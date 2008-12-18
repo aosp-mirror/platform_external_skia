@@ -172,6 +172,9 @@ public:
     static int ComputeShiftPerPixel(Config c) {
         return ComputeBytesPerPixel(c) >> 1;
     }
+    
+    static Sk64 ComputeSize64(Config, int width, int height);
+    static size_t ComputeSize(Config, int width, int height);
 
     /** Set the bitmap's config and dimensions. If rowBytes is 0, then
         ComputeRowBytes() is called to compute the optimal value. This resets
@@ -602,6 +605,12 @@ public:
     explicit SkAutoLockColors(const SkBitmap& bm) {
         fCTable = bm.getColorTable();
         fColors = fCTable ? fCTable->lockColors() : NULL;
+    }
+    /** Initialize with a colortable (may be null)
+     */
+    explicit SkAutoLockColors(SkColorTable* ctable) {
+        fCTable = ctable;
+        fColors = ctable ? ctable->lockColors() : NULL;
     }
     ~SkAutoLockColors() {
         if (fCTable) {

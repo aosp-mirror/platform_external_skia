@@ -98,10 +98,10 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     if (NULL == codec) {
-        SkDebugf("--- ImageRef: <%s> failed to find codec\n", fName.c_str());
+        SkDebugf("--- ImageRef: <%s> failed to find codec\n", this->getURI());
     } else {
         SkDebugf("--- ImageRef: <%s> failed in codec for %d mode\n",
-                 fName.c_str(), mode);
+                 this->getURI(), mode);
     }
 #endif
     fErrorInDecoding = true;

@@ -42,7 +42,7 @@ void Android_SkDebugf(const char* file, int line, const char* function,
     va_end(args);
 }
 
-#elif defined(SK_DEBUG)
+#else
 
 #include <stdarg.h>
 #include <stdio.h>

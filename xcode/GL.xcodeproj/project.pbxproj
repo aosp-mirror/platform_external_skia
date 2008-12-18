@@ -1,0 +1,267 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 44;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00B7DCF60EDCA0BD00F77EA2 /* SkGL.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCE90EDCA0BD00F77EA2 /* SkGL.cpp */; };
+		00B7DCF70EDCA0BD00F77EA2 /* SkGL.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCEA0EDCA0BD00F77EA2 /* SkGL.h */; };
+		00B7DCF80EDCA0BD00F77EA2 /* SkGLCanvas.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCEB0EDCA0BD00F77EA2 /* SkGLCanvas.cpp */; };
+		00B7DCF90EDCA0BD00F77EA2 /* SkGLDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCEC0EDCA0BD00F77EA2 /* SkGLDevice.cpp */; };
+		00B7DCFA0EDCA0BD00F77EA2 /* SkGLDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCED0EDCA0BD00F77EA2 /* SkGLDevice.h */; };
+		00B7DCFB0EDCA0BD00F77EA2 /* SkGLDevice_FBO.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCEE0EDCA0BD00F77EA2 /* SkGLDevice_FBO.cpp */; };
+		00B7DCFC0EDCA0BD00F77EA2 /* SkGLDevice_FBO.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCEF0EDCA0BD00F77EA2 /* SkGLDevice_FBO.h */; };
+		00B7DCFD0EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCF00EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.cpp */; };
+		00B7DCFE0EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCF10EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.h */; };
+		00B7DCFF0EDCA0BD00F77EA2 /* SkGLTextCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCF20EDCA0BD00F77EA2 /* SkGLTextCache.cpp */; };
+		00B7DD000EDCA0BD00F77EA2 /* SkGLTextCache.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCF30EDCA0BD00F77EA2 /* SkGLTextCache.h */; };
+		00B7DD010EDCA0BD00F77EA2 /* SkTextureCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7DCF40EDCA0BD00F77EA2 /* SkTextureCache.cpp */; };
+		00B7DD020EDCA0BD00F77EA2 /* SkTextureCache.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7DCF50EDCA0BD00F77EA2 /* SkTextureCache.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00B7DCE90EDCA0BD00F77EA2 /* SkGL.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGL.cpp; path = ../libsgl/gl/SkGL.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCEA0EDCA0BD00F77EA2 /* SkGL.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkGL.h; path = ../libsgl/gl/SkGL.h; sourceTree = SOURCE_ROOT; };
+		00B7DCEB0EDCA0BD00F77EA2 /* SkGLCanvas.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGLCanvas.cpp; path = ../libsgl/gl/SkGLCanvas.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCEC0EDCA0BD00F77EA2 /* SkGLDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGLDevice.cpp; path = ../libsgl/gl/SkGLDevice.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCED0EDCA0BD00F77EA2 /* SkGLDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkGLDevice.h; path = ../libsgl/gl/SkGLDevice.h; sourceTree = SOURCE_ROOT; };
+		00B7DCEE0EDCA0BD00F77EA2 /* SkGLDevice_FBO.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGLDevice_FBO.cpp; path = ../libsgl/gl/SkGLDevice_FBO.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCEF0EDCA0BD00F77EA2 /* SkGLDevice_FBO.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkGLDevice_FBO.h; path = ../libsgl/gl/SkGLDevice_FBO.h; sourceTree = SOURCE_ROOT; };
+		00B7DCF00EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGLDevice_SWLayer.cpp; path = ../libsgl/gl/SkGLDevice_SWLayer.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCF10EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkGLDevice_SWLayer.h; path = ../libsgl/gl/SkGLDevice_SWLayer.h; sourceTree = SOURCE_ROOT; };
+		00B7DCF20EDCA0BD00F77EA2 /* SkGLTextCache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkGLTextCache.cpp; path = ../libsgl/gl/SkGLTextCache.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCF30EDCA0BD00F77EA2 /* SkGLTextCache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkGLTextCache.h; path = ../libsgl/gl/SkGLTextCache.h; sourceTree = SOURCE_ROOT; };
+		00B7DCF40EDCA0BD00F77EA2 /* SkTextureCache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkTextureCache.cpp; path = ../libsgl/gl/SkTextureCache.cpp; sourceTree = SOURCE_ROOT; };
+		00B7DCF50EDCA0BD00F77EA2 /* SkTextureCache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkTextureCache.h; path = ../libsgl/gl/SkTextureCache.h; sourceTree = SOURCE_ROOT; };
+		D2AAC046055464E500DB518D /* libGL.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libGL.a; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D289987405E68DCB004EDB86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		08FB7794FE84155DC02AAC07 /* GL */ = {
+			isa = PBXGroup;
+			children = (
+				08FB7795FE84155DC02AAC07 /* Source */,
+				C6A0FF2B0290797F04C91782 /* Documentation */,
+				1AB674ADFE9D54B511CA2CBB /* Products */,
+			);
+			name = GL;
+			sourceTree = "<group>";
+		};
+		08FB7795FE84155DC02AAC07 /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				00B7DCE90EDCA0BD00F77EA2 /* SkGL.cpp */,
+				00B7DCEA0EDCA0BD00F77EA2 /* SkGL.h */,
+				00B7DCEB0EDCA0BD00F77EA2 /* SkGLCanvas.cpp */,
+				00B7DCEC0EDCA0BD00F77EA2 /* SkGLDevice.cpp */,
+				00B7DCED0EDCA0BD00F77EA2 /* SkGLDevice.h */,
+				00B7DCEE0EDCA0BD00F77EA2 /* SkGLDevice_FBO.cpp */,
+				00B7DCEF0EDCA0BD00F77EA2 /* SkGLDevice_FBO.h */,
+				00B7DCF00EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.cpp */,
+				00B7DCF10EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.h */,
+				00B7DCF20EDCA0BD00F77EA2 /* SkGLTextCache.cpp */,
+				00B7DCF30EDCA0BD00F77EA2 /* SkGLTextCache.h */,
+				00B7DCF40EDCA0BD00F77EA2 /* SkTextureCache.cpp */,
+				00B7DCF50EDCA0BD00F77EA2 /* SkTextureCache.h */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+		1AB674ADFE9D54B511CA2CBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D2AAC046055464E500DB518D /* libGL.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C6A0FF2B0290797F04C91782 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Documentation;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		D2AAC043055464E500DB518D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00B7DCF70EDCA0BD00F77EA2 /* SkGL.h in Headers */,
+				00B7DCFA0EDCA0BD00F77EA2 /* SkGLDevice.h in Headers */,
+				00B7DCFC0EDCA0BD00F77EA2 /* SkGLDevice_FBO.h in Headers */,
+				00B7DCFE0EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.h in Headers */,
+				00B7DD000EDCA0BD00F77EA2 /* SkGLTextCache.h in Headers */,
+				00B7DD020EDCA0BD00F77EA2 /* SkTextureCache.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		D2AAC045055464E500DB518D /* GL */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "GL" */;
+			buildPhases = (
+				D2AAC043055464E500DB518D /* Headers */,
+				D2AAC044055464E500DB518D /* Sources */,
+				D289987405E68DCB004EDB86 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GL;
+			productName = GL;
+			productReference = D2AAC046055464E500DB518D /* libGL.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		08FB7793FE84155DC02AAC07 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "GL" */;
+			compatibilityVersion = "Xcode 3.0";
+			hasScannedForEncodings = 1;
+			mainGroup = 08FB7794FE84155DC02AAC07 /* GL */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D2AAC045055464E500DB518D /* GL */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D2AAC044055464E500DB518D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00B7DCF60EDCA0BD00F77EA2 /* SkGL.cpp in Sources */,
+				00B7DCF80EDCA0BD00F77EA2 /* SkGLCanvas.cpp in Sources */,
+				00B7DCF90EDCA0BD00F77EA2 /* SkGLDevice.cpp in Sources */,
+				00B7DCFB0EDCA0BD00F77EA2 /* SkGLDevice_FBO.cpp in Sources */,
+				00B7DCFD0EDCA0BD00F77EA2 /* SkGLDevice_SWLayer.cpp in Sources */,
+				00B7DCFF0EDCA0BD00F77EA2 /* SkGLTextCache.cpp in Sources */,
+				00B7DD010EDCA0BD00F77EA2 /* SkTextureCache.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1DEB91EC08733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_FIX_AND_CONTINUE = YES;
+				GCC_MODEL_TUNING = G5;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = GL;
+				ZERO_LINK = YES;
+			};
+			name = Debug;
+		};
+		1DEB91ED08733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_MODEL_TUNING = G5;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = GL;
+			};
+			name = Release;
+		};
+		1DEB91F008733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_ENABLE_CPP_EXCEPTIONS = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					SK_DEBUG,
+					SK_BUILD_FOR_MAC,
+				);
+				GCC_THREADSAFE_STATICS = NO;
+				GCC_TREAT_IMPLICIT_FUNCTION_DECLARATIONS_AS_ERRORS = YES;
+				GCC_USE_GCC3_PFE_SUPPORT = NO;
+				GCC_WARN_ABOUT_MISSING_NEWLINE = YES;
+				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_SIGN_COMPARE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				PREBINDING = NO;
+				SDKROOT = "$(DEVELOPER_SDK_DIR)/MacOSX10.5.sdk";
+				USER_HEADER_SEARCH_PATHS = "../libsgl/sgl ../include/corecg ../include/graphics";
+			};
+			name = Debug;
+		};
+		1DEB91F108733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					ppc,
+					i386,
+				);
+				GCC_ENABLE_CPP_EXCEPTIONS = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					SK_BUILD_FOR_MAC,
+					SK_RELEASE,
+				);
+				GCC_THREADSAFE_STATICS = NO;
+				GCC_TREAT_IMPLICIT_FUNCTION_DECLARATIONS_AS_ERRORS = YES;
+				GCC_USE_GCC3_PFE_SUPPORT = NO;
+				GCC_WARN_ABOUT_MISSING_NEWLINE = YES;
+				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_SIGN_COMPARE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				PREBINDING = NO;
+				SDKROOT = "$(DEVELOPER_SDK_DIR)/MacOSX10.5.sdk";
+				USER_HEADER_SEARCH_PATHS = "../libsgl/sgl ../include/corecg ../include/graphics";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "GL" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91EC08733DB70010E9CD /* Debug */,
+				1DEB91ED08733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "GL" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91F008733DB70010E9CD /* Debug */,
+				1DEB91F108733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 08FB7793FE84155DC02AAC07 /* Project object */;
+}

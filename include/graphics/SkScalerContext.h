@@ -89,7 +89,10 @@ struct SkGlyph {
         kSubBits = 2,
         kSubMask = ((1 << kSubBits) - 1),
         kSubShift = 24, // must be large enough for glyphs and unichars
-        kCodeMask = ((1 << kSubShift) - 1)
+        kCodeMask = ((1 << kSubShift) - 1),
+        // relative offsets for X and Y subpixel bits
+        kSubShiftX = kSubBits,
+        kSubShiftY = 0
     };
 
     static unsigned ID2Code(uint32_t id) {
@@ -97,11 +100,11 @@ struct SkGlyph {
     }
     
     static unsigned ID2SubX(uint32_t id) {
-        return id >> (kSubShift + kSubBits);
+        return id >> (kSubShift + kSubShiftX);
     }
     
     static unsigned ID2SubY(uint32_t id) {
-        return (id >> kSubShift) & kSubMask;
+        return (id >> (kSubShift + kSubShiftY)) & kSubMask;
     }
     
     static unsigned FixedToSub(SkFixed n) {
@@ -121,7 +124,9 @@ struct SkGlyph {
         SkASSERT(code <= kCodeMask);
         x = FixedToSub(x);
         y = FixedToSub(y);
-        return (x << (kSubShift + kSubBits)) | (y << kSubShift) | code;
+        return (x << (kSubShift + kSubShiftX)) |
+               (y << (kSubShift + kSubShiftY)) |
+               code;
     }
     
     void toMask(SkMask* mask) const;

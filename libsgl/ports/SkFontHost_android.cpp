@@ -418,7 +418,11 @@ static const FontInitRec gSystemFonts[] = {
     { "DroidSerif-Italic.ttf",      NULL        },
     { "DroidSerif-BoldItalic.ttf",  NULL        },
     { "DroidSansMono.ttf",          gMonoNames  },
+#ifdef NO_FALLBACK_FONT
+    { "DroidSans.ttf",              gFBNames    }
+#else
     { "DroidSansFallback.ttf",      gFBNames    }
+#endif
 };
 
 #define DEFAULT_NAMES   gSansNames

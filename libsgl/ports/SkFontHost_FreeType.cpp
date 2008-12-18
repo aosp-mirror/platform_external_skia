@@ -372,6 +372,13 @@ SkScalerContext_FreeType::~SkScalerContext_FreeType() {
     this face with other context (at different sizes).
 */
 FT_Error SkScalerContext_FreeType::setupSize() {
+    /*  In the off-chance that a font has been removed, we want to error out
+        right away, so call resolve just to be sure.
+
+        TODO: perhaps we can skip this, by walking the global font cache and
+        killing all of the contexts when we know that a given fontID is going
+        away...
+     */
     if (SkFontHost::ResolveTypeface(fRec.fFontID) == NULL) {
         return (FT_Error)-1;
     }
@@ -484,10 +491,11 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
         if (kSubpixel_Hints == fRec.fHints) {
             int dx = glyph->getSubXFixed() >> 10;
             int dy = glyph->getSubYFixed() >> 10;
+            // negate dy since freetype-y-goes-up and skia-y-goes-down
             bbox.xMin += dx;
-            bbox.yMin += dy;
+            bbox.yMin -= dy;
             bbox.xMax += dx;
-            bbox.yMax += dy;
+            bbox.yMax -= dy;
         }
 
         bbox.xMin &= ~63;
@@ -559,6 +567,8 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
             if (kSubpixel_Hints == fRec.fHints) {
                 dx = glyph.getSubXFixed() >> 10;
                 dy = glyph.getSubYFixed() >> 10;
+                // negate dy since freetype-y-goes-up and skia-y-goes-down
+                dy = -dy;
             }
             FT_Outline_Get_CBox(outline, &bbox);
             /*
@@ -692,13 +702,6 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
     }
 
     path->close();
-}
-
-static void map_y_to_pt(const FT_Matrix& mat, SkFixed y, SkPoint* pt) {
-    SkFixed x = SkFixedMul(mat.xy, y);
-    y = SkFixedMul(mat.yy, y);
-
-    pt->set(SkFixedToScalar(x), SkFixedToScalar(y));
 }
 
 void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,

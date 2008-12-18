@@ -34,11 +34,12 @@ public:
     // This method is not exported to java.
     virtual void flatten(SkFlattenableWriteBuffer&);
 
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
+
 private:
     SkScalar                    fRadius;
     SkBlurMaskFilter::BlurStyle fBlurStyle;
 
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
     SkBlurMaskFilterImpl(SkFlattenableReadBuffer&);
     
     typedef SkMaskFilter INHERITED;
@@ -114,4 +115,9 @@ void SkBlurMaskFilterImpl::flatten(SkFlattenableWriteBuffer& buffer)
     buffer.writeScalar(fRadius);
     buffer.write32(fBlurStyle);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+static SkFlattenable::Registrar gReg("SkBlurMaskFilter",
+                                     SkBlurMaskFilterImpl::CreateProc);
 

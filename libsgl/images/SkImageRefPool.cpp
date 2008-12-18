@@ -23,7 +23,7 @@ void SkImageRefPool::setRAMBudget(size_t size) {
 void SkImageRefPool::justAddedPixels(SkImageRef* ref) {
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("=== ImagePool: add pixels %s [%d %d %d] bytes=%d heap=%d\n",
-             ref->fName.c_str(),
+             ref->getURI(),
              ref->fBitmap.width(), ref->fBitmap.height(),
              ref->fBitmap.bytesPerPixel(),
              ref->fBitmap.getSize(), (int)fRAMUsed);
@@ -59,7 +59,7 @@ void SkImageRefPool::setRAMUsed(size_t limit) {
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
             SkDebugf("=== ImagePool: purge %s [%d %d %d] bytes=%d heap=%d\n",
-                     ref->fName.c_str(),
+                     ref->getURI(),
                      ref->fBitmap.width(), ref->fBitmap.height(),
                      ref->fBitmap.bytesPerPixel(),
                      (int)size, (int)fRAMUsed);
@@ -177,7 +177,7 @@ void SkImageRefPool::dump() const {
         SkDebugf("  [%3d %3d %d] ram=%d data=%d locks=%d %s\n", ref->fBitmap.width(),
                  ref->fBitmap.height(), ref->fBitmap.config(),
                  ref->ramUsed(), (int)ref->fStream->getLength(),
-                 ref->getLockCount(), ref->fName.c_str());
+                 ref->getLockCount(), ref->getURI());
         
         ref = ref->fNext;
     }

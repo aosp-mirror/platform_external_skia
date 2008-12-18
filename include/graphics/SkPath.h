@@ -22,6 +22,7 @@
 
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
+class SkAutoPathBoundsUpdate;
 class SkString;
 
 /** \class SkPath
@@ -580,6 +581,7 @@ private:
     void reversePathTo(const SkPath&);
 
     friend const SkPoint* sk_get_path_points(const SkPath&, int index);
+    friend class SkAutoPathBoundsUpdate;
 };
 
 #endif

@@ -19,6 +19,8 @@
 
 #include "SkRect.h"
 
+class SkString;
+
 /** \class SkMatrix
 
     The SkMatrix class holds a 3x3 matrix for transforming coordinates.
@@ -399,6 +401,7 @@ public:
     }
     
     void dump() const;
+    void toDumpString(SkString*) const;
 
 #ifdef SK_DEBUG
   /** @cond UNIT_TEST */

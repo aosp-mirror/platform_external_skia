@@ -51,7 +51,20 @@ protected:
 };
 
 SkImageDecoder* SkImageDecoder_JPEG_Factory(SkStream* stream) {
-    // !!! unimplemented; rely on PNG test first for now
+    static const char gHeader[] = { 0xFF, 0xD8, 0xFF };
+    static const size_t HEADER_SIZE = sizeof(gHeader);
+
+    char buffer[HEADER_SIZE];
+    size_t len = stream->read(buffer, HEADER_SIZE);
+
+    if (len != HEADER_SIZE) {
+        return NULL;   // can't read enough
+    }
+    
+    if (memcmp(buffer, gHeader, HEADER_SIZE)) {
+        return NULL;
+    }
+
     return SkNEW(SkJPEGImageDecoder);
 }
 
@@ -140,7 +153,7 @@ static void sk_skip_input_data(j_decompress_ptr cinfo, long num_bytes) {
     if (bytesToSkip > 0) {
         size_t bytes = src->fStream->skip(bytesToSkip);
         if (bytes != (size_t)bytesToSkip) {
-            SkDebugf("xxxxxxxxxxxxxx failure to skip request %d actual %d\n", bytesToSkip, bytes);
+//            SkDebugf("xxxxxxxxxxxxxx failure to skip request %d actual %d\n", bytesToSkip, bytes);
             cinfo->err->error_exit((j_common_ptr)cinfo);
         }
         src->next_input_byte = (const JOCTET*)src->fBuffer;
@@ -241,13 +254,28 @@ static void sk_error_exit(j_common_ptr cinfo) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer,
+static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer,
                           int count) {
     for (int i = 0; i < count; i++) {
         JSAMPLE* rowptr = (JSAMPLE*)buffer;
         int row_count = jpeg_read_scanlines(cinfo, &rowptr, 1);
-        SkASSERT(row_count == 1);
+        if (row_count != 1) {
+            return false;
+        }
     }
+    return true;
+}
+
+// This guy exists just to aid in debugging, as it allows debuggers to just
+// set a break-point in one place to see all error exists.
+static bool return_false(const jpeg_decompress_struct& cinfo,
+                         const SkBitmap& bm, const char msg[]) {
+#if 0
+    SkDebugf("libjpeg error %d <%s> from %s [%d %d]", cinfo.err->msg_code,
+             cinfo.err->jpeg_message_table[cinfo.err->msg_code], msg,
+             bm.width(), bm.height());
+#endif
+    return false;   // must always return false
 }
 
 bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
@@ -269,16 +297,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
     // All objects need to be instantiated before this setjmp call so that
     // they will be cleaned up properly if an error occurs.
     if (setjmp(sk_err.fJmpBuf)) {
-        int code = sk_err.msg_code;
-        if (code != JERR_TOO_LITTLE_DATA) {
-            if ((unsigned)code <= (unsigned)sk_err.last_jpeg_message) {
-                SkDebugf("xxxxxxxxxxx jpeg error %d %s\n", code,
-                         sk_err.jpeg_message_table[code]);
-            } else {
-                SkDebugf("xxxxxxxxxxxxxxxxxxxxx jpeg error %d\n", code);
-            }
-        }
-        return false;
+        return return_false(cinfo, *bm, "setjmp");
     }
 
     jpeg_create_decompress(&cinfo);
@@ -287,7 +306,10 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
     //jpeg_stdio_src(&cinfo, file);
     cinfo.src = &sk_stream;
 
-    jpeg_read_header(&cinfo, true);
+    int status = jpeg_read_header(&cinfo, true);
+    if (status != JPEG_HEADER_OK) {
+        return return_false(cinfo, *bm, "read_header");
+    }
 
     /*  Try to fulfill the requested sampleSize. Since jpeg can do it (when it
         can) much faster that we, just use their num/denom api to approximate
@@ -342,7 +364,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
         after jpeg_read_header(). To see the scaled dimensions, we have to call
         jpeg_start_decompress(), and then read output_width and output_height.
     */
-    jpeg_start_decompress(&cinfo);
+    if (!jpeg_start_decompress(&cinfo)) {
+        return return_false(cinfo, *bm, "start_decompress");
+    }
 
     /*  If we need to better match the request, we might examine the image and
         output dimensions, and determine if the downsampling jpeg provided is
@@ -357,7 +381,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
     // should we allow the Chooser (if present) to pick a config for us???
     if (!this->chooseFromOneChoice(config, cinfo.output_width,
                                    cinfo.output_height)) {
-        return false;
+        return return_false(cinfo, *bm, "chooseFromOneChoice");
     }
 
 #ifdef ANDROID_RGB
@@ -375,32 +399,27 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
         if (SkImageDecoder::kDecodeBounds_Mode == mode) {
             return true;
         }
-#if 0
-        if (bm->getSize() > 20*1024) {
-            SkDebugf("------------------- bm1 size %d [%d %d] %d\n", bm->getSize(), bm->width(), bm->height(), bm->config());
-        }
-#endif
         if (!this->allocPixelRef(bm, NULL)) {
-            SkDebugf("xxxxxxxxxxxxxxxxxxxx allocPixelRef failed\n");
-            return false;
+            return return_false(cinfo, *bm, "allocPixelRef");
         }
         SkAutoLockPixels alp(*bm);
         JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
         INT32 const bpr =  bm->rowBytes();
-        bool success = true;
         
         while (cinfo.output_scanline < cinfo.output_height) {
             int row_count = jpeg_read_scanlines(&cinfo, &rowptr, 1);
             // if row_count == 0, then we didn't get a scanline, so abort.
             // if we supported partial images, we might return true in this case
-            if (0 == row_count || this->shouldCancelDecode()) {
-                success = false;
-                break;
+            if (0 == row_count) {
+                return return_false(cinfo, *bm, "read_scanlines");
+            }
+            if (this->shouldCancelDecode()) {
+                return return_false(cinfo, *bm, "shouldCancelDecode");
             }
             rowptr += bpr;
         }
         jpeg_finish_decompress(&cinfo);
-        return success;
+        return true;
     }
 #endif
     
@@ -418,9 +437,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
                JCS_GRAYSCALE == cinfo.out_color_space) {
         sc = SkScaledBitmapSampler::kGray;
     } else {
-        SkDebugf("SkJPEGImageDecoder: unsupported jpeg colorspace %d with %d components\n",
-                    cinfo.jpeg_color_space, cinfo.num_components);
-        return false;
+        return return_false(cinfo, *bm, "jpeg colorspace");
     }
 
     SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height,
@@ -434,43 +451,52 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm,
         return true;
     }
     if (!this->allocPixelRef(bm, NULL)) {
-        SkDebugf("xxxxxxxxxxxxxxxxxxxx allocPixelRef failed\n");
-        return false;
+        return return_false(cinfo, *bm, "allocPixelRef");
     }
 
     SkAutoLockPixels alp(*bm);                          
     if (!sampler.begin(bm, sc, this->getDitherImage())) {
-        SkDebugf("xxxxxxxxxxxxxxxxxxxx sampler.begin failed\n");
-        return false;
+        return return_false(cinfo, *bm, "sampler.begin");
     }
 
     uint8_t* srcRow = (uint8_t*)srcStorage.alloc(cinfo.output_width * 4);
 
-    skip_src_rows(&cinfo, srcRow, sampler.srcY0());
-    bool success = true;
+    //  Possibly skip initial rows [sampler.srcY0]
+    if (!skip_src_rows(&cinfo, srcRow, sampler.srcY0())) {
+        return return_false(cinfo, *bm, "skip rows");
+    }
+
+    // now loop through scanlines until y == bm->height() - 1
     for (int y = 0;; y++) {
         JSAMPLE* rowptr = (JSAMPLE*)srcRow;
         int row_count = jpeg_read_scanlines(&cinfo, &rowptr, 1);
-        if (0 == row_count || this->shouldCancelDecode()) {
-            success = false;
-            break;
+        if (0 == row_count) {
+            return return_false(cinfo, *bm, "read_scanlines");
+        }
+        if (this->shouldCancelDecode()) {
+            return return_false(cinfo, *bm, "shouldCancelDecode");
         }
         
         sampler.next(srcRow);
         if (bm->height() - 1 == y) {
+            // we're done
             break;
         }
-        skip_src_rows(&cinfo, srcRow, sampler.srcDY() - 1);
+
+        if (!skip_src_rows(&cinfo, srcRow, sampler.srcDY() - 1)) {
+            return return_false(cinfo, *bm, "skip rows");
+        }
     }
 
-    // ??? If I don't do this, I get an error from finish_decompress
-    if (success) {
-        skip_src_rows(&cinfo, srcRow, cinfo.output_height - cinfo.output_scanline);
+    // we formally skip the rest, so we don't get a complaint from libjpeg
+    if (!skip_src_rows(&cinfo, srcRow,
+                       cinfo.output_height - cinfo.output_scanline)) {
+        return return_false(cinfo, *bm, "skip rows");
     }
     jpeg_finish_decompress(&cinfo);
 
 //    SkDebugf("------------------- bm2 size %d [%d %d] %d\n", bm->getSize(), bm->width(), bm->height(), bm->config());
-    return success;
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

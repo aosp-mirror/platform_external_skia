@@ -23,15 +23,15 @@
 #include "SkRegion.h"
 #include "SkTemplates.h"
 
-#define kEDGE_HEAD_Y    SK_MinS16
-#define kEDGE_TAIL_Y    SK_MaxS16
+#define kEDGE_HEAD_Y    SK_MinS32
+#define kEDGE_TAIL_Y    SK_MaxS32
 
 #ifdef SK_DEBUG
     static void validate_sort(const SkEdge* edge)
     {
         int y = kEDGE_HEAD_Y;
 
-        while (edge->fFirstY != SK_MaxS16)
+        while (edge->fFirstY != SK_MaxS32)
         {
             edge->validate();
             SkASSERT(y <= edge->fFirstY);

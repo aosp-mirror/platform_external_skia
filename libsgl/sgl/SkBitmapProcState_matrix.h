@@ -25,13 +25,18 @@ static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
     PREAMBLE(s);
     // we store y, x, x, x, x, x
 
-    // invert x+half, y+half and convert to fixed
-    SkFixed fx = s.fInvSy * y + s.fInvTyPlusHalf;
-    *xy++ = TILEY_PROCF(fx, (s.fBitmap->height() - 1));
-    // invert X
-    SkFixed dx = s.fInvSx;
-    fx = dx * x + s.fInvTxPlusHalf;
-    unsigned maxX = s.fBitmap->width() - 1;
+    const unsigned maxX = s.fBitmap->width() - 1;
+    const SkFixed dx = s.fInvSx;
+    SkFixed fx;
+    {
+        SkPoint pt;
+        s.fInvProc(*s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
+                                  SkIntToScalar(y) + SK_ScalarHalf, &pt);
+        fx = SkScalarToFixed(pt.fY);
+        const unsigned maxY = s.fBitmap->height() - 1;
+        *xy++ = TILEY_PROCF(fx, maxY);
+        fx = SkScalarToFixed(pt.fX);
+    }
 
 #ifdef CHECK_FOR_DECAL
     // test if we don't need to apply the tile proc
@@ -42,18 +47,6 @@ static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
 #endif
     {
         int i;
-#if 0
-        uint16_t* xx = (uint16_t*)xy;
-        for (i = (count >> 2); i > 0; --i) {
-            *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
-            *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
-            *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
-            *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
-        }
-        for (i = (count & 3); i > 0; --i) {
-            *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
-        }
-#else
         for (i = (count >> 2); i > 0; --i) {
             unsigned a, b;
             a = TILEX_PROCF(fx, maxX); fx += dx;
@@ -75,7 +68,6 @@ static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
         for (i = (count & 3); i > 0; --i) {
             *xx++ = TILEX_PROCF(fx, maxX); fx += dx;
         }
-#endif
     }
 }
 
@@ -155,17 +147,23 @@ static void SCALE_FILTER_NAME(const SkBitmapProcState& s,
     SkASSERT(s.fInvKy == 0);
 
     PREAMBLE(s);
-    // compute our two Y values up front
-    {
-        unsigned maxY = s.fBitmap->height() - 1;
-        SkFixed fy = s.fInvSy * y + s.fInvTyPlusHalf - (s.fFilterOneY >> 1);
-        *xy++ = PACK_FILTER_Y_NAME(fy, maxY, s.fFilterOneY PREAMBLE_ARG_Y);
-    }
+    
+    const unsigned maxX = s.fBitmap->width() - 1;
+    const SkFixed one = s.fFilterOneX;
+    const SkFixed dx = s.fInvSx;
+    SkFixed fx;
 
-    unsigned maxX = s.fBitmap->width() - 1;
-    SkFixed one = s.fFilterOneX;
-    SkFixed dx = s.fInvSx;
-    SkFixed fx = dx * x + s.fInvTxPlusHalf - (one >> 1);
+    {
+        SkPoint pt;
+        s.fInvProc(*s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
+                                  SkIntToScalar(y) + SK_ScalarHalf, &pt);
+        const SkFixed fy = SkScalarToFixed(pt.fY) - (s.fFilterOneY >> 1);
+        const unsigned maxY = s.fBitmap->height() - 1;
+        // compute our two Y values up front
+        *xy++ = PACK_FILTER_Y_NAME(fy, maxY, s.fFilterOneY PREAMBLE_ARG_Y);
+        // now initialize fx
+        fx = SkScalarToFixed(pt.fX) - (one >> 1);
+    }
 
 #ifdef CHECK_FOR_DECAL
     // test if we don't need to apply the tile proc

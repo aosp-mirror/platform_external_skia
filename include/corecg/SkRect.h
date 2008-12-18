@@ -279,6 +279,16 @@ struct SkRect {
         fRight  = right;
         fBottom = bottom;
     }
+    
+    /** Initialize the rect with the 4 specified integers. The routine handles
+        converting them to scalars (by calling SkIntToScalar)
+     */
+    void iset(int left, int top, int right, int bottom) {
+        fLeft   = SkIntToScalar(left);
+        fTop    = SkIntToScalar(top);
+        fRight  = SkIntToScalar(right);
+        fBottom = SkIntToScalar(bottom);
+    }
 
     /** Set this rectangle to be the bounds of the array of points.
         If the array is empty (count == 0), then set this rectangle

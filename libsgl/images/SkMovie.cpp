@@ -77,20 +77,24 @@ const SkBitmap& SkMovie::bitmap()
 
 #include "SkStream.h"
 
+SkMovie* SkMovie::DecodeMemory(const void* data, size_t length) {
+    SkMemoryStream stream(data, length, false);
+    return SkMovie::DecodeStream(&stream);
+}
+
 SkMovie* SkMovie::DecodeFile(const char path[])
 {
     SkMovie* movie = NULL;
 
-    // since the movie might hold onto the stream
-    // we dynamically allocate it and then unref()
-    SkFILEStream* stream = new SkFILEStream(path);
-    if (stream->isValid())
-        movie = SkMovie::DecodeStream(stream);
+    SkFILEStream stream(path);
+    if (stream.isValid()) {
+        movie = SkMovie::DecodeStream(&stream);
+    }
 #ifdef SK_DEBUG
-    else
+    else {
         SkDebugf("Movie file not found <%s>\n", path);
+    }
 #endif
-    stream->unref();
 
     return movie;
 }

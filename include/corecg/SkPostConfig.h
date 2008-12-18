@@ -63,6 +63,8 @@
     #endif
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+
 #ifndef SkNEW
     #define SkNEW(type_name)                new type_name
     #define SkNEW_ARGS(type_name, args)     new type_name args
@@ -80,6 +82,13 @@
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
+#if defined(SK_SOFTWARE_FLOAT) && defined(SK_SCALAR_IS_FLOAT)
+    // if this is defined, we convert floats to 2scompliment ints for compares
+    #ifndef SK_SCALAR_SLOW_COMPARES
+        #define SK_SCALAR_SLOW_COMPARES
+    #endif
+#endif
 
 #ifdef SK_BUILD_FOR_WIN
     #define WIN32_LEAN_AND_MEAN

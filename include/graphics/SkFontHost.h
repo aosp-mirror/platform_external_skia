@@ -37,24 +37,38 @@ public:
         1) If familyFace is null, use famillyName.
         2) If famillyName is null, use familyFace.
         3) If both are null, return the default font that best matches style
-    */
+
+        NOTE: this does not return a new typeface, nor does it affect the
+        owner count of an existing one, so the caller is free to ignore the
+        return result, or just compare it against null.
+     */
     static SkTypeface* FindTypeface(const SkTypeface* familyFace,
                                     const char famillyName[],
                                     SkTypeface::Style style);
 
     /** Return the typeface associated with the uniqueID, or null if that ID
         does not match any faces.
+
+        NOTE: this does not return a new typeface, nor does it affect the
+        owner count of an existing one, so the caller is free to ignore the
+        return result, or just compare it against null.
     */
     static SkTypeface* ResolveTypeface(uint32_t uniqueID);
     
     /** Return a new stream to read the font data, or null if the uniqueID does
-        not match an existing typeface
+        not match an existing typeface. The caller must call CloseStream() when
+        it is finished reading the stream.
     */
     static SkStream* OpenStream(uint32_t uniqueID);
+    
+    /** Call this when finished reading from the stream returned by OpenStream.
+        The caller should NOT try to delete the stream.
+     */
     static void CloseStream(uint32_t uniqueID, SkStream*);
 
     /** Return a new typeface given the data buffer (owned by the caller).
-        If the data does not represent a valid font, return null.
+        If the data does not represent a valid font, return null. The caller is
+        responsible for unref-ing the returned typeface (if it is not null).
     */
     static SkTypeface* CreateTypeface(SkStream*);
 
@@ -64,6 +78,14 @@ public:
         be retrieved with Deserialize().
     */
     static void Serialize(const SkTypeface*, SkWStream*);
+
+    /** Given a stream created by Serialize(), return the corresponding typeface
+        or null if no match is found.
+
+        NOTE: this does not return a new typeface, nor does it affect the
+        owner count of an existing one, so the caller is free to ignore the
+        return result, or just compare it against null.
+     */
     static SkTypeface* Deserialize(SkStream*);
 
     ///////////////////////////////////////////////////////////////////////////
@@ -71,6 +93,7 @@ public:
     /** Return a subclass of SkScalarContext
     */
     static SkScalerContext* CreateScalerContext(const SkDescriptor* desc);
+
     /** Return a scalercontext using the "fallback" font. If there is no designated
         fallback, return null.
     */

@@ -1502,11 +1502,26 @@ void Sweep_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
 
+// assumes colors is SkColor* and pos is SkScalar*
+#define EXPAND_1_COLOR(count)               \
+    SkColor tmp[2];                         \
+    do {                                    \
+        if (1 == count) {                   \
+            tmp[0] = tmp[1] = colors[0];    \
+            colors = tmp;                   \
+            pos = NULL;                     \
+            count = 2;                      \
+        }                                   \
+    } while (0)
+
 SkShader* SkGradientShader::CreateLinear(   const SkPoint pts[2],
                                             const SkColor colors[], const SkScalar pos[], int colorCount,
                                             SkShader::TileMode mode, SkUnitMapper* mapper)
 {
-    SkASSERT(pts && colors && colorCount >= 2);
+    if (NULL == pts || NULL == colors || colorCount < 1) {
+        return NULL;
+    }
+    EXPAND_1_COLOR(colorCount);
 
     return SkNEW_ARGS(Linear_Gradient, (pts, colors, pos, colorCount, mode, mapper));
 }
@@ -1515,7 +1530,10 @@ SkShader* SkGradientShader::CreateRadial(   const SkPoint& center, SkScalar radi
                                             const SkColor colors[], const SkScalar pos[], int colorCount,
                                             SkShader::TileMode mode, SkUnitMapper* mapper)
 {
-    SkASSERT(radius > 0 && colors && colorCount >= 2);
+    if (radius <= 0 || NULL == colors || colorCount < 1) {
+        return NULL;
+    }
+    EXPAND_1_COLOR(colorCount);
 
     return SkNEW_ARGS(Radial_Gradient, (center, radius, colors, pos, colorCount, mode, mapper));
 }
@@ -1525,8 +1543,11 @@ SkShader* SkGradientShader::CreateSweep(SkScalar cx, SkScalar cy,
                                         const SkScalar pos[],
                                         int count, SkUnitMapper* mapper)
 {
-    SkASSERT(colors && count >= 2);
-    
+    if (NULL == colors || count < 1) {
+        return NULL;
+    }
+    EXPAND_1_COLOR(count);
+
     return SkNEW_ARGS(Sweep_Gradient, (cx, cy, colors, pos, count, mapper));
 }
 

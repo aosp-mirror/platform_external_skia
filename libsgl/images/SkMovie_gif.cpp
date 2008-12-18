@@ -25,8 +25,6 @@
 
 class SkGIFMovie : public SkMovie {
 public:
-    // we do NOT hold onto the stream, so it is OK if it is on the
-    // stack of the caller
     SkGIFMovie(SkStream* stream);
     virtual ~SkGIFMovie();
 
@@ -40,7 +38,7 @@ private:
     SavedImage* fCurrSavedImage;
 };
 
-SkMovie* SkMovie_GIF_StreamFactory(SkStream* stream) {
+SkMovie* SkMovie_GIF_Factory(SkStream* stream) {
     char buf[GIF_STAMP_LEN];
     if (stream->read(buf, GIF_STAMP_LEN) == GIF_STAMP_LEN) {
         if (memcmp(GIF_STAMP,   buf, GIF_STAMP_LEN) == 0 ||
@@ -49,14 +47,6 @@ SkMovie* SkMovie_GIF_StreamFactory(SkStream* stream) {
             stream->rewind();
             return SkNEW_ARGS(SkGIFMovie, (stream));
         }
-    }
-    return NULL;
-}
-
-SkMovie* SkMovie_GIF_MemoryFactory(const void* data, size_t length) {
-    if (length > GIF_STAMP_LEN && !memcmp(GIF_STAMP, data, GIF_STAMP_LEN)) {
-        SkMemoryStream  stream(data, length);
-        return SkNEW_ARGS(SkGIFMovie, (&stream));
     }
     return NULL;
 }

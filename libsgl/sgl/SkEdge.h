@@ -32,8 +32,8 @@ struct SkEdge {
 
     SkFixed fX;
     SkFixed fDX;
-    int16_t fFirstY;
-    int16_t fLastY;
+    int32_t fFirstY;
+    int32_t fLastY;
     int8_t fCurveCount;    // only used by kQuad(+) and kCubic(-)
     uint8_t fCurveShift;    // appled to all Dx/DDx/DDDx except for fCubicDShift exception
     uint8_t fCubicDShift;   // applied to fCDx and fCDy only in cubic

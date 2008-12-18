@@ -543,8 +543,19 @@ static void transform_scanline_4444(const char* SK_RESTRICT src, int width,
     }
 }
 
+static void transform_scanline_index8(const char* SK_RESTRICT src, int width,
+                                      char* SK_RESTRICT dst) {
+    memcpy(dst, src, width);
+}
+
 static transform_scanline_proc choose_proc(SkBitmap::Config config,
                                            bool hasAlpha) {
+    // we don't care about search on alpha if we're kIndex8, since only the
+    // colortable packing cares about that distinction, not the pixels
+    if (SkBitmap::kIndex8_Config == config) {
+        hasAlpha = false;   // we store false in the table entries for kIndex8
+    }
+    
     static const struct {
         SkBitmap::Config        fConfig;
         bool                    fHasAlpha;
@@ -555,6 +566,7 @@ static transform_scanline_proc choose_proc(SkBitmap::Config config,
         { SkBitmap::kARGB_8888_Config,  true,   transform_scanline_8888 },
         { SkBitmap::kARGB_4444_Config,  false,  transform_scanline_444 },
         { SkBitmap::kARGB_4444_Config,  true,   transform_scanline_4444 },
+        { SkBitmap::kIndex8_Config,     false,   transform_scanline_index8 },
     };
 
     for (int i = SK_ARRAY_COUNT(gMap) - 1; i >= 0; --i) {
@@ -564,6 +576,78 @@ static transform_scanline_proc choose_proc(SkBitmap::Config config,
     }
     sk_throw();
     return NULL;
+}
+
+// return the minimum legal bitdepth (by png standards) for this many colortable
+// entries. SkBitmap always stores in 8bits per pixel, but for colorcount <= 16,
+// we can use fewer bits per in png
+static int computeBitDepth(int colorCount) {
+#if 0
+    int bits = SkNextLog2(colorCount);
+    SkASSERT(bits >= 1 && bits <= 8);
+    // now we need bits itself to be a power of 2 (e.g. 1, 2, 4, 8)
+    return SkNextPow2(bits);
+#else
+    // for the moment, we don't know how to pack bitdepth < 8
+    return 8;
+#endif
+}
+
+/*  Pack palette[] with the corresponding colors, and if hasAlpha is true, also
+    pack trans[] and return the number of trans[] entries written. If hasAlpha
+    is false, the return value will always be 0.
+ 
+    Note: this routine takes care of unpremultiplying the RGB values when we
+    have alpha in the colortable, since png doesn't support premul colors
+*/
+static int pack_palette(SkColorTable* ctable, png_color* SK_RESTRICT palette,
+                        png_byte* SK_RESTRICT trans, bool hasAlpha) {
+    SkAutoLockColors alc(ctable);
+    const SkPMColor* SK_RESTRICT colors = alc.colors();
+    const int ctCount = ctable->count();
+    int i, num_trans = 0;
+
+    if (hasAlpha) {
+        /*  first see if we have some number of fully opaque at the end of the
+            ctable. PNG allows num_trans < num_palette, but all of the trans
+            entries must come first in the palette. If I was smarter, I'd
+            reorder the indices and ctable so that all non-opaque colors came
+            first in the palette. But, since that would slow down the encode,
+            I'm leaving the indices and ctable order as is, and just looking
+            at the tail of the ctable for opaqueness.
+        */
+        num_trans = ctCount;
+        for (i = ctCount - 1; i >= 0; --i) {
+            if (SkGetPackedA32(colors[i]) != 0xFF) {
+                break;
+            }
+            num_trans -= 1;
+        }
+        
+        const SkUnPreMultiply::Scale* SK_RESTRICT table =
+                                            SkUnPreMultiply::GetScaleTable();
+
+        for (i = 0; i < num_trans; i++) {
+            const SkPMColor c = *colors++;
+            const unsigned a = SkGetPackedA32(c);
+            const SkUnPreMultiply::Scale s = table[a];
+            trans[i] = a;
+            palette[i].red = SkUnPreMultiply::ApplyScale(s, SkGetPackedR32(c));
+            palette[i].green = SkUnPreMultiply::ApplyScale(s,SkGetPackedG32(c));
+            palette[i].blue = SkUnPreMultiply::ApplyScale(s, SkGetPackedB32(c));
+        }        
+        // now fall out of this if-block to use common code for the trailing
+        // opaque entries
+    }
+    
+    // these (remaining) entries are opaque
+    for (i = num_trans; i < ctCount; i++) {
+        SkPMColor c = *colors++;
+        palette[i].red = SkGetPackedR32(c);
+        palette[i].green = SkGetPackedG32(c);
+        palette[i].blue = SkGetPackedB32(c);
+    }
+    return num_trans;
 }
 
 class SkPNGImageEncoder : public SkImageEncoder {
@@ -576,20 +660,25 @@ bool SkPNGImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap,
     SkBitmap::Config config = bitmap.getConfig();
 
     const bool hasAlpha = !bitmap.isOpaque();
+    int colorType = PNG_COLOR_MASK_COLOR;
+    int bitDepth = 8;   // default for color
     png_color_8 sig_bit;
 
     switch (config) {
+        case SkBitmap::kIndex8_Config:
+            colorType |= PNG_COLOR_MASK_PALETTE;
+            // fall through to the ARGB_8888 case
         case SkBitmap::kARGB_8888_Config:
             sig_bit.red = 8;
             sig_bit.green = 8;
             sig_bit.blue = 8;
-            sig_bit.alpha = hasAlpha ? 8 : 0;
+            sig_bit.alpha = 8;
             break;
         case SkBitmap::kARGB_4444_Config:
             sig_bit.red = 4;
             sig_bit.green = 4;
             sig_bit.blue = 4;
-            sig_bit.alpha = hasAlpha ? 4 : 0;
+            sig_bit.alpha = 4;
             break;
         case SkBitmap::kRGB_565_Config:
             sig_bit.red = 5;
@@ -598,18 +687,34 @@ bool SkPNGImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap,
             sig_bit.alpha = 0;
             break;
         default:
-#if 0
-            SkDEBUGF(("SkPNGImageEncoder::onEncode can't encode %d config\n",
-                      config));
-#endif
             return false;
     }
-
-    SkAutoLockPixels alp(bitmap);
-    if (NULL == bitmap.getPixels()) {
-        return false;
+    
+    if (hasAlpha) {
+        // don't specify alpha if we're a palette, even if our ctable has alpha
+        if (!(colorType & PNG_COLOR_MASK_PALETTE)) {
+            colorType |= PNG_COLOR_MASK_ALPHA;
+        }
+    } else {
+        sig_bit.alpha = 0;
     }
     
+    SkAutoLockPixels alp(bitmap);
+    // readyToDraw checks for pixels (and colortable if that is required)
+    if (!bitmap.readyToDraw()) {
+        return false;
+    }
+
+    // we must do this after we have locked the pixels
+    SkColorTable* ctable = bitmap.getColorTable();
+    if (NULL != ctable) {
+        if (ctable->count() == 0) {
+            return false;
+        }
+        // check if we can store in fewer than 8 bits
+        bitDepth = computeBitDepth(ctable->count());
+    }
+
     png_structp png_ptr;
     png_infop info_ptr;
 
@@ -644,8 +749,8 @@ bool SkPNGImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap,
     * currently be PNG_COMPRESSION_TYPE_BASE and PNG_FILTER_TYPE_BASE. REQUIRED
     */
 
-    png_set_IHDR(png_ptr, info_ptr, bitmap.width(), bitmap.height(), 8,
-                 hasAlpha ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
+    png_set_IHDR(png_ptr, info_ptr, bitmap.width(), bitmap.height(),
+                 bitDepth, colorType,
                  PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
                  PNG_FILTER_TYPE_BASE);
 
@@ -676,15 +781,6 @@ bool SkPNGImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap,
     }
 
     png_write_end(png_ptr, info_ptr);
-
-#if 0
-    /* If you png_malloced a palette, free it here (don't free info_ptr->palette,
-      as recommended in versions 1.0.5m and earlier of this example; if
-      libpng mallocs info_ptr->palette, libpng will free it).  If you
-      allocated it with malloc() instead of png_malloc(), use free() instead
-      of png_free(). */
-    png_free(png_ptr, palette);
-#endif
 
     /* clean up after the write, and free any memory allocated */
     png_destroy_write_struct(&png_ptr, &info_ptr);

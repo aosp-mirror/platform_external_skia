@@ -108,6 +108,16 @@ public:
         drawn by the path (with no antialiasing) with the specified clip.
     */
     bool    setPath(const SkPath&, const SkRegion& clip);
+    
+    /** Returns true if the specified rectangle has a non-empty intersection
+        with this region.
+    */
+    bool    intersects(const SkIRect&) const;
+    
+    /** Returns true if the specified region has a non-empty intersection
+        with this region.
+    */
+    bool    intersects(const SkRegion&) const;
 
     /** Return true if the specified x,y coordinate is inside the region.
     */
@@ -297,6 +307,9 @@ public:
     SkDEBUGCODE(void dump() const;)
     SkDEBUGCODE(void validate() const;)
     SkDEBUGCODE(static void UnitTest();)
+
+    // expose this to allow for regression test on complex regions
+    SkDEBUGCODE(bool debugSetRuns(const RunType runs[], int count);)
 
 private:
     enum {

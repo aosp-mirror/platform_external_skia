@@ -34,8 +34,8 @@ struct MipLevel {
 };
 
 struct SkBitmap::MipMap : SkNoncopyable {
-    int fRefCnt;
-    int fLevelCount;
+    int32_t fRefCnt;
+    int     fLevelCount;
 //  MipLevel    fLevel[fLevelCount];
 //  Pixels[]
     
@@ -202,6 +202,20 @@ int SkBitmap::ComputeRowBytes(Config c, int width) {
             break;
     }
     return rowBytes;
+}
+
+Sk64 SkBitmap::ComputeSize64(Config c, int width, int height) {
+    Sk64 size;
+    size.setMul(SkBitmap::ComputeRowBytes(c, width), height);
+    return size;
+}
+
+size_t SkBitmap::ComputeSize(Config c, int width, int height) {
+    Sk64 size = SkBitmap::ComputeSize64(c, width, height);
+    if (size.isNeg() || !size.is32()) {
+        return 0;
+    }
+    return size.get32();
 }
 
 void SkBitmap::setConfig(Config c, int width, int height, int rowBytes) {
@@ -382,8 +396,8 @@ SkMallocPixelRef::SkMallocPixelRef(SkFlattenableReadBuffer& buffer) : INHERITED(
     }
 }
 
-static SkPixelRef::Registrar::Registrar reg("SkMallocPixelRef",
-                                            SkMallocPixelRef::Create);
+static SkPixelRef::Registrar reg("SkMallocPixelRef",
+                                 SkMallocPixelRef::Create);
 
 /** We explicitly use the same allocator for our pixels that SkMask does,
  so that we can freely assign memory allocated by one class to the other.
@@ -1226,6 +1240,7 @@ void SkBitmap::validate() const {
     SkASSERT(NULL == fColorTable || (unsigned)fColorTable->getRefCnt() < 10000);
     SkASSERT((uint8_t)ComputeBytesPerPixel((Config)fConfig) == fBytesPerPixel);
 
+#if 0   // these asserts are not thread-correct, so disable for now
     if (fPixelRef) {
         if (fPixelLockCount > 0) {
             SkASSERT(fPixelRef->getLockCount() > 0);
@@ -1234,6 +1249,7 @@ void SkBitmap::validate() const {
             SkASSERT(NULL == fColorTable);
         }
     }
+#endif
 }
 #endif
 

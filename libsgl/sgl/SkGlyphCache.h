@@ -188,7 +188,7 @@ private:
     SkPaint::FontMetrics fFontMetricsY;
 
     enum {
-        kHashBits   = 6,
+        kHashBits   = 8,
         kHashCount  = 1 << kHashBits,
         kHashMask   = kHashCount - 1
     };

@@ -367,6 +367,35 @@ public:
     */
     bool getFillPath(const SkPath& src, SkPath* dst) const;
 
+    /** Returns true if the current paint settings allow for fast computation of
+        bounds (i.e. there is nothing complex like a patheffect that would make
+        the bounds computation expensive.
+    */
+    bool canComputeFastBounds() const;
+    
+    /** Only call this if canComputeFastBounds() returned true. This takes a
+        raw rectangle (the raw bounds of a shape), and adjusts it for stylistic
+        effects in the paint (e.g. stroking). If needed, it uses the storage
+        rect parameter. It returns the adjusted bounds that can then be used
+        for quickReject tests.
+     
+        The returned rect will either be orig or storage, thus the caller
+        should not rely on storage being set to the result, but should always
+        use the retured value. It is legal for orig and storage to be the same
+        rect.
+        
+        e.g.
+        if (paint.canComputeFastBounds()) {
+            SkRect r, storage;
+            path.computeBounds(&r, SkPath::kFast_BoundsType);
+            const SkRect& fastR = paint.computeFastBounds(r, &storage);
+            if (canvas->quickReject(fastR, ...)) {
+                // don't draw the path
+            }
+        }
+    */
+    const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const;
+
     /** Get the paint's shader object.
         <p />
       The shader's reference count is not affected.

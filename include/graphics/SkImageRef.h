@@ -44,12 +44,12 @@ public:
     SkImageRef(SkStream*, SkBitmap::Config config, int sampleSize = 1);
     virtual ~SkImageRef();
     
-    const char* getName() const { return fName.c_str(); }
-    void setName(const char name[]) { fName.set(name); }
-
     /** Return true if the image can be decoded. If so, and bitmap is non-null,
         call its setConfig() with the corresponding values, but explicitly will
         not set its pixels or colortable. Use SkPixelRef::lockPixels() for that.
+     
+        If there has been an error decoding the bitmap, this will return false
+        and ignore the bitmap parameter.
     */
     bool getInfo(SkBitmap* bm);
 
@@ -85,8 +85,6 @@ private:
     SkBitmap::Config    fConfig;
     int                 fSampleSize;
     bool                fErrorInDecoding;
-
-    SkString    fName;  // for debugging
     
     friend class SkImageRefPool;
     

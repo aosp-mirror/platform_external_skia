@@ -430,6 +430,46 @@ const SkRegion::RunType* SkRegion::getRuns(RunType tmpStorage[], int* count) con
 
 /////////////////////////////////////////////////////////////////////////////////////
 
+bool SkRegion::intersects(const SkIRect& r) const {
+    if (this->isEmpty() || r.isEmpty()) {
+        return false;
+    }
+    
+    if (!SkIRect::Intersects(fBounds, r)) {
+        return false;
+    }
+
+    if (this->isRect()) {
+        return true;
+    }
+    
+    // we are complex
+    SkRegion tmp;
+    return tmp.op(*this, r, kIntersect_Op);
+}
+
+bool SkRegion::intersects(const SkRegion& rgn) const {
+    if (this->isEmpty() || rgn.isEmpty()) {
+        return false;
+    }
+    
+    if (!SkIRect::Intersects(fBounds, rgn.fBounds)) {
+        return false;
+    }
+    
+    if (this->isRect() && rgn.isRect()) {
+        return true;
+    }
+    
+    // one or both of us is complex
+    // TODO: write a faster version that aborts as soon as we write the first
+    //       non-empty span, to avoid build the entire result
+    SkRegion tmp;
+    return tmp.op(*this, rgn, kIntersect_Op);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+
 int operator==(const SkRegion& a, const SkRegion& b)
 {
     SkDEBUGCODE(a.validate();)
@@ -844,6 +884,43 @@ static int operate( const SkRegion::RunType a_runs[],
     return oper.flush();
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+/*  Given count RunTypes in a complex region, return the worst case number of
+    logical intervals that represents (i.e. number of rects that would be
+    returned from the iterator).
+ 
+    We could just return count/2, since there must be at least 2 values per
+    interval, but we can first trim off the const overhead of the initial TOP
+    value, plus the final BOTTOM + 2 sentinels.
+ */
+static int count_to_intervals(int count) {
+    SkASSERT(count >= 6);   // a single rect is 6 values
+    return (count - 4) >> 1;
+}
+
+/*  Given a number of intervals, what is the worst case representation of that
+    many intervals?
+ 
+    Worst case (from a storage perspective), is a vertical stack of single
+    intervals:  TOP + N * (BOTTOM LEFT RIGHT SENTINEL) + SENTINEL
+ */
+static int intervals_to_count(int intervals) {
+    return 1 + intervals * 4 + 1;
+}
+
+/*  Given the counts of RunTypes in two regions, return the worst-case number
+    of RunTypes need to store the result after a region-op.
+ */
+static int compute_worst_case_count(int a_count, int b_count) {
+    int a_intervals = count_to_intervals(a_count);
+    int b_intervals = count_to_intervals(b_count);
+    // Our heuristic worst case is ai * (bi + 1) + bi * (ai + 1)
+    int intervals = 2 * a_intervals * b_intervals + a_intervals + b_intervals;
+    // convert back to number of RunType values
+    return intervals_to_count(intervals);
+}
+
 bool SkRegion::op(const SkRegion& rgnaOrig, const SkRegion& rgnbOrig, Op op)
 {
     SkDEBUGCODE(this->validate();)
@@ -916,7 +993,7 @@ bool SkRegion::op(const SkRegion& rgnaOrig, const SkRegion& rgnbOrig, Op op)
     const RunType* a_runs = rgna->getRuns(tmpA, &a_count);
     const RunType* b_runs = rgnb->getRuns(tmpB, &b_count);
 
-    int dstCount = 3 * SkMax32(a_count, b_count);
+    int dstCount = compute_worst_case_count(a_count, b_count);
     SkAutoSTMalloc<32, RunType> array(dstCount);
 
     int count = operate(a_runs, b_runs, array.get(), op);
@@ -1245,4 +1322,20 @@ bool SkRegion::Spanerator::next(int* left, int* right)
     fRuns = runs + 2;
     return true;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef SK_DEBUG
+
+bool SkRegion::debugSetRuns(const RunType runs[], int count) {
+    // we need to make a copy, since the real method may modify the array, and
+    // so it cannot be const.
+    
+    SkAutoTArray<RunType> storage(count);
+    memcpy(storage.get(), runs, count * sizeof(RunType));
+    return this->setRuns(storage.get(), count);
+}
+
+#endif
+
 

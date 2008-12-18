@@ -23,6 +23,12 @@
     #define SK_DEBUG
 #endif
 
+// remove the x if you want to force us into SK_RELEASE mode
+#ifdef SK_DEBUGx
+    #undef SK_DEBUG
+    #define SK_RELEASE
+#endif
+
 #ifdef ANDROID
     #include <utils/misc.h>
 
@@ -39,6 +45,7 @@
 #endif
 
     #define SK_CAN_USE_FLOAT
+    #define SK_SOFTWARE_FLOAT
     #define SkLONGLONG int64_t
 
     // replace some sw float routines (floor, ceil, etc.)

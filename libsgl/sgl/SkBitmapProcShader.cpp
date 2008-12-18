@@ -192,3 +192,40 @@ SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
 
 static SkFlattenable::Registrar gBitmapProcShaderReg("SkBitmapProcShader",
                                                SkBitmapProcShader::CreateProc);
+
+///////////////////////////////////////////////////////////////////////////////
+
+static const char* gTileModeName[] = {
+    "clamp", "repeat", "mirror"
+};
+
+bool SkBitmapProcShader::toDumpString(SkString* str) const {
+    str->printf("BitmapShader: [%d %d %d",
+                fRawBitmap.width(), fRawBitmap.height(),
+                fRawBitmap.bytesPerPixel());
+    
+    // add the pixelref
+    SkPixelRef* pr = fRawBitmap.pixelRef();
+    if (pr) {
+        const char* uri = pr->getURI();
+        if (uri) {
+            str->appendf(" \"%s\"", uri);
+        }
+    }
+    
+    // add the (optional) matrix
+    {
+        SkMatrix m;
+        if (this->getLocalMatrix(&m)) {
+            SkString info;
+            m.toDumpString(&info);
+            str->appendf(" %s", info.c_str());
+        }
+    }
+    
+    str->appendf(" [%s %s]]",
+                 gTileModeName[fState.fTileModeX],
+                 gTileModeName[fState.fTileModeY]);
+    return true;
+}
+

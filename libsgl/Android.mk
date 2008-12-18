@@ -17,22 +17,20 @@ LOCAL_SRC_FILES:= \
 	effects/SkCornerPathEffect.cpp \
 	effects/SkDashPathEffect.cpp \
 	effects/SkDiscretePathEffect.cpp \
+	effects/SkDumpCanvas.cpp \
 	effects/SkEmbossMask.cpp \
 	effects/SkEmbossMaskFilter.cpp \
 	effects/SkGradientShader.cpp \
+	effects/SkLayerDrawLooper.cpp \
 	effects/SkLayerRasterizer.cpp \
 	effects/SkNinePatch.cpp \
 	effects/SkPaintFlagsDrawFilter.cpp \
 	effects/SkPixelXorXfermode.cpp \
+	effects/SkProxyCanvas.cpp \
 	effects/SkShaderExtras.cpp \
 	effects/SkTransparentShader.cpp \
-    gl/SkGL.cpp \
-    gl/SkGLCanvas.cpp \
-    gl/SkGLDevice.cpp \
-    gl/SkGLDevice_SWLayer.cpp \
-    gl/SkGLTextCache.cpp \
-    gl/SkTextureCache.cpp \
     images/bmpdecoderhelper.cpp \
+	images/SkFDStream.cpp \
 	images/SkImageDecoder.cpp \
 	images/SkImageDecoder_libbmp.cpp \
 	images/SkImageDecoder_libgif.cpp \
@@ -46,9 +44,12 @@ LOCAL_SRC_FILES:= \
 	images/SkMMapStream.cpp \
 	images/SkMovie.cpp \
 	images/SkMovie_gif.cpp \
+	images/SkFlipPixelRef.cpp \
     images/SkScaledBitmapSampler.cpp \
 	images/SkStream.cpp \
 	images/SkCreateRLEPixelRef.cpp \
+	picture/SkPathHeap.cpp \
+	picture/SkPicture.cpp \
     picture/SkPictureFlat.cpp \
     picture/SkPicturePlayback.cpp \
     picture/SkPictureRecord.cpp \
@@ -100,7 +101,6 @@ LOCAL_SRC_FILES:= \
 	sgl/SkPath.cpp \
 	sgl/SkPathEffect.cpp \
 	sgl/SkPathMeasure.cpp \
-	sgl/SkPicture.cpp \
 	sgl/SkPixelRef.cpp \
 	sgl/SkProcSpriteBlitter.cpp \
     sgl/SkPtrRecorder.cpp \
@@ -116,13 +116,11 @@ LOCAL_SRC_FILES:= \
 	sgl/SkShader.cpp \
 	sgl/SkSpriteBlitter_ARGB32.cpp \
 	sgl/SkSpriteBlitter_RGB16.cpp \
-	sgl/SkString.cpp \
 	sgl/SkStroke.cpp \
 	sgl/SkStrokerPriv.cpp \
 	sgl/SkTSearch.cpp \
 	sgl/SkTypeface.cpp \
     sgl/SkUnPreMultiply.cpp \
-	sgl/SkUtils.cpp \
 	sgl/SkXfermode.cpp \
 	sgl/SkWriter32.cpp \
 	xml/SkXMLPullParser.cpp
@@ -132,7 +130,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libcorecg \
 	libexpat \
-	libGLES_CM \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
@@ -158,8 +155,49 @@ LOCAL_C_INCLUDES += \
 
 LOCAL_CFLAGS += -fpic -fstrict-aliasing
 
+ifeq ($(NO_FALLBACK_FONT),true)
+	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
+endif
+
 LOCAL_LDLIBS += -lpthread
 
 LOCAL_MODULE:= libsgl
+
+include $(BUILD_SHARED_LIBRARY)
+
+#
+# Build the skia-opengl glue library
+#
+
+include $(CLEAR_VARS)
+
+LOCAL_PRELINK_MODULE := false
+
+LOCAL_ARM_MODE := arm
+
+LOCAL_SRC_FILES:= \
+    gl/SkGL.cpp \
+    gl/SkGLCanvas.cpp \
+    gl/SkGLDevice.cpp \
+    gl/SkGLDevice_SWLayer.cpp \
+    gl/SkGLTextCache.cpp \
+    gl/SkTextureCache.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+	libcutils \
+	libutils \
+	libsgl \
+	libcorecg \
+	libGLES_CM
+
+LOCAL_C_INCLUDES += \
+	$(LOCAL_PATH)/sgl \
+	$(call include-path-for, graphics corecg)
+
+LOCAL_CFLAGS += -fpic -fstrict-aliasing
+
+LOCAL_LDLIBS += -lpthread
+
+LOCAL_MODULE:= libskiagl
 
 include $(BUILD_SHARED_LIBRARY)

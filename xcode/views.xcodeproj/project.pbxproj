@@ -1,0 +1,324 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 42;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00B7E1C20EDCAB1500F77EA2 /* SkEvent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1BC0EDCAB1500F77EA2 /* SkEvent.cpp */; };
+		00B7E1C30EDCAB1500F77EA2 /* SkEventSink.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1BD0EDCAB1500F77EA2 /* SkEventSink.cpp */; };
+		00B7E1C40EDCAB1500F77EA2 /* SkMetaData.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1BE0EDCAB1500F77EA2 /* SkMetaData.cpp */; };
+		00B7E1C50EDCAB1500F77EA2 /* SkTagList.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1BF0EDCAB1500F77EA2 /* SkTagList.cpp */; };
+		00B7E1C60EDCAB1500F77EA2 /* SkTagList.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7E1C00EDCAB1500F77EA2 /* SkTagList.h */; };
+		00B7E1C70EDCAB1500F77EA2 /* SkTextBox.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1C10EDCAB1500F77EA2 /* SkTextBox.cpp */; };
+		00B7E1DF0EDCABAC00F77EA2 /* SkBGViewArtist.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CA0EDCABAC00F77EA2 /* SkBGViewArtist.cpp */; };
+		00B7E1E00EDCABAC00F77EA2 /* SkBorderView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CB0EDCABAC00F77EA2 /* SkBorderView.cpp */; };
+		00B7E1E10EDCABAC00F77EA2 /* SkImageView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CC0EDCABAC00F77EA2 /* SkImageView.cpp */; };
+		00B7E1E20EDCABAC00F77EA2 /* SkListView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CD0EDCABAC00F77EA2 /* SkListView.cpp */; };
+		00B7E1E30EDCABAC00F77EA2 /* SkListWidget.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CE0EDCABAC00F77EA2 /* SkListWidget.cpp */; };
+		00B7E1E40EDCABAC00F77EA2 /* SkOSFile.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1CF0EDCABAC00F77EA2 /* SkOSFile.cpp */; };
+		00B7E1E50EDCABAC00F77EA2 /* SkOSMenu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D00EDCABAC00F77EA2 /* SkOSMenu.cpp */; };
+		00B7E1E60EDCABAC00F77EA2 /* SkOSSound.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D10EDCABAC00F77EA2 /* SkOSSound.cpp */; };
+		00B7E1E70EDCABAC00F77EA2 /* SkParsePaint.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D20EDCABAC00F77EA2 /* SkParsePaint.cpp */; };
+		00B7E1E80EDCABAC00F77EA2 /* SkProgressBarView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D30EDCABAC00F77EA2 /* SkProgressBarView.cpp */; };
+		00B7E1E90EDCABAC00F77EA2 /* SkProgressView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D40EDCABAC00F77EA2 /* SkProgressView.cpp */; };
+		00B7E1EA0EDCABAC00F77EA2 /* SkScrollBarView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D50EDCABAC00F77EA2 /* SkScrollBarView.cpp */; };
+		00B7E1EB0EDCABAC00F77EA2 /* SkStackViewLayout.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D60EDCABAC00F77EA2 /* SkStackViewLayout.cpp */; };
+		00B7E1EC0EDCABAC00F77EA2 /* SkView.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D70EDCABAC00F77EA2 /* SkView.cpp */; };
+		00B7E1ED0EDCABAC00F77EA2 /* SkViewInflate.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D80EDCABAC00F77EA2 /* SkViewInflate.cpp */; };
+		00B7E1EE0EDCABAC00F77EA2 /* SkViewPriv.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1D90EDCABAC00F77EA2 /* SkViewPriv.cpp */; };
+		00B7E1EF0EDCABAC00F77EA2 /* SkViewPriv.h in Headers */ = {isa = PBXBuildFile; fileRef = 00B7E1DA0EDCABAC00F77EA2 /* SkViewPriv.h */; };
+		00B7E1F00EDCABAC00F77EA2 /* SkWidget.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1DB0EDCABAC00F77EA2 /* SkWidget.cpp */; };
+		00B7E1F10EDCABAC00F77EA2 /* SkWidgets.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1DC0EDCABAC00F77EA2 /* SkWidgets.cpp */; };
+		00B7E1F20EDCABAC00F77EA2 /* SkWidgetViews.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1DD0EDCABAC00F77EA2 /* SkWidgetViews.cpp */; };
+		00B7E1F30EDCABAC00F77EA2 /* SkWindow.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00B7E1DE0EDCABAC00F77EA2 /* SkWindow.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		00B7E1BC0EDCAB1500F77EA2 /* SkEvent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkEvent.cpp; path = ../libsgl/views/SkEvent.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1BD0EDCAB1500F77EA2 /* SkEventSink.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkEventSink.cpp; path = ../libsgl/views/SkEventSink.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1BE0EDCAB1500F77EA2 /* SkMetaData.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkMetaData.cpp; path = ../libsgl/views/SkMetaData.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1BF0EDCAB1500F77EA2 /* SkTagList.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkTagList.cpp; path = ../libsgl/views/SkTagList.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1C00EDCAB1500F77EA2 /* SkTagList.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkTagList.h; path = ../libsgl/views/SkTagList.h; sourceTree = SOURCE_ROOT; };
+		00B7E1C10EDCAB1500F77EA2 /* SkTextBox.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkTextBox.cpp; path = ../libsgl/views/SkTextBox.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CA0EDCABAC00F77EA2 /* SkBGViewArtist.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkBGViewArtist.cpp; path = ../libsgl/views/SkBGViewArtist.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CB0EDCABAC00F77EA2 /* SkBorderView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkBorderView.cpp; path = ../libsgl/views/SkBorderView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CC0EDCABAC00F77EA2 /* SkImageView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkImageView.cpp; path = ../libsgl/views/SkImageView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CD0EDCABAC00F77EA2 /* SkListView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkListView.cpp; path = ../libsgl/views/SkListView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CE0EDCABAC00F77EA2 /* SkListWidget.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkListWidget.cpp; path = ../libsgl/views/SkListWidget.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1CF0EDCABAC00F77EA2 /* SkOSFile.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkOSFile.cpp; path = ../libsgl/views/SkOSFile.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D00EDCABAC00F77EA2 /* SkOSMenu.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkOSMenu.cpp; path = ../libsgl/views/SkOSMenu.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D10EDCABAC00F77EA2 /* SkOSSound.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkOSSound.cpp; path = ../libsgl/views/SkOSSound.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D20EDCABAC00F77EA2 /* SkParsePaint.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkParsePaint.cpp; path = ../libsgl/views/SkParsePaint.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D30EDCABAC00F77EA2 /* SkProgressBarView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkProgressBarView.cpp; path = ../libsgl/views/SkProgressBarView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D40EDCABAC00F77EA2 /* SkProgressView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkProgressView.cpp; path = ../libsgl/views/SkProgressView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D50EDCABAC00F77EA2 /* SkScrollBarView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkScrollBarView.cpp; path = ../libsgl/views/SkScrollBarView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D60EDCABAC00F77EA2 /* SkStackViewLayout.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkStackViewLayout.cpp; path = ../libsgl/views/SkStackViewLayout.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D70EDCABAC00F77EA2 /* SkView.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkView.cpp; path = ../libsgl/views/SkView.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D80EDCABAC00F77EA2 /* SkViewInflate.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkViewInflate.cpp; path = ../libsgl/views/SkViewInflate.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1D90EDCABAC00F77EA2 /* SkViewPriv.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkViewPriv.cpp; path = ../libsgl/views/SkViewPriv.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1DA0EDCABAC00F77EA2 /* SkViewPriv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SkViewPriv.h; path = ../libsgl/views/SkViewPriv.h; sourceTree = SOURCE_ROOT; };
+		00B7E1DB0EDCABAC00F77EA2 /* SkWidget.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkWidget.cpp; path = ../libsgl/views/SkWidget.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1DC0EDCABAC00F77EA2 /* SkWidgets.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkWidgets.cpp; path = ../libsgl/views/SkWidgets.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1DD0EDCABAC00F77EA2 /* SkWidgetViews.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkWidgetViews.cpp; path = ../libsgl/views/SkWidgetViews.cpp; sourceTree = SOURCE_ROOT; };
+		00B7E1DE0EDCABAC00F77EA2 /* SkWindow.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SkWindow.cpp; path = ../libsgl/views/SkWindow.cpp; sourceTree = SOURCE_ROOT; };
+		D2AAC046055464E500DB518D /* libviews.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libviews.a; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D289987405E68DCB004EDB86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		08FB7794FE84155DC02AAC07 /* views */ = {
+			isa = PBXGroup;
+			children = (
+				08FB7795FE84155DC02AAC07 /* Source */,
+				C6A0FF2B0290797F04C91782 /* Documentation */,
+				1AB674ADFE9D54B511CA2CBB /* Products */,
+			);
+			name = views;
+			sourceTree = "<group>";
+		};
+		08FB7795FE84155DC02AAC07 /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				00B7E1CA0EDCABAC00F77EA2 /* SkBGViewArtist.cpp */,
+				00B7E1CB0EDCABAC00F77EA2 /* SkBorderView.cpp */,
+				00B7E1CC0EDCABAC00F77EA2 /* SkImageView.cpp */,
+				00B7E1CD0EDCABAC00F77EA2 /* SkListView.cpp */,
+				00B7E1CE0EDCABAC00F77EA2 /* SkListWidget.cpp */,
+				00B7E1CF0EDCABAC00F77EA2 /* SkOSFile.cpp */,
+				00B7E1D00EDCABAC00F77EA2 /* SkOSMenu.cpp */,
+				00B7E1D10EDCABAC00F77EA2 /* SkOSSound.cpp */,
+				00B7E1D20EDCABAC00F77EA2 /* SkParsePaint.cpp */,
+				00B7E1D30EDCABAC00F77EA2 /* SkProgressBarView.cpp */,
+				00B7E1D40EDCABAC00F77EA2 /* SkProgressView.cpp */,
+				00B7E1D50EDCABAC00F77EA2 /* SkScrollBarView.cpp */,
+				00B7E1D60EDCABAC00F77EA2 /* SkStackViewLayout.cpp */,
+				00B7E1D70EDCABAC00F77EA2 /* SkView.cpp */,
+				00B7E1D80EDCABAC00F77EA2 /* SkViewInflate.cpp */,
+				00B7E1D90EDCABAC00F77EA2 /* SkViewPriv.cpp */,
+				00B7E1DA0EDCABAC00F77EA2 /* SkViewPriv.h */,
+				00B7E1DB0EDCABAC00F77EA2 /* SkWidget.cpp */,
+				00B7E1DC0EDCABAC00F77EA2 /* SkWidgets.cpp */,
+				00B7E1DD0EDCABAC00F77EA2 /* SkWidgetViews.cpp */,
+				00B7E1DE0EDCABAC00F77EA2 /* SkWindow.cpp */,
+				00B7E1BC0EDCAB1500F77EA2 /* SkEvent.cpp */,
+				00B7E1BD0EDCAB1500F77EA2 /* SkEventSink.cpp */,
+				00B7E1BE0EDCAB1500F77EA2 /* SkMetaData.cpp */,
+				00B7E1BF0EDCAB1500F77EA2 /* SkTagList.cpp */,
+				00B7E1C00EDCAB1500F77EA2 /* SkTagList.h */,
+				00B7E1C10EDCAB1500F77EA2 /* SkTextBox.cpp */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+		1AB674ADFE9D54B511CA2CBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D2AAC046055464E500DB518D /* libviews.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C6A0FF2B0290797F04C91782 /* Documentation */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Documentation;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		D2AAC043055464E500DB518D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00B7E1C60EDCAB1500F77EA2 /* SkTagList.h in Headers */,
+				00B7E1EF0EDCABAC00F77EA2 /* SkViewPriv.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		D2AAC045055464E500DB518D /* views */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "views" */;
+			buildPhases = (
+				D2AAC043055464E500DB518D /* Headers */,
+				D2AAC044055464E500DB518D /* Sources */,
+				D289987405E68DCB004EDB86 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = views;
+			productName = views;
+			productReference = D2AAC046055464E500DB518D /* libviews.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		08FB7793FE84155DC02AAC07 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "views" */;
+			compatibilityVersion = "Xcode 2.4";
+			hasScannedForEncodings = 1;
+			mainGroup = 08FB7794FE84155DC02AAC07 /* views */;
+			projectDirPath = "";
+			projectRoot = ..;
+			targets = (
+				D2AAC045055464E500DB518D /* views */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D2AAC044055464E500DB518D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00B7E1C20EDCAB1500F77EA2 /* SkEvent.cpp in Sources */,
+				00B7E1C30EDCAB1500F77EA2 /* SkEventSink.cpp in Sources */,
+				00B7E1C40EDCAB1500F77EA2 /* SkMetaData.cpp in Sources */,
+				00B7E1C50EDCAB1500F77EA2 /* SkTagList.cpp in Sources */,
+				00B7E1C70EDCAB1500F77EA2 /* SkTextBox.cpp in Sources */,
+				00B7E1DF0EDCABAC00F77EA2 /* SkBGViewArtist.cpp in Sources */,
+				00B7E1E00EDCABAC00F77EA2 /* SkBorderView.cpp in Sources */,
+				00B7E1E10EDCABAC00F77EA2 /* SkImageView.cpp in Sources */,
+				00B7E1E20EDCABAC00F77EA2 /* SkListView.cpp in Sources */,
+				00B7E1E30EDCABAC00F77EA2 /* SkListWidget.cpp in Sources */,
+				00B7E1E40EDCABAC00F77EA2 /* SkOSFile.cpp in Sources */,
+				00B7E1E50EDCABAC00F77EA2 /* SkOSMenu.cpp in Sources */,
+				00B7E1E60EDCABAC00F77EA2 /* SkOSSound.cpp in Sources */,
+				00B7E1E70EDCABAC00F77EA2 /* SkParsePaint.cpp in Sources */,
+				00B7E1E80EDCABAC00F77EA2 /* SkProgressBarView.cpp in Sources */,
+				00B7E1E90EDCABAC00F77EA2 /* SkProgressView.cpp in Sources */,
+				00B7E1EA0EDCABAC00F77EA2 /* SkScrollBarView.cpp in Sources */,
+				00B7E1EB0EDCABAC00F77EA2 /* SkStackViewLayout.cpp in Sources */,
+				00B7E1EC0EDCABAC00F77EA2 /* SkView.cpp in Sources */,
+				00B7E1ED0EDCABAC00F77EA2 /* SkViewInflate.cpp in Sources */,
+				00B7E1EE0EDCABAC00F77EA2 /* SkViewPriv.cpp in Sources */,
+				00B7E1F00EDCABAC00F77EA2 /* SkWidget.cpp in Sources */,
+				00B7E1F10EDCABAC00F77EA2 /* SkWidgets.cpp in Sources */,
+				00B7E1F20EDCABAC00F77EA2 /* SkWidgetViews.cpp in Sources */,
+				00B7E1F30EDCABAC00F77EA2 /* SkWindow.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1DEB91EC08733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH)";
+				COPY_PHASE_STRIP = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_FIX_AND_CONTINUE = YES;
+				GCC_MODEL_TUNING = G5;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = views;
+				ZERO_LINK = NO;
+			};
+			name = Debug;
+		};
+		1DEB91ED08733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH)";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_MODEL_TUNING = G5;
+				INSTALL_PATH = /usr/local/lib;
+				PRODUCT_NAME = views;
+				ZERO_LINK = NO;
+			};
+			name = Release;
+		};
+		1DEB91F008733DB70010E9CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_CW_ASM_SYNTAX = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_ENABLE_PASCAL_STRINGS = NO;
+				GCC_ENABLE_SYMBOL_SEPARATION = NO;
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				GCC_USE_GCC3_PFE_SUPPORT = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)";
+				LINK_WITH_STANDARD_LIBRARIES = NO;
+				PREBINDING = NO;
+				PRECOMPS_INCLUDE_HEADERS_FROM_BUILT_PRODUCTS_DIR = NO;
+				SDKROOT = "";
+				SHARED_PRECOMPS_DIR = "";
+				STRIP_INSTALLED_PRODUCT = NO;
+				USER_HEADER_SEARCH_PATHS = "../libsgl/sgl ../include/**";
+			};
+			name = Debug;
+		};
+		1DEB91F108733DB70010E9CD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_CW_ASM_SYNTAX = NO;
+				GCC_ENABLE_CPP_RTTI = NO;
+				GCC_ENABLE_PASCAL_STRINGS = NO;
+				GCC_ENABLE_SYMBOL_SEPARATION = NO;
+				GCC_PREPROCESSOR_DEFINITIONS = SK_RELEASE;
+				GCC_USE_GCC3_PFE_SUPPORT = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)";
+				LINK_WITH_STANDARD_LIBRARIES = NO;
+				PREBINDING = NO;
+				PRECOMPS_INCLUDE_HEADERS_FROM_BUILT_PRODUCTS_DIR = NO;
+				SDKROOT = "";
+				SHARED_PRECOMPS_DIR = "";
+				STRIP_INSTALLED_PRODUCT = NO;
+				USER_HEADER_SEARCH_PATHS = "../libsgl/sgl ../include/**";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1DEB91EB08733DB70010E9CD /* Build configuration list for PBXNativeTarget "views" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91EC08733DB70010E9CD /* Debug */,
+				1DEB91ED08733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1DEB91EF08733DB70010E9CD /* Build configuration list for PBXProject "views" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DEB91F008733DB70010E9CD /* Debug */,
+				1DEB91F108733DB70010E9CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 08FB7793FE84155DC02AAC07 /* Project object */;
+}

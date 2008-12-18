@@ -15,9 +15,12 @@ LOCAL_SRC_FILES:= \
 	SkMath.cpp \
 	SkMatrix.cpp \
 	SkMemory_stdlib.cpp \
+	SkPageFlipper.cpp \
 	SkPoint.cpp \
 	SkRect.cpp \
-	SkRegion.cpp
+	SkRegion.cpp \
+	SkString.cpp \
+	SkUtils.cpp \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \

@@ -25,6 +25,7 @@
 
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
+class SkString;
 
 /** \class SkFlattenable
  
@@ -49,6 +50,11 @@ public:
      */
     virtual void flatten(SkFlattenableWriteBuffer&);
     
+    /** Set the string to describe the sublass and return true. If this is not
+        overridden, ignore the string param and return false.
+     */
+    virtual bool toDumpString(SkString*) const;
+
     static Factory NameToFactory(const char name[]);
     static const char* FactoryToName(Factory);
     static void Register(const char name[], Factory);

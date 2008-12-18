@@ -76,8 +76,8 @@ int SkEdge::setLine(const SkPoint& p0, const SkPoint& p1, const SkIRect* clip,
 
     fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, (32 - y0) & 63));   // + SK_Fixed1/2
     fDX         = slope;
-    fFirstY     = SkToS16(top);
-    fLastY      = SkToS16(bot - 1);
+    fFirstY     = top;
+    fLastY      = bot - 1;
     fCurveCount = 0;
     fWinding    = SkToS8(winding);
     fCurveShift = 0;
@@ -116,8 +116,8 @@ int SkEdge::updateLine(SkFixed x0, SkFixed y0, SkFixed x1, SkFixed y1)
 
     fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, (32 - y0) & 63));   // + SK_Fixed1/2
     fDX         = slope;
-    fFirstY     = SkToS16(top);
-    fLastY      = SkToS16(bot - 1);
+    fFirstY     = top;
+    fLastY      = bot - 1;
 
     return 1;
 }
@@ -139,11 +139,12 @@ void SkEdge::chopLineWithClip(const SkIRect& clip)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/*  We store 1<<shift in a (signed) byte, so its maximum value is 7 (e.g. 128)
-    Note that this limits the number of times we can subdivide a curve, but 128
-    seems more than adequate.
+/*  We store 1<<shift in a (signed) byte, so its maximum value is 1<<6 == 64.
+    Note that this limits the number of lines we use to approximate a curve.
+    If we need to increase this, we need to store fCurveCount in something
+    larger than int8_t.
 */
-#define MAX_COEFF_SHIFT     7
+#define MAX_COEFF_SHIFT     6
 
 static inline SkFDot6 cheap_distance(SkFDot6 dx, SkFDot6 dy)
 {
@@ -166,7 +167,7 @@ static inline int diff_to_shift(SkFDot6 dx, SkFDot6 dy)
     // down by 5 should give us 1/2 pixel accuracy (assuming our dist is accurate...)
     // this is chosen by heuristic: make it as big as possible (to minimize segments)
     // ... but small enough so that our curves still look smooth
-    dist >>= 5;
+    dist = (dist + (1 << 4)) >> 5;
 
     // each subdivision (shift value) cuts this dist (error) by 1/4
     return (32 - SkCLZ(dist)) >> 1;

@@ -89,9 +89,15 @@ public:
     */
     const char* getURI() const { return fURI.size() ? fURI.c_str() : NULL; }
 
-    /** Assign a URI string to this pixelref. If not null, the string is copied.
-    */
-    void setURI(const char uri[], size_t len = (size_t)-1) {
+    /** Copy a URI string to this pixelref, or clear the URI if the uri is null
+     */
+    void setURI(const char uri[]) {
+        fURI.set(uri);
+    }
+    
+    /** Copy a URI string to this pixelref
+     */
+    void setURI(const char uri[], size_t len) {
         fURI.set(uri, len);
     }
     

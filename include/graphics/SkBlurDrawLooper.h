@@ -37,6 +37,10 @@ public:
     virtual bool next();
     virtual void restore();
 
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
+        return SkNEW_ARGS(SkBlurDrawLooper, (buffer));
+    }
+
 protected:
     SkBlurDrawLooper(SkFlattenableReadBuffer&);
     // overrides from SkFlattenable
@@ -44,9 +48,6 @@ protected:
     virtual Factory getFactory() { return CreateProc; }
 
 private:
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkBlurDrawLooper, (buffer)); }
-
     SkCanvas*       fCanvas;
     SkPaint*        fPaint;
     SkMaskFilter*   fBlur;

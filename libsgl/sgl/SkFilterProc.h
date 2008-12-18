@@ -70,7 +70,7 @@ typedef unsigned (*SkFilter32Proc)(uint32_t x00, uint32_t x01,
 
 const SkFilter32Proc* SkGetFilter32ProcTable();
 
-inline SkFilter32Proc SkGetFilter32Proc22(const SkFilterProc* table,
+inline SkFilter32Proc SkGetFilter32Proc22(const SkFilter32Proc* table,
                                           unsigned x, unsigned y)
 {
     SkASSERT(table);
@@ -81,7 +81,7 @@ inline SkFilter32Proc SkGetFilter32Proc22(const SkFilterProc* table,
     return table[(y << 2) | x];
 }
 
-inline const SkFilter32Proc* SkGetFilter32Proc22Row(const SkFilterProc* table,
+inline const SkFilter32Proc* SkGetFilter32Proc22Row(const SkFilter32Proc* table,
                                                     unsigned y)
 {
     SkASSERT(table);
@@ -89,7 +89,7 @@ inline const SkFilter32Proc* SkGetFilter32Proc22Row(const SkFilterProc* table,
     return &table[y << 30 >> 28];
 }
 
-inline SkFilter32Proc SkGetFilter32Proc22RowProc(const SkFilterProc* row,
+inline SkFilter32Proc SkGetFilter32Proc22RowProc(const SkFilter32Proc* row,
                                                  unsigned x)
 {
     SkASSERT(row);

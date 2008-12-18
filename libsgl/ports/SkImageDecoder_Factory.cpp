@@ -39,7 +39,6 @@ static const CodecFormat gPairs[] = {
     { SkImageDecoder_ICO_Factory,   SkImageDecoder::kICO_Format },
     { SkImageDecoder_WBMP_Factory,  SkImageDecoder::kWBMP_Format },
     { SkImageDecoder_BMP_Factory,   SkImageDecoder::kBMP_Format },
-    // jpeg must be last, as it doesn't have a good sniffer yet
     { SkImageDecoder_JPEG_Factory,  SkImageDecoder::kJPEG_Format }
 };
 
@@ -65,40 +64,21 @@ bool SkImageDecoder::SupportsFormat(Format format) {
 
 /////////////////////////////////////////////////////////////////////////
 
-// the movie may hold onto the stream (by calling ref())
-typedef SkMovie* (*SkMovieStreamProc)(SkStream*);
-// the movie may NOT hold onto the pointer
-typedef SkMovie* (*SkMovieMemoryProc)(const void*, size_t);
+typedef SkMovie* (*SkMovieFactoryProc)(SkStream*);
 
-extern SkMovie* SkMovie_GIF_StreamFactory(SkStream*);
-extern SkMovie* SkMovie_GIF_MemoryFactory(const void*, size_t);
+extern SkMovie* SkMovie_GIF_Factory(SkStream*);
 
-static const SkMovieStreamProc gStreamProc[] = {
-    SkMovie_GIF_StreamFactory
-};
-
-static const SkMovieMemoryProc gMemoryProc[] = {
-    SkMovie_GIF_MemoryFactory
+static const SkMovieFactoryProc gMovieProcs[] = {
+    SkMovie_GIF_Factory
 };
 
 SkMovie* SkMovie::DecodeStream(SkStream* stream) {
-    for (unsigned i = 0; i < SK_ARRAY_COUNT(gStreamProc); i++) {
-        SkMovie* movie = gStreamProc[i](stream);
+    for (unsigned i = 0; i < SK_ARRAY_COUNT(gMovieProcs); i++) {
+        SkMovie* movie = gMovieProcs[i](stream);
         if (NULL != movie) {
             return movie;
         }
         stream->rewind();
-    }
-    return NULL;
-}
-
-SkMovie* SkMovie::DecodeMemory(const void* data, size_t length)
-{
-    for (unsigned i = 0; i < SK_ARRAY_COUNT(gMemoryProc); i++) {
-        SkMovie* movie = gMemoryProc[i](data, length);
-        if (NULL != movie) {
-            return movie;
-        }
     }
     return NULL;
 }

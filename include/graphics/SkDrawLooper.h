@@ -52,6 +52,13 @@ public:
         loop?
     */
     virtual void restore() {}
+    
+protected:
+    SkDrawLooper() {}
+    SkDrawLooper(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {}
+
+private:
+    typedef SkFlattenable INHERITED;
 };
 
 #endif

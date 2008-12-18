@@ -21,7 +21,33 @@
 #include "SkTemplates.h"
 
 #define SPEW_PURGE_STATUS
-#define USE_CACHE_HASHxxxxx
+//#define USE_CACHE_HASH
+//#define RECORD_HASH_EFFICIENCY
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef RECORD_HASH_EFFICIENCY
+    static uint32_t gHashSuccess;
+    static uint32_t gHashCollision;
+
+    static void RecordHashSuccess() {
+        gHashSuccess += 1;
+    }
+
+    static void RecordHashCollisionIf(bool pred) {
+        if (pred) {
+            gHashCollision += 1;
+            
+            uint32_t total = gHashSuccess + gHashCollision;
+            SkDebugf("Font Cache Hash success rate: %d%%\n",
+                     100 * gHashSuccess / total);
+        }
+    }
+#else
+    #define RecordHashSuccess() (void)0
+    #define RecordHashCollisionIf(pred) (void)0
+#endif
+#define RecordHashCollision() RecordHashCollisionIf(true)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -140,12 +166,14 @@ const SkGlyph& SkGlyphCache::getUnicharMetrics(SkUnichar charCode) {
     CharGlyphRec* rec = &fCharToGlyphHash[ID2HashIndex(id)];
     
     if (rec->fID != id) {
+        RecordHashCollisionIf(rec->fGlyph != NULL);
         // this ID is based on the UniChar
         rec->fID = id;
         // this ID is based on the glyph index
         id = SkGlyph::MakeID(fScalerContext->charToGlyphID(charCode));
         rec->fGlyph = this->lookupMetrics(id, kFull_MetricsType);
     } else {
+        RecordHashSuccess();
         if (rec->fGlyph->isJustAdvance()) {
             fScalerContext->getMetrics(rec->fGlyph);
         }
@@ -161,12 +189,14 @@ const SkGlyph& SkGlyphCache::getUnicharMetrics(SkUnichar charCode,
     CharGlyphRec* rec = &fCharToGlyphHash[ID2HashIndex(id)];
     
     if (rec->fID != id) {
+        RecordHashCollisionIf(rec->fGlyph != NULL);
         // this ID is based on the UniChar
         rec->fID = id;
         // this ID is based on the glyph index
         id = SkGlyph::MakeID(fScalerContext->charToGlyphID(charCode), x, y);
         rec->fGlyph = this->lookupMetrics(id, kFull_MetricsType);
     } else {
+        RecordHashSuccess();
         if (rec->fGlyph->isJustAdvance()) {
             fScalerContext->getMetrics(rec->fGlyph);
         }
@@ -182,9 +212,11 @@ const SkGlyph& SkGlyphCache::getGlyphIDMetrics(uint16_t glyphID) {
     SkGlyph* glyph = fGlyphHash[index];
     
     if (NULL == glyph || glyph->fID != id) {
+        RecordHashCollisionIf(glyph != NULL);
         glyph = this->lookupMetrics(glyphID, kFull_MetricsType);
         fGlyphHash[index] = glyph;
     } else {
+        RecordHashSuccess();
         if (glyph->isJustAdvance()) {
             fScalerContext->getMetrics(glyph);
         }
@@ -199,11 +231,13 @@ const SkGlyph& SkGlyphCache::getGlyphIDMetrics(uint16_t glyphID,
     uint32_t id = SkGlyph::MakeID(glyphID, x, y);
     unsigned index = ID2HashIndex(id);
     SkGlyph* glyph = fGlyphHash[index];
-    
+
     if (NULL == glyph || glyph->fID != id) {
+        RecordHashCollisionIf(glyph != NULL);
         glyph = this->lookupMetrics(id, kFull_MetricsType);
         fGlyphHash[index] = glyph;
     } else {
+        RecordHashSuccess();
         if (glyph->isJustAdvance()) {
             fScalerContext->getMetrics(glyph);
         }

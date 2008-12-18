@@ -85,59 +85,89 @@ private:
     T*  fArray;
 };
 
+/** Allocate an array of T elements, and free the array in the destructor
+ */
 template <typename T> class SkAutoTArray : SkNoncopyable {
 public:
-    SkAutoTArray(size_t count)
-    {
-        fArray = NULL;   // init first in case we throw
-        if (count)
+    /** Allocate count number of T elements
+     */
+    SkAutoTArray(size_t count) {
+        fArray = NULL;
+        if (count) {
             fArray = new T[count];
-#ifdef SK_DEBUG
-        fCount = count;
-#endif
+        }
+        SkDEBUGCODE(fCount = count;)
     }
-    ~SkAutoTArray()
-    {
+
+    ~SkAutoTArray() {
         delete[] fArray;
     }
 
+    /** Return the array of T elements. Will be NULL if count == 0
+     */
     T* get() const { return fArray; }
-    T&  operator[](int index) const { SkASSERT((unsigned)index < fCount); return fArray[index]; }
-
-    void reset()
-    {
-        if (fArray)
-        {
-            delete[] fArray;
-            fArray = NULL;
-        }
-    }
-
-    void replace(T* array)
-    {
-        if (fArray != array)
-        {
-            delete[] fArray;
-            fArray = array;
-        }
-    }
-
-    /** Call swap to exchange your pointer to an array of T with the SkAutoTArray object.
-        After this call, the SkAutoTArray object will be responsible for deleting your
-        array, and you will be responsible for deleting its.
-    */
-    void swap(T*& other)
-    {
-        T*  tmp = fArray;
-        fArray = other;
-        other = tmp;
+    
+    /** Return the nth element in the array
+     */
+    T&  operator[](int index) const {
+        SkASSERT((unsigned)index < fCount);
+        return fArray[index];
     }
 
 private:
-#ifdef SK_DEBUG
-    size_t fCount;
-#endif
     T*  fArray;
+    SkDEBUGCODE(size_t fCount;)
+};
+
+/** Wraps SkAutoTArray, with room for up to N elements preallocated
+ */
+template <size_t N, typename T> class SkAutoSTArray : SkNoncopyable {
+public:
+    /** Allocate count number of T elements
+     */
+    SkAutoSTArray(size_t count) {
+        if (count > N) {
+            fArray = new T[count];
+        } else if (count) {
+            fArray = new (fStorage) T[count];
+        } else {
+            fArray = NULL;
+        }
+        fCount = count;
+    }
+    
+    ~SkAutoSTArray() {
+        if (fCount > N) {
+            delete[] fArray;
+        } else {
+            T* start = fArray;
+            T* iter = start + fCount;
+            while (iter > start) {
+                (--iter)->~T();
+            }
+        }
+    }
+    
+    /** Return the number of T elements in the array
+     */
+    size_t count() const { return fCount; }
+    
+    /** Return the array of T elements. Will be NULL if count == 0
+     */
+    T* get() const { return fArray; }
+    
+    /** Return the nth element in the array
+     */
+    T&  operator[](int index) const {
+        SkASSERT((unsigned)index < fCount);
+        return fArray[index];
+    }
+    
+private:
+    size_t  fCount;
+    T*      fArray;
+    // since we come right after fArray, fStorage should be properly aligned
+    char    fStorage[N * sizeof(T)];
 };
 
 /** Allocate a temp array on the stack/heap.

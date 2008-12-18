@@ -18,6 +18,7 @@
 #include "SkMatrix.h"
 #include "Sk64.h"
 #include "SkFloatBits.h"
+#include "SkString.h"
 
 #ifdef SK_SCALAR_IS_FLOAT
     #define kMatrix22Elem   SK_Scalar1
@@ -645,11 +646,15 @@ bool SkMatrix::setConcat(const SkMatrix& a, const SkMatrix& b) {
 }
 
 bool SkMatrix::preConcat(const SkMatrix& mat) {
-    return this->setConcat(*this, mat);
+    // check for identity first, so we don't do a needless copy of ourselves
+    // to ourselves inside setConcat()
+    return mat.isIdentity() || this->setConcat(*this, mat);
 }
 
 bool SkMatrix::postConcat(const SkMatrix& mat) {
-    return this->setConcat(mat, *this);
+    // check for identity first, so we don't do a needless copy of ourselves
+    // to ourselves inside setConcat()
+    return mat.isIdentity() || this->setConcat(mat, *this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -669,7 +674,9 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
             det =   (double)mat[SkMatrix::kMScaleX] * mat[SkMatrix::kMScaleY] - (double)mat[SkMatrix::kMSkewX] * mat[SkMatrix::kMSkewY];
         }
 
-        if (SkScalarNearlyZero((float)det)) {
+        // Since the determinant is on the order of the square of the matrix members,
+        // compare to the square of the default nearly-zero constant
+        if (SkScalarNearlyZero((float)det, SK_ScalarNearlyZero * SK_ScalarNearlyZero)) {
             return 0;
         }
         return (float)(1.0 / det);
@@ -1576,28 +1583,26 @@ bool SkMatrix::setPolyToPoly(const SkPoint src[], const SkPoint dst[],
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkMatrix::dump() const {
-    // ensure the fTypeMask is up2date
-    (void)this->getType();
-#ifdef SK_DEBUG
-    int mask = this->computeTypeMask();
-    SkASSERT(mask == fTypeMask);
-#endif
+    SkString str;
+    this->toDumpString(&str);
+    SkDebugf("%s\n", str.c_str());
+}
 
+void SkMatrix::toDumpString(SkString* str) const {
 #ifdef SK_CAN_USE_FLOAT
-    SkDebugf("[%8.4f %8.4f %8.4f] [%8.4f %8.4f %8.4f] [%8.4f %8.4f %8.4f] %x\n",
+    str->printf("[%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f][%8.4f %8.4f %8.4f]",
 #ifdef SK_SCALAR_IS_FLOAT
              fMat[0], fMat[1], fMat[2], fMat[3], fMat[4], fMat[5],
-             fMat[6], fMat[7], fMat[8], fTypeMask);
+             fMat[6], fMat[7], fMat[8]);
 #else
     SkFixedToFloat(fMat[0]), SkFixedToFloat(fMat[1]), SkFixedToFloat(fMat[2]),
     SkFixedToFloat(fMat[3]), SkFixedToFloat(fMat[4]), SkFixedToFloat(fMat[5]),
-    SkFractToFloat(fMat[6]), SkFractToFloat(fMat[7]), SkFractToFloat(fMat[8]),
-    fTypeMask);
+    SkFractToFloat(fMat[6]), SkFractToFloat(fMat[7]), SkFractToFloat(fMat[8]));
 #endif
 #else   // can't use float
-    SkDebugf("[%x %x %x]\n[%x %x %x]\n[%x %x %x] %x\n",
-             fMat[0], fMat[1], fMat[2], fMat[3], fMat[4], fMat[5],
-             fMat[6], fMat[7], fMat[8], fTypeMask);
+    str->printf("[%x %x %x][%x %x %x][%x %x %x]",
+                fMat[0], fMat[1], fMat[2], fMat[3], fMat[4], fMat[5],
+                fMat[6], fMat[7], fMat[8]);
 #endif
 }
 

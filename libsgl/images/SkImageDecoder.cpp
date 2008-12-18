@@ -16,6 +16,8 @@
 */
 
 #include "SkImageDecoder.h"
+#include "SkBitmap.h"
+#include "SkPixelRef.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
 
@@ -118,8 +120,13 @@ bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,
     SkASSERT(bm);
 
     SkFILEStream    stream(file);
-    return stream.isValid() &&
-           SkImageDecoder::DecodeStream(&stream, bm, pref, mode);
+    if (stream.isValid()) {
+        if (SkImageDecoder::DecodeStream(&stream, bm, pref, mode)) {
+            bm->pixelRef()->setURI(file);
+        }
+        return true;
+    }
+    return false;
 }
 
 bool SkImageDecoder::DecodeMemory(const void* buffer, size_t size, SkBitmap* bm,
@@ -165,6 +172,18 @@ bool SkImageEncoder::encodeFile(const char file[], const SkBitmap& bm,
     quality = SkMin32(100, SkMax32(0, quality));
     SkFILEWStream   stream(file);
     return this->onEncode(&stream, bm, quality);
+}
+
+bool SkImageEncoder::EncodeFile(const char file[], const SkBitmap& bm, Type t,
+                                int quality) {
+    SkAutoTDelete<SkImageEncoder> enc(SkImageEncoder::Create(t));
+    return enc.get() && enc.get()->encodeFile(file, bm, quality);
+}
+
+bool SkImageEncoder::EncodeStream(SkWStream* stream, const SkBitmap& bm, Type t,
+                                int quality) {
+    SkAutoTDelete<SkImageEncoder> enc(SkImageEncoder::Create(t));
+    return enc.get() && enc.get()->encodeStream(stream, bm, quality);
 }
 
 #endif

@@ -31,6 +31,18 @@ static inline int32_t SkSignBitTo2sCompliment(int32_t x) {
     return x;
 }
 
+/** Convert a 2s compliment int to a sign-bit (i.e. int interpreted as float).
+    This undoes the result of SkSignBitTo2sCompliment().
+ */
+static inline int32_t Sk2sComplimentToSignBit(int32_t x) {
+    int sign = x >> 31;
+    // make x positive
+    x = (x ^ sign) - sign;
+    // set the sign bit as needed
+    x |= sign << 31;
+    return x;
+}
+
 /** Given the bit representation of a float, return its value cast to an int.
     If the value is out of range, or NaN, return return +/- SK_MaxS32
 */
@@ -77,9 +89,16 @@ static inline float SkBits2Float(int32_t floatAsBits) {
     to each other or against positive float-bit-constants (like 0). This does
     not return the int equivalent of the float, just something cheaper for
     compares-only.
-*/
+ */
 static inline int32_t SkFloatAs2sCompliment(float x) {
     return SkSignBitTo2sCompliment(SkFloat2Bits(x));
+}
+
+/** Return the 2s compliment int as a float. This undos the result of
+    SkFloatAs2sCompliment
+ */
+static inline float Sk2sComplimentAsFloat(int32_t x) {
+    return SkBits2Float(Sk2sComplimentToSignBit(x));
 }
 
 /** Return x cast to a float (i.e. (float)x)
@@ -121,8 +140,10 @@ static inline int32_t SkFloatToIntCeil(float x) {
 
 #ifdef SK_SCALAR_IS_FLOAT
     #define SkScalarAs2sCompliment(x)    SkFloatAs2sCompliment(x)
+    #define Sk2sComplimentAsScalar(x)    Sk2sComplimentAsFloat(x)
 #else
     #define SkScalarAs2sCompliment(x)    (x)
+    #define Sk2sComplimentAsScalar(x)    (x)
 #endif
 
 #endif

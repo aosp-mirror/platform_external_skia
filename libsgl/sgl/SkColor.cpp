@@ -66,7 +66,9 @@ void SkRGBToHSV(U8CPU r, U8CPU g, U8CPU b, SkScalar hsv[3]) {
     SkASSERT(v >= 0 && v <= SK_Scalar1);
 
     if (0 == delta) { // we're a shade of gray
-        hsv[0] = hsv[1] = hsv[2] = v;
+        hsv[0] = 0;
+        hsv[1] = 0;
+        hsv[2] = v;
         return;
     }
 

@@ -86,6 +86,12 @@ public:
 
     void serialize(SkWStream*) const;
 
+    /** Signals that the caller is prematurely done replaying the drawing
+        commands. This can be called from a canvas virtual while the picture
+        is drawing. Has no effect if the picture is not drawing. 
+    */
+    void abortPlayback();
+    
 private:
     int fWidth, fHeight;
     SkPictureRecord* fRecord;
