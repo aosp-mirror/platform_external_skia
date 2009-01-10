@@ -4,30 +4,28 @@ include $(CLEAR_VARS)
 LOCAL_ARM_MODE := arm
 
 LOCAL_SRC_FILES:= \
-	Sk64.cpp \
-	SkBuffer.cpp \
-	SkChunkAlloc.cpp \
-	SkCordic.cpp \
-	SkDebug.cpp \
-	SkDebug_stdio.cpp \
-	SkFloatBits.cpp \
-	SkInterpolator.cpp \
-	SkMath.cpp \
-	SkMatrix.cpp \
-	SkMemory_stdlib.cpp \
-	SkPageFlipper.cpp \
-	SkPoint.cpp \
-	SkRect.cpp \
-	SkRegion.cpp \
-	SkString.cpp \
-	SkUtils.cpp \
+	../src/core/Sk64.cpp \
+	../src/core/SkBuffer.cpp \
+	../src/core/SkChunkAlloc.cpp \
+	../src/core/SkCordic.cpp \
+	../src/core/SkDebug.cpp \
+	../src/core/SkDebug_stdio.cpp \
+	../src/core/SkFloatBits.cpp \
+	../src/core/SkMath.cpp \
+	../src/core/SkMatrix.cpp \
+	../src/core/SkMemory_stdlib.cpp \
+	../src/core/SkPoint.cpp \
+	../src/core/SkRect.cpp \
+	../src/core/SkRegion.cpp \
+	../src/core/SkString.cpp \
+	../src/core/SkUtils.cpp \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	libutils
 
 LOCAL_C_INCLUDES += \
-	$(call include-path-for, corecg)
+	$(LOCAL_PATH)/../include/core
 
 #LOCAL_CFLAGS+= 
 #LOCAL_LDFLAGS:= 
