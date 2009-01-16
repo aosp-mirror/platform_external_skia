@@ -500,6 +500,7 @@ SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
     return SkFontHost::FindTypeface(NULL, NULL, (SkTypeface::Style)style);
 #endif
     sk_throw();
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -590,6 +591,11 @@ SkTypeface* SkFontHost::CreateTypeface(SkStream* stream)
     SkTypeface::Style style = find_name_and_style(stream, &name);
     
     return SkNEW_ARGS(StreamTypeface, (style, false, NULL, stream));
+}
+
+SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[])
+{
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

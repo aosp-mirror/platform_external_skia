@@ -608,7 +608,7 @@ private:
 };
 
 //  Return true if fx, fx+dx, fx+2*dx, ... is always in range
-static bool no_need_for_clamp(int fx, int dx, int count)
+static inline bool no_need_for_clamp(int fx, int dx, int count)
 {
     SkASSERT(count > 0);
     return (unsigned)((fx | (fx + (count - 1) * dx)) >> 8) <= 0xFF;
@@ -733,7 +733,7 @@ bool Linear_Gradient::asABitmap(SkBitmap* bitmap, SkMatrix* matrix,
 #ifdef TEST_GRADIENT_DITHER
 static void dither_memset16(uint16_t dst[], uint16_t value, uint16_t other, int count)
 {
-    if ((unsigned)dst & 2)
+    if (reinterpret_cast<uintptr_t>(dst) & 2)
     {
         *dst++ = value;
         count -= 1;
