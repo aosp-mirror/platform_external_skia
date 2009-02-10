@@ -43,8 +43,8 @@ LOCAL_SRC_FILES:= \
 	../src/images/SkPageFlipper.cpp \
 	../src/images/SkScaledBitmapSampler.cpp \
 	../src/images/SkCreateRLEPixelRef.cpp \
-	../src/ports/SkImageDecoder_Factory.cpp \
-	../src/ports/SkImageEncoder_Factory.cpp \
+	../src/images/SkImageDecoder_Factory.cpp \
+	../src/images/SkImageEncoder_Factory.cpp \
 	../src/ports/SkFontHost_android.cpp \
 	../src/ports/SkFontHost_gamma.cpp \
 	../src/ports/SkFontHost_FreeType.cpp \
@@ -102,6 +102,7 @@ LOCAL_SRC_FILES:= \
 	../src/core/SkPixelRef.cpp \
 	../src/core/SkProcSpriteBlitter.cpp \
 	../src/core/SkPtrRecorder.cpp \
+	../src/core/SkQuadClipper.cpp \
 	../src/core/SkRasterizer.cpp \
 	../src/core/SkRefCnt.cpp \
 	../src/core/SkRegion_path.cpp \
@@ -191,7 +192,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libsgl \
 	libcorecg \
-	libGLES_CM
+	libGLESv1_CM
 
 LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/../src/core \
