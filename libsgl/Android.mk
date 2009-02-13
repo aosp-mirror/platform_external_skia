@@ -127,8 +127,7 @@ LOCAL_SRC_FILES:= \
 	../src/utils/SkDumpCanvas.cpp \
 	../src/utils/SkInterpolator.cpp \
 	../src/utils/SkNinePatch.cpp \
-	../src/utils/SkProxyCanvas.cpp \
-	../src/xml/SkXMLPullParser.cpp
+	../src/utils/SkProxyCanvas.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
