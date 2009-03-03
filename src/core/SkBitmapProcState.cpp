@@ -379,7 +379,6 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
         case SkBitmap::kA8_Config:
             index |= 32;
             fPaintPMColor = SkPreMultiplyColor(paint.getColor());
-            break;
         default:
             return false;
     }
