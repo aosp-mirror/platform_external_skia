@@ -162,7 +162,7 @@ static inline int SkNextLog2(uint32_t value) {
     With this requirement, we can generate faster instructions on some
     architectures.
 */
-#if defined(__arm__) && !defined(__thumb__)
+#if defined(__arm__) && !defined(__thumb__) && !defined(__ARM_ARCH_4__)
     static inline int32_t SkMulS16(S16CPU x, S16CPU y) {
         SkASSERT((int16_t)x == x);
         SkASSERT((int16_t)y == y);
@@ -216,15 +216,6 @@ static inline unsigned SkMul16ShiftRound(unsigned a, unsigned b, int shift) {
     unsigned prod = SkMulS16(a, b) + (1 << (shift - 1));
     return (prod + (prod >> shift)) >> shift;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef SK_DEBUG
-    class SkMath {
-    public:
-        static void UnitTest();
-    };
-#endif
 
 #endif
 
