@@ -1,30 +1,6 @@
 #include "SkTypeface.h"
 #include "SkFontHost.h"
 
-//#define TRACK_TYPEFACE_ALLOCS
-
-#ifdef TRACK_TYPEFACE_ALLOCS
-    static int32_t gTypefaceAllocCount;
-#endif
-
-SkTypeface::SkTypeface(Style style, uint32_t uniqueID)
-        : fUniqueID(uniqueID), fStyle(style) {
-#ifdef TRACK_TYPEFACE_ALLOCS
-    sk_atomic_inc(&gTypefaceAllocCount);
-    SkDebugf("+++ [%d] typeface %p [style=%d uniqueID=%d]\n",
-             gTypefaceAllocCount, this, style, uniqueID);
-#endif
-}
-
-SkTypeface::~SkTypeface() {
-#ifdef TRACK_TYPEFACE_ALLOCS
-    SkDebugf("--- [%d] typeface %p\n", gTypefaceAllocCount, this);
-    sk_atomic_inc(&gTypefaceAllocCount);
-#endif
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
     if (face) {
         return face->uniqueID();

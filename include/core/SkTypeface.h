@@ -110,7 +110,7 @@ public:
         typeface referencing the same font when Deserialize is called.
      */
     void serialize(SkWStream*) const;
-
+    
     /** Given the data previously written by serialize(), return a new instance
         to a typeface referring to the same font. If that font is not available,
         return null. If an instance is returned, the caller is responsible for
@@ -121,8 +121,8 @@ public:
 protected:
     /** uniqueID must be unique (please!) and non-zero
     */
-    SkTypeface(Style style, uint32_t uniqueID);
-    virtual ~SkTypeface();
+    SkTypeface(Style style, uint32_t uniqueID)
+        : fUniqueID(uniqueID), fStyle(style) {}
 
 private:
     uint32_t    fUniqueID;
