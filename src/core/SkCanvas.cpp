@@ -813,6 +813,10 @@ bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
     fLocalBoundsCompareTypeDirty = true;
 
     if (fMCRec->fMatrix->rectStaysRect()) {
+        // for these simpler matrices, we can stay a rect ever after applying
+        // the matrix. This means we don't have to a) make a path, and b) tell
+        // the region code to scan-convert the path, only to discover that it
+        // is really just a rect.
         SkRect      r;
         SkIRect     ir;
 
@@ -820,10 +824,14 @@ bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
         r.round(&ir);
         return fMCRec->fRegion->op(ir, op);
     } else {
+        // since we're rotate or some such thing, we convert the rect to a path
+        // and clip against that, since it can handle any matrix. However, to
+        // avoid recursion in the case where we are subclassed (e.g. Pictures)
+        // we explicitly call "our" version of clipPath.
         SkPath  path;
 
         path.addRect(rect);
-        return this->clipPath(path, op);
+        return this->SkCanvas::clipPath(path, op);
     }
 }
 
@@ -957,12 +965,14 @@ bool SkCanvas::getClipBounds(SkRect* bounds, EdgeType et) const {
         return false;
     }
 
-    if (NULL != bounds) {
-        SkMatrix inverse;
-        SkRect   r;
+    SkMatrix inverse;
+    // if we can't invert the CTM, we can't return local clip bounds
+    if (!fMCRec->fMatrix->invert(&inverse)) {
+        return false;
+    }
 
-        fMCRec->fMatrix->invert(&inverse);
-        
+    if (NULL != bounds) {
+        SkRect   r;
         // get the clip's bounds
         const SkIRect& ibounds = clip.getBounds();
         // adjust it outwards if we are antialiasing
@@ -1133,13 +1143,13 @@ void SkCanvas::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& matrix,
 void SkCanvas::commonDrawBitmap(const SkBitmap& bitmap, const SkMatrix& matrix,
                                 const SkPaint& paint) {
     SkDEBUGCODE(bitmap.validate();)
-    
+
     ITER_BEGIN(paint, SkDrawFilter::kBitmap_Type)
-    
+
     while (iter.next()) {
         iter.fDevice->drawBitmap(iter, bitmap, matrix, paint);
     }
-    
+
     ITER_END
 }
 

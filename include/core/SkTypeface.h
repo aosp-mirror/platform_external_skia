@@ -29,8 +29,7 @@ class SkWStream;
     textSize, textSkewX, textScaleX, kFakeBoldText_Mask, to specify
     how text appears when drawn (and measured).
 
-    Typeface objects are immutable, and so they can be shred between threads.
-    To enable this, Typeface inherits from the thread-safe version of SkRefCnt.
+    Typeface objects are immutable, and so they can be shared between threads.
 */
 class SkTypeface : public SkRefCnt {
 public:
@@ -48,9 +47,6 @@ public:
     /** Returns the typeface's intrinsic style attributes
     */
     Style style() const { return fStyle; }
-    
-    /** DEPRECATED */
-    Style getStyle() const { return this->style(); }
 
     /** Returns true if getStyle() has the kBold bit set.
     */
@@ -60,13 +56,22 @@ public:
     */
     bool isItalic() const { return (fStyle & kItalic) != 0; }
     
+    /** Return a 32bit value for this typeface, unique for the underlying font
+        data. Will never return 0.
+     */
     uint32_t uniqueID() const { return fUniqueID; }
 
     /** Return the uniqueID for the specified typeface. If the face is null,
-        resolve it to the default font and return its uniqueID.
+        resolve it to the default font and return its uniqueID. Will never
+        return 0.
     */
     static uint32_t UniqueID(const SkTypeface* face);
 
+    /** Returns true if the two typefaces reference the same underlying font,
+        handling either being null (treating null as the default font)
+     */
+    static bool Equal(const SkTypeface* facea, const SkTypeface* faceb);
+    
     /** Return a new reference to the typeface that most closely matches the
         requested familyName and style. Pass null as the familyName to return
         the default font for the requested style. Will never return null
@@ -76,7 +81,7 @@ public:
         @return reference to the closest-matching typeface. Call must call
                 unref() when they are done.
     */
-    static SkTypeface* Create(const char familyName[], Style style = kNormal);
+    static SkTypeface* CreateFromName(const char familyName[], Style style);
 
     /** Return a new reference to the typeface that most closely matches the
         requested typeface and specified Style. Use this call if you want to
@@ -90,16 +95,6 @@ public:
     */
     static SkTypeface* CreateFromTypeface(const SkTypeface* family, Style s);
 
-    /** Returns true if the two typefaces reference the same underlying font,
-        even if one is null (which maps to the default font).
-    */
-    static bool Equal(const SkTypeface* facea, const SkTypeface* faceb);
-    
-    /** Returns a 32bit hash value for the typeface. Takes care of mapping null
-        to the default typeface.
-    */
-    static uint32_t Hash(const SkTypeface* face);
-
     /** Return a new typeface given a file. If the file does not exist, or is
         not a valid font file, returns null.
     */
@@ -111,8 +106,16 @@ public:
     */
     static SkTypeface* CreateFromStream(SkStream* stream);
 
-    // Serialization
+    /** Write a unique signature to a stream, sufficient to reconstruct a
+        typeface referencing the same font when Deserialize is called.
+     */
     void serialize(SkWStream*) const;
+    
+    /** Given the data previously written by serialize(), return a new instance
+        to a typeface referring to the same font. If that font is not available,
+        return null. If an instance is returned, the caller is responsible for
+        calling unref() when they are done with it.
+     */
     static SkTypeface* Deserialize(SkStream*);
 
 protected:
