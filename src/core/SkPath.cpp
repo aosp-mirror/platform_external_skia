@@ -62,6 +62,8 @@ private:
         fPath = path;
         fDirty = path->fFastBoundsIsDirty;
         fEmpty = path->isEmpty();
+        // Cannot use fRect for our bounds unless we know it is sorted
+        fRect.sort();
     }
 };
 
@@ -994,7 +996,7 @@ SkPath::Verb SkPath::Iter::autoClose(SkPoint pts[2]) {
             SkScalarIsNaN(fMoveTo.fX) && SkScalarIsNaN(fMoveTo.fY)) {
             return kClose_Verb;
         }
-        
+
         if (pts) {
             pts[0] = fLastPt;
             pts[1] = fMoveTo;
