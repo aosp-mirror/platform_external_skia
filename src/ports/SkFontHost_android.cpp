@@ -352,7 +352,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool get_name_and_style(const char path[], SkString* name,
-                               SkTypeface::Style* style) {
+                               SkTypeface::Style* style, bool isExpected) {
     SkString        fullpath;
     GetFullPathForSysFonts(&fullpath, path);
 
@@ -369,7 +369,9 @@ static bool get_name_and_style(const char path[], SkString* name,
         }
     }
 
-    SkDebugf("---- failed to open <%s> as a font\n", fullpath.c_str());
+    if (isExpected) {
+        SkDebugf("---- failed to open <%s> as a font\n", fullpath.c_str());
+    }
     return false;
 }
 
@@ -451,8 +453,10 @@ static void load_system_fonts() {
         
         SkString name;
         SkTypeface::Style style;
-        
-        if (!get_name_and_style(rec[i].fFileName, &name, &style)) {
+
+        // we expect all the fonts, except the "fallback" fonts
+        bool isExpected = (rec[i].fNames != gFBNames);
+        if (!get_name_and_style(rec[i].fFileName, &name, &style, isExpected)) {
             continue;
         }
 
