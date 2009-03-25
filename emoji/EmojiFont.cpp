@@ -142,7 +142,7 @@ uint16_t EmojiFont::UnicharToGlyph(int32_t unichar) {
     return 0;
 }
 
-SkScalar EmojiFont::GetAdvanceWidth(uint16_t glyphID) {
+SkScalar EmojiFont::GetAdvanceWidth(uint16_t glyphID, const SkPaint& paint) {
     if (glyphID < kGlyphBase) {
         SkDebugf("-------- bad glyph passed to EmojiFont::GetAdvanceWidth %d\n",
                  glyphID);
@@ -154,20 +154,28 @@ SkScalar EmojiFont::GetAdvanceWidth(uint16_t glyphID) {
         return 0;
     }
 
-    // add one for 1-pixel right-side-bearing
-    return SkIntToScalar(bitmap->width() + 1);
+    // assume that our advance width is always the pointsize
+    return paint.getTextSize();
 }
 
+/*  This tells us to shift the emoji bounds down by 20% below the baseline,
+    to better align with the Kanji characters' placement in the line.
+ */
+static const SkScalar gBaselinePercentDrop = SkFloatToScalar(0.2f);
+    
 void EmojiFont::Draw(SkCanvas* canvas, uint16_t glyphID,
-                     SkScalar x, SkScalar y, const SkPaint* paint) {
+                     SkScalar x, SkScalar y, const SkPaint& paint) {
     if (glyphID < kGlyphBase) {
         SkDebugf("-------- bad glyph passed to EmojiFont::Draw %d\n", glyphID);
     }
 
     const SkBitmap* bitmap = get_bitmap(glyphID - kGlyphBase);
-    if (bitmap) {
-        canvas->drawBitmap(*bitmap, x, y - SkIntToScalar(bitmap->height()),
-                           paint);
+    if (bitmap && !bitmap->empty()) {
+        SkRect dst;
+        SkScalar size = paint.getTextSize();
+        y += SkScalarMul(size, gBaselinePercentDrop);
+        dst.set(x, y - size, x + size, y);
+        canvas->drawBitmapRect(*bitmap, NULL, dst, &paint);
     }
 }
 
