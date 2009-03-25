@@ -54,14 +54,14 @@ namespace android {
         
         /** Returns the advance width for the specified emoji form.
          */
-        static SkScalar GetAdvanceWidth(uint16_t index);
+        static SkScalar GetAdvanceWidth(uint16_t index, const SkPaint& paint);
         
         /** Draw the specified emoji form, given the x,y origin of the text
             version. The paint is the one associated with the text that has
             the emoji in it.
          */
         static void Draw(SkCanvas*, uint16_t index, SkScalar x, SkScalar y,
-                         const SkPaint* paintOrNull);
+                         const SkPaint& paint);
         
     private:
         enum {
