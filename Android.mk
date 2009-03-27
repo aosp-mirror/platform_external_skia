@@ -178,8 +178,13 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkProxyCanvas.cpp
 
+# these are for emoji support, needed by webkit
+LOCAL_SRC_FILES += \
+	emoji/EmojiFont.cpp
+
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
+    libemoji \
 	libutils \
 	libcorecg \
 	libexpat \
@@ -203,7 +208,8 @@ LOCAL_C_INCLUDES += \
 	external/libpng \
 	external/giflib \
 	external/expat/lib \
-	external/jpeg
+	external/jpeg \
+    frameworks/opt/emoji
 
 LOCAL_CFLAGS += -fpic -fstrict-aliasing
 

@@ -15,12 +15,12 @@ SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
                        int sampleSize)
         : SkPixelRef(&gImageRefMutex), fErrorInDecoding(false) {
     SkASSERT(stream);
-    SkASSERT(1 == stream->getRefCnt());
-
+    stream->ref();
     fStream = stream;
     fConfig = config;
     fSampleSize = sampleSize;
     fPrev = fNext = NULL;
+    fFactory = NULL;
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("add ImageRef %p [%d] data=%d\n",
@@ -36,7 +36,8 @@ SkImageRef::~SkImageRef() {
               this, fConfig, (int)fStream->getLength());
 #endif
 
-    delete fStream;
+    fStream->unref();
+    fFactory->safeUnref();
 }
 
 bool SkImageRef::getInfo(SkBitmap* bitmap) {
@@ -51,6 +52,12 @@ bool SkImageRef::getInfo(SkBitmap* bitmap) {
         bitmap->setConfig(fBitmap.config(), fBitmap.width(), fBitmap.height());
     }
     return true;
+}
+
+SkImageDecoderFactory* SkImageRef::setDecoderFactory(
+                                                SkImageDecoderFactory* fact) {
+    SkRefCnt_SafeAssign(fFactory, fact);
+    return fact;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -85,8 +92,14 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
     SkASSERT(fBitmap.getPixels() == NULL);
 
     fStream->rewind();
-        
-    SkImageDecoder* codec = SkImageDecoder::Factory(fStream);
+
+    SkImageDecoder* codec;
+    if (fFactory) {
+        codec = fFactory->newDecoder(fStream);
+    } else {
+        codec = SkImageDecoder::Factory(fStream);
+    }
+
     if (codec) {
         SkAutoTDelete<SkImageDecoder> ad(codec);
 
@@ -150,6 +163,7 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer)
     buffer.read((void*)fStream->getMemoryBase(), length);
 
     fPrev = fNext = NULL;
+    fFactory = NULL;
 }
 
 void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
