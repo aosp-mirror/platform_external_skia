@@ -879,34 +879,29 @@ void SkCanvas::computeLocalClipBoundsCompareType() const {
     }
 }
 
+/*  current impl ignores edgetype, and relies on
+    getLocalClipBoundsCompareType(), which always returns a value assuming
+    antialiasing (worst case)
+ */
 bool SkCanvas::quickReject(const SkRect& rect, EdgeType) const {
-    /*  current impl ignores edgetype, and relies on
-        getLocalClipBoundsCompareType(), which always returns a value assuming
-        antialiasing (worst case)
-     */
-
     if (fMCRec->fRegion->isEmpty()) {
         return true;
     }
-    
-    // check for empty user rect (horizontal)
-    SkScalarCompareType userL = SkScalarToCompareType(rect.fLeft);
-    SkScalarCompareType userR = SkScalarToCompareType(rect.fRight);
-    if (userL >= userR) {
-        return true;
-    }
 
-    // check for empty user rect (vertical)
+    const SkRectCompareType& clipR = this->getLocalClipBoundsCompareType();
+
+    // for speed, do the most likely reject compares first
     SkScalarCompareType userT = SkScalarToCompareType(rect.fTop);
     SkScalarCompareType userB = SkScalarToCompareType(rect.fBottom);
-    if (userT >= userB) {
+    if (userT >= clipR.fBottom || userB <= clipR.fTop) {
         return true;
     }
-    
-    // check if we are completely outside of the local clip bounds
-    const SkRectCompareType& clipR = this->getLocalClipBoundsCompareType();
-    return  userL >= clipR.fRight || userT >= clipR.fBottom ||
-            userR <= clipR.fLeft  || userB <= clipR.fTop;
+    SkScalarCompareType userL = SkScalarToCompareType(rect.fLeft);
+    SkScalarCompareType userR = SkScalarToCompareType(rect.fRight);
+    if (userL >= clipR.fRight || userR <= clipR.fLeft) {
+        return true;
+    }    
+    return false;
 }
 
 bool SkCanvas::quickReject(const SkPath& path, EdgeType et) const {
