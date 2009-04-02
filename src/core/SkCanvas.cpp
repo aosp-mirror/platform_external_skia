@@ -905,27 +905,7 @@ bool SkCanvas::quickReject(const SkRect& rect, EdgeType) const {
 }
 
 bool SkCanvas::quickReject(const SkPath& path, EdgeType et) const {
-    if (fMCRec->fRegion->isEmpty() || path.isEmpty()) {
-        return true;
-    }
-
-    if (fMCRec->fMatrix->rectStaysRect()) {
-        SkRect  r;
-        path.computeBounds(&r, SkPath::kFast_BoundsType);
-        return this->quickReject(r, et);
-    }
-
-    SkPath      dstPath;
-    SkRect      r;
-    SkIRect     ir;
-
-    path.transform(*fMCRec->fMatrix, &dstPath);
-    dstPath.computeBounds(&r, SkPath::kFast_BoundsType);
-    r.round(&ir);
-    if (kAA_EdgeType == et) {
-        ir.inset(-1, -1);
-    }
-    return fMCRec->fRegion->quickReject(ir);
+    return path.isEmpty() || this->quickReject(path.getBounds(), et);
 }
 
 bool SkCanvas::quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const {
@@ -942,6 +922,7 @@ bool SkCanvas::quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const {
     SkScalarCompareType userB = SkScalarToCompareType(bottom);
     
     // check for invalid user Y coordinates (i.e. empty)
+    // reed: why do we need to do this check, since it slows us down?
     if (userT >= userB) {
         return true;
     }
@@ -1058,9 +1039,9 @@ void SkCanvas::drawRect(const SkRect& r, const SkPaint& paint) {
 
 void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     if (paint.canComputeFastBounds()) {
-        SkRect r;
-        path.computeBounds(&r, SkPath::kFast_BoundsType);
-        if (this->quickReject(paint.computeFastBounds(r, &r),
+        SkRect storage;
+        const SkRect& bounds = path.getBounds();
+        if (this->quickReject(paint.computeFastBounds(bounds, &storage),
                               paint2EdgeType(&paint))) {
             return;
         }
