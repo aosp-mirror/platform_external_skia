@@ -14,7 +14,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkCordic.cpp \
 	src/core/SkDebug.cpp \
-	src/core/SkDebug_stdio.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
@@ -24,6 +23,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkRegion.cpp \
 	src/core/SkString.cpp \
 	src/core/SkUtils.cpp \
+	src/ports/SkDebug_android.cpp \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
