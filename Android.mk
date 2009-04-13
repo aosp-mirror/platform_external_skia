@@ -97,6 +97,7 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkFontHost_android.cpp \
 	src/ports/SkFontHost_gamma.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
+	src/ports/SkFontHost_tables.cpp \
 	src/ports/SkGlobals_global.cpp \
 	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkOSFile_stdio.cpp \
