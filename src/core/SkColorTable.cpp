@@ -1,19 +1,18 @@
-/* libs/graphics/sgl/SkColorTable.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+/*
+ * Copyright (C) 2006-2009 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "SkBitmap.h"
 #include "SkFlattenable.h"
@@ -31,7 +30,20 @@ SkColorTable::SkColorTable(int count)
     fCount = SkToU16(count);
     fColors = (SkPMColor*)sk_malloc_throw(count * sizeof(SkPMColor));
     memset(fColors, 0, count * sizeof(SkPMColor));
-    
+
+    SkDEBUGCODE(fColorLockCount = 0;)
+    SkDEBUGCODE(f16BitCacheLockCount = 0;)
+}
+
+SkColorTable::SkColorTable(const SkColorTable& src) {
+    f16BitCache = NULL;
+    fFlags = src.fFlags;
+    int count = src.count();
+    fCount = SkToU16(count);
+    fColors = reinterpret_cast<SkPMColor*>(
+                                    sk_malloc_throw(count * sizeof(SkPMColor)));
+    memcpy(fColors, src.fColors, count * sizeof(SkPMColor));
+
     SkDEBUGCODE(fColorLockCount = 0;)
     SkDEBUGCODE(f16BitCacheLockCount = 0;)
 }
@@ -43,13 +55,14 @@ SkColorTable::SkColorTable(const SkPMColor colors[], int count)
         count = 0;
     else if (count > 256)
         count = 256;
-    
+
     fCount = SkToU16(count);
-    fColors = (SkPMColor*)sk_malloc_throw(count * sizeof(SkPMColor));
-    
+    fColors = reinterpret_cast<SkPMColor*>(
+                                    sk_malloc_throw(count * sizeof(SkPMColor)));
+
     if (colors)
         memcpy(fColors, colors, count * sizeof(SkPMColor));
-    
+
     SkDEBUGCODE(fColorLockCount = 0;)
     SkDEBUGCODE(f16BitCacheLockCount = 0;)
 }
