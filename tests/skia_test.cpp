@@ -107,7 +107,7 @@ public:
 
 int main (int argc, char * const argv[]) {
     SkAutoGraphics ag;
-    
+
     bool androidMode = false;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-android")) {
