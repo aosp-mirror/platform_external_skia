@@ -163,6 +163,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkScan_Hairline.cpp \
 	src/core/SkScan_Path.cpp \
 	src/core/SkShader.cpp \
+	src/core/SkShape.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
 	src/core/SkStream.cpp \

@@ -22,6 +22,7 @@
 #include "SkDrawLooper.h"
 #include "SkPicture.h"
 #include "SkScalarCompare.h"
+#include "SkShape.h"
 #include "SkTemplates.h"
 #include "SkUtils.h"
 #include <new>
@@ -944,6 +945,9 @@ bool SkCanvas::getClipBounds(SkRect* bounds, EdgeType et) const {
     SkMatrix inverse;
     // if we can't invert the CTM, we can't return local clip bounds
     if (!fMCRec->fMatrix->invert(&inverse)) {
+        if (bounds) {
+            bounds->setEmpty();
+        }
         return false;
     }
 
@@ -1357,10 +1361,17 @@ void SkCanvas::drawTextOnPathHV(const void* text, size_t byteLength,
     this->drawTextOnPath(text, byteLength, path, &matrix, paint);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 void SkCanvas::drawPicture(SkPicture& picture) {
     int saveCount = save();
     picture.draw(this);
     restoreToCount(saveCount);
+}
+
+void SkCanvas::drawShape(SkShape* shape) {
+    // shape baseclass takes care of save/restore
+    shape->draw(this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
