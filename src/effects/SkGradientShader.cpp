@@ -620,6 +620,7 @@ public:
         }
     }
 
+    virtual bool setContext(const SkBitmap&, const SkPaint&, const SkMatrix&);
     virtual void shadeSpan(int x, int y, SkPMColor dstC[], int count);
     virtual void shadeSpan16(int x, int y, uint16_t dstC[], int count);
     virtual bool asABitmap(SkBitmap*, SkMatrix*, TileMode*);
@@ -646,6 +647,19 @@ private:
     typedef Gradient_Shader INHERITED;
 };
 
+bool Linear_Gradient::setContext(const SkBitmap& device, const SkPaint& paint,
+                                 const SkMatrix& matrix) {
+    if (!this->INHERITED::setContext(device, paint, matrix)) {
+        return false;
+    }
+
+    unsigned mask = SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask;
+    if ((fDstToIndex.getType() & ~mask) == 0) {
+        fFlags |= SkShader::kConstInY_Flag;
+    }
+    return true;
+}
+
 //  Return true if fx, fx+dx, fx+2*dx, ... is always in range
 static inline bool no_need_for_clamp(int fx, int dx, int count)
 {
@@ -662,31 +676,27 @@ void Linear_Gradient::shadeSpan(int x, int y, SkPMColor dstC[], int count)
     TileProc            proc = fTileProc;
     const SkPMColor*    cache = this->getCache32();
 
-    if (fDstToIndexClass != kPerspective_MatrixClass)
-    {
+    if (fDstToIndexClass != kPerspective_MatrixClass) {
         dstProc(fDstToIndex, SkIntToScalar(x), SkIntToScalar(y), &srcPt);
         SkFixed dx, fx = SkScalarToFixed(srcPt.fX);
+        // preround fx by half the amount we throw away
+        fx += 1 << 7;
 
-        if (fDstToIndexClass == kFixedStepInX_MatrixClass)
-        {
+        if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
             SkFixed dxStorage[1];
             (void)fDstToIndex.fixedStepInX(SkIntToScalar(y), dxStorage, NULL);
             dx = dxStorage[0];
-        }
-        else
-        {
+        } else {
             SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
             dx = SkScalarToFixed(fDstToIndex.getScaleX());
         }
 
-        if (SkFixedNearlyZero(dx))  // we're a vertical gradient, so no change in a span
-        {
+        if (SkFixedNearlyZero(dx)) {
+            // we're a vertical gradient, so no change in a span
             unsigned fi = proc(fx);
             SkASSERT(fi <= 0xFFFF);
             sk_memset32(dstC, cache[fi >> (16 - kCache32Bits)], count);
-        }
-        else if (proc == clamp_tileproc)
-        {
+        } else if (proc == clamp_tileproc) {
 #if 0
             if (no_need_for_clamp(fx, dx, count))
             {
@@ -716,18 +726,14 @@ void Linear_Gradient::shadeSpan(int x, int y, SkPMColor dstC[], int count)
                     fx += dx;
                     *dstC++ = cache[fi];
                 } while (--count != 0);
-        }
-        else if (proc == mirror_tileproc)
-        {
+        } else if (proc == mirror_tileproc) {
             do {
                 unsigned fi = mirror_8bits(fx >> 8);
                 SkASSERT(fi <= 0xFF);
                 fx += dx;
                 *dstC++ = cache[fi];
             } while (--count != 0);
-        }
-        else
-        {
+        } else {
             SkASSERT(proc == repeat_tileproc);
             do {
                 unsigned fi = repeat_8bits(fx >> 8);
@@ -736,9 +742,7 @@ void Linear_Gradient::shadeSpan(int x, int y, SkPMColor dstC[], int count)
                 *dstC++ = cache[fi];
             } while (--count != 0);
         }
-    }
-    else
-    {
+    } else {
         SkScalar    dstX = SkIntToScalar(x);
         SkScalar    dstY = SkIntToScalar(y);
         do {
@@ -804,25 +808,23 @@ void Linear_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
     int                 toggle = ((x ^ y) & 1) << kCache16Bits;
 #endif
 
-    if (fDstToIndexClass != kPerspective_MatrixClass)
-    {
+    if (fDstToIndexClass != kPerspective_MatrixClass) {
         dstProc(fDstToIndex, SkIntToScalar(x), SkIntToScalar(y), &srcPt);
         SkFixed dx, fx = SkScalarToFixed(srcPt.fX);
+        // preround fx by half the amount we throw away
+        fx += 1 << 7;
 
-        if (fDstToIndexClass == kFixedStepInX_MatrixClass)
-        {
+        if (fDstToIndexClass == kFixedStepInX_MatrixClass) {
             SkFixed dxStorage[1];
             (void)fDstToIndex.fixedStepInX(SkIntToScalar(y), dxStorage, NULL);
             dx = dxStorage[0];
-        }
-        else
-        {
+        } else {
             SkASSERT(fDstToIndexClass == kLinear_MatrixClass);
             dx = SkScalarToFixed(fDstToIndex.getScaleX());
         }
 
-        if (SkFixedNearlyZero(dx))  // we're a vertical gradient, so no change in a span
-        {
+        if (SkFixedNearlyZero(dx)) {
+            // we're a vertical gradient, so no change in a span
             unsigned fi = proc(fx) >> 10;
             SkASSERT(fi <= 63);
 #ifdef TEST_GRADIENT_DITHER
@@ -830,9 +832,7 @@ void Linear_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
 #else
             sk_memset16(dstC, cache[fi], count);
 #endif
-        }
-        else if (proc == clamp_tileproc)
-        {
+        } else if (proc == clamp_tileproc) {
             do {
                 unsigned fi = SkClampMax(fx >> 10, 63);
                 SkASSERT(fi <= 63);
@@ -844,9 +844,7 @@ void Linear_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
                 *dstC++ = cache[fi];
 #endif
             } while (--count != 0);
-        }
-        else if (proc == mirror_tileproc)
-        {
+        } else if (proc == mirror_tileproc) {
             do {
                 unsigned fi = mirror_6bits(fx >> 10);
                 SkASSERT(fi <= 0x3F);
@@ -858,9 +856,7 @@ void Linear_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
                 *dstC++ = cache[fi];
 #endif
             } while (--count != 0);
-        }
-        else
-        {
+        } else {
             SkASSERT(proc == repeat_tileproc);
             do {
                 unsigned fi = repeat_6bits(fx >> 10);
@@ -874,9 +870,7 @@ void Linear_Gradient::shadeSpan16(int x, int y, uint16_t dstC[], int count)
 #endif
             } while (--count != 0);
         }
-    }
-    else
-    {
+    } else {
         SkScalar    dstX = SkIntToScalar(x);
         SkScalar    dstY = SkIntToScalar(y);
         do {

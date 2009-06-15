@@ -38,7 +38,8 @@ public:
     virtual ~SkShaderBlitter();
 
 protected:
-    SkShader* fShader;
+    uint32_t    fShaderFlags;
+    SkShader*   fShader;
 
 private:
     // illegal
@@ -161,7 +162,7 @@ public:
     virtual void blitMask(const SkMask&, const SkIRect&);
     virtual const SkBitmap* justAnOpaqueColor(uint32_t*);
 
-private:
+protected:
     SkPMColor   fSrcColor32;
     unsigned    fScale;
     uint16_t    fColor16;       // already scaled by fScale
@@ -175,10 +176,21 @@ private:
     typedef SkRasterBlitter INHERITED;
 };
 
+class SkRGB16_Opaque_Blitter : public SkRGB16_Blitter {
+public:
+    SkRGB16_Opaque_Blitter(const SkBitmap& device, const SkPaint& paint);
+    virtual void blitH(int x, int y, int width);
+    virtual void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]);
+    virtual void blitRect(int x, int y, int width, int height);
+    virtual void blitMask(const SkMask&, const SkIRect&);
+
+private:
+    typedef SkRGB16_Blitter INHERITED;
+};
+
 class SkRGB16_Black_Blitter : public SkRGB16_Blitter {
 public:
     SkRGB16_Black_Blitter(const SkBitmap& device, const SkPaint& paint);
-
     virtual void blitMask(const SkMask&, const SkIRect&);
     virtual void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]);
 
@@ -192,7 +204,8 @@ public:
     virtual ~SkRGB16_Shader_Blitter();
     virtual void blitH(int x, int y, int width);
     virtual void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]);
-    
+    virtual void blitRect(int x, int y, int width, int height);
+
 protected:
     SkPMColor*      fBuffer;
     SkBlitRow::Proc fOpaqueProc;
