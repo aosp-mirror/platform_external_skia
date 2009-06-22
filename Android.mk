@@ -72,6 +72,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
+	src/effects/SkPorterDuff.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/images/bmpdecoderhelper.cpp \
 	src/images/SkFDStream.cpp \

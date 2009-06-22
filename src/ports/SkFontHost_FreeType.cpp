@@ -75,7 +75,9 @@ public:
     virtual ~SkScalerContext_FreeType();
 
     bool success() const {
-        return fFaceRec != NULL && fFTSize != NULL;
+        return fFaceRec != NULL &&
+               fFTSize != NULL &&
+               fFace != NULL;
     }
 
 protected:
