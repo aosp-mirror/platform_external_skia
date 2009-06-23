@@ -45,6 +45,13 @@ static bool find_pdmode(SkXfermode::Mode src, SkPorterDuff::Mode* dst) {
     return false;
 }
 
+SkXfermode::Mode SkPorterDuff::ToXfermodeMode(Mode mode) {
+    SkASSERT((unsigned)mode < SkPorterDuff::kModeCount);
+    const Pair& pair = gPairs[mode];
+    SkASSERT(pair.fPD == mode);
+    return pair.fXF;
+}
+
 SkXfermode* SkPorterDuff::CreateXfermode(SkPorterDuff::Mode mode) {
     const Pair& pair = gPairs[mode];
     SkASSERT(pair.fPD == mode);
@@ -65,11 +72,5 @@ SkXfermodeProc SkPorterDuff::GetXfermodeProc(Mode mode) {
 
 SkXfermodeProc16 SkPorterDuff::GetXfermodeProc16(Mode mode, SkColor srcColor) {
     return SkXfermode::GetProc16(gPairs[mode].fXF, srcColor);
-}
-
-// DEPRECATED
-#include "SkPaint.h"
-SkXfermode* SkPaint::setPorterDuffXfermode(SkPorterDuff::Mode mode) {
-    return this->setXfermode(SkPorterDuff::CreateXfermode(mode));
 }
 
