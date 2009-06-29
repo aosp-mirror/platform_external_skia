@@ -57,37 +57,11 @@ static void S32A_D565_Opaque(uint16_t* SK_RESTRICT dst,
     }
 }
 
-/*  The function diffs from S32A_D565_Opaque() by checking if the alpha value in
-    a src pixel equals to 255. If so, there is no need to do SkSrcOver32To16().
- */
-static void S32A_D565_Opaque_255Check(uint16_t* SK_RESTRICT dst,
-                               const SkPMColor* SK_RESTRICT src, int count,
-                               U8CPU alpha, int /*x*/, int /*y*/) {
-    SkASSERT(255 == alpha);
-
-    if (count > 0) {
-        do {
-            SkPMColor c = *src++;
-            SkPMColorAssert(c);
-            if (c) {
-                unsigned isa = SkGetPackedA32(c);
-                if (isa == 255) {
-                    *dst = SkPixel32ToPixel16(c);
-                    dst += 1;
-                    continue;
-                }
-                *dst = SkSrcOver32To16(c, *dst);
-            }
-            dst += 1;
-        } while (--count != 0);
-    }
-}
-
 static void S32A_D565_Blend(uint16_t* SK_RESTRICT dst,
                               const SkPMColor* SK_RESTRICT src, int count,
                                U8CPU alpha, int /*x*/, int /*y*/) {
     SkASSERT(255 > alpha);
-
+    
     if (count > 0) {
         int src_scale = SkAlpha255To256(alpha);
         do {
@@ -98,7 +72,7 @@ static void S32A_D565_Blend(uint16_t* SK_RESTRICT dst,
                 uint16_t dc = *dst;
                 unsigned sa = SkGetPackedA32(sc);
                 unsigned dr, dg, db;
-
+                
                 if (sa == 255) {
                     dr = SkAlphaBlend(SkPacked32ToR16(sc), SkGetPackedR16(dc), src_scale);
                     dg = SkAlphaBlend(SkPacked32ToG16(sc), SkGetPackedG16(dc), src_scale);
@@ -117,12 +91,12 @@ static void S32A_D565_Blend(uint16_t* SK_RESTRICT dst,
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
+                               
 static void S32_D565_Opaque_Dither(uint16_t* SK_RESTRICT dst,
                                      const SkPMColor* SK_RESTRICT src,
                                      int count, U8CPU alpha, int x, int y) {
     SkASSERT(255 == alpha);
-
+    
     if (count > 0) {
         DITHER_565_SCAN(y);
         do {
@@ -141,7 +115,7 @@ static void S32_D565_Blend_Dither(uint16_t* SK_RESTRICT dst,
                                     const SkPMColor* SK_RESTRICT src,
                                     int count, U8CPU alpha, int x, int y) {
     SkASSERT(255 > alpha);
-
+    
     if (count > 0) {
         int scale = SkAlpha255To256(alpha);
         DITHER_565_SCAN(y);
@@ -150,7 +124,7 @@ static void S32_D565_Blend_Dither(uint16_t* SK_RESTRICT dst,
             SkPMColorAssert(c);
             SkASSERT(SkGetPackedA32(c) == 255);
 
-            int dither = DITHER_VALUE(x);
+            int dither = DITHER_VALUE(x);            
             int sr = SkGetPackedR32(c);
             int sg = SkGetPackedG32(c);
             int sb = SkGetPackedB32(c);
@@ -171,7 +145,7 @@ static void S32A_D565_Opaque_Dither(uint16_t* SK_RESTRICT dst,
                                       const SkPMColor* SK_RESTRICT src,
                                       int count, U8CPU alpha, int x, int y) {
     SkASSERT(255 == alpha);
-
+    
     if (count > 0) {
         DITHER_565_SCAN(y);
         do {
@@ -179,16 +153,16 @@ static void S32A_D565_Opaque_Dither(uint16_t* SK_RESTRICT dst,
             SkPMColorAssert(c);
             if (c) {
                 unsigned a = SkGetPackedA32(c);
-
+                
                 int d = SkAlphaMul(DITHER_VALUE(x), SkAlpha255To256(a));
-
+                
                 unsigned sr = SkGetPackedR32(c);
                 unsigned sg = SkGetPackedG32(c);
                 unsigned sb = SkGetPackedB32(c);
                 sr = SkDITHER_R32_FOR_565(sr, d);
                 sg = SkDITHER_G32_FOR_565(sg, d);
                 sb = SkDITHER_B32_FOR_565(sb, d);
-
+                
                 uint32_t src_expanded = (sg << 24) | (sr << 13) | (sb << 2);
                 uint32_t dst_expanded = SkExpand_rgb_16(*dst);
                 dst_expanded = dst_expanded * (SkAlpha255To256(255 - a) >> 3);
@@ -205,7 +179,7 @@ static void S32A_D565_Blend_Dither(uint16_t* SK_RESTRICT dst,
                                      const SkPMColor* SK_RESTRICT src,
                                      int count, U8CPU alpha, int x, int y) {
     SkASSERT(255 > alpha);
-
+    
     if (count > 0) {
         int src_scale = SkAlpha255To256(alpha);
         DITHER_565_SCAN(y);
@@ -218,18 +192,18 @@ static void S32A_D565_Blend_Dither(uint16_t* SK_RESTRICT dst,
                 int sa = SkGetPackedA32(c);
                 int dst_scale = SkAlpha255To256(255 - SkAlphaMul(sa, src_scale));
                 int dither = DITHER_VALUE(x);
-
+                
                 int sr = SkGetPackedR32(c);
                 int sg = SkGetPackedG32(c);
                 int sb = SkGetPackedB32(c);
                 sr = SkDITHER_R32To565(sr, dither);
                 sg = SkDITHER_G32To565(sg, dither);
                 sb = SkDITHER_B32To565(sb, dither);
-
+                
                 int dr = (sr * src_scale + SkGetPackedR16(d) * dst_scale) >> 8;
                 int dg = (sg * src_scale + SkGetPackedG16(d) * dst_scale) >> 8;
                 int db = (sb * src_scale + SkGetPackedB16(d) * dst_scale) >> 8;
-
+                
                 *dst = SkPackRGB16(dr, dg, db);
             }
             dst += 1;
@@ -240,12 +214,6 @@ static void S32A_D565_Blend_Dither(uint16_t* SK_RESTRICT dst,
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-// Use the assembly version of s32a_d565_opaque()
-#define USE_S32A_D565_OPAQUE_ASM
-
-#if defined(USE_S32A_D565_OPAQUE_ASM) && defined(USE_ARM_ASM)
-    extern "C" void s32a_d565_opaque_arm(uint16_t*, uint32_t*, size_t);
-#endif
 
 #ifdef USE_T32CB16BLEND_ASM
     extern "C" void scanline_t32cb16blend_arm(uint16_t*, uint32_t*, size_t);
@@ -256,31 +224,27 @@ static const SkBlitRow::Proc gProcs16[] = {
     S32_D565_Opaque,
     S32_D565_Blend,
 
-#if defined(USE_S32A_D565_OPAQUE_ASM) && defined(USE_ARM_ASM)
-    (SkBlitRow::Proc)s32a_d565_opaque_arm,
-#elif defined(USE_S32A_D565_OPAQUE_CHECK)
-    S32A_D565_Opaque_255Check,
-#elif defined(USE_T32CB16BLEND_ASM)
+#ifdef USE_T32CB16BLEND_ASM
     (SkBlitRow::Proc)scanline_t32cb16blend_arm,
 #else
     S32A_D565_Opaque,
 #endif
 
     S32A_D565_Blend,
-
+    
     // dither
     S32_D565_Opaque_Dither,
     S32_D565_Blend_Dither,
-
+    
     S32A_D565_Opaque_Dither,
     S32A_D565_Blend_Dither
 };
 
 extern SkBlitRow::Proc SkBlitRow_Factory_4444(unsigned flags);
-
+    
 SkBlitRow::Proc SkBlitRow::Factory(unsigned flags, SkBitmap::Config config) {
     SkASSERT(flags < SK_ARRAY_COUNT(gProcs16));
-
+    
     switch (config) {
         case SkBitmap::kRGB_565_Config:
             return gProcs16[flags];
@@ -291,3 +255,4 @@ SkBlitRow::Proc SkBlitRow::Factory(unsigned flags, SkBitmap::Config config) {
     }
     return NULL;
 }
+    

@@ -1,4 +1,5 @@
 #include "SkPictureRecord.h"
+#include "SkShape.h"
 #include "SkTSearch.h"
 
 #define MIN_WRITER_SIZE 16384
@@ -353,6 +354,20 @@ void SkPictureRecord::drawPicture(SkPicture& picture) {
     validate();
 }
 
+void SkPictureRecord::drawShape(SkShape* shape) {
+    addDraw(DRAW_SHAPE);
+
+    int index = fShapes.find(shape);
+    if (index < 0) {    // not found
+        index = fShapes.count();
+        *fShapes.append() = shape;
+        shape->ref();
+    }
+    // follow the convention of recording a 1-based index
+    addInt(index + 1);
+    validate();
+}
+
 void SkPictureRecord::drawVertices(VertexMode vmode, int vertexCount,
                           const SkPoint vertices[], const SkPoint texs[],
                           const SkColor colors[], SkXfermode*,
@@ -398,6 +413,7 @@ void SkPictureRecord::reset() {
     fPaints.reset();
     fPictureRefs.unrefAll();
     fRegions.reset();
+    fShapes.unrefAll();
     fWriter.reset();
     fHeap.reset();
     

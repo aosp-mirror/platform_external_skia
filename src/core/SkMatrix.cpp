@@ -397,7 +397,7 @@ bool SkMatrix::setRectToRect(const SkRect& src, const SkRect& dst,
     }
 
     if (dst.isEmpty()) {
-        bzero(fMat, 8 * sizeof(SkScalar));
+        sk_bzero(fMat, 8 * sizeof(SkScalar));
         this->setTypeMask(kScale_Mask | kRectStaysRect_Mask);
     } else {
         SkScalar    tx, sx = SkScalarDiv(dst.width(), src.width());
@@ -1581,6 +1581,20 @@ bool SkMatrix::setPolyToPoly(const SkPoint src[], const SkPoint dst[],
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+uint32_t SkMatrix::flatten(void* buffer) const {
+    // TODO write less for simple matrices
+    if (buffer) {
+        memcpy(buffer, fMat, 9 * sizeof(SkScalar));
+    }
+    return 9 * sizeof(SkScalar);
+}
+
+uint32_t SkMatrix::unflatten(const void* buffer) {
+    memcpy(fMat, buffer, 9 * sizeof(SkScalar));
+    this->setTypeMask(kUnknown_Mask);
+    return 9 * sizeof(SkScalar);
+}
 
 void SkMatrix::dump() const {
     SkString str;
