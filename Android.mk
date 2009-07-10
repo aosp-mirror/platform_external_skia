@@ -1,7 +1,7 @@
 LOCAL_PATH:= $(call my-dir)
 
 #############################################################
-#  build the corecg library
+#   build the skia+fretype+png+jpeg+zlib+gif library
 #
 
 include $(CLEAR_VARS)
@@ -28,31 +28,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkString.cpp \
 	src/core/SkUtils.cpp \
 	src/ports/SkDebug_android.cpp \
-
-LOCAL_SHARED_LIBRARIES := \
-	libcutils \
-	libutils
-
-LOCAL_C_INCLUDES += \
-	$(LOCAL_PATH)/include/core
-
-LOCAL_MODULE:= libcorecg
-
-include $(BUILD_SHARED_LIBRARY)
-
-#############################################################
-#   build the main sgl library
-#
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-ifneq ($(TARGET_ARCH_VARIANT),armv7-a)
-	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
-endif
-
-LOCAL_SRC_FILES:= \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAvoidXfermode.cpp \
@@ -102,7 +77,6 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkTime_Unix.cpp \
-	src/ports/SkXMLPullParser_expat.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmap_scroll.cpp \
@@ -195,8 +169,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libcutils \
     libemoji \
 	libutils \
-	libcorecg \
-	libexpat \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
@@ -216,7 +188,6 @@ LOCAL_C_INCLUDES += \
 	external/zlib \
 	external/libpng \
 	external/giflib \
-	external/expat/lib \
 	external/jpeg \
     frameworks/opt/emoji
 
@@ -226,7 +197,7 @@ endif
 
 LOCAL_LDLIBS += -lpthread
 
-LOCAL_MODULE:= libsgl
+LOCAL_MODULE:= libskia
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -255,8 +226,7 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	libutils \
-	libsgl \
-	libcorecg \
+	libskia \
 	libGLESv1_CM
 
 LOCAL_C_INCLUDES += \

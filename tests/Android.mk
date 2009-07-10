@@ -32,8 +32,7 @@ LOCAL_C_INCLUDES := \
         external/skia/src/core
 
 LOCAL_SHARED_LIBRARIES := \
-        libcorecg \
-        libsgl
+        libskia
 
 LOCAL_MODULE_TAGS := eng tests
 
