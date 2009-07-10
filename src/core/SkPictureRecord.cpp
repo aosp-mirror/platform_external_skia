@@ -53,7 +53,7 @@ void SkPictureRecord::restore() {
     if (fRestoreOffsetStack.count() == 0) {
         return;
     }
-    
+
     // patch up the clip offsets
     uint32_t restoreOffset = (uint32_t)fWriter.size();
     uint32_t offset = fRestoreOffsetStack.top();
@@ -63,7 +63,7 @@ void SkPictureRecord::restore() {
         *peek = restoreOffset;
     }
     fRestoreOffsetStack.pop();
-    
+
     addDraw(RESTORE);
     validate();
     return this->INHERITED::restore();
