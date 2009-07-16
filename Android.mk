@@ -8,7 +8,7 @@ include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE := arm
 
-ifneq ($(TARGET_ARCH_VARIANT),armv7-a)
+ifneq ($(ARCH_ARM_HAVE_VFP),true)
 	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
 endif
 
@@ -211,7 +211,7 @@ LOCAL_PRELINK_MODULE := false
 
 LOCAL_ARM_MODE := arm
 
-ifneq ($(TARGET_ARCH_VARIANT),armv7-a)
+ifneq ($(ARCH_ARM_HAVE_VFP),true)
 	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
 endif
 
