@@ -84,7 +84,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
 	src/core/SkBitmapSampler.cpp \
-	src/core/SkBitmapShader.cpp \
 	src/core/SkBlitRow_D16.cpp \
 	src/core/SkBlitRow_D4444.cpp \
 	src/core/SkBlitter.cpp \

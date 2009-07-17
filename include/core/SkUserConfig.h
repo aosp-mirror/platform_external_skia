@@ -47,7 +47,11 @@
 //
 // ANDROID Specific changes - NO NOT CHECK BACK INTO code.google.com/p/skia
 //
-#include <utils/misc.h>
+
+// do this build check for other tools that still read this header
+#ifdef ANDROID
+    #include <utils/misc.h>
+#endif
 
 #ifdef SK_BUILD_FOR_MAC
     #undef SK_BUILD_FOR_MAC
