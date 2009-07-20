@@ -91,34 +91,34 @@ bool SkImageDecoder::allocPixelRef(SkBitmap* bitmap,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/*  Technically, this should be 342, since that is the cutoff point between
-    an index and 32bit bitmap (they take equal ram), but since 32bit is almost
-    always faster, I bump up the value a bit.
-*/
-#define MIN_SIZE_FOR_INDEX  (512)
-
-/*  Return the "optimal" config for this bitmap. In this case, we just look to
-    promote index bitmaps to full-color, since those are a little faster to
-    draw (fewer memory lookups).
-
-    Seems like we could expose this to the caller through some exising or new
-    proxy object, allowing them to decide (after sniffing some aspect of the
-    original bitmap) what config they really want.
- */
-static SkBitmap::Config optimal_config(const SkBitmap& bm,
-                                       SkBitmap::Config pref) {
-    if (bm.config() != pref) {
-        if (bm.config() == SkBitmap::kIndex8_Config) {
-            Sk64 size64 = bm.getSize64();
-            if (size64.is32()) {
-                int32_t size = size64.get32();
-                if (size < MIN_SIZE_FOR_INDEX) {
-                    return SkBitmap::kARGB_8888_Config;
-                }
-            }
-        }
+static bool canCopyTo(SkBitmap::Config src, SkBitmap::Config dst) {
+    if (src == SkBitmap::kNo_Config) {
+        return false;
     }
-    return bm.config();
+
+    bool sameConfigs = (src == dst);
+    switch (dst) {
+        case SkBitmap::kA8_Config:
+        case SkBitmap::kARGB_4444_Config:
+        case SkBitmap::kRGB_565_Config:
+        case SkBitmap::kARGB_8888_Config:
+            break;
+        case SkBitmap::kA1_Config:
+        case SkBitmap::kIndex8_Config:
+            if (!sameConfigs) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+    }
+
+    // do not copy src if srcConfig == kA1_Config while dstConfig != kA1_Config
+    if (src == SkBitmap::kA1_Config && !sameConfigs) {
+        return false;
+    }
+
+    return true;
 }
 
 bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
@@ -134,13 +134,12 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
         return false;
     }
 
-    SkBitmap::Config c = optimal_config(tmp, pref);
-    if (c != tmp.config()) {
+    if (tmp.config() != pref && canCopyTo(tmp.config(), pref)) {
         if (mode == kDecodeBounds_Mode) {
-            tmp.setConfig(c, tmp.width(), tmp.height());
-        } else {
+            tmp.setConfig(pref, tmp.width(), tmp.height());
+        } else if (mode == kDecodePixels_Mode) {
             SkBitmap tmp2;
-            if (tmp.copyTo(&tmp2, c, this->getAllocator())) {
+            if (tmp.copyTo(&tmp2, pref, this->getAllocator())) {
                 tmp.swap(tmp2);
             }
         }
