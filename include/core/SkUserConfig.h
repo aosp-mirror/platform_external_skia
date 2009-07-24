@@ -135,7 +135,6 @@ void Android_SkDebugf(const char* file, int line,
                       const char* function, const char* format, ...);
 
 
-
 /*  If SK_DEBUG is defined, then you can optionally define SK_SUPPORT_UNITTEST
     which will run additional self-tests at startup. These can take a long time,
     so this flag is optional.

@@ -21,6 +21,25 @@
 #include "SkUtils.h"
 #include "SkXfermode.h"
 
+#if defined(SK_SUPPORT_LCDTEXT)
+namespace skia_blitter_support {
+// subpixel helper functions from SkBlitter_ARGB32_Subpixel.cpp
+uint32_t* adjustForSubpixelClip(const SkMask& mask,
+                                const SkIRect& clip, const SkBitmap& device,
+                                int* widthAdjustment, int* heightAdjustment,
+                                const uint32_t** alpha32);
+extern uint32_t BlendLCDPixelWithColor(const uint32_t alphaPixel, const uint32_t originalPixel,
+                                       const uint32_t sourcePixel);
+extern uint32_t BlendLCDPixelWithOpaqueColor(const uint32_t alphaPixel, const uint32_t originalPixel,
+                                             const uint32_t sourcePixel);
+extern uint32_t BlendLCDPixelWithBlack(const uint32_t alphaPixel, const uint32_t originalPixel);
+}
+
+using namespace skia_blitter_support;
+#endif
+
+//////////////////////////////////////////////////////////////////////////////////////
+
 SkARGB32_Blitter::SkARGB32_Blitter(const SkBitmap& device, const SkPaint& paint)
         : INHERITED(device) {
     uint32_t color = paint.getColor();
@@ -201,12 +220,45 @@ void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
     int width = clip.width();
     int height = clip.height();
 
-    uint32_t*       device = fDevice.getAddr32(x, y);
-    const uint8_t*  alpha = mask.getAddr(x, y);
-    uint32_t        srcColor = fPMColor;
-    unsigned        devRB = fDevice.rowBytes() - (width << 2);
-    unsigned        maskRB = mask.fRowBytes - width;
+#if defined(SK_SUPPORT_LCDTEXT)
+    const bool      lcdMode = mask.fFormat == SkMask::kHorizontalLCD_Format;
+    const bool      verticalLCDMode = mask.fFormat == SkMask::kVerticalLCD_Format;
+#endif
 
+    // In LCD mode the masks have either an extra couple of rows or columns on the edges.
+    uint32_t        srcColor = fPMColor;
+
+#if defined(SK_SUPPORT_LCDTEXT)
+    if (lcdMode || verticalLCDMode) {
+        int widthAdjustment, heightAdjustment;
+        const uint32_t* alpha32;
+        uint32_t* device = adjustForSubpixelClip(mask, clip, fDevice, &widthAdjustment, &heightAdjustment, &alpha32);
+
+        width += widthAdjustment;
+        height += heightAdjustment;
+
+        unsigned devRB = fDevice.rowBytes() - (width << 2);
+        unsigned alphaExtraRowWords = mask.rowWordsLCD() - width;
+
+        do {
+            unsigned w = width;
+            do {
+                const uint32_t alphaPixel = *alpha32++;
+                const uint32_t originalPixel = *device;
+                *device++ = BlendLCDPixelWithOpaqueColor(alphaPixel, originalPixel, srcColor);
+            } while (--w != 0);
+            device = (uint32_t*)((char*)device + devRB);
+            alpha32 += alphaExtraRowWords;
+        } while (--height != 0);
+
+        return;
+    }
+#endif
+
+    uint32_t*      device = fDevice.getAddr32(x, y);
+    const uint8_t* alpha = mask.getAddr(x, y);
+    unsigned       maskRB = mask.fRowBytes - width;
+    unsigned       devRB = fDevice.rowBytes() - (width << 2);
     do {
         int w = width;
         do {
@@ -298,18 +350,49 @@ void SkARGB32_Black_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 
         SkARGB32_BlitBW(fDevice, mask, clip, black);
     } else {
-        uint32_t*       device = fDevice.getAddr32(clip.fLeft, clip.fTop);
-        const uint8_t*  alpha = mask.getAddr(clip.fLeft, clip.fTop);
+#if defined(SK_SUPPORT_LCDTEXT)
+        const bool      lcdMode = mask.fFormat == SkMask::kHorizontalLCD_Format;
+        const bool      verticalLCDMode = mask.fFormat == SkMask::kVerticalLCD_Format;
+#endif
+
+        // In LCD mode the masks have either an extra couple of rows or columns on the edges.
         unsigned        width = clip.width();
         unsigned        height = clip.height();
-        unsigned        deviceRB = fDevice.rowBytes() - (width << 2);
-        unsigned        maskRB = mask.fRowBytes - width;
 
         SkASSERT((int)height > 0);
         SkASSERT((int)width > 0);
-        SkASSERT((int)deviceRB >= 0);
-        SkASSERT((int)maskRB >= 0);
 
+#if defined(SK_SUPPORT_LCDTEXT)
+        if (lcdMode || verticalLCDMode) {
+            int widthAdjustment, heightAdjustment;
+            const uint32_t* alpha32;
+            uint32_t* device = adjustForSubpixelClip(mask, clip, fDevice, &widthAdjustment, &heightAdjustment, &alpha32);
+
+            width += widthAdjustment;
+            height += heightAdjustment;
+
+            unsigned deviceRB = fDevice.rowBytes() - (width << 2);
+            unsigned alphaExtraRowWords = mask.rowWordsLCD() - width;
+
+            do {
+                unsigned w = width;
+                do {
+                    const uint32_t alphaPixel = *alpha32++;
+                    const uint32_t originalPixel = *device;
+                    *device++ = BlendLCDPixelWithBlack(alphaPixel, originalPixel);
+                } while (--w != 0);
+                device = (uint32_t*)((char*)device + deviceRB);
+                alpha32 += alphaExtraRowWords;
+            } while (--height != 0);
+
+            return;
+        }
+#endif
+
+        uint32_t*      device = fDevice.getAddr32(clip.fLeft, clip.fTop);
+        unsigned       maskRB = mask.fRowBytes - width;
+        unsigned       deviceRB = fDevice.rowBytes() - (width << 2);
+        const uint8_t* alpha = mask.getAddr(clip.fLeft, clip.fTop);
         do {
             unsigned w = width;
             do {
@@ -482,4 +565,3 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
         } 
     }
 }
-
