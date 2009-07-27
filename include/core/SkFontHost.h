@@ -131,6 +131,20 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
+    /** Given a filled-out rec, the fonthost may decide to modify it to reflect
+        what the host is actually capable of fulfilling. For example, if the
+        rec is requesting a level of hinting that, for this host, maps some
+        other level (e.g. kFull -> kNormal), it should update the rec to reflect
+        what will actually be done. This is an optimization so that the font
+        cache does not contain different recs (i.e. keys) that in reality map to
+        the same output.
+
+        A lazy (but valid) fonthost can do nothing in its FilterRec routine.
+     */
+    static void FilterRec(SkScalerContext::Rec* rec);
+
+    ///////////////////////////////////////////////////////////////////////////
+
     /** Return the number of tables in the font
      */
     static int CountTables(SkFontID);
@@ -187,6 +201,38 @@ public:
         white (table[1]) gamma tables.
     */
     static void GetGammaTables(const uint8_t* tables[2]);
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    /** LCDs either have their color elements arranged horizontally or
+        vertically. When rendering subpixel glyphs we need to know which way
+        round they are.
+
+        Note, if you change this after startup, you'll need to flush the glyph
+        cache because it'll have the wrong type of masks cached.
+    */
+    enum LCDOrientation {
+        kHorizontal_LCDOrientation = 0,    //!< this is the default
+        kVertical_LCDOrientation   = 1,
+    };
+
+    static void SetSubpixelOrientation(LCDOrientation orientation);
+    static LCDOrientation GetSubpixelOrientation();
+
+    /** LCD color elements can vary in order. For subpixel text we need to know
+        the order which the LCDs uses so that the color fringes are in the
+        correct place.
+
+        Note, if you change this after startup, you'll need to flush the glyph
+        cache because it'll have the wrong type of masks cached.
+    */
+    enum LCDOrder {
+        kRGB_LCDOrder = 0,    //!< this is the default
+        kBGR_LCDOrder = 1,
+    };
+
+    static void SetSubpixelOrder(LCDOrder order);
+    static LCDOrder GetSubpixelOrder();
 };
 
 #endif
