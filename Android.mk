@@ -147,6 +147,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkWriter32.cpp \
+	src/opts/SkBlitRow_opts_arm.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
@@ -156,13 +157,6 @@ LOCAL_SRC_FILES:= \
 # these are for emoji support, needed by webkit
 LOCAL_SRC_FILES += \
 	emoji/EmojiFont.cpp
-
-# including the optimized assembly code for the src-overing operation
-ifeq ($(TARGET_ARCH),arm)
-        LOCAL_CFLAGS += -DUSE_ARM_ASM
-        LOCAL_SRC_FILES += \
-	        src/core/asm/s32a_d565_opaque.S
-endif
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
