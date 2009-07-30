@@ -147,12 +147,19 @@ LOCAL_SRC_FILES:= \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkWriter32.cpp \
-	src/opts/SkBlitRow_opts_arm.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkProxyCanvas.cpp
+
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += \
+	src/opts/SkBlitRow_opts_arm.cpp
+else
+LOCAL_SRC_FILES += \
+	src/opts/SkBlitRow_opts_none.cpp
+endif
 
 # these are for emoji support, needed by webkit
 LOCAL_SRC_FILES += \
