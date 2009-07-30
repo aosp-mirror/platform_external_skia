@@ -110,10 +110,30 @@ static bool substituteTranspColor(SkBitmap* bm, SkPMColor match) {
     return reallyHasAlpha;
 }
 
-static inline bool isDirectModel(SkBitmap::Config config) {
-    return  config == SkBitmap::kARGB_8888_Config ||
-    config == SkBitmap::kARGB_4444_Config ||
-    config == SkBitmap::kRGB_565_Config;
+static bool canUpscalePaletteToConfig(SkBitmap::Config prefConfig,
+                                      bool srcHasAlpha) {
+    switch (prefConfig) {
+        case SkBitmap::kARGB_8888_Config:
+        case SkBitmap::kARGB_4444_Config:
+            return true;
+        case SkBitmap::kRGB_565_Config:
+            // only return true if the src is opaque (since 565 is opaque)
+            return !srcHasAlpha;
+        default:
+            return false;
+    }
+}
+
+// call only if color_type is PALETTE. Returns true if the ctable has alpha
+static bool hasTransparencyInPalette(png_structp png_ptr, png_infop info_ptr) {
+    png_bytep trans;
+    int num_trans;
+
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+        png_get_tRNS(png_ptr, info_ptr, &trans, &num_trans, NULL);
+        return num_trans > 0;
+    }
+    return false;
 }
 
 bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
@@ -214,9 +234,9 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
     
     if (color_type == PNG_COLOR_TYPE_PALETTE) {
         config = SkBitmap::kIndex8_Config;
-        if (isDirectModel(prefConfig)) {
-            // todo: as we do below, if the palette has alpha, we should could
-            // decide to not allow conversion to 565...
+        // now see if we can upscale to their requested config
+        bool paletteHasAlpha = hasTransparencyInPalette(png_ptr, info_ptr);
+        if (canUpscalePaletteToConfig(prefConfig, paletteHasAlpha)) {
             config = prefConfig;
         }
     } else {
