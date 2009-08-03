@@ -91,36 +91,6 @@ bool SkImageDecoder::allocPixelRef(SkBitmap* bitmap,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static bool canCopyTo(SkBitmap::Config src, SkBitmap::Config dst) {
-    if (src == SkBitmap::kNo_Config) {
-        return false;
-    }
-
-    bool sameConfigs = (src == dst);
-    switch (dst) {
-        case SkBitmap::kA8_Config:
-        case SkBitmap::kARGB_4444_Config:
-        case SkBitmap::kRGB_565_Config:
-        case SkBitmap::kARGB_8888_Config:
-            break;
-        case SkBitmap::kA1_Config:
-        case SkBitmap::kIndex8_Config:
-            if (!sameConfigs) {
-                return false;
-            }
-            break;
-        default:
-            return false;
-    }
-
-    // do not copy src if srcConfig == kA1_Config while dstConfig != kA1_Config
-    if (src == SkBitmap::kA1_Config && !sameConfigs) {
-        return false;
-    }
-
-    return true;
-}
-
 bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
                             SkBitmap::Config pref, Mode mode) {
     // pass a temporary bitmap, so that if we return false, we are assured of
@@ -132,17 +102,6 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
 
     if (!this->onDecode(stream, &tmp, pref, mode)) {
         return false;
-    }
-
-    if (tmp.config() != pref && canCopyTo(tmp.config(), pref)) {
-        if (mode == kDecodeBounds_Mode) {
-            tmp.setConfig(pref, tmp.width(), tmp.height());
-        } else if (mode == kDecodePixels_Mode) {
-            SkBitmap tmp2;
-            if (tmp.copyTo(&tmp2, pref, this->getAllocator())) {
-                tmp.swap(tmp2);
-            }
-        }
     }
     bm->swap(tmp);
     return true;
