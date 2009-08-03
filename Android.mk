@@ -155,10 +155,12 @@ LOCAL_SRC_FILES:= \
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += \
-	src/opts/SkBlitRow_opts_arm.cpp
+	src/opts/SkBlitRow_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_arm.cpp
 else
 LOCAL_SRC_FILES += \
-	src/opts/SkBlitRow_opts_none.cpp
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp
 endif
 
 # these are for emoji support, needed by webkit

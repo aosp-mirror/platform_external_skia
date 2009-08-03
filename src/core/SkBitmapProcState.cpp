@@ -366,7 +366,6 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     fInvProc        = m->getMapXYProc();
     fInvType        = m->getType();
     fInvSx          = SkScalarToFixed(m->getScaleX());
-    fInvSy          = SkScalarToFixed(m->getScaleY());
     fInvKy          = SkScalarToFixed(m->getSkewY());
 
     fAlphaScale = SkAlpha255To256(paint.getAlpha());
@@ -507,6 +506,9 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
             fShaderProc16 = Repeat_S16_D16_filter_DX_shaderproc;
         }
     }
+
+    // see if our platform has any accelerated overrides
+    this->platformProcs();
     return true;
 }
 
