@@ -12,6 +12,10 @@ ifneq ($(ARCH_ARM_HAVE_VFP),true)
 	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
 endif
 
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+endif
+
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
 	src/core/SkBuffer.cpp \
@@ -217,6 +221,10 @@ ifneq ($(ARCH_ARM_HAVE_VFP),true)
 	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
 endif
 
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+endif
+
 LOCAL_SRC_FILES:= \
 	src/gl/SkGL.cpp \
 	src/gl/SkGLCanvas.cpp \
@@ -243,3 +251,9 @@ LOCAL_LDLIBS += -lpthread
 LOCAL_MODULE:= libskiagl
 
 include $(BUILD_SHARED_LIBRARY)
+
+#############################################################
+# Build the skia benchmark too
+#
+
+include $(LOCAL_PATH)/bench/Android.mk
