@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-#include <machine/cpu-features.h>
+#ifdef __arm__
+    #include <machine/cpu-features.h>
+#endif
 #include "SkColorPriv.h"
 
 #if defined(__ARM_HAVE_NEON) && !defined(SK_CPU_BENDIAN)
