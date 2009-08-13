@@ -5,6 +5,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
 	BitmapBench.cpp \
 	RectBench.cpp \
+	RepeatTileBench.cpp \
 	TextBench.cpp \
 	SkBenchmark.cpp \
 	benchmain.cpp

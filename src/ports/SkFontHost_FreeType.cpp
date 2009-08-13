@@ -376,6 +376,13 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
             break;
         }
 
+        if (fRec.fMaskFormat != SkMask::kBW_Format) {
+            // If the user requested anti-aliasing then we don't use bitmap
+            // strikes in the font. The consensus among our Japanese users is
+            // that this results in the best quality.
+            loadFlags |= FT_LOAD_NO_BITMAP;
+        }
+
         fLoadGlyphFlags = loadFlags;
     }
 
@@ -686,7 +693,9 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
             const uint8_t*  src = (const uint8_t*)fFace->glyph->bitmap.buffer;
             uint8_t*        dst = (uint8_t*)glyph.fImage;
 
-            if (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
+            if (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY ||
+                (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_MONO &&
+                 glyph.fMaskFormat == SkMask::kBW_Format)) {
                 unsigned    srcRowBytes = fFace->glyph->bitmap.pitch;
                 unsigned    dstRowBytes = glyph.rowBytes();
                 unsigned    minRowBytes = SkMin32(srcRowBytes, dstRowBytes);
@@ -698,7 +707,8 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
                     src += srcRowBytes;
                     dst += dstRowBytes;
                 }
-            } else if (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_MONO) {
+            } else if (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_MONO &&
+                       glyph.fMaskFormat == SkMask::kA8_Format) {
                 for (int y = 0; y < fFace->glyph->bitmap.rows; ++y) {
                     uint8_t byte = 0;
                     int bits = 0;
@@ -719,6 +729,8 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
                     src += fFace->glyph->bitmap.pitch;
                     dst += glyph.rowBytes();
                 }
+            } else {
+              SkASSERT(!"unknown glyph bitmap transform needed");
             }
 
             if (lcdRenderMode)
