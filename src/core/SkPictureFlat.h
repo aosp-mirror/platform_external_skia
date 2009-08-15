@@ -70,8 +70,6 @@ protected:
 
 class SkTypefacePlayback : public SkRefCntPlayback {
 public:
-    virtual ~SkTypefacePlayback() {}
-
     virtual void setupBuffer(SkFlattenableReadBuffer& buffer) const {
         buffer.setTypefaceArray((SkTypeface**)fArray, fCount);
     }
