@@ -1,3 +1,4 @@
+BASE_PATH := $(call my-dir)
 LOCAL_PATH:= $(call my-dir)
 
 #############################################################
@@ -253,7 +254,12 @@ LOCAL_MODULE:= libskiagl
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################
-# Build the skia benchmark too
+# Build the skia tools
 #
 
-include $(LOCAL_PATH)/bench/Android.mk
+# benchmark (timings)
+include $(BASE_PATH)/bench/Android.mk
+
+# golden-master (fidelity / regression test)
+include $(BASE_PATH)/gm/Android.mk
+
