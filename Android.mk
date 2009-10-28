@@ -156,9 +156,11 @@ LOCAL_SRC_FILES:= \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkWriter32.cpp \
+	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
+	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkProxyCanvas.cpp
 
