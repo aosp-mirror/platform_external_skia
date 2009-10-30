@@ -55,6 +55,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
+	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/images/bmpdecoderhelper.cpp \
 	src/images/SkFDStream.cpp \
