@@ -120,7 +120,7 @@ void SkGL::Ortho(float left, float right, float bottom, float top,
     
     float mat[16];
     
-    bzero(mat, sizeof(mat));
+    sk_bzero(mat, sizeof(mat));
     
     mat[0] = 2 / (right - left);
     mat[5] = 2 / (top - bottom);
@@ -443,9 +443,7 @@ static int worst_case_edge_count(const SkPath& path) {
 }
 
 void SkGL::DrawPath(const SkPath& path, bool useTex, SkGLClipIter* clipIter) {
-    SkRect  bounds;
-    
-    path.computeBounds(&bounds, SkPath::kFast_BoundsType);
+    const SkRect& bounds = path.getBounds();
     if (bounds.isEmpty()) {
         return;
     }

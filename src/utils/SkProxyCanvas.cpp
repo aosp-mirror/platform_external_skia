@@ -138,6 +138,10 @@ void SkProxyCanvas::drawPicture(SkPicture& picture) {
     fProxy->drawPicture(picture);
 }
 
+void SkProxyCanvas::drawShape(SkShape* shape) {
+    fProxy->drawShape(shape);
+}
+
 void SkProxyCanvas::drawVertices(VertexMode vmode, int vertexCount,
                                  const SkPoint vertices[], const SkPoint texs[],
                                  const SkColor colors[], SkXfermode* xmode,

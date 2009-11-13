@@ -1,4 +1,5 @@
 #include "SkDumpCanvas.h"
+#include "SkPicture.h"  
 #include "SkPixelRef.h"
 #include "SkString.h"
 #include <stdarg.h>
@@ -53,9 +54,7 @@ static void toString(const SkPath& path, SkString* str) {
     if (path.isEmpty()) {
         str->set("path:empty");
     } else {
-        SkRect bounds;
-        path.computeBounds(&bounds, SkPath::kFast_BoundsType);
-        toString(bounds, str);
+        toString(path.getBounds(), str);
 #if 1
         SkString s;
         dumpVerbs(path, &s);
@@ -140,7 +139,7 @@ static void toString(const void* text, size_t len, SkPaint::TextEncoding enc,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkDumpCanvas::SkDumpCanvas(Dumper* dumper) {
+SkDumpCanvas::SkDumpCanvas(Dumper* dumper) : fNestLevel(0) {
     dumper->safeRef();
     fDumper = dumper;
 
@@ -352,8 +351,22 @@ void SkDumpCanvas::drawTextOnPath(const void* text, size_t byteLength,
                str.c_str(), byteLength);
 }
 
+void SkDumpCanvas::drawShape(SkShape* shape) {
+    this->dump(kDrawShape_Verb, NULL, "drawShape(%p)", shape);
+    fNestLevel += 1;
+    this->INHERITED::drawShape(shape);
+    fNestLevel -= 1;
+    this->dump(kDrawShape_Verb, NULL, "endShape(%p)", shape);
+}
+
 void SkDumpCanvas::drawPicture(SkPicture& picture) {
-    this->dump(kDrawPicture_Verb, NULL, "drawPicture(%p)", &picture);
+    this->dump(kDrawPicture_Verb, NULL, "drawPicture(%p) %d:%d", &picture,
+               picture.width(), picture.height());
+    fNestLevel += 1;
+    this->INHERITED::drawPicture(picture);
+    fNestLevel -= 1;
+    this->dump(kDrawPicture_Verb, NULL, "endPicture(%p) %d:%d", &picture,
+               picture.width(), picture.height());
 }
 
 void SkDumpCanvas::drawVertices(VertexMode vmode, int vertexCount,
@@ -395,7 +408,7 @@ static void appendFlattenable(SkString* str, const SkFlattenable* ptr,
 void SkFormatDumper::dump(SkDumpCanvas* canvas, SkDumpCanvas::Verb verb,
                           const char str[], const SkPaint* p) {
     SkString msg, tab;
-    const int level = canvas->getSaveCount() - 1;
+    const int level = canvas->getNestLevel() + canvas->getSaveCount() - 1;
     SkASSERT(level >= 0);
     for (int i = 0; i < level; i++) {
         tab.append("\t");

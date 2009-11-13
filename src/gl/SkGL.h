@@ -1,7 +1,7 @@
 #ifndef SkGL_DEFINED
 #define SkGL_DEFINED
 
-#ifdef SK_BUILD_FOR_MAC
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_SDL)
     #include <OpenGL/gl.h>
     #include <OpenGL/glext.h>
     #include <AGL/agl.h>
@@ -10,6 +10,7 @@
 #elif defined(ANDROID)
     #include <GLES/gl.h>
     #include <EGL/egl.h>
+    #include <GLES/glext.h>
 #endif
 
 #include "SkColor.h"
@@ -23,6 +24,9 @@ class SkGLClipIter;
 
 //#define TRACE_TEXTURE_CREATE
 
+static void SkGL_unimpl(const char str[]) {
+    SkDebugf("SkGL unimplemented: %s\n", str);
+}
 ///////////////////////////////////////////////////////////////////////////////
 
 #if GL_OES_compressed_paletted_texture
@@ -189,12 +193,12 @@ struct SkGLMatrix {
     SkGLScalar fMat[16];
     
     void reset() {
-        bzero(fMat, sizeof(fMat));
+        sk_bzero(fMat, sizeof(fMat));
         fMat[0] = fMat[5] = fMat[10] = fMat[15] = SK_GLScalar1;
     }
     
     void set(const SkMatrix& m) {
-        bzero(fMat, sizeof(fMat));
+        sk_bzero(fMat, sizeof(fMat));
         fMat[0] = SkScalarToGL(m[SkMatrix::kMScaleX]);
         fMat[4] = SkScalarToGL(m[SkMatrix::kMSkewX]);
         fMat[12] = SkScalarToGL(m[SkMatrix::kMTransX]);

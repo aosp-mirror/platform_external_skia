@@ -82,16 +82,28 @@ public:
     */
     void toggleInverseFillType() { fFillType ^= 2; }
 
+    /** Returns true if the path is flagged as being convex. This is not a
+        confirmed by any analysis, it is just the value set earlier.
+     */
+    bool isConvex() const { return fIsConvex != 0; }
+
+    /** Set the isConvex flag to true or false. Convex paths may draw faster if
+        this flag is set, though setting this to true on a path that is in fact
+        not convex can give undefined results when drawn. Paths default to
+        isConvex == false
+     */
+    void setIsConvex(bool isConvex) { fIsConvex = (isConvex != 0); }
+
     /** Clear any lines and curves from the path, making it empty. This frees up
         internal storage associated with those segments.
-        This does NOT change the fill-type setting.
+        This does NOT change the fill-type setting nor isConvex
     */
     void reset();
     
     /** Similar to reset(), in that all lines and curves are removed from the
         path. However, any internal storage for those lines/curves is retained,
         making reuse of the path potentially faster.
-        This does NOT change the fill-type setting.
+        This does NOT change the fill-type setting nor isConvex
     */
     void rewind();
 
@@ -122,32 +134,27 @@ public:
     //! Swap contents of this and other. Guaranteed not to throw
     void swap(SkPath& other);
 
-    enum BoundsType {
-        /** compute the bounds of the path's control points, may be larger than
-            with kExact_BoundsType, but may be faster to compute
-        */
-        kFast_BoundsType,
-        /** compute the exact bounds of the path, may be smaller than with
-            kFast_BoundsType, but may be slower to compute
-        */
-        kExact_BoundsType
-    };
-
-    /** Compute the bounds of the path, and write the answer into bounds. If the
-        path contains 0 or 1 points, the bounds is set to (0,0,0,0)
-     
-        @param bounds   Returns the computed bounds of the path
-        @param btype    Specifies if the computed bounds should be exact
-                        (slower) or approximate (faster)
+    /** Returns the bounds of the path's points. If the path contains 0 or 1
+        points, the bounds is set to (0,0,0,0), and isEmpty() will return true.
+        Note: this bounds may be larger than the actual shape, since curves
+        do not extend as far as their control points.
     */
-    void computeBounds(SkRect* bounds, BoundsType btype) const;
+    const SkRect& getBounds() const {
+        if (fBoundsIsDirty) {
+            this->computeBounds();
+        }
+        return fBounds;
+    }
 
     /** Calling this will, if the internal cache of the bounds is out of date,
-        update it so that subsequent calls to computeBounds will be instanteous.
+        update it so that subsequent calls to getBounds will be instanteous.
         This also means that any copies or simple transformations of the path
         will inherit the cached bounds.
-    */
-    void updateBoundsCache() const;
+     */
+    void updateBoundsCache() const {
+        // for now, just calling getBounds() is sufficient
+        this->getBounds();
+    }
 
     //  Construction methods
 
@@ -555,18 +562,18 @@ public:
     */
     void subdivide(SkScalar dist, bool bendLines, SkPath* dst = NULL) const;
 
-    /** Return an SVG-compatible string of the path.
-    */
-    void toString(SkString*) const;
-
     SkDEBUGCODE(void validate() const;)
 
 private:
     SkTDArray<SkPoint>  fPts;
     SkTDArray<uint8_t>  fVerbs;
-    mutable SkRect      fFastBounds;
-    mutable uint8_t     fFastBoundsIsDirty;
+    mutable SkRect      fBounds;
+    mutable uint8_t     fBoundsIsDirty;
     uint8_t             fFillType;
+    uint8_t             fIsConvex;
+
+    // called, if dirty, by getBounds()
+    void computeBounds() const;
 
     friend class Iter;
     void cons_moveto();

@@ -1,12 +1,24 @@
+BASE_PATH := $(call my-dir)
 LOCAL_PATH:= $(call my-dir)
 
 #############################################################
-#  build the corecg library
+#   build the skia+fretype+png+jpeg+zlib+gif library
 #
 
 include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE := arm
+
+# enable this if we turn on SK_DEBUG, otherwise we exceed our prelink budget
+#LOCAL_PRELINK_MODULE := false
+
+ifneq ($(ARCH_ARM_HAVE_VFP),true)
+	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
+endif
+
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+endif
 
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
@@ -14,7 +26,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkCordic.cpp \
 	src/core/SkDebug.cpp \
-	src/core/SkDebug_stdio.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
@@ -24,36 +35,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkRegion.cpp \
 	src/core/SkString.cpp \
 	src/core/SkUtils.cpp \
-
-LOCAL_SHARED_LIBRARIES := \
-	libcutils \
-	libutils
-
-LOCAL_C_INCLUDES += \
-	$(LOCAL_PATH)/include/core
-
-#LOCAL_CFLAGS+= 
-#LOCAL_LDFLAGS:= 
-
-LOCAL_MODULE:= libcorecg
-
-LOCAL_CFLAGS += -fstrict-aliasing
-
-ifeq ($(TARGET_ARCH),arm)
-	LOCAL_CFLAGS += -fomit-frame-pointer
-endif
-
-include $(BUILD_SHARED_LIBRARY)
-
-#############################################################
-#   build the main sgl library
-#
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-LOCAL_SRC_FILES:= \
+	src/ports/SkDebug_android.cpp \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAvoidXfermode.cpp \
@@ -72,6 +54,8 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
+	src/effects/SkPorterDuff.cpp \
+	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/images/bmpdecoderhelper.cpp \
 	src/images/SkFDStream.cpp \
@@ -97,11 +81,11 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkFontHost_android.cpp \
 	src/ports/SkFontHost_gamma.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
+	src/ports/SkFontHost_tables.cpp \
 	src/ports/SkGlobals_global.cpp \
 	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkTime_Unix.cpp \
-	src/ports/SkXMLPullParser_expat.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmap_scroll.cpp \
@@ -109,8 +93,8 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
 	src/core/SkBitmapSampler.cpp \
-	src/core/SkBitmapShader.cpp \
 	src/core/SkBlitRow_D16.cpp \
+	src/core/SkBlitRow_D32.cpp \
 	src/core/SkBlitRow_D4444.cpp \
 	src/core/SkBlitter.cpp \
 	src/core/SkBlitter_4444.cpp \
@@ -162,6 +146,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkScan_Hairline.cpp \
 	src/core/SkScan_Path.cpp \
 	src/core/SkShader.cpp \
+	src/core/SkShape.cpp \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
 	src/core/SkStream.cpp \
@@ -178,23 +163,24 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkProxyCanvas.cpp
 
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += \
+	src/opts/SkBlitRow_opts_arm.cpp \
+	src/opts/SkBitmapProcState_opts_arm.cpp
+else
+LOCAL_SRC_FILES += \
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp
+endif
+
 # these are for emoji support, needed by webkit
 LOCAL_SRC_FILES += \
 	emoji/EmojiFont.cpp
-
-# including the optimized assembly code for the src-overing operation
-ifeq ($(TARGET_ARCH),arm)
-        LOCAL_CFLAGS += -DUSE_ARM_ASM
-        LOCAL_SRC_FILES += \
-	        src/core/asm/s32a_d565_opaque.S
-endif
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
     libemoji \
 	libutils \
-	libcorecg \
-	libexpat \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
@@ -214,11 +200,8 @@ LOCAL_C_INCLUDES += \
 	external/zlib \
 	external/libpng \
 	external/giflib \
-	external/expat/lib \
 	external/jpeg \
     frameworks/opt/emoji
-
-LOCAL_CFLAGS += -fpic -fstrict-aliasing
 
 ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
@@ -226,7 +209,7 @@ endif
 
 LOCAL_LDLIBS += -lpthread
 
-LOCAL_MODULE:= libsgl
+LOCAL_MODULE:= libskia
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -240,6 +223,14 @@ LOCAL_PRELINK_MODULE := false
 
 LOCAL_ARM_MODE := arm
 
+ifneq ($(ARCH_ARM_HAVE_VFP),true)
+	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
+endif
+
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+endif
+
 LOCAL_SRC_FILES:= \
 	src/gl/SkGL.cpp \
 	src/gl/SkGLCanvas.cpp \
@@ -251,8 +242,7 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	libutils \
-	libsgl \
-	libcorecg \
+	libskia \
 	libGLESv1_CM
 
 LOCAL_C_INCLUDES += \
@@ -262,10 +252,19 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/utils
 
-LOCAL_CFLAGS += -fpic -fstrict-aliasing
-
 LOCAL_LDLIBS += -lpthread
 
 LOCAL_MODULE:= libskiagl
 
 include $(BUILD_SHARED_LIBRARY)
+
+#############################################################
+# Build the skia tools
+#
+
+# benchmark (timings)
+include $(BASE_PATH)/bench/Android.mk
+
+# golden-master (fidelity / regression test)
+include $(BASE_PATH)/gm/Android.mk
+

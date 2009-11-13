@@ -24,6 +24,9 @@ class SkDescriptor;
 class SkStream;
 class SkWStream;
 
+typedef uint32_t SkFontID;
+typedef uint32_t SkFontTableTag;
+
 /** \class SkFontHost
 
     This class is ported to each environment. It is responsible for bridging
@@ -84,20 +87,49 @@ public:
         the caller is responsible for calling unref() when it is no longer used.
      */
     static SkTypeface* CreateTypefaceFromFile(const char path[]);
-    
+
     ///////////////////////////////////////////////////////////////////////////
     
     /** Returns true if the specified unique ID matches an existing font.
         Returning false is similar to calling OpenStream with an invalid ID,
         which will return NULL in that case.
     */
-    static bool ValidFontID(uint32_t uniqueID);
+    static bool ValidFontID(SkFontID uniqueID);
     
     /** Return a new stream to read the font data, or null if the uniqueID does
         not match an existing typeface. .The caller must call stream->unref()
         when it is finished reading the data.
     */
-    static SkStream* OpenStream(uint32_t uniqueID);
+    static SkStream* OpenStream(SkFontID uniqueID);
+
+    /** Some fonts are stored in files. If that is true for the fontID, then
+        this returns the byte length of the full file path. If path is not null,
+        then the full path is copied into path (allocated by the caller), up to
+        length bytes. If index is not null, then it is set to the truetype
+        collection index for this font, or 0 if the font is not in a collection.
+
+        Note: GetFileName does not assume that path is a null-terminated string,
+        so when it succeeds, it only copies the bytes of the file name and
+        nothing else (i.e. it copies exactly the number of bytes returned by the
+        function. If the caller wants to treat path[] as a C string, it must be
+        sure that it is allocated at least 1 byte larger than the returned size,
+        and it must copy in the terminating 0.
+
+        If the fontID does not correspond to a file, then the function returns
+        0, and the path and index parameters are ignored.
+
+        @param fontID   The font whose file name is being queried
+        @param path     Either NULL, or storage for receiving up to length bytes
+                        of the font's file name. Allocated by the caller.
+        @param length   The maximum space allocated in path (by the caller).
+                        Ignored if path is NULL.
+        @param index    Either NULL, or receives the TTC index for this font.
+                        If the font is not a TTC, then will be set to 0.
+        @return The byte length of th font's file name, or 0 if the font is not
+                baked by a file.
+     */
+    static size_t GetFileName(SkFontID fontID, char path[], size_t length,
+                              int32_t* index);
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -124,10 +156,63 @@ public:
         on. This process must be finite, and when the fonthost sees a
         font with no logical successor, it must return 0.
     */
-    static uint32_t NextLogicalFont(uint32_t fontID);
+    static uint32_t NextLogicalFont(SkFontID fontID);
 
     ///////////////////////////////////////////////////////////////////////////
+
+    /** Given a filled-out rec, the fonthost may decide to modify it to reflect
+        what the host is actually capable of fulfilling. For example, if the
+        rec is requesting a level of hinting that, for this host, maps some
+        other level (e.g. kFull -> kNormal), it should update the rec to reflect
+        what will actually be done. This is an optimization so that the font
+        cache does not contain different recs (i.e. keys) that in reality map to
+        the same output.
+
+        A lazy (but valid) fonthost can do nothing in its FilterRec routine.
+     */
+    static void FilterRec(SkScalerContext::Rec* rec);
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    /** Return the number of tables in the font
+     */
+    static int CountTables(SkFontID);
+
+    /** Copy into tags[] (allocated by the caller) the list of table tags in
+        the font, and return the number. This will be the same as CountTables()
+        or 0 if an error occured.
+     */
+    static int GetTableTags(SkFontID, SkFontTableTag[]);
+
+    /** Given a table tag, return the size of its contents, or 0 if not present
+     */
+    static size_t GetTableSize(SkFontID, SkFontTableTag);
     
+    /** Copy the contents of a table into data (allocated by the caller). Note
+        that the contents of the table will be in their native endian order
+        (which for most truetype tables is big endian). If the table tag is
+        not found, or there is an error copying the data, then 0 is returned.
+        If this happens, it is possible that some or all of the memory pointed
+        to by data may have been written to, even though an error has occured.
+
+        @param fontID the font to copy the table from
+        @param tag  The table tag whose contents are to be copied
+        @param offset The offset in bytes into the table's contents where the
+                copy should start from.
+        @param length The number of bytes, starting at offset, of table data
+                to copy.
+        @param data storage address where the table contents are copied to
+        @return the number of bytes actually copied into data. If offset+length
+                exceeds the table's size, then only the bytes up to the table's
+                size are actually copied, and this is the value returned. If
+                offset > the table's size, or tag is not a valid table,
+                then 0 is returned.
+     */
+    static size_t GetTableData(SkFontID fontID, SkFontTableTag tag,
+                               size_t offset, size_t length, void* data);
+
+    ///////////////////////////////////////////////////////////////////////////
+
     /** Return the number of bytes (approx) that should be purged from the font
         cache. The input parameter is the cache's estimate of how much as been
         allocated by the cache so far.
@@ -145,6 +230,38 @@ public:
         white (table[1]) gamma tables.
     */
     static void GetGammaTables(const uint8_t* tables[2]);
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    /** LCDs either have their color elements arranged horizontally or
+        vertically. When rendering subpixel glyphs we need to know which way
+        round they are.
+
+        Note, if you change this after startup, you'll need to flush the glyph
+        cache because it'll have the wrong type of masks cached.
+    */
+    enum LCDOrientation {
+        kHorizontal_LCDOrientation = 0,    //!< this is the default
+        kVertical_LCDOrientation   = 1,
+    };
+
+    static void SetSubpixelOrientation(LCDOrientation orientation);
+    static LCDOrientation GetSubpixelOrientation();
+
+    /** LCD color elements can vary in order. For subpixel text we need to know
+        the order which the LCDs uses so that the color fringes are in the
+        correct place.
+
+        Note, if you change this after startup, you'll need to flush the glyph
+        cache because it'll have the wrong type of masks cached.
+    */
+    enum LCDOrder {
+        kRGB_LCDOrder = 0,    //!< this is the default
+        kBGR_LCDOrder = 1,
+    };
+
+    static void SetSubpixelOrder(LCDOrder order);
+    static LCDOrder GetSubpixelOrder();
 };
 
 #endif

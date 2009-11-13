@@ -1,43 +1,9 @@
 #include "SkBitmapProcState.h"
+#include "SkBitmapProcState_filter.h"
 #include "SkColorPriv.h"
 #include "SkFilterProc.h"
 #include "SkPaint.h"
 #include "SkShader.h"   // for tilemodes
-
-#ifdef SK_CPU_BENDIAN
-    #define UNPACK_PRIMARY_SHORT(packed)    ((uint32_t)(packed) >> 16)
-    #define UNPACK_SECONDARY_SHORT(packed)  ((packed) & 0xFFFF)
-#else
-    #define UNPACK_PRIMARY_SHORT(packed)    ((packed) & 0xFFFF)
-    #define UNPACK_SECONDARY_SHORT(packed)  ((uint32_t)(packed) >> 16)
-#endif
-
-static inline SkPMColor Filter_32(unsigned x, unsigned y,
-                                  SkPMColor a00, SkPMColor a01,
-                                  SkPMColor a10, SkPMColor a11) {
-    SkASSERT((unsigned)x <= 0xF);
-    SkASSERT((unsigned)y <= 0xF);
-    
-    int xy = x * y;
-    uint32_t mask = gMask_00FF00FF; //0xFF00FF;
-    
-    int scale = 256 - 16*y - 16*x + xy;
-    uint32_t lo = (a00 & mask) * scale;
-    uint32_t hi = ((a00 >> 8) & mask) * scale;
-    
-    scale = 16*x - xy;
-    lo += (a01 & mask) * scale;
-    hi += ((a01 >> 8) & mask) * scale;
-    
-    scale = 16*y - xy;
-    lo += (a10 & mask) * scale;
-    hi += ((a10 >> 8) & mask) * scale;
-    
-    lo += (a11 & mask) * xy;
-    hi += ((a11 >> 8) & mask) * xy;
-    
-    return ((lo >> 8) & mask) | (hi & ~mask);
-}
 
 // returns expanded * 5bits
 static inline uint32_t Filter_565_Expanded(unsigned x, unsigned y,
@@ -111,7 +77,7 @@ static inline U8CPU Filter_8(unsigned x, unsigned y,
 
 // SRC == 8888
 
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_32(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst)   Filter_32_opaque(x, y, a, b, c, d, dst)
 
 #define MAKENAME(suffix)        S32_opaque_D32 ## suffix
 #define DSTSIZE                 32
@@ -120,24 +86,29 @@ static inline U8CPU Filter_8(unsigned x, unsigned y,
                                 SkASSERT(state.fAlphaScale == 256)
 #define RETURNDST(src)          src
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        c
 #include "SkBitmapProcState_sample.h"
+
+#undef FILTER_PROC
+#define FILTER_PROC(x, y, a, b, c, d, dst)   Filter_32_alpha(x, y, a, b, c, d, dst, alphaScale)
 
 #define MAKENAME(suffix)        S32_alpha_D32 ## suffix
 #define DSTSIZE                 32
 #define SRCTYPE                 SkPMColor
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kARGB_8888_Config); \
                                 SkASSERT(state.fAlphaScale < 256)
-#define PREAMBLE(state)         unsigned scale = state.fAlphaScale
-#define RETURNDST(src)          SkAlphaMulQ(src, scale)
+#define PREAMBLE(state)         unsigned alphaScale = state.fAlphaScale
+#define RETURNDST(src)          SkAlphaMulQ(src, alphaScale)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkAlphaMulQ(c, scale)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == 565
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_565_Expanded(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                        \
+        uint32_t tmp = Filter_565_Expanded(x, y, a, b, c, d);   \
+        *(dst) = SkExpanded_565_To_PMColor(tmp);                \
+    } while (0)
 
 #define MAKENAME(suffix)        S16_opaque_D32 ## suffix
 #define DSTSIZE                 32
@@ -146,24 +117,29 @@ static inline U8CPU Filter_8(unsigned x, unsigned y,
                                 SkASSERT(state.fAlphaScale == 256)
 #define RETURNDST(src)          SkPixel16ToPixel32(src)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkExpanded_565_To_PMColor(c)
 #include "SkBitmapProcState_sample.h"
+
+#undef FILTER_PROC
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                                    \
+        uint32_t tmp = Filter_565_Expanded(x, y, a, b, c, d);               \
+        *(dst) = SkAlphaMulQ(SkExpanded_565_To_PMColor(tmp), alphaScale);   \
+    } while (0)
 
 #define MAKENAME(suffix)        S16_alpha_D32 ## suffix
 #define DSTSIZE                 32
 #define SRCTYPE                 uint16_t
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kRGB_565_Config); \
                                 SkASSERT(state.fAlphaScale < 256)
-#define PREAMBLE(state)         unsigned scale = state.fAlphaScale
-#define RETURNDST(src)          SkAlphaMulQ(SkPixel16ToPixel32(src), scale)
+#define PREAMBLE(state)         unsigned alphaScale = state.fAlphaScale
+#define RETURNDST(src)          SkAlphaMulQ(SkPixel16ToPixel32(src), alphaScale)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkAlphaMulQ(SkExpanded_565_To_PMColor(c), scale)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == Index8
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_32(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst)   Filter_32_opaque(x, y, a, b, c, d, dst)
 
 #define MAKENAME(suffix)        SI8_opaque_D32 ## suffix
 #define DSTSIZE                 32
@@ -173,53 +149,63 @@ static inline U8CPU Filter_8(unsigned x, unsigned y,
 #define PREAMBLE(state)         const SkPMColor* SK_RESTRICT table = state.fBitmap->getColorTable()->lockColors()
 #define RETURNDST(src)          table[src]
 #define SRC_TO_FILTER(src)      table[src]
-#define FILTER_TO_DST(c)        c
 #define POSTAMBLE(state)        state.fBitmap->getColorTable()->unlockColors(false)
 #include "SkBitmapProcState_sample.h"
+
+#undef FILTER_PROC
+#define FILTER_PROC(x, y, a, b, c, d, dst)   Filter_32_alpha(x, y, a, b, c, d, dst, alphaScale)
 
 #define MAKENAME(suffix)        SI8_alpha_D32 ## suffix
 #define DSTSIZE                 32
 #define SRCTYPE                 uint8_t
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kIndex8_Config); \
                                 SkASSERT(state.fAlphaScale < 256)
-#define PREAMBLE(state)         unsigned scale = state.fAlphaScale; \
+#define PREAMBLE(state)         unsigned alphaScale = state.fAlphaScale; \
                                 const SkPMColor* SK_RESTRICT table = state.fBitmap->getColorTable()->lockColors()
-#define RETURNDST(src)          SkAlphaMulQ(table[src], scale)
+#define RETURNDST(src)          SkAlphaMulQ(table[src], alphaScale)
 #define SRC_TO_FILTER(src)      table[src]
-#define FILTER_TO_DST(c)        SkAlphaMulQ(c, scale)
 #define POSTAMBLE(state)        state.fBitmap->getColorTable()->unlockColors(false)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == 4444
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_4444_D32(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst)  *(dst) = Filter_4444_D32(x, y, a, b, c, d)
 
 #define MAKENAME(suffix)        S4444_opaque_D32 ## suffix
 #define DSTSIZE                 32
 #define SRCTYPE                 SkPMColor16
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kARGB_4444_Config); \
-SkASSERT(state.fAlphaScale == 256)
+                                SkASSERT(state.fAlphaScale == 256)
 #define RETURNDST(src)          SkPixel4444ToPixel32(src)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        c
 #include "SkBitmapProcState_sample.h"
+
+#undef FILTER_PROC
+#define FILTER_PROC(x, y, a, b, c, d, dst)  \
+    do {                                                    \
+        uint32_t tmp = Filter_4444_D32(x, y, a, b, c, d);   \
+        *(dst) = SkAlphaMulQ(tmp, alphaScale);              \
+    } while (0)
 
 #define MAKENAME(suffix)        S4444_alpha_D32 ## suffix
 #define DSTSIZE                 32
 #define SRCTYPE                 SkPMColor16
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kARGB_4444_Config); \
-SkASSERT(state.fAlphaScale < 256)
-#define PREAMBLE(state)         unsigned scale = state.fAlphaScale
-#define RETURNDST(src)          SkAlphaMulQ(SkPixel4444ToPixel32(src), scale)
+                                SkASSERT(state.fAlphaScale < 256)
+#define PREAMBLE(state)         unsigned alphaScale = state.fAlphaScale
+#define RETURNDST(src)          SkAlphaMulQ(SkPixel4444ToPixel32(src), alphaScale)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkAlphaMulQ(c, scale)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == A8
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_8(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                        \
+        unsigned tmp = Filter_8(x, y, a, b, c, d);              \
+        *(dst) = SkAlphaMulQ(pmColor, SkAlpha255To256(tmp));    \
+    } while (0)
 
 #define MAKENAME(suffix)        SA8_alpha_D32 ## suffix
 #define DSTSIZE                 32
@@ -229,7 +215,6 @@ SkASSERT(state.fAlphaScale < 256)
 #define PREAMBLE(state)         const SkPMColor pmColor = state.fPaintPMColor;
 #define RETURNDST(src)          SkAlphaMulQ(pmColor, SkAlpha255To256(src))
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkAlphaMulQ(pmColor, SkAlpha255To256(c))
 #include "SkBitmapProcState_sample.h"
 
 /*****************************************************************************
@@ -241,7 +226,12 @@ SkASSERT(state.fAlphaScale < 256)
 // SRC == 8888
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_32(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                \
+        SkPMColor dstColor;                             \
+        Filter_32_opaque(x, y, a, b, c, d, &dstColor);  \
+        (*dst) = SkPixel32ToPixel16(dstColor);          \
+    } while (0)
 
 #define MAKENAME(suffix)        S32_D16 ## suffix
 #define DSTSIZE                 16
@@ -250,13 +240,16 @@ SkASSERT(state.fAlphaScale < 256)
                                 SkASSERT(state.fBitmap->isOpaque())
 #define RETURNDST(src)          SkPixel32ToPixel16(src)
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkPixel32ToPixel16(c)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == 565
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_565_Expanded(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                        \
+        uint32_t tmp = Filter_565_Expanded(x, y, a, b, c, d);   \
+        *(dst) = SkCompact_rgb_16((tmp) >> 5);                  \
+    } while (0)
 
 #define MAKENAME(suffix)        S16_D16 ## suffix
 #define DSTSIZE                 16
@@ -264,13 +257,16 @@ SkASSERT(state.fAlphaScale < 256)
 #define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kRGB_565_Config)
 #define RETURNDST(src)          src
 #define SRC_TO_FILTER(src)      src
-#define FILTER_TO_DST(c)        SkCompact_rgb_16((c) >> 5)
 #include "SkBitmapProcState_sample.h"
 
 // SRC == Index8
 
 #undef FILTER_PROC
-#define FILTER_PROC(x, y, a, b, c, d)   Filter_565_Expanded(x, y, a, b, c, d)
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                        \
+        uint32_t tmp = Filter_565_Expanded(x, y, a, b, c, d);   \
+        *(dst) = SkCompact_rgb_16((tmp) >> 5);                  \
+    } while (0)
 
 #define MAKENAME(suffix)        SI8_D16 ## suffix
 #define DSTSIZE                 16
@@ -280,9 +276,45 @@ SkASSERT(state.fAlphaScale < 256)
 #define PREAMBLE(state)         const uint16_t* SK_RESTRICT table = state.fBitmap->getColorTable()->lock16BitCache()
 #define RETURNDST(src)          table[src]
 #define SRC_TO_FILTER(src)      table[src]
-#define FILTER_TO_DST(c)        SkCompact_rgb_16(c >> 5)
 #define POSTAMBLE(state)        state.fBitmap->getColorTable()->unlock16BitCache()
 #include "SkBitmapProcState_sample.h"
+
+///////////////////////////////////////////////////////////////////////////////
+
+#undef FILTER_PROC
+#define FILTER_PROC(x, y, a, b, c, d, dst) \
+    do {                                                        \
+        uint32_t tmp = Filter_565_Expanded(x, y, a, b, c, d);   \
+        *(dst) = SkCompact_rgb_16((tmp) >> 5);                  \
+    } while (0)
+
+
+#define TILEX_PROCF(fx, max)    SkClampMax((fx) >> 16, max)
+#define TILEY_PROCF(fy, max)    SkClampMax((fy) >> 16, max)
+#define TILEX_LOW_BITS(fx, max) (((fx) >> 12) & 0xF)
+#define TILEY_LOW_BITS(fy, max) (((fy) >> 12) & 0xF)
+
+#define MAKENAME(suffix)        Clamp_S16_D16 ## suffix
+#define SRCTYPE                 uint16_t
+#define DSTTYPE                 uint16_t
+#define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kRGB_565_Config)
+#define SRC_TO_FILTER(src)      src
+#include "SkBitmapProcState_shaderproc.h"
+
+
+#define TILEX_PROCF(fx, max)    (((fx) & 0xFFFF) * ((max) + 1) >> 16)
+#define TILEY_PROCF(fy, max)    (((fy) & 0xFFFF) * ((max) + 1) >> 16)
+#define TILEX_LOW_BITS(fx, max) ((((fx) & 0xFFFF) * ((max) + 1) >> 12) & 0xF)
+#define TILEY_LOW_BITS(fy, max) ((((fy) & 0xFFFF) * ((max) + 1) >> 12) & 0xF)
+
+#define MAKENAME(suffix)        Repeat_S16_D16 ## suffix
+#define SRCTYPE                 uint16_t
+#define DSTTYPE                 uint16_t
+#define CHECKSTATE(state)       SkASSERT(state.fBitmap->config() == SkBitmap::kRGB_565_Config)
+#define SRC_TO_FILTER(src)      src
+#include "SkBitmapProcState_shaderproc.h"
+
+///////////////////////////////////////////////////////////////////////////////
 
 static bool valid_for_filtering(unsigned dimension) {
     // for filtering, width and height must fit in 14bits, since we use steal
@@ -294,19 +326,21 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     if (fOrigBitmap.width() == 0 || fOrigBitmap.height() == 0) {
         return false;
     }
+
     const SkMatrix* m;
-    
-    if (SkShader::kClamp_TileMode == fTileModeX &&
-            SkShader::kClamp_TileMode == fTileModeY) {
+    bool trivial_matrix = (inv.getType() & ~SkMatrix::kTranslate_Mask) == 0;
+    bool clamp_clamp = SkShader::kClamp_TileMode == fTileModeX &&
+                       SkShader::kClamp_TileMode == fTileModeY;
+
+    if (clamp_clamp || trivial_matrix) {
         m = &inv;
     } else {
         fUnitInvMatrix = inv;
         fUnitInvMatrix.postIDiv(fOrigBitmap.width(), fOrigBitmap.height());
         m = &fUnitInvMatrix;
     }
-    
+
     fBitmap = &fOrigBitmap;
-#ifdef SK_SUPPORT_MIPMAP
     if (fOrigBitmap.hasMipMap()) {
         int shift = fOrigBitmap.extractMipLevel(&fMipBitmap,
                                                 SkScalarToFixed(m->getScaleX()),
@@ -325,13 +359,11 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
             fBitmap = &fMipBitmap;
         }
     }
-#endif
 
     fInvMatrix      = m;
     fInvProc        = m->getMapXYProc();
     fInvType        = m->getType();
     fInvSx          = SkScalarToFixed(m->getScaleX());
-    fInvSy          = SkScalarToFixed(m->getScaleY());
     fInvKy          = SkScalarToFixed(m->getSkewY());
 
     fAlphaScale = SkAlpha255To256(paint.getAlpha());
@@ -345,7 +377,12 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
                 (inv.getType() > SkMatrix::kTranslate_Mask &&
                  valid_for_filtering(fBitmap->width() | fBitmap->height()));
 
-    fMatrixProc = this->chooseMatrixProc();
+    fShaderProc32 = NULL;
+    fShaderProc16 = NULL;
+    fSampleProc32 = NULL;
+    fSampleProc16 = NULL;
+
+    fMatrixProc = this->chooseMatrixProc(trivial_matrix);
     if (NULL == fMatrixProc) {
         return false;
     }
@@ -453,11 +490,51 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
         // Don't support A8 -> 565
         NULL, NULL, NULL, NULL
     };
-    
+
     fSampleProc32 = gSample32[index];
     index >>= 1;    // shift away any opaque/alpha distinction
     fSampleProc16 = gSample16[index];
 
+    // our special-case shaderprocs
+    if (S16_D16_filter_DX == fSampleProc16) {
+        if (clamp_clamp) {
+            fShaderProc16 = Clamp_S16_D16_filter_DX_shaderproc;
+        } else if (SkShader::kRepeat_TileMode == fTileModeX &&
+                   SkShader::kRepeat_TileMode == fTileModeY) {
+            fShaderProc16 = Repeat_S16_D16_filter_DX_shaderproc;
+        }
+    }
+
+    // see if our platform has any accelerated overrides
+    this->platformProcs();
     return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/*
+    The storage requirements for the different matrix procs are as follows,
+    where each X or Y is 2 bytes, and N is the number of pixels/elements:
+ 
+    scale/translate     nofilter      Y(4bytes) + N * X
+    affine/perspective  nofilter      N * (X Y)
+    scale/translate     filter        Y Y + N * (X X)
+    affine/perspective  filter        N * (Y Y X X)
+ */
+int SkBitmapProcState::maxCountForBufferSize(size_t bufferSize) const {
+    int32_t size = static_cast<int32_t>(bufferSize);
+    int perElemShift;
+
+    size &= ~3; // only care about 4-byte aligned chunks
+    if (fInvType <= (SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask)) {
+        size -= 4;   // the shared Y (or YY) coordinate
+        if (size < 0) {
+            size = 0;
+        }
+        perElemShift = fDoFilter ? 2 : 1;
+    } else {
+        perElemShift = fDoFilter ? 3 : 2;
+    }
+
+    return size >> perElemShift;
 }
 

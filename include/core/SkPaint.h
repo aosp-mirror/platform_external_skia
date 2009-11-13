@@ -19,7 +19,7 @@
 
 #include "SkColor.h"
 #include "SkMath.h"
-#include "SkPorterDuff.h"
+#include "SkXfermode.h"
 
 class SkAutoGlyphCache;
 class SkColorFilter;
@@ -37,7 +37,6 @@ class SkRasterizer;
 class SkShader;
 class SkDrawLooper;
 class SkTypeface;
-class SkXfermode;
 
 typedef const SkGlyph& (*SkDrawCacheProc)(SkGlyphCache*, const char**,
                                            SkFixed x, SkFixed y);
@@ -70,6 +69,33 @@ public:
     */
     void reset();
 
+    /** Specifies the level of hinting to be performed. These names are taken
+        from the Gnome/Cairo names for the same. They are translated into
+        Freetype concepts the same as in cairo-ft-font.c:
+           kNo_Hinting     -> FT_LOAD_NO_HINTING
+           kSlight_Hinting -> FT_LOAD_TARGET_LIGHT
+           kNormal_Hinting -> <default, no option>
+           kFull_Hinting   -> <same as kNormalHinting, unless we are rendering
+                              subpixel glyphs, in which case TARGET_LCD or
+                              TARGET_LCD_V is used>
+    */
+    enum Hinting {
+        kNo_Hinting            = 0,
+        kSlight_Hinting        = 1,
+        kNormal_Hinting        = 2,     //!< this is the default
+        kFull_Hinting          = 3,
+    };
+
+    Hinting getHinting() const
+    {
+        return static_cast<Hinting>(fHinting);
+    }
+
+    void setHinting(Hinting hintingLevel)
+    {
+        fHinting = hintingLevel;
+    }
+
     /** Specifies the bit values that are stored in the paint's flags.
     */
     enum Flags {
@@ -80,10 +106,13 @@ public:
         kStrikeThruText_Flag  = 0x10,   //!< mask to enable strike-thru text
         kFakeBoldText_Flag    = 0x20,   //!< mask to enable fake-bold text
         kLinearText_Flag      = 0x40,   //!< mask to enable linear-text
-        kSubpixelText_Flag    = 0x80,   //!< mask to enable subpixel-text
+        kSubpixelText_Flag    = 0x80,   //!< mask to enable subpixel text positioning
         kDevKernText_Flag     = 0x100,  //!< mask to enable device kerning text
+        kLCDRenderText_Flag   = 0x200,  //!< mask to enable subpixel glyph renderering
+        // when adding extra flags, note that the fFlags member is specified
+        // with a bit-width and you'll have to expand it.
 
-        kAllFlags = 0x1FF
+        kAllFlags = 0x3FF
     };
 
     /** Return the paint's flags. Use the Flag enum to test flag values.
@@ -144,12 +173,23 @@ public:
         return SkToBool(this->getFlags() & kSubpixelText_Flag);
     }
     
-    /** Helper for setFlags(), setting or clearing the kSubpixelText_Flag bit
-        @param subpixelText true to set the subpixelText bit in the paint's
-                            flags, false to clear it.
+    /** Helper for setFlags(), setting or clearing the kSubpixelText_Flag
+       bit @param subpixelText true to set the subpixelText bit in the paint's flags,
+                               false to clear it.
     */
     void setSubpixelText(bool subpixelText);
-    
+
+    bool isLCDRenderText() const
+    {
+        return SkToBool(this->getFlags() & kLCDRenderText_Flag);
+    }
+
+    /** Helper for setFlags(), setting or clearing the kLCDRenderText_Flag bit
+        @param subpixelRender true to set the subpixelRenderText bit in the paint's flags,
+                              false to clear it.
+    */
+    void setLCDRenderText(bool subpixelRender);
+
     /** Helper for getFlags(), returning true if kUnderlineText_Flag bit is set
         @return true if the underlineText bit is set in the paint's flags.
     */
@@ -216,11 +256,16 @@ public:
     /** Styles apply to rect, oval, path, and text.
         Bitmaps are always drawn in "fill", and lines are always drawn in
         "stroke".
+     
+        Note: strokeandfill implicitly draws the result with
+        SkPath::kWinding_FillType, so if the original path is even-odd, the
+        results may not appear the same as if it was drawn twice, filled and
+        then stroked.
     */
     enum Style {
-        kFill_Style,            //!< fill with the paint's color
-        kStroke_Style,          //!< stroke with the paint's color
-        kStrokeAndFill_Style,   //!< fill and stroke with the paint's color
+        kFill_Style,            //!< fill the geometry
+        kStroke_Style,          //!< stroke the geometry
+        kStrokeAndFill_Style,   //!< fill and stroke the geometry
 
         kStyleCount,
     };
@@ -371,8 +416,14 @@ public:
         bounds (i.e. there is nothing complex like a patheffect that would make
         the bounds computation expensive.
     */
-    bool canComputeFastBounds() const;
-    
+    bool canComputeFastBounds() const {
+        // use bit-or since no need for early exit
+        return (reinterpret_cast<uintptr_t>(this->getMaskFilter()) |
+                reinterpret_cast<uintptr_t>(this->getLooper()) |
+                reinterpret_cast<uintptr_t>(this->getRasterizer()) |
+                reinterpret_cast<uintptr_t>(this->getPathEffect())) == 0;
+    }
+
     /** Only call this if canComputeFastBounds() returned true. This takes a
         raw rectangle (the raw bounds of a shape), and adjusts it for stylistic
         effects in the paint (e.g. stroking). If needed, it uses the storage
@@ -394,7 +445,10 @@ public:
             }
         }
     */
-    const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const;
+    const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const {
+        return this->getStyle() == kFill_Style ? orig :
+                    this->computeStrokeFastBounds(orig, storage);
+    }
 
     /** Get the paint's shader object.
         <p />
@@ -447,15 +501,12 @@ public:
         @return         xfermode
     */
     SkXfermode* setXfermode(SkXfermode* xfermode);
-    
-    /** Helper for setXfermode, passing the corresponding xfermode object
-        returned from the PorterDuff factory.
-        @param mode The porter-duff mode used to create an xfermode for the
-                    paint.
-        @return     the resulting xfermode object (or NULL if the mode is
-                    SrcOver)
-    */
-    SkXfermode* setPorterDuffXfermode(SkPorterDuff::Mode mode);
+
+    /** Create an xfermode based on the specified Mode, and assign it into the
+        paint, returning the mode that was set. If the Mode is SrcOver, then
+        the paint's xfermode is set to null.
+     */
+    SkXfermode* setXfermodeMode(SkXfermode::Mode);
 
     /** Get the paint's patheffect object.
         <p />
@@ -614,6 +665,10 @@ public:
         SkScalar    fDescent;   //!< The recommended distance below the baseline (will be >= 0)
         SkScalar    fBottom;    //!< The greatest distance below the baseline for any glyph (will be >= 0)
         SkScalar    fLeading;   //!< The recommended distance to add between lines of text (will be >= 0)
+        SkScalar    fAvgCharWidth;  //!< the average charactor width (>= 0)
+        SkScalar    fXMin;      //!< The minimum bounding box x value for all glyphs
+        SkScalar    fXMax;      //!< The maximum bounding box x value for all glyphs
+        SkScalar    fXHeight;   //!< the height of an 'x' in px, or 0 if no 'x' in face
     };
     
     /** Return the recommend spacing between lines (which will be
@@ -740,12 +795,13 @@ private:
     SkColor         fColor;
     SkScalar        fWidth;
     SkScalar        fMiterLimit;
-    unsigned        fFlags : 9;
+    unsigned        fFlags : 10;
     unsigned        fTextAlign : 2;
     unsigned        fCapType : 2;
     unsigned        fJoinType : 2;
     unsigned        fStyle : 2;
     unsigned        fTextEncoding : 2;  // 3 values
+    unsigned        fHinting : 2;
 
     SkDrawCacheProc    getDrawCacheProc() const;
     SkMeasureCacheProc getMeasureCacheProc(TextBufferDirection dir,
@@ -759,7 +815,10 @@ private:
     void descriptorProc(const SkMatrix* deviceMatrix,
                         void (*proc)(const SkDescriptor*, void*),
                         void* context) const;
-        
+
+    const SkRect& computeStrokeFastBounds(const SkRect& orig,
+                                          SkRect* storage) const;
+
     enum {
         kCanonicalTextSizeForPaths = 64
     };

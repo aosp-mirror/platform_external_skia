@@ -151,7 +151,7 @@ SkDraw::SkDraw(const SkDraw& src) {
 typedef void (*BitmapXferProc)(void* pixels, size_t bytes, uint32_t data);
 
 static void D_Clear_BitmapXferProc(void* pixels, size_t bytes, uint32_t) {
-    bzero(pixels, bytes);
+    sk_bzero(pixels, bytes);
 }
 
 static void D_Dst_BitmapXferProc(void*, size_t, uint32_t data) {}
@@ -177,31 +177,31 @@ static BitmapXferProc ChooseBitmapXferProc(const SkBitmap& bitmap,
         return NULL;
     }
 
-    SkPorterDuff::Mode  mode;
-    if (!SkPorterDuff::IsMode(paint.getXfermode(), &mode)) {
+    SkXfermode::Mode mode;
+    if (!SkXfermode::IsMode(paint.getXfermode(), &mode)) {
         return NULL;
     }
     
     SkColor color = paint.getColor();
     
     // collaps modes based on color...
-    if (SkPorterDuff::kSrcOver_Mode == mode) {
+    if (SkXfermode::kSrcOver_Mode == mode) {
         unsigned alpha = SkColorGetA(color);
         if (0 == alpha) {
-            mode = SkPorterDuff::kDst_Mode;
+            mode = SkXfermode::kDst_Mode;
         } else if (0xFF == alpha) {
-            mode = SkPorterDuff::kSrc_Mode;
+            mode = SkXfermode::kSrc_Mode;
         }
     }
         
     switch (mode) {
-        case SkPorterDuff::kClear_Mode:
+        case SkXfermode::kClear_Mode:
 //            SkDebugf("--- D_Clear_BitmapXferProc\n");
             return D_Clear_BitmapXferProc;  // ignore data
-        case SkPorterDuff::kDst_Mode:
+        case SkXfermode::kDst_Mode:
 //            SkDebugf("--- D_Dst_BitmapXferProc\n");
             return D_Dst_BitmapXferProc;    // ignore data
-        case SkPorterDuff::kSrc_Mode: {
+        case SkXfermode::kSrc_Mode: {
             /*
                 should I worry about dithering for the lower depths? 
             */
@@ -443,6 +443,7 @@ static void aa_square_proc(const PtProcRec& rec, const SkPoint devPts[],
     }
 }
 
+// If this guy returns true, then chooseProc() must return a valid proc
 bool PtProcRec::init(SkCanvas::PointMode mode, const SkPaint& paint,
                      const SkMatrix* matrix, const SkRegion* clip) {
     if (paint.getPathEffect()) {
@@ -456,7 +457,8 @@ bool PtProcRec::init(SkCanvas::PointMode mode, const SkPaint& paint,
         fRadius = SK_Fixed1 >> 1;
         return true;
     }
-    if (matrix->rectStaysRect() && SkCanvas::kPoints_PointMode == mode) {
+    if (paint.getStrokeCap() != SkPaint::kRound_Cap &&
+            matrix->rectStaysRect() && SkCanvas::kPoints_PointMode == mode) {
         SkScalar sx = matrix->get(SkMatrix::kMScaleX);
         SkScalar sy = matrix->get(SkMatrix::kMScaleY);
         if (SkScalarNearlyZero(sx - sy)) {
@@ -475,7 +477,7 @@ bool PtProcRec::init(SkCanvas::PointMode mode, const SkPaint& paint,
 }
 
 PtProcRec::Proc PtProcRec::chooseProc(SkBlitter* blitter) {
-    Proc proc;
+    Proc proc = NULL;
     
     // for our arrays
     SkASSERT(0 == SkCanvas::kPoints_PointMode);
@@ -506,7 +508,7 @@ PtProcRec::Proc PtProcRec::chooseProc(SkBlitter* blitter) {
                 proc = gBWProcs[fMode];
             }
         }
-    } else {
+    } else if (fPaint->getStrokeCap() != SkPaint::kRound_Cap) {
         SkASSERT(SkCanvas::kPoints_PointMode == fMode);
         if (fPaint->isAntiAlias()) {
             proc = aa_square_proc;
@@ -670,7 +672,7 @@ void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
         SkPath  tmp;
         tmp.addRect(rect);
         tmp.setFillType(SkPath::kWinding_FillType);
-        this->drawPath(tmp, paint);
+        this->drawPath(tmp, paint, NULL, true);
         return;
     }
 
@@ -758,6 +760,35 @@ private:
     SkScalar    fWidth;
 };
 
+static SkScalar fast_len(const SkVector& vec) {
+    SkScalar x = SkScalarAbs(vec.fX);
+    SkScalar y = SkScalarAbs(vec.fY);
+    if (x < y) {
+        SkTSwap(x, y);
+    }
+    return x + SkScalarHalf(y);
+}
+
+// our idea is to return true if there is no appreciable skew or non-square scale
+// for that we'll transform (0,1) and (1,0), and check that the resulting dot-prod
+// is nearly one
+static bool map_radius(const SkMatrix& matrix, SkScalar* value) {
+    if (matrix.getType() & SkMatrix::kPerspective_Mask) {
+        return false;
+    }
+    SkVector src[2], dst[2];
+    src[0].set(*value, 0);
+    src[1].set(0, *value);
+    matrix.mapVectors(dst, src, 2);
+    SkScalar len0 = fast_len(dst[0]);
+    SkScalar len1 = fast_len(dst[1]);
+    if (len0 < SK_Scalar1 && len1 < SK_Scalar1) {
+        *value = SkScalarAve(len0, len1);
+        return true;
+    }
+    return false;
+}
+
 void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& paint,
                       const SkMatrix* prePathMatrix, bool pathIsMutable) const {
     SkDEBUGCODE(this->validate();)
@@ -804,22 +835,18 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& paint,
 
     SkAutoPaintRestoreColorStrokeWidth aprc(paint);
     
-    if (paint.getStyle() == SkPaint::kStroke_Style &&
-            paint.getXfermode() == NULL &&
-            (matrix->getType() & SkMatrix::kPerspective_Mask) == 0) {
+    // can we approximate a thin (but not hairline) stroke with an alpha-modulated
+    // hairline? Only if the matrix scales evenly in X and Y, and the device-width is
+    // less than a pixel
+    if (paint.getStyle() == SkPaint::kStroke_Style && paint.getXfermode() == NULL) {
         SkScalar width = paint.getStrokeWidth();
-        if (width > 0) {
-            width = matrix->mapRadius(paint.getStrokeWidth());
-            if (width < SK_Scalar1) {
-                int scale = (int)SkScalarMul(width, 256);
-                int alpha = paint.getAlpha() * scale >> 8;
-                
-                // pretend to be a hairline, with a modulated alpha
-                ((SkPaint*)&paint)->setAlpha(alpha);
-                ((SkPaint*)&paint)->setStrokeWidth(0);
-                
-//                SkDebugf("------ convert to hairline %d\n", scale);
-            }
+        if (width > 0 && map_radius(*matrix, &width)) {
+            int scale = (int)SkScalarMul(width, 256);
+            int alpha = paint.getAlpha() * scale >> 8;
+            
+            // pretend to be a hairline, with a modulated alpha
+            ((SkPaint*)&paint)->setAlpha(alpha);
+            ((SkPaint*)&paint)->setStrokeWidth(0);
         }
     }
     
@@ -873,15 +900,33 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& paint,
     }
 }
 
-static inline bool just_translate(const SkMatrix& m) {
-    return (m.getType() & ~SkMatrix::kTranslate_Mask) == 0;
+/** For the purposes of drawing bitmaps, if a matrix is "almost" translate
+    go ahead and treat it as if it were, so that subsequent code can go fast.
+ */
+static bool just_translate(const SkMatrix& matrix, const SkBitmap& bitmap) {
+    SkMatrix::TypeMask mask = matrix.getType();
+
+    if (mask & (SkMatrix::kAffine_Mask | SkMatrix::kPerspective_Mask)) {
+        return false;
+    }
+    if (mask & SkMatrix::kScale_Mask) {
+        SkScalar sx = matrix[SkMatrix::kMScaleX];
+        SkScalar sy = matrix[SkMatrix::kMScaleY];
+        int w = bitmap.width();
+        int h = bitmap.height();
+        int sw = SkScalarRound(SkScalarMul(sx, SkIntToScalar(w)));
+        int sh = SkScalarRound(SkScalarMul(sy, SkIntToScalar(h)));
+        return sw == w && sh == h;
+    }
+    // if we got here, we're either kTranslate_Mask or identity
+    return true;
 }
 
 void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap,
                               const SkPaint& paint) const {
     SkASSERT(bitmap.getConfig() == SkBitmap::kA8_Config);
 
-    if (just_translate(*fMatrix)) {        
+    if (just_translate(*fMatrix, bitmap)) {        
         int ix = SkScalarRound(fMatrix->getTranslateX());
         int iy = SkScalarRound(fMatrix->getTranslateY());
 
@@ -911,11 +956,16 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap,
                 return;
             }
         }
+
         mask.fFormat = SkMask::kA8_Format;
         mask.fRowBytes = SkAlign4(mask.fBounds.width());
+        size_t size = mask.computeImageSize();
+        if (0 == size) {
+            // the mask is too big to allocated, draw nothing
+            return;
+        }
 
         // allocate (and clear) our temp buffer to hold the transformed bitmap
-        size_t size = mask.computeImageSize();
         SkAutoMalloc    storage(size);
         mask.fImage = (uint8_t*)storage.get();
         memset(mask.fImage, 0, size);
@@ -1000,7 +1050,8 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
         return;
     }
 
-    if (bitmap.getConfig() != SkBitmap::kA8_Config && just_translate(matrix)) {
+    if (bitmap.getConfig() != SkBitmap::kA8_Config &&
+            just_translate(matrix, bitmap)) {
         int         ix = SkScalarRound(matrix.getTranslateX());
         int         iy = SkScalarRound(matrix.getTranslateY());
         uint32_t    storage[kBlitterStorageLongCount];
@@ -1250,7 +1301,7 @@ static void D1G_NoBounder_RectClip(const SkDraw1Glyph& state,
 	}
 
 	mask.fRowBytes = glyph.rowBytes();
-	mask.fFormat = glyph.fMaskFormat;
+	mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
 	mask.fImage = aa;
 	state.fBlitter->blitMask(mask, *bounds);
 }
@@ -1280,7 +1331,7 @@ static void D1G_NoBounder_RgnClip(const SkDraw1Glyph& state,
 		}
 		
 		mask.fRowBytes = glyph.rowBytes();
-		mask.fFormat = glyph.fMaskFormat;
+		mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
 		mask.fImage = (uint8_t*)aa;
 		do {
 			state.fBlitter->blitMask(mask, cr);
@@ -1313,7 +1364,7 @@ static void D1G_Bounder(const SkDraw1Glyph& state,
 		
 		if (state.fBounder->doIRect(cr)) {
 			mask.fRowBytes = glyph.rowBytes();
-			mask.fFormat = glyph.fMaskFormat;
+			mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
 			mask.fImage = (uint8_t*)aa;
 			do {
 				state.fBlitter->blitMask(mask, cr);
@@ -1997,9 +2048,7 @@ bool SkTriColorShader::setup(const SkPoint pts[], const SkColor colors[],
 }
 
 #include "SkColorPriv.h"
-#include "SkPorterDuff.h"
 #include "SkComposeShader.h"
-#include "SkXfermode.h"
 
 static int ScalarTo256(SkScalar v) {
     int scale = SkScalarToFixed(v) >> 8;
@@ -2097,8 +2146,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
             SkASSERT(shader);
             bool releaseMode = false;
             if (NULL == xmode) {
-                xmode = SkPorterDuff::CreateXfermode(
-                                                  SkPorterDuff::kMultiply_Mode);
+                xmode = SkXfermode::Create(SkXfermode::kMultiply_Mode);
                 releaseMode = true;
             }
             SkShader* compose = SkNEW_ARGS(SkComposeShader,
@@ -2236,10 +2284,8 @@ bool SkBounder::doRect(const SkRect& rect, const SkPaint& paint) {
 }
 
 bool SkBounder::doPath(const SkPath& path, const SkPaint& paint, bool doFill) {
-    SkRect      bounds;
-    SkIRect     r;
-
-    path.computeBounds(&bounds, SkPath::kFast_BoundsType);
+    SkIRect       r;
+    const SkRect& bounds = path.getBounds();
 
     if (doFill) {
         bounds.round(&r);
@@ -2276,8 +2322,7 @@ static bool compute_bounds(const SkPath& devPath, const SkIRect* clipBounds,
 
     //  init our bounds from the path
     {
-        SkRect      pathBounds;
-        devPath.computeBounds(&pathBounds, SkPath::kExact_BoundsType);
+        SkRect pathBounds = devPath.getBounds();
         pathBounds.inset(-SK_ScalarHalf, -SK_ScalarHalf);
         pathBounds.roundOut(bounds);
     }
@@ -2353,7 +2398,12 @@ bool SkDraw::DrawToMask(const SkPath& devPath, const SkIRect* clipBounds,
     if (SkMask::kComputeBoundsAndRenderImage_CreateMode == mode) {
         mask->fFormat = SkMask::kA8_Format;
         mask->fRowBytes = mask->fBounds.width();
-        mask->fImage = SkMask::AllocImage(mask->computeImageSize());
+        size_t size = mask->computeImageSize();
+        if (0 == size) {
+            // we're too big to allocate the mask, abort
+            return false;
+        }
+        mask->fImage = SkMask::AllocImage(size);
         memset(mask->fImage, 0, mask->computeImageSize());
     }
 

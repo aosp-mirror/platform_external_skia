@@ -2,16 +2,16 @@
 **
 ** Copyright 2006, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
@@ -110,13 +110,13 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,
-                                SkBitmap::Config pref,  Mode mode) {
+                            SkBitmap::Config pref,  Mode mode, Format* format) {
     SkASSERT(file);
     SkASSERT(bm);
 
     SkFILEStream    stream(file);
     if (stream.isValid()) {
-        if (SkImageDecoder::DecodeStream(&stream, bm, pref, mode)) {
+        if (SkImageDecoder::DecodeStream(&stream, bm, pref, mode, format)) {
             bm->pixelRef()->setURI(file);
         }
         return true;
@@ -125,18 +125,18 @@ bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,
 }
 
 bool SkImageDecoder::DecodeMemory(const void* buffer, size_t size, SkBitmap* bm,
-                                  SkBitmap::Config pref, Mode mode) {
+                          SkBitmap::Config pref, Mode mode, Format* format) {
     if (0 == size) {
         return false;
     }
     SkASSERT(buffer);
 
     SkMemoryStream  stream(buffer, size);
-    return SkImageDecoder::DecodeStream(&stream, bm, pref, mode);
+    return SkImageDecoder::DecodeStream(&stream, bm, pref, mode, format);
 }
 
 bool SkImageDecoder::DecodeStream(SkStream* stream, SkBitmap* bm,
-                                  SkBitmap::Config pref, Mode mode) {
+                          SkBitmap::Config pref, Mode mode, Format* format) {
     SkASSERT(stream);
     SkASSERT(bm);
 
@@ -145,6 +145,9 @@ bool SkImageDecoder::DecodeStream(SkStream* stream, SkBitmap* bm,
 
     if (NULL != codec) {
         success = codec->decode(stream, bm, pref, mode);
+        if (success && format) {
+            *format = codec->getFormat();
+        }
         delete codec;
     }
     return success;

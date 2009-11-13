@@ -18,10 +18,15 @@
 #include "SkMatrix.h"
 #include "Sk64.h"
 #include "SkFloatBits.h"
+#include "SkScalarCompare.h"
 #include "SkString.h"
 
 #ifdef SK_SCALAR_IS_FLOAT
     #define kMatrix22Elem   SK_Scalar1
+
+    static inline float SkDoubleToFloat(double x) {
+        return static_cast<float>(x);
+    }
 #else
     #define kMatrix22Elem   SK_Fract1
 #endif
@@ -115,7 +120,7 @@ uint8_t SkMatrix::computeTypeMask() const {
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkMatrix::setTranslate(SkScalar dx, SkScalar dy) {
-    if (SkScalarAs2sCompliment(dx) | SkScalarAs2sCompliment(dy)) {
+    if (SkScalarToCompareType(dx) || SkScalarToCompareType(dy)) {
         fMat[kMTransX] = dx;
         fMat[kMTransY] = dy;
 
@@ -137,7 +142,7 @@ bool SkMatrix::preTranslate(SkScalar dx, SkScalar dy) {
         return this->preConcat(m);
     }
     
-    if (SkScalarAs2sCompliment(dx) | SkScalarAs2sCompliment(dy)) {
+    if (SkScalarToCompareType(dx) || SkScalarToCompareType(dy)) {
         fMat[kMTransX] += SkScalarMul(fMat[kMScaleX], dx) +
                           SkScalarMul(fMat[kMSkewX], dy);
         fMat[kMTransY] += SkScalarMul(fMat[kMSkewY], dx) +
@@ -155,7 +160,7 @@ bool SkMatrix::postTranslate(SkScalar dx, SkScalar dy) {
         return this->postConcat(m);
     }
     
-    if (SkScalarAs2sCompliment(dx) | SkScalarAs2sCompliment(dy)) {
+    if (SkScalarToCompareType(dx) || SkScalarToCompareType(dy)) {
         fMat[kMTransX] += dx;
         fMat[kMTransY] += dy;
         this->setTypeMask(kUnknown_Mask);
@@ -397,7 +402,7 @@ bool SkMatrix::setRectToRect(const SkRect& src, const SkRect& dst,
     }
 
     if (dst.isEmpty()) {
-        bzero(fMat, 8 * sizeof(SkScalar));
+        sk_bzero(fMat, 8 * sizeof(SkScalar));
         this->setTypeMask(kScale_Mask | kRectStaysRect_Mask);
     } else {
         SkScalar    tx, sx = SkScalarDiv(dst.width(), src.width());
@@ -454,13 +459,7 @@ bool SkMatrix::setRectToRect(const SkRect& src, const SkRect& dst,
 #ifdef SK_SCALAR_IS_FLOAT
     static inline int fixmuladdmul(float a, float b, float c, float d,
                                    float* result) {
-        *result = a * b + c * d;
-        return true;
-    }
-
-    static inline int fixmuladdmulshiftmul(float a, float b, float c, float d,
-                           int /*shift not used*/, float scale, float* result) {
-        *result = (a * b + c * d) * scale;
+        *result = SkDoubleToFloat((double)a * b + (double)c * d);
         return true;
     }
 
@@ -483,34 +482,6 @@ bool SkMatrix::setRectToRect(const SkRect& src, const SkRect& dst,
         tmp1.add(tmp2);
         if (tmp1.isFixed()) {
             *result = tmp1.getFixed();
-            return true;
-        }
-        return false;
-    }
-
-    static inline bool fixmuladdmulshiftmul(SkFixed a, SkFixed b, SkFixed c,
-                        SkFixed d, int shift, SkFixed scale, SkFixed* result) {
-        Sk64    tmp1, tmp2;
-        tmp1.setMul(a, b);
-        tmp2.setMul(c, d);
-        tmp1.add(tmp2);
-
-        int32_t hi = SkAbs32(tmp1.fHi);
-        int afterShift = 16;
-        if (hi >> 15) {
-            int clz = 17 - SkCLZ(hi);
-            SkASSERT(clz > 0 && clz <= 16);
-            afterShift -= clz;
-            shift += clz;
-        }
-
-        tmp1.roundRight(shift + 16);
-        SkASSERT(tmp1.is32());
-
-        tmp1.setMul(tmp1.get32(), scale);
-        tmp1.roundRight(afterShift);
-        if (tmp1.is32()) {
-            *result = tmp1.get32();
             return true;
         }
         return false;
@@ -659,10 +630,18 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+/*  Matrix inversion is very expensive, but also the place where keeping
+    precision may be most important (here and matrix concat). Hence to avoid
+    bitmap blitting artifacts when walking the inverse, we use doubles for
+    the intermediate math, even though we know that is more expensive.
+    The fixed counter part is us using Sk64 for temp calculations.
+ */
+
 #ifdef SK_SCALAR_IS_FLOAT
+    typedef double SkDetScalar;
     #define SkPerspMul(a, b)            SkScalarMul(a, b)
-    #define SkScalarMulShift(a, b, s)   SkScalarMul(a, b)
-    static float sk_inv_determinant(const float mat[9], int isPerspective,
+    #define SkScalarMulShift(a, b, s)   SkDoubleToFloat((a) * (b))
+    static double sk_inv_determinant(const float mat[9], int isPerspective,
                                     int* /* (only used in Fixed case) */) {
         double det;
 
@@ -679,9 +658,17 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
         if (SkScalarNearlyZero((float)det, SK_ScalarNearlyZero * SK_ScalarNearlyZero)) {
             return 0;
         }
-        return (float)(1.0 / det);
+        return 1.0 / det;
+    }
+    // we declar a,b,c,d to all be doubles, because we want to perform
+    // double-precision muls and subtract, even though the original values are
+    // from the matrix, which are floats.
+    static float inline mul_diff_scale(double a, double b, double c, double d,
+                                       double scale) {
+        return SkDoubleToFloat((a * b - c * d) * scale);
     }
 #else
+    typedef SkFixed SkDetScalar;
     #define SkPerspMul(a, b)            SkFractMul(a, b)
     #define SkScalarMulShift(a, b, s)   SkMulShift(a, b, s)
     static void set_muladdmul(Sk64* dst, int32_t a, int32_t b, int32_t c,
@@ -732,7 +719,7 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
 bool SkMatrix::invert(SkMatrix* inv) const {
     int         isPersp = has_perspective(*this);
     int         shift;
-    SkScalar    scale = sk_inv_determinant(fMat, isPersp, &shift);
+    SkDetScalar scale = sk_inv_determinant(fMat, isPersp, &shift);
 
     if (scale == 0) { // underflow
         return false;
@@ -807,17 +794,15 @@ bool SkMatrix::invert(SkMatrix* inv) const {
             inv->fMat[kMScaleY] = SkMulShift(fMat[kMScaleX], scale, fixedShift);
             inv->fMat[kMTransY] = SkMulShift(ty.getShiftRight(33 - clzNumer), scale, sk64shift);
 #else
-            inv->fMat[kMScaleX] = SkScalarMul(fMat[kMScaleY], scale);
-            inv->fMat[kMSkewX] = SkScalarMul(-fMat[kMSkewX], scale);
-            if (!fixmuladdmulshiftmul(fMat[kMSkewX], fMat[kMTransY], -fMat[kMScaleY], fMat[kMTransX], shift, scale, &inv->fMat[kMTransX])) {
-                return false;
-            }
+            inv->fMat[kMScaleX] = SkDoubleToFloat(fMat[kMScaleY] * scale);
+            inv->fMat[kMSkewX] = SkDoubleToFloat(-fMat[kMSkewX] * scale);
+            inv->fMat[kMTransX] = mul_diff_scale(fMat[kMSkewX], fMat[kMTransY],
+                                     fMat[kMScaleY], fMat[kMTransX], scale);
                 
-            inv->fMat[kMSkewY] = SkScalarMul(-fMat[kMSkewY], scale);
-            inv->fMat[kMScaleY] = SkScalarMul(fMat[kMScaleX], scale);
-            if (!fixmuladdmulshiftmul(fMat[kMSkewY], fMat[kMTransX], -fMat[kMScaleX], fMat[kMTransY], shift, scale, &inv->fMat[kMTransY])) {
-                return false;
-            }
+            inv->fMat[kMSkewY] = SkDoubleToFloat(-fMat[kMSkewY] * scale);
+            inv->fMat[kMScaleY] = SkDoubleToFloat(fMat[kMScaleX] * scale);
+            inv->fMat[kMTransY] = mul_diff_scale(fMat[kMSkewY], fMat[kMTransX],
+                                        fMat[kMScaleX], fMat[kMTransY], scale);
 #endif
             inv->fMat[kMPersp0] = 0;
             inv->fMat[kMPersp1] = 0;
@@ -1581,6 +1566,20 @@ bool SkMatrix::setPolyToPoly(const SkPoint src[], const SkPoint dst[],
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+uint32_t SkMatrix::flatten(void* buffer) const {
+    // TODO write less for simple matrices
+    if (buffer) {
+        memcpy(buffer, fMat, 9 * sizeof(SkScalar));
+    }
+    return 9 * sizeof(SkScalar);
+}
+
+uint32_t SkMatrix::unflatten(const void* buffer) {
+    memcpy(fMat, buffer, 9 * sizeof(SkScalar));
+    this->setTypeMask(kUnknown_Mask);
+    return 9 * sizeof(SkScalar);
+}
 
 void SkMatrix::dump() const {
     SkString str;

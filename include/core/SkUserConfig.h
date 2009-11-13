@@ -47,7 +47,11 @@
 //
 // ANDROID Specific changes - NO NOT CHECK BACK INTO code.google.com/p/skia
 //
-#include <utils/misc.h>
+
+// do this build check for other tools that still read this header
+#ifdef ANDROID
+    #include <utils/misc.h>
+#endif
 
 #ifdef SK_BUILD_FOR_MAC
     #undef SK_BUILD_FOR_MAC
@@ -74,7 +78,7 @@
     native support for floats. If your environment uses software floating point,
     define this flag.
  */
-#define SK_SOFTWARE_FLOAT
+//#define SK_SOFTWARE_FLOAT
 
 
 /*  Skia has lots of debug-only code. Often this is just null checks or other
@@ -129,7 +133,6 @@
                                         __FUNCTION__, __VA_ARGS__)
 void Android_SkDebugf(const char* file, int line, 
                       const char* function, const char* format, ...);
-
 
 
 /*  If SK_DEBUG is defined, then you can optionally define SK_SUPPORT_UNITTEST

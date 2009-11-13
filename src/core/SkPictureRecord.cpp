@@ -1,4 +1,5 @@
 #include "SkPictureRecord.h"
+#include "SkShape.h"
 #include "SkTSearch.h"
 
 #define MIN_WRITER_SIZE 16384
@@ -44,7 +45,13 @@ int SkPictureRecord::saveLayer(const SkRect* bounds, const SkPaint* paint,
     fRestoreOffsetStack.push(0);
 
     validate();
-    return this->INHERITED::saveLayer(bounds, paint, flags);
+    /*  Don't actually call saveLayer, because that will try to allocate an
+        offscreen device (potentially very big) which we don't actually need
+        at this time (and may not be able to afford since during record our
+        clip starts out the size of the picture, which is often much larger
+        than the size of the actual device we'll use during playback).
+     */
+    return this->INHERITED::save(flags);
 }
 
 void SkPictureRecord::restore() {
@@ -52,7 +59,7 @@ void SkPictureRecord::restore() {
     if (fRestoreOffsetStack.count() == 0) {
         return;
     }
-    
+
     // patch up the clip offsets
     uint32_t restoreOffset = (uint32_t)fWriter.size();
     uint32_t offset = fRestoreOffsetStack.top();
@@ -62,7 +69,7 @@ void SkPictureRecord::restore() {
         *peek = restoreOffset;
     }
     fRestoreOffsetStack.pop();
-    
+
     addDraw(RESTORE);
     validate();
     return this->INHERITED::restore();
@@ -140,9 +147,7 @@ bool SkPictureRecord::clipPath(const SkPath& path, SkRegion::Op op) {
     validate();
     
     if (fRecordFlags & SkPicture::kUsePathBoundsForClip_RecordingFlag) {
-        SkRect bounds;
-        path.computeBounds(&bounds, SkPath::kFast_BoundsType);
-        return this->INHERITED::clipRect(bounds, op);
+        return this->INHERITED::clipRect(path.getBounds(), op);
     } else {
         return this->INHERITED::clipPath(path, op);
     }
@@ -357,6 +362,20 @@ void SkPictureRecord::drawPicture(SkPicture& picture) {
     validate();
 }
 
+void SkPictureRecord::drawShape(SkShape* shape) {
+    addDraw(DRAW_SHAPE);
+
+    int index = fShapes.find(shape);
+    if (index < 0) {    // not found
+        index = fShapes.count();
+        *fShapes.append() = shape;
+        shape->ref();
+    }
+    // follow the convention of recording a 1-based index
+    addInt(index + 1);
+    validate();
+}
+
 void SkPictureRecord::drawVertices(VertexMode vmode, int vertexCount,
                           const SkPoint vertices[], const SkPoint texs[],
                           const SkColor colors[], SkXfermode*,
@@ -402,6 +421,7 @@ void SkPictureRecord::reset() {
     fPaints.reset();
     fPictureRefs.unrefAll();
     fRegions.reset();
+    fShapes.safeUnrefAll();
     fWriter.reset();
     fHeap.reset();
     
@@ -516,8 +536,7 @@ int SkPictureRecord::find(SkTDArray<const SkFlatBitmap* >& bitmaps, const SkBitm
     int index = SkTSearch<SkFlatData>((const SkFlatData**) bitmaps.begin(), 
         bitmaps.count(), (SkFlatData*) flat, sizeof(flat), &SkFlatData::Compare);
     if (index >= 0) {
-//        SkBitmap bitmap;
-//        flat->unflatten(&bitmap); // balance ref count
+        (void)fHeap.unalloc(flat);
         return bitmaps[index]->index();
     }
     index = ~index;
@@ -531,8 +550,10 @@ int SkPictureRecord::find(SkTDArray<const SkFlatMatrix* >& matrices, const SkMat
     SkFlatMatrix* flat = SkFlatMatrix::Flatten(&fHeap, *matrix, fMatrixIndex);
     int index = SkTSearch<SkFlatData>((const SkFlatData**) matrices.begin(), 
         matrices.count(), (SkFlatData*) flat, sizeof(flat), &SkFlatData::Compare);
-    if (index >= 0)
+    if (index >= 0) {
+        (void)fHeap.unalloc(flat);
         return matrices[index]->index();
+    }
     index = ~index;
     *matrices.insert(index) = flat;
     return fMatrixIndex++;
@@ -548,6 +569,7 @@ int SkPictureRecord::find(SkTDArray<const SkFlatPaint* >& paints, const SkPaint*
     int index = SkTSearch<SkFlatData>((const SkFlatData**) paints.begin(), 
         paints.count(), (SkFlatData*) flat, sizeof(flat), &SkFlatData::Compare);
     if (index >= 0) {
+        (void)fHeap.unalloc(flat);
         return paints[index]->index();
     }
 
@@ -560,8 +582,10 @@ int SkPictureRecord::find(SkTDArray<const SkFlatRegion* >& regions, const SkRegi
     SkFlatRegion* flat = SkFlatRegion::Flatten(&fHeap, region, fRegionIndex);
     int index = SkTSearch<SkFlatData>((const SkFlatData**) regions.begin(), 
         regions.count(), (SkFlatData*) flat, sizeof(flat), &SkFlatData::Compare);
-    if (index >= 0)
+    if (index >= 0) {
+        (void)fHeap.unalloc(flat);
         return regions[index]->index();
+    }
     index = ~index;
     *regions.insert(index) = flat;
     return fRegionIndex++;
