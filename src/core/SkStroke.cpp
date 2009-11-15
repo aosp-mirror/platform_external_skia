@@ -302,9 +302,12 @@ DRAW_LINE:
     bool degenerateBC = !set_normal_unitnormal(pts[1], pts[2], fRadius,
                                                &normalBC, &unitNormalBC);
 
-    if (--subDivide >= 0 &&
-            (degenerateBC || normals_too_curvy(unitNormalAB, unitNormalBC) ||
-             normals_too_curvy(unitNormalBC, *unitNormalCD))) {
+    if (degenerateBC || normals_too_curvy(unitNormalAB, unitNormalBC) ||
+             normals_too_curvy(unitNormalBC, *unitNormalCD)) {
+        // subdivide if we can
+        if (--subDivide < 0) {
+            goto DRAW_LINE;
+        }
         SkPoint     tmp[7];
         SkVector    norm, unit, dummy, unitDummy;
 
@@ -538,8 +541,7 @@ void SkStroke::setJoin(SkPaint::Join join) {
         routine
     */
     static int needs_to_shrink(const SkPath& path) {
-        SkRect r;
-        path.computeBounds(&r, SkPath::kFast_BoundsType);
+        const SkRect& r = path.getBounds();
         SkFixed mask = SkAbs32(r.fLeft);
         mask |= SkAbs32(r.fTop);
         mask |= SkAbs32(r.fRight);

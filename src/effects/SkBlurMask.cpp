@@ -18,33 +18,65 @@
 #include "SkBlurMask.h"
 #include "SkTemplates.h"
 
-static void build_sum_buffer(uint32_t dst[], int w, int h, const uint8_t src[], int srcRB)
-{
-    SkASSERT(srcRB >= w);
+#if 0
+static void dump_sum_buffer(const uint32_t sum[], const int w, const int h) {
+    printf("---- sum buffer\n");
+    for (int y = 0; y <= h; y++) {
+        for (int x = 0; x <= w; x++) {
+            printf(" %5d", sum[x]);
+        }
+        printf("\n");
+        sum += w+1;
+    }
+}
+#else
+#define dump_sum_buffer(sum, w, h)
+#endif
+
+/** The sum buffer is an array of u32 to hold the accumulated sum of all of the
+    src values at their position, plus all values above and to the left.
+    When we sample into this buffer, we need an initial row and column of 0s,
+    so we have an index correspondence as follows:
+ 
+    src[i, j] == sum[i+1, j+1]
+    sum[0, j] == sum[i, 0] == 0
+ 
+    We assume that the sum buffer's stride == its width
+ */
+static void build_sum_buffer(uint32_t sum[], int srcW, int srcH, const uint8_t src[], int srcRB) {
+    int sumW = srcW + 1;
+
+    SkASSERT(srcRB >= srcW);
     // mod srcRB so we can apply it after each row
-    srcRB -= w;
+    srcRB -= srcW;
 
     int x, y;
 
+    // zero out the top row and column
+    memset(sum, 0, sumW * sizeof(sum[0]));
+    sum += sumW;
+
     // special case first row
     uint32_t X = 0;
-    for (x = w - 1; x >= 0; --x)
+    *sum++ = 0; // initialze the first column to 0
+    for (x = srcW - 1; x >= 0; --x)
     {
         X = *src++ + X;
-        *dst++ = X;
+        *sum++ = X;
     }
     src += srcRB;
 
     // now do the rest of the rows
-    for (y = h - 1; y > 0; --y)
+    for (y = srcH - 1; y > 0; --y)
     {
         uint32_t L = 0;
         uint32_t C = 0;
-        for (x = w - 1; x >= 0; --x)
+        *sum++ = 0; // initialze the first column to 0
+        for (x = srcW - 1; x >= 0; --x)
         {
-            uint32_t T = dst[-w];
+            uint32_t T = sum[-sumW];
             X = *src++ + L + T - C;
-            *dst++ = X;
+            *sum++ = X;
             L = X;
             C = T;
         }
@@ -52,36 +84,36 @@ static void build_sum_buffer(uint32_t dst[], int w, int h, const uint8_t src[], 
     }
 }
 
-static void apply_kernel(uint8_t dst[], int rx, int ry, const uint32_t src[], int sw, int sh)
-{
+/*  sw and sh are the width and height of the src. Since the sum buffer
+    matches that, but has an extra row and col at the beginning (with zeros),
+    we can just use sw and sh as our "max" values for pinning coordinates
+    when sampling into sum[][]
+ */
+static void apply_kernel(uint8_t dst[], int rx, int ry, const uint32_t sum[],
+                         int sw, int sh) {
     uint32_t scale = (1 << 24) / ((2*rx + 1)*(2*ry + 1));
 
-    int rowBytes = sw;
+    int sumStride = sw + 1;
 
     int dw = sw + 2*rx;
     int dh = sh + 2*ry;
 
-    sw -= 1;    // now it is max_x
-    sh -= 1;    // now it is max_y
+    int prev_y = -2*ry;
+    int next_y = 1;
 
-    int prev_y = -ry - 1    -ry;
-    int next_y = ry         -ry;
+    for (int y = 0; y < dh; y++) {
+        int py = SkClampPos(prev_y) * sumStride;
+        int ny = SkFastMin32(next_y, sh) * sumStride;
 
-    for (int y = 0; y < dh; y++)
-    {
-        int py = SkClampPos(prev_y) * rowBytes;
-        int ny = SkFastMin32(next_y, sh) * rowBytes;
+        int prev_x = -2*rx;
+        int next_x = 1;
 
-        int prev_x = -rx - 1    -rx;
-        int next_x = rx         -rx;
-
-        for (int x = 0; x < dw; x++)
-        {
+        for (int x = 0; x < dw; x++) {
             int px = SkClampPos(prev_x);
             int nx = SkFastMin32(next_x, sw);
 
-            uint32_t sum = src[px+py] + src[nx+ny] - src[nx+py] - src[px+ny];
-            *dst++ = SkToU8(sum * scale >> 24);
+            uint32_t tmp = sum[px+py] + sum[nx+ny] - sum[nx+py] - sum[px+ny];
+            *dst++ = SkToU8(tmp * scale >> 24);
 
             prev_x += 1;
             next_x += 1;
@@ -91,8 +123,13 @@ static void apply_kernel(uint8_t dst[], int rx, int ry, const uint32_t src[], in
     }
 }
 
-static void apply_kernel_interp(uint8_t dst[], int rx, int ry, const uint32_t src[], int sw, int sh, U8CPU outer_weight)
-{
+/*  sw and sh are the width and height of the src. Since the sum buffer
+ matches that, but has an extra row and col at the beginning (with zeros),
+ we can just use sw and sh as our "max" values for pinning coordinates
+ when sampling into sum[][]
+ */
+static void apply_kernel_interp(uint8_t dst[], int rx, int ry,
+                const uint32_t sum[], int sw, int sh, U8CPU outer_weight) {
     SkASSERT(rx > 0 && ry > 0);
     SkASSERT(outer_weight <= 255);
 
@@ -105,38 +142,33 @@ static void apply_kernel_interp(uint8_t dst[], int rx, int ry, const uint32_t sr
     uint32_t outer_scale = (outer_weight << 16) / ((2*rx + 1)*(2*ry + 1));
     uint32_t inner_scale = (inner_weight << 16) / ((2*rx - 1)*(2*ry - 1));
 
-    int rowBytes = sw;
+    int sumStride = sw + 1;
 
     int dw = sw + 2*rx;
     int dh = sh + 2*ry;
 
-    sw -= 1;    // now it is max_x
-    sh -= 1;    // now it is max_y
+    int prev_y = -2*ry;
+    int next_y = 1;
 
-    int prev_y = -ry - 1    -ry;
-    int next_y = ry         -ry;
+    for (int y = 0; y < dh; y++) {
+        int py = SkClampPos(prev_y) * sumStride;
+        int ny = SkFastMin32(next_y, sh) * sumStride;
 
-    for (int y = 0; y < dh; y++)
-    {
-        int py = SkClampPos(prev_y) * rowBytes;
-        int ny = SkFastMin32(next_y, sh) * rowBytes;
+        int ipy = SkClampPos(prev_y + 1) * sumStride;
+        int iny = SkClampMax(next_y - 1, sh) * sumStride;
 
-        int ipy = SkClampPos(prev_y + 1) * rowBytes;
-        int iny = SkClampMax(next_y - 1, sh) * rowBytes;
+        int prev_x = -2*rx;
+        int next_x = 1;
 
-        int prev_x = -rx - 1    -rx;
-        int next_x = rx         -rx;
-
-        for (int x = 0; x < dw; x++)
-        {
+        for (int x = 0; x < dw; x++) {
             int px = SkClampPos(prev_x);
             int nx = SkFastMin32(next_x, sw);
 
             int ipx = SkClampPos(prev_x + 1);
             int inx = SkClampMax(next_x - 1, sw);
 
-            uint32_t outer_sum = src[px+py] + src[nx+ny] - src[nx+py] - src[px+ny];
-            uint32_t inner_sum = src[ipx+ipy] + src[inx+iny] - src[inx+ipy] - src[ipx+iny];
+            uint32_t outer_sum = sum[px+py] + sum[nx+ny] - sum[nx+py] - sum[px+ny];
+            uint32_t inner_sum = sum[ipx+ipy] + sum[inx+iny] - sum[inx+ipy] - sum[ipx+iny];
             *dst++ = SkToU8((outer_sum * outer_scale + inner_sum * inner_scale) >> 24);
 
             prev_x += 1;
@@ -149,44 +181,47 @@ static void apply_kernel_interp(uint8_t dst[], int rx, int ry, const uint32_t sr
 
 #include "SkColorPriv.h"
 
-static void merge_src_with_blur(uint8_t dst[],
-                                const uint8_t src[], int sw, int sh,
-                                const uint8_t blur[], int blurRowBytes)
-{
-    while (--sh >= 0)
-    {
-        for (int x = sw - 1; x >= 0; --x)
-        {
+static void merge_src_with_blur(uint8_t dst[], int dstRB,
+                                const uint8_t src[], int srcRB,
+                                const uint8_t blur[], int blurRB,
+                                int sw, int sh) {
+    dstRB -= sw;
+    srcRB -= sw;
+    blurRB -= sw;
+    while (--sh >= 0) {
+        for (int x = sw - 1; x >= 0; --x) {
             *dst = SkToU8(SkAlphaMul(*blur, SkAlpha255To256(*src)));
             dst += 1;
             src += 1;
             blur += 1;
         }
-        blur += blurRowBytes - sw;
+        dst += dstRB;
+        src += srcRB;
+        blur += blurRB;
     }
 }
 
 static void clamp_with_orig(uint8_t dst[], int dstRowBytes,
-                            const uint8_t src[], int sw, int sh,
-                            SkBlurMask::Style style)
-{
+                            const uint8_t src[], int srcRowBytes,
+                            int sw, int sh,
+                            SkBlurMask::Style style) {
     int x;
-    while (--sh >= 0)
-    {
+    while (--sh >= 0) {
         switch (style) {
         case SkBlurMask::kSolid_Style:
-            for (x = sw - 1; x >= 0; --x)
-            {
-                *dst = SkToU8(*src + SkAlphaMul(*dst, SkAlpha255To256(255 - *src)));
+            for (x = sw - 1; x >= 0; --x) {
+                int s = *src;
+                int d = *dst;
+                *dst = SkToU8(s + d - SkMulDiv255Round(s, d));
                 dst += 1;
                 src += 1;
             }
             break;
         case SkBlurMask::kOuter_Style:
-            for (x = sw - 1; x >= 0; --x)
-            {
-                if (*src)
+            for (x = sw - 1; x >= 0; --x) {
+                if (*src) {
                     *dst = SkToU8(SkAlphaMul(*dst, SkAlpha255To256(255 - *src)));
+                }
                 dst += 1;
                 src += 1;
             }
@@ -196,6 +231,7 @@ static void clamp_with_orig(uint8_t dst[], int dstRowBytes,
             break;
         }
         dst += dstRowBytes - sw;
+        src += srcRowBytes - sw;
     }
 }
 
@@ -220,33 +256,38 @@ bool SkBlurMask::Blur(SkMask* dst, const SkMask& src,
 
     SkASSERT(rx >= 0);
     SkASSERT((unsigned)outer_weight <= 255);
-
-    if (rx == 0)
+    if (rx <= 0) {
         return false;
+    }
 
     int ry = rx;    // only do square blur for now
 
     dst->fBounds.set(src.fBounds.fLeft - rx, src.fBounds.fTop - ry,
                         src.fBounds.fRight + rx, src.fBounds.fBottom + ry);
-    dst->fRowBytes = SkToU16(dst->fBounds.width());
+    dst->fRowBytes = dst->fBounds.width();
     dst->fFormat = SkMask::kA8_Format;
     dst->fImage = NULL;
 
-    if (src.fImage)
-    {
+    if (src.fImage) {
+        size_t dstSize = dst->computeImageSize();
+        if (0 == dstSize) {
+            return false;   // too big to allocate, abort
+        }
+
         int             sw = src.fBounds.width();
         int             sh = src.fBounds.height();
         const uint8_t*  sp = src.fImage;
-        uint8_t*        dp = SkMask::AllocImage(dst->computeImageSize());
+        uint8_t*        dp = SkMask::AllocImage(dstSize);
 
         SkAutoTCallVProc<uint8_t, SkMask_FreeImage> autoCall(dp);
 
         // build the blurry destination
         {
-            SkAutoTMalloc<uint32_t> storage(sw * sh);
+            SkAutoTMalloc<uint32_t> storage((sw + 1) * (sh + 1));
             uint32_t*               sumBuffer = storage.get();
 
             build_sum_buffer(sumBuffer, sw, sh, sp, src.fRowBytes);
+            dump_sum_buffer(sumBuffer, sw, sh);
             if (outer_weight == 255)
                 apply_kernel(dp, rx, ry, sumBuffer, sw, sh);
             else
@@ -256,38 +297,39 @@ bool SkBlurMask::Blur(SkMask* dst, const SkMask& src,
         dst->fImage = dp;
         // if need be, alloc the "real" dst (same size as src) and copy/merge
         // the blur into it (applying the src)
-        if (style == kInner_Style)
-        {
-            dst->fImage = SkMask::AllocImage(src.computeImageSize());
-            merge_src_with_blur(dst->fImage, sp, sw, sh,
-                                dp + rx + ry*dst->fBounds.width(),
-                                dst->fBounds.width());
+        if (style == kInner_Style) {
+            // now we allocate the "real" dst, mirror the size of src
+            size_t srcSize = src.computeImageSize();
+            if (0 == srcSize) {
+                return false;   // too big to allocate, abort
+            }
+            dst->fImage = SkMask::AllocImage(srcSize);
+            merge_src_with_blur(dst->fImage, src.fRowBytes,
+                                sp, src.fRowBytes,
+                                dp + rx + ry*dst->fRowBytes, dst->fRowBytes,
+                                sw, sh);
             SkMask::FreeImage(dp);
-        }
-        else if (style != kNormal_Style)
-        {
-            clamp_with_orig(dp + rx + ry*dst->fBounds.width(),
-                            dst->fBounds.width(),
-                            sp, sw, sh,
+        } else if (style != kNormal_Style) {
+            clamp_with_orig(dp + rx + ry*dst->fRowBytes, dst->fRowBytes,
+                            sp, src.fRowBytes, sw, sh,
                             style);
         }
         (void)autoCall.detach();
     }
 
-    if (style == kInner_Style)
-    {
+    if (style == kInner_Style) {
         dst->fBounds = src.fBounds; // restore trimmed bounds
-        dst->fRowBytes = SkToU16(dst->fBounds.width());
+        dst->fRowBytes = src.fRowBytes;
     }
 
 #if 0
-    if (gamma && dst->fImage)
-    {
+    if (gamma && dst->fImage) {
         uint8_t*    image = dst->fImage;
         uint8_t*    stop = image + dst->computeImageSize();
 
-        for (; image < stop; image += 1)
+        for (; image < stop; image += 1) {
             *image = gamma[*image];
+        }
     }
 #endif
     return true;

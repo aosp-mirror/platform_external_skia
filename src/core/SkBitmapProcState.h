@@ -24,6 +24,12 @@ class SkPaint;
 
 struct SkBitmapProcState {
 
+    typedef void (*ShaderProc32)(const SkBitmapProcState&, int x, int y,
+                                 SkPMColor[], int count);
+
+    typedef void (*ShaderProc16)(const SkBitmapProcState&, int x, int y,
+                                 uint16_t[], int count);
+
     typedef void (*MatrixProc)(const SkBitmapProcState&,
                                uint32_t bitmapXY[],
                                int count,
@@ -40,37 +46,94 @@ struct SkBitmapProcState {
                                  uint16_t colors[]);
     
     typedef U16CPU (*FixedTileProc)(SkFixed);   // returns 0..0xFFFF
-    
+    typedef U16CPU (*IntTileProc)(int value, int count);   // returns 0..count-1
+
+    // If a shader proc is present, then the corresponding matrix/sample procs
+    // are ignored
+    ShaderProc32        fShaderProc32;      // chooseProcs
+    ShaderProc16        fShaderProc16;      // chooseProcs
+    // These are used if the shaderproc is NULL
     MatrixProc          fMatrixProc;        // chooseProcs
     SampleProc32        fSampleProc32;      // chooseProcs
     SampleProc16        fSampleProc16;      // chooseProcs
 
-    SkMatrix            fUnitInvMatrix;     // chooseProcs
+    const SkBitmap*     fBitmap;            // chooseProcs - orig or mip
+    const SkMatrix*     fInvMatrix;         // chooseProcs
+    SkMatrix::MapXYProc fInvProc;           // chooseProcs
+
     FixedTileProc       fTileProcX;         // chooseProcs
     FixedTileProc       fTileProcY;         // chooseProcs
+    IntTileProc         fIntTileProcY;      // chooseProcs
     SkFixed             fFilterOneX;
     SkFixed             fFilterOneY;
 
-    const SkBitmap*     fBitmap;            // chooseProcs - orig or mip
-    SkBitmap            fOrigBitmap;        // CONSTRUCTOR
-#ifdef SK_SUPPORT_MIPMAP
-    SkBitmap            fMipBitmap;
-#endif
     SkPMColor           fPaintPMColor;      // chooseProcs - A8 config
-    const SkMatrix*     fInvMatrix;         // chooseProcs
-    SkMatrix::MapXYProc fInvProc;           // chooseProcs
-    SkFixed             fInvSx, fInvSy;     // chooseProcs
+    SkFixed             fInvSx;             // chooseProcs
     SkFixed             fInvKy;             // chooseProcs
     uint16_t            fAlphaScale;        // chooseProcs
     uint8_t             fInvType;           // chooseProcs
     uint8_t             fTileModeX;         // CONSTRUCTOR
     uint8_t             fTileModeY;         // CONSTRUCTOR
     SkBool8             fDoFilter;          // chooseProcs
-    
-    bool chooseProcs(const SkMatrix& inv, const SkPaint&);
+
+    /** Platforms implement this, and can optionally overwrite only the
+        following fields:
+
+        fShaderProc32
+        fShaderProc16
+        fMatrixProc
+        fSampleProc32
+        fSampleProc32
+
+        They will already have valid function pointers, so a platform that does
+        not have an accelerated version can just leave that field as is. A valid
+        implementation can do nothing (see SkBitmapProcState_opts_none.cpp)
+     */
+    void platformProcs();
+
+    /** Given the size of a buffer, to be used for calling the matrix and
+        sample procs, this return the maximum count that can be stored in the
+        buffer, taking into account that filtering and scale-vs-affine affect
+        this value.
+     
+        Only valid to call after chooseProcs (setContext) has been called. It is
+        safe to call this inside the shader's shadeSpan() method.
+     */
+    int maxCountForBufferSize(size_t bufferSize) const;
 
 private:
-    MatrixProc chooseMatrixProc();
+    friend class SkBitmapProcShader;
+
+    SkMatrix            fUnitInvMatrix;     // chooseProcs
+    SkBitmap            fOrigBitmap;        // CONSTRUCTOR
+    SkBitmap            fMipBitmap;
+
+    MatrixProc chooseMatrixProc(bool trivial_matrix);
+    bool chooseProcs(const SkMatrix& inv, const SkPaint&);
 };
+
+/*  Macros for packing and unpacking pairs of 16bit values in a 32bit uint.
+    Used to allow access to a stream of uint16_t either one at a time, or
+    2 at a time by unpacking a uint32_t
+ */
+#ifdef SK_CPU_BENDIAN
+    #define PACK_TWO_SHORTS(pri, sec) ((pri) << 16 | (sec))
+    #define UNPACK_PRIMARY_SHORT(packed)    ((uint32_t)(packed) >> 16)
+    #define UNPACK_SECONDARY_SHORT(packed)  ((packed) & 0xFFFF)
+#else
+    #define PACK_TWO_SHORTS(pri, sec) ((pri) | ((sec) << 16))
+    #define UNPACK_PRIMARY_SHORT(packed)    ((packed) & 0xFFFF)
+    #define UNPACK_SECONDARY_SHORT(packed)  ((uint32_t)(packed) >> 16)
+#endif
+
+#ifdef SK_DEBUG
+    static inline uint32_t pack_two_shorts(U16CPU pri, U16CPU sec) {
+        SkASSERT((uint16_t)pri == pri);
+        SkASSERT((uint16_t)sec == sec);
+        return PACK_TWO_SHORTS(pri, sec);
+    }
+#else
+    #define pack_two_shorts(pri, sec)   PACK_TWO_SHORTS(pri, sec)
+#endif
 
 #endif

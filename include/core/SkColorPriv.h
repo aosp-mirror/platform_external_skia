@@ -33,7 +33,13 @@
 */
 static inline unsigned SkAlpha255To256(U8CPU alpha) {
     SkASSERT(SkToU8(alpha) == alpha);
+#ifndef SK_USE_OLD_255_TO_256
+    // this one assues that blending on top of an opaque dst keeps it that way
+    // even though it is less accurate than a+(a>>7) for non-opaque dsts
+    return alpha + 1;
+#else
     return alpha + (alpha >> 7);
+#endif
 }
 
 /** Multiplify value by 0..256, and shift the result down 8
@@ -385,6 +391,21 @@ inline SkPMColor SkPixel16ToPixel32(U16CPU src)
     SkASSERT((b >> (8 - SK_B16_BITS)) == SkGetPackedB16(src));
 
     return SkPackARGB32(0xFF, r, g, b);
+}
+
+// similar to SkPixel16ToPixel32, but returns SkColor instead of SkPMColor
+static inline SkColor SkPixel16ToColor(U16CPU src) {
+    SkASSERT(src == SkToU16(src));
+    
+    unsigned    r = SkPacked16ToR32(src);
+    unsigned    g = SkPacked16ToG32(src);
+    unsigned    b = SkPacked16ToB32(src);
+    
+    SkASSERT((r >> (8 - SK_R16_BITS)) == SkGetPackedR16(src));
+    SkASSERT((g >> (8 - SK_G16_BITS)) == SkGetPackedG16(src));
+    SkASSERT((b >> (8 - SK_B16_BITS)) == SkGetPackedB16(src));
+    
+    return SkColorSetRGB(r, g, b);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

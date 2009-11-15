@@ -383,7 +383,11 @@ extern "C" {
             valuea = edgea->fX;
             valueb = edgeb->fX;
         }
-        return valuea - valueb;
+
+        // this overflows if valuea >>> valueb or vice-versa
+        //     return valuea - valueb;
+        // do perform the slower but safe compares
+        return (valuea < valueb) ? -1 : (valuea > valueb);
     }
 }
 
@@ -479,10 +483,9 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
     SkEdge          headEdge, tailEdge, *last;
 
     SkASSERT(count <= maxCount);
-    if (count == 0) {
+    if (count < 2) {
         return;
     }
-    SkASSERT(count > 1);
 
     // this returns the first and last edge after they're sorted into a dlink list
     edge = sort_edges(list, count, &last);
@@ -582,11 +585,8 @@ void SkScan::FillPath(const SkPath& path, const SkRegion& clip,
         return;
     }
 
-    SkRect  r;
     SkIRect ir;
-
-    path.computeBounds(&r, SkPath::kFast_BoundsType);
-    r.round(&ir);
+    path.getBounds().round(&ir);
     if (ir.isEmpty()) {
         if (path.isInverseFillType()) {
             blitter->blitRegion(clip);

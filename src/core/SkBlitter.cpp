@@ -25,9 +25,7 @@
 #include "SkUtils.h"
 #include "SkXfermode.h"
 
-SkBlitter::~SkBlitter()
-{
-}
+SkBlitter::~SkBlitter() {}
 
 const SkBitmap* SkBlitter::justAnOpaqueColor(uint32_t* value)
 {
@@ -784,6 +782,64 @@ static void delete_blitter(void* blitter)
     SkDELETE((SkBlitter*)blitter);
 }
 
+static bool just_solid_color(const SkPaint& paint) {
+    if (paint.getAlpha() == 0xFF && paint.getColorFilter() == NULL) {
+        SkShader* shader = paint.getShader();
+        if (NULL == shader ||
+            (shader->getFlags() & SkShader::kOpaqueAlpha_Flag)) {
+            return true;
+        }
+    }
+    return false;
+}
+    
+/** By analyzing the paint (with an xfermode), we may decide we can take
+    special action. This enum lists our possible actions
+ */
+enum XferInterp {
+    kNormal_XferInterp,         // no special interpretation, draw normally
+    kSrcOver_XferInterp,        // draw as if in srcover mode
+    kSkipDrawing_XferInterp     // draw nothing
+};
+
+static XferInterp interpret_xfermode(const SkPaint& paint, SkXfermode* xfer,
+                                     SkBitmap::Config deviceConfig) {
+    SkXfermode::Mode  mode;
+    
+    if (SkXfermode::IsMode(xfer, &mode)) {
+        switch (mode) {
+            case SkXfermode::kSrc_Mode:
+                if (just_solid_color(paint)) {
+                    return kSrcOver_XferInterp;
+                }
+                break;
+            case SkXfermode::kDst_Mode:
+                return kSkipDrawing_XferInterp;
+            case SkXfermode::kSrcOver_Mode:
+                return kSrcOver_XferInterp;
+            case SkXfermode::kDstOver_Mode:
+                if (SkBitmap::kRGB_565_Config == deviceConfig) {
+                    return kSkipDrawing_XferInterp;
+                }
+                break;
+            case SkXfermode::kSrcIn_Mode:
+                if (SkBitmap::kRGB_565_Config == deviceConfig &&
+                    just_solid_color(paint)) {
+                    return kSrcOver_XferInterp;
+                }
+                break;
+            case SkXfermode::kDstIn_Mode:
+                if (just_solid_color(paint)) {
+                    return kSkipDrawing_XferInterp;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return kNormal_XferInterp;
+}
+
 SkBlitter* SkBlitter::Choose(const SkBitmap& device,
                              const SkMatrix& matrix,
                              const SkPaint& paint,
@@ -813,6 +869,19 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
     }
 
     SkXfermode* mode = paint.getXfermode();
+    if (NULL != mode) {
+        switch (interpret_xfermode(paint, mode, device.config())) {
+            case kSrcOver_XferInterp:
+                mode = NULL;
+                break;
+            case kSkipDrawing_XferInterp:
+                SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
+                return blitter;
+            default:
+                break;
+        }
+    }
+
     if (NULL == shader && (NULL != mode || paint.getColorFilter() != NULL))
     {
         // xfermodes require shaders for our current set of blitters
@@ -827,16 +896,8 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
         ((SkPaint*)&paint)->setShader(shader)->unref();
     }
     
-    bool doDither = paint.isDither();
-
-    if (shader)
-    {
-        if (!shader->setContext(device, paint, matrix))
-            return SkNEW(SkNullBlitter);
-        
-        // disable dither if our shader is natively 16bit (no need to upsample)
-        if (shader->getFlags() & SkShader::kIntrinsicly16_Flag)
-            doDither = false;
+    if (shader && !shader->setContext(device, paint, matrix)) {
+        return SkNEW(SkNullBlitter);
     }
 
     switch (device.getConfig()) {
@@ -860,15 +921,25 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
         {
             if (mode)
                 SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Shader_Xfermode_Blitter, storage, storageSize, (device, paint));
-            else if (SkShader::CanCallShadeSpan16(shader->getFlags()) && !doDither)
+            else if (shader->canCallShadeSpan16())
                 SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Shader16_Blitter, storage, storageSize, (device, paint));
             else
                 SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Shader_Blitter, storage, storageSize, (device, paint));
+        } else {
+            SkColor color = paint.getColor();
+            if (0 == SkColorGetA(color)) {
+                SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
+            } else if (SK_ColorBLACK == color) {
+                SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Black_Blitter, storage,
+                                      storageSize, (device, paint));
+            } else if (0xFF == SkColorGetA(color)) {
+                SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Opaque_Blitter, storage,
+                                      storageSize, (device, paint));
+            } else {
+                SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Blitter, storage,
+                                      storageSize, (device, paint));
+            }
         }
-        else if (paint.getColor() == SK_ColorBLACK)
-            SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Black_Blitter, storage, storageSize, (device, paint));
-        else
-            SK_PLACEMENT_NEW_ARGS(blitter, SkRGB16_Blitter, storage, storageSize, (device, paint));
         break;
 
     case SkBitmap::kARGB_8888_Config:
@@ -906,17 +977,16 @@ const uint32_t gMask_00FF00FF = 0xFF00FF;
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 SkShaderBlitter::SkShaderBlitter(const SkBitmap& device, const SkPaint& paint)
-    : INHERITED(device)
-{
+        : INHERITED(device) {
     fShader = paint.getShader();
     SkASSERT(fShader);
 
     fShader->ref();
     fShader->beginSession();
+    fShaderFlags = fShader->getFlags();
 }
 
-SkShaderBlitter::~SkShaderBlitter()
-{
+SkShaderBlitter::~SkShaderBlitter() {
     fShader->endSession();
     fShader->unref();
 }

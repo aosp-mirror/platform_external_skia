@@ -21,6 +21,21 @@
 #include "SkRegion.h"
 #include "SkFDot6.h"
 
+/*  Our attempt to compute the worst case "bounds" for the horizontal and
+    vertical cases has some numerical bug in it, and we sometimes undervalue
+    our extends. The bug is that when this happens, we will set the clip to
+    NULL (for speed), and thus draw outside of the clip by a pixel, which might
+    only look bad, but it might also access memory outside of the valid range
+    allcoated for the device bitmap.
+
+    This define enables our fix to outset our "bounds" by 1, thus avoiding the
+    chance of the bug, but at the cost of sometimes taking the rectblitter
+    case (i.e. not setting the clip to NULL) when we might not actually need
+    to. If we can improve/fix the actual calculations, then we can remove this
+    step.
+ */
+#define OUTSET_BEFORE_CLIP_TEST     true
+
 #define HLINE_STACK_BUFFER      100
 
 static inline int SmallDot6Scale(int value, int dot6) {
@@ -290,6 +305,10 @@ static void do_anti_hairline(SkFDot6 x0, SkFDot6 y0, SkFDot6 x1, SkFDot6 y1,
                 bottom = SkFixedCeil(fstart + SK_FixedHalf);
                 top = SkFixedFloor(fstart + (istop - istart - 1) * slope - SK_FixedHalf);
             }
+#ifdef OUTSET_BEFORE_CLIP_TEST
+            top -= 1;
+            bottom += 1;
+#endif
             if (top >= clip->fBottom || bottom <= clip->fTop)
                 return;
             if (clip->fTop <= top && clip->fBottom >= bottom)
@@ -363,6 +382,10 @@ static void do_anti_hairline(SkFDot6 x0, SkFDot6 y0, SkFDot6 x1, SkFDot6 y1,
                 right = SkFixedCeil(fstart + SK_FixedHalf);
                 left = SkFixedFloor(fstart + (istop - istart - 1) * slope - SK_FixedHalf);
             }
+#ifdef OUTSET_BEFORE_CLIP_TEST
+            left -= 1;
+            right += 1;
+#endif
             if (left >= clip->fRight || right <= clip->fLeft)
                 return;
             if (clip->fLeft <= left && clip->fRight >= right)
@@ -379,7 +402,7 @@ static void do_anti_hairline(SkFDot6 x0, SkFDot6 y0, SkFDot6 x1, SkFDot6 y1,
     
     fstart = proc(istart, istart + 1, fstart, slope, blitter, scaleStart);
     istart += 1;
-    int fullSpans = istop - istart - 1;
+    int fullSpans = istop - istart - (scaleStop > 0);
     if (fullSpans > 0) {
         fstart = proc(istart, istart + fullSpans, fstart, slope, blitter, 64);
     }

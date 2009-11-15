@@ -169,6 +169,7 @@ SkGLDevice::TexCache* SkGLDevice::setupGLPaintShader(const SkPaint& paint) {
     SkMatrix matrix;
     SkShader::TileMode tileModes[2];
     if (!shader->asABitmap(&bitmap, &matrix, tileModes)) {
+        SkGL_unimpl("shader->asABitmap() == false");
         return NULL;
     }
     
@@ -232,6 +233,7 @@ void SkGLDevice::drawPaint(const SkDraw& draw, const SkPaint& paint) {
                        this->updateMatrixClip());
 }
 
+// must be in SkCanvas::PointMode order
 static const GLenum gPointMode2GL[] = {
     GL_POINTS,
     GL_LINES,
@@ -281,15 +283,39 @@ void SkGLDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
                        this->updateMatrixClip());
 }
 
+/*  create a triangle strip that strokes the specified triangle. There are 8
+    unique vertices, but we repreat the last 2 to close up. Alternatively we
+    could use an indices array, and then only send 8 verts, but not sure that
+    would be faster.
+ */
+static void setStrokeRectStrip(SkGLVertex verts[10], const SkRect& rect,
+                               SkScalar width) {
+    const SkScalar rad = SkScalarHalf(width);
+
+    verts[0].setScalars(rect.fLeft + rad, rect.fTop + rad);
+    verts[1].setScalars(rect.fLeft - rad, rect.fTop - rad);
+    verts[2].setScalars(rect.fRight - rad, rect.fTop + rad);
+    verts[3].setScalars(rect.fRight + rad, rect.fTop - rad);
+    verts[4].setScalars(rect.fRight - rad, rect.fBottom - rad);
+    verts[5].setScalars(rect.fRight + rad, rect.fBottom + rad);
+    verts[6].setScalars(rect.fLeft + rad, rect.fBottom - rad);
+    verts[7].setScalars(rect.fLeft - rad, rect.fBottom + rad);
+    verts[8] = verts[0];
+    verts[9] = verts[1];
+}
+
 void SkGLDevice::drawRect(const SkDraw& draw, const SkRect& rect,
                           const SkPaint& paint) {
     TRACE_DRAW("coreDrawRect", this, draw);
-    
-    if (paint.getStyle() == SkPaint::kStroke_Style) {
-        return;
-    }
-    
-    if (paint.getStrokeJoin() != SkPaint::kMiter_Join) {
+
+    bool doStroke = paint.getStyle() == SkPaint::kStroke_Style;
+
+    if (doStroke) {
+        if (paint.getStrokeJoin() != SkPaint::kMiter_Join) {
+            SkGL_unimpl("non-miter stroke rect");
+            return;
+        }
+    } else if (paint.getStrokeJoin() != SkPaint::kMiter_Join) {
         SkPath  path;
         path.addRect(rect);
         this->drawPath(draw, path, paint);
@@ -297,12 +323,34 @@ void SkGLDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     }
     
     AutoPaintShader shader(this, paint);
-    
-    SkGLVertex vertex[4];
-    vertex->setRectFan(rect);
+    SkScalar width = paint.getStrokeWidth();
+    SkGLVertex vertex[10];   // max needed for all cases
+    int vertCount;
+    GLenum vertMode;
+
+    if (doStroke) {
+        if (width > 0) {
+            vertCount = 10;
+            vertMode = GL_TRIANGLE_STRIP;
+            setStrokeRectStrip(vertex, rect, width);
+        } else {    // hairline
+            vertCount = 5;
+            vertMode = GL_LINE_STRIP;
+            vertex[0].setScalars(rect.fLeft, rect.fTop);
+            vertex[1].setScalars(rect.fRight, rect.fTop);
+            vertex[2].setScalars(rect.fRight, rect.fBottom);
+            vertex[3].setScalars(rect.fLeft, rect.fBottom);
+            vertex[4].setScalars(rect.fLeft, rect.fTop);
+            glLineWidth(1);
+        }
+    } else {
+        vertCount = 4;
+        vertMode = GL_TRIANGLE_FAN;
+        vertex->setRectFan(rect);
+    }
+
     const SkGLVertex* texs = shader.useTex() ? vertex : NULL;
-    
-    SkGL::DrawVertices(4, GL_TRIANGLE_FAN, vertex, texs, NULL, NULL,
+    SkGL::DrawVertices(vertCount, vertMode, vertex, texs, NULL, NULL,
                        this->updateMatrixClip());
 }
 
@@ -310,6 +358,7 @@ void SkGLDevice::drawPath(const SkDraw& draw, const SkPath& path,
                           const SkPaint& paint) {
     TRACE_DRAW("coreDrawPath", this, draw);
     if (paint.getStyle() == SkPaint::kStroke_Style) {
+        SkGL_unimpl("stroke path");
         return;
     }
     
@@ -554,7 +603,7 @@ static void SkGL_Draw1Glyph(const SkDraw1Glyph& state, const SkGlyph& glyph,
     SkGLDrawProcs* procs = (SkGLDrawProcs*)state.fDraw->fProcs;
     
     x += glyph.fLeft;
-    y  += glyph.fTop;
+    y += glyph.fTop;
     
     // check if we're clipped out (nothing to draw)
 	SkIRect bounds;
@@ -591,6 +640,7 @@ static void SkGL_Draw1Glyph(const SkDraw1Glyph& state, const SkGlyph& glyph,
         }
         strike = textCache->addGlyphAndBind(glyph, aa, &offset);
         if (NULL == strike) {
+            SkGL_unimpl("addGlyphAndBind failed, too big");
             // too big to cache, need to draw as is...
             return;
         }
@@ -727,6 +777,7 @@ void SkGLDevice::drawText(const SkDraw& draw, const void* text,
      - option to have draw call the font cache, which we could patch (?)
      */
     if (draw.fMatrix->getType() & SkMatrix::kPerspective_Mask) {
+        SkGL_unimpl("drawText in perspective");
         return;
     }
     
@@ -742,6 +793,7 @@ void SkGLDevice::drawPosText(const SkDraw& draw, const void* text,
                              SkScalar constY, int scalarsPerPos,
                              const SkPaint& paint) {
     if (draw.fMatrix->getType() & SkMatrix::kPerspective_Mask) {
+        SkGL_unimpl("drawPosText in perspective");
         return;
     }
     
@@ -756,6 +808,6 @@ void SkGLDevice::drawPosText(const SkDraw& draw, const void* text,
 void SkGLDevice::drawTextOnPath(const SkDraw& draw, const void* text,
                                 size_t byteLength, const SkPath& path,
                                 const SkMatrix* m, const SkPaint& paint) {
-    // not supported yet
+    SkGL_unimpl("drawTextOnPath");
 }
 

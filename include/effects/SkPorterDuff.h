@@ -18,9 +18,12 @@
 #define SkPorterDuff_DEFINED
 
 #include "SkColor.h"
+#include "SkXfermode.h"
 
 class SkXfermode;
 
+/** DEPRECATED - use SkXfermode::Mode instead
+ */
 class SkPorterDuff {
 public:
     /** List of predefined xfermodes. In general, the algebra for the modes
@@ -48,9 +51,11 @@ public:
         kLighten_Mode,  //!< [Sa + Da - Sa*Da, Sc*(1 - Da) + Dc*(1 - Sa) + max(Sc, Dc)]
         kMultiply_Mode, //!< [Sa * Da, Sc * Dc]
         kScreen_Mode,   //!< [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc]
+        kAdd_Mode,      //!< Saturate(S + D)
 
         kModeCount
     };
+
     /** Return an SkXfermode object for the specified mode.
     */
     static SkXfermode* CreateXfermode(Mode mode);
@@ -73,6 +78,10 @@ public:
         return false and ignore the mode parameter.
     */
     static bool IsMode(SkXfermode*, Mode* mode);
+
+    /** Return the corersponding SkXfermode::Mode
+     */
+    static SkXfermode::Mode ToXfermodeMode(Mode);
 };
 
 #endif

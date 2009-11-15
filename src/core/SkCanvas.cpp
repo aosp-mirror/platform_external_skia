@@ -22,6 +22,7 @@
 #include "SkDrawLooper.h"
 #include "SkPicture.h"
 #include "SkScalarCompare.h"
+#include "SkShape.h"
 #include "SkTemplates.h"
 #include "SkUtils.h"
 #include <new>
@@ -247,7 +248,7 @@ public:
             }
 
             // fCurrLayer may be NULL now
-            
+
             fCanvas->prepareForDeviceDraw(fDevice);
             return true;
         }
@@ -389,6 +390,7 @@ private:
 SkDevice* SkCanvas::init(SkDevice* device) {
     fBounder = NULL;
     fLocalBoundsCompareTypeDirty = true;
+    fLastDeviceToGainFocus = NULL;
 
     fMCRec = (MCRec*)fMCStack.push_back();
     new (fMCRec) MCRec(NULL, 0);
@@ -545,7 +547,10 @@ void SkCanvas::updateDeviceCMCache() {
 
 void SkCanvas::prepareForDeviceDraw(SkDevice* device) {
     SkASSERT(device);
-    device->gainFocus(this);
+    if (fLastDeviceToGainFocus != device) {
+        device->gainFocus(this);
+        fLastDeviceToGainFocus = device;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -879,58 +884,41 @@ void SkCanvas::computeLocalClipBoundsCompareType() const {
     }
 }
 
+/*  current impl ignores edgetype, and relies on
+    getLocalClipBoundsCompareType(), which always returns a value assuming
+    antialiasing (worst case)
+ */
 bool SkCanvas::quickReject(const SkRect& rect, EdgeType) const {
-    /*  current impl ignores edgetype, and relies on
-        getLocalClipBoundsCompareType(), which always returns a value assuming
-        antialiasing (worst case)
-     */
-
     if (fMCRec->fRegion->isEmpty()) {
         return true;
     }
-    
-    // check for empty user rect (horizontal)
-    SkScalarCompareType userL = SkScalarToCompareType(rect.fLeft);
-    SkScalarCompareType userR = SkScalarToCompareType(rect.fRight);
-    if (userL >= userR) {
-        return true;
-    }
 
-    // check for empty user rect (vertical)
-    SkScalarCompareType userT = SkScalarToCompareType(rect.fTop);
-    SkScalarCompareType userB = SkScalarToCompareType(rect.fBottom);
-    if (userT >= userB) {
-        return true;
+    if (fMCRec->fMatrix->getType() & SkMatrix::kPerspective_Mask) {
+        SkRect dst;
+        fMCRec->fMatrix->mapRect(&dst, rect);
+        SkIRect idst;
+        dst.roundOut(&idst);
+        return !SkIRect::Intersects(idst, fMCRec->fRegion->getBounds());
+    } else {
+        const SkRectCompareType& clipR = this->getLocalClipBoundsCompareType();
+
+        // for speed, do the most likely reject compares first
+        SkScalarCompareType userT = SkScalarToCompareType(rect.fTop);
+        SkScalarCompareType userB = SkScalarToCompareType(rect.fBottom);
+        if (userT >= clipR.fBottom || userB <= clipR.fTop) {
+            return true;
+        }
+        SkScalarCompareType userL = SkScalarToCompareType(rect.fLeft);
+        SkScalarCompareType userR = SkScalarToCompareType(rect.fRight);
+        if (userL >= clipR.fRight || userR <= clipR.fLeft) {
+            return true;
+        }
+        return false;
     }
-    
-    // check if we are completely outside of the local clip bounds
-    const SkRectCompareType& clipR = this->getLocalClipBoundsCompareType();
-    return  userL >= clipR.fRight || userT >= clipR.fBottom ||
-            userR <= clipR.fLeft  || userB <= clipR.fTop;
 }
 
 bool SkCanvas::quickReject(const SkPath& path, EdgeType et) const {
-    if (fMCRec->fRegion->isEmpty() || path.isEmpty()) {
-        return true;
-    }
-
-    if (fMCRec->fMatrix->rectStaysRect()) {
-        SkRect  r;
-        path.computeBounds(&r, SkPath::kFast_BoundsType);
-        return this->quickReject(r, et);
-    }
-
-    SkPath      dstPath;
-    SkRect      r;
-    SkIRect     ir;
-
-    path.transform(*fMCRec->fMatrix, &dstPath);
-    dstPath.computeBounds(&r, SkPath::kFast_BoundsType);
-    r.round(&ir);
-    if (kAA_EdgeType == et) {
-        ir.inset(-1, -1);
-    }
-    return fMCRec->fRegion->quickReject(ir);
+    return path.isEmpty() || this->quickReject(path.getBounds(), et);
 }
 
 bool SkCanvas::quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const {
@@ -943,10 +931,11 @@ bool SkCanvas::quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const {
         return true;
     }
     
-    SkScalarCompareType userT = SkScalarAs2sCompliment(top);
-    SkScalarCompareType userB = SkScalarAs2sCompliment(bottom);
+    SkScalarCompareType userT = SkScalarToCompareType(top);
+    SkScalarCompareType userB = SkScalarToCompareType(bottom);
     
     // check for invalid user Y coordinates (i.e. empty)
+    // reed: why do we need to do this check, since it slows us down?
     if (userT >= userB) {
         return true;
     }
@@ -968,6 +957,9 @@ bool SkCanvas::getClipBounds(SkRect* bounds, EdgeType et) const {
     SkMatrix inverse;
     // if we can't invert the CTM, we can't return local clip bounds
     if (!fMCRec->fMatrix->invert(&inverse)) {
+        if (bounds) {
+            bounds->setEmpty();
+        }
         return false;
     }
 
@@ -1063,9 +1055,9 @@ void SkCanvas::drawRect(const SkRect& r, const SkPaint& paint) {
 
 void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     if (paint.canComputeFastBounds()) {
-        SkRect r;
-        path.computeBounds(&r, SkPath::kFast_BoundsType);
-        if (this->quickReject(paint.computeFastBounds(r, &r),
+        SkRect storage;
+        const SkRect& bounds = path.getBounds();
+        if (this->quickReject(paint.computeFastBounds(bounds, &storage),
                               paint2EdgeType(&paint))) {
             return;
         }
@@ -1245,22 +1237,22 @@ void SkCanvas::drawVertices(VertexMode vmode, int vertexCount,
 //////////////////////////////////////////////////////////////////////////////
 
 void SkCanvas::drawARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b,
-                        SkPorterDuff::Mode mode) {
+                        SkXfermode::Mode mode) {
     SkPaint paint;
 
     paint.setARGB(a, r, g, b);
-    if (SkPorterDuff::kSrcOver_Mode != mode) {
-        paint.setPorterDuffXfermode(mode);
+    if (SkXfermode::kSrcOver_Mode != mode) {
+        paint.setXfermodeMode(mode);
     }
     this->drawPaint(paint);
 }
 
-void SkCanvas::drawColor(SkColor c, SkPorterDuff::Mode mode) {
+void SkCanvas::drawColor(SkColor c, SkXfermode::Mode mode) {
     SkPaint paint;
 
     paint.setColor(c);
-    if (SkPorterDuff::kSrcOver_Mode != mode) {
-        paint.setPorterDuffXfermode(mode);
+    if (SkXfermode::kSrcOver_Mode != mode) {
+        paint.setXfermodeMode(mode);
     }
     this->drawPaint(paint);
 }
@@ -1381,10 +1373,17 @@ void SkCanvas::drawTextOnPathHV(const void* text, size_t byteLength,
     this->drawTextOnPath(text, byteLength, path, &matrix, paint);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 void SkCanvas::drawPicture(SkPicture& picture) {
     int saveCount = save();
     picture.draw(this);
     restoreToCount(saveCount);
+}
+
+void SkCanvas::drawShape(SkShape* shape) {
+    // shape baseclass takes care of save/restore
+    shape->draw(this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

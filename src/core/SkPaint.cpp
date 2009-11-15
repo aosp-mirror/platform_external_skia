@@ -33,13 +33,15 @@
 
 #define SK_DefaultFlags         0   //(kNativeHintsText_Flag)
 
-SkPaint::SkPaint()
-{
-    fTypeface   = NULL;
-    fTextSize   = SK_DefaultTextSize;
-    fTextScaleX = SK_Scalar1;
-    fTextSkewX  = 0;
+SkPaint::SkPaint() {
+    // since we may have padding, we zero everything so that our memcmp() call
+    // in operator== will work correctly.
+    // with this, we can skip 0 and null individual initializations
+    sk_bzero(this, sizeof(*this));
 
+#if 0   // not needed with the bzero call above
+    fTypeface   = NULL;
+    fTextSkewX  = 0;
     fPathEffect  = NULL;
     fShader      = NULL;
     fXfermode    = NULL;
@@ -47,9 +49,12 @@ SkPaint::SkPaint()
     fColorFilter = NULL;
     fRasterizer  = NULL;
     fLooper      = NULL;
-
-    fColor      = SK_ColorBLACK;
     fWidth      = 0;
+#endif
+
+    fTextSize   = SK_DefaultTextSize;
+    fTextScaleX = SK_Scalar1;
+    fColor      = SK_ColorBLACK;
     fMiterLimit = SK_DefaultMiterLimit;
     fFlags      = SK_DefaultFlags;
     fCapType    = kDefault_Cap;
@@ -57,6 +62,7 @@ SkPaint::SkPaint()
     fTextAlign  = kLeft_Align;
     fStyle      = kFill_Style;
     fTextEncoding = kUTF8_TextEncoding;
+    fHinting    = kNormal_Hinting;
 }
 
 SkPaint::SkPaint(const SkPaint& src)
@@ -142,6 +148,11 @@ void SkPaint::setDither(bool doDither)
 void SkPaint::setSubpixelText(bool doSubpixel)
 {
     this->setFlags(SkSetClearMask(fFlags, doSubpixel, kSubpixelText_Flag));
+}
+
+void SkPaint::setLCDRenderText(bool doLCDRender)
+{
+    this->setFlags(SkSetClearMask(fFlags, doLCDRender, kLCDRenderText_Flag));
 }
 
 void SkPaint::setLinearText(bool doLinearText)
@@ -1118,25 +1129,34 @@ static const SkScalar multipliers[] = { SK_Scalar1/24, SK_Scalar1/32 };
 static SkMask::Format computeMaskFormat(const SkPaint& paint)
 {
     uint32_t flags = paint.getFlags();
-    
-    return (flags & SkPaint::kAntiAlias_Flag) ? SkMask::kA8_Format : SkMask::kBW_Format;
+
+    if (flags & SkPaint::kLCDRenderText_Flag)
+#if defined(SK_SUPPORT_LCDTEXT)
+        return SkFontHost::GetSubpixelOrientation() == SkFontHost::kHorizontal_LCDOrientation ?
+                   SkMask::kHorizontalLCD_Format : SkMask::kVerticalLCD_Format;
+#else
+        return SkMask::kA8_Format;
+#endif
+    if (flags & SkPaint::kAntiAlias_Flag)
+        return SkMask::kA8_Format;
+    return SkMask::kBW_Format;
 }
 
-static SkScalerContext::Hints computeScalerHints(const SkPaint& paint)
-{
-    uint32_t flags = paint.getFlags();
-    
-    if (flags & SkPaint::kLinearText_Flag)
-        return SkScalerContext::kNo_Hints;
-    else if (flags & SkPaint::kSubpixelText_Flag)
-        return SkScalerContext::kSubpixel_Hints;
-    else
-        return SkScalerContext::kNormal_Hints;
+// if linear-text is on, then we force hinting to be off (since that's sort of
+// the point of linear-text.
+static SkPaint::Hinting computeHinting(const SkPaint& paint) {
+    SkPaint::Hinting h = paint.getHinting();
+    if (paint.isLinearText()) {
+        h = SkPaint::kNo_Hinting;
+    }
+    return h;
 }
 
-void SkScalerContext::MakeRec(const SkPaint& paint, const SkMatrix* deviceMatrix, Rec* rec)
+void SkScalerContext::MakeRec(const SkPaint& paint,
+                              const SkMatrix* deviceMatrix, Rec* rec)
 {
-    SkASSERT(deviceMatrix == NULL || (deviceMatrix->getType() & SkMatrix::kPerspective_Mask) == 0);
+    SkASSERT(deviceMatrix == NULL ||
+             (deviceMatrix->getType() & SkMatrix::kPerspective_Mask) == 0);
 
     rec->fFontID = SkTypeface::UniqueID(paint.getTypeface());
     rec->fTextSize = paint.getTextSize();
@@ -1194,9 +1214,17 @@ void SkScalerContext::MakeRec(const SkPaint& paint, const SkMatrix* deviceMatrix
         rec->fStrokeJoin = 0;
     }
 
-    rec->fHints = SkToU8(computeScalerHints(paint));
+    rec->fSubpixelPositioning = paint.isSubpixelText();
     rec->fMaskFormat = SkToU8(computeMaskFormat(paint));
     rec->fFlags = SkToU8(flags);
+    rec->setHinting(computeHinting(paint));
+
+    /*  Allow the fonthost to modify our rec before we use it as a key into the
+        cache. This way if we're asking for something that they will ignore,
+        they can modify our rec up front, so we don't create duplicate cache
+        entries.
+     */
+    SkFontHost::FilterRec(rec);
 }
 
 #define MIN_SIZE_FOR_EFFECT_BUFFER  1024
@@ -1278,50 +1306,143 @@ SkGlyphCache* SkPaint::detachCache(const SkMatrix* deviceMatrix) const
 
 #include "SkStream.h"
 
+static uintptr_t asint(const void* p) {
+    return reinterpret_cast<uintptr_t>(p);
+}
+
+union Scalar32 {
+    SkScalar    fScalar;
+    uint32_t    f32;
+};
+
+static uint32_t* write_scalar(uint32_t* ptr, SkScalar value) {
+    SkASSERT(sizeof(SkScalar) == sizeof(uint32_t));
+    Scalar32 tmp;
+    tmp.fScalar = value;
+    *ptr = tmp.f32;
+    return ptr + 1;
+}
+
+static SkScalar read_scalar(const uint32_t*& ptr) {
+    SkASSERT(sizeof(SkScalar) == sizeof(uint32_t));
+    Scalar32 tmp;
+    tmp.f32 = *ptr++;
+    return tmp.fScalar;
+}
+
+static uint32_t pack_4(unsigned a, unsigned b, unsigned c, unsigned d) {
+    SkASSERT(a == (uint8_t)a);
+    SkASSERT(b == (uint8_t)b);
+    SkASSERT(c == (uint8_t)c);
+    SkASSERT(d == (uint8_t)d);
+    return (a << 24) | (b << 16) | (c << 8) | d;
+}
+
+enum FlatFlags {
+    kHasTypeface_FlatFlag   = 0x01,
+    kHasEffects_FlatFlag    = 0x02
+};
+
+// The size of a flat paint's POD fields
+static const uint32_t kPODPaintSize =   5 * sizeof(SkScalar) +
+                                        1 * sizeof(SkColor) +
+                                        1 * sizeof(uint16_t) +
+                                        6 * sizeof(uint8_t);
+
+/*  To save space/time, we analyze the paint, and write a truncated version of
+    it if there are not tricky elements like shaders, etc.
+ */
 void SkPaint::flatten(SkFlattenableWriteBuffer& buffer) const {
-    buffer.writeTypeface(this->getTypeface());
-    buffer.writeScalar(this->getTextSize());
-    buffer.writeScalar(this->getTextScaleX());
-    buffer.writeScalar(this->getTextSkewX());
-    buffer.writeFlattenable(this->getPathEffect());
-    buffer.writeFlattenable(this->getShader());
-    buffer.writeFlattenable(this->getXfermode());
-    buffer.writeFlattenable(this->getMaskFilter());
-    buffer.writeFlattenable(this->getColorFilter());
-    buffer.writeFlattenable(this->getRasterizer());
-    buffer.writeFlattenable(this->getLooper());
-    buffer.write32(this->getColor());
-    buffer.writeScalar(this->getStrokeWidth());
-    buffer.writeScalar(this->getStrokeMiter());
-    buffer.write16(this->getFlags());
-    buffer.write8(this->getTextAlign());
-    buffer.write8(this->getStrokeCap());
-    buffer.write8(this->getStrokeJoin());
-    buffer.write8(this->getStyle());
-    buffer.write8(this->getTextEncoding());
+    uint8_t flatFlags = 0;
+    if (this->getTypeface()) {
+        flatFlags |= kHasTypeface_FlatFlag;
+    }
+    if (asint(this->getPathEffect()) |
+        asint(this->getShader()) |
+        asint(this->getXfermode()) |
+        asint(this->getMaskFilter()) |
+        asint(this->getColorFilter()) |
+        asint(this->getRasterizer()) |
+        asint(this->getLooper())) {
+        flatFlags |= kHasEffects_FlatFlag;
+    }
+    
+    SkASSERT(SkAlign4(kPODPaintSize) == kPODPaintSize);
+    uint32_t* ptr = buffer.reserve(kPODPaintSize);
+
+    ptr = write_scalar(ptr, this->getTextSize());
+    ptr = write_scalar(ptr, this->getTextScaleX());
+    ptr = write_scalar(ptr, this->getTextSkewX());
+    ptr = write_scalar(ptr, this->getStrokeWidth());
+    ptr = write_scalar(ptr, this->getStrokeMiter());
+    *ptr++ = this->getColor();
+    *ptr++ = (this->getFlags() << 16) | (this->getTextAlign() << 8) | flatFlags;
+    *ptr++ = pack_4(this->getStrokeCap(), this->getStrokeJoin(),
+                    this->getStyle(), this->getTextEncoding());
+
+    // now we're done with ptr and the (pre)reserved space. If we need to write
+    // additional fields, use the buffer directly
+    if (flatFlags & kHasTypeface_FlatFlag) {
+        buffer.writeTypeface(this->getTypeface());
+    }
+    if (flatFlags & kHasEffects_FlatFlag) {
+        buffer.writeFlattenable(this->getPathEffect());
+        buffer.writeFlattenable(this->getShader());
+        buffer.writeFlattenable(this->getXfermode());
+        buffer.writeFlattenable(this->getMaskFilter());
+        buffer.writeFlattenable(this->getColorFilter());
+        buffer.writeFlattenable(this->getRasterizer());
+        buffer.writeFlattenable(this->getLooper());
+    }
 }
 
 void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
-    this->setTypeface(buffer.readTypeface());
-    this->setTextSize(buffer.readScalar());
-    this->setTextScaleX(buffer.readScalar());
-    this->setTextSkewX(buffer.readScalar());
-    this->setPathEffect((SkPathEffect*) buffer.readFlattenable())->safeUnref();
-    this->setShader((SkShader*) buffer.readFlattenable())->safeUnref();
-    this->setXfermode((SkXfermode*) buffer.readFlattenable())->safeUnref();
-    this->setMaskFilter((SkMaskFilter*) buffer.readFlattenable())->safeUnref();
-    this->setColorFilter((SkColorFilter*) buffer.readFlattenable())->safeUnref();
-    this->setRasterizer((SkRasterizer*) buffer.readFlattenable())->safeUnref();
-    this->setLooper((SkDrawLooper*) buffer.readFlattenable())->safeUnref();
-    this->setColor(buffer.readU32());
-    this->setStrokeWidth(buffer.readScalar());
-    this->setStrokeMiter(buffer.readScalar());
-    this->setFlags(buffer.readU16());
-    this->setTextAlign((SkPaint::Align) buffer.readU8());
-    this->setStrokeCap((SkPaint::Cap) buffer.readU8());
-    this->setStrokeJoin((SkPaint::Join) buffer.readU8());
-    this->setStyle((SkPaint::Style) buffer.readU8());
-    this->setTextEncoding((SkPaint::TextEncoding) buffer.readU8());
+    SkASSERT(SkAlign4(kPODPaintSize) == kPODPaintSize);
+    const void* podData = buffer.skip(kPODPaintSize);
+    const uint32_t* pod = reinterpret_cast<const uint32_t*>(podData);
+    
+    // the order we read must match the order we wrote in flatten()
+    this->setTextSize(read_scalar(pod));
+    this->setTextScaleX(read_scalar(pod));
+    this->setTextSkewX(read_scalar(pod));
+    this->setStrokeWidth(read_scalar(pod));
+    this->setStrokeMiter(read_scalar(pod));    
+    this->setColor(*pod++);
+
+    uint32_t tmp = *pod++;
+    this->setFlags(tmp >> 16);
+    this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xFF));
+    uint8_t flatFlags = tmp & 0xFF;
+
+    tmp = *pod++;
+    this->setStrokeCap(static_cast<Cap>((tmp >> 24) & 0xFF));
+    this->setStrokeJoin(static_cast<Join>((tmp >> 16) & 0xFF));
+    this->setStyle(static_cast<Style>((tmp >> 8) & 0xFF));
+    this->setTextEncoding(static_cast<TextEncoding>((tmp >> 0) & 0xFF));
+
+    if (flatFlags & kHasTypeface_FlatFlag) {
+        this->setTypeface(buffer.readTypeface());
+    } else {
+        this->setTypeface(NULL);
+    }
+
+    if (flatFlags & kHasEffects_FlatFlag) {
+        this->setPathEffect((SkPathEffect*) buffer.readFlattenable())->safeUnref();
+        this->setShader((SkShader*) buffer.readFlattenable())->safeUnref();
+        this->setXfermode((SkXfermode*) buffer.readFlattenable())->safeUnref();
+        this->setMaskFilter((SkMaskFilter*) buffer.readFlattenable())->safeUnref();
+        this->setColorFilter((SkColorFilter*) buffer.readFlattenable())->safeUnref();
+        this->setRasterizer((SkRasterizer*) buffer.readFlattenable())->safeUnref();
+        this->setLooper((SkDrawLooper*) buffer.readFlattenable())->safeUnref();
+    } else {
+        this->setPathEffect(NULL);
+        this->setShader(NULL);
+        this->setXfermode(NULL);
+        this->setMaskFilter(NULL);
+        this->setColorFilter(NULL);
+        this->setRasterizer(NULL);
+        this->setLooper(NULL);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1344,10 +1465,9 @@ SkXfermode* SkPaint::setXfermode(SkXfermode* mode)
     return mode;
 }
 
-SkXfermode* SkPaint::setPorterDuffXfermode(SkPorterDuff::Mode mode)
-{
-    fXfermode->safeUnref();
-    fXfermode = SkPorterDuff::CreateXfermode(mode);
+SkXfermode* SkPaint::setXfermodeMode(SkXfermode::Mode mode) {
+    SkSafeUnref(fXfermode);
+    fXfermode = SkXfermode::Create(mode);
     return fXfermode;
 }
 
@@ -1424,36 +1544,24 @@ bool SkPaint::getFillPath(const SkPath& src, SkPath* dst) const
     return width != 0;  // return true if we're filled, or false if we're hairline (width == 0)
 }
 
-bool SkPaint::canComputeFastBounds() const {
-    // use bit-or since no need for early exit
-    return (reinterpret_cast<uintptr_t>(this->getMaskFilter()) |
-            reinterpret_cast<uintptr_t>(this->getLooper()) |
-            reinterpret_cast<uintptr_t>(this->getRasterizer()) |
-            reinterpret_cast<uintptr_t>(this->getPathEffect())) == 0;
-}
-
-const SkRect& SkPaint::computeFastBounds(const SkRect& src,
-                                         SkRect* storage) const {
+const SkRect& SkPaint::computeStrokeFastBounds(const SkRect& src,
+                                               SkRect* storage) const {
     SkASSERT(storage);
-    
-    if (this->getStyle() != SkPaint::kFill_Style) {
-        // if we're stroked, outset the rect by the radius (and join type)
-        SkScalar radius = SkScalarHalf(this->getStrokeWidth());
-        
-        if (0 == radius) {  // hairline
-            radius = SK_Scalar1;
-        } else if (this->getStrokeJoin() == SkPaint::kMiter_Join) {
-            SkScalar scale = this->getStrokeMiter();
-            if (scale > SK_Scalar1) {
-                radius = SkScalarMul(radius, scale);
-            }
+    SkASSERT(this->getStyle() != SkPaint::kFill_Style);
+
+    // since we're stroked, outset the rect by the radius (and join type)
+    SkScalar radius = SkScalarHalf(this->getStrokeWidth());
+    if (0 == radius) {  // hairline
+        radius = SK_Scalar1;
+    } else if (this->getStrokeJoin() == SkPaint::kMiter_Join) {
+        SkScalar scale = this->getStrokeMiter();
+        if (scale > SK_Scalar1) {
+            radius = SkScalarMul(radius, scale);
         }
-        storage->set(src.fLeft - radius, src.fTop - radius,
-                     src.fRight + radius, src.fBottom + radius);
-        return *storage;
     }
-    // no adjustments needed, just return the original rect
-    return src;
+    storage->set(src.fLeft - radius, src.fTop - radius,
+                 src.fRight + radius, src.fBottom + radius);
+    return *storage;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
