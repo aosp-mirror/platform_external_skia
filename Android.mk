@@ -113,12 +113,15 @@ LOCAL_SRC_FILES:= \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
 	src/core/SkEdge.cpp \
+	src/core/SkEdgeBuilder.cpp \
+	src/core/SkEdgeClipper.cpp \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlobals.cpp \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
+	src/core/SkLineClipper.cpp \
 	src/core/SkMMapStream.cpp \
 	src/core/SkMask.cpp \
 	src/core/SkMaskFilter.cpp \

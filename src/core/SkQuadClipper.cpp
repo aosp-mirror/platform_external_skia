@@ -17,14 +17,36 @@
 #include "SkQuadClipper.h"
 #include "SkGeometry.h"
 
-static bool chopMonoQuadAtY(SkPoint pts[3], SkScalar y, SkScalar* t) {
+static inline void clamp_le(SkScalar& value, SkScalar max) {
+    if (value > max) {
+        value = max;
+    }
+}
+
+static inline void clamp_ge(SkScalar& value, SkScalar min) {
+    if (value < min) {
+        value = min;
+    }
+}
+
+SkQuadClipper::SkQuadClipper() {}
+
+void SkQuadClipper::setClip(const SkIRect& clip) {
+    // conver to scalars, since that's where we'll see the points
+    fClip.set(clip);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+static bool chopMonoQuadAt(SkScalar c0, SkScalar c1, SkScalar c2,
+                           SkScalar target, SkScalar* t) {
     /* Solve F(t) = y where F(t) := [0](1-t)^2 + 2[1]t(1-t) + [2]t^2
      *  We solve for t, using quadratic equation, hence we have to rearrange
      * our cooefficents to look like At^2 + Bt + C
      */
-    SkScalar A = pts[0].fY - pts[1].fY - pts[1].fY + pts[2].fY;
-    SkScalar B = 2*(pts[1].fY - pts[0].fY);
-    SkScalar C = pts[0].fY - y;
+    SkScalar A = c0 - c1 - c1 + c2;
+    SkScalar B = 2*(c1 - c0);
+    SkScalar C = c0 - target;
     
     SkScalar roots[2];  // we only expect one, but make room for 2 for safety
     int count = SkFindUnitQuadRoots(A, B, C, roots);
@@ -35,20 +57,19 @@ static bool chopMonoQuadAtY(SkPoint pts[3], SkScalar y, SkScalar* t) {
     return false;
 }
 
-SkQuadClipper::SkQuadClipper() {}
-
-void SkQuadClipper::setClip(const SkIRect& clip) {
-    // conver to scalars, since that's where we'll see the points
-    fClip.set(clip);
+static bool chopMonoQuadAtY(SkPoint pts[3], SkScalar y, SkScalar* t) {
+    return chopMonoQuadAt(pts[0].fY, pts[1].fY, pts[2].fY, y, t);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 /*  If we somehow returned the fact that we had to flip the pts in Y, we could
-    communicate that to setQuadratic, and then avoid having to flip it back
-    here (only to have setQuadratic do the flip again)
+ communicate that to setQuadratic, and then avoid having to flip it back
+ here (only to have setQuadratic do the flip again)
  */
 bool SkQuadClipper::clipQuad(const SkPoint srcPts[3], SkPoint dst[3]) {
     bool reverse;
-
+    
     // we need the data to be monotonically increasing in Y
     if (srcPts[0].fY > srcPts[2].fY) {
         dst[0] = srcPts[2];
@@ -59,7 +80,7 @@ bool SkQuadClipper::clipQuad(const SkPoint srcPts[3], SkPoint dst[3]) {
         memcpy(dst, srcPts, 3 * sizeof(SkPoint));
         reverse = false;
     }
-
+    
     // are we completely above or below
     const SkScalar ctop = fClip.fTop;
     const SkScalar cbot = fClip.fBottom;
@@ -104,7 +125,7 @@ bool SkQuadClipper::clipQuad(const SkPoint srcPts[3], SkPoint dst[3]) {
             }
         }
     }
-
+    
     if (reverse) {
         SkTSwap<SkPoint>(dst[0], dst[2]);
     }
