@@ -24,6 +24,8 @@
 #include "SkRegion.h"
 #include "SkTemplates.h"
 
+#define USE_NEW_BUILDER
+
 #define kEDGE_HEAD_Y    SK_MinS32
 #define kEDGE_TAIL_Y    SK_MaxS32
 
@@ -301,6 +303,9 @@ static inline bool line_too_big(const SkPoint pts[2])
             SkScalarAbs(dy) > SkIntToScalar(511);
 }
 
+#ifdef USE_NEW_BUILDER
+#include "SkEdgeBuilder.h"
+#else
 static int build_edges(SkEdge edge[], const SkPath& path,
                        const SkIRect* clipRect, SkEdge* list[], int shiftUp) {
     SkEdge**        start = list;
@@ -369,43 +374,6 @@ static int build_edges(SkEdge edge[], const SkPath& path,
     return (int)(list - start);
 }
 
-extern "C" {
-    static int edge_compare(const void* a, const void* b)
-    {
-        const SkEdge* edgea = *(const SkEdge**)a;
-        const SkEdge* edgeb = *(const SkEdge**)b;
-
-        int valuea = edgea->fFirstY;
-        int valueb = edgeb->fFirstY;
-
-        if (valuea == valueb)
-        {
-            valuea = edgea->fX;
-            valueb = edgeb->fX;
-        }
-
-        // this overflows if valuea >>> valueb or vice-versa
-        //     return valuea - valueb;
-        // do perform the slower but safe compares
-        return (valuea < valueb) ? -1 : (valuea > valueb);
-    }
-}
-
-static SkEdge* sort_edges(SkEdge* list[], int count, SkEdge** last)
-{
-    qsort(list, count, sizeof(SkEdge*), edge_compare);
-
-    // now make the edges linked in sorted order
-    for (int i = 1; i < count; i++)
-    {
-        list[i - 1]->fNext = list[i];
-        list[i]->fPrev = list[i - 1];
-    }
-
-    *last = list[count - 1];
-    return list[0];
-}
-
 #ifdef SK_DEBUG
 /* 'quick' computation of the max sized needed to allocated for
     our edgelist.
@@ -465,6 +433,42 @@ static int cheap_worst_case_edge_count(const SkPath& path, size_t* storage) {
     *storage = quadSize;
     return edgeCount;
 }
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+extern "C" {
+    static int edge_compare(const void* a, const void* b) {
+        const SkEdge* edgea = *(const SkEdge**)a;
+        const SkEdge* edgeb = *(const SkEdge**)b;
+        
+        int valuea = edgea->fFirstY;
+        int valueb = edgeb->fFirstY;
+        
+        if (valuea == valueb) {
+            valuea = edgea->fX;
+            valueb = edgeb->fX;
+        }
+        
+        // this overflows if valuea >>> valueb or vice-versa
+        //     return valuea - valueb;
+        // do perform the slower but safe compares
+        return (valuea < valueb) ? -1 : (valuea > valueb);
+    }
+}
+
+static SkEdge* sort_edges(SkEdge* list[], int count, SkEdge** last) {
+    qsort(list, count, sizeof(SkEdge*), edge_compare);
+    
+    // now make the edges linked in sorted order
+    for (int i = 1; i < count; i++) {
+        list[i - 1]->fNext = list[i];
+        list[i]->fPrev = list[i - 1];
+    }
+    
+    *last = list[count - 1];
+    return list[0];
+}
 
 // clipRect may be null, even though we always have a clip. This indicates that
 // the path is contained in the clip, and so we can ignore it during the blit
@@ -476,6 +480,12 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
 {
     SkASSERT(&path && blitter);
 
+#ifdef USE_NEW_BUILDER
+    SkEdgeBuilder   builder;
+    
+    int count = builder.build(path, clipRect, shiftEdgesUp);
+    SkEdge**    list = builder.edgeList();
+#else
     size_t  size;
     int     maxCount = cheap_worst_case_edge_count(path, &size);
 
@@ -490,17 +500,19 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
 
     SkAutoMalloc    memory(maxCount * sizeof(SkEdge*) + size);
     SkEdge**        list = (SkEdge**)memory.get();
-    SkEdge*         edge = (SkEdge*)(list + maxCount);
-    int             count = build_edges(edge, path, clipRect, list, shiftEdgesUp);
-    SkEdge          headEdge, tailEdge, *last;
-
+    SkEdge*         initialEdge = (SkEdge*)(list + maxCount);
+    int             count = build_edges(initialEdge, path, clipRect, list,
+                                        shiftEdgesUp);
     SkASSERT(count <= maxCount);
+#endif
+
     if (count < 2) {
         return;
     }
 
+    SkEdge headEdge, tailEdge, *last;
     // this returns the first and last edge after they're sorted into a dlink list
-    edge = sort_edges(list, count, &last);
+    SkEdge* edge = sort_edges(list, count, &last);
 
     headEdge.fPrev = NULL;
     headEdge.fNext = edge;
