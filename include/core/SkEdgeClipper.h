@@ -14,34 +14,15 @@
  * limitations under the License.
  */
 
-#ifndef SkQuadClipper_DEFINED
-#define SkQuadClipper_DEFINED
+#ifndef SkEdgeClipper_DEFINED
+#define SkEdgeClipper_DEFINED
 
 #include "SkPath.h"
 
-/** This class is initialized with a clip rectangle, and then can be fed quads,
-    which must already be monotonic in Y.
- 
-    In the future, it might return a series of segments, allowing it to clip
-    also in X, to ensure that all segments fit in a finite coordinate system.
+/** This is basically an iterator. It is initialized with an edge and a clip,
+    and then next() is called until it returns kDone_Verb.
  */
-class SkQuadClipper {
-public:
-    SkQuadClipper();
-    
-    void setClip(const SkIRect& clip);
-    
-    bool clipQuad(const SkPoint src[3], SkPoint dst[3]);
-
-private:
-    SkRect      fClip;
-};
-
-/** Iterator that returns the clipped segements of a quad clipped to a rect.
-    The segments will be either lines or quads (based on SkPath::Verb), and
-    will all be monotonic in Y
- */
-class SkQuadClipper2 {
+class SkEdgeClipper {
 public:
     bool clipQuad(const SkPoint pts[3], const SkRect& clip);
     bool clipCubic(const SkPoint pts[4], const SkRect& clip);
