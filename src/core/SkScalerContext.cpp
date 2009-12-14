@@ -356,6 +356,9 @@ SK_ERROR:
     glyph->fTop     = 0;
     glyph->fWidth   = 0;
     glyph->fHeight  = 0;
+    // put a valid value here, in case it was earlier set to
+    // MASK_FORMAT_JUST_ADVANCE
+    glyph->fMaskFormat = fRec.fMaskFormat;
 }
 
 void SkScalerContext::getImage(const SkGlyph& origGlyph) {
