@@ -206,6 +206,11 @@ public:
      */
     uint16_t    charToGlyphID(SkUnichar uni);
 
+    /** Map the glyphID to its glyph index, and then to its char code. Unmapped
+        glyphs return zero.
+    */
+    SkUnichar glyphIDToChar(uint16_t glyphID);
+
     unsigned    getGlyphCount() const { return this->generateGlyphCount(); }
     void        getAdvance(SkGlyph*);
     void        getMetrics(SkGlyph*);
@@ -229,6 +234,8 @@ protected:
     virtual void generatePath(const SkGlyph&, SkPath*) = 0;
     virtual void generateFontMetrics(SkPaint::FontMetrics* mX,
                                      SkPaint::FontMetrics* mY) = 0;
+    // default impl returns 0, indicating failure.
+    virtual SkUnichar generateGlyphToChar(uint16_t);
 
 private:
     SkPathEffect*   fPathEffect;
