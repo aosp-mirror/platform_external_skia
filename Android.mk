@@ -184,15 +184,15 @@ LOCAL_SRC_FILES += \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
-    libemoji \
+        libemoji \
+	libjpeg \
 	libutils \
 	libz
 
 LOCAL_STATIC_LIBRARIES := \
 	libft2 \
 	libpng \
-	libgif \
-	libjpeg
+	libgif
 
 LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/src/core \
@@ -272,4 +272,3 @@ include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
 include $(BASE_PATH)/gm/Android.mk
-
