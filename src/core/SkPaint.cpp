@@ -155,6 +155,11 @@ void SkPaint::setLCDRenderText(bool doLCDRender)
     this->setFlags(SkSetClearMask(fFlags, doLCDRender, kLCDRenderText_Flag));
 }
 
+void SkPaint::setEmbeddedBitmapText(bool doEmbeddedBitmapText)
+{
+    this->setFlags(SkSetClearMask(fFlags, doEmbeddedBitmapText, kEmbeddedBitmapText_Flag));
+}
+
 void SkPaint::setLinearText(bool doLinearText)
 {
     this->setFlags(SkSetClearMask(fFlags, doLinearText, kLinearText_Flag));
@@ -1235,6 +1240,8 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
     rec->fMaskFormat = SkToU8(computeMaskFormat(paint));
     rec->fFlags = SkToU8(flags);
     rec->setHinting(computeHinting(paint));
+    if (paint.isEmbeddedBitmapText())
+        rec->fFlags |= SkScalerContext::kEmbeddedBitmapText_Flag;
 
     /*  Allow the fonthost to modify our rec before we use it as a key into the
         cache. This way if we're asking for something that they will ignore,
