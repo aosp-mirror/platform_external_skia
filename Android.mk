@@ -165,6 +165,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkCamera.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
+	src/utils/SkLayer.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkProxyCanvas.cpp
