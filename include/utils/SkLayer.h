@@ -101,7 +101,7 @@ public:
 
     // paint method
 
-    virtual void paintOn(SkPoint offset, SkSize size, SkScalar scale, SkCanvas*) = 0;
+    virtual void draw(SkCanvas*, const SkRect* viewPort) = 0;
 
 public:
 
