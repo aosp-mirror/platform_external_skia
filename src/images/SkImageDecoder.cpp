@@ -39,7 +39,6 @@ SkImageDecoder::SkImageDecoder()
     : fPeeker(NULL), fChooser(NULL), fAllocator(NULL), fSampleSize(1),
       fDefaultPref(SkBitmap::kNo_Config), fDitherImage(true),
       fUsePrefTable(false) {
-          SkDebugf("--------- sizeof(fPrefTable) = %d\n", sizeof(fPrefTable));
 }
 
 SkImageDecoder::~SkImageDecoder() {
