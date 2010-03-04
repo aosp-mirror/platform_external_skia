@@ -9,6 +9,12 @@ include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE := arm
 
+# need a flag to tell the C side when we're on devices with large memory
+# budgets (i.e. larger than the low-end devices that initially shipped)
+ifeq ($(ARCH_ARM_HAVE_VFP),true)
+    LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+endif
+
 # enable this if we turn on SK_DEBUG, otherwise we exceed our prelink budget
 #LOCAL_PRELINK_MODULE := false
 
