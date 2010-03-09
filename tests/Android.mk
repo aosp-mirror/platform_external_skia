@@ -3,6 +3,7 @@ include $(CLEAR_VARS)
 
 
 LOCAL_SRC_FILES:= \
+        BlitRowTest.cpp \
         GeometryTest.cpp \
         MathTest.cpp \
         MatrixTest.cpp \
