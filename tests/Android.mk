@@ -33,7 +33,7 @@ LOCAL_C_INCLUDES := \
         external/skia/src/core
 
 LOCAL_SHARED_LIBRARIES := \
-        libskia
+        libskia libcutils
 
 LOCAL_MODULE_TAGS := eng tests
 
