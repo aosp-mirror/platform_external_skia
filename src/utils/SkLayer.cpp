@@ -19,6 +19,7 @@ SkLayer::SkLayer() {
 
     fMatrix.reset();
     fChildrenMatrix.reset();
+    fFlags = 0;
 
 #ifdef DEBUG_TRACK_NEW_DELETE
     gLayerAllocCount += 1;
@@ -35,6 +36,7 @@ SkLayer::SkLayer(const SkLayer& src) {
 
     fMatrix = src.fMatrix;
     fChildrenMatrix = src.fChildrenMatrix;
+    fFlags = src.fFlags;
 
 #ifdef DEBUG_TRACK_NEW_DELETE
     gLayerAllocCount += 1;
@@ -52,6 +54,18 @@ SkLayer::~SkLayer() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+bool SkLayer::isInheritFromRootTransform() const {
+    return (fFlags & kInheritFromRootTransform_Flag) != 0;
+}
+
+void SkLayer::setInheritFromRootTransform(bool doInherit) {
+    if (doInherit) {
+        fFlags |= kInheritFromRootTransform_Flag;
+    } else {
+        fFlags &= ~kInheritFromRootTransform_Flag;
+    }
+}
 
 void SkLayer::setMatrix(const SkMatrix& matrix) {
     fMatrix = matrix;
@@ -126,6 +140,11 @@ void SkLayer::getLocalTransform(SkMatrix* matrix) const {
 void SkLayer::localToGlobal(SkMatrix* matrix) const {
     this->getLocalTransform(matrix);
 
+    if (this->isInheritFromRootTransform()) {
+        matrix->postConcat(this->getRootLayer()->getMatrix());
+        return;
+    }
+
     const SkLayer* layer = this;
     while (layer->fParent != NULL) {
         layer = layer->fParent;
@@ -165,13 +184,13 @@ void SkLayer::draw(SkCanvas* canvas, SkScalar opacity) {
 
     // apply our local transform
     {
-        canvas->translate(m_position.fX, m_position.fY);
-        
-        SkScalar tx = SkScalarMul(m_anchorPoint.fX, m_size.width());
-        SkScalar ty = SkScalarMul(m_anchorPoint.fY, m_size.height());
-        canvas->translate(tx, ty);
-        canvas->concat(this->getMatrix());
-        canvas->translate(-tx, -ty);
+        SkMatrix tmp;
+        this->getLocalTransform(&tmp);
+        if (this->isInheritFromRootTransform()) {
+            // should we also apply the root's childrenMatrix?
+            canvas->setMatrix(getRootLayer()->getMatrix());
+        }
+        canvas->concat(tmp);
     }
 
     this->onDraw(canvas, opacity);

@@ -34,6 +34,7 @@ public:
     SkLayer(const SkLayer&);
     virtual ~SkLayer();
 
+    bool isInheritFromRootTransform() const;
     SkScalar getOpacity() const { return m_opacity; }
     const SkSize& getSize() const { return m_size; }
     const SkPoint& getPosition() const { return m_position; }
@@ -44,6 +45,7 @@ public:
     SkScalar getWidth() const { return m_size.width(); }
     SkScalar getHeight() const { return m_size.height(); }
 
+    void setInheritFromRootTransform(bool);
     void setOpacity(SkScalar opacity) { m_opacity = opacity; }
     void setSize(SkScalar w, SkScalar h) { m_size.set(w, h); }
     void setPosition(SkScalar x, SkScalar y) { m_position.set(x, y); }
@@ -112,6 +114,10 @@ protected:
     virtual void onDraw(SkCanvas*, SkScalar opacity);
 
 private:
+    enum Flags {
+        kInheritFromRootTransform_Flag = 0x01
+    };
+
     SkLayer*    fParent;
     SkScalar    m_opacity;
     SkSize      m_size;
@@ -119,6 +125,7 @@ private:
     SkPoint     m_anchorPoint;
     SkMatrix    fMatrix;
     SkMatrix    fChildrenMatrix;
+    uint32_t    fFlags;
 
     SkTDArray<SkLayer*> m_children;
 };
