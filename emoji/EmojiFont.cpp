@@ -35,6 +35,8 @@
 
 #include "gmoji_pua_table.h"
 
+#include <string.h>
+
 namespace android {
 
 // lazily allocate the factory
@@ -123,6 +125,20 @@ static const SkBitmap* get_bitmap(int index) {
 
 bool EmojiFont::IsAvailable() {
     return get_emoji_factory() != NULL;
+}
+
+const char *EmojiFont::GetShiftJisConverterName() {
+    EmojiFactory* fact = get_emoji_factory();
+    if (NULL != fact) {
+        if (strcmp(fact->Name(), "kddi") == 0) {
+            return "kddi-emoji";
+        } else if (strcmp(fact->Name(), "softbank") == 0) {
+            return "softbank-emoji";
+        }
+    }
+
+    // Until Eclair, we have used DoCoMo's Shift_JIS table.
+    return "docomo-emoji";
 }
 
 uint16_t EmojiFont::UnicharToGlyph(int32_t unichar) {

@@ -40,7 +40,7 @@ namespace android {
          */
         static bool IsAvailable();
 
-        /** Return index for the corresponding index to the emoji table, or 0
+        /** Returns index for the corresponding index to the emoji table, or 0
             if there is no matching emoji form.
          */
         static uint16_t UnicharToGlyph(int32_t unichar);
@@ -51,18 +51,21 @@ namespace android {
         static bool IsEmojiGlyph(uint16_t index) {
             return index >= kGlyphBase;
         }
-        
+
         /** Returns the advance width for the specified emoji form.
          */
         static SkScalar GetAdvanceWidth(uint16_t index, const SkPaint& paint);
-        
+
         /** Draw the specified emoji form, given the x,y origin of the text
             version. The paint is the one associated with the text that has
             the emoji in it.
          */
         static void Draw(SkCanvas*, uint16_t index, SkScalar x, SkScalar y,
                          const SkPaint& paint);
-        
+
+        /** Returns the conver name for Shift_JIS (one of Japanese charset)
+         */
+        static const char* GetShiftJisConverterName();
     private:
         enum {
             /*  this is our internal trick to embedded private emoji glyph IDs
