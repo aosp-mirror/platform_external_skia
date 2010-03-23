@@ -70,10 +70,10 @@ public:
      */
     SkLayer* addChild(SkLayer* child);
 
-    /** Remove this layer from our child list, and unref() it and return true.
-        If it is not in our child list, do nothing and return false.
+    /** Remove this layer from its parent's list (or do nothing if it has no
+        parent.) If it had a parent, then unref() is called.
      */
-    bool removeChild(SkLayer* child);
+    void detachFromParent();
 
     /** Remove, and unref(), all of the layers in our child list.
      */

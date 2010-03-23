@@ -83,16 +83,16 @@ int SkLayer::countChildren() const {
 
 SkLayer* SkLayer::getChild(int index) const {
     if ((unsigned)index < (unsigned)m_children.count()) {
+        SkASSERT(m_children[index]->fParent == this);
         return m_children[index];
     }
     return NULL;
 }
 
 SkLayer* SkLayer::addChild(SkLayer* child) {
+    SkASSERT(this != child);
     child->ref();
-    if (child->fParent) {
-        child->fParent->removeChild(child);
-    }
+    child->detachFromParent();
     SkASSERT(child->fParent == NULL);
     child->fParent = this;
 
@@ -100,20 +100,24 @@ SkLayer* SkLayer::addChild(SkLayer* child) {
     return child;
 }
 
-bool SkLayer::removeChild(SkLayer* child) {
-    int index = m_children.find(child);
-    if (index >= 0) {
-        SkASSERT(child->fParent == this);
-        child->fParent = NULL;
-        child->unref();
-        m_children.remove(index);
-        return true;
+void SkLayer::detachFromParent() {
+    if (fParent) {
+        int index = fParent->m_children.find(this);
+        SkASSERT(index >= 0);
+        fParent->m_children.remove(index);
+        fParent = NULL;
+        this->unref();  // this call might delete us
     }
-    return false;
 }
 
 void SkLayer::removeChildren() {
-    m_children.unrefAll();
+    int count = m_children.count();
+    for (int i = 0; i < count; i++) {
+        SkLayer* child = m_children[i];
+        SkASSERT(child->fParent == this);
+        child->fParent = NULL;  // in case it has more than one owner
+        child->unref();
+    }
     m_children.reset();
 }
 
