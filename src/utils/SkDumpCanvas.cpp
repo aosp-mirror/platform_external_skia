@@ -121,7 +121,8 @@ static void toString(const SkBitmap& bm, SkString* str) {
 }
 
 static void toString(const void* text, size_t len, SkPaint::TextEncoding enc,
-                     SkString* str) {
+                     SkString* str, const SkPaint& paint,
+                     const SkScalar xpos[] = NULL) {
     switch (enc) {
         case SkPaint::kUTF8_TextEncoding:
             str->printf("\"%.*s\"%s", SkMax32(len, 32), text,
@@ -131,9 +132,21 @@ static void toString(const void* text, size_t len, SkPaint::TextEncoding enc,
             str->printf("\"%.*S\"%s", SkMax32(len, 32), text,
                         len > 64 ? "..." : "");
             break;
-        case SkPaint::kGlyphID_TextEncoding:
-            str->set("<glyphs>");
-            break;
+        case SkPaint::kGlyphID_TextEncoding: {
+            const uint16_t* glyphs = (const uint16_t*)text;
+            const int max = 32;
+            SkUnichar uni[max];
+            int count = SkMin32(len >> 1, max);
+            paint.glyphsToUnichars(glyphs, count, uni);
+            str->append("\"");
+            for (int i = 0; i < count; i++) {
+                str->appendUnichar(uni[i]);
+            }
+            if ((size_t)count < (len >> 1)) {
+                str->append("...");
+            }
+            str->append("\"");
+        } break;
     }
 }
 
@@ -318,7 +331,7 @@ void SkDumpCanvas::drawSprite(const SkBitmap& bitmap, int x, int y,
 void SkDumpCanvas::drawText(const void* text, size_t byteLength, SkScalar x,
                              SkScalar y, const SkPaint& paint) {
     SkString str;
-    toString(text, byteLength, paint.getTextEncoding(), &str);
+    toString(text, byteLength, paint.getTextEncoding(), &str, paint);
     this->dump(kDrawText_Verb, &paint, "drawText(%s [%d] %g %g)", str.c_str(),
                byteLength, SkScalarToFloat(x), SkScalarToFloat(y));
 }
@@ -326,7 +339,7 @@ void SkDumpCanvas::drawText(const void* text, size_t byteLength, SkScalar x,
 void SkDumpCanvas::drawPosText(const void* text, size_t byteLength,
                                 const SkPoint pos[], const SkPaint& paint) {
     SkString str;
-    toString(text, byteLength, paint.getTextEncoding(), &str);
+    toString(text, byteLength, paint.getTextEncoding(), &str, paint);
     this->dump(kDrawText_Verb, &paint, "drawPosText(%s [%d] %g %g ...)",
                str.c_str(), byteLength, SkScalarToFloat(pos[0].fX),
                SkScalarToFloat(pos[0].fY));
@@ -336,7 +349,7 @@ void SkDumpCanvas::drawPosTextH(const void* text, size_t byteLength,
                                  const SkScalar xpos[], SkScalar constY,
                                  const SkPaint& paint) {
     SkString str;
-    toString(text, byteLength, paint.getTextEncoding(), &str);
+    toString(text, byteLength, paint.getTextEncoding(), &str, paint, xpos);
     this->dump(kDrawText_Verb, &paint, "drawPosTextH(%s [%d] %g %g ...)",
                str.c_str(), byteLength, SkScalarToFloat(xpos[0]),
                SkScalarToFloat(constY));
@@ -346,7 +359,7 @@ void SkDumpCanvas::drawTextOnPath(const void* text, size_t byteLength,
                                    const SkPath& path, const SkMatrix* matrix,
                                    const SkPaint& paint) {
     SkString str;
-    toString(text, byteLength, paint.getTextEncoding(), &str);
+    toString(text, byteLength, paint.getTextEncoding(), &str, paint);
     this->dump(kDrawText_Verb, &paint, "drawTextOnPath(%s [%d])",
                str.c_str(), byteLength);
 }
