@@ -1041,12 +1041,12 @@ static const SkBlitRow::Proc platform_565_procs[] = {
     S32_D565_Opaque_PROC,
     S32_D565_Blend_PROC,
     S32A_D565_Opaque_PROC,
-    NULL, //S32A_D565_Blend_PROC,
+    S32A_D565_Blend_PROC,
     
     // dither
     S32_D565_Opaque_Dither_PROC,
     S32_D565_Blend_Dither_PROC,
-    NULL, //S32A_D565_Opaque_Dither_PROC,
+    S32A_D565_Opaque_Dither_PROC,
     NULL,   // S32A_D565_Blend_Dither
 };
 
