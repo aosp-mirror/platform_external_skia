@@ -52,7 +52,6 @@ public:
         kMultiply_Mode, //!< [Sa * Da, Sc * Dc]
         kScreen_Mode,   //!< [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc]
         kAdd_Mode,      //!< Saturate(S + D)
-        kOverlay_Mode,  //!< [Sa * Da, (Dc < 0.5 ? Sc * Dc : 1 - (1 - Dc) * (1 - Sc))]
 
         kModeCount
     };

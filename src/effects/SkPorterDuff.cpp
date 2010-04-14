@@ -29,8 +29,7 @@ static const struct Pair {
     MAKE_PAIR(Lighten),
     MAKE_PAIR(Multiply),
     MAKE_PAIR(Screen),
-    { SkPorterDuff::kAdd_Mode, SkXfermode::kPlus_Mode },
-    MAKE_PAIR(Overlay)
+    { SkPorterDuff::kAdd_Mode, SkXfermode::kPlus_Mode }
 };
 
 static bool find_pdmode(SkXfermode::Mode src, SkPorterDuff::Mode* dst) {
