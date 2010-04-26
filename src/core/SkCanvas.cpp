@@ -1216,6 +1216,20 @@ void SkCanvas::drawTextOnPath(const void* text, size_t byteLength,
     ITER_END
 }
 
+void SkCanvas::drawPosTextOnPath(const void* text, size_t byteLength,
+                                 const SkPoint pos[], const SkPaint& paint,
+                                 const SkPath& path, const SkMatrix* matrix) {
+
+    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+
+    while (iter.next()) {
+        iter.fDevice->drawPosTextOnPath(iter, text, byteLength, pos,
+                                        paint, path, matrix);
+    }
+
+    ITER_END
+}
+
 void SkCanvas::drawVertices(VertexMode vmode, int vertexCount,
                             const SkPoint verts[], const SkPoint texs[],
                             const SkColor colors[], SkXfermode* xmode,

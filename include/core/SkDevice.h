@@ -120,6 +120,9 @@ public:
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint);
+    virtual void drawPosTextOnPath(const SkDraw& draw, const void* text, size_t len,
+                                   const SkPoint pos[], const SkPaint& paint,
+                                   const SkPath& path, const SkMatrix* matrix);
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode, int vertexCount,
                               const SkPoint verts[], const SkPoint texs[],
                               const SkColor colors[], SkXfermode* xmode,
