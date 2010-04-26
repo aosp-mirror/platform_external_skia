@@ -262,6 +262,16 @@ public:
 
     static void SetSubpixelOrder(LCDOrder order);
     static LCDOrder GetSubpixelOrder();
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Return the number of font units per em.
+     *
+     * @param fontID the font to query.
+     * @return the number of font units per em or 0 on error.
+     */
+    static uint32_t GetUnitsPerEm(SkFontID fontID);
 };
 
 #endif

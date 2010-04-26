@@ -225,6 +225,13 @@ static SkFaceRec* ref_ft_face(uint32_t fontID) {
         args.stream = &rec->fFTStream;
     }
 
+    if (gFTCount == 0) {
+        if (!InitFreetype()) {
+            return 0;
+        }
+    }
+    ++gFTCount;
+
     FT_Error err = FT_Open_Face(gFTLibrary, &args, 0, &rec->fFace);
 
     if (err) {    // bad filename, try the default font
@@ -255,6 +262,10 @@ static void unref_ft_face(FT_Face face) {
                 }
                 FT_Done_Face(face);
                 SkDELETE(rec);
+
+                if (--gFTCount == 0) {
+                    FT_Done_FreeType(gFTLibrary);
+                }
             }
             return;
         }
@@ -287,6 +298,19 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
         h = SkPaint::kSlight_Hinting;
     }
     rec->setHinting(h);
+}
+
+uint32_t SkFontHost::GetUnitsPerEm(SkFontID fontID) {
+    SkAutoMutexAcquire ac(gFTMutex);
+    SkFaceRec *rec = ref_ft_face(fontID);
+    uint16_t unitsPerEm = 0;
+
+    if (rec != NULL && rec->fFace != NULL) {
+        unitsPerEm = rec->fFace->units_per_EM;
+        unref_ft_face(rec->fFace);
+    }
+
+    return (uint32_t)unitsPerEm;
 }
 
 SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
