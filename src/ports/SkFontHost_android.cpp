@@ -31,7 +31,7 @@
     #define SK_FONT_FILE_PREFIX          "/fonts/"
 #endif
 
-SkTypeface::Style find_name_and_style(SkStream* stream, SkString* name);
+bool find_name_and_style(SkStream* stream, SkString* name, SkTypeface::Style* style);
 
 static void GetFullPathForSysFonts(SkString* full, const char name[]) {
     full->set(getenv("ANDROID_ROOT"));
@@ -363,14 +363,12 @@ static bool get_name_and_style(const char path[], SkString* name,
 
     SkMMAPStream stream(fullpath.c_str());
     if (stream.getLength() > 0) {
-        *style = find_name_and_style(&stream, name);
-        return true;
+        return find_name_and_style(&stream, name, style);
     }
     else {
         SkFILEStream stream(fullpath.c_str());
         if (stream.getLength() > 0) {
-            *style = find_name_and_style(&stream, name);
-            return true;
+            return find_name_and_style(&stream, name, style);
         }
     }
 
@@ -643,9 +641,13 @@ SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
     }
     
     SkString name;
-    SkTypeface::Style style = find_name_and_style(stream, &name);
+    SkTypeface::Style style;
 
-    return SkNEW_ARGS(StreamTypeface, (style, false, NULL, stream));
+    if (find_name_and_style(stream, &name, &style)) {
+        return SkNEW_ARGS(StreamTypeface, (style, false, NULL, stream));
+    } else {
+        return NULL;
+    }
 }
 
 SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
