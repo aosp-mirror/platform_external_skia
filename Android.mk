@@ -232,8 +232,6 @@ include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 
-LOCAL_PRELINK_MODULE := false
-
 LOCAL_ARM_MODE := arm
 
 ifneq ($(ARCH_ARM_HAVE_VFP),true)
