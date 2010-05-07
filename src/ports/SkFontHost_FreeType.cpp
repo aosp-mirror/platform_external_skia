@@ -940,11 +940,11 @@ SkScalerContext* SkFontHost::CreateScalerContext(const SkDescriptor* desc) {
 /*  Export this so that other parts of our FonttHost port can make use of our
     ability to extract the name+style from a stream, using FreeType's api.
 */
-SkTypeface::Style find_name_and_style(SkStream* stream, SkString* name) {
+bool find_name_and_style(SkStream* stream, SkString* name, SkTypeface::Style* style) {
     FT_Library  library;
     if (FT_Init_FreeType(&library)) {
         name->set(NULL);
-        return SkTypeface::kNormal;
+        return false;
     }
 
     FT_Open_Args    args;
@@ -972,20 +972,21 @@ SkTypeface::Style find_name_and_style(SkStream* stream, SkString* name) {
     if (FT_Open_Face(library, &args, 0, &face)) {
         FT_Done_FreeType(library);
         name->set(NULL);
-        return SkTypeface::kNormal;
+        return false;
     }
 
     name->set(face->family_name);
-    int style = SkTypeface::kNormal;
+    int tempStyle = SkTypeface::kNormal;
 
     if (face->style_flags & FT_STYLE_FLAG_BOLD) {
-        style |= SkTypeface::kBold;
+        tempStyle |= SkTypeface::kBold;
     }
     if (face->style_flags & FT_STYLE_FLAG_ITALIC) {
-        style |= SkTypeface::kItalic;
+        tempStyle |= SkTypeface::kItalic;
     }
 
+    *style = (SkTypeface::Style)tempStyle;
     FT_Done_Face(face);
     FT_Done_FreeType(library);
-    return (SkTypeface::Style)style;
+    return true;
 }
