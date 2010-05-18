@@ -816,7 +816,7 @@ size_t SkPaint::breakText(const void* textD, size_t length, SkScalar maxWidth,
     if (this->isLinearText())
     {
         scale = fTextSize / kCanonicalTextSizeForPaths;
-        maxWidth = SkScalarMul(maxWidth, SkScalarDiv(kCanonicalTextSizeForPaths, fTextSize));
+        maxWidth = SkScalarMulDiv(maxWidth, kCanonicalTextSizeForPaths, fTextSize);
         // this gets restored by restore
         ((SkPaint*)this)->setTextSize(SkIntToScalar(kCanonicalTextSizeForPaths));
     }
