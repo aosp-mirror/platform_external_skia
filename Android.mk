@@ -78,6 +78,7 @@ LOCAL_SRC_FILES:= \
 	src/images/SkImageRef_GlobalPool.cpp \
 	src/images/SkImageRefPool.cpp \
 	src/images/SkJpegUtility.cpp \
+	src/images/SkLargeBitmap.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \

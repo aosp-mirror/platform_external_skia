@@ -23,6 +23,8 @@
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkUtils.h"
+#include "SkRect.h"
+#include "SkCanvas.h"
 
 #include <stdio.h>
 extern "C" {
@@ -48,14 +50,44 @@ static const char KEY_MEM_CAP[] = "ro.media.dec.jpeg.memcap";
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
+class SkJPEGImageIndex {
+public:
+    SkJPEGImageIndex() {}
+    virtual ~SkJPEGImageIndex() {
+        jpeg_destroy_huffman_index(index);
+        delete cinfo->src;
+        jpeg_finish_decompress(cinfo);
+        jpeg_destroy_decompress(cinfo);
+        free(cinfo);
+    }
+    jpeg_decompress_struct *cinfo;
+    huffman_index *index;
+};
+
+
 class SkJPEGImageDecoder : public SkImageDecoder {
 public:
+    SkJPEGImageDecoder() {
+        index = NULL;
+    }
+    ~SkJPEGImageDecoder() {
+        if (index)
+            delete index;
+    }
     virtual Format getFormat() const {
         return kJPEG_Format;
     }
+    virtual bool buildTileIndex(SkStream *stream,
+                                int *width, int *height, bool isShareable);
 
 protected:
+    virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
+    virtual void cropBitmap(SkBitmap *dest, SkBitmap *src, int sampleSize,
+                            int srcX, int srcY, int width, int height,
+                            int destX, int destY);
+private:
+    SkJPEGImageIndex *index;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -141,6 +173,21 @@ static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer,
     return true;
 }
 
+static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
+                          huffman_index *index, void* buffer,
+                          int startX, int startY, int width, int height,
+                          int count) {
+    for (int i = 0; i < count; i++) {
+        JSAMPLE* rowptr = (JSAMPLE*)buffer;
+        int row_count = jpeg_read_tile_scanline(cinfo, index, &rowptr,
+                                              startX, startY, width, height);
+        if (row_count != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // This guy exists just to aid in debugging, as it allows debuggers to just
 // set a break-point in one place to see all error exists.
 static bool return_false(const jpeg_decompress_struct& cinfo,
@@ -163,7 +210,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     jpeg_decompress_struct  cinfo;
     skjpeg_error_mgr        sk_err;
-    skjpeg_source_mgr       sk_stream(stream, this);
+    skjpeg_source_mgr       sk_stream(stream, this, false, false);
 
     cinfo.err = jpeg_std_error(&sk_err);
     sk_err.error_exit = skjpeg_error_exit;
@@ -385,6 +432,278 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     jpeg_finish_decompress(&cinfo);
 
 //    SkDebugf("------------------- bm2 size %d [%d %d] %d\n", bm->getSize(), bm->width(), bm->height(), bm->config());
+    return true;
+}
+
+bool SkJPEGImageDecoder::buildTileIndex(SkStream* stream,
+                                        int *width, int *height,
+                                        bool isShareable) {
+    SkAutoMalloc  srcStorage;
+    SkJPEGImageIndex *index = new SkJPEGImageIndex;
+
+    jpeg_decompress_struct  *cinfo = (jpeg_decompress_struct*)
+                                        malloc(sizeof(jpeg_decompress_struct));
+    skjpeg_error_mgr        sk_err;
+    skjpeg_source_mgr       *sk_stream =
+        new skjpeg_source_mgr(stream, this, !isShareable, true);
+    if (cinfo == NULL || sk_stream == NULL) {
+        return false;
+    }
+
+    cinfo->err = jpeg_std_error(&sk_err);
+    sk_err.error_exit = skjpeg_error_exit;
+
+    // All objects need to be instantiated before this setjmp call so that
+    // they will be cleaned up properly if an error occurs.
+    if (setjmp(sk_err.fJmpBuf)) {
+        return false;
+    }
+
+    jpeg_create_decompress(cinfo);
+    cinfo->do_fancy_upsampling = 0;
+    cinfo->do_block_smoothing = 0;
+
+#ifdef ANDROID
+    overwrite_mem_buffer_size(cinfo);
+#endif
+
+    cinfo->src = sk_stream;
+    int status = jpeg_read_header(cinfo, true);
+    if (status != JPEG_HEADER_OK) {
+        return false;
+    }
+    index->index = (huffman_index*)malloc(sizeof(huffman_index));
+    jpeg_create_huffman_index(cinfo, index->index);
+
+    cinfo->dct_method = JDCT_IFAST;
+    cinfo->scale_num = 1;
+    cinfo->scale_denom = 1;
+    if (!jpeg_build_huffman_index(cinfo, index->index)) {
+        return false;
+    }
+    if (fReporter)
+        fReporter->reportMemory(index->index->mem_used);
+    jpeg_destroy_decompress(cinfo);
+
+
+    // Init decoder to image decode mode
+    jpeg_create_decompress(cinfo);
+
+#ifdef ANDROID
+    overwrite_mem_buffer_size(cinfo);
+#endif
+
+    cinfo->src = sk_stream;
+    status = jpeg_read_header(cinfo,true);
+    if (status != JPEG_HEADER_OK) {
+        return false;
+    }
+    cinfo->out_color_space = JCS_RGBA_8888;
+    cinfo->do_fancy_upsampling = 0;
+    cinfo->do_block_smoothing = 0;
+    //jpeg_start_decompress(cinfo);
+    jpeg_start_tile_decompress(cinfo);
+
+    cinfo->dct_method = JDCT_IFAST;
+    cinfo->scale_num = 1;
+    index->cinfo = cinfo;
+    *height = cinfo->output_height;
+    *width = cinfo->output_width;
+
+    this->index = index;
+    return true;
+}
+
+/*
+ * Crop a rectangle from the src Bitmap to the dest Bitmap. src and dest are
+ * both sampled by sampleSize from an original Bitmap.
+ *
+ * @param dest the destination Bitmap.
+ * @param src the source Bitmap that is sampled by sampleSize from the original
+ *            Bitmap.
+ * @param sampleSize the sample size that src is sampled from the original Bitmap.
+ * @param (srcX, srcY) the upper-left point of the src Btimap in terms of
+ *                     the coordinate in the original Bitmap.
+ * @param (width, height) the width and height of the unsampled dest.
+ * @param (destX, destY) the upper-left point of the dest Bitmap in terms of
+ *                       the coordinate in the original Bitmap.
+ */
+void SkJPEGImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
+                                    int sampleSize, int srcX, int srcY,
+                                    int width, int height, int destX, int destY)
+{
+    int w = width / sampleSize;
+    int h = height / sampleSize;
+    if (w == src->width() && h == src->height() &&
+          (destX - srcX) / sampleSize == 0 && (destY - srcY) / sampleSize == 0) {
+        // The output rect is the same as the decode result
+        dest->swap( *src );
+        return;
+    }
+    dest->setConfig(src->getConfig(), w, h);
+    dest->setIsOpaque(true);
+    this->allocPixelRef(dest, NULL);
+
+    SkCanvas canvas(*dest);
+    canvas.drawBitmap(*src, (destX - srcX) / sampleSize,
+                             (destY - srcY) / sampleSize);
+}
+
+bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
+    if (index == NULL) {
+        return false;
+    }
+    int startX = region.fLeft;
+    int startY = region.fTop;
+    int width = region.width();
+    int height = region.height();
+    jpeg_decompress_struct *cinfo = index->cinfo;
+    SkAutoMalloc  srcStorage;
+    skjpeg_error_mgr        sk_err;
+    cinfo->err = jpeg_std_error(&sk_err);
+    sk_err.error_exit = skjpeg_error_exit;
+    if (setjmp(sk_err.fJmpBuf)) {
+        return false;
+    }
+    int requestedSampleSize = this->getSampleSize();
+    cinfo->scale_denom = requestedSampleSize;
+
+    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, false);
+    if (config != SkBitmap::kARGB_8888_Config &&
+        config != SkBitmap::kARGB_4444_Config &&
+        config != SkBitmap::kRGB_565_Config) {
+        config = SkBitmap::kARGB_8888_Config;
+    }
+#ifdef ANDROID_RGB
+    cinfo->dither_mode = JDITHER_NONE;
+    if (config == SkBitmap::kARGB_8888_Config) {
+        cinfo->out_color_space = JCS_RGBA_8888;
+    } else if (config == SkBitmap::kRGB_565_Config) {
+        if (requestedSampleSize == 1) {
+            // SkScaledBitmapSampler can't handle RGB_565 yet,
+            // so don't even try.
+            cinfo->out_color_space = JCS_RGB_565;
+            if (this->getDitherImage()) {
+                cinfo->dither_mode = JDITHER_ORDERED;
+            }
+        }
+    }
+#endif
+
+    int oriStartX = startX;
+    int oriStartY = startY;
+    int oriWidth = width;
+    int oriHeight = height;
+    jpeg_init_read_tile_scanline(cinfo, index->index,
+                                 &startX, &startY, &width, &height);
+    int skiaSampleSize = recompute_sampleSize(requestedSampleSize, *cinfo);
+    SkBitmap *bitmap = new SkBitmap;
+    SkAutoTDelete<SkBitmap> adb(bitmap);
+
+    int actualSampleSize = skiaSampleSize * cinfo->image_width / cinfo->output_width;
+
+#ifdef ANDROID_RGB
+    /* short-circuit the SkScaledBitmapSampler when possible, as this gives
+       a significant performance boost.
+    */
+    if (skiaSampleSize == 1 &&
+        ((config == SkBitmap::kARGB_8888_Config &&
+                cinfo->out_color_space == JCS_RGBA_8888) ||
+        (config == SkBitmap::kRGB_565_Config &&
+                cinfo->out_color_space == JCS_RGB_565)))
+    {
+        bitmap->setConfig(config, cinfo->output_width, height);
+        bitmap->setIsOpaque(true);
+        if (!this->allocPixelRef(bitmap, NULL)) {
+            return return_false(*cinfo, *bitmap, "allocPixelRef");
+        }
+        SkAutoLockPixels alp(*bitmap);
+        JSAMPLE* rowptr = (JSAMPLE*)bitmap->getPixels();
+        INT32 const bpr = bitmap->rowBytes();
+        int row_total_count = 0;
+
+        while (row_total_count < height) {
+            int row_count = jpeg_read_tile_scanline(cinfo,
+                    index->index, &rowptr, startX, startY, width, height);
+            // if row_count == 0, then we didn't get a scanline, so abort.
+            // if we supported partial images, we might return true in this case
+            if (0 == row_count) {
+                return return_false(*cinfo, *bitmap, "read_scanlines");
+            }
+            if (this->shouldCancelDecode()) {
+                return return_false(*cinfo, *bitmap, "shouldCancelDecode");
+            }
+            row_total_count += row_count;
+            rowptr += bpr;
+        }
+        cropBitmap(bm, bitmap, actualSampleSize, oriStartX, oriStartY,
+                   oriWidth, oriHeight, startX, startY);
+        return true;
+    }
+#endif
+    // check for supported formats
+    SkScaledBitmapSampler::SrcConfig sc;
+    if (3 == cinfo->out_color_components && JCS_RGB == cinfo->out_color_space) {
+        sc = SkScaledBitmapSampler::kRGB;
+#ifdef ANDROID_RGB
+    } else if (JCS_RGBA_8888 == cinfo->out_color_space) {
+        sc = SkScaledBitmapSampler::kRGBX;
+#endif
+    } else if (1 == cinfo->out_color_components &&
+               JCS_GRAYSCALE == cinfo->out_color_space) {
+        sc = SkScaledBitmapSampler::kGray;
+    } else {
+        return return_false(*cinfo, *bm, "jpeg colorspace");
+    }
+
+    SkScaledBitmapSampler sampler(width, height, skiaSampleSize);
+
+    bitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bitmap->setIsOpaque(true);
+
+    if (!this->allocPixelRef(bitmap, NULL)) {
+        return return_false(*cinfo, *bitmap, "allocPixelRef");
+    }
+
+    SkAutoLockPixels alp(*bitmap);
+    if (!sampler.begin(bitmap, sc, this->getDitherImage())) {
+        return return_false(*cinfo, *bitmap, "sampler.begin");
+    }
+
+    uint8_t* srcRow = (uint8_t*)srcStorage.alloc(width * 4);
+
+    //  Possibly skip initial rows [sampler.srcY0]
+    if (!skip_src_rows_tile(cinfo, index->index, srcRow,
+                            startX, startY, width, height, sampler.srcY0())) {
+        return return_false(*cinfo, *bitmap, "skip rows");
+    }
+
+    // now loop through scanlines until y == bitmap->height() - 1
+    for (int y = 0;; y++) {
+        JSAMPLE* rowptr = (JSAMPLE*)srcRow;
+        int row_count = jpeg_read_tile_scanline(cinfo, index->index, &rowptr,
+                                                startX, startY, width, height);
+        if (0 == row_count) {
+            return return_false(*cinfo, *bitmap, "read_scanlines");
+        }
+        if (this->shouldCancelDecode()) {
+            return return_false(*cinfo, *bitmap, "shouldCancelDecode");
+        }
+
+        sampler.next(srcRow);
+        if (bitmap->height() - 1 == y) {
+            // we're done
+            break;
+        }
+
+        if (!skip_src_rows_tile(cinfo, index->index, srcRow,
+                                startX, startY, width, height,
+                                sampler.srcDY() - 1)) {
+            return return_false(*cinfo, *bitmap, "skip rows");
+        }
+    }
+    cropBitmap(bm, bitmap, actualSampleSize, oriStartX, oriStartY,
+               oriWidth, oriHeight, startX, startY);
     return true;
 }
 

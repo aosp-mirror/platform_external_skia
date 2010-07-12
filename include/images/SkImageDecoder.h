@@ -18,9 +18,16 @@
 #define SkImageDecoder_DEFINED
 
 #include "SkBitmap.h"
+#include "SkRect.h"
 #include "SkRefCnt.h"
 
 class SkStream;
+
+class SkVMMemoryReporter : public SkRefCnt {
+public:
+    virtual ~SkVMMemoryReporter() {}
+    virtual bool reportMemory(size_t memorySize);
+};
 
 /** \class SkImageDecoder
 
@@ -30,6 +37,7 @@ class SkImageDecoder {
 public:
     virtual ~SkImageDecoder();
 
+    // Should be consistent with kFormatName
     enum Format {
         kUnknown_Format,
         kBMP_Format,
@@ -42,9 +50,20 @@ public:
         kLastKnownFormat = kWBMP_Format
     };
 
+    /** Contains the image format name.
+     *  This should be consistent with Format.
+     *
+     *  The format name gives a more meaningful error message than enum.
+     */
+    static const char *kFormatName[7];
+
     /** Return the compressed data's format (see Format enum)
     */
     virtual Format getFormat() const;
+
+    /** Return the compressed data's format name.
+    */
+    const char* getFormatName() const { return kFormatName[getFormat()]; }
 
     /** Returns true if the decoder should try to dither the resulting image.
         The default setting is true.
@@ -118,6 +137,7 @@ public:
 
     SkBitmap::Allocator* getAllocator() const { return fAllocator; }
     SkBitmap::Allocator* setAllocator(SkBitmap::Allocator*);
+    SkVMMemoryReporter* setReporter(SkVMMemoryReporter*);
 
     // sample-size, if set to > 1, tells the decoder to return a smaller than
     // original bitmap, sampling 1 pixel for every size pixels. e.g. if sample
@@ -175,6 +195,29 @@ public:
     bool decode(SkStream* stream, SkBitmap* bitmap, Mode mode) {
         return this->decode(stream, bitmap, SkBitmap::kNo_Config, mode);
     }
+
+    /**
+     * Given a stream, build an index for doing tile-based decode.
+     * The built index will be saved in the decoder, and the image size will
+     * be returned in width and height.
+     *
+     * Return true for success or false on failure.
+     */
+    virtual bool buildTileIndex(SkStream*,
+                                int *width, int *height, bool isShareable) {
+        return false;
+    }
+
+    /**
+     * Decode a rectangle region in the image specified by rect.
+     * The method can only be called after buildTileIndex().
+     *
+     * Return true for success.
+     * Return false if the index is never built or failing in decoding.
+     */
+    virtual bool decodeRegion(SkBitmap* bitmap, SkIRect rect,
+                              SkBitmap::Config pref);
+
 
     /** Given a stream, this will try to find an appropriate decoder object.
         If none is found, the method returns NULL.
@@ -264,6 +307,11 @@ protected:
     // must be overridden in subclasses. This guy is called by decode(...)
     virtual bool onDecode(SkStream*, SkBitmap* bitmap, Mode) = 0;
 
+    // must be overridden in subclasses. This guy is called by decodeRegion(...)
+    virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect) {
+        return false;
+    }
+
     /** Can be queried from within onDecode, to see if the user (possibly in
         a different thread) has requested the decode to cancel. If this returns
         true, your onDecode() should stop and return false.
@@ -303,6 +351,8 @@ protected:
         need not call that.
      */
     SkBitmap::Config getPrefConfig(SrcDepth, bool hasAlpha) const;
+
+    SkVMMemoryReporter*      fReporter;
 
 private:
     Peeker*                 fPeeker;
