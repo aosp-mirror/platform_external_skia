@@ -806,6 +806,9 @@ public:
     void getTextPath(const void* text, size_t length, SkScalar x, SkScalar y,
                      SkPath* path) const;
 
+    const SkGlyph& getUnicharMetrics(SkUnichar);
+    const void* findImage(const SkGlyph&);
+
 private:
     SkTypeface*     fTypeface;
     SkScalar        fTextSize;

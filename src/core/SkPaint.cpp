@@ -322,6 +322,20 @@ SkDrawLooper* SkPaint::setLooper(SkDrawLooper* looper)
 #include "SkGlyphCache.h"
 #include "SkUtils.h"
 
+const SkGlyph& SkPaint::getUnicharMetrics(SkUnichar text) {
+    SkAutoGlyphCache autoCache(*this, NULL);
+    SkGlyphCache*    cache = autoCache.getCache();
+
+    return cache->getUnicharMetrics(text);
+}
+
+const void* SkPaint::findImage(const SkGlyph& glyph) {
+    SkAutoGlyphCache autoCache(*this, NULL);
+    SkGlyphCache*    cache = autoCache.getCache();
+
+    return cache->findImage(glyph);
+}
+
 int SkPaint::textToGlyphs(const void* textData, size_t byteLength,
                           uint16_t glyphs[]) const {
     if (byteLength == 0) {
