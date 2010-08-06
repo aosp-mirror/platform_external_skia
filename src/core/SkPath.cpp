@@ -155,7 +155,7 @@ void SkPath::reset() {
 
     fPts.reset();
     fVerbs.reset();
-    fGenerationID = 0;
+    fGenerationID++;
     fBoundsIsDirty = true;
 }
 
@@ -164,7 +164,7 @@ void SkPath::rewind() {
 
     fPts.rewind();
     fVerbs.rewind();
-    fGenerationID = 0;
+    fGenerationID++;
     fBoundsIsDirty = true;
 }
 
