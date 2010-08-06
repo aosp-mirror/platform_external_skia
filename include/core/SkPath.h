@@ -571,6 +571,8 @@ public:
     */
     void subdivide(SkScalar dist, bool bendLines, SkPath* dst = NULL) const;
 
+    uint32_t getGenerationID() const;
+
     SkDEBUGCODE(void validate() const;)
 
 private:
@@ -580,6 +582,7 @@ private:
     mutable uint8_t     fBoundsIsDirty;
     uint8_t             fFillType;
     uint8_t             fIsConvex;
+    uint32_t            fGenerationID;
 
     // called, if dirty, by getBounds()
     void computeBounds() const;
