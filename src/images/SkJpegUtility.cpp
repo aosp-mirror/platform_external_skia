@@ -21,6 +21,24 @@ static void sk_init_source(j_decompress_ptr cinfo) {
     skjpeg_source_mgr*  src = (skjpeg_source_mgr*)cinfo->src;
     src->next_input_byte = (const JOCTET*)src->fBuffer;
     src->bytes_in_buffer = 0;
+    src->current_offset = 0;
+    src->fStream->rewind();
+}
+
+static boolean sk_seek_input_data(j_decompress_ptr cinfo, long byte_offset) {
+    skjpeg_source_mgr* src = (skjpeg_source_mgr*)cinfo->src;
+
+    if (byte_offset > src->current_offset) {
+        (void)src->fStream->skip(byte_offset - src->current_offset);
+    } else {
+        src->fStream->rewind();
+        (void)src->fStream->skip(byte_offset);
+    }
+
+    src->current_offset = byte_offset;
+    src->next_input_byte = (const JOCTET*)src->fBuffer;
+    src->bytes_in_buffer = 0;
+    return TRUE;
 }
 
 static boolean sk_fill_input_buffer(j_decompress_ptr cinfo) {
@@ -35,6 +53,7 @@ static boolean sk_fill_input_buffer(j_decompress_ptr cinfo) {
         return FALSE;
     }
 
+    src->current_offset += bytes;
     src->next_input_byte = (const JOCTET*)src->fBuffer;
     src->bytes_in_buffer = bytes;
     return TRUE;
@@ -52,6 +71,7 @@ static void sk_skip_input_data(j_decompress_ptr cinfo, long num_bytes) {
                 cinfo->err->error_exit((j_common_ptr)cinfo);
                 return;
             }
+            src->current_offset += bytes;
             bytesToSkip -= bytes;
         }
         src->next_input_byte = (const JOCTET*)src->fBuffer;
@@ -83,7 +103,9 @@ static void sk_term_source(j_decompress_ptr /*cinfo*/) {}
 static void skmem_init_source(j_decompress_ptr cinfo) {
     skjpeg_source_mgr*  src = (skjpeg_source_mgr*)cinfo->src;
     src->next_input_byte = (const JOCTET*)src->fMemoryBase;
+    src->start_input_byte = (const JOCTET*)src->fMemoryBase;
     src->bytes_in_buffer = src->fMemoryBaseSize;
+    src->current_offset = src->fMemoryBaseSize;
 }
 
 static boolean skmem_fill_input_buffer(j_decompress_ptr cinfo) {
@@ -108,18 +130,23 @@ static void skmem_term_source(j_decompress_ptr /*cinfo*/) {}
 
 ///////////////////////////////////////////////////////////////////////////////
 
-skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder) : fStream(stream) {
+skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder,
+                                     bool copyStream, bool ownStream) : fStream(stream) {
     fDecoder = decoder;
     const void* baseAddr = stream->getMemoryBase();
-    if (baseAddr && false) {
-        fMemoryBase = baseAddr;
+    fMemoryBase = NULL;
+    fUnrefStream = ownStream;
+    if (copyStream) {
         fMemoryBaseSize = stream->getLength();
+        fMemoryBase = sk_malloc_throw(fMemoryBaseSize);
+        stream->read(fMemoryBase, fMemoryBaseSize);
 
         init_source = skmem_init_source;
         fill_input_buffer = skmem_fill_input_buffer;
         skip_input_data = skmem_skip_input_data;
         resync_to_restart = skmem_resync_to_restart;
         term_source = skmem_term_source;
+        seek_input_data = NULL;
     } else {
         fMemoryBase = NULL;
         fMemoryBaseSize = 0;
@@ -129,8 +156,18 @@ skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder) 
         skip_input_data = sk_skip_input_data;
         resync_to_restart = sk_resync_to_restart;
         term_source = sk_term_source;
+        seek_input_data = sk_seek_input_data;
     }
 //    SkDebugf("**************** use memorybase %p %d\n", fMemoryBase, fMemoryBaseSize);
+}
+
+skjpeg_source_mgr::~skjpeg_source_mgr() {
+    if (fMemoryBase) {
+        sk_free(fMemoryBase);
+    }
+    if (fUnrefStream) {
+        fStream->unref();
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

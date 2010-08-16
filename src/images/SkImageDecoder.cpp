@@ -20,6 +20,17 @@
 #include "SkPixelRef.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
+#include "SkCanvas.h"
+
+const char *SkImageDecoder::kFormatName[] = {
+    "Unknown Format",
+    "BMP",
+    "GIF",
+    "ICO",
+    "JPEG",
+    "PNG",
+    "WBMP",
+};
 
 static SkBitmap::Config gDeviceConfig = SkBitmap::kNo_Config;
 
@@ -36,8 +47,8 @@ void SkImageDecoder::SetDeviceConfig(SkBitmap::Config config)
 ///////////////////////////////////////////////////////////////////////////////
 
 SkImageDecoder::SkImageDecoder()
-    : fPeeker(NULL), fChooser(NULL), fAllocator(NULL), fSampleSize(1),
-      fDefaultPref(SkBitmap::kNo_Config), fDitherImage(true),
+    : fReporter(NULL), fPeeker(NULL), fChooser(NULL), fAllocator(NULL),
+      fSampleSize(1), fDefaultPref(SkBitmap::kNo_Config), fDitherImage(true),
       fUsePrefTable(false) {
 }
 
@@ -45,6 +56,7 @@ SkImageDecoder::~SkImageDecoder() {
     fPeeker->safeUnref();
     fChooser->safeUnref();
     fAllocator->safeUnref();
+    fReporter->safeUnref();
 }
 
 SkImageDecoder::Format SkImageDecoder::getFormat() const {
@@ -64,6 +76,11 @@ SkImageDecoder::Chooser* SkImageDecoder::setChooser(Chooser* chooser) {
 SkBitmap::Allocator* SkImageDecoder::setAllocator(SkBitmap::Allocator* alloc) {
     SkRefCnt_SafeAssign(fAllocator, alloc);
     return alloc;
+}
+
+SkVMMemoryReporter* SkImageDecoder::setReporter(SkVMMemoryReporter* reporter) {
+    SkRefCnt_SafeAssign(fReporter, reporter);
+    return reporter;
 }
 
 void SkImageDecoder::setSampleSize(int size) {
@@ -144,6 +161,24 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
     fDefaultPref = pref;
 
     if (!this->onDecode(stream, &tmp, mode)) {
+        return false;
+    }
+    bm->swap(tmp);
+    return true;
+}
+
+bool SkImageDecoder::decodeRegion(SkBitmap* bm, SkIRect rect,
+                                  SkBitmap::Config pref) {
+    // pass a temporary bitmap, so that if we return false, we are assured of
+    // leaving the caller's bitmap untouched.
+    SkBitmap    tmp;
+
+    // we reset this to false before calling onDecodeRegion
+    fShouldCancelDecode = false;
+    // assign this, for use by getPrefConfig(), in case fUsePrefTable is false
+    fDefaultPref = pref;
+
+    if (!this->onDecodeRegion(&tmp, rect)) {
         return false;
     }
     bm->swap(tmp);
