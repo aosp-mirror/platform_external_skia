@@ -22,6 +22,9 @@
 #include "SkTemplates.h"
 #include "SkCanvas.h"
 
+SkVMMemoryReporter::~SkVMMemoryReporter() {
+}
+
 const char *SkImageDecoder::kFormatName[] = {
     "Unknown Format",
     "BMP",
