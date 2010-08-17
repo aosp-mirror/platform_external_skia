@@ -25,8 +25,8 @@ class SkStream;
 
 class SkVMMemoryReporter : public SkRefCnt {
 public:
-    virtual ~SkVMMemoryReporter() {}
-    virtual bool reportMemory(size_t memorySize);
+    virtual ~SkVMMemoryReporter();
+    virtual bool reportMemory(size_t memorySize) = 0;
 };
 
 /** \class SkImageDecoder
