@@ -57,6 +57,12 @@ public:
     */
     bool getInfo(SkBitmap* bm);
     
+    /** Return true if the image can be decoded and is opaque. Calling this
+        method will decode and set the pixels in the specified bitmap and
+        set the opaque flag.
+     */
+    bool isOpaque(SkBitmap* bm);
+    
     SkImageDecoderFactory* getDecoderFactory() const { return fFactory; }
     // returns the factory parameter
     SkImageDecoderFactory* setDecoderFactory(SkImageDecoderFactory*);
