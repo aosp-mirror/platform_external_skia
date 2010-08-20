@@ -52,10 +52,17 @@ void SkBlurDrawLooper::init(SkCanvas* canvas, SkPaint* paint)
 
 bool SkBlurDrawLooper::next()
 {
+    SkColor blurColor;
+    SkAlpha alpha;
     switch (fState) {
     case kBeforeEdge:
         fSavedColor = fPaint->getColor();
-        fPaint->setColor(fBlurColor);
+        blurColor = fBlurColor;
+        alpha = SkColorGetA(blurColor);
+        if (alpha == 255) {
+            blurColor = SkColorSetA(blurColor, fPaint->getAlpha());
+        }
+        fPaint->setColor(blurColor);
         fPaint->setMaskFilter(fBlur);
         fCanvas->save(SkCanvas::kMatrix_SaveFlag);
         fCanvas->translate(fDx, fDy);
