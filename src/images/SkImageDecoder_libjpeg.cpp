@@ -175,12 +175,10 @@ static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer,
 
 static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
                           huffman_index *index, void* buffer,
-                          int startX, int startY, int width, int height,
                           int count) {
     for (int i = 0; i < count; i++) {
         JSAMPLE* rowptr = (JSAMPLE*)buffer;
-        int row_count = jpeg_read_tile_scanline(cinfo, index, &rowptr,
-                                              startX, startY, width, height);
+        int row_count = jpeg_read_tile_scanline(cinfo, index, &rowptr);
         if (row_count != 1) {
             return false;
         }
@@ -597,10 +595,10 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     jpeg_init_read_tile_scanline(cinfo, index->index,
                                  &startX, &startY, &width, &height);
     int skiaSampleSize = recompute_sampleSize(requestedSampleSize, *cinfo);
+    int actualSampleSize = skiaSampleSize * (DCTSIZE / cinfo->min_DCT_scaled_size);
+
     SkBitmap *bitmap = new SkBitmap;
     SkAutoTDelete<SkBitmap> adb(bitmap);
-
-    int actualSampleSize = skiaSampleSize * cinfo->image_width / cinfo->output_width;
 
 #ifdef ANDROID_RGB
     /* short-circuit the SkScaledBitmapSampler when possible, as this gives
@@ -624,7 +622,7 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
 
         while (row_total_count < height) {
             int row_count = jpeg_read_tile_scanline(cinfo,
-                    index->index, &rowptr, startX, startY, width, height);
+                    index->index, &rowptr);
             // if row_count == 0, then we didn't get a scanline, so abort.
             // if we supported partial images, we might return true in this case
             if (0 == row_count) {
@@ -673,16 +671,14 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     uint8_t* srcRow = (uint8_t*)srcStorage.alloc(width * 4);
 
     //  Possibly skip initial rows [sampler.srcY0]
-    if (!skip_src_rows_tile(cinfo, index->index, srcRow,
-                            startX, startY, width, height, sampler.srcY0())) {
+    if (!skip_src_rows_tile(cinfo, index->index, srcRow, sampler.srcY0())) {
         return return_false(*cinfo, *bitmap, "skip rows");
     }
 
     // now loop through scanlines until y == bitmap->height() - 1
     for (int y = 0;; y++) {
         JSAMPLE* rowptr = (JSAMPLE*)srcRow;
-        int row_count = jpeg_read_tile_scanline(cinfo, index->index, &rowptr,
-                                                startX, startY, width, height);
+        int row_count = jpeg_read_tile_scanline(cinfo, index->index, &rowptr);
         if (0 == row_count) {
             return return_false(*cinfo, *bitmap, "read_scanlines");
         }
@@ -697,7 +693,6 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
         }
 
         if (!skip_src_rows_tile(cinfo, index->index, srcRow,
-                                startX, startY, width, height,
                                 sampler.srcDY() - 1)) {
             return return_false(*cinfo, *bitmap, "skip rows");
         }
