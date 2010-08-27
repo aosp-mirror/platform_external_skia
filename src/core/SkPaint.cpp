@@ -329,11 +329,20 @@ const SkGlyph& SkPaint::getUnicharMetrics(SkUnichar text) {
     return cache->getUnicharMetrics(text);
 }
 
-const void* SkPaint::findImage(const SkGlyph& glyph) {
-    SkAutoGlyphCache autoCache(*this, NULL);
-    SkGlyphCache*    cache = autoCache.getCache();
+static void DetachDescProc(const SkDescriptor* desc, void* context)
+{
+    *((SkGlyphCache**)context) = SkGlyphCache::DetachCache(desc);
+}
 
-    return cache->findImage(glyph);
+const void* SkPaint::findImage(const SkGlyph& glyph) {
+    // See ::detachCache()
+    SkGlyphCache* cache;
+    descriptorProc(NULL, DetachDescProc, &cache, true);
+
+    const void* image = cache->findImage(glyph);
+
+    SkGlyphCache::AttachCache(cache);
+    return image;
 }
 
 int SkPaint::textToGlyphs(const void* textData, size_t byteLength,
@@ -1344,11 +1353,15 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
 
 void SkPaint::descriptorProc(const SkMatrix* deviceMatrix,
                              void (*proc)(const SkDescriptor*, void*),
-                             void* context) const
+                             void* context, bool ignoreGamma) const
 {
     SkScalerContext::Rec    rec;
 
     SkScalerContext::MakeRec(*this, deviceMatrix, &rec);
+    if (ignoreGamma) {
+        rec.fFlags &= ~(SkScalerContext::kGammaForBlack_Flag |
+                SkScalerContext::kGammaForWhite_Flag);
+    }
 
     size_t          descSize = sizeof(rec);
     int             entryCount = 1;
@@ -1401,11 +1414,6 @@ void SkPaint::descriptorProc(const SkMatrix* deviceMatrix,
     desc->computeChecksum();
 
     proc(desc, context);
-}
-
-static void DetachDescProc(const SkDescriptor* desc, void* context)
-{
-    *((SkGlyphCache**)context) = SkGlyphCache::DetachCache(desc);
 }
 
 SkGlyphCache* SkPaint::detachCache(const SkMatrix* deviceMatrix) const
