@@ -78,7 +78,7 @@ LOCAL_SRC_FILES:= \
 	src/images/SkImageRef_GlobalPool.cpp \
 	src/images/SkImageRefPool.cpp \
 	src/images/SkJpegUtility.cpp \
-	src/images/SkBitmapRegionDecoder.cpp \
+	src/images/SkLargeBitmap.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
@@ -282,3 +282,4 @@ include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk
+
