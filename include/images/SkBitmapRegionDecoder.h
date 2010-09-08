@@ -1,18 +1,18 @@
-#ifndef SkLargeBitmap_DEFINED
-#define SkLargeBitmap_DEFINED
+#ifndef SkBitmapRegionDecoder_DEFINED
+#define SkBitmapRegionDecoder_DEFINED
 
 #include "SkBitmap.h"
 #include "SkRect.h"
 #include "SkImageDecoder.h"
 
-class SkLargeBitmap {
+class SkBitmapRegionDecoder {
 public:
-    SkLargeBitmap(SkImageDecoder *decoder, int width, int height) {
+    SkBitmapRegionDecoder(SkImageDecoder *decoder, int width, int height) {
         fDecoder = decoder;
         fWidth = width;
         fHeight = height;
     }
-    virtual ~SkLargeBitmap() {
+    virtual ~SkBitmapRegionDecoder() {
         delete fDecoder;
     }
 
