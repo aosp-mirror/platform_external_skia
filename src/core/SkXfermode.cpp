@@ -941,30 +941,36 @@ SkXfermode* SkXfermode::Create(Mode mode) {
     SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == kModeCount);
     SkASSERT((unsigned)mode < kModeCount);
 
+    SkXfermode* xferMode = NULL;
     switch (mode) {
         case kClear_Mode:
-            return SkNEW(SkClearXfermode);
+            xferMode = SkNEW(SkClearXfermode);
+            break;
         case kSrc_Mode:
-            return SkNEW(SkSrcXfermode);
+            xferMode = SkNEW(SkSrcXfermode);
+            break;
         case kSrcOver_Mode:
             return NULL;
         case kDstIn_Mode:
-            return SkNEW(SkDstInXfermode);
+            xferMode = SkNEW(SkDstInXfermode);
+            break;
         case kDstOut_Mode:
-            return SkNEW(SkDstOutXfermode);
+            xferMode = SkNEW(SkDstOutXfermode);
+            break;
         // use the table 
         default: {
             const ProcCoeff& rec = gProcCoeffs[mode];
             if ((unsigned)rec.fSC < SkXfermode::kCoeffCount &&
                     (unsigned)rec.fDC < SkXfermode::kCoeffCount) {
-                return SkNEW_ARGS(SkProcCoeffXfermode, (rec.fProc,
-                                                        rec.fSC,
-                                                        rec.fDC));
+                xferMode = SkNEW_ARGS(SkProcCoeffXfermode, (rec.fProc, rec.fSC, rec.fDC));
             } else {
-                return SkNEW_ARGS(SkProcXfermode, (rec.fProc));
+                xferMode = SkNEW_ARGS(SkProcXfermode, (rec.fProc));
             }
+            break;
         }
     }
+    xferMode->fMode = mode;
+    return xferMode;
 }
 
 bool SkXfermode::IsMode(SkXfermode* xfer, Mode* mode) {

@@ -137,6 +137,8 @@ public:
         return false and ignore the mode parameter.
      */
     static bool IsMode(SkXfermode*, Mode* mode);
+    
+    Mode fMode;
 
 protected:
     SkXfermode(SkFlattenableReadBuffer& rb) : SkFlattenable(rb) {}
