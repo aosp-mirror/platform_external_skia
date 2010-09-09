@@ -134,12 +134,22 @@ skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder,
                                      bool copyStream, bool ownStream) : fStream(stream) {
     fDecoder = decoder;
     const void* baseAddr = stream->getMemoryBase();
+    size_t bufferSize = 4096;
+    size_t len;
     fMemoryBase = NULL;
     fUnrefStream = ownStream;
     if (copyStream) {
-        fMemoryBaseSize = stream->getLength();
-        fMemoryBase = sk_malloc_throw(fMemoryBaseSize);
-        stream->read(fMemoryBase, fMemoryBaseSize);
+        fMemoryBaseSize = 0;
+        fMemoryBase = sk_malloc_throw(bufferSize);
+        while ((len = stream->read(fMemoryBase + fMemoryBaseSize,
+                        bufferSize - fMemoryBaseSize)) != 0) {
+            fMemoryBaseSize += len;
+            if (fMemoryBaseSize == bufferSize) {
+                bufferSize *= 2;
+                fMemoryBase = sk_realloc_throw(fMemoryBase, bufferSize);
+            }
+        }
+        fMemoryBase = sk_realloc_throw(fMemoryBase, fMemoryBaseSize);
 
         init_source = skmem_init_source;
         fill_input_buffer = skmem_fill_input_buffer;
