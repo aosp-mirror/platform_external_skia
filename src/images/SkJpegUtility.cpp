@@ -141,8 +141,8 @@ skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder,
     if (copyStream) {
         fMemoryBaseSize = 0;
         fMemoryBase = sk_malloc_throw(bufferSize);
-        while ((len = stream->read(fMemoryBase + fMemoryBaseSize,
-                        bufferSize - fMemoryBaseSize)) != 0) {
+        while ((len = stream->read((char*)fMemoryBase + fMemoryBaseSize,
+                    bufferSize - fMemoryBaseSize)) != 0) {
             fMemoryBaseSize += len;
             if (fMemoryBaseSize == bufferSize) {
                 bufferSize *= 2;
