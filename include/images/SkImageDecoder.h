@@ -204,9 +204,7 @@ public:
      * Return true for success or false on failure.
      */
     virtual bool buildTileIndex(SkStream*,
-                                int *width, int *height, bool isShareable) {
-        return false;
-    }
+                                int *width, int *height);
 
     /**
      * Decode a rectangle region in the image specified by rect.
@@ -307,7 +305,15 @@ protected:
     // must be overridden in subclasses. This guy is called by decode(...)
     virtual bool onDecode(SkStream*, SkBitmap* bitmap, Mode) = 0;
 
-    // must be overridden in subclasses. This guy is called by decodeRegion(...)
+    // If the decoder wants to support tiled based decoding,
+    // this method must be overridden. This guy is called by buildTileIndex(...)
+    virtual bool onBuildTileIndex(SkStream*,
+                int *width, int *height) {
+        return false;
+    }
+
+    // If the decoder wants to support tiled based decoding,
+    // this method must be overridden. This guy is called by decodeRegion(...)
     virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect) {
         return false;
     }

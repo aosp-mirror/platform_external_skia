@@ -188,6 +188,14 @@ bool SkImageDecoder::decodeRegion(SkBitmap* bm, SkIRect rect,
     return true;
 }
 
+bool SkImageDecoder::buildTileIndex(SkStream* stream,
+                                int *width, int *height) {
+    // we reset this to false before calling onBuildTileIndex
+    fShouldCancelDecode = false;
+
+    return this->onBuildTileIndex(stream, width, height);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,

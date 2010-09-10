@@ -77,10 +77,10 @@ public:
     virtual Format getFormat() const {
         return kJPEG_Format;
     }
-    virtual bool buildTileIndex(SkStream *stream,
-                                int *width, int *height, bool isShareable);
 
 protected:
+    virtual bool onBuildTileIndex(SkStream *stream,
+                                int *width, int *height);
     virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
     virtual void cropBitmap(SkBitmap *dest, SkBitmap *src, int sampleSize,
@@ -208,7 +208,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     jpeg_decompress_struct  cinfo;
     skjpeg_error_mgr        sk_err;
-    skjpeg_source_mgr       sk_stream(stream, this, false, false);
+    skjpeg_source_mgr       sk_stream(stream, this, false);
 
     cinfo.err = jpeg_std_error(&sk_err);
     sk_err.error_exit = skjpeg_error_exit;
@@ -433,9 +433,8 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     return true;
 }
 
-bool SkJPEGImageDecoder::buildTileIndex(SkStream* stream,
-                                        int *width, int *height,
-                                        bool isShareable) {
+bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
+                                        int *width, int *height) {
     SkAutoMalloc  srcStorage;
     SkJPEGImageIndex *index = new SkJPEGImageIndex;
 
@@ -443,7 +442,7 @@ bool SkJPEGImageDecoder::buildTileIndex(SkStream* stream,
                                         malloc(sizeof(jpeg_decompress_struct));
     skjpeg_error_mgr        sk_err;
     skjpeg_source_mgr       *sk_stream =
-        new skjpeg_source_mgr(stream, this, !isShareable, true);
+        new skjpeg_source_mgr(stream, this, true);
     if (cinfo == NULL || sk_stream == NULL) {
         return false;
     }
