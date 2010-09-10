@@ -176,6 +176,7 @@ public:
     */
     virtual void setMemory(const void* data, size_t length,
                            bool copyData = false);
+    virtual void setMemoryOwned(const void* src, size_t size);
     void skipToAlign4();
     virtual bool rewind();
     virtual size_t read(void* buffer, size_t size);

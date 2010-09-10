@@ -131,43 +131,21 @@ static void skmem_term_source(j_decompress_ptr /*cinfo*/) {}
 ///////////////////////////////////////////////////////////////////////////////
 
 skjpeg_source_mgr::skjpeg_source_mgr(SkStream* stream, SkImageDecoder* decoder,
-                                     bool copyStream, bool ownStream) : fStream(stream) {
+                                     bool ownStream) : fStream(stream) {
     fDecoder = decoder;
     const void* baseAddr = stream->getMemoryBase();
     size_t bufferSize = 4096;
     size_t len;
     fMemoryBase = NULL;
     fUnrefStream = ownStream;
-    if (copyStream) {
-        fMemoryBaseSize = 0;
-        fMemoryBase = sk_malloc_throw(bufferSize);
-        while ((len = stream->read((char*)fMemoryBase + fMemoryBaseSize,
-                    bufferSize - fMemoryBaseSize)) != 0) {
-            fMemoryBaseSize += len;
-            if (fMemoryBaseSize == bufferSize) {
-                bufferSize *= 2;
-                fMemoryBase = sk_realloc_throw(fMemoryBase, bufferSize);
-            }
-        }
-        fMemoryBase = sk_realloc_throw(fMemoryBase, fMemoryBaseSize);
+    fMemoryBaseSize = 0;
 
-        init_source = skmem_init_source;
-        fill_input_buffer = skmem_fill_input_buffer;
-        skip_input_data = skmem_skip_input_data;
-        resync_to_restart = skmem_resync_to_restart;
-        term_source = skmem_term_source;
-        seek_input_data = NULL;
-    } else {
-        fMemoryBase = NULL;
-        fMemoryBaseSize = 0;
-
-        init_source = sk_init_source;
-        fill_input_buffer = sk_fill_input_buffer;
-        skip_input_data = sk_skip_input_data;
-        resync_to_restart = sk_resync_to_restart;
-        term_source = sk_term_source;
-        seek_input_data = sk_seek_input_data;
-    }
+    init_source = sk_init_source;
+    fill_input_buffer = sk_fill_input_buffer;
+    skip_input_data = sk_skip_input_data;
+    resync_to_restart = sk_resync_to_restart;
+    term_source = sk_term_source;
+    seek_input_data = sk_seek_input_data;
 //    SkDebugf("**************** use memorybase %p %d\n", fMemoryBase, fMemoryBaseSize);
 }
 
