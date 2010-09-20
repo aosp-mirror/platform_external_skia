@@ -196,6 +196,26 @@ bool SkImageDecoder::buildTileIndex(SkStream* stream,
     return this->onBuildTileIndex(stream, width, height);
 }
 
+void SkImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
+                                    int sampleSize, int destX, int destY,
+                                    int width, int height, int srcX, int srcY) {
+    int w = width / sampleSize;
+    int h = height / sampleSize;
+    if (w == src->width() && h == src->height() &&
+          (srcX - destX) / sampleSize == 0 && (srcY - destY) / sampleSize == 0) {
+        // The output rect is the same as the decode result
+        dest->swap(*src);
+        return;
+    }
+    dest->setConfig(src->getConfig(), w, h);
+    dest->setIsOpaque(src->isOpaque());
+    this->allocPixelRef(dest, NULL);
+
+    SkCanvas canvas(*dest);
+    canvas.drawBitmap(*src, (srcX - destX) / sampleSize,
+                             (srcY - destY) / sampleSize);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,
@@ -241,4 +261,3 @@ bool SkImageDecoder::DecodeStream(SkStream* stream, SkBitmap* bm,
     }
     return success;
 }
-

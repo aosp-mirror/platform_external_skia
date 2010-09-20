@@ -77,15 +77,11 @@ public:
     virtual Format getFormat() const {
         return kJPEG_Format;
     }
-
 protected:
     virtual bool onBuildTileIndex(SkStream *stream,
                                 int *width, int *height);
     virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
-    virtual void cropBitmap(SkBitmap *dest, SkBitmap *src, int sampleSize,
-                            int srcX, int srcY, int width, int height,
-                            int destX, int destY);
 private:
     SkJPEGImageIndex *index;
 };
@@ -509,41 +505,6 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
 
     this->index = index;
     return true;
-}
-
-/*
- * Crop a rectangle from the src Bitmap to the dest Bitmap. src and dest are
- * both sampled by sampleSize from an original Bitmap.
- *
- * @param dest the destination Bitmap.
- * @param src the source Bitmap that is sampled by sampleSize from the original
- *            Bitmap.
- * @param sampleSize the sample size that src is sampled from the original Bitmap.
- * @param (srcX, srcY) the upper-left point of the src Btimap in terms of
- *                     the coordinate in the original Bitmap.
- * @param (width, height) the width and height of the unsampled dest.
- * @param (destX, destY) the upper-left point of the dest Bitmap in terms of
- *                       the coordinate in the original Bitmap.
- */
-void SkJPEGImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
-                                    int sampleSize, int srcX, int srcY,
-                                    int width, int height, int destX, int destY)
-{
-    int w = width / sampleSize;
-    int h = height / sampleSize;
-    if (w == src->width() && h == src->height() &&
-          (destX - srcX) / sampleSize == 0 && (destY - srcY) / sampleSize == 0) {
-        // The output rect is the same as the decode result
-        dest->swap( *src );
-        return;
-    }
-    dest->setConfig(src->getConfig(), w, h);
-    dest->setIsOpaque(true);
-    this->allocPixelRef(dest, NULL);
-
-    SkCanvas canvas(*dest);
-    canvas.drawBitmap(*src, (destX - srcX) / sampleSize,
-                             (destY - srcY) / sampleSize);
 }
 
 bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
