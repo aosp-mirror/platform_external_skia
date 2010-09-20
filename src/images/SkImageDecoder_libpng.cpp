@@ -431,7 +431,7 @@ bool SkPNGImageDecoder::buildTileIndex(SkStream* sk_stream,
         size_t bufferSize = 4096;
         void *tmp = sk_malloc_throw(bufferSize);
 
-        while ((len = sk_stream->read(tmp + inputLen,
+        while ((len = sk_stream->read((char*) tmp + inputLen,
                         bufferSize - inputLen)) != 0) {
             inputLen += len;
             if (inputLen == bufferSize) {
