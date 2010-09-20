@@ -216,7 +216,6 @@ public:
     virtual bool decodeRegion(SkBitmap* bitmap, SkIRect rect,
                               SkBitmap::Config pref);
 
-
     /** Given a stream, this will try to find an appropriate decoder object.
         If none is found, the method returns NULL.
     */
@@ -317,6 +316,26 @@ protected:
     virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect) {
         return false;
     }
+
+    /*
+     * Crop a rectangle from the src Bitmap to the dest Bitmap. src and dest are
+     * both sampled by sampleSize from an original Bitmap.
+     *
+     * @param dest the destination Bitmap.
+     * @param src the source Bitmap that is sampled by sampleSize from the original
+     *            Bitmap.
+     * @param sampleSize the sample size that src is sampled from the original Bitmap.
+     * @param (srcX, srcY) the upper-left point of the src Btimap in terms of
+     *                     the coordinate in the original Bitmap.
+     * @param (width, height) the width and height of the unsampled dest.
+     * @param (destX, destY) the upper-left point of the dest Bitmap in terms of
+     *                       the coordinate in the original Bitmap.
+     */
+    virtual void cropBitmap(SkBitmap *dest, SkBitmap *src, int sampleSize,
+                            int destX, int destY, int width, int height,
+                            int srcX, int srcY);
+
+
 
     /** Can be queried from within onDecode, to see if the user (possibly in
         a different thread) has requested the decode to cancel. If this returns
