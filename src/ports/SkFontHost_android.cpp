@@ -419,6 +419,8 @@ static const FontInitRec gSystemFonts[] = {
     { "DroidSansArabic.ttf",        gFBNames    },
     { "DroidSansHebrew.ttf",        gFBNames    },
     { "DroidSansThai.ttf",          gFBNames    },
+    { "MTLmr3m.ttf",                gFBNames    }, // Motoya Japanese Font
+    { "MTLc3m.ttf",                 gFBNames    }, // Motoya Japanese Font
     { "DroidSansJapanese.ttf",      gFBNames    },
     { "DroidSansFallback.ttf",      gFBNames    }
 };
