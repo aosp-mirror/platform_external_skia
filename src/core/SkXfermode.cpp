@@ -315,10 +315,12 @@ void SkProcXfermode::xferA8(SK_RESTRICT SkAlpha dst[],
 SkProcXfermode::SkProcXfermode(SkFlattenableReadBuffer& buffer)
         : SkXfermode(buffer) {
     fProc = (SkXfermodeProc)buffer.readFunctionPtr();
+    fMode = (Mode) buffer.readInt();
 }
 
 void SkProcXfermode::flatten(SkFlattenableWriteBuffer& buffer) {
     buffer.writeFunctionPtr((void*)fProc);
+    buffer.writeInt(fMode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
