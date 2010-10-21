@@ -62,10 +62,10 @@ public:
             delete index;
         }
     }
-    virtual bool buildTileIndex(SkStream *stream,
-             int *width, int *height, bool isShareable);
 
 protected:
+    virtual bool onBuildTileIndex(SkStream *stream,
+             int *width, int *height);
     virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
 
@@ -419,32 +419,12 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
     return true;
 }
 
-bool SkPNGImageDecoder::buildTileIndex(SkStream* sk_stream,
-                int *width, int *height, bool isShareable) {
+bool SkPNGImageDecoder::onBuildTileIndex(SkStream* sk_stream, int *width,
+        int *height) {
     png_structp png_ptr;
     png_infop   info_ptr;
 
     this->index = new SkPNGImageIndex();
-
-    if (!isShareable) {
-        size_t len, inputLen = 0;
-        size_t bufferSize = 4096;
-        void *tmp = sk_malloc_throw(bufferSize);
-
-        while ((len = sk_stream->read((char*) tmp + inputLen,
-                        bufferSize - inputLen)) != 0) {
-            inputLen += len;
-            if (inputLen == bufferSize) {
-                bufferSize *= 2;
-                tmp = sk_realloc_throw(tmp, bufferSize);
-            }
-        }
-        tmp = sk_realloc_throw(tmp, inputLen);
-
-        SkMemoryStream *mem_stream = new SkMemoryStream(tmp, inputLen, true);
-        this->index->inputStream = mem_stream;
-        sk_stream = mem_stream;
-    }
 
     if (onDecodeInit(sk_stream, &png_ptr, &info_ptr) == false) {
         return false;
