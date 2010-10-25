@@ -809,6 +809,8 @@ public:
     const SkGlyph& getUnicharMetrics(SkUnichar);
     const void* findImage(const SkGlyph&);
 
+    uint32_t getGenerationID() const;
+
 private:
     SkTypeface*     fTypeface;
     SkScalar        fTextSize;
@@ -833,6 +835,7 @@ private:
     unsigned        fStyle : 2;
     unsigned        fTextEncoding : 2;  // 3 values
     unsigned        fHinting : 2;
+    uint32_t        fGenerationID;
 
     SkDrawCacheProc    getDrawCacheProc() const;
     SkMeasureCacheProc getMeasureCacheProc(TextBufferDirection dir,
