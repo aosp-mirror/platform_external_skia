@@ -12,6 +12,7 @@
 #include "SkRegion.h"
 #include "SkPictureFlat.h"
 #include "SkShape.h"
+#include "SkThread.h"
 
 class SkPictureRecord;
 class SkStream;
@@ -172,6 +173,7 @@ private:
     SkRefCntPlayback fRCPlayback;
     SkTypefacePlayback fTFPlayback;
     SkFactoryPlayback*   fFactoryPlayback;
+    SkMutex fDrawMutex;
 };
 
 #endif
