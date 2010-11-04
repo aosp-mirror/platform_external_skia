@@ -271,7 +271,7 @@ SkA8_Shader_Blitter::SkA8_Shader_Blitter(const SkBitmap& device, const SkPaint& 
 
 SkA8_Shader_Blitter::~SkA8_Shader_Blitter()
 {
-    fXfermode->safeUnref();
+    if (fXfermode) fXfermode->safeUnref();
     sk_free(fBuffer);
 }
 
@@ -377,7 +377,9 @@ void SkA8_Shader_Blitter::blitMask(const SkMask& mask, const SkIRect& clip)
     while (--height >= 0)
     {
         fShader->shadeSpan(x, y, span, width);
-        fXfermode->xferA8(device, span, width, alpha);
+        if (fXfermode) {
+            fXfermode->xferA8(device, span, width, alpha);
+        }
         
         y += 1;
         device += fDevice.rowBytes();
