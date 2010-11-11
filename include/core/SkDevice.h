@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,25 +22,52 @@
 #include "SkCanvas.h"
 #include "SkColor.h"
 
+class SkDevice;
 class SkDraw;
 struct SkIRect;
 class SkMatrix;
 class SkRegion;
 
+/** \class SkDeviceFactory
+
+    Devices that extend SkDevice should also provide a SkDeviceFactory class
+    to pass into SkCanvas.  Doing so will eliminate the need to extend
+    SkCanvas as well.
+*/
+class SkDeviceFactory {
+public:
+    virtual ~SkDeviceFactory();
+    virtual SkDevice* newDevice(SkBitmap::Config config, int width, int height,
+                                bool isOpaque, bool isForLayer) = 0;
+};
+
+class SkRasterDeviceFactory : public SkDeviceFactory {
+public:
+    virtual SkDevice* newDevice(SkBitmap::Config config, int width, int height,
+                                bool isOpaque, bool isForLayer);
+};
+
 class SkDevice : public SkRefCnt {
 public:
     SkDevice();
-    /** Construct a new device, extracting the width/height/config/isOpaque values from
-        the bitmap. If transferPixelOwnership is true, and the bitmap claims to own its
-        own pixels (getOwnsPixels() == true), then transfer this responsibility to the
-        device, and call setOwnsPixels(false) on the bitmap.
-        
-        Subclasses may override the destructor, which is virtual, even though this class
-        doesn't have one. SkRefCnt does.
-    
+    /** Construct a new device, extracting the width/height/config/isOpaque
+        values from the bitmap.  Subclasses may override the destructor, which
+        is virtual, even though this class doesn't have one. SkRefCnt does.
+
         @param bitmap   A copy of this bitmap is made and stored in the device
     */
     SkDevice(const SkBitmap& bitmap);
+
+    virtual SkDeviceFactory* getDeviceFactory() {
+        return SkNEW(SkRasterDeviceFactory);
+    }
+
+    enum Capabilities {
+        kGL_Capability     = 0x1,  //!< mask indicating GL support
+        kVector_Capability = 0x2,  //!< mask indicating a vector representation
+        kAll_Capabilities  = 0x3
+    };
+    virtual uint32_t getDeviceCapabilities() { return 0; }
 
     /** Return the width of the device (in pixels).
     */

@@ -2,6 +2,8 @@
 #include "SkDraw.h"
 #include "SkRect.h"
 
+SkDeviceFactory::~SkDeviceFactory() {}
+
 SkDevice::SkDevice() {}
 
 SkDevice::SkDevice(const SkBitmap& bitmap) : fBitmap(bitmap) {}
@@ -113,4 +115,16 @@ void SkDevice::drawDevice(const SkDraw& draw, SkDevice* device,
     draw.drawSprite(device->accessBitmap(false), x, y, paint);
 }
 
+SkDevice* SkRasterDeviceFactory::newDevice(SkBitmap::Config config, int width,
+                                           int height, bool isOpaque,
+                                           bool isForLayer) {
+    SkBitmap bitmap;
+    bitmap.setConfig(config, width, height);
+    bitmap.setIsOpaque(isOpaque);
 
+    bitmap.allocPixels();
+    if (!bitmap.isOpaque())
+        bitmap.eraseARGB(0, 0, 0, 0);
+
+    return SkNEW_ARGS(SkDevice, (bitmap));
+}
