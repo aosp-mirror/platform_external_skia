@@ -236,7 +236,12 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     */
     int sampleSize = this->getSampleSize();
 
-    cinfo.dct_method = JDCT_IFAST;
+    if (this->getPreferQualityOverSpeed()) {
+        cinfo.dct_method = JDCT_ISLOW;
+    } else {
+        cinfo.dct_method = JDCT_IFAST;
+    }
+
     cinfo.scale_num = 1;
     cinfo.scale_denom = sampleSize;
 
@@ -464,7 +469,6 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
     index->index = (huffman_index*)malloc(sizeof(huffman_index));
     jpeg_create_huffman_index(cinfo, index->index);
 
-    cinfo->dct_method = JDCT_IFAST;
     cinfo->scale_num = 1;
     cinfo->scale_denom = 1;
     if (!jpeg_build_huffman_index(cinfo, index->index)) {
@@ -493,7 +497,6 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
     //jpeg_start_decompress(cinfo);
     jpeg_start_tile_decompress(cinfo);
 
-    cinfo->dct_method = JDCT_IFAST;
     cinfo->scale_num = 1;
     index->cinfo = cinfo;
     *height = cinfo->output_height;
@@ -521,6 +524,12 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     }
     int requestedSampleSize = this->getSampleSize();
     cinfo->scale_denom = requestedSampleSize;
+
+    if (this->getPreferQualityOverSpeed()) {
+        cinfo->dct_method = JDCT_ISLOW;
+    } else {
+        cinfo->dct_method = JDCT_IFAST;
+    }
 
     SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, false);
     if (config != SkBitmap::kARGB_8888_Config &&

@@ -75,6 +75,20 @@ public:
     */
     void setDitherImage(bool dither) { fDitherImage = dither; }
 
+    /** Returns true if the decoder should try to decode the
+        resulting image to a higher quality even at the expense of
+        the decoding speed.
+    */
+    bool getPreferQualityOverSpeed() const { return fPreferQualityOverSpeed; }
+
+    /** Set to true if the the decoder should try to decode the
+        resulting image to a higher quality even at the expense of
+        the decoding speed.
+    */
+    void setPreferQualityOverSpeed(bool qualityOverSpeed) {
+        fPreferQualityOverSpeed = qualityOverSpeed;
+    }
+
     /** \class Peeker
 
         Base class for optional callbacks to retrieve meta/chunk data out of
@@ -389,6 +403,7 @@ private:
     bool                    fDitherImage;
     bool                    fUsePrefTable;
     mutable bool            fShouldCancelDecode;
+    bool                    fPreferQualityOverSpeed;
 
     // illegal
     SkImageDecoder(const SkImageDecoder&);
