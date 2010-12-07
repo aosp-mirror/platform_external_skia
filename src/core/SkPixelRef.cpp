@@ -128,3 +128,10 @@ const char* SkPixelRef::FactoryToName(Factory fact) {
     return NULL;
 }
 
+void SkPixelRef::globalRef() {
+    ref();
+}
+
+void SkPixelRef::globalUnref() {
+    unref();
+}

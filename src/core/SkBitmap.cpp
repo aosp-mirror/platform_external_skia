@@ -1114,7 +1114,7 @@ static bool GetBitmapAlpha(const SkBitmap& src, uint8_t SK_RESTRICT alpha[],
 #include "SkMatrix.h"
 
 void SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
-                            SkIPoint* offset) const {
+                            Allocator *allocator, SkIPoint* offset) const {
     SkDEBUGCODE(this->validate();)
 
     SkMatrix    identity;
@@ -1138,7 +1138,7 @@ void SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
     NO_FILTER_CASE:
         dst->setConfig(SkBitmap::kA8_Config, this->width(), this->height(),
                        srcM.fRowBytes);
-        dst->allocPixels();
+        dst->allocPixels(allocator, NULL);
         GetBitmapAlpha(*this, dst->getAddr8(0, 0), srcM.fRowBytes);
         if (offset) {
             offset->set(0, 0);
@@ -1157,7 +1157,7 @@ void SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
 
     dst->setConfig(SkBitmap::kA8_Config, dstM.fBounds.width(),
                    dstM.fBounds.height(), dstM.fRowBytes);
-    dst->allocPixels();
+    dst->allocPixels(allocator, NULL);
     memcpy(dst->getPixels(), dstM.fImage, dstM.computeImageSize());
     if (offset) {
         offset->set(dstM.fBounds.fLeft, dstM.fBounds.fTop);

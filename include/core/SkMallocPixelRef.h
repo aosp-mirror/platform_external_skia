@@ -49,8 +49,9 @@ protected:
 
     SkMallocPixelRef(SkFlattenableReadBuffer& buffer);
 
-private:
     void*           fStorage;
+
+private:
     size_t          fSize;
     SkColorTable*   fCTable;
 
