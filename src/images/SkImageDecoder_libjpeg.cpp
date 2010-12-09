@@ -325,16 +325,26 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         (config == SkBitmap::kRGB_565_Config && 
                 cinfo.out_color_space == JCS_RGB_565)))
     {
-        bm->setConfig(config, cinfo.output_width, cinfo.output_height);
-        bm->setIsOpaque(true);
-        if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+        bm->lockPixels();
+        JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
+        bm->unlockPixels();
+        bool reuseBitmap = (rowptr != NULL && (int) cinfo.output_width == bm->width() &&
+                (int) cinfo.output_height == bm->height());
+
+        if (!reuseBitmap) {
+            bm->setConfig(config, cinfo.output_width, cinfo.output_height);
+            bm->setIsOpaque(true);
+            if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+                return true;
+            }
+            if (!this->allocPixelRef(bm, NULL)) {
+                return return_false(cinfo, *bm, "allocPixelRef");
+            }
+        } else if (SkImageDecoder::kDecodeBounds_Mode == mode) {
             return true;
         }
-        if (!this->allocPixelRef(bm, NULL)) {
-            return return_false(cinfo, *bm, "allocPixelRef");
-        }
         SkAutoLockPixels alp(*bm);
-        JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
+        rowptr = (JSAMPLE*)bm->getPixels();
         INT32 const bpr =  bm->rowBytes();
         
         while (cinfo.output_scanline < cinfo.output_height) {
@@ -348,6 +358,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
                 return return_false(cinfo, *bm, "shouldCancelDecode");
             }
             rowptr += bpr;
+        }
+        if (reuseBitmap) {
+            bm->notifyPixelsChanged();
         }
         jpeg_finish_decompress(&cinfo);
         return true;
@@ -374,15 +387,25 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height,
                                   sampleSize);
 
-    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-    // jpegs are always opauqe (i.e. have no per-pixel alpha)
-    bm->setIsOpaque(true);
+    bm->lockPixels();
+    JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
+    bool reuseBitmap = (rowptr != NULL && sampler.scaledWidth() == bm->width() &&
+            sampler.scaledHeight() == bm->height());
+    bm->unlockPixels();
 
-    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+    if (!reuseBitmap) {
+        bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+        // jpegs are always opaque (i.e. have no per-pixel alpha)
+        bm->setIsOpaque(true);
+
+        if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+            return true;
+        }
+        if (!this->allocPixelRef(bm, NULL)) {
+            return return_false(cinfo, *bm, "allocPixelRef");
+        }
+    } else if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return true;
-    }
-    if (!this->allocPixelRef(bm, NULL)) {
-        return return_false(cinfo, *bm, "allocPixelRef");
     }
 
     SkAutoLockPixels alp(*bm);                          

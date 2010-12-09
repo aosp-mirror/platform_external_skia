@@ -205,9 +205,9 @@ public:
 
         note: document use of Allocator, Peeker and Chooser
     */
-    bool decode(SkStream*, SkBitmap* bitmap, SkBitmap::Config pref, Mode);
-    bool decode(SkStream* stream, SkBitmap* bitmap, Mode mode) {
-        return this->decode(stream, bitmap, SkBitmap::kNo_Config, mode);
+    bool decode(SkStream*, SkBitmap* bitmap, SkBitmap::Config pref, Mode, bool reuseBitmap = false);
+    bool decode(SkStream* stream, SkBitmap* bitmap, Mode mode, bool reuseBitmap = false) {
+        return this->decode(stream, bitmap, SkBitmap::kNo_Config, mode, reuseBitmap);
     }
 
     /**
