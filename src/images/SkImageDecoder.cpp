@@ -154,8 +154,6 @@ SkBitmap::Config SkImageDecoder::getPrefConfig(SrcDepth srcDepth,
 
 bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
                             SkBitmap::Config pref, Mode mode, bool reuseBitmap) {
-    SkAutoLockPixels alp(*bm);
-    bool hasPixels = (bm->getPixels() != NULL);
     // pass a temporary bitmap, so that if we return false, we are assured of
     // leaving the caller's bitmap untouched.
     SkBitmap    tmp;
@@ -165,16 +163,16 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
     // assign this, for use by getPrefConfig(), in case fUsePrefTable is false
     fDefaultPref = pref;
 
-    if (reuseBitmap && hasPixels) {
-        if (!this->onDecode(stream, bm, mode)) {
-            return false;
+    if (reuseBitmap) {
+        SkAutoLockPixels alp(*bm);
+        if (bm->getPixels() != NULL) {
+            return this->onDecode(stream, bm, mode);
         }
-    } else {
-        if (!this->onDecode(stream, &tmp, mode)) {
-            return false;
-        }
-        bm->swap(tmp);
     }
+    if (!this->onDecode(stream, &tmp, mode)) {
+        return false;
+    }
+    bm->swap(tmp);
     return true;
 }
 
