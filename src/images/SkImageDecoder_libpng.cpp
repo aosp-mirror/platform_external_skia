@@ -291,8 +291,20 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
     const int sampleSize = this->getSampleSize();
     SkScaledBitmapSampler sampler(origWidth, origHeight, sampleSize);
 
-    decodedBitmap->setConfig(config, sampler.scaledWidth(),
-                             sampler.scaledHeight(), 0);
+    decodedBitmap->lockPixels();
+    void* rowptr = (void*) decodedBitmap->getPixels();
+    bool reuseBitmap = (rowptr != NULL);
+    decodedBitmap->unlockPixels();
+    if (reuseBitmap && (sampler.scaledWidth() != decodedBitmap->width() ||
+            sampler.scaledHeight() != decodedBitmap->height())) {
+        // Dimensions must match
+        return false;
+    }
+
+    if (!reuseBitmap) {
+        decodedBitmap->setConfig(config, sampler.scaledWidth(),
+                                 sampler.scaledHeight(), 0);
+    }
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return true;
     }
@@ -312,10 +324,12 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
 
     SkAutoUnref aur(colorTable);
 
-    if (!this->allocPixelRef(decodedBitmap,
-                             SkBitmap::kIndex8_Config == config ?
-                                colorTable : NULL)) {
-        return false;
+    if (!reuseBitmap) {
+        if (!this->allocPixelRef(decodedBitmap,
+                                 SkBitmap::kIndex8_Config == config ?
+                                    colorTable : NULL)) {
+            return false;
+        }
     }
 
     SkAutoLockPixels alp(*decodedBitmap);
@@ -416,6 +430,9 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
         reallyHasAlpha |= substituteTranspColor(decodedBitmap, theTranspColor);
     }
     decodedBitmap->setIsOpaque(!reallyHasAlpha);
+    if (reuseBitmap) {
+        decodedBitmap->notifyPixelsChanged();
+    }
     return true;
 }
 
@@ -684,7 +701,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect rect) {
     png_ptr->pass = 0;
     png_read_update_info(png_ptr, info_ptr);
 
-    SkDebugf("Request size %d %d\n", requestedWidth, requestedHeight);
+    // SkDebugf("Request size %d %d\n", requestedWidth, requestedHeight);
 
     int actualTop = rect.fTop;
 

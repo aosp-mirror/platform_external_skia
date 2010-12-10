@@ -328,8 +328,12 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         bm->lockPixels();
         JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
         bm->unlockPixels();
-        bool reuseBitmap = (rowptr != NULL && (int) cinfo.output_width == bm->width() &&
-                (int) cinfo.output_height == bm->height());
+        bool reuseBitmap = (rowptr != NULL);
+        if (reuseBitmap && ((int) cinfo.output_width != bm->width() ||
+                (int) cinfo.output_height != bm->height())) {
+            // Dimensions must match
+            return false;
+        }
 
         if (!reuseBitmap) {
             bm->setConfig(config, cinfo.output_width, cinfo.output_height);
@@ -389,9 +393,13 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     bm->lockPixels();
     JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
-    bool reuseBitmap = (rowptr != NULL && sampler.scaledWidth() == bm->width() &&
-            sampler.scaledHeight() == bm->height());
+    bool reuseBitmap = (rowptr != NULL);
     bm->unlockPixels();
+    if (reuseBitmap && (sampler.scaledWidth() != bm->width() ||
+            sampler.scaledHeight() != bm->height())) {
+        // Dimensions must match
+        return false;
+    }
 
     if (!reuseBitmap) {
         bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
@@ -446,6 +454,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     if (!skip_src_rows(&cinfo, srcRow,
                        cinfo.output_height - cinfo.output_scanline)) {
         return return_false(cinfo, *bm, "skip rows");
+    }
+    if (reuseBitmap) {
+        bm->notifyPixelsChanged();
     }
     jpeg_finish_decompress(&cinfo);
 
