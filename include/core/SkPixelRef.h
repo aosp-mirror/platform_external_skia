@@ -116,7 +116,7 @@ public:
     * The default implementation just calls ref(), but subclasses can override
     * this method to implement additional behavior.
     */
-    virtual void globalRef();
+    virtual void globalRef(void* data=NULL);
 
     /** Release a "global" ref on this object.
     * The default implementation just calls unref(), but subclasses can override
