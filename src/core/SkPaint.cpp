@@ -114,8 +114,9 @@ SkPaint& SkPaint::operator=(const SkPaint& src)
     fRasterizer->safeUnref();
     fLooper->safeUnref();
 
+    uint32_t oldGenerationID = fGenerationID;
     memcpy(this, &src, sizeof(src));
-    fGenerationID++;
+    fGenerationID = oldGenerationID + 1;
 
     return *this;
 }
@@ -129,8 +130,9 @@ void SkPaint::reset()
 {
     SkPaint init;
 
+    uint32_t oldGenerationID = fGenerationID;
     *this = init;
-    fGenerationID++;
+    fGenerationID = oldGenerationID + 1;
 }
 
 uint32_t SkPaint::getGenerationID() const {

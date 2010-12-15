@@ -93,7 +93,10 @@ public:
 
     void setHinting(Hinting hintingLevel)
     {
-        fHinting = hintingLevel;
+        if ((unsigned) hintingLevel != fHinting) {
+            fGenerationID++;
+            fHinting = hintingLevel;
+        }
     }
 
     /** Specifies the bit values that are stored in the paint's flags.
