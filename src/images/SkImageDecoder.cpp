@@ -33,6 +33,7 @@ const char *SkImageDecoder::kFormatName[] = {
     "JPEG",
     "PNG",
     "WBMP",
+    "WEBP",
 };
 
 static SkBitmap::Config gDeviceConfig = SkBitmap::kNo_Config;

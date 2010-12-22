@@ -46,8 +46,9 @@ public:
         kJPEG_Format,
         kPNG_Format,
         kWBMP_Format,
+        kWEBP_Format,
 
-        kLastKnownFormat = kWBMP_Format
+        kLastKnownFormat = kWEBP_Format
     };
 
     /** Contains the image format name.
@@ -55,7 +56,7 @@ public:
      *
      *  The format name gives a more meaningful error message than enum.
      */
-    static const char *kFormatName[7];
+    static const char *kFormatName[8];
 
     /** Return the compressed data's format (see Format enum)
     */
