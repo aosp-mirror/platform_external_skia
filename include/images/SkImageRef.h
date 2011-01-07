@@ -59,7 +59,7 @@ public:
     
     /** Return true if the image can be decoded and is opaque. Calling this
         method will decode and set the pixels in the specified bitmap and
-        set the opaque flag.
+        sets the isOpaque flag.
      */
     bool isOpaque(SkBitmap* bm);
     

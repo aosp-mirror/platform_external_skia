@@ -2,16 +2,16 @@
 **
 ** Copyright 2006, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
@@ -24,11 +24,11 @@
 /*  This guy's constructor/destructor bracket a path editing operation. It is
     used when we know the bounds of the amount we are going to add to the path
     (usually a new contour, but not required).
- 
+
     It captures some state about the path up front (i.e. if it already has a
     cached bounds), and the if it can, it updates the cache bounds explicitly,
     avoiding the need to revisit all of the points in getBounds().
- 
+
     It also notes if the path was originally empty, and if so, sets isConvex
     to true. Thus it can only be used if the contour being added is convex.
  */
@@ -43,7 +43,7 @@ public:
         fRect.set(left, top, right, bottom);
         this->init(path);
     }
-    
+
     ~SkAutoPathBoundsUpdate() {
         fPath->setIsConvex(fEmpty);
         if (fEmpty) {
@@ -54,13 +54,13 @@ public:
             fPath->fBoundsIsDirty = false;
         }
     }
-    
+
 private:
     SkPath* fPath;
     SkRect  fRect;
     bool    fDirty;
     bool    fEmpty;
-    
+
     // returns true if we should proceed
     void init(SkPath* path) {
         fPath = path;
@@ -177,7 +177,7 @@ bool SkPath::isEmpty() const {
 
 bool SkPath::isRect(SkRect*) const {
     SkDEBUGCODE(this->validate();)
-    
+
     SkASSERT(!"unimplemented");
     return false;
 }
@@ -358,7 +358,7 @@ void SkPath::close() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-    
+
 void SkPath::addRect(const SkRect& rect, Direction dir) {
     this->addRect(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, dir);
 }
@@ -386,8 +386,6 @@ void SkPath::addRect(SkScalar left, SkScalar top, SkScalar right,
 
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                           Direction dir) {
-    SkAutoPathBoundsUpdate apbu(this, rect);
-
     SkScalar    w = rect.width();
     SkScalar    halfW = SkScalarHalf(w);
     SkScalar    h = rect.height();
@@ -397,13 +395,16 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
         return;
     }
 
-    bool    skip_hori = rx >= halfW;
-    bool    skip_vert = ry >= halfH;
+    bool skip_hori = rx >= halfW;
+    bool skip_vert = ry >= halfH;
 
     if (skip_hori && skip_vert) {
         this->addOval(rect, dir);
         return;
     }
+
+    SkAutoPathBoundsUpdate apbu(this, rect);
+
     if (skip_hori) {
         rx = halfW;
     } else if (skip_vert) {
@@ -474,7 +475,7 @@ static void add_corner_arc(SkPath* path, const SkRect& rect,
                            SkPath::Direction dir, bool forceMoveTo) {
     rx = SkMinScalar(SkScalarHalf(rect.width()), rx);
     ry = SkMinScalar(SkScalarHalf(rect.height()), ry);
-    
+
     SkRect   r;
     r.set(-rx, -ry, rx, ry);
 
@@ -489,19 +490,24 @@ static void add_corner_arc(SkPath* path, const SkRect& rect,
         case 270: r.offset(rect.fRight - r.fRight, rect.fTop - r.fTop); break;
         default: SkASSERT(!"unexpected startAngle in add_corner_arc");
     }
-    
+
     SkScalar start = SkIntToScalar(startAngle);
     SkScalar sweep = SkIntToScalar(90);
     if (SkPath::kCCW_Direction == dir) {
         start += sweep;
         sweep = -sweep;
     }
-    
+
     path->arcTo(r, start, sweep, forceMoveTo);
 }
 
 void SkPath::addRoundRect(const SkRect& rect, const SkScalar rad[],
                           Direction dir) {
+    // abort before we invoke SkAutoPathBoundsUpdate()
+    if (rect.isEmpty()) {
+        return;
+    }
+
     SkAutoPathBoundsUpdate apbu(this, rect);
 
     if (kCW_Direction == dir) {
@@ -626,10 +632,10 @@ static int build_arc_points(const SkRect& oval, SkScalar startAngle,
     }
 
     SkMatrix    matrix;
-    
+
     matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
     matrix.postTranslate(oval.centerX(), oval.centerY());
-    
+
     return SkBuildQuadArc(start, stop,
           sweepAngle > 0 ? kCW_SkRotationDirection : kCCW_SkRotationDirection,
                           &matrix, pts);
@@ -685,22 +691,31 @@ void SkPath::addArc(const SkRect& oval, SkScalar startAngle,
 void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                    SkScalar radius) {
     SkVector    before, after;
-    
+
     // need to know our prev pt so we can construct tangent vectors
     {
         SkPoint start;
         this->getLastPt(&start);
+        // Handle degenerate cases by adding a line to the first point and
+        // bailing out.
+        if ((x1 == start.fX && y1 == start.fY) ||
+            (x1 == x2 && y1 == y2) ||
+            radius == 0) {
+            this->lineTo(x1, y1);
+            return;
+        }
         before.setNormalize(x1 - start.fX, y1 - start.fY);
         after.setNormalize(x2 - x1, y2 - y1);
     }
-    
+
     SkScalar cosh = SkPoint::DotProduct(before, after);
     SkScalar sinh = SkPoint::CrossProduct(before, after);
 
     if (SkScalarNearlyZero(sinh)) {   // angle is too tight
+        this->lineTo(x1, y1);
         return;
     }
-    
+
     SkScalar dist = SkScalarMulDiv(radius, SK_Scalar1 - cosh, sinh);
     if (dist < 0) {
         dist = -dist;
@@ -723,13 +738,13 @@ void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
 
     SkMatrix    matrix;
     SkPoint     pts[kSkBuildQuadArcStorage];
-    
+
     matrix.setScale(radius, radius);
     matrix.postTranslate(xx - SkScalarMul(radius, before.fX),
                          yy - SkScalarMul(radius, before.fY));
-    
+
     int count = SkBuildQuadArc(before, after, arcDir, &matrix, pts);
-    
+
     this->incReserve(count);
     // [xx,yy] == pts[0]
     this->lineTo(xx, yy);
@@ -1009,13 +1024,13 @@ bool SkPath::Iter::isClosedContour() const {
 
     const uint8_t* verbs = fVerbs;
     const uint8_t* stop = fVerbStop;
-    
+
     if (kMove_Verb == *verbs) {
         verbs += 1; // skip the initial moveto
     }
 
     while (verbs < stop) {
-        unsigned v = *verbs++;        
+        unsigned v = *verbs++;
         if (kMove_Verb == v) {
             break;
         }
@@ -1338,7 +1353,7 @@ void SkPath::validate() const {
     SkASSERT((fFillType & ~3) == 0);
     fPts.validate();
     fVerbs.validate();
-    
+
     if (!fBoundsIsDirty) {
         SkRect bounds;
         compute_pt_bounds(&bounds, fPts);

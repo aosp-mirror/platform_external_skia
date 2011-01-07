@@ -1,13 +1,13 @@
 #include "SkProxyCanvas.h"
 
 SkProxyCanvas::SkProxyCanvas(SkCanvas* proxy) : fProxy(proxy) {
-    fProxy->safeRef();
+    SkSafeRef(fProxy);
 }
 
 SkProxyCanvas::~SkProxyCanvas() {
-    fProxy->safeUnref();
+    SkSafeUnref(fProxy);
 }
-    
+
 void SkProxyCanvas::setProxy(SkCanvas* proxy) {
     SkRefCnt_SafeAssign(fProxy, proxy);
 }
@@ -16,14 +16,6 @@ void SkProxyCanvas::setProxy(SkCanvas* proxy) {
 
 bool SkProxyCanvas::getViewport(SkIPoint* size) const {
     return fProxy->getViewport(size);
-}
-
-bool SkProxyCanvas::setViewport(int x, int y) {
-    return fProxy->setViewport(x, y);
-}
-
-SkDevice* SkProxyCanvas::setBitmapDevice(const SkBitmap& bitmap) {
-    return fProxy->setBitmapDevice(bitmap);
 }
 
 int SkProxyCanvas::save(SaveFlags flags) {
@@ -163,8 +155,8 @@ SkDrawFilter* SkProxyCanvas::setDrawFilter(SkDrawFilter* filter) {
     return fProxy->setDrawFilter(filter);
 }
 
-SkDevice* SkProxyCanvas::createDevice(SkBitmap::Config config, int width,
-                                int height, bool isOpaque, bool isForLayer) {
+SkDevice* SkProxyCanvas::createDevice(SkBitmap::Config config, int width, int height,
+                                      bool isOpaque, bool isForLayer) {
     return fProxy->createDevice(config, width, height, isOpaque, isForLayer);
 }
 

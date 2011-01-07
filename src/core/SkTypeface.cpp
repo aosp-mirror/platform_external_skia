@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2011 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "SkTypeface.h"
 #include "SkFontHost.h"
 
@@ -12,8 +28,9 @@ uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
     static uint32_t gDefaultFontID;
     
     if (0 == gDefaultFontID) {
-        SkTypeface* defaultFace = SkFontHost::CreateTypeface(NULL, NULL,
-                                                    SkTypeface::kNormal);
+        SkTypeface* defaultFace =
+                SkFontHost::CreateTypeface(NULL, NULL, NULL, 0,
+                                           SkTypeface::kNormal);
         SkASSERT(defaultFace);
         gDefaultFontID = defaultFace->uniqueID();
         defaultFace->unref();
@@ -28,11 +45,16 @@ bool SkTypeface::Equal(const SkTypeface* facea, const SkTypeface* faceb) {
 ///////////////////////////////////////////////////////////////////////////////
 
 SkTypeface* SkTypeface::CreateFromName(const char name[], Style style) {
-    return SkFontHost::CreateTypeface(NULL, name, style);
+    return SkFontHost::CreateTypeface(NULL, name, NULL, 0, style);
+}
+
+SkTypeface* SkTypeface::CreateForChars(const void* data, size_t bytelength,
+                                       Style s) {
+    return SkFontHost::CreateTypeface(NULL, NULL, data, bytelength, s);
 }
 
 SkTypeface* SkTypeface::CreateFromTypeface(const SkTypeface* family, Style s) {
-    return SkFontHost::CreateTypeface(family, NULL, s);
+    return SkFontHost::CreateTypeface(family, NULL, NULL, 0, s);
 }
 
 SkTypeface* SkTypeface::CreateFromStream(SkStream* stream) {
@@ -53,4 +75,7 @@ SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
     return SkFontHost::Deserialize(stream);
 }
 
-
+SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
+        bool perGlyphInfo) const {
+    return SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID, perGlyphInfo);
+}

@@ -30,6 +30,9 @@ class SkRegion;
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 
+// This is an opaque class, not interpreted by skia
+class SkGpuTexture;
+
 /** \class SkBitmap
 
     The SkBitmap class specifies a raster bitmap. A bitmap has an integer width
@@ -43,12 +46,22 @@ public:
 
     enum Config {
         kNo_Config,         //!< bitmap has not been configured
-        kA1_Config,         //!< 1-bit per pixel, (0 is transparent, 1 is opaque)
+        /**
+         *  1-bit per pixel, (0 is transparent, 1 is opaque)
+         *  Valid as a destination (target of a canvas), but not valid as a src.
+         *  i.e. you can draw into a 1-bit bitmap, but you cannot draw from one.
+         */
+        kA1_Config,
         kA8_Config,         //!< 8-bits per pixel, with only alpha specified (0 is transparent, 0xFF is opaque)
         kIndex8_Config,     //!< 8-bits per pixel, using SkColorTable to specify the colors
         kRGB_565_Config,    //!< 16-bits per pixel, (see SkColorPriv.h for packing)
         kARGB_4444_Config,  //!< 16-bits per pixel, (see SkColorPriv.h for packing)
         kARGB_8888_Config,  //!< 32-bits per pixel, (see SkColorPriv.h for packing)
+        /**
+         *  Custom compressed format, not supported on all platforms.
+         *  Cannot be used as a destination (target of a canvas).
+         *  i.e. you may be able to draw from one, but you cannot draw into one.
+         */
         kRLE_Index8_Config,
 
         kConfigCount
@@ -129,6 +142,12 @@ public:
     */
     size_t getSize() const { return fHeight * fRowBytes; }
 
+    /** Return the number of bytes from the pointer returned by getPixels()
+        to the end of the allocated space in the buffer. Required in
+        cases where extractBitmap has been called.
+    */
+    size_t getSafeSize() const ;
+
     /** Return the byte size of the pixels, based on the height and rowBytes.
         This routine is slightly slower than getSize(), but does not truncate
         the answer to 32bits.
@@ -138,6 +157,10 @@ public:
         size.setMul(fHeight, fRowBytes);
         return size;
     }
+
+    /** Same as getSafeSize(), but does not truncate the answer to 32bits.
+    */
+    Sk64 getSafeSize64() const ;
 
     /** Returns true if the bitmap is opaque (has no translucent/transparent pixels).
     */
@@ -189,6 +212,44 @@ public:
     */
     void setPixels(void* p, SkColorTable* ctable = NULL);
 
+    /** Copies the bitmap's pixels to the location pointed at by dst and returns
+        true if possible, returns false otherwise.
+
+        In the event that the bitmap's stride is equal to dstRowBytes, and if
+        it is greater than strictly required by the bitmap's current config
+        (this may happen if the bitmap is an extracted subset of another), then
+        this function will copy bytes past the eand of each row, excluding the
+        last row. No copies are made outside of the declared size of dst,
+        however.
+
+        Always returns false for RLE formats.
+
+        @param dst      Location of destination buffer.
+        @param dstSize  Size of destination buffer. Must be large enough to hold
+                        pixels using indicated stride.
+        @param dstRowBytes  Width of each line in the buffer. If -1, uses
+                            bitmap's internal stride.
+    */
+    bool copyPixelsTo(void* const dst, size_t dstSize, int dstRowBytes = -1)
+         const;
+
+    /** Copies the pixels at location src to the bitmap's pixel buffer.
+        Returns true if copy if possible (bitmap buffer is large enough),
+        false otherwise.
+
+        Like copyPixelsTo, this function may write values beyond the end of
+        each row, although never outside the defined buffer.
+
+        Always returns false for RLE formats.
+
+        @param src      Location of the source buffer.
+        @param srcSize  Height of source buffer in pixels.
+        @param srcRowBytes  Width of each line in the buffer. If -1, uses i
+                            bitmap's internal stride.
+    */
+    bool copyPixelsFrom(const void* const src, size_t srcSize,
+                        int srcRowBytes = -1);
+
     /** Use the standard HeapAllocator to create the pixelref that manages the
         pixel memory. It will be sized based on the current width/height/config.
         If this is called multiple times, a new pixelref object will be created
@@ -227,7 +288,7 @@ public:
     */
     bool allocPixels(Allocator* allocator, SkColorTable* ctable);
 
-    /** Return the current pixelref object, of any
+    /** Return the current pixelref object, if any
     */
     SkPixelRef* pixelRef() const { return fPixelRef; }
     /** Return the offset into the pixelref, if any. Will return 0 if there is
@@ -258,9 +319,14 @@ public:
     */
     bool readyToDraw() const {
         return this->getPixels() != NULL &&
-               ((this->config() != kIndex8_Config && this->config() != kRLE_Index8_Config) ||
+               ((this->config() != kIndex8_Config &&
+                 this->config() != kRLE_Index8_Config) ||
                        fColorTable != NULL);
     }
+
+    /** Returns the pixelRef's texture, or NULL
+     */
+    SkGpuTexture* getTexture() const;
 
     /** Return the bitmap's colortable (if any). Does not affect the colortable's
         reference count.
@@ -476,6 +542,17 @@ private:
     uint8_t     fConfig;
     uint8_t     fFlags;
     uint8_t     fBytesPerPixel; // based on config
+
+    /* Internal computations for safe size.
+    */
+    static Sk64 ComputeSafeSize64(Config config,
+                                  uint32_t width,
+                                  uint32_t height,
+                                  uint32_t rowBytes);
+    static size_t ComputeSafeSize(Config   config,
+                                  uint32_t width,
+                                  uint32_t height,
+                                  uint32_t rowBytes);
 
     /*  Unreference any pixelrefs or colortables
     */

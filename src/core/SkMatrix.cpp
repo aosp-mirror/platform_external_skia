@@ -653,9 +653,10 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
             det =   (double)mat[SkMatrix::kMScaleX] * mat[SkMatrix::kMScaleY] - (double)mat[SkMatrix::kMSkewX] * mat[SkMatrix::kMSkewY];
         }
 
-        // Since the determinant is on the order of the square of the matrix members,
-        // compare to the square of the default nearly-zero constant
-        if (SkScalarNearlyZero((float)det, SK_ScalarNearlyZero * SK_ScalarNearlyZero)) {
+        // Since the determinant is on the order of the cube of the matrix members,
+        // compare to the cube of the default nearly-zero constant (although an
+        // estimate of the condition number would be better if it wasn't so expensive).
+        if (SkScalarNearlyZero((float)det, SK_ScalarNearlyZero * SK_ScalarNearlyZero * SK_ScalarNearlyZero)) {
             return 0;
         }
         return 1.0 / det;
@@ -715,6 +716,24 @@ bool SkMatrix::postConcat(const SkMatrix& mat) {
         return SkFractDiv(SK_Fract1, denom);
     }
 #endif
+
+bool SkMatrix::pdfTransform(SkScalar transform[6]) const {
+    SkMatrix identity;
+    const SkMatrix* use = this;
+    bool ret = true;
+    if (has_perspective(*this)) {
+        identity.reset();
+        use = &identity;
+        ret = false;
+    }
+    transform[0] = use->fMat[kMScaleX];
+    transform[1] = use->fMat[kMSkewY];
+    transform[2] = use->fMat[kMSkewX];
+    transform[3] = use->fMat[kMScaleY];
+    transform[4] = use->fMat[kMTransX];
+    transform[5] = use->fMat[kMTransY];
+    return true;
+}
 
 bool SkMatrix::invert(SkMatrix* inv) const {
     int         isPersp = has_perspective(*this);
@@ -1576,8 +1595,10 @@ uint32_t SkMatrix::flatten(void* buffer) const {
 }
 
 uint32_t SkMatrix::unflatten(const void* buffer) {
-    memcpy(fMat, buffer, 9 * sizeof(SkScalar));
-    this->setTypeMask(kUnknown_Mask);
+    if (buffer) {
+        memcpy(fMat, buffer, 9 * sizeof(SkScalar));
+        this->setTypeMask(kUnknown_Mask);
+    }
     return 9 * sizeof(SkScalar);
 }
 

@@ -37,7 +37,7 @@ SkImageRef_ashmem::SkImageRef_ashmem(SkStream* stream,
 }
 
 SkImageRef_ashmem::~SkImageRef_ashmem() {
-    fCT->safeUnref();
+    SkSafeUnref(fCT);
     this->closeFD();
 }
 

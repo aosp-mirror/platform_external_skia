@@ -2,16 +2,16 @@
 **
 ** Copyright 2006, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
@@ -40,6 +40,32 @@ using namespace skia_blitter_support;
 
 //////////////////////////////////////////////////////////////////////////////////////
 
+static void SkARGB32_Blit32(const SkBitmap& device, const SkMask& mask,
+							const SkIRect& clip, SkPMColor srcColor) {
+	U8CPU alpha = SkGetPackedA32(srcColor);
+	unsigned flags = SkBlitRow::kSrcPixelAlpha_Flag32;
+	if (alpha != 255) {
+		flags |= SkBlitRow::kGlobalAlpha_Flag32;
+	}
+	SkBlitRow::Proc32 proc = SkBlitRow::Factory32(flags);
+
+    int x = clip.fLeft;
+    int y = clip.fTop;
+    int width = clip.width();
+    int height = clip.height();
+
+    SkPMColor*		 dstRow = device.getAddr32(x, y);
+    const SkPMColor* srcRow = reinterpret_cast<const SkPMColor*>(mask.getAddr(x, y));
+
+    do {
+		proc(dstRow, srcRow, width, alpha);
+        dstRow = (SkPMColor*)((char*)dstRow + device.rowBytes());
+        srcRow = (const SkPMColor*)((const char*)srcRow + mask.fRowBytes);
+    } while (--height != 0);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+
 SkARGB32_Blitter::SkARGB32_Blitter(const SkBitmap& device, const SkPaint& paint)
         : INHERITED(device) {
     uint32_t color = paint.getColor();
@@ -51,6 +77,7 @@ SkARGB32_Blitter::SkARGB32_Blitter(const SkBitmap& device, const SkPaint& paint)
     fSrcB = SkAlphaMul(SkColorGetB(color), scale);
 
     fPMColor = SkPackARGB32(fSrcA, fSrcR, fSrcG, fSrcB);
+    fColor32Proc = SkBlitRow::ColorProcFactory();
 }
 
 const SkBitmap* SkARGB32_Blitter::justAnOpaqueColor(uint32_t* value) {
@@ -69,7 +96,8 @@ const SkBitmap* SkARGB32_Blitter::justAnOpaqueColor(uint32_t* value) {
 void SkARGB32_Blitter::blitH(int x, int y, int width) {
     SkASSERT(x >= 0 && y >= 0 && x + width <= fDevice.width());
 
-    SkBlitRow::Color32(fDevice.getAddr32(x, y), width, fPMColor);
+    uint32_t*   device = fDevice.getAddr32(x, y);
+    fColor32Proc(device, device, width, fPMColor);
 }
 
 void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
@@ -94,7 +122,7 @@ void SkARGB32_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
                 sk_memset32(device, color, count);
             } else {
                 uint32_t sc = SkAlphaMulQ(color, SkAlpha255To256(aa));
-                SkBlitRow::Color32(device, count, sc);
+                fColor32Proc(device, device, count, sc);
             }
         }
         runs += count;
@@ -154,6 +182,9 @@ void SkARGB32_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     if (mask.fFormat == SkMask::kBW_Format) {
         SkARGB32_BlendBW(fDevice, mask, clip, fPMColor, SkAlpha255To256(255 - fSrcA));
         return;
+    } else if (SkMask::kARGB32_Format == mask.fFormat) {
+		SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
+		return;
     }
 
     int x = clip.fLeft;
@@ -186,7 +217,10 @@ void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
     if (mask.fFormat == SkMask::kBW_Format) {
         SkARGB32_BlitBW(fDevice, mask, clip, fPMColor);
         return;
-    }
+    } else if (SkMask::kARGB32_Format == mask.fFormat) {
+		SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
+		return;
+	}
 
     int x = clip.fLeft;
     int y = clip.fTop;
@@ -286,7 +320,7 @@ void SkARGB32_Blitter::blitRect(int x, int y, int width, int height) {
     size_t      rowBytes = fDevice.rowBytes();
 
     while (--height >= 0) {
-        SkBlitRow::Color32(device, width, color);
+        fColor32Proc(device, device, width, color);
         device = (uint32_t*)((char*)device + rowBytes);
     }
 }
@@ -304,6 +338,8 @@ void SkARGB32_Black_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
         SkPMColor black = (SkPMColor)(SK_A32_MASK << SK_A32_SHIFT);
 
         SkARGB32_BlitBW(fDevice, mask, clip, black);
+    } else if (SkMask::kARGB32_Format == mask.fFormat) {
+		SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
     } else {
 #if defined(SK_SUPPORT_LCDTEXT)
         const bool      lcdMode = mask.fFormat == SkMask::kHorizontalLCD_Format;
@@ -412,7 +448,7 @@ SkARGB32_Shader_Blitter::SkARGB32_Shader_Blitter(const SkBitmap& device,
 }
 
 SkARGB32_Shader_Blitter::~SkARGB32_Shader_Blitter() {
-    fXfermode->safeUnref();
+    SkSafeUnref(fXfermode);
     sk_free(fBuffer);
 }
 
@@ -465,7 +501,7 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
             runs += count;
             antialias += count;
             x += count;
-        } 
+        }
     } else if (fShader->getFlags() & SkShader::kOpaqueAlpha_Flag) {
         for (;;) {
             int count = *runs;
@@ -486,7 +522,7 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
             runs += count;
             antialias += count;
             x += count;
-        } 
+        }
     } else {    // no xfermode but the shader not opaque
         for (;;) {
             int count = *runs;
@@ -506,6 +542,6 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
             runs += count;
             antialias += count;
             x += count;
-        } 
+        }
     }
 }

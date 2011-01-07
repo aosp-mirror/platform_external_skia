@@ -98,6 +98,13 @@ public:
     */
     bool    setRect(int32_t left, int32_t top, int32_t right, int32_t bottom);
 
+    /** Set this region to the union of an array of rects. This is generally
+        faster than calling region.op(rect, kUnion_Op) in a loop. If count is
+        0, then this region is set to the empty region.
+        @return true if the resulting region is non-empty
+     */
+    bool setRects(const SkIRect rects[], int count);
+    
     /** Set this region to the specified region, and return true if it is
         non-empty. */
     bool    setRegion(const SkRegion&);
@@ -260,7 +267,8 @@ public:
         bool done() { return fDone; }
         void next();
         const SkIRect& rect() const { return fRect; }
-
+        // may return null
+        const SkRegion* rgn() const { return fRgn; }
     private:
         const SkRegion* fRgn;
         const RunType*  fRuns;

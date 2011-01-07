@@ -20,6 +20,7 @@
 #include "SkRefCnt.h"
 
 class SkStream;
+class SkAdvancedTypefaceMetrics;
 class SkWStream;
 
 /** \class SkTypeface
@@ -83,6 +84,18 @@ public:
     */
     static SkTypeface* CreateFromName(const char familyName[], Style style);
 
+    /** Return a new reference to the typeface that covers a set of Unicode
+        code points with the specified Style. Use this call if you want to
+        pick any font that covers a given string of text.
+
+        @param data        UTF-16 characters
+        @param bytelength  length of data, in bytes
+        @return reference to the closest-matching typeface. Call must call
+                unref() when they are done.
+    */
+    static SkTypeface* CreateForChars(const void* data, size_t bytelength,
+                                      Style s);
+
     /** Return a new reference to the typeface that most closely matches the
         requested typeface and specified Style. Use this call if you want to
         pick a new style from the same family of the existing typeface.
@@ -117,6 +130,14 @@ public:
         calling unref() when they are done with it.
      */
     static SkTypeface* Deserialize(SkStream*);
+
+    /** Retrieve detailed typeface metrics.  Used by the PDF backend.
+        @param perGlyphInfo Indicate if the glyph specific information (advances
+                            and names) should be populated.
+        @return The returned object has already been referenced.
+     */
+    SkAdvancedTypefaceMetrics* getAdvancedTypefaceMetrics(
+            bool perGlyphInfo) const;
 
 protected:
     /** uniqueID must be unique (please!) and non-zero
