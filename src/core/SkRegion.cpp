@@ -18,6 +18,7 @@
 #include "SkRegionPriv.h"
 #include "SkTemplates.h"
 #include "SkThread.h"
+#include <stdio.h>
 
 SkDEBUGCODE(int32_t gRgnAllocCounter;)
 
@@ -207,6 +208,33 @@ bool SkRegion::op(const SkRegion& rgn, const SkIRect& rect, Op op)
     SkRegion tmp(rect);
 
     return this->op(rgn, tmp, op);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+char* SkRegion::toString()
+{
+    Iterator iter(*this);
+    int count = 0;
+    while (!iter.done()) {
+        count++;
+        iter.next();
+    }
+    // 4 ints, up to 10 digits each plus sign, 3 commas, '(', ')', SkRegion() and '\0'
+    const int max = (count*((11*4)+5))+11+1;
+    char* result = (char*)malloc(max);
+    if (result == NULL) {
+        return NULL;
+    }
+    count = sprintf(result, "SkRegion(");
+    iter.reset(*this);
+    while (!iter.done()) {
+        const SkIRect& r = iter.rect();
+        count += sprintf(result+count, "(%d,%d,%d,%d)", r.fLeft, r.fTop, r.fRight, r.fBottom);
+        iter.next();
+    }
+    count += sprintf(result+count, ")");
+    return result;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
