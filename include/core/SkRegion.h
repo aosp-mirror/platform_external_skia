@@ -242,6 +242,10 @@ public:
     */
     bool op(const SkRegion& rgna, const SkRegion& rgnb, Op op);
 
+    /** Returns a new char* containing the list of rectangles in this region
+     */
+    char* toString();
+
     /** Returns the sequence of rectangles, sorted in Y and X, that make up
         this region.
     */
