@@ -1138,8 +1138,19 @@ void SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
     NO_FILTER_CASE:
         dst->setConfig(SkBitmap::kA8_Config, this->width(), this->height(),
                        srcM.fRowBytes);
-        dst->allocPixels(allocator, NULL);
-        GetBitmapAlpha(*this, dst->getAddr8(0, 0), srcM.fRowBytes);
+        if (dst->allocPixels(allocator, NULL)) {
+            GetBitmapAlpha(*this, dst->getAddr8(0, 0), srcM.fRowBytes);
+            if (offset) {
+                offset->set(0, 0);
+            }
+            return;
+        }
+    ALLOC_ERR:
+        // Allocation of pixels for alpha bitmap failed.
+        SkDebugf("extractAlpha failed to allocate (%d,%d) alpha bitmap\n",
+                 dst->width(), dst->height());
+        // When pixels can't be allocated, reset destination bitmap
+        dst->reset();
         if (offset) {
             offset->set(0, 0);
         }
@@ -1157,7 +1168,9 @@ void SkBitmap::extractAlpha(SkBitmap* dst, const SkPaint* paint,
 
     dst->setConfig(SkBitmap::kA8_Config, dstM.fBounds.width(),
                    dstM.fBounds.height(), dstM.fRowBytes);
-    dst->allocPixels(allocator, NULL);
+    if (!dst->allocPixels(allocator, NULL)) {
+        goto ALLOC_ERR;
+    }
     memcpy(dst->getPixels(), dstM.fImage, dstM.computeImageSize());
     if (offset) {
         offset->set(dstM.fBounds.fLeft, dstM.fBounds.fTop);
@@ -1341,4 +1354,3 @@ void SkBitmap::validate() const {
 #endif
 }
 #endif
-
