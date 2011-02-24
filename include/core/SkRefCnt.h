@@ -62,24 +62,6 @@ public:
             SkDELETE(this);
         }
     }
-    
-    /** Helper version of ref(), that first checks to see if this is not null.
-        If this is null, then do nothing.
-    */
-    void safeRef() const {
-        if (this) {
-            this->ref();
-        }
-    }
-
-    /** Helper version of unref(), that first checks to see if this is not null.
-        If this is null, then do nothing.
-    */
-    void safeUnref() const {
-        if (this) {
-            this->unref();
-        }
-    }
 
 private:
     mutable int32_t fRefCnt;
@@ -145,6 +127,52 @@ template <typename T> static inline void SkSafeUnref(T* obj) {
     if (obj) {
         obj->unref();
     }
+}
+
+/** Wrapper class for SkRefCnt pointers. This manages ref/unref of a pointer to
+    a SkRefCnt (or subclass) object.
+ */
+template <typename T> class SkRefPtr {
+public:
+    SkRefPtr() : fObj(NULL) {}
+    SkRefPtr(T* obj) : fObj(obj) { SkSafeRef(fObj); }
+    SkRefPtr(const SkRefPtr& o) : fObj(o.fObj) { SkSafeRef(fObj); }
+    ~SkRefPtr() { SkSafeUnref(fObj); }
+
+    SkRefPtr& operator=(const SkRefPtr& rp) {
+        SkRefCnt_SafeAssign(fObj, rp.fObj);
+        return *this;
+    }
+    SkRefPtr& operator=(T* obj) {
+        SkRefCnt_SafeAssign(fObj, obj);
+        return *this;
+    }
+
+    bool operator==(const SkRefPtr& rp) const { return fObj == rp.fObj; }
+    bool operator==(const T* obj) const { return fObj == obj; }
+    bool operator!=(const SkRefPtr& rp) const { return fObj != rp.fObj; }
+    bool operator!=(const T* obj) const { return fObj != obj; }
+
+    T* get() const { return fObj; }
+    T& operator*() const { return *fObj; }
+    T* operator->() const { return fObj; }
+    bool operator!() const { return !fObj; }
+
+    typedef T* SkRefPtr::*unspecified_bool_type;
+    operator unspecified_bool_type() const { return fObj ? &SkRefPtr::fObj : NULL; }
+
+private:
+    T* fObj;
+};
+
+template <typename T>
+inline bool operator==(T* obj, const SkRefPtr<T>& rp) {
+    return obj == rp.get();
+}
+
+template <typename T>
+inline bool operator!=(T* obj, const SkRefPtr<T>& rp) {
+    return obj != rp.get();
 }
 
 #endif

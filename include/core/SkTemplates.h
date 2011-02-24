@@ -59,12 +59,13 @@ private:
     T* fObj;
 };
 
+// See also SkTScopedPtr.
 template <typename T> class SkAutoTDelete : SkNoncopyable {
 public:
     SkAutoTDelete(T* obj, bool deleteWhenDone = true) : fObj(obj) {
-        this->deleteWhenDone = deleteWhenDone;
+        fDeleteWhenDone = deleteWhenDone;
     }
-    ~SkAutoTDelete() { if (deleteWhenDone) delete fObj; }
+    ~SkAutoTDelete() { if (fDeleteWhenDone) delete fObj; }
 
     T*      get() const { return fObj; }
     void    free() { delete fObj; fObj = NULL; }
@@ -72,7 +73,7 @@ public:
 
 private:
     T*  fObj;
-    bool deleteWhenDone;
+    bool fDeleteWhenDone;
 };
 
 template <typename T> class SkAutoTDeleteArray : SkNoncopyable {

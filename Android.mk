@@ -41,10 +41,15 @@ LOCAL_SRC_FILES:= \
 	src/core/SkRegion.cpp \
 	src/core/SkString.cpp \
 	src/core/SkUtils.cpp \
+	src/core/SkFlate.cpp \
+	src/core/SkMallocPixelRef.cpp \
+	src/core/SkRegion_rects.cpp \
+	src/core/SkScalar.cpp \
 	src/ports/SkDebug_android.cpp \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAvoidXfermode.cpp \
+	src/effects/SkBitmapCache.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurMask.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
@@ -150,6 +155,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkRefCnt.cpp \
+	src/core/SkRefDict.cpp \
 	src/core/SkRegion_path.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
@@ -194,7 +200,7 @@ LOCAL_SRC_FILES += \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
-        libemoji \
+  libemoji \
 	libjpeg \
 	libutils \
 	libz
@@ -218,7 +224,7 @@ LOCAL_C_INCLUDES += \
 	external/giflib \
 	external/jpeg \
 	external/webp/include \
-    frameworks/opt/emoji
+	frameworks/opt/emoji
 
 ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
@@ -231,49 +237,6 @@ LOCAL_MODULE:= libskia
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################
-# Build the skia-opengl glue library
-#
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-ifneq ($(ARCH_ARM_HAVE_VFP),true)
-	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
-endif
-
-ifeq ($(ARCH_ARM_HAVE_NEON),true)
-	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
-endif
-
-LOCAL_SRC_FILES:= \
-	src/gl/SkGL.cpp \
-	src/gl/SkGLCanvas.cpp \
-	src/gl/SkGLDevice.cpp \
-	src/gl/SkGLDevice_SWLayer.cpp \
-	src/gl/SkGLTextCache.cpp \
-	src/gl/SkTextureCache.cpp
-
-LOCAL_SHARED_LIBRARIES := \
-	libcutils \
-	libutils \
-	libskia \
-	libGLESv1_CM
-
-LOCAL_C_INCLUDES += \
-	$(LOCAL_PATH)/src/core \
-	$(LOCAL_PATH)/src/gl \
-	$(LOCAL_PATH)/include/core \
-	$(LOCAL_PATH)/include/effects \
-	$(LOCAL_PATH)/include/utils
-
-LOCAL_LDLIBS += -lpthread
-
-LOCAL_MODULE:= libskiagl
-
-include $(BUILD_SHARED_LIBRARY)
-
-#############################################################
 # Build the skia tools
 #
 
@@ -281,7 +244,7 @@ include $(BUILD_SHARED_LIBRARY)
 include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
-include $(BASE_PATH)/gm/Android.mk
+#include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk

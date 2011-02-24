@@ -16,7 +16,7 @@
 */
 
 #include "SkTextBox.h"
-#include "../src/core/SkGlyphCache.h"
+#include "../core/SkGlyphCache.h"
 #include "SkUtils.h"
 #include "SkAutoKern.h"
 
@@ -212,5 +212,26 @@ void SkTextBox::draw(SkCanvas* canvas, const char text[], size_t len, const SkPa
         if (y + metrics.fAscent >= height)
             break;
     } 
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void SkTextBox::setText(const char text[], size_t len, const SkPaint& paint) {
+    fText = text;
+    fLen = len;
+    fPaint = &paint;
+}
+
+void SkTextBox::draw(SkCanvas* canvas) {
+    this->draw(canvas, fText, fLen, *fPaint);
+}
+
+int SkTextBox::countLines() const {
+    return SkTextLineBreaker::CountLines(fText, fLen, *fPaint, fBox.width());
+}
+
+SkScalar SkTextBox::getTextHeight() const {
+    SkScalar spacing = SkScalarMul(fPaint->getTextSize(), fSpacingMul) + fSpacingAdd;
+    return this->countLines() * spacing;
 }
 

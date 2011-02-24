@@ -161,6 +161,13 @@ static inline int SkNextLog2(uint32_t value) {
     return 32 - SkCLZ(value - 1);
 }
 
+/** Returns true if value is a power of 2. Does not explicitly check for
+    value <= 0.
+ */
+static inline bool SkIsPow2(int value) {
+    return (value & (value - 1)) == 0;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 /** SkMulS16(a, b) multiplies a * b, but requires that a and b are both int16_t.
@@ -210,6 +217,16 @@ static inline U8CPU SkMulDiv255Round(U8CPU a, U8CPU b) {
     SkASSERT((uint8_t)a == a);
     SkASSERT((uint8_t)b == b);
     unsigned prod = SkMulS16(a, b) + 128;
+    return (prod + (prod >> 8)) >> 8;
+}
+
+/** Return (a*b)/255, taking the ceiling of any fractional bits. Only valid if
+    both a and b are 0..255. The expected result equals (a * b + 254) / 255.
+ */
+static inline U8CPU SkMulDiv255Ceiling(U8CPU a, U8CPU b) {
+    SkASSERT((uint8_t)a == a);
+    SkASSERT((uint8_t)b == b);
+    unsigned prod = SkMulS16(a, b) + 255;
     return (prod + (prod >> 8)) >> 8;
 }
 

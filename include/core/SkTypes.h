@@ -103,27 +103,53 @@ static inline void sk_bzero(void* buffer, size_t size) {
     #define SkAssertResult(cond)        cond
 #endif
 
+namespace {
+
+template <bool>
+struct SkCompileAssert {
+};
+
+}  // namespace
+
+#define SK_COMPILE_ASSERT(expr, msg) \
+    typedef SkCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
+
 ///////////////////////////////////////////////////////////////////////
 
-/** Fast type for signed 8 bits. Use for parameter passing and local variables, not for storage
-*/
-typedef int         S8CPU;
-/** Fast type for unsigned 8 bits. Use for parameter passing and local variables, not for storage
-*/
-typedef int         S16CPU;
-/** Fast type for signed 16 bits. Use for parameter passing and local variables, not for storage
-*/
-typedef unsigned    U8CPU;
-/** Fast type for unsigned 16 bits. Use for parameter passing and local variables, not for storage
-*/
-typedef unsigned    U16CPU;
+/**
+ *  Fast type for signed 8 bits. Use for parameter passing and local variables,
+ *  not for storage.
+ */
+typedef int S8CPU;
 
-/** Meant to be faster than bool (doesn't promise to be 0 or 1, just 0 or non-zero
-*/
-typedef int         SkBool;
-/** Meant to be a small version of bool, for storage purposes. Will be 0 or 1
-*/
-typedef uint8_t     SkBool8;
+/**
+ *  Fast type for unsigned 8 bits. Use for parameter passing and local
+ *  variables, not for storage
+ */
+typedef unsigned U8CPU;
+
+/**
+ *  Fast type for signed 16 bits. Use for parameter passing and local variables,
+ *  not for storage
+ */
+typedef int S16CPU;
+
+/**
+ *  Fast type for unsigned 16 bits. Use for parameter passing and local
+ *  variables, not for storage
+ */
+typedef unsigned U16CPU;
+
+/**
+ *  Meant to be faster than bool (doesn't promise to be 0 or 1,
+ *  just 0 or non-zero
+ */
+typedef int SkBool;
+
+/**
+ *  Meant to be a small version of bool, for storage purposes. Will be 0 or 1
+ */
+typedef uint8_t SkBool8;
 
 #ifdef SK_DEBUG
     int8_t      SkToS8(long);
@@ -290,6 +316,20 @@ static inline uint32_t SkSetClearMask(uint32_t bits, bool cond,
     return cond ? bits | mask : bits & ~mask;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ *  Use to cast a pointer to a different type, and maintaining strict-aliasing
+ */
+template <typename Dst> Dst SkTCast(const void* ptr) {
+    union {
+        const void* src;
+        Dst dst;
+    } data;
+    data.src = ptr;
+    return data.dst;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 /** \class SkNoncopyable
@@ -300,7 +340,7 @@ be copied. It hides its copy-constructor and its assignment-operator.
 class SkNoncopyable {
 public:
     SkNoncopyable() {}
-    
+
 private:
     SkNoncopyable(const SkNoncopyable&);
     SkNoncopyable& operator=(const SkNoncopyable&);
@@ -311,7 +351,7 @@ public:
     SkAutoFree() : fPtr(NULL) {}
     explicit SkAutoFree(void* ptr) : fPtr(ptr) {}
     ~SkAutoFree() { sk_free(fPtr); }
-    
+
     /** Return the currently allocate buffer, or null
     */
     void* get() const { return fPtr; }
@@ -325,7 +365,7 @@ public:
         fPtr = ptr;
         return prev;
     }
-    
+
     /** Transfer ownership of the current ptr to the caller, setting the
         internal reference to null. Note the caller is reponsible for calling
         sk_free on the returned address.

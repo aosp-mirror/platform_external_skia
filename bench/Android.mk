@@ -4,8 +4,8 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	BitmapBench.cpp \
-    DecodeBench.cpp \
-    FPSBench.cpp \
+  DecodeBench.cpp \
+  FPSBench.cpp \
 	RectBench.cpp \
 	RepeatTileBench.cpp \
 	TextBench.cpp \
@@ -23,7 +23,9 @@ LOCAL_C_INCLUDES := \
     external/skia/include/core \
     external/skia/include/images \
     external/skia/include/utils \
-    external/skia/include/effects
+    external/skia/include/effects \
+    external/skia/gpu/include \
+    external/skia/include/gpu
 
 #LOCAL_CFLAGS := 
 

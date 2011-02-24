@@ -91,6 +91,7 @@ public:
 
     bool    writeText(const char text[]);
     bool    writeDecAsText(int32_t);
+    bool    writeBigDecAsText(int64_t, int minDigits = 0);
     bool    writeHexAsText(uint32_t, int minDigits = 0);
     bool    writeScalarAsText(SkScalar);
     
@@ -176,7 +177,11 @@ public:
     */
     virtual void setMemory(const void* data, size_t length,
                            bool copyData = false);
-    virtual void setMemoryOwned(const void* src, size_t size);
+    /** Replace any memory buffer with the specified buffer. The caller
+        must have allocated data with sk_malloc or sk_realloc, since it
+        will be freed with sk_free.
+    */
+    void setMemoryOwned(const void* data, size_t length);
     void skipToAlign4();
     virtual bool rewind();
     virtual size_t read(void* buffer, size_t size);
@@ -273,7 +278,7 @@ public:
     // modifies stream and returns true if offset + size is less than or equal to getOffset()
     bool write(const void* buffer, size_t offset, size_t size);
     bool read(void* buffer, size_t offset, size_t size);
-    size_t getOffset() { return fBytesWritten; }
+    size_t getOffset() const { return fBytesWritten; }
 
     // copy what has been written to the stream into dst
     void    copyTo(void* dst) const;
@@ -309,4 +314,3 @@ public:
 typedef SkFILEStream SkURLStream;
 
 #endif
-

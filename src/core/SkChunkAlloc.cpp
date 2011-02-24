@@ -49,6 +49,11 @@ struct SkChunkAlloc::Block {
         }
         return block;
     }
+
+    bool contains(const void* addr) const {
+        const char* ptr = reinterpret_cast<const char*>(addr);
+        return ptr >= (const char*)(this + 1) && ptr < fFreePtr;
+    }
 };
 
 SkChunkAlloc::SkChunkAlloc(size_t minSize)
@@ -85,7 +90,9 @@ SkChunkAlloc::Block* SkChunkAlloc::newBlock(size_t bytes, AllocFailType ftype) {
         return block;
     }
 
-    size_t  size = SkMax32((int32_t)bytes, (int32_t)fMinSize);
+    size_t size = bytes;
+    if (size < fMinSize)
+        size = fMinSize;
 
     block = (Block*)sk_malloc_flags(sizeof(Block) + size,
                         ftype == kThrow_AllocFailType ? SK_MALLOC_THROW : 0);
@@ -135,5 +142,16 @@ size_t SkChunkAlloc::unalloc(void* ptr) {
         }
     }
     return bytes;
+}
+
+bool SkChunkAlloc::contains(const void* addr) const {
+    const Block* block = fBlock;
+    while (block) {
+        if (block->contains(addr)) {
+            return true;
+        }
+        block = block->fNext;
+    }
+    return false;
 }
 

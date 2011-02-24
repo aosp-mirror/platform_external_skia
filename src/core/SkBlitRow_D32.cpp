@@ -137,8 +137,17 @@ SkBlitRow::Proc32 SkBlitRow::Factory32(unsigned flags) {
     return proc;
 }
 
-void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[], int count,
-                        SkPMColor color) {
+SkBlitRow::Proc32 SkBlitRow::ColorProcFactory() {
+    SkBlitRow::ColorProc proc = PlatformColorProc();
+    if (NULL == proc) {
+        proc = Color32;
+    }
+    SkASSERT(proc);
+    return proc;
+}
+
+void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[], 
+                        int count, SkPMColor color) {
     if (count > 0) {
         if (0 == color) {
             if (src != dst) {
