@@ -157,6 +157,8 @@ public:
     void rotateY(SkScalar deg);
     void rotateZ(SkScalar deg);
 
+    void setCameraLocation(SkScalar x, SkScalar y, SkScalar z);
+
     void getMatrix(SkMatrix*) const;
     void applyToCanvas(SkCanvas*) const;
 
