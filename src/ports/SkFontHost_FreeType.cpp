@@ -522,7 +522,7 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
         InitFreetype();
         FT_Done_FreeType(gFTLibrary);
     }
-    
+
     if (!gLCDSupport && rec->isLCD()) {
         // If the runtime Freetype library doesn't support LCD mode, we disable
         // it here.
@@ -1261,11 +1261,12 @@ SkScalerContext* SkFontHost::CreateScalerContext(const SkDescriptor* desc) {
 /*  Export this so that other parts of our FonttHost port can make use of our
     ability to extract the name+style from a stream, using FreeType's api.
 */
-bool find_name_and_style(SkStream* stream, SkString* name, SkTypeface::Style* style) {
+SkTypeface::Style find_name_and_attributes(SkStream* stream, SkString* name,
+                                           bool* isFixedWidth) {
     FT_Library  library;
     if (FT_Init_FreeType(&library)) {
-        name->set(NULL);
-        return false;
+        name->reset();
+        return SkTypeface::kNormal;
     }
 
     FT_Open_Args    args;
@@ -1292,22 +1293,24 @@ bool find_name_and_style(SkStream* stream, SkString* name, SkTypeface::Style* st
     FT_Face face;
     if (FT_Open_Face(library, &args, 0, &face)) {
         FT_Done_FreeType(library);
-        name->set(NULL);
-        return false;
+        name->reset();
+        return SkTypeface::kNormal;
     }
 
     name->set(face->family_name);
-    int tempStyle = SkTypeface::kNormal;
+    int style = SkTypeface::kNormal;
 
     if (face->style_flags & FT_STYLE_FLAG_BOLD) {
-        tempStyle |= SkTypeface::kBold;
+        style |= SkTypeface::kBold;
     }
     if (face->style_flags & FT_STYLE_FLAG_ITALIC) {
-        tempStyle |= SkTypeface::kItalic;
+        style |= SkTypeface::kItalic;
+    }
+    if (isFixedWidth) {
+        *isFixedWidth = FT_IS_FIXED_WIDTH(face);
     }
 
-    *style = (SkTypeface::Style)tempStyle;
     FT_Done_Face(face);
     FT_Done_FreeType(library);
-    return true;
+    return (SkTypeface::Style)style;
 }

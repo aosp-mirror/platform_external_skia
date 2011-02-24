@@ -118,6 +118,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
 	src/core/SkCanvas.cpp \
+	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorTable.cpp \

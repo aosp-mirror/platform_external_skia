@@ -99,7 +99,7 @@ struct DeviceCM {
 	}
 
     void updateMC(const SkMatrix& totalMatrix, const SkRegion& totalClip,
-                  SkRegion* updateClip) {
+                  const SkClipStack& clipStack, SkRegion* updateClip) {
         int x = fX;
         int y = fY;
         int width = fDevice->width();
@@ -126,7 +126,7 @@ struct DeviceCM {
                            SkRegion::kDifference_Op);
         }
 
-        fDevice->setMatrixClip(*fMatrix, fClip);
+        fDevice->setMatrixClip(*fMatrix, fClip, clipStack);
 
 #ifdef SK_DEBUG
         if (!fClip.isEmpty()) {
@@ -477,16 +477,16 @@ SkDrawFilter* SkCanvas::setDrawFilter(SkDrawFilter* filter) {
 
 SkDevice* SkCanvas::getDevice() const {
     // return root device
-    SkDeque::Iter   iter(fMCStack);
-    MCRec*          rec = (MCRec*)iter.next();
+    SkDeque::F2BIter iter(fMCStack);
+    MCRec*           rec = (MCRec*)iter.next();
     SkASSERT(rec && rec->fLayer);
     return rec->fLayer->fDevice;
 }
 
 SkDevice* SkCanvas::setDevice(SkDevice* device) {
     // return root device
-    SkDeque::Iter   iter(fMCStack);
-    MCRec*          rec = (MCRec*)iter.next();
+    SkDeque::F2BIter iter(fMCStack);
+    MCRec*           rec = (MCRec*)iter.next();
     SkASSERT(rec && rec->fLayer);
     SkDevice*       rootDevice = rec->fLayer->fDevice;
 
@@ -528,6 +528,7 @@ SkDevice* SkCanvas::setDevice(SkDevice* device) {
         while ((rec = (MCRec*)iter.next()) != NULL) {
             (void)rec->fRegion->setEmpty();
         }
+        fClipStack.reset();
     } else {
         // compute our total bounds for all devices
         SkIRect bounds;
@@ -539,6 +540,7 @@ SkDevice* SkCanvas::setDevice(SkDevice* device) {
         while ((rec = (MCRec*)iter.next()) != NULL) {
             (void)rec->fRegion->op(bounds, SkRegion::kIntersect_Op);
         }
+        fClipStack.clipDevRect(bounds, SkRegion::kIntersect_Op);
     }
     return device;
 }
@@ -608,7 +610,7 @@ void SkCanvas::updateDeviceCMCache() {
         DeviceCM*       layer = fMCRec->fTopLayer;
 
         if (NULL == layer->fNext) {   // only one layer
-            layer->updateMC(totalMatrix, totalClip, NULL);
+            layer->updateMC(totalMatrix, totalClip, fClipStack, NULL);
             if (fUseExternalMatrix) {
                 layer->updateExternalMatrix(fExternalMatrix,
                                             fExternalInverse);
@@ -617,7 +619,7 @@ void SkCanvas::updateDeviceCMCache() {
             SkRegion clip;
             clip = totalClip;  // make a copy
             do {
-                layer->updateMC(totalMatrix, clip, &clip);
+                layer->updateMC(totalMatrix, clip, fClipStack, &clip);
                 if (fUseExternalMatrix) {
                     layer->updateExternalMatrix(fExternalMatrix,
                                                 fExternalInverse);
@@ -647,6 +649,9 @@ int SkCanvas::internalSave(SaveFlags flags) {
 
     newTop->fNext = fMCRec;
     fMCRec = newTop;
+
+    fClipStack.save();
+    SkASSERT(fClipStack.getSaveCount() == this->getSaveCount() - 1);
 
     return saveCount;
 }
@@ -729,6 +734,7 @@ int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint,
         ir = clipBounds;
     }
 
+    fClipStack.clipDevRect(ir, SkRegion::kIntersect_Op);
     // early exit if the clip is now empty
     if (bounds_affects_clip(flags) &&
         !fMCRec->fRegion->op(ir, SkRegion::kIntersect_Op)) {
@@ -775,6 +781,7 @@ void SkCanvas::internalRestore() {
     fLocalBoundsCompareTypeDirty = true;
     fLocalBoundsCompareTypeDirtyBW = true;
 
+    fClipStack.restore();
 	// reserve our layer (if any)
     DeviceCM* layer = fMCRec->fLayer;   // may be null
     // now detach it from fMCRec so we can pop(). Gets freed after its drawn
@@ -798,6 +805,8 @@ void SkCanvas::internalRestore() {
         }
         SkDELETE(layer);
 	}
+
+    SkASSERT(fClipStack.getSaveCount() == this->getSaveCount() - 1);
 }
 
 int SkCanvas::getSaveCount() const {
@@ -911,6 +920,8 @@ void SkCanvas::resetMatrix() {
 //////////////////////////////////////////////////////////////////////////////
 
 bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
+    AutoValidateClip avc(this);
+
     fDeviceCMDirty = true;
     fLocalBoundsCompareTypeDirty = true;
     fLocalBoundsCompareTypeDirtyBW = true;
@@ -924,6 +935,7 @@ bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
         SkIRect     ir;
 
         fMCRec->fMatrix->mapRect(&r, rect);
+        fClipStack.clipDevRect(r, op);
         r.round(&ir);
         return fMCRec->fRegion->op(ir, op);
     } else {
@@ -938,7 +950,28 @@ bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
     }
 }
 
+static bool clipPathHelper(const SkCanvas* canvas, SkRegion* currRgn,
+                           const SkPath& devPath, SkRegion::Op op) {
+    if (SkRegion::kIntersect_Op == op) {
+        return currRgn->setPath(devPath, *currRgn);
+    } else {
+        SkRegion base;
+        const SkBitmap& bm = canvas->getDevice()->accessBitmap(false);
+        base.setRect(0, 0, bm.width(), bm.height());
+
+        if (SkRegion::kReplace_Op == op) {
+            return currRgn->setPath(devPath, base);
+        } else {
+            SkRegion rgn;
+            rgn.setPath(devPath, base);
+            return currRgn->op(rgn, op);
+        }
+    }
+}
+
 bool SkCanvas::clipPath(const SkPath& path, SkRegion::Op op) {
+    AutoValidateClip avc(this);
+
     fDeviceCMDirty = true;
     fLocalBoundsCompareTypeDirty = true;
     fLocalBoundsCompareTypeDirtyBW = true;
@@ -946,30 +979,54 @@ bool SkCanvas::clipPath(const SkPath& path, SkRegion::Op op) {
     SkPath devPath;
     path.transform(*fMCRec->fMatrix, &devPath);
 
-    if (SkRegion::kIntersect_Op == op) {
-        return fMCRec->fRegion->setPath(devPath, *fMCRec->fRegion);
-    } else {
-        SkRegion base;
-        const SkBitmap& bm = this->getDevice()->accessBitmap(false);
-        base.setRect(0, 0, bm.width(), bm.height());
+    // if we called path.swap() we could avoid a deep copy of this path
+    fClipStack.clipDevPath(devPath, op);
 
-        if (SkRegion::kReplace_Op == op) {
-            return fMCRec->fRegion->setPath(devPath, base);
-        } else {
-            SkRegion rgn;
-            rgn.setPath(devPath, base);
-            return fMCRec->fRegion->op(rgn, op);
-        }
-    }
+    return clipPathHelper(this, fMCRec->fRegion, devPath, op);
 }
 
 bool SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
+    AutoValidateClip avc(this);
+
     fDeviceCMDirty = true;
     fLocalBoundsCompareTypeDirty = true;
     fLocalBoundsCompareTypeDirtyBW = true;
 
+    // todo: signal fClipStack that we have a region, and therefore (I guess)
+    // we have to ignore it, and use the region directly?
+    fClipStack.clipDevRect(rgn.getBounds());
+
     return fMCRec->fRegion->op(rgn, op);
 }
+
+#ifdef SK_DEBUG
+void SkCanvas::validateClip() const {
+    // construct clipRgn from the clipstack
+    const SkDevice* device = this->getDevice();
+    SkIRect ir;
+    ir.set(0, 0, device->width(), device->height());
+    SkRegion clipRgn(ir);
+
+    SkClipStack::B2FIter                iter(fClipStack);
+    const SkClipStack::B2FIter::Clip*   clip;
+    while ((clip = iter.next()) != NULL) {
+        if (clip->fPath) {
+            clipPathHelper(this, &clipRgn, *clip->fPath, clip->fOp);
+        } else if (clip->fRect) {
+            clip->fRect->round(&ir);
+            clipRgn.op(ir, clip->fOp);
+        } else {
+            break;
+        }
+    }
+
+    // now compare against the current rgn
+    const SkRegion& rgn = this->getTotalClip();
+    SkASSERT(rgn == clipRgn);
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
 
 void SkCanvas::computeLocalClipBoundsCompareType(EdgeType et) const {
     SkRect r;
