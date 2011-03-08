@@ -4,16 +4,20 @@
 #include "SkBitmap.h"
 #include "SkRect.h"
 #include "SkImageDecoder.h"
+#include "SkStream.h"
 
 class SkBitmapRegionDecoder {
 public:
-    SkBitmapRegionDecoder(SkImageDecoder *decoder, int width, int height) {
+    SkBitmapRegionDecoder(SkImageDecoder *decoder, SkStream *stream,
+            int width, int height) {
         fDecoder = decoder;
+        fStream = stream;
         fWidth = width;
         fHeight = height;
     }
     virtual ~SkBitmapRegionDecoder() {
         delete fDecoder;
+        fStream->unref();
     }
 
     virtual bool decodeRegion(SkBitmap* bitmap, SkIRect rect,
@@ -26,6 +30,7 @@ public:
 
 private:
     SkImageDecoder *fDecoder;
+    SkStream *fStream;
     int fWidth;
     int fHeight;
 };
