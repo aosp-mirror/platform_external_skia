@@ -186,7 +186,7 @@ static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
 // set a break-point in one place to see all error exists.
 static bool return_false(const jpeg_decompress_struct& cinfo,
                          const SkBitmap& bm, const char msg[]) {
-#if 0
+#if 1
     SkDebugf("libjpeg error %d <%s> from %s [%d %d]", cinfo.err->msg_code,
              cinfo.err->jpeg_message_table[cinfo.err->msg_code], msg,
              bm.width(), bm.height());
