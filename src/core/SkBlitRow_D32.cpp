@@ -128,7 +128,7 @@ SkBlitRow::Proc32 SkBlitRow::Factory32(unsigned flags) {
     SkASSERT(flags < SK_ARRAY_COUNT(gDefault_Procs32));
     // just so we don't crash
     flags &= kFlags32_Mask;
-    
+
     SkBlitRow::Proc32 proc = PlatformProcs32(flags);
     if (NULL == proc) {
         proc = gDefault_Procs32[flags];
@@ -146,7 +146,7 @@ SkBlitRow::Proc32 SkBlitRow::ColorProcFactory() {
     return proc;
 }
 
-void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[], 
+void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[],
                         int count, SkPMColor color) {
     if (count > 0) {
         if (0 == color) {
@@ -168,5 +168,84 @@ void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[],
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////
 
+static void D32_Mask_Color(void* dst, size_t dstRB, SkBitmap::Config,
+                           const uint8_t* mask, size_t maskRB, SkColor color,
+                           int width, int height) {
+    SkPMColor pmc = SkPreMultiplyColor(color);
+    size_t dstOffset = dstRB - (width << 2);
+    size_t maskOffset = maskRB - width;
+    SkPMColor *device = (SkPMColor *)dst;
+    do {
+        int w = width;
+        do {
+            unsigned aa = *mask++;
+            *device = SkBlendARGB32(pmc, *device, aa);
+            device += 1;
+        } while (--w != 0);
+        device = (uint32_t*)((char*)device + dstOffset);
+        mask += maskOffset;
+    } while (--height != 0);
+}
+
+static void D32_Mask_Opaque(void* dst, size_t dstRB, SkBitmap::Config,
+                            const uint8_t* mask, size_t maskRB, SkColor color,
+                            int width, int height) {
+    SkPMColor pmc = SkPreMultiplyColor(color);
+    uint32_t* device = (uint32_t*)dst;
+
+    maskRB -= width;
+    dstRB -= (width << 2);
+    do {
+        int w = width;
+        do {
+            unsigned aa = *mask++;
+            *device = SkAlphaMulQ(pmc, SkAlpha255To256(aa)) + SkAlphaMulQ(*device, SkAlpha255To256(255 - aa));
+            device += 1;
+        } while (--w != 0);
+        device = (uint32_t*)((char*)device + dstRB);
+        mask += maskRB;
+    } while (--height != 0);
+}
+
+static void D32_Mask_Black(void* dst, size_t dstRB, SkBitmap::Config,
+                           const uint8_t* mask, size_t maskRB, SkColor,
+                           int width, int height) {
+    uint32_t* device = (uint32_t*)dst;
+
+    maskRB -= width;
+    dstRB -= (width << 2);
+    do {
+        int w = width;
+        do {
+            unsigned aa = *mask++;
+            *device = (aa << SK_A32_SHIFT) + SkAlphaMulQ(*device, SkAlpha255To256(255 - aa));
+            device += 1;
+        } while (--w != 0);
+        device = (uint32_t*)((char*)device + dstRB);
+        mask += maskRB;
+    } while (--height != 0);
+}
+
+SkBlitMask::Proc SkBlitMask::Factory(SkBitmap::Config config, SkColor color) {
+    SkBlitMask::Proc proc = PlatformProcs(config, color);
+    proc = NULL;
+    if (NULL == proc) {
+        switch (config) {
+            case SkBitmap::kARGB_8888_Config:
+                if (SK_ColorBLACK == color) {
+                    proc = D32_Mask_Black;
+                } else if (0xFF == SkColorGetA(color)) {
+                    proc = D32_Mask_Opaque;
+                } else {
+                    proc = D32_Mask_Color;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return proc;
+}
 

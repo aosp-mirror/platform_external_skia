@@ -121,7 +121,7 @@ public:
     }
 
 protected:
-    virtual unsigned generateGlyphCount() const;
+    virtual unsigned generateGlyphCount();
     virtual uint16_t generateCharToGlyph(SkUnichar uni);
     virtual void generateAdvance(SkGlyph* glyph);
     virtual void generateMetrics(SkGlyph* glyph);
@@ -346,7 +346,7 @@ static bool getWidthAdvance(FT_Face face, int gId, int16_t* data) {
 // static
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         uint32_t fontID, bool perGlyphInfo) {
-#ifdef ANDROID
+#if defined(SK_BUILD_FOR_MAC) || defined(ANDROID)
     return NULL;
 #else
     SkAutoMutexAcquire ac(gFTMutex);
@@ -541,6 +541,7 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
     rec->setHinting(h);
 }
 
+#ifdef ANDROID
 uint32_t SkFontHost::GetUnitsPerEm(SkFontID fontID) {
     SkAutoMutexAcquire ac(gFTMutex);
     SkFaceRec *rec = ref_ft_face(fontID);
@@ -553,6 +554,7 @@ uint32_t SkFontHost::GetUnitsPerEm(SkFontID fontID) {
 
     return (uint32_t)unitsPerEm;
 }
+#endif
 
 SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
         : SkScalerContext(desc) {
@@ -748,7 +750,7 @@ void SkScalerContext_FreeType::emboldenOutline(FT_Outline* outline) {
     FT_Outline_Embolden(outline, strength);
 }
 
-unsigned SkScalerContext_FreeType::generateGlyphCount() const {
+unsigned SkScalerContext_FreeType::generateGlyphCount() {
     return fFace->num_glyphs;
 }
 

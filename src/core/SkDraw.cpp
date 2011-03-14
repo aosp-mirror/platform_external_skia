@@ -1940,6 +1940,7 @@ void SkDraw::drawTextOnPath(const char text[], size_t byteLength,
     }
 }
 
+#ifdef ANDROID
 void SkDraw::drawPosTextOnPath(const char text[], size_t byteLength,
                                const SkPoint pos[], const SkPaint& paint,
                                const SkPath& path, const SkMatrix* matrix) const {
@@ -2001,6 +2002,7 @@ void SkDraw::drawPosTextOnPath(const char text[], size_t byteLength,
     // re-attach cache
     SkGlyphCache::AttachCache(cache);
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

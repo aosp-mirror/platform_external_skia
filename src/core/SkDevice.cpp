@@ -4,10 +4,13 @@
 
 SkDeviceFactory::~SkDeviceFactory() {}
 
-SkDevice::SkDevice(SkCanvas* canvas) : fCanvas(canvas) {}
+SkDevice::SkDevice(SkCanvas* canvas) : fCanvas(canvas) {
+    fOrigin.setZero();
+}
 
 SkDevice::SkDevice(SkCanvas* canvas, const SkBitmap& bitmap, bool isForLayer)
         : fCanvas(canvas), fBitmap(bitmap) {
+    fOrigin.setZero();
     // auto-allocate if we're for offscreen drawing
     if (isForLayer) {
         if (NULL == fBitmap.getPixels() && NULL == fBitmap.pixelRef()) {
@@ -150,11 +153,13 @@ void SkDevice::drawTextOnPath(const SkDraw& draw, const void* text,
     draw.drawTextOnPath((const char*)text, len, path, matrix, paint);
 }
 
+#ifdef ANDROID
 void SkDevice::drawPosTextOnPath(const SkDraw& draw, const void* text, size_t len,
                                      const SkPoint pos[], const SkPaint& paint,
                                      const SkPath& path, const SkMatrix* matrix) {
     draw.drawPosTextOnPath((const char*)text, len, pos, paint, path, matrix);
 }
+#endif
 
 void SkDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
                                 int vertexCount,

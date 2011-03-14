@@ -80,7 +80,7 @@ public:
             shadeSpan().
          */
         kConstInY32_Flag = 0x08,
-        
+
         /** same as kConstInY32_Flag, but is set if this is true for shadeSpan16
             which may not always be the case, since shadeSpan16 may be
             predithered, which would mean it was not const in Y, even though
@@ -101,7 +101,7 @@ public:
         kHasSpan16_Flag is not set, this value is meaningless.
     */
     virtual uint8_t getSpan16Alpha() const { return fPaintAlpha; }
-    
+
     /** Called once before drawing, with the current paint and
         device matrix. Return true if your shader supports these
         parameters, or false if not. If false is returned, nothing
@@ -144,7 +144,7 @@ public:
     */
     virtual void beginSession();
     virtual void endSession();
-    
+
     /**
      Gives method bitmap should be read to implement a shader.
      Also determines number and interpretation of "extra" parameters returned
@@ -152,34 +152,35 @@ public:
      */
     enum BitmapType {
         kNone_BitmapType,   //<! Shader is not represented as a bitmap
-        kDefault_BitmapType,//<! Access bitmap using local coords transformed 
+        kDefault_BitmapType,//<! Access bitmap using local coords transformed
                             //   by matrix. No extras
-        kRadial_BitmapType, //<! Access bitmap by transforming local coordinates 
-                            //   by the matrix and taking the distance of result 
-                            //   from  (0,0) as bitmap column. Bitmap is 1 pixel 
+        kRadial_BitmapType, //<! Access bitmap by transforming local coordinates
+                            //   by the matrix and taking the distance of result
+                            //   from  (0,0) as bitmap column. Bitmap is 1 pixel
                             //   tall. No extras
-        kSweep_BitmapType,  //<! Access bitmap by transforming local coordinates 
+        kSweep_BitmapType,  //<! Access bitmap by transforming local coordinates
                             //   by the matrix and taking the angle of result
                             //   to (0,0) as bitmap x coord, where angle = 0 is
-                            //   bitmap left edge of bitmap = 2pi is the 
+                            //   bitmap left edge of bitmap = 2pi is the
                             //   right edge. Bitmap is 1 pixel tall. No extras
-        kTwoPointRadial_BitmapType
-                            //<! Matrix transforms to space where (0,0) is 
+        kTwoPointRadial_BitmapType,
+                            //<! Matrix transforms to space where (0,0) is
                             //   the center of the starting circle.  The second
-                            //   circle will be centered (x, 0) where x  may be 
-                            //   0. The post-matrix space is normalized such 
+                            //   circle will be centered (x, 0) where x  may be
+                            //   0. The post-matrix space is normalized such
                             //   that 1 is the second radius - first radius.
                             //   Three extra parameters are returned:
-                            //      0: x-offset of second circle center 
+                            //      0: x-offset of second circle center
                             //         to first.
-                            //      1: radius of first circle in post-matrix 
+                            //      1: radius of first circle in post-matrix
                             //         space
                             //      2: the second radius minus the first radius
-                            //         in pre-transformed space.        
-        
+                            //         in pre-transformed space.
+
+       kLast_BitmapType = kTwoPointRadial_BitmapType
     };
     /** Optional methods for shaders that can pretend to be a bitmap/texture
-        to play along with opengl. Default just returns kNone_BitmapType and 
+        to play along with opengl. Default just returns kNone_BitmapType and
         ignores the out parameters.
 
         @param outTexture if non-NULL will be the bitmap representing the shader
@@ -194,7 +195,60 @@ public:
                                     about the first point.
     */
     virtual BitmapType asABitmap(SkBitmap* outTexture, SkMatrix* outMatrix,
-                                 TileMode xy[2], SkScalar* twoPointRadialParams);
+                                 TileMode xy[2], SkScalar* twoPointRadialParams) const;
+
+    /**
+     *  If the shader subclass can be represented as a gradient, asAGradient
+     *  returns the matching GradientType enum (or kNone_GradientType if it
+     *  cannot). Also, if info is not null, asAGradient populates info with
+     *  the relevant (see below) parameters for the gradient.  fColorCount
+     *  is both an input and output parameter.  On input, it indicates how
+     *  many entries in fColors and fColorOffsets can be used, if they are
+     *  non-NULL.  After asAGradient has run, fColorCount indicates how
+     *  many color-offset pairs there are in the gradient.  If there is
+     *  insufficient space to store all of the color-offset pairs, fColors
+     *  and fColorOffsets will not be altered.  fColorOffsets specifies
+     *  where on the range of 0 to 1 to transition to the given color.
+     *  The meaning of fPoint and fRadius is dependant on the type of gradient.
+     *
+     *  None:
+     *      info is ignored.
+     *  Color:
+     *      fColorOffsets[0] is meaningless.
+     *  Linear:
+     *      fPoint[0] and fPoint[1] are the end-points of the gradient
+     *  Radial:
+     *      fPoint[0] and fRadius[0] are the center and radius
+     *  Radial2:
+     *      fPoint[0] and fRadius[0] are the center and radius of the 1st circle
+     *      fPoint[1] and fRadius[1] are the center and radius of the 2nd circle
+     *  Sweep:
+     *      fPoint[0] is the center of the sweep.
+     */
+
+    enum GradientType {
+        kNone_GradientType,
+        kColor_GradientType,
+        kLinear_GradientType,
+        kRadial_GradientType,
+        kRadial2_GradientType,
+        kSweep_GradientType,
+        kLast_GradientType = kSweep_GradientType
+    };
+
+    struct GradientInfo {
+        int         fColorCount;    //!< In-out parameter, specifies passed size
+                                    //   of fColors/fColorOffsets on input, and
+                                    //   actual number of colors/offsets on
+                                    //   output.
+        SkColor*    fColors;        //!< The colors in the gradient.
+        SkScalar*   fColorOffsets;  //!< The unit offset for color transitions.
+        SkPoint     fPoint[2];      //!< Type specific, see above.
+        SkScalar    fRadius[2];     //!< Type specific, see above.
+        TileMode    fTileMode;      //!< The tile mode used.
+    };
+
+    virtual GradientType asAGradient(GradientInfo* info) const;
 
     //////////////////////////////////////////////////////////////////////////
     //  Factory methods for stock shaders

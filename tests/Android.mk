@@ -3,24 +3,40 @@ include $(CLEAR_VARS)
 
 
 LOCAL_SRC_FILES:= \
-        BlitRowTest.cpp \
-        GeometryTest.cpp \
-        MathTest.cpp \
-        MatrixTest.cpp \
-        PackBitsTest.cpp \
-        Sk64Test.cpp \
-        StringTest.cpp \
-        Test.cpp UtilsTest.cpp \
-        PathTest.cpp \
-        SrcOverTest.cpp \
-        StreamTest.cpp \
-        SortTest.cpp \
-        PathMeasureTest.cpp
+  BitmapCopyTest.cpp \
+  BitmapGetColorTest.cpp \
+  BlitRowTest.cpp \
+  ClipCubicTest.cpp \
+  ClipStackTest.cpp \
+  ClipperTest.cpp \
+  DequeTest.cpp \
+  FillPathTest.cpp \
+  FlateTest.cpp \
+  GeometryTest.cpp \
+  InfRectTest.cpp \
+  MathTest.cpp \
+  MatrixTest.cpp \
+  PackBitsTest.cpp \
+  PaintTest.cpp \
+  ParsePathTest.cpp \
+  PathMeasureTest.cpp \
+  PathTest.cpp \
+  RefDictTest.cpp \
+  RegionTest.cpp \
+  Sk64Test.cpp \
+  SortTest.cpp \
+  SrcOverTest.cpp \
+  StreamTest.cpp \
+  StringTest.cpp \
+  Test.cpp \
+  TestSize.cpp \
+  UtilsTest.cpp \
+  XfermodeTest.cpp
 
 # The name of the file with a main function must
 # match native test's naming rule: xxx_test.cpp.
 LOCAL_SRC_FILES += \
-        skia_test.cpp
+  skia_test.cpp
 
 LOCAL_MODULE:= skia_test
 

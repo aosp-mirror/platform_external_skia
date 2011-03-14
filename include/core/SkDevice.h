@@ -81,6 +81,13 @@ public:
     /** Return the height of the device (in pixels).
     */
     virtual int height() const { return fBitmap.height(); }
+
+    /**
+     *  Return the device's origin: its offset in device coordinates from
+     *  the default origin in its canvas' matrix/clip
+     */
+    const SkIPoint& getOrigin() const { return fOrigin; }
+
     /** Return the bitmap config of the device's pixels
     */
     SkBitmap::Config config() const { return fBitmap.getConfig(); }
@@ -141,7 +148,8 @@ public:
     /** Called when this device gains focus (i.e becomes the current device
         for drawing).
     */
-    virtual void gainFocus(SkCanvas*, const SkMatrix&, const SkRegion&) {}
+    virtual void gainFocus(SkCanvas*, const SkMatrix&, const SkRegion&,
+                           const SkClipStack&) {}
 
     /** Causes any deferred drawing to the device to be completed.
      */
@@ -189,9 +197,11 @@ public:
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint);
+#ifdef ANDROID
     virtual void drawPosTextOnPath(const SkDraw& draw, const void* text, size_t len,
                                    const SkPoint pos[], const SkPaint& paint,
                                    const SkPath& path, const SkMatrix* matrix);
+#endif
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode, int vertexCount,
                               const SkPoint verts[], const SkPoint texs[],
                               const SkColor colors[], SkXfermode* xmode,
@@ -219,9 +229,14 @@ protected:
     }
 
 private:
+    friend class SkCanvas;
+    // just called by SkCanvas when built as a layer
+    void setOrigin(int x, int y) { fOrigin.set(x, y); }
+
     SkCanvas*   fCanvas;
     SkBitmap    fBitmap;
     SkRefDict   fRefDict;
+    SkIPoint    fOrigin;
 };
 
 #endif

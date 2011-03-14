@@ -157,6 +157,7 @@ void SkPath::reset() {
     fVerbs.reset();
     fGenerationID++;
     fBoundsIsDirty = true;
+    fIsConvex = false;  // really should be kUnknown
 }
 
 void SkPath::rewind() {
@@ -166,6 +167,7 @@ void SkPath::rewind() {
     fVerbs.rewind();
     fGenerationID++;
     fBoundsIsDirty = true;
+    fIsConvex = false;  // really should be kUnknown
 }
 
 bool SkPath::isEmpty() const {

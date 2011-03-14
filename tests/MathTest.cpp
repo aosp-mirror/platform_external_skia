@@ -146,6 +146,38 @@ static void unittest_fastfloat(skiatest::Reporter* reporter) {
     }
 }
 
+#ifdef SK_SCALAR_IS_FLOAT
+static float make_zero() {
+    return sk_float_sin(0);
+}
+#endif
+
+static void unittest_isfinite(skiatest::Reporter* reporter) {
+#ifdef SK_SCALAR_IS_FLOAT
+    float nan = ::asin(2);
+    float inf = 1.0 / make_zero();
+    float big = 3.40282e+038;
+
+    REPORTER_ASSERT(reporter, !SkScalarIsNaN(inf));
+    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-inf));
+    REPORTER_ASSERT(reporter, !SkScalarIsFinite(inf));
+    REPORTER_ASSERT(reporter, !SkScalarIsFinite(-inf));
+#else
+    SkFixed nan = SK_FixedNaN;
+    SkFixed big = SK_FixedMax;
+#endif
+
+    REPORTER_ASSERT(reporter,  SkScalarIsNaN(nan));
+    REPORTER_ASSERT(reporter, !SkScalarIsNaN(big));
+    REPORTER_ASSERT(reporter, !SkScalarIsNaN(-big));
+    REPORTER_ASSERT(reporter, !SkScalarIsNaN(0));
+    
+    REPORTER_ASSERT(reporter, !SkScalarIsFinite(nan));
+    REPORTER_ASSERT(reporter,  SkScalarIsFinite(big));
+    REPORTER_ASSERT(reporter,  SkScalarIsFinite(-big));
+    REPORTER_ASSERT(reporter,  SkScalarIsFinite(0));
+}
+
 #endif
 
 static void test_muldiv255(skiatest::Reporter* reporter) {
@@ -169,6 +201,19 @@ static void test_muldiv255(skiatest::Reporter* reporter) {
         }
     }
 #endif
+}
+
+static void test_muldiv255ceiling(skiatest::Reporter* reporter) {
+    for (int c = 0; c <= 255; c++) {
+        for (int a = 0; a <= 255; a++) {
+            int product = (c * a + 255);
+            int expected_ceiling = (product + (product >> 8)) >> 8;
+            int webkit_ceiling = (c * a + 254) / 255;
+            REPORTER_ASSERT(reporter, expected_ceiling == webkit_ceiling);
+            int skia_ceiling = SkMulDiv255Ceiling(c, a);
+            REPORTER_ASSERT(reporter, skia_ceiling == webkit_ceiling);
+        }
+    }
 }
 
 static void test_copysign(skiatest::Reporter* reporter) {
@@ -237,6 +282,7 @@ static void TestMath(skiatest::Reporter* reporter) {
 #endif
 
     test_muldiv255(reporter);
+    test_muldiv255ceiling(reporter);
     test_copysign(reporter);
 
     {
@@ -295,6 +341,7 @@ static void TestMath(skiatest::Reporter* reporter) {
 
 #ifdef SK_CAN_USE_FLOAT
     unittest_fastfloat(reporter);
+    unittest_isfinite(reporter);
 #endif
 
 #ifdef SkLONGLONG

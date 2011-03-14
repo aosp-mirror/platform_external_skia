@@ -3,27 +3,33 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	filltypes.cpp \
+  bitmapfilters.cpp \
+  blurs.cpp \
+  complexclip.cpp \
+  filltypes.cpp \
   gradients.cpp \
-	tilemodes.cpp \
-	bitmapfilters.cpp \
-	xfermodes.cpp \
-	gmmain.cpp
+  points.cpp \
+  poly2poly.cpp \
+  shadertext.cpp \
+  shadows.cpp \
+  shapes.cpp \
+  tilemodes.cpp \
+  xfermodes.cpp \
+  gmmain.cpp
 
 # additional optional class for this tool
 LOCAL_SRC_FILES += \
-	../src/utils/SkUnitMappers.cpp \
-	../src/utils/SkEGLContext_none.cpp
+  ../src/utils/SkEGLContext_none.cpp
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia
 LOCAL_C_INCLUDES := \
-    external/skia/include/config \
-    external/skia/include/core \
-    external/skia/include/images \
-    external/skia/include/utils \
-    external/skia/include/effects \
-    external/skia/gpu/include \
-    external/skia/include/gpu
+  external/skia/include/config \
+  external/skia/include/core \
+  external/skia/include/images \
+  external/skia/include/utils \
+  external/skia/include/effects \
+  external/skia/gpu/include \
+  external/skia/include/gpu
 
 #LOCAL_CFLAGS := 
 
