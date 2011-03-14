@@ -15,9 +15,6 @@ ifeq ($(ARCH_ARM_HAVE_VFP),true)
     LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
 endif
 
-# enable this if we turn on SK_DEBUG, otherwise we exceed our prelink budget
-#LOCAL_PRELINK_MODULE := false
-
 ifneq ($(ARCH_ARM_HAVE_VFP),true)
 	LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
 endif
