@@ -30,8 +30,33 @@ int SkStrStartsWithOneOf(const char string[], const char prefixes[]);
 char*   SkStrAppendS32(char buffer[], int32_t);
 #define SkStrAppendS64_MaxSize  20
 char*   SkStrAppendS64(char buffer[], int64_t, int minDigits);
-#define SkStrAppendScalar_MaxSize  11
-char*   SkStrAppendScalar(char buffer[], SkScalar);
+
+/**
+ *  Floats have at most 8 significant digits, so we limit our %g to that.
+ *  However, the total string could be 15 characters: -1.2345678e-005
+ *
+ *  In theory we should only expect up to 2 digits for the exponent, but on
+ *  some platforms we have seen 3 (as in the example above).
+ */
+#define SkStrAppendScalar_MaxSize  15
+
+/**
+ *  Write the scaler in decimal format into buffer, and return a pointer to
+ *  the next char after the last one written. Note: a terminating 0 is not
+ *  written into buffer, which must be at least SkStrAppendScalar_MaxSize.
+ *  Thus if the caller wants to add a 0 at the end, buffer must be at least
+ *  SkStrAppendScalar_MaxSize + 1 bytes large.
+ */
+#ifdef SK_SCALAR_IS_FLOAT
+    #define SkStrAppendScalar SkStrAppendFloat
+#else
+    #define SkStrAppendScalar SkStrAppendFixed
+#endif
+
+#ifdef SK_CAN_USE_FLOAT
+char* SkStrAppendFloat(char buffer[], float);
+#endif
+char* SkStrAppendFixed(char buffer[], SkFixed);
 
 /** \class SkString
 
@@ -127,7 +152,7 @@ public:
         to never fail or throw.
     */
     void    swap(SkString& other);
-    
+
 private:
     struct Rec {
     public:

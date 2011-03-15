@@ -626,6 +626,7 @@ public:
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint);
 
+#ifdef ANDROID
     /** Draw the text on path, with each character/glyph origin specified by the pos[]
         array. The origin is interpreted by the Align setting in the paint.
         @param text The text to be drawn
@@ -638,6 +639,7 @@ public:
     void drawPosTextOnPath(const void* text, size_t byteLength,
                            const SkPoint pos[], const SkPaint& paint,
                            const SkPath& path, const SkMatrix* matrix);
+#endif
 
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state
@@ -740,6 +742,12 @@ public:
     */
     const SkRegion& getTotalClip() const;
 
+    /**
+     *  Return the current clipstack. This mirrors the result in getTotalClip()
+     *  but is represented as a stack of geometric clips + region-ops.
+     */
+    const SkClipStack& getTotalClipStack() const;
+
     void setExternalMatrix(const SkMatrix* = NULL);
 
     ///////////////////////////////////////////////////////////////////////////
@@ -801,7 +809,8 @@ private:
     SkDevice*   fLastDeviceToGainFocus;
     SkDeviceFactory* fDeviceFactory;
 
-    void prepareForDeviceDraw(SkDevice*, const SkMatrix&, const SkRegion&);
+    void prepareForDeviceDraw(SkDevice*, const SkMatrix&, const SkRegion&,
+                              const SkClipStack& clipStack);
 
     bool fDeviceCMDirty;            // cleared by updateDeviceCMCache()
     void updateDeviceCMCache();

@@ -120,6 +120,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
+	src/core/SkCubicClipper.cpp \
 	src/core/SkDeque.cpp \
 	src/core/SkDevice.cpp \
 	src/core/SkDither.cpp \
@@ -152,7 +153,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkRasterizer.cpp \
-	src/core/SkRefCnt.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion_path.cpp \
 	src/core/SkScalerContext.cpp \
@@ -180,6 +180,8 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
+	src/utils/SkParse.cpp \
+	src/utils/SkParsePath.cpp \
 	src/utils/SkProxyCanvas.cpp
 
 ifeq ($(TARGET_ARCH),arm)
@@ -233,6 +235,76 @@ LOCAL_LDLIBS += -lpthread
 LOCAL_MODULE:= libskia
 
 include $(BUILD_SHARED_LIBRARY)
+
+#############################################################
+# Build the skia gpu (ganesh) library
+#
+
+include $(CLEAR_VARS)
+
+LOCAL_ARM_MODE := arm
+
+ifneq ($(ARCH_ARM_HAVE_VFP),true)
+       LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
+endif
+
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+       LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+endif
+
+LOCAL_SRC_FILES:= \
+  gpu/src/GrAllocPool.cpp \
+  gpu/src/GrAtlas.cpp \
+  gpu/src/GrClip.cpp \
+  gpu/src/GrContext.cpp \
+  gpu/src/GrDrawTarget.cpp \
+  gpu/src/GrGLIndexBuffer.cpp	\
+  gpu/src/GrGLTexture.cpp \
+  gpu/src/GrGLVertexBuffer.cpp \
+  gpu/src/GrGpu.cpp \
+  gpu/src/GrGpuGLShaders2.cpp \
+  gpu/src/GrGpuGLFixed.cpp \
+  gpu/src/GrGpuFactory.cpp \
+  gpu/src/GrGLUtil.cpp \
+  gpu/src/GrGpuGL.cpp \
+  gpu/src/GrInOrderDrawBuffer.cpp \
+  gpu/src/GrMatrix.cpp \
+  gpu/src/GrMemory.cpp \
+  gpu/src/GrPath.cpp \
+  gpu/src/GrRectanizer_fifo.cpp \
+  gpu/src/GrTextureCache.cpp \
+  gpu/src/GrTextContext.cpp \
+  gpu/src/GrTextStrike.cpp \
+  gpu/src/GrBufferAllocPool.cpp\
+  gpu/src/GrPathRenderer.cpp \
+  gpu/src/GrStencil.cpp \
+  src/gpu/SkGpuCanvas.cpp	\
+  src/gpu/SkGpuDevice.cpp \
+  src/gpu/SkGr.cpp \
+  src/gpu/SkGrTexturePixelRef.cpp \
+  src/gpu/SkGrFontScaler.cpp \
+	src/gpu/GrPrintf_skia.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+  libcutils \
+  libutils \
+  libskia \
+  libEGL \
+  libGLESv2
+
+LOCAL_C_INCLUDES += \
+  $(LOCAL_PATH)/gpu/include \
+  $(LOCAL_PATH)/gpu/src \
+  $(LOCAL_PATH)/include/core \
+  $(LOCAL_PATH)/include/gpu \
+  $(LOCAL_PATH)/src/core
+
+LOCAL_LDLIBS += -lpthread
+
+LOCAL_MODULE:= libskiagpu
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_STATIC_LIBRARY)
 
 #############################################################
 # Build the skia tools

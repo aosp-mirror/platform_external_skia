@@ -401,6 +401,13 @@ public:
     */
     void* getAddr(int x, int y) const;
 
+    /** Return the SkColor of the specified pixel.  In most cases this will
+        require un-premultiplying the color.  Alpha only configs (A1 and A8)
+        return black with the appropriate alpha set.  The value is undefined
+        for kNone_Config or if x or y are out of bounds.
+    */
+    SkColor getColor(int x, int y) const;
+
     /** Returns the address of the pixel specified by x,y for 32bit pixels.
     */
     inline uint32_t* getAddr32(int x, int y) const;
@@ -461,18 +468,18 @@ public:
     */
     int extractMipLevel(SkBitmap* dst, SkFixed sx, SkFixed sy);
 
-    void extractAlpha(SkBitmap* dst) const {
-        this->extractAlpha(dst, NULL, NULL, NULL);
+    bool extractAlpha(SkBitmap* dst) const {
+        return this->extractAlpha(dst, NULL, NULL, NULL);
     }
 
-    void extractAlpha(SkBitmap* dst, const SkPaint* paint,
+    bool extractAlpha(SkBitmap* dst, const SkPaint* paint,
                       SkIPoint* offset) const {
-        this->extractAlpha(dst, paint, NULL, offset);
+        return this->extractAlpha(dst, paint, NULL, offset);
     }
 
     /** Set dst to contain alpha layer of this bitmap. If destination bitmap
         fails to be initialized, e.g. because allocator can't allocate pixels
-        for it, dst will be resetted (zero width and height, no pixels).
+        for it, dst will not be modified and false will be returned.
 
         @param dst The bitmap to be filled with alpha layer
         @param paint The paint to draw with
@@ -483,7 +490,7 @@ public:
                       the returned bitmap so that it visually lines up with the
                       original
     */
-    void extractAlpha(SkBitmap* dst, const SkPaint* paint, Allocator* allocator,
+    bool extractAlpha(SkBitmap* dst, const SkPaint* paint, Allocator* allocator,
                       SkIPoint* offset) const;
 
     void flatten(SkFlattenableWriteBuffer&) const;

@@ -246,8 +246,9 @@ void SkPaint::setStyle(Style style)
         }
     }
 #ifdef SK_DEBUG
-    else
+    else {
         SkDebugf("SkPaint::setStyle(%d) out of range\n", style);
+    }
 #endif
 }
 
@@ -286,8 +287,9 @@ void SkPaint::setStrokeWidth(SkScalar width)
         }
     }
 #ifdef SK_DEBUG
-    else
+    else {
         SkDebugf("SkPaint::setStrokeWidth() called with negative value\n");
+    }
 #endif
 }
 
@@ -300,8 +302,9 @@ void SkPaint::setStrokeMiter(SkScalar limit)
         }
     }
 #ifdef SK_DEBUG
-    else
+    else {
         SkDebugf("SkPaint::setStrokeMiter() called with negative value\n");
+    }
 #endif
 }
 
@@ -1251,12 +1254,34 @@ static void add_flattenable(SkDescriptor* desc, uint32_t tag,
     buffer->flatten(desc->addEntry(tag, buffer->size(), NULL));
 }
 
+static bool canSupportLCD16(const SkPaint& paint) {
+#if 0
+    return  !paint.getShader() &&
+            !paint.getXfermode() && // unless its srcover
+            !paint.getMaskFilter() &&
+            !paint.getRasterizer() &&
+            !paint.getColorFilter() &&
+            !paint.getPathEffect() &&
+            !paint.isFakeBoldText() &&
+            paint.getStyle() == SkPaint::kFill_Style;
+#else
+    // disable for now, while we test more
+    return false;
+#endif
+}
+
 static SkMask::Format computeMaskFormat(const SkPaint& paint) {
     uint32_t flags = paint.getFlags();
 
     // Antialiasing being disabled trumps all other settings.
     if (!(flags & SkPaint::kAntiAlias_Flag))
         return SkMask::kBW_Format;
+
+    if (flags & SkPaint::kLCDRenderText_Flag) {
+        if (canSupportLCD16(paint)) {
+            return SkMask::kLCD16_Format;
+        }
+    }
 
 #if defined(SK_SUPPORT_LCDTEXT)
     if (flags & SkPaint::kLCDRenderText_Flag) {

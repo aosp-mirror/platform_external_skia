@@ -48,6 +48,43 @@ static void TestString(skiatest::Reporter* reporter) {
     a.set("ab");
     a.set("abc");
     a.set("abcd");
+
+    a.set("");
+    a.appendS64(72036854775808LL, 0);
+    REPORTER_ASSERT(reporter, a.equals("72036854775808"));
+
+    a.set("");
+    a.appendS64(-1844674407370LL, 0);
+    REPORTER_ASSERT(reporter, a.equals("-1844674407370"));
+
+    a.set("");
+    a.appendS64(73709551616LL, 15);
+    REPORTER_ASSERT(reporter, a.equals("000073709551616"));
+
+    a.set("");
+    a.appendS64(-429496729612LL, 15);
+    REPORTER_ASSERT(reporter, a.equals("-000429496729612"));
+
+    static const struct {
+        SkScalar    fValue;
+        const char* fString;
+    } gRec[] = {
+        { 0,            "0" },
+        { SK_Scalar1,   "1" },
+        { -SK_Scalar1,  "-1" },
+        { SK_Scalar1/2, "0.5" },
+#ifdef SK_SCALAR_IS_FLOAT
+        { 3.4028234e38f,   "3.4028235e+38" },
+        { -3.4028234e38f, "-3.4028235e+38" },
+#endif
+    };
+    for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
+        a.reset();
+        a.appendScalar(gRec[i].fValue);
+        REPORTER_ASSERT(reporter, a.size() <= SkStrAppendScalar_MaxSize);
+//        SkDebugf(" received <%s> expected <%s>\n", a.c_str(), gRec[i].fString);
+        REPORTER_ASSERT(reporter, a.equals(gRec[i].fString));
+    }
 }
 
 #include "TestClassDef.h"

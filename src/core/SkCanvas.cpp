@@ -72,8 +72,7 @@ struct DeviceCM {
     SkDevice*           fDevice;
     SkRegion            fClip;
     const SkMatrix*     fMatrix;
-	SkPaint*			fPaint;	// may be null (in the future)
-    int16_t             fX, fY; // relative to base matrix/clip
+    SkPaint*            fPaint; // may be null (in the future)
     // optional, related to canvas' external matrix
     const SkMatrix*     fMVMatrix;
     const SkMatrix*     fExtMatrix;
@@ -85,8 +84,6 @@ struct DeviceCM {
             device->lockPixels();
         }
         fDevice = device;
-        fX = SkToS16(x);
-        fY = SkToS16(y);
         fPaint = paint ? SkNEW_ARGS(SkPaint, (*paint)) : NULL;
 	}
 
@@ -100,8 +97,8 @@ struct DeviceCM {
 
     void updateMC(const SkMatrix& totalMatrix, const SkRegion& totalClip,
                   const SkClipStack& clipStack, SkRegion* updateClip) {
-        int x = fX;
-        int y = fY;
+        int x = fDevice->getOrigin().x();
+        int y = fDevice->getOrigin().y();
         int width = fDevice->width();
         int height = fDevice->height();
 
@@ -145,12 +142,6 @@ struct DeviceCM {
         fMVMatrixStorage.setConcat(extI, *fMatrix);
         fMVMatrix = &fMVMatrixStorage;
         fExtMatrix = &extM; // assumes extM has long life-time (owned by canvas)
-    }
-
-    void translateClip() {
-        if (fX | fY) {
-            fClip.translate(fX, fY);
-        }
     }
 
 private:
@@ -230,6 +221,7 @@ public:
         fCanvas = canvas;
         canvas->updateDeviceCMCache();
 
+        fClipStack = &canvas->getTotalClipStack();
         fBounder = canvas->getBounder();
         fCurrLayer = canvas->fMCRec->fTopLayer;
         fSkipEmptyClips = skipEmptyClips;
@@ -250,8 +242,6 @@ public:
             fClip   = &rec->fClip;
             fDevice = rec->fDevice;
             fBitmap = &fDevice->accessBitmap(true);
-            fLayerX = rec->fX;
-            fLayerY = rec->fY;
             fPaint  = rec->fPaint;
             fMVMatrix = rec->fMVMatrix;
             fExtMatrix = rec->fExtMatrix;
@@ -263,24 +253,23 @@ public:
             }
             // fCurrLayer may be NULL now
 
-            fCanvas->prepareForDeviceDraw(fDevice, *fMatrix, *fClip);
+            fCanvas->prepareForDeviceDraw(fDevice, *fMatrix, *fClip, *fClipStack);
             return true;
         }
         return false;
     }
 
-    int getX() const { return fLayerX; }
-    int getY() const { return fLayerY; }
     SkDevice* getDevice() const { return fDevice; }
+    int getX() const { return fDevice->getOrigin().x(); }
+    int getY() const { return fDevice->getOrigin().y(); }
     const SkMatrix& getMatrix() const { return *fMatrix; }
     const SkRegion& getClip() const { return *fClip; }
     const SkPaint* getPaint() const { return fPaint; }
+
 private:
     SkCanvas*       fCanvas;
     const DeviceCM* fCurrLayer;
     const SkPaint*  fPaint;     // May be null.
-    int             fLayerX;
-    int             fLayerY;
     SkBool8         fSkipEmptyClips;
 
     typedef SkDraw INHERITED;
@@ -631,10 +620,11 @@ void SkCanvas::updateDeviceCMCache() {
 }
 
 void SkCanvas::prepareForDeviceDraw(SkDevice* device, const SkMatrix& matrix,
-                                    const SkRegion& clip) {
+                                    const SkRegion& clip,
+                                    const SkClipStack& clipStack) {
     SkASSERT(device);
     if (fLastDeviceToGainFocus != device) {
-        device->gainFocus(this, matrix, clip);
+        device->gainFocus(this, matrix, clip, clipStack);
         fLastDeviceToGainFocus = device;
     }
 }
@@ -746,6 +736,7 @@ int SkCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint,
 
     SkDevice* device = this->createDevice(config, ir.width(), ir.height(),
                                           isOpaque, true);
+    device->setOrigin(ir.fLeft, ir.fTop);
     DeviceCM* layer = SkNEW_ARGS(DeviceCM, (device, ir.fLeft, ir.fTop, paint));
     device->unref();
 
@@ -798,7 +789,8 @@ void SkCanvas::internalRestore() {
     */
     if (NULL != layer) {
         if (layer->fNext) {
-            this->drawDevice(layer->fDevice, layer->fX, layer->fY,
+            const SkIPoint& origin = layer->fDevice->getOrigin();
+            this->drawDevice(layer->fDevice, origin.x(), origin.y(),
                              layer->fPaint);
             // reset this, since drawDevice will have set it to true
             fDeviceCMDirty = true;
@@ -952,10 +944,23 @@ bool SkCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
 
 static bool clipPathHelper(const SkCanvas* canvas, SkRegion* currRgn,
                            const SkPath& devPath, SkRegion::Op op) {
+    // base is used to limit the size (and therefore memory allocation) of the
+    // region that results from scan converting devPath.
+    SkRegion base;
+
     if (SkRegion::kIntersect_Op == op) {
-        return currRgn->setPath(devPath, *currRgn);
+        // since we are intersect, we can do better (tighter) with currRgn's
+        // bounds, than just using the device. However, if currRgn is complex,
+        // our region blitter may hork, so we do that case in two steps.
+        if (currRgn->isRect()) {
+            return currRgn->setPath(devPath, *currRgn);
+        } else {
+            base.setRect(currRgn->getBounds());
+            SkRegion rgn;
+            rgn.setPath(devPath, base);
+            return currRgn->op(rgn, op);
+        }
     } else {
-        SkRegion base;
         const SkBitmap& bm = canvas->getDevice()->accessBitmap(false);
         base.setRect(0, 0, bm.width(), bm.height());
 
@@ -1016,13 +1021,15 @@ void SkCanvas::validateClip() const {
             clip->fRect->round(&ir);
             clipRgn.op(ir, clip->fOp);
         } else {
-            break;
+            clipRgn.setEmpty();
         }
     }
 
+#if 0   // enable this locally for testing
     // now compare against the current rgn
     const SkRegion& rgn = this->getTotalClip();
     SkASSERT(rgn == clipRgn);
+#endif
 }
 #endif
 
@@ -1147,6 +1154,10 @@ const SkMatrix& SkCanvas::getTotalMatrix() const {
 
 const SkRegion& SkCanvas::getTotalClip() const {
     return *fMCRec->fRegion;
+}
+
+const SkClipStack& SkCanvas::getTotalClipStack() const {
+    return fClipStack;
 }
 
 void SkCanvas::setExternalMatrix(const SkMatrix* matrix) {
@@ -1390,6 +1401,7 @@ void SkCanvas::drawTextOnPath(const void* text, size_t byteLength,
     ITER_END
 }
 
+#ifdef ANDROID
 void SkCanvas::drawPosTextOnPath(const void* text, size_t byteLength,
                                  const SkPoint pos[], const SkPaint& paint,
                                  const SkPath& path, const SkMatrix* matrix) {
@@ -1403,6 +1415,7 @@ void SkCanvas::drawPosTextOnPath(const void* text, size_t byteLength,
 
     ITER_END
 }
+#endif
 
 void SkCanvas::drawVertices(VertexMode vmode, int vertexCount,
                             const SkPoint verts[], const SkPoint texs[],

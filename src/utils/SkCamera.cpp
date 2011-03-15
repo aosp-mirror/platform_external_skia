@@ -400,6 +400,7 @@ void Sk3DView::restore()
     fRec = next;
 }
 
+#ifdef ANDROID
 void Sk3DView::setCameraLocation(SkScalar x, SkScalar y, SkScalar z)
 {
     // the camera location is passed in inches, set in pt
@@ -409,6 +410,7 @@ void Sk3DView::setCameraLocation(SkScalar x, SkScalar y, SkScalar z)
     fCamera.update();
     
 }
+#endif
 
 void Sk3DView::translate(SkScalar x, SkScalar y, SkScalar z)
 {
