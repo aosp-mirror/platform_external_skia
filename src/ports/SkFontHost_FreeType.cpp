@@ -39,10 +39,7 @@
 // In the past, FT_GlyphSlot_Own_Bitmap was defined in this header file.
 #include FT_SYNTHESIS_H
 #include FT_XFREE86_H
-
-#if defined(SK_SUPPORT_LCDTEXT)
 #include FT_LCD_FILTER_H
-#endif
 
 #ifdef   FT_ADVANCES_H
 #include FT_ADVANCES_H
@@ -95,15 +92,18 @@ static const FT_Pos kBitmapEmboldenStrength = 1 << 6;
 static bool
 InitFreetype() {
     FT_Error err = FT_Init_FreeType(&gFTLibrary);
-    if (err)
+    if (err) {
         return false;
+    }
 
-#if defined(SK_SUPPORT_LCDTEXT)
     // Setup LCD filtering. This reduces colour fringes for LCD rendered
     // glyphs.
+//#ifdef ANDROID
+//    gLCDSupport = false;
+//#else
     err = FT_Library_SetLcdFilter(gFTLibrary, FT_LCD_FILTER_DEFAULT);
     gLCDSupport = err == 0;
-#endif
+//#endif
     gLCDSupportValid = true;
 
     return true;
@@ -523,7 +523,7 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
         FT_Done_FreeType(gFTLibrary);
     }
 
-    if (!gLCDSupport && rec->isLCD()) {
+    if (!gLCDSupport && (rec->isLCD() || SkMask::kLCD16_Format == rec->fMaskFormat)) {
         // If the runtime Freetype library doesn't support LCD mode, we disable
         // it here.
         rec->fMaskFormat = SkMask::kA8_Format;
@@ -646,10 +646,12 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
                     break;
                 }
                 loadFlags = FT_LOAD_TARGET_NORMAL;
-                if (SkMask::kHorizontalLCD_Format == fRec.fMaskFormat)
+                if (SkMask::kHorizontalLCD_Format == fRec.fMaskFormat ||
+                        SkMask::kLCD16_Format == fRec.fMaskFormat) {
                     loadFlags = FT_LOAD_TARGET_LCD;
-                else if (SkMask::kVerticalLCD_Format == fRec.fMaskFormat)
+                } else if (SkMask::kVerticalLCD_Format == fRec.fMaskFormat) {
                     loadFlags = FT_LOAD_TARGET_LCD_V;
+                }
                 break;
             default:
                 SkDebugf("---------- UNKNOWN hinting %d\n", fRec.getHinting());
@@ -915,6 +917,26 @@ extern void CopyFreetypeBitmapToVerticalLCDMask(const SkGlyph& dest, const FT_Bi
 using namespace skia_freetype_support;
 #endif
 
+static void copyFT2LCD16(const SkGlyph& glyph, const FT_Bitmap& bitmap) {
+    SkASSERT(glyph.fWidth * 3 == bitmap.width - 6);
+    SkASSERT(glyph.fHeight == bitmap.rows);
+
+    const uint8_t* src = bitmap.buffer + 3;
+    uint16_t* dst = reinterpret_cast<uint16_t*>(glyph.fImage);
+    size_t dstRB = glyph.rowBytes();
+    int width = glyph.fWidth;
+
+    for (int y = 0; y < glyph.fHeight; y++) {
+        const uint8_t* triple = src;
+        for (int x = 0; x < width; x++) {
+            dst[x] = SkPackRGB16(triple[0] >> 3, triple[1] >> 2, triple[2] >> 3);
+            triple += 3;
+        }
+        src += bitmap.pitch;
+        dst = (uint16_t*)((char*)dst + dstRB);
+    }
+}
+
 void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
     SkAutoMutexAcquire  ac(gFTMutex);
 
@@ -982,16 +1004,21 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
             }
 #endif
 
-            target.width = glyph.fWidth;
-            target.rows = glyph.fHeight;
-            target.pitch = glyph.rowBytes();
-            target.buffer = reinterpret_cast<uint8_t*>(glyph.fImage);
-            target.pixel_mode = compute_pixel_mode(
-                                            (SkMask::Format)fRec.fMaskFormat);
-            target.num_grays = 256;
+            if (SkMask::kLCD16_Format == glyph.fMaskFormat) {
+                FT_Render_Glyph(fFace->glyph, FT_RENDER_MODE_LCD);
+                copyFT2LCD16(glyph, fFace->glyph->bitmap);
+            } else {
+                target.width = glyph.fWidth;
+                target.rows = glyph.fHeight;
+                target.pitch = glyph.rowBytes();
+                target.buffer = reinterpret_cast<uint8_t*>(glyph.fImage);
+                target.pixel_mode = compute_pixel_mode(
+                                                (SkMask::Format)fRec.fMaskFormat);
+                target.num_grays = 256;
 
-            memset(glyph.fImage, 0, glyph.rowBytes() * glyph.fHeight);
-            FT_Outline_Get_Bitmap(gFTLibrary, outline, &target);
+                memset(glyph.fImage, 0, glyph.rowBytes() * glyph.fHeight);
+                FT_Outline_Get_Bitmap(gFTLibrary, outline, &target);
+            }
         } break;
 
         case FT_GLYPH_FORMAT_BITMAP: {

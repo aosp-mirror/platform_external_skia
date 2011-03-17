@@ -28,10 +28,11 @@ class GrAtlasMgr;
 
 class GrAtlas {
 public:
-    GrAtlas(GrAtlasMgr*, int plotX, int plotY);
+    GrAtlas(GrAtlasMgr*, int plotX, int plotY, GrMaskFormat);
 
     int getPlotX() const { return fPlot.fX; }
     int getPlotY() const { return fPlot.fY; }
+    GrMaskFormat getMaskFormat() const { return fMaskFormat; }
 
     GrTexture* texture() const { return fTexture; }
 
@@ -56,6 +57,7 @@ private:
     GrRectanizer*   fRects;
     GrAtlasMgr*     fAtlasMgr;
     GrIPoint16      fPlot;
+    GrMaskFormat    fMaskFormat;
 
     friend class GrAtlasMgr;
 };
@@ -68,9 +70,12 @@ public:
     ~GrAtlasMgr();
 
     GrAtlas* addToAtlas(GrAtlas*, int width, int height, const void*,
-                        GrIPoint16*);
+                        GrMaskFormat, GrIPoint16*);
 
-    GrTexture* getTexture() const { return fTexture; }
+    GrTexture* getTexture(GrMaskFormat format) const {
+        GrAssert((unsigned)format < kCount_GrMaskFormats);
+        return fTexture[format];
+    }
 
     // to be called by ~GrAtlas()
     void freePlot(int x, int y);
@@ -79,7 +84,7 @@ public:
 
 private:
     GrGpu*      fGpu;
-    GrTexture*  fTexture;
+    GrTexture*  fTexture[kCount_GrMaskFormats];
     GrPlotMgr*  fPlotMgr;
 };
 

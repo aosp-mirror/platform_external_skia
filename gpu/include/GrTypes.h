@@ -186,7 +186,31 @@ enum GrBlendCoeff {
     kISA_BlendCoeff,     //<! one minus src alpha
     kDA_BlendCoeff,      //<! dst alpha
     kIDA_BlendCoeff,     //<! one minus dst alpha
+    kConstC_BlendCoeff,  //<! constant color
+    kIConstC_BlendCoeff, //<! one minus constant color
+    kConstA_BlendCoeff,  //<! constant color alpha
+    kIConstA_BlendCoeff, //<! one minus constant color alpha
+
+    kBlendCoeffCount
 };
+
+/**
+ *  Formats for masks, used by the font cache.
+ *  Important that these are 0-based.
+ */
+enum GrMaskFormat {
+    kA8_GrMaskFormat,   //!< 1-byte per pixel
+    kA565_GrMaskFormat  //!< 2-bytes per pixel
+};
+#define kCount_GrMaskFormats    2
+
+/**
+ *  Return the number of bytes-per-pixel for the specified mask format.
+ */
+static inline int GrMaskFormatBytesPerPixel(GrMaskFormat format) {
+    GrAssert((unsigned)format <= 1);
+    return (int)format + 1;
+}
 
 /**
  * Set Operations used to construct clips.

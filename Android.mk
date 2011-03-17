@@ -262,6 +262,7 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrContext.cpp \
   gpu/src/GrDrawTarget.cpp \
   gpu/src/GrGLIndexBuffer.cpp	\
+  gpu/src/GrGLInterface.cpp \
   gpu/src/GrGLTexture.cpp \
   gpu/src/GrGLVertexBuffer.cpp \
   gpu/src/GrGpu.cpp \
