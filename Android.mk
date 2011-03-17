@@ -58,11 +58,13 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkGradientShader.cpp \
+	src/effects/SkGroupShape.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
+	src/effects/SkRectShape.cpp \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/images/bmpdecoderhelper.cpp \
@@ -182,7 +184,8 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkParse.cpp \
 	src/utils/SkParsePath.cpp \
-	src/utils/SkProxyCanvas.cpp
+	src/utils/SkProxyCanvas.cpp \
+	src/utils/SkUnitMappers.cpp
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += \
@@ -314,7 +317,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
-#include $(BASE_PATH)/gm/Android.mk
+include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk

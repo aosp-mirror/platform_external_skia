@@ -21,7 +21,14 @@ LOCAL_SRC_FILES := \
 LOCAL_SRC_FILES += \
   ../src/utils/SkEGLContext_none.cpp
 
-LOCAL_SHARED_LIBRARIES := libcutils libskia
+LOCAL_STATIC_LIBRARIES := libskiagpu
+LOCAL_SHARED_LIBRARIES := \
+  libcutils \
+  libutils \
+  libskia \
+  libEGL \
+  libGLESv2
+  
 LOCAL_C_INCLUDES := \
   external/skia/include/config \
   external/skia/include/core \
