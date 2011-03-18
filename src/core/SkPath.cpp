@@ -102,7 +102,9 @@ SkPath::SkPath() : fBoundsIsDirty(true), fFillType(kWinding_FillType) {
 
 SkPath::SkPath(const SkPath& src) {
     SkDEBUGCODE(src.validate();)
+    uint32_t currentGenID = fGenerationID;
     *this = src;
+    fGenerationID = currentGenID;
 }
 
 SkPath::~SkPath() {
