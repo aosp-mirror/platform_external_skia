@@ -56,6 +56,10 @@ public:
     */
     bool isItalic() const { return (fStyle & kItalic) != 0; }
     
+    /** Returns true if the typeface is fixed-width
+    */
+    bool isFixedWidth() const { return fIsFixedWidth; }
+
     /** Return a 32bit value for this typeface, unique for the underlying font
         data. Will never return 0.
      */
@@ -121,12 +125,13 @@ public:
 protected:
     /** uniqueID must be unique (please!) and non-zero
     */
-    SkTypeface(Style style, uint32_t uniqueID)
-        : fUniqueID(uniqueID), fStyle(style) {}
+    SkTypeface(Style style, uint32_t uniqueID, bool isFixedWidth = false)
+        : fUniqueID(uniqueID), fStyle(style), fIsFixedWidth(isFixedWidth) {}
 
 private:
     uint32_t    fUniqueID;
     Style       fStyle;
+    bool        fIsFixedWidth;
     
     typedef SkRefCnt INHERITED;
 };
