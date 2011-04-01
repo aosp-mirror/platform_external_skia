@@ -746,6 +746,11 @@ protected:
     // all of the drawBitmap variants call this guy
     virtual void commonDrawBitmap(const SkBitmap&, const SkMatrix& m,
                                   const SkPaint& paint);
+    virtual void commonDrawBitmap(const SkBitmap& b, const SkIRect*,
+                                  const SkMatrix& m, const SkPaint& paint)
+    {
+        commonDrawBitmap(b, m, paint);
+    }
     
 private:
     class MCRec;
