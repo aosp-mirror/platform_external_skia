@@ -20,6 +20,14 @@
 #include "SkMatrix.h"
 #include "SkTDArray.h"
 
+#ifdef ANDROID
+#define GEN_ID_INC              fGenerationID++
+#define GEN_ID_PTR_INC(ptr)     ptr->fGenerationID++
+#else
+#define GEN_ID_INC
+#define GEN_ID_PTR_INC(ptr)
+#endif
+
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 class SkAutoPathBoundsUpdate;
@@ -74,7 +82,7 @@ public:
     */
     void setFillType(FillType ft) {
         fFillType = SkToU8(ft);
-        fGenerationID++;
+        GEN_ID_INC;
     }
 
     /** Returns true if the filltype is one of the Inverse variants */
@@ -85,7 +93,7 @@ public:
     */
     void toggleInverseFillType() {
         fFillType ^= 2;
-        fGenerationID++;
+        GEN_ID_INC;
      }
 
     /** Returns true if the path is flagged as being convex. This is not a
@@ -100,7 +108,7 @@ public:
      */
     void setIsConvex(bool isConvex) {
         fIsConvex = (isConvex != 0);
-        fGenerationID++;
+        GEN_ID_INC;
     }
 
     /** Clear any lines and curves from the path, making it empty. This frees up
@@ -580,7 +588,9 @@ public:
     */
     void subdivide(SkScalar dist, bool bendLines, SkPath* dst = NULL) const;
 
+#ifdef ANDROID
     uint32_t getGenerationID() const;
+#endif
 
     SkDEBUGCODE(void validate() const;)
 
@@ -591,7 +601,9 @@ private:
     mutable uint8_t     fBoundsIsDirty;
     uint8_t             fFillType;
     uint8_t             fIsConvex;
+#ifdef ANDROID
     uint32_t            fGenerationID;
+#endif
 
     // called, if dirty, by getBounds()
     void computeBounds() const;

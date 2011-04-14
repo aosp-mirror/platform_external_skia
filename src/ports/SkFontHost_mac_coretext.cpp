@@ -18,28 +18,18 @@
 
 #include "SkFontHost.h"
 #include "SkDescriptor.h"
-#include "SkString.h"
-#include "SkPaint.h"
 #include "SkFloatingPoint.h"
+#include "SkPaint.h"
+#include "SkString.h"
+#include "SkTypeface_mac.h"
 #include "SkUtils.h"
 
 
-
-//============================================================================
-//      Constants
-//----------------------------------------------------------------------------
 static const SkFontID kSkInvalidFontID          = 0;
 
 static const size_t FONT_CACHE_MEMORY_BUDGET    = 1024 * 1024;
 static const char FONT_DEFAULT_NAME[]           = "Lucida Sans";
 
-static const float FONT_CANONICAL_POINTSIZE = 1.0f;
-
-
-//============================================================================
-//      Types
-//----------------------------------------------------------------------------
-// Native font info
 typedef struct {
     SkString                name;
     SkTypeface::Style       style;
@@ -47,13 +37,8 @@ typedef struct {
     CTFontRef               fontRef;
 } SkNativeFontInfo;
 
-typedef std::vector<SkNativeFontInfo>                               SkNativeFontInfoList;
-typedef SkNativeFontInfoList::iterator                              SkNativeFontInfoListIterator;
-typedef SkNativeFontInfoList::const_iterator                        SkNativeFontInfoListConstIterator;
-
-
-
-
+typedef std::vector<SkNativeFontInfo>   SkNativeFontInfoList;
+typedef SkNativeFontInfoList::iterator  SkNativeFontInfoListIterator;
 
 //============================================================================
 //      Macros
@@ -73,7 +58,21 @@ typedef SkNativeFontInfoList::const_iterator                        SkNativeFont
 #endif
 
 
+static SkTypeface::Style computeStyleBits(CTFontRef font, bool* isMonospace) {
+    unsigned style = SkTypeface::kNormal;
+    CTFontSymbolicTraits traits = CTFontGetSymbolicTraits(font);
 
+    if (traits & kCTFontBoldTrait) {
+        style |= SkTypeface::kBold;
+    }
+    if (traits & kCTFontItalicTrait) {
+        style |= SkTypeface::kItalic;
+    }
+    if (isMonospace) {
+        *isMonospace = (traits & kCTFontMonoSpaceTrait) != 0;
+    }
+    return (SkTypeface::Style)style;
+}
 
 
 //============================================================================
@@ -82,34 +81,24 @@ typedef SkNativeFontInfoList::const_iterator                        SkNativeFont
 #pragma mark -
 class SkNativeFontCache {
 public:
-                                        SkNativeFontCache(void);
-    virtual                            ~SkNativeFontCache(void);
+            SkNativeFontCache(void);
+    virtual ~SkNativeFontCache(void);
 
+    bool IsValid(SkFontID fontID);
+    CTFontRef GetFont(SkFontID fontID);
+    SkNativeFontInfo GetFontInfo(const char familyName[], SkTypeface::Style);
+    SkNativeFontInfo CreateFont(const char familyName[], SkTypeface::Style);
+    SkNativeFontInfo CreateFromCTFont(CTFontRef);
 
-    // Is a font ID valid?
-    bool                                IsValid(SkFontID fontID);
+    static SkNativeFontCache* Get(void);
 
-
-    // Get a font
-    CTFontRef                           GetFont(SkFontID fontID);
-    SkNativeFontInfo                    GetFontInfo(const SkString &theName, SkTypeface::Style theStyle);
-
-
-    // Create a font
-    SkNativeFontInfo                    CreateFont(const SkString &theName, SkTypeface::Style theStyle);
-
-
-    // Get the font table
-    static SkNativeFontCache           *Get(void);
+private:
+    CTFontRef CreateNativeFont(const char familyName[], SkTypeface::Style style);
 
 
 private:
-    CTFontRef                           CreateNativeFont(const SkString &name, SkTypeface::Style style);
-
-
-private:
-    SkNativeFontInfoList                mFonts;
-    SkMutex                             mMutex;
+    SkNativeFontInfoList mFonts;
+    SkMutex mMutex;
 };
 
 SkNativeFontCache::SkNativeFontCache(void)
@@ -168,64 +157,76 @@ CTFontRef SkNativeFontCache::GetFont(SkFontID fontID)
     return(mFonts.at(fontID).fontRef);
 }
 
-SkNativeFontInfo SkNativeFontCache::GetFontInfo(const SkString &theName, SkTypeface::Style theStyle)
+SkNativeFontInfo SkNativeFontCache::GetFontInfo(const char familyName[],
+                                                SkTypeface::Style theStyle)
 {   SkAutoMutexAcquire              acquireLock(mMutex);
     SkNativeFontInfo                fontInfo;
     SkNativeFontInfoListIterator    theIter;
 
-
     // Validate our parameters
-    SkASSERT(!theName.isEmpty());
-
+    SkASSERT(familyName && *familyName);
 
     // Get the state we need
     fontInfo.style   = SkTypeface::kNormal;
     fontInfo.fontID  = kSkInvalidFontID;
     fontInfo.fontRef = NULL;
 
-
     // Get the font
-    for (theIter = mFonts.begin(); theIter != mFonts.end(); theIter++)
-        {
-        if (theIter->name == theName && theIter->style == theStyle)
-            return(*theIter);
+    for (theIter = mFonts.begin(); theIter != mFonts.end(); theIter++) {
+        if (theIter->style == theStyle && theIter->name.equals(familyName)) {
+            return *theIter;
         }
+    }
 
-    return(fontInfo);
+    return fontInfo;
 }
 
-SkNativeFontInfo SkNativeFontCache::CreateFont(const SkString &theName, SkTypeface::Style theStyle)
-{   SkAutoMutexAcquire      acquireLock(mMutex);
+SkNativeFontInfo SkNativeFontCache::CreateFont(const char familyName[],
+                                               SkTypeface::Style theStyle) {
+    SkAutoMutexAcquire      acquireLock(mMutex);
     SkNativeFontInfo        fontInfo;
-
-
+    
+    
     // Validate our parameters
-    SkASSERT(!theName.isEmpty());
-
-
+    SkASSERT(familyName && *familyName);
+    
+    
     // Create the font
-    fontInfo.name    = theName;
-    fontInfo.style   = theStyle;
-    fontInfo.fontID  = mFonts.size();
-    fontInfo.fontRef = CreateNativeFont(theName, theStyle);
-
+    fontInfo.name.set(familyName);
+    fontInfo.fontID = mFonts.size();
+    fontInfo.fontRef = CreateNativeFont(familyName, theStyle);
+    fontInfo.style = computeStyleBits(fontInfo.fontRef, NULL);
+    
     mFonts.push_back(fontInfo);
     return(fontInfo);
 }
 
-SkNativeFontCache *SkNativeFontCache::Get(void)
-{   static SkNativeFontCache    sInstance;
+SkNativeFontInfo SkNativeFontCache::CreateFromCTFont(CTFontRef font) {
+    SkAutoMutexAcquire      acquireLock(mMutex);
+    SkNativeFontInfo        fontInfo;
+    
+    // TODO: need to query the font's name
+//    fontInfo.name.set(familyName);
+    fontInfo.fontID = mFonts.size();
+    fontInfo.fontRef = font;
+    CFRetain(font);
+    fontInfo.style = computeStyleBits(font, NULL);
+    
+    mFonts.push_back(fontInfo);
+    return(fontInfo);
+}
 
-
-    // Get the instance
-    //
+SkNativeFontCache *SkNativeFontCache::Get(void) {
+    static SkNativeFontCache    sInstance;
     // We use a local static for well-defined static initialisation order.
-    return(&sInstance);
+    return &sInstance;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-CTFontRef SkNativeFontCache::CreateNativeFont(const SkString &theName, SkTypeface::Style theStyle)
-{   CFMutableDictionaryRef      cfAttributes, cfTraits;
+
+CTFontRef SkNativeFontCache::CreateNativeFont(const char familyName[],
+                                              SkTypeface::Style theStyle) {
+    CFMutableDictionaryRef      cfAttributes, cfTraits;
     CFNumberRef                 cfFontTraits;
     CTFontSymbolicTraits        ctFontTraits;
     CTFontDescriptorRef         ctFontDesc;
@@ -246,31 +247,25 @@ CTFontRef SkNativeFontCache::CreateNativeFont(const SkString &theName, SkTypefac
 
 
     // Create the font info
-    cfFontName   = CFStringCreateWithCString(NULL, theName.c_str(), kCFStringEncodingUTF8);
+    cfFontName   = CFStringCreateWithCString(NULL, familyName, kCFStringEncodingUTF8);
     cfFontTraits = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &ctFontTraits);
     cfAttributes = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     cfTraits     = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
 
     // Create the font
-    //
-    // Fonts are scaled using the Sk matrix, so we always request a font
-    // at a canonical size FONT_CANONICAL_POINTSIZE
-    if (cfFontName != NULL && cfFontTraits != NULL && cfAttributes != NULL && cfTraits != NULL)
-        {
+    if (cfFontName != NULL && cfFontTraits != NULL && cfAttributes != NULL && cfTraits != NULL) {
         CFDictionaryAddValue(cfTraits, kCTFontSymbolicTrait, cfFontTraits);
 
         CFDictionaryAddValue(cfAttributes, kCTFontFamilyNameAttribute, cfFontName);
         CFDictionaryAddValue(cfAttributes, kCTFontTraitsAttribute,     cfTraits);
 
         ctFontDesc = CTFontDescriptorCreateWithAttributes(cfAttributes);
-        if (ctFontDesc != NULL)
-            ctFont = CTFontCreateWithFontDescriptor(ctFontDesc, FONT_CANONICAL_POINTSIZE, NULL);
-
+        if (ctFontDesc != NULL) {
+            ctFont = CTFontCreateWithFontDescriptor(ctFontDesc, 0, NULL);
         }
+    }
 
-
-    // Clean up
     CFSafeRelease(cfFontName);
     CFSafeRelease(cfFontTraits);
     CFSafeRelease(cfAttributes);
@@ -280,28 +275,27 @@ CTFontRef SkNativeFontCache::CreateNativeFont(const SkString &theName, SkTypefac
     return(ctFont);
 }
 
-
-
-
-
 //============================================================================
 //      SkTypeface_Mac
 //----------------------------------------------------------------------------
 #pragma mark -
 class SkTypeface_Mac : public SkTypeface {
 public:
-                                        SkTypeface_Mac(SkTypeface::Style style, uint32_t fontID);
+    SkTypeface_Mac(SkTypeface::Style style, uint32_t fontID);
 };
 
 
 SkTypeface_Mac::SkTypeface_Mac(SkTypeface::Style style, uint32_t fontID)
-        : SkTypeface(style, fontID)
-{
+    : SkTypeface(style, fontID) {
 }
 
 
-
-
+SkTypeface* SkCreateTypefaceFromCTFont(CTFontRef font) {
+    SkNativeFontInfo info;
+    
+    info = SkNativeFontCache::Get()->CreateFromCTFont(font);
+    return new SkTypeface_Mac(info.style, info.fontID);
+}
 
 //============================================================================
 //      SkScalerContext_Mac
@@ -358,15 +352,15 @@ SkScalerContext_Mac::SkScalerContext_Mac(const SkDescriptor* desc)
     mColorSpaceRGB = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGBLinear);
     mColorSpaceGray = CGColorSpaceCreateDeviceGray();
 
-    const float inv = 1.0f / FONT_CANONICAL_POINTSIZE;
-    mTransform  = CGAffineTransformMake(SkScalarToFloat(skMatrix[SkMatrix::kMScaleX]) * inv,
-                                        -SkScalarToFloat(skMatrix[SkMatrix::kMSkewY]) * inv,
-                                        -SkScalarToFloat(skMatrix[SkMatrix::kMSkewX]) * inv,
-                                        SkScalarToFloat(skMatrix[SkMatrix::kMScaleY]) * inv,
-                                        SkScalarToFloat(skMatrix[SkMatrix::kMTransX]) * inv,
-                                        SkScalarToFloat(skMatrix[SkMatrix::kMTransY]) * inv);
+    mTransform  = CGAffineTransformMake(SkScalarToFloat(skMatrix[SkMatrix::kMScaleX]),
+                                        -SkScalarToFloat(skMatrix[SkMatrix::kMSkewY]),
+                                        -SkScalarToFloat(skMatrix[SkMatrix::kMSkewX]),
+                                        SkScalarToFloat(skMatrix[SkMatrix::kMScaleY]),
+                                        SkScalarToFloat(skMatrix[SkMatrix::kMTransX]),
+                                        SkScalarToFloat(skMatrix[SkMatrix::kMTransY]));
 
-    mFont       = CTFontCreateCopyWithAttributes(ctFont, 0.0, &mTransform, NULL);
+    // since our matrix includes everything, we pass 1 for pointSize
+    mFont       = CTFontCreateCopyWithAttributes(ctFont, 1, &mTransform, NULL);
     mGlyphCount = (uint16_t) numGlyphs;
 }
 
@@ -445,6 +439,19 @@ void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph)
 
 #include "SkColorPriv.h"
 
+static void bytes_to_bits(uint8_t dst[], const uint8_t src[], int count) {
+    while (count > 0) {
+        uint8_t mask = 0;
+        for (int i = 7; i >= 0; --i) {
+            mask |= (*src++ >> 7) << i;
+            if (0 == --count) {
+                break;
+            }
+        }
+        *dst++ = mask;
+    }
+}
+
 static inline uint16_t rgb_to_lcd16(uint32_t rgb) {
     int r = (rgb >> 16) & 0xFF;
     int g = (rgb >>  8) & 0xFF;
@@ -480,6 +487,7 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph) {
     void* image = glyph.fImage;
     size_t rowBytes = glyph.rowBytes();
     float grayColor = 1; // white
+    bool doAA = true;
 
     /*  For LCD16, we first create a temp offscreen cg-context in 32bit,
      *  erase to white, and then draw a black glyph into it. Then we can
@@ -496,6 +504,12 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph) {
         // we draw black-on-white (and invert in rgb_to_lcd16)
         sk_memset32((uint32_t*)image, 0xFFFFFFFF, size >> 2);
         grayColor = 0;  // black
+    } else if (SkMask::kBW_Format == glyph.fMaskFormat) {
+        rowBytes = SkAlign4(glyph.fWidth);
+        size_t size = glyph.fHeight * rowBytes;
+        image = storage.realloc(size);
+        sk_bzero(image, size);
+        doAA = false;
     }
 
     cgContext = CGBitmapContextCreate(image, glyph.fWidth, glyph.fHeight, 8,
@@ -503,13 +517,15 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph) {
 
     // Draw the glyph
     if (cgFont != NULL && cgContext != NULL) {
+#ifdef WE_ARE_RUNNING_ON_10_6_OR_LATER
         CGContextSetAllowsFontSubpixelQuantization(cgContext, true);
         CGContextSetShouldSubpixelQuantizeFonts(cgContext, true);
-
+#endif
+        CGContextSetShouldAntialias(cgContext, doAA);
         CGContextSetGrayFillColor(  cgContext, grayColor, 1.0);
         CGContextSetTextDrawingMode(cgContext, kCGTextFill);
         CGContextSetFont(           cgContext, cgFont);
-        CGContextSetFontSize(       cgContext, FONT_CANONICAL_POINTSIZE);
+        CGContextSetFontSize(       cgContext, 1); // cgFont know's its size
         CGContextSetTextMatrix(     cgContext, mTransform);
         CGContextShowGlyphsAtPoint( cgContext, -glyph.fLeft, glyph.fTop + glyph.fHeight, &cgGlyph, 1);
 
@@ -525,6 +541,16 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph) {
                 }
                 src = (const uint32_t*)((const char*)src + rowBytes);
                 dst = (uint16_t*)((char*)dst + dstRB);
+            }
+        } else if (SkMask::kBW_Format == glyph.fMaskFormat) {
+            // downsample from A8 to A1
+            const uint8_t* src = (const uint8_t*)image;
+            uint8_t* dst = (uint8_t*)glyph.fImage;
+            size_t dstRB = glyph.rowBytes();
+            for (int y = 0; y < glyph.fHeight; y++) {
+                bytes_to_bits(dst, src, glyph.fWidth);
+                src += rowBytes;
+                dst += dstRB;
             }
         }
     }
@@ -616,48 +642,55 @@ void SkScalerContext_Mac::CTPathElement(void *info, const CGPathElement *element
 }
 
 
+static const char* map_css_names(const char* name) {
+    static const struct {
+        const char* fFrom;
+        const char* fTo;
+    } gPairs[] = {
+        { "sans-serif", "Helvetica" },
+        { "serif",      "Times"     },
+        { "monospace",  "Courier"   }
+    };
 
-
+    for (size_t i = 0; i < SK_ARRAY_COUNT(gPairs); i++) {
+        if (strcmp(name, gPairs[i].fFrom) == 0) {
+            return gPairs[i].fTo;
+        }
+    }
+    return name;    // no change
+}
 
 ///////////////////////////////////////////////////////////////////////////
 #pragma mark -
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                            const char familyName[],
-                            const void* data, size_t bytelength,
-                            SkTypeface::Style style)
-{   SkTypeface              *theTypeface;
-    SkNativeFontCache       *fontTable;
-    SkNativeFontInfo        fontInfo;
-    SkString                fontName;
+                                       const char familyName[],
+                                       const void* data, size_t bytelength,
+                                       SkTypeface::Style style) {
+    if (familyName) {
+        familyName = map_css_names(familyName);
+    }
 
-
-    // Get the state we need
-    fontName  = SkString(familyName);
-    fontTable = SkNativeFontCache::Get();
-
+    SkNativeFontCache* fontTable = SkNativeFontCache::Get();
 
     // Clone an existing typeface
     // TODO: only clone if style matches the familyFace's style...
-    if (familyName == NULL && familyFace != NULL)
-        {
+    if (familyName == NULL && familyFace != NULL) {
         familyFace->ref();
-        return(const_cast<SkTypeface*>(familyFace));
-        }
-
-
-    if (fontName.isEmpty()) {
-        fontName.set(FONT_DEFAULT_NAME);
+        return const_cast<SkTypeface*>(familyFace);
     }
+
+    if (!familyName || !*familyName) {
+        familyName = FONT_DEFAULT_NAME;
+    }
+
     // Get the native font
-    fontInfo = fontTable->GetFontInfo(fontName, style);
-    if (fontInfo.fontID == kSkInvalidFontID)
-        fontInfo = fontTable->CreateFont(fontName, style);
+    SkNativeFontInfo fontInfo = fontTable->GetFontInfo(familyName, style);
+    if (fontInfo.fontID == kSkInvalidFontID) {
+        fontInfo = fontTable->CreateFont(familyName, style);
+    }
 
-
-    // Create the typeface
-    theTypeface = new SkTypeface_Mac(fontInfo.style, fontInfo.fontID);
-    return(theTypeface);
+    return new SkTypeface_Mac(fontInfo.style, fontInfo.fontID);
 }
 
 SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream)
@@ -674,7 +707,8 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[])
 
 // static
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
-        uint32_t fontID, bool perGlyphInfo) {
+        uint32_t fontID,
+        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) {
     SkASSERT(!"SkFontHost::GetAdvancedTypefaceMetrics unimplemented");
     return NULL;
 }

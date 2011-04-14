@@ -14,7 +14,6 @@
     limitations under the License.
  */
 
-
 #ifndef GrGLTexture_DEFINED
 #define GrGLTexture_DEFINED
 
@@ -29,123 +28,143 @@ class GrGLTexture;
  * A ref counted tex id that deletes the texture in its destructor.
  */
 class GrGLTexID : public GrRefCnt {
+
 public:
-    GrGLTexID(GLuint texID) : fTexID(texID) {}
+    GrGLTexID(GrGLuint texID, bool ownsID) : fTexID(texID), fOwnsID(ownsID) {}
 
     virtual ~GrGLTexID() {
-        if (0 != fTexID) {
+        if (0 != fTexID && fOwnsID) {
             GR_GL(DeleteTextures(1, &fTexID));
         }
     }
 
     void abandon() { fTexID = 0; }
-    GLuint id() const { return fTexID; }
+    GrGLuint id() const { return fTexID; }
 
 private:
-    GLuint      fTexID;
+    GrGLuint      fTexID;
+    bool          fOwnsID;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class GrGLRenderTarget : public GrRenderTarget {
+
 public:
-    virtual ~GrGLRenderTarget();
-    
-    bool resolveable() const { return fRTFBOID != fTexFBOID; }
-    bool needsResolve() const { return fNeedsResolve; }
-    void setDirty(bool dirty) { fNeedsResolve = resolveable() && dirty; }
-    
-    GLuint renderFBOID() const { return fRTFBOID; }
-    GLuint textureFBOID() const { return fTexFBOID; }
-
-    void   abandon();
-
-protected:
+    // set fTexFBOID to this value to indicate that it is multisampled but
+    // Gr doesn't know how to resolve it.
+    enum { kUnresolvableFBOID = 0 };
 
     struct GLRenderTargetIDs {
-        GLuint      fRTFBOID;
-        GLuint      fTexFBOID;
-        GLuint      fStencilRenderbufferID;
-        GLuint      fMSColorRenderbufferID;
-        bool        fOwnIDs;
+        GrGLuint      fRTFBOID;
+        GrGLuint      fTexFBOID;
+        GrGLuint      fStencilRenderbufferID;
+        GrGLuint      fMSColorRenderbufferID;
+        bool          fOwnIDs;
+        void reset() { memset(this, 0, sizeof(GLRenderTargetIDs)); }
     };
-    
-    GrGLRenderTarget(const GLRenderTargetIDs& ids,
+
+    GrGLRenderTarget(GrGpuGL* gpu,
+                     const GLRenderTargetIDs& ids,
                      GrGLTexID* texID,
-                     GLuint stencilBits,
+                     GrGLuint stencilBits,
+                     bool isMultisampled,
                      const GrGLIRect& fViewport,
-                     GrGLTexture* texture,
-                     GrGpuGL* gl);
-    
+                     GrGLTexture* texture);
+
+    virtual ~GrGLRenderTarget() { this->release(); }
+
     void setViewport(const GrGLIRect& rect) { fViewport = rect; }
     const GrGLIRect& getViewport() const { return fViewport; }
+
+    // The following two functions return the same ID when a 
+    // texture-rendertarget is multisampled, and different IDs when
+    // it is.
+    // FBO ID used to render into
+    GrGLuint renderFBOID() const { return fRTFBOID; }
+    // FBO ID that has texture ID attached.
+    GrGLuint textureFBOID() const { return fTexFBOID; }
+
+    // override of GrRenderTarget 
+    virtual ResolveType getResolveType() const {
+        if (fRTFBOID == fTexFBOID) {
+            // catches FBO 0 and non MSAA case
+            return kAutoResolves_ResolveType;
+        } else if (kUnresolvableFBOID == fTexFBOID) {
+            return kCantResolve_ResolveType;
+        } else {
+            return kCanResolve_ResolveType;
+        }
+    }
+
+protected:
+    // override of GrResource
+    virtual void onAbandon();
+    virtual void onRelease();
+
 private:
-    GrGpuGL*    fGL;
-    GLuint      fRTFBOID;
-    GLuint      fTexFBOID;
-    GLuint      fStencilRenderbufferID;
-    GLuint      fMSColorRenderbufferID;
-   
+    GrGLuint      fRTFBOID;
+    GrGLuint      fTexFBOID;
+    GrGLuint      fStencilRenderbufferID;
+    GrGLuint      fMSColorRenderbufferID;
+
     // Should this object delete IDs when it is destroyed or does someone
     // else own them.
     bool        fOwnIDs;
-    
-    // If there separate Texture and RenderTarget FBO IDs then the rendertarget
-    // must be resolved to the texture FBO before it is used as a texture.
-    bool fNeedsResolve;
-    
-    // when we switch to this rendertarget we want to set the viewport to 
+
+    // when we switch to this rendertarget we want to set the viewport to
     // only render to to content area (as opposed to the whole allocation) and
-    // we want the rendering to be at top left (GL has origin in bottom left) 
+    // we want the rendering to be at top left (GL has origin in bottom left)
     GrGLIRect fViewport;
 
     // non-NULL if this RT was created by Gr with an associated GrGLTexture.
     GrGLTexID* fTexIDObj;
 
-    friend class GrGpuGL;
-    friend class GrGLTexture;
-    
     typedef GrRenderTarget INHERITED;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class GrGLTexture : public GrTexture {
+
 public:
     enum Orientation {
         kBottomUp_Orientation,
         kTopDown_Orientation,
     };
-    
+
     struct TexParams {
-        GLenum fFilter;
-        GLenum fWrapS;
-        GLenum fWrapT;
+        GrGLenum fFilter;
+        GrGLenum fWrapS;
+        GrGLenum fWrapT;
+        void invalidate() { memset(this, 0xff, sizeof(TexParams)); }
     };
 
-protected:
     struct GLTextureDesc {
-        uint32_t    fContentWidth;
-        uint32_t    fContentHeight;
-        uint32_t    fAllocWidth;
-        uint32_t    fAllocHeight;
-        PixelConfig fFormat;
-        GLuint      fTextureID;
-        GLenum      fUploadFormat;
-        GLenum      fUploadByteCount;
-        GLenum      fUploadType;
-        GLuint      fStencilBits;
-        Orientation fOrientation;
+        uint32_t        fContentWidth;
+        uint32_t        fContentHeight;
+        uint32_t        fAllocWidth;
+        uint32_t        fAllocHeight;
+        GrPixelConfig   fFormat;
+        GrGLuint        fTextureID;
+        bool            fOwnsID;
+        GrGLenum        fUploadFormat;
+        GrGLenum        fUploadByteCount;
+        GrGLenum        fUploadType;
+        GrGLuint        fStencilBits;
+        Orientation     fOrientation;
     };
-    typedef GrGLRenderTarget::GLRenderTargetIDs GLRenderTargetIDs;
-    GrGLTexture(const GLTextureDesc& textureDesc,
-                const GLRenderTargetIDs& rtIDs,
-                const TexParams& initialTexParams,
-                GrGpuGL* gl);
 
-public:
-    virtual ~GrGLTexture();
-    
-    // overloads of GrTexture
-    virtual void abandon();
-    virtual GrRenderTarget* asRenderTarget();
-    virtual void releaseRenderTarget();
+    typedef GrGLRenderTarget::GLRenderTargetIDs GLRenderTargetIDs;
+
+    GrGLTexture(GrGpuGL* gpu,
+                const GLTextureDesc& textureDesc,
+                const GLRenderTargetIDs& rtIDs,
+                const TexParams& initialTexParams);
+
+    virtual ~GrGLTexture() { this->release(); }
+
+    // overrides of GrTexture
     virtual void uploadTextureData(uint32_t x,
                                    uint32_t y,
                                    uint32_t width,
@@ -155,11 +174,11 @@ public:
 
     const TexParams& getTexParams() const { return fTexParams; }
     void setTexParams(const TexParams& texParams) { fTexParams = texParams; }
-    GLuint textureID() const { return fTexIDObj->id(); }
+    GrGLuint textureID() const { return fTexIDObj->id(); }
 
-    GLenum uploadFormat() const { return fUploadFormat; }
-    GLenum uploadByteCount() const { return fUploadByteCount; }
-    GLenum uploadType() const { return fUploadType; }
+    GrGLenum uploadFormat() const { return fUploadFormat; }
+    GrGLenum uploadByteCount() const { return fUploadByteCount; }
+    GrGLenum uploadType() const { return fUploadType; }
 
     /**
      * Retrieves the texture width actually allocated in texels.
@@ -189,30 +208,33 @@ public:
     // in the top-left corner of the image. OpenGL, however,
     // has the origin in the lower-left corner. For content that
     // is loaded by Ganesh we just push the content "upside down"
-    // (by GL's understanding of the world ) in glTex*Image and the 
-    // addressing just works out. However, content generated by GL 
-    // (FBO or externally imported texture) will be updside down 
+    // (by GL's understanding of the world ) in glTex*Image and the
+    // addressing just works out. However, content generated by GL
+    // (FBO or externally imported texture) will be updside down
     // and it is up to the GrGpuGL derivative to handle y-mirroing.
     Orientation orientation() const { return fOrientation; }
+
+    static const GrGLenum* WrapMode2GLWrap();
+
+protected:
+
+    // overrides of GrTexture
+    virtual void onAbandon();
+    virtual void onRelease();
 
 private:
     TexParams           fTexParams;
     GrGLTexID*          fTexIDObj;
-    GLenum              fUploadFormat;
-    GLenum              fUploadByteCount;
-    GLenum              fUploadType;
+    GrGLenum            fUploadFormat;
+    GrGLenum            fUploadByteCount;
+    GrGLenum            fUploadType;
     int                 fAllocWidth;
     int                 fAllocHeight;
     // precomputed content / alloc ratios
     GrScalar            fScaleX;
     GrScalar            fScaleY;
     Orientation         fOrientation;
-    GrGLRenderTarget*   fRenderTarget;
     GrGpuGL*            fGpuGL;
-
-    static const GLenum gWrapMode2GLWrap[];
-
-    friend class GrGpuGL;
 
     typedef GrTexture INHERITED;
 };

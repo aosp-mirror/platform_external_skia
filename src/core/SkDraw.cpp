@@ -679,6 +679,49 @@ static inline SkPoint* as_rightbottom(SkRect* r) {
     return ((SkPoint*)(void*)r) + 1;
 }
 
+static bool easy_rect_join(const SkPaint& paint, const SkMatrix& matrix,
+                           SkPoint* strokeSize) {
+    if (SkPaint::kMiter_Join != paint.getStrokeJoin() ||
+        paint.getStrokeMiter() < SK_ScalarSqrt2) {
+        return false;
+    }
+    
+    SkASSERT(matrix.rectStaysRect());
+    SkPoint pt = { paint.getStrokeWidth(), paint.getStrokeWidth() };
+    matrix.mapVectors(strokeSize, &pt, 1);
+    strokeSize->fX = SkScalarAbs(strokeSize->fX);
+    strokeSize->fY = SkScalarAbs(strokeSize->fY);
+    return true;
+}
+
+SkDraw::RectType SkDraw::ComputeRectType(const SkPaint& paint,
+                                         const SkMatrix& matrix,
+                                         SkPoint* strokeSize) {
+    RectType rtype;
+    const SkScalar width = paint.getStrokeWidth();
+    const bool zeroWidth = (0 == width);
+    SkPaint::Style style = paint.getStyle();
+    
+    if ((SkPaint::kStrokeAndFill_Style == style) && zeroWidth) {
+        style = SkPaint::kFill_Style;
+    }
+    
+    if (paint.getPathEffect() || paint.getMaskFilter() ||
+        paint.getRasterizer() || !matrix.rectStaysRect() ||
+        SkPaint::kStrokeAndFill_Style == style) {
+        rtype = kPath_RectType;
+    } else if (SkPaint::kFill_Style == style) {
+        rtype = kFill_RectType;
+    } else if (zeroWidth) {
+        rtype = kHair_RectType;
+    } else if (easy_rect_join(paint, matrix, strokeSize)) {
+        rtype = kStroke_RectType;
+    } else {
+        rtype = kPath_RectType;
+    }
+    return rtype;
+}
+
 void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
     SkDEBUGCODE(this->validate();)
 
@@ -688,11 +731,16 @@ void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
         return;
     }
 
-    // complex enough to draw as a path
-    if (paint.getPathEffect() || paint.getMaskFilter() ||
-            paint.getRasterizer() || !fMatrix->rectStaysRect() ||
-            (paint.getStyle() != SkPaint::kFill_Style &&
-             SkScalarHalf(paint.getStrokeWidth()) > 0)) {
+    SkPoint strokeSize;
+    RectType rtype = ComputeRectType(paint, *fMatrix, &strokeSize);
+
+#ifdef SK_DISABLE_FAST_AA_STROKE_RECT
+    if (kStroke_RectType == rtype && paint.isAntiAlias()) {
+        rtype = kPath_RectType;
+    }
+#endif
+        
+    if (kPath_RectType == rtype) {
         SkPath  tmp;
         tmp.addRect(rect);
         tmp.setFillType(SkPath::kWinding_FillType);
@@ -733,18 +781,30 @@ void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
     // we want to "fill" if we are kFill or kStrokeAndFill, since in the latter
     // case we are also hairline (if we've gotten to here), which devolves to
     // effectively just kFill
-    if (paint.getStyle() != SkPaint::kStroke_Style) {
-        if (paint.isAntiAlias()) {
-            SkScan::AntiFillRect(devRect, clip, blitter);
-        } else {
-            SkScan::FillRect(devRect, clip, blitter);
-        }
-    } else {
-        if (paint.isAntiAlias()) {
-            SkScan::AntiHairRect(devRect, clip, blitter);
-        } else {
-            SkScan::HairRect(devRect, clip, blitter);
-        }
+    switch (rtype) {
+        case kFill_RectType:
+            if (paint.isAntiAlias()) {
+                SkScan::AntiFillRect(devRect, clip, blitter);
+            } else {
+                SkScan::FillRect(devRect, clip, blitter);
+            }
+            break;
+        case kStroke_RectType:
+            if (paint.isAntiAlias()) {
+                SkScan::AntiFrameRect(devRect, strokeSize, clip, blitter);
+            } else {
+                SkScan::FrameRect(devRect, strokeSize, clip, blitter);
+            }
+            break;
+        case kHair_RectType:
+            if (paint.isAntiAlias()) {
+                SkScan::AntiHairRect(devRect, clip, blitter);
+            } else {
+                SkScan::HairRect(devRect, clip, blitter);
+            }
+            break;
+        default:
+            SkASSERT(!"bad rtype");
     }
 }
 
@@ -1568,7 +1628,7 @@ void SkDraw::drawText(const char text[], size_t byteLength,
     // apply the bias here, so we don't have to add 1/2 in the loop
     fx += SK_FixedHalf;
     fy += SK_FixedHalf;
-    fy &= finalFYMask;
+    fyMask &= finalFYMask;
 
     SkAutoKern          autokern;
 	SkDraw1Glyph        d1g;
@@ -2364,8 +2424,8 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_DEBUG
 
@@ -2386,7 +2446,12 @@ void SkDraw::validate() const {
 
 #endif
 
-//////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+SkBounder::SkBounder() {
+    // initialize up front. This gets reset by SkCanvas before each draw call.
+    fClip = &SkRegion::GetEmptyRegion();
+}
 
 bool SkBounder::doIRect(const SkIRect& r) {
     SkIRect    rr;

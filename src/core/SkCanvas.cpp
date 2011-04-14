@@ -24,6 +24,7 @@
 #include "SkScalarCompare.h"
 #include "SkShape.h"
 #include "SkTemplates.h"
+#include "SkTLazy.h"
 #include "SkUtils.h"
 #include <new>
 
@@ -49,6 +50,8 @@
     #define inc_canvas()
     #define dec_canvas()
 #endif
+
+typedef SkTLazy<SkPaint> SkLazyPaint;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helpers for computing fast bounds for quickReject tests
@@ -279,64 +282,68 @@ private:
 
 class AutoDrawLooper {
 public:
-    AutoDrawLooper(SkCanvas* canvas, const SkPaint& paint, SkDrawFilter::Type t)
-            : fCanvas(canvas), fPaint((SkPaint*)&paint), fType(t) {
-        if ((fLooper = paint.getLooper()) != NULL) {
-            fLooper->init(canvas, (SkPaint*)&paint);
-        } else {
-            fOnce = true;
-        }
+    AutoDrawLooper(SkCanvas* canvas, const SkPaint& paint) : fOrigPaint(paint) {
+        fCanvas = canvas;
+        fLooper = paint.getLooper();
         fFilter = canvas->getDrawFilter();
-        fNeedFilterRestore = false;
-    }
+        fPaint = NULL;
+        fSaveCount = canvas->getSaveCount();
+        fDone = false;
 
+        if (fLooper) {
+            fLooper->init(canvas);
+        }
+    }
+    
     ~AutoDrawLooper() {
-        if (fNeedFilterRestore) {
-            SkASSERT(fFilter);
-            fFilter->restore(fCanvas, fPaint, fType);
-        }
-        if (NULL != fLooper) {
-            fLooper->restore();
-        }
+        SkASSERT(fCanvas->getSaveCount() == fSaveCount);
     }
-
-    bool next() {
-        SkDrawFilter* filter = fFilter;
-
-        // if we drew earlier with a filter, then we need to restore first
-        if (fNeedFilterRestore) {
-            SkASSERT(filter);
-            filter->restore(fCanvas, fPaint, fType);
-            fNeedFilterRestore = false;
-        }
-
-        bool result;
-
-        if (NULL != fLooper) {
-            result = fLooper->next();
-        } else {
-            result = fOnce;
-            fOnce = false;
-        }
-
-        // if we're gonna draw, give the filter a chance to do its work
-        if (result && NULL != filter) {
-            fNeedFilterRestore = result = filter->filter(fCanvas, fPaint,
-                                                         fType);
-        }
-        return result;
+    
+    const SkPaint& paint() const {
+        SkASSERT(fPaint);
+        return *fPaint;
     }
-
+    
+    bool next(SkDrawFilter::Type drawType);
+    
 private:
+    SkLazyPaint     fLazyPaint;
+    SkCanvas*       fCanvas;
+    const SkPaint&  fOrigPaint;
     SkDrawLooper*   fLooper;
     SkDrawFilter*   fFilter;
-    SkCanvas*       fCanvas;
-    SkPaint*        fPaint;
-    SkDrawFilter::Type  fType;
-    bool            fOnce;
-    bool            fNeedFilterRestore;
-
+    const SkPaint*  fPaint;
+    int             fSaveCount;
+    bool            fDone;
 };
+
+bool AutoDrawLooper::next(SkDrawFilter::Type drawType) {
+    if (fDone) {
+        fPaint = NULL;
+        return false;
+    }
+    if (!fLooper && !fFilter) {
+        fDone = true;
+        fPaint = &fOrigPaint;
+        return true;
+    }
+
+    SkPaint* paint = fLazyPaint.set(fOrigPaint);
+    if (fLooper && !fLooper->next(fCanvas, paint)) {
+        fDone = true;
+        fPaint = NULL;
+        return false;
+    }
+    if (fFilter) {
+        fFilter->filter(paint, drawType);
+        if (NULL == fLooper) {
+            // no looper means we only draw once
+            fDone = true;
+        }
+    }
+    fPaint = paint;
+    return true;
+}
 
 /*  Stack helper for managing a SkBounder. In the destructor, if we were
     given a bounder, we call its commit() method, signifying that we are
@@ -379,14 +386,14 @@ private:
 
 ////////// macros to place around the internal draw calls //////////////////
 
-#define ITER_BEGIN(paint, type)                                     \
+#define LOOPER_BEGIN(paint, type)                                   \
 /*    AutoValidator   validator(fMCRec->fTopLayer->fDevice); */     \
-    AutoDrawLooper  looper(this, paint, type);                      \
-    while (looper.next()) {                                         \
+    AutoDrawLooper  looper(this, paint);                            \
+    while (looper.next(type)) {                                     \
         SkAutoBounderCommit ac(fBounder);                           \
         SkDrawIter          iter(this);
 
-#define ITER_END    }
+#define LOOPER_END    }
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -470,6 +477,10 @@ SkDevice* SkCanvas::getDevice() const {
     MCRec*           rec = (MCRec*)iter.next();
     SkASSERT(rec && rec->fLayer);
     return rec->fLayer->fDevice;
+}
+
+SkDevice* SkCanvas::getTopDevice() const {
+    return fMCRec->fTopLayer->fDevice;
 }
 
 SkDevice* SkCanvas::setDevice(SkDevice* device) {
@@ -832,12 +843,11 @@ void SkCanvas::internalDrawBitmap(const SkBitmap& bitmap, const SkIRect* srcRect
         return;
     }
 
+    SkLazyPaint lazy;
     if (NULL == paint) {
-        SkPaint tmpPaint;
-        this->commonDrawBitmap(bitmap, srcRect, matrix, tmpPaint);
-    } else {
-        this->commonDrawBitmap(bitmap, srcRect, matrix, *paint);
+        paint = lazy.init();
     }
+    this->commonDrawBitmap(bitmap, srcRect, matrix, *paint);
 }
 
 void SkCanvas::drawDevice(SkDevice* device, int x, int y,
@@ -848,12 +858,12 @@ void SkCanvas::drawDevice(SkDevice* device, int x, int y,
         paint = &tmp;
     }
 
-    ITER_BEGIN(*paint, SkDrawFilter::kBitmap_Type)
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type)
     while (iter.next()) {
         iter.fDevice->drawDevice(iter, device, x - iter.getX(), y - iter.getY(),
-                                 *paint);
+                                 looper.paint());
     }
-    ITER_END
+    LOOPER_END
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1185,13 +1195,13 @@ SkDevice* SkCanvas::createDevice(SkBitmap::Config config, int width, int height,
 //////////////////////////////////////////////////////////////////////////////
 
 void SkCanvas::drawPaint(const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kPaint_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kPaint_Type)
 
     while (iter.next()) {
-        iter.fDevice->drawPaint(iter, paint);
+        iter.fDevice->drawPaint(iter, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawPoints(PointMode mode, size_t count, const SkPoint pts[],
@@ -1202,13 +1212,13 @@ void SkCanvas::drawPoints(PointMode mode, size_t count, const SkPoint pts[],
 
     SkASSERT(pts != NULL);
 
-    ITER_BEGIN(paint, SkDrawFilter::kPoint_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kPoint_Type)
 
     while (iter.next()) {
-        iter.fDevice->drawPoints(iter, mode, count, pts, paint);
+        iter.fDevice->drawPoints(iter, mode, count, pts, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawRect(const SkRect& r, const SkPaint& paint) {
@@ -1220,13 +1230,13 @@ void SkCanvas::drawRect(const SkRect& r, const SkPaint& paint) {
         }
     }
 
-    ITER_BEGIN(paint, SkDrawFilter::kRect_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kRect_Type)
 
     while (iter.next()) {
-        iter.fDevice->drawRect(iter, r, paint);
+        iter.fDevice->drawRect(iter, r, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
@@ -1239,13 +1249,13 @@ void SkCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
         }
     }
 
-    ITER_BEGIN(paint, SkDrawFilter::kPath_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kPath_Type)
 
     while (iter.next()) {
-        iter.fDevice->drawPath(iter, path, paint);
+        iter.fDevice->drawPath(iter, path, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
@@ -1305,7 +1315,9 @@ void SkCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
     SkIRect tmpISrc;
     if (src) {
         tmpISrc.set(0, 0, bitmap.width(), bitmap.height());
-        tmpISrc.intersect(*src);
+        if (!tmpISrc.intersect(*src)) {
+            return;
+        }
         src = &tmpISrc;
     }
     this->internalDrawBitmap(*bitmapPtr, src, matrix, paint);
@@ -1321,13 +1333,13 @@ void SkCanvas::commonDrawBitmap(const SkBitmap& bitmap, const SkIRect* srcRect,
                                 const SkMatrix& matrix, const SkPaint& paint) {
     SkDEBUGCODE(bitmap.validate();)
 
-    ITER_BEGIN(paint, SkDrawFilter::kBitmap_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kBitmap_Type)
 
     while (iter.next()) {
-        iter.fDevice->drawBitmap(iter, bitmap, srcRect, matrix, paint);
+        iter.fDevice->drawBitmap(iter, bitmap, srcRect, matrix, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawSprite(const SkBitmap& bitmap, int x, int y,
@@ -1343,13 +1355,13 @@ void SkCanvas::drawSprite(const SkBitmap& bitmap, int x, int y,
         paint = &tmp;
     }
 
-    ITER_BEGIN(*paint, SkDrawFilter::kBitmap_Type)
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type)
 
     while (iter.next()) {
         iter.fDevice->drawSprite(iter, bitmap, x - iter.getX(), y - iter.getY(),
-                                 *paint);
+                                 looper.paint());
     }
-    ITER_END
+    LOOPER_END
 }
 
 class SkDeviceFilteredPaint {
@@ -1357,7 +1369,7 @@ public:
     SkDeviceFilteredPaint(SkDevice* device, const SkPaint& paint) {
         SkDevice::TextFlags flags;
         if (device->filterTextFlags(paint, &flags)) {
-            SkPaint* newPaint = new (fStorage) SkPaint(paint);
+            SkPaint* newPaint = fLazy.set(paint);
             newPaint->setFlags(flags.fFlags);
             newPaint->setHinting(flags.fHinting);
             fPaint = newPaint;
@@ -1366,71 +1378,63 @@ public:
         }
     }
 
-    ~SkDeviceFilteredPaint() {
-        if (reinterpret_cast<SkPaint*>(fStorage) == fPaint) {
-            fPaint->~SkPaint();
-        }
-    }
-
     const SkPaint& paint() const { return *fPaint; }
 
 private:
-    // points to either fStorage or the caller's paint
     const SkPaint*  fPaint;
-    // we rely on the fPaint above to ensure proper alignment of fStorage
-    char            fStorage[sizeof(SkPaint)];
+    SkLazyPaint     fLazy;
 };
 
 void SkCanvas::drawText(const void* text, size_t byteLength,
                         SkScalar x, SkScalar y, const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kText_Type)
 
     while (iter.next()) {
-        SkDeviceFilteredPaint dfp(iter.fDevice, paint);
+        SkDeviceFilteredPaint dfp(iter.fDevice, looper.paint());
         iter.fDevice->drawText(iter, text, byteLength, x, y, dfp.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawPosText(const void* text, size_t byteLength,
                            const SkPoint pos[], const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kText_Type)
 
     while (iter.next()) {
-        SkDeviceFilteredPaint dfp(iter.fDevice, paint);
+        SkDeviceFilteredPaint dfp(iter.fDevice, looper.paint());
         iter.fDevice->drawPosText(iter, text, byteLength, &pos->fX, 0, 2,
                                   dfp.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawPosTextH(const void* text, size_t byteLength,
                             const SkScalar xpos[], SkScalar constY,
                             const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kText_Type)
 
     while (iter.next()) {
-        SkDeviceFilteredPaint dfp(iter.fDevice, paint);
+        SkDeviceFilteredPaint dfp(iter.fDevice, looper.paint());
         iter.fDevice->drawPosText(iter, text, byteLength, xpos, constY, 1,
                                   dfp.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawTextOnPath(const void* text, size_t byteLength,
                               const SkPath& path, const SkMatrix* matrix,
                               const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kText_Type)
 
     while (iter.next()) {
         iter.fDevice->drawTextOnPath(iter, text, byteLength, path,
-                                     matrix, paint);
+                                     matrix, looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 #ifdef ANDROID
@@ -1438,14 +1442,14 @@ void SkCanvas::drawPosTextOnPath(const void* text, size_t byteLength,
                                  const SkPoint pos[], const SkPaint& paint,
                                  const SkPath& path, const SkMatrix* matrix) {
 
-    ITER_BEGIN(paint, SkDrawFilter::kText_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kText_Type)
 
     while (iter.next()) {
         iter.fDevice->drawPosTextOnPath(iter, text, byteLength, pos,
-                                        paint, path, matrix);
+                                        looper.paint(), path, matrix);
     }
 
-    ITER_END
+    LOOPER_END
 }
 #endif
 
@@ -1454,14 +1458,15 @@ void SkCanvas::drawVertices(VertexMode vmode, int vertexCount,
                             const SkColor colors[], SkXfermode* xmode,
                             const uint16_t indices[], int indexCount,
                             const SkPaint& paint) {
-    ITER_BEGIN(paint, SkDrawFilter::kPath_Type)
+    LOOPER_BEGIN(paint, SkDrawFilter::kPath_Type)
 
     while (iter.next()) {
         iter.fDevice->drawVertices(iter, vmode, vertexCount, verts, texs,
-                                   colors, xmode, indices, indexCount, paint);
+                                   colors, xmode, indices, indexCount,
+                                   looper.paint());
     }
 
-    ITER_END
+    LOOPER_END
 }
 
 void SkCanvas::drawData(const void* data, size_t length) {

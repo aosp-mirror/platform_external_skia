@@ -142,16 +142,16 @@ GrAtlasMgr::~GrAtlasMgr() {
     fGpu->unref();
 }
 
-static GrTexture::PixelConfig maskformat2pixelconfig(GrMaskFormat format) {
+static GrPixelConfig maskformat2pixelconfig(GrMaskFormat format) {
     switch (format) {
         case kA8_GrMaskFormat:
-            return GrTexture::kAlpha_8_PixelConfig;
+            return kAlpha_8_GrPixelConfig;
         case kA565_GrMaskFormat:
-            return GrTexture::kRGB_565_PixelConfig;
+            return kRGB_565_GrPixelConfig;
         default:
             GrAssert(!"unknown maskformat");
     }
-    return GrTexture::kUnknown_PixelConfig;
+    return kUnknown_GrPixelConfig;
 }
 
 GrAtlas* GrAtlasMgr::addToAtlas(GrAtlas* atlas,
@@ -201,18 +201,6 @@ GrAtlas* GrAtlasMgr::addToAtlas(GrAtlas* atlas,
 void GrAtlasMgr::freePlot(int x, int y) {
     GrAssert(fPlotMgr->isBusy(x, y));
     fPlotMgr->freePlot(x, y);
-}
-
-void GrAtlasMgr::abandonAll() {
-#if 0
-    GrAtlas** curr = fList.begin();
-    GrAtlas** stop = fList.end();
-    for (; curr < stop; curr++) {
-        (*curr)->texture()->abandon();
-        delete *curr;
-    }
-    fList.reset();
-#endif
 }
 
 

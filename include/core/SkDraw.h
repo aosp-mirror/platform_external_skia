@@ -41,9 +41,15 @@ public:
     void    drawPoints(SkCanvas::PointMode, size_t count, const SkPoint[],
                        const SkPaint&, bool forceUseDevice = false) const;
     void    drawRect(const SkRect&, const SkPaint&) const;
-    /*  To save on mallocs, we allow a flag that tells us that srcPath is
-        mutable, so that we don't have to make copies of it as we transform it.
-    */
+    /**
+     *  To save on mallocs, we allow a flag that tells us that srcPath is
+     *  mutable, so that we don't have to make copies of it as we transform it.
+     *
+     *  If prePathMatrix is not null, it should logically be applied before any
+     *  stroking or other effects. If there are no effects on the paint that
+     *  affect the geometry/rasterization, then the pre matrix can just be
+     *  pre-concated with the current matrix.
+     */
     void    drawPath(const SkPath& srcPath, const SkPaint&,
                      const SkMatrix* prePathMatrix, bool pathIsMutable) const;
     void    drawBitmap(const SkBitmap&, const SkMatrix&, const SkPaint&) const;
@@ -78,6 +84,24 @@ public:
     static bool DrawToMask(const SkPath& devPath, const SkIRect* clipBounds,
                            SkMaskFilter* filter, const SkMatrix* filterMatrix,
                            SkMask* mask, SkMask::CreateMode mode);
+
+    enum RectType {
+        kHair_RectType,
+        kFill_RectType,
+        kStroke_RectType,
+        kPath_RectType
+    };
+
+    /**
+     *  Based on the paint's style, strokeWidth, and the matrix, classify how
+     *  to draw the rect. If no special-case is available, returns
+     *  kPath_RectType.
+     *
+     *  Iff RectType == kStroke_RectType, then strokeSize is set to the device
+     *  width and height of the stroke.
+     */
+    static RectType ComputeRectType(const SkPaint&, const SkMatrix&,
+                                    SkPoint* strokeSize);
 
 private:
     void    drawText_asPaths(const char text[], size_t byteLength,

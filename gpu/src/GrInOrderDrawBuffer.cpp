@@ -316,6 +316,7 @@ void GrInOrderDrawBuffer::reset() {
 }
 
 void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
+    GrAssert(!fReservedGeometry.fLocked);
     GrAssert(NULL != target);
     GrAssert(target != this); // not considered and why?
 
@@ -346,8 +347,6 @@ void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
             ++currClip;
             target->setClip(fClips[currClip]);
         }
-        uint32_t vertexReserveCount = 0;
-        uint32_t indexReserveCount = 0;
 
         target->setVertexSourceToBuffer(draw.fVertexLayout, draw.fVertexBuffer);
 
@@ -365,9 +364,6 @@ void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
             target->drawNonIndexed(draw.fPrimitiveType,
                                    draw.fStartVertex,
                                    draw.fVertexCount);
-        }
-        if (vertexReserveCount || indexReserveCount) {
-            target->releaseReservedGeometry();
         }
     }
 }
@@ -402,9 +398,9 @@ bool GrInOrderDrawBuffer::geometryHints(GrVertexLayout vertexLayout,
     return flush;
 }
 
-bool GrInOrderDrawBuffer::acquireGeometryHelper(GrVertexLayout vertexLayout,
-                                                void**         vertices,
-                                                void**         indices) {
+bool GrInOrderDrawBuffer::onAcquireGeometry(GrVertexLayout vertexLayout,
+                                            void**         vertices,
+                                            void**         indices) {
     GrAssert(!fReservedGeometry.fLocked);
     if (fReservedGeometry.fVertexCount) {
         GrAssert(NULL != vertices);
@@ -439,7 +435,7 @@ bool GrInOrderDrawBuffer::acquireGeometryHelper(GrVertexLayout vertexLayout,
     return true;
 }
 
-void GrInOrderDrawBuffer::releaseGeometryHelper() {
+void GrInOrderDrawBuffer::onReleaseGeometry() {
     GrAssert(fUsedReservedVertexBytes <= fReservedVertexBytes);
     GrAssert(fUsedReservedIndexBytes <= fReservedIndexBytes);
 
@@ -458,8 +454,8 @@ void GrInOrderDrawBuffer::releaseGeometryHelper() {
 
 }
 
-void GrInOrderDrawBuffer::setVertexSourceToArrayHelper(const void* vertexArray,
-                                                       int vertexCount) {
+void GrInOrderDrawBuffer::onSetVertexSourceToArray(const void* vertexArray,
+                                                   int vertexCount) {
     GrAssert(!fReservedGeometry.fLocked || !fReservedGeometry.fVertexCount);
 #if GR_DEBUG
     bool success =
@@ -472,8 +468,8 @@ void GrInOrderDrawBuffer::setVertexSourceToArrayHelper(const void* vertexArray,
     GR_DEBUGASSERT(success);
 }
 
-void GrInOrderDrawBuffer::setIndexSourceToArrayHelper(const void* indexArray,
-                                                      int indexCount) {
+void GrInOrderDrawBuffer::onSetIndexSourceToArray(const void* indexArray,
+                                                  int indexCount) {
     GrAssert(!fReservedGeometry.fLocked || !fReservedGeometry.fIndexCount);
 #if GR_DEBUG
     bool success =

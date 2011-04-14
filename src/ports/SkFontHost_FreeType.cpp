@@ -98,12 +98,8 @@ InitFreetype() {
 
     // Setup LCD filtering. This reduces colour fringes for LCD rendered
     // glyphs.
-//#ifdef ANDROID
-//    gLCDSupport = false;
-//#else
     err = FT_Library_SetLcdFilter(gFTLibrary, FT_LCD_FILTER_DEFAULT);
     gLCDSupport = err == 0;
-//#endif
     gLCDSupportValid = true;
 
     return true;
@@ -345,7 +341,8 @@ static bool getWidthAdvance(FT_Face face, int gId, int16_t* data) {
 
 // static
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
-        uint32_t fontID, bool perGlyphInfo) {
+        uint32_t fontID,
+        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) {
 #if defined(SK_BUILD_FOR_MAC) || defined(ANDROID)
     return NULL;
 #else
@@ -386,12 +383,6 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
             info->fEmSize = ttHeader->Units_Per_EM;
         }
     }
-
-    SkASSERT(!FT_HAS_VERTICAL(face));
-#ifdef FT_IS_CID_KEYED
-    SkASSERT(FT_IS_CID_KEYED(face) ==
-             (info->fType == SkAdvancedTypefaceMetrics::kType1CID_Font));
-#endif
 
     info->fStyle = 0;
     if (FT_IS_FIXED_WIDTH(face))
@@ -464,8 +455,12 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
     info->fBBox = SkIRect::MakeLTRB(face->bbox.xMin, face->bbox.yMax,
                                     face->bbox.xMax, face->bbox.yMin);
 
-    if (perGlyphInfo && canEmbed(face) && FT_IS_SCALABLE(face) &&
-            info->fType != SkAdvancedTypefaceMetrics::kOther_Font) {
+    if (!canEmbed(face) || !FT_IS_SCALABLE(face) || 
+            info->fType == SkAdvancedTypefaceMetrics::kOther_Font) {
+        perGlyphInfo = SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo;
+    }
+
+    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kHAdvance_PerGlyphInfo) {
         if (FT_IS_FIXED_WIDTH(face)) {
             appendRange(&info->fGlyphWidths, 0);
             int16_t advance = face->max_advance_width;
@@ -493,18 +488,24 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
             info->fGlyphWidths.reset(
                 getAdvanceData(face, face->num_glyphs, &getWidthAdvance));
         }
+    }
 
-        if (info->fType == SkAdvancedTypefaceMetrics::kType1_Font) {
-            // Postscript fonts may contain more than 255 glyphs, so we end up
-            // using multiple font descriptions with a glyph ordering.  Record
-            // the name of each glyph.
-            info->fGlyphNames.reset(
-                    new SkAutoTArray<SkString>(face->num_glyphs));
-            for (int gID = 0; gID < face->num_glyphs; gID++) {
-                char glyphName[128];  // PS limit for names is 127 bytes.
-                FT_Get_Glyph_Name(face, gID, glyphName, 128);
-                info->fGlyphNames->get()[gID].set(glyphName);
-            }
+    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kVAdvance_PerGlyphInfo &&
+            FT_HAS_VERTICAL(face)) {
+        SkASSERT(false);  // Not implemented yet.
+    }
+
+    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kGlyphNames_PerGlyphInfo &&
+            info->fType == SkAdvancedTypefaceMetrics::kType1_Font) {
+        // Postscript fonts may contain more than 255 glyphs, so we end up
+        // using multiple font descriptions with a glyph ordering.  Record
+        // the name of each glyph.
+        info->fGlyphNames.reset(
+                new SkAutoTArray<SkString>(face->num_glyphs));
+        for (int gID = 0; gID < face->num_glyphs; gID++) {
+            char glyphName[128];  // PS limit for names is 127 bytes.
+            FT_Get_Glyph_Name(face, gID, glyphName, 128);
+            info->fGlyphNames->get()[gID].set(glyphName);
         }
     }
 

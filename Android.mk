@@ -30,9 +30,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkCordic.cpp \
 	src/core/SkDebug.cpp \
 	src/core/SkFloatBits.cpp \
-	src/core/SkMath.cpp \
-	src/core/SkMatrix.cpp \
-	src/core/SkMemory_stdlib.cpp \
 	src/core/SkPoint.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRegion.cpp \
@@ -140,6 +137,10 @@ LOCAL_SRC_FILES:= \
 	src/core/SkMMapStream.cpp \
 	src/core/SkMask.cpp \
 	src/core/SkMaskFilter.cpp \
+	src/core/SkMath.cpp \
+	src/core/SkMatrix.cpp \
+	src/core/SkMemory_stdlib.cpp \
+    src/core/SkMetaData.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPath.cpp \
@@ -260,9 +261,12 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrAtlas.cpp \
   gpu/src/GrClip.cpp \
   gpu/src/GrContext.cpp \
+  gpu/src/GrCreatePathRenderer_none.cpp \
   gpu/src/GrDrawTarget.cpp \
+  gpu/src/GrGLDefaultInterface_none.cpp \
   gpu/src/GrGLIndexBuffer.cpp	\
   gpu/src/GrGLInterface.cpp \
+  gpu/src/GrGLProgram.cpp \
   gpu/src/GrGLTexture.cpp \
   gpu/src/GrGLVertexBuffer.cpp \
   gpu/src/GrGpu.cpp \
@@ -271,11 +275,15 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrGpuFactory.cpp \
   gpu/src/GrGLUtil.cpp \
   gpu/src/GrGpuGL.cpp \
+  gpu/src/GrGpuGLShaders.cpp \
   gpu/src/GrInOrderDrawBuffer.cpp \
   gpu/src/GrMatrix.cpp \
   gpu/src/GrMemory.cpp \
   gpu/src/GrPath.cpp \
+  gpu/src/GrPathUtils.cpp \
   gpu/src/GrRectanizer_fifo.cpp \
+  gpu/src/GrResource.cpp \
+  gpu/src/GrTexture.cpp \
   gpu/src/GrTextureCache.cpp \
   gpu/src/GrTextContext.cpp \
   gpu/src/GrTextStrike.cpp \

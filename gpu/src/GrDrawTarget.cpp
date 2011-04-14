@@ -402,9 +402,9 @@ bool GrDrawTarget::reserveAndLockGeometry(GrVertexLayout    vertexLayout,
     fReservedGeometry.fVertexCount  = vertexCount;
     fReservedGeometry.fIndexCount   = indexCount;
 
-    fReservedGeometry.fLocked = acquireGeometryHelper(vertexLayout,
-                                                      vertices,
-                                                      indices);
+    fReservedGeometry.fLocked = this->onAcquireGeometry(vertexLayout,
+                                                        vertices,
+                                                        indices);
     if (fReservedGeometry.fLocked) {
         if (vertexCount) {
             fGeometrySrc.fVertexSrc = kReserved_GeometrySrcType;
@@ -432,7 +432,7 @@ bool GrDrawTarget::geometryHints(GrVertexLayout vertexLayout,
 
 void GrDrawTarget::releaseReservedGeometry() {
     GrAssert(fReservedGeometry.fLocked);
-    releaseGeometryHelper();
+    this->onReleaseGeometry();
     fReservedGeometry.fLocked = false;
 }
 
@@ -441,13 +441,13 @@ void GrDrawTarget::setVertexSourceToArray(GrVertexLayout vertexLayout,
                                           int vertexCount) {
     fGeometrySrc.fVertexSrc = kArray_GeometrySrcType;
     fGeometrySrc.fVertexLayout = vertexLayout;
-    setVertexSourceToArrayHelper(vertexArray, vertexCount);
+    this->onSetVertexSourceToArray(vertexArray, vertexCount);
 }
 
 void GrDrawTarget::setIndexSourceToArray(const void* indexArray,
                                          int indexCount) {
     fGeometrySrc.fIndexSrc = kArray_GeometrySrcType;
-    setIndexSourceToArrayHelper(indexArray, indexCount);
+    this->onSetIndexSourceToArray(indexArray, indexCount);
 }
 
 void GrDrawTarget::setVertexSourceToBuffer(GrVertexLayout vertexLayout,
@@ -492,10 +492,10 @@ bool GrDrawTarget::canDisableBlend() const {
     for (int s = 0; s < kNumStages; ++s) {
         if (VertexUsesStage(s, fGeometrySrc.fVertexLayout)) {
             GrAssert(NULL != fCurrDrawState.fTextures[s]);
-            GrTexture::PixelConfig config = fCurrDrawState.fTextures[s]->config();
+            GrPixelConfig config = fCurrDrawState.fTextures[s]->config();
 
-            if (GrTexture::kRGB_565_PixelConfig != config &&
-                GrTexture::kRGBX_8888_PixelConfig != config) {
+            if (kRGB_565_GrPixelConfig != config &&
+                kRGBX_8888_GrPixelConfig != config) {
                 return false;
             }
         }

@@ -112,13 +112,24 @@
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+#if GR_WIN32_BUILD
+// VC8 doesn't support stdint.h, so we define those types here.
+typedef signed char int8_t;
+typedef unsigned char uint8_t;
+typedef short int16_t;
+typedef unsigned short uint16_t;
+typedef int int32_t;
+typedef unsigned uint32_t;
+#else
 /*
- *  Pull stdint.h in before user-config, to be sure our __STDC... macros are
- *  defined before anyone else might try to include stdint.h
+ *  Include stdint.h with defines that trigger declaration of C99 limit/const
+ *  macros here before anyone else has a chance to include stdint.h without 
+ *  these.
  */
 #define __STDC_LIMIT_MACROS
 #define __STDC_CONSTANT_MACROS
 #include <stdint.h>
+#endif
 
 /*
  *  The "user config" file can be empty, and everything should work. It is
@@ -141,6 +152,33 @@
 ///////////////////////////////////////////////////////////////////////////////
 // postconfig section:
 //
+
+// GR_IMPLEMENTATION should be define to 1 when building Gr and 0 when including
+// it in another dependent build. The Gr makefile/ide-project should define this
+// to 1.
+#if !defined(GR_IMPLEMENTATION)
+    #define GR_IMPLEMENTATION 0
+#endif
+
+// If Gr is built as a shared library then GR_DLL should be defined to 1 (both
+// when building Gr and when including its headers in dependent builds). Only
+// currently supported minimally for Chrome's Win32 Multi-DLL build (TODO:
+// correctly exort all of the public API correctly and support shared lib on
+// other platforms).
+#if !defined(GR_DLL)
+    #define GR_DLL 0
+#endif
+
+#if GR_WIN32_BUILD && GR_DLL
+    #if GR_IMPLEMENTATION
+        #define GR_API __declspec(dllexport)
+    #else
+        #define GR_API __declspec(dllimport)
+    #endif
+#else
+    #define GR_API
+#endif
+
 // By now we must have a GR_..._BUILD symbol set to 1, and a decision about
 // debug -vs- release
 //
@@ -288,6 +326,10 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
 
 #ifndef GR_DUMP_TEXTURE_UPLOAD
     #define GR_DUMP_TEXTURE_UPLOAD  0
+#endif
+
+#ifndef GR_USE_NEW_GLSHADERS
+    #define GR_USE_NEW_GLSHADERS 0
 #endif
 
 /**

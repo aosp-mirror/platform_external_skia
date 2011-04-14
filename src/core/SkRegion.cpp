@@ -85,36 +85,29 @@ bool SkRegion::ComputeRunBounds(const SkRegion::RunType runs[], int count, SkIRe
 
 //////////////////////////////////////////////////////////////////////////
 
-SkRegion::SkRegion()
-{
+SkRegion::SkRegion() {
     fBounds.set(0, 0, 0, 0);
     fRunHead = SkRegion_gEmptyRunHeadPtr;
 }
 
-SkRegion::SkRegion(const SkRegion& src)
-{
+SkRegion::SkRegion(const SkRegion& src) {
     fRunHead = SkRegion_gEmptyRunHeadPtr;   // just need a value that won't trigger sk_free(fRunHead)
     this->setRegion(src);
 }
 
-SkRegion::SkRegion(const SkIRect& rect)
-{
+SkRegion::SkRegion(const SkIRect& rect) {
     fRunHead = SkRegion_gEmptyRunHeadPtr;   // just need a value that won't trigger sk_free(fRunHead)
     this->setRect(rect);
 }
 
-SkRegion::~SkRegion()
-{
+SkRegion::~SkRegion() {
     this->freeRuns();
 }
 
-void SkRegion::freeRuns()
-{
-    if (fRunHead->isComplex())
-    {
+void SkRegion::freeRuns() {
+    if (fRunHead->isComplex()) {
         SkASSERT(fRunHead->fRefCnt >= 1);
-        if (sk_atomic_dec(&fRunHead->fRefCnt) == 1)
-        {
+        if (sk_atomic_dec(&fRunHead->fRefCnt) == 1) {
             //SkASSERT(gRgnAllocCounter > 0);
             //SkDEBUGCODE(sk_atomic_dec(&gRgnAllocCounter));
             //SkDEBUGF(("************** gRgnAllocCounter::free %d\n", gRgnAllocCounter));
@@ -123,76 +116,68 @@ void SkRegion::freeRuns()
     }
 }
 
-void SkRegion::allocateRuns(int count)
-{
+void SkRegion::allocateRuns(int count) {
     fRunHead = RunHead::Alloc(count);
 }
 
-SkRegion& SkRegion::operator=(const SkRegion& src)
-{
+SkRegion& SkRegion::operator=(const SkRegion& src) {
     (void)this->setRegion(src);
     return *this;
 }
 
-void SkRegion::swap(SkRegion& other)
-{
+void SkRegion::swap(SkRegion& other) {
     SkTSwap<SkIRect>(fBounds, other.fBounds);
     SkTSwap<RunHead*>(fRunHead, other.fRunHead);
 }
 
-bool SkRegion::setEmpty()
-{
+bool SkRegion::setEmpty() {
     this->freeRuns();
     fBounds.set(0, 0, 0, 0);
     fRunHead = SkRegion_gEmptyRunHeadPtr;
     return false;
 }
 
-bool SkRegion::setRect(int32_t left, int32_t top, int32_t right, int32_t bottom)
-{
-    if (left >= right || top >= bottom)
+bool SkRegion::setRect(int32_t left, int32_t top,
+                       int32_t right, int32_t bottom) {
+    if (left >= right || top >= bottom) {
         return this->setEmpty();
-
+    }
     this->freeRuns();
     fBounds.set(left, top, right, bottom);
     fRunHead = SkRegion_gRectRunHeadPtr;
     return true;
 }
 
-bool SkRegion::setRect(const SkIRect& r)
-{
+bool SkRegion::setRect(const SkIRect& r) {
     return this->setRect(r.fLeft, r.fTop, r.fRight, r.fBottom);
 }
 
-bool SkRegion::setRegion(const SkRegion& src)
-{
-    if (this != &src)
-    {
+bool SkRegion::setRegion(const SkRegion& src) {
+    if (this != &src) {
         this->freeRuns();
 
         fBounds = src.fBounds;
         fRunHead = src.fRunHead;
-        if (fRunHead->isComplex())
+        if (fRunHead->isComplex()) {
             sk_atomic_inc(&fRunHead->fRefCnt);
+        }
     }
     return fRunHead != SkRegion_gEmptyRunHeadPtr;
 }
 
-bool SkRegion::op(const SkIRect& rect, const SkRegion& rgn, Op op)
-{
+bool SkRegion::op(const SkIRect& rect, const SkRegion& rgn, Op op) {
     SkRegion tmp(rect);
 
     return this->op(tmp, rgn, op);
 }
 
-bool SkRegion::op(const SkRegion& rgn, const SkIRect& rect, Op op)
-{
+bool SkRegion::op(const SkRegion& rgn, const SkIRect& rect, Op op) {
     SkRegion tmp(rect);
 
     return this->op(rgn, tmp, op);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef ANDROID
 char* SkRegion::toString()
@@ -482,52 +467,48 @@ bool SkRegion::intersects(const SkRegion& rgn) const {
 
 /////////////////////////////////////////////////////////////////////////////////////
 
-int operator==(const SkRegion& a, const SkRegion& b)
-{
+bool operator==(const SkRegion& a, const SkRegion& b) {
     SkDEBUGCODE(a.validate();)
     SkDEBUGCODE(b.validate();)
 
-    if (&a == &b)
+    if (&a == &b) {
         return true;
-    if (a.fBounds != b.fBounds)
+    }
+    if (a.fBounds != b.fBounds) {
         return false;
+    }
     
     const SkRegion::RunHead* ah = a.fRunHead;
     const SkRegion::RunHead* bh = b.fRunHead;
 
     // this catches empties and rects being equal
-    if (ah == bh) 
+    if (ah == bh) {
         return true;
-    
+    }
     // now we insist that both are complex (but different ptrs)
-    if (!ah->isComplex() || !bh->isComplex())
+    if (!ah->isComplex() || !bh->isComplex()) {
         return false;
-
+    }
     return  ah->fRunCount == bh->fRunCount &&
             !memcmp(ah->readonly_runs(), bh->readonly_runs(),
                     ah->fRunCount * sizeof(SkRegion::RunType));
 }
 
-void SkRegion::translate(int dx, int dy, SkRegion* dst) const
-{
+void SkRegion::translate(int dx, int dy, SkRegion* dst) const {
     SkDEBUGCODE(this->validate();)
 
-    if (NULL == dst)
+    if (NULL == dst) {
         return;
-
-    if (this->isEmpty())
+    }
+    if (this->isEmpty()) {
         dst->setEmpty();
-    else if (this->isRect())
+    } else if (this->isRect()) {
         dst->setRect(fBounds.fLeft + dx, fBounds.fTop + dy,
                      fBounds.fRight + dx, fBounds.fBottom + dy);
-    else
-    {
-        if (this == dst)
-        {
+    } else {
+        if (this == dst) {
             dst->fRunHead = dst->fRunHead->ensureWritable();
-        }
-        else
-        {
+        } else {
             SkRegion    tmp;
             tmp.allocateRuns(fRunHead->fRunCount);
             tmp.fBounds = fBounds;
@@ -540,17 +521,17 @@ void SkRegion::translate(int dx, int dy, SkRegion* dst) const
         RunType*        druns = dst->fRunHead->writable_runs();
 
         *druns++ = (SkRegion::RunType)(*sruns++ + dy);    // top
-        for (;;)
-        {
+        for (;;) {
             int bottom = *sruns++;
-            if (bottom == kRunTypeSentinel)
+            if (bottom == kRunTypeSentinel) {
                 break;
+            }
             *druns++ = (SkRegion::RunType)(bottom + dy);  // bottom;
-            for (;;)
-            {
+            for (;;) {
                 int x = *sruns++;
-                if (x == kRunTypeSentinel)
+                if (x == kRunTypeSentinel) {
                     break;
+                }
                 *druns++ = (SkRegion::RunType)(x + dx);
                 *druns++ = (SkRegion::RunType)(*sruns++ + dx);
             }
@@ -1086,7 +1067,14 @@ uint32_t SkRegion::unflatten(const void* storage) {
     return buffer.pos();
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+const SkRegion& SkRegion::GetEmptyRegion() {
+    static SkRegion gEmpty;
+    return gEmpty;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_DEBUG
 

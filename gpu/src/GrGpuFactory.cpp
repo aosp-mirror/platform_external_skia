@@ -14,7 +14,6 @@
     limitations under the License.
  */
 
-
 #include "GrTypes.h"
 
 // must be before GrGLConfig.h
@@ -24,37 +23,42 @@
 
 #include "GrGLConfig.h"
 
-
-#if GR_SUPPORT_GLES1 || GR_SUPPORT_GLDESKTOP
-    #include "GrGpuGLFixed.h"
-#endif
-
-#if GR_SUPPORT_GLES2 || GR_SUPPORT_GLDESKTOP
-    #include "GrGpuGLShaders2.h"
-#endif
-
 #include "GrGpu.h"
+#include "GrGpuGLFixed.h"
+#include "GrGpuGLShaders.h"
+#include "GrGpuGLShaders2.h"
 
 GrGpu* GrGpu::Create(Engine engine, Platform3DContext context3D) {
-    // If no GL bindings have been installed, fall-back to calling the
-    // GL functions that have been linked with the executable.
-    if (!GrGLGetGLInterface())
-        GrGLSetDefaultGLInterface();
+
+    if (kOpenGL_Shaders_Engine == engine ||
+        kOpenGL_Fixed_Engine == engine) {
+        // If no GL bindings have been installed, fall-back to calling the
+        // GL functions that have been linked with the executable.
+        if (!GrGLGetGLInterface()) {
+            GrGLSetDefaultGLInterface();
+            // If there is no platform-default then just fail.
+            if (!GrGLGetGLInterface()) {
+                return NULL;
+            }
+        }
+    }
 
     GrGpu* gpu = NULL;
 
     switch (engine) {
         case kOpenGL_Shaders_Engine:
             GrAssert(NULL == context3D);
-#if GR_SUPPORT_GLES2 || GR_SUPPORT_GLDESKTOP
-            gpu = new GrGpuGLShaders2;
+            {
+#if GR_USE_NEW_GLSHADERS
+                gpu = new GrGpuGLShaders;
+#else
+                gpu = new GrGpuGLShaders2;
 #endif
+            }
             break;
         case kOpenGL_Fixed_Engine:
             GrAssert(NULL == context3D);
-#if GR_SUPPORT_GLES1 || GR_SUPPORT_GLDESKTOP
             gpu = new GrGpuGLFixed;
-#endif
             break;
         case kDirect3D9_Engine:
             GrAssert(NULL != context3D);
@@ -69,6 +73,3 @@ GrGpu* GrGpu::Create(Engine engine, Platform3DContext context3D) {
 
     return gpu;
 }
-
-
-

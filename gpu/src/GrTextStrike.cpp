@@ -58,19 +58,12 @@ GrTextStrike* GrFontCache::generateStrike(GrFontScaler* scaler,
     return strike;
 }
 
-void GrFontCache::abandonAll() {
-    fCache.deleteAll();
-    if (fAtlasMgr) {
-        fAtlasMgr->abandonAll();
-        delete fAtlasMgr;
-        fAtlasMgr = NULL;
-    }
-}
-
 void GrFontCache::freeAll() {
     fCache.deleteAll();
     delete fAtlasMgr;
     fAtlasMgr = NULL;
+    fHead = NULL;
+    fTail = NULL;
 }
 
 void GrFontCache::purgeExceptFor(GrTextStrike* preserveStrike) {
@@ -176,6 +169,11 @@ GrGlyph* GrTextStrike::generateGlyph(GrGlyph::PackedID packed,
 }
 
 bool GrTextStrike::getGlyphAtlas(GrGlyph* glyph, GrFontScaler* scaler) {
+#if 0   // testing hack to force us to flush our cache often
+    static int gCounter;
+    if ((++gCounter % 10) == 0) return false;
+#endif
+
     GrAssert(glyph);
     GrAssert(scaler);
     GrAssert(fCache.contains(glyph));

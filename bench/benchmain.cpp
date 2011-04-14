@@ -317,6 +317,14 @@ int main (int argc, char * const argv[]) {
         }
     }
 
+    // report our current settings
+    {
+        SkString str;
+        str.printf("skia bench: alpha=0x%02X antialias=%d filter=%d\n",
+                   forceAlpha, forceAA, forceFilter);
+        log_progress(str);
+    }
+                   
     Iter iter(&defineDict);
     SkBenchmark* bench;
     while ((bench = iter.next()) != NULL) {
@@ -340,7 +348,7 @@ int main (int argc, char * const argv[]) {
 
         {
             SkString str;
-            str.printf("running bench [%d %d] %16s", dim.fX, dim.fY,
+            str.printf("running bench [%d %d] %28s", dim.fX, dim.fY,
                        bench->getName());
             log_progress(str);
         }
@@ -397,8 +405,7 @@ int main (int argc, char * const argv[]) {
             if (repeatDraw > 1) {
                 double duration = SkTime::GetMSecs() - now;
                 SkString str;
-                str.printf("  %4s: msecs = %7.2f, fps = %7.2f", configName,
-                           duration / repeatDraw, repeatDraw * 1000.0 / duration);
+                str.printf("  %4s: msecs = %5.2f", configName, duration / repeatDraw);
                 log_progress(str);
             }
             if (outDir.size() > 0) {

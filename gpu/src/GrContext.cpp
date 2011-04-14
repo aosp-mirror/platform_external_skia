@@ -57,18 +57,41 @@ GrContext* GrContext::CreateGLShaderContext() {
 }
 
 GrContext::~GrContext() {
+    this->flush();
     fGpu->unref();
     delete fTextureCache;
     delete fFontCache;
     delete fDrawBuffer;
     delete fDrawBufferVBAllocPool;
     delete fDrawBufferIBAllocPool;
-    delete fPathRenderer;
+    GrSafeUnref(fCustomPathRenderer);
 }
 
-void GrContext::abandonAllTextures() {
-    fTextureCache->deleteAll(GrTextureCache::kAbandonTexture_DeleteMode);
-    fFontCache->abandonAll();
+void GrContext::contextLost() {
+    delete fDrawBuffer;
+    fDrawBuffer = NULL;
+    delete fDrawBufferVBAllocPool;
+    fDrawBufferVBAllocPool = NULL;
+    delete fDrawBufferIBAllocPool;
+    fDrawBufferIBAllocPool = NULL;
+
+    fTextureCache->removeAll();
+    fFontCache->freeAll();
+    fGpu->markContextDirty();
+
+    fGpu->abandonResources();
+
+    this->setupDrawBuffer();
+}
+
+void GrContext::resetContext() {
+    fGpu->markContextDirty();
+}
+
+void GrContext::freeGpuResources() {
+    this->flush();
+    fTextureCache->removeAll();
+    fFontCache->freeAll();
 }
 
 GrTextureEntry* GrContext::findAndLockTexture(GrTextureKey* key,
@@ -133,7 +156,7 @@ GrTextureEntry* GrContext::createAndLockTexture(GrTextureKey* key,
         }
         GrGpu::TextureDesc rtDesc = desc;
         rtDesc.fFlags |= GrGpu::kRenderTarget_TextureFlag |
-                         GrGpu::kNoPathRendering_TextureFlag;
+                         GrGpu::kNoStencil_TextureFlag;
         rtDesc.fWidth  = GrNextPow2(GrMax<int>(desc.fWidth,
                                                fGpu->minRenderTargetWidth()));
         rtDesc.fHeight = GrNextPow2(GrMax<int>(desc.fHeight,
@@ -183,7 +206,7 @@ GrTextureEntry* GrContext::createAndLockTexture(GrTextureKey* key,
             // no longer need to clamp at min RT size.
             rtDesc.fWidth  = GrNextPow2(desc.fWidth);
             rtDesc.fHeight = GrNextPow2(desc.fHeight);
-            int bpp = GrTexture::BytesPerPixel(desc.fFormat);
+            int bpp = GrBytesPerPixel(desc.fFormat);
             GrAutoSMalloc<128*128*4> stretchedPixels(bpp *
                                                      rtDesc.fWidth *
                                                      rtDesc.fHeight);
@@ -244,13 +267,25 @@ int GrContext::getMaxTextureDimension() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrRenderTarget* GrContext::createPlatformRenderTarget(
-                                                intptr_t platformRenderTarget,
-                                                int stencilBits,
-                                                int width, int height) {
-    return fGpu->createPlatformRenderTarget(platformRenderTarget, stencilBits,
-                                            width, height);
+GrResource* GrContext::createPlatformSurface(const GrPlatformSurfaceDesc& desc) {
+    // validate flags here so that GrGpu subclasses don't have to check
+    if (kTexture_GrPlatformSurfaceType == desc.fSurfaceType &&
+        0 != desc.fRenderTargetFlags) {
+            return NULL;
+    }
+    if (!(kIsMultisampled_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags) &&
+        (kGrCanResolve_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags)) {
+            return NULL;
+    }
+    if (kTextureRenderTarget_GrPlatformSurfaceType == desc.fSurfaceType &&
+        (kIsMultisampled_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags) &&
+        !(kGrCanResolve_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags)) {
+        return NULL;
+    }
+    return fGpu->createPlatformSurface(desc);
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 bool GrContext::supportsIndex8PixelConfig(const GrSamplerState& sampler,
                                           int width, int height) {
@@ -546,7 +581,8 @@ void GrContext::drawPath(const GrPaint& paint,
     if (NULL != paint.getTexture()) {
         enabledStages |= 1;
     }
-    fPathRenderer->drawPath(target, enabledStages, path, fill, translate);
+    GrPathRenderer* pr = getPathRenderer(target, path, fill);
+    pr->drawPath(target, enabledStages, path, fill, translate);
 }
 
 void GrContext::drawPath(const GrPaint& paint,
@@ -585,14 +621,39 @@ void GrContext::flushDrawBuffer() {
 #endif
 }
 
-bool GrContext::readPixels(int left, int top, int width, int height,
-                           GrTexture::PixelConfig config, void* buffer) {
-    this->flush(true);
-    return fGpu->readPixels(left, top, width, height, config, buffer);
+bool GrContext::readTexturePixels(GrTexture* texture,
+                                  int left, int top, int width, int height,
+                                  GrPixelConfig config, void* buffer) {
+
+    // TODO: code read pixels for textures that aren't rendertargets
+
+    this->flush();
+    GrRenderTarget* target = texture->asRenderTarget();
+    if (NULL != target) {
+        return fGpu->readPixels(target,
+                                left, top, width, height, 
+                                config, buffer);
+    } else {
+        return false;
+    }
+}
+
+bool GrContext::readRenderTargetPixels(GrRenderTarget* target,
+                                      int left, int top, int width, int height,
+                                      GrPixelConfig config, void* buffer) {
+    uint32_t flushFlags = 0;
+    if (NULL == target) { 
+        flushFlags |= GrContext::kForceCurrentRenderTarget_FlushBit;
+    }
+
+    this->flush(flushFlags);
+    return fGpu->readPixels(target,
+                            left, top, width, height, 
+                            config, buffer);
 }
 
 void GrContext::writePixels(int left, int top, int width, int height,
-                            GrTexture::PixelConfig config, const void* buffer,
+                            GrPixelConfig config, const void* buffer,
                             size_t stride) {
 
     // TODO: when underlying api has a direct way to do this we should use it
@@ -687,12 +748,8 @@ GrDrawTarget* GrContext::prepareToDraw(const GrPaint& paint,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrContext::resetContext() {
-    fGpu->markContextDirty();
-}
-
 void GrContext::setRenderTarget(GrRenderTarget* target) {
-    flush(false);
+    this->flush(false);
     fGpu->setRenderTarget(target);
 }
 
@@ -738,38 +795,53 @@ void GrContext::printStats() const {
     fGpu->printStats();
 }
 
-GrContext::GrContext(GrGpu* gpu) {
+GrContext::GrContext(GrGpu* gpu) :
+    fDefaultPathRenderer(gpu->supportsTwoSidedStencil(),
+                         gpu->supportsStencilWrapOps()) {
+
     fGpu = gpu;
     fGpu->ref();
+    fGpu->setContext(this);
+
+    fCustomPathRenderer = GrPathRenderer::CreatePathRenderer();
+    fGpu->setClipPathRenderer(fCustomPathRenderer);
+
     fTextureCache = new GrTextureCache(MAX_TEXTURE_CACHE_COUNT,
                                        MAX_TEXTURE_CACHE_BYTES);
     fFontCache = new GrFontCache(fGpu);
 
     fLastDrawCategory = kUnbuffered_DrawCategory;
 
+    fDrawBuffer = NULL;
+    fDrawBufferVBAllocPool = NULL;
+    fDrawBufferIBAllocPool = NULL;
+
+    this->setupDrawBuffer();
+}
+
+void GrContext::setupDrawBuffer() {
+
+    GrAssert(NULL == fDrawBuffer);
+    GrAssert(NULL == fDrawBufferVBAllocPool);
+    GrAssert(NULL == fDrawBufferIBAllocPool);
+
 #if DEFER_TEXT_RENDERING || BATCH_RECT_TO_RECT
     fDrawBufferVBAllocPool =
-        new GrVertexBufferAllocPool(gpu, false,
+        new GrVertexBufferAllocPool(fGpu, false,
                                     DRAW_BUFFER_VBPOOL_BUFFER_SIZE,
                                     DRAW_BUFFER_VBPOOL_PREALLOC_BUFFERS);
     fDrawBufferIBAllocPool =
-        new GrIndexBufferAllocPool(gpu, false,
+        new GrIndexBufferAllocPool(fGpu, false,
                                    DRAW_BUFFER_IBPOOL_BUFFER_SIZE,
                                    DRAW_BUFFER_IBPOOL_PREALLOC_BUFFERS);
 
     fDrawBuffer = new GrInOrderDrawBuffer(fDrawBufferVBAllocPool,
                                           fDrawBufferIBAllocPool);
-#else
-    fDrawBuffer = NULL;
-    fDrawBufferVBAllocPool = NULL;
-    fDrawBufferIBAllocPool = NULL;
 #endif
 
 #if BATCH_RECT_TO_RECT
     fDrawBuffer->setQuadIndexBuffer(this->getQuadIndexBuffer());
 #endif
-    fPathRenderer = new GrDefaultPathRenderer(fGpu->supportsTwoSidedStencil(),
-                                              fGpu->supportsStencilWrapOps());
 }
 
 bool GrContext::finalizeTextureKey(GrTextureKey* key,
@@ -807,4 +879,16 @@ GrDrawTarget* GrContext::getTextTarget(const GrPaint& paint) {
 
 const GrIndexBuffer* GrContext::getQuadIndexBuffer() const {
     return fGpu->getQuadIndexBuffer();
+}
+
+GrPathRenderer* GrContext::getPathRenderer(const GrDrawTarget* target,
+                                           GrPathIter* path,
+                                           GrPathFill fill) {
+    if (NULL != fCustomPathRenderer &&
+        fCustomPathRenderer->canDrawPath(target, path, fill)) {
+        return fCustomPathRenderer;
+    } else {
+        GrAssert(fDefaultPathRenderer.canDrawPath(target, path, fill));
+        return &fDefaultPathRenderer;
+    }
 }

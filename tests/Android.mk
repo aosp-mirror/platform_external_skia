@@ -10,12 +10,14 @@ LOCAL_SRC_FILES:= \
   ClipStackTest.cpp \
   ClipperTest.cpp \
   DequeTest.cpp \
+  DrawBitmapRectTest.cpp \
   FillPathTest.cpp \
   FlateTest.cpp \
   GeometryTest.cpp \
   InfRectTest.cpp \
   MathTest.cpp \
   MatrixTest.cpp \
+  MetaDataTest.cpp \
   PackBitsTest.cpp \
   PaintTest.cpp \
   ParsePathTest.cpp \

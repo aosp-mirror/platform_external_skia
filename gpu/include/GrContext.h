@@ -21,15 +21,15 @@
 #include "GrGpu.h"
 #include "GrTextureCache.h"
 #include "GrPaint.h"
+#include "GrPathRenderer.h"
 
 class GrFontCache;
 class GrPathIter;
 class GrVertexBufferAllocPool;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
-class GrPathRenderer;
 
-class GrContext : public GrRefCnt {
+class GR_API GrContext : public GrRefCnt {
 public:
     /**
      * Creates a GrContext from within a 3D context.
@@ -52,14 +52,27 @@ public:
      */
     void resetContext();
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Textures
+    /**
+     * Abandons all gpu resources, assumes 3D API state is unknown. Call this
+     * if you have lost the associated GPU context, and thus internal texture,
+     * buffer, etc. references/IDs are now invalid. Should be called even when
+     * GrContext is no longer going to be used for two reasons:
+     *  1) ~GrContext will not try to free the objects in the 3D API.
+     *  2) If you've created GrResources that outlive the GrContext they will
+     *     be marked as invalid (GrResource::isValid()) and won't attempt to
+     *     free their underlying resource in the 3D API.
+     * Content drawn since the last GrContext::flush() may be lost.
+     */
+    void contextLost();
 
     /**
-     *  Abandons all textures. Call this if you have lost the associated GPU
-     *  context, and thus internal texture references/IDs are now invalid.
+     * Frees gpu created by the context. Can be called to reduce GPU memory
+     * pressure.
      */
-    void abandonAllTextures();
+    void freeGpuResources();
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Textures
 
     /**
      *  Search for an entry with the same Key. If found, "lock" it and return it.
@@ -145,33 +158,6 @@ public:
     // Render targets
 
     /**
-     * Wraps an externally-created rendertarget in a GrRenderTarget.
-     * @param platformRenderTarget  3D API-specific render target identifier
-     *                              e.g. in GL platforamRenderTarget is an FBO
-     *                              id.
-     * @param stencilBits           the number of stencil bits that the render
-     *                              target has.
-     * @param width                 width of the render target.
-     * @param height                height of the render target.
-     */
-    GrRenderTarget* createPlatformRenderTarget(intptr_t platformRenderTarget,
-                                               int stencilBits,
-                                               int width, int height);
-
-    /**
-     * Reads the current target object (e.g. FBO or IDirect3DSurface9*) and
-     * viewport state from the underlying 3D API and wraps it in a
-     * GrRenderTarget. The GrRenderTarget will not attempt to delete/destroy the
-     * underlying object in its destructor and it is up to caller to guarantee
-     * that it remains valid while the GrRenderTarget is used.
-     *
-     * @return the newly created GrRenderTarget
-     */
-    GrRenderTarget* createRenderTargetFrom3DApiState() {
-        return fGpu->createRenderTargetFrom3DApiState();
-    }
-
-    /**
      * Sets the render target.
      * @param target    the render target to set. (should not be NULL.)
      */
@@ -183,6 +169,72 @@ public:
      */
     const GrRenderTarget* getRenderTarget() const;
     GrRenderTarget* getRenderTarget();
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Platform Surfaces
+
+    // GrContext provides an interface for wrapping externally created textures
+    // and rendertargets in their Gr-equivalents.
+
+    /**
+     * Wraps an existing 3D API surface in a GrObject. desc.fFlags determines
+     * the type of object returned. If kIsTexture is set the returned object
+     * will be a GrTexture*. Otherwise, it will be a GrRenderTarget*. If both 
+     * are set the render target object is accessible by
+     * GrTexture::asRenderTarget().
+     *
+     * GL: if the object is a texture Gr may change its GL texture parameters
+     *     when it is drawn.
+     *
+     * @param   desc    description of the object to create.
+     * @return either a GrTexture* or GrRenderTarget* depending on desc. NULL
+     *         on failure.
+     */
+    GrResource* createPlatformSurface(const GrPlatformSurfaceDesc& desc);
+
+    /**
+     * DEPRECATED, WILL BE REMOVED SOON. USE createPlatformSurface.
+     *
+     * Wraps an externally-created rendertarget in a GrRenderTarget.
+     * @param platformRenderTarget  3D API-specific render target identifier
+     *                              e.g. in GL platforamRenderTarget is an FBO
+     *                              id.
+     * @param stencilBits           the number of stencil bits that the render
+     *                              target has.
+     * @param isMultisampled        specify whether the render target is 
+     *                              multisampled.
+     * @param width                 width of the render target.
+     * @param height                height of the render target.
+     */
+    GrRenderTarget* createPlatformRenderTarget(intptr_t platformRenderTarget,
+                                               int stencilBits,
+                                               bool isMultisampled,
+                                               int width, int height) {
+    #if GR_DEBUG
+        GrPrintf("Using deprecated createPlatformRenderTarget API.");
+    #endif
+        return fGpu->createPlatformRenderTarget(platformRenderTarget, 
+                                                stencilBits, isMultisampled, 
+                                                width, height);
+    }
+
+    /**
+     * DEPRECATED, WILL BE REMOVED SOON. USE createPlatformSurface.
+     *
+     * Reads the current target object (e.g. FBO or IDirect3DSurface9*) and
+     * viewport state from the underlying 3D API and wraps it in a
+     * GrRenderTarget. The GrRenderTarget will not attempt to delete/destroy the
+     * underlying object in its destructor and it is up to caller to guarantee
+     * that it remains valid while the GrRenderTarget is used.
+     *
+     * @return the newly created GrRenderTarget
+     */
+    GrRenderTarget* createRenderTargetFrom3DApiState() {
+    #if GR_DEBUG
+        GrPrintf("Using deprecated createRenderTargetFrom3DApiState API.");
+    #endif
+        return fGpu->createRenderTargetFrom3DApiState();
+    }
 
     ///////////////////////////////////////////////////////////////////////////
     // Matrix state
@@ -409,21 +461,50 @@ public:
      * @param flagsBitfield     flags that control the flushing behavior. See
      *                          FlushBits.
      */
-    void flush(int flagsBitfield);
+    void flush(int flagsBitfield = 0);
+    
     /**
-     *  Return true on success, i.e. if we could copy the specified range of
-     *  pixels from the current render-target into the buffer, converting into
-     *  the specified pixel-config.
+     * Reads a rectangle of pixels from a render target.
+     * @param renderTarget  the render target to read from. NULL means the
+     *                      current render target.
+     * @param left          left edge of the rectangle to read (inclusive)
+     * @param top           top edge of the rectangle to read (inclusive)
+     * @param width         width of rectangle to read in pixels.
+     * @param height        height of rectangle to read in pixels.
+     * @param config        the pixel config of the destination buffer
+     * @param buffer        memory to read the rectangle into.
+     *
+     * @return true if the read succeeded, false if not. The read can fail
+     *              because of a unsupported pixel config or because no render
+     *              target is currently set.
      */
-    bool readPixels(int left, int top, int width, int height,
-                    GrTexture::PixelConfig, void* buffer);
+    bool readRenderTargetPixels(GrRenderTarget* target,
+                                int left, int top, int width, int height,
+                                GrPixelConfig config, void* buffer);
+
+    /**
+     * Reads a rectangle of pixels from a texture.
+     * @param texture       the render target to read from.
+     * @param left          left edge of the rectangle to read (inclusive)
+     * @param top           top edge of the rectangle to read (inclusive)
+     * @param width         width of rectangle to read in pixels.
+     * @param height        height of rectangle to read in pixels.
+     * @param config        the pixel config of the destination buffer
+     * @param buffer        memory to read the rectangle into.
+     *
+     * @return true if the read succeeded, false if not. The read can fail
+     *              because of a unsupported pixel config.
+     */
+    bool readTexturePixels(GrTexture* target,
+                           int left, int top, int width, int height,
+                           GrPixelConfig config, void* buffer);
 
     /**
      *  Copy the src pixels [buffer, stride, pixelconfig] into the current
      *  render-target at the specified rectangle.
      */
     void writePixels(int left, int top, int width, int height,
-                     GrTexture::PixelConfig, const void* buffer, size_t stride);
+                     GrPixelConfig, const void* buffer, size_t stride);
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -479,13 +560,18 @@ private:
     GrGpu*          fGpu;
     GrTextureCache* fTextureCache;
     GrFontCache*    fFontCache;
-    GrPathRenderer* fPathRenderer;
+
+    GrPathRenderer*         fCustomPathRenderer;
+    GrDefaultPathRenderer   fDefaultPathRenderer;
 
     GrVertexBufferAllocPool*    fDrawBufferVBAllocPool;
     GrIndexBufferAllocPool*     fDrawBufferIBAllocPool;
     GrInOrderDrawBuffer*        fDrawBuffer;
 
     GrContext(GrGpu* gpu);
+
+    void setupDrawBuffer();
+
     void flushDrawBuffer();
 
     static void SetPaint(const GrPaint& paint, GrDrawTarget* target);
@@ -495,6 +581,11 @@ private:
     GrDrawTarget* prepareToDraw(const GrPaint& paint, DrawCategory drawType);
 
     void drawClipIntoStencil();
+
+    GrPathRenderer* getPathRenderer(const GrDrawTarget* target,
+                                    GrPathIter* path,
+                                    GrPathFill fill);
+
 };
 
 /**

@@ -54,6 +54,7 @@ protected:
     void*           fStorage;
 
 private:
+
     size_t          fSize;
     SkColorTable*   fCTable;
 

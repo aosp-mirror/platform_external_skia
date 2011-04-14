@@ -129,10 +129,10 @@ public:
      *  Convert the SkBitmap::Config to the corresponding PixelConfig, or
      *  kUnknown_PixelConfig if the conversion cannot be done.
      */
-    static GrTexture::PixelConfig BitmapConfig2PixelConfig(SkBitmap::Config,
-                                                        bool isOpaque);
+    static GrPixelConfig BitmapConfig2PixelConfig(SkBitmap::Config,
+                                                  bool isOpaque);
 
-    static GrTexture::PixelConfig Bitmap2PixelConfig(const SkBitmap& bm) {
+    static GrPixelConfig Bitmap2PixelConfig(const SkBitmap& bm) {
         return BitmapConfig2PixelConfig(bm.config(), bm.isOpaque());
     }
 
@@ -156,14 +156,6 @@ public:
         unsigned a = SkGetPackedA32(pm);
         return GrColorPackRGBA(r, g, b, a);
     }
-
-    /**
-     *  This abandons all texture caches (for bitmaps and text) associated with
-     *  the gpu, and frees any associated skia caches. It differs from
-     *  deleteAllTextures in that it assumes that the gpu has lots its context,
-     *  and thus the associated HW textures are no longer valid
-     */
-    static void AbandonAllTextures(GrContext*);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -207,7 +199,11 @@ public:
     virtual GrSetOp getOp() const;
 
     virtual void getRect(GrRect* rect) const {
-        *rect = Sk2Gr(*fCurr->fRect);
+        if (!fCurr->fRect) {
+            rect->setEmpty();
+        } else {
+            *rect = Sk2Gr(*fCurr->fRect);
+        }
     }
 
     virtual GrPathIter* getPathIter() {

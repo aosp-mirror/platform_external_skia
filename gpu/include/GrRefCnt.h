@@ -29,7 +29,7 @@
  *  It is an error (though only checked for in the debug build) to call unref()
  *  such that the reference count becomes 0.
  */
-class GrRefCnt : GrNoncopyable {
+class GR_API GrRefCnt : GrNoncopyable {
 public:
             GrRefCnt() : fRefCnt(1) {}
     virtual ~GrRefCnt() {
@@ -93,7 +93,8 @@ static inline void GrSafeUnref(const GrRefCnt* obj) {
  *  Assigns src to dst, checking for NULLs in each, and correctly incrementing
  *  the reference count of src, and decrementing the reference count of dst
  */
-static inline void GrSafeAssign(GrRefCnt*& dst, GrRefCnt* src) {
+template<typename T>
+static inline void GrSafeAssign(T*& dst, T* src) {
     if (src) {
         src->ref();
     }
@@ -101,6 +102,14 @@ static inline void GrSafeAssign(GrRefCnt*& dst, GrRefCnt* src) {
         dst->unref();
     }
     dst = src;
+}
+
+template<typename T>
+static inline void GrSafeSetNull(T*& obj) {
+    if (NULL != obj) {
+        obj->unref();
+        obj = NULL;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

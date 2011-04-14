@@ -16,17 +16,9 @@
 
 #include "GrGpuGL.h"
 #include "GrMemory.h"
-#if GR_WIN32_BUILD
-    // need to get wglGetProcAddress
-    #undef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN 1
-    #include <windows.h>
-    #undef WIN32_LEAN_AND_MEAN
-#endif
 
-
-static const GLuint GR_MAX_GLUINT = ~0;
-static const GLint  GR_INVAL_GLINT = ~0;
+static const GrGLuint GR_MAX_GLUINT = ~0;
+static const GrGLint  GR_INVAL_GLINT = ~0;
 
 // we use a spare texture unit to avoid
 // mucking with the state of any of the stages.
@@ -34,21 +26,21 @@ static const int SPARE_TEX_UNIT = GrGpuGL::kNumStages;
 
 #define SKIP_CACHE_CHECK    true
 
-static const GLenum gXfermodeCoeff2Blend[] = {
-    GL_ZERO,
-    GL_ONE,
-    GL_SRC_COLOR,
-    GL_ONE_MINUS_SRC_COLOR,
-    GL_DST_COLOR,
-    GL_ONE_MINUS_DST_COLOR,
-    GL_SRC_ALPHA,
-    GL_ONE_MINUS_SRC_ALPHA,
-    GL_DST_ALPHA,
-    GL_ONE_MINUS_DST_ALPHA,
-    GL_CONSTANT_COLOR,
-    GL_ONE_MINUS_CONSTANT_COLOR,
-    GL_CONSTANT_ALPHA,
-    GL_ONE_MINUS_CONSTANT_ALPHA,
+static const GrGLenum gXfermodeCoeff2Blend[] = {
+    GR_GL_ZERO,
+    GR_GL_ONE,
+    GR_GL_SRC_COLOR,
+    GR_GL_ONE_MINUS_SRC_COLOR,
+    GR_GL_DST_COLOR,
+    GR_GL_ONE_MINUS_DST_COLOR,
+    GR_GL_SRC_ALPHA,
+    GR_GL_ONE_MINUS_SRC_ALPHA,
+    GR_GL_DST_ALPHA,
+    GR_GL_ONE_MINUS_DST_ALPHA,
+    GR_GL_CONSTANT_COLOR,
+    GR_GL_ONE_MINUS_CONSTANT_COLOR,
+    GR_GL_CONSTANT_ALPHA,
+    GR_GL_ONE_MINUS_CONSTANT_ALPHA,
 };
 
 bool GrGpuGL::BlendCoefReferencesConstant(GrBlendCoeff coeff) {
@@ -147,35 +139,35 @@ static bool gPrintStartupSpew;
 
 static bool fbo_test(int w, int h) {
 
-    GLint savedFBO;
-    GLint savedTexUnit;
-    GR_GL_GetIntegerv(GL_ACTIVE_TEXTURE, &savedTexUnit);
-    GR_GL_GetIntegerv(GR_FRAMEBUFFER_BINDING, &savedFBO);
+    GrGLint savedFBO;
+    GrGLint savedTexUnit;
+    GR_GL_GetIntegerv(GR_GL_ACTIVE_TEXTURE, &savedTexUnit);
+    GR_GL_GetIntegerv(GR_GL_FRAMEBUFFER_BINDING, &savedFBO);
 
-    GR_GL(ActiveTexture(GL_TEXTURE0 + SPARE_TEX_UNIT));
+    GR_GL(ActiveTexture(GR_GL_TEXTURE0 + SPARE_TEX_UNIT));
 
-    GLuint testFBO;
+    GrGLuint testFBO;
     GR_GL(GenFramebuffers(1, &testFBO));
-    GR_GL(BindFramebuffer(GR_FRAMEBUFFER, testFBO));
-    GLuint testRTTex;
+    GR_GL(BindFramebuffer(GR_GL_FRAMEBUFFER, testFBO));
+    GrGLuint testRTTex;
     GR_GL(GenTextures(1, &testRTTex));
-    GR_GL(BindTexture(GL_TEXTURE_2D, testRTTex));
+    GR_GL(BindTexture(GR_GL_TEXTURE_2D, testRTTex));
     // some implementations require texture to be mip-map complete before
     // FBO with level 0 bound as color attachment will be framebuffer complete.
-    GR_GL(TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    GR_GL(TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h,
-                     0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-    GR_GL(BindTexture(GL_TEXTURE_2D, 0));
-    GR_GL(FramebufferTexture2D(GR_FRAMEBUFFER, GR_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, testRTTex, 0));
-    GLenum status = GR_GL(CheckFramebufferStatus(GR_FRAMEBUFFER));
+    GR_GL(TexParameteri(GR_GL_TEXTURE_2D, GR_GL_TEXTURE_MIN_FILTER, GR_GL_NEAREST));
+    GR_GL(TexImage2D(GR_GL_TEXTURE_2D, 0, GR_GL_RGBA, w, h,
+                     0, GR_GL_RGBA, GR_GL_UNSIGNED_BYTE, NULL));
+    GR_GL(BindTexture(GR_GL_TEXTURE_2D, 0));
+    GR_GL(FramebufferTexture2D(GR_GL_FRAMEBUFFER, GR_GL_COLOR_ATTACHMENT0,
+                               GR_GL_TEXTURE_2D, testRTTex, 0));
+    GrGLenum status = GR_GL(CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
     GR_GL(DeleteFramebuffers(1, &testFBO));
     GR_GL(DeleteTextures(1, &testRTTex));
 
     GR_GL(ActiveTexture(savedTexUnit));
-    GR_GL(BindFramebuffer(GR_FRAMEBUFFER, savedFBO));
+    GR_GL(BindFramebuffer(GR_GL_FRAMEBUFFER, savedFBO));
 
-    return status == GR_FRAMEBUFFER_COMPLETE;
+    return status == GR_GL_FRAMEBUFFER_COMPLETE;
 }
 
 GrGpuGL::GrGpuGL() {
@@ -184,31 +176,31 @@ GrGpuGL::GrGpuGL() {
         GrPrintf("------------------------- create GrGpuGL %p --------------\n",
                  this);
         GrPrintf("------ VENDOR %s\n",
-                 GrGLGetGLInterface()->fGetString(GL_VENDOR));
+                 GrGLGetGLInterface()->fGetString(GR_GL_VENDOR));
         GrPrintf("------ RENDERER %s\n",
-                 GrGLGetGLInterface()->fGetString(GL_RENDERER));
+                 GrGLGetGLInterface()->fGetString(GR_GL_RENDERER));
         GrPrintf("------ VERSION %s\n",
-                 GrGLGetGLInterface()->fGetString(GL_VERSION));
+                 GrGLGetGLInterface()->fGetString(GR_GL_VERSION));
         GrPrintf("------ EXTENSIONS\n %s \n",
-                 GrGLGetGLInterface()->fGetString(GL_EXTENSIONS));
+                 GrGLGetGLInterface()->fGetString(GR_GL_EXTENSIONS));
     }
 
     GrGLClearErr();
 
     resetDirtyFlags();
 
-    GLint maxTextureUnits;
+    GrGLint maxTextureUnits;
     // check FS and fixed-function texture unit limits
     // we only use textures in the fragment stage currently.
     // checks are > to make sure we have a spare unit.
-#if GR_SUPPORT_GLDESKTOP || GR_SUPPORT_GLES2
-    GR_GL_GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxTextureUnits);
-    GrAssert(maxTextureUnits > kNumStages);
-#endif
-#if GR_SUPPORT_GLDESKTOP || GR_SUPPORT_GLES1
-    GR_GL_GetIntegerv(GL_MAX_TEXTURE_UNITS, &maxTextureUnits);
-    GrAssert(maxTextureUnits > kNumStages);
-#endif
+    if (GR_GL_SUPPORT_DESKTOP || GR_GL_SUPPORT_ES2) {
+        GR_GL_GetIntegerv(GR_GL_MAX_TEXTURE_IMAGE_UNITS, &maxTextureUnits);
+        GrAssert(maxTextureUnits > kNumStages);
+    }
+    if (GR_GL_SUPPORT_DESKTOP || GR_GL_SUPPORT_ES1) {
+        GR_GL_GetIntegerv(GR_GL_MAX_TEXTURE_UNITS, &maxTextureUnits);
+        GrAssert(maxTextureUnits > kNumStages);
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // Check for supported features.
@@ -216,12 +208,12 @@ GrGpuGL::GrGpuGL() {
     int major, minor;
     gl_version(&major, &minor);
 
-    GLint numFormats;
-    GR_GL_GetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &numFormats);
-    GrAutoSTMalloc<10, GLint> formats(numFormats);
-    GR_GL_GetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, formats);
+    GrGLint numFormats;
+    GR_GL_GetIntegerv(GR_GL_NUM_COMPRESSED_TEXTURE_FORMATS, &numFormats);
+    GrAutoSTMalloc<10, GrGLint> formats(numFormats);
+    GR_GL_GetIntegerv(GR_GL_COMPRESSED_TEXTURE_FORMATS, formats);
     for (int i = 0; i < numFormats; ++i) {
-        if (formats[i] == GR_PALETTE8_RGBA8) {
+        if (formats[i] == GR_GL_PALETTE8_RGBA8) {
             f8bitPaletteSupport = true;
             break;
         }
@@ -238,41 +230,43 @@ GrGpuGL::GrGpuGL() {
 
     memset(fAASamples, 0, sizeof(fAASamples));
     fMSFBOType = kNone_MSFBO;
-    if (has_gl_extension("GL_IMG_multisampled_render_to_texture")) {
-        fMSFBOType = kIMG_MSFBO;
-        if (gPrintStartupSpew) {
-            GrPrintf("MSAA Support: IMG ES EXT.\n");
+    if (GR_GL_SUPPORT_ES) {
+       if (has_gl_extension("GL_CHROMIUM_framebuffer_multisample")) {
+           // chrome's extension is equivalent to the EXT msaa
+           // and fbo_blit extensions.
+            fMSFBOType = kDesktopEXT_MSFBO;
+       } else if (has_gl_extension("GL_APPLE_framebuffer_multisample")) {
+            fMSFBOType = kAppleES_MSFBO;
+        }
+    } else {
+        GrAssert(GR_GL_SUPPORT_DESKTOP);
+        if ((major >= 3) || has_gl_extension("GL_ARB_framebuffer_object")) {
+            fMSFBOType = kDesktopARB_MSFBO;
+        } else if (has_gl_extension("GL_EXT_framebuffer_multisample") &&
+                   has_gl_extension("GL_EXT_framebuffer_blit")) {
+            fMSFBOType = kDesktopEXT_MSFBO;
         }
     }
-    else if (has_gl_extension("GL_APPLE_framebuffer_multisample")) {
-        fMSFBOType = kApple_MSFBO;
-        if (gPrintStartupSpew) {
-            GrPrintf("MSAA Support: APPLE ES EXT.\n");
-        }
-    }
-#if GR_SUPPORT_GLDESKTOP
-    else if ((major >= 3) ||
-             has_gl_extension("GL_ARB_framebuffer_object") ||
-             (has_gl_extension("GL_EXT_framebuffer_multisample") &&
-              has_gl_extension("GL_EXT_framebuffer_blit"))) {
-        fMSFBOType = kDesktop_MSFBO;
-         if (gPrintStartupSpew) {
-             GrPrintf("MSAA Support: DESKTOP\n");
-         }
-    }
-#endif
-    else {
-        if (gPrintStartupSpew) {
-            GrPrintf("MSAA Support: NONE\n");
+    if (gPrintStartupSpew) {
+        switch (fMSFBOType) {
+            case kNone_MSFBO:
+                GrPrintf("MSAA Support: NONE\n");
+                break;
+            case kDesktopARB_MSFBO:
+                GrPrintf("MSAA Support: DESKTOP ARB.\n");
+                break;
+            case kDesktopEXT_MSFBO:
+                GrPrintf("MSAA Support: DESKTOP EXT.\n");
+                break;
+            case kAppleES_MSFBO:
+                GrPrintf("MSAA Support: APPLE ES.\n");
+                break;
         }
     }
 
     if (kNone_MSFBO != fMSFBOType) {
-        GLint maxSamples;
-        GLenum maxSampleGetter = (kIMG_MSFBO == fMSFBOType) ?
-                                                            GR_MAX_SAMPLES_IMG :
-                                                            GR_MAX_SAMPLES;
-        GR_GL_GetIntegerv(maxSampleGetter, &maxSamples);
+        GrGLint maxSamples;
+        GR_GL_GetIntegerv(GR_GL_MAX_SAMPLES, &maxSamples);
         if (maxSamples > 1 ) {
             fAASamples[kNone_AALevel] = 0;
             fAASamples[kLow_AALevel] = GrMax(2,
@@ -288,83 +282,84 @@ GrGpuGL::GrGpuGL() {
         }
     }
 
-#if GR_SUPPORT_GLDESKTOP
-    fHasStencilWrap = (major >= 2 || (major == 1 && minor >= 4)) ||
-                      has_gl_extension("GL_EXT_stencil_wrap");
-#else
-    fHasStencilWrap = (major >= 2) || has_gl_extension("GL_OES_stencil_wrap");
-#endif
+    if (GR_GL_SUPPORT_DESKTOP) {
+        fHasStencilWrap = (major >= 2 || (major == 1 && minor >= 4)) ||
+                          has_gl_extension("GL_EXT_stencil_wrap");
+    } else {
+        fHasStencilWrap = (major >= 2) || has_gl_extension("GL_OES_stencil_wrap");
+    }
     if (gPrintStartupSpew) {
         GrPrintf("Stencil Wrap: %s\n", (fHasStencilWrap ? "YES" : "NO"));
     }
 
-#if GR_SUPPORT_GLDESKTOP
-    // we could also look for GL_ATI_separate_stencil extension or
-    // GL_EXT_stencil_two_side but they use different function signatures
-    // than GL2.0+ (and than each other).
-    fTwoSidedStencilSupport = (major >= 2);
-    // supported on GL 1.4 and higher or by extension
-    fStencilWrapOpsSupport = (major > 1) ||
-                             ((1 == major) && (minor >= 4)) ||
-                              has_gl_extension("GL_EXT_stencil_wrap");
-#else
-    // ES 2 has two sided stencil but 1.1 doesn't. There doesn't seem to be
-    // an ES1 extension.
-    fTwoSidedStencilSupport = (major >= 2);
-    // stencil wrap support is in ES2, ES1 requires extension.
-    fStencilWrapOpsSupport = (major > 1) ||
-                              has_gl_extension("GL_OES_stencil_wrap");
-
-#endif
+    if (GR_GL_SUPPORT_DESKTOP) {
+        // we could also look for GL_ATI_separate_stencil extension or
+        // GL_EXT_stencil_two_side but they use different function signatures
+        // than GL2.0+ (and than each other).
+        fTwoSidedStencilSupport = (major >= 2);
+        // supported on GL 1.4 and higher or by extension
+        fStencilWrapOpsSupport = (major > 1) ||
+                                 ((1 == major) && (minor >= 4)) ||
+                                  has_gl_extension("GL_EXT_stencil_wrap");
+    } else {
+        // ES 2 has two sided stencil but 1.1 doesn't. There doesn't seem to be
+        // an ES1 extension.
+        fTwoSidedStencilSupport = (major >= 2);
+        // stencil wrap support is in ES2, ES1 requires extension.
+        fStencilWrapOpsSupport = (major > 1) ||
+                                  has_gl_extension("GL_OES_stencil_wrap");
+    }
     if (gPrintStartupSpew) {
         GrPrintf("Stencil Caps: TwoSide: %s, Wrap: %s\n",
                 (fTwoSidedStencilSupport ? "YES" : "NO"),
                 (fStencilWrapOpsSupport ? "YES" : "NO"));
     }
 
-#if GR_SUPPORT_GLDESKTOP
-    fRGBA8Renderbuffer = true;
-#else
-    fRGBA8Renderbuffer = has_gl_extension("GL_OES_rgb8_rgba8");
-#endif
+    if (GR_GL_SUPPORT_DESKTOP) {
+        fRGBA8Renderbuffer = true;
+    } else {
+        fRGBA8Renderbuffer = has_gl_extension("GL_OES_rgb8_rgba8");
+    }
     if (gPrintStartupSpew) {
         GrPrintf("RGBA Renderbuffer: %s\n", (fRGBA8Renderbuffer ? "YES" : "NO"));
     }
 
-#if GR_SUPPORT_GLES
-    if (GR_GL_32BPP_COLOR_FORMAT == GR_BGRA) {
-        GrAssert(has_gl_extension("GL_EXT_texture_format_BGRA8888"));
-    }
-#endif
 
-#if GR_SUPPORT_GLDESKTOP
-    fBufferLockSupport = true; // we require VBO support and the desktop VBO
-                               // extension includes glMapBuffer.
-#else
-    fBufferLockSupport = has_gl_extension("GL_OES_mapbuffer");
-#endif
+    if (GR_GL_SUPPORT_ES) {
+        if (GR_GL_32BPP_COLOR_FORMAT == GR_GL_BGRA) {
+            GrAssert(has_gl_extension("GL_EXT_texture_format_BGRA8888"));
+        }
+    }
+
+    if (GR_GL_SUPPORT_DESKTOP) {
+        fBufferLockSupport = true; // we require VBO support and the desktop VBO
+                                   // extension includes glMapBuffer.
+    } else {
+        fBufferLockSupport = has_gl_extension("GL_OES_mapbuffer");
+    }
 
     if (gPrintStartupSpew) {
         GrPrintf("Map Buffer: %s\n", (fBufferLockSupport ? "YES" : "NO"));
     }
 
-#if GR_SUPPORT_GLDESKTOP
-    if (major >= 2 || has_gl_extension("GL_ARB_texture_non_power_of_two")) {
-        fNPOTTextureTileSupport = true;
-        fNPOTTextureSupport = true;
+    if (GR_GL_SUPPORT_DESKTOP) {
+        if (major >= 2 || has_gl_extension("GL_ARB_texture_non_power_of_two")) {
+            fNPOTTextureTileSupport = true;
+            fNPOTTextureSupport = true;
+        } else {
+            fNPOTTextureTileSupport = false;
+            fNPOTTextureSupport = false;
+        }
     } else {
-        fNPOTTextureTileSupport = false;
-        fNPOTTextureSupport = false;
+        if (major >= 2) {
+            fNPOTTextureSupport = true;
+            fNPOTTextureTileSupport = has_gl_extension("GL_OES_texture_npot");
+        } else {
+            fNPOTTextureSupport =
+                        has_gl_extension("GL_APPLE_texture_2D_limited_npot");
+            fNPOTTextureTileSupport = false;
+        }
     }
-#else
-    if (major >= 2) {
-        fNPOTTextureSupport = true;
-        fNPOTTextureTileSupport = has_gl_extension("GL_OES_texture_npot");
-    } else {
-        fNPOTTextureSupport = has_gl_extension("GL_APPLE_texture_2D_limited_npot");
-        fNPOTTextureTileSupport = false;
-    }
-#endif
 
     ////////////////////////////////////////////////////////////////////////////
     // Experiments to determine limitations that can't be queried. TODO: Make
@@ -412,21 +407,25 @@ GrGpuGL::GrGpuGL() {
         }
     }
 
+    GR_GL_GetIntegerv(GR_GL_MAX_TEXTURE_SIZE, &fMaxTextureDimension);
+
     /* The iPhone 4 has a restriction that for an FBO with texture color
        attachment with height <= 8 then the width must be <= height. Here
        we look for such a limitation.
      */
     fMinRenderTargetHeight = GR_INVAL_GLINT;
-    GLint maxRenderSize;
-    GR_GL_GetIntegerv(GR_MAX_RENDERBUFFER_SIZE, &maxRenderSize);
+    GrGLint maxRenderSize;
+    GR_GL_GetIntegerv(GR_GL_MAX_RENDERBUFFER_SIZE, &maxRenderSize);
+    // fbo_test creates FBOs with texture bound to the color attachment
+    maxRenderSize = GrMin(maxRenderSize, fMaxTextureDimension);
 
     if (gPrintStartupSpew) {
         GrPrintf("Small height FBO texture experiments\n");
     }
 
-    for (GLuint i = 1; i <= 256; fNPOTRenderTargetSupport ? ++i : i *= 2) {
-        GLuint w = maxRenderSize;
-        GLuint h = i;
+    for (GrGLuint i = 1; i <= 256; fNPOTRenderTargetSupport ? ++i : i *= 2) {
+        GrGLuint w = maxRenderSize;
+        GrGLuint h = i;
         if (fbo_test(w, h)) {
             if (gPrintStartupSpew) {
                 GrPrintf("\t[%d, %d]: PASSED\n", w, h);
@@ -445,9 +444,9 @@ GrGpuGL::GrGpuGL() {
         GrPrintf("Small width FBO texture experiments\n");
     }
     fMinRenderTargetWidth = GR_MAX_GLUINT;
-    for (GLuint i = 1; i <= 256; fNPOTRenderTargetSupport ? i *= 2 : ++i) {
-        GLuint w = i;
-        GLuint h = maxRenderSize;
+    for (GrGLuint i = 1; i <= 256; fNPOTRenderTargetSupport ? i *= 2 : ++i) {
+        GrGLuint w = i;
+        GrGLuint h = maxRenderSize;
         if (fbo_test(w, h)) {
             if (gPrintStartupSpew) {
                 GrPrintf("\t[%d, %d]: PASSED\n", w, h);
@@ -461,8 +460,6 @@ GrGpuGL::GrGpuGL() {
         }
     }
     GrAssert(GR_INVAL_GLINT != fMinRenderTargetWidth);
-
-    GR_GL_GetIntegerv(GL_MAX_TEXTURE_SIZE, &fMaxTextureDimension);
 }
 
 GrGpuGL::~GrGpuGL() {
@@ -471,24 +468,26 @@ GrGpuGL::~GrGpuGL() {
 void GrGpuGL::resetContext() {
     // We detect cases when blending is effectively off
     fHWBlendDisabled = false;
-    GR_GL(Enable(GL_BLEND));
+    GR_GL(Enable(GR_GL_BLEND));
 
     // we don't use the zb at all
-    GR_GL(Disable(GL_DEPTH_TEST));
-    GR_GL(DepthMask(GL_FALSE));
+    GR_GL(Disable(GR_GL_DEPTH_TEST));
+    GR_GL(DepthMask(GR_GL_FALSE));
 
-    GR_GL(Disable(GL_CULL_FACE));
-    GR_GL(FrontFace(GL_CCW));
+    GR_GL(Disable(GR_GL_CULL_FACE));
+    GR_GL(FrontFace(GR_GL_CCW));
     fHWDrawState.fDrawFace = kBoth_DrawFace;
 
-    GR_GL(Disable(GL_DITHER));
-#if GR_SUPPORT_GLDESKTOP
-    GR_GL(Disable(GL_LINE_SMOOTH));
-    GR_GL(Disable(GL_POINT_SMOOTH));
-    GR_GL(Disable(GL_MULTISAMPLE));
-#endif
+    GR_GL(Disable(GR_GL_DITHER));
+    if (GR_GL_SUPPORT_DESKTOP) {
+        GR_GL(Disable(GR_GL_LINE_SMOOTH));
+        GR_GL(Disable(GR_GL_POINT_SMOOTH));
+        GR_GL(Disable(GR_GL_MULTISAMPLE));
+        fHWAAState.fMSAAEnabled = false;
+        fHWAAState.fSmoothLineEnabled = false;
+    }
 
-    GR_GL(ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE));
+    GR_GL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
     fHWDrawState.fFlagBits = 0;
 
     // we only ever use lines in hairline mode
@@ -519,7 +518,7 @@ void GrGpuGL::resetContext() {
 
     fHWBounds.fScissorRect.invalidate();
     fHWBounds.fScissorEnabled = false;
-    GR_GL(Disable(GL_SCISSOR_TEST));
+    GR_GL(Disable(GR_GL_SCISSOR_TEST));
     fHWBounds.fViewportRect.invalidate();
 
     fHWDrawState.fStencilSettings.invalidate();
@@ -528,17 +527,85 @@ void GrGpuGL::resetContext() {
 
     fHWGeometryState.fIndexBuffer = NULL;
     fHWGeometryState.fVertexBuffer = NULL;
-    GR_GL(BindBuffer(GL_ARRAY_BUFFER, 0));
-    GR_GL(BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+    GR_GL(BindBuffer(GR_GL_ARRAY_BUFFER, 0));
+    GR_GL(BindBuffer(GR_GL_ELEMENT_ARRAY_BUFFER, 0));
     fHWGeometryState.fArrayPtrsDirty = true;
 
-    GR_GL(ColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE));
+    GR_GL(ColorMask(GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE, GR_GL_TRUE));
     fHWDrawState.fRenderTarget = NULL;
 }
 
-GrRenderTarget* GrGpuGL::createPlatformRenderTargetHelper(
+GrResource* GrGpuGL::onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc) {
+
+    bool isTexture = kTexture_GrPlatformSurfaceType == desc.fSurfaceType ||
+                     kTextureRenderTarget_GrPlatformSurfaceType == desc.fSurfaceType;
+    bool isRenderTarget = kRenderTarget_GrPlatformSurfaceType == desc.fSurfaceType ||
+                          kTextureRenderTarget_GrPlatformSurfaceType == desc.fSurfaceType;
+
+    GrGLRenderTarget::GLRenderTargetIDs rtIDs;
+    if (isRenderTarget) {
+        rtIDs.fRTFBOID = desc.fPlatformRenderTarget;
+        if (kIsMultisampled_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags) {
+            if (kGrCanResolve_GrPlatformRenderTargetFlagBit  & desc.fRenderTargetFlags) {
+                rtIDs.fTexFBOID = desc.fPlatformResolveDestination;
+            } else {
+                GrAssert(!isTexture); // this should have been filtered by GrContext
+                rtIDs.fTexFBOID = GrGLRenderTarget::kUnresolvableFBOID;
+            }
+        } else {
+            rtIDs.fTexFBOID = desc.fPlatformRenderTarget;
+        }
+        // we don't know what the RB ids are without glGets and we don't care
+        // since we aren't responsible for deleting them.
+        rtIDs.fStencilRenderbufferID = 0;
+        rtIDs.fMSColorRenderbufferID = 0;
+
+        rtIDs.fOwnIDs = false;
+    } else {
+        rtIDs.reset();
+    }
+
+    if (isTexture) {
+        GrGLTexture::GLTextureDesc texDesc;
+        GrGLenum dontCare;
+        if (!canBeTexture(desc.fConfig, &dontCare,
+                         &texDesc.fUploadFormat,
+                         &texDesc.fUploadType)) {
+            return NULL;
+        }
+
+        GrGLTexture::TexParams params;
+
+        texDesc.fAllocWidth  = texDesc.fContentWidth  = desc.fWidth;
+        texDesc.fAllocHeight = texDesc.fContentHeight = desc.fHeight;
+
+        texDesc.fFormat             = texDesc.fFormat;
+        texDesc.fOrientation        = GrGLTexture::kBottomUp_Orientation;
+        texDesc.fStencilBits        = desc.fStencilBits;
+        texDesc.fTextureID          = desc.fPlatformTexture;
+        texDesc.fUploadByteCount    = GrBytesPerPixel(desc.fConfig);
+        texDesc.fOwnsID             = false;
+
+        params.invalidate(); // rather than do glGets.
+
+        return new GrGLTexture(this, texDesc, rtIDs, params);
+    } else {
+        GrGLIRect viewport;
+        viewport.fLeft   = 0;
+        viewport.fBottom = 0;
+        viewport.fWidth  = desc.fWidth;
+        viewport.fHeight = desc.fHeight;
+
+        return new GrGLRenderTarget(this, rtIDs, NULL, desc.fStencilBits,
+                                    kIsMultisampled_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags,
+                                    viewport, NULL);
+    }
+}
+
+GrRenderTarget* GrGpuGL::onCreatePlatformRenderTarget(
                                                 intptr_t platformRenderTarget,
                                                 int stencilBits,
+                                                bool isMultisampled,
                                                 int width,
                                                 int height) {
     GrGLRenderTarget::GLRenderTargetIDs rtIDs;
@@ -554,54 +621,71 @@ GrRenderTarget* GrGpuGL::createPlatformRenderTargetHelper(
     viewport.fWidth     = width;
     viewport.fHeight    = height;
 
-    rtIDs.fRTFBOID  = (GLuint)platformRenderTarget;
-    rtIDs.fTexFBOID = (GLuint)platformRenderTarget;
+    rtIDs.fRTFBOID  = (GrGLuint)platformRenderTarget;
+    rtIDs.fTexFBOID = (GrGLuint)platformRenderTarget;
 
-    return new GrGLRenderTarget(rtIDs, NULL, stencilBits, viewport, NULL, this);
+    return new GrGLRenderTarget(this, rtIDs, NULL, stencilBits, 
+                                isMultisampled, viewport, NULL);
 }
 
-GrRenderTarget* GrGpuGL::createRenderTargetFrom3DApiStateHelper() {
+GrRenderTarget* GrGpuGL::onCreateRenderTargetFrom3DApiState() {
 
     GrGLRenderTarget::GLRenderTargetIDs rtIDs;
 
-    GR_GL_GetIntegerv(GR_FRAMEBUFFER_BINDING, (GLint*)&rtIDs.fRTFBOID);
+    GR_GL_GetIntegerv(GR_GL_FRAMEBUFFER_BINDING, (GrGLint*)&rtIDs.fRTFBOID);
     rtIDs.fTexFBOID = rtIDs.fRTFBOID;
     rtIDs.fMSColorRenderbufferID = 0;
     rtIDs.fStencilRenderbufferID = 0;
 
     GrGLIRect viewport;
     viewport.setFromGLViewport();
-    GLuint stencilBits;
-    GR_GL_GetIntegerv(GL_STENCIL_BITS, (GLint*)&stencilBits);
+    GrGLuint stencilBits;
+    GR_GL_GetIntegerv(GR_GL_STENCIL_BITS, (GrGLint*)&stencilBits);
+
+    GrGLint samples;
+    GR_GL_GetIntegerv(GR_GL_SAMPLES, &samples);
 
     rtIDs.fOwnIDs = false;
 
-    return new GrGLRenderTarget(rtIDs, NULL, stencilBits, viewport, NULL, this);
+    return new GrGLRenderTarget(this, rtIDs, NULL, stencilBits, 
+                                (samples > 0), viewport, NULL);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static const GLuint UNKNOWN_BITS = ~0;
+static const GrGLuint UNKNOWN_BITS = ~0;
 
-// defines stencil formats from more to less preferred
-static const struct {
-    GLenum  fEnum;
-    GLuint  fBits;
-} gStencilFormats[] = {
-    {GR_STENCIL_INDEX8,     8},
-
-#if GR_SUPPORT_GLDESKTOP
-    {GR_STENCIL_INDEX16,    16},
-#endif
-
-    {GR_DEPTH24_STENCIL8,   8},
-    {GR_STENCIL_INDEX4,     4},
-
-#if GR_SUPPORT_GLDESKTOP
-    {GL_STENCIL_INDEX,      UNKNOWN_BITS},
-    {GR_DEPTH_STENCIL,      UNKNOWN_BITS}
-#endif
+struct StencilFormat {
+    GrGLenum  fEnum;
+    GrGLuint  fBits;
+    bool      fPacked;
 };
+
+const StencilFormat* GrGLStencilFormats() {
+    // defines stencil formats from more to less preferred
+    static const StencilFormat desktopStencilFormats[] = {
+        {GR_GL_STENCIL_INDEX8,     8,            false},
+        {GR_GL_STENCIL_INDEX16,    16,           false},
+        {GR_GL_DEPTH24_STENCIL8,   8,            true },
+        {GR_GL_STENCIL_INDEX4,     4,            false},
+        {GR_GL_STENCIL_INDEX,      UNKNOWN_BITS, false},
+        {GR_GL_DEPTH_STENCIL,      UNKNOWN_BITS, true },
+        {0, 0, false}
+    };
+
+    static const StencilFormat esStencilFormats[] = {
+        {GR_GL_STENCIL_INDEX8,     8,   false},
+        {GR_GL_DEPTH24_STENCIL8,   8,   true },
+        {GR_GL_STENCIL_INDEX4,     4,   false},
+        {0, 0, false}
+    };
+
+    if (GR_GL_SUPPORT_DESKTOP) {
+        return desktopStencilFormats;
+    } else {
+        return esStencilFormats;
+    }
+}
 
 // good to set a break-point here to know when createTexture fails
 static GrTexture* return_null_texture() {
@@ -615,24 +699,24 @@ static size_t as_size_t(int x) {
 }
 #endif
 
-GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
-                                        const void* srcData,
-                                        size_t rowBytes) {
+GrTexture* GrGpuGL::onCreateTexture(const TextureDesc& desc,
+                                    const void* srcData,
+                                    size_t rowBytes) {
 
 #if GR_COLLECT_STATS
     ++fStats.fTextureCreateCnt;
 #endif
 
-    setSpareTextureUnit();
+    this->setSpareTextureUnit();
 
     static const GrGLTexture::TexParams DEFAULT_PARAMS = {
-        GL_NEAREST,
-        GL_CLAMP_TO_EDGE,
-        GL_CLAMP_TO_EDGE
+        GR_GL_NEAREST,
+        GR_GL_CLAMP_TO_EDGE,
+        GR_GL_CLAMP_TO_EDGE
     };
 
     GrGLTexture::GLTextureDesc glDesc;
-    GLenum internalFormat;
+    GrGLenum internalFormat;
 
     glDesc.fContentWidth  = desc.fWidth;
     glDesc.fContentHeight = desc.fHeight;
@@ -640,6 +724,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
     glDesc.fAllocHeight   = desc.fHeight;
     glDesc.fStencilBits   = 0;
     glDesc.fFormat        = desc.fFormat;
+    glDesc.fOwnsID        = true;
 
     bool renderTarget = 0 != (desc.fFlags & kRenderTarget_TextureFlag);
     if (!canBeTexture(desc.fFormat,
@@ -650,7 +735,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
     }
 
     GrAssert(as_size_t(desc.fAALevel) < GR_ARRAY_COUNT(fAASamples));
-    GLint samples = fAASamples[desc.fAALevel];
+    GrGLint samples = fAASamples[desc.fAALevel];
     if (kNone_MSFBO == fMSFBOType && desc.fAALevel != kNone_AALevel) {
         GrPrintf("AA RT requested but not supported on this platform.");
     }
@@ -660,36 +745,37 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
         return return_null_texture();
     }
 
-    glDesc.fUploadByteCount = GrTexture::BytesPerPixel(desc.fFormat);
+    glDesc.fUploadByteCount = GrBytesPerPixel(desc.fFormat);
+
+    // in case we need a temporary, trimmed copy of the src pixels
+    GrAutoSMalloc<128 * 128> trimStorage;
 
     /*
      *  check if our srcData has extra bytes past each row. If so, we need
      *  to trim those off here, since GL doesn't let us pass the rowBytes as
      *  a parameter to glTexImage2D
      */
-#if GR_SUPPORT_GLDESKTOP
-    if (srcData) {
-        GR_GL(PixelStorei(GL_UNPACK_ROW_LENGTH,
-                          rowBytes / glDesc.fUploadByteCount));
-    }
-#else
-    GrAutoSMalloc<128 * 128> trimStorage;
-    size_t trimRowBytes = desc.fWidth * glDesc.fUploadByteCount;
-    if (srcData && (trimRowBytes < rowBytes)) {
-        size_t trimSize = desc.fHeight * trimRowBytes;
-        trimStorage.realloc(trimSize);
-        // now copy the data into our new storage, skipping the trailing bytes
-        const char* src = (const char*)srcData;
-        char* dst = (char*)trimStorage.get();
-        for (uint32_t y = 0; y < desc.fHeight; y++) {
-            memcpy(dst, src, trimRowBytes);
-            src += rowBytes;
-            dst += trimRowBytes;
+    if (GR_GL_SUPPORT_DESKTOP) {
+        if (srcData) {
+            GR_GL(PixelStorei(GR_GL_UNPACK_ROW_LENGTH,
+                              rowBytes / glDesc.fUploadByteCount));
         }
-        // now point srcData to our trimmed version
-        srcData = trimStorage.get();
+    } else {
+        size_t trimRowBytes = desc.fWidth * glDesc.fUploadByteCount;
+        if (srcData && (trimRowBytes < rowBytes)) {
+            // copy the data into our new storage, skipping the trailing bytes
+            size_t trimSize = desc.fHeight * trimRowBytes;
+            const char* src = (const char*)srcData;
+            char* dst = (char*)trimStorage.realloc(trimSize);
+            for (uint32_t y = 0; y < desc.fHeight; y++) {
+                memcpy(dst, src, trimRowBytes);
+                src += rowBytes;
+                dst += trimRowBytes;
+            }
+            // now point srcData to our trimmed version
+            srcData = trimStorage.get();
+        }
     }
-#endif
 
     if (renderTarget) {
         if (!this->npotRenderTargetSupport()) {
@@ -706,42 +792,42 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
         glDesc.fAllocHeight = GrNextPow2(desc.fHeight);
     }
 
-    GR_GL(BindTexture(GL_TEXTURE_2D, glDesc.fTextureID));
-    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                        GL_TEXTURE_MAG_FILTER,
+    GR_GL(BindTexture(GR_GL_TEXTURE_2D, glDesc.fTextureID));
+    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                        GR_GL_TEXTURE_MAG_FILTER,
                         DEFAULT_PARAMS.fFilter));
-    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                        GL_TEXTURE_MIN_FILTER,
+    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                        GR_GL_TEXTURE_MIN_FILTER,
                         DEFAULT_PARAMS.fFilter));
-    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                        GL_TEXTURE_WRAP_S,
+    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                        GR_GL_TEXTURE_WRAP_S,
                         DEFAULT_PARAMS.fWrapS));
-    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                        GL_TEXTURE_WRAP_T,
+    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                        GR_GL_TEXTURE_WRAP_T,
                         DEFAULT_PARAMS.fWrapT));
 
-    GR_GL(PixelStorei(GL_UNPACK_ALIGNMENT, glDesc.fUploadByteCount));
-    if (GrTexture::kIndex_8_PixelConfig == desc.fFormat &&
+    GR_GL(PixelStorei(GR_GL_UNPACK_ALIGNMENT, glDesc.fUploadByteCount));
+    if (kIndex_8_GrPixelConfig == desc.fFormat &&
         supports8BitPalette()) {
         // ES only supports CompressedTexImage2D, not CompressedTexSubimage2D
         GrAssert(desc.fWidth == glDesc.fAllocWidth);
         GrAssert(desc.fHeight == glDesc.fAllocHeight);
-        GLsizei imageSize = glDesc.fAllocWidth * glDesc.fAllocHeight +
-                            kColorTableSize;
-        GR_GL(CompressedTexImage2D(GL_TEXTURE_2D, 0, glDesc.fUploadFormat,
+        GrGLsizei imageSize = glDesc.fAllocWidth * glDesc.fAllocHeight +
+                              kColorTableSize;
+        GR_GL(CompressedTexImage2D(GR_GL_TEXTURE_2D, 0, glDesc.fUploadFormat,
                                    glDesc.fAllocWidth, glDesc.fAllocHeight,
                                    0, imageSize, srcData));
-        GrGL_RestoreResetRowLength();
+        GrGLRestoreResetRowLength();
     } else {
         if (NULL != srcData && (glDesc.fAllocWidth != desc.fWidth ||
                                 glDesc.fAllocHeight != desc.fHeight)) {
-            GR_GL(TexImage2D(GL_TEXTURE_2D, 0, internalFormat,
+            GR_GL(TexImage2D(GR_GL_TEXTURE_2D, 0, internalFormat,
                              glDesc.fAllocWidth, glDesc.fAllocHeight,
                              0, glDesc.fUploadFormat, glDesc.fUploadType, NULL));
-            GR_GL(TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, desc.fWidth,
+            GR_GL(TexSubImage2D(GR_GL_TEXTURE_2D, 0, 0, 0, desc.fWidth,
                                 desc.fHeight, glDesc.fUploadFormat,
                                 glDesc.fUploadType, srcData));
-            GrGL_RestoreResetRowLength();
+            GrGLRestoreResetRowLength();
 
             uint32_t extraW = glDesc.fAllocWidth  - desc.fWidth;
             uint32_t extraH = glDesc.fAllocHeight - desc.fHeight;
@@ -761,7 +847,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
                     memcpy(extraRowStart, lastRowStart, rowSize);
                     extraRowStart += rowSize;
                 }
-                GR_GL(TexSubImage2D(GL_TEXTURE_2D, 0, 0, desc.fHeight, desc.fWidth,
+                GR_GL(TexSubImage2D(GR_GL_TEXTURE_2D, 0, 0, desc.fHeight, desc.fWidth,
                                     extraH, glDesc.fUploadFormat, glDesc.fUploadType,
                                     texels.get()));
             }
@@ -775,7 +861,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
                     }
                     edgeTexel += rowSize;
                 }
-                GR_GL(TexSubImage2D(GL_TEXTURE_2D, 0, desc.fWidth, 0, extraW,
+                GR_GL(TexSubImage2D(GR_GL_TEXTURE_2D, 0, desc.fWidth, 0, extraW,
                                     desc.fHeight, glDesc.fUploadFormat,
                                     glDesc.fUploadType, texels.get()));
             }
@@ -787,16 +873,16 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
                     memcpy(extraTexel, cornerTexel, glDesc.fUploadByteCount);
                     extraTexel += glDesc.fUploadByteCount;
                 }
-                GR_GL(TexSubImage2D(GL_TEXTURE_2D, 0, desc.fWidth, desc.fHeight,
+                GR_GL(TexSubImage2D(GR_GL_TEXTURE_2D, 0, desc.fWidth, desc.fHeight,
                                     extraW, extraH, glDesc.fUploadFormat,
                                     glDesc.fUploadType, texels.get()));
             }
 
         } else {
-            GR_GL(TexImage2D(GL_TEXTURE_2D, 0, internalFormat, glDesc.fAllocWidth,
+            GR_GL(TexImage2D(GR_GL_TEXTURE_2D, 0, internalFormat, glDesc.fAllocWidth,
                              glDesc.fAllocHeight, 0, glDesc.fUploadFormat,
                              glDesc.fUploadType, srcData));
-            GrGL_RestoreResetRowLength();
+            GrGLRestoreResetRowLength();
         }
     }
 
@@ -808,15 +894,15 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
     rtIDs.fRTFBOID = 0;
     rtIDs.fTexFBOID = 0;
     rtIDs.fOwnIDs = true;
-    GLenum msColorRenderbufferFormat = -1;
+    GrGLenum msColorRenderbufferFormat = -1;
 
     if (renderTarget) {
 #if GR_COLLECT_STATS
         ++fStats.fRenderTargetCreateCnt;
 #endif
         bool failed = true;
-        GLenum status;
-        GLint err;
+        GrGLenum status;
+        GrGLint err;
 
         // If need have both RT flag and srcData we have
         // to invert the data before uploading because FBO
@@ -827,11 +913,9 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
         GR_GL(GenFramebuffers(1, &rtIDs.fTexFBOID));
         GrAssert(rtIDs.fTexFBOID);
 
-        // If we are using multisampling and any extension other than the IMG
-        // one we will create two FBOs. We render to one and then resolve to
-        // the texture bound to the other. The IMG extension does an implicit
-        // resolve.
-        if (samples > 1 && kIMG_MSFBO != fMSFBOType && kNone_MSFBO != fMSFBOType) {
+        // If we are using multisampling and we will create two FBOS We render
+        // to one and then resolve to the texture bound to the other.
+        if (samples > 1 && kNone_MSFBO != fMSFBOType) {
             GR_GL(GenFramebuffers(1, &rtIDs.fRTFBOID));
             GrAssert(0 != rtIDs.fRTFBOID);
             GR_GL(GenRenderbuffers(1, &rtIDs.fMSColorRenderbufferID));
@@ -846,138 +930,119 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
         } else {
             rtIDs.fRTFBOID = rtIDs.fTexFBOID;
         }
-        int attempts = 1;
-        if (!(kNoPathRendering_TextureFlag & desc.fFlags)) {
+        if (!(kNoStencil_TextureFlag & desc.fFlags)) {
             GR_GL(GenRenderbuffers(1, &rtIDs.fStencilRenderbufferID));
             GrAssert(0 != rtIDs.fStencilRenderbufferID);
-            attempts = GR_ARRAY_COUNT(gStencilFormats);
         }
 
         // someone suggested that some systems might require
         // unbinding the texture before we call FramebufferTexture2D
         // (seems unlikely)
-        GR_GL(BindTexture(GL_TEXTURE_2D, 0));
+        GR_GL(BindTexture(GR_GL_TEXTURE_2D, 0));
 
-        err = ~GL_NO_ERROR;
-        for (int i = 0; i < attempts; ++i) {
+        err = ~GR_GL_NO_ERROR;
+
+        const StencilFormat* stencilFormats = GrGLStencilFormats();
+        for (int i = 0; 0 != stencilFormats[i].fEnum; ++i) {
             if (rtIDs.fStencilRenderbufferID) {
-                GR_GL(BindRenderbuffer(GR_RENDERBUFFER,
+                GR_GL(BindRenderbuffer(GR_GL_RENDERBUFFER,
                                        rtIDs.fStencilRenderbufferID));
                 if (samples > 1) {
                     GR_GL_NO_ERR(RenderbufferStorageMultisample(
-                                                GR_RENDERBUFFER,
+                                                GR_GL_RENDERBUFFER,
                                                 samples,
-                                                gStencilFormats[i].fEnum,
+                                                stencilFormats[i].fEnum,
                                                 glDesc.fAllocWidth,
                                                 glDesc.fAllocHeight));
                 } else {
-                    GR_GL_NO_ERR(RenderbufferStorage(GR_RENDERBUFFER,
-                                                     gStencilFormats[i].fEnum,
+                    GR_GL_NO_ERR(RenderbufferStorage(GR_GL_RENDERBUFFER,
+                                                     stencilFormats[i].fEnum,
                                                      glDesc.fAllocWidth,
                                                      glDesc.fAllocHeight));
                 }
-                err = glGetError();
-                if (err != GL_NO_ERROR) {
+                err = GrGLGetGLInterface()->fGetError();
+                if (err != GR_GL_NO_ERROR) {
                     continue;
                 }
             }
             if (rtIDs.fRTFBOID != rtIDs.fTexFBOID) {
                 GrAssert(samples > 1);
-                GR_GL(BindRenderbuffer(GR_RENDERBUFFER,
+                GR_GL(BindRenderbuffer(GR_GL_RENDERBUFFER,
                                        rtIDs.fMSColorRenderbufferID));
                 GR_GL_NO_ERR(RenderbufferStorageMultisample(
-                                                   GR_RENDERBUFFER,
+                                                   GR_GL_RENDERBUFFER,
                                                    samples,
                                                    msColorRenderbufferFormat,
                                                    glDesc.fAllocWidth,
                                                    glDesc.fAllocHeight));
-                err = glGetError();
-                if (err != GL_NO_ERROR) {
+                err = GrGLGetGLInterface()->fGetError();
+                if (err != GR_GL_NO_ERROR) {
                     continue;
                 }
             }
-            GR_GL(BindFramebuffer(GR_FRAMEBUFFER, rtIDs.fTexFBOID));
+            GR_GL(BindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs.fTexFBOID));
 
 #if GR_COLLECT_STATS
             ++fStats.fRenderTargetChngCnt;
 #endif
-            if (kIMG_MSFBO == fMSFBOType && samples > 1) {
-                GR_GL(FramebufferTexture2DMultisample(GR_FRAMEBUFFER,
-                                                      GR_COLOR_ATTACHMENT0,
-                                                      GL_TEXTURE_2D,
-                                                      glDesc.fTextureID,
-                                                      0,
-                                                      samples));
-
-            } else {
-                GR_GL(FramebufferTexture2D(GR_FRAMEBUFFER,
-                                           GR_COLOR_ATTACHMENT0,
-                                           GL_TEXTURE_2D,
-                                           glDesc.fTextureID, 0));
-            }
+            GR_GL(FramebufferTexture2D(GR_GL_FRAMEBUFFER,
+                                        GR_GL_COLOR_ATTACHMENT0,
+                                        GR_GL_TEXTURE_2D,
+                                        glDesc.fTextureID, 0));
             if (rtIDs.fRTFBOID != rtIDs.fTexFBOID) {
-                GLenum status = GR_GL(CheckFramebufferStatus(GR_FRAMEBUFFER));
-                if (status != GR_FRAMEBUFFER_COMPLETE) {
+                GrGLenum status = GR_GL(CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
+                if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
                     GrPrintf("-- glCheckFramebufferStatus %x %d %d\n",
                              status, desc.fWidth, desc.fHeight);
                     continue;
                 }
-                GR_GL(BindFramebuffer(GR_FRAMEBUFFER, rtIDs.fRTFBOID));
+                GR_GL(BindFramebuffer(GR_GL_FRAMEBUFFER, rtIDs.fRTFBOID));
             #if GR_COLLECT_STATS
                 ++fStats.fRenderTargetChngCnt;
             #endif
-                GR_GL(FramebufferRenderbuffer(GR_FRAMEBUFFER,
-                                              GR_COLOR_ATTACHMENT0,
-                                              GR_RENDERBUFFER,
+                GR_GL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                              GR_GL_COLOR_ATTACHMENT0,
+                                              GR_GL_RENDERBUFFER,
                                               rtIDs.fMSColorRenderbufferID));
 
             }
             if (rtIDs.fStencilRenderbufferID) {
                 // bind the stencil to rt fbo if present, othewise the tex fbo
-                GR_GL(FramebufferRenderbuffer(GR_FRAMEBUFFER,
-                                              GR_STENCIL_ATTACHMENT,
-                                              GR_RENDERBUFFER,
+                GR_GL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                              GR_GL_STENCIL_ATTACHMENT,
+                                              GR_GL_RENDERBUFFER,
                                               rtIDs.fStencilRenderbufferID));
+                // if it is a packed format bind to depth also, otherwise 
+                // we may get an unsupported fbo completeness result
+                if (stencilFormats[i].fPacked) {
+                    GR_GL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                                  GR_GL_DEPTH_ATTACHMENT,
+                                                  GR_GL_RENDERBUFFER,
+                                                  rtIDs.fStencilRenderbufferID));
+                }
             }
-            status = GR_GL(CheckFramebufferStatus(GR_FRAMEBUFFER));
+            status = GR_GL(CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
 
-#if GR_SUPPORT_GLDESKTOP
-            // On some implementations you have to be bound as DEPTH_STENCIL.
-            // (Even binding to DEPTH and STENCIL separately with the same
-            // buffer doesn't work.)
-            if (rtIDs.fStencilRenderbufferID &&
-                status != GR_FRAMEBUFFER_COMPLETE) {
-                GR_GL(FramebufferRenderbuffer(GR_FRAMEBUFFER,
-                                              GR_STENCIL_ATTACHMENT,
-                                              GR_RENDERBUFFER,
-                                              0));
-                GR_GL(FramebufferRenderbuffer(GR_FRAMEBUFFER,
-                                              GR_DEPTH_STENCIL_ATTACHMENT,
-                                              GR_RENDERBUFFER,
-                                              rtIDs.fStencilRenderbufferID));
-                status = GR_GL(CheckFramebufferStatus(GR_FRAMEBUFFER));
-            }
-#endif
-            if (status != GR_FRAMEBUFFER_COMPLETE) {
+            if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
                 GrPrintf("-- glCheckFramebufferStatus %x %d %d\n",
                          status, desc.fWidth, desc.fHeight);
-#if GR_SUPPORT_GLDESKTOP
-                if (rtIDs.fStencilRenderbufferID) {
-                    GR_GL(FramebufferRenderbuffer(GR_FRAMEBUFFER,
-                                                  GR_DEPTH_STENCIL_ATTACHMENT,
-                                                  GR_RENDERBUFFER,
-                                                  0));
+                // undo the depth bind
+                if (rtIDs.fStencilRenderbufferID && 
+                    stencilFormats[i].fPacked) {
+                    GR_GL(FramebufferRenderbuffer(GR_GL_FRAMEBUFFER,
+                                                    GR_GL_DEPTH_ATTACHMENT,
+                                                    GR_GL_RENDERBUFFER,
+                                                    0));
                 }
-#endif
                 continue;
             }
             // we're successful!
             failed = false;
             if (rtIDs.fStencilRenderbufferID) {
-                if (UNKNOWN_BITS == gStencilFormats[i].fBits) {
-                    GR_GL_GetIntegerv(GL_STENCIL_BITS, (GLint*)&glDesc.fStencilBits);
+                if (UNKNOWN_BITS == stencilFormats[i].fBits) {
+                    GR_GL_GetIntegerv(GR_GL_STENCIL_BITS, (GrGLint*)&glDesc.fStencilBits);
                 } else {
-                    glDesc.fStencilBits = gStencilFormats[i].fBits;
+                    glDesc.fStencilBits = stencilFormats[i].fBits;
                 }
             }
             break;
@@ -1003,7 +1068,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
     GrPrintf("--- new texture [%d] size=(%d %d) bpp=%d\n",
              tex->fTextureID, width, height, tex->fUploadByteCount);
 #endif
-    GrGLTexture* tex = new GrGLTexture(glDesc, rtIDs, DEFAULT_PARAMS, this);
+    GrGLTexture* tex = new GrGLTexture(this, glDesc, rtIDs, DEFAULT_PARAMS);
 
     if (0 != rtIDs.fTexFBOID) {
         GrRenderTarget* rt = tex->asRenderTarget();
@@ -1012,7 +1077,7 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
         fHWDrawState.fRenderTarget = NULL;
 
         // clear the new stencil buffer if we have one
-        if (!(desc.fFlags & kNoPathRendering_TextureFlag)) {
+        if (!(desc.fFlags & kNoStencil_TextureFlag)) {
             GrRenderTarget* rtSave = fCurrDrawState.fRenderTarget;
             fCurrDrawState.fRenderTarget = rt;
             eraseStencil(0, ~0);
@@ -1022,23 +1087,23 @@ GrTexture* GrGpuGL::createTextureHelper(const TextureDesc& desc,
     return tex;
 }
 
-GrVertexBuffer* GrGpuGL::createVertexBufferHelper(uint32_t size, bool dynamic) {
-    GLuint id;
+GrVertexBuffer* GrGpuGL::onCreateVertexBuffer(uint32_t size, bool dynamic) {
+    GrGLuint id;
     GR_GL(GenBuffers(1, &id));
     if (id) {
-        GR_GL(BindBuffer(GL_ARRAY_BUFFER, id));
+        GR_GL(BindBuffer(GR_GL_ARRAY_BUFFER, id));
         fHWGeometryState.fArrayPtrsDirty = true;
         GrGLClearErr();
         // make sure driver can allocate memory for this buffer
-        GR_GL_NO_ERR(BufferData(GL_ARRAY_BUFFER, size, NULL,
-                                dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
-        if (glGetError() != GL_NO_ERROR) {
+        GR_GL_NO_ERR(BufferData(GR_GL_ARRAY_BUFFER, size, NULL,
+                                dynamic ? GR_GL_DYNAMIC_DRAW : GR_GL_STATIC_DRAW));
+        if (GrGLGetGLInterface()->fGetError() != GR_GL_NO_ERROR) {
             GR_GL(DeleteBuffers(1, &id));
             // deleting bound buffer does implicit bind to 0
             fHWGeometryState.fVertexBuffer = NULL;
             return NULL;
         }
-        GrGLVertexBuffer* vertexBuffer = new GrGLVertexBuffer(id, this,
+        GrGLVertexBuffer* vertexBuffer = new GrGLVertexBuffer(this, id,
                                                               size, dynamic);
         fHWGeometryState.fVertexBuffer = vertexBuffer;
         return vertexBuffer;
@@ -1046,22 +1111,22 @@ GrVertexBuffer* GrGpuGL::createVertexBufferHelper(uint32_t size, bool dynamic) {
     return NULL;
 }
 
-GrIndexBuffer* GrGpuGL::createIndexBufferHelper(uint32_t size, bool dynamic) {
-    GLuint id;
+GrIndexBuffer* GrGpuGL::onCreateIndexBuffer(uint32_t size, bool dynamic) {
+    GrGLuint id;
     GR_GL(GenBuffers(1, &id));
     if (id) {
-        GR_GL(BindBuffer(GL_ELEMENT_ARRAY_BUFFER, id));
+        GR_GL(BindBuffer(GR_GL_ELEMENT_ARRAY_BUFFER, id));
         GrGLClearErr();
         // make sure driver can allocate memory for this buffer
-        GR_GL_NO_ERR(BufferData(GL_ELEMENT_ARRAY_BUFFER, size, NULL,
-                                dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW));
-        if (glGetError() != GL_NO_ERROR) {
+        GR_GL_NO_ERR(BufferData(GR_GL_ELEMENT_ARRAY_BUFFER, size, NULL,
+                                dynamic ? GR_GL_DYNAMIC_DRAW : GR_GL_STATIC_DRAW));
+        if (GrGLGetGLInterface()->fGetError() != GR_GL_NO_ERROR) {
             GR_GL(DeleteBuffers(1, &id));
             // deleting bound buffer does implicit bind to 0
             fHWGeometryState.fIndexBuffer = NULL;
             return NULL;
         }
-        GrIndexBuffer* indexBuffer = new GrGLIndexBuffer(id, this,
+        GrIndexBuffer* indexBuffer = new GrGLIndexBuffer(this, id,
                                                          size, dynamic);
         fHWGeometryState.fIndexBuffer = indexBuffer;
         return indexBuffer;
@@ -1089,33 +1154,33 @@ void GrGpuGL::flushScissor(const GrIRect* rect) {
             fHWBounds.fScissorRect = scissor;
         }
         if (!fHWBounds.fScissorEnabled) {
-            GR_GL(Enable(GL_SCISSOR_TEST));
+            GR_GL(Enable(GR_GL_SCISSOR_TEST));
             fHWBounds.fScissorEnabled = true;
         }
     } else {
         if (fHWBounds.fScissorEnabled) {
-            GR_GL(Disable(GL_SCISSOR_TEST));
+            GR_GL(Disable(GR_GL_SCISSOR_TEST));
             fHWBounds.fScissorEnabled = false;
         }
     }
 }
 
-void GrGpuGL::eraseColorHelper(GrColor color) {
+void GrGpuGL::onEraseColor(GrColor color) {
     if (NULL == fCurrDrawState.fRenderTarget) {
         return;
     }
     flushRenderTarget();
     if (fHWBounds.fScissorEnabled) {
-        GR_GL(Disable(GL_SCISSOR_TEST));
+        GR_GL(Disable(GR_GL_SCISSOR_TEST));
         fHWBounds.fScissorEnabled = false;
     }
-    GR_GL(ColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE));
+    GR_GL(ColorMask(GR_GL_TRUE,GR_GL_TRUE,GR_GL_TRUE,GR_GL_TRUE));
     fHWDrawState.fFlagBits &= ~kNoColorWrites_StateBit;
     GR_GL(ClearColor(GrColorUnpackR(color)/255.f,
                      GrColorUnpackG(color)/255.f,
                      GrColorUnpackB(color)/255.f,
                      GrColorUnpackA(color)/255.f));
-    GR_GL(Clear(GL_COLOR_BUFFER_BIT));
+    GR_GL(Clear(GR_GL_COLOR_BUFFER_BIT));
 }
 
 void GrGpuGL::eraseStencil(uint32_t value, uint32_t mask) {
@@ -1124,56 +1189,70 @@ void GrGpuGL::eraseStencil(uint32_t value, uint32_t mask) {
     }
     flushRenderTarget();
     if (fHWBounds.fScissorEnabled) {
-        GR_GL(Disable(GL_SCISSOR_TEST));
+        GR_GL(Disable(GR_GL_SCISSOR_TEST));
         fHWBounds.fScissorEnabled = false;
     }
     GR_GL(StencilMask(mask));
     GR_GL(ClearStencil(value));
-    GR_GL(Clear(GL_STENCIL_BUFFER_BIT));
+    GR_GL(Clear(GR_GL_STENCIL_BUFFER_BIT));
     fHWDrawState.fStencilSettings.invalidate();
 }
 
 void GrGpuGL::eraseStencilClip(const GrIRect& rect) {
     GrAssert(NULL != fCurrDrawState.fRenderTarget);
 #if 0
-    GLint stencilBitCount = fCurrDrawState.fRenderTarget->stencilBits();
+    GrGLint stencilBitCount = fCurrDrawState.fRenderTarget->stencilBits();
     GrAssert(stencilBitCount > 0);
-    GLint clipStencilMask  = (1 << (stencilBitCount - 1));
+    GrGLint clipStencilMask  = (1 << (stencilBitCount - 1));
 #else
     // we could just clear the clip bit but when we go through
     // angle a partial stencil mask will cause clears to be
     // turned into draws. Our contract on GrDrawTarget says that
     // changing the clip between stencil passes may or may not
     // zero the client's clip bits. So we just clear the whole thing.
-    static const GLint clipStencilMask  = ~0;
+    static const GrGLint clipStencilMask  = ~0;
 #endif
     flushRenderTarget();
     flushScissor(&rect);
     GR_GL(StencilMask(clipStencilMask));
     GR_GL(ClearStencil(0));
-    GR_GL(Clear(GL_STENCIL_BUFFER_BIT));
+    GR_GL(Clear(GR_GL_STENCIL_BUFFER_BIT));
     fHWDrawState.fStencilSettings.invalidate();
 }
 
-void GrGpuGL::forceRenderTargetFlushHelper() {
+void GrGpuGL::onForceRenderTargetFlush() {
     flushRenderTarget();
 }
 
-bool GrGpuGL::readPixelsHelper(int left, int top, int width, int height,
-                               GrTexture::PixelConfig config, void* buffer) {
-    GLenum internalFormat;  // we don't use this for glReadPixels
-    GLenum format;
-    GLenum type;
+bool GrGpuGL::onReadPixels(GrRenderTarget* target,
+                           int left, int top, int width, int height,
+                           GrPixelConfig config, void* buffer) {
+    GrGLenum internalFormat;  // we don't use this for glReadPixels
+    GrGLenum format;
+    GrGLenum type;
     if (!this->canBeTexture(config, &internalFormat, &format, &type)) {
         return false;
+    }    
+    GrGLRenderTarget* tgt = static_cast<GrGLRenderTarget*>(target);
+    GrAutoTPtrValueRestore<GrRenderTarget*> autoTargetRestore;
+    switch (tgt->getResolveType()) {
+        case GrGLRenderTarget::kCantResolve_ResolveType:
+            return false;
+        case GrGLRenderTarget::kAutoResolves_ResolveType:
+            autoTargetRestore.save(&fCurrDrawState.fRenderTarget);
+            fCurrDrawState.fRenderTarget = target;
+            flushRenderTarget();
+            break;
+        case GrGLRenderTarget::kCanResolve_ResolveType:
+            resolveRenderTarget(tgt);
+            // we don't track the state of the READ FBO ID.
+            GR_GL(BindFramebuffer(GR_GL_READ_FRAMEBUFFER, tgt->textureFBOID()));
+            break;
+        default:
+            GrCrash("Unknown resolve type");
     }
 
-    if (NULL == fCurrDrawState.fRenderTarget) {
-        return false;
-    }
-    flushRenderTarget();
-
-    const GrGLIRect& glvp = ((GrGLRenderTarget*)fCurrDrawState.fRenderTarget)->getViewport();
+    const GrGLIRect& glvp = tgt->getViewport();
 
     // the read rect is viewport-relative
     GrGLIRect readRect;
@@ -1185,7 +1264,7 @@ bool GrGpuGL::readPixelsHelper(int left, int top, int width, int height,
     // now reverse the order of the rows, since GL's are bottom-to-top, but our
     // API presents top-to-bottom
     {
-        size_t stride = width * GrTexture::BytesPerPixel(config);
+        size_t stride = width * GrBytesPerPixel(config);
         GrAutoMalloc rowStorage(stride);
         void* tmp = rowStorage.get();
 
@@ -1209,14 +1288,14 @@ void GrGpuGL::flushRenderTarget() {
 
     if (fHWDrawState.fRenderTarget != fCurrDrawState.fRenderTarget) {
         GrGLRenderTarget* rt = (GrGLRenderTarget*)fCurrDrawState.fRenderTarget;
-        GR_GL(BindFramebuffer(GR_FRAMEBUFFER, rt->renderFBOID()));
+        GR_GL(BindFramebuffer(GR_GL_FRAMEBUFFER, rt->renderFBOID()));
     #if GR_COLLECT_STATS
         ++fStats.fRenderTargetChngCnt;
     #endif
-        rt->setDirty(true);
+        rt->flagAsNeedingResolve();
     #if GR_DEBUG
-        GLenum status = GR_GL(CheckFramebufferStatus(GR_FRAMEBUFFER));
-        if (status != GR_FRAMEBUFFER_COMPLETE) {
+        GrGLenum status = GR_GL(CheckFramebufferStatus(GR_GL_FRAMEBUFFER));
+        if (status != GR_GL_FRAMEBUFFER_COMPLETE) {
             GrPrintf("-- glCheckFramebufferStatus %x\n", status);
         }
     #endif
@@ -1230,13 +1309,13 @@ void GrGpuGL::flushRenderTarget() {
     }
 }
 
-GLenum gPrimitiveType2GLMode[] = {
-    GL_TRIANGLES,
-    GL_TRIANGLE_STRIP,
-    GL_TRIANGLE_FAN,
-    GL_POINTS,
-    GL_LINES,
-    GL_LINE_STRIP
+GrGLenum gPrimitiveType2GLMode[] = {
+    GR_GL_TRIANGLES,
+    GR_GL_TRIANGLE_STRIP,
+    GR_GL_TRIANGLE_FAN,
+    GR_GL_POINTS,
+    GR_GL_LINES,
+    GR_GL_LINE_STRIP
 };
 
 #define SWAP_PER_DRAW 0
@@ -1260,14 +1339,14 @@ GLenum gPrimitiveType2GLMode[] = {
     #endif
 #endif
 
-void GrGpuGL::drawIndexedHelper(GrPrimitiveType type,
-                                uint32_t startVertex,
-                                uint32_t startIndex,
-                                uint32_t vertexCount,
-                                uint32_t indexCount) {
+void GrGpuGL::onDrawIndexed(GrPrimitiveType type,
+                            uint32_t startVertex,
+                            uint32_t startIndex,
+                            uint32_t vertexCount,
+                            uint32_t indexCount) {
     GrAssert((size_t)type < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
 
-    GLvoid* indices = (GLvoid*)(sizeof(uint16_t) * startIndex);
+    GrGLvoid* indices = (GrGLvoid*)(sizeof(uint16_t) * startIndex);
 
     GrAssert(NULL != fHWGeometryState.fIndexBuffer);
     GrAssert(NULL != fHWGeometryState.fVertexBuffer);
@@ -1277,7 +1356,7 @@ void GrGpuGL::drawIndexedHelper(GrPrimitiveType type,
     GrAssert(0 == startVertex);
 
     GR_GL(DrawElements(gPrimitiveType2GLMode[type], indexCount,
-                       GL_UNSIGNED_SHORT, indices));
+                       GR_GL_UNSIGNED_SHORT, indices));
 #if SWAP_PER_DRAW
     glFlush();
     #if GR_MAC_BUILD
@@ -1292,9 +1371,9 @@ void GrGpuGL::drawIndexedHelper(GrPrimitiveType type,
 #endif
 }
 
-void GrGpuGL::drawNonIndexedHelper(GrPrimitiveType type,
-                                   uint32_t startVertex,
-                                   uint32_t vertexCount) {
+void GrGpuGL::onDrawNonIndexed(GrPrimitiveType type,
+                               uint32_t startVertex,
+                               uint32_t vertexCount) {
     GrAssert((size_t)type < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
 
     GrAssert(NULL != fHWGeometryState.fVertexBuffer);
@@ -1321,52 +1400,56 @@ void GrGpuGL::drawNonIndexedHelper(GrPrimitiveType type,
 #endif
 }
 
-void GrGpuGL::resolveTextureRenderTarget(GrGLTexture* texture) {
-    GrGLRenderTarget* rt = (GrGLRenderTarget*) texture->asRenderTarget();
+void GrGpuGL::resolveRenderTarget(GrGLRenderTarget* rt) {
 
-    if (NULL != rt && rt->needsResolve()) {
+    if (rt->needsResolve()) {
         GrAssert(kNone_MSFBO != fMSFBOType);
         GrAssert(rt->textureFBOID() != rt->renderFBOID());
-        GR_GL(BindFramebuffer(GR_READ_FRAMEBUFFER,
+        GR_GL(BindFramebuffer(GR_GL_READ_FRAMEBUFFER,
                                         rt->renderFBOID()));
-        GR_GL(BindFramebuffer(GR_DRAW_FRAMEBUFFER,
+        GR_GL(BindFramebuffer(GR_GL_DRAW_FRAMEBUFFER,
                                         rt->textureFBOID()));
     #if GR_COLLECT_STATS
         ++fStats.fRenderTargetChngCnt;
     #endif
-        // make sure we go through set render target
+        // make sure we go through flushRenderTarget() since we've modified
+        // the bound DRAW FBO ID.
         fHWDrawState.fRenderTarget = NULL;
+        const GrGLIRect& vp = rt->getViewport();
 
-        GLint left = 0;
-        GLint right = texture->width();
-        // we will have rendered to the top of the FBO.
-        GLint top = texture->allocHeight();
-        GLint bottom = texture->allocHeight() - texture->height();
-        if (kApple_MSFBO == fMSFBOType) {
-            GR_GL(Enable(GL_SCISSOR_TEST));
-            GR_GL(Scissor(left, bottom, right-left, top-bottom));
+        if (kAppleES_MSFBO == fMSFBOType) {
+            // Apple's extension uses the scissor as the blit bounds.
+            GR_GL(Enable(GR_GL_SCISSOR_TEST));
+            GR_GL(Scissor(vp.fLeft, vp.fBottom,
+                          vp.fWidth, vp.fHeight));
             GR_GL(ResolveMultisampleFramebuffer());
             fHWBounds.fScissorRect.invalidate();
             fHWBounds.fScissorEnabled = true;
         } else {
-            GR_GL(BlitFramebuffer(left, bottom, right, top,
-                                     left, bottom, right, top,
-                                     GL_COLOR_BUFFER_BIT, GL_NEAREST));
+            if (kDesktopARB_MSFBO != fMSFBOType) {
+                // this respects the scissor during the blit, so disable it.
+                GrAssert(kDesktopEXT_MSFBO == fMSFBOType);
+                flushScissor(NULL);
+            }
+            int right = vp.fLeft + vp.fWidth;
+            int top = vp.fBottom + vp.fHeight;
+            GR_GL(BlitFramebuffer(vp.fLeft, vp.fBottom, right, top,
+                                  vp.fLeft, vp.fBottom, right, top,
+                                  GR_GL_COLOR_BUFFER_BIT, GR_GL_NEAREST));
         }
-        rt->setDirty(false);
-
+        rt->flagAsResolved();
     }
 }
 
-static const GLenum grToGLStencilFunc[] = {
-    GL_ALWAYS,           // kAlways_StencilFunc
-    GL_NEVER,            // kNever_StencilFunc
-    GL_GREATER,          // kGreater_StencilFunc
-    GL_GEQUAL,           // kGEqual_StencilFunc
-    GL_LESS,             // kLess_StencilFunc
-    GL_LEQUAL,           // kLEqual_StencilFunc,
-    GL_EQUAL,            // kEqual_StencilFunc,
-    GL_NOTEQUAL,         // kNotEqual_StencilFunc,
+static const GrGLenum grToGLStencilFunc[] = {
+    GR_GL_ALWAYS,           // kAlways_StencilFunc
+    GR_GL_NEVER,            // kNever_StencilFunc
+    GR_GL_GREATER,          // kGreater_StencilFunc
+    GR_GL_GEQUAL,           // kGEqual_StencilFunc
+    GR_GL_LESS,             // kLess_StencilFunc
+    GR_GL_LEQUAL,           // kLEqual_StencilFunc,
+    GR_GL_EQUAL,            // kEqual_StencilFunc,
+    GR_GL_NOTEQUAL,         // kNotEqual_StencilFunc,
 };
 GR_STATIC_ASSERT(GR_ARRAY_COUNT(grToGLStencilFunc) == kBasicStencilFuncCount);
 GR_STATIC_ASSERT(0 == kAlways_StencilFunc);
@@ -1378,15 +1461,15 @@ GR_STATIC_ASSERT(5 == kLEqual_StencilFunc);
 GR_STATIC_ASSERT(6 == kEqual_StencilFunc);
 GR_STATIC_ASSERT(7 == kNotEqual_StencilFunc);
 
-static const GLenum grToGLStencilOp[] = {
-    GL_KEEP,        // kKeep_StencilOp
-    GL_REPLACE,     // kReplace_StencilOp
-    GL_INCR_WRAP,   // kIncWrap_StencilOp
-    GL_INCR,        // kIncClamp_StencilOp
-    GL_DECR_WRAP,   // kDecWrap_StencilOp
-    GL_DECR,        // kDecClamp_StencilOp
-    GL_ZERO,        // kZero_StencilOp
-    GL_INVERT,      // kInvert_StencilOp
+static const GrGLenum grToGLStencilOp[] = {
+    GR_GL_KEEP,        // kKeep_StencilOp
+    GR_GL_REPLACE,     // kReplace_StencilOp
+    GR_GL_INCR_WRAP,   // kIncWrap_StencilOp
+    GR_GL_INCR,        // kIncClamp_StencilOp
+    GR_GL_DECR_WRAP,   // kDecWrap_StencilOp
+    GR_GL_DECR,        // kDecClamp_StencilOp
+    GR_GL_ZERO,        // kZero_StencilOp
+    GR_GL_INVERT,      // kInvert_StencilOp
 };
 GR_STATIC_ASSERT(GR_ARRAY_COUNT(grToGLStencilOp) == kStencilOpCount);
 GR_STATIC_ASSERT(0 == kKeep_StencilOp);
@@ -1422,9 +1505,9 @@ void GrGpuGL::flushStencil() {
         }
 
         if (settings->isDisabled()) {
-            GR_GL(Disable(GL_STENCIL_TEST));
+            GR_GL(Disable(GR_GL_STENCIL_TEST));
         } else {
-            GR_GL(Enable(GL_STENCIL_TEST));
+            GR_GL(Enable(GR_GL_STENCIL_TEST));
     #if GR_DEBUG
             if (!fStencilWrapOpsSupport) {
                 GrAssert(settings->fFrontPassOp != kIncWrap_StencilOp);
@@ -1441,13 +1524,13 @@ void GrGpuGL::flushStencil() {
             GrAssert(stencilBits ||
                      (GrStencilSettings::gDisabled ==
                       fCurrDrawState.fStencilSettings));
-            GLuint clipStencilMask = 1 << (stencilBits - 1);
-            GLuint userStencilMask = clipStencilMask - 1;
+            GrGLuint clipStencilMask = 1 << (stencilBits - 1);
+            GrGLuint userStencilMask = clipStencilMask - 1;
 
             unsigned int frontRef  = settings->fFrontFuncRef;
             unsigned int frontMask = settings->fFrontFuncMask;
             unsigned int frontWriteMask = settings->fFrontWriteMask;
-            GLenum frontFunc;
+            GrGLenum frontFunc;
 
             if (fCurrDrawState.fFlagBits & kModifyStencilClip_StateBit) {
 
@@ -1465,15 +1548,15 @@ void GrGpuGL::flushStencil() {
                 frontWriteMask &= userStencilMask;
             }
             GrAssert(settings->fFrontFailOp >= 0 &&
-                     settings->fFrontFailOp < GR_ARRAY_COUNT(grToGLStencilOp));
+                     (unsigned) settings->fFrontFailOp < GR_ARRAY_COUNT(grToGLStencilOp));
             GrAssert(settings->fFrontPassOp >= 0 &&
-                     settings->fFrontPassOp < GR_ARRAY_COUNT(grToGLStencilOp));
+                     (unsigned) settings->fFrontPassOp < GR_ARRAY_COUNT(grToGLStencilOp));
             GrAssert(settings->fBackFailOp >= 0 &&
-                     settings->fBackFailOp < GR_ARRAY_COUNT(grToGLStencilOp));
+                     (unsigned) settings->fBackFailOp < GR_ARRAY_COUNT(grToGLStencilOp));
             GrAssert(settings->fBackPassOp >= 0 &&
-                     settings->fBackPassOp < GR_ARRAY_COUNT(grToGLStencilOp));
+                     (unsigned) settings->fBackPassOp < GR_ARRAY_COUNT(grToGLStencilOp));
             if (fTwoSidedStencilSupport) {
-                GLenum backFunc;
+                GrGLenum backFunc;
 
                 unsigned int backRef  = settings->fBackFuncRef;
                 unsigned int backMask = settings->fBackFuncMask;
@@ -1494,15 +1577,15 @@ void GrGpuGL::flushStencil() {
                     backWriteMask &= userStencilMask;
                 }
 
-                GR_GL(StencilFuncSeparate(GL_FRONT, frontFunc, frontRef, frontMask));
-                GR_GL(StencilMaskSeparate(GL_FRONT, frontWriteMask));
-                GR_GL(StencilFuncSeparate(GL_BACK, backFunc, backRef, backMask));
-                GR_GL(StencilMaskSeparate(GL_BACK, backWriteMask));
-                GR_GL(StencilOpSeparate(GL_FRONT, grToGLStencilOp[settings->fFrontFailOp],
+                GR_GL(StencilFuncSeparate(GR_GL_FRONT, frontFunc, frontRef, frontMask));
+                GR_GL(StencilMaskSeparate(GR_GL_FRONT, frontWriteMask));
+                GR_GL(StencilFuncSeparate(GR_GL_BACK, backFunc, backRef, backMask));
+                GR_GL(StencilMaskSeparate(GR_GL_BACK, backWriteMask));
+                GR_GL(StencilOpSeparate(GR_GL_FRONT, grToGLStencilOp[settings->fFrontFailOp],
                                                   grToGLStencilOp[settings->fFrontPassOp],
                                                   grToGLStencilOp[settings->fFrontPassOp]));
 
-                GR_GL(StencilOpSeparate(GL_BACK,  grToGLStencilOp[settings->fBackFailOp],
+                GR_GL(StencilOpSeparate(GR_GL_BACK,  grToGLStencilOp[settings->fBackFailOp],
                                                   grToGLStencilOp[settings->fBackPassOp],
                                                   grToGLStencilOp[settings->fBackPassOp]));
             } else {
@@ -1515,6 +1598,101 @@ void GrGpuGL::flushStencil() {
         }
         fHWDrawState.fStencilSettings = fCurrDrawState.fStencilSettings;
         fHWStencilClip = stencilClip;
+    }
+}
+
+bool GrGpuGL::useSmoothLines() {
+    // there is a conflict between using smooth lines and our use of
+    // premultiplied alpha. Smooth lines tweak the incoming alpha value
+    // but not in a premul-alpha way. So we only use them when our alpha
+    // is 0xff.
+
+    // TODO: write a smarter line frag shader.
+
+    return (kAntialias_StateBit & fCurrDrawState.fFlagBits) &&
+           canDisableBlend();
+}
+
+void GrGpuGL::flushAAState(GrPrimitiveType type) {
+    if (GR_GL_SUPPORT_DESKTOP) {
+        // ES doesn't support toggling GL_MULTISAMPLE and doesn't have
+        // smooth lines.
+
+        // we prefer smooth lines over multisampled lines
+        // msaa should be disabled if drawing smooth lines.
+        if (GrIsPrimTypeLines(type)) {
+            bool smooth = useSmoothLines();
+            if (!fHWAAState.fSmoothLineEnabled && smooth) {
+                GR_GL(Enable(GR_GL_LINE_SMOOTH));
+                fHWAAState.fSmoothLineEnabled = true;
+            } else if (fHWAAState.fSmoothLineEnabled && !smooth) {
+                GR_GL(Disable(GR_GL_LINE_SMOOTH));
+                fHWAAState.fSmoothLineEnabled = false;
+            }
+            if (fCurrDrawState.fRenderTarget->isMultisampled() && 
+                fHWAAState.fMSAAEnabled) {
+                GR_GL(Disable(GR_GL_MULTISAMPLE));
+                fHWAAState.fMSAAEnabled = false;
+            }
+        } else if (fCurrDrawState.fRenderTarget->isMultisampled() &&
+                   !!(kAntialias_StateBit & fCurrDrawState.fFlagBits) !=
+                   fHWAAState.fMSAAEnabled) {
+            if (fHWAAState.fMSAAEnabled) {
+                GR_GL(Disable(GR_GL_MULTISAMPLE));
+                fHWAAState.fMSAAEnabled = false;
+            } else {
+                GR_GL(Enable(GR_GL_MULTISAMPLE));
+                fHWAAState.fMSAAEnabled = true;
+            }
+        }
+    }
+}
+
+void GrGpuGL::flushBlend(GrPrimitiveType type) {
+    if (GrIsPrimTypeLines(type) && useSmoothLines()) {
+        if (fHWBlendDisabled) {
+            GR_GL(Enable(GR_GL_BLEND));
+            fHWBlendDisabled = false;
+        }
+        if (kSA_BlendCoeff != fHWDrawState.fSrcBlend ||
+            kISA_BlendCoeff != fHWDrawState.fDstBlend) {
+            GR_GL(BlendFunc(gXfermodeCoeff2Blend[kSA_BlendCoeff],
+                            gXfermodeCoeff2Blend[kISA_BlendCoeff]));
+            fHWDrawState.fSrcBlend = kSA_BlendCoeff;
+            fHWDrawState.fDstBlend = kISA_BlendCoeff;
+        }
+    } else {
+        bool blendOff = canDisableBlend();
+        if (fHWBlendDisabled != blendOff) {
+            if (blendOff) {
+                GR_GL(Disable(GR_GL_BLEND));
+            } else {
+                GR_GL(Enable(GR_GL_BLEND));
+            }
+            fHWBlendDisabled = blendOff;
+        }
+        if (!blendOff) {
+            if (fHWDrawState.fSrcBlend != fCurrDrawState.fSrcBlend ||
+                  fHWDrawState.fDstBlend != fCurrDrawState.fDstBlend) {
+                GR_GL(BlendFunc(gXfermodeCoeff2Blend[fCurrDrawState.fSrcBlend],
+                                gXfermodeCoeff2Blend[fCurrDrawState.fDstBlend]));
+                fHWDrawState.fSrcBlend = fCurrDrawState.fSrcBlend;
+                fHWDrawState.fDstBlend = fCurrDrawState.fDstBlend;
+            }
+            if ((BlendCoefReferencesConstant(fCurrDrawState.fSrcBlend) ||
+                 BlendCoefReferencesConstant(fCurrDrawState.fDstBlend)) &&
+                fHWDrawState.fBlendConstant != fCurrDrawState.fBlendConstant) {
+
+                float c[] = {
+                    GrColorUnpackR(fCurrDrawState.fBlendConstant) / 255.f,
+                    GrColorUnpackG(fCurrDrawState.fBlendConstant) / 255.f,
+                    GrColorUnpackB(fCurrDrawState.fBlendConstant) / 255.f,
+                    GrColorUnpackA(fCurrDrawState.fBlendConstant) / 255.f
+                };
+                GR_GL(BlendColor(c[0], c[1], c[2], c[3]));
+                fHWDrawState.fBlendConstant = fCurrDrawState.fBlendConstant;
+            }
+        }
     }
 }
 
@@ -1536,11 +1714,15 @@ bool GrGpuGL::flushGLStateCommon(GrPrimitiveType type) {
                 // texture and now we're texuring from the rt it will still be
                 // the last bound texture, but it needs resolving. So keep this
                 // out of the "last != next" check.
-                resolveTextureRenderTarget(nextTexture);
+                GrGLRenderTarget* texRT = 
+                    static_cast<GrGLRenderTarget*>(nextTexture->asRenderTarget());
+                if (NULL != texRT) {
+                    resolveRenderTarget(texRT);
+                }
 
                 if (fHWDrawState.fTextures[s] != nextTexture) {
                     setTextureUnit(s);
-                    GR_GL(BindTexture(GL_TEXTURE_2D, nextTexture->textureID()));
+                    GR_GL(BindTexture(GR_GL_TEXTURE_2D, nextTexture->textureID()));
                 #if GR_COLLECT_STATS
                     ++fStats.fTextureChngCnt;
                 #endif
@@ -1553,32 +1735,32 @@ bool GrGpuGL::flushGLStateCommon(GrPrimitiveType type) {
                                                     nextTexture->getTexParams();
                 GrGLTexture::TexParams newTexParams;
 
-                newTexParams.fFilter = sampler.isFilter() ? GL_LINEAR :
-                                                            GL_NEAREST;
+                newTexParams.fFilter = sampler.isFilter() ? GR_GL_LINEAR :
+                                                            GR_GL_NEAREST;
                 newTexParams.fWrapS =
-                            GrGLTexture::gWrapMode2GLWrap[sampler.getWrapX()];
+                            GrGLTexture::WrapMode2GLWrap()[sampler.getWrapX()];
                 newTexParams.fWrapT =
-                            GrGLTexture::gWrapMode2GLWrap[sampler.getWrapY()];
+                            GrGLTexture::WrapMode2GLWrap()[sampler.getWrapY()];
 
                 if (newTexParams.fFilter != oldTexParams.fFilter) {
                     setTextureUnit(s);
-                    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                                        GL_TEXTURE_MAG_FILTER,
+                    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                                        GR_GL_TEXTURE_MAG_FILTER,
                                         newTexParams.fFilter));
-                    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                                        GL_TEXTURE_MIN_FILTER,
+                    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                                        GR_GL_TEXTURE_MIN_FILTER,
                                         newTexParams.fFilter));
                 }
                 if (newTexParams.fWrapS != oldTexParams.fWrapS) {
                     setTextureUnit(s);
-                    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                                        GL_TEXTURE_WRAP_S,
+                    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                                        GR_GL_TEXTURE_WRAP_S,
                                         newTexParams.fWrapS));
                 }
                 if (newTexParams.fWrapT != oldTexParams.fWrapT) {
                     setTextureUnit(s);
-                    GR_GL(TexParameteri(GL_TEXTURE_2D,
-                                        GL_TEXTURE_WRAP_T,
+                    GR_GL(TexParameteri(GR_GL_TEXTURE_2D,
+                                        GR_GL_TEXTURE_WRAP_T,
                                         newTexParams.fWrapT));
                 }
                 nextTexture->setTexParams(newTexParams);
@@ -1594,100 +1776,41 @@ bool GrGpuGL::flushGLStateCommon(GrPrimitiveType type) {
     }
 
     flushRenderTarget();
-
+    flushAAState(type);
+    flushBlend(type);
+    
     if ((fCurrDrawState.fFlagBits & kDither_StateBit) !=
         (fHWDrawState.fFlagBits & kDither_StateBit)) {
         if (fCurrDrawState.fFlagBits & kDither_StateBit) {
-            GR_GL(Enable(GL_DITHER));
+            GR_GL(Enable(GR_GL_DITHER));
         } else {
-            GR_GL(Disable(GL_DITHER));
+            GR_GL(Disable(GR_GL_DITHER));
         }
     }
 
     if ((fCurrDrawState.fFlagBits & kNoColorWrites_StateBit) !=
         (fHWDrawState.fFlagBits & kNoColorWrites_StateBit)) {
-        GLenum mask;
+        GrGLenum mask;
         if (fCurrDrawState.fFlagBits & kNoColorWrites_StateBit) {
-            mask = GL_FALSE;
+            mask = GR_GL_FALSE;
         } else {
-            mask = GL_TRUE;
+            mask = GR_GL_TRUE;
         }
         GR_GL(ColorMask(mask, mask, mask, mask));
-    }
-
-#if GR_SUPPORT_GLDESKTOP
-    // ES doesn't support toggling GL_MULTISAMPLE and doesn't have
-    // smooth lines.
-    if (fDirtyFlags.fRenderTargetChanged ||
-        (fCurrDrawState.fFlagBits & kAntialias_StateBit) !=
-        (fHWDrawState.fFlagBits & kAntialias_StateBit)) {
-        GLint msaa = 0;
-        // only perform query if we know MSAA is supported.
-        // calling on non-MSAA target caused a crash in one environment,
-        // though I don't think it should.
-        if (fAASamples[kHigh_AALevel]) {
-            GR_GL_GetIntegerv(GL_SAMPLE_BUFFERS, &msaa);
-        }
-        if (fCurrDrawState.fFlagBits & kAntialias_StateBit) {
-            if (msaa) {
-                GR_GL(Enable(GL_MULTISAMPLE));
-            } else {
-                GR_GL(Enable(GL_LINE_SMOOTH));
-            }
-        } else {
-            if (msaa) {
-                GR_GL(Disable(GL_MULTISAMPLE));
-            }
-            GR_GL(Disable(GL_LINE_SMOOTH));
-        }
-    }
-#endif
-
-    bool blendOff = canDisableBlend();
-    if (fHWBlendDisabled != blendOff) {
-        if (blendOff) {
-            GR_GL(Disable(GL_BLEND));
-        } else {
-            GR_GL(Enable(GL_BLEND));
-        }
-        fHWBlendDisabled = blendOff;
-    }
-
-    if (!blendOff) {
-        if (fHWDrawState.fSrcBlend != fCurrDrawState.fSrcBlend ||
-              fHWDrawState.fDstBlend != fCurrDrawState.fDstBlend) {
-            GR_GL(BlendFunc(gXfermodeCoeff2Blend[fCurrDrawState.fSrcBlend],
-                            gXfermodeCoeff2Blend[fCurrDrawState.fDstBlend]));
-            fHWDrawState.fSrcBlend = fCurrDrawState.fSrcBlend;
-            fHWDrawState.fDstBlend = fCurrDrawState.fDstBlend;
-        }
-        if ((BlendCoefReferencesConstant(fCurrDrawState.fSrcBlend) ||
-             BlendCoefReferencesConstant(fCurrDrawState.fDstBlend)) &&
-            fHWDrawState.fBlendConstant != fCurrDrawState.fBlendConstant) {
-
-            float c[] = {
-                GrColorUnpackR(fCurrDrawState.fBlendConstant) / 255.f,
-                GrColorUnpackG(fCurrDrawState.fBlendConstant) / 255.f,
-                GrColorUnpackB(fCurrDrawState.fBlendConstant) / 255.f,
-                GrColorUnpackA(fCurrDrawState.fBlendConstant) / 255.f
-            };
-            GR_GL(BlendColor(c[0], c[1], c[2], c[3]));
-            fHWDrawState.fBlendConstant = fCurrDrawState.fBlendConstant;
-        }
     }
 
     if (fHWDrawState.fDrawFace != fCurrDrawState.fDrawFace) {
         switch (fCurrDrawState.fDrawFace) {
             case kCCW_DrawFace:
-                glEnable(GL_CULL_FACE);
-                GR_GL(CullFace(GL_BACK));
+                GR_GL(Enable(GR_GL_CULL_FACE));
+                GR_GL(CullFace(GR_GL_BACK));
                 break;
             case kCW_DrawFace:
-                GR_GL(Enable(GL_CULL_FACE));
-                GR_GL(CullFace(GL_FRONT));
+                GR_GL(Enable(GR_GL_CULL_FACE));
+                GR_GL(CullFace(GR_GL_FRONT));
                 break;
             case kBoth_DrawFace:
-                GR_GL(Disable(GL_CULL_FACE));
+                GR_GL(Disable(GR_GL_CULL_FACE));
                 break;
             default:
                 GrCrash("Unknown draw face.");
@@ -1721,9 +1844,6 @@ void GrGpuGL::notifyVertexBufferBind(const GrGLVertexBuffer* buffer) {
 }
 
 void GrGpuGL::notifyVertexBufferDelete(const GrGLVertexBuffer* buffer) {
-    GrAssert(!(kBuffer_GeometrySrcType == fGeometrySrc.fVertexSrc &&
-               buffer == fGeometrySrc.fVertexBuffer));
-
     if (fHWGeometryState.fVertexBuffer == buffer) {
         // deleting bound buffer does implied bind to 0
         fHWGeometryState.fVertexBuffer = NULL;
@@ -1736,9 +1856,6 @@ void GrGpuGL::notifyIndexBufferBind(const GrGLIndexBuffer* buffer) {
 }
 
 void GrGpuGL::notifyIndexBufferDelete(const GrGLIndexBuffer* buffer) {
-    GrAssert(!(kBuffer_GeometrySrcType == fGeometrySrc.fIndexSrc &&
-               buffer == fGeometrySrc.fIndexBuffer));
-
     if (fHWGeometryState.fIndexBuffer == buffer) {
         // deleting bound buffer does implied bind to 0
         fHWGeometryState.fIndexBuffer = NULL;
@@ -1767,46 +1884,46 @@ void GrGpuGL::notifyTextureDelete(GrGLTexture* texture) {
     }
 }
 
-bool GrGpuGL::canBeTexture(GrTexture::PixelConfig config,
-                           GLenum* internalFormat,
-                           GLenum* format,
-                           GLenum* type) {
+bool GrGpuGL::canBeTexture(GrPixelConfig config,
+                           GrGLenum* internalFormat,
+                           GrGLenum* format,
+                           GrGLenum* type) {
     switch (config) {
-        case GrTexture::kRGBA_8888_PixelConfig:
-        case GrTexture::kRGBX_8888_PixelConfig: // todo: can we tell it our X?
+        case kRGBA_8888_GrPixelConfig:
+        case kRGBX_8888_GrPixelConfig: // todo: can we tell it our X?
             *format = GR_GL_32BPP_COLOR_FORMAT;
-#if GR_SUPPORT_GLES
-            // according to GL_EXT_texture_format_BGRA8888 the *internal*
-            // format for a BGRA is BGRA not RGBA (as on desktop)
-            *internalFormat = GR_GL_32BPP_COLOR_FORMAT;
-#else
-            *internalFormat = GL_RGBA;
-#endif
-            *type = GL_UNSIGNED_BYTE;
+            if (GR_GL_SUPPORT_ES) {
+                // according to GL_EXT_texture_format_BGRA8888 the *internal*
+                // format for a BGRA is BGRA not RGBA (as on desktop)
+                *internalFormat = GR_GL_32BPP_COLOR_FORMAT;
+            } else {
+                *internalFormat = GR_GL_RGBA;
+            }
+            *type = GR_GL_UNSIGNED_BYTE;
             break;
-        case GrTexture::kRGB_565_PixelConfig:
-            *format = GL_RGB;
-            *internalFormat = GL_RGB;
-            *type = GL_UNSIGNED_SHORT_5_6_5;
+        case kRGB_565_GrPixelConfig:
+            *format = GR_GL_RGB;
+            *internalFormat = GR_GL_RGB;
+            *type = GR_GL_UNSIGNED_SHORT_5_6_5;
             break;
-        case GrTexture::kRGBA_4444_PixelConfig:
-            *format = GL_RGBA;
-            *internalFormat = GL_RGBA;
-            *type = GL_UNSIGNED_SHORT_4_4_4_4;
+        case kRGBA_4444_GrPixelConfig:
+            *format = GR_GL_RGBA;
+            *internalFormat = GR_GL_RGBA;
+            *type = GR_GL_UNSIGNED_SHORT_4_4_4_4;
             break;
-        case GrTexture::kIndex_8_PixelConfig:
+        case kIndex_8_GrPixelConfig:
             if (this->supports8BitPalette()) {
-                *format = GR_PALETTE8_RGBA8;
-                *internalFormat = GR_PALETTE8_RGBA8;
-                *type = GL_UNSIGNED_BYTE;   // unused I think
+                *format = GR_GL_PALETTE8_RGBA8;
+                *internalFormat = GR_GL_PALETTE8_RGBA8;
+                *type = GR_GL_UNSIGNED_BYTE;   // unused I think
             } else {
                 return false;
             }
             break;
-        case GrTexture::kAlpha_8_PixelConfig:
-            *format = GL_ALPHA;
-            *internalFormat = GL_ALPHA;
-            *type = GL_UNSIGNED_BYTE;
+        case kAlpha_8_GrPixelConfig:
+            *format = GR_GL_ALPHA;
+            *internalFormat = GR_GL_ALPHA;
+            *type = GR_GL_UNSIGNED_BYTE;
             break;
         default:
             return false;
@@ -1817,14 +1934,14 @@ bool GrGpuGL::canBeTexture(GrTexture::PixelConfig config,
 void GrGpuGL::setTextureUnit(int unit) {
     GrAssert(unit >= 0 && unit < kNumStages);
     if (fActiveTextureUnitIdx != unit) {
-        GR_GL(ActiveTexture(GL_TEXTURE0 + unit));
+        GR_GL(ActiveTexture(GR_GL_TEXTURE0 + unit));
         fActiveTextureUnitIdx = unit;
     }
 }
 
 void GrGpuGL::setSpareTextureUnit() {
-    if (fActiveTextureUnitIdx != (GL_TEXTURE0 + SPARE_TEX_UNIT)) {
-        GR_GL(ActiveTexture(GL_TEXTURE0 + SPARE_TEX_UNIT));
+    if (fActiveTextureUnitIdx != (GR_GL_TEXTURE0 + SPARE_TEX_UNIT)) {
+        GR_GL(ActiveTexture(GR_GL_TEXTURE0 + SPARE_TEX_UNIT));
         fActiveTextureUnitIdx = SPARE_TEX_UNIT;
     }
 }
@@ -1835,24 +1952,24 @@ void GrGpuGL::setSpareTextureUnit() {
    RenderBufferStorage* has to be a specific format (not a base format like
    GL_RGBA).
  */
-bool GrGpuGL::fboInternalFormat(GrTexture::PixelConfig config, GLenum* format) {
+bool GrGpuGL::fboInternalFormat(GrPixelConfig config, GrGLenum* format) {
     switch (config) {
-        case GrTexture::kRGBA_8888_PixelConfig:
-        case GrTexture::kRGBX_8888_PixelConfig:
+        case kRGBA_8888_GrPixelConfig:
+        case kRGBX_8888_GrPixelConfig:
             if (fRGBA8Renderbuffer) {
-                *format = GR_RGBA8;
+                *format = GR_GL_RGBA8;
                 return true;
             } else {
                 return false;
             }
-#if GR_SUPPORT_GLES // ES2 supports 565. ES1 supports it with FBO extension
-                    // desktop GL has no such internal format
-        case GrTexture::kRGB_565_PixelConfig:
-            *format = GR_RGB565;
+        case kRGB_565_GrPixelConfig:
+            GrAssert(GR_GL_SUPPORT_ES);  // ES2 supports 565. ES1 supports it
+                                         // with FBO extension desktop GL has
+                                         // no such internal format
+            *format = GR_GL_RGB565;
             return true;
-#endif
-        case GrTexture::kRGBA_4444_PixelConfig:
-            *format = GL_RGBA4;
+        case kRGBA_4444_GrPixelConfig:
+            *format = GR_GL_RGBA4;
             return true;
         default:
             return false;
@@ -1889,7 +2006,7 @@ void GrGpuGL::setBuffers(bool indexed,
     GrAssert(NULL != vbuf);
     GrAssert(!vbuf->isLocked());
     if (fHWGeometryState.fVertexBuffer != vbuf) {
-        GR_GL(BindBuffer(GL_ARRAY_BUFFER, vbuf->bufferID()));
+        GR_GL(BindBuffer(GR_GL_ARRAY_BUFFER, vbuf->bufferID()));
         fHWGeometryState.fArrayPtrsDirty = true;
         fHWGeometryState.fVertexBuffer = vbuf;
     }
@@ -1917,7 +2034,7 @@ void GrGpuGL::setBuffers(bool indexed,
         GrAssert(NULL != ibuf);
         GrAssert(!ibuf->isLocked());
         if (fHWGeometryState.fIndexBuffer != ibuf) {
-            GR_GL(BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuf->bufferID()));
+            GR_GL(BindBuffer(GR_GL_ELEMENT_ARRAY_BUFFER, ibuf->bufferID()));
             fHWGeometryState.fIndexBuffer = ibuf;
         }
     }

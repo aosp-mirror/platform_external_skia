@@ -19,13 +19,24 @@
 #define GrGLConfig_DEFINED
 
 #include "GrTypes.h"
-#include "GrGLInterface.h"
+#include "GrGLDefines.h"
+
+/**
+ * Optional GL config file.
+ */
+#ifdef GR_GL_CUSTOM_SETUP_HEADER
+    #include GR_GL_CUSTOM_SETUP_HEADER
+#endif
+
+#if !defined(GR_GL_FUNCTION_TYPE)
+    #define GR_GL_FUNCTION_TYPE
+#endif
 
 /**
  * The following are optional defines that can be enabled at the compiler
  * command line, in a IDE project, in a GrUserConfig.h file, or in a GL custom
- * file (if one is in use). They don't require GR_GL_CUSTOM_SETUP or
- * setup GR_GL_CUSTOM_SETUP_HEADER to be enabled:
+ * file (if one is in use). If a GR_GL_CUSTOM_SETUP_HEADER is used they can
+ * also be placed there.
  *
  * GR_GL_LOG_CALLS: if 1 Gr can print every GL call using GrPrintf. Defaults to
  * 0. Logging can be enabled and disabled at runtime using a debugger via to
@@ -63,22 +74,34 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * The following macros are used to staticlly configure the default
+ * GrGLInterface, but should not be used outside of the GrGLInterface
+ * scaffolding.  Undefine here to prevent accidental use.
+ */
+#undef GR_SUPPORT_GLDESKTOP
+#undef GR_SUPPORT_GLES1
+#undef GR_SUPPORT_GLES2
+#undef GR_SUPPORT_GLES
+
+////////////////////////////////////////////////////////////////////////////////
+
 #if GR_SCALAR_IS_FIXED
     #define GrGLType   GL_FIXED
 #elif GR_SCALAR_IS_FLOAT
-    #define GrGLType   GL_FLOAT
+    #define GrGLType   GR_GL_FLOAT
 #else
     #error "unknown GR_SCALAR type"
 #endif
 
 #if GR_TEXT_SCALAR_IS_USHORT
-    #define GrGLTextType                    GL_UNSIGNED_SHORT
+    #define GrGLTextType                    GR_GL_UNSIGNED_SHORT
     #define GR_GL_TEXT_TEXTURE_NORMALIZED   1
 #elif GR_TEXT_SCALAR_IS_FLOAT
-    #define GrGLTextType                    GL_FLOAT
+    #define GrGLTextType                    GR_GL_FLOAT
     #define GR_GL_TEXT_TEXTURE_NORMALIZED   0
 #elif GR_TEXT_SCALAR_IS_FIXED
-    #define GrGLTextType                    GL_FIXED
+    #define GrGLTextType                    GR_GL_FIXED
     #define GR_GL_TEXT_TEXTURE_NORMALIZED   0
 #else
     #error "unknown GR_TEXT_SCALAR type"
@@ -88,57 +111,17 @@
 // Windows where we match GDI's order).
 #ifndef GR_GL_32BPP_COLOR_FORMAT
     #if GR_WIN32_BUILD
-        #define GR_GL_32BPP_COLOR_FORMAT    GR_BGRA //use GR prefix because this
-    #else                                           //may be an extension.
-        #define GR_GL_32BPP_COLOR_FORMAT    GL_RGBA
+        #define GR_GL_32BPP_COLOR_FORMAT    GR_GL_BGRA
+    #else
+        #define GR_GL_32BPP_COLOR_FORMAT    GR_GL_RGBA
     #endif
 #endif
-
-
-
-// BGRA format
-#define GR_BGRA                     0x80E1
-
-// FBO / stencil formats
-#define GR_FRAMEBUFFER              0x8D40
-#define GR_FRAMEBUFFER_COMPLETE     0x8CD5
-#define GR_COLOR_ATTACHMENT0        0x8CE0
-#define GR_FRAMEBUFFER_BINDING      0x8CA6
-#define GR_RENDERBUFFER             0x8D41
-#define GR_STENCIL_ATTACHMENT       0x8D20
-#define GR_STENCIL_INDEX4           0x8D47
-#define GR_STENCIL_INDEX8           0x8D48
-#define GR_STENCIL_INDEX16          0x8D49
-#define GR_DEPTH24_STENCIL8         0x88F0
-#define GR_MAX_RENDERBUFFER_SIZE    0x84E8
-#define GR_DEPTH_STENCIL_ATTACHMENT 0x821A
-#define GR_DEPTH_STENCIL            0x84F9
-#define GR_RGBA8                    0x8058
-#define GR_RGB565                   0x8D62
-
-
-// Multisampling
-
-// IMG MAX_SAMPLES uses a different value than desktop, Apple ES extension.
-#define GR_MAX_SAMPLES              0x8D57
-#define GR_MAX_SAMPLES_IMG          0x9135
-#define GR_READ_FRAMEBUFFER         0x8CA8
-#define GR_DRAW_FRAMEBUFFER         0x8CA9
-
-// Buffer mapping
-#define GR_WRITE_ONLY               0x88B9
-#define GR_BUFFER_MAPPED            0x88BC
-
-// Palette texture
-#define GR_PALETTE8_RGBA8           0x8B91
 
 ////////////////////////////////////////////////////////////////////////////////
 
 extern void GrGLCheckErr(const char* location, const char* call);
 
-static inline void GrGLClearErr() {
-    while (GL_NO_ERROR != GrGLGetGLInterface()->fGetError()) {}
-}
+extern void GrGLClearErr();
 
 #if GR_GL_CHECK_ERROR
     extern bool gCheckErrorGL;
@@ -157,19 +140,18 @@ static inline void GrGLClearErr() {
 #define GR_GL(X)                 GrGLGetGLInterface()->f##X;; GR_GL_LOG_CALLS_IMPL(X); GR_GL_CHECK_ERROR_IMPL(X);
 #define GR_GL_NO_ERR(X)          GrGLGetGLInterface()->f##X;; GR_GL_LOG_CALLS_IMPL(X); GR_GL_CHECK_ERROR_IMPL(X);
 
+#define GR_GL_SUPPORT_DESKTOP   (kDesktop_GrGLBinding == GrGLGetGLInterface()->fBindingsExported)
+#define GR_GL_SUPPORT_ES1       (kES1_GrGLBinding == GrGLGetGLInterface()->fBindingsExported)
+#define GR_GL_SUPPORT_ES2       (kES2_GrGLBinding == GrGLGetGLInterface()->fBindingsExported)
+#define GR_GL_SUPPORT_ES        (GR_GL_SUPPORT_ES1 || GR_GL_SUPPORT_ES2)
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
- *  GrGL_RestoreResetRowLength() will reset GL_UNPACK_ROW_LENGTH to 0. We write
+ *  GrGLRestoreResetRowLength() will reset GL_UNPACK_ROW_LENGTH to 0. We write
  *  this wrapper, since GL_UNPACK_ROW_LENGTH is not available on all GL versions
  */
-#if GR_SUPPORT_GLDESKTOP
-    static inline void GrGL_RestoreResetRowLength() {
-        GR_GL(PixelStorei(GL_UNPACK_ROW_LENGTH, 0));
-    }
-#else
-    #define GrGL_RestoreResetRowLength()
-#endif
+extern void GrGLRestoreResetRowLength();
 
 ////////////////////////////////////////////////////////////////////////////////
 

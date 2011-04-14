@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "SkAdvancedTypefaceMetrics.h"
 #include "SkTypeface.h"
 #include "SkFontHost.h"
 
@@ -76,6 +77,6 @@ SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
-        bool perGlyphInfo) const {
+        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) const {
     return SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID, perGlyphInfo);
 }

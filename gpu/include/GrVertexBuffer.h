@@ -22,8 +22,8 @@
 
 class GrVertexBuffer : public GrGeometryBuffer {
 protected:
-    GrVertexBuffer(size_t sizeInBytes, bool dynamic) : 
-        INHERITED(sizeInBytes, dynamic) {}
+    GrVertexBuffer(GrGpu* gpu, size_t sizeInBytes, bool dynamic)
+        : INHERITED(gpu, sizeInBytes, dynamic) {}
 private:
     typedef GrGeometryBuffer INHERITED;
 };

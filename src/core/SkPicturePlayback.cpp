@@ -528,7 +528,9 @@ void SkPicturePlayback::draw(SkCanvas& canvas) {
     SkipClipRec skipRect, skipRegion, skipPath;
 #endif
 
+#ifdef ANDROID
     SkAutoMutexAcquire autoMutex(fDrawMutex);
+#endif
 
     TextContainer text;
     fReader.rewind();

@@ -21,13 +21,13 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
-#include "SkRefDict.h"
 
 class SkClipStack;
 class SkDevice;
 class SkDraw;
 struct SkIRect;
 class SkMatrix;
+class SkMetaData;
 class SkRegion;
 
 /** \class SkDeviceFactory
@@ -36,7 +36,7 @@ class SkRegion;
     to pass into SkCanvas.  Doing so will eliminate the need to extend
     SkCanvas as well.
 */
-class SkDeviceFactory {
+class SK_API SkDeviceFactory {
 public:
     virtual ~SkDeviceFactory();
     virtual SkDevice* newDevice(SkCanvas*, SkBitmap::Config, int width,
@@ -63,6 +63,7 @@ public:
         @param bitmap   A copy of this bitmap is made and stored in the device
     */
     SkDevice(SkCanvas*, const SkBitmap& bitmap, bool forOffscreen);
+    virtual ~SkDevice();
 
     virtual SkDeviceFactory* getDeviceFactory() {
         return SkNEW(SkRasterDeviceFactory);
@@ -180,6 +181,17 @@ public:
                             const SkPoint[], const SkPaint& paint);
     virtual void drawRect(const SkDraw&, const SkRect& r,
                           const SkPaint& paint);
+    /**
+     *  If pathIsMutable, then the implementation is allowed to cast path to a
+     *  non-const pointer and modify it in place (as an optimization). Canvas
+     *  may do this to implement helpers such as drawOval, by placing a temp
+     *  path on the stack to hold the representation of the oval.
+     *
+     *  If prePathMatrix is not null, it should logically be applied before any
+     *  stroking or other effects. If there are no effects on the paint that
+     *  affect the geometry/rasterization, then the pre matrix can just be
+     *  pre-concated with the current matrix.
+     */
     virtual void drawPath(const SkDraw&, const SkPath& path,
                           const SkPaint& paint,
                           const SkMatrix* prePathMatrix = NULL,
@@ -212,7 +224,7 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    SkRefDict& getRefDict() { return fRefDict; }
+    SkMetaData& getMetaData();
 
     struct TextFlags {
         uint32_t            fFlags;     // SkPaint::getFlags()
@@ -250,8 +262,8 @@ private:
 
     SkCanvas*   fCanvas;
     SkBitmap    fBitmap;
-    SkRefDict   fRefDict;
     SkIPoint    fOrigin;
+    SkMetaData* fMetaData;
 };
 
 #endif

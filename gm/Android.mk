@@ -8,11 +8,13 @@ LOCAL_SRC_FILES := \
   complexclip.cpp \
   filltypes.cpp \
   gradients.cpp \
+  pathfill.cpp \
   points.cpp \
   poly2poly.cpp \
   shadertext.cpp \
   shadows.cpp \
   shapes.cpp \
+  strokerects.cpp \
   tilemodes.cpp \
   xfermodes.cpp \
   gmmain.cpp

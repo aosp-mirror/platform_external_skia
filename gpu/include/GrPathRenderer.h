@@ -25,9 +25,21 @@ struct GrPoint;
 /**
  *  Base class for drawing paths into a GrDrawTarget.
  */
-class GrPathRenderer {
+class GR_API GrPathRenderer : public GrRefCnt {
 public:
-    virtual ~GrPathRenderer() { };
+    /**
+     * Returns true if this path renderer is able to render the path.
+     * Returning false allows the caller to fallback to another path renderer.
+     *
+     * @param target    The target to draw into
+     * @param path      The path to draw
+     * @param fill      The fill rule to use
+     *
+     * @return  true if the path can be drawn by this object, false otherwise.
+     */
+    virtual bool canDrawPath(const GrDrawTarget* target,
+                             GrPathIter* path,
+                             GrPathFill fill) const = 0;
 
     /**
      * Draws a path into the draw target. The target will already have its draw
@@ -49,15 +61,6 @@ public:
                           GrPathFill fill,
                           const GrPoint* translate) = 0;
 
-    void drawPath(GrDrawTarget* target,
-                  GrDrawTarget::StageBitfield stages,
-                  const GrPath& path,
-                  GrPathFill fill,
-                  const GrPoint* translate) {
-            GrPath::Iter iter(path);
-            this->drawPath(target, stages, &iter, fill, translate);
-    }
-
     /**
      * For complex clips Gr uses the stencil buffer. The path renderer must be
      * able to render paths into the stencil buffer. However, the path renderer
@@ -68,7 +71,8 @@ public:
      *
      * @param target target that the path will be rendered to
      * @param path   the path that will be drawn
-     * @param fill   the fill rule that will be used
+     * @param fill   the fill rule that will be used, will never be an inverse
+     *               rule.
      *
      * @return false if this path renderer can generate interior-only fragments
      *         without changing the stencil settings on the target. If it
@@ -79,20 +83,13 @@ public:
                                      GrPathIter* path,
                                      GrPathFill fill) const { return false; }
 
-    bool requiresStencilPass(const GrDrawTarget* target,
-                             const GrPath& path,
-                             GrPathFill fill) const {
-        GrPath::Iter iter(path);
-        return requiresStencilPass(target, &iter, fill);
-    }
-
     /**
      * Draws a path to the stencil buffer. Assume the writable stencil bits
      * are already initialized to zero. Fill will always be either
      * kWinding_PathFill or kEvenOdd_PathFill.
      *
      * Only called if requiresStencilPass returns true for the same combo of
-     * target, path, and fill (or inverse of the fill).
+     * target, path, and fill. Never called with an inverse fill.
      *
      * The default implementation assumes the path filling algorithm doesn't
      * require a separate stencil pass and so crashes.
@@ -110,24 +107,31 @@ public:
                                    const GrPoint* translate) {
         GrCrash("Unexpected call to drawPathToStencil.");
     }
+    
+    /**
+     * This is called to install a custom path renderer in every GrContext at
+     * create time. The default implementation in GrCreatePathRenderer_none.cpp
+     * returns NULL. Link against another implementation to install your own.
+     */
+    static GrPathRenderer* CreatePathRenderer();
 
-    void drawPathToStencil(GrDrawTarget* target,
-                           const GrPath& path,
-                           GrPathFill fill,
-                           const GrPoint* translate) {
-        GrPath::Iter iter(path);
-        this->drawPathToStencil(target, &iter, fill, translate);
-    }
+private:
+
+    typedef GrRefCnt INHERITED;
 };
 
 /**
  *  Subclass that renders the path using the stencil buffer to resolve fill
  *  rules (e.g. winding, even-odd)
  */
-class GrDefaultPathRenderer : public GrPathRenderer {
+class GR_API GrDefaultPathRenderer : public GrPathRenderer {
 public:
     GrDefaultPathRenderer(bool separateStencilSupport,
                           bool stencilWrapOpsSupport);
+
+    virtual bool canDrawPath(const GrDrawTarget* target,
+                             GrPathIter* path,
+                             GrPathFill fill) const { return true; }
 
     virtual void drawPath(GrDrawTarget* target,
                           GrDrawTarget::StageBitfield stages,
@@ -143,15 +147,17 @@ public:
                                    const GrPoint* translate);
 private:
 
-    void drawPathHelper(GrDrawTarget* target,
-                        GrDrawTarget::StageBitfield stages,
-                        GrPathIter* path,
-                        GrPathFill fill,
-                        const GrPoint* translate,
-                        bool stencilOnly);
+    void onDrawPath(GrDrawTarget* target,
+                    GrDrawTarget::StageBitfield stages,
+                    GrPathIter* path,
+                    GrPathFill fill,
+                    const GrPoint* translate,
+                    bool stencilOnly);
 
     bool    fSeparateStencil;
     bool    fStencilWrapOps;
+
+    typedef GrPathRenderer INHERITED;
 };
 
 #endif

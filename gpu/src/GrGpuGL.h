@@ -19,7 +19,6 @@
 #define GrGpuGL_DEFINED
 
 #include "GrGpu.h"
-#include "GrGLConfig.h"
 #include "GrGLIRect.h"
 #include "GrGLTexture.h"
 
@@ -39,6 +38,11 @@ protected:
         const GrIndexBuffer*    fIndexBuffer;
         bool                    fArrayPtrsDirty;
     } fHWGeometryState;
+
+    struct AAState {
+        bool fMSAAEnabled;
+        bool fSmoothLineEnabled;
+    } fHWAAState;
 
     DrState   fHWDrawState;
     bool      fHWStencilClip;
@@ -68,34 +72,35 @@ protected:
     // overrides from GrGpu
     virtual void resetContext();
 
-    virtual GrTexture* createTextureHelper(const TextureDesc& desc,
-                                           const void* srcData,
-                                           size_t rowBytes);
-    virtual GrVertexBuffer* createVertexBufferHelper(uint32_t size,
-                                                     bool dynamic);
-    virtual GrIndexBuffer* createIndexBufferHelper(uint32_t size,
-                                                   bool dynamic);
-
-    virtual GrRenderTarget* createPlatformRenderTargetHelper(
+    virtual GrTexture* onCreateTexture(const TextureDesc& desc,
+                                       const void* srcData,
+                                       size_t rowBytes);
+    virtual GrVertexBuffer* onCreateVertexBuffer(uint32_t size,
+                                                 bool dynamic);
+    virtual GrIndexBuffer* onCreateIndexBuffer(uint32_t size,
+                                               bool dynamic);
+    virtual GrResource* onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc);
+    virtual GrRenderTarget* onCreatePlatformRenderTarget(
                                                  intptr_t platformRenderTarget,
                                                  int stencilBits,
+                                                 bool isMultisampled,
                                                  int width, int height);
+    virtual GrRenderTarget* onCreateRenderTargetFrom3DApiState();
 
-    virtual GrRenderTarget* createRenderTargetFrom3DApiStateHelper();
+    virtual void onEraseColor(GrColor color);
 
-    virtual void eraseColorHelper(GrColor color);
+    virtual void onForceRenderTargetFlush();
 
-    virtual void forceRenderTargetFlushHelper();
+    virtual bool onReadPixels(GrRenderTarget* target,
+                              int left, int top, int width, int height,
+                              GrPixelConfig, void* buffer);
 
-    virtual bool readPixelsHelper(int left, int top, int width, int height,
-                                  GrTexture::PixelConfig, void* buffer);
-
-    virtual void drawIndexedHelper(GrPrimitiveType type,
+    virtual void onDrawIndexed(GrPrimitiveType type,
                                    uint32_t startVertex,
                                    uint32_t startIndex,
                                    uint32_t vertexCount,
                                    uint32_t indexCount);
-    virtual void drawNonIndexedHelper(GrPrimitiveType type,
+    virtual void onDrawNonIndexed(GrPrimitiveType type,
                                       uint32_t vertexCount,
                                       uint32_t numVertices);
     virtual void flushScissor(const GrIRect* rect);
@@ -146,15 +151,21 @@ private:
 
     void setSpareTextureUnit();
 
+    bool useSmoothLines();
+
     void flushRenderTarget();
     void flushStencil();
-    void resolveTextureRenderTarget(GrGLTexture* texture);
+    void flushAAState(GrPrimitiveType type);
+    void flushBlend(GrPrimitiveType type);
 
-    bool canBeTexture(GrTexture::PixelConfig config,
-                      GLenum* internalFormat,
-                      GLenum* format,
-                      GLenum* type);
-    bool fboInternalFormat(GrTexture::PixelConfig config, GLenum* format);
+    void resolveRenderTarget(GrGLRenderTarget* texture);
+
+    bool canBeTexture(GrPixelConfig config,
+                      GrGLenum* internalFormat,
+                      GrGLenum* format,
+                      GrGLenum* type);
+
+    bool fboInternalFormat(GrPixelConfig config, GrGLenum* format);
 
     friend class GrGLVertexBuffer;
     friend class GrGLIndexBuffer;
@@ -163,12 +174,12 @@ private:
 
     bool fHWBlendDisabled;
 
-    GLuint fAASamples[4];
+    GrGLuint fAASamples[4];
     enum {
-        kNone_MSFBO = 0,
-        kDesktop_MSFBO,
-        kApple_MSFBO,
-        kIMG_MSFBO
+        kNone_MSFBO = 0,  //<! no support for MSAA FBOs
+        kDesktopARB_MSFBO,//<! GL3.0-style MSAA FBO (GL_ARB_framebuffer_object)
+        kDesktopEXT_MSFBO,//<! earlier GL_EXT_framebuffer* extensions
+        kAppleES_MSFBO,   //<! GL_APPLE_framebuffer_multisample ES extension
     } fMSFBOType;
 
     // Do we have stencil wrap ops.

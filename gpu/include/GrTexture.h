@@ -20,6 +20,7 @@
 
 #include "GrRefCnt.h"
 #include "GrClip.h"
+#include "GrResource.h"
 
 class GrTexture;
 
@@ -30,7 +31,8 @@ class GrTexture;
  * Additionally, GrContext provides methods for creating GrRenderTargets
  * that wrap externally created render targets.
  */
-class GrRenderTarget : public GrRefCnt {
+class GrRenderTarget : public GrResource {
+
 public:
     /**
      * @return the width of the rendertarget
@@ -51,21 +53,92 @@ public:
      */
     GrTexture* asTexture() {return fTexture;}
 
+    /**
+     * @return true if the render target is multisampled, false otherwise
+     */
+    bool isMultisampled() { return fIsMultisampled; }
+
+    /**
+     * Call to indicate the multisample contents were modified such that the
+     * render target needs to be resolved before it can be used as texture. Gr
+     * tracks this for its own drawing and thus this only needs to be called
+     * when the render target has been modified outside of Gr. Only meaningful
+     * for Gr-created RT/Textures and Platform RT/Textures created with the
+     * kGrCanResolve flag.
+     */
+    void flagAsNeedingResolve() {
+        fNeedsResolve = kCanResolve_ResolveType == getResolveType();
+    }
+
+    /**
+     * Call to indicate that GrRenderTarget was externally resolved. This may
+     * allow Gr to skip a redundant resolve step.
+     */
+    void flagAsResolved() { fNeedsResolve = false; }
+
+    /**
+     * @return true if the GrRenderTarget requires MSAA resolving
+     */
+    bool needsResolve() { return fNeedsResolve; }
+
+    /**
+     * Reads a rectangle of pixels from the render target.
+     * @param left          left edge of the rectangle to read (inclusive)
+     * @param top           top edge of the rectangle to read (inclusive)
+     * @param width         width of rectangle to read in pixels.
+     * @param height        height of rectangle to read in pixels.
+     * @param config        the pixel config of the destination buffer
+     * @param buffer        memory to read the rectangle into.
+     *
+     * @return true if the read succeeded, false if not. The read can fail
+     *              because of a unsupported pixel config.
+     */
+    bool readPixels(int left, int top, int width, int height,
+                    GrPixelConfig config, void* buffer);
+
+    // a MSAA RT may require explicit resolving , it may auto-resolve (e.g. FBO
+    // 0 in GL), or be unresolvable because the client didn't give us the 
+    // resolve destination.
+    enum ResolveType {
+        kCanResolve_ResolveType,
+        kAutoResolves_ResolveType,
+        kCantResolve_ResolveType,
+    };
+    virtual ResolveType getResolveType() const = 0;
+
 protected:
-    GrRenderTarget(GrTexture* texture,
+    GrRenderTarget(GrGpu* gpu,
+                   GrTexture* texture,
                    int width,
                    int height,
-                   int stencilBits)
-        : fTexture(texture),
-          fWidth(width),
-          fHeight(height),
-          fStencilBits(stencilBits) {}
+                   int stencilBits,
+                   bool isMultisampled)
+        : INHERITED(gpu)
+        , fTexture(texture)
+        , fWidth(width)
+        , fHeight(height)
+        , fStencilBits(stencilBits)
+        , fIsMultisampled(isMultisampled)
+        , fNeedsResolve(false)
+    {}
 
+    friend class GrTexture;
+    // When a texture unrefs an owned rendertarget this func
+    // removes the back pointer. This could be done called from 
+    // texture's destructor but would have to be done in derived
+    // class. By the time of texture base destructor it has already
+    // lost its pointer to the rt.
+    void onTextureReleaseRenderTarget() {
+        GrAssert(NULL != fTexture);
+        fTexture = NULL;
+    }
 
-    GrTexture* fTexture;
+    GrTexture* fTexture; // not ref'ed
     int        fWidth;
     int        fHeight;
     int        fStencilBits;
+    bool       fIsMultisampled;
+    bool       fNeedsResolve;
 
 private:
     // GrGpu keeps a cached clip in the render target to avoid redundantly
@@ -73,44 +146,19 @@ private:
     friend class GrGpu;
     GrClip     fLastStencilClip;
 
-    typedef GrRefCnt INHERITED;
+    typedef GrResource INHERITED;
 };
 
-class GrTexture : public GrRefCnt {
-public:
-    enum PixelConfig {
-        kUnknown_PixelConfig,
-        kAlpha_8_PixelConfig,
-        kIndex_8_PixelConfig,
-        kRGB_565_PixelConfig,
-        kRGBA_4444_PixelConfig, //!< premultiplied
-        kRGBA_8888_PixelConfig, //!< premultiplied
-        kRGBX_8888_PixelConfig, //!< treat the alpha channel as opaque
-    };
-    static size_t BytesPerPixel(PixelConfig);
-    static bool PixelConfigIsOpaque(PixelConfig);
-    static bool PixelConfigIsAlphaOnly(PixelConfig);
+class GrTexture : public GrResource {
 
-protected:
-    GrTexture(int width,
-              int height,
-              PixelConfig config) :
-                fWidth(width),
-                fHeight(height),
-                fConfig(config) {
-                    // only make sense if alloc size is pow2
-                    fShiftFixedX = 31 - Gr_clz(fWidth);
-                    fShiftFixedY = 31 - Gr_clz(fHeight);
-                }
 public:
-    virtual ~GrTexture();
-
     /**
      * Retrieves the width of the texture.
      *
      * @return the width in texels
      */
     int width() const { return fWidth; }
+
     /**
      * Retrieves the height of the texture.
      *
@@ -130,13 +178,13 @@ public:
     /**
      * Retrieves the pixel config specified when the texture was created.
      */
-    PixelConfig config() const { return fConfig; }
+    GrPixelConfig config() const { return fConfig; }
 
     /**
      *  Approximate number of bytes used by the texture
      */
     size_t sizeInBytes() const {
-        return fWidth * fHeight * BytesPerPixel(fConfig);
+        return fWidth * fHeight * GrBytesPerPixel(fConfig);
     }
 
     /**
@@ -154,28 +202,44 @@ public:
                                    uint32_t width,
                                    uint32_t height,
                                    const void* srcData) = 0;
+
     /**
-     * Indicates that GPU context in which this texture was created is destroyed
-     * and that Ganesh should not attempt to free the texture with the
-     * underlying API.
+     * Reads a rectangle of pixels from the texture.
+     * @param left          left edge of the rectangle to read (inclusive)
+     * @param top           top edge of the rectangle to read (inclusive)
+     * @param width         width of rectangle to read in pixels.
+     * @param height        height of rectangle to read in pixels.
+     * @param config        the pixel config of the destination buffer
+     * @param buffer        memory to read the rectangle into.
+     *
+     * @return true if the read succeeded, false if not. The read can fail
+     *              because of a unsupported pixel config.
      */
-    virtual void abandon() = 0;
+    bool readPixels(int left, int top, int width, int height,
+                    GrPixelConfig config, void* buffer);
 
     /**
      * Retrieves the render target underlying this texture that can be passed to
      * GrGpu::setRenderTarget().
      *
-     * @return    handle to render target or undefined if the texture is not a
+     * @return    handle to render target or NULL if the texture is not a
      *            render target
      */
-    virtual GrRenderTarget* asRenderTarget() = 0;
+    GrRenderTarget* asRenderTarget() { return fRenderTarget; }
 
     /**
      * Removes the reference on the associated GrRenderTarget held by this
-     * texture. Afterwards asRenderTarget() will return NULL. The 
+     * texture. Afterwards asRenderTarget() will return NULL. The
      * GrRenderTarget survives the release if another ref is held on it.
      */
-    virtual void releaseRenderTarget() = 0;
+    void releaseRenderTarget() {
+        if (NULL != fRenderTarget) {
+            GrAssert(fRenderTarget->asTexture() == this);
+            fRenderTarget->onTextureReleaseRenderTarget();
+            fRenderTarget->unref();
+            fRenderTarget = NULL;
+        }
+    }
 
     /**
      *  Return the native ID or handle to the texture, depending on the
@@ -191,6 +255,36 @@ public:
     void validate() const {}
 #endif
 
+protected:
+    GrRenderTarget* fRenderTarget; // texture refs its rt representation
+                                   // base class cons sets to NULL
+                                   // subclass cons can create and set
+
+    GrTexture(GrGpu* gpu,
+              int width,
+              int height,
+              GrPixelConfig config)
+    : INHERITED(gpu)
+    , fRenderTarget(NULL)
+    , fWidth(width)
+    , fHeight(height)
+    , fConfig(config) {
+        // only make sense if alloc size is pow2
+        fShiftFixedX = 31 - Gr_clz(fWidth);
+        fShiftFixedY = 31 - Gr_clz(fHeight);
+    }
+    
+    // GrResource overrides
+    virtual void onRelease() {
+        releaseRenderTarget();
+    }
+
+    virtual void onAbandon() {
+        if (NULL != fRenderTarget) {
+            fRenderTarget->abandon();
+        }
+    }
+
 private:
     int fWidth;
     int fHeight;
@@ -198,9 +292,10 @@ private:
     // for this texture if the texture is power of two sized.
     int      fShiftFixedX;
     int      fShiftFixedY;
-    PixelConfig fConfig;
 
-    typedef GrRefCnt INHERITED;
+    GrPixelConfig fConfig;
+
+    typedef GrResource INHERITED;
 };
 
 #endif
