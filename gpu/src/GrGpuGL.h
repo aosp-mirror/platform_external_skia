@@ -27,10 +27,11 @@
 
 class GrGpuGL : public GrGpu {
 public:
-            GrGpuGL();
     virtual ~GrGpuGL();
 
 protected:
+    GrGpuGL();
+
     struct {
         size_t                  fVertexOffset;
         GrVertexLayout          fVertexLayout;
@@ -72,7 +73,7 @@ protected:
     // overrides from GrGpu
     virtual void resetContext();
 
-    virtual GrTexture* onCreateTexture(const TextureDesc& desc,
+    virtual GrTexture* onCreateTexture(const GrTextureDesc& desc,
                                        const void* srcData,
                                        size_t rowBytes);
     virtual GrVertexBuffer* onCreateVertexBuffer(uint32_t size,
@@ -87,7 +88,7 @@ protected:
                                                  int width, int height);
     virtual GrRenderTarget* onCreateRenderTargetFrom3DApiState();
 
-    virtual void onEraseColor(GrColor color);
+    virtual void onClear(const GrIRect* rect, GrColor color);
 
     virtual void onForceRenderTargetFlush();
 
@@ -104,8 +105,8 @@ protected:
                                       uint32_t vertexCount,
                                       uint32_t numVertices);
     virtual void flushScissor(const GrIRect* rect);
-    void eraseStencil(uint32_t value, uint32_t mask);
-    virtual void eraseStencilClip(const GrIRect& rect);
+    void clearStencil(uint32_t value, uint32_t mask);
+    virtual void clearStencilClip(const GrIRect& rect);
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -140,6 +141,7 @@ protected:
     static bool BlendCoefReferencesConstant(GrBlendCoeff coeff);
 
 private:
+
     // notify callbacks to update state tracking when related
     // objects are bound to GL or deleted outside of the class
     void notifyVertexBufferBind(const GrGLVertexBuffer* buffer);
@@ -153,7 +155,9 @@ private:
 
     bool useSmoothLines();
 
-    void flushRenderTarget();
+    // bound is region that may be modified and therefore has to be resolved.
+    // NULL means whole target. Can be an empty rect.
+    void flushRenderTarget(const GrIRect* bound);
     void flushStencil();
     void flushAAState(GrPrimitiveType type);
     void flushBlend(GrPrimitiveType type);

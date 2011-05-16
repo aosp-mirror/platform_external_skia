@@ -27,6 +27,8 @@
 #include "SkPackBits.h"
 #include <new>
 
+extern int32_t SkNextPixelRefGenerationID();
+
 static bool isPos32Bits(const Sk64& value) {
     return !value.isNeg() && value.is32();
 }
@@ -122,6 +124,12 @@ SkBitmap& SkBitmap::operator=(const SkBitmap& src) {
             // ignore the values from the memcpy
             fPixels = NULL;
             fColorTable = NULL;
+            // Note that what to for genID is somewhat arbitrary. We have no
+            // way to track changes to raw pixels across multiple SkBitmaps.
+            // Would benefit from an SkRawPixelRef type created by
+            // setPixels.
+            // Just leave the memcpy'ed one but they'll get out of sync
+            // as soon either is modified.
         }
     }
 
@@ -130,18 +138,19 @@ SkBitmap& SkBitmap::operator=(const SkBitmap& src) {
 }
 
 void SkBitmap::swap(SkBitmap& other) {
-    SkTSwap<SkColorTable*>(fColorTable, other.fColorTable);
-    SkTSwap<SkPixelRef*>(fPixelRef, other.fPixelRef);
-    SkTSwap<size_t>(fPixelRefOffset, other.fPixelRefOffset);
-    SkTSwap<int>(fPixelLockCount, other.fPixelLockCount);
-    SkTSwap<MipMap*>(fMipMap, other.fMipMap);
-    SkTSwap<void*>(fPixels, other.fPixels);
-    SkTSwap<uint32_t>(fRowBytes, other.fRowBytes);
-    SkTSwap<uint32_t>(fWidth, other.fWidth);
-    SkTSwap<uint32_t>(fHeight, other.fHeight);
-    SkTSwap<uint8_t>(fConfig, other.fConfig);
-    SkTSwap<uint8_t>(fFlags, other.fFlags);
-    SkTSwap<uint8_t>(fBytesPerPixel, other.fBytesPerPixel);
+    SkTSwap(fColorTable, other.fColorTable);
+    SkTSwap(fPixelRef, other.fPixelRef);
+    SkTSwap(fPixelRefOffset, other.fPixelRefOffset);
+    SkTSwap(fPixelLockCount, other.fPixelLockCount);
+    SkTSwap(fMipMap, other.fMipMap);
+    SkTSwap(fPixels, other.fPixels);
+    SkTSwap(fRawPixelGenerationID, other.fRawPixelGenerationID);
+    SkTSwap(fRowBytes, other.fRowBytes);
+    SkTSwap(fWidth, other.fWidth);
+    SkTSwap(fHeight, other.fHeight);
+    SkTSwap(fConfig, other.fConfig);
+    SkTSwap(fFlags, other.fFlags);
+    SkTSwap(fBytesPerPixel, other.fBytesPerPixel);
 
     SkDEBUGCODE(this->validate();)
 }
@@ -387,12 +396,22 @@ void SkBitmap::freeMipMap() {
 }
 
 uint32_t SkBitmap::getGenerationID() const {
-    return fPixelRef ? fPixelRef->getGenerationID() : 0;
+    if (fPixelRef) {
+        return fPixelRef->getGenerationID();
+    } else {
+        SkASSERT(fPixels || !fRawPixelGenerationID);
+        if (fPixels && !fRawPixelGenerationID) {
+            fRawPixelGenerationID = SkNextPixelRefGenerationID();
+        }
+        return fRawPixelGenerationID;
+    }
 }
 
 void SkBitmap::notifyPixelsChanged() const {
     if (fPixelRef) {
         fPixelRef->notifyPixelsChanged();
+    } else {
+        fRawPixelGenerationID = 0; // will grab next ID in getGenerationID
     }
 }
 
@@ -605,7 +624,7 @@ SkColor SkBitmap::getColor(int x, int y) const {
 
     switch (this->config()) {
         case SkBitmap::kA1_Config: {
-            uint8_t* addr = getAddr1(x, y);
+            uint8_t* addr = this->getAddr1(x, y);
             uint8_t mask = 1 << (7  - (x % 8));
             if (addr[0] & mask) {
                 return SK_ColorBLACK;
@@ -614,30 +633,30 @@ SkColor SkBitmap::getColor(int x, int y) const {
             }
         }
         case SkBitmap::kA8_Config: {
-            uint8_t* addr = getAddr8(x, y);
+            uint8_t* addr = this->getAddr8(x, y);
             return SkColorSetA(0, addr[0]);
         }
         case SkBitmap::kIndex8_Config: {
-            SkPMColor c = getIndex8Color(x, y);
+            SkPMColor c = this->getIndex8Color(x, y);
             return SkUnPreMultiply::PMColorToColor(c);
         }
         case SkBitmap::kRGB_565_Config: {
-            uint16_t* addr = getAddr16(x, y);
+            uint16_t* addr = this->getAddr16(x, y);
             return SkPixel16ToColor(addr[0]);
         }
         case SkBitmap::kARGB_4444_Config: {
-            uint16_t* addr = getAddr16(x, y);
+            uint16_t* addr = this->getAddr16(x, y);
             SkPMColor c = SkPixel4444ToPixel32(addr[0]);
             return SkUnPreMultiply::PMColorToColor(c);
         }
         case SkBitmap::kARGB_8888_Config: {
-            uint32_t* addr = getAddr32(x, y);
+            uint32_t* addr = this->getAddr32(x, y);
             return SkUnPreMultiply::PMColorToColor(addr[0]);
         }
         case kRLE_Index8_Config: {
             uint8_t dst;
             const SkBitmap::RLEPixels* rle =
-                (const SkBitmap::RLEPixels*) getPixels();
+                (const SkBitmap::RLEPixels*)this->getPixels();
             SkPackBits::Unpack8(&dst, x, 1, rle->packedAtY(y));
             return SkUnPreMultiply::PMColorToColor((*fColorTable)[dst]);
         }

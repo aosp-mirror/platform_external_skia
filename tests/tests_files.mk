@@ -2,9 +2,12 @@ SOURCE := \
     BitmapCopyTest.cpp \
     BitmapGetColorTest.cpp \
     BlitRowTest.cpp \
+    ClampRangeTest.cpp \
     ClipCubicTest.cpp \
     ClipStackTest.cpp \
     ClipperTest.cpp \
+    ColorFilterTest.cpp \
+    ColorTest.cpp \
     DequeTest.cpp \
     DrawBitmapRectTest.cpp \
     FillPathTest.cpp \

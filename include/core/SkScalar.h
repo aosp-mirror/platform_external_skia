@@ -53,7 +53,7 @@
     #define SK_ScalarMax            (3.402823466e+38f)
     /** SK_ScalarMin is defined to be the smallest value representable as an SkScalar
     */
-    #define SK_ScalarMin            (1.175494351e-38f)
+    #define SK_ScalarMin            (-SK_ScalarMax)
     /** SK_ScalarNaN is defined to be 'Not a Number' as an SkScalar
     */
     #define SK_ScalarNaN      (*(const float*)(const void*)&gIEEENotANumber)
@@ -173,6 +173,9 @@
     inline SkScalar SkMaxScalar(SkScalar a, SkScalar b) { return a > b ? a : b; }
     inline SkScalar SkMinScalar(SkScalar a, SkScalar b) { return a < b ? a : b; }
 
+    static inline bool SkScalarIsInt(SkScalar x) {
+        return x == (float)(int)x;
+    }
 #else
     typedef SkFixed SkScalar;
 
@@ -237,6 +240,10 @@
 
     #define SkMaxScalar(a, b)       SkMax32(a, b)
     #define SkMinScalar(a, b)       SkMin32(a, b)
+
+    static inline bool SkScalarIsInt(SkFixed x) {
+        return 0 == (x & 0xffff);
+    }
 #endif
 
 #define SK_ScalarNearlyZero         (SK_Scalar1 / (1 << 12))

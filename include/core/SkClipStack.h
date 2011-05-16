@@ -10,7 +10,12 @@ class SkPath;
 class SK_API SkClipStack {
 public:
     SkClipStack();
+    SkClipStack(const SkClipStack& b);
     ~SkClipStack() {}
+
+    SkClipStack& operator=(const SkClipStack& b);
+    bool operator==(const SkClipStack& b) const;
+    bool operator!=(const SkClipStack& b) const { return !(*this == b); }
 
     void reset();
 
@@ -37,6 +42,7 @@ public:
         B2FIter(const SkClipStack& stack);
 
         struct Clip {
+            friend bool operator==(const Clip& a, const Clip& b);
             const SkRect*   fRect;  // if non-null, this is a rect clip
             const SkPath*   fPath;  // if non-null, this is a path clip
             SkRegion::Op    fOp;

@@ -1,13 +1,17 @@
 {
   'target_defaults': {
-   'msvs_settings': {
-      #really need to figure out how to generate debug and release
-      'VCLinkerTool': {
-        'GenerateDebugInformation': 'true',
+    'configurations': {
+      'Debug': {
+        'defines': [
+          'SK_DEBUG',
+          'GR_DEBUG=1',
+        ],
       },
-      'VCCLCompilerTool': {
-          'DebugInformationFormat': '4',
-          'Optimization': '0',
+      'Release': {
+        'defines': [
+          'SK_RELEASE',
+          'GR_RELEASE=1',
+        ],
       },
     },
     'conditions': [
@@ -26,7 +30,12 @@
           'SK_BUILD_FOR_WIN32',
           'SK_IGNORE_STDINT_DOT_H',
         ],
-      },],
+      }],
+      [ 'OS == "linux"', {
+        'defines': [
+          'SK_SAMPLES_FOR_X',
+        ],
+      }],
     ],
     'direct_dependent_settings': {
       'conditions': [
@@ -39,7 +48,7 @@
           'defines': [
             'SK_BUILD_FOR_WIN32',
           ],
-        },],
+        }],
       ],
     },
   },
@@ -82,6 +91,7 @@
         '../src/core/SkBuffer.cpp',
         '../src/core/SkCanvas.cpp',
         '../src/core/SkChunkAlloc.cpp',
+        '../src/core/SkClampRange.cpp',
         '../src/core/SkClipStack.cpp',
         '../src/core/SkColor.cpp',
         '../src/core/SkColorFilter.cpp',
@@ -174,6 +184,8 @@
         '../src/core/SkTSort.h',
         '../src/core/SkTemplatesPriv.h',
         '../src/core/SkTypeface.cpp',
+        '../src/core/SkTypefaceCache.cpp',
+        '../src/core/SkTypefaceCache.h',
         '../src/core/SkUnPreMultiply.cpp',
         '../src/core/SkUtils.cpp',
         '../src/core/SkWriter32.cpp',
@@ -182,6 +194,8 @@
         '../src/opts/opts_check_SSE2.cpp',
 
         '../src/ports/SkDebug_stdio.cpp',
+        '../src/ports/SkDebug_win.cpp',
+
         '../src/ports/SkFontHost_tables.cpp',
         '../src/ports/SkGlobals_global.cpp',
         '../src/ports/SkMemory_malloc.cpp',
@@ -200,6 +214,7 @@
         '../include/core/SkBuffer.h',
         '../include/core/SkCanvas.h',
         '../include/core/SkChunkAlloc.h',
+        '../include/core/SkClampRange.h',
         '../include/core/SkClipStack.h',
         '../include/core/SkColor.h',
         '../include/core/SkColorFilter.h',
@@ -331,7 +346,15 @@
             '../src/ports/SkFontHost_win.cpp',
             '../src/ports/SkThread_win.cpp',
           ],
-        },],
+          'sources!': [
+            '../src/ports/SkDebug_stdio.cpp',
+          ],
+        }],
+        [ 'OS != "win"', {
+          'sources!': [
+            '../src/ports/SkDebug_win.cpp',
+          ],
+        }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -514,7 +537,7 @@
             '../src/images/SkJpegUtility.cpp',
             '../src/images/SkMovie_gif.cpp',
           ],
-        },],
+        }],
         [ 'OS == "mac"', {
           'sources!': [
             '../include/images/SkJpegUtility.h',
@@ -526,7 +549,7 @@
             '../src/images/SkJpegUtility.cpp',
             '../src/images/SkMovie_gif.cpp',
           ],
-        },],
+        }],
         [ 'OS == "linux" or OS == "freebsd" or OS == "openbsd" or OS == "solaris"', {
           'sources!': [
             '../include/images/SkJpegUtility.h',
@@ -583,7 +606,7 @@
             '../src/xml/SkJS.cpp',
             '../src/xml/SkJSDisplayable.cpp',
           ],
-        },],
+        }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -692,7 +715,7 @@
             '../src/utils/mac/SkCreateCGImageRef.cpp',
             '../src/utils/mac/SkEGLContext_mac.cpp',
           ],
-        },],
+        }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -775,7 +798,7 @@
             '../src/utils/win/SkOSWindow_Win.cpp',
             '../src/utils/win/skia_win.cpp',
           ],
-        },],
+        }],
         [ 'OS == "mac"', {
           'sources': [
             '../include/utils/SkCGUtils.h',
@@ -791,7 +814,7 @@
               '$(SDKROOT)/System/Library/Frameworks/AGL.framework',
             ],
           },
-        },],
+        }],
         [ 'OS == "linux" or OS == "freebsd" or OS == "openbsd" or OS == "solaris"', {
           'include_dirs' : [
             '../include/utils/unix',
@@ -848,7 +871,7 @@
           'defines': [
               'GR_WIN32_BUILD=1',
           ],
-          },],
+          }],
       ],
       'direct_dependent_settings': {
         'conditions': [
@@ -866,7 +889,7 @@
             'defines': [
               'GR_WIN32_BUILD=1',
             ],
-          },],
+          }],
         ],
         'include_dirs': [
           '../include/gpu',
@@ -878,10 +901,12 @@
       'type': 'static_library',
       'include_dirs': [
         '../gpu/include',
+        '../include/core',
+        '../include/config',
       ],
-      #'dependencies': [
-      #  'libtess',
-      #],
+      'dependencies': [
+        'libtess',
+      ],
       'sources': [
         '../gpu/include/GrAllocator.h',
         '../gpu/include/GrAllocPool.h',
@@ -934,7 +959,7 @@
         '../gpu/include/GrTArray.h',
         '../gpu/include/GrTBSearch.h',
         '../gpu/include/GrTDArray.h',
-        #'../gpu/include/GrTesselatedPathRenderer.h',
+        '../gpu/include/GrTesselatedPathRenderer.h',
         '../gpu/include/GrTextContext.h',
         '../gpu/include/GrTextStrike.h',
         '../gpu/include/GrTexture.h',
@@ -972,8 +997,6 @@
         '../gpu/src/GrGpuGLFixed.h',
         '../gpu/src/GrGpuGLShaders.cpp',
         '../gpu/src/GrGpuGLShaders.h',
-        '../gpu/src/GrGpuGLShaders2.cpp',
-        '../gpu/src/GrGpuGLShaders2.h',
         '../gpu/src/GrInOrderDrawBuffer.cpp',
         '../gpu/src/GrMatrix.cpp',
         '../gpu/src/GrMemory.cpp',
@@ -981,12 +1004,11 @@
         '../gpu/src/GrPathRenderer.cpp',
         '../gpu/src/GrPathUtils.cpp',
         '../gpu/src/GrPathUtils.h',
-        '../gpu/src/GrPrintf_printf.cpp',
         '../gpu/src/GrRectanizer.cpp',
         '../gpu/src/GrRedBlackTree.h',
         '../gpu/src/GrResource.cpp',
         '../gpu/src/GrStencil.cpp',
-        #'../gpu/src/GrTesselatedPathRenderer.cpp',
+        '../gpu/src/GrTesselatedPathRenderer.cpp',
         '../gpu/src/GrTextContext.cpp',
         '../gpu/src/GrTextStrike.cpp',
         '../gpu/src/GrTextStrike_impl.h',
@@ -997,6 +1019,8 @@
         '../gpu/src/mac/GrGLDefaultInterface_mac.cpp',
 
         '../gpu/src/win/GrGLDefaultInterface_win.cpp',
+
+        '../gpu/src/unix/GrGLDefaultInterface_unix.cpp',
       ],
       'defines': [
         'GR_IMPLEMENTATION=1',
@@ -1005,6 +1029,9 @@
         [ 'OS == "linux"', {
           'defines': [
               'GR_LINUX_BUILD=1',
+          ],
+          'sources!': [
+            '../gpu/src/GrGLDefaultInterface_none.cpp',
           ],
           'link_settings': {
             'libraries': [
@@ -1034,7 +1061,7 @@
           'sources!': [
             '../gpu/src/GrGLDefaultInterface_none.cpp',
           ],
-        },],
+        }],
         [ 'OS != "win"', {
           'sources!': [
             '../gpu/src/win/GrGLDefaultInterface_win.cpp',
@@ -1043,6 +1070,11 @@
         [ 'OS != "mac"', {
           'sources!': [
             '../gpu/src/mac/GrGLDefaultInterface_mac.cpp',
+          ],
+        }],
+        [ 'OS != "linux"', {
+          'sources!': [
+            '../gpu/src/unix/GrGLDefaultInterface_unix.cpp',
           ],
         }],
       ],
@@ -1063,7 +1095,7 @@
               'GR_WIN32_BUILD=1',
               'GR_GL_FUNCTION_TYPE=__stdcall',
             ],
-          },],
+          }],
         ],
         'include_dirs': [
           '../gpu/include',
@@ -1109,7 +1141,7 @@
         '../src/animator/SkBoundable.h',
         '../src/animator/SkBuildCondensedInfo.cpp',
         #'../src/animator/SkCondensedDebug.cpp', fails on windows
-        '../src/animator/SkCondensedRelease.cpp',
+        #'../src/animator/SkCondensedRelease.cpp',
         '../src/animator/SkDisplayable.cpp',
         '../src/animator/SkDisplayable.h',
         '../src/animator/SkDisplayAdd.cpp',
@@ -1392,6 +1424,7 @@
         '../samplecode/SampleCamera.cpp',
         '../samplecode/SampleCircle.cpp',
         '../samplecode/SampleCode.h',
+        '../samplecode/SampleColorFilter.cpp',
         '../samplecode/SampleComplexClip.cpp',
         '../samplecode/SampleCull.cpp',
         '../samplecode/SampleDecode.cpp',
@@ -1432,6 +1465,7 @@
         '../samplecode/SamplePicture.cpp',
         '../samplecode/SamplePoints.cpp',
         '../samplecode/SamplePolyToPoly.cpp',
+        '../samplecode/SampleAARects.cpp',
         '../samplecode/SampleRegion.cpp',
         '../samplecode/SampleRepeatTile.cpp',
         '../samplecode/SampleShaders.cpp',
@@ -1487,12 +1521,12 @@
             '../samplecode/SampleEncode.cpp',
             '../samplecode/SamplePageFlip.cpp',
           ],
-        },],
+        }],
         [ 'OS == "mac"', {
           'sources!': [
             '../samplecode/SampleDecode.cpp',
           ],
-        },],
+        }],
 
       ],
       'msvs_settings': {

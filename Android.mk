@@ -114,6 +114,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
 	src/core/SkCanvas.cpp \
+	src/core/SkClampRange.cpp \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
 	src/core/SkColorFilter.cpp \
@@ -140,7 +141,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
 	src/core/SkMemory_stdlib.cpp \
-    src/core/SkMetaData.cpp \
+	src/core/SkMetaData.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPath.cpp \
@@ -173,6 +174,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
+	src/core/SkTypefaceCache.cpp \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkXfermode.cpp \
 	src/core/SkWriter32.cpp \
@@ -181,6 +183,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
+	src/utils/SkOSFile.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkParse.cpp \
@@ -189,9 +192,18 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkUnitMappers.cpp
 
 ifeq ($(TARGET_ARCH),arm)
+
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+LOCAL_SRC_FILES += \
+	src/opts/memset16_neon.S \
+	src/opts/memset32_neon.S
+endif
+
 LOCAL_SRC_FILES += \
 	src/opts/SkBlitRow_opts_arm.cpp \
-	src/opts/SkBitmapProcState_opts_arm.cpp
+	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/opts_check_arm.cpp \
+	src/opts/memset.arm.S
 else
 LOCAL_SRC_FILES += \
 	src/opts/SkBlitRow_opts_none.cpp \
@@ -270,7 +282,6 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrGLTexture.cpp \
   gpu/src/GrGLVertexBuffer.cpp \
   gpu/src/GrGpu.cpp \
-  gpu/src/GrGpuGLShaders2.cpp \
   gpu/src/GrGpuGLFixed.cpp \
   gpu/src/GrGpuFactory.cpp \
   gpu/src/GrGLUtil.cpp \

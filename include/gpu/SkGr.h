@@ -104,27 +104,8 @@ GR_STATIC_ASSERT((int)SkPath::kDone_Verb  == (int)kEnd_PathCmd);
 
 #include "SkColorPriv.h"
 
-static inline GrRect Sk2Gr(const SkRect& src) {
-    return GrRect(SkScalarToGrScalar(src.fLeft),
-                  SkScalarToGrScalar(src.fTop),
-                  SkScalarToGrScalar(src.fRight),
-                  SkScalarToGrScalar(src.fBottom));
-}
-
 class SkGr {
 public:
-    static inline SkIRect& SetIRect(SkIRect* dst, const GrIRect& src) {
-        GR_STATIC_ASSERT(sizeof(*dst) == sizeof(src));
-        memcpy(dst, &src, sizeof(*dst));
-        return *dst;
-    }
-
-    static inline GrIRect& SetIRect(GrIRect* dst, const SkIRect& src) {
-        GR_STATIC_ASSERT(sizeof(*dst) == sizeof(src));
-        memcpy(dst, &src, sizeof(*dst));
-        return *dst;
-    }
-
     /**
      *  Convert the SkBitmap::Config to the corresponding PixelConfig, or
      *  kUnknown_PixelConfig if the conversion cannot be done.
@@ -134,18 +115,6 @@ public:
 
     static GrPixelConfig Bitmap2PixelConfig(const SkBitmap& bm) {
         return BitmapConfig2PixelConfig(bm.config(), bm.isOpaque());
-    }
-
-    static void SkMatrix2GrMatrix(const SkMatrix& m, GrMatrix* g) {
-        g->setAll(SkScalarToGrScalar(m[0]),
-                  SkScalarToGrScalar(m[1]),
-                  SkScalarToGrScalar(m[2]),
-                  SkScalarToGrScalar(m[3]),
-                  SkScalarToGrScalar(m[4]),
-                  SkScalarToGrScalar(m[5]),
-                  SkScalarToGrScalar(m[6]),
-                  SkScalarToGrScalar(m[7]),
-                  SkScalarToGrScalar(m[8]));
     }
 
     static GrColor SkColor2GrColor(SkColor c) {
@@ -169,6 +138,7 @@ public:
     virtual GrPathCmd next();
     virtual void rewind();
     virtual GrConvexHint convexHint() const;
+    virtual bool getConservativeBounds(GrRect* rect) const;
 
     void reset(const SkPath& path) {
         fPath = &path;
@@ -202,7 +172,7 @@ public:
         if (!fCurr->fRect) {
             rect->setEmpty();
         } else {
-            *rect = Sk2Gr(*fCurr->fRect);
+            *rect = *fCurr->fRect;
         }
     }
 

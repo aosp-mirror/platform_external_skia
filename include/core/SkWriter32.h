@@ -32,9 +32,23 @@ public:
         fMinSize = minSize;
         fSize = 0;
         fHead = fTail = NULL;
+        fSingleBlock = NULL;
     }
     ~SkWriter32();
 
+    /**
+     *  Returns the single block backing the writer, or NULL if the memory is
+     *  to be dynamically allocated.
+     */
+    void* getSingleBlock() const { return fSingleBlock; }
+
+    /**
+     *  Specify the single block to back the writer, rathern than dynamically
+     *  allocating the memory. If block == NULL, then the writer reverts to
+     *  dynamic allocation (and resets).
+     */
+    void reset(void* block, size_t size);
+                    
     bool writeBool(bool value) {
         this->writeInt(value);
         return value;
@@ -70,6 +84,14 @@ public:
     
     // write count bytes (must be a multiple of 4)
     void writeMul4(const void* values, size_t size) {
+        this->write(values, size);
+    }
+
+    /**
+     *  Write size bytes from values. size must be a multiple of 4, though
+     *  values need not be 4-byte aligned.
+     */
+    void write(const void* values, size_t size) {
         SkASSERT(SkAlign4(size) == size);
         // if we could query how much is avail in the current block, we might
         // copy that much, and then alloc the rest. That would reduce the waste
@@ -83,7 +105,7 @@ public:
     uint32_t  size() const { return fSize; }
     void      reset();
     uint32_t* reserve(size_t size); // size MUST be multiple of 4
-    
+
     // return the address of the 4byte int at the specified offset (which must
     // be a multiple of 4. This does not allocate any new space, so the returned
     // address is only valid for 1 int.
@@ -101,11 +123,14 @@ public:
 private:
     size_t      fMinSize;
     uint32_t    fSize;
+
+    char*       fSingleBlock;
+    uint32_t    fSingleBlockSize;
     
     struct Block;
     Block*  fHead;
     Block*  fTail;
-    
+
     Block* newBlock(size_t bytes);
 };
 

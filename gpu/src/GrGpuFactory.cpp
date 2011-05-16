@@ -26,12 +26,11 @@
 #include "GrGpu.h"
 #include "GrGpuGLFixed.h"
 #include "GrGpuGLShaders.h"
-#include "GrGpuGLShaders2.h"
 
-GrGpu* GrGpu::Create(Engine engine, Platform3DContext context3D) {
+GrGpu* GrGpu::Create(GrEngine engine, GrPlatform3DContext context3D) {
 
-    if (kOpenGL_Shaders_Engine == engine ||
-        kOpenGL_Fixed_Engine == engine) {
+    if (kOpenGL_Shaders_GrEngine == engine ||
+        kOpenGL_Fixed_GrEngine == engine) {
         // If no GL bindings have been installed, fall-back to calling the
         // GL functions that have been linked with the executable.
         if (!GrGLGetGLInterface()) {
@@ -41,27 +40,33 @@ GrGpu* GrGpu::Create(Engine engine, Platform3DContext context3D) {
                 return NULL;
             }
         }
+        if (!GrGLGetGLInterface()->validate(engine)) {
+#if GR_DEBUG
+            GrPrintf("Failed GL interface validation!");
+#endif
+            return NULL;
+        }
     }
 
     GrGpu* gpu = NULL;
 
     switch (engine) {
-        case kOpenGL_Shaders_Engine:
-            GrAssert(NULL == context3D);
+        case kOpenGL_Shaders_GrEngine:
+            GrAssert(NULL == (void*)context3D);
             {
-#if GR_USE_NEW_GLSHADERS
-                gpu = new GrGpuGLShaders;
-#else
+#if 0 // old code path, will be removed soon
                 gpu = new GrGpuGLShaders2;
+#else
+                gpu = new GrGpuGLShaders;
 #endif
             }
             break;
-        case kOpenGL_Fixed_Engine:
-            GrAssert(NULL == context3D);
+        case kOpenGL_Fixed_GrEngine:
+            GrAssert(NULL == (void*)context3D);
             gpu = new GrGpuGLFixed;
             break;
-        case kDirect3D9_Engine:
-            GrAssert(NULL != context3D);
+        case kDirect3D9_GrEngine:
+            GrAssert(NULL != (void*)context3D);
 #if GR_WIN32_BUILD
 //            gpu = new GrGpuD3D9((IDirect3DDevice9*)context3D);
 #endif

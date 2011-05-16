@@ -136,7 +136,7 @@ void GrGpu::unimpl(const char msg[]) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrTexture* GrGpu::createTexture(const TextureDesc& desc,
+GrTexture* GrGpu::createTexture(const GrTextureDesc& desc,
                                 const void* srcData, size_t rowBytes) {
     this->handleDirtyContext();
     return this->onCreateTexture(desc, srcData, rowBytes);
@@ -173,9 +173,9 @@ GrIndexBuffer* GrGpu::createIndexBuffer(uint32_t size, bool dynamic) {
     return this->onCreateIndexBuffer(size, dynamic);
 }
 
-void GrGpu::eraseColor(GrColor color) {
+void GrGpu::clear(const GrIRect* rect, GrColor color) {
     this->handleDirtyContext();
-    this->onEraseColor(color);
+    this->onClear(rect, color);
 }
 
 void GrGpu::forceRenderTargetFlush() {
@@ -238,10 +238,16 @@ const GrVertexBuffer* GrGpu::getUnitSquareVertexBuffer() const {
     if (NULL == fUnitSquareVertexBuffer) {
 
         static const GrPoint DATA[] = {
+            { 0,            0 },
+            { GR_Scalar1,   0 },
+            { GR_Scalar1,   GR_Scalar1 },
+            { 0,            GR_Scalar1 }
+#if 0
             GrPoint(0,         0),
             GrPoint(GR_Scalar1,0),
             GrPoint(GR_Scalar1,GR_Scalar1),
             GrPoint(0,         GR_Scalar1)
+#endif
         };
         static const size_t SIZE = sizeof(DATA);
 
@@ -393,7 +399,9 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                        GrIntToScalar(rt.width()), GrIntToScalar(rt.height()));
         if (fClip.hasConservativeBounds()) {
             bounds = fClip.getConservativeBounds();
-            bounds.intersectWith(rtRect);
+            if (!bounds.intersect(rtRect)) {
+                bounds.setEmpty();
+            }
         } else {
             bounds = rtRect;
         }
@@ -423,7 +431,7 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
             AutoInternalDrawGeomRestore aidgr(this);
 
             this->setViewMatrix(GrMatrix::I());
-            this->eraseStencilClip(clipRect);
+            this->clearStencilClip(clipRect);
             this->flushScissor(NULL);
 #if !VISUALIZE_COMPLEX_CLIP
             this->enableState(kNoColorWrites_StateBit);
@@ -725,7 +733,7 @@ void GrGpu::onSetIndexSourceToArray(const void* indexArray, int indexCount) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const GrGpu::Stats& GrGpu::getStats() const {
+const GrGpuStats& GrGpu::getStats() const {
     return fStats;
 }
 
@@ -755,7 +763,7 @@ const GrSamplerState GrSamplerState::gClampNoFilter(
     GrSamplerState::kClamp_WrapMode,
     GrSamplerState::kNormal_SampleMode,
     GrMatrix::I(),
-    false);
+    GrSamplerState::kNearest_Filter);
 
 
 

@@ -3,6 +3,7 @@
 #include "SkGraphics.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
+#include "SkPicture.h"
 #include "SkStream.h"
 #include "SkRefCnt.h"
 
@@ -13,8 +14,8 @@
 #include "SkDevice.h"
 
 #ifdef SK_SUPPORT_PDF
-	#include "SkPDFDevice.h"
-	#include "SkPDFDocument.h"
+    #include "SkPDFDevice.h"
+    #include "SkPDFDocument.h"
 #endif
 
 using namespace skiagm;
@@ -57,11 +58,16 @@ static SkString make_name(const char shortName[], const char configName[]) {
     return name;
 }
 
-static SkString make_filename(const char path[], const SkString& name, const char suffix[]) {
+static SkString make_filename(const char path[],
+                              const char pathSuffix[],
+                              const SkString& name,
+                              const char suffix[]) {
     SkString filename(path);
-    if (filename.size() && filename[filename.size() - 1] != '/') {
-        filename.append("/");
+    if (filename.endsWith("/")) {
+        filename.remove(filename.size() - 1, 1);
     }
+    filename.append(pathSuffix);
+    filename.append("/");
     filename.appendf("%s.%s", name.c_str(), suffix);
     return filename;
 }
@@ -88,15 +94,15 @@ static bool write_bitmap(const SkString& path, const SkBitmap& bitmap) {
 }
 
 static inline SkPMColor compute_diff_pmcolor(SkPMColor c0, SkPMColor c1) {
-	int dr = SkGetPackedR32(c0) - SkGetPackedR32(c1);
-	int dg = SkGetPackedG32(c0) - SkGetPackedG32(c1);
-	int db = SkGetPackedB32(c0) - SkGetPackedB32(c1);
-	return SkPackARGB32(0xFF, SkAbs32(dr), SkAbs32(dg), SkAbs32(db));
+    int dr = SkGetPackedR32(c0) - SkGetPackedR32(c1);
+    int dg = SkGetPackedG32(c0) - SkGetPackedG32(c1);
+    int db = SkGetPackedB32(c0) - SkGetPackedB32(c1);
+    return SkPackARGB32(0xFF, SkAbs32(dr), SkAbs32(dg), SkAbs32(db));
 }
 
 static void compute_diff(const SkBitmap& target, const SkBitmap& base,
-						 SkBitmap* diff) {
-	SkAutoLockPixels alp(*diff);
+                         SkBitmap* diff) {
+    SkAutoLockPixels alp(*diff);
 
     const int w = target.width();
     const int h = target.height();
@@ -104,17 +110,18 @@ static void compute_diff(const SkBitmap& target, const SkBitmap& base,
         for (int x = 0; x < w; x++) {
             SkPMColor c0 = *base.getAddr32(x, y);
             SkPMColor c1 = *target.getAddr32(x, y);
-			SkPMColor d = 0;
-			if (c0 != c1) {
-				d = compute_diff_pmcolor(c0, c1);
-			}
-			*diff->getAddr32(x, y) = d;
-		}
-	}
+            SkPMColor d = 0;
+            if (c0 != c1) {
+                d = compute_diff_pmcolor(c0, c1);
+            }
+            *diff->getAddr32(x, y) = d;
+        }
+    }
 }
 
 static bool compare(const SkBitmap& target, const SkBitmap& base,
-                    const SkString& name, SkBitmap* diff) {
+                    const SkString& name, const char* modeDescriptor,
+                    SkBitmap* diff) {
     SkBitmap copy;
     const SkBitmap* bm = &target;
     if (target.config() != SkBitmap::kARGB_8888_Config) {
@@ -127,8 +134,9 @@ static bool compare(const SkBitmap& target, const SkBitmap& base,
     const int w = bm->width();
     const int h = bm->height();
     if (w != base.width() || h != base.height()) {
-        SkDebugf("---- dimensions mismatch for %s base [%d %d] current [%d %d]\n",
-                 name.c_str(), base.width(), base.height(), w, h);
+        SkDebugf("---- %s dimensions mismatch for %s base [%d %d] current [%d %d]\n",
+                 modeDescriptor, name.c_str(),
+                 base.width(), base.height(), w, h);
         return false;
     }
 
@@ -140,21 +148,21 @@ static bool compare(const SkBitmap& target, const SkBitmap& base,
             SkPMColor c0 = *base.getAddr32(x, y);
             SkPMColor c1 = *bm->getAddr32(x, y);
             if (c0 != c1) {
-                SkDebugf("----- pixel mismatch for %s at [%d %d] base 0x%08X current 0x%08X\n",
-                         name.c_str(), x, y, c0, c1);
+                SkDebugf("----- %s pixel mismatch for %s at [%d %d] base 0x%08X current 0x%08X\n",
+                         modeDescriptor, name.c_str(), x, y, c0, c1);
 
-				if (diff) {
-					diff->setConfig(SkBitmap::kARGB_8888_Config, w, h);
-					diff->allocPixels();
-					compute_diff(*bm, base, diff);
-				}
+                if (diff) {
+                    diff->setConfig(SkBitmap::kARGB_8888_Config, w, h);
+                    diff->allocPixels();
+                    compute_diff(*bm, base, diff);
+                }
                 return false;
             }
         }
     }
 
-	// they're equal
-	return true;
+    // they're equal
+    return true;
 }
 
 static bool write_pdf(const SkString& path, const SkDynamicMemoryWStream& pdf) {
@@ -168,11 +176,255 @@ enum Backend {
   kPDF_Backend,
 };
 
-static const struct {
-	SkBitmap::Config	fConfig;
+struct ConfigData {
+    SkBitmap::Config    fConfig;
     Backend             fBackend;
-	const char*			fName;
-} gRec[] = {
+    const char*         fName;
+};
+
+/// Returns true if processing should continue, false to skip the
+/// remainder of this config for this GM.
+//@todo thudson 22 April 2011 - could refactor this to take in
+// a factory to generate the context, always call readPixels()
+// (logically a noop for rasters, if wasted time), and thus collapse the
+// GPU special case and also let this be used for SkPicture testing.
+static void setup_bitmap(const ConfigData& gRec, SkISize& size,
+                         SkBitmap* bitmap) {
+    bitmap->setConfig(gRec.fConfig, size.width(), size.height());
+    bitmap->allocPixels();
+    bitmap->eraseColor(0);
+}
+
+// Returns true if the test should continue, false if the test should
+// halt.
+static bool generate_image(GM* gm, const ConfigData& gRec,
+                           GrContext* context,
+                           SkBitmap& bitmap) {
+    SkISize size (gm->getISize());
+    setup_bitmap(gRec, size, &bitmap);
+    SkCanvas canvas(bitmap);
+
+    if (gRec.fBackend == kRaster_Backend) {
+        gm->draw(&canvas);
+    } else {  // GPU
+        if (NULL == context) {
+            return false;
+        }
+        SkGpuCanvas gc(context,
+                       SkGpuDevice::Current3DApiRenderTarget());
+        gc.setDevice(gc.createDevice(bitmap.config(),
+                                     bitmap.width(),
+                                     bitmap.height(),
+                                     bitmap.isOpaque(),
+                                     false))->unref();
+        gm->draw(&gc);
+        gc.readPixels(&bitmap); // overwrite our previous allocation
+    }
+    return true;
+}
+
+static void generate_image_from_picture(GM* gm, const ConfigData& gRec,
+                                        SkPicture* pict, SkBitmap* bitmap) {
+    SkISize size = gm->getISize();
+    setup_bitmap(gRec, size, bitmap);
+    SkCanvas canvas(*bitmap);
+    canvas.drawPicture(*pict);
+}
+
+static void generate_pdf(GM* gm, SkDynamicMemoryWStream& pdf) {
+#ifdef SK_SUPPORT_PDF
+    SkISize size = gm->getISize();
+    SkMatrix identity;
+    identity.reset();
+    SkPDFDevice* dev = new SkPDFDevice(size, size, identity);
+    SkAutoUnref aur(dev);
+
+    SkCanvas c(dev);
+    gm->draw(&c);
+
+    SkPDFDocument doc;
+    doc.appendPage(dev);
+    doc.emitPDF(&pdf);
+#endif
+}
+
+static bool write_reference_image(const ConfigData& gRec,
+                                  const char writePath [],
+                                  const char writePathSuffix [],
+                                  const SkString& name,
+                                  SkBitmap& bitmap,
+                                  SkDynamicMemoryWStream* pdf) {
+    SkString path;
+    bool success = false;
+    if (gRec.fBackend != kPDF_Backend) {
+        path = make_filename(writePath, writePathSuffix, name, "png");
+        success = write_bitmap(path, bitmap);
+    } else if (pdf) {
+        path = make_filename(writePath, writePathSuffix, name, "pdf");
+        success = write_pdf(path, *pdf);
+    }
+    if (!success) {
+        fprintf(stderr, "FAILED to write %s\n", path.c_str());
+    }
+    return success;
+}
+
+static bool compare_to_reference_image(const char readPath [],
+                                       const SkString& name,
+                                       SkBitmap &bitmap,
+                                       const char diffPath [],
+                                       const char modeDescriptor []) {
+    SkString path = make_filename(readPath, "", name, "png");
+    SkBitmap orig;
+    bool success = SkImageDecoder::DecodeFile(path.c_str(), &orig,
+                        SkBitmap::kARGB_8888_Config,
+                        SkImageDecoder::kDecodePixels_Mode, NULL);
+    if (success) {
+        SkBitmap diffBitmap;
+        success = compare(bitmap, orig, name, modeDescriptor,
+                          diffPath ? &diffBitmap : NULL);
+        if (!success && diffPath) {
+            SkString diffName = make_filename(diffPath, "", name, ".diff.png");
+            fprintf(stderr, "Writing %s\n", diffName.c_str());
+            write_bitmap(diffName, diffBitmap);
+        }
+    } else {
+        fprintf(stderr, "FAILED to read %s\n", path.c_str());
+    }
+    return success;
+}
+
+static bool handle_test_results(GM* gm,
+                                const ConfigData& gRec,
+                                const char writePath [],
+                                const char readPath [],
+                                const char diffPath [],
+                                const char writePathSuffix [],
+                                SkBitmap& bitmap,
+                                SkDynamicMemoryWStream* pdf) {
+    SkString name = make_name(gm->shortName(), gRec.fName);
+
+    if (writePath) {
+        write_reference_image(gRec, writePath, writePathSuffix,
+                              name, bitmap, pdf);
+    // TODO: Figure out a way to compare PDFs.
+    } else if (readPath && gRec.fBackend != kPDF_Backend) {
+        return compare_to_reference_image(readPath, name, bitmap,
+                                   diffPath, writePathSuffix);
+    }
+    return true;
+}
+
+static SkPicture* generate_new_picture(GM* gm) {
+    // Pictures are refcounted so must be on heap
+    SkPicture* pict = new SkPicture;
+    SkCanvas* cv = pict->beginRecording(1000, 1000);
+    gm->draw(cv);
+    pict->endRecording();
+
+    return pict;
+}
+
+static SkPicture* stream_to_new_picture(const SkPicture& src) {
+
+    // To do in-memory commiunications with a stream, we need to:
+    // * create a dynamic memory stream
+    // * copy it into a buffer
+    // * create a read stream from it
+    // ?!?!
+
+    SkDynamicMemoryWStream storage;
+    src.serialize(&storage);
+
+    int streamSize = storage.getOffset();
+    SkAutoMalloc dstStorage(streamSize);
+    void* dst = dstStorage.get();
+    //char* dst = new char [streamSize];
+    //@todo thudson 22 April 2011 when can we safely delete [] dst?
+    storage.copyTo(dst);
+    SkMemoryStream pictReadback(dst, streamSize);
+    SkPicture* retval = new SkPicture (&pictReadback);
+    return retval;
+}
+
+// Test: draw into a bitmap or pdf.
+// Depending on flags, possibly compare to an expected image
+// and possibly output a diff image if it fails to match.
+static bool test_drawing(GM* gm,
+                         const ConfigData& gRec,
+                         const char writePath [],
+                         const char readPath [],
+                         const char diffPath [],
+                         GrContext* context) {
+    SkBitmap bitmap;
+    SkDynamicMemoryWStream pdf;
+
+    if (gRec.fBackend == kRaster_Backend ||
+            gRec.fBackend == kGPU_Backend) {
+        // Early exit if we can't generate the image, but this is
+        // expected in some cases, so don't report a test failure.
+        if (!generate_image(gm, gRec, context, bitmap)) {
+            return true;
+        }
+    }
+    // TODO: Figure out a way to compare PDFs.
+    if (gRec.fBackend == kPDF_Backend && writePath) {
+        generate_pdf(gm, pdf);
+    }
+    return handle_test_results(gm, gRec, writePath, readPath, diffPath,
+                        "", bitmap, &pdf);
+}
+
+static bool test_picture_playback(GM* gm,
+                                  const ConfigData& gRec,
+                                  const char writePath [],
+                                  const char readPath [],
+                                  const char diffPath []) {
+    SkPicture* pict = generate_new_picture(gm);
+    SkAutoUnref aur(pict);
+
+    if (kRaster_Backend == gRec.fBackend) {
+        SkBitmap bitmap;
+        generate_image_from_picture(gm, gRec, pict, &bitmap);
+        return handle_test_results(gm, gRec, writePath, readPath, diffPath,
+                            "-replay", bitmap, NULL);
+    }
+    return true;
+}
+
+static bool test_picture_serialization(GM* gm,
+                                       const ConfigData& gRec,
+                                       const char writePath [],
+                                       const char readPath [],
+                                       const char diffPath []) {
+    SkPicture* pict = generate_new_picture(gm);
+    SkAutoUnref aurp(pict);
+    SkPicture* repict = stream_to_new_picture(*pict);
+    SkAutoUnref aurr(repict);
+
+    if (kRaster_Backend == gRec.fBackend) {
+        SkBitmap bitmap;
+        generate_image_from_picture(gm, gRec, repict, &bitmap);
+        return handle_test_results(gm, gRec, writePath, readPath, diffPath,
+                            "-serialize", bitmap, NULL);
+    }
+    return true;
+}
+
+static void usage(const char * argv0) {
+    SkDebugf("%s [-w writePath] [-r readPath] [-d diffPath]\n", argv0);
+    SkDebugf("    [--replay] [--serialize]\n");
+    SkDebugf("    writePath: directory to write rendered images in.\n");
+    SkDebugf(
+"    readPath: directory to read reference images from;\n"
+"        reports if any pixels mismatch between reference and new images\n");
+    SkDebugf("    diffPath: directory to write difference images in.\n");
+    SkDebugf("    --replay: exercise SkPicture replay.\n");
+    SkDebugf(
+"    --serialize: exercise SkPicture serialization & deserialization.\n");
+}
+
+static const ConfigData gRec[] = {
     { SkBitmap::kARGB_8888_Config, kRaster_Backend, "8888" },
     { SkBitmap::kARGB_4444_Config, kRaster_Backend, "4444" },
     { SkBitmap::kRGB_565_Config,   kRaster_Backend, "565" },
@@ -182,13 +434,16 @@ static const struct {
 #endif
 };
 
-int main (int argc, char * const argv[]) {
+int main(int argc, char * const argv[]) {
     SkAutoGraphics ag;
 
     const char* writePath = NULL;   // if non-null, where we write the originals
     const char* readPath = NULL;    // if non-null, were we read from to compare
-	const char* diffPath = NULL;	// if non-null, where we write our diffs (from compare)
+    const char* diffPath = NULL;    // if non-null, where we write our diffs (from compare)
 
+    bool doReplay = false;
+    bool doSerialize = false;
+    const char* const commandName = argv[0];
     char* const* stop = argv + argc;
     for (++argv; argv < stop; ++argv) {
         if (strcmp(*argv, "-w") == 0) {
@@ -202,12 +457,23 @@ int main (int argc, char * const argv[]) {
                 readPath = *argv;
             }
         } else if (strcmp(*argv, "-d") == 0) {
-			argv++;
+            argv++;
             if (argv < stop && **argv) {
                 diffPath = *argv;
             }
-		}
-	}
+        } else if (strcmp(*argv, "--replay") == 0) {
+            doReplay = true;
+        } else if (strcmp(*argv, "--serialize") == 0) {
+            doSerialize = true;
+        } else {
+          usage(commandName);
+          return -1;
+        }
+    }
+    if (argv != stop) {
+      usage(commandName);
+      return -1;
+    }
 
     // setup a GL context for drawing offscreen
     GrContext* context = NULL;
@@ -225,91 +491,32 @@ int main (int argc, char * const argv[]) {
         fprintf(stderr, "writing to %s\n", writePath);
     }
 
+    // Accumulate success of all tests so we can flag error in any
+    // one with the return value.
+    bool testSuccess = true;
     while ((gm = iter.next()) != NULL) {
-		SkISize size = gm->getISize();
+        SkISize size = gm->getISize();
         SkDebugf("drawing... %s [%d %d]\n", gm->shortName(),
                  size.width(), size.height());
 
-		SkBitmap bitmap;
-        SkDynamicMemoryWStream pdf;
-		for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
-            if (gRec[i].fBackend == kRaster_Backend ||
-                    gRec[i].fBackend == kGPU_Backend) {
-                bitmap.setConfig(gRec[i].fConfig, size.width(), size.height());
-                bitmap.allocPixels();
-                bitmap.eraseColor(0);
-                SkCanvas canvas(bitmap);
+        for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
+            testSuccess &= test_drawing(gm, gRec[i],
+                         writePath, readPath, diffPath, context);
 
-                if (gRec[i].fBackend == kRaster_Backend) {
-                    gm->draw(&canvas);
-                } else {  // GPU
-                    if (NULL == context) {
-                        continue;
-                    }
-                    SkGpuCanvas gc(context,
-                                   SkGpuDevice::Current3DApiRenderTarget());
-                    gc.setDevice(gc.createDevice(bitmap.config(),
-                                                 bitmap.width(),
-                                                 bitmap.height(),
-                                                 bitmap.isOpaque(),
-                                                 false))->unref();
-                    gm->draw(&gc);
-                    gc.readPixels(&bitmap); // overwrite our previous allocation
-                }
+            if (doReplay) {
+                testSuccess &= test_picture_playback(gm, gRec[i],
+                                      writePath, readPath, diffPath);
             }
-            // TODO: Figure out a way to compare PDFs.
-            if (gRec[i].fBackend == kPDF_Backend && writePath) {
-#ifdef SK_SUPPORT_PDF
-                SkISize size = gm->getISize();
-                SkMatrix identity;
-                identity.reset();
-                SkPDFDevice* dev = new SkPDFDevice(size.width(), size.height(),
-                                                   identity);
-                SkAutoUnref aur(dev);
 
-                SkCanvas c(dev);
-                gm->draw(&c);
-
-                SkPDFDocument doc;
-                doc.appendPage(dev);
-                doc.emitPDF(&pdf);
-#endif
+            if (doSerialize) {
+                testSuccess &= test_picture_serialization(gm, gRec[i],
+                                           writePath, readPath, diffPath);
             }
-            SkString name = make_name(gm->shortName(), gRec[i].fName);
-
-            if (writePath) {
-                SkString path;
-                bool success;
-                if (gRec[i].fBackend != kPDF_Backend) {
-                    path = make_filename(writePath, name, "png");
-                    success = write_bitmap(path, bitmap);
-                } else {
-                    path = make_filename(writePath, name, "pdf");
-                    success = write_pdf(path, pdf);
-                }
-                if (!success)
-                    fprintf(stderr, "FAILED to write %s\n", path.c_str());
-            // TODO: Figure out a way to compare PDFs.
-            } else if (readPath && gRec[i].fBackend != kPDF_Backend) {
-                SkString path = make_filename(readPath, name, "png");
-                SkBitmap orig;
-                bool success = SkImageDecoder::DecodeFile(path.c_str(), &orig,
-                                    SkBitmap::kARGB_8888_Config,
-                                    SkImageDecoder::kDecodePixels_Mode, NULL);
-                if (success) {
-					SkBitmap diffBitmap;
-                    success = compare(bitmap, orig, name, diffPath ? &diffBitmap : NULL);
-					if (!success && diffPath) {
-						SkString diffName = make_filename(diffPath, name, ".diff.png");
-						fprintf(stderr, "Writing %s\n", diffName.c_str());
-						write_bitmap(diffName, diffBitmap);
-					}
-                } else {
-                    fprintf(stderr, "FAILED to read %s\n", path.c_str());
-                }
-            }
-		}
+        }
         SkDELETE(gm);
+    }
+    if (false == testSuccess) {
+        return -1;
     }
     return 0;
 }
@@ -322,7 +529,5 @@ GM::GM() {}
 GM::~GM() {}
 
 void GM::draw(SkCanvas* canvas) {
-	this->onDraw(canvas);
+    this->onDraw(canvas);
 }
-
-

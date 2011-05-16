@@ -43,6 +43,10 @@ public:
     bool eof() const { return fCurr >= fStop; }
     const void* base() const { return fBase; }
     const void* peek() const { return fCurr; }
+
+    uint32_t available() const { return fStop - fCurr; }
+    bool isAvailable(uint32_t size) const { return fCurr + size <= fStop; }
+    
     void rewind() { fCurr = fBase; }
 
     void setOffset(size_t offset) {
@@ -86,7 +90,7 @@ public:
     }
     
     void read(void* dst, size_t size) {
-        SkASSERT(dst != NULL);
+        SkASSERT(0 == size || dst != NULL);
         SkASSERT(ptr_align_4(fCurr));
         memcpy(dst, fCurr, size);
         fCurr += SkAlign4(size);

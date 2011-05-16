@@ -22,7 +22,7 @@
 // recursive helper for creating mask with all the tex coord bits set for
 // one stage
 template <int N>
-static int stage_mask_recur(int stage) {
+int stage_mask_recur(int stage) {
     return GrDrawTarget::StageTexCoordVertexLayoutBit(stage, N) |
            stage_mask_recur<N+1>(stage);
 }
@@ -43,7 +43,7 @@ static int stage_mask(int stage) {
 // recursive helper for creating mask of with all bits set relevant to one
 // texture coordinate index
 template <int N>
-static int tex_coord_mask_recur(int texCoordIdx) {
+int tex_coord_mask_recur(int texCoordIdx) {
     return GrDrawTarget::StageTexCoordVertexLayoutBit(N, texCoordIdx) |
            tex_coord_mask_recur<N+1>(texCoordIdx);
 }
@@ -335,6 +335,10 @@ void GrDrawTarget::preConcatViewMatrix(const GrMatrix& matrix) {
     fCurrDrawState.fViewMatrix.preConcat(matrix);
 }
 
+void GrDrawTarget::postConcatViewMatrix(const GrMatrix& matrix) {
+    fCurrDrawState.fViewMatrix.postConcat(matrix);
+}
+
 const GrMatrix& GrDrawTarget::getViewMatrix() const {
     return fCurrDrawState.fViewMatrix;
 }
@@ -376,6 +380,11 @@ void GrDrawTarget::setColor(GrColor c) {
     fCurrDrawState.fColor = c;
 }
 
+void GrDrawTarget::setColorFilter(GrColor c, SkXfermode::Mode mode) {
+    fCurrDrawState.fColorFilterColor = c;
+    fCurrDrawState.fColorFilterXfermode = mode;
+}
+
 void GrDrawTarget::setAlpha(uint8_t a) {
     this->setColor((a << 24) | (a << 16) | (a << 8) | a);
 }
@@ -409,9 +418,13 @@ bool GrDrawTarget::reserveAndLockGeometry(GrVertexLayout    vertexLayout,
         if (vertexCount) {
             fGeometrySrc.fVertexSrc = kReserved_GeometrySrcType;
             fGeometrySrc.fVertexLayout = vertexLayout;
+        } else if (NULL != vertices) {
+            *vertices = NULL;
         }
         if (indexCount) {
             fGeometrySrc.fIndexSrc = kReserved_GeometrySrcType;
+        } else if (NULL != indices) {
+            *indices = NULL;
         }
     }
     return fReservedGeometry.fLocked;
@@ -465,6 +478,11 @@ void GrDrawTarget::setIndexSourceToBuffer(const GrIndexBuffer* buffer) {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool GrDrawTarget::canDisableBlend() const {
+    // If we're using edge antialiasing, we can't force blend off.
+    if (fCurrDrawState.fFlagBits & kEdgeAA_StateBit) {
+        return false;
+    }
+
     if ((kOne_BlendCoeff == fCurrDrawState.fSrcBlend) &&
         (kZero_BlendCoeff == fCurrDrawState.fDstBlend)) {
             return true;
@@ -490,20 +508,34 @@ bool GrDrawTarget::canDisableBlend() const {
 
     // ...and there isn't a texture with an alpha channel...
     for (int s = 0; s < kNumStages; ++s) {
-        if (VertexUsesStage(s, fGeometrySrc.fVertexLayout)) {
+        if (this->isStageEnabled(s)) {
             GrAssert(NULL != fCurrDrawState.fTextures[s]);
+
             GrPixelConfig config = fCurrDrawState.fTextures[s]->config();
 
-            if (kRGB_565_GrPixelConfig != config &&
-                kRGBX_8888_GrPixelConfig != config) {
+            if (!GrPixelConfigIsOpaque(config)) {
                 return false;
             }
         }
     }
 
+    // ...and there isn't an interesting color filter...
+    // TODO: Consider being more aggressive with regards to disabling
+    // blending when a color filter is used.
+    if (SkXfermode::kDst_Mode != fCurrDrawState.fColorFilterXfermode) {
+        return false;
+    }
+
     // ...then we disable blend.
     return true;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+void GrDrawTarget::setEdgeAAData(const float edges[18]) {
+    memcpy(fCurrDrawState.fEdgeAAEdges, edges, sizeof(fCurrDrawState.fEdgeAAEdges));
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 void GrDrawTarget::drawRect(const GrRect& rect, 
                             const GrMatrix* matrix,
@@ -581,6 +613,9 @@ void GrDrawTarget::SetRectVertices(const GrRect& rect,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+GrDrawTarget::AutoStateRestore::AutoStateRestore() {
+    fDrawTarget = NULL;
+}
 
 GrDrawTarget::AutoStateRestore::AutoStateRestore(GrDrawTarget* target) {
     fDrawTarget = target;
@@ -595,3 +630,14 @@ GrDrawTarget::AutoStateRestore::~AutoStateRestore() {
     }
 }
 
+void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target) {
+    if (target != fDrawTarget) {
+        if (NULL != fDrawTarget) {
+            fDrawTarget->restoreDrawState(fDrawState);
+        }
+        if (NULL != target) {
+            fDrawTarget->saveCurrentDrawState(&fDrawState);
+        }
+        fDrawTarget = target;
+    }
+}

@@ -32,17 +32,17 @@ struct GrGpuMatrix {
 
     void set(const GrMatrix& m) {
         Gr_bzero(fMat, sizeof(fMat));
-        fMat[0]  = GrScalarToFloat(m[GrMatrix::kScaleX]);
-        fMat[4]  = GrScalarToFloat(m[GrMatrix::kSkewX]);
-        fMat[12] = GrScalarToFloat(m[GrMatrix::kTransX]);
+        fMat[0]  = GrScalarToFloat(m[GrMatrix::kMScaleX]);
+        fMat[4]  = GrScalarToFloat(m[GrMatrix::kMSkewX]);
+        fMat[12] = GrScalarToFloat(m[GrMatrix::kMTransX]);
 
-        fMat[1]  = GrScalarToFloat(m[GrMatrix::kSkewY]);
-        fMat[5]  = GrScalarToFloat(m[GrMatrix::kScaleY]);
-        fMat[13] = GrScalarToFloat(m[GrMatrix::kTransY]);
+        fMat[1]  = GrScalarToFloat(m[GrMatrix::kMSkewY]);
+        fMat[5]  = GrScalarToFloat(m[GrMatrix::kMScaleY]);
+        fMat[13] = GrScalarToFloat(m[GrMatrix::kMTransY]);
 
-        fMat[3]  = GrScalarToFloat(m[GrMatrix::kPersp0]);
-        fMat[7]  = GrScalarToFloat(m[GrMatrix::kPersp1]);
-        fMat[15] = GrScalarToFloat(m[GrMatrix::kPersp2]);
+        fMat[3]  = GrScalarToFloat(m[GrMatrix::kMPersp0]);
+        fMat[7]  = GrScalarToFloat(m[GrMatrix::kMPersp1]);
+        fMat[15] = GrScalarToFloat(m[GrMatrix::kMPersp2]);
 
         fMat[10] = 1.f;    // z-scale
     }
@@ -56,6 +56,7 @@ static const GrGLenum gMatrixMode2Enum[] = {
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGpuGLFixed::GrGpuGLFixed() {
+    f4X4DownsampleFilterSupport = false;
 }
 
 GrGpuGLFixed::~GrGpuGLFixed() {
@@ -127,8 +128,7 @@ bool GrGpuGLFixed::flushGraphicsState(GrPrimitiveType type) {
     bool usingTextures[kNumStages];
 
     for (int s = 0; s < kNumStages; ++s) {
-        usingTextures[s] = VertexUsesStage(s, fGeometrySrc.fVertexLayout);
-
+        usingTextures[s] = this->isStageEnabled(s);
         if (usingTextures[s] && fCurrDrawState.fSamplerStates[s].isGradient()) {
             unimpl("Fixed pipe doesn't support radial/sweep gradients");
             return false;
@@ -152,7 +152,7 @@ bool GrGpuGLFixed::flushGraphicsState(GrPrimitiveType type) {
     }
 
     for (int s = 0; s < kNumStages; ++s) {
-        bool wasUsingTexture = VertexUsesStage(s, fHWGeometryState.fVertexLayout);
+        bool wasUsingTexture = StageWillBeUsed(s, fHWGeometryState.fVertexLayout, fHWDrawState);
         if (usingTextures[s] != wasUsingTexture) {
             setTextureUnit(s);
             if (usingTextures[s]) {

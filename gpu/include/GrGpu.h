@@ -28,116 +28,43 @@ class GrIndexBufferAllocPool;
 class GrResource;
 class GrVertexBufferAllocPool;
 
+/**
+ * Gpu usage statistics.
+ */
+struct GrGpuStats {
+    uint32_t fVertexCnt;  //<! Number of vertices drawn
+    uint32_t fIndexCnt;   //<! Number of indices drawn
+    uint32_t fDrawCnt;    //<! Number of draws
+
+    uint32_t fProgChngCnt;//<! Number of program changes (N/A for fixed)
+
+    /*
+        *  Number of times the texture is set in 3D API
+        */
+    uint32_t fTextureChngCnt;
+    /*
+        *  Number of times the render target is set in 3D API
+        */
+    uint32_t fRenderTargetChngCnt;
+    /*
+        *  Number of textures created (includes textures that are rendertargets).
+        */
+    uint32_t fTextureCreateCnt;
+    /*
+        *  Number of rendertargets created.
+        */
+    uint32_t fRenderTargetCreateCnt;
+};
+
 class GrGpu : public GrDrawTarget {
 
 public:
-    /**
-     * Possible 3D APIs that may be used by Ganesh.
-     */
-    enum Engine {
-        kOpenGL_Shaders_Engine,
-        kOpenGL_Fixed_Engine,
-        kDirect3D9_Engine
-    };
-
-    /**
-     * Platform specific 3D context.
-     * For
-     *    kOpenGL_Shaders_Engine use NULL
-     *    kOpenGL_Fixed_Engine   use NULL
-     *    kDirect3D9_Engine      use an IDirect3DDevice9*
-     */
-    typedef void* Platform3DContext;
-
     /**
      *  Create an instance of GrGpu that matches the specified Engine backend.
      *  If the requested engine is not supported (at compile-time or run-time)
      *  this returns NULL.
      */
-    static GrGpu* Create(Engine, Platform3DContext context3D);
-
-    /**
-     * Used to control the level of antialiasing available for a rendertarget.
-     * Anti-alias quality levels depend on the underlying API/GPU capabilities.
-     */
-    enum AALevels {
-        kNone_AALevel, //<! No antialiasing available.
-        kLow_AALevel,  //<! Low quality antialiased rendering. Actual
-                       //   interpretation is platform-dependent.
-        kMed_AALevel,  //<! Medium quality antialiased rendering. Actual
-                       //   interpretation is platform-dependent.
-        kHigh_AALevel, //<! High quality antialiased rendering. Actual
-                       //   interpretation is platform-dependent.
-    };
-
-
-    /**
-     * Optional bitfield flags that can be passed to createTexture.
-     */
-    enum TextureFlags {
-        kRenderTarget_TextureFlag  = 0x1,   //<! Creates a texture that can be
-                                            //   rendered to by calling
-                                            //   GrGpu::setRenderTarget() with
-                                            //   GrTexture::asRenderTarget().
-        kNoStencil_TextureFlag      = 0x2,  //<! If the texture is used as a
-                                            //   rendertarget but a stencil
-                                            //   buffer is not required. Stencil
-                                            //   may be required for clipping and
-                                            //   path rendering.
-        kDynamicUpdate_TextureFlag = 0x4    //!< Hint that the CPU may modify
-                                            // this texture after creation
-    };
-
-    enum {
-        /**
-         *  For Index8 pixel config, the colortable must be 256 entries
-         */
-        kColorTableSize = 256 * sizeof(GrColor)
-    };
-    /**
-     * Describes a texture to be created.
-     */
-    struct TextureDesc {
-        uint32_t               fFlags;  //!< bitfield of TextureFlags
-        GrGpu::AALevels        fAALevel;//!< The level of antialiasing available
-                                        //   for a rendertarget texture. Only
-                                        //   flags contains
-                                        //   kRenderTarget_TextureFlag.
-        uint32_t               fWidth;  //!< Width of the texture
-        uint32_t               fHeight; //!< Height of the texture
-        GrPixelConfig          fFormat; //!< Format of source data of the
-                                        //   texture. Not guaraunteed to be the
-                                        //   same as internal format used by
-                                        //   3D API.
-    };
-
-    /**
-     * Gpu usage statistics.
-     */
-    struct Stats {
-        uint32_t fVertexCnt;  //<! Number of vertices drawn
-        uint32_t fIndexCnt;   //<! Number of indices drawn
-        uint32_t fDrawCnt;    //<! Number of draws
-
-        uint32_t fProgChngCnt;//<! Number of program changes (N/A for fixed)
-
-        /*
-         *  Number of times the texture is set in 3D API
-         */
-        uint32_t fTextureChngCnt;
-        /*
-         *  Number of times the render target is set in 3D API
-         */
-        uint32_t fRenderTargetChngCnt;
-        /*
-         *  Number of textures created (includes textures that are rendertargets).
-         */
-        uint32_t fTextureCreateCnt;
-        /*
-         *  Number of rendertargets created.
-         */
-        uint32_t fRenderTargetCreateCnt;
-    };
+    static GrGpu* Create(GrEngine, GrPlatform3DContext context3D);
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -180,7 +107,7 @@ public:
      *
      * @return    The texture object if successful, otherwise NULL.
      */
-    GrTexture* createTexture(const TextureDesc& desc,
+    GrTexture* createTexture(const GrTextureDesc& desc,
                              const void* srcData, size_t rowBytes);
     /**
      * Wraps an externally-created rendertarget in a GrRenderTarget.
@@ -235,13 +162,6 @@ public:
     GrIndexBuffer* createIndexBuffer(uint32_t size, bool dynamic);
 
     /**
-     * Erase the entire render target, ignoring any clips/scissors.
-     *
-     * This is issued to the GPU driver immediately.
-     */
-    void eraseColor(GrColor color);
-
-    /**
      * Are 8 bit paletted textures supported.
      *
      * @return    true if 8bit palette textures are supported, false otherwise
@@ -273,6 +193,17 @@ public:
     bool supportsBufferLocking() const { return fBufferLockSupport; }
 
     /**
+     * Does the 3D API support anti-aliased lines. If so then line primitive
+     * types will use this functionality when the AA state flag is set.
+     */
+    bool supportsAALines() const { return fAALineSupport; }
+
+    /**
+     * Does the subclass support GrSamplerState::k4x4Downsample_Filter
+     */
+    bool supports4x4DownsampleFilter() const { return f4X4DownsampleFilterSupport; }
+
+    /**
      * Gets the minimum width of a render target. If a texture/rt is created
      * with a width less than this size the GrGpu object will clamp it to this
      * value.
@@ -285,6 +216,11 @@ public:
      * value.
      */
     int minRenderTargetHeight() const  { return fMinRenderTargetHeight; }
+    
+    /**
+     * Reports whether full scene anti-aliasing is supported.
+     */
+    bool supportsFullsceneAA() const { return fFSAASupport; }
 
     /**
      * Returns true if NPOT textures can be created
@@ -319,6 +255,7 @@ public:
     virtual void drawNonIndexed(GrPrimitiveType type,
                                 int startVertex,
                                 int vertexCount);
+    virtual void clear(const GrIRect* rect, GrColor color);
 
     /**
      * Installs a path renderer that will be used to draw paths that are
@@ -370,7 +307,7 @@ public:
                     int left, int top, int width, int height,
                     GrPixelConfig config, void* buffer);
 
-    const Stats& getStats() const;
+    const GrGpuStats& getStats() const;
     void resetStats();
     void printStats() const;
 
@@ -445,6 +382,9 @@ protected:
     bool fNPOTRenderTargetSupport;
     bool fTwoSidedStencilSupport;
     bool fStencilWrapOpsSupport;
+    bool fAALineSupport;
+    bool fFSAASupport;
+    bool f4X4DownsampleFilterSupport; // supports GrSamplerState::k4x4Downsample_Filter
 
     // set by subclass to true if index and vertex buffers can be locked, false
     // otherwise.
@@ -455,7 +395,7 @@ protected:
     int fMinRenderTargetHeight;
     int fMaxTextureDimension;
 
-    Stats           fStats;
+    GrGpuStats fStats;
 
     const GrVertexBuffer*           fCurrPoolVertexBuffer;
     int                             fCurrPoolStartVertex;
@@ -483,7 +423,7 @@ protected:
     virtual void resetContext() = 0;
 
     // overridden by API-specific derived class to create objects.
-    virtual GrTexture* onCreateTexture(const TextureDesc& desc,
+    virtual GrTexture* onCreateTexture(const GrTextureDesc& desc,
                                        const void* srcData,
                                        size_t rowBytes) = 0;
     virtual GrResource* onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc) = 0;
@@ -498,8 +438,9 @@ protected:
     virtual GrIndexBuffer* onCreateIndexBuffer(uint32_t size,
                                                bool dynamic) = 0;
 
-    // overridden by API-specific derivated class to perform the erase.
-    virtual void onEraseColor(GrColor color) = 0;
+    // overridden by API-specific derivated class to perform the clear and 
+    // clearRect. NULL rect means clear whole target.
+    virtual void onClear(const GrIRect* rect, GrColor color) = 0;
 
     // overridden by API-specific derived class to perform the draw call.
     virtual void onDrawIndexed(GrPrimitiveType type,
@@ -539,7 +480,7 @@ protected:
     virtual void flushScissor(const GrIRect* rect) = 0;
 
     // GrGpu subclass removes the clip from the stencil buffer
-    virtual void eraseStencilClip(const GrIRect& rect) = 0;
+    virtual void clearStencilClip(const GrIRect& rect) = 0;
 
 private:
     GrContext*                  fContext; // not reffed (context refs gpu)

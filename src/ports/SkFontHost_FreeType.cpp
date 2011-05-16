@@ -339,6 +339,56 @@ static bool getWidthAdvance(FT_Face face, int gId, int16_t* data) {
     return true;
 }
 
+static void populate_glyph_to_unicode(FT_Face& face,
+                                      SkTDArray<SkUnichar>* glyphToUnicode) {
+    // Check and see if we have Unicode cmaps.
+    for (int i = 0; i < face->num_charmaps; ++i) {
+        // CMaps known to support Unicode:
+        // Platform ID   Encoding ID   Name
+        // -----------   -----------   -----------------------------------
+        // 0             0,1           Apple Unicode
+        // 0             3             Apple Unicode 2.0 (preferred)
+        // 3             1             Microsoft Unicode UCS-2
+        // 3             10            Microsoft Unicode UCS-4 (preferred)
+        //
+        // See Apple TrueType Reference Manual
+        // http://developer.apple.com/fonts/TTRefMan/RM06/Chap6cmap.html
+        // http://developer.apple.com/fonts/TTRefMan/RM06/Chap6name.html#ID
+        // Microsoft OpenType Specification
+        // http://www.microsoft.com/typography/otspec/cmap.htm
+
+        FT_UShort platformId = face->charmaps[i]->platform_id;
+        FT_UShort encodingId = face->charmaps[i]->encoding_id;
+
+        if (platformId != 0 && platformId != 3) {
+            continue;
+        }
+        if (platformId == 3 && encodingId != 1 && encodingId != 10) {
+            continue;
+        }
+        bool preferredMap = ((platformId == 3 && encodingId == 10) ||
+                             (platformId == 0 && encodingId == 3));
+
+        FT_Set_Charmap(face, face->charmaps[i]);
+        if (glyphToUnicode->isEmpty()) {
+            glyphToUnicode->setCount(face->num_glyphs);
+            memset(glyphToUnicode->begin(), 0,
+                   sizeof(SkUnichar) * face->num_glyphs);
+        }
+
+        // Iterate through each cmap entry.
+        FT_UInt glyphIndex;
+        for (SkUnichar charCode = FT_Get_First_Char(face, &glyphIndex);
+             glyphIndex != 0;
+             charCode = FT_Get_Next_Char(face, charCode, &glyphIndex)) {
+            if (charCode &&
+                    ((*glyphToUnicode)[glyphIndex] == 0 || preferredMap)) {
+                (*glyphToUnicode)[glyphIndex] = charCode;
+            }
+        }
+    }
+}
+
 // static
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         uint32_t fontID,
@@ -509,6 +559,12 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         }
     }
 
+    if (perGlyphInfo & SkAdvancedTypefaceMetrics::kToUnicode_PerGlyphInfo &&
+           info->fType != SkAdvancedTypefaceMetrics::kType1_Font &&
+           face->num_charmaps) {
+        populate_glyph_to_unicode(face, &(info->fGlyphToUnicode));
+    }
+
     if (!canEmbed(face))
         info->fType = SkAdvancedTypefaceMetrics::kNotEmbeddable_Font;
 
@@ -662,6 +718,11 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
 
         if ((fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag) == 0)
             loadFlags |= FT_LOAD_NO_BITMAP;
+
+        // Always using FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH to get correct
+        // advances, as fontconfig and cairo do.
+        // See http://code.google.com/p/skia/issues/detail?id=222.
+        loadFlags |= FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
 
         fLoadGlyphFlags = loadFlags;
     }

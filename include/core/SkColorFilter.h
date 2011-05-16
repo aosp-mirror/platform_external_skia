@@ -21,8 +21,15 @@
 #include "SkFlattenable.h"
 #include "SkXfermode.h"
 
-class SkColorFilter : public SkFlattenable {
+class SK_API SkColorFilter : public SkFlattenable {
 public:
+    /**
+     *  If the filter can be represented by a source color plus Mode, this
+     *  returns true, and sets (if not NULL) the color and mode appropriately.
+     *  If not, this returns false and ignores the parameters.
+     */
+    virtual bool asColorMode(SkColor* color, SkXfermode::Mode* mode);
+
     /** Called with a scanline of colors, as if there was a shader installed.
         The implementation writes out its filtered version into result[].
         Note: shader and result may be the same buffer.
@@ -58,6 +65,15 @@ public:
     */
     virtual uint32_t getFlags() { return 0; }
 
+    /**
+     *  Apply this colorfilter to the specified SkColor. This routine handles
+     *  converting to SkPMColor, calling the filter, and then converting back
+     *  to SkColor. This method is not virtual, but will call filterSpan()
+     *   which is virtual.
+     */
+    SkColor filterColor(SkColor);
+
+
     /** Create a colorfilter that uses the specified color and mode.
         If the Mode is DST, this function will return NULL (since that
         mode will have no effect on the result).
@@ -83,11 +99,11 @@ public:
         are ignored.
     */
     static SkColorFilter* CreateLightingFilter(SkColor mul, SkColor add);
-    
+
 protected:
     SkColorFilter() {}
     SkColorFilter(SkFlattenableReadBuffer& rb) : INHERITED(rb) {}
-    
+
 private:
     typedef SkFlattenable INHERITED;
 };
@@ -107,17 +123,17 @@ public:
     virtual void shadeSpan16(int x, int y, uint16_t result[], int count);
     virtual void beginSession();
     virtual void endSession();
-    
+
 protected:
     SkFilterShader(SkFlattenableReadBuffer& );
     virtual void flatten(SkFlattenableWriteBuffer& );
     virtual Factory getFactory() { return CreateProc; }
 private:
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) { 
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
         return SkNEW_ARGS(SkFilterShader, (buffer)); }
     SkShader*       fShader;
     SkColorFilter*  fFilter;
-    
+
     typedef SkShader INHERITED;
 };
 

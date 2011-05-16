@@ -40,7 +40,7 @@ public:
                           const SkAlpha aa[]);
     virtual void xferA8(SkAlpha dst[], const SkPMColor src[], int count,
                         const SkAlpha aa[]);
-    
+
     /** Enum of possible coefficients to describe some xfermodes
      */
     enum Coeff {
@@ -54,18 +54,18 @@ public:
         kISA_Coeff,     /** inverse src alpha (i.e. 1 - sa) */
         kDA_Coeff,      /** dst alpha */
         kIDA_Coeff,     /** inverse dst alpha (i.e. 1 - da) */
-        
+
         kCoeffCount
     };
-    
+
     /** If the xfermode can be expressed as an equation using the coefficients
         in Coeff, then asCoeff() returns true, and sets (if not null) src and
         dst accordingly.
-     
+
             result = src_coeff * src_color + dst_coeff * dst_color;
-     
+
         As examples, here are some of the porterduff coefficients
-     
+
         MODE        SRC_COEFF       DST_COEFF
         clear       zero            zero
         src         one             zero
@@ -74,6 +74,12 @@ public:
         dstover     ida             one
      */
     virtual bool asCoeff(Coeff* src, Coeff* dst);
+
+    /**
+     *  The same as calling xfermode->asCoeff(..), except that this also checks
+     *  if the xfermode is NULL, and if so, treats its as kSrcOver_Mode.
+     */
+    static bool AsCoeff(SkXfermode*, Coeff* src, Coeff* dst);
 
     /** List of predefined xfermodes.
         The algebra for the modes uses the following symbols:
@@ -115,12 +121,18 @@ public:
         kLastMode = kExclusion_Mode
     };
 
-    /** If the xfermode is one of the modes in the Mode enum, then asMode()
-        returns true and sets (if not null) mode accordingly.
-        This is a better version of IsMode(), which is only able to report
-        about modes that are expressible as coefficients.
+    /**
+     *  If the xfermode is one of the modes in the Mode enum, then asMode()
+     *  returns true and sets (if not null) mode accordingly. Otherwise it
+     *  returns false and ignores the mode parameter.
      */
     virtual bool asMode(Mode* mode);
+
+    /**
+     *  The same as calling xfermode->asMode(mode), except that this also checks
+     *  if the xfermode is NULL, and if so, treats its as kSrcOver_Mode.
+     */
+    static bool AsMode(SkXfermode*, Mode* mode);
 
     /** Return an SkXfermode object for the specified mode.
      */
@@ -138,23 +150,27 @@ public:
       */
     static SkXfermodeProc16 GetProc16(Mode mode, SkColor srcColor);
 
-    /** If the specified xfermode advertises itself as one of the porterduff
-        modes (via SkXfermode::Coeff), return true and if not null, set mode
-        to the corresponding porterduff mode. If it is not recognized as a one,
-        return false and ignore the mode parameter.
+    /**
+     *  If the specified mode can be represented by a pair of Coeff, then return
+     *  true and set (if not NULL) the corresponding coeffs. If the mode is
+     *  not representable as a pair of Coeffs, return false and ignore the
+     *  src and dst parameters.
      */
-    static bool IsMode(SkXfermode*, Mode* mode);
+    static bool ModeAsCoeff(Mode mode, Coeff* src, Coeff* dst);
 
-    Mode fMode;
+    // DEPRECATED: call AsMode(...)
+    static bool IsMode(SkXfermode* xfer, Mode* mode) {
+        return AsMode(xfer, mode);
+    }
 
 protected:
     SkXfermode(SkFlattenableReadBuffer& rb) : SkFlattenable(rb) {}
-    
+
     /** The default implementation of xfer32/xfer16/xferA8 in turn call this
         method, 1 color at a time (upscaled to a SkPMColor). The default
         implmentation of this method just returns dst. If performance is
         important, your subclass should override xfer32/xfer16/xferA8 directly.
-        
+
         This method will not be called directly by the client, so it need not
         be implemented if your subclass has overridden xfer32/xfer16/xferA8
     */
@@ -191,14 +207,13 @@ public:
     // overrides from SkFlattenable
     virtual Factory getFactory() { return CreateProc; }
     virtual void    flatten(SkFlattenableWriteBuffer&);
-    virtual bool asMode(SkXfermode::Mode* mode);
 
 protected:
     SkProcXfermode(SkFlattenableReadBuffer&);
 
 private:
     SkXfermodeProc  fProc;
-    
+
     static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
         return SkNEW_ARGS(SkProcXfermode, (buffer)); }
 
@@ -206,4 +221,3 @@ private:
 };
 
 #endif
-

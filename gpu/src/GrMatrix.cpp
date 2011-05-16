@@ -19,6 +19,7 @@
 #include "GrRect.h"
 #include <stddef.h>
 
+#if 0
 #if GR_SCALAR_IS_FLOAT
     const GrScalar GrMatrix::gRESCALE(GR_Scalar1);
 #else
@@ -258,6 +259,26 @@ bool GrMatrix::isIdentity() const {
     return (0 == fTypeMask);
 }
 
+
+bool GrMatrix::preservesAxisAlignment() const {
+
+    // check if matrix is trans and scale only
+    static const int gAllowedMask1 = kScale_TypeBit | kTranslate_TypeBit;
+
+    if (!(~gAllowedMask1 & fTypeMask)) {
+        return true;
+    }
+
+    // check matrix is trans and skew only (0 scale)
+    static const int gAllowedMask2 = kScale_TypeBit | kSkew_TypeBit |
+                                     kTranslate_TypeBit | kZeroScale_TypeBit;
+
+    if (!(~gAllowedMask2 & fTypeMask) && (kZeroScale_TypeBit & fTypeMask)) {
+        return true;
+    }
+
+    return false;
+}
 
 GrScalar GrMatrix::getMaxStretch() const {
 
@@ -611,7 +632,7 @@ void GrMatrix::UnitTest() {
         if (maxStretch > 0) {
             maxStretch = GrMul(GR_Scalar1 + GR_Scalar1 / 100, maxStretch);
         }
-        GrPoint origin = a.mapPoint(GrPoint(0,0));
+        GrPoint origin = a.mapPoint(GrPoint::Make(0,0));
 
         for (int j = 0; j < 9; ++j) {
             int mask, origMask = a.fTypeMask;
@@ -648,8 +669,8 @@ void GrMatrix::UnitTest() {
             a.mapPerspective(&t2, &pt, 1);   // full mult
             GrAssert(t0 == t1 && t1 == t2);
             if (maxStretch >= 0.f) {
-                GrVec vec;
-                vec.setBetween(t0, origin);
+                GrVec vec = origin - t0;
+//                vec.setBetween(t0, origin);
                 GrScalar stretch = vec.length() / pt.distanceToOrigin();
                 GrAssert(stretch <= maxStretch);
             }
@@ -668,6 +689,7 @@ void GrMatrix::UnitTest() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+#endif
 
 int Gr_clz(uint32_t n) {
     if (0 == n) {
@@ -696,34 +718,3 @@ int Gr_clz(uint32_t n) {
     }
     return count;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-#include "GrRect.h"
-
-void GrRect::setBounds(const GrPoint pts[], int count) {
-    if (count <= 0) {
-        this->setEmpty();
-    } else {
-        GrScalar L, R, T, B;
-        L = R = pts[0].fX;
-        T = B = pts[0].fY;
-        for (int i = 1; i < count; i++) {
-            GrScalar x = pts[i].fX;
-            GrScalar y = pts[i].fY;
-            if (x < L) {
-                L = x;
-            } else if (x > R) {
-                R = x;
-            }
-            if (y < T) {
-                T = y;
-            } else if (y > B) {
-                B = y;
-            }
-        }
-        this->setLTRB(L, T, R, B);
-    }
-}
-
-
-

@@ -26,6 +26,8 @@
 #include "GrTexture.h"
 #include "GrStencil.h"
 
+#include "SkXfermode.h"
+
 class GrTexture;
 class GrClipIterator;
 class GrVertexBuffer;
@@ -64,18 +66,22 @@ public:
      *  default to disabled.
      */
     enum StateBits {
-        kDither_StateBit          = 0x1,//<! Perform color dithering
-        kAntialias_StateBit       = 0x2,//<! Perform anti-aliasing. The render-
+        kDither_StateBit        = 0x01, //<! Perform color dithering
+        kAntialias_StateBit     = 0x02, //<! Perform anti-aliasing. The render-
                                         //   target must support some form of AA
                                         //   (msaa, coverage sampling, etc). For
                                         //   GrGpu-created rendertarget/textures
                                         //   this is controlled by parameters
                                         //   passed to createTexture.
-        kClip_StateBit            = 0x4,//<! Controls whether drawing is clipped
+        kClip_StateBit          = 0x04, //<! Controls whether drawing is clipped
                                         //   against the region specified by
                                         //   setClip.
-        kNoColorWrites_StateBit   = 0x8,//<! If set it disables writing colors.
-                                        //   Useful while performing stencil ops.
+        kNoColorWrites_StateBit = 0x08, //<! If set it disables writing colors.
+                                        //   Useful while performing stencil
+                                        //   ops.
+        kEdgeAA_StateBit        = 0x10, //<! Perform edge anti-aliasing.
+                                        //   Requires the edges to be passed in
+                                        //   setEdgeAAData().
 
         // subclass may use additional bits internally
         kDummyStateBit,
@@ -131,6 +137,9 @@ protected:
             // all DrState members should default to something
             // valid by the memset
             memset(this, 0, sizeof(DrState));
+            // This is an exception to our memset, since it will
+            // result in no change.
+            fColorFilterXfermode = SkXfermode::kDstIn_Mode;
             GrAssert((intptr_t)(void*)NULL == 0LL);
             GrAssert(fStencilSettings.isDisabled());
         }
@@ -144,9 +153,12 @@ protected:
         GrRenderTarget*         fRenderTarget;
         GrColor                 fColor;
         DrawFace                fDrawFace;
+        GrColor                 fColorFilterColor;
+        SkXfermode::Mode        fColorFilterXfermode;
 
         GrStencilSettings       fStencilSettings;
         GrMatrix                fViewMatrix;
+        float                   fEdgeAAEdges[18];
         bool operator ==(const DrState& s) const {
             return 0 == memcmp(this, &s, sizeof(DrState));
         }
@@ -276,6 +288,18 @@ public:
     void preConcatViewMatrix(const GrMatrix& m);
 
     /**
+     *  Multiplies the current view matrix by a matrix
+     *
+     *  After this call V' = m*V where V is the old view matrix,
+     *  m is the parameter to this function, and V' is the new view matrix.
+     *  (We consider positions to be column vectors so position vector p is
+     *  transformed by matrix X as p' = X*p.)
+     *
+     *  @param m the matrix used to modify the view matrix.
+     */
+    void postConcatViewMatrix(const GrMatrix& m);
+
+    /**
      * Retrieves the current view matrix
      * @return the current view matrix.
      */
@@ -298,6 +322,11 @@ public:
      *  @param the color to set.
      */
     void setColor(GrColor);
+
+    /**
+     * Add a color filter that can be represented by a color and a mode.
+     */
+    void setColorFilter(GrColor, SkXfermode::Mode);
 
     /**
      *  Sets the color to be used for the next draw to be
@@ -336,6 +365,10 @@ public:
 
     bool isDitherState() const {
         return 0 != (fCurrDrawState.fFlagBits & kDither_StateBit);
+    }
+
+    bool isAntialiasState() const {
+        return 0 != (fCurrDrawState.fFlagBits & kAntialias_StateBit);
     }
 
     bool isClipState() const {
@@ -459,6 +492,14 @@ public:
      */
     bool canDisableBlend() const;
 
+    /**
+     * Sets the edge data required for edge antialiasing.
+     *
+     * @param edges       3 * 6 float values, representing the edge
+     *                    equations in Ax + By + C form
+     */
+     void setEdgeAAData(const float edges[18]);
+
 private:
     static const int TEX_COORD_BIT_CNT = kNumStages*kMaxTexCoords;
 public:
@@ -498,7 +539,7 @@ public:
         kHighVertexLayoutBit = kDummyVertexLayoutBit - 1
     };
     // make sure we haven't exceeded the number of bits in GrVertexLayout.
-    GR_STATIC_ASSERT(kHighVertexLayoutBit < (1 << 8*sizeof(GrVertexLayout)));
+    GR_STATIC_ASSERT(kHighVertexLayoutBit < ((uint64_t)1 << 8*sizeof(GrVertexLayout)));
 
     /**
      * There are three paths for specifying geometry (vertices and optionally
@@ -539,7 +580,7 @@ public:
      *          of vertices to be filled by caller. The next draw will read
      *          these vertices.
      *
-     *          if indecCount is nonzero, *indices will be the array of indices
+     *          if indexCount is nonzero, *indices will be the array of indices
      *          to be filled by caller. The next indexed draw will read from
      *          these indices.
      *
@@ -718,12 +759,27 @@ public:
          drawRect(rect, matrix, stageEnableBitfield, NULL, NULL);
     }
 
+    /**
+     * Clear the render target. Ignores the clip and all other draw state
+     * (blend mode, stages, etc). Clears the whole thing if rect is NULL,
+     * otherwise just the rect.
+     */
+    virtual void clear(const GrIRect* rect, GrColor color) = 0;
+
     ///////////////////////////////////////////////////////////////////////////
 
     class AutoStateRestore : ::GrNoncopyable {
     public:
+        AutoStateRestore();
         AutoStateRestore(GrDrawTarget* target);
         ~AutoStateRestore();
+
+        /**
+         * if this object is already saving state for param target then
+         * this does nothing. Otherise, it restores previously saved state on
+         * previous target (if any) and saves current state on param target.
+         */
+        void set(GrDrawTarget* target);
 
     private:
         GrDrawTarget*       fDrawTarget;
@@ -771,20 +827,16 @@ public:
                             GrVertexLayout vertexLayout,
                             uint32_t       vertexCount,
                             uint32_t       indexCount) {
-            fTarget = target;
-            fSuccess = fTarget->reserveAndLockGeometry(vertexLayout,
-                                                       vertexCount,
-                                                       indexCount,
-                                                       &fVertices,
-                                                       &fIndices);
+            fTarget = NULL;
+            this->set(target, vertexLayout, vertexCount, indexCount);
         }
 
         AutoReleaseGeometry() {
-            fSuccess = false;
+            fTarget = NULL;
         }
 
         ~AutoReleaseGeometry() {
-            if (fSuccess) {
+            if (NULL != fTarget) {
                 fTarget->releaseReservedGeometry();
             }
         }
@@ -793,19 +845,23 @@ public:
                  GrVertexLayout vertexLayout,
                  uint32_t       vertexCount,
                  uint32_t       indexCount) {
-            if (fSuccess) {
+            if (NULL != fTarget) {
                 fTarget->releaseReservedGeometry();
             }
             fTarget = target;
-            fSuccess = fTarget->reserveAndLockGeometry(vertexLayout,
-                                                       vertexCount,
-                                                       indexCount,
-                                                       &fVertices,
-                                                       &fIndices);
-            return fSuccess;
+            if (NULL != fTarget) {
+                if (!fTarget->reserveAndLockGeometry(vertexLayout,
+                                                     vertexCount,
+                                                     indexCount,
+                                                     &fVertices,
+                                                     &fIndices)) {
+                    fTarget = NULL;
+                }
+            }
+            return NULL != fTarget;
         }
 
-        bool succeeded() const { return fSuccess; }
+        bool succeeded() const { return NULL != fTarget; }
         void* vertices() const { return fVertices; }
         void* indices() const { return fIndices; }
 
@@ -815,7 +871,6 @@ public:
 
     private:
         GrDrawTarget* fTarget;
-        bool          fSuccess;
         void*         fVertices;
         void*         fIndices;
     };
@@ -994,6 +1049,15 @@ public:
     static void VertexLayoutUnitTest();
 
 protected:
+    // given a vertex layout and a draw state, will a stage be used?
+    static bool StageWillBeUsed(int stage, GrVertexLayout layout, 
+                         const DrState& state) {
+        return NULL != state.fTextures[stage] && VertexUsesStage(stage, layout);
+    }
+
+    bool isStageEnabled(int stage) const {
+        return StageWillBeUsed(stage, fGeometrySrc.fVertexLayout, fCurrDrawState);
+    }
 
     // Helpers for GrDrawTarget subclasses that won't have private access to
     // SavedDrawState but need to peek at the state values.

@@ -30,7 +30,7 @@ typedef int32_t             SkFixed;
 #define SK_Fixed1           (1 << 16)
 #define SK_FixedHalf        (1 << 15)
 #define SK_FixedMax         (0x7FFFFFFF)
-#define SK_FixedMin         (0x1)
+#define SK_FixedMin         (-SK_FixedMax)
 #define SK_FixedNaN         ((int) 0x80000000)
 #define SK_FixedPI          (0x3243F)
 #define SK_FixedSqrt2       (92682)
@@ -118,7 +118,11 @@ inline SkFixed SkFixedSquare_portable(SkFixed value)
     uint32_t a = SkAbs32(value);
     uint32_t ah = a >> 16;
     uint32_t al = a & 0xFFFF;
-    return ah * a + al * ah + (al * al >> 16);
+    SkFixed result = ah * a + al * ah + (al * al >> 16);
+    if (result >= 0)
+        return result;
+    else // Overflow.
+        return SK_FixedMax;
 }
 
 #define SkFixedDiv(numer, denom)    SkDivBits(numer, denom, 16)

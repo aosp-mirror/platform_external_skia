@@ -22,6 +22,7 @@ SOURCE := \
     SkBuffer.cpp \
     SkCanvas.cpp \
     SkChunkAlloc.cpp \
+    SkClampRange.cpp \
     SkClipStack.cpp \
     SkColor.cpp \
     SkColorFilter.cpp \
@@ -94,6 +95,7 @@ SOURCE := \
     SkStrokerPriv.cpp \
     SkTSearch.cpp \
     SkTypeface.cpp \
+    SkTypefaceCache.cpp \
     SkUnPreMultiply.cpp \
     SkUtils.cpp \
     SkWriter32.cpp \

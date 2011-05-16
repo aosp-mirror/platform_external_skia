@@ -36,8 +36,9 @@ class SkRegion;
     to pass into SkCanvas.  Doing so will eliminate the need to extend
     SkCanvas as well.
 */
-class SK_API SkDeviceFactory {
+class SK_API SkDeviceFactory : public SkRefCnt {
 public:
+    SkDeviceFactory();
     virtual ~SkDeviceFactory();
     virtual SkDevice* newDevice(SkCanvas*, SkBitmap::Config, int width,
                                 int height, bool isOpaque, bool isLayer) = 0;
@@ -65,9 +66,12 @@ public:
     SkDevice(SkCanvas*, const SkBitmap& bitmap, bool forOffscreen);
     virtual ~SkDevice();
 
-    virtual SkDeviceFactory* getDeviceFactory() {
-        return SkNEW(SkRasterDeviceFactory);
-    }
+    /**
+     *  Return the factory that will create this subclass of SkDevice.
+     *  The returned factory is cached by the device, and so its reference count
+     *  is not changed by this call.
+     */
+    SkDeviceFactory* getDeviceFactory();
 
     enum Capabilities {
         kGL_Capability     = 0x1,  //!< mask indicating GL support
@@ -115,10 +119,15 @@ public:
     */
     const SkBitmap& accessBitmap(bool changePixels);
 
-    /** Helper to erase the entire device to the specified color (including
-        alpha).
-    */
-    void eraseColor(SkColor eraseColor);
+    /** Clears the entire device to the specified color (including alpha).
+     *  Ignores the clip.
+     */
+    virtual void clear(SkColor color);
+
+    /**
+     * Deprecated name for clear.
+     */
+    void eraseColor(SkColor eraseColor) { this->clear(eraseColor); }
 
     /** Called when this device is installed into a Canvas. Balanaced by a call
         to unlockPixels() when the device is removed from a Canvas.
@@ -145,6 +154,31 @@ public:
     */
     virtual void setMatrixClip(const SkMatrix&, const SkRegion&,
                                const SkClipStack&);
+
+    /**
+     *  Observer interface for listening to the calls to
+     *  SkDevice::setMatrixClip(...).  Users of SkDevice instances should
+     *  implement matrixClipChanged(...) to receive notifications.
+     */
+    class SkMatrixClipObserver : public SkRefCnt {
+    public:
+        virtual void matrixClipChanged(const SkMatrix&, const SkRegion&,
+                                       const SkClipStack&) = 0;
+    };
+
+    /** Assign the clip observer.  Note that an extra reference is added to the
+      * observer, and removed at SkDevice construction, or re-assignment of a
+      * different observer.
+      */
+    void setMatrixClipObserver(SkMatrixClipObserver* observer);
+
+    /** Return the device's associated SkMatrixClipObserver, or NULL.
+      * If non-null is returned, the reference count of the object is not
+      * modified.
+      */
+    SkMatrixClipObserver* getMatrixClipObserver() const {
+        return fMatrixClipObserver;
+    }
 
     /** Called when this device gains focus (i.e becomes the current device
         for drawing).
@@ -242,6 +276,13 @@ public:
     virtual bool filterTextFlags(const SkPaint& paint, TextFlags*);
 
 protected:
+    /**
+     *  subclasses must override this to return a new (or ref'd) instance of
+     *  a device factory that will create this subclass of device. This value
+     *  is cached, so it should get called at most once for a given instance.
+     */
+    virtual SkDeviceFactory* onNewDeviceFactory();
+
     /** Update as needed the pixel value in the bitmap, so that the caller can access
         the pixels directly. Note: only the pixels field should be altered. The config/width/height/rowbytes
         must remain unchanged.
@@ -264,6 +305,10 @@ private:
     SkBitmap    fBitmap;
     SkIPoint    fOrigin;
     SkMetaData* fMetaData;
+
+    SkMatrixClipObserver* fMatrixClipObserver;
+
+    SkDeviceFactory* fCachedDeviceFactory;
 };
 
 #endif

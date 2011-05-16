@@ -18,12 +18,13 @@
 #define GrContext_DEFINED
 
 #include "GrClip.h"
-#include "GrGpu.h"
 #include "GrTextureCache.h"
 #include "GrPaint.h"
 #include "GrPathRenderer.h"
 
 class GrFontCache;
+class GrGpu;
+struct GrGpuStats;
 class GrPathIter;
 class GrVertexBufferAllocPool;
 class GrIndexBufferAllocPool;
@@ -34,8 +35,8 @@ public:
     /**
      * Creates a GrContext from within a 3D context.
      */
-    static GrContext* Create(GrGpu::Engine engine,
-                             GrGpu::Platform3DContext context3D);
+    static GrContext* Create(GrEngine engine,
+                             GrPlatform3DContext context3D);
 
     /**
      *  Helper to create a opengl-shader based context
@@ -91,8 +92,22 @@ public:
      */
     GrTextureEntry* createAndLockTexture(GrTextureKey* key,
                                          const GrSamplerState&,
-                                         const GrGpu::TextureDesc&,
+                                         const GrTextureDesc&,
                                          void* srcData, size_t rowBytes);
+
+    /**
+     * Returns a texture matching the desc. It's contents are unknown. Subsequent
+     * requests with the same descriptor are not guaranteed to return the same
+     * texture. The same texture is guaranteed not be returned again until it is
+     * unlocked.
+     *
+     * Textures created by createAndLockTexture() hide the complications of
+     * tiling non-power-of-two textures on APIs that don't support this (e.g. 
+     * unextended GLES2). Tiling a npot texture created by lockKeylessTexture on
+     * such an API will create gaps in the tiling pattern. This includes clamp
+     * mode. (This may be addressed in a future update.)
+     */
+    GrTextureEntry* lockKeylessTexture(const GrTextureDesc& desc);
 
     /**
      *  When done with an entry, call unlockTexture(entry) on it, which returns
@@ -101,25 +116,10 @@ public:
     void unlockTexture(GrTextureEntry* entry);
 
     /**
-     *  Removes an texture from the cache. This prevents the texture from
-     *  being found by a subsequent findAndLockTexture() until it is
-     *  reattached. The entry still counts against the cache's budget and should
-     *  be reattached when exclusive access is no longer needed.
-     */
-    void detachCachedTexture(GrTextureEntry*);
-
-    /**
-     * Reattaches a texture to the cache and unlocks it. Allows it to be found
-     * by a subsequent findAndLock or be purged (provided its lock count is
-     * now 0.)
-     */
-    void reattachAndUnlockCachedTexture(GrTextureEntry*);
-
-    /**
      * Creates a texture that is outside the cache. Does not count against
      * cache's budget.
      */
-    GrTexture* createUncachedTexture(const GrGpu::TextureDesc&,
+    GrTexture* createUncachedTexture(const GrTextureDesc&,
                                      void* srcData,
                                      size_t rowBytes);
 
@@ -209,14 +209,7 @@ public:
     GrRenderTarget* createPlatformRenderTarget(intptr_t platformRenderTarget,
                                                int stencilBits,
                                                bool isMultisampled,
-                                               int width, int height) {
-    #if GR_DEBUG
-        GrPrintf("Using deprecated createPlatformRenderTarget API.");
-    #endif
-        return fGpu->createPlatformRenderTarget(platformRenderTarget, 
-                                                stencilBits, isMultisampled, 
-                                                width, height);
-    }
+                                               int width, int height);
 
     /**
      * DEPRECATED, WILL BE REMOVED SOON. USE createPlatformSurface.
@@ -229,12 +222,7 @@ public:
      *
      * @return the newly created GrRenderTarget
      */
-    GrRenderTarget* createRenderTargetFrom3DApiState() {
-    #if GR_DEBUG
-        GrPrintf("Using deprecated createRenderTargetFrom3DApiState API.");
-    #endif
-        return fGpu->createRenderTargetFrom3DApiState();
-    }
+    GrRenderTarget* createRenderTargetFrom3DApiState();
 
     ///////////////////////////////////////////////////////////////////////////
     // Matrix state
@@ -265,7 +253,7 @@ public:
      * Gets the current clip.
      * @return the current clip.
      */
-    const GrClip& getClip() const { return fGpu->getClip(); }
+    const GrClip& getClip() const;
 
     /**
      * Sets the clip.
@@ -283,9 +271,11 @@ public:
     // Draws
 
     /**
-     *  Erase the entire render target, ignoring any clips
+     * Clear the entire or rect of the render target, ignoring any clips.
+     * @param rect  the rect to clear or the whole thing if rect is NULL.
+     * @param color the color to clear to.
      */
-    void eraseColor(GrColor color);
+    void clear(const GrIRect* rect, GrColor color);
 
     /**
      *  Draw everywhere (respecting the clip) with the paint.
@@ -506,16 +496,6 @@ public:
     void writePixels(int left, int top, int width, int height,
                      GrPixelConfig, const void* buffer, size_t stride);
 
-
-    ///////////////////////////////////////////////////////////////////////////
-    // Statistics
-
-    void resetStats();
-
-    const GrGpu::Stats& getStats() const;
-
-    void printStats() const;
-
     ///////////////////////////////////////////////////////////////////////////
     // Helpers
 
@@ -547,6 +527,9 @@ public:
     GrDrawTarget* getTextTarget(const GrPaint& paint);
     void flushText();
     const GrIndexBuffer* getQuadIndexBuffer() const;
+    void resetStats();
+    const GrGpuStats& getStats() const;
+    void printStats() const;
 
 private:
     // used to keep track of when we need to flush the draw buffer
@@ -568,7 +551,25 @@ private:
     GrIndexBufferAllocPool*     fDrawBufferIBAllocPool;
     GrInOrderDrawBuffer*        fDrawBuffer;
 
+    GrIndexBuffer*              fAAFillRectIndexBuffer;
+    GrIndexBuffer*              fAAStrokeRectIndexBuffer;
+
     GrContext(GrGpu* gpu);
+
+    void fillAARect(GrDrawTarget* target,
+                    const GrPaint& paint,
+                    const GrRect& devRect);
+
+    void strokeAARect(GrDrawTarget* target,
+                      const GrPaint& paint,
+                      const GrRect& devRect,
+                      const GrVec& devStrokeSize);
+
+    inline int aaFillRectIndexCount() const;
+    GrIndexBuffer* aaFillRectIndexBuffer();
+
+    inline int aaStrokeRectIndexCount() const;
+    GrIndexBuffer* aaStrokeRectIndexBuffer();
 
     void setupDrawBuffer();
 
@@ -576,7 +577,9 @@ private:
 
     static void SetPaint(const GrPaint& paint, GrDrawTarget* target);
 
-    bool finalizeTextureKey(GrTextureKey*, const GrSamplerState&) const;
+    bool finalizeTextureKey(GrTextureKey*, 
+                            const GrSamplerState&,
+                            bool keyless) const;
 
     GrDrawTarget* prepareToDraw(const GrPaint& paint, DrawCategory drawType);
 
@@ -586,6 +589,30 @@ private:
                                     GrPathIter* path,
                                     GrPathFill fill);
 
+    struct OffscreenRecord;
+    // we currently only expose stage 0 through the paint so use stage 1. We
+    // use stage 1 for the offscreen.
+    enum {
+        kOffscreenStage = 1,
+    };
+
+    bool doOffscreenAA(GrDrawTarget* target, 
+                       const GrPaint& paint,
+                       bool isLines) const;
+
+    // sets up target to draw coverage to the supersampled render target
+    bool setupOffscreenAAPass1(GrDrawTarget* target,
+                               bool requireStencil,
+                               const GrIRect& boundRect,
+                               OffscreenRecord* record);
+
+    // sets up target to sample coverage of supersampled render target back
+    // to the main render target using stage kOffscreenStage.
+    void offscreenAAPass2(GrDrawTarget* target,
+                          const GrPaint& paint,
+                          const GrIRect& boundRect,
+                          OffscreenRecord* record);
+    
 };
 
 /**
@@ -612,3 +639,4 @@ private:
 #endif
 
 #include "GrContext_impl.h"
+

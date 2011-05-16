@@ -417,21 +417,27 @@ SkDevice* SkCanvas::init(SkDevice* device) {
 }
 
 SkCanvas::SkCanvas(SkDeviceFactory* factory)
-        : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage)),
-          fDeviceFactory(factory) {
+        : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage)) {
     inc_canvas();
 
-    if (!factory)
-        fDeviceFactory = SkNEW(SkRasterDeviceFactory);
+    if (factory) {
+        factory->ref();
+    } else {
+        factory = SkNEW(SkRasterDeviceFactory);
+    }
+    fDeviceFactory = factory;
 
     this->init(NULL);
 }
 
 SkCanvas::SkCanvas(SkDevice* device)
-        : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage)),
-          fDeviceFactory(device->getDeviceFactory()) {
+        : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage)) {
     inc_canvas();
 
+    fDeviceFactory = device->getDeviceFactory();
+    SkASSERT(fDeviceFactory);
+    fDeviceFactory->ref();
+              
     this->init(device);
 }
 
@@ -441,6 +447,9 @@ SkCanvas::SkCanvas(const SkBitmap& bitmap)
 
     SkDevice* device = SkNEW_ARGS(SkDevice, (this, bitmap, false));
     fDeviceFactory = device->getDeviceFactory();
+    SkASSERT(fDeviceFactory);
+    fDeviceFactory->ref();
+
     this->init(device)->unref();
 }
 
@@ -450,7 +459,7 @@ SkCanvas::~SkCanvas() {
     this->internalRestore();    // restore the last, since we're going away
 
     SkSafeUnref(fBounder);
-    SkDELETE(fDeviceFactory);
+    SkSafeUnref(fDeviceFactory);
 
     dec_canvas();
 }
@@ -560,8 +569,7 @@ bool SkCanvas::readPixels(const SkIRect& srcRect, SkBitmap* bitmap) {
 }
 
 SkDeviceFactory* SkCanvas::setDeviceFactory(SkDeviceFactory* factory) {
-    SkDELETE(fDeviceFactory);
-    fDeviceFactory = factory;
+    SkRefCnt_SafeAssign(fDeviceFactory, factory);
     return factory;
 }
 
@@ -585,23 +593,6 @@ void SkCanvas::writePixels(const SkBitmap& bitmap, int x, int y) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-
-bool SkCanvas::getViewport(SkIPoint* size) const {
-    if ((getDevice()->getDeviceCapabilities() & SkDevice::kGL_Capability) == 0)
-        return false;
-    if (size)
-        size->set(getDevice()->width(), getDevice()->height());
-    return true;
-}
-
-bool SkCanvas::setViewport(int width, int height) {
-    if ((getDevice()->getDeviceCapabilities() & SkDevice::kGL_Capability) == 0)
-        return false;
-
-    this->setDevice(this->createDevice(SkBitmap::kARGB_8888_Config, width, height,
-                                       false, false))->unref();
-    return true;
-}
 
 void SkCanvas::updateDeviceCMCache() {
     if (fDeviceCMDirty) {
@@ -1193,6 +1184,14 @@ SkDevice* SkCanvas::createDevice(SkBitmap::Config config, int width, int height,
 //////////////////////////////////////////////////////////////////////////////
 //  These are the virtual drawing methods
 //////////////////////////////////////////////////////////////////////////////
+
+void SkCanvas::clear(SkColor color) {
+    SkDrawIter  iter(this);
+
+    while (iter.next()) {
+        iter.fDevice->clear(color);
+    }
+}
 
 void SkCanvas::drawPaint(const SkPaint& paint) {
     LOOPER_BEGIN(paint, SkDrawFilter::kPaint_Type)

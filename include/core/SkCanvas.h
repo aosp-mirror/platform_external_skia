@@ -75,22 +75,6 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /** If the Device supports GL viewports, return true and set size (if not
-        null) to the size of the viewport. If it is not supported, ignore size
-        and return false.
-     
-        DEPRECATED: the gpu-device backend takes care of managing the viewport
-    */
-    virtual bool getViewport(SkIPoint* size) const;
-
-    /** If the Device supports GL viewports, return true and set the viewport
-        to the specified x and y dimensions. If it is not supported, ignore x
-        and y and return false.
-     
-        DEPRECATED: the gpu-device backend takes care of managing the viewport
-    */
-    virtual bool setViewport(int x, int y);
-
     /** Return the canvas' device object, which may be null. The device holds
         the bitmap of the pixels that the canvas draws into. The reference count
         of the returned device is not changed by this call.
@@ -126,12 +110,15 @@ public:
     SkDevice* setBitmapDevice(const SkBitmap& bitmap, bool forLayer = false);
 
     /**
-     *  Return the current device factory, or NULL.
+     *  Return the current device factory, or NULL. The reference count of
+     *  the returned factory is not changed.
      */
     SkDeviceFactory* getDeviceFactory() const { return fDeviceFactory; }
 
     /**
-     *  Replace any existing factory with the specified factory.
+     *  Replace any existing factory with the specified factory, unrefing the
+     *  previous (if any), and refing the new one (if any). For convenience,
+     *  the factory parameter is also returned.
      */
     SkDeviceFactory* setDeviceFactory(SkDeviceFactory*);
 
@@ -391,10 +378,27 @@ public:
     void drawColor(SkColor color,
                    SkXfermode::Mode mode = SkXfermode::kSrcOver_Mode);
 
-    /** Fill the entire canvas' bitmap (restricted to the current clip) with the
-        specified paint.
-        @param paint    The paint used to fill the canvas
-    */
+    /**
+     *  This erases the entire drawing surface to the specified color,
+     *  irrespective of the clip. It does not blend with the previous pixels,
+     *  but always overwrites them.
+     *
+     *  It is roughly equivalent to the following:
+     *      canvas.save();
+     *      canvas.clipRect(hugeRect, kReplace_Op);
+     *      paint.setColor(color);
+     *      paint.setXfermodeMode(kSrc_Mode);
+     *      canvas.drawPaint(paint);
+     *      canvas.restore();
+     *  though it is almost always much more efficient.
+     */
+    virtual void clear(SkColor);
+
+    /**
+     *  Fill the entire canvas' bitmap (restricted to the current clip) with the
+     *  specified paint.
+     *  @param paint    The paint used to fill the canvas
+     */
     virtual void drawPaint(const SkPaint& paint);
 
     enum PointMode {

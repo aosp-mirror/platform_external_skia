@@ -24,9 +24,10 @@
 
 GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrVertexBufferAllocPool* vertexPool,
                                          GrIndexBufferAllocPool* indexPool) :
-        fDraws(DRAWS_BLOCK_SIZE, fDrawsStorage),
-        fStates(STATES_BLOCK_SIZE, fStatesStorage),
-        fClips(CLIPS_BLOCK_SIZE, fClipsStorage),
+        fDraws(&fDrawStorage),
+        fStates(&fStateStorage),
+        fClears(&fClearStorage),
+        fClips(&fClipStorage),
         fClipSet(true),
 
         fLastRectVertexLayout(0),
@@ -149,7 +150,12 @@ void GrInOrderDrawBuffer::drawRect(const GrRect& rect,
             GrAssert(0 == lastDraw.fIndexCount % 6);
             GrAssert(0 == lastDraw.fStartIndex);
 
-            appendToPreviousDraw = lastDraw.fVertexBuffer == fCurrPoolVertexBuffer &&
+            bool clearSinceLastDraw =
+                            fClears.count() && 
+                            fClears.back().fBeforeDrawIdx == fDraws.count();
+
+            appendToPreviousDraw =  !clearSinceLastDraw &&
+                                    lastDraw.fVertexBuffer == fCurrPoolVertexBuffer &&
                                    (fCurrQuad * 4 + lastDraw.fStartVertex) == fCurrPoolStartVertex;
             if (appendToPreviousDraw) {
                 lastDraw.fVertexCount += 4;
@@ -287,6 +293,23 @@ void GrInOrderDrawBuffer::drawNonIndexed(GrPrimitiveType primitiveType,
     draw.fIndexBuffer = NULL;
 }
 
+void GrInOrderDrawBuffer::clear(const GrIRect* rect, GrColor color) {
+    GrIRect r;
+    if (NULL == rect) {
+        // We could do something smart and remove previous draws and clears to
+        // the current render target. If we get that smart we have to make sure
+        // those draws aren't read before this clear (render-to-texture).
+        r.setLTRB(0, 0, 
+                  this->getRenderTarget()->width(), 
+                  this->getRenderTarget()->height());
+        rect = &r;
+    }
+    Clear& clr = fClears.push_back();
+    clr.fColor = color;
+    clr.fBeforeDrawIdx = fDraws.count();
+    clr.fRect = *rect;
+}
+
 void GrInOrderDrawBuffer::reset() {
     GrAssert(!fReservedGeometry.fLocked);
     uint32_t numStates = fStates.count();
@@ -307,6 +330,8 @@ void GrInOrderDrawBuffer::reset() {
     fDraws.reset();
     fStates.reset();
 
+    fClears.reset();
+
     fVertexPool.reset();
     fIndexPool.reset();
 
@@ -320,7 +345,7 @@ void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
     GrAssert(NULL != target);
     GrAssert(target != this); // not considered and why?
 
-    uint32_t numDraws = fDraws.count();
+    int numDraws = fDraws.count();
     if (!numDraws) {
         return;
     }
@@ -334,10 +359,17 @@ void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
     // on the stack.
     GrDrawTarget::AutoGeometrySrcRestore agsr(target);
 
-    uint32_t currState = ~0;
-    uint32_t currClip  = ~0;
+    int currState = ~0;
+    int currClip  = ~0;
+    int currClear = 0;
 
-    for (uint32_t i = 0; i < numDraws; ++i) {
+    for (int i = 0; i < numDraws; ++i) {
+        while (currClear < fClears.count() && 
+               i == fClears[currClear].fBeforeDrawIdx) {
+            target->clear(&fClears[currClear].fRect, fClears[currClear].fColor);
+            ++currClear;
+        }
+
         const Draw& draw = fDraws[i];
         if (draw.fStateChanged) {
             ++currState;
@@ -365,6 +397,11 @@ void GrInOrderDrawBuffer::playback(GrDrawTarget* target) {
                                    draw.fStartVertex,
                                    draw.fVertexCount);
         }
+    }
+    while (currClear < fClears.count()) {
+        GrAssert(fDraws.count() == fClears[currClear].fBeforeDrawIdx);
+        target->clear(&fClears[currClear].fRect, fClears[currClear].fColor);
+        ++currClear;
     }
 }
 

@@ -120,6 +120,8 @@ typedef short int16_t;
 typedef unsigned short uint16_t;
 typedef int int32_t;
 typedef unsigned uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
 #else
 /*
  *  Include stdint.h with defines that trigger declaration of C99 limit/const
@@ -169,11 +171,15 @@ typedef unsigned uint32_t;
     #define GR_DLL 0
 #endif
 
-#if GR_WIN32_BUILD && GR_DLL
-    #if GR_IMPLEMENTATION
-        #define GR_API __declspec(dllexport)
+#if GR_DLL
+    #if GR_WIN32_BUILD
+        #if GR_IMPLEMENTATION
+            #define GR_API __declspec(dllexport)
+        #else
+            #define GR_API __declspec(dllimport)
+        #endif
     #else
-        #define GR_API __declspec(dllimport)
+        #define GR_API __attribute__((visibility("default")))
     #endif
 #else
     #define GR_API
@@ -326,10 +332,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
 
 #ifndef GR_DUMP_TEXTURE_UPLOAD
     #define GR_DUMP_TEXTURE_UPLOAD  0
-#endif
-
-#ifndef GR_USE_NEW_GLSHADERS
-    #define GR_USE_NEW_GLSHADERS 0
 #endif
 
 /**

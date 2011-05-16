@@ -3,14 +3,35 @@
 #include "SkMetaData.h"
 #include "SkRect.h"
 
-SkDeviceFactory::~SkDeviceFactory() {}
+//#define TRACE_FACTORY_LIFETIME
 
-SkDevice::SkDevice(SkCanvas* canvas) : fCanvas(canvas), fMetaData(NULL) {
+#ifdef TRACE_FACTORY_LIFETIME
+    static int gFactoryCounter;
+#endif
+
+SkDeviceFactory::SkDeviceFactory() {
+#ifdef TRACE_FACTORY_LIFETIME
+    SkDebugf("+++ factory index %d\n", gFactoryCounter);
+    ++gFactoryCounter;
+#endif
+}
+
+SkDeviceFactory::~SkDeviceFactory() {
+#ifdef TRACE_FACTORY_LIFETIME
+    --gFactoryCounter;
+    SkDebugf("--- factory index %d\n", gFactoryCounter);
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+SkDevice::SkDevice(SkCanvas* canvas) : fCanvas(canvas), fMetaData(NULL), fMatrixClipObserver(NULL) {
     fOrigin.setZero();
+    fCachedDeviceFactory = NULL;
 }
 
 SkDevice::SkDevice(SkCanvas* canvas, const SkBitmap& bitmap, bool isForLayer)
-        : fCanvas(canvas), fBitmap(bitmap), fMetaData(NULL) {
+        : fCanvas(canvas), fBitmap(bitmap), fMetaData(NULL), fMatrixClipObserver(NULL) {
     fOrigin.setZero();
     // auto-allocate if we're for offscreen drawing
     if (isForLayer) {
@@ -21,10 +42,24 @@ SkDevice::SkDevice(SkCanvas* canvas, const SkBitmap& bitmap, bool isForLayer)
             }
         }
     }
+    fCachedDeviceFactory = NULL;
 }
 
 SkDevice::~SkDevice() {
     delete fMetaData;
+    SkSafeUnref(fCachedDeviceFactory);
+    SkSafeUnref(fMatrixClipObserver);
+}
+
+SkDeviceFactory* SkDevice::onNewDeviceFactory() {
+    return SkNEW(SkRasterDeviceFactory);
+}
+
+SkDeviceFactory* SkDevice::getDeviceFactory() {
+    if (NULL == fCachedDeviceFactory) {
+        fCachedDeviceFactory = this->onNewDeviceFactory();
+    }
+    return fCachedDeviceFactory;
 }
 
 SkMetaData& SkDevice::getMetaData() {
@@ -65,14 +100,22 @@ bool SkDevice::intersects(const SkIRect& r, SkIRect* sect) const {
     return sect ? sect->intersect(r, bounds) : SkIRect::Intersects(r, bounds);
 }
 
-void SkDevice::eraseColor(SkColor eraseColor) {
-    fBitmap.eraseColor(eraseColor);
+void SkDevice::clear(SkColor color) {
+    fBitmap.eraseColor(color);
 }
 
 void SkDevice::onAccessBitmap(SkBitmap* bitmap) {}
 
-void SkDevice::setMatrixClip(const SkMatrix&, const SkRegion&,
-                             const SkClipStack&) {}
+void SkDevice::setMatrixClip(const SkMatrix& matrix, const SkRegion& region,
+                             const SkClipStack& clipStack) {
+    if (fMatrixClipObserver) {
+        fMatrixClipObserver->matrixClipChanged(matrix, region, clipStack);
+    }
+}
+
+void SkDevice::setMatrixClipObserver(SkMatrixClipObserver* observer) {
+    SkRefCnt_SafeAssign(fMatrixClipObserver, observer);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 

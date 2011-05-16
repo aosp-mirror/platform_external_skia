@@ -51,11 +51,20 @@ private:
     // sets the texture matrix uniform for currently bound program
     void flushTextureMatrix(int stage);
 
+    // sets the color specified by GrDrawTarget::setColor()
+    void flushColor();
+
     // sets the MVP matrix uniform for currently bound program
     void flushViewMatrix();
 
     // flushes the parameters to two point radial gradient
     void flushRadial2(int stage);
+
+    // flushes the normalized texel size
+    void flushTexelSize(int stage);
+
+    // flushes the edges for edge AA
+    void flushEdgeAAData();
 
     static void DeleteProgram(GrGLProgram::CachedData* programData);
 

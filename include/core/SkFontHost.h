@@ -24,7 +24,6 @@ class SkDescriptor;
 class SkStream;
 class SkWStream;
 
-typedef uint32_t SkFontID;
 typedef uint32_t SkFontTableTag;
 
 /** \class SkFontHost
@@ -56,7 +55,7 @@ typedef uint32_t SkFontTableTag;
         font scaler (e.g. freetype or other) to the font's data.
     5) Utilites to manage the font cache (budgeting) and gamma correction
 */
-class SkFontHost {
+class SK_API SkFontHost {
 public:
     /** Return a new, closest matching typeface given either an existing family
         (specified by a typeface in that family) or by a familyName and a
