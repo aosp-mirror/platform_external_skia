@@ -73,17 +73,29 @@ static FamilyRec* gFamilyHead;
 static SkTDArray<NameFamilyPair> gNameList;
 
 struct FamilyRec {
+    FamilyRec*  fPrev;
     FamilyRec*  fNext;
     SkTypeface* fFaces[4];
 
     FamilyRec()
     {
-        fNext = gFamilyHead;
+        static FamilyRec* tail = 0;
+        if (!gFamilyHead) {
+            gFamilyHead = this;
+        }
+        fPrev = tail;
+        fNext = 0;
         memset(fFaces, 0, sizeof(fFaces));
-        gFamilyHead = this;
+        if (tail) {
+            tail->fNext = this;
+        }
+        tail = this;
+        SkDebugf("FamilyRec::FamilyRec(%p) fPrev=%p fNext=%p fFaces=[%p,%p,%p,%p]",
+                 this, fPrev, fNext, fFaces[0], fFaces[1], fFaces[2], fFaces[3]);
     }
 };
 
+// Styles are spread across a family. Fallback fonts, as a whole, are treated as one family
 static SkTypeface* find_best_face(const FamilyRec* family,
                                   SkTypeface::Style style) {
     SkTypeface* const* faces = family->fFaces;
@@ -157,26 +169,20 @@ static FamilyRec* remove_from_family(const SkTypeface* face) {
     return family;  // return the empty family
 }
 
-// maybe we should make FamilyRec be doubly-linked
 static void detach_and_delete_family(FamilyRec* family) {
-    FamilyRec* curr = gFamilyHead;
-    FamilyRec* prev = NULL;
+    FamilyRec* prev = family->fPrev;
+    FamilyRec* next = family->fNext;
 
-    while (curr != NULL) {
-        FamilyRec* next = curr->fNext;
-        if (curr == family) {
-            if (prev == NULL) {
-                gFamilyHead = next;
-            } else {
-                prev->fNext = next;
-            }
-            SkDELETE(family);
-            return;
-        }
-        prev = curr;
-        curr = next;
+    if (family == gFamilyHead) {
+        gFamilyHead = next;
     }
-    SkASSERT(!"Yikes, couldn't find family in our list to remove/delete");
+    if (prev) {
+        prev->fNext = next;
+    }
+    if (next) {
+        next->fPrev = prev;
+    }
+    SkDELETE(family);
 }
 
 static SkTypeface* find_typeface(const char name[], SkTypeface::Style style) {
@@ -361,8 +367,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool get_name_and_style(const char path[], SkString* name,
-                               SkTypeface::Style* style,
-                               bool* isFixedWidth, bool isExpected) {
+                               SkTypeface::Style* style, bool* isFixedWidth) {
     SkString        fullpath;
     GetFullPathForSysFonts(&fullpath, path);
 
@@ -378,10 +383,7 @@ static bool get_name_and_style(const char path[], SkString* name,
             return true;
         }
     }
-
-    if (isExpected) {
-        SkDebugf("---- failed to open <%s> as a font\n", fullpath.c_str());
-    }
+    SkDebugf("get_name_and_style() failed to open <%s> as a font\n", fullpath.c_str());
     return false;
 }
 
@@ -424,7 +426,8 @@ static const FontInitRec gSystemFonts[] = {
         them in the order we want them to be accessed by NextLogicalFont().
      */
     { "DroidSansArabic.ttf",        gFBNames    },
-    { "DroidSansHebrew.ttf",        gFBNames    },
+    { "DroidSansHebrew-Regular.ttf",gFBNames    },
+    { "DroidSansHebrew-Bold.ttf",   NULL        },
     { "DroidSansThai.ttf",          gFBNames    },
     { "MTLmr3m.ttf",                gFBNames    }, // Motoya Japanese Font
     { "MTLc3m.ttf",                 gFBNames    }, // Motoya Japanese Font
@@ -438,14 +441,10 @@ static const FontInitRec gSystemFonts[] = {
 static FamilyRec* gDefaultFamily;
 static SkTypeface* gDefaultNormal;
 
-/*  This is sized conservatively, assuming that it will never be a size issue.
-    It will be initialized in load_system_fonts(), and will be filled with the
-    fontIDs that can be used for fallback consideration, in sorted order (sorted
-    meaning element[0] should be used first, then element[1], etc. When we hit
-    a fontID==0 in the array, the list is done, hence our allocation size is
-    +1 the total number of possible system fonts. Also see NextLogicalFont().
+/*  Fallback fonts are a segment of the linked list that starts at gFamilyHead,
+    configured by load_system_fonts().
  */
-static uint32_t gFallbackFonts[SK_ARRAY_COUNT(gSystemFonts)+1];
+static FamilyRec* gFallbackHead;
 
 /*  Called once (ensured by the sentinel check at the beginning of our body).
     Initializes all the globals, and register the system fonts.
@@ -458,7 +457,6 @@ static void load_system_fonts() {
 
     const FontInitRec* rec = gSystemFonts;
     SkTypeface* firstInFamily = NULL;
-    int fallbackCount = 0;
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(gSystemFonts); i++) {
         // if we're the first in a new family, clear firstInFamily
@@ -471,9 +469,8 @@ static void load_system_fonts() {
         SkTypeface::Style style;
 
         // we expect all the fonts, except the "fallback" fonts
-        bool isExpected = (rec[i].fNames != gFBNames);
-        if (!get_name_and_style(rec[i].fFileName, &name, &style,
-                                &isFixedWidth, isExpected)) {
+        // after one fallback is received, all the rest are fallbacks, too
+        if (!get_name_and_style(rec[i].fFileName, &name, &style, &isFixedWidth)) {
             continue;
         }
 
@@ -485,14 +482,10 @@ static void load_system_fonts() {
                                      isFixedWidth) // filename
                                     );
 
-        if (rec[i].fNames != NULL) {
-            // see if this is one of our fallback fonts
-            if (rec[i].fNames == gFBNames) {
-            //    SkDebugf("---- adding %s as fallback[%d] fontID %d\n",
-            //             rec[i].fFileName, fallbackCount, tf->uniqueID());
-                gFallbackFonts[fallbackCount++] = tf->uniqueID();
-            }
+//        SkDebugf("load_system_fonts() %s, %d, %d, %d\n",
+//                                 rec[i].fFileName, style, firstInFamily, tf->uniqueID());
 
+        if (rec[i].fNames != NULL) {
             firstInFamily = tf;
             FamilyRec* family = find_family(tf);
             const char* const* names = rec[i].fNames;
@@ -506,14 +499,20 @@ static void load_system_fonts() {
                 add_name(*names, family);
                 names += 1;
             }
+            // see if this is one of our fallback fonts
+            if (rec[i].fNames == gFBNames) {
+                if (!gFallbackHead) {
+                    // record the first of the fallback families
+                    gFallbackHead = family;
+                }
+            }
+
         }
     }
 
     // do this after all fonts are loaded. This is our default font, and it
     // acts as a sentinel so we only execute load_system_fonts() once
     gDefaultNormal = find_best_face(gDefaultFamily, SkTypeface::kNormal);
-    // now terminate our fallback list with the sentinel value
-    gFallbackFonts[fallbackCount] = 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -578,13 +577,15 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
 
     if (NULL != familyFace) {
         tf = find_typeface(familyFace, style);
+//        SkDebugf("SkFontHost::CreateTypeface find_typeface for familyFace returns %p", tf);
     } else if (NULL != familyName) {
-//        SkDebugf("======= familyName <%s>\n", familyName);
         tf = find_typeface(familyName, style);
+//        SkDebugf("SkFontHost::CreateTypeface find_typeface for familyName returns %p", tf);
     }
 
     if (NULL == tf) {
         tf = find_best_face(gDefaultFamily, style);
+//        SkDebugf("SkFontHost::CreateTypeface find_best_face for gDefaultFamily returns %p", tf);
     }
 
     // we ref(), since the symantic is to return a new instance
@@ -640,13 +641,27 @@ SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
         in our list. Note: list is zero-terminated, and returning zero means
         we have no more fonts to use for fallbacks.
      */
-    const uint32_t* list = gFallbackFonts;
-    for (int i = 0; list[i] != 0; i++) {
-        if (list[i] == currFontID) {
-            return list[i+1];
+
+    SkTypeface* origTypeface = find_from_uniqueID(origFontID);
+    SkTypeface::Style origStyle = origTypeface->style();
+
+    FamilyRec* family = gFallbackHead;
+    while (family) {
+        SkTypeface* typeface = find_best_face(family, origStyle);
+        family = family->fNext;
+        if (typeface && typeface->uniqueID() == currFontID) {
+            if (family) {
+                return find_best_face(family, origStyle)->uniqueID();
+            } else {
+                return 0;
+            }
         }
     }
-    return list[0];
+
+    if (gFallbackHead) {
+        return find_best_face(gFallbackHead, origStyle)->uniqueID();
+    }
+    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
