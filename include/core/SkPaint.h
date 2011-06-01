@@ -817,6 +817,7 @@ public:
 
 #ifdef ANDROID
     const SkGlyph& getUnicharMetrics(SkUnichar);
+    const SkGlyph& getGlyphMetrics(uint16_t);
     const void* findImage(const SkGlyph&);
 
     uint32_t getGenerationID() const;

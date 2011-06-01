@@ -364,6 +364,16 @@ const SkGlyph& SkPaint::getUnicharMetrics(SkUnichar text) {
     return glyph;
 }
 
+const SkGlyph& SkPaint::getGlyphMetrics(uint16_t glyphId) {
+    SkGlyphCache* cache;
+    descriptorProc(NULL, DetachDescProc, &cache, true);
+
+    const SkGlyph& glyph = cache->getGlyphIDMetrics(glyphId);
+
+    SkGlyphCache::AttachCache(cache);
+    return glyph;
+}
+
 const void* SkPaint::findImage(const SkGlyph& glyph) {
     // See ::detachCache()
     SkGlyphCache* cache;
