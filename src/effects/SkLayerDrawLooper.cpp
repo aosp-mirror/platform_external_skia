@@ -189,6 +189,7 @@ void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
     
     Rec* rec = fRecs;
     for (int i = 0; i < fCount; i++) {
+        buffer.writeInt(rec->fInfo.fFlagsMask);
         buffer.writeInt(rec->fInfo.fPaintBits);
         buffer.writeInt(rec->fInfo.fColorMode);
         buffer.writeScalar(rec->fInfo.fOffset.fX);
@@ -208,6 +209,7 @@ SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
 
     for (int i = 0; i < count; i++) {
         LayerInfo info;
+        info.fFlagsMask = buffer.readInt();
         info.fPaintBits = buffer.readInt();
         info.fColorMode = (SkXfermode::Mode)buffer.readInt();
         info.fOffset.fX = buffer.readScalar();
