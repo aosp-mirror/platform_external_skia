@@ -81,11 +81,6 @@ protected:
     virtual GrIndexBuffer* onCreateIndexBuffer(uint32_t size,
                                                bool dynamic);
     virtual GrResource* onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc);
-    virtual GrRenderTarget* onCreatePlatformRenderTarget(
-                                                 intptr_t platformRenderTarget,
-                                                 int stencilBits,
-                                                 bool isMultisampled,
-                                                 int width, int height);
     virtual GrRenderTarget* onCreateRenderTargetFrom3DApiState();
 
     virtual void onClear(const GrIRect* rect, GrColor color);
@@ -107,6 +102,7 @@ protected:
     virtual void flushScissor(const GrIRect* rect);
     void clearStencil(uint32_t value, uint32_t mask);
     virtual void clearStencilClip(const GrIRect& rect);
+    virtual int getMaxEdges() const;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -120,12 +116,16 @@ protected:
     // flushes state that is common to fixed and programmable GL
     // dither
     // line smoothing
-    // blend func
     // texture binding
     // sampler state (filtering, tiling)
     // FBO binding
     // line width
     bool flushGLStateCommon(GrPrimitiveType type);
+
+    // subclass should call this to flush the blend state
+    void flushBlend(GrPrimitiveType type,
+                    GrBlendCoeff srcCoeff,
+                    GrBlendCoeff dstCoeff);
 
     // adjusts texture matrix to account for orientation, size, and npotness
     static void AdjustTextureMatrix(const GrGLTexture* texture,
@@ -138,7 +138,7 @@ protected:
     static bool TextureMatrixIsIdentity(const GrGLTexture* texture,
                                         const GrSamplerState& sampler);
 
-    static bool BlendCoefReferencesConstant(GrBlendCoeff coeff);
+    static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
 
 private:
 
@@ -160,7 +160,6 @@ private:
     void flushRenderTarget(const GrIRect* bound);
     void flushStencil();
     void flushAAState(GrPrimitiveType type);
-    void flushBlend(GrPrimitiveType type);
 
     void resolveRenderTarget(GrGLRenderTarget* texture);
 
@@ -188,6 +187,9 @@ private:
 
     // Do we have stencil wrap ops.
     bool fHasStencilWrap;
+
+    // The maximum number of fragment uniform vectors (GLES has min. 16).
+    int fMaxFragmentUniformVectors;
 
     // ES requires an extension to support RGBA8 in RenderBufferStorage
     bool fRGBA8Renderbuffer;

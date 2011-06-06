@@ -25,7 +25,6 @@
 class GrFontCache;
 class GrGpu;
 struct GrGpuStats;
-class GrPathIter;
 class GrVertexBufferAllocPool;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
@@ -191,34 +190,15 @@ public:
      *         on failure.
      */
     GrResource* createPlatformSurface(const GrPlatformSurfaceDesc& desc);
-
     /**
-     * DEPRECATED, WILL BE REMOVED SOON. USE createPlatformSurface.
-     *
-     * Wraps an externally-created rendertarget in a GrRenderTarget.
-     * @param platformRenderTarget  3D API-specific render target identifier
-     *                              e.g. in GL platforamRenderTarget is an FBO
-     *                              id.
-     * @param stencilBits           the number of stencil bits that the render
-     *                              target has.
-     * @param isMultisampled        specify whether the render target is 
-     *                              multisampled.
-     * @param width                 width of the render target.
-     * @param height                height of the render target.
-     */
-    GrRenderTarget* createPlatformRenderTarget(intptr_t platformRenderTarget,
-                                               int stencilBits,
-                                               bool isMultisampled,
-                                               int width, int height);
-
-    /**
-     * DEPRECATED, WILL BE REMOVED SOON. USE createPlatformSurface.
-     *
      * Reads the current target object (e.g. FBO or IDirect3DSurface9*) and
      * viewport state from the underlying 3D API and wraps it in a
      * GrRenderTarget. The GrRenderTarget will not attempt to delete/destroy the
      * underlying object in its destructor and it is up to caller to guarantee
      * that it remains valid while the GrRenderTarget is used.
+     *
+     * Will not detect that the render target is also a texture. If you need
+     * to also use the render target as a GrTexture use createPlatformSurface.
      *
      * @return the newly created GrRenderTarget
      */
@@ -323,22 +303,14 @@ public:
      * Draws a path.
      *
      * @param paint         describes how to color pixels.
-     * @param pathIter      the path to draw
+     * @param path          the path to draw
      * @param fill          the path filling rule to use.
      * @param translate     optional additional translation applied to the
      *                      path.
      */
-    void drawPath(const GrPaint& paint,
-                  GrPathIter* pathIter,
-                  GrPathFill fill,
+    void drawPath(const GrPaint& paint, const GrPath& path, GrPathFill fill,
                   const GrPoint* translate = NULL);
-    /**
-     * Helper version of drawPath that takes a GrPath
-     */
-    void drawPath(const GrPaint& paint,
-                  const GrPath& path,
-                  GrPathFill fill,
-                  const GrPoint* translate = NULL);
+
     /**
      * Draws vertices with a paint.
      *
@@ -585,16 +557,9 @@ private:
 
     void drawClipIntoStencil();
 
-    GrPathRenderer* getPathRenderer(const GrDrawTarget* target,
-                                    GrPathIter* path,
-                                    GrPathFill fill);
+    GrPathRenderer* getPathRenderer(const GrDrawTarget*, const GrPath&, GrPathFill);
 
     struct OffscreenRecord;
-    // we currently only expose stage 0 through the paint so use stage 1. We
-    // use stage 1 for the offscreen.
-    enum {
-        kOffscreenStage = 1,
-    };
 
     bool doOffscreenAA(GrDrawTarget* target, 
                        const GrPaint& paint,
@@ -612,6 +577,15 @@ private:
                           const GrPaint& paint,
                           const GrIRect& boundRect,
                           OffscreenRecord* record);
+    
+    // computes vertex layout bits based on the paint. If paint expresses
+    // a texture for a stage, the stage coords will be bound to postitions
+    // unless hasTexCoords[s]==true in which case stage s's input coords
+    // are bound to tex coord index s. hasTexCoords == NULL is a shortcut
+    // for an array where all the values are false.
+    static int PaintStageVertexLayoutBits(
+                                    const GrPaint& paint,
+                                    const bool hasTexCoords[GrPaint::kTotalStages]);
     
 };
 

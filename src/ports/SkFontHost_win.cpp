@@ -83,7 +83,8 @@ static inline FIXED SkScalarToFIXED(SkScalar x) {
 
 static unsigned calculateGlyphCount(HDC hdc) {
     // The 'maxp' table stores the number of glyphs at offset 4, in 2 bytes.
-    const DWORD maxpTag = *(DWORD*) "maxp";
+    const DWORD maxpTag =
+        SkEndian_SwapBE32(SkSetFourByteTag('m', 'a', 'x', 'p'));
     uint16_t glyphs;
     if (GetFontData(hdc, maxpTag, 4, &glyphs, sizeof(glyphs)) != GDI_ERROR) {
         return SkEndian_SwapBE16(glyphs);
@@ -271,6 +272,10 @@ private:
     HFONT        fFont;
     SCRIPT_CACHE fSC;
     int          fGlyphCount;
+
+    HFONT        fHiResFont;
+    MAT2         fMat22Identity;
+    SkMatrix     fHiResMatrix;
 };
 
 static float mul2float(SkScalar a, SkScalar b) {
@@ -282,6 +287,16 @@ static FIXED float2FIXED(float x) {
 }
 
 static SkMutex gFTMutex;
+
+#define HIRES_TEXTSIZE  2048
+#define HIRES_SHIFT     11
+static inline SkFixed HiResToFixed(int value) {
+    return value << (16 - HIRES_SHIFT);
+}
+
+static bool needHiResMetrics(const SkScalar mat[2][2]) {
+    return mat[1][0] || mat[0][1];
+}
 
 SkScalerContext_Windows::SkScalerContext_Windows(const SkDescriptor* desc)
         : SkScalerContext(desc), fDDC(0), fFont(0), fSavefont(0), fSC(0)
@@ -303,6 +318,7 @@ SkScalerContext_Windows::SkScalerContext_Windows(const SkDescriptor* desc)
     fMat22.eM22 = float2FIXED(-fXform.eM22);
 
     fDDC = ::CreateCompatibleDC(NULL);
+    SetGraphicsMode(fDDC, GM_ADVANCED);
     SetBkMode(fDDC, TRANSPARENT);
 
     // Scaling by the DPI is inconsistent with how Skia draws elsewhere
@@ -311,6 +327,21 @@ SkScalerContext_Windows::SkScalerContext_Windows(const SkDescriptor* desc)
     GetLogFontByID(fRec.fFontID, &lf);
     lf.lfHeight = -gCanonicalTextSize;
     fFont = CreateFontIndirect(&lf);
+
+    // if we're rotated, or want fractional widths, create a hires font
+    fHiResFont = 0;
+    if (needHiResMetrics(fRec.fPost2x2) || (fRec.fFlags & kSubpixelPositioning_Flag)) {
+        lf.lfHeight = -HIRES_TEXTSIZE;
+        fHiResFont = CreateFontIndirect(&lf);
+
+        fMat22Identity.eM11 = fMat22Identity.eM22 = SkFixedToFIXED(SK_Fixed1);
+        fMat22Identity.eM12 = fMat22Identity.eM21 = SkFixedToFIXED(0);
+
+        // construct a matrix to go from HIRES logical units to our device units
+        fRec.getSingleMatrix(&fHiResMatrix);
+        SkScalar scale = SkScalarInvert(SkIntToScalar(HIRES_TEXTSIZE));
+        fHiResMatrix.preScale(scale, scale);
+    }
     fSavefont = (HFONT)SelectObject(fDDC, fFont);
 }
 
@@ -321,6 +352,9 @@ SkScalerContext_Windows::~SkScalerContext_Windows() {
     }
     if (fFont) {
         ::DeleteObject(fFont);
+    }
+    if (fHiResFont) {
+        ::DeleteObject(fHiResFont);
     }
     if (fSC) {
         ::ScriptFreeCache(&fSC);
@@ -368,7 +402,7 @@ void SkScalerContext_Windows::generateMetrics(SkGlyph* glyph) {
     SkASSERT(fDDC);
 
     GLYPHMETRICS gm;
-    memset(&gm, 0, sizeof(gm));
+    sk_bzero(&gm, sizeof(gm));
 
     glyph->fRsbDelta = 0;
     glyph->fLsbDelta = 0;
@@ -398,6 +432,19 @@ void SkScalerContext_Windows::generateMetrics(SkGlyph* glyph) {
             glyph->fHeight += 2;
             glyph->fTop -= 1;
             glyph->fLeft -= 1;
+        }
+
+        if (fHiResFont) {
+            SelectObject(fDDC, fHiResFont);
+            sk_bzero(&gm, sizeof(gm));
+            ret = GetGlyphOutlineW(fDDC, glyph->getGlyphID(0), GGO_METRICS | GGO_GLYPH_INDEX, &gm, 0, NULL, &fMat22Identity);
+            if (GDI_ERROR != ret) {
+                SkPoint advance;
+                fHiResMatrix.mapXY(SkIntToScalar(gm.gmCellIncX), SkIntToScalar(gm.gmCellIncY), &advance);
+                glyph->fAdvanceX = SkScalarToFixed(advance.fX);
+                glyph->fAdvanceY = SkScalarToFixed(advance.fY);
+            }
+            SelectObject(fDDC, fFont);
         }
     } else {
         glyph->fWidth = 0;
@@ -453,34 +500,53 @@ static inline uint16_t rgb_to_lcd16(uint32_t rgb) {
     return SkPackRGB16(SkR32ToR16(r), SkG32ToG16(g), SkB32ToB16(b));
 }
 
+static int alignTo32(int n) {
+    return (n + 31) & ~31;
+}
+
+struct MyBitmapInfo : public BITMAPINFO {
+    RGBQUAD fMoreSpaceForColors[1];
+};
+
 void SkScalerContext_Windows::generateImage(const SkGlyph& glyph) {
 
     SkAutoMutexAcquire  ac(gFTMutex);
 
     SkASSERT(fDDC);
 
-    if (SkMask::kLCD16_Format == fRec.fMaskFormat) {
+    const bool isBW = SkMask::kBW_Format == fRec.fMaskFormat;
+    if ((SkMask::kLCD16_Format == fRec.fMaskFormat) || isBW) {
         HDC dc = CreateCompatibleDC(0);
         void* bits = 0;
-        BITMAPINFO info;
+        int biWidth = isBW ? alignTo32(glyph.fWidth) : glyph.fWidth;
+        MyBitmapInfo info;
         sk_bzero(&info, sizeof(info));
+        if (isBW) {
+            RGBQUAD blackQuad = { 0, 0, 0, 0 };
+            RGBQUAD whiteQuad = { 0xFF, 0xFF, 0xFF, 0 };
+            info.bmiColors[0] = blackQuad;
+            info.bmiColors[1] = whiteQuad;
+        }
         info.bmiHeader.biSize = sizeof(info.bmiHeader);
-        info.bmiHeader.biWidth = glyph.fWidth;
+        info.bmiHeader.biWidth = biWidth;
         info.bmiHeader.biHeight = glyph.fHeight;
         info.bmiHeader.biPlanes = 1;
-        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biBitCount = isBW ? 1 : 32;
         info.bmiHeader.biCompression = BI_RGB;
+        if (isBW) {
+            info.bmiHeader.biClrUsed = 2;
+        }
         HBITMAP bm = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, 0, 0);
         SelectObject(dc, bm);
 
         // erase to white
-        size_t srcRB = glyph.fWidth << 2;
+        size_t srcRB = isBW ? (biWidth >> 3) : (glyph.fWidth << 2);
         size_t size = glyph.fHeight * srcRB;
-        memset(bits, 0xFF, size);
+        memset(bits, isBW ? 0 : 0xFF, size);
 
+        SetGraphicsMode(dc, GM_ADVANCED);
         SetBkMode(dc, TRANSPARENT);
         SetTextAlign(dc, TA_LEFT | TA_BASELINE);
-        SetGraphicsMode(dc, GM_ADVANCED);
 
         XFORM xform = fXform;
         xform.eDx = (float)-glyph.fLeft;
@@ -488,7 +554,7 @@ void SkScalerContext_Windows::generateImage(const SkGlyph& glyph) {
         SetWorldTransform(dc, &xform);
 
         HGDIOBJ prevFont = SelectObject(dc, fFont);
-        COLORREF color = SetTextColor(dc, 0); // black
+        COLORREF color = SetTextColor(dc, isBW ? 0xFFFFFF : 0);
         SkASSERT(color != CLR_INVALID);
         uint16_t glyphID = glyph.getGlyphID();
 #if defined(UNICODE)
@@ -501,15 +567,26 @@ void SkScalerContext_Windows::generateImage(const SkGlyph& glyph) {
         // downsample from rgba to rgb565
         int width = glyph.fWidth;
         size_t dstRB = glyph.rowBytes();
-        const uint32_t* src = (const uint32_t*)bits;
-        // gdi's bitmap is upside-down, so we reverse dst walking in Y
-        uint16_t* dst = (uint16_t*)((char*)glyph.fImage + (glyph.fHeight - 1) * dstRB);
-        for (int y = 0; y < glyph.fHeight; y++) {
-            for (int i = 0; i < width; i++) {
-                dst[i] = rgb_to_lcd16(src[i]);
+        if (isBW) {
+            const uint8_t* src = (const uint8_t*)bits;
+            // gdi's bitmap is upside-down, so we reverse dst walking in Y
+            uint8_t* dst = (uint8_t*)((char*)glyph.fImage + (glyph.fHeight - 1) * dstRB);
+            for (int y = 0; y < glyph.fHeight; y++) {
+                memcpy(dst, src, dstRB);
+                src += srcRB;
+                dst -= dstRB;
             }
-            src = (const uint32_t*)((const char*)src + srcRB);
-            dst = (uint16_t*)((char*)dst - dstRB);
+        } else {    // LCD16
+            const uint32_t* src = (const uint32_t*)bits;
+            // gdi's bitmap is upside-down, so we reverse dst walking in Y
+            uint16_t* dst = (uint16_t*)((char*)glyph.fImage + (glyph.fHeight - 1) * dstRB);
+            for (int y = 0; y < glyph.fHeight; y++) {
+                for (int i = 0; i < width; i++) {
+                    dst[i] = rgb_to_lcd16(src[i]);
+                }
+                src = (const uint32_t*)((const char*)src + srcRB);
+                dst = (uint16_t*)((char*)dst - dstRB);
+            }
         }
 
         DeleteDC(dc);
@@ -790,7 +867,8 @@ SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
 }
 
 SkStream* SkFontHost::OpenStream(SkFontID uniqueID) {
-    const DWORD kTTCTag = *(DWORD*) "ttcf";
+    const DWORD kTTCTag =
+        SkEndian_SwapBE32(SkSetFourByteTag('t', 't', 'c', 'f'));
     LOGFONT lf;
     GetLogFontByID(uniqueID, &lf);
 
@@ -895,10 +973,6 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
     // we do support LCD16
     if (SkMask::kLCD16_Format == rec->fMaskFormat) {
         return;
-    }
-    // we never like BW format
-    if (SkMask::kBW_Format == rec->fMaskFormat) {
-        rec->fMaskFormat = SkMask::kA8_Format;
     }
 
     if (SkMask::FormatIsLCD((SkMask::Format)rec->fMaskFormat)) {

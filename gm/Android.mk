@@ -8,6 +8,7 @@ LOCAL_SRC_FILES := \
   complexclip.cpp \
   filltypes.cpp \
   gradients.cpp \
+  nocolorbleed.cpp \
   pathfill.cpp \
   points.cpp \
   poly2poly.cpp \

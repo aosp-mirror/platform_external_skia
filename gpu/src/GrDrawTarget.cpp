@@ -19,6 +19,8 @@
 #include "GrGpuVertex.h"
 #include "GrTexture.h"
 
+namespace {
+
 // recursive helper for creating mask with all the tex coord bits set for
 // one stage
 template <int N>
@@ -26,16 +28,16 @@ int stage_mask_recur(int stage) {
     return GrDrawTarget::StageTexCoordVertexLayoutBit(stage, N) |
            stage_mask_recur<N+1>(stage);
 }
-template<> // linux build doesn't like static on specializations
+template<> 
 int stage_mask_recur<GrDrawTarget::kNumStages>(int) { return 0; }
 
 // mask of all tex coord indices for one stage
-static int stage_tex_coord_mask(int stage) {
+int stage_tex_coord_mask(int stage) {
     return stage_mask_recur<0>(stage);
 }
 
 // mask of all bits relevant to one stage
-static int stage_mask(int stage) {
+int stage_mask(int stage) {
     return stage_tex_coord_mask(stage) |
            GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(stage);
 }
@@ -47,11 +49,11 @@ int tex_coord_mask_recur(int texCoordIdx) {
     return GrDrawTarget::StageTexCoordVertexLayoutBit(N, texCoordIdx) |
            tex_coord_mask_recur<N+1>(texCoordIdx);
 }
-template<> // linux build doesn't like static on specializations
+template<> 
 int tex_coord_mask_recur<GrDrawTarget::kMaxTexCoords>(int) { return 0; }
 
 // mask of all bits relevant to one texture coordinate index
-static int tex_coord_idx_mask(int texCoordIdx) {
+int tex_coord_idx_mask(int texCoordIdx) {
     return tex_coord_mask_recur<0>(texCoordIdx);
 }
 
@@ -65,6 +67,8 @@ bool check_layout(GrVertexLayout layout) {
     }
     return true;
 }
+
+} //unnamed namespace
 
 size_t GrDrawTarget::VertexSize(GrVertexLayout vertexLayout) {
     GrAssert(check_layout(vertexLayout));
@@ -370,10 +374,34 @@ void GrDrawTarget::disableState(uint32_t bits) {
     fCurrDrawState.fFlagBits &= ~(bits);
 }
 
-void GrDrawTarget::setBlendFunc(GrBlendCoeff srcCoef,
-                                GrBlendCoeff dstCoef) {
-    fCurrDrawState.fSrcBlend = srcCoef;
-    fCurrDrawState.fDstBlend = dstCoef;
+void GrDrawTarget::setBlendFunc(GrBlendCoeff srcCoeff,
+                                GrBlendCoeff dstCoeff) {
+    fCurrDrawState.fSrcBlend = srcCoeff;
+    fCurrDrawState.fDstBlend = dstCoeff;
+#if GR_DEBUG
+    switch (dstCoeff) {
+    case kDC_BlendCoeff:
+    case kIDC_BlendCoeff:
+    case kDA_BlendCoeff:
+    case kIDA_BlendCoeff:
+        GrPrintf("Unexpected dst blend coeff. Won't work correctly with"
+                 "coverage stages.\n");
+        break;
+    default:
+        break;
+    }
+    switch (srcCoeff) {
+    case kSC_BlendCoeff:
+    case kISC_BlendCoeff:
+    case kSA_BlendCoeff:
+    case kISA_BlendCoeff:
+        GrPrintf("Unexpected src blend coeff. Won't work correctly with"
+                 "coverage stages.\n");
+        break;
+    default:
+        break;
+    }
+#endif
 }
 
 void GrDrawTarget::setColor(GrColor c) {
@@ -478,9 +506,15 @@ void GrDrawTarget::setIndexSourceToBuffer(const GrIndexBuffer* buffer) {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool GrDrawTarget::canDisableBlend() const {
-    // If we're using edge antialiasing, we can't force blend off.
-    if (fCurrDrawState.fFlagBits & kEdgeAA_StateBit) {
+    // If we compute a coverage value (using edge AA or a coverage stage) then
+    // we can't force blending off.
+    if (fCurrDrawState.fEdgeAANumEdges > 0) {
         return false;
+    }
+    for (int s = fCurrDrawState.fFirstCoverageStage; s < kNumStages; ++s) {
+        if (this->isStageEnabled(s)) {
+            return false;
+        }
     }
 
     if ((kOne_BlendCoeff == fCurrDrawState.fSrcBlend) &&
@@ -506,8 +540,8 @@ bool GrDrawTarget::canDisableBlend() const {
         return false;
     }
 
-    // ...and there isn't a texture with an alpha channel...
-    for (int s = 0; s < kNumStages; ++s) {
+    // ...and there isn't a texture stage with an alpha channel...
+    for (int s = 0; s < fCurrDrawState.fFirstCoverageStage; ++s) {
         if (this->isStageEnabled(s)) {
             GrAssert(NULL != fCurrDrawState.fTextures[s]);
 
@@ -531,8 +565,10 @@ bool GrDrawTarget::canDisableBlend() const {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void GrDrawTarget::setEdgeAAData(const float edges[18]) {
-    memcpy(fCurrDrawState.fEdgeAAEdges, edges, sizeof(fCurrDrawState.fEdgeAAEdges));
+void GrDrawTarget::setEdgeAAData(const Edge* edges, int numEdges) {
+    GrAssert(numEdges <= kMaxEdges);
+    memcpy(fCurrDrawState.fEdgeAAEdges, edges, numEdges * sizeof(Edge));
+    fCurrDrawState.fEdgeAANumEdges = numEdges;
 }
 
 

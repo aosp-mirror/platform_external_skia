@@ -6,6 +6,9 @@
 #include "SkPicture.h"
 #include "SkString.h"
 #include "SkTime.h"
+#include "GrContext.h"
+#include "SkGpuDevice.h"
+#include "SkEGLContext.h"
 
 #include "SkBenchmark.h"
 
@@ -30,6 +33,7 @@ static void erase(SkBitmap& bm) {
     }
 }
 
+#if 0
 static bool equal(const SkBitmap& bm1, const SkBitmap& bm2) {
     if (bm1.width() != bm2.width() ||
         bm1.height() != bm2.height() ||
@@ -43,9 +47,9 @@ static bool equal(const SkBitmap& bm1, const SkBitmap& bm2) {
             return false;
         }
     }
-
     return true;
 }
+#endif
 
 class Iter {
 public:
@@ -62,7 +66,7 @@ public:
         }
         return NULL;
     }
-    
+
 private:
     const BenchRegistry* fBench;
     void* fParam;
@@ -102,7 +106,7 @@ static void saveFile(const char name[], const char config[], const char dir[],
             *p++ = c | (SK_A32_MASK << SK_A32_SHIFT);
         }
     }
-
+    
     SkString str;
     make_filename(name, &str);
     str.appendf("_%s.png", config);
@@ -118,7 +122,7 @@ static void performClip(SkCanvas* canvas, int w, int h) {
     r.set(SkIntToScalar(10), SkIntToScalar(10),
           SkIntToScalar(w*2/3), SkIntToScalar(h*2/3));
     canvas->clipRect(r, SkRegion::kIntersect_Op);
-
+    
     r.set(SkIntToScalar(w/3), SkIntToScalar(h/3),
           SkIntToScalar(w-10), SkIntToScalar(h-10));
     canvas->clipRect(r, SkRegion::kXOR_Op);
@@ -143,21 +147,6 @@ static void performScale(SkCanvas* canvas, int w, int h) {
     canvas->translate(-x, -y);
 }
 
-static void compare_pict_to_bitmap(SkPicture* pict, const SkBitmap& bm) {
-    SkBitmap bm2;
-    
-    bm2.setConfig(bm.config(), bm.width(), bm.height());
-    bm2.allocPixels();
-    erase(bm2);
-
-    SkCanvas canvas(bm2);
-    canvas.drawPicture(*pict);
-
-    if (!equal(bm, bm2)) {
-        SkDebugf("----- compare_pict_to_bitmap failed\n");
-    }
-}
-
 static bool parse_bool_arg(char * const* argv, char* const* stop, bool* var) {
     if (argv < stop) {
         *var = atoi(*argv) != 0;
@@ -166,16 +155,43 @@ static bool parse_bool_arg(char * const* argv, char* const* stop, bool* var) {
     return false;
 }
 
+enum Backend {
+    kRaster_Backend,
+    kGPU_Backend,
+    kPDF_Backend,
+};
+
+static SkDevice* make_device(SkBitmap::Config config, const SkIPoint& size,
+                             Backend backend, GrContext* context) {
+    SkDevice* device = NULL;
+    SkBitmap bitmap;
+    bitmap.setConfig(config, size.fX, size.fY);
+    
+    switch (backend) {
+        case kRaster_Backend:
+            bitmap.allocPixels();
+            erase(bitmap);
+            device = new SkDevice(NULL, bitmap, true);
+            break;
+        case kGPU_Backend:
+            device = new SkGpuDevice(context, bitmap, SkGpuDevice::Current3DApiRenderTarget());
+//            device->clear(0xFFFFFFFF);
+            break;
+        case kPDF_Backend:
+        default:
+            SkASSERT(!"unsupported");
+    }
+    return device;
+}
+
 static const struct {
     SkBitmap::Config    fConfig;
     const char*         fName;
+    Backend             fBackend;
 } gConfigs[] = {
-    { SkBitmap::kARGB_8888_Config,  "8888" },
-    { SkBitmap::kRGB_565_Config,    "565",  },
-#if 0
-    { SkBitmap::kARGB_4444_Config,  "4444", },
-    { SkBitmap::kA8_Config,         "A8",   }
-#endif
+    { SkBitmap::kARGB_8888_Config,  "8888",     kRaster_Backend },
+    { SkBitmap::kRGB_565_Config,    "565",      kRaster_Backend },
+    { SkBitmap::kARGB_8888_Config,  "GPU",      kGPU_Backend },
 };
 
 static int findConfig(const char config[]) {
@@ -189,7 +205,7 @@ static int findConfig(const char config[]) {
 
 int main (int argc, char * const argv[]) {
     SkAutoGraphics ag;
-
+    
     SkTDict<const char*> defineDict(1024);
     int repeatDraw = 1;
     int forceAlpha = 0xFF;
@@ -199,16 +215,16 @@ int main (int argc, char * const argv[]) {
     bool doScale = false;
     bool doRotate = false;
     bool doClip = false;
-    bool doPict = false;
     const char* matchStr = NULL;
     bool hasStrokeWidth = false;
     float strokeWidth;
-
+    
     SkString outDir;
     SkBitmap::Config outConfig = SkBitmap::kNo_Config;
     const char* configName = "";
+    Backend backend = kRaster_Backend;  // for warning
     int configCount = SK_ARRAY_COUNT(gConfigs);
-
+    
     char* const* stop = argv + argc;
     for (++argv; argv < stop; ++argv) {
         if (strcmp(*argv, "-o") == 0) {
@@ -219,8 +235,6 @@ int main (int argc, char * const argv[]) {
                     outDir.append("/");
                 }
             }
-        } else if (strcmp(*argv, "-pict") == 0) {
-            doPict = true;
         } else if (strcmp(*argv, "-repeat") == 0) {
             argv++;
             if (argv < stop) {
@@ -290,6 +304,7 @@ int main (int argc, char * const argv[]) {
                 if (index >= 0) {
                     outConfig = gConfigs[index].fConfig;
                     configName = gConfigs[index].fName;
+                    backend = gConfigs[index].fBackend;
                     configCount = 1;
                 } else {
                     SkString str;
@@ -316,7 +331,7 @@ int main (int argc, char * const argv[]) {
             return -1;
         }
     }
-
+    
     // report our current settings
     {
         SkString str;
@@ -324,7 +339,13 @@ int main (int argc, char * const argv[]) {
                    forceAlpha, forceAA, forceFilter);
         log_progress(str);
     }
-                   
+    
+    GrContext* context = NULL;
+    SkEGLContext eglContext;
+    if (eglContext.init(1024, 1024)) {
+        context = GrContext::CreateGLShaderContext();
+    }
+    
     Iter iter(&defineDict);
     SkBenchmark* bench;
     while ((bench = iter.next()) != NULL) {
@@ -340,32 +361,34 @@ int main (int argc, char * const argv[]) {
         if (hasStrokeWidth) {
             bench->setStrokeWidth(strokeWidth);
         }
-
+        
         // only run benchmarks if their name contains matchStr
         if (matchStr && strstr(bench->getName(), matchStr) == NULL) {
             continue;
         }
-
+        
         {
             SkString str;
             str.printf("running bench [%d %d] %28s", dim.fX, dim.fY,
                        bench->getName());
             log_progress(str);
         }
-
+        
         for (int configIndex = 0; configIndex < configCount; configIndex++) {
             if (configCount > 1) {
                 outConfig = gConfigs[configIndex].fConfig;
                 configName = gConfigs[configIndex].fName;
+                backend = gConfigs[configIndex].fBackend;
             }
             
-            SkBitmap bm;
-            bm.setConfig(outConfig, dim.fX, dim.fY);
-            bm.allocPixels();
-            erase(bm);
-
-            SkCanvas canvas(bm);
-
+            if (kGPU_Backend == backend && NULL == context) {
+                continue;
+            }
+            
+            SkDevice* device = make_device(outConfig, dim, backend, context);
+            SkCanvas canvas(device);
+            device->unref();
+            
             if (doClip) {
                 performClip(&canvas, dim.fX, dim.fY);
             }
@@ -375,33 +398,27 @@ int main (int argc, char * const argv[]) {
             if (doRotate) {
                 performRotate(&canvas, dim.fX, dim.fY);
             }
-
+            
+            //warm up caches if needed
             if (repeatDraw > 1) {
                 SkAutoCanvasRestore acr(&canvas, true);
                 bench->draw(&canvas);
+                if (kGPU_Backend == backend && context) {
+                    context->flush();
+                    glFinish();
+                }
             }
-
+            
             SkMSec now = SkTime::GetMSecs();
             for (int i = 0; i < repeatDraw; i++) {
-                SkCanvas* c = &canvas;
-
-                SkNWayCanvas nway;
-                SkPicture* pict = NULL;
-                if (doPict) {
-                    pict = new SkPicture;
-                    nway.addCanvas(pict->beginRecording(bm.width(), bm.height()));
-                    nway.addCanvas(&canvas);
-                    c = &nway;
-                }
-
-                SkAutoCanvasRestore acr(c, true);
-                bench->draw(c);
-                
-                if (pict) {
-                    compare_pict_to_bitmap(pict, bm);
-                    pict->unref();
-                }
+                SkAutoCanvasRestore acr(&canvas, true);
+                bench->draw(&canvas);
             }
+            if (kGPU_Backend == backend && context) {
+                context->flush();
+                glFinish();
+            }
+            
             if (repeatDraw > 1) {
                 double duration = SkTime::GetMSecs() - now;
                 SkString str;
@@ -409,7 +426,8 @@ int main (int argc, char * const argv[]) {
                 log_progress(str);
             }
             if (outDir.size() > 0) {
-                saveFile(bench->getName(), configName, outDir.c_str(), bm);
+                saveFile(bench->getName(), configName, outDir.c_str(),
+                         device->accessBitmap(false));
             }
         }
         log_progress("\n");

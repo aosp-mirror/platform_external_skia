@@ -19,13 +19,22 @@
 
 #include "GrGLInterface.h"
 #include "GrStringBuilder.h"
-#include "GrDrawTarget.h"
+#include "GrGpu.h"
 
 #include "SkXfermode.h"
 
 class GrBinHashKeyBuilder;
-class GrGLEffect;
-struct ShaderCodeSegments;
+
+struct ShaderCodeSegments {
+    GrStringBuilder fHeader; // VS+FS, GLSL version, etc
+    GrStringBuilder fVSUnis;
+    GrStringBuilder fVSAttrs;
+    GrStringBuilder fVaryings;
+    GrStringBuilder fFSUnis;
+    GrStringBuilder fFSOutputs;
+    GrStringBuilder fVSCode;
+    GrStringBuilder fFSCode;
+};
 
 /**
  * This class manages a GPU program and records per-program information.
@@ -58,39 +67,29 @@ public:
      */
     bool genProgram(CachedData* programData) const;
 
-    /**
-     *  Routine that is called before rendering. Sets-up all the state and
-     *  other initializations required for the Gpu Program to run.
-     */
-    bool doGLSetup(GrPrimitiveType type, CachedData* programData) const;
+     /**
+      * The shader may modify the blend coeffecients. Params are in/out
+      */
+     void overrideBlend(GrBlendCoeff* srcCoeff, GrBlendCoeff* dstCoeff) const;
 
     /**
-     *  Routine that is called after rendering. Performs state restoration.
-     *  May perform secondary render passes.
+     * Attribute indices
      */
-    void doGLPost() const;
-
-    /**
-     *  Configures the GrGLProgram based on the state of a GrDrawTarget
-     *  object.  This is the fast and light initialization. Retrieves all the
-     *  state that is required for performing the heavy init (i.e. genProgram),
-     *  or for retrieving heavy init results from cache.
-     */
-    void buildFromTarget(const GrDrawTarget* target);
-
     static int PositionAttributeIdx() { return 0; }
     static int TexCoordAttributeIdx(int tcIdx) { return 1 + tcIdx; }
     static int ColorAttributeIdx() { return 1 + GrDrawTarget::kMaxTexCoords; }
-    static int ViewMatrixAttributeIdx() { 
-        return 2 + GrDrawTarget::kMaxTexCoords; 
+    static int ViewMatrixAttributeIdx() {
+        return 2 + GrDrawTarget::kMaxTexCoords;
     }
-    static int TextureMatrixAttributeIdx(int stage) { 
-        return 5 + GrDrawTarget::kMaxTexCoords + 3 * stage; 
+    static int TextureMatrixAttributeIdx(int stage) {
+        return 5 + GrDrawTarget::kMaxTexCoords + 3 * stage;
     }
 
 private:
 
-    //Parameters that affect code generation
+    // Parameters that affect code generation
+    // These structs should be kept compact; they are the input to an
+    // expensive hash key generator.
     struct ProgramDesc {
         ProgramDesc() {
             // since we use this as part of a key we can't have any unitialized
@@ -98,46 +97,76 @@ private:
             memset(this, 0, sizeof(ProgramDesc));
         }
 
-        // stripped of bits that don't affect prog generation
-        GrVertexLayout fVertexLayout;
-
-        enum {
-            kNone_ColorType         = 0,
-            kAttribute_ColorType    = 1,
-            kUniform_ColorType      = 2,
-        } fColorType;
-
-        bool fEmitsPointSize;
-        bool fUsesEdgeAA;
-
-        SkXfermode::Mode fColorFilterXfermode;
-
         struct StageDesc {
             enum OptFlagBits {
-                kNoPerspective_OptFlagBit  = 0x1,
-                kIdentityMatrix_OptFlagBit = 0x2
+                kNoPerspective_OptFlagBit       = 1 << 0,
+                kIdentityMatrix_OptFlagBit      = 1 << 1,
+                kCustomTextureDomain_OptFlagBit = 1 << 2,
+                kIsEnabled_OptFlagBit           = 1 << 7
             };
-
-            unsigned fOptFlags;
-            bool fEnabled;
-
             enum Modulation {
                 kColor_Modulation,
                 kAlpha_Modulation
-            } fModulation;
-
+            };
             enum FetchMode {
                 kSingle_FetchMode,
                 k2x2_FetchMode
-            } fFetchMode;
-
+            };
             enum CoordMapping {
                 kIdentity_CoordMapping,
                 kRadialGradient_CoordMapping,
                 kSweepGradient_CoordMapping,
                 kRadial2Gradient_CoordMapping
-            } fCoordMapping;
-        } fStages[GrDrawTarget::kNumStages];
+            };
+
+            uint8_t fOptFlags;
+            uint8_t fModulation;  // casts to enum Modulation
+            uint8_t fFetchMode;  // casts to enum FetchMode
+            uint8_t fCoordMapping;  // casts to enum CoordMapping
+
+            inline bool isEnabled() const {
+                return fOptFlags & kIsEnabled_OptFlagBit;
+            }
+            inline void setEnabled(bool newValue) {
+                if (newValue) {
+                    fOptFlags |= kIsEnabled_OptFlagBit;
+                } else {
+                    fOptFlags &= ~kIsEnabled_OptFlagBit;
+                }
+            }
+        };
+
+        enum ColorType {
+            kNone_ColorType         = 0,
+            kAttribute_ColorType    = 1,
+            kUniform_ColorType      = 2,
+        };
+        // Dual-src blending makes use of a secondary output color that can be
+        // used as a per-pixel blend coeffecient. This controls whether a
+        // secondary source is output and what value it holds.
+        enum DualSrcOutput {
+            kNone_DualSrcOutput,
+            kCoverage_DualSrcOutput,
+            kCoverageISA_DualSrcOutput,
+            kCoverageISC_DualSrcOutput,
+            kDualSrcOutputCnt
+        };
+
+        // stripped of bits that don't affect prog generation
+        GrVertexLayout fVertexLayout;
+
+        StageDesc fStages[GrDrawTarget::kNumStages];
+
+        uint8_t fColorType;  // casts to enum ColorType
+        uint8_t fDualSrcOutput;  // casts to enum DualSrcOutput
+        int8_t fFirstCoverageStage;
+        SkBool8 fEmitsPointSize;
+
+        int8_t fEdgeAANumEdges;
+        uint8_t fColorFilterXfermode;  // casts to enum SkXfermode::Mode
+
+        uint8_t fPadTo32bLengthMultiple [2];
+
     } fProgramDesc;
 
     const ProgramDesc& getDesc() { return fProgramDesc; }
@@ -153,11 +182,13 @@ public:
         GrGLint fNormalizedTexelSizeUni;
         GrGLint fSamplerUni;
         GrGLint fRadial2Uni;
+        GrGLint fTexDomUni;
         void reset() {
             fTextureMatrixUni = kUnusedUniform;
             fNormalizedTexelSizeUni = kUnusedUniform;
             fSamplerUni = kUnusedUniform;
             fRadial2Uni = kUnusedUniform;
+            fTexDomUni = kUnusedUniform;
         }
     };
 
@@ -181,35 +212,13 @@ public:
     class CachedData : public ::GrNoncopyable {
     public:
         CachedData() {
-            GR_DEBUGCODE(fEffectUniCount = 0;)
-            fEffectUniLocationsExtended = NULL;
         }
 
         ~CachedData() {
-            GrFree(fEffectUniLocationsExtended);
         }
 
         void copyAndTakeOwnership(CachedData& other) {
             memcpy(this, &other, sizeof(*this));
-            other.fEffectUniLocationsExtended = NULL; // ownership transfer
-            GR_DEBUGCODE(other.fEffectUniCount = 0;)
-        }
-
-        void setEffectUniformCount(size_t effectUniforms) {
-            GR_DEBUGCODE(fEffectUniCount = effectUniforms;)
-            GrFree(fEffectUniLocationsExtended);
-            if (effectUniforms > kUniLocationPreAllocSize) {
-                fEffectUniLocationsExtended = (GrGLint*)GrMalloc(sizeof(GrGLint)*(effectUniforms-kUniLocationPreAllocSize));
-            } else {
-                fEffectUniLocationsExtended = NULL;
-            }
-        }
-
-        GrGLint&  effectUniLocation(size_t index) {
-            GrAssert(index < fEffectUniCount);
-            return (index < kUniLocationPreAllocSize) ? 
-                fEffectUniLocations[index] :
-                fEffectUniLocationsExtended[index - kUniLocationPreAllocSize];
         }
 
     public:
@@ -234,18 +243,14 @@ public:
         GrScalar                    fRadial2CenterX1[GrDrawTarget::kNumStages];
         GrScalar                    fRadial2Radius0[GrDrawTarget::kNumStages];
         bool                        fRadial2PosRoot[GrDrawTarget::kNumStages];
+        GrRect                      fTextureDomain[GrDrawTarget::kNumStages];
 
     private:
         enum Constants {
             kUniLocationPreAllocSize = 8
         };
 
-        GrGLint     fEffectUniLocations[kUniLocationPreAllocSize];
-        GrGLint*    fEffectUniLocationsExtended;
-        GR_DEBUGCODE(size_t fEffectUniCount;)
     }; // CachedData
-
-    GrGLEffect* fStageEffects[GrDrawTarget::kNumStages];
 
 private:
     enum {
@@ -273,8 +278,11 @@ private:
 
     // Creates a GL program ID, binds shader attributes to GL vertex attrs, and
     // links the program
-    bool bindAttribsAndLinkProgram(GrStringBuilder texCoordAttrNames[GrDrawTarget::kMaxTexCoords],
-                                   CachedData* programData) const;
+    bool bindOutputsAttribsAndLinkProgram(
+                GrStringBuilder texCoordAttrNames[GrDrawTarget::kMaxTexCoords],
+                bool bindColorOut,
+                bool bindDualSrcOut,
+                CachedData* programData) const;
 
     // Gets locations for all uniforms set to kUseUniform and initializes cache
     // to invalid values.

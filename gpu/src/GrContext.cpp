@@ -19,14 +19,16 @@
 #include "GrTextureCache.h"
 #include "GrTextStrike.h"
 #include "GrMemory.h"
-#include "GrPathIter.h"
 #include "GrClipIterator.h"
 #include "GrIndexBuffer.h"
 #include "GrInOrderDrawBuffer.h"
 #include "GrBufferAllocPool.h"
 #include "GrPathRenderer.h"
 
-#define ENABLE_OFFSCREEN_AA 0
+// larger than this, and we don't AA. set to 0 for no AA
+#ifndef GR_MAX_OFFSCREEN_AA_DIM
+    #define GR_MAX_OFFSCREEN_AA_DIM    0
+#endif
 
 #define DEFER_TEXT_RENDERING 1
 
@@ -104,6 +106,26 @@ void GrContext::freeGpuResources() {
     fTextureCache->removeAll();
     fFontCache->freeAll();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+int GrContext::PaintStageVertexLayoutBits(
+                            const GrPaint& paint,
+                            const bool hasTexCoords[GrPaint::kTotalStages]) {
+    int stageMask = paint.getActiveStageMask();
+    int layout = 0;
+    for (int i = 0; i < GrPaint::kTotalStages; ++i) {
+        if ((1 << i) & stageMask) {
+            if (NULL != hasTexCoords && hasTexCoords[i]) {
+                layout |= GrDrawTarget::StageTexCoordVertexLayoutBit(i, i);
+            } else {
+                layout |= GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(i);
+            }
+        }
+    }
+    return layout;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -360,22 +382,7 @@ GrResource* GrContext::createPlatformSurface(const GrPlatformSurfaceDesc& desc) 
     return fGpu->createPlatformSurface(desc);
 }
 
-GrRenderTarget* GrContext::createPlatformRenderTarget(intptr_t platformRenderTarget,
-                                                      int stencilBits,
-                                                      bool isMultisampled,
-                                                      int width, int height) {
-#if GR_DEBUG
-    GrPrintf("Using deprecated createPlatformRenderTarget API.");
-#endif
-    return fGpu->createPlatformRenderTarget(platformRenderTarget, 
-                                            stencilBits, isMultisampled, 
-                                            width, height);
-}
-
 GrRenderTarget* GrContext::createRenderTargetFrom3DApiState() {
-#if GR_DEBUG
-    GrPrintf("Using deprecated createRenderTargetFrom3DApiState API.");
-#endif
     return fGpu->createRenderTargetFrom3DApiState();
 }
 
@@ -447,7 +454,7 @@ void GrContext::drawPaint(const GrPaint& paint) {
 bool GrContext::doOffscreenAA(GrDrawTarget* target, 
                               const GrPaint& paint,
                               bool isLines) const {
-#if !ENABLE_OFFSCREEN_AA
+#if GR_MAX_OFFSCREEN_AA_DIM==0
     return false;
 #else
     if (!paint.fAntiAlias) {
@@ -477,7 +484,7 @@ bool GrContext::setupOffscreenAAPass1(GrDrawTarget* target,
                                       bool requireStencil,
                                       const GrIRect& boundRect,
                                       OffscreenRecord* record) {
-    GrAssert(ENABLE_OFFSCREEN_AA);
+    GrAssert(GR_MAX_OFFSCREEN_AA_DIM > 0);
 
     GrAssert(NULL == record->fEntry0);
     GrAssert(NULL == record->fEntry1);
@@ -577,6 +584,10 @@ void GrContext::offscreenAAPass2(GrDrawTarget* target,
     GrTexture* src = record->fEntry0->texture();
     int scale;
 
+    enum {
+        kOffscreenStage = GrPaint::kTotalStages,
+    };
+
     if (OffscreenRecord::k4x4TwoPass_Downsample == record->fDownsample) {
         GrAssert(NULL != record->fEntry1);
         scale = 2;
@@ -606,11 +617,14 @@ void GrContext::offscreenAAPass2(GrDrawTarget* target,
     }
 
     // setup for draw back to main RT
+    int stageMask = paint.getActiveStageMask();
+
     target->restoreDrawState(record->fSavedState);
-    if (NULL != paint.getTexture()) {
+
+    if (stageMask) {
         GrMatrix invVM;
         if (target->getViewInverse(&invVM)) {
-            target->preConcatSamplerMatrix(0, invVM);
+            target->preConcatSamplerMatrices(stageMask, invVM);
         }
     }
     target->setViewMatrix(GrMatrix::I());
@@ -624,7 +638,7 @@ void GrContext::offscreenAAPass2(GrDrawTarget* target,
     target->setSamplerState(kOffscreenStage, sampler);
 
     GrRect dstRect;
-    int stages = (1 << kOffscreenStage) | (NULL == paint.getTexture() ? 0 : 1);
+    int stages = (1 << kOffscreenStage) | stageMask;
     dstRect.set(boundRect);
     target->drawSimpleRect(dstRect, NULL, stages);
 
@@ -662,11 +676,14 @@ static void setStrokeRectStrip(GrPoint verts[10], GrRect rect,
 }
 
 static GrColor getColorForMesh(const GrPaint& paint) {
-    if (NULL == paint.getTexture()) {
-        return paint.fColor;
-    } else {
+    // FIXME: This was copied from SkGpuDevice, seems like
+    // we should have already smeared a in caller if that
+    // is what is desired.
+    if (paint.hasTexture()) {
         unsigned a = GrColorUnpackA(paint.fColor);
         return GrColorPackRGBA(a, a, a, a);
+    } else {
+        return paint.fColor;
     }
 }
 
@@ -742,10 +759,8 @@ void GrContext::fillAARect(GrDrawTarget* target,
                            const GrPaint& paint,
                            const GrRect& devRect) {
 
-    GrVertexLayout layout = GrDrawTarget::kColor_VertexLayoutBit;
-    if (NULL != paint.getTexture()) {
-        layout |= GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0);
-    }
+    GrVertexLayout layout = PaintStageVertexLayoutBits(paint, NULL) |
+                            GrDrawTarget::kColor_VertexLayoutBit;
 
     size_t vsize = GrDrawTarget::VertexSize(layout);
 
@@ -783,11 +798,8 @@ void GrContext::strokeAARect(GrDrawTarget* target, const GrPaint& paint,
     const GrScalar rx = GrMul(dx, GR_ScalarHalf);
     const GrScalar ry = GrMul(dy, GR_ScalarHalf);
 
-    GrVertexLayout layout = GrDrawTarget::kColor_VertexLayoutBit;
-
-    if (NULL != paint.getTexture()) {
-        layout |= GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0);
-    }
+    GrVertexLayout layout = PaintStageVertexLayoutBits(paint, NULL) |
+                            GrDrawTarget::kColor_VertexLayoutBit;
 
     GrScalar spare;
     {
@@ -903,9 +915,9 @@ void GrContext::drawRect(const GrPaint& paint,
                          GrScalar width,
                          const GrMatrix* matrix) {
 
-    bool textured = NULL != paint.getTexture();
 
     GrDrawTarget* target = this->prepareToDraw(paint, kUnbuffered_DrawCategory);
+    int stageMask = paint.getActiveStageMask();
 
     GrRect devRect = rect;
     GrMatrix combinedMatrix;
@@ -914,10 +926,10 @@ void GrContext::drawRect(const GrPaint& paint,
 
     if (doAA) {
         GrDrawTarget::AutoViewMatrixRestore avm(target);
-        if (textured) {
+        if (stageMask) {
             GrMatrix inv;
             if (combinedMatrix.invert(&inv)) {
-                target->preConcatSamplerMatrix(0, inv);
+                target->preConcatSamplerMatrices(stageMask, inv);
             }
         }
         target->setViewMatrix(GrMatrix::I());
@@ -941,9 +953,8 @@ void GrContext::drawRect(const GrPaint& paint,
         // TODO: consider making static vertex buffers for these cases.
         // Hairline could be done by just adding closing vertex to
         // unitSquareVertexBuffer()
-        GrVertexLayout layout = textured ?
-                            GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0) :
-                            0;
+        GrVertexLayout layout =  PaintStageVertexLayoutBits(paint, NULL);
+
         static const int worstCaseVertCount = 10;
         GrDrawTarget::AutoReleaseGeometry geo(target, layout, worstCaseVertCount, 0);
 
@@ -974,17 +985,14 @@ void GrContext::drawRect(const GrPaint& paint,
         if (NULL != matrix) {
             avmr.set(target);
             target->preConcatViewMatrix(*matrix);
-            if (textured) {
-                target->preConcatSamplerMatrix(0, *matrix);
-            }
+            target->preConcatSamplerMatrices(stageMask, *matrix);
         }
 
         target->drawNonIndexed(primType, 0, vertCount);
     } else {
         #if GR_STATIC_RECT_VB
-            GrVertexLayout layout = (textured) ?
-                            GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0) :
-                            0;
+            GrVertexLayout layout = PaintStageVertexLayoutBits(paint, NULL);
+
             target->setVertexSourceToBuffer(layout,
                                             fGpu->getUnitSquareVertexBuffer());
             GrDrawTarget::AutoViewMatrixRestore avmr(target);
@@ -998,13 +1006,11 @@ void GrContext::drawRect(const GrPaint& paint,
             }
 
             target->preConcatViewMatrix(m);
-
-            if (textured) {
-                target->preConcatSamplerMatrix(0, m);
-            }
+            target->preConcatSamplerMatrices(stageMask, m);
+ 
             target->drawNonIndexed(kTriangleFan_PrimitiveType, 0, 4);
         #else
-            target->drawSimpleRect(rect, matrix, textured ? 1 : 0);
+            target->drawSimpleRect(rect, matrix, stageMask);
         #endif
     }
 }
@@ -1015,7 +1021,8 @@ void GrContext::drawRectToRect(const GrPaint& paint,
                                const GrMatrix* dstMatrix,
                                const GrMatrix* srcMatrix) {
 
-    if (NULL == paint.getTexture()) {
+    // srcRect refers to paint's first texture
+    if (NULL == paint.getTexture(0)) {
         drawRect(paint, dstRect, -1, dstMatrix);
         return;
     }
@@ -1024,8 +1031,8 @@ void GrContext::drawRectToRect(const GrPaint& paint,
 
 #if GR_STATIC_RECT_VB
     GrDrawTarget* target = this->prepareToDraw(paint, kUnbuffered_DrawCategory);
-
-    GrVertexLayout layout = GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0);
+    
+    GrVertexLayout layout = PaintStageVertexLayoutBits(paint, NULL);
     GrDrawTarget::AutoViewMatrixRestore avmr(target);
 
     GrMatrix m;
@@ -1038,13 +1045,20 @@ void GrContext::drawRectToRect(const GrPaint& paint,
     }
     target->preConcatViewMatrix(m);
 
+    // srcRect refers to first stage
+    int otherStageMask = paint.getActiveStageMask() & 
+                         (~(1 << GrPaint::kFirstTextureStage));
+    if (otherStageMask) {
+        target->preConcatSamplerMatrices(otherStageMask, m);
+    }
+
     m.setAll(srcRect.width(), 0,                srcRect.fLeft,
              0,               srcRect.height(), srcRect.fTop,
              0,               0,                GrMatrix::I()[8]);
     if (NULL != srcMatrix) {
         m.postConcat(*srcMatrix);
     }
-    target->preConcatSamplerMatrix(0, m);
+    target->preConcatSamplerMatrix(GrPaint::kFirstTextureStage, m);
 
     target->setVertexSourceToBuffer(layout, fGpu->getUnitSquareVertexBuffer());
     target->drawNonIndexed(kTriangleFan_PrimitiveType, 0, 4);
@@ -1074,26 +1088,22 @@ void GrContext::drawVertices(const GrPaint& paint,
                              const GrColor colors[],
                              const uint16_t indices[],
                              int indexCount) {
-    GrVertexLayout layout = 0;
-    int vertexSize = sizeof(GrPoint);
 
     GrDrawTarget::AutoReleaseGeometry geo;
 
     GrDrawTarget* target = this->prepareToDraw(paint, kUnbuffered_DrawCategory);
 
-    if (NULL != paint.getTexture()) {
-        if (NULL == texCoords) {
-            layout |= GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(0);
-        } else {
-            layout |= GrDrawTarget::StageTexCoordVertexLayoutBit(0,0);
-            vertexSize += sizeof(GrPoint);
-        }
-    }
+    bool hasTexCoords[GrPaint::kTotalStages] = {
+        NULL != texCoords,   // texCoordSrc provides explicit stage 0 coords
+        0                    // remaining stages use positions
+    };
+
+    GrVertexLayout layout = PaintStageVertexLayoutBits(paint, hasTexCoords);
 
     if (NULL != colors) {
         layout |= GrDrawTarget::kColor_VertexLayoutBit;
-        vertexSize += sizeof(GrColor);
     }
+    int vertexSize = GrDrawTarget::VertexSize(layout);
 
     bool doAA = false;
     OffscreenRecord record;
@@ -1106,9 +1116,9 @@ void GrContext::drawVertices(const GrPaint& paint,
         }
         int texOffsets[GrDrawTarget::kMaxTexCoords];
         int colorOffset;
-        int vsize = GrDrawTarget::VertexSizeAndOffsetsByIdx(layout,
-                                                            texOffsets,
-                                                            &colorOffset);
+        GrDrawTarget::VertexSizeAndOffsetsByIdx(layout,
+                                                texOffsets,
+                                                &colorOffset);
         void* curVertex = geo.vertices();
 
         for (int i = 0; i < vertexCount; ++i) {
@@ -1120,7 +1130,7 @@ void GrContext::drawVertices(const GrPaint& paint,
             if (colorOffset > 0) {
                 *(GrColor*)((intptr_t)curVertex + colorOffset) = colors[i];
             }
-            curVertex = (void*)((intptr_t)curVertex + vsize);
+            curVertex = (void*)((intptr_t)curVertex + vertexSize);
         }
     } else {
         // we don't do offscreen AA when we have per-vertex tex coords or colors
@@ -1155,10 +1165,8 @@ void GrContext::drawVertices(const GrPaint& paint,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrContext::drawPath(const GrPaint& paint,
-                         GrPathIter* path,
-                         GrPathFill fill,
-                         const GrPoint* translate) {
+void GrContext::drawPath(const GrPaint& paint, const GrPath& path,
+                         GrPathFill fill, const GrPoint* translate) {
 
     GrDrawTarget* target = this->prepareToDraw(paint, kUnbuffered_DrawCategory);
     GrPathRenderer* pr = this->getPathRenderer(target, path, fill);
@@ -1180,9 +1188,10 @@ void GrContext::drawPath(const GrPaint& paint,
                 return;
             }
         }
-        GrRect pathBounds;
-        if (path->getConservativeBounds(&pathBounds)) {
-            GrIRect pathIBounds;
+
+        GrRect pathBounds = path.getBounds();
+        GrIRect pathIBounds;
+        if (!pathBounds.isEmpty()) {
             target->getViewMatrix().mapRect(&pathBounds, pathBounds);
             pathBounds.roundOut(&pathIBounds);
             if (!bound.intersect(pathIBounds)) {
@@ -1190,28 +1199,26 @@ void GrContext::drawPath(const GrPaint& paint,
             }
         }
 
+        // for now, abort antialiasing if our bounds are too big, so we don't
+        // hit the FBO size limit
+        if (pathIBounds.width() > GR_MAX_OFFSCREEN_AA_DIM ||
+            pathIBounds.height() > GR_MAX_OFFSCREEN_AA_DIM) {
+            goto NO_AA;
+        }
+
         if (this->setupOffscreenAAPass1(target, needsStencil, bound, &record)) {
             pr->drawPath(target, 0, path, fill, translate);
             this->offscreenAAPass2(target, paint, bound, &record);
             return;
         }
-    } 
-    GrDrawTarget::StageBitfield enabledStages = 0;
-    if (NULL != paint.getTexture()) {
-        enabledStages |= 1;
     }
+
+// we can fall out of the AA section for some reasons, and land here
+NO_AA:
+    GrDrawTarget::StageBitfield enabledStages = paint.getActiveStageMask();
 
     pr->drawPath(target, enabledStages, path, fill, translate);
 }
-
-void GrContext::drawPath(const GrPaint& paint,
-                         const GrPath& path,
-                         GrPathFill fill,
-                         const GrPoint* translate) {
-    GrPath::Iter iter(path);
-    this->drawPath(paint, &iter, fill, translate);
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1320,8 +1327,21 @@ void GrContext::writePixels(int left, int top, int width, int height,
 ////////////////////////////////////////////////////////////////////////////////
 
 void GrContext::SetPaint(const GrPaint& paint, GrDrawTarget* target) {
-    target->setTexture(0, paint.getTexture());
-    target->setSamplerState(0, paint.fSampler);
+
+    for (int i = 0; i < GrPaint::kMaxTextures; ++i) {
+        int s = i + GrPaint::kFirstTextureStage;
+        target->setTexture(s, paint.getTexture(i));
+        target->setSamplerState(s, *paint.getTextureSampler(i));
+    }
+
+    target->setFirstCoverageStage(GrPaint::kFirstMaskStage);
+
+    for (int i = 0; i < GrPaint::kMaxMasks; ++i) {
+        int s = i + GrPaint::kFirstMaskStage;
+        target->setTexture(s, paint.getMask(i));
+        target->setSamplerState(s, *paint.getMaskSampler(i));
+    }
+
     target->setColor(paint.fColor);
 
     if (paint.fDither) {
@@ -1483,7 +1503,7 @@ const GrIndexBuffer* GrContext::getQuadIndexBuffer() const {
 }
 
 GrPathRenderer* GrContext::getPathRenderer(const GrDrawTarget* target,
-                                           GrPathIter* path,
+                                           const GrPath& path,
                                            GrPathFill fill) {
     if (NULL != fCustomPathRenderer &&
         fCustomPathRenderer->canDrawPath(target, path, fill)) {

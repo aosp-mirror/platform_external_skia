@@ -18,7 +18,6 @@
 
 #include "GrBinHashKey.h"
 #include "GrGLConfig.h"
-#include "GrGLEffect.h"
 #include "GrMemory.h"
 
 #include "SkXfermode.h"
@@ -86,6 +85,23 @@ static inline const char* vector_all_coords(int count) {
     return ALL[count];
 }
 
+static inline const char* all_ones_vec(int count) {
+    static const char* ONESVEC[] = {"ERROR", "1.0", "vec2(1,1)",
+                                    "vec3(1,1,1)", "vec4(1,1,1,1)"};
+    GrAssert(count >= 1 && count < (int)GR_ARRAY_COUNT(ONESVEC));
+    return ONESVEC[count];
+}
+
+static inline const char* all_zeros_vec(int count) {
+    static const char* ZEROSVEC[] = {"ERROR", "0.0", "vec2(0,0)",
+                                    "vec3(0,0,0)", "vec4(0,0,0,0)"};
+    GrAssert(count >= 1 && count < (int)GR_ARRAY_COUNT(ZEROSVEC));
+    return ZEROSVEC[count];
+}
+
+static inline const char* declared_color_output_name() { return "fsColorOut"; }
+static inline const char* dual_source_output_name() { return "dualSourceOut"; }
+
 static void tex_matrix_name(int stage, GrStringBuilder* s) {
 #if GR_GL_ATTRIBUTE_MATRICES
     *s = "aTexM";
@@ -120,113 +136,194 @@ static void radial2_varying_name(int stage, GrStringBuilder* s) {
     s->appendS32(stage);
 }
 
+static void tex_domain_name(int stage, GrStringBuilder* s) {
+    *s = "uTexDom";
+    s->appendS32(stage);
+}
+
 GrGLProgram::GrGLProgram() {
-    for(int stage = 0; stage < GrDrawTarget::kNumStages; ++stage) {
-        fStageEffects[stage] = NULL;
-    }
 }
 
 GrGLProgram::~GrGLProgram() {
 }
 
+void GrGLProgram::overrideBlend(GrBlendCoeff* srcCoeff,
+                                GrBlendCoeff* dstCoeff) const {
+    switch (fProgramDesc.fDualSrcOutput) {
+        case ProgramDesc::kNone_DualSrcOutput:
+            break;
+        // the prog will write a coverage value to the secondary
+        // output and the dst is blended by one minus that value.
+        case ProgramDesc::kCoverage_DualSrcOutput:
+        case ProgramDesc::kCoverageISA_DualSrcOutput:
+        case ProgramDesc::kCoverageISC_DualSrcOutput:
+        *dstCoeff = (GrBlendCoeff)GrGpu::kIS2C_BlendCoeff;
+        break;
+        default:
+            GrCrash("Unexpected dual source blend output");
+            break;
+    }
+}
+
 void GrGLProgram::buildKey(GrBinHashKeyBuilder& key) const {
     // Add stage configuration to the key
-    key.keyData(reinterpret_cast<const uint8_t*>(&fProgramDesc), sizeof(ProgramDesc));
+    key.keyData(reinterpret_cast<const uint32_t*>(&fProgramDesc), sizeof(ProgramDesc));
+}
 
-    for(int stage = 0; stage < GrDrawTarget::kNumStages; ++stage) {
-        // First pass: count effects and write the count to the key.
-        // This may seem like  we are adding redundant data to the
-        // key, but in ensures the one key cannot be a prefix of
-        // another key, or identical to the key of a different program.
-        GrGLEffect* currentEffect = fStageEffects[stage];
-        uint8_t effectCount = 0;
-        while (currentEffect) {
-            GrAssert(effectCount < 255); // overflow detection
-            ++effectCount;
-            currentEffect = currentEffect->nextEffect();
-        }
-        key.keyData(reinterpret_cast<const uint8_t*>(&effectCount), sizeof(uint8_t));
+// assigns modulation of two vars to an output var
+// vars can be vec4s or floats (or one of each)
+// result is always vec4
+// if either var is "" then assign to the other var
+// if both are "" then assign all ones
+static inline void modulate_helper(const char* outputVar,
+                                   const char* var0,
+                                   const char* var1,
+                                   GrStringBuilder* code) {
+    GrAssert(NULL != outputVar);
+    GrAssert(NULL != var0);
+    GrAssert(NULL != var1);
+    GrAssert(NULL != code);
 
-        // Second pass: continue building key using the effects
-        currentEffect = fStageEffects[stage];
-        while (currentEffect) {
-            fStageEffects[stage]->buildKey(key);
-        }
+    bool has0 = '\0' != *var0;
+    bool has1 = '\0' != *var1;
+
+    if (!has0 && !has1) {
+        code->appendf("\t%s = %s;\n", outputVar, all_ones_vec(4));
+    } else if (!has0) {
+        code->appendf("\t%s = vec4(%s);\n", outputVar, var1);
+    } else if (!has1) {
+        code->appendf("\t%s = vec4(%s);\n", outputVar, var0);
+    } else {
+        code->appendf("\t%s = vec4(%s * %s);\n", outputVar, var0, var1);
     }
 }
 
-bool GrGLProgram::doGLSetup(GrPrimitiveType type, 
-                            GrGLProgram::CachedData* programData) const {
-    for (int stage = 0; stage < GrDrawTarget::kNumStages; ++stage) {
-        GrGLEffect* effect = fStageEffects[stage];
-        if (effect) {
-            if (!effect->doGLSetup(type, programData->fProgramID)) {
-                return false;
-            }
-        }
-    }
+// assigns addition of two vars to an output var
+// vars can be vec4s or floats (or one of each)
+// result is always vec4
+// if either var is "" then assign to the other var
+// if both are "" then assign all zeros
+static inline void add_helper(const char* outputVar,
+                              const char* var0,
+                              const char* var1,
+                              GrStringBuilder* code) {
+    GrAssert(NULL != outputVar);
+    GrAssert(NULL != var0);
+    GrAssert(NULL != var1);
+    GrAssert(NULL != code);
 
-    return true;
+    bool has0 = '\0' != *var0;
+    bool has1 = '\0' != *var1;
+
+    if (!has0 && !has1) {
+        code->appendf("\t%s = %s;\n", outputVar, all_zeros_vec(4));
+    } else if (!has0) {
+        code->appendf("\t%s = vec4(%s);\n", outputVar, var1);
+    } else if (!has1) {
+        code->appendf("\t%s = vec4(%s);\n", outputVar, var0);
+    } else {
+        code->appendf("\t%s = vec4(%s + %s);\n", outputVar, var0, var1);
+    }
 }
 
-void GrGLProgram::doGLPost() const {
-    for (int stage = 0; stage < GrDrawTarget::kNumStages; ++stage) {
-        GrGLEffect* effect = fStageEffects[stage];
-        if (effect) {
-            effect->doGLPost(); 
-        }    
+// given two blend coeffecients determine whether the src
+// and/or dst computation can be omitted.
+static inline void needBlendInputs(SkXfermode::Coeff srcCoeff,
+                                   SkXfermode::Coeff dstCoeff,
+                                   bool* needSrcValue,
+                                   bool* needDstValue) {
+    if (SkXfermode::kZero_Coeff == srcCoeff) {
+        switch (dstCoeff) {
+            // these all read the src
+            case SkXfermode::kSC_Coeff:
+            case SkXfermode::kISC_Coeff:
+            case SkXfermode::kSA_Coeff:
+            case SkXfermode::kISA_Coeff:
+                *needSrcValue = true;
+                break;
+            default:
+                *needSrcValue = false;
+                break;
+        }
+    } else {
+        *needSrcValue = true;
+    }
+    if (SkXfermode::kZero_Coeff == dstCoeff) {
+        switch (srcCoeff) {
+            // these all read the dst
+            case SkXfermode::kDC_Coeff:
+            case SkXfermode::kIDC_Coeff:
+            case SkXfermode::kDA_Coeff:
+            case SkXfermode::kIDA_Coeff:
+                *needDstValue = true;
+                break;
+            default:
+                *needDstValue = false;
+                break;
+        }
+    } else {
+        *needDstValue = true;
     }
 }
 
 /**
- * Create a text coefficient to be used in fragment shader code.
+ * Create a blend_coeff * value string to be used in shader code. Sets empty
+ * string if result is trivially zero.
  */
-static void coefficientString(GrStringBuilder* str, SkXfermode::Coeff coeff,
-            const char* src, const char* dst) {
+static void blendTermString(GrStringBuilder* str, SkXfermode::Coeff coeff,
+                             const char* src, const char* dst,
+                             const char* value) {
     switch (coeff) {
     case SkXfermode::kZero_Coeff:    /** 0 */
-        *str = "0.0";
+        *str = "";
         break;
     case SkXfermode::kOne_Coeff:     /** 1 */
-        *str = "1.0";
-        break;
-    case SkXfermode::kSA_Coeff:      /** src alpha */
-        str->appendf("%s.a", src);
-        break;
-    case SkXfermode::kISA_Coeff:     /** inverse src alpha (i.e. 1 - sa) */
-        str->appendf("(1.0 - %s.a)", src);
-        break;
-    case SkXfermode::kDA_Coeff:      /** dst alpha */
-        str->appendf("%s.a", dst);
-        break;
-    case SkXfermode::kIDA_Coeff:     /** inverse dst alpha (i.e. 1 - da) */
-        str->appendf("(1.0 - %s.a)", dst);
+        *str = value;
         break;
     case SkXfermode::kSC_Coeff:
-        str->append(src);
+        str->printf("(%s * %s)", src, value);
+        break;
+    case SkXfermode::kISC_Coeff:
+        str->printf("((%s - %s) * %s)", all_ones_vec(4), src, value);
+        break;
+    case SkXfermode::kDC_Coeff:
+        str->printf("(%s * %s)", dst, value);
+        break;
+    case SkXfermode::kIDC_Coeff:
+        str->printf("((%s - %s) * %s)", all_ones_vec(4), dst, value);
+        break;
+    case SkXfermode::kSA_Coeff:      /** src alpha */
+        str->printf("(%s.a * %s)", src, value);
+        break;
+    case SkXfermode::kISA_Coeff:     /** inverse src alpha (i.e. 1 - sa) */
+        str->printf("((1.0 - %s.a) * %s)", src, value);
+        break;
+    case SkXfermode::kDA_Coeff:      /** dst alpha */
+        str->printf("(%s.a * %s)", dst, value);
+        break;
+    case SkXfermode::kIDA_Coeff:     /** inverse dst alpha (i.e. 1 - da) */
+        str->printf("((1.0 - %s.a) * %s)", dst, value);
         break;
     default:
+        GrCrash("Unexpected xfer coeff.");
         break;
     }
 }
-
 /**
  * Adds a line to the fragment shader code which modifies the color by
  * the specified color filter.
  */
-static void addColorFilter(GrStringBuilder* FSCode, const char * outputVar,
-            SkXfermode::Mode colorFilterXfermode, const char* dstColor) {
-    SkXfermode::Coeff srcCoeff, dstCoeff;
-    SkDEBUGCODE(bool success =)
-    SkXfermode::ModeAsCoeff(colorFilterXfermode, &srcCoeff, &dstCoeff);
-    // We currently do not handle modes that cannot be represented as
-    // coefficients.
-    GrAssert(success);
-    GrStringBuilder srcCoeffStr, dstCoeffStr;
-    coefficientString(&srcCoeffStr, srcCoeff, COL_FILTER_UNI_NAME, dstColor);
-    coefficientString(&dstCoeffStr, dstCoeff, COL_FILTER_UNI_NAME, dstColor);
-    FSCode->appendf("\t%s = %s*%s + %s*%s;\n", outputVar, srcCoeffStr.c_str(),
-            COL_FILTER_UNI_NAME, dstCoeffStr.c_str(), dstColor);
+static void addColorFilter(GrStringBuilder* fsCode, const char * outputVar,
+                           SkXfermode::Coeff uniformCoeff,
+                           SkXfermode::Coeff colorCoeff,
+                           const char* inColor) {
+    GrStringBuilder colorStr, constStr;
+    blendTermString(&colorStr, colorCoeff, COL_FILTER_UNI_NAME,
+                    inColor, inColor);
+    blendTermString(&constStr, uniformCoeff, COL_FILTER_UNI_NAME,
+                    inColor, COL_FILTER_UNI_NAME);
+
+    add_helper(outputVar, colorStr.c_str(), constStr.c_str(), fsCode);
 }
 
 bool GrGLProgram::genProgram(GrGLProgram::CachedData* programData) const {
@@ -235,6 +332,39 @@ bool GrGLProgram::genProgram(GrGLProgram::CachedData* programData) const {
     const uint32_t& layout = fProgramDesc.fVertexLayout;
 
     programData->fUniLocations.reset();
+
+    SkXfermode::Coeff colorCoeff, uniformCoeff;
+    // The rest of transfer mode color filters have not been implemented
+    if (fProgramDesc.fColorFilterXfermode < SkXfermode::kCoeffModesCnt) {
+        GR_DEBUGCODE(bool success =)
+            SkXfermode::ModeAsCoeff(static_cast<SkXfermode::Mode>
+                                    (fProgramDesc.fColorFilterXfermode),
+                                    &uniformCoeff, &colorCoeff);
+        GR_DEBUGASSERT(success);
+    } else {
+        colorCoeff = SkXfermode::kOne_Coeff;
+        uniformCoeff = SkXfermode::kZero_Coeff;
+    }
+
+    bool needColorFilterUniform;
+    bool needComputedColor;
+    needBlendInputs(uniformCoeff, colorCoeff,
+                    &needColorFilterUniform, &needComputedColor);
+
+    // the dual source output has no canonical var name, have to
+    // declare an output, which is incompatible with gl_FragColor/gl_FragData.
+    const char* fsColorOutput;
+    bool dualSourceOutputWritten = false;
+    bool usingDeclaredOutputs = ProgramDesc::kNone_DualSrcOutput !=
+                                fProgramDesc.fDualSrcOutput;
+    if (usingDeclaredOutputs) {
+        GrAssert(0 == segments.fHeader.size());
+        segments.fHeader.printf("#version 150\n");
+        fsColorOutput = declared_color_output_name();
+        segments.fFSOutputs.appendf("out vec4 %s;\n", fsColorOutput);
+    } else {
+        fsColorOutput = "gl_FragColor";
+    }
 
 #if GR_GL_ATTRIBUTE_MATRICES
     segments.fVSAttrs += "attribute mat3 " VIEW_MATRIX_NAME ";\n";
@@ -253,25 +383,23 @@ bool GrGLProgram::genProgram(GrGLProgram::CachedData* programData) const {
     // incoming color to current stage being processed.
     GrStringBuilder inColor;
 
-    switch (fProgramDesc.fColorType) {
-    case ProgramDesc::kAttribute_ColorType:
-        segments.fVSAttrs.append( "attribute vec4 " COL_ATTR_NAME ";\n");
-        segments.fVaryings.append("varying vec4 vColor;\n");
-        segments.fVSCode.append(    "\tvColor = " COL_ATTR_NAME ";\n");
-        inColor = "vColor";
-        break;
-    case ProgramDesc::kUniform_ColorType:
-        segments.fFSUnis.append(  "uniform vec4 " COL_UNI_NAME ";\n");
-        programData->fUniLocations.fColorUni = kUseUniform;
-        inColor = COL_UNI_NAME;
-        break;
-    case ProgramDesc::kNone_ColorType:
-        inColor = "";
-        break;
-    }
-
-    if (fProgramDesc.fUsesEdgeAA) {
-        segments.fFSUnis.append("uniform vec3 " EDGES_UNI_NAME "[6];\n");
+    if (needComputedColor) {
+        switch (fProgramDesc.fColorType) {
+            case ProgramDesc::kAttribute_ColorType:
+                segments.fVSAttrs.append( "attribute vec4 " COL_ATTR_NAME ";\n");
+                segments.fVaryings.append("varying vec4 vColor;\n");
+                segments.fVSCode.append(    "\tvColor = " COL_ATTR_NAME ";\n");
+                inColor = "vColor";
+                break;
+            case ProgramDesc::kUniform_ColorType:
+                segments.fFSUnis.append(  "uniform vec4 " COL_UNI_NAME ";\n");
+                programData->fUniLocations.fColorUni = kUseUniform;
+                inColor = COL_UNI_NAME;
+                break;
+            default:
+                GrAssert(ProgramDesc::kNone_ColorType == fProgramDesc.fColorType);
+                break;
+        }
     }
 
     if (fProgramDesc.fEmitsPointSize){
@@ -289,109 +417,204 @@ bool GrGLProgram::genProgram(GrGLProgram::CachedData* programData) const {
         }
     }
 
-    bool useColorFilter = 
-            // The rest of transfer mode color filters have not been implemented
-            fProgramDesc.fColorFilterXfermode <= SkXfermode::kMultiply_Mode
-            // This mode has no effect.
-            && fProgramDesc.fColorFilterXfermode != SkXfermode::kDst_Mode;
-    bool onlyUseColorFilter = useColorFilter
-            && (fProgramDesc.fColorFilterXfermode == SkXfermode::kClear_Mode
-            || fProgramDesc.fColorFilterXfermode == SkXfermode::kSrc_Mode);
-    if (useColorFilter) {
-        // Set up a uniform for the color
-        segments.fFSUnis.append(  "uniform vec4 " COL_FILTER_UNI_NAME ";\n");
-        programData->fUniLocations.fColorFilterUni = kUseUniform;
-    }
+    ///////////////////////////////////////////////////////////////////////////
+    // compute the final color
 
-    // for each enabled stage figure out what the input coordinates are
-    // and count the number of stages in use.
-    const char* stageInCoords[GrDrawTarget::kNumStages];
-    int numActiveStages = 0;
+    // if we have color stages string them together, feeding the output color
+    // of each to the next and generating code for each stage.
+    if (needComputedColor) {
+        GrStringBuilder outColor;
+        for (int s = 0; s < fProgramDesc.fFirstCoverageStage; ++s) {
+            if (fProgramDesc.fStages[s].isEnabled()) {
+                // create var to hold stage result
+                outColor = "color";
+                outColor.appendS32(s);
+                segments.fFSCode.appendf("\tvec4 %s;\n", outColor.c_str());
 
-    if (!onlyUseColorFilter) {
-        for (int s = 0; s < GrDrawTarget::kNumStages; ++s) {
-            if (fProgramDesc.fStages[s].fEnabled) {
-                if (GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(s) & layout) {
-                    stageInCoords[s] = POS_ATTR_NAME;
+                const char* inCoords;
+                // figure out what our input coords are
+                if (GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(s) &
+                    layout) {
+                    inCoords = POS_ATTR_NAME;
                 } else {
                     int tcIdx = GrDrawTarget::VertexTexCoordsForStage(s, layout);
                      // we better have input tex coordinates if stage is enabled.
                     GrAssert(tcIdx >= 0);
                     GrAssert(texCoordAttrs[tcIdx].size());
-                    stageInCoords[s] = texCoordAttrs[tcIdx].c_str();
-                }
-                ++numActiveStages;
-            }
-        }
-    }
-
-    // if we have active stages string them together, feeding the output color
-    // of each to the next and generating code for each stage.
-    if (numActiveStages) {
-        int currActiveStage = 0;
-        GrStringBuilder outColor;
-        for (int s = 0; s < GrDrawTarget::kNumStages; ++s) {
-            if (fProgramDesc.fStages[s].fEnabled) {
-                if (currActiveStage < (numActiveStages - 1) || useColorFilter) {
-                    outColor = "color";
-                    outColor.appendS32(currActiveStage);
-                    segments.fFSCode.appendf("\tvec4 %s;\n", outColor.c_str());
-                } else {
-                    outColor = "gl_FragColor";
+                    inCoords = texCoordAttrs[tcIdx].c_str();
                 }
 
                 genStageCode(s,
                              fProgramDesc.fStages[s],
                              inColor.size() ? inColor.c_str() : NULL,
                              outColor.c_str(),
-                             stageInCoords[s],
+                             inCoords,
                              &segments,
                              &programData->fUniLocations.fStages[s]);
-                ++currActiveStage;
                 inColor = outColor;
             }
         }
-        if (useColorFilter) {
-            addColorFilter(&segments.fFSCode, "gl_FragColor",
-                    fProgramDesc.fColorFilterXfermode, outColor.c_str());
+    }
+
+    // if have all ones for the "dst" input to the color filter then we can make
+    // additional optimizations.
+    if (needColorFilterUniform && !inColor.size() &&
+        (SkXfermode::kIDC_Coeff == uniformCoeff ||
+         SkXfermode::kIDA_Coeff == uniformCoeff)) {
+          uniformCoeff = SkXfermode::kZero_Coeff;
+          bool bogus;
+          needBlendInputs(SkXfermode::kZero_Coeff, colorCoeff,
+                          &needColorFilterUniform, &bogus);
+    }
+    if (needColorFilterUniform) {
+        segments.fFSUnis.append(  "uniform vec4 " COL_FILTER_UNI_NAME ";\n");
+        programData->fUniLocations.fColorFilterUni = kUseUniform;
+    }
+
+    bool wroteFragColorZero = false;
+    if (SkXfermode::kZero_Coeff == uniformCoeff &&
+        SkXfermode::kZero_Coeff == colorCoeff) {
+        segments.fFSCode.appendf("\t%s = %s;\n",
+                                 fsColorOutput,
+                                 all_zeros_vec(4));
+        wroteFragColorZero = true;
+    } else if (SkXfermode::kDst_Mode != fProgramDesc.fColorFilterXfermode) {
+        segments.fFSCode.appendf("\tvec4 filteredColor;\n");
+        const char* color = inColor.size() ? inColor.c_str() : all_ones_vec(4);
+        addColorFilter(&segments.fFSCode, "filteredColor", uniformCoeff,
+                       colorCoeff, color);
+        inColor = "filteredColor";
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // compute the partial coverage (coverage stages and edge aa)
+
+    GrStringBuilder inCoverage;
+
+    // we don't need to compute coverage at all if we know the final shader
+    // output will be zero and we don't have a dual src blend output.
+    if (!wroteFragColorZero ||
+        ProgramDesc::kNone_DualSrcOutput != fProgramDesc.fDualSrcOutput) {
+        if (fProgramDesc.fEdgeAANumEdges > 0) {
+            segments.fFSUnis.append("uniform vec3 " EDGES_UNI_NAME "[");
+            segments.fFSUnis.appendS32(fProgramDesc.fEdgeAANumEdges);
+            segments.fFSUnis.append("];\n");
+            programData->fUniLocations.fEdgesUni = kUseUniform;
+            int count = fProgramDesc.fEdgeAANumEdges;
+            segments.fFSCode.append(
+                "\tvec3 pos = vec3(gl_FragCoord.xy, 1);\n");
+            for (int i = 0; i < count; i++) {
+                segments.fFSCode.append("\tfloat a");
+                segments.fFSCode.appendS32(i);
+                segments.fFSCode.append(" = clamp(dot(" EDGES_UNI_NAME "[");
+                segments.fFSCode.appendS32(i);
+                segments.fFSCode.append("], pos), 0.0, 1.0);\n");
+            }
+            segments.fFSCode.append("\tfloat edgeAlpha = ");
+            for (int i = 0; i < count - 1; i++) {
+                segments.fFSCode.append("min(a");
+                segments.fFSCode.appendS32(i);
+                segments.fFSCode.append(" * a");
+                segments.fFSCode.appendS32(i + 1);
+                segments.fFSCode.append(", ");
+            }
+            segments.fFSCode.append("a");
+            segments.fFSCode.appendS32(count - 1);
+            segments.fFSCode.append(" * a0");
+            for (int i = 0; i < count - 1; i++) {
+                segments.fFSCode.append(")");
+            }
+            segments.fFSCode.append(";\n");
+            inCoverage = "edgeAlpha";
         }
 
-    } else {
-        if (fProgramDesc.fUsesEdgeAA) {
-            // FIXME:  put the a's in a loop
-            segments.fFSCode.append(
-                "\tvec3 pos = vec3(gl_FragCoord.xy, 1);\n"
-                "\tfloat a0 = clamp(dot(uEdges[0], pos), 0.0, 1.0);\n"
-                "\tfloat a1 = clamp(dot(uEdges[1], pos), 0.0, 1.0);\n"
-                "\tfloat a2 = clamp(dot(uEdges[2], pos), 0.0, 1.0);\n"
-                "\tfloat a3 = clamp(dot(uEdges[3], pos), 0.0, 1.0);\n"
-                "\tfloat a4 = clamp(dot(uEdges[4], pos), 0.0, 1.0);\n"
-                "\tfloat a5 = clamp(dot(uEdges[5], pos), 0.0, 1.0);\n"
-                "\tfloat edgeAlpha = min(min(a0 * a1, a2 * a3), a4 * a5);\n");
-            if (inColor.size()) {
-                inColor.append(" * edgeAlpha");
-            } else {
-                inColor = "vec4(edgeAlpha)";
+        GrStringBuilder outCoverage;
+        const int& startStage = fProgramDesc.fFirstCoverageStage;
+        for (int s = startStage; s < GrDrawTarget::kNumStages; ++s) {
+            if (fProgramDesc.fStages[s].isEnabled()) {
+                // create var to hold stage output
+                outCoverage = "coverage";
+                outCoverage.appendS32(s);
+                segments.fFSCode.appendf("\tvec4 %s;\n", outCoverage.c_str());
+
+                const char* inCoords;
+                // figure out what our input coords are
+                if (GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(s) & layout) {
+                    inCoords = POS_ATTR_NAME;
+                } else {
+                    int tcIdx = GrDrawTarget::VertexTexCoordsForStage(s, layout);
+                        // we better have input tex coordinates if stage is enabled.
+                    GrAssert(tcIdx >= 0);
+                    GrAssert(texCoordAttrs[tcIdx].size());
+                    inCoords = texCoordAttrs[tcIdx].c_str();
+                }
+
+                genStageCode(s,
+                             fProgramDesc.fStages[s],
+                             inCoverage.size() ? inCoverage.c_str() : NULL,
+                             outCoverage.c_str(),
+                             inCoords,
+                             &segments,
+                             &programData->fUniLocations.fStages[s]);
+                inCoverage = outCoverage;
             }
         }
-        // we may not have any incoming color
-        const char * incomingColor = (inColor.size() ? inColor.c_str()
-                : "vec4(1,1,1,1)");
-        if (useColorFilter) {
-            addColorFilter(&segments.fFSCode, "gl_FragColor",
-                    fProgramDesc.fColorFilterXfermode, incomingColor);
-        } else {
-            segments.fFSCode.appendf("\tgl_FragColor = %s;\n", incomingColor);
+        if (ProgramDesc::kNone_DualSrcOutput != fProgramDesc.fDualSrcOutput) {
+            segments.fFSOutputs.appendf("out vec4 %s;\n",
+                                        dual_source_output_name());
+            bool outputIsZero = false;
+            GrStringBuilder coeff;
+            if (ProgramDesc::kCoverage_DualSrcOutput !=
+                fProgramDesc.fDualSrcOutput && !wroteFragColorZero) {
+                if (!inColor.size()) {
+                    outputIsZero = true;
+                } else {
+                    if (fProgramDesc.fDualSrcOutput ==
+                        ProgramDesc::kCoverageISA_DualSrcOutput) {
+                        coeff.printf("(1 - %s.a)", inColor.c_str());
+                    } else {
+                        coeff.printf("(vec4(1,1,1,1) - %s)", inColor.c_str());
+                    }
+                }
+            }
+            if (outputIsZero) {
+                segments.fFSCode.appendf("\t%s = %s;\n",
+                                         dual_source_output_name(),
+                                         all_zeros_vec(4));
+            } else {
+                modulate_helper(dual_source_output_name(),
+                                coeff.c_str(),
+                                inCoverage.c_str(),
+                                &segments.fFSCode);
+            }
+            dualSourceOutputWritten = true;
         }
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // combine color and coverage as frag color
+
+    if (!wroteFragColorZero) {
+        modulate_helper(fsColorOutput,
+                         inColor.c_str(),
+                         inCoverage.c_str(),
+                         &segments.fFSCode);
+    }
+
     segments.fVSCode.append("}\n");
     segments.fFSCode.append("}\n");
+
+    ///////////////////////////////////////////////////////////////////////////
+    // compile and setup attribs and unis
 
     if (!CompileFSAndVS(segments, programData)) {
         return false;
     }
 
-    if (!this->bindAttribsAndLinkProgram(texCoordAttrs, programData)) {
+    if (!this->bindOutputsAttribsAndLinkProgram(texCoordAttrs,
+                                                usingDeclaredOutputs,
+                                                dualSourceOutputWritten,
+                                                programData)) {
         return false;
     }
 
@@ -403,10 +626,16 @@ bool GrGLProgram::genProgram(GrGLProgram::CachedData* programData) const {
 bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
                                  CachedData* programData) {
 
-    const char* strings[4];
-    int lengths[4];
+    static const int MAX_STRINGS = 6;
+    const char* strings[MAX_STRINGS];
+    int lengths[MAX_STRINGS];
     int stringCnt = 0;
 
+    if (segments.fHeader.size()) {
+        strings[stringCnt] = segments.fHeader.c_str();
+        lengths[stringCnt] = segments.fHeader.size();
+        ++stringCnt;
+    }
     if (segments.fVSUnis.size()) {
         strings[stringCnt] = segments.fVSUnis.c_str();
         lengths[stringCnt] = segments.fVSUnis.size();
@@ -429,12 +658,14 @@ bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
     ++stringCnt;
 
 #if PRINT_SHADERS
+    GrPrintf(segments.fHeader.c_str());
     GrPrintf(segments.fVSUnis.c_str());
     GrPrintf(segments.fVSAttrs.c_str());
     GrPrintf(segments.fVaryings.c_str());
     GrPrintf(segments.fVSCode.c_str());
     GrPrintf("\n");
 #endif
+    GrAssert(stringCnt <= MAX_STRINGS);
     programData->fVShaderID = CompileShader(GR_GL_VERTEX_SHADER,
                                         stringCnt,
                                         strings,
@@ -446,6 +677,11 @@ bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
 
     stringCnt = 0;
 
+    if (segments.fHeader.size()) {
+        strings[stringCnt] = segments.fHeader.c_str();
+        lengths[stringCnt] = segments.fHeader.size();
+        ++stringCnt;
+    }
     if (strlen(GrShaderPrecision()) > 1) {
         strings[stringCnt] = GrShaderPrecision();
         lengths[stringCnt] = strlen(GrShaderPrecision());
@@ -461,6 +697,11 @@ bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
         lengths[stringCnt] = segments.fVaryings.size();
         ++stringCnt;
     }
+    if (segments.fFSOutputs.size()) {
+        strings[stringCnt] = segments.fFSOutputs.c_str();
+        lengths[stringCnt] = segments.fFSOutputs.size();
+        ++stringCnt;
+    }
 
     GrAssert(segments.fFSCode.size());
     strings[stringCnt] = segments.fFSCode.c_str();
@@ -468,12 +709,15 @@ bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
     ++stringCnt;
 
 #if PRINT_SHADERS
+    GrPrintf(segments.fHeader.c_str());
     GrPrintf(GrShaderPrecision());
     GrPrintf(segments.fFSUnis.c_str());
     GrPrintf(segments.fVaryings.c_str());
+    GrPrintf(segments.fFSOutputs.c_str());
     GrPrintf(segments.fFSCode.c_str());
     GrPrintf("\n");
 #endif
+    GrAssert(stringCnt <= MAX_STRINGS);
     programData->fFShaderID = CompileShader(GR_GL_FRAGMENT_SHADER,
                                             stringCnt,
                                             strings,
@@ -482,6 +726,7 @@ bool GrGLProgram::CompileFSAndVS(const ShaderCodeSegments& segments,
     if (!programData->fFShaderID) {
         return false;
     }
+
     return true;
 }
 
@@ -521,8 +766,11 @@ GrGLuint GrGLProgram::CompileShader(GrGLenum type,
     return shader;
 }
 
-bool GrGLProgram::bindAttribsAndLinkProgram(GrStringBuilder texCoordAttrNames[],
-                                            CachedData* programData) const {
+bool GrGLProgram::bindOutputsAttribsAndLinkProgram(
+                                        GrStringBuilder texCoordAttrNames[],
+                                        bool bindColorOut,
+                                        bool bindDualSrcOut,
+                                        CachedData* programData) const {
     programData->fProgramID = GR_GL(CreateProgram());
     if (!programData->fProgramID) {
         return false;
@@ -531,6 +779,15 @@ bool GrGLProgram::bindAttribsAndLinkProgram(GrStringBuilder texCoordAttrNames[],
 
     GR_GL(AttachShader(progID, programData->fVShaderID));
     GR_GL(AttachShader(progID, programData->fFShaderID));
+
+    if (bindColorOut) {
+        GR_GL(BindFragDataLocationIndexed(programData->fProgramID,
+                                          0, 0, declared_color_output_name()));
+    }
+    if (bindDualSrcOut) {
+        GR_GL(BindFragDataLocationIndexed(programData->fProgramID,
+                                          0, 1, dual_source_output_name()));
+    }
 
     // Bind the attrib locations to same values for all shaders
     GR_GL(BindAttribLocation(progID, PositionAttributeIdx(), POS_ATTR_NAME));
@@ -541,7 +798,6 @@ bool GrGLProgram::bindAttribsAndLinkProgram(GrStringBuilder texCoordAttrNames[],
                                      texCoordAttrNames[t].c_str()));
         }
     }
-
 
     if (kSetAsAttribute == programData->fUniLocations.fViewMatrixUni) {
         GR_GL(BindAttribLocation(progID,
@@ -559,7 +815,6 @@ bool GrGLProgram::bindAttribsAndLinkProgram(GrStringBuilder texCoordAttrNames[],
                                      matName.c_str()));
         }
     }
-
 
     GR_GL(BindAttribLocation(progID, ColorAttributeIdx(), COL_ATTR_NAME));
 
@@ -595,18 +850,18 @@ void GrGLProgram::getUniformLocationsAndInitCache(CachedData* programData) const
         GrAssert(kUnusedUniform != programData->fUniLocations.fViewMatrixUni);
     }
     if (kUseUniform == programData->fUniLocations.fColorUni) {
-        programData->fUniLocations.fColorUni = 
+        programData->fUniLocations.fColorUni =
                                 GR_GL(GetUniformLocation(progID, COL_UNI_NAME));
         GrAssert(kUnusedUniform != programData->fUniLocations.fColorUni);
     }
     if (kUseUniform == programData->fUniLocations.fColorFilterUni) {
-        programData->fUniLocations.fColorFilterUni = 
+        programData->fUniLocations.fColorFilterUni =
                         GR_GL(GetUniformLocation(progID, COL_FILTER_UNI_NAME));
         GrAssert(kUnusedUniform != programData->fUniLocations.fColorFilterUni);
     }
 
-    if (fProgramDesc.fUsesEdgeAA) {
-        programData->fUniLocations.fEdgesUni = 
+    if (kUseUniform == programData->fUniLocations.fEdgesUni) {
+        programData->fUniLocations.fEdgesUni =
             GR_GL(GetUniformLocation(progID, EDGES_UNI_NAME));
         GrAssert(kUnusedUniform != programData->fUniLocations.fEdgesUni);
     } else {
@@ -615,7 +870,7 @@ void GrGLProgram::getUniformLocationsAndInitCache(CachedData* programData) const
 
     for (int s = 0; s < GrDrawTarget::kNumStages; ++s) {
         StageUniLocations& locations = programData->fUniLocations.fStages[s];
-        if (fProgramDesc.fStages[s].fEnabled) {
+        if (fProgramDesc.fStages[s].isEnabled()) {
             if (kUseUniform == locations.fTextureMatrixUni) {
                 GrStringBuilder texMName;
                 tex_matrix_name(s, &texMName);
@@ -637,7 +892,7 @@ void GrGLProgram::getUniformLocationsAndInitCache(CachedData* programData) const
             if (kUseUniform == locations.fNormalizedTexelSizeUni) {
                 GrStringBuilder texelSizeName;
                 normalized_texel_size_name(s, &texelSizeName);
-                locations.fNormalizedTexelSizeUni = 
+                locations.fNormalizedTexelSizeUni =
                    GR_GL(GetUniformLocation(progID, texelSizeName.c_str()));
                 GrAssert(kUnusedUniform != locations.fNormalizedTexelSizeUni);
             }
@@ -649,6 +904,15 @@ void GrGLProgram::getUniformLocationsAndInitCache(CachedData* programData) const
                                              progID,
                                              radial2ParamName.c_str()));
                 GrAssert(kUnusedUniform != locations.fRadial2Uni);
+            }
+
+            if (kUseUniform == locations.fTexDomUni) {
+                GrStringBuilder texDomName;
+                tex_domain_name(s, &texDomName);
+                locations.fTexDomUni = GR_GL(GetUniformLocation(
+                                             progID,
+                                             texDomName.c_str()));
+                GrAssert(kUnusedUniform != locations.fTexDomUni);
             }
         }
     }
@@ -726,7 +990,7 @@ void GrGLProgram::genStageCode(int stageNum,
         segments->fFSUnis.appendf("uniform vec2 %s;\n", texelSizeName.c_str());
     }
 
-    segments->fVaryings.appendf("varying %s %s;\n", 
+    segments->fVaryings.appendf("varying %s %s;\n",
                                 float_vector_type(varyingDims), varyingName.c_str());
 
     if (desc.fOptFlags & ProgramDesc::StageDesc::kIdentityMatrix_OptFlagBit) {
@@ -748,9 +1012,9 @@ void GrGLProgram::genStageCode(int stageNum,
 
     if (ProgramDesc::StageDesc::kRadial2Gradient_CoordMapping == desc.fCoordMapping) {
 
-        segments->fVSUnis.appendf("uniform %s float %s[6];\n", 
+        segments->fVSUnis.appendf("uniform %s float %s[6];\n",
                                   GrPrecision(), radial2ParamsName.c_str());
-        segments->fFSUnis.appendf("uniform float %s[6];\n", 
+        segments->fFSUnis.appendf("uniform float %s[6];\n",
                                   radial2ParamsName.c_str());
         locations->fRadial2Uni = kUseUniform;
 
@@ -869,6 +1133,24 @@ void GrGLProgram::genStageCode(int stageNum,
         modulate.printf(" * %s", fsInColor);
     }
 
+    if (desc.fOptFlags &
+        ProgramDesc::StageDesc::kCustomTextureDomain_OptFlagBit) {
+        GrStringBuilder texDomainName;
+        tex_domain_name(stageNum, &texDomainName);
+        segments->fFSUnis.appendf("uniform %s %s;\n",
+                                  float_vector_type(4),
+                                  texDomainName.c_str());
+        GrStringBuilder coordVar("clampCoord");
+        segments->fFSCode.appendf("\t%s %s = clamp(%s, %s.xy, %s.zw);\n",
+                                  float_vector_type(coordDims),
+                                  coordVar.c_str(),
+                                  sampleCoords.c_str(),
+                                  texDomainName.c_str(),
+                                  texDomainName.c_str());
+        sampleCoords = coordVar;
+        locations->fTexDomUni = kUseUniform;
+    }
+
     if (ProgramDesc::StageDesc::k2x2_FetchMode == desc.fFetchMode) {
         locations->fNormalizedTexelSizeUni = kUseUniform;
         if (complexCoord) {
@@ -889,11 +1171,6 @@ void GrGLProgram::genStageCode(int stageNum,
         segments->fFSCode.appendf("\t%s += %s(%s, %s + vec2(+%s.x,+%s.y))%s;\n", accumVar.c_str(), texFunc.c_str(), samplerName.c_str(), sampleCoords.c_str(), texelSizeName.c_str(), texelSizeName.c_str(), smear);
         segments->fFSCode.appendf("\t%s = .25 * %s%s;\n", fsOutColor, accumVar.c_str(), modulate.c_str());
     } else {
-        segments->fFSCode.appendf("\t%s = %s(%s, %s)%s %s;\n", fsOutColor, texFunc.c_str(), samplerName.c_str(), sampleCoords.c_str(), smear, modulate.c_str());
-    }
-
-    if(fStageEffects[stageNum]) {
-        fStageEffects[stageNum]->genShaderCode(segments);
+        segments->fFSCode.appendf("\t%s = %s(%s, %s)%s%s;\n", fsOutColor, texFunc.c_str(), samplerName.c_str(), sampleCoords.c_str(), smear, modulate.c_str());
     }
 }
-

@@ -30,6 +30,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkCordic.cpp \
 	src/core/SkDebug.cpp \
 	src/core/SkFloatBits.cpp \
+	src/core/SkFontHost.cpp \
 	src/core/SkPoint.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRegion.cpp \
@@ -181,6 +182,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkDumpCanvas.cpp \
+	src/utils/SkEGLContext_none.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkOSFile.cpp \
@@ -290,7 +292,6 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrInOrderDrawBuffer.cpp \
   gpu/src/GrMatrix.cpp \
   gpu/src/GrMemory.cpp \
-  gpu/src/GrPath.cpp \
   gpu/src/GrPathUtils.cpp \
   gpu/src/GrRectanizer_fifo.cpp \
   gpu/src/GrResource.cpp \

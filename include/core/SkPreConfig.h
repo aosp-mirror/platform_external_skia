@@ -41,14 +41,16 @@
         #define SK_BUILD_FOR_UNIX
     #elif TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
         #define SK_BUILD_FOR_IOS
-    #elif defined(ANDROID_NDK)
-        #define SK_BUILD_FOR_ANDROID_NDK
-    #elif defined(ANROID)
-        #define SK_BUILD_FOR_ANDROID
     #else
         #define SK_BUILD_FOR_MAC
     #endif
 
+    #if defined(ANDROID)
+        #define SK_BUILD_FOR_ANDROID
+    #endif
+    #if defined(ANDROID_NDK)
+        #define SK_BUILD_FOR_ANDROID_NDK
+    #endif
 #endif
 
 //////////////////////////////////////////////////////////////////////

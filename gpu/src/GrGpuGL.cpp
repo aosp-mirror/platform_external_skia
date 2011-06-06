@@ -16,6 +16,7 @@
 
 #include "GrGpuGL.h"
 #include "GrMemory.h"
+#include "GrTypes.h"
 
 static const GrGLuint GR_MAX_GLUINT = ~0;
 static const GrGLint  GR_INVAL_GLINT = ~0;
@@ -41,9 +42,15 @@ static const GrGLenum gXfermodeCoeff2Blend[] = {
     GR_GL_ONE_MINUS_CONSTANT_COLOR,
     GR_GL_CONSTANT_ALPHA,
     GR_GL_ONE_MINUS_CONSTANT_ALPHA,
+
+    // extended blend coeffs
+    GR_GL_SRC1_COLOR,
+    GR_GL_ONE_MINUS_SRC1_COLOR,
+    GR_GL_SRC1_ALPHA,
+    GR_GL_ONE_MINUS_SRC1_ALPHA,
 };
 
-bool GrGpuGL::BlendCoefReferencesConstant(GrBlendCoeff coeff) {
+bool GrGpuGL::BlendCoeffReferencesConstant(GrBlendCoeff coeff) {
     static const bool gCoeffReferencesBlendConst[] = {
         false,
         false,
@@ -59,27 +66,39 @@ bool GrGpuGL::BlendCoefReferencesConstant(GrBlendCoeff coeff) {
         true,
         true,
         true,
+
+        // extended blend coeffs
+        false,
+        false,
+        false,
+        false,
     };
     return gCoeffReferencesBlendConst[coeff];
-    GR_STATIC_ASSERT(kBlendCoeffCount == GR_ARRAY_COUNT(gCoeffReferencesBlendConst));
+    GR_STATIC_ASSERT(kTotalBlendCoeffCount == GR_ARRAY_COUNT(gCoeffReferencesBlendConst));
+
+    GR_STATIC_ASSERT(0 == kZero_BlendCoeff);
+    GR_STATIC_ASSERT(1 == kOne_BlendCoeff);
+    GR_STATIC_ASSERT(2 == kSC_BlendCoeff);
+    GR_STATIC_ASSERT(3 == kISC_BlendCoeff);
+    GR_STATIC_ASSERT(4 == kDC_BlendCoeff);
+    GR_STATIC_ASSERT(5 == kIDC_BlendCoeff);
+    GR_STATIC_ASSERT(6 == kSA_BlendCoeff);
+    GR_STATIC_ASSERT(7 == kISA_BlendCoeff);
+    GR_STATIC_ASSERT(8 == kDA_BlendCoeff);
+    GR_STATIC_ASSERT(9 == kIDA_BlendCoeff);
+    GR_STATIC_ASSERT(10 == kConstC_BlendCoeff);
+    GR_STATIC_ASSERT(11 == kIConstC_BlendCoeff);
+    GR_STATIC_ASSERT(12 == kConstA_BlendCoeff);
+    GR_STATIC_ASSERT(13 == kIConstA_BlendCoeff);
+
+    GR_STATIC_ASSERT(14 == kS2C_BlendCoeff);
+    GR_STATIC_ASSERT(15 == kIS2C_BlendCoeff);
+    GR_STATIC_ASSERT(16 == kS2A_BlendCoeff);
+    GR_STATIC_ASSERT(17 == kIS2A_BlendCoeff);
+
+    // assertion for gXfermodeCoeff2Blend have to be in GrGpu scope
+    GR_STATIC_ASSERT(kTotalBlendCoeffCount == GR_ARRAY_COUNT(gXfermodeCoeff2Blend));
 }
-
-GR_STATIC_ASSERT(0 == kZero_BlendCoeff);
-GR_STATIC_ASSERT(1 == kOne_BlendCoeff);
-GR_STATIC_ASSERT(2 == kSC_BlendCoeff);
-GR_STATIC_ASSERT(3 == kISC_BlendCoeff);
-GR_STATIC_ASSERT(4 == kDC_BlendCoeff);
-GR_STATIC_ASSERT(5 == kIDC_BlendCoeff);
-GR_STATIC_ASSERT(6 == kSA_BlendCoeff);
-GR_STATIC_ASSERT(7 == kISA_BlendCoeff);
-GR_STATIC_ASSERT(8 == kDA_BlendCoeff);
-GR_STATIC_ASSERT(9 == kIDA_BlendCoeff);
-GR_STATIC_ASSERT(10 == kConstC_BlendCoeff);
-GR_STATIC_ASSERT(11 == kIConstC_BlendCoeff);
-GR_STATIC_ASSERT(12 == kConstA_BlendCoeff);
-GR_STATIC_ASSERT(13 == kIConstA_BlendCoeff);
-
-GR_STATIC_ASSERT(kBlendCoeffCount == GR_ARRAY_COUNT(gXfermodeCoeff2Blend));
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -200,6 +219,16 @@ GrGpuGL::GrGpuGL() {
     if (GR_GL_SUPPORT_DESKTOP || GR_GL_SUPPORT_ES1) {
         GR_GL_GetIntegerv(GR_GL_MAX_TEXTURE_UNITS, &maxTextureUnits);
         GrAssert(maxTextureUnits > kNumStages);
+    }
+    if (GR_GL_SUPPORT_ES2) {
+        GR_GL_GetIntegerv(GR_GL_MAX_FRAGMENT_UNIFORM_VECTORS,
+                          &fMaxFragmentUniformVectors);
+    } else if (GR_GL_SUPPORT_DESKTOP) {
+        GrGLint max;
+        GR_GL_GetIntegerv(GR_GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &max);
+        fMaxFragmentUniformVectors = max / 4;
+    } else {
+        fMaxFragmentUniformVectors = 16;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -602,32 +631,6 @@ GrResource* GrGpuGL::onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc) 
                                     kIsMultisampled_GrPlatformRenderTargetFlagBit & desc.fRenderTargetFlags,
                                     viewport, NULL);
     }
-}
-
-GrRenderTarget* GrGpuGL::onCreatePlatformRenderTarget(
-                                                intptr_t platformRenderTarget,
-                                                int stencilBits,
-                                                bool isMultisampled,
-                                                int width,
-                                                int height) {
-    GrGLRenderTarget::GLRenderTargetIDs rtIDs;
-    rtIDs.fStencilRenderbufferID = 0;
-    rtIDs.fMSColorRenderbufferID = 0;
-    rtIDs.fTexFBOID              = 0;
-    rtIDs.fOwnIDs                = false;
-    GrGLIRect viewport;
-
-    // viewport is in GL coords (top >= bottom)
-    viewport.fLeft      = 0;
-    viewport.fBottom    = 0;
-    viewport.fWidth     = width;
-    viewport.fHeight    = height;
-
-    rtIDs.fRTFBOID  = (GrGLuint)platformRenderTarget;
-    rtIDs.fTexFBOID = (GrGLuint)platformRenderTarget;
-
-    return new GrGLRenderTarget(this, rtIDs, NULL, stencilBits, 
-                                isMultisampled, viewport, NULL);
 }
 
 GrRenderTarget* GrGpuGL::onCreateRenderTargetFrom3DApiState() {
@@ -1667,7 +1670,9 @@ void GrGpuGL::flushAAState(GrPrimitiveType type) {
     }
 }
 
-void GrGpuGL::flushBlend(GrPrimitiveType type) {
+void GrGpuGL::flushBlend(GrPrimitiveType type, 
+                         GrBlendCoeff srcCoeff, 
+                         GrBlendCoeff dstCoeff) {
     if (GrIsPrimTypeLines(type) && useSmoothLines()) {
         if (fHWBlendDisabled) {
             GR_GL(Enable(GR_GL_BLEND));
@@ -1691,15 +1696,15 @@ void GrGpuGL::flushBlend(GrPrimitiveType type) {
             fHWBlendDisabled = blendOff;
         }
         if (!blendOff) {
-            if (fHWDrawState.fSrcBlend != fCurrDrawState.fSrcBlend ||
-                  fHWDrawState.fDstBlend != fCurrDrawState.fDstBlend) {
-                GR_GL(BlendFunc(gXfermodeCoeff2Blend[fCurrDrawState.fSrcBlend],
-                                gXfermodeCoeff2Blend[fCurrDrawState.fDstBlend]));
-                fHWDrawState.fSrcBlend = fCurrDrawState.fSrcBlend;
-                fHWDrawState.fDstBlend = fCurrDrawState.fDstBlend;
+            if (fHWDrawState.fSrcBlend != srcCoeff ||
+                fHWDrawState.fDstBlend != dstCoeff) {
+                GR_GL(BlendFunc(gXfermodeCoeff2Blend[srcCoeff],
+                                gXfermodeCoeff2Blend[dstCoeff]));
+                fHWDrawState.fSrcBlend = srcCoeff;
+                fHWDrawState.fDstBlend = dstCoeff;
             }
-            if ((BlendCoefReferencesConstant(fCurrDrawState.fSrcBlend) ||
-                 BlendCoefReferencesConstant(fCurrDrawState.fDstBlend)) &&
+            if ((BlendCoeffReferencesConstant(srcCoeff) ||
+                 BlendCoeffReferencesConstant(dstCoeff)) &&
                 fHWDrawState.fBlendConstant != fCurrDrawState.fBlendConstant) {
 
                 float c[] = {
@@ -1802,7 +1807,6 @@ bool GrGpuGL::flushGLStateCommon(GrPrimitiveType type) {
     }
     this->flushRenderTarget(rect);
     this->flushAAState(type);
-    this->flushBlend(type);
     
     if ((fCurrDrawState.fFlagBits & kDither_StateBit) !=
         (fHWDrawState.fFlagBits & kDither_StateBit)) {
@@ -2063,4 +2067,10 @@ void GrGpuGL::setBuffers(bool indexed,
             fHWGeometryState.fIndexBuffer = ibuf;
         }
     }
+}
+
+int GrGpuGL::getMaxEdges() const {
+    // FIXME:  This is a pessimistic estimate based on how many other things
+    // want to add uniforms.  This should be centralized somewhere.
+    return GR_CT_MIN(fMaxFragmentUniformVectors - 8, kMaxEdges);
 }
