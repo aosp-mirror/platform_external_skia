@@ -246,7 +246,7 @@ static bool yuv_init() {
           VP8kClip[(y) + (goff) - YUV_RANGE_MIN],    \
           VP8kClip[(y) + (boff) - YUV_RANGE_MIN])
 
-static void block_put(const VP8Io* io) {
+static int block_put(const VP8Io* io) {
     WEBPImage *p = (WEBPImage*) io->opaque;
     SkBitmap* decodedBitmap = p->image;
 
@@ -282,7 +282,7 @@ static void block_put(const VP8Io* io) {
             break;
         default:
             // Unsupported config
-            return;
+            return 0;
     }
 
     for (j = 0; j < mb_h;) {
@@ -434,7 +434,7 @@ static void block_put(const VP8Io* io) {
         v += io->uv_stride;
     }
 
-    return;
+    return 1;
 }
 
 static int block_setup(VP8Io* io) {
