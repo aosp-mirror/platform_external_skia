@@ -15,7 +15,6 @@
  */
 
 #include "GrBinHashKey.h"
-#include "GrGLEffect.h"
 #include "GrGLProgram.h"
 #include "GrGpuGLShaders.h"
 #include "GrGpuVertex.h"
@@ -169,6 +168,14 @@ void GrGpuGLShaders::ProgramUnitTest() {
     GrRandom random;
     for (int t = 0; t < NUM_TESTS; ++t) {
 
+#if 0
+        GrPrintf("\nTest Program %d\n-------------\n", t);
+        static const int stop = -1;
+        if (t == stop) {
+            int breakpointhere = 9;
+        }
+#endif
+
         pdesc.fVertexLayout = 0;
         pdesc.fEmitsPointSize = random.nextF() > .5f;
         float colorType = random.nextF();
@@ -179,6 +186,24 @@ void GrGpuGLShaders::ProgramUnitTest() {
         } else {
             pdesc.fColorType = GrGLProgram::ProgramDesc::kNone_ColorType;
         }
+
+        int idx = (int)(random.nextF() * (SkXfermode::kCoeffModesCnt));
+        pdesc.fColorFilterXfermode = (SkXfermode::Mode)idx;
+
+        idx = (int)(random.nextF() * (kNumStages+1));
+        pdesc.fFirstCoverageStage = idx;
+
+        pdesc.fEdgeAANumEdges = (random.nextF() * (getMaxEdges() + 1));
+
+        if (fDualSourceBlendingSupport) {
+            pdesc.fDualSrcOutput =
+               (GrGLProgram::ProgramDesc::DualSrcOutput)
+               (int)(random.nextF() * GrGLProgram::ProgramDesc::kDualSrcOutputCnt);
+        } else {
+            pdesc.fDualSrcOutput =
+                                GrGLProgram::ProgramDesc::kNone_DualSrcOutput;
+        }
+
         for (int s = 0; s < kNumStages; ++s) {
             // enable the stage?
             if (random.nextF() > .5f) {
@@ -194,19 +219,15 @@ void GrGpuGLShaders::ProgramUnitTest() {
             if (random.nextF() > .5f) {
                 pdesc.fVertexLayout |= kTextFormat_VertexLayoutBit;
             }
-        }
-
-        for (int s = 0; s < kNumStages; ++s) {
-            int x;
-            pdesc.fStages[s].fEnabled = VertexUsesStage(s, pdesc.fVertexLayout);
-            x = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_OPTS));
-            pdesc.fStages[s].fOptFlags = STAGE_OPTS[x];
-            x = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_MODULATES));
-            pdesc.fStages[s].fModulation = STAGE_MODULATES[x];
-            x = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_COORD_MAPPINGS));
-            pdesc.fStages[s].fCoordMapping = STAGE_COORD_MAPPINGS[x];
-            x = (int)(random.nextF() * GR_ARRAY_COUNT(FETCH_MODES));
-            pdesc.fStages[s].fFetchMode = FETCH_MODES[x];
+            idx = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_OPTS));
+            pdesc.fStages[s].fOptFlags = STAGE_OPTS[idx];
+            idx = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_MODULATES));
+            pdesc.fStages[s].fModulation = STAGE_MODULATES[idx];
+            idx = (int)(random.nextF() * GR_ARRAY_COUNT(STAGE_COORD_MAPPINGS));
+            pdesc.fStages[s].fCoordMapping = STAGE_COORD_MAPPINGS[idx];
+            idx = (int)(random.nextF() * GR_ARRAY_COUNT(FETCH_MODES));
+            pdesc.fStages[s].fFetchMode = FETCH_MODES[idx];
+            pdesc.fStages[s].setEnabled(VertexUsesStage(s, pdesc.fVertexLayout));
         }
         GrGLProgram::CachedData cachedData;
         program.genProgram(&cachedData);
@@ -219,11 +240,20 @@ void GrGpuGLShaders::ProgramUnitTest() {
     }
 }
 
-
 GrGpuGLShaders::GrGpuGLShaders() {
 
     resetContext();
+    int major, minor;
+    gl_version(&major, &minor);
+
     f4X4DownsampleFilterSupport = true;
+    if (GR_GL_SUPPORT_DESKTOP) {
+        fDualSourceBlendingSupport =
+            major > 3 ||(3 == major && 3 <= minor) ||
+            has_gl_extension("GL_ARB_blend_func_extended");
+    } else {
+        fDualSourceBlendingSupport = false;
+    }
 
     fProgramData = NULL;
     fProgramCache = new ProgramCache();
@@ -283,16 +313,16 @@ void GrGpuGLShaders::flushViewMatrix() {
 
     // ES doesn't allow you to pass true to the transpose param,
     // so do our own transpose
-    GrScalar mt[]  = {
-        m[GrMatrix::kMScaleX],
-        m[GrMatrix::kMSkewY],
-        m[GrMatrix::kMPersp0],
-        m[GrMatrix::kMSkewX],
-        m[GrMatrix::kMScaleY],
-        m[GrMatrix::kMPersp1],
-        m[GrMatrix::kMTransX],
-        m[GrMatrix::kMTransY],
-        m[GrMatrix::kMPersp2]
+    GrGLfloat mt[]  = {
+        GrScalarToFloat(m[GrMatrix::kMScaleX]),
+        GrScalarToFloat(m[GrMatrix::kMSkewY]),
+        GrScalarToFloat(m[GrMatrix::kMPersp0]),
+        GrScalarToFloat(m[GrMatrix::kMSkewX]),
+        GrScalarToFloat(m[GrMatrix::kMScaleY]),
+        GrScalarToFloat(m[GrMatrix::kMPersp1]),
+        GrScalarToFloat(m[GrMatrix::kMTransX]),
+        GrScalarToFloat(m[GrMatrix::kMTransY]),
+        GrScalarToFloat(m[GrMatrix::kMPersp2])
     };
 
     if (GrGLProgram::kSetAsAttribute ==  
@@ -309,8 +339,48 @@ void GrGpuGLShaders::flushViewMatrix() {
     }
 }
 
+void GrGpuGLShaders::flushTextureDomain(int s) {
+    const GrGLint& uni = fProgramData->fUniLocations.fStages[s].fTexDomUni;
+    if (GrGLProgram::kUnusedUniform != uni) {
+        const GrRect &texDom =
+            fCurrDrawState.fSamplerStates[s].getTextureDomain();
+
+        if (((1 << s) & fDirtyFlags.fTextureChangedMask) ||
+            fProgramData->fTextureDomain[s] != texDom) {
+
+            fProgramData->fTextureDomain[s] = texDom;
+
+            float values[4] = {
+                GrScalarToFloat(texDom.left()),
+                GrScalarToFloat(texDom.top()),
+                GrScalarToFloat(texDom.right()),
+                GrScalarToFloat(texDom.bottom())
+            };
+
+            GrGLTexture* texture = (GrGLTexture*) fCurrDrawState.fTextures[s];
+            GrGLTexture::Orientation orientation = texture->orientation();
+
+            // vertical flip if necessary
+            if (GrGLTexture::kBottomUp_Orientation == orientation) {
+                values[1] = 1.0f - values[1];
+                values[3] = 1.0f - values[3];
+                // The top and bottom were just flipped, so correct the ordering
+                // of elements so that values = (l, t, r, b).
+                SkTSwap(values[1], values[3]);
+            }
+
+            values[0] *= SkScalarToFloat(texture->contentScaleX());
+            values[2] *= SkScalarToFloat(texture->contentScaleX());
+            values[1] *= SkScalarToFloat(texture->contentScaleY());
+            values[3] *= SkScalarToFloat(texture->contentScaleY());
+
+            GR_GL(Uniform4fv(uni, 1, values));
+        }
+    }
+}
+
 void GrGpuGLShaders::flushTextureMatrix(int s) {
-    const int& uni = fProgramData->fUniLocations.fStages[s].fTextureMatrixUni;
+    const GrGLint& uni = fProgramData->fUniLocations.fStages[s].fTextureMatrixUni;
     GrGLTexture* texture = (GrGLTexture*) fCurrDrawState.fTextures[s];
     if (NULL != texture) {
         if (GrGLProgram::kUnusedUniform != uni &&
@@ -328,17 +398,18 @@ void GrGpuGLShaders::flushTextureMatrix(int s) {
 
             // ES doesn't allow you to pass true to the transpose param,
             // so do our own transpose
-            GrScalar mt[]  = {
-                m[GrMatrix::kMScaleX],
-                m[GrMatrix::kMSkewY],
-                m[GrMatrix::kMPersp0],
-                m[GrMatrix::kMSkewX],
-                m[GrMatrix::kMScaleY],
-                m[GrMatrix::kMPersp1],
-                m[GrMatrix::kMTransX],
-                m[GrMatrix::kMTransY],
-                m[GrMatrix::kMPersp2]
+            GrGLfloat mt[]  = {
+                GrScalarToFloat(m[GrMatrix::kMScaleX]),
+                GrScalarToFloat(m[GrMatrix::kMSkewY]),
+                GrScalarToFloat(m[GrMatrix::kMPersp0]),
+                GrScalarToFloat(m[GrMatrix::kMSkewX]),
+                GrScalarToFloat(m[GrMatrix::kMScaleY]),
+                GrScalarToFloat(m[GrMatrix::kMPersp1]),
+                GrScalarToFloat(m[GrMatrix::kMTransX]),
+                GrScalarToFloat(m[GrMatrix::kMTransY]),
+                GrScalarToFloat(m[GrMatrix::kMPersp2])
             };
+
             if (GrGLProgram::kSetAsAttribute ==
                 fProgramData->fUniLocations.fStages[s].fTextureMatrixUni) {
                 int baseIdx = GrGLProgram::TextureMatrixAttributeIdx(s);
@@ -399,16 +470,17 @@ void GrGpuGLShaders::flushTexelSize(int s) {
 void GrGpuGLShaders::flushEdgeAAData() {
     const int& uni = fProgramData->fUniLocations.fEdgesUni;
     if (GrGLProgram::kUnusedUniform != uni) {
-        float edges[18];
-        memcpy(edges, fCurrDrawState.fEdgeAAEdges, sizeof(edges));
+        int count = fCurrDrawState.fEdgeAANumEdges;
+        Edge edges[kMaxEdges];
         // Flip the edges in Y
         float height = fCurrDrawState.fRenderTarget->height();
-        for (int i = 0; i < 6; ++i) {
-            float b = edges[i * 3 + 1];
-            edges[i * 3 + 1] = -b;
-            edges[i * 3 + 2] += b * height;
+        for (int i = 0; i < count; ++i) {
+            edges[i] = fCurrDrawState.fEdgeAAEdges[i];
+            float b = edges[i].fY;
+            edges[i].fY = -b;
+            edges[i].fZ += b * height;
         }
-        GR_GL(Uniform3fv(uni, 6, edges));
+        GR_GL(Uniform3fv(uni, count, &edges[0].fX));
     }
 }
 
@@ -489,10 +561,11 @@ bool GrGpuGLShaders::flushGraphicsState(GrPrimitiveType type) {
         GR_GL(UseProgram(fProgramData->fProgramID));
         fHWProgramID = fProgramData->fProgramID;
     }
-
-    if (!fCurrentProgram.doGLSetup(type, fProgramData)) {
-        return false;
-    }
+    GrBlendCoeff srcCoeff = fCurrDrawState.fSrcBlend;
+    GrBlendCoeff dstCoeff = fCurrDrawState.fDstBlend;
+    
+    fCurrentProgram.overrideBlend(&srcCoeff, &dstCoeff);
+    this->flushBlend(type, srcCoeff, dstCoeff);
 
     this->flushColor();
 
@@ -515,6 +588,8 @@ bool GrGpuGLShaders::flushGraphicsState(GrPrimitiveType type) {
         this->flushRadial2(s);
 
         this->flushTexelSize(s);
+
+        this->flushTextureDomain(s);
     }
     this->flushEdgeAAData();
     resetDirtyFlags();
@@ -522,7 +597,6 @@ bool GrGpuGLShaders::flushGraphicsState(GrPrimitiveType type) {
 }
 
 void GrGpuGLShaders::postDraw() {
-    fCurrentProgram.doGLPost();
 }
 
 void GrGpuGLShaders::setupGeometry(int* startVertex,
@@ -634,6 +708,8 @@ void GrGpuGLShaders::buildProgram(GrPrimitiveType type) {
     // existing program in the cache.
     desc.fVertexLayout &= ~(kColor_VertexLayoutBit);
 
+    desc.fColorFilterXfermode = fCurrDrawState.fColorFilterXfermode;
+
 #if GR_AGGRESSIVE_SHADER_OPTS
     if (!requiresAttributeColors && (0xffffffff == fCurrDrawState.fColor)) {
         desc.fColorType = GrGLProgram::ProgramDesc::kNone_ColorType;
@@ -649,24 +725,26 @@ void GrGpuGLShaders::buildProgram(GrPrimitiveType type) {
         desc.fColorType = GrGLProgram::ProgramDesc::kAttribute_ColorType;
     }
 
-    desc.fUsesEdgeAA = fCurrDrawState.fFlagBits & kEdgeAA_StateBit;
+    desc.fEdgeAANumEdges = fCurrDrawState.fEdgeAANumEdges;
+
+    int lastEnabledStage = -1;
 
     for (int s = 0; s < kNumStages; ++s) {
         GrGLProgram::ProgramDesc::StageDesc& stage = desc.fStages[s];
 
-        stage.fEnabled = this->isStageEnabled(s);
+        stage.fOptFlags = 0;
+        stage.setEnabled(this->isStageEnabled(s));
 
-        if (stage.fEnabled) {
+        if (stage.isEnabled()) {
+            lastEnabledStage = s;
             GrGLTexture* texture = (GrGLTexture*) fCurrDrawState.fTextures[s];
             GrAssert(NULL != texture);
             // we matrix to invert when orientation is TopDown, so make sure
             // we aren't in that case before flagging as identity.
             if (TextureMatrixIsIdentity(texture, fCurrDrawState.fSamplerStates[s])) {
-                stage.fOptFlags = GrGLProgram::ProgramDesc::StageDesc::kIdentityMatrix_OptFlagBit;
+                stage.fOptFlags |= GrGLProgram::ProgramDesc::StageDesc::kIdentityMatrix_OptFlagBit;
             } else if (!getSamplerMatrix(s).hasPerspective()) {
-                stage.fOptFlags = GrGLProgram::ProgramDesc::StageDesc::kNoPerspective_OptFlagBit;
-            } else {
-                stage.fOptFlags = 0;
+                stage.fOptFlags |= GrGLProgram::ProgramDesc::StageDesc::kNoPerspective_OptFlagBit;
             }
             switch (fCurrDrawState.fSamplerStates[s].getSampleMode()) {
                 case GrSamplerState::kNormal_SampleMode:
@@ -701,27 +779,62 @@ void GrGpuGLShaders::buildProgram(GrPrimitiveType type) {
                     break;
             }
 
+            if (fCurrDrawState.fSamplerStates[s].hasTextureDomain()) {
+                GrAssert(GrSamplerState::kClamp_WrapMode ==
+                    fCurrDrawState.fSamplerStates[s].getWrapX() &&
+                    GrSamplerState::kClamp_WrapMode ==
+                    fCurrDrawState.fSamplerStates[s].getWrapY());
+                stage.fOptFlags |=
+                    GrGLProgram::ProgramDesc::StageDesc::
+                    kCustomTextureDomain_OptFlagBit;
+            }
+
             if (GrPixelConfigIsAlphaOnly(texture->config())) {
                 stage.fModulation = GrGLProgram::ProgramDesc::StageDesc::kAlpha_Modulation;
             } else {
                 stage.fModulation = GrGLProgram::ProgramDesc::StageDesc::kColor_Modulation;
             }
-
-            if (fCurrDrawState.fEffects[s]) {
-                fCurrentProgram.fStageEffects[s] = GrGLEffect::Create(fCurrDrawState.fEffects[s]);
-            } else {
-                delete fCurrentProgram.fStageEffects[s];
-                fCurrentProgram.fStageEffects[s] = NULL;
-            }
         } else {
             stage.fOptFlags     = 0;
             stage.fCoordMapping = (GrGLProgram::ProgramDesc::StageDesc::CoordMapping)0;
             stage.fModulation   = (GrGLProgram::ProgramDesc::StageDesc::Modulation)0;
-            fCurrentProgram.fStageEffects[s] = NULL;
         }
     }
-    desc.fColorFilterXfermode = fCurrDrawState.fColorFilterXfermode;
+
+    desc.fDualSrcOutput = GrGLProgram::ProgramDesc::kNone_DualSrcOutput;
+    // use canonical value when coverage/color distinction won't affect
+    // generated code to prevent duplicate programs.
+    desc.fFirstCoverageStage = kNumStages;
+    if (fCurrDrawState.fFirstCoverageStage <= lastEnabledStage) {
+        // color filter is applied between color/coverage computation
+        if (SkXfermode::kDst_Mode != desc.fColorFilterXfermode) {
+            desc.fFirstCoverageStage = fCurrDrawState.fFirstCoverageStage;
+        }
+
+        // We could consider cases where the final color is solid (0xff alpha)
+        // and the dst coeff can correctly be set to a non-dualsrc gl value.
+        // (e.g. solid draw, and dst coeff is kZero. It's correct to make
+        // the dst coeff be kISA. Or solid draw with kSA can be tweaked to be
+        // kOne).
+        if (fDualSourceBlendingSupport) {
+            if (kZero_BlendCoeff == fCurrDrawState.fDstBlend) {
+                // write the coverage value to second color
+                desc.fDualSrcOutput = 
+                                GrGLProgram::ProgramDesc::kCoverage_DualSrcOutput;
+                desc.fFirstCoverageStage = fCurrDrawState.fFirstCoverageStage;
+            } else if (kSA_BlendCoeff == fCurrDrawState.fDstBlend) {
+                // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially 
+                // cover
+                desc.fDualSrcOutput = 
+                            GrGLProgram::ProgramDesc::kCoverageISA_DualSrcOutput;
+                desc.fFirstCoverageStage = fCurrDrawState.fFirstCoverageStage;
+            } else if (kSC_BlendCoeff == fCurrDrawState.fDstBlend) {
+                // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially
+                // cover
+                desc.fDualSrcOutput = 
+                        GrGLProgram::ProgramDesc::kCoverageISC_DualSrcOutput;
+                desc.fFirstCoverageStage = fCurrDrawState.fFirstCoverageStage;
+            }
+        }
+    }
 }
-
-
-

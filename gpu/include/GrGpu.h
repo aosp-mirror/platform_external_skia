@@ -60,6 +60,21 @@ class GrGpu : public GrDrawTarget {
 
 public:
     /**
+     * Additional blend coeffecients for dual source blending, not exposed
+     * through GrPaint/GrContext.
+     */
+    enum ExtendedBlendCoeffs {
+        // source 2 refers to second output color when
+        // using dual source blending.
+        kS2C_BlendCoeff = kPublicBlendCoeffCount,
+        kIS2C_BlendCoeff,
+        kS2A_BlendCoeff,
+        kIS2A_BlendCoeff,
+
+        kTotalBlendCoeffCount
+    };
+
+    /**
      *  Create an instance of GrGpu that matches the specified Engine backend.
      *  If the requested engine is not supported (at compile-time or run-time)
      *  this returns NULL.
@@ -109,20 +124,6 @@ public:
      */
     GrTexture* createTexture(const GrTextureDesc& desc,
                              const void* srcData, size_t rowBytes);
-    /**
-     * Wraps an externally-created rendertarget in a GrRenderTarget.
-     * @param platformRenderTarget  handle to the the render target in the
-     *                              underlying 3D API. Interpretation depends on
-     *                              GrGpu subclass in use.
-     * @param stencilBits           number of stencil bits the target has
-     * @param isMultisampled        specify whether the RT is multisampled
-     * @param width                 width of the render target
-     * @param height                height of the render target
-     */
-     GrRenderTarget* createPlatformRenderTarget(intptr_t platformRenderTarget,
-                                                int stencilBits,
-                                                bool isMultisampled,
-                                                int width, int height);
 
     GrResource* createPlatformSurface(const GrPlatformSurfaceDesc& desc);
 
@@ -202,6 +203,15 @@ public:
      * Does the subclass support GrSamplerState::k4x4Downsample_Filter
      */
     bool supports4x4DownsampleFilter() const { return f4X4DownsampleFilterSupport; }
+
+    /**
+     * Does this instance support dual-source blending? Required for proper
+     * blending with partial coverage with certain blend modes (dst coeff is
+     * not 1, ISA, or ISC)
+     */
+    bool supportsDualSourceBlending() const { 
+        return fDualSourceBlendingSupport; 
+    }
 
     /**
      * Gets the minimum width of a render target. If a texture/rt is created
@@ -385,6 +395,7 @@ protected:
     bool fAALineSupport;
     bool fFSAASupport;
     bool f4X4DownsampleFilterSupport; // supports GrSamplerState::k4x4Downsample_Filter
+    bool fDualSourceBlendingSupport;
 
     // set by subclass to true if index and vertex buffers can be locked, false
     // otherwise.
@@ -427,11 +438,6 @@ protected:
                                        const void* srcData,
                                        size_t rowBytes) = 0;
     virtual GrResource* onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc) = 0;
-    virtual GrRenderTarget* onCreatePlatformRenderTarget(
-                                                intptr_t platformRenderTarget,
-                                                int stencilBits,
-                                                bool isMultisampled,
-                                                int width, int height) = 0;
     virtual GrRenderTarget* onCreateRenderTargetFrom3DApiState() = 0;
     virtual GrVertexBuffer* onCreateVertexBuffer(uint32_t size,
                                                  bool dynamic) = 0;
@@ -513,8 +519,7 @@ private:
     void prepareIndexPool();
 
     // determines the path renderer used to draw a clip path element.
-    GrPathRenderer* getClipPathRenderer(GrPathIter* path,
-                                        GrPathFill fill);
+    GrPathRenderer* getClipPathRenderer(const SkPath& path, GrPathFill fill);
 
     void handleDirtyContext() {
         if (fContextIsDirty) {

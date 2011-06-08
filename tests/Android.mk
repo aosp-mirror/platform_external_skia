@@ -26,6 +26,7 @@ LOCAL_SRC_FILES:= \
   ParsePathTest.cpp \
   PathMeasureTest.cpp \
   PathTest.cpp \
+  Reader32Test.cpp \
   RefDictTest.cpp \
   RegionTest.cpp \
   Sk64Test.cpp \
@@ -36,6 +37,7 @@ LOCAL_SRC_FILES:= \
   Test.cpp \
   TestSize.cpp \
   UtilsTest.cpp \
+  Writer32Test.cpp \
   XfermodeTest.cpp
 
 # The name of the file with a main function must

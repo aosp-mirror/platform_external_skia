@@ -32,7 +32,6 @@ class GrTexture;
 class GrClipIterator;
 class GrVertexBuffer;
 class GrIndexBuffer;
-class GrEffect;
 
 class GrDrawTarget : public GrRefCnt {
 public:
@@ -51,8 +50,19 @@ public:
      * or not.
      */
     enum {
-        kNumStages = 2,
+        kNumStages = 3,
         kMaxTexCoords = kNumStages
+    };
+
+
+    /**
+     * The absolute maximum number of edges that may be specified for
+     * a single draw call when performing edge antialiasing.  This is used for
+     * the size of several static buffers, so implementations of getMaxEdges()
+     * (below) should clamp to this value.
+     */
+    enum {
+        kMaxEdges = 32
     };
 
     /**
@@ -79,9 +89,6 @@ public:
         kNoColorWrites_StateBit = 0x08, //<! If set it disables writing colors.
                                         //   Useful while performing stencil
                                         //   ops.
-        kEdgeAA_StateBit        = 0x10, //<! Perform edge anti-aliasing.
-                                        //   Requires the edges to be passed in
-                                        //   setEdgeAAData().
 
         // subclass may use additional bits internally
         kDummyStateBit,
@@ -129,6 +136,20 @@ public:
         fCurrDrawState.fStencilSettings.setDisabled();
     }
 
+    class Edge {
+      public:
+        Edge() {}
+        Edge(float x, float y, float z) : fX(x), fY(y), fZ(z) {}
+        GrPoint intersect(const Edge& other) {
+            return GrPoint::Make(
+                (fY * other.fZ - other.fY * fZ) /
+                  (fX * other.fY - other.fX * fY),
+                (fX * other.fZ - other.fX * fZ) /
+                  (other.fX * fY - fX * other.fY));
+        }
+        float fX, fY, fZ;
+    };
+
 protected:
 
     struct DrState {
@@ -137,19 +158,26 @@ protected:
             // all DrState members should default to something
             // valid by the memset
             memset(this, 0, sizeof(DrState));
-            // This is an exception to our memset, since it will
-            // result in no change.
+            
+            // memset exceptions
             fColorFilterXfermode = SkXfermode::kDstIn_Mode;
+            fFirstCoverageStage = kNumStages;
+
+            // pedantic assertion that our ptrs will
+            // be NULL (0 ptr is mem addr 0)
             GrAssert((intptr_t)(void*)NULL == 0LL);
+
+            // default stencil setting should be disabled
             GrAssert(fStencilSettings.isDisabled());
+            fFirstCoverageStage = kNumStages;
         }
         uint32_t                fFlagBits;
         GrBlendCoeff            fSrcBlend;
         GrBlendCoeff            fDstBlend;
         GrColor                 fBlendConstant;
         GrTexture*              fTextures[kNumStages];
-        GrEffect*               fEffects[kNumStages];
         GrSamplerState          fSamplerStates[kNumStages];
+        int                     fFirstCoverageStage;
         GrRenderTarget*         fRenderTarget;
         GrColor                 fColor;
         DrawFace                fDrawFace;
@@ -158,7 +186,8 @@ protected:
 
         GrStencilSettings       fStencilSettings;
         GrMatrix                fViewMatrix;
-        float                   fEdgeAAEdges[18];
+        Edge                    fEdgeAAEdges[kMaxEdges];
+        int                     fEdgeAANumEdges;
         bool operator ==(const DrState& s) const {
             return 0 == memcmp(this, &s, sizeof(DrState));
         }
@@ -242,6 +271,18 @@ public:
     void preConcatSamplerMatrix(int stage, const GrMatrix& matrix)  {
         GrAssert(stage >= 0 && stage < kNumStages);
         fCurrDrawState.fSamplerStates[stage].preConcatMatrix(matrix);
+    }
+
+    /**
+     * Shortcut for preConcatSamplerMatrix on all stages in mask with same 
+     * matrix
+     */
+    void preConcatSamplerMatrices(int stageMask, const GrMatrix& matrix) {
+        for (int i = 0; i < kNumStages; ++i) {
+            if ((1 << i) & stageMask) {
+                this->preConcatSamplerMatrix(i, matrix);
+            }
+        }
     }
 
     /**
@@ -343,6 +384,26 @@ public:
     void setDrawFace(DrawFace face) { fCurrDrawState.fDrawFace = face; }
 
     /**
+     * A common pattern is to compute a color with the initial stages and then
+     * modulate that color by a coverage value in later stage(s) (AA, mask-
+     * filters, glyph mask, etc). Color-filters, xfermodes, etc should be 
+     * computed based on the pre-coverage-modulated color. The division of 
+     * stages between color-computing and coverage-computing is specified by 
+     * this method. Initially this is kNumStages (all stages are color-
+     * computing).
+     */
+    void setFirstCoverageStage(int firstCoverageStage) { 
+        fCurrDrawState.fFirstCoverageStage = firstCoverageStage; 
+    }
+
+    /**
+     * Gets the index of the first coverage-computing stage.
+     */
+    int getFirstCoverageStage() const { 
+        return fCurrDrawState.fFirstCoverageStage; 
+    }
+
+    /**
      * Gets whether the target is drawing clockwise, counterclockwise,
      * or both faces.
      * @return the current draw face(s).
@@ -392,7 +453,7 @@ public:
      * @param srcCoef coeffecient applied to the src color.
      * @param dstCoef coeffecient applied to the dst color.
      */
-    void setBlendFunc(GrBlendCoeff srcCoef, GrBlendCoeff dstCoef);
+    void setBlendFunc(GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff);
 
     /**
      * Sets the blending function constant referenced by the following blending
@@ -498,7 +559,7 @@ public:
      * @param edges       3 * 6 float values, representing the edge
      *                    equations in Ax + By + C form
      */
-     void setEdgeAAData(const float edges[18]);
+     void setEdgeAAData(const Edge* edges, int numEdges);
 
 private:
     static const int TEX_COORD_BIT_CNT = kNumStages*kMaxTexCoords;
@@ -765,6 +826,15 @@ public:
      * otherwise just the rect.
      */
     virtual void clear(const GrIRect* rect, GrColor color) = 0;
+
+    /**
+     * Returns the maximum number of edges that may be specified in a single
+     * draw call when performing edge antialiasing.  This is usually limited
+     * by the number of fragment uniforms which may be uploaded.  Must be a
+     * minimum of six, since a triangle's vertices each belong to two boundary
+     * edges which may be distinct.
+     */
+    virtual int getMaxEdges() const { return 6; }
 
     ///////////////////////////////////////////////////////////////////////////
 

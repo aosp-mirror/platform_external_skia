@@ -69,6 +69,12 @@
 /*      GL_DST_ALPHA */
 /*      GL_ONE_MINUS_DST_ALPHA */
 
+/* ExtendedBlendFactors */
+#define GR_GL_SRC1_COLOR                     0x88F9
+#define GR_GL_ONE_MINUS_SRC1_COLOR           0x88FA
+/*      GL_SRC1_ALPHA */
+#define GR_GL_ONE_MINUS_SRC1_ALPHA           0x88FB
+
 /* BlendEquationSeparate */
 #define GR_GL_FUNC_ADD                       0x8006
 #define GR_GL_BLEND_EQUATION                 0x8009
@@ -318,6 +324,8 @@
 #define GR_GL_ACTIVE_ATTRIBUTE_MAX_LENGTH      0x8B8A
 #define GR_GL_SHADING_LANGUAGE_VERSION         0x8B8C
 #define GR_GL_CURRENT_PROGRAM                  0x8B8D
+#define GR_GL_MAX_FRAGMENT_UNIFORM_COMPONENTS  0x8B49
+#define GR_GL_MAX_VERTEX_UNIFORM_COMPONENTS    0x8B4A
 
 /* StencilFunction */
 #define GR_GL_NEVER                          0x0200

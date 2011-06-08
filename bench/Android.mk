@@ -6,6 +6,9 @@ LOCAL_SRC_FILES := \
 	BitmapBench.cpp \
   DecodeBench.cpp \
   FPSBench.cpp \
+  GradientBench.cpp \
+  MatrixBench.cpp \
+  PathBench.cpp \
 	RectBench.cpp \
 	RepeatTileBench.cpp \
 	TextBench.cpp \
@@ -17,7 +20,8 @@ LOCAL_SRC_FILES += \
     ../src/utils/SkNWayCanvas.cpp \
     ../src/utils/SkParse.cpp
 
-LOCAL_SHARED_LIBRARIES := libcutils libskia
+LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2
+LOCAL_STATIC_LIBRARIES := libskiagpu
 LOCAL_C_INCLUDES := \
     external/skia/include/config \
     external/skia/include/core \

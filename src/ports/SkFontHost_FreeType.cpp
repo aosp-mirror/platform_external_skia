@@ -72,6 +72,14 @@
 
 using namespace skia_advanced_typeface_metrics_utils;
 
+// SK_FREETYPE_LCD_LERP should be 0...256
+//   0 means no color reduction (e.g. just as returned from FreeType)
+//   256 means 100% color reduction (e.g. gray)
+//
+#ifndef SK_FREETYPE_LCD_LERP
+    #define SK_FREETYPE_LCD_LERP    96
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 
 struct SkFaceRec;
@@ -906,7 +914,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
     }
 
     switch ( fFace->glyph->format ) {
-      case FT_GLYPH_FORMAT_OUTLINE:
+      case FT_GLYPH_FORMAT_OUTLINE: {
         FT_BBox bbox;
 
         if (fRec.fFlags & kEmbolden_Flag) {
@@ -934,6 +942,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
         glyph->fTop     = -SkToS16(bbox.yMax >> 6);
         glyph->fLeft    = SkToS16(bbox.xMin >> 6);
         break;
+      }
 
       case FT_GLYPH_FORMAT_BITMAP:
         if (fRec.fFlags & kEmbolden_Flag) {
@@ -979,6 +988,22 @@ extern void CopyFreetypeBitmapToVerticalLCDMask(const SkGlyph& dest, const FT_Bi
 using namespace skia_freetype_support;
 #endif
 
+static int lerp(int start, int end) {
+    SkASSERT((unsigned)SK_FREETYPE_LCD_LERP <= 256);
+    return start + ((end - start) * (SK_FREETYPE_LCD_LERP) >> 8);
+}
+
+static uint16_t packTriple(unsigned r, unsigned g, unsigned b) {
+    if (SK_FREETYPE_LCD_LERP) {
+        // want (a+b+c)/3, but we approx to avoid the divide
+        unsigned ave = (5 * (r + g + b) + b) >> 4;
+        r = lerp(r, ave);
+        g = lerp(g, ave);
+        b = lerp(b, ave);
+    }
+    return SkPackRGB16(r >> 3, g >> 2, b >> 3);
+}
+
 static void copyFT2LCD16(const SkGlyph& glyph, const FT_Bitmap& bitmap) {
     SkASSERT(glyph.fWidth * 3 == bitmap.width - 6);
     SkASSERT(glyph.fHeight == bitmap.rows);
@@ -991,7 +1016,7 @@ static void copyFT2LCD16(const SkGlyph& glyph, const FT_Bitmap& bitmap) {
     for (int y = 0; y < glyph.fHeight; y++) {
         const uint8_t* triple = src;
         for (int x = 0; x < width; x++) {
-            dst[x] = SkPackRGB16(triple[0] >> 3, triple[1] >> 2, triple[2] >> 3);
+            dst[x] = packTriple(triple[0], triple[1], triple[2]);
             triple += 3;
         }
         src += bitmap.pitch;

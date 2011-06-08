@@ -305,8 +305,8 @@ twoChar:
             } while (true);
             signed char topPrecedence = gPrecedence[compare];
             SkASSERT(topPrecedence != -1);
-            if (topPrecedence > precedence || topPrecedence == precedence && 
-                    gOpAttributes[op].fLeftType == kNoType) {
+            if (topPrecedence > precedence || (topPrecedence == precedence && 
+                    gOpAttributes[op].fLeftType == kNoType)) {
                 break;
             }
             if (processOp() == false)
@@ -1207,7 +1207,7 @@ noMatch:
             } break;
         case kElse:
 flipSuppress:
-            if (fSuppressStack.top().fElse == true)
+            if (fSuppressStack.top().fElse)
                 fSuppressStack.pop();
             fSuppressStack.top().fElse = true;
             fSuppressStack.top().fSuppress ^= true;

@@ -53,7 +53,7 @@ protected:
     int         fWidth, fLeft, fSuperLeft;
 
     SkDEBUGCODE(int fCurrX;)
-    SkDEBUGCODE(int fCurrY;)
+    int fCurrY;
 };
 
 BaseSuperBlitter::BaseSuperBlitter(SkBlitter* realBlitter, const SkIRect& ir,
@@ -69,7 +69,8 @@ BaseSuperBlitter::BaseSuperBlitter(SkBlitter* realBlitter, const SkIRect& ir,
     fSuperLeft = left << SHIFT;
     fWidth = right - left;
     fCurrIY = -1;
-    SkDEBUGCODE(fCurrX = -1; fCurrY = -1;)
+    fCurrY = -1;
+    SkDEBUGCODE(fCurrX = -1;)
 }
 
 class SuperBlitter : public BaseSuperBlitter {
@@ -89,6 +90,7 @@ public:
 
 private:
     SkAlphaRuns fRuns;
+    int         fOffsetX;
 };
 
 SuperBlitter::SuperBlitter(SkBlitter* realBlitter, const SkIRect& ir,
@@ -100,6 +102,8 @@ SuperBlitter::SuperBlitter(SkBlitter* realBlitter, const SkIRect& ir,
     fRuns.fRuns = (int16_t*)sk_malloc_throw((width + 1 + (width + 2)/2) * sizeof(int16_t));
     fRuns.fAlpha = (uint8_t*)(fRuns.fRuns + width + 1);
     fRuns.reset(width);
+
+    fOffsetX = 0;
 }
 
 void SuperBlitter::flush() {
@@ -108,6 +112,7 @@ void SuperBlitter::flush() {
         //  SkDEBUGCODE(fRuns.dump();)
             fRealBlitter->blitAntiH(fLeft, fCurrIY, fRuns.fAlpha, fRuns.fRuns);
             fRuns.reset(fWidth);
+            fOffsetX = 0;
         }
         fCurrIY = -1;
         SkDEBUGCODE(fCurrX = -1;)
@@ -134,11 +139,14 @@ void SuperBlitter::blitH(int x, int y, int width) {
     }
 
 #ifdef SK_DEBUG
-    SkASSERT(y >= fCurrY);
     SkASSERT(y != fCurrY || x >= fCurrX);
-    fCurrY = y;
 #endif
-
+    SkASSERT(y >= fCurrY);
+    if (fCurrY != y) {
+        fOffsetX = 0;
+        fCurrY = y;
+    }
+    
     if (iy != fCurrIY) {  // new scanline
         this->flush();
         fCurrIY = iy;
@@ -148,36 +156,29 @@ void SuperBlitter::blitH(int x, int y, int width) {
     // hit 256 as a summed max, but 255.
 //  int maxValue = (1 << (8 - SHIFT)) - (((y & MASK) + 1) >> SHIFT);
 
-#if 0
-    SkAntiRun<SHIFT>    arun;
-    arun.set(x, x + width);
-    fRuns.add(x >> SHIFT, arun.getStartAlpha(), arun.getMiddleCount(),
-              arun.getStopAlpha(), maxValue);
-#else
-    {
-        int start = x;
-        int stop = x + width;
+    int start = x;
+    int stop = x + width;
 
-        SkASSERT(start >= 0 && stop > start);
-        int fb = start & SUPER_Mask;
-        int fe = stop & SUPER_Mask;
-        int n = (stop >> SHIFT) - (start >> SHIFT) - 1;
+    SkASSERT(start >= 0 && stop > start);
+    int fb = start & SUPER_Mask;
+    int fe = stop & SUPER_Mask;
+    int n = (stop >> SHIFT) - (start >> SHIFT) - 1;
 
-        if (n < 0) {
-            fb = fe - fb;
-            n = 0;
-            fe = 0;
+    if (n < 0) {
+        fb = fe - fb;
+        n = 0;
+        fe = 0;
+    } else {
+        if (fb == 0) {
+            n += 1;
         } else {
-            if (fb == 0) {
-                n += 1;
-            } else {
-                fb = (1 << SHIFT) - fb;
-            }
+            fb = (1 << SHIFT) - fb;
         }
-        fRuns.add(x >> SHIFT, coverage_to_alpha(fb), n, coverage_to_alpha(fe),
-                  (1 << (8 - SHIFT)) - (((y & MASK) + 1) >> SHIFT));
     }
-#endif
+
+    fOffsetX = fRuns.add(x >> SHIFT, coverage_to_alpha(fb), n, coverage_to_alpha(fe),
+                         (1 << (8 - SHIFT)) - (((y & MASK) + 1) >> SHIFT),
+                         fOffsetX);
 
 #ifdef SK_DEBUG
     fRuns.assertValid(y & MASK, (1 << (8 - SHIFT)));

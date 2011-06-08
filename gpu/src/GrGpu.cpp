@@ -142,17 +142,6 @@ GrTexture* GrGpu::createTexture(const GrTextureDesc& desc,
     return this->onCreateTexture(desc, srcData, rowBytes);
 }
 
-GrRenderTarget* GrGpu::createPlatformRenderTarget(intptr_t platformRenderTarget,
-                                                  int stencilBits,
-                                                  bool isMultisampled,
-                                                  int width, int height) {
-    this->handleDirtyContext();
-    return this->onCreatePlatformRenderTarget(platformRenderTarget,
-                                                  stencilBits,
-                                                  isMultisampled,
-                                                  width, height);
-}
-
 GrRenderTarget* GrGpu::createRenderTargetFrom3DApiState() {
     this->handleDirtyContext();
     return this->onCreateRenderTargetFrom3DApiState();
@@ -467,17 +456,16 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                                                // resolve in/out status.
 
                 GrPathRenderer* pr = NULL;
-                GrPath::Iter pathIter;
+                const GrPath* clipPath = NULL;
                 if (kRect_ClipType == clip.getElementType(c)) {
                     canRenderDirectToStencil = true;
                     fill = kEvenOdd_PathFill;
                 } else {
                     fill = clip.getPathFill(c);
-                    const GrPath& path = clip.getPath(c);
-                    pathIter.reset(path);
-                    pr = this->getClipPathRenderer(&pathIter, NonInvertedFill(fill));
+                    clipPath = &clip.getPath(c);
+                    pr = this->getClipPathRenderer(*clipPath, NonInvertedFill(fill));
                     canRenderDirectToStencil =
-                        !pr->requiresStencilPass(this, &pathIter,
+                        !pr->requiresStencilPass(this, *clipPath,
                                                  NonInvertedFill(fill));
                 }
 
@@ -513,12 +501,10 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                     } else {
                         if (canRenderDirectToStencil) {
                             this->setStencil(gDrawToStencil);
-                            pr->drawPath(this, 0,
-                                         &pathIter,
-                                         NonInvertedFill(fill),
+                            pr->drawPath(this, 0, *clipPath, NonInvertedFill(fill),
                                          NULL);
                         } else {
-                            pr->drawPathToStencil(this, &pathIter,
+                            pr->drawPathToStencil(this, *clipPath,
                                                   NonInvertedFill(fill),
                                                   NULL);
                         }
@@ -537,7 +523,7 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                         } else {
                             SET_RANDOM_COLOR
                             GrAssert(!IsFillInverted(fill));
-                            pr->drawPath(this, 0, &pathIter, fill, NULL);
+                            pr->drawPath(this, 0, *clipPath, fill, NULL);
                         }
                     } else {
                         SET_RANDOM_COLOR
@@ -561,7 +547,7 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
     return true;
 }
 
-GrPathRenderer* GrGpu::getClipPathRenderer(GrPathIter* path,
+GrPathRenderer* GrGpu::getClipPathRenderer(const GrPath& path,
                                            GrPathFill fill) {
     if (NULL != fClientPathRenderer &&
         fClientPathRenderer->canDrawPath(this, path, fill)) {
