@@ -37,11 +37,11 @@ SkPaint* SkLayerDrawLooper::addLayer(const LayerInfo& info) {
     return &rec->fPaint;
 }
 
-void SkLayerDrawLooper::addLayer(SkScalar dx, SkScalar dy) {
+SkPaint* SkLayerDrawLooper::addLayer(SkScalar dx, SkScalar dy) {
     LayerInfo info;
 
     info.fOffset.set(dx, dy);
-    (void)this->addLayer(info);
+    return this->addLayer(info);
 }
 
 void SkLayerDrawLooper::init(SkCanvas* canvas) {

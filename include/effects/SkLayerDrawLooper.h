@@ -74,12 +74,12 @@ public:
     /**
      *  This layer will draw with the original paint, ad the specified offset
      */
-    void addLayer(SkScalar dx, SkScalar dy);
+    SkPaint* addLayer(SkScalar dx, SkScalar dy);
     
     /**
      *  This layer will with the original paint and no offset.
      */
-    void addLayer() { this->addLayer(0, 0); }
+    SkPaint* addLayer() { return this->addLayer(0, 0); }
     
     // overrides from SkDrawLooper
     virtual void init(SkCanvas*);
