@@ -126,7 +126,7 @@ void GrGLSetDefaultGLInterface() {
     NULL,  // glResolveMultisampleFramebuffer
     glMapBufferOES,
     glUnmapBufferOES,
-
+    NULL,
     GrGLInterface::kStaticInitEndGuard
   };
   static bool host_StubGL_initialized = false;
