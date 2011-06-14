@@ -277,7 +277,7 @@ LOCAL_SRC_FILES:= \
   gpu/src/GrContext.cpp \
   gpu/src/GrCreatePathRenderer_none.cpp \
   gpu/src/GrDrawTarget.cpp \
-  gpu/src/GrGLDefaultInterface_none.cpp \
+  gpu/src/android/GrGLDefaultInterface_android.cpp \
   gpu/src/GrGLIndexBuffer.cpp	\
   gpu/src/GrGLInterface.cpp \
   gpu/src/GrGLProgram.cpp \
@@ -321,7 +321,8 @@ LOCAL_C_INCLUDES += \
   $(LOCAL_PATH)/gpu/src \
   $(LOCAL_PATH)/include/core \
   $(LOCAL_PATH)/include/gpu \
-  $(LOCAL_PATH)/src/core
+  $(LOCAL_PATH)/src/core \
+  frameworks/base/opengl/include/GLES2
 
 LOCAL_LDLIBS += -lpthread
 
