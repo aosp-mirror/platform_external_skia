@@ -3,17 +3,20 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	BitmapBench.cpp \
+  BenchGpuTimer_none.cpp \
+  BenchSysTimer_posix.cpp \
+  BenchTimer.cpp \
+  BitmapBench.cpp \
   DecodeBench.cpp \
   FPSBench.cpp \
   GradientBench.cpp \
   MatrixBench.cpp \
   PathBench.cpp \
-	RectBench.cpp \
-	RepeatTileBench.cpp \
-	TextBench.cpp \
-	SkBenchmark.cpp \
-	benchmain.cpp
+  RectBench.cpp \
+  RepeatTileBench.cpp \
+  TextBench.cpp \
+  SkBenchmark.cpp \
+  benchmain.cpp
 
 # additional optional class for this tool
 LOCAL_SRC_FILES += \
