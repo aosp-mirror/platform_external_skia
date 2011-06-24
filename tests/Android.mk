@@ -24,6 +24,7 @@ LOCAL_SRC_FILES:= \
   PackBitsTest.cpp \
   PaintTest.cpp \
   ParsePathTest.cpp \
+  PathCoverageTest.cpp \
   PathMeasureTest.cpp \
   PathTest.cpp \
   Reader32Test.cpp \

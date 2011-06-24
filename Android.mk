@@ -2,7 +2,7 @@ BASE_PATH := $(call my-dir)
 LOCAL_PATH:= $(call my-dir)
 
 #############################################################
-#   build the skia+fretype+png+jpeg+zlib+gif library
+#   build the skia+fretype+png+jpeg+zlib+gif+webp library
 #
 
 include $(CLEAR_VARS)
@@ -73,9 +73,9 @@ LOCAL_SRC_FILES:= \
 	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libjpeg.cpp \
 	src/images/SkImageDecoder_libpng.cpp \
+	src/images/SkImageDecoder_libwebp.cpp \
 	src/images/SkImageDecoder_libico.cpp \
 	src/images/SkImageDecoder_wbmp.cpp \
-	src/images/SkImageDecoder_libwebp.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageRef.cpp \
 	src/images/SkImageRef_GlobalPool.cpp \
@@ -218,7 +218,7 @@ LOCAL_SRC_FILES += \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
-  libemoji \
+	libemoji \
 	libjpeg \
 	libutils \
 	libz
@@ -227,7 +227,8 @@ LOCAL_STATIC_LIBRARIES := \
 	libft2 \
 	libpng \
 	libgif \
-	libwebp-decode
+	libwebp-decode \
+	libwebp-encode
 
 LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/src/core \

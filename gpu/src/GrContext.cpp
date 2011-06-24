@@ -57,7 +57,7 @@ GrContext* GrContext::Create(GrEngine engine,
 }
 
 GrContext* GrContext::CreateGLShaderContext() {
-    return GrContext::Create(kOpenGL_Shaders_GrEngine, NULL);
+    return GrContext::Create(kOpenGL_Shaders_GrEngine, 0);
 }
 
 GrContext::~GrContext() {
@@ -74,6 +74,11 @@ GrContext::~GrContext() {
 }
 
 void GrContext::contextLost() {
+    contextDestroyed();
+    this->setupDrawBuffer();
+}
+
+void GrContext::contextDestroyed() {
     // abandon first to so destructors
     // don't try to free the resources in the API.
     fGpu->abandonResources();
@@ -93,8 +98,6 @@ void GrContext::contextLost() {
     fTextureCache->removeAll();
     fFontCache->freeAll();
     fGpu->markContextDirty();
-
-    this->setupDrawBuffer();
 }
 
 void GrContext::resetContext() {
@@ -1192,6 +1195,9 @@ void GrContext::drawPath(const GrPaint& paint, const GrPath& path,
         GrRect pathBounds = path.getBounds();
         GrIRect pathIBounds;
         if (!pathBounds.isEmpty()) {
+            if (NULL != translate) {
+                pathBounds.offset(*translate);
+            }
             target->getViewMatrix().mapRect(&pathBounds, pathBounds);
             pathBounds.roundOut(&pathIBounds);
             if (!bound.intersect(pathIBounds)) {
@@ -1242,8 +1248,10 @@ void GrContext::flushText() {
 
 void GrContext::flushDrawBuffer() {
 #if BATCH_RECT_TO_RECT || DEFER_TEXT_RENDERING
-    fDrawBuffer->playback(fGpu);
-    fDrawBuffer->reset();
+    if (fDrawBuffer) {
+        fDrawBuffer->playback(fGpu);
+        fDrawBuffer->reset();
+    }
 #endif
 }
 
@@ -1302,6 +1310,7 @@ void GrContext::writePixels(int left, int top, int width, int height,
     matrix.setTranslate(GrIntToScalar(left), GrIntToScalar(top));
     fGpu->setViewMatrix(matrix);
 
+    fGpu->setColorFilter(0, SkXfermode::kDst_Mode);
     fGpu->disableState(GrDrawTarget::kClip_StateBit);
     fGpu->setAlpha(0xFF);
     fGpu->setBlendFunc(kOne_BlendCoeff,
