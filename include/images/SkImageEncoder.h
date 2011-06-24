@@ -10,7 +10,8 @@ class SkImageEncoder {
 public:
     enum Type {
         kJPEG_Type,
-        kPNG_Type
+        kPNG_Type,
+        kWEBP_Type
     };
     static SkImageEncoder* Create(Type);
 
