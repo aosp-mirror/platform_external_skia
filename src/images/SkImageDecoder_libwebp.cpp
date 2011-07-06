@@ -77,66 +77,34 @@ static uint32_t getint32l(unsigned char *in) {
     return result;
 }
 
-// Parse headers of RIFF container, and check for valid Webp (VP8) content
-// return VP8 chunk content size on success, 0 on error.
-static const size_t WEBP_HEADER_SIZE = 20;
-static const size_t VP8_HEADER_SIZE = 10;
+static const size_t WEBP_VP8_HEADER_SIZE = 30;
+static const size_t WEBP_IDECODE_BUFFER_SZ = (1 << 16);
 
-static uint32_t webp_parse_header(SkStream* stream) {
-    unsigned char buffer[WEBP_HEADER_SIZE];
-    size_t len;
-    uint32_t totalSize;
-    uint32_t contentSize;
-
-    // RIFF container for WEBP image should always have:
-    // 0  "RIFF" 4-byte tag
-    // 4  size of image data (including metadata) starting at offset 8
-    // 8  "WEBP" the form-type signature
-    // 12 "VP8 " 4-bytes tags, describing the raw video format used
-    // 16 size of the raw VP8 image data, starting at offset 20
-    // 20 the VP8 bytes
-    // First check for RIFF top chunk, consuming only 8 bytes
-    len = stream->read(buffer, 8);
-    if (len != 8) {
-        return 0; // can't read enough
-    }
-    // Inline magic matching instead of memcmp()
-    if (buffer[0] != 'R' || buffer[1] != 'I' || buffer[2] != 'F' || buffer[3] != 'F') {
-        return 0;
+// Parse headers of RIFF container, and check for valid Webp (VP8) content.
+static bool webp_parse_header(SkStream* stream, int* width, int* height) {
+    unsigned char buffer[WEBP_VP8_HEADER_SIZE];
+    const size_t len = stream->read(buffer, WEBP_VP8_HEADER_SIZE);
+    if (len != WEBP_VP8_HEADER_SIZE) {
+        return false; // can't read enough
     }
 
-    totalSize = getint32l(buffer + 4);
-    if (totalSize < (int) (WEBP_HEADER_SIZE - 8)) {
-        return 0;
+    if (WebPGetInfo(buffer, WEBP_VP8_HEADER_SIZE, width, height) == 0) {
+        return false; // Invalid WebP file.
     }
 
-    // If RIFF header found, check for RIFF content to start with WEBP/VP8 chunk
-    len = stream->read(buffer + 8, WEBP_HEADER_SIZE - 8);
-    if (len != (int) (WEBP_HEADER_SIZE - 8)) {
-        return 0;
+    // sanity check for image size that's about to be decoded.
+    {
+        Sk64 size;
+        size.setMul(*width, *height);
+        if (size.isNeg() || !size.is32()) {
+            return false;
+        }
+        // now check that if we are 4-bytes per pixel, we also don't overflow
+        if (size.get32() > (0x7FFFFFFF >> 2)) {
+            return false;
+        }
     }
-    if (buffer[8] != 'W' || buffer[9] != 'E' || buffer[10] != 'B' || buffer[11] != 'P') {
-        return 0;
-    }
-    if (buffer[12] != 'V' || buffer[13] != 'P' || buffer[14] != '8' || buffer[15] != ' ') {
-        return 0;
-    }
-
-    // Magic matches, extract content size
-    contentSize = getint32l(buffer + 16);
-
-    // Check consistency of reported sizes
-    if (contentSize <= 0 || contentSize > 0x7fffffff) {
-        return 0;
-    }
-    if (totalSize < 12 + contentSize) {
-        return 0;
-    }
-    if (contentSize & 1) {
-        return 0;
-    }
-
-    return contentSize;
+    return true;
 }
 
 class SkWEBPImageDecoder: public SkImageDecoder {
@@ -147,6 +115,9 @@ public:
 
 protected:
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
+
+private:
+    bool setDecodeConfig(SkBitmap* decodedBitmap, int width, int height);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -446,70 +417,84 @@ static int block_setup(VP8Io* io) {
 static void block_teardown(const VP8Io* io) {
 }
 
-bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap, Mode mode) {
-#ifdef TIME_DECODE
-    AutoTimeMillis atm("WEBP Decode");
-#endif
+static bool webp_init_custom_io(WebPIDecoder* idec, SkBitmap* decodedBitmap) {
+    if (idec == NULL) {
+        return false;
+    }
 
-    // libwebp doesn't provide a way to override all I/O with a custom
-    // implementation. For initial implementation, let's go the "dirty"
-    // way, by loading image file content in memory before decoding it
-    int origWidth, origHeight;
-    size_t len;
+    WEBPImage pSrc;
+    // Custom Put callback need reference to target image.
+    pSrc.image = decodedBitmap;
 
+    if (!WebPISetIOHooks(idec, block_put, block_setup, block_teardown,
+                         (void*)&pSrc)) {
+        return false;
+    }
+
+    return true;
+}
+
+// Incremental WebP image decoding. Reads input buffer of 64K size iteratively
+// and decodes this block to appropriate color-space as per config object.
+static bool webp_idecode(SkStream* stream, SkBitmap* decodedBitmap) {
+    SkAutoLockPixels alp(*decodedBitmap);
+
+    stream->rewind();
+    const uint32_t contentSize = stream->getLength();
+
+    WebPIDecoder* idec = WebPINew(MODE_YUV);
+    if (idec == NULL) {
+        return false;
+    }
+
+    if (!webp_init_custom_io(idec, decodedBitmap)) {
+        WebPIDelete(idec);
+        return false;
+    }
+
+    uint32_t read_buffer_size = contentSize;
+    if (read_buffer_size > WEBP_IDECODE_BUFFER_SZ) {
+        read_buffer_size = WEBP_IDECODE_BUFFER_SZ;
+    }
+    SkAutoMalloc srcStorage(read_buffer_size);
+    unsigned char* input = (uint8_t*)srcStorage.get();
+    if (input == NULL) {
+        WebPIDelete(idec);
+        return false;
+    }
+
+    uint32_t bytes_remaining = contentSize;
+    while (bytes_remaining > 0) {
+        const uint32_t bytes_to_read =
+            (bytes_remaining > WEBP_IDECODE_BUFFER_SZ) ?
+                WEBP_IDECODE_BUFFER_SZ : bytes_remaining;
+
+        const size_t bytes_read = stream->read(input, bytes_to_read);
+        if (bytes_read == 0) {
+            break;
+        }
+
+        VP8StatusCode status = WebPIAppend(idec, input, bytes_read);
+        if (status == VP8_STATUS_OK || status == VP8_STATUS_SUSPENDED) {
+            bytes_remaining -= bytes_read;
+        } else {
+            break;
+        }
+    }
+    srcStorage.free();
+    WebPIDelete(idec);
+
+    if (bytes_remaining > 0) {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+bool SkWEBPImageDecoder::setDecodeConfig(SkBitmap* decodedBitmap,
+                                         int origWidth, int origHeight) {
     bool hasAlpha = false;
-
-    uint32_t contentSize;
-    unsigned char buffer[VP8_HEADER_SIZE];
-    unsigned char *input;
-
-    // Check header
-    contentSize = webp_parse_header(stream);
-    if (contentSize <= VP8_HEADER_SIZE) {
-        return false;
-    }
-
-    //* Extract information
-    len = stream->read(buffer, VP8_HEADER_SIZE);
-    if (len != VP8_HEADER_SIZE) {
-        return false;
-    }
-
-    // check signature
-    if (buffer[3] != 0x9d || buffer[4] != 0x01 || buffer[5] != 0x2a) {
-        return false;
-    }
-
-    const uint32_t bits = buffer[0] | (buffer[1] << 8) | (buffer[2] << 16);
-    const int key_frame = !(bits & 1);
-
-    origWidth = ((buffer[7] << 8) | buffer[6]) & 0x3fff;
-    origHeight = ((buffer[9] << 8) | buffer[8]) & 0x3fff;
-
-    if (origWidth <= 0 || origHeight <= 0) {
-        return false;
-    }
-
-    if (!key_frame) {
-        // Not a keyframe
-        return false;
-    }
-
-    if (((bits >> 1) & 7) > 3) {
-        // unknown profile
-        return false;
-    }
-    if (!((bits >> 4) & 1)) {
-        // first frame is invisible
-        return false;
-    }
-    if (((bits >> 5)) >= contentSize) {
-        // partition_length inconsistent size information
-        return false;
-    }
-
-    SkBitmap::Config config;
-    config = this->getPrefConfig(k32Bit_SrcDepth, hasAlpha);
+    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, hasAlpha);
 
     // only accept prefConfig if it makes sense for us. YUV converter
     // supports output in RGB565, RGBA4444 and RGBA8888 formats.
@@ -518,121 +503,55 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap, Mod
             config = SkBitmap::kARGB_8888_Config;
         }
     } else {
-        if (config != SkBitmap::kRGB_565_Config && config != SkBitmap::kARGB_4444_Config) {
+        if (config != SkBitmap::kRGB_565_Config &&
+            config != SkBitmap::kARGB_4444_Config) {
             config = SkBitmap::kARGB_8888_Config;
         }
     }
 
-    // sanity check for size
-    {
-        Sk64 size;
-        size.setMul(origWidth, origHeight);
-        if (size.isNeg() || !size.is32()) {
-            return false;
-        }
-        // now check that if we are 4-bytes per pixel, we also don't overflow
-        if (size.get32() > (0x7FFFFFFF >> 2)) {
-            return false;
-        }
-    }
 
     if (!this->chooseFromOneChoice(config, origWidth, origHeight)) {
         return false;
     }
 
-    // TODO: may add support for sampler, to load previeww/thumbnails faster
-    // Note that, as documented, an image decoder may decide to ignore sample hint from requested
-    // config, so this implementation is still valid and safe even without handling it at all. Several
-    // other Skia image decoders just ignore this optional feature as well.
-#if 0
-    SkScaledBitmapSampler sampler(origWidth, origHeight, getSampleSize());
-    decodedBitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight(), 0);
-#else
     decodedBitmap->setConfig(config, origWidth, origHeight, 0);
+
+    // Current WEBP specification has no support for alpha layer.
+    decodedBitmap->setIsOpaque(true);
+
+    return true;
+}
+
+
+bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
+                                  Mode mode) {
+#ifdef TIME_DECODE
+    AutoTimeMillis atm("WEBP Decode");
 #endif
+
+    int origWidth, origHeight;
+    if (!webp_parse_header(stream, &origWidth, &origHeight)) {
+        return false;
+    }
+
+    if (!setDecodeConfig(decodedBitmap, origWidth, origHeight)) {
+        return false;
+    }
 
     // If only bounds are requested, done
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return true;
     }
 
-    // Current WEBP specification has no support for alpha layer.
-    decodedBitmap->setIsOpaque(true);
-
     if (!this->allocPixelRef(decodedBitmap, NULL)) {
         return return_false(*decodedBitmap, "allocPixelRef");
     }
-    SkAutoLockPixels alp(*decodedBitmap);
 
-    // libwebp doesn't provide a way to override all I/O with a custom
-    // implementation. For initial implementation, let's go the "dirty"
-    // way, by loading image file content (actually only VP8 chunk) into
-    // memory before decoding it */
-    SkAutoMalloc srcStorage(contentSize);
-    input = (uint8_t*) srcStorage.get();
-    if (input == NULL) {
-        return return_false(*decodedBitmap, "failed to allocate read buffer");
-    }
-
-    len = stream->read(input + VP8_HEADER_SIZE, contentSize - VP8_HEADER_SIZE);
-#ifdef WEBPCONV_MISSING_PADDING
-    // Some early (yet widely spread) version of webpconv utility
-    // had a bug causing mandatory padding byte to not be written to
-    // file when content size was odd, while total size was reporting
-    // actual file size correctly. Since many webp around may have been
-    // generated with this version of webpconv, work around this issue
-    // by adding padding here. */
-    // TODO: remove this whenever work-around may be considered obsolete
-    if (len == contentSize - VP8_HEADER_SIZE - 1) {
-        input[VP8_HEADER_SIZE + len] = 0;
-        len++;
-    }
-#endif
-    if (len != contentSize - VP8_HEADER_SIZE) {
-        return false;
-    }
-    memcpy(input, buffer, VP8_HEADER_SIZE);
-
-    WEBPImage pSrc;
-    VP8Decoder* dec;
-    VP8Io io;
-
-    // Custom Put callback need reference to target image
-    pSrc.image = decodedBitmap;
-
-    // Keep reference to input stream, in case we find a way to not preload stream
-    // content in memory. So far, stream content has already been consumed, and this
-    // won't be used, but this is left for future usage.
-    pSrc.stream = stream;
-
-    dec = VP8New();
-    if (dec == NULL) {
+    // Decode the WebP image data stream using WebP incremental decoding.
+    if (!webp_idecode(stream, decodedBitmap)) {
         return false;
     }
 
-    VP8InitIo(&io);
-    io.data = input;
-    io.data_size = contentSize;
-
-    io.opaque = (void*) &pSrc;
-    io.put = block_put;
-    io.setup = block_setup;
-    io.teardown = block_teardown;
-
-    if (!VP8GetHeaders(dec, &io)) {
-        VP8Delete(dec);
-        return false;
-    }
-
-    if (!VP8Decode(dec, &io)) {
-        VP8Delete(dec);
-        return false;
-    }
-
-    VP8Delete(dec);
-
-    // SkDebugf("------------------- bm2 size %d [%d %d] %d\n",
-    //          bm->getSize(), bm->width(), bm->height(), bm->config());
     return true;
 }
 
@@ -768,8 +687,9 @@ bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
 #include "SkTRegistry.h"
 
 static SkImageDecoder* DFactory(SkStream* stream) {
-    if (webp_parse_header(stream) <= 0) {
-        return NULL;
+    int width, height;
+    if (!webp_parse_header(stream, &width, &height)) {
+        return false;
     }
 
     // Magic matches, call decoder
