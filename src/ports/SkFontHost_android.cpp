@@ -158,13 +158,17 @@ static SkTypeface* find_from_uniqueID(uint32_t uniqueID) {
 */
 static FamilyRec* remove_from_family(const SkTypeface* face) {
     FamilyRec* family = find_family(face);
-    SkASSERT(family->fFaces[face->style()] == face);
-    family->fFaces[face->style()] = NULL;
+    if (family) {
+        SkASSERT(family->fFaces[face->style()] == face);
+        family->fFaces[face->style()] = NULL;
 
-    for (int i = 0; i < 4; i++) {
-        if (family->fFaces[i] != NULL) {    // family is non-empty
-            return NULL;
+        for (int i = 0; i < 4; i++) {
+            if (family->fFaces[i] != NULL) {    // family is non-empty
+                return NULL;
+            }
         }
+    } else {
+//        SkDebugf("remove_from_family(%p) face not found", face);
     }
     return family;  // return the empty family
 }
