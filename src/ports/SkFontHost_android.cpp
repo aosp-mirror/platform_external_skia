@@ -645,7 +645,7 @@ SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
      */
 
     SkTypeface* origTypeface = find_from_uniqueID(origFontID);
-    SkTypeface::Style origStyle = origTypeface->style();
+    SkTypeface::Style origStyle = origTypeface ? origTypeface->style() : SkTypeface::kNormal;
 
     FamilyRec* family = gFallbackHead;
     while (family) {
