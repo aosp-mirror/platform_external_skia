@@ -428,11 +428,14 @@ static const FontInitRec gSystemFonts[] = {
         them in the order we want them to be accessed by NextLogicalFont().
      */
     { "DroidSansArabic.ttf",        gFBNames    },
-    { "DroidSansHebrew.ttf",        gFBNames    },
+    { "DroidSansHebrew-Regular.ttf",gFBNames    },
+    { "DroidSansHebrew-Bold.ttf",   NULL        },
     { "DroidSansThai.ttf",          gFBNames    },
     { "MTLmr3m.ttf",                gFBNames    }, // Motoya Japanese Font
     { "MTLc3m.ttf",                 gFBNames    }, // Motoya Japanese Font
     { "DroidSansJapanese.ttf",      gFBNames    },
+    { "DroidSansEthiopic-Regular.ttf",gFBNames  },
+    { "DroidSansEthiopic-Bold.ttf", NULL        },
     { "DroidSansFallback.ttf",      gFBNames    }
 };
 
@@ -639,6 +642,16 @@ size_t SkFontHost::GetFileName(SkFontID fontID, char path[], size_t length,
 SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
     load_system_fonts();
 
+    const SkTypeface* origTypeface = find_from_uniqueID(origFontID);
+    const SkTypeface* currTypeface = find_from_uniqueID(currFontID);
+
+    SkASSERT(origTypeface != 0);
+    SkASSERT(currTypeface != 0);
+
+    // Our fallback list always stores the id of the plain in each fallback
+    // family, so we transform currFontID to its plain equivalent.
+    currFontID = find_typeface(currTypeface, SkTypeface::kNormal)->uniqueID();
+
     /*  First see if fontID is already one of our fallbacks. If so, return
         its successor. If fontID is not in our list, then return the first one
         in our list. Note: list is zero-terminated, and returning zero means
@@ -647,10 +660,17 @@ SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
     const uint32_t* list = gFallbackFonts;
     for (int i = 0; list[i] != 0; i++) {
         if (list[i] == currFontID) {
-            return list[i+1];
+            if (list[i+1] == 0)
+                return 0;
+            const SkTypeface* nextTypeface = find_from_uniqueID(list[i+1]);
+            return find_typeface(nextTypeface, origTypeface->style())->uniqueID();
         }
     }
-    return list[0];
+
+    // If we get here, currFontID was not a fallback, so we start at the
+    // beginning of our list.
+    const SkTypeface* firstTypeface = find_from_uniqueID(list[0]);
+    return find_typeface(firstTypeface, origTypeface->style())->uniqueID();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
