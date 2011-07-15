@@ -89,6 +89,7 @@ LOCAL_SRC_FILES:= \
 	src/images/SkCreateRLEPixelRef.cpp \
 	src/images/SkImageDecoder_Factory.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
+	src/ports/FontHostConfiguration_android.cpp \
 	src/ports/SkFontHost_android.cpp \
 	src/ports/SkFontHost_gamma.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
@@ -221,7 +222,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libemoji \
 	libjpeg \
 	libutils \
-	libz
+	libz \
+	libexpat
 
 LOCAL_STATIC_LIBRARIES := \
 	libft2 \
@@ -243,7 +245,8 @@ LOCAL_C_INCLUDES += \
 	external/giflib \
 	external/jpeg \
 	external/webp/include \
-	frameworks/opt/emoji
+	frameworks/opt/emoji \
+	external/expat/lib
 
 ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
