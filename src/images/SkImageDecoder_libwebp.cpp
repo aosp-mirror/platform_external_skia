@@ -17,7 +17,6 @@
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkColorPriv.h"
-#include "SkDither.h"
 #include "SkScaledBitmapSampler.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
@@ -133,7 +132,8 @@ static bool return_false(const SkBitmap& bm, const char msg[]) {
 
 // Incremental WebP image decoding. Reads input buffer of 64K size iteratively
 // and decodes this block to appropriate color-space as per config object.
-static bool webp_idecode(SkStream* stream, SkBitmap* decodedBitmap) {
+static bool webp_idecode(SkStream* stream, SkBitmap* decodedBitmap,
+                         int origWidth, int origHeight) {
     SkAutoLockPixels alp(*decodedBitmap);
 
     stream->rewind();
@@ -161,6 +161,12 @@ static bool webp_idecode(SkStream* stream, SkBitmap* decodedBitmap) {
     decode_config.output.u.RGBA.stride = decodedBitmap->rowBytes();
     decode_config.output.u.RGBA.size = decodedBitmap->getSize();
     decode_config.output.is_external_memory = 1;
+    if (origWidth != decodedBitmap->width() ||
+        origHeight != decodedBitmap->height()) {
+        decode_config.options.use_scaling = 1;
+        decode_config.options.scaled_width = decodedBitmap->width();
+        decode_config.options.scaled_height = decodedBitmap->height();
+    }
 
     WebPIDecoder* idec = WebPIDecode(NULL, NULL, &decode_config);
     if (idec == NULL) {
@@ -210,7 +216,7 @@ static bool webp_idecode(SkStream* stream, SkBitmap* decodedBitmap) {
 }
 
 bool SkWEBPImageDecoder::setDecodeConfig(SkBitmap* decodedBitmap,
-                                         int origWidth, int origHeight) {
+                                         int width, int height) {
     bool hasAlpha = false;
     SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, hasAlpha);
 
@@ -227,18 +233,17 @@ bool SkWEBPImageDecoder::setDecodeConfig(SkBitmap* decodedBitmap,
         }
     }
 
-    if (!this->chooseFromOneChoice(config, origWidth, origHeight)) {
+    if (!this->chooseFromOneChoice(config, width, height)) {
         return false;
     }
 
-    decodedBitmap->setConfig(config, origWidth, origHeight, 0);
+    decodedBitmap->setConfig(config, width, height, 0);
 
     // Current WEBP specification has no support for alpha layer.
     decodedBitmap->setIsOpaque(true);
 
     return true;
 }
-
 
 bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
                                   Mode mode) {
@@ -251,7 +256,11 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
         return false;
     }
 
-    if (!setDecodeConfig(decodedBitmap, origWidth, origHeight)) {
+    const int sampleSize = this->getSampleSize();
+    SkScaledBitmapSampler sampler(origWidth, origHeight, sampleSize);
+
+    if (!setDecodeConfig(decodedBitmap, sampler.scaledWidth(),
+                         sampler.scaledHeight())) {
         return false;
     }
 
@@ -265,7 +274,7 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
     }
 
     // Decode the WebP image data stream using WebP incremental decoding.
-    if (!webp_idecode(stream, decodedBitmap)) {
+    if (!webp_idecode(stream, decodedBitmap, origWidth, origHeight)) {
         return false;
     }
 
