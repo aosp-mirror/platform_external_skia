@@ -363,6 +363,9 @@ static void editPixelBit32(const int pixelNo, const unsigned char* buf,
     int green = readByte(buf, xorOffset + 4*pixelNo + 1);
     int red = readByte(buf, xorOffset + 4*pixelNo + 2);
     int alphaBit = (alphaByte & m) >> shift;
+#if 1 // don't trust the alphaBit for 32bit images <mrr>
+    alphaBit = 0;
+#endif
     int alpha = readByte(buf, xorOffset + 4*pixelNo + 3) & ((alphaBit-1)&0xFF);
     *address = SkPreMultiplyARGB(alpha, red, green, blue);
 }
