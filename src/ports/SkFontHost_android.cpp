@@ -545,40 +545,85 @@ static void load_system_fonts() {
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
-    const char* name = ((FamilyTypeface*)face)->getUniqueString();
+    // lookup and record if the font is custom (i.e. not a system font)
+    bool isCustomFont = !((FamilyTypeface*)face)->isSysFont();
+    stream->writeBool(isCustomFont);
 
-    stream->write8((uint8_t)face->style());
+    if (isCustomFont) {
+        SkStream* fontStream = ((FamilyTypeface*)face)->openStream();
 
-    if (NULL == name || 0 == *name) {
-        stream->writePackedUInt(0);
-//        SkDebugf("--- fonthost serialize null\n");
-    } else {
-        uint32_t len = strlen(name);
+        // store the length of the custom font
+        uint32_t len = fontStream->getLength();
         stream->writePackedUInt(len);
-        stream->write(name, len);
-//      SkDebugf("--- fonthost serialize <%s> %d\n", name, face->style());
+
+        // store the entire font in the serialized stream
+        void* fontData = malloc(len);
+
+        fontStream->read(fontData, len);
+        stream->write(fontData, len);
+
+        fontStream->unref();
+        free(fontData);
+//      SkDebugf("--- fonthost custom serialize %d\n", face->style());
+
+    } else {
+        const char* name = ((FamilyTypeface*)face)->getUniqueString();
+
+        stream->write8((uint8_t)face->style());
+
+        if (NULL == name || 0 == *name) {
+            stream->writePackedUInt(0);
+//          SkDebugf("--- fonthost serialize null\n");
+        } else {
+            uint32_t len = strlen(name);
+            stream->writePackedUInt(len);
+            stream->write(name, len);
+//          SkDebugf("--- fonthost serialize <%s> %d\n", name, face->style());
+        }
     }
 }
 
 SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
     load_system_fonts();
 
-    int style = stream->readU8();
+    // check if the font is a custom or system font
+    bool isCustomFont = stream->readBool();
 
-    int len = stream->readPackedUInt();
-    if (len > 0) {
-        SkString str;
-        str.resize(len);
-        stream->read(str.writable_str(), len);
+    if (isCustomFont) {
 
-        const FontInitRec* rec = gSystemFonts;
-        for (size_t i = 0; i < gNumSystemFonts; i++) {
-            if (strcmp(rec[i].fFileName, str.c_str()) == 0) {
-                // backup until we hit the fNames
-                for (int j = i; j >= 0; --j) {
-                    if (rec[j].fNames != NULL) {
-                        return SkFontHost::CreateTypeface(NULL,
-                                    rec[j].fNames[0], NULL, 0, (SkTypeface::Style)style);
+        // read the length of the custom font from the stream
+        int len = stream->readPackedUInt();
+
+        // generate a new stream to store the custom typeface
+        SkMemoryStream* fontStream = new SkMemoryStream(len);
+        stream->read((void*)fontStream->getMemoryBase(), len);
+
+        SkTypeface* face = CreateTypefaceFromStream(fontStream);
+
+        fontStream->unref();
+
+//      SkDebugf("--- fonthost custom deserialize %d\n", face->style());
+        return face;
+
+    } else {
+        int style = stream->readU8();
+
+        int len = stream->readPackedUInt();
+        if (len > 0) {
+            SkString str;
+            str.resize(len);
+            stream->read(str.writable_str(), len);
+
+            const FontInitRec* rec = gSystemFonts;
+            for (size_t i = 0; i < gNumSystemFonts; i++) {
+                if (strcmp(rec[i].fFileName, str.c_str()) == 0) {
+                    // backup until we hit the fNames
+                    for (int j = i; j >= 0; --j) {
+                        if (rec[j].fNames != NULL) {
+                            return SkFontHost::CreateTypeface(NULL,
+                                        rec[j].fNames[0], NULL, 0,
+                                        (SkTypeface::Style)style);
+                        }
                     }
                 }
             }
