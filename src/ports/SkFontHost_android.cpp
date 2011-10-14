@@ -554,7 +554,7 @@ void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
 
         // store the length of the custom font
         uint32_t len = fontStream->getLength();
-        stream->writePackedUInt(len);
+        stream->write32(len);
 
         // store the entire font in the serialized stream
         void* fontData = malloc(len);
@@ -564,7 +564,7 @@ void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
 
         fontStream->unref();
         free(fontData);
-//      SkDebugf("--- fonthost custom serialize %d\n", face->style());
+//      SkDebugf("--- fonthost custom serialize %d %d\n", face->style(), len);
 
     } else {
         const char* name = ((FamilyTypeface*)face)->getUniqueString();
@@ -592,7 +592,7 @@ SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
     if (isCustomFont) {
 
         // read the length of the custom font from the stream
-        int len = stream->readPackedUInt();
+        uint32_t len = stream->readU32();
 
         // generate a new stream to store the custom typeface
         SkMemoryStream* fontStream = new SkMemoryStream(len);
@@ -602,7 +602,7 @@ SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
 
         fontStream->unref();
 
-//      SkDebugf("--- fonthost custom deserialize %d\n", face->style());
+//      SkDebugf("--- fonthost custom deserialize %d %d\n", face->style(), len);
         return face;
 
     } else {
