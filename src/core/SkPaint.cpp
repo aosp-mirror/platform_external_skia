@@ -30,6 +30,7 @@
 #include "SkTypeface.h"
 #include "SkXfermode.h"
 #include "SkAutoKern.h"
+#include "SkGlyphCache.h"
 
 #define SK_DefaultTextSize      SkIntToScalar(12)
 
@@ -153,6 +154,14 @@ void SkPaint::reset() {
 #ifdef ANDROID
 uint32_t SkPaint::getGenerationID() const {
     return fGenerationID;
+}
+#endif
+
+#ifdef ANDROID
+unsigned SkPaint::getBaseGlyphCount(SkUnichar text) {
+    SkAutoGlyphCache autoCache(*this, NULL);
+    SkGlyphCache* cache = autoCache.getCache();
+    return cache->getBaseGlyphCount(text);
 }
 #endif
 

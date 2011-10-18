@@ -237,6 +237,31 @@ SkScalerContext* SkScalerContext::getGlyphContext(const SkGlyph& glyph) {
     return ctx;
 }
 
+#ifdef ANDROID
+/*  This loops through all available fallback contexts (if needed) until it
+    finds some context that can handle the unichar and return it.
+
+    As this is somewhat expensive operation, it should only be done on the first char of a run
+ */
+SkScalerContext* SkScalerContext::charToScalerContext(SkUnichar uni) {
+    SkScalerContext* ctx = this;
+    unsigned glyphID;
+    for (;;) {
+        glyphID = ctx->generateCharToGlyph(uni);
+        if (glyphID) {
+            break;  // found it
+        }
+        ctx = ctx->getNextContext();
+        if (NULL == ctx) {
+            SkDebugf("--- no context for char %x\n", uni);
+            // just return the original context (this)
+            return this;
+        }
+    }
+    return ctx;
+}
+#endif
+
 /*  This loops through all available fallback contexts (if needed) until it
     finds some context that can handle the unichar. If all fail, returns 0
  */

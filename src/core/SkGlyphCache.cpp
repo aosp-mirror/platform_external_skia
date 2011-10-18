@@ -121,6 +121,13 @@ unsigned SkGlyphCache::getGlyphCount() {
     return fScalerContext->getGlyphCount();
 }
 
+#ifdef ANDROID
+unsigned SkGlyphCache::getBaseGlyphCount(SkUnichar charCode) {
+    SkScalerContext* ctx = fScalerContext->charToScalerContext(charCode);
+    return ctx->getBaseGlyphCount();
+}
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 const SkGlyph& SkGlyphCache::getUnicharAdvance(SkUnichar charCode) {

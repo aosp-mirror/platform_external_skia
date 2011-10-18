@@ -242,6 +242,13 @@ public:
      */
     uint16_t    charToGlyphID(SkUnichar uni);
 
+#ifdef ANDROID
+    /** Return the ScalerContext for the specifier unichar. Since contexts may be chained,
+     *  the returned value can be the ScalerContext of the default font.
+     */
+    SkScalerContext* charToScalerContext(SkUnichar uni);
+#endif
+
     /** Map the glyphID to its glyph index, and then to its char code. Unmapped
         glyphs return zero.
     */
@@ -254,6 +261,10 @@ public:
     void        getPath(const SkGlyph&, SkPath*);
     void        getFontMetrics(SkPaint::FontMetrics* mX,
                                SkPaint::FontMetrics* mY);
+
+#ifdef ANDROID
+    inline unsigned getBaseGlyphCount() { return fBaseGlyphCount; }
+#endif
 
     static inline void MakeRec(const SkPaint&, const SkMatrix*, Rec* rec);
     static SkScalerContext* Create(const SkDescriptor*);

@@ -81,6 +81,12 @@ public:
     */
     unsigned getGlyphCount();
 
+#ifdef ANDROID
+    /** Returns the base glyph count for this strike.
+    */
+    unsigned getBaseGlyphCount(SkUnichar charCode);
+#endif
+
     /** Return the image associated with the glyph. If it has not been generated
         this will trigger that.
     */
