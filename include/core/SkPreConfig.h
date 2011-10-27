@@ -55,6 +55,10 @@
 
 //////////////////////////////////////////////////////////////////////
 
+// SKIA does not currently work in debug mode, so we force release mode to
+// allow it to be built with WebKit, when it's built in debug mode.
+// See http://b/5524273
+#define SK_RELEASE 1
 #if !defined(SK_DEBUG) && !defined(SK_RELEASE)
     #ifdef NDEBUG
         #define SK_RELEASE
