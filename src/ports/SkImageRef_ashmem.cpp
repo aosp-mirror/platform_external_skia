@@ -86,6 +86,7 @@ public:
             if (err) {
                 SkDebugf("------ ashmem_set_prot_region(%d) failed %d %d\n",
                          fd, err, errno);
+                close(fd);
                 return false;
             }
             
@@ -93,6 +94,7 @@ public:
             if (-1 == (long)addr) {
                 SkDebugf("---------- mmap failed for imageref_ashmem size=%d err=%d\n",
                          size, errno);
+                close(fd);
                 return false;
             }
             
