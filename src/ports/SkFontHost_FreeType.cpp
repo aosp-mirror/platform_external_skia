@@ -401,7 +401,7 @@ static void populate_glyph_to_unicode(FT_Face& face,
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         uint32_t fontID,
         SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) {
-#if defined(SK_BUILD_FOR_MAC) || defined(ANDROID)
+#if defined(SK_BUILD_FOR_MAC)
     return NULL;
 #else
     SkAutoMutexAcquire ac(gFTMutex);

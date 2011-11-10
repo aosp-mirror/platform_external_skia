@@ -17,7 +17,7 @@
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkTypes.h"
 
-#ifdef SK_BUILD_FOR_UNIX
+#if defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #endif
@@ -141,7 +141,7 @@ template SkAdvancedTypefaceMetrics::WidthRange* getAdvanceData(
         HDC hdc,
         int num_glyphs,
         bool (*getAdvance)(HDC hdc, int gId, int16_t* data));
-#elif defined(SK_BUILD_FOR_UNIX)
+#elif defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
 template SkAdvancedTypefaceMetrics::WidthRange* getAdvanceData(
         FT_Face face,
         int num_glyphs,

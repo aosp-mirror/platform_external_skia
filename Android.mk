@@ -98,6 +98,7 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkTime_Unix.cpp \
+	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmap_scroll.cpp \
