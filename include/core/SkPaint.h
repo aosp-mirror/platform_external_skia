@@ -18,7 +18,7 @@
 #define SkPaint_DEFINED
 
 #include "SkColor.h"
-#include "SkMath.h"
+#include "SkDrawLooper.h"
 #include "SkXfermode.h"
 
 class SkAutoGlyphCache;
@@ -35,7 +35,6 @@ class SkPath;
 class SkPathEffect;
 class SkRasterizer;
 class SkShader;
-class SkDrawLooper;
 class SkTypeface;
 
 typedef const SkGlyph& (*SkDrawCacheProc)(SkGlyphCache*, const char**,
@@ -425,10 +424,11 @@ public:
         the bounds computation expensive.
     */
     bool canComputeFastBounds() const {
+        if (this->getLooper()) {
+            return this->getLooper()->canComputeFastBounds(*this);
+        }
         // use bit-or since no need for early exit
-        return (reinterpret_cast<uintptr_t>(this->getMaskFilter()) |
-                reinterpret_cast<uintptr_t>(this->getLooper()) |
-                reinterpret_cast<uintptr_t>(this->getRasterizer()) |
+        return (reinterpret_cast<uintptr_t>(this->getRasterizer()) |
                 reinterpret_cast<uintptr_t>(this->getPathEffect())) == 0;
     }
 
@@ -454,8 +454,12 @@ public:
         }
     */
     const SkRect& computeFastBounds(const SkRect& orig, SkRect* storage) const {
-        return this->getStyle() == kFill_Style ? orig :
-                    this->computeStrokeFastBounds(orig, storage);
+        if (this->getStyle() == kFill_Style &&
+                !this->getLooper() && !this->getMaskFilter()) {
+            return orig;
+        }
+
+        return this->doComputeFastBounds(orig, storage);
     }
 
     /** Get the paint's shader object.
@@ -864,8 +868,7 @@ private:
                         void (*proc)(const SkDescriptor*, void*),
                         void* context, bool ignoreGamma = false) const;
 
-    const SkRect& computeStrokeFastBounds(const SkRect& orig,
-                                          SkRect* storage) const;
+    const SkRect& doComputeFastBounds(const SkRect& orig, SkRect* storage) const;
 
     enum {
         kCanonicalTextSizeForPaths = 64

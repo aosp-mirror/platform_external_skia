@@ -57,4 +57,19 @@ bool SkMaskFilter::filterPath(const SkPath& devPath, const SkMatrix& matrix,
     return true;
 }
 
+void SkMaskFilter::computeFastBounds(const SkRect& src, SkRect* dst) {
+    SkMask  srcM, dstM;
+
+    srcM.fImage = NULL;
+    src.roundOut(&srcM.fBounds);
+    srcM.fRowBytes = 0;
+    srcM.fFormat = SkMask::kA8_Format;
+
+    SkIPoint margin;    // ignored
+    if (this->filterMask(&dstM, srcM, SkMatrix::I(), &margin)) {
+        dst->set(dstM.fBounds);
+    } else {
+        dst->set(srcM.fBounds);
+    }
+}
 

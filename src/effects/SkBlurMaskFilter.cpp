@@ -27,6 +27,7 @@ public:
     // overrides from SkMaskFilter
     virtual SkMask::Format getFormat();
     virtual bool filterMask(SkMask* dst, const SkMask& src, const SkMatrix& matrix, SkIPoint* margin);
+    virtual void computeFastBounds(const SkRect& src, SkRect* dst);
 
     // overrides from SkFlattenable
     // This method is not exported to java.
@@ -109,6 +110,11 @@ bool SkBlurMaskFilterImpl::filterMask(SkMask* dst, const SkMask& src, const SkMa
         return true;
     }
     return false;
+}
+
+void SkBlurMaskFilterImpl::computeFastBounds(const SkRect& src, SkRect* dst) {
+    dst->set(src.fLeft - fRadius, src.fTop - fRadius,
+             src.fRight + fRadius, src.fBottom + fRadius);
 }
 
 SkFlattenable* SkBlurMaskFilterImpl::CreateProc(SkFlattenableReadBuffer& buffer)
