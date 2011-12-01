@@ -59,8 +59,8 @@ public:
                               const SkPaint&);
     virtual void drawData(const void*, size_t);
 
-    void addFontMetricsTopBottom(const SkPaint& paint, SkScalar baselineY);
-    
+    void addFontMetricsTopBottom(const SkPaint& paint, SkScalar minY, SkScalar maxY);
+
     const SkTDArray<const SkFlatBitmap* >& getBitmaps() const {
         return fBitmaps;
     }
