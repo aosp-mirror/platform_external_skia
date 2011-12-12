@@ -1,6 +1,30 @@
 BASE_PATH := $(call my-dir)
 LOCAL_PATH:= $(call my-dir)
 
+###############################################################################
+#
+# PROBLEMS WITH SKIA DEBUGGING?? READ THIS...
+#
+# The debug build results in changes to the Skia headers. This means that those
+# using libskia must also be built with the debug version of the Skia headers.
+# There are a few scenarios where this comes into play:
+#
+# (1) You're building debug code that depends on libskia.
+#   (a) If libskia is built in release, then define SK_RELEASE when building
+#       your sources.
+#   (b) If libskia is built with debugging (see step 2), then no changes are
+#       needed since your sources and libskia have been built with SK_DEBUG.
+# (2) You're building libskia in debug mode.
+#   (a) RECOMMENDED: You can build the entire system in debug mode. Do this by
+#       updating your buildspec.mk to include TARGET_BUILD_TYPE=debug
+#   (b) You can update all the users of libskia to define SK_DEBUG when they are
+#       building their sources.
+#
+# NOTE: If neither SK_DEBUG or SK_RELEASE are defined then Skia checks NDEBUG to
+#       determine which build type to use.
+###############################################################################
+
+
 #############################################################
 #   build the skia+fretype+png+jpeg+zlib+gif+webp library
 #
@@ -191,6 +215,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkParse.cpp \
+	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
 	src/utils/SkProxyCanvas.cpp \
 	src/utils/SkUnitMappers.cpp
