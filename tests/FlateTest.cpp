@@ -1,23 +1,17 @@
+
 /*
- * Copyright (C) 2011 Google Inc.
+ * Copyright 2011 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "Test.h"
+#include "SkData.h"
 #include "SkFlate.h"
 #include "SkStream.h"
 
@@ -67,7 +61,9 @@ static void TestFlate(skiatest::Reporter* reporter, SkMemoryStream* testStream,
     else
       REPORTER_ASSERT(reporter, compressed.getOffset() > 1024);
 
-    testStream->setMemory(compressed.getStream(), compressed.getOffset(), true);
+    SkAutoDataUnref data1(compressed.copyToData());
+
+    testStream->setData(data1.get())->unref();
     SkDynamicMemoryWStream uncompressed;
     status = SkFlate::Inflate(testStream, &uncompressed);
     REPORTER_ASSERT(reporter, status);
@@ -76,15 +72,14 @@ static void TestFlate(skiatest::Reporter* reporter, SkMemoryStream* testStream,
     inputSize = testStream->getLength();
     if (inputSize == 0)
         inputSize = testStream->read(NULL, SkZeroSizeMemStream::kGetSizeKey);
-    REPORTER_ASSERT(reporter, compressed.getOffset() == inputSize);
+    REPORTER_ASSERT(reporter, data1.size() == inputSize);
     REPORTER_ASSERT(reporter, memcmp(testStream->getMemoryBase(),
-                                     compressed.getStream(),
-                                     compressed.getOffset()) == 0);
+                                     data1.data(), data1.size()) == 0);
 
     // Check that the uncompressed data matches the source data.
+    SkAutoDataUnref data2(uncompressed.copyToData());
     REPORTER_ASSERT(reporter, testData.getLength() == uncompressed.getOffset());
-    REPORTER_ASSERT(reporter, memcmp(testData.getMemoryBase(),
-                                     uncompressed.getStream(),
+    REPORTER_ASSERT(reporter, memcmp(testData.getMemoryBase(), data2.data(),
                                      testData.getLength()) == 0);
 }
 

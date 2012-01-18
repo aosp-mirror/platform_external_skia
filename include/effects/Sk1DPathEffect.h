@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef Sk1DPathEffect_DEFINED
 #define Sk1DPathEffect_DEFINED
@@ -64,27 +57,29 @@ public:
     SkPath1DPathEffect(const SkPath& path, SkScalar advance, SkScalar phase, Style);
 
     // override from SkPathEffect
-    virtual bool filterPath(SkPath* dst, const SkPath& src, SkScalar* width);
+    virtual bool filterPath(SkPath*, const SkPath&, SkScalar* width) SK_OVERRIDE;
+
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
+        return SkNEW_ARGS(SkPath1DPathEffect, (buffer));
+    }
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     SkPath1DPathEffect(SkFlattenableReadBuffer& buffer);
 
     // overrides from Sk1DPathEffect
-    virtual SkScalar begin(SkScalar contourLength);
-    virtual SkScalar next(SkPath* dst, SkScalar distance, SkPathMeasure&);
+    virtual SkScalar begin(SkScalar contourLength) SK_OVERRIDE;
+    virtual SkScalar next(SkPath*, SkScalar distance, SkPathMeasure&) SK_OVERRIDE;
     // overrides from SkFlattenable
-    virtual void flatten(SkFlattenableWriteBuffer& );
-    virtual Factory getFactory() { return CreateProc; }
+    virtual void flatten(SkFlattenableWriteBuffer&) SK_OVERRIDE;
+    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; }
     
 private:
     SkPath      fPath;          // copied from constructor
     SkScalar    fAdvance;       // copied from constructor
     SkScalar    fInitialOffset; // computed from phase
     Style       fStyle;         // copied from constructor
-    
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkPath1DPathEffect, (buffer));
-    }
 
     typedef Sk1DPathEffect INHERITED;
 };

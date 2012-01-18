@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkOSFile.h"
 
 #ifdef SK_BUILD_FOR_WIN
@@ -125,7 +132,7 @@ bool SkOSFile::Iter::next(SkString* name, bool getDir)
     return fHandle != (HANDLE)~0 && get_the_file(fHandle, name, dataPtr, getDir);
 }
 
-#elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX)
+#elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
 
 #if 0
 OSStatus FSPathMakeRef (

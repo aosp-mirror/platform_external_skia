@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkTransparentShader_DEFINED
 #define SkTransparentShader_DEFINED
@@ -22,19 +15,18 @@
 class SkTransparentShader : public SkShader {
 public:
     SkTransparentShader() {}
-    virtual uint32_t getFlags();
+
+    virtual uint32_t getFlags() SK_OVERRIDE;
     virtual bool    setContext( const SkBitmap& device,
                                 const SkPaint& paint,
-                                const SkMatrix& matrix);
-    virtual void    shadeSpan(int x, int y, SkPMColor[], int count);
-    virtual void    shadeSpan16(int x, int y, uint16_t span[], int count);
+                                const SkMatrix& matrix) SK_OVERRIDE;
+    virtual void    shadeSpan(int x, int y, SkPMColor[], int count) SK_OVERRIDE;
+    virtual void    shadeSpan16(int x, int y, uint16_t span[], int count) SK_OVERRIDE;
 
     // overrides for SkFlattenable
-    virtual Factory getFactory() { return Create; }
-    virtual void flatten(SkFlattenableWriteBuffer& buffer) {
-        this->INHERITED::flatten(buffer);
-    }
-        
+    virtual Factory getFactory() SK_OVERRIDE;
+    virtual void flatten(SkFlattenableWriteBuffer&) SK_OVERRIDE;
+
 private:
     // these are a cache from the call to setContext()
     const SkBitmap* fDevice;

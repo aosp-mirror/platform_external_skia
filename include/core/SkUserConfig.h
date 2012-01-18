@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkUserConfig_DEFINED
 #define SkUserConfig_DEFINED
@@ -53,11 +46,6 @@
     #include <utils/misc.h>
 #endif
 
-#ifdef SK_BUILD_FOR_MAC
-    #undef SK_BUILD_FOR_MAC
-#endif
-#define SK_BUILD_FOR_UNIX
-
 /*  Scalars (the fractional value type in skia) can be implemented either as
     floats or 16.16 integers (fixed). Exactly one of these two symbols must be
     defined.
@@ -68,7 +56,7 @@
 
 /*  Somewhat independent of how SkScalar is implemented, Skia also wants to know
     if it can use floats at all. Naturally, if SK_SCALAR_IS_FLOAT is defined,
-    then so muse SK_CAN_USE_FLOAT, but if scalars are fixed, SK_CAN_USE_FLOAT
+    SK_CAN_USE_FLOAT must be too; but if scalars are fixed, SK_CAN_USE_FLOAT
     can go either way.
  */
 #define SK_CAN_USE_FLOAT
@@ -119,25 +107,22 @@
 #define SkLONGLONG int64_t
 
 
-/*  Some envorinments do not suport writable globals (eek!). If yours does not,
-    define this flag.
- */
-//#define SK_USE_RUNTIME_GLOBALS
-
-
 /*  To write debug messages to a console, skia will call SkDebugf(...) following
     printf conventions (e.g. const char* format, ...). If you want to redirect
     this to something other than printf, define yours here
  */
-#define SkDebugf(...) Android_SkDebugf(__FILE__, __LINE__, \
-                                        __FUNCTION__, __VA_ARGS__)
-void Android_SkDebugf(const char* file, int line, 
-                      const char* function, const char* format, ...);
+//#define SkDebugf(...) MyFunction(__VA_ARGS__)
 
-/*  To enable additional blitters (and fontscaler code) to support separate
-    alpha channels for R G B channels, define SK_SUPPORT_LCDTEXT
+/*
+ *  To specify a different default font cache limit, define this. If this is
+ *  undefined, skia will use a built-in value.
  */
-//#define SK_SUPPORT_LCDTEXT
+//#define SK_DEFAULT_FONT_CACHE_LIMIT   (1024 * 1024)
+
+/* If defined, use CoreText instead of ATSUI on OS X.
+*/
+//#define SK_USE_MAC_CORE_TEXT
+
 
 /*  If zlib is available and you want to support the flate compression
     algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
@@ -150,10 +135,21 @@ void Android_SkDebugf(const char* file, int line,
  */
 //#define SK_ALLOW_LARGE_PDF_SCALARS
 
+/*  Define this to provide font subsetter in PDF generation.
+ */
+//#define SK_SFNTLY_SUBSETTER "sfntly/subsetter/font_subsetter.h"
+
 /*  Define this to remove dimension checks on bitmaps. Not all blits will be
     correct yet, so this is mostly for debugging the implementation.
  */
 //#define SK_ALLOW_OVER_32K_BITMAPS
+
+/*  Define this to set the upper limit for text to support LCD. Values that
+    are very large increase the cost in the font cache and draw slower, without
+    improving readability. If this is undefined, Skia will use its default
+    value (e.g. 48)
+ */
+//#define SK_MAX_SIZE_FOR_LCDTEXT     48
 
 /*  If SK_DEBUG is defined, then you can optionally define SK_SUPPORT_UNITTEST
     which will run additional self-tests at startup. These can take a long time,
@@ -162,6 +158,18 @@ void Android_SkDebugf(const char* file, int line,
 #ifdef SK_DEBUG
     #define SK_SUPPORT_UNITTEST
 #endif
+
+/* If your system embeds skia and has complex event logging, define this
+   symbol to name a file that maps the following macros to your system's
+   equivalents:
+       SK_TRACE_EVENT0(event)
+       SK_TRACE_EVENT1(event, name1, value1)
+       SK_TRACE_EVENT2(event, name1, value1, name2, value2)
+   src/utils/SkDebugTrace.h has a trivial implementation that writes to
+   the debug output stream. If SK_USER_TRACE_INCLUDE_FILE is not defined,
+   SkTrace.h will define the above three macros to do nothing.
+*/
+//#undef SK_USER_TRACE_INCLUDE_FILE
 
 /*  Change the ordering to work in X windows.
  */
@@ -173,4 +181,3 @@ void Android_SkDebugf(const char* file, int line,
 #endif
 
 #endif
-

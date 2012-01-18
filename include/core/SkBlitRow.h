@@ -1,3 +1,10 @@
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #ifndef SkBlitRow_DEFINED
 #define SkBlitRow_DEFINED
 
@@ -25,8 +32,8 @@ public:
         @param x The x coordinate of the beginning of the scanline
         @param y THe y coordinate of the scanline
      */
-    typedef void (*Proc)(uint16_t* SK_RESTRICT dst,
-                         const SkPMColor* SK_RESTRICT src,
+    typedef void (*Proc)(uint16_t* dst,
+                         const SkPMColor* src,
                          int count, U8CPU alpha, int x, int y);
 
    /** Function pointer that blends a single color with a row of 32-bit colors
@@ -51,8 +58,8 @@ public:
         @param count number of colors to blend
         @param alpha global alpha to be applied to all src colors
      */
-    typedef void (*Proc32)(uint32_t* SK_RESTRICT dst,
-                         const SkPMColor* SK_RESTRICT src,
+    typedef void (*Proc32)(uint32_t* dst,
+                         const SkPMColor* src,
                          int count, U8CPU alpha);
 
     static Proc32 Factory32(unsigned flags32);
@@ -83,30 +90,5 @@ private:
         kFlags32_Mask = 3
     };
 };
-
-/**
- *  Factory for blitmask procs
- */
-class SkBlitMask {
-public:
-    /**
-     *  Function pointer that blits the mask into a device (dst) colorized
-     *  by color. The number of pixels to blit is specified by width and height,
-     *  but each scanline is offset by dstRB (rowbytes) and srcRB respectively.
-     */
-    typedef void (*Proc)(void* dst, size_t dstRB, SkBitmap::Config dstConfig,
-                        const uint8_t* mask, size_t maskRB, SkColor color,
-                        int width, int height);
-
-    /* Public entry-point to return a blitmask function ptr
-     */
-    static Proc Factory(SkBitmap::Config dstConfig, SkColor color);
-
-    /* return either platform specific optimized blitmask function-ptr,
-     * or NULL if no optimized
-     */
-    static Proc PlatformProcs(SkBitmap::Config dstConfig, SkColor color);
-};
-
 
 #endif

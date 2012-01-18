@@ -20,11 +20,12 @@
 #include "SkTDArray.h"
 
 /**
- * The FontFamily data structure is created during parsing and handed back to Skia to fold
- * into its representation of font families. fNames is the list of font names that alias to a
- * font family. fFileNames is the list of font filenames for the family. Order is the priority
- * order for the font. This is used internally to determine the order in which to place fallback
- * fonts as they are read from the configuration files.
+ * The FontFamily data structure is created during parsing and handed back to
+ * Skia to fold into its representation of font families. fNames is the list of
+ * font names that alias to a font family. fFileNames is the list of font
+ * filenames for the family. Order is the priority order for the font. This is
+ * used internally to determine the order in which to place fallback fonts as
+ * they are read from the configuration files.
  */
 struct FontFamily {
     SkTDArray<const char*>  fNames;
@@ -33,8 +34,8 @@ struct FontFamily {
 };
 
 /**
- * Parses all system font configuration files and returns the results in an array of FontFamily
- * structures.
+ * Parses all system font configuration files and returns the results in an
+ * array of FontFamily structures.
  */
 void getFontFamilies(SkTDArray<FontFamily*> &fontFamilies);
 

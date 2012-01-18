@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
@@ -127,16 +134,14 @@ protected:
         matrix.preScale(SK_Scalar1*2, SK_Scalar1*2);
         gs->appendShape(&fGroup, matrix);
         
-#if 0
-        canvas->drawShape(gs);
-#else
+#if 1
         SkPicture* pict = new SkPicture;
         SkCanvas* cv = pict->beginRecording(1000, 1000);
         cv->scale(SK_ScalarHalf, SK_ScalarHalf);
-        cv->drawShape(gs);
+        gs->draw(cv);
         cv->translate(SkIntToScalar(680), SkIntToScalar(480));
         cv->scale(-SK_Scalar1, SK_Scalar1);
-        cv->drawShape(gs);
+        gs->draw(cv);
         pict->endRecording();
         
         drawpicture(canvas, *pict);

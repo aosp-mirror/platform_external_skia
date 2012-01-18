@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #ifndef SkGPipe_DEFINED
@@ -23,6 +16,11 @@
 
 class SkCanvas;
 
+// XLib.h might have defined Status already (ugh)
+#ifdef Status
+    #undef Status
+#endif
+
 class SkGPipeReader {
 public:
     SkGPipeReader(SkCanvas* target);
@@ -31,13 +29,14 @@ public:
     enum Status {
         kDone_Status,   //!< no more data expected from reader
         kEOF_Status,    //!< need more data from reader
-        kError_Status   //!< encountered error
+        kError_Status,  //!< encountered error
+        kReadAtom_Status//!< finished reading an atom
     };
 
     // data must be 4-byte aligned
     // length must be a multiple of 4
-    Status playback(const void* data, size_t length, size_t* bytesRead = NULL);
-
+    Status playback(const void* data, size_t length, size_t* bytesRead = NULL,
+                    bool readAtom = false);
 private:
     SkCanvas*           fCanvas;
     class SkGPipeState* fState;

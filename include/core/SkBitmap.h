@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkBitmap_DEFINED
 #define SkBitmap_DEFINED
@@ -165,13 +158,40 @@ public:
     */
     Sk64 getSafeSize64() const ;
 
+    /** Returns true if this bitmap is marked as immutable, meaning that the
+        contents of its pixels will not change for the lifetime of the bitmap.
+    */
+    bool isImmutable() const;
+
+    /** Marks this bitmap as immutable, meaning that the contents of its
+        pixels will not change for the lifetime of the bitmap and of the
+        underlying pixelref. This state can be set, but it cannot be 
+        cleared once it is set. This state propagates to all other bitmaps
+        that share the same pixelref.
+    */
+    void setImmutable();
+
     /** Returns true if the bitmap is opaque (has no translucent/transparent pixels).
     */
     bool isOpaque() const;
+
     /** Specify if this bitmap's pixels are all opaque or not. Is only meaningful for configs
         that support per-pixel alpha (RGB32, A1, A8).
     */
     void setIsOpaque(bool);
+
+    /** Returns true if the bitmap is volatile (i.e. should not be cached by devices.)
+    */
+    bool isVolatile() const;
+
+    /** Specify whether this bitmap is volatile. Bitmaps are not volatile by 
+        default. Temporary bitmaps that are discarded after use should be
+        marked as volatile. This provides a hint to the device that the bitmap
+        should not be cached. Providing this hint when appropriate can  
+        improve performance by avoiding unnecessary overhead and resource 
+        consumption on the device.
+    */
+    void setIsVolatile(bool);
 
     /** Reset the bitmap to its initial state (see default constructor). If we are a (shared)
         owner of the pixels, that ownership is decremented.
@@ -218,12 +238,11 @@ public:
     /** Copies the bitmap's pixels to the location pointed at by dst and returns
         true if possible, returns false otherwise.
 
-        In the event that the bitmap's stride is equal to dstRowBytes, and if
-        it is greater than strictly required by the bitmap's current config
-        (this may happen if the bitmap is an extracted subset of another), then
-        this function will copy bytes past the eand of each row, excluding the
-        last row. No copies are made outside of the declared size of dst,
-        however.
+        In the case when the dstRowBytes matches the bitmap's rowBytes, the copy
+        may be made faster by copying over the dst's per-row padding (for all
+        rows but the last). By setting preserveDstPad to true the caller can
+        disable this optimization and ensure that pixels in the padding are not
+        overwritten.
 
         Always returns false for RLE formats.
 
@@ -232,26 +251,11 @@ public:
                         pixels using indicated stride.
         @param dstRowBytes  Width of each line in the buffer. If -1, uses
                             bitmap's internal stride.
+        @param preserveDstPad Must we preserve padding in the dst
     */
-    bool copyPixelsTo(void* const dst, size_t dstSize, int dstRowBytes = -1)
+    bool copyPixelsTo(void* const dst, size_t dstSize, int dstRowBytes = -1,
+                      bool preserveDstPad = false)
          const;
-
-    /** Copies the pixels at location src to the bitmap's pixel buffer.
-        Returns true if copy if possible (bitmap buffer is large enough),
-        false otherwise.
-
-        Like copyPixelsTo, this function may write values beyond the end of
-        each row, although never outside the defined buffer.
-
-        Always returns false for RLE formats.
-
-        @param src      Location of the source buffer.
-        @param srcSize  Height of source buffer in pixels.
-        @param srcRowBytes  Width of each line in the buffer. If -1, uses i
-                            bitmap's internal stride.
-    */
-    bool copyPixelsFrom(const void* const src, size_t srcSize,
-                        int srcRowBytes = -1);
 
     /** Use the standard HeapAllocator to create the pixelref that manages the
         pixel memory. It will be sized based on the current width/height/config.
@@ -315,6 +319,14 @@ public:
         a given image.
     */
     void unlockPixels() const;
+
+    /**
+     *  Some bitmaps can return a copy of their pixels for lockPixels(), but
+     *  that copy, if modified, will not be pushed back. These bitmaps should
+     *  not be used as targets for a raster device/canvas (since all pixels
+     *  modifications will be lost when unlockPixels() is called.)
+     */
+    bool lockPixelsAreWritable() const;
 
     /** Call this to be sure that the bitmap is valid enough to be drawn (i.e.
         it has non-null pixels, and if required by its config, it has a
@@ -463,18 +475,28 @@ public:
     */
     bool extractSubset(SkBitmap* dst, const SkIRect& subset) const;
 
-    /** Makes a deep copy of this bitmap, respecting the requested config.
-        Returns false if either there is an error (i.e. the src does not have
-        pixels) or the request cannot be satisfied (e.g. the src has per-pixel
-        alpha, and the requested config does not support alpha).
-        @param dst The bitmap to be sized and allocated
-        @param c The desired config for dst
-        @param allocator Allocator used to allocate the pixelref for the dst
-                         bitmap. If this is null, the standard HeapAllocator
-                         will be used.
-        @return true if the copy could be made.
-    */
+    /** Makes a deep copy of this bitmap, respecting the requested config,
+     *  and allocating the dst pixels on the cpu.
+     *  Returns false if either there is an error (i.e. the src does not have
+     *  pixels) or the request cannot be satisfied (e.g. the src has per-pixel
+     *  alpha, and the requested config does not support alpha).
+     *  @param dst The bitmap to be sized and allocated
+     *  @param c The desired config for dst
+     *  @param allocator Allocator used to allocate the pixelref for the dst
+     *                   bitmap. If this is null, the standard HeapAllocator
+     *                   will be used.
+     *  @return true if the copy could be made.
+     */
     bool copyTo(SkBitmap* dst, Config c, Allocator* allocator = NULL) const;
+
+    /** Makes a deep copy of this bitmap, respecting the requested config, and
+     *  with custom allocation logic that will keep the copied pixels
+     *  in the same domain as the source: If the src pixels are allocated for
+     *  the cpu, then so will the dst. If the src pixels are allocated on the
+     *  gpu (typically as a texture), the it will do the same for the dst.
+     *  If the request cannot be fulfilled, returns false and dst is unmodified.
+     */
+    bool deepCopyTo(SkBitmap* dst, Config c) const;
 
     /** Returns true if this bitmap can be deep copied into the requested config
         by calling copyTo().
@@ -580,7 +602,9 @@ private:
     mutable int         fRawPixelGenerationID;
 
     enum Flags {
-        kImageIsOpaque_Flag  = 0x01
+        kImageIsOpaque_Flag     = 0x01,
+        kImageIsVolatile_Flag   = 0x02,
+        kImageIsImmutable_Flag  = 0x04
     };
 
     uint32_t    fRowBytes;
@@ -698,17 +722,23 @@ private:
     void inval16BitCache();
 };
 
-class SkAutoLockPixels {
+class SkAutoLockPixels : public SkNoncopyable {
 public:
-    SkAutoLockPixels(const SkBitmap& bitmap) : fBitmap(bitmap) {
-        bitmap.lockPixels();
+    SkAutoLockPixels(const SkBitmap& bm, bool doLock = true) : fBitmap(bm) {
+        fDidLock = doLock;
+        if (doLock) {
+            bm.lockPixels();
+        }
     }
     ~SkAutoLockPixels() {
-        fBitmap.unlockPixels();
+        if (fDidLock) {
+            fBitmap.unlockPixels();
+        }
     }
 
 private:
     const SkBitmap& fBitmap;
+    bool            fDidLock;
 };
 
 /** Helper class that performs the lock/unlockColors calls on a colortable.

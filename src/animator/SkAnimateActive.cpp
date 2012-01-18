@@ -1,19 +1,11 @@
-/* libs/graphics/animator/SkAnimateActive.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkAnimateActive.h"
 #include "SkAnimateBase.h"
@@ -150,9 +142,12 @@ void SkActive::calcDurations(int index)
     SkAnimateBase* animate = fAnimators[index];
     SkMSec duration = animate->dur;
     SkState& state = fState[index];
-    if (state.fMode == SkApply::kMode_immediate || state.fMode == SkApply::kMode_create)
+    switch (state.fMode) {
+      case SkApply::kMode_immediate:
+      case SkApply::kMode_create:
         duration = state.fSteps ? state.fSteps * SK_MSec1 : 1;
-//  else if (state.fMode == SkApply::kMode_hold) {
+        break;
+//    case SkApply::kMode_hold: {
 //      int entries = animate->entries();
 //      SkScriptValue value;
 //      value.fOperand = animate->getValues()[entries - 1];
@@ -160,7 +155,9 @@ void SkActive::calcDurations(int index)
 //      bool result = SkScriptEngine::ConvertTo(NULL, SkType_Int, &value);
 //      SkASSERT(result);
 //      duration = value.fOperand.fS32 * SK_MSec1;
-//  }
+//      break;
+//    }
+    }
     state.fDuration = duration;
     SkMSec maxTime = state.fBegin + duration;
     if (fMaxTime < maxTime)

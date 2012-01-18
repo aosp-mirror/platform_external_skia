@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkGlyphCache.h
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #ifndef SkGlyphCache_DEFINED
 #define SkGlyphCache_DEFINED
@@ -81,6 +73,14 @@ public:
     */
     unsigned getGlyphCount();
 
+#ifdef SK_BUILD_FOR_ANDROID
+    /** Returns the base glyph count for this strike.
+    */
+    unsigned getBaseGlyphCount(SkUnichar charCode) const {
+        return fScalerContext->getBaseGlyphCount(charCode);
+    }
+#endif
+
     /** Return the image associated with the glyph. If it has not been generated
         this will trigger that.
     */
@@ -100,6 +100,10 @@ public:
 
     SkMask::Format getMaskFormat() const {
         return fScalerContext->getMaskFormat();
+    }
+
+    bool isSubpixel() const {
+        return fScalerContext->isSubpixel();
     }
 
     /*  AuxProc/Data allow a client to associate data with this cache entry.
@@ -228,7 +232,7 @@ private:
     SkPaint::FontMetrics fFontMetricsY;
 
     enum {
-        kHashBits   = 8,
+        kHashBits   = 12,
         kHashCount  = 1 << kHashBits,
         kHashMask   = kHashCount - 1
     };

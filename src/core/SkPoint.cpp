@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006-2008 The Android Open Source Project
+ * Copyright 2008 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkPoint.h"
 
@@ -82,8 +75,6 @@ void SkPoint::scale(SkScalar scale, SkPoint* dst) const {
     dst->set(SkScalarMul(fX, scale), SkScalarMul(fY, scale));
 }
 
-#define kNearlyZero     (SK_Scalar1 / 8092)
-
 bool SkPoint::normalize() {
     return this->setLength(fX, fY, SK_Scalar1);
 }
@@ -96,29 +87,34 @@ bool SkPoint::setLength(SkScalar length) {
     return this->setLength(fX, fY, length);
 }
 
-#ifdef SK_SCALAR_IS_FLOAT
-
-SkScalar SkPoint::Length(SkScalar dx, SkScalar dy) {
-    return sk_float_sqrt(dx * dx + dy * dy);
-}
-
 SkScalar SkPoint::Normalize(SkPoint* pt) {
-    float mag = SkPoint::Length(pt->fX, pt->fY);
-    if (mag > kNearlyZero) {
-        float scale = 1 / mag;
-        pt->fX *= scale;
-        pt->fY *= scale;
+    SkScalar mag = SkPoint::Length(pt->fX, pt->fY);
+    if (mag > SK_ScalarNearlyZero) {
+        SkScalar scale = SkScalarInvert(mag);
+        pt->fX = SkScalarMul(pt->fX, scale);
+        pt->fY = SkScalarMul(pt->fY, scale);
         return mag;
     }
     return 0;
 }
 
+#ifdef SK_SCALAR_IS_FLOAT
+
+bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
+    float mag2 = dx * dx + dy * dy;
+    return mag2 > SK_ScalarNearlyZero * SK_ScalarNearlyZero;
+}
+
+SkScalar SkPoint::Length(SkScalar dx, SkScalar dy) {
+    return sk_float_sqrt(dx * dx + dy * dy);
+}
+
 bool SkPoint::setLength(float x, float y, float length) {
-    float mag = sk_float_sqrt(x * x + y * y);
-    if (mag > kNearlyZero) {
-        length /= mag;
-        fX = x * length;
-        fY = y * length;
+    float mag2 = x * x + y * y;
+    if (mag2 > SK_ScalarNearlyZero * SK_ScalarNearlyZero) {
+        float scale = length / sk_float_sqrt(mag2);
+        fX = x * scale;
+        fY = y * scale;
         return true;
     }
     return false;
@@ -127,6 +123,23 @@ bool SkPoint::setLength(float x, float y, float length) {
 #else
 
 #include "Sk64.h"
+
+bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
+    Sk64    tmp1, tmp2, tolSqr;
+    
+    tmp1.setMul(dx, dx);
+    tmp2.setMul(dy, dy);
+    tmp1.add(tmp2);
+
+    // we want nearlyzero^2, but to compute it fast we want to just do a
+    // 32bit multiply, so we require that it not exceed 31bits. That is true
+    // if nearlyzero is <= 0xB504, which should be trivial, since usually
+    // nearlyzero is a very small fixed-point value.
+    SkASSERT(SK_ScalarNearlyZero <= 0xB504);
+
+    tolSqr.set(0, SK_ScalarNearlyZero * SK_ScalarNearlyZero);
+    return tmp1 > tolSqr;
+}
 
 SkScalar SkPoint::Length(SkScalar dx, SkScalar dy) {
     Sk64    tmp1, tmp2;
@@ -368,7 +381,25 @@ bool SkPoint::setLength(SkFixed ox, SkFixed oy, SkFixed length) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkScalar SkPoint::distanceToLineSegmentBetweenSqd(const SkPoint& a, 
+SkScalar SkPoint::distanceToLineBetweenSqd(const SkPoint& a,
+                                           const SkPoint& b,
+                                           Side* side) const {
+
+    SkVector u = b - a;
+    SkVector v = *this - a;
+    
+    SkScalar uLengthSqd = u.lengthSqd();
+    SkScalar det = u.cross(v);
+    if (NULL != side) {
+        SkASSERT(-1 == SkPoint::kLeft_Side &&
+                  0 == SkPoint::kOn_Side &&
+                  1 == kRight_Side);
+        *side = (Side) SkScalarSignAsInt(det);
+    }
+    return SkScalarMulDiv(det, det, uLengthSqd);
+}
+
+SkScalar SkPoint::distanceToLineSegmentBetweenSqd(const SkPoint& a,
                                                   const SkPoint& b) const {
     // See comments to distanceToLineBetweenSqd. If the projection of c onto
     // u is between a and b then this returns the same result as that 
@@ -401,4 +432,3 @@ SkScalar SkPoint::distanceToLineSegmentBetweenSqd(const SkPoint& a,
         return SkScalarMulDiv(det, det, uLengthSqd);
     }
 }
-

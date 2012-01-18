@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -38,7 +45,7 @@ static float huge() {
 }
 
 static float make_number() {
-  float v;
+  float v = 0;
   int sel;
 
   if (return_large == true && R(3) == 1) sel = R(6); else  sel = R(4);
@@ -124,9 +131,11 @@ static void do_fuzz(SkCanvas* canvas) {
       case 2: {
           SkXfermode::Mode mode;
           switch (R(3)) {
-              case 0: mode = SkXfermode::kSrc_Mode; break;
+            case 0: mode = SkXfermode::kSrc_Mode; break;
             case 1: mode = SkXfermode::kXor_Mode; break;
-            case 2: mode = SkXfermode::kSrcOver_Mode; break;
+            case 2:
+            default:  // silence warning
+              mode = SkXfermode::kSrcOver_Mode; break;
           }
           paint.setXfermodeMode(mode);
       }
@@ -347,7 +356,6 @@ protected:
     }
     
     virtual void onDrawContent(SkCanvas* canvas) {
-        SkIRect r = canvas->getTotalClip().getBounds();
         do_fuzz(canvas);
         this->inval(NULL);
     }

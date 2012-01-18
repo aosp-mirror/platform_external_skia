@@ -1,25 +1,18 @@
+
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright 2010 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkPDFCatalog.h"
 #include "SkPDFDevice.h"
 #include "SkPDFPage.h"
 #include "SkStream.h"
 
-SkPDFPage::SkPDFPage(const SkRefPtr<SkPDFDevice>& content)
+SkPDFPage::SkPDFPage(SkPDFDevice* content)
     : SkPDFDict("Page"),
       fDevice(content) {
 }
@@ -29,7 +22,7 @@ SkPDFPage::~SkPDFPage() {}
 void SkPDFPage::finalizePage(SkPDFCatalog* catalog, bool firstPage,
                              SkTDArray<SkPDFObject*>* resourceObjects) {
     if (fContentStream.get() == NULL) {
-        insert("Resources", fDevice->getResourceDict().get());
+        insert("Resources", fDevice->getResourceDict());
         insert("MediaBox", fDevice->getMediaBox().get());
 
         SkRefPtr<SkStream> content = fDevice->content();
@@ -54,7 +47,7 @@ void SkPDFPage::emitPage(SkWStream* stream, SkPDFCatalog* catalog) {
 }
 
 // static
-void SkPDFPage::generatePageTree(const SkTDArray<SkPDFPage*>& pages,
+void SkPDFPage::GeneratePageTree(const SkTDArray<SkPDFPage*>& pages,
                                  SkPDFCatalog* catalog,
                                  SkTDArray<SkPDFDict*>* pageTree,
                                  SkPDFDict** rootNode) {
@@ -107,13 +100,14 @@ void SkPDFPage::generatePageTree(const SkTDArray<SkPDFPage*>& pages,
                 curNodes[i]->insert(parentName.get(), newNodeRef.get());
                 kids->append(new SkPDFObjRef(curNodes[i]))->unref();
 
-                // TODO(vandebo) put the objects in strict access order.
+                // TODO(vandebo): put the objects in strict access order.
                 // Probably doesn't matter because they are so small.
                 if (curNodes[i] != pages[0]) {
-                    pageTree->push(curNodes[i]); // Transfer reference.
+                    pageTree->push(curNodes[i]);  // Transfer reference.
                     catalog->addObject(curNodes[i], false);
                 } else {
                     SkSafeUnref(curNodes[i]);
+                    catalog->addObject(curNodes[i], true);
                 }
             }
 
@@ -129,14 +123,19 @@ void SkPDFPage::generatePageTree(const SkTDArray<SkPDFPage*>& pages,
         curNodes = nextRoundNodes;
         nextRoundNodes.rewind();
         treeCapacity *= kNodeSize;
-    } while(curNodes.count() > 1);
+    } while (curNodes.count() > 1);
 
-    pageTree->push(curNodes[0]); // Transfer reference.
+    pageTree->push(curNodes[0]);  // Transfer reference.
     catalog->addObject(curNodes[0], false);
-    if (rootNode)
+    if (rootNode) {
         *rootNode = curNodes[0];
+    }
 }
 
 const SkTDArray<SkPDFFont*>& SkPDFPage::getFontResources() const {
     return fDevice->getFontResources();
+}
+
+const SkPDFGlyphSetMap& SkPDFPage::getFontGlyphUsage() const {
+    return fDevice->getFontGlyphUsage();
 }

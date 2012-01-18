@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkMask_DEFINED
 #define SkMask_DEFINED
@@ -28,30 +21,13 @@ struct SkMask {
         kBW_Format, //!< 1bit per pixel mask (e.g. monochrome)
         kA8_Format, //!< 8bits per pixel mask (e.g. antialiasing)
         k3D_Format, //!< 3 8bit per pixl planes: alpha, mul, add
-
-        /* The LCD formats look like this in memory:
-
-           First, there's an A8 plane which contains the average alpha value for
-           each pixel. Because of this, the LCD formats can be passed directly
-           to functions which expect an A8 and everything will just work.
-
-           After that in memory, there's a bitmap of 32-bit values which have
-           been RGB order corrected for the current screen (based on the
-           settings in SkFontHost at the time of renderering). The alpha value
-           for each pixel is the maximum of the three alpha values.
-
-           kHorizontalLCD_Format has an extra column of pixels on the left and right
-           edges. kVerticalLCD_Format has an extra row at the top and bottom.
-        */
-
-        kHorizontalLCD_Format,  //!< 4 bytes/pixel: a/r/g/b
-        kVerticalLCD_Format,    //!< 4 bytes/pixel: a/r/g/b
         kARGB32_Format,         //!< SkPMColor
-        kLCD16_Format           //!< 565 alpha for r/g/b
+        kLCD16_Format,          //!< 565 alpha for r/g/b
+        kLCD32_Format           //!< 888 alpha for r/g/b
     };
 
     enum {
-        kCountMaskFormats = kVerticalLCD_Format + 1
+        kCountMaskFormats = kLCD32_Format + 1
     };
 
     uint8_t*    fImage;
@@ -80,7 +56,7 @@ struct SkMask {
         x,y are in the same coordiate space as fBounds.
     */
     uint8_t* getAddr1(int x, int y) const {
-        SkASSERT(fFormat == kBW_Format);
+        SkASSERT(kBW_Format == fFormat);
         SkASSERT(fBounds.contains(x, y));
         SkASSERT(fImage != NULL);
         return fImage + ((x - fBounds.fLeft) >> 3) + (y - fBounds.fTop) * fRowBytes;
@@ -90,8 +66,8 @@ struct SkMask {
         Asserts that the mask is kA8_Format, and that x,y are in range.
         x,y are in the same coordiate space as fBounds.
     */
-    uint8_t* getAddr(int x, int y) const {
-        SkASSERT(fFormat != kBW_Format);
+    uint8_t* getAddr8(int x, int y) const {
+        SkASSERT(kA8_Format == fFormat);
         SkASSERT(fBounds.contains(x, y));
         SkASSERT(fImage != NULL);
         return fImage + x - fBounds.fLeft + (y - fBounds.fTop) * fRowBytes;
@@ -110,28 +86,32 @@ struct SkMask {
         return row + (x - fBounds.fLeft);
     }
 
-    /** Return an address into the 32-bit plane of an LCD or VerticalLCD mask
-        for the given position.
-    */
-    const uint32_t* getAddrLCD(int x, int y) const {
-        SkASSERT(fFormat == kHorizontalLCD_Format || fFormat == kVerticalLCD_Format);
+    /**
+     *  Return the address of the specified 32bit mask. In the debug build,
+     *  this asserts that the mask's format is kLCD32_Format, and that (x,y)
+     *  are contained in the mask's fBounds.
+     */
+    uint32_t* getAddrLCD32(int x, int y) const {
+        SkASSERT(kLCD32_Format == fFormat);
+        SkASSERT(fBounds.contains(x, y));
         SkASSERT(fImage != NULL);
-
-        return reinterpret_cast<const uint32_t*>(fImage + SkAlign4(fRowBytes * fBounds.height())) +
-               x - fBounds.fLeft + (y - fBounds.fTop) * rowWordsLCD();
+        uint32_t* row = (uint32_t*)(fImage + (y - fBounds.fTop) * fRowBytes);
+        return row + (x - fBounds.fLeft);
     }
 
-    /** Return the number of 32-bit words in a row of the 32-bit plane of an
-       LCD or VerticalLCD mask.
-    */
-    unsigned rowWordsLCD() const {
-        SkASSERT(fFormat == kHorizontalLCD_Format || fFormat == kVerticalLCD_Format);
-        if (fFormat == kHorizontalLCD_Format) {
-            return fBounds.width() + 2;
-        } else {
-            return fBounds.width();
-        }
-    }
+    /**
+     *  Returns the address of the specified pixel, computing the pixel-size
+     *  at runtime based on the mask format. This will be slightly slower than
+     *  using one of the routines where the format is implied by the name
+     *  e.g. getAddr8 or getAddrLCD32.
+     *
+     *  x,y must be contained by the mask's bounds (this is asserted in the
+     *  debug build, but not checked in the release build.)
+     *
+     *  This should not be called with kBW_Format, as it will give unspecified
+     *  results (and assert in the debug build).
+     */
+    void* getAddr(int x, int y) const;
 
     static uint8_t* AllocImage(size_t bytes);
     static void FreeImage(void* image);
@@ -141,10 +121,28 @@ struct SkMask {
         kJustRenderImage_CreateMode,        //!< render into preallocate mask
         kComputeBoundsAndRenderImage_CreateMode  //!< compute bounds, alloc image and render into it
     };
+};
 
-    static bool FormatIsLCD(Format fm) {
-        return kHorizontalLCD_Format == fm || kVerticalLCD_Format == fm;
+///////////////////////////////////////////////////////////////////////////////
+
+/**
+ *  \class SkAutoMaskImage
+ *
+ *  Stack class used to manage the fImage buffer in a SkMask.
+ *  When this object loses scope, the buffer is freed with SkMask::FreeImage().
+ */
+class SkAutoMaskFreeImage {
+public:
+    SkAutoMaskFreeImage(uint8_t* maskImage) {
+        fImage = maskImage;
     }
+    
+    ~SkAutoMaskFreeImage() {
+        SkMask::FreeImage(fImage);
+    }
+
+private:
+    uint8_t* fImage;
 };
 
 #endif

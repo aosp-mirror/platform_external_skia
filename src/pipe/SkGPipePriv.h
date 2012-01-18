@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #ifndef SkGPipePriv_DEFINED
@@ -56,7 +49,6 @@ enum DrawOps {
     kDrawPosText_DrawOp,
     kDrawPosTextH_DrawOp,
     kDrawRect_DrawOp,
-    kDrawShape_DrawOp,
     kDrawSprite_DrawOp,
     kDrawText_DrawOp,
     kDrawTextOnPath_DrawOp,
@@ -74,8 +66,6 @@ enum DrawOps {
 
     kDef_Typeface_DrawOp,
     kDef_Flattenable_DrawOp,
-
-    kName_Flattenable_DrawOp,   // index <--> name
 
     // these are signals to playback, not drawing verbs
     kDone_DrawOp,
@@ -119,7 +109,7 @@ static uint32_t DrawOp_packOpFlagData(DrawOps op, unsigned flags, unsigned data)
     SkASSERT(0 == (flags & ~DRAWOPS_FLAG_MASK));
     SkASSERT(0 == (data & ~DRAWOPS_DATA_MASK));
 
-    return (op << DRAWOPS_FLAG_BITS + DRAWOPS_DATA_BITS) |
+    return (op << (DRAWOPS_FLAG_BITS + DRAWOPS_DATA_BITS)) |
            (flags << DRAWOPS_DATA_BITS) |
             data;
 }
@@ -190,14 +180,14 @@ static unsigned PaintOp_unpackData(uint32_t op32) {
 static uint32_t PaintOp_packOp(PaintOps op) {
     SkASSERT(0 == (op & ~PAINTOPS_OP_MASK));
     
-    return (op << PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS);
+    return op << (PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS);
 }
 
 static uint32_t PaintOp_packOpData(PaintOps op, unsigned data) {
     SkASSERT(0 == (op & ~PAINTOPS_OP_MASK));
     SkASSERT(0 == (data & ~PAINTOPS_DATA_MASK));
     
-    return (op << PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS) | data;
+    return (op << (PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS)) | data;
 }
 
 static uint32_t PaintOp_packOpFlagData(PaintOps op, unsigned flags, unsigned data) {
@@ -205,7 +195,7 @@ static uint32_t PaintOp_packOpFlagData(PaintOps op, unsigned flags, unsigned dat
     SkASSERT(0 == (flags & ~PAINTOPS_FLAG_MASK));
     SkASSERT(0 == (data & ~PAINTOPS_DATA_MASK));
     
-    return (op << PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS) |
+    return (op << (PAINTOPS_FLAG_BITS + PAINTOPS_DATA_BITS)) |
     (flags << PAINTOPS_DATA_BITS) |
     data;
 }

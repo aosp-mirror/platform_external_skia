@@ -1,21 +1,15 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
 
 
+
 #include "SkCanvas.h"
+#include "SkData.h"
 #include "SkDevice.h"
 #include "SkPaint.h"
 #include "SkGPipe.h"
@@ -41,7 +35,7 @@ static SkFlattenable* get_paintflat(const SkPaint& paint, unsigned paintFlat) {
         case kShader_PaintFlat:         return paint.getShader();
         case kXfermode_PaintFlat:       return paint.getXfermode();
     }
-    SkASSERT(!"never gets here");
+    SkDEBUGFAIL("never gets here");
     return NULL;
 }
 
@@ -68,7 +62,8 @@ static size_t writeTypeface(SkWriter32* writer, SkTypeface* typeface) {
     size_t size = stream.getOffset();
     if (writer) {
         writer->write32(size);
-        writer->write(stream.getStream(), size);
+        SkAutoDataUnref data(stream.copyToData());
+        writer->write(data.data(), size);
     }
     return 4 + size;
 }
@@ -82,8 +77,10 @@ public:
 
     void finish() {
         if (!fDone) {
-            this->writeOp(kDone_DrawOp);
-            this->doNotify();
+            if (this->needOpBytes()) {
+                this->writeOp(kDone_DrawOp);
+                this->doNotify();
+            }
             fDone = true;
         }
     }
@@ -125,7 +122,6 @@ public:
                             const SkPath& path, const SkMatrix* matrix, 
                                 const SkPaint&);
     virtual void drawPicture(SkPicture& picture);
-    virtual void drawShape(SkShape*);
     virtual void drawVertices(VertexMode, int vertexCount,
                           const SkPoint vertices[], const SkPoint texs[],
                           const SkColor colors[], SkXfermode*,
@@ -197,31 +193,9 @@ int SkGPipeCanvas::flattenToIndex(SkFlattenable* obj, PaintFlats paintflat) {
     if (NULL == obj) {
         return 0;
     }
-    
-    SkFlattenable::Factory fact = obj->getFactory();
-    if (NULL == fact) {
-        return 0;
-    }
 
-    if (fFactorySet) {
-        uint32_t id = fFactorySet->find((void*)fact);
-        if (0 == id) {
-            const char* name = SkFlattenable::FactoryToName(fact);
-            if (NULL == name) {
-                return 0;
-            }
-            size_t len = strlen(name);
-            size_t size = SkWriter32::WriteStringSize(name, len);
-            if (!this->needOpBytes(size)) {
-                return 0;
-            }
-            unsigned id = fFactorySet->add(fact);
-            this->writeOp(kName_Flattenable_DrawOp, paintflat, id);
-            fWriter.writeString(name, len);
-        }
-    }
-    
     SkFlattenableWriteBuffer tmpWriter(1024);
+    tmpWriter.setFlags(SkFlattenableWriteBuffer::kInlineFactoryNames_Flag);
     tmpWriter.setFactoryRecorder(fFactorySet);
 
     tmpWriter.writeFlattenable(obj);
@@ -259,7 +233,8 @@ int SkGPipeCanvas::flattenToIndex(SkFlattenable* obj, PaintFlats paintflat) {
 
 SkGPipeCanvas::SkGPipeCanvas(SkGPipeController* controller,
                              SkWriter32* writer, SkFactorySet* fset)
-        : fWriter(*writer), fFactorySet(fset) {
+        : fWriter(*writer) {
+    fFactorySet = fset;
     fController = controller;
     fDone = false;
     fBlockSize = 0; // need first block from controller
@@ -267,9 +242,10 @@ SkGPipeCanvas::SkGPipeCanvas(SkGPipeController* controller,
 
     // we need a device to limit our clip
     // should the caller give us the bounds?
+    // We don't allocate pixels for the bitmap
     SkBitmap bitmap;
     bitmap.setConfig(SkBitmap::kARGB_8888_Config, 32767, 32767);
-    SkDevice* device = SkNEW_ARGS(SkDevice, (this, bitmap, false));
+    SkDevice* device = SkNEW_ARGS(SkDevice, (bitmap));
     this->setDevice(device)->unref();
 }
 
@@ -608,10 +584,6 @@ void SkGPipeCanvas::drawTextOnPath(const void* text, size_t byteLength,
 void SkGPipeCanvas::drawPicture(SkPicture& picture) {
     // we want to playback the picture into individual draw calls
     this->INHERITED::drawPicture(picture);
-}
-
-void SkGPipeCanvas::drawShape(SkShape* shape) {
-    UNIMPLEMENTED
 }
 
 void SkGPipeCanvas::drawVertices(VertexMode mode, int vertexCount,

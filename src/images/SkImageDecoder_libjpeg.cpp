@@ -1,18 +1,11 @@
+
 /*
- * Copyright 2007, The Android Open Source Project
+ * Copyright 2007 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
@@ -32,7 +25,7 @@ extern "C" {
     #include "jerror.h"
 }
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 #include <cutils/properties.h>
 
 // Key to lookup the size of memory buffer set in system property
@@ -122,7 +115,7 @@ private:
     jpeg_decompress_struct* cinfo_ptr;
 };
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 /* Check if the memory cap property is set.
    If so, use the memory size for jpeg decode.
 */
@@ -218,7 +211,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     jpeg_create_decompress(&cinfo);
     autoClean.set(&cinfo);
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     overwrite_mem_buffer_size(&cinfo);
 #endif
 
@@ -421,7 +414,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         return return_false(cinfo, *bm, "sampler.begin");
     }
 
-    uint8_t* srcRow = (uint8_t*)srcStorage.alloc(cinfo.output_width * 4);
+    uint8_t* srcRow = (uint8_t*)srcStorage.reset(cinfo.output_width * 4);
 
     //  Possibly skip initial rows [sampler.srcY0]
     if (!skip_src_rows(&cinfo, srcRow, sampler.srcY0())) {
@@ -491,7 +484,7 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
     cinfo->do_fancy_upsampling = 0;
     cinfo->do_block_smoothing = 0;
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     overwrite_mem_buffer_size(cinfo);
 #endif
 
@@ -516,7 +509,7 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
     // Init decoder to image decode mode
     jpeg_create_decompress(cinfo);
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     overwrite_mem_buffer_size(cinfo);
 #endif
 
@@ -669,7 +662,7 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
         return return_false(*cinfo, *bitmap, "sampler.begin");
     }
 
-    uint8_t* srcRow = (uint8_t*)srcStorage.alloc(width * 4);
+    uint8_t* srcRow = (uint8_t*)srcStorage.reset(width * 4);
 
     //  Possibly skip initial rows [sampler.srcY0]
     if (!skip_src_rows_tile(cinfo, index->index, srcRow, sampler.srcY0())) {
@@ -919,7 +912,7 @@ protected:
         jpeg_start_compress(&cinfo, TRUE);
 
         const int       width = bm.width();
-        uint8_t*        oneRowP = (uint8_t*)oneRow.alloc(width * 3);
+        uint8_t*        oneRowP = (uint8_t*)oneRow.reset(width * 3);
 
         const SkPMColor* colors = ctLocker.lockColors(bm);
         const void*      srcRow = bm.getPixels();

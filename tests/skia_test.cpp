@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkGraphics.h"
 #include "Test.h"
 
@@ -97,11 +104,40 @@ private:
 
 int main (int argc, char * const argv[]) {
     SkAutoGraphics ag;
-    
+
     bool androidMode = false;
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-android")) {
+    const char* matchStr = NULL;
+
+    char* const* stop = argv + argc;
+    for (++argv; argv < stop; ++argv) {
+        if (strcmp(*argv, "-android") == 0) {
             androidMode = true;
+        
+        } else if (strcmp(*argv, "--match") == 0) {
+            ++argv;
+            if (argv < stop && **argv) {
+                matchStr = *argv;
+            }
+        }
+    }
+
+    {
+        SkString header("Skia UnitTests:");
+        if (matchStr) {
+            header.appendf(" --match %s", matchStr);
+        }
+#ifdef SK_DEBUG
+        header.append(" SK_DEBUG");
+#else
+        header.append(" SK_RELEASE");
+#endif
+#ifdef SK_SCALAR_IS_FIXED
+        header.append(" SK_SCALAR_IS_FIXED");
+#else
+        header.append(" SK_SCALAR_IS_FLOAT");
+#endif
+        if (!androidMode) {
+            SkDebugf("%s\n", header.c_str());
         }
     }
 
@@ -111,17 +147,24 @@ int main (int argc, char * const argv[]) {
 
     const int count = Iter::Count();
     int index = 0;
-    int successCount = 0;
+    int failCount = 0;
+    int skipCount = 0;
     while ((test = iter.next()) != NULL) {
         reporter.setIndexOfTotal(index, count);
-        successCount += test->run();
+        if (NULL != matchStr && !strstr(test->getName(), matchStr)) {
+            ++skipCount;
+        } else {
+            if (!test->run()) {
+                ++failCount;
+            }
+        }
         SkDELETE(test);
         index += 1;
     }
 
     if (!androidMode) {
-        SkDebugf("Finished %d tests, %d failures.\n", count,
-                 count - successCount);
+        SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
+                 count, failCount, skipCount);
     }
-    return (count == successCount) ? 0 : 1;
+    return (failCount == 0) ? 0 : 1;
 }

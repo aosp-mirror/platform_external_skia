@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 
 namespace skiagm {
@@ -6,6 +13,7 @@ class FillTypeGM : public GM {
     SkPath fPath;
 public:
 	FillTypeGM() {
+        this->setBGColor(0xFFDDDDDD);
         const SkScalar radius = SkIntToScalar(45);
         fPath.addCircle(SkIntToScalar(50), SkIntToScalar(50), radius);
         fPath.addCircle(SkIntToScalar(100), SkIntToScalar(100), radius);
@@ -49,8 +57,6 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-        
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
         
         SkPaint paint;

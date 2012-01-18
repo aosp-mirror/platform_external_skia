@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkUtils_DEFINED
 #define SkUtils_DEFINED
@@ -38,13 +31,6 @@ SkMemset16Proc SkMemset16GetPlatformProc();
 void sk_memset32_portable(uint32_t dst[], uint32_t value, int count);
 typedef void (*SkMemset32Proc)(uint32_t dst[], uint32_t value, int count);
 SkMemset32Proc SkMemset32GetPlatformProc();
-
-#if defined(ANDROID) && !defined(SK_BUILD_FOR_ANDROID_NDK)
-    #include "cutils/memory.h"
-    
-    #define sk_memset16(dst, value, count)    android_memset16(dst, value, (count) << 1)
-    #define sk_memset32(dst, value, count)    android_memset32(dst, value, (count) << 2)
-#endif
 
 #ifndef sk_memset16
 extern SkMemset16Proc sk_memset16;
@@ -97,6 +83,21 @@ size_t SkUTF16_FromUnichar(SkUnichar uni, uint16_t utf16[] = NULL);
 
 size_t SkUTF16_ToUTF8(const uint16_t utf16[], int numberOf16BitValues,
                            char utf8[] = NULL);
+
+inline bool SkUnichar_IsVariationSelector(SkUnichar uni) {
+/*  The 'true' ranges are:
+ *      0x180B  <= uni <=  0x180D
+ *      0xFE00  <= uni <=  0xFE0F
+ *      0xE0100 <= uni <= 0xE01EF
+ */
+    if (uni < 0x180B || uni > 0xE01EF) {
+        return false;
+    }
+    if ((uni > 0x180D && uni < 0xFE00) || (uni > 0xFE0F && uni < 0xE0100)) {
+        return false;
+    }
+    return true;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 

@@ -1,19 +1,9 @@
-/* libs/graphics/sgl/SkCoreBlitters.h
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 
 #ifndef SkCoreBlitters_DEFINED
 #define SkCoreBlitters_DEFINED
@@ -104,7 +94,6 @@ protected:
     SkColor                fColor;
     SkPMColor              fPMColor;
     SkBlitRow::ColorProc   fColor32Proc;
-    SkBlitMask::Proc       fBlitMaskProc;
 
 private:
     unsigned fSrcA, fSrcR, fSrcG, fSrcB;
@@ -129,7 +118,6 @@ class SkARGB32_Black_Blitter : public SkARGB32_Opaque_Blitter {
 public:
     SkARGB32_Black_Blitter(const SkBitmap& device, const SkPaint& paint)
         : INHERITED(device, paint) {}
-    virtual void blitMask(const SkMask&, const SkIRect&);
     virtual void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]);
 
 private:
@@ -142,6 +130,7 @@ public:
     virtual ~SkARGB32_Shader_Blitter();
     virtual void blitH(int x, int y, int width);
     virtual void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]);
+    virtual void blitMask(const SkMask&, const SkIRect&);
 
 private:
     SkXfermode*         fXfermode;

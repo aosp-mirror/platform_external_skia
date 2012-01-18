@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkSpriteBlitterTemplate.h
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 
 class SkSPRITE_CLASSNAME : public SkSpriteBlitter {
@@ -27,8 +19,8 @@ public:
         SkASSERT(width > 0 && height > 0);
         int srcX = x - fLeft;
         int srcY = y - fTop;
-        SK_RESTRICT SkSPRITE_DST_TYPE* dst =fDevice->SkSPRITE_DST_GETADDR(x, y);
-        const SK_RESTRICT SkSPRITE_SRC_TYPE* src =
+        SkSPRITE_DST_TYPE* SK_RESTRICT dst =fDevice->SkSPRITE_DST_GETADDR(x, y);
+        const SkSPRITE_SRC_TYPE* SK_RESTRICT src =
                                       fSource->SkSPRITE_SRC_GETADDR(srcX, srcY);
         unsigned dstRB = fDevice->rowBytes();
         unsigned srcRB = fSource->rowBytes();
@@ -55,8 +47,8 @@ public:
                 d += 1;
             } while (--w != 0);
 #endif
-            dst = (SK_RESTRICT SkSPRITE_DST_TYPE*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT SkSPRITE_SRC_TYPE*)
+            dst = (SkSPRITE_DST_TYPE* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const SkSPRITE_SRC_TYPE* SK_RESTRICT)
                                             ((const char*)src + srcRB);
             SkSPRITE_NEXT_ROW
 #ifdef SkSPRITE_ROW_PROC
@@ -88,4 +80,3 @@ private:
 #ifdef SkSPRITE_ROW_PROC
     #undef SkSPRITE_ROW_PROC
 #endif
-

@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkView_DEFINED
 #define SkView_DEFINED
@@ -21,6 +14,7 @@
 #include "SkRect.h"
 #include "SkDOM.h"
 #include "SkTDict.h"
+#include "SkMatrix.h"
 
 class SkCanvas;
 class SkLayerView;
@@ -87,6 +81,12 @@ public:
     /** Return a rectangle set to [0, 0, width, height] */
     void        getLocalBounds(SkRect* bounds) const;
 
+    /** Loc - the view's offset with respect to its parent in its view hiearchy.
+        NOTE: For more complex transforms, use Local Matrix. The tranformations 
+        are applied in the following order:
+             canvas->translate(fLoc.fX, fLoc.fY);		
+             canvas->concat(fMatrix);
+    */
     /** Return the view's left edge */
     SkScalar    locX() const { return fLoc.fX; }
     /** Return the view's top edge */
@@ -96,6 +96,18 @@ public:
     void        setLoc(const SkPoint& loc) { this->setLoc(loc.fX, loc.fY); }
     void        setLocX(SkScalar x) { this->setLoc(x, fLoc.fY); }
     void        setLocY(SkScalar y) { this->setLoc(fLoc.fX, y); }
+    
+    /** Local Matrix - matrix used to tranform the view with respect to its 
+        parent in its view hiearchy. Use setLocalMatrix to apply matrix 
+        transformations to the current view and in turn affect its children.
+        NOTE: For simple offsets, use Loc. The transformations are applied in
+        the following order:
+             canvas->translate(fLoc.fX, fLoc.fY);		
+             canvas->concat(fMatrix);
+    */
+    const SkMatrix& getLocalMatrix() const { return fMatrix; }
+    void            setLocalMatrix(const SkMatrix& matrix);
+
     /** Offset (move) the view by the specified dx and dy. This does not affect the view's size */
     void        offset(SkScalar dx, SkScalar dy);
 
@@ -142,6 +154,7 @@ public:
         SkPoint     fOrig, fPrev, fCurr;
         SkIPoint    fIOrig, fIPrev, fICurr;
         State       fState;
+        void*       fOwner;
     private:
         SkEventSinkID   fTargetID;
         char*           fType;
@@ -167,10 +180,6 @@ public:
         the query, null is returned.
      */
     SkView* sendQueryToParents(SkEvent*);
-
-    /** Depricated helper function. Just call event->post(sinkID, delay);
-    */
-    bool    postEvent(SkEvent* evt, SkEventSinkID sinkID, SkMSec delay) { return evt->post(sinkID, delay); }
 
     //  View hierarchy management
 
@@ -348,6 +357,7 @@ protected:
 
 private:
     SkScalar    fWidth, fHeight;
+    SkMatrix    fMatrix;
     SkPoint     fLoc;
     SkView*     fParent;
     SkView*     fFirstChild;
@@ -364,6 +374,8 @@ private:
     bool    setFocusView(SkView* fvOrNull);
     SkView* acceptFocus(FocusDirection);
     void    detachFromParent_NoLayout();
+    /** Compute the matrix to transform view-local coordinates into global ones */
+    void    localToGlobal(SkMatrix* matrix) const;
 };
 
 #endif

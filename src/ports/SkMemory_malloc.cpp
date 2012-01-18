@@ -1,14 +1,21 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkTypes.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 void sk_throw() {
-    SkASSERT(!"sk_throw");
+    SkDEBUGFAIL("sk_throw");
     abort();
 }
 
 void sk_out_of_memory(void) {
-    SkASSERT(!"sk_out_of_memory");
+    SkDEBUGFAIL("sk_out_of_memory");
     abort();
 }
 

@@ -1,25 +1,17 @@
-/* libs/graphics/sgl/SkScan_Antihair.cpp
-**
-** Copyright 2011, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2011 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkScan.h"
 #include "SkBlitter.h"
 #include "SkColorPriv.h"
 #include "SkLineClipper.h"
-#include "SkRegion.h"
+#include "SkRasterClip.h"
 #include "SkFDot6.h"
 
 /*  Our attempt to compute the worst case "bounds" for the horizontal and
@@ -395,8 +387,8 @@ static void do_anti_hairline(SkFDot6 x0, SkFDot6 y0, SkFDot6 x1, SkFDot6 y1,
     }
 }
 
-void SkScan::AntiHairLine(const SkPoint& pt0, const SkPoint& pt1,
-                          const SkRegion* clip, SkBlitter* blitter) {
+void SkScan::AntiHairLineRgn(const SkPoint& pt0, const SkPoint& pt1,
+                             const SkRegion* clip, SkBlitter* blitter) {
     if (clip && clip->isEmpty()) {
         return;
     }
@@ -463,7 +455,7 @@ void SkScan::AntiHairLine(const SkPoint& pt0, const SkPoint& pt1,
     do_anti_hairline(x0, y0, x1, y1, NULL, blitter);
 }
 
-void SkScan::AntiHairRect(const SkRect& rect, const SkRegion* clip,
+void SkScan::AntiHairRect(const SkRect& rect, const SkRasterClip& clip,
                           SkBlitter* blitter) {
     SkPoint p0, p1;
 
@@ -566,7 +558,9 @@ static void antifillrect(const SkXRect& xr, SkBlitter* blitter) {
 
 void SkScan::AntiFillXRect(const SkXRect& xr, const SkRegion* clip,
                           SkBlitter* blitter) {
-    if (clip) {
+    if (NULL == clip) {
+        antifillrect(xr, blitter);
+    } else {
         SkIRect outerBounds;
         XRect_roundOut(xr, &outerBounds);
 
@@ -598,8 +592,25 @@ void SkScan::AntiFillXRect(const SkXRect& xr, const SkRegion* clip,
                 clipper.next();
             }
         }
+    }
+}
+
+void SkScan::AntiFillXRect(const SkXRect& xr, const SkRasterClip& clip,
+                           SkBlitter* blitter) {
+    if (clip.isBW()) {
+        AntiFillXRect(xr, &clip.bwRgn(), blitter);
     } else {
-        antifillrect(xr, blitter);
+        SkIRect outerBounds;
+        XRect_roundOut(xr, &outerBounds);
+
+        if (clip.quickContains(outerBounds)) {
+            AntiFillXRect(xr, NULL, blitter);
+        } else {
+            SkAAClipBlitterWrapper wrapper(clip, blitter);
+            blitter = wrapper.getBlitter();
+
+            AntiFillXRect(xr, &wrapper.getRgn(), wrapper.getBlitter());
+        }
     }
 }
 
@@ -650,6 +661,16 @@ void SkScan::AntiFillRect(const SkRect& origR, const SkRegion* clip,
         }
     } else {
         antifillrect(origR, blitter);
+    }
+}
+
+void SkScan::AntiFillRect(const SkRect& r, const SkRasterClip& clip,
+                          SkBlitter* blitter) {
+    if (clip.isBW()) {
+        AntiFillRect(r, &clip.bwRgn(), blitter);
+    } else {
+        SkAAClipBlitterWrapper wrap(clip, blitter);
+        AntiFillRect(r, &wrap.getRgn(), wrap.getBlitter());
     }
 }
 
@@ -813,3 +834,14 @@ void SkScan::AntiFrameRect(const SkRect& r, const SkPoint& strokeSize,
         innerstrokedot8(L, T, R, B, blitter);
     }
 }
+
+void SkScan::AntiFrameRect(const SkRect& r, const SkPoint& strokeSize,
+                           const SkRasterClip& clip, SkBlitter* blitter) {
+    if (clip.isBW()) {
+        AntiFrameRect(r, strokeSize, &clip.bwRgn(), blitter);
+    } else {
+        SkAAClipBlitterWrapper wrap(clip, blitter);
+        AntiFrameRect(r, strokeSize, &wrap.getRgn(), wrap.getBlitter());
+    }
+}
+

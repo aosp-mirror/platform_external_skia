@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -56,8 +63,9 @@ public:
                     { SkIntToScalar(32), SkIntToScalar(17) }
                 };
 
-                SkMatrix m0, m1;
+                SkMatrix m0;
                 m0.setPolyToPoly(src, dst, 3);
+              //  SkMatrix m1;
               //  SkSetPoly3To3(&m1, src, dst);
               //  m0.dump();
               //  m1.dump();

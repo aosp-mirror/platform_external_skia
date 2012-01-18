@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkXfermode_DEFINED
 #define SkXfermode_DEFINED
@@ -138,6 +131,18 @@ public:
      */
     static bool AsMode(SkXfermode*, Mode* mode);
 
+    /**
+     *  Returns true if the xfermode claims to be the specified Mode. This works
+     *  correctly even if the xfermode is NULL (which equates to kSrcOver.) Thus
+     *  you can say this without checking for a null...
+     *
+     *  If (SkXfermode::IsMode(paint.getXfermode(),
+     *                         SkXfermode::kDstOver_Mode)) {
+     *      ...
+     *  }
+     */
+    static bool IsMode(SkXfermode* xfer, Mode mode);
+
     /** Return an SkXfermode object for the specified mode.
      */
     static SkXfermode* Create(Mode mode);
@@ -167,6 +172,7 @@ public:
         return AsMode(xfer, mode);
     }
 
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 protected:
     SkXfermode(SkFlattenableReadBuffer& rb) : SkFlattenable(rb) {}
 
@@ -200,20 +206,25 @@ public:
 
     // overrides from SkXfermode
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) SK_OVERRIDE;
     virtual void xfer16(uint16_t dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) SK_OVERRIDE;
     virtual void xfer4444(uint16_t dst[], const SkPMColor src[], int count,
-                          const SkAlpha aa[]);
+                          const SkAlpha aa[]) SK_OVERRIDE;
     virtual void xferA8(SkAlpha dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) SK_OVERRIDE;
 
     // overrides from SkFlattenable
-    virtual Factory getFactory() { return CreateProc; }
-    virtual void    flatten(SkFlattenableWriteBuffer&);
+    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; }
+    virtual void    flatten(SkFlattenableWriteBuffer&) SK_OVERRIDE;
 
 protected:
     SkProcXfermode(SkFlattenableReadBuffer&);
+
+    // allow subclasses to update this after we unflatten
+    void setProc(SkXfermodeProc proc) {
+        fProc = proc;
+    }
 
 private:
     SkXfermodeProc  fProc;

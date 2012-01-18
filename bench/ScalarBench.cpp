@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBenchmark.h"
 #include "SkFloatBits.h"
 #include "SkRandom.h"
@@ -21,7 +28,7 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-        int n = N * this->mulLoopCount();
+        int n = SkBENCHLOOP(N * this->mulLoopCount());
         for (int i = 0; i < n; i++) {
             this->performTest();
         }

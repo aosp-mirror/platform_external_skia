@@ -1,4 +1,12 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkScript2.h"
+#include "SkData.h"
 #include "SkFloatingPoint.h"
 #include "SkMath.h"
 #include "SkParse.h"
@@ -497,8 +505,9 @@ bool SkScriptEngine2::innerScript(const char** scriptPtr, SkScriptValue2* value)
                 }
                 lastPush = false;
                 continue;
-            } else
+            } else {
                 SkASSERT(token_length(script) > 0);
+            }
         }
         if (lastPush != false && fTokenLength > 0) {
             if (ch == '(') {
@@ -594,7 +603,7 @@ scalarCommon:
         }
         if (ch ==  '.') {
             if (fTokenLength == 0) {
-                SkScriptValue2 scriptValue;
+                SkDEBUGCODE(SkScriptValue2 scriptValue;)
                 SkDEBUGCODE(scriptValue.fOperand.fObject = NULL);
                 int tokenLength = token_length(++script);
                 const char* token = script;
@@ -736,11 +745,12 @@ scalarCommon:
     }
     if (fStream.getOffset() > 0) {
         addToken(kEnd);
+        SkAutoDataUnref data(fStream.copyToData());
 #ifdef SK_DEBUG
-        decompile((const unsigned char*)fStream.getStream(), fStream.getOffset());
+        decompile(data.bytes(), data.size());
 #endif
         SkScriptRuntime runtime(fCallBackArray);
-        runtime.executeTokens((unsigned char*) fStream.getStream());
+        runtime.executeTokens((unsigned char*) data.bytes());
         SkScriptValue2 value1;
         runtime.getResult(&value1.fOperand);
         value1.fType = fReturnType;
@@ -1029,8 +1039,9 @@ void SkScriptEngine2::processLogicalOp(Op op) {
                 SkASSERT(fValueStack.top().fType == SkOperand2::kS32); // !!! add error handling, and conversion to int?
                 addTokenValue(fValueStack.top(), kAccumulator);
                 fValueStack.pop();
-            } else
+            } else {
                 SkASSERT(fAccumulatorType == SkOperand2::kS32);
+            }
             // if 'and', write beq goto opcode after end of predicate (after to bool)
             // if 'or', write bne goto to bool
             addToken(op == kLogicalAnd ? kLogicalAndInt : kLogicalOrInt);
@@ -1124,8 +1135,8 @@ bool SkScriptEngine2::processOp() {
     else if (value2.fType == SkOperand2::kString)
         typeOp = (TypeOp) (typeOp + 2);
     SkDynamicMemoryWStream stream;
-    SkOperand2::OpType saveType;
-    SkBool saveOperand;
+    SkOperand2::OpType saveType = SkOperand2::kNoType;
+    SkBool saveOperand = false;
     if (constantOperands) {
         fActiveStream = &stream;
         saveType = fAccumulatorType;
@@ -1142,11 +1153,12 @@ bool SkScriptEngine2::processOp() {
     addToken(typeOp);
     if (constantOperands) {
         addToken(kEnd);
+        SkAutoDataUnref data(fStream.copyToData());
 #ifdef SK_DEBUG        
-        decompile((const unsigned char*) stream.getStream(), stream.getOffset());
+        decompile(data.bytes(), data.size());
 #endif
         SkScriptRuntime runtime(fCallBackArray);
-        runtime.executeTokens((unsigned char*) stream.getStream());
+        runtime.executeTokens((unsigned char*)data.bytes());
         runtime.getResult(&value1.fOperand);
         if (attributes->fResultIsBoolean == kResultIsBoolean)
             value1.fType = SkOperand2::kS32;

@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkWidgetViews.h"
 #include "SkAnimator.h"
 #include "SkCanvas.h"
@@ -398,7 +405,7 @@ SkView* SkWidgetFactory(SkWidgetEnum sw)
 	case kText_WidgetEnum:
 		return new SkStaticTextView;
 	default:
-		SkASSERT(!"unknown enum passed to SkWidgetFactory");
+		SkDEBUGFAIL("unknown enum passed to SkWidgetFactory");
 		break;
 	}
 	return NULL;

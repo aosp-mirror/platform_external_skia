@@ -1,24 +1,18 @@
+
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright 2010 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPDFCatalog_DEFINED
 #define SkPDFCatalog_DEFINED
 
 #include <sys/types.h>
 
+#include "SkPDFDocument.h"
 #include "SkPDFTypes.h"
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
@@ -32,7 +26,7 @@ class SK_API SkPDFCatalog {
 public:
     /** Create a PDF catalog.
      */
-    SkPDFCatalog();
+    explicit SkPDFCatalog(SkPDFDocument::Flags flags);
     ~SkPDFCatalog();
 
     /** Add the passed object to the catalog.  Refs obj.
@@ -62,6 +56,10 @@ public:
      */
     size_t getObjectNumberSize(SkPDFObject* obj);
 
+    /** Return the document flags in effect for this catalog/document.
+     */
+    SkPDFDocument::Flags getDocumentFlags() const { return fDocumentFlags; }
+
     /** Output the cross reference table for objects in the catalog.
      *  Returns the total number of objects.
      *  @param stream      The writable output stream to send the output to.
@@ -69,6 +67,26 @@ public:
      *                     include all objects not on the first page.
      */
     int32_t emitXrefTable(SkWStream* stream, bool firstPage);
+
+    /** Set substitute object for the passed object.
+     */
+    void setSubstitute(SkPDFObject* original, SkPDFObject* substitute);
+
+    /** Find and return any substitute object set for the passed object. If
+     *  there is none, return the passed object.
+     */
+    SkPDFObject* getSubstituteObject(SkPDFObject* object);
+
+    /** Set file offsets for the resources of substitute objects.
+     *  @param fileOffset Accumulated offset of current document.
+     *  @param firstPage  Indicate whether this is for the first page only.
+     *  @return           Total size of resources of substitute objects.
+     */
+    off_t setSubstituteResourcesOffsets(off_t fileOffset, bool firstPage);
+
+    /** Emit the resources of substitute objects.
+     */
+    void emitSubstituteResources(SkWStream* stream, bool firstPage);
 
 private:
     struct Rec {
@@ -84,8 +102,21 @@ private:
         bool fOnFirstPage;
     };
 
-    // TODO(vandebo) Make this a hash if it's a performance problem.
+    struct SubstituteMapping {
+        SubstituteMapping(SkPDFObject* original, SkPDFObject* substitute)
+            : fOriginal(original), fSubstitute(substitute) {
+        }
+        SkPDFObject* fOriginal;
+        SkPDFObject* fSubstitute;
+    };
+
+    // TODO(vandebo): Make this a hash if it's a performance problem.
     SkTDArray<struct Rec> fCatalog;
+
+    // TODO(arthurhsu): Make this a hash if it's a performance problem.
+    SkTDArray<SubstituteMapping> fSubstituteMap;
+    SkTDArray<SkPDFObject*> fSubstituteResourcesFirstPage;
+    SkTDArray<SkPDFObject*> fSubstituteResourcesRemaining;
 
     // Number of objects on the first page.
     uint32_t fFirstPageCount;
@@ -94,9 +125,13 @@ private:
     // Next object number to assign on the first page.
     uint32_t fNextFirstPageObjNum;
 
+    SkPDFDocument::Flags fDocumentFlags;
+
     int findObjectIndex(SkPDFObject* obj) const;
 
     int assignObjNum(SkPDFObject* obj);
+
+    SkTDArray<SkPDFObject*>* getSubstituteList(bool firstPage);
 };
 
 #endif

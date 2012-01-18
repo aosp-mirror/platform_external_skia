@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2010 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-         http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2010 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #ifndef SkGr_DEFINED
@@ -21,7 +14,7 @@
 #include <stddef.h>
 
 // Gr headers
-#include "GrConfig.h"
+#include "GrTypes.h"
 #include "GrContext.h"
 #include "GrFontScaler.h"
 #include "GrClipIterator.h"
@@ -39,36 +32,8 @@
 //    #error "inconsistent GR_DEBUG and SK_DEBUG"
 #endif
 
-#if GR_SCALAR_IS_FIXED
-    #ifdef SK_SCALAR_IS_FIXED
-        #define SK_SCALAR_IS_GR_SCALAR  1
-    #else
-        #define SK_SCALAR_IS_GR_SCALAR  0
-    #endif
-    #define SkScalarToGrScalar(x)       SkScalarToFixed(x)
-
-#elif GR_SCALAR_IS_FLOAT
-
-    #ifdef SK_SCALAR_IS_FLOAT
-        #define SK_SCALAR_IS_GR_SCALAR  1
-    #else
-        #define SK_SCALAR_IS_GR_SCALAR  0
-    #endif
-    #define SkScalarToGrScalar(x)       SkScalarToFloat(x)
-
-#else
-    #error "Ganesh scalar type not defined"
-#endif
-
 ////////////////////////////////////////////////////////////////////////////////
 // Sk to Gr Type conversions
-
-// Verify that SkPoint and GrPoint are compatible if using the same scalar type
-#if 0/*SK_SCALAR_IS_GR_SCALAR*/
-    GR_STATIC_ASSERT(sizeof(SkPoint) == sizeof(GrPoint));
-    GR_STATIC_ASSERT(offsetof(SkPoint,fX) == offsetof(GrPoint,fX)));
-    GR_STATIC_ASSERT(offsetof(SkPoint,fY) == offsetof(GrPoint,fY)));
-#endif
 
 GR_STATIC_ASSERT((int)GrSamplerState::kClamp_WrapMode == (int)SkShader::kClamp_TileMode);
 GR_STATIC_ASSERT((int)GrSamplerState::kRepeat_WrapMode ==(
@@ -231,10 +196,11 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions
 
-GrTextureEntry* sk_gr_create_bitmap_texture(GrContext* ctx,
-                                            GrTextureKey* key,
-                                            const GrSamplerState& sampler,
-                                            const SkBitmap& bitmap);
+static const GrContext::TextureKey gUNCACHED_KEY = ~0;
+GrContext::TextureCacheEntry sk_gr_create_bitmap_texture(GrContext* ctx,
+                                                GrContext::TextureKey key,
+                                                const GrSamplerState* sampler,
+                                                const SkBitmap& bitmap);
 
 
 #endif

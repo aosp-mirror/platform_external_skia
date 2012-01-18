@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkGeometry.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkGeometry.h"
 #include "Sk64.h"
@@ -448,18 +440,20 @@ int SkChopQuadAtMaxCurvature(const SkPoint src[3], SkPoint dst[5])
     }
 }
 
-void SkConvertQuadToCubic(const SkPoint src[3], SkPoint dst[4])
-{
-    SkScalar two = SkIntToScalar(2);
-    SkScalar one_third = SkScalarDiv(SK_Scalar1, SkIntToScalar(3));
-    dst[0].set(src[0].fX, src[0].fY);
-    dst[1].set(
-        SkScalarMul(SkScalarMulAdd(src[1].fX, two, src[0].fX), one_third),
-        SkScalarMul(SkScalarMulAdd(src[1].fY, two, src[0].fY), one_third));
-    dst[2].set(
-        SkScalarMul(SkScalarMulAdd(src[1].fX, two, src[2].fX), one_third),
-        SkScalarMul(SkScalarMulAdd(src[1].fY, two, src[2].fY), one_third));
-    dst[3].set(src[2].fX, src[2].fY);
+#ifdef SK_SCALAR_IS_FLOAT
+    #define SK_ScalarTwoThirds  (0.666666666f)
+#else
+    #define SK_ScalarTwoThirds  ((SkFixed)(43691))
+#endif
+
+void SkConvertQuadToCubic(const SkPoint src[3], SkPoint dst[4]) {
+    const SkScalar scale = SK_ScalarTwoThirds;
+    dst[0] = src[0];
+    dst[1].set(src[0].fX + SkScalarMul(src[1].fX - src[0].fX, scale),
+               src[0].fY + SkScalarMul(src[1].fY - src[0].fY, scale));
+    dst[2].set(src[2].fX + SkScalarMul(src[1].fX - src[2].fX, scale),
+               src[2].fY + SkScalarMul(src[1].fY - src[2].fY, scale));
+    dst[3] = src[2];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////

@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright 2011 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkFontHost.h"
 #include "SkDescriptor.h"
@@ -23,8 +16,6 @@
 #include "SkThread.h"
 #include "SkTSearch.h"
 #include <stdio.h>
-
-#define FONT_CACHE_MEMORY_BUDGET    (768 * 1024)
 
 #ifdef SK_BUILD_FOR_MAC
     #define SK_FONT_FILE_PREFIX     "/Library/Fonts/"
@@ -107,7 +98,7 @@ static SkTypeface* find_best_face(const FamilyRec* family,
         }
     }
     // should never get here, since the faces list should not be empty
-    SkASSERT(!"faces list is empty");
+    SkDEBUGFAIL("faces list is empty");
     return NULL;
 }
 
@@ -176,7 +167,7 @@ static void detach_and_delete_family(FamilyRec* family) {
         prev = curr;
         curr = next;
     }
-    SkASSERT(!"Yikes, couldn't find family in our list to remove/delete");
+    SkDEBUGFAIL("Yikes, couldn't find family in our list to remove/delete");
 }
 
 static SkTypeface* find_typeface(const char name[], SkTypeface::Style style) {
@@ -594,7 +585,7 @@ SkStream* SkFontHost::OpenStream(uint32_t fontID) {
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         uint32_t fontID,
         SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) {
-    SkASSERT(!"SkFontHost::GetAdvancedTypefaceMetrics unimplemented");
+    SkDEBUGFAIL("SkFontHost::GetAdvancedTypefaceMetrics unimplemented");
     return NULL;
 }
 #endif
@@ -658,14 +649,5 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
     // since we created the stream, we let go of our ref() here
     stream->unref();
     return face;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-size_t SkFontHost::ShouldPurgeFontCache(size_t sizeAllocatedSoFar) {
-    if (sizeAllocatedSoFar > FONT_CACHE_MEMORY_BUDGET)
-        return sizeAllocatedSoFar - FONT_CACHE_MEMORY_BUDGET;
-    else
-        return 0;   // nothing to do
 }
 

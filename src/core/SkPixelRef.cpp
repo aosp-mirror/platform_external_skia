@@ -1,10 +1,18 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkPixelRef.h"
 #include "SkFlattenable.h"
 #include "SkThread.h"
 
 static SkMutex  gPixelRefMutex;
 
-extern int32_t SkNextPixelRefGenerationID() {
+extern int32_t SkNextPixelRefGenerationID();
+int32_t SkNextPixelRefGenerationID() {
     static int32_t  gPixelRefGenerationID;
     // do a loop in case our global wraps around, as we never want to
     // return a 0
@@ -61,6 +69,14 @@ void SkPixelRef::unlockPixels() {
         fPixels = NULL;
         fColorTable = NULL;
     }
+}
+
+bool SkPixelRef::lockPixelsAreWritable() const {
+    return this->onLockPixelsAreWritable();
+}
+
+bool SkPixelRef::onLockPixelsAreWritable() const {
+    return true;
 }
 
 uint32_t SkPixelRef::getGenerationID() const {
@@ -121,7 +137,20 @@ void SkPixelRef::Register(const char name[], Factory factory) {
     gCount += 1;
 }
 
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+static void report_no_entries(const char* functionName) {
+    if (!gCount) {
+        SkDebugf("%s has no registered name/factory pairs."
+                 " Call SkGraphics::Init() at process initialization time.",
+                 functionName);
+    }
+}
+#endif
+
 SkPixelRef::Factory SkPixelRef::NameToFactory(const char name[]) {
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+    report_no_entries(__FUNCTION__);
+#endif
     const Pair* pairs = gPairs;
     for (int i = gCount - 1; i >= 0; --i) {
         if (strcmp(pairs[i].fName, name) == 0) {
@@ -132,6 +161,9 @@ SkPixelRef::Factory SkPixelRef::NameToFactory(const char name[]) {
 }
 
 const char* SkPixelRef::FactoryToName(Factory fact) {
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+    report_no_entries(__FUNCTION__);
+#endif
     const Pair* pairs = gPairs;
     for (int i = gCount - 1; i >= 0; --i) {
         if (pairs[i].fFactory == fact) {
@@ -143,7 +175,7 @@ const char* SkPixelRef::FactoryToName(Factory fact) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 void SkPixelRef::globalRef(void* data) {
     this->ref();
 }

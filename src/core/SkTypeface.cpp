@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright 2011 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkTypeface.h"
@@ -41,25 +34,25 @@ SkTypeface::~SkTypeface() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
-    if (face) {
-        return face->uniqueID();
-    }
+static SkTypeface* get_default_typeface() {
+    // we keep a reference to this guy for all time, since if we return its
+    // fontID, the font cache may later on ask to resolve that back into a
+    // typeface object.
+    static SkTypeface* gDefaultTypeface;
 
-    // We cache the default fontID, assuming it will not change during a boot
-    // The initial value of 0 is fine, since a typeface's uniqueID should not
-    // be zero.
-    static uint32_t gDefaultFontID;
-    
-    if (0 == gDefaultFontID) {
-        SkTypeface* defaultFace =
-                SkFontHost::CreateTypeface(NULL, NULL, NULL, 0,
-                                           SkTypeface::kNormal);
-        SkASSERT(defaultFace);
-        gDefaultFontID = defaultFace->uniqueID();
-        defaultFace->unref();
+    if (NULL == gDefaultTypeface) {
+        gDefaultTypeface =
+        SkFontHost::CreateTypeface(NULL, NULL, NULL, 0,
+                                   SkTypeface::kNormal);
     }
-    return gDefaultFontID;
+    return gDefaultTypeface;
+}
+
+uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
+    if (NULL == face) {
+        face = get_default_typeface();
+    }
+    return face->uniqueID();
 }
 
 bool SkTypeface::Equal(const SkTypeface* facea, const SkTypeface* faceb) {
@@ -100,6 +93,11 @@ SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
-        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) const {
-    return SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID, perGlyphInfo);
+        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
+        const uint32_t* glyphIDs,
+        uint32_t glyphIDsCount) const {
+    return SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID,
+                                                  perGlyphInfo,
+                                                  glyphIDs,
+                                                  glyphIDsCount);
 }

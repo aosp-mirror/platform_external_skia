@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #ifndef SkTypefaceCache_DEFINED
@@ -60,6 +53,13 @@ public:
     static SkTypeface* FindByProc(FindProc proc, void* ctx);
 
     /**
+     *  This will unref all of the typefaces in the cache. Normally this is
+     *  handled automatically as needed. This function is exposed for clients
+     *  that explicitly want to purge the entire cache (e.g. to look for leaks).
+     */
+    static void PurgeAll();
+
+    /**
      *  Debugging only: dumps the status of the typefaces in the cache
      */
     static void Dump();
@@ -71,6 +71,7 @@ private:
     SkTypeface* findByID(SkFontID findID) const;
     SkTypeface* findByProc(FindProc proc, void* ctx) const;
     void purge(int count);
+    void purgeAll();
 
     struct Rec {
         SkTypeface*         fFace;

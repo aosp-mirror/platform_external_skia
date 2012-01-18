@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkEndian_DEFINED
 #define SkEndian_DEFINED
@@ -87,6 +80,19 @@ static inline void SkEndianSwap32s(uint32_t array[], int count) {
     #define SkEndian_SwapLE32(n)    SkEndianSwap32(n)
 #endif
 
+// When a bytestream is embedded in a 32-bit word, how far we need to
+// shift the word to extract each byte from the low 8 bits by anding with 0xff.
+#ifdef SK_CPU_LENDIAN
+    #define SkEndian_Byte0Shift 0
+    #define SkEndian_Byte1Shift 8
+    #define SkEndian_Byte2Shift 16
+    #define SkEndian_Byte3Shift 24
+#else   // SK_CPU_BENDIAN
+    #define SkEndian_Byte0Shift 24
+    #define SkEndian_Byte1Shift 16
+    #define SkEndian_Byte2Shift 8
+    #define SkEndian_Byte3Shift 0
+#endif
 
 #endif
 

@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkTypes_DEFINED
 #define SkTypes_DEFINED
@@ -43,12 +36,12 @@
 /** Called internally if we run out of memory. The platform implementation must
     not return, but should either throw an exception or otherwise exit.
 */
-extern void  sk_out_of_memory(void);
+SK_API extern void sk_out_of_memory(void);
 /** Called internally if we hit an unrecoverable error.
     The platform implementation must not return, but should either throw
     an exception or otherwise exit.
 */
-extern void  sk_throw(void);
+SK_API extern void sk_throw(void);
 
 enum {
     SK_MALLOC_TEMP  = 0x01, //!< hint to sk_malloc that the requested memory will be freed in the scope of the stack frame
@@ -62,21 +55,35 @@ enum {
 SK_API extern void* sk_malloc_flags(size_t size, unsigned flags);
 /** Same as sk_malloc(), but hard coded to pass SK_MALLOC_THROW as the flag
 */
-extern void* sk_malloc_throw(size_t size);
+SK_API extern void* sk_malloc_throw(size_t size);
 /** Same as standard realloc(), but this one never returns null on failure. It will throw
     an exception if it fails.
 */
-extern void* sk_realloc_throw(void* buffer, size_t size);
+SK_API extern void* sk_realloc_throw(void* buffer, size_t size);
 /** Free memory returned by sk_malloc(). It is safe to pass null.
 */
-SK_API extern void  sk_free(void*);
+SK_API extern void sk_free(void*);
 
 // bzero is safer than memset, but we can't rely on it, so... sk_bzero()
 static inline void sk_bzero(void* buffer, size_t size) {
     memset(buffer, 0, size);
 }
 
-///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef SK_OVERRIDE_GLOBAL_NEW
+#include <new>
+
+inline void* operator new(size_t size) {
+    return sk_malloc_throw(size);
+}
+
+inline void operator delete(void* p) {
+    sk_free(p);
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
 
 #define SK_INIT_TO_AVOID_WARNING    = 0
 
@@ -86,6 +93,7 @@ static inline void sk_bzero(void* buffer, size_t size) {
 
 #ifdef SK_DEBUG
     #define SkASSERT(cond)              SK_DEBUGBREAK(cond)
+    #define SkDEBUGFAIL(message)        SkASSERT(false && message)
     #define SkDEBUGCODE(code)           code
     #define SkDECLAREPARAM(type, var)   , type var
     #define SkPARAM(var)                , var
@@ -94,6 +102,7 @@ static inline void sk_bzero(void* buffer, size_t size) {
     #define SkAssertResult(cond)        SkASSERT(cond)
 #else
     #define SkASSERT(cond)
+    #define SkDEBUGFAIL(message)
     #define SkDEBUGCODE(code)
     #define SkDEBUGF(args)
     #define SkDECLAREPARAM(type, var)
@@ -208,6 +217,8 @@ static inline bool SkIsU16(long x) {
 /** Returns x rounded up to a multiple of 4
 */
 #define SkAlign4(x)     (((x) + 3) >> 2 << 2)
+
+#define SkIsAlign4(x) (((x) & 3) == 0)
 
 typedef uint32_t SkFourByteTag;
 #define SkSetFourByteTag(a, b, c, d)    (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
@@ -394,20 +405,84 @@ private:
     SkAutoFree& operator=(const SkAutoFree&);
 };
 
-class SkAutoMalloc : public SkAutoFree {
+/**
+ *  Manage an allocated block of heap memory. This object is the sole manager of
+ *  the lifetime of the block, so the caller must not call sk_free() or delete
+ *  on the block, unless detach() was called.
+ */
+class SkAutoMalloc : public SkNoncopyable {
 public:
-    explicit SkAutoMalloc(size_t size)
-        : SkAutoFree(sk_malloc_flags(size, SK_MALLOC_THROW | SK_MALLOC_TEMP)) {}
-
-    SkAutoMalloc(size_t size, unsigned flags)
-        : SkAutoFree(sk_malloc_flags(size, flags)) {}
-    SkAutoMalloc() {}
-
-    void* alloc(size_t size,
-                unsigned flags = (SK_MALLOC_THROW | SK_MALLOC_TEMP)) {
-        sk_free(set(sk_malloc_flags(size, flags)));
-        return get();
+    explicit SkAutoMalloc(size_t size = 0) {
+        fPtr = size ? sk_malloc_throw(size) : NULL;
+        fSize = size;
     }
+
+    ~SkAutoMalloc() {
+        sk_free(fPtr);
+    }
+
+    /**
+     *  Passed to reset to specify what happens if the requested size is smaller
+     *  than the current size (and the current block was dynamically allocated).
+     */
+    enum OnShrink {
+        /**
+         *  If the requested size is smaller than the current size, and the
+         *  current block is dynamically allocated, free the old block and
+         *  malloc a new block of the smaller size.
+         */
+        kAlloc_OnShrink,
+        
+        /**
+         *  If the requested size is smaller than the current size, and the
+         *  current block is dynamically allocated, just return the old
+         *  block.
+         */
+        kReuse_OnShrink,
+    };
+
+    /**
+     *  Reallocates the block to a new size. The ptr may or may not change.
+     */
+    void* reset(size_t size, OnShrink shrink = kAlloc_OnShrink) {
+        if (size == fSize || (kReuse_OnShrink == shrink && size < fSize)) {
+            return fPtr;
+        }
+
+        sk_free(fPtr);
+        fPtr = size ? sk_malloc_throw(size) : NULL;
+        fSize = size;
+
+        return fPtr;
+    }
+
+    /**
+     *  Releases the block back to the heap
+     */
+    void free() {
+        this->reset(0);
+    }
+
+    /**
+     *  Return the allocated block.
+     */
+    void* get() { return fPtr; }
+    const void* get() const { return fPtr; }
+
+   /** Transfer ownership of the current ptr to the caller, setting the
+       internal reference to null. Note the caller is reponsible for calling
+       sk_free on the returned address.
+    */
+    void* detach() {
+        void* ptr = fPtr;
+        fPtr = NULL;
+        fSize = 0;
+        return ptr;
+    }
+
+private:
+    void*   fPtr;
+    size_t  fSize;  // can be larger than the requested size (see kReuse)
 };
 
 /**
@@ -420,11 +495,12 @@ template <size_t kSize> class SkAutoSMalloc : SkNoncopyable {
 public:
     /**
      *  Creates initially empty storage. get() returns a ptr, but it is to
-     *  a zero-byte allocation. Must call realloc(size) to return an allocated
+     *  a zero-byte allocation. Must call reset(size) to return an allocated
      *  block.
      */
     SkAutoSMalloc() {
         fPtr = fStorage;
+        fSize = 0;
     }
 
     /**
@@ -434,7 +510,8 @@ public:
      */
     explicit SkAutoSMalloc(size_t size) {
         fPtr = fStorage;
-        this->realloc(size);
+        fSize = 0;
+        this->reset(size);
     }
 
     /**
@@ -461,7 +538,13 @@ public:
      *  then the return block may be allocated locally, rather than from the
      *  heap.
      */
-    void* realloc(size_t size) {
+    void* reset(size_t size,
+                SkAutoMalloc::OnShrink shrink = SkAutoMalloc::kAlloc_OnShrink) {
+        if (size == fSize || (SkAutoMalloc::kReuse_OnShrink == shrink &&
+                              size < fSize)) {
+            return fPtr;
+        }
+
         if (fPtr != (void*)fStorage) {
             sk_free(fPtr);
         }
@@ -476,13 +559,10 @@ public:
 
 private:
     void*       fPtr;
+    size_t      fSize;  // can be larger than the requested size (see kReuse)
     uint32_t    fStorage[(kSize + 3) >> 2];
-    // illegal
-    SkAutoSMalloc(const SkAutoSMalloc&);
-    SkAutoSMalloc& operator=(const SkAutoSMalloc&);
 };
 
 #endif /* C++ */
 
 #endif
-

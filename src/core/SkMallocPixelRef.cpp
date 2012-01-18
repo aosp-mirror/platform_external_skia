@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkMallocPixelRef.h"
 #include "SkBitmap.h"
 #include "SkFlattenable.h"
@@ -52,6 +59,4 @@ SkMallocPixelRef::SkMallocPixelRef(SkFlattenableReadBuffer& buffer)
     }
 }
 
-static SkPixelRef::Registrar reg("SkMallocPixelRef",
-                                 SkMallocPixelRef::Create);
-
+SK_DEFINE_PIXEL_REF_REGISTRAR(SkMallocPixelRef)

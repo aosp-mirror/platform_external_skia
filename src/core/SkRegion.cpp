@@ -1,27 +1,15 @@
-/* libs/corecg/SkRegion.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkRegionPriv.h"
 #include "SkTemplates.h"
 #include "SkThread.h"
-
-#ifdef ANDROID
-#include <stdio.h>
-#endif
 
 SkDEBUGCODE(int32_t gRgnAllocCounter;)
 
@@ -179,7 +167,7 @@ bool SkRegion::op(const SkRegion& rgn, const SkIRect& rect, Op op) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 char* SkRegion::toString()
 {
     Iterator iter(*this);
@@ -785,11 +773,10 @@ private:
     SkRegion::RunType   fTop;
 };
 
-static int operate( const SkRegion::RunType a_runs[],
-                    const SkRegion::RunType b_runs[],
-                    SkRegion::RunType dst[],
-                    SkRegion::Op op)
-{
+static int operate(const SkRegion::RunType a_runs[],
+                   const SkRegion::RunType b_runs[],
+                   SkRegion::RunType dst[],
+                   SkRegion::Op op) {
     const SkRegion::RunType gSentinel[] = {
         SkRegion::kRunTypeSentinel,
         // just need a 2nd value, since spanRec.init() reads 2 values, even
@@ -813,83 +800,67 @@ static int operate( const SkRegion::RunType a_runs[],
     bool firstInterval = true;
     int prevBot = SkRegion::kRunTypeSentinel; // so we fail the first test
     
-    while (a_bot < SkRegion::kRunTypeSentinel || b_bot < SkRegion::kRunTypeSentinel)
-    {
-        int         top, bot SK_INIT_TO_AVOID_WARNING;
+    while (a_bot < SkRegion::kRunTypeSentinel ||
+           b_bot < SkRegion::kRunTypeSentinel) {
+        int                         top, bot SK_INIT_TO_AVOID_WARNING;
         const SkRegion::RunType*    run0 = gSentinel;
         const SkRegion::RunType*    run1 = gSentinel;
-        bool        a_flush = false;
-        bool        b_flush = false;
-        int         inside;
+        bool                        a_flush = false;
+        bool                        b_flush = false;
 
-        if (a_top < b_top)
-        {
-            inside = 1;
+        if (a_top < b_top) {
             top = a_top;
             run0 = a_runs;
-            if (a_bot <= b_top) // [...] <...>
-            {
+            if (a_bot <= b_top) {   // [...] <...>
                 bot = a_bot;
                 a_flush = true;
-            }
-            else // [...<..]...> or [...<...>...]
+            } else {  // [...<..]...> or [...<...>...]
                 bot = a_top = b_top;
-        }
-        else if (b_top < a_top)
-        {
-            inside = 2;
+            }
+        } else if (b_top < a_top) {
             top = b_top;
             run1 = b_runs;
-            if (b_bot <= a_top) // [...] <...>
-            {
+            if (b_bot <= a_top) {   // [...] <...>
                 bot = b_bot;
                 b_flush = true;
-            }
-            else // [...<..]...> or [...<...>...]
+            } else {    // [...<..]...> or [...<...>...]
                 bot = b_top = a_top;
-        }
-        else    // a_top == b_top
-        {
-            inside = 3;
+            }
+        } else {    // a_top == b_top
             top = a_top;    // or b_top
             run0 = a_runs;
             run1 = b_runs;
-            if (a_bot <= b_bot)
-            {
+            if (a_bot <= b_bot) {
                 bot = b_top = a_bot;
                 a_flush = true;
             }
-            if (b_bot <= a_bot)
-            {
+            if (b_bot <= a_bot) {
                 bot = a_top = b_bot;
                 b_flush = true;
             }
         }
         
-        if (top > prevBot)
+        if (top > prevBot) {
             oper.addSpan(top, gSentinel, gSentinel);
-
-//      if ((unsigned)(inside - oper.fMin) <= (unsigned)(oper.fMax - oper.fMin))
-        {
-            oper.addSpan(bot, run0, run1);
-            firstInterval = false;
         }
+        oper.addSpan(bot, run0, run1);
+        firstInterval = false;
 
-        if (a_flush)
-        {
+        if (a_flush) {
             a_runs = skip_scanline(a_runs);
             a_top = a_bot;
             a_bot = *a_runs++;
-            if (a_bot == SkRegion::kRunTypeSentinel)
+            if (a_bot == SkRegion::kRunTypeSentinel) {
                 a_top = a_bot;
+            }
         }
-        if (b_flush)
-        {
+        if (b_flush) {
             b_runs = skip_scanline(b_runs);
             b_top = b_bot;
             b_bot = *b_runs++;
-            if (b_bot == SkRegion::kRunTypeSentinel)
+            if (b_bot == SkRegion::kRunTypeSentinel) {
                 b_top = b_bot;
+            }
         }
         
         prevBot = bot;
@@ -995,7 +966,7 @@ bool SkRegion::op(const SkRegion& rgnaOrig, const SkRegion& rgnbOrig, Op op)
             return this->setRegion(*rgna);
         break;
     default:
-        SkASSERT(!"unknown region op");
+        SkDEBUGFAIL("unknown region op");
         return !this->isEmpty();
     }
 

@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkEdgeBuilder.h"
 #include "SkPath.h"
 #include "SkEdge.h"
@@ -111,7 +118,7 @@ int SkEdgeBuilder::build(const SkPath& path, const SkIRect* iclip,
                     }
                     break;
                 default:
-                    SkASSERT(!"unexpected verb");
+                    SkDEBUGFAIL("unexpected verb");
                     break;
             }
         }
@@ -143,7 +150,7 @@ int SkEdgeBuilder::build(const SkPath& path, const SkIRect* iclip,
                     break;
                 }
                 default:
-                    SkASSERT(!"unexpected verb");
+                    SkDEBUGFAIL("unexpected verb");
                     break;
             }
         }

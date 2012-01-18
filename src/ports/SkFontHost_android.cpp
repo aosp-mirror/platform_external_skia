@@ -464,9 +464,11 @@ static void load_font_info() {
         // shouldn't get here
         gNumSystemFonts = 0;
     }
+//    SkDebugf("---- We have %d system fonts", gNumSystemFonts);
     for (size_t i = 0; i < gNumSystemFonts; ++i) {
         gSystemFonts[i].fFileName = fontInfo[i].fFileName;
         gSystemFonts[i].fNames = fontInfo[i].fNames;
+//        SkDebugf("---- gSystemFonts[%d] fileName=%s", i, fontInfo[i].fFileName);
     }
     fontFamilies.deleteAll();
 }
@@ -511,11 +513,13 @@ static void load_system_fonts() {
                                      isFixedWidth) // filename
                                     );
 
+//        SkDebugf("---- SkTypeface[%d] %s fontID %d\n", i, rec[i].fFileName, tf->uniqueID());
+
         if (rec[i].fNames != NULL) {
             // see if this is one of our fallback fonts
             if (rec[i].fNames == gFBNames) {
-            //    SkDebugf("---- adding %s as fallback[%d] fontID %d\n",
-            //             rec[i].fFileName, fallbackCount, tf->uniqueID());
+//                SkDebugf("---- adding %s as fallback[%d] fontID %d\n",
+//                         rec[i].fFileName, fallbackCount, tf->uniqueID());
                 gFallbackFonts[fallbackCount++] = tf->uniqueID();
             }
 
@@ -762,13 +766,3 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
     stream->unref();
     return face;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-size_t SkFontHost::ShouldPurgeFontCache(size_t sizeAllocatedSoFar) {
-    if (sizeAllocatedSoFar > FONT_CACHE_MEMORY_BUDGET)
-        return sizeAllocatedSoFar - FONT_CACHE_MEMORY_BUDGET;
-    else
-        return 0;   // nothing to do
-}
-

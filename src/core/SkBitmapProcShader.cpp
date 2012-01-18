@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBitmapProcShader.h"
 #include "SkColorPriv.h"
 #include "SkPixelRef.h"
@@ -72,6 +79,10 @@ void SkBitmapProcShader::flatten(SkFlattenableWriteBuffer& buffer) {
 static bool only_scale_and_translate(const SkMatrix& matrix) {
     unsigned mask = SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask;
     return (matrix.getType() & ~mask) == 0;
+}
+
+bool SkBitmapProcShader::isOpaque() const {
+    return fRawBitmap.isOpaque();
 }
 
 bool SkBitmapProcShader::setContext(const SkBitmap& device,
@@ -228,6 +239,7 @@ void SkBitmapProcShader::shadeSpan16(int x, int y, uint16_t dstC[], int count) {
 
 #include "SkUnPreMultiply.h"
 #include "SkColorShader.h"
+#include "SkEmptyShader.h"
 
 // returns true and set color if the bitmap can be drawn as a single color
 // (for efficiency)
@@ -264,7 +276,10 @@ SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
                                        void* storage, size_t storageSize) {
     SkShader* shader;
     SkColor color;
-    if (canUseColorShader(src, &color)) {
+    if (src.isNull()) {
+        SK_PLACEMENT_NEW(shader, SkEmptyShader, storage, storageSize);
+    }
+    else if (canUseColorShader(src, &color)) {
         SK_PLACEMENT_NEW_ARGS(shader, SkColorShader, storage, storageSize,
                               (color));
     } else {
@@ -274,8 +289,7 @@ SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
     return shader;
 }
 
-static SkFlattenable::Registrar gBitmapProcShaderReg("SkBitmapProcShader",
-                                               SkBitmapProcShader::CreateProc);
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkBitmapProcShader)
 
 ///////////////////////////////////////////////////////////////////////////////
 
