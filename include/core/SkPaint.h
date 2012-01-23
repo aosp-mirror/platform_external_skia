@@ -828,7 +828,7 @@ public:
 
     /** Returns the base glyph count for the strike associated with this paint
     */
-    unsigned getBaseGlyphCount(SkUnichar text);
+    unsigned getBaseGlyphCount(SkUnichar text) const;
 #endif
 
 private:

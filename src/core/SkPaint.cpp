@@ -157,7 +157,7 @@ uint32_t SkPaint::getGenerationID() const {
 #endif
 
 #ifdef ANDROID
-unsigned SkPaint::getBaseGlyphCount(SkUnichar text) {
+unsigned SkPaint::getBaseGlyphCount(SkUnichar text) const {
     SkAutoGlyphCache autoCache(*this, NULL);
     SkGlyphCache* cache = autoCache.getCache();
     return cache->getBaseGlyphCount(text);
