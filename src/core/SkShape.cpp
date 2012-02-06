@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkCanvas.h"
 #include "SkShape.h"
 #include "SkMatrix.h"
@@ -67,4 +74,4 @@ void SkShape::flatten(SkFlattenableWriteBuffer& buffer) {
 
 void SkShape::onDraw(SkCanvas*) {}
 
-static SkFlattenable::Registrar gReg("SkShape", SkShape::CreateProc);
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkShape)

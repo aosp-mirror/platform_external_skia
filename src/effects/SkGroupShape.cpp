@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkGroupShape.h"
 
 SkGroupShape::SkGroupShape() {}
@@ -124,5 +131,5 @@ SkFlattenable* SkGroupShape::CreateProc(SkFlattenableReadBuffer& buffer) {
     return SkNEW_ARGS(SkGroupShape, (buffer));
 }
 
-static SkFlattenable::Registrar gReg("SkGroupShape", SkGroupShape::CreateProc);
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkGroupShape)
 

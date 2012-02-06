@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkImageRef_ashmem.h"
 #include "SkImageDecoder.h"
 #include "SkFlattenable.h"
@@ -84,15 +91,17 @@ public:
             
             int err = ashmem_set_prot_region(fd, PROT_READ | PROT_WRITE);
             if (err) {
-                SkDebugf("------ ashmem_set_prot_region(%d) failed %d %d\n",
-                         fd, err, errno);
+                SkDebugf("------ ashmem_set_prot_region(%d) failed %d\n",
+                         fd, err);
+                close(fd);
                 return false;
             }
             
             addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
             if (-1 == (long)addr) {
-                SkDebugf("---------- mmap failed for imageref_ashmem size=%d err=%d\n",
-                         size, errno);
+                SkDebugf("---------- mmap failed for imageref_ashmem size=%d\n",
+                         size);
+                close(fd);
                 return false;
             }
             
@@ -171,8 +180,7 @@ void* SkImageRef_ashmem::onLockPixels(SkColorTable** ct) {
             SkDebugf("===== ashmem purged %d\n", fBitmap.getSize());
 #endif
         } else {
-            SkDebugf("===== ashmem pin_region(%d) returned %d, treating as error %d\n",
-                     fRec.fFD, pin, errno);
+            SkDebugf("===== ashmem pin_region(%d) returned %d\n", fRec.fFD, pin);
             // return null result for failure
             if (ct) {
                 *ct = NULL;
@@ -233,5 +241,4 @@ SkPixelRef* SkImageRef_ashmem::Create(SkFlattenableReadBuffer& buffer) {
     return SkNEW_ARGS(SkImageRef_ashmem, (buffer));
 }
 
-static SkPixelRef::Registrar reg("SkImageRef_ashmem",
-                                 SkImageRef_ashmem::Create);
+SK_DEFINE_PIXEL_REF_REGISTRAR(SkImageRef_ashmem)

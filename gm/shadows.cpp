@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkBlurDrawLooper.h"
 
@@ -21,6 +28,7 @@ public:
     SkRect fRect;
 
     ShadowsGM() {
+        this->setBGColor(0xFFDDDDDD);
         fCirclePath.addCircle(SkIntToScalar(20), SkIntToScalar(20), SkIntToScalar(10) );
         fRect.set(SkIntToScalar(10), SkIntToScalar(10),
                   SkIntToScalar(30), SkIntToScalar(30));
@@ -35,13 +43,7 @@ protected:
         return make_isize(200, 80);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
-
     SkBlurDrawLooper* shadowLoopers[5];
     shadowLoopers[0] =
         new SkBlurDrawLooper (SkIntToScalar(10), SkIntToScalar(5),

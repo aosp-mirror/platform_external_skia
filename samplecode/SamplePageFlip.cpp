@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -8,7 +15,7 @@
 
 #include <pthread.h>
 
-#define WIDTH   200
+#define WIDTH   160
 #define HEIGHT  200
 
 static bool gDone;
@@ -49,6 +56,9 @@ static void* draw_proc(void* context) {
     SkRect oval;
     oval.setEmpty();
 
+    SkRect clipR = SkRect::MakeWH(SkIntToScalar(bm->width()), SkIntToScalar(bm->height()));
+    clipR.inset(SK_Scalar1/4, SK_Scalar1/4);
+                                  
     while (!gDone) {
         ref->inval(oval, true);
         oval.set(x, y, x + SkIntToScalar(OVALW), y + SkIntToScalar(OVALH));
@@ -60,34 +70,23 @@ static void* draw_proc(void* context) {
             // this must be local to the loop, since it needs to forget the pixels
             // its writing to after each iteration, since we do the swap
             SkCanvas    canvas(update.bitmap());
-
-//            SkDebugf("----- dirty [%d %d %d %d]\n", dirty.getBounds().fLeft, dirty.getBounds().fTop, dirty.getBounds().width(), dirty.getBounds().height());
             canvas.clipRegion(update.dirty());
-            
             canvas.drawColor(0, SkXfermode::kClear_Mode);            
+            canvas.clipRect(clipR, SkRegion::kIntersect_Op, true);
+            
             canvas.drawOval(oval, paint);
         }
         bounce(&x, &dx, WIDTH-OVALW);
         bounce(&y, &dy, HEIGHT-OVALH);
-        
-#if 1
-        for (int i = 0; i < 1000; i++) {
-            for (int j = 0; j < 10000; j++) {
-                SkFixedMul(j, 10);
-            }
-        }
-#endif
     }
     return NULL;
 }
 
 static const SkBitmap::Config gConfigs[] = {
     SkBitmap::kARGB_8888_Config,
-#if 1
     SkBitmap::kRGB_565_Config,
     SkBitmap::kARGB_4444_Config,
     SkBitmap::kA8_Config
-#endif
 };
 
 class PageFlipView : public SampleView {

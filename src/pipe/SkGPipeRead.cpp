@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #include "SkCanvas.h"
@@ -56,7 +49,7 @@ static void set_paintflat(SkPaint* paint, SkFlattenable* obj, unsigned paintFlat
             paint->setXfermode((SkXfermode*)obj);
             break;
         default:
-            SkASSERT(!"never gets here");
+            SkDEBUGFAIL("never gets here");
     }
 }
 
@@ -72,7 +65,7 @@ public:
 
     void setReader(SkFlattenableReadBuffer* reader) {
         fReader = reader;
-        fReader->setFactoryPlayback(fFactoryArray.begin(), fFactoryArray.count());
+        fReader->setFactoryArray(&fFactoryArray);
     }
 
     const SkPaint& paint() const { return fPaint; }
@@ -85,22 +78,12 @@ public:
         return fFlatArray[index - 1];
     }
 
-    void defFlattenable(PaintFlats pf, unsigned index) {
+    void defFlattenable(PaintFlats pf, int index) {
         SkASSERT(index == fFlatArray.count() + 1);
         SkFlattenable* obj = fReader->readFlattenable();
         *fFlatArray.append() = obj;
     }
 
-    void nameFlattenable(PaintFlats pf, unsigned index) {
-        SkASSERT(index == fFactoryArray.count() + 1);
-        const char* name = fReader->readString();
-        SkFlattenable::Factory fact = SkFlattenable::NameToFactory(name);
-        *fFactoryArray.append() = fact;
-
-        // update this each time we grow the array
-        fReader->setFactoryPlayback(fFactoryArray.begin(), fFactoryArray.count());
-    }
-    
     void addTypeface() {
         size_t size = fReader->readU32();
         const void* data = fReader->skip(SkAlign4(size));
@@ -374,11 +357,6 @@ static void drawData_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     canvas->drawData(data, size);
 }
 
-static void drawShape_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
-                         SkGPipeState* state) {
-    UNIMPLEMENTED
-}
-
 static void drawPicture_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
                            SkGPipeState* state) {
     UNIMPLEMENTED
@@ -425,7 +403,7 @@ static void paintOp_rp(SkCanvas*, SkReader32* reader, uint32_t op32,
             }
 
             case kTypeface_PaintOp: state->setTypeface(p, data); break;
-            default: SkASSERT(!"bad paintop"); return;
+            default: SkDEBUGFAIL("bad paintop"); return;
         }
         SkASSERT(reader->offset() <= stop);
     } while (reader->offset() < stop);
@@ -442,13 +420,6 @@ static void def_PaintFlat_rp(SkCanvas*, SkReader32*, uint32_t op32,
     PaintFlats pf = (PaintFlats)DrawOp_unpackFlags(op32);
     unsigned index = DrawOp_unpackData(op32);
     state->defFlattenable(pf, index);
-}
-
-static void name_PaintFlat_rp(SkCanvas*, SkReader32*, uint32_t op32,
-                              SkGPipeState* state) {
-    PaintFlats pf = (PaintFlats)DrawOp_unpackFlags(op32);
-    unsigned index = DrawOp_unpackData(op32);
-    state->nameFlattenable(pf, index);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -480,7 +451,6 @@ static const ReadProc gReadTable[] = {
     drawPosText_rp,
     drawPosTextH_rp,
     drawRect_rp,
-    drawShape_rp,
     drawSprite_rp,
     drawText_rp,
     drawTextOnPath_rp,
@@ -497,7 +467,6 @@ static const ReadProc gReadTable[] = {
     paintOp_rp,
     def_Typeface_rp,
     def_PaintFlat_rp,
-    name_PaintFlat_rp,
 
     done_rp
 };
@@ -507,8 +476,8 @@ static const ReadProc gReadTable[] = {
 SkGPipeState::SkGPipeState() {}
 
 SkGPipeState::~SkGPipeState() {
-    fTypefaces.unrefAll();
-    fFlatArray.unrefAll();
+    fTypefaces.safeUnrefAll();
+    fFlatArray.safeUnrefAll();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -527,7 +496,7 @@ SkGPipeReader::~SkGPipeReader() {
 }
 
 SkGPipeReader::Status SkGPipeReader::playback(const void* data, size_t length,
-                                              size_t* bytesRead) {
+                                              size_t* bytesRead, bool readAtom) {
     if (NULL == fCanvas) {
         return kError_Status;
     }
@@ -559,6 +528,14 @@ SkGPipeReader::Status SkGPipeReader::playback(const void* data, size_t length,
             break;
         }
         table[op](canvas, &reader, op32, fState);
+        if (readAtom && 
+            (table[op] != paintOp_rp &&
+             table[op] != def_Typeface_rp &&
+             table[op] != def_PaintFlat_rp
+             )) {
+                status = kReadAtom_Status;
+                break;
+            }
     }
 
     if (bytesRead) {

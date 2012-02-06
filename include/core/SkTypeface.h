@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkTypeface_DEFINED
 #define SkTypeface_DEFINED
@@ -141,10 +134,17 @@ public:
     /** Retrieve detailed typeface metrics.  Used by the PDF backend.
         @param perGlyphInfo Indicate what glyph specific information (advances,
                             names, etc.) should be populated.
+        @param glyphIDs  For per-glyph info, specify subset of the font by
+                         giving glyph ids.  Each integer represents a glyph
+                         id.  Passing NULL means all glyphs in the font.
+        @param glyphIDsCount Number of elements in subsetGlyphIds. Ignored if
+                             glyphIDs is NULL.
         @return The returned object has already been referenced.
      */
     SkAdvancedTypefaceMetrics* getAdvancedTypefaceMetrics(
-            SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) const;
+            SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
+            const uint32_t* glyphIDs = NULL,
+            uint32_t glyphIDsCount = 0) const;
 
 protected:
     /** uniqueID must be unique (please!) and non-zero

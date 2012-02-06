@@ -1,27 +1,18 @@
+
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright 2008 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkReader32_DEFINED
 #define SkReader32_DEFINED
 
-#include "SkTypes.h"
-
 #include "SkScalar.h"
-#include "SkPoint.h"
-#include "SkRect.h"
+
+class SkString;
 
 class SkReader32 : SkNoncopyable {
 public:
@@ -73,14 +64,6 @@ public:
         return value;
     }
     
-    const SkPoint* skipPoint() {
-        return (const SkPoint*)this->skip(sizeof(SkPoint));
-    }
-    
-    const SkRect* skipRect() {
-        return (const SkRect*)this->skip(sizeof(SkRect));
-    }
-
     const void* skip(size_t size) {
         SkASSERT(ptr_align_4(fCurr));
         const void* addr = fCurr;
@@ -89,6 +72,11 @@ public:
         return addr;
     }
     
+    template <typename T> const T& skipT() {
+        SkASSERT(SkAlign4(sizeof(T)) == sizeof(T));
+        return *(const T*)this->skip(sizeof(T));
+    }
+
     void read(void* dst, size_t size) {
         SkASSERT(0 == size || dst != NULL);
         SkASSERT(ptr_align_4(fCurr));
@@ -103,11 +91,17 @@ public:
     uint32_t readU32() { return this->readInt(); }
 
     /**
-     *  Read the length of a string written by SkWriter32::writeString()
-     *  (if len is not NULL) and return the null-ternimated address of the
-     *  string.
+     *  Read the length of a string (written by SkWriter32::writeString) into
+     *  len (if len is not NULL) and return the null-ternimated address of the
+     *  string within the reader's buffer.
      */
     const char* readString(size_t* len = NULL);
+
+    /**
+     *  Read the string (written by SkWriter32::writeString) and return it in
+     *  copy (if copy is not null). Return the length of the string.
+     */
+    size_t readIntoString(SkString* copy);
 
 private:
     // these are always 4-byte aligned
@@ -116,8 +110,7 @@ private:
     const char* fBase;  // beginning of buffer
     
 #ifdef SK_DEBUG
-    static bool ptr_align_4(const void* ptr)
-    {
+    static bool ptr_align_4(const void* ptr) {
         return (((const char*)ptr - (const char*)NULL) & 3) == 0;
     }
 #endif

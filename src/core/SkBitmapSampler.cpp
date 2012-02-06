@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkBitmapSampler.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkBitmapSampler.h"
 
@@ -27,7 +19,7 @@ static SkTileModeProc get_tilemode_proc(SkShader::TileMode mode)
     case SkShader::kMirror_TileMode:
         return do_mirror_mod;
     default:
-        SkASSERT(!"unknown mode");
+        SkDEBUGFAIL("unknown mode");
         return NULL;
     }
 }
@@ -346,7 +338,7 @@ SkBitmapSampler* SkBitmapSampler::Create(const SkBitmap& bm, bool doFilter,
                 else
                     return SkNEW_ARGS(ARGB32_Point_Mirror_Mod_Sampler, (bm));
             default:
-                SkASSERT(!"unknown mode");
+                SkDEBUGFAIL("unknown mode");
             }
         }
         else {  // tmx != tmy
@@ -373,7 +365,7 @@ SkBitmapSampler* SkBitmapSampler::Create(const SkBitmap& bm, bool doFilter,
                 else
                     return SkNEW_ARGS(RGB16_Point_Mirror_Mod_Sampler, (bm));
             default:
-                SkASSERT(!"unknown mode");
+                SkDEBUGFAIL("unknown mode");
             }
         }
         else {  // tmx != tmy
@@ -400,7 +392,7 @@ SkBitmapSampler* SkBitmapSampler::Create(const SkBitmap& bm, bool doFilter,
                 else
                     return SkNEW_ARGS(Index8_Point_Mirror_Mod_Sampler, (bm));
             default:
-                SkASSERT(!"unknown mode");
+                SkDEBUGFAIL("unknown mode");
             }
         }
         else {  // tmx != tmy
@@ -416,7 +408,7 @@ SkBitmapSampler* SkBitmapSampler::Create(const SkBitmap& bm, bool doFilter,
         break;
 
     default:
-        SkASSERT(!"unknown device");
+        SkDEBUGFAIL("unknown device");
     }
     return SkNEW_ARGS(SkNullBitmapSampler, (bm, doFilter, tmx, tmy));
 }

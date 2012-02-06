@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2011 Google Inc.
+ * Copyright 2011 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkPDFFormXObject.h"
 #include "SkPDFGraphicState.h"
@@ -46,7 +39,7 @@ static const char* blend_mode_from_xfermode(SkXfermode::Mode mode) {
         case SkXfermode::kDstOut_Mode:
             return "Normal";
 
-        // TODO(vandebo) Figure out if we can support more of these modes.
+        // TODO(vandebo): Figure out if we can support more of these modes.
         case SkXfermode::kSrcATop_Mode:
         case SkXfermode::kDstATop_Mode:
         case SkXfermode::kXor_Mode:
@@ -57,22 +50,18 @@ static const char* blend_mode_from_xfermode(SkXfermode::Mode mode) {
 }
 
 SkPDFGraphicState::~SkPDFGraphicState() {
-    SkAutoMutexAcquire lock(canonicalPaintsMutex());
+    SkAutoMutexAcquire lock(CanonicalPaintsMutex());
     if (!fSMask) {
-        int index = find(fPaint);
+        int index = Find(fPaint);
         SkASSERT(index >= 0);
-        canonicalPaints().removeShuffle(index);
+        SkASSERT(CanonicalPaints()[index].fGraphicState == this);
+        CanonicalPaints().removeShuffle(index);
     }
     fResources.unrefAll();
 }
 
 void SkPDFGraphicState::getResources(SkTDArray<SkPDFObject*>* resourceList) {
-    resourceList->setReserve(resourceList->count() + fResources.count());
-    for (int i = 0; i < fResources.count(); i++) {
-        resourceList->push(fResources[i]);
-        fResources[i]->ref();
-        fResources[i]->getResources(resourceList);
-    }
+    GetResourcesHelper(&fResources, resourceList);
 }
 
 void SkPDFGraphicState::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
@@ -89,30 +78,30 @@ size_t SkPDFGraphicState::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
 
 // static
 SkTDArray<SkPDFGraphicState::GSCanonicalEntry>&
-SkPDFGraphicState::canonicalPaints() {
+SkPDFGraphicState::CanonicalPaints() {
     // This initialization is only thread safe with gcc.
     static SkTDArray<SkPDFGraphicState::GSCanonicalEntry> gCanonicalPaints;
     return gCanonicalPaints;
 }
 
 // static
-SkMutex& SkPDFGraphicState::canonicalPaintsMutex() {
+SkMutex& SkPDFGraphicState::CanonicalPaintsMutex() {
     // This initialization is only thread safe with gcc.
     static SkMutex gCanonicalPaintsMutex;
     return gCanonicalPaintsMutex;
 }
 
 // static
-SkPDFGraphicState* SkPDFGraphicState::getGraphicStateForPaint(
+SkPDFGraphicState* SkPDFGraphicState::GetGraphicStateForPaint(
         const SkPaint& paint) {
-    SkAutoMutexAcquire lock(canonicalPaintsMutex());
-    int index = find(paint);
+    SkAutoMutexAcquire lock(CanonicalPaintsMutex());
+    int index = Find(paint);
     if (index >= 0) {
-        canonicalPaints()[index].fGraphicState->ref();
-        return canonicalPaints()[index].fGraphicState;
+        CanonicalPaints()[index].fGraphicState->ref();
+        return CanonicalPaints()[index].fGraphicState;
     }
     GSCanonicalEntry newEntry(new SkPDFGraphicState(paint));
-    canonicalPaints().push(newEntry);
+    CanonicalPaints().push(newEntry);
     return newEntry.fGraphicState;
 }
 
@@ -126,8 +115,8 @@ SkPDFObject* SkPDFGraphicState::GetInvertFunction() {
         SkRefPtr<SkPDFArray> domainAndRange = new SkPDFArray;
         domainAndRange->unref();  // SkRefPtr and new both took a reference.
         domainAndRange->reserve(2);
-        domainAndRange->append(new SkPDFInt(0))->unref();
-        domainAndRange->append(new SkPDFInt(1))->unref();
+        domainAndRange->appendInt(0);
+        domainAndRange->appendInt(1);
 
         static const char psInvert[] = "{1 exch sub}";
         SkRefPtr<SkMemoryStream> psInvertStream =
@@ -135,7 +124,7 @@ SkPDFObject* SkPDFGraphicState::GetInvertFunction() {
         psInvertStream->unref();  // SkRefPtr and new both took a reference.
 
         invertFunction = new SkPDFStream(psInvertStream.get());
-        invertFunction->insert("FunctionType", new SkPDFInt(4))->unref();
+        invertFunction->insertInt("FunctionType", 4);
         invertFunction->insert("Domain", domainAndRange.get());
         invertFunction->insert("Range", domainAndRange.get());
     }
@@ -143,21 +132,21 @@ SkPDFObject* SkPDFGraphicState::GetInvertFunction() {
 }
 
 // static
-SkPDFGraphicState* SkPDFGraphicState::getSMaskGraphicState(
+SkPDFGraphicState* SkPDFGraphicState::GetSMaskGraphicState(
         SkPDFFormXObject* sMask, bool invert) {
     // The practical chances of using the same mask more than once are unlikely
     // enough that it's not worth canonicalizing.
-    SkAutoMutexAcquire lock(canonicalPaintsMutex());
+    SkAutoMutexAcquire lock(CanonicalPaintsMutex());
 
     SkRefPtr<SkPDFDict> sMaskDict = new SkPDFDict("Mask");
     sMaskDict->unref();  // SkRefPtr and new both took a reference.
-    sMaskDict->insert("S", new SkPDFName("Alpha"))->unref();
+    sMaskDict->insertName("S", "Alpha");
     sMaskDict->insert("G", new SkPDFObjRef(sMask))->unref();
 
     SkPDFGraphicState* result = new SkPDFGraphicState;
     result->fPopulated = true;
     result->fSMask = true;
-    result->insert("Type", new SkPDFName("ExtGState"))->unref();
+    result->insertName("Type", "ExtGState");
     result->insert("SMask", sMaskDict.get());
     result->fResources.push(sMask);
     sMask->ref();
@@ -173,24 +162,24 @@ SkPDFGraphicState* SkPDFGraphicState::getSMaskGraphicState(
 }
 
 // static
-SkPDFGraphicState* SkPDFGraphicState::getNoSMaskGraphicState() {
-    SkAutoMutexAcquire lock(canonicalPaintsMutex());
+SkPDFGraphicState* SkPDFGraphicState::GetNoSMaskGraphicState() {
+    SkAutoMutexAcquire lock(CanonicalPaintsMutex());
     static SkPDFGraphicState* noSMaskGS = NULL;
     if (!noSMaskGS) {
         noSMaskGS = new SkPDFGraphicState;
         noSMaskGS->fPopulated = true;
         noSMaskGS->fSMask = true;
-        noSMaskGS->insert("Type", new SkPDFName("ExtGState"))->unref();
-        noSMaskGS->insert("SMask", new SkPDFName("None"))->unref();
+        noSMaskGS->insertName("Type", "ExtGState");
+        noSMaskGS->insertName("SMask", "None");
     }
     noSMaskGS->ref();
     return noSMaskGS;
 }
 
 // static
-int SkPDFGraphicState::find(const SkPaint& paint) {
+int SkPDFGraphicState::Find(const SkPaint& paint) {
     GSCanonicalEntry search(&paint);
-    return canonicalPaints().find(search);
+    return CanonicalPaints().find(search);
 }
 
 SkPDFGraphicState::SkPDFGraphicState()
@@ -208,10 +197,10 @@ SkPDFGraphicState::SkPDFGraphicState(const SkPaint& paint)
 void SkPDFGraphicState::populateDict() {
     if (!fPopulated) {
         fPopulated = true;
-        insert("Type", new SkPDFName("ExtGState"))->unref();
+        insertName("Type", "ExtGState");
 
         SkRefPtr<SkPDFScalar> alpha =
-            new SkPDFScalar(fPaint.getAlpha() * SkScalarInvert(0xFF));
+            new SkPDFScalar(SkScalarDiv(fPaint.getAlpha(), 0xFF));
         alpha->unref();  // SkRefPtr and new both took a reference.
         insert("CA", alpha.get());
         insert("ca", alpha.get());
@@ -221,17 +210,17 @@ void SkPDFGraphicState::populateDict() {
         SK_COMPILE_ASSERT(SkPaint::kSquare_Cap == 2, paint_cap_mismatch);
         SK_COMPILE_ASSERT(SkPaint::kCapCount == 3, paint_cap_mismatch);
         SkASSERT(fPaint.getStrokeCap() >= 0 && fPaint.getStrokeCap() <= 2);
-        insert("LC", new SkPDFInt(fPaint.getStrokeCap()))->unref();
+        insertInt("LC", fPaint.getStrokeCap());
 
         SK_COMPILE_ASSERT(SkPaint::kMiter_Join == 0, paint_join_mismatch);
         SK_COMPILE_ASSERT(SkPaint::kRound_Join == 1, paint_join_mismatch);
         SK_COMPILE_ASSERT(SkPaint::kBevel_Join == 2, paint_join_mismatch);
         SK_COMPILE_ASSERT(SkPaint::kJoinCount == 3, paint_join_mismatch);
         SkASSERT(fPaint.getStrokeJoin() >= 0 && fPaint.getStrokeJoin() <= 2);
-        insert("LJ", new SkPDFInt(fPaint.getStrokeJoin()))->unref();
+        insertInt("LJ", fPaint.getStrokeJoin());
 
-        insert("LW", new SkPDFScalar(fPaint.getStrokeWidth()))->unref();
-        insert("ML", new SkPDFScalar(fPaint.getStrokeMiter()))->unref();
+        insertScalar("LW", fPaint.getStrokeWidth());
+        insertScalar("ML", fPaint.getStrokeMiter());
         insert("SA", new SkPDFBool(true))->unref();  // Auto stroke adjustment.
 
         SkXfermode::Mode xfermode = SkXfermode::kSrcOver_Mode;
@@ -244,8 +233,7 @@ void SkPDFGraphicState::populateDict() {
             xfermode = SkXfermode::kSrcOver_Mode;
             NOT_IMPLEMENTED("unsupported xfermode", false);
         }
-        insert("BM",
-               new SkPDFName(blend_mode_from_xfermode(xfermode)))->unref();
+        insertName("BM", blend_mode_from_xfermode(xfermode));
     }
 }
 

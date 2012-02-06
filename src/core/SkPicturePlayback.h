@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef SkPicturePlayback_DEFINED
 #define SkPicturePlayback_DEFINED
 
@@ -11,9 +18,8 @@
 #include "SkPathHeap.h"
 #include "SkRegion.h"
 #include "SkPictureFlat.h"
-#include "SkShape.h"
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 #include "SkThread.h"
 #endif
 
@@ -78,12 +84,6 @@ private:
         return *fPictureRefs[index - 1];
     }
     
-    SkShape* getShape() {
-        int index = getInt();
-        SkASSERT(index > 0 && index <= fShapeCount);
-        return fShapes[index - 1];
-    }
-    
     const SkPaint* getPaint() {
         int index = getInt();
         if (index == 0) {
@@ -95,7 +95,7 @@ private:
 
     const SkRect* getRectPtr() {
         if (fReader.readBool()) {
-            return fReader.skipRect();
+            return &fReader.skipT<SkRect>();
         } else {
             return NULL;
         }
@@ -103,7 +103,7 @@ private:
 
     const SkIRect* getIRectPtr() {
         if (fReader.readBool()) {
-            return (const SkIRect*)fReader.skip(sizeof(SkIRect));
+            return &fReader.skipT<SkIRect>();
         } else {
             return NULL;
         }
@@ -170,13 +170,11 @@ private:
 
     SkPicture** fPictureRefs;
     int fPictureCount;
-    SkShape** fShapes;
-    int fShapeCount;
 
     SkRefCntPlayback fRCPlayback;
     SkTypefacePlayback fTFPlayback;
     SkFactoryPlayback*   fFactoryPlayback;
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     SkMutex fDrawMutex;
 #endif
 };

@@ -1,7 +1,32 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "Test.h"
 #include "SkPath.h"
 #include "SkLineClipper.h"
 #include "SkEdgeClipper.h"
+
+static void test_edgeclipper(skiatest::Reporter* reporter) {
+    SkEdgeClipper clipper;
+    
+    const SkPoint pts[] = {
+        { SkFloatToScalar(3.0995476e+010),  SkFloatToScalar(42.929779) },
+        { SkFloatToScalar(-3.0995163e+010), SkFloatToScalar(51.050385) },
+        { SkFloatToScalar(-3.0995157e+010), SkFloatToScalar(51.050392) },
+        { SkFloatToScalar(-3.0995134e+010), SkFloatToScalar(51.050400) },
+    };
+
+    const SkRect clip = { 0, 0, SkIntToScalar(300), SkIntToScalar(200) };
+
+    // this should not assert, even though our choppers do a poor numerical
+    // job when computing their t values.
+    // http://code.google.com/p/skia/issues/detail?id=444
+    clipper.clipCubic(pts, clip);
+}
 
 static void test_intersectline(skiatest::Reporter* reporter) {
     static const SkScalar L = 0;
@@ -83,6 +108,7 @@ static void test_intersectline(skiatest::Reporter* reporter) {
 
 void TestClipper(skiatest::Reporter* reporter) {
     test_intersectline(reporter);
+    test_edgeclipper(reporter);
 }
 
 #include "TestClassDef.h"

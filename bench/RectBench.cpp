@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBenchmark.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
@@ -11,7 +18,7 @@ public:
     enum {
         W = 640,
         H = 480,
-        N = 300
+        N = SkBENCHLOOP(300)
     };
     SkRect  fRects[N];
     SkColor fColors[N];

@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -56,15 +63,20 @@ static const int gWidth = 32;
 static const int gHeight = 32;
 
 class TilingView : public SampleView {
-    SkPicture           fTextPicture;
+    SkPicture*          fTextPicture;
     SkBlurDrawLooper    fLooper;
 public:
 	TilingView()
             : fLooper(SkIntToScalar(1), SkIntToScalar(2), SkIntToScalar(2),
                       0x88000000) {
+        fTextPicture = new SkPicture();
         for (size_t i = 0; i < SK_ARRAY_COUNT(gConfigs); i++) {
             makebm(&fTexture[i], gConfigs[i], gWidth, gHeight);
         }
+    }
+
+    ~TilingView() {
+        fTextPicture->unref();
     }
 
     SkBitmap    fTexture[SK_ARRAY_COUNT(gConfigs)];
@@ -94,8 +106,8 @@ protected:
         SkScalar x = SkIntToScalar(10);
 
         SkCanvas* textCanvas = NULL;
-        if (fTextPicture.width() == 0) {
-            textCanvas = fTextPicture.beginRecording(1000, 1000);
+        if (fTextPicture->width() == 0) {
+            textCanvas = fTextPicture->beginRecording(1000, 1000);
         }
 
         if (textCanvas) {
@@ -148,7 +160,7 @@ protected:
             }
         }
 
-        canvas->drawPicture(fTextPicture);
+        canvas->drawPicture(*fTextPicture);
     }
     
 private:

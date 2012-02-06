@@ -1,19 +1,11 @@
-/* libs/graphics/animator/SkDisplayType.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkDisplayType.h"
 #include "SkAnimateMaker.h"
@@ -119,7 +111,7 @@ SkDisplayable* SkDisplayType::CreateInstance(SkAnimateMaker* maker, SkDisplayTyp
         CASE_DRAW_NEW(Color);
         CASE_NEW(CubicTo);
         CASE_NEW(Dash);
-        CASE_NEW(Data);
+        CASE_NEW(DataInput);
         CASE_NEW(Discrete);
         // displayable
         // drawable
@@ -274,7 +266,7 @@ const SkMemberInfo* SkDisplayType::GetMembers(SkAnimateMaker* maker,
         CASE_GET_DRAW_INFO(Color);
         CASE_GET_INFO(CubicTo);
         CASE_GET_INFO(Dash);
-        CASE_GET_INFO(Data);
+        CASE_GET_INFO(DataInput);
         CASE_GET_INFO(Discrete);
         // displayable
         // drawable
@@ -441,7 +433,7 @@ const TypeNames gTypeNames[] = {
     DRAW_NAME("color", SkType_Color),
     { "cubicTo", SkType_CubicTo                 INIT_BOOL_FIELDS },
     { "dash", SkType_Dash                       INIT_BOOL_FIELDS },
-    { "data", SkType_Data                       INIT_BOOL_FIELDS },
+    { "data", SkType_DataInput                  INIT_BOOL_FIELDS },
     { "discrete", SkType_Discrete               INIT_BOOL_FIELDS },
     // displayable
     // drawable
@@ -634,7 +626,7 @@ bool SkDisplayType::IsDisplayable(SkAnimateMaker* , SkDisplayTypes type) {
         case SkType_Color:
         case SkType_CubicTo:
         case SkType_Dash:
-        case SkType_Data:
+        case SkType_DataInput:
         case SkType_Discrete:
         case SkType_Displayable:
         case SkType_Drawable:

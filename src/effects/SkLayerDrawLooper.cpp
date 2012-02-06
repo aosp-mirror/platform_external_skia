@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkCanvas.h"
 #include "SkColor.h"
 #include "SkLayerDrawLooper.h"
@@ -12,9 +19,10 @@ SkLayerDrawLooper::LayerInfo::LayerInfo() {
     fPostTranslate = false;
 }
 
-SkLayerDrawLooper::SkLayerDrawLooper() {
-    fRecs = NULL;
-    fCount = 0;
+SkLayerDrawLooper::SkLayerDrawLooper()
+        : fRecs(NULL),
+          fCount(0),
+          fCurrRec(NULL) {
 }
 
 SkLayerDrawLooper::~SkLayerDrawLooper() {
@@ -119,13 +127,11 @@ void SkLayerDrawLooper::ApplyInfo(SkPaint* dst, const SkPaint& src,
         dst->setXfermode(src.getXfermode());
     }
 
-    // we never copy these
+    // we don't override these
 #if 0
-    dst->setFlags(src.getFlags());
     dst->setTypeface(src.getTypeface());
     dst->setTextSize(src.getTextSize());
     dst->setTextScaleX(src.getTextScaleX());
-    dst->setTextSkewX(src.getTextSkewX());
     dst->setRasterizer(src.getRasterizer());
     dst->setLooper(src.getLooper());
     dst->setTextEncoding(src.getTextEncoding());
@@ -193,7 +199,6 @@ void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
     
     Rec* rec = fRecs;
     for (int i = 0; i < fCount; i++) {
-        buffer.writeInt(rec->fInfo.fFlagsMask);
         buffer.writeInt(rec->fInfo.fPaintBits);
         buffer.writeInt(rec->fInfo.fColorMode);
         buffer.writeScalar(rec->fInfo.fOffset.fX);
@@ -205,15 +210,14 @@ void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
 }
 
 SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
-        : INHERITED(buffer) {
-    fRecs = NULL;
-    fCount = 0;
-    
+        : INHERITED(buffer),
+          fRecs(NULL),
+          fCount(0),
+          fCurrRec(NULL) {
     int count = buffer.readInt();
 
     for (int i = 0; i < count; i++) {
         LayerInfo info;
-        info.fFlagsMask = buffer.readInt();
         info.fPaintBits = buffer.readInt();
         info.fColorMode = (SkXfermode::Mode)buffer.readInt();
         info.fOffset.fX = buffer.readScalar();
@@ -241,5 +245,4 @@ SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkFlattenable::Registrar gReg("SkLayerDrawLooper",
-                                     SkLayerDrawLooper::CreateProc);
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkLayerDrawLooper)

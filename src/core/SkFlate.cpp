@@ -1,35 +1,27 @@
+
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright 2010 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
 
+
+#include "SkData.h"
 #include "SkFlate.h"
 #include "SkStream.h"
 
 #ifndef SK_ZLIB_INCLUDE
 bool SkFlate::HaveFlate() { return false; }
-bool SkFlate::Deflate(SkStream*, SkDynamicMemoryWStream*) { return false; }
-bool SkFlate::Inflate(SkStream*, SkDynamicMemoryWStream*) { return false; }
+bool SkFlate::Deflate(SkStream*, SkWStream*) { return false; }
+bool SkFlate::Deflate(const void*, size_t, SkWStream*) { return false; }
+bool SkFlate::Deflate(const SkData*, SkWStream*) { return false; }
+bool SkFlate::Inflate(SkStream*, SkWStream*) { return false; }
 #else
 
 // static
 bool SkFlate::HaveFlate() {
-#ifdef SK_DEBUG
-    return false;
-#else
     return true;
-#endif
 }
 
 namespace {
@@ -39,7 +31,7 @@ namespace {
 // static
 const size_t kBufferSize = 1024;
 
-bool doFlate(bool compress, SkStream* src, SkDynamicMemoryWStream* dst) {
+bool doFlate(bool compress, SkStream* src, SkWStream* dst) {
     uint8_t inputBuffer[kBufferSize];
     uint8_t outputBuffer[kBufferSize];
     z_stream flateData;
@@ -119,12 +111,25 @@ bool doFlate(bool compress, SkStream* src, SkDynamicMemoryWStream* dst) {
 }
 
 // static
-bool SkFlate::Deflate(SkStream* src, SkDynamicMemoryWStream* dst) {
+bool SkFlate::Deflate(SkStream* src, SkWStream* dst) {
     return doFlate(true, src, dst);
 }
 
+bool SkFlate::Deflate(const void* ptr, size_t len, SkWStream* dst) {
+    SkMemoryStream stream(ptr, len);
+    return doFlate(true, &stream, dst);
+}
+
+bool SkFlate::Deflate(const SkData* data, SkWStream* dst) {
+    if (data) {
+        SkMemoryStream stream(data->data(), data->size());
+        return doFlate(true, &stream, dst);
+    }
+    return false;
+}
+
 // static
-bool SkFlate::Inflate(SkStream* src, SkDynamicMemoryWStream* dst) {
+bool SkFlate::Inflate(SkStream* src, SkWStream* dst) {
     return doFlate(false, src, dst);
 }
 

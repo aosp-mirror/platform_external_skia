@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkUtils.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkUtils.h"
 
@@ -116,7 +108,6 @@ void sk_memset32_portable(uint32_t dst[], uint32_t value, int count) {
     }
 }
 
-#if !defined(ANDROID) || defined(SK_BUILD_FOR_ANDROID_NDK)
 static void sk_memset16_stub(uint16_t dst[], uint16_t value, int count) {
     SkMemset16Proc proc = SkMemset16GetPlatformProc();
     sk_memset16 = proc ? proc : sk_memset16_portable;
@@ -132,8 +123,6 @@ static void sk_memset32_stub(uint32_t dst[], uint32_t value, int count) {
 }
 
 SkMemset32Proc sk_memset32 = sk_memset32_stub;
-
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -251,7 +240,7 @@ SkUnichar SkUTF8_PrevUnichar(const char** ptr) {
 
 size_t SkUTF8_FromUnichar(SkUnichar uni, char utf8[]) {
     if ((uint32_t)uni > 0x10FFFF) {
-        SkASSERT(!"bad unichar");
+        SkDEBUGFAIL("bad unichar");
         return 0;
     }
 

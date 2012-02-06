@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkGradientShader.h"
 
@@ -73,21 +80,18 @@ static const GradMaker gGradMakers[] = {
 
 class GradientsGM : public GM {
 public:
-	GradientsGM() {}
+	GradientsGM() {
+        this->setBGColor(0xFFDDDDDD);
+    }
     
 protected:
     SkString onShortName() {
         return SkString("gradients");
     }
     
-	SkISize onISize() { return make_isize(640, 510); }
-    
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
-    
+    virtual SkISize onISize() { return make_isize(640, 510); }
+        
     virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
         
         SkPoint pts[2] = {
             { 0, 0 },
@@ -117,10 +121,109 @@ private:
     typedef GM INHERITED;
 };
 
+/*
+ Inspired by this <canvas> javascript, where we need to detect that we are not
+ solving a quadratic equation, but must instead solve a linear (since our X^2
+ coefficient is 0)
+
+ ctx.fillStyle = '#f00';
+ ctx.fillRect(0, 0, 100, 50);
+ 
+ var g = ctx.createRadialGradient(-80, 25, 70, 0, 25, 150);
+ g.addColorStop(0, '#f00');
+ g.addColorStop(0.01, '#0f0');
+ g.addColorStop(0.99, '#0f0');
+ g.addColorStop(1, '#f00');
+ ctx.fillStyle = g;
+ ctx.fillRect(0, 0, 100, 50);
+ */
+class GradientsDegenrate2PointGM : public GM {
+public:
+    GradientsDegenrate2PointGM() {}
+    
+protected:
+    SkString onShortName() {
+        return SkString("gradients_degenerate_2pt");
+    }
+    
+	virtual SkISize onISize() { return make_isize(320, 320); }
+    
+    void drawBG(SkCanvas* canvas) {
+        canvas->drawColor(SK_ColorBLUE);
+    }
+    
+    virtual void onDraw(SkCanvas* canvas) {
+        this->drawBG(canvas);
+        
+        SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorGREEN, SK_ColorRED };
+        SkScalar pos[] = { 0, SkFloatToScalar(0.01f), SkFloatToScalar(0.99f), SK_Scalar1 };
+        SkPoint c0;
+        c0.iset(-80, 25);
+        SkScalar r0 = SkIntToScalar(70);
+        SkPoint c1;
+        c1.iset(0, 25);
+        SkScalar r1 = SkIntToScalar(150);
+        SkShader* s = SkGradientShader::CreateTwoPointRadial(c0, r0, c1, r1, colors,
+                                                             pos, SK_ARRAY_COUNT(pos),
+                                                             SkShader::kClamp_TileMode);
+        SkPaint paint;
+        paint.setShader(s)->unref();
+        canvas->drawPaint(paint);
+    }
+    
+private:
+    typedef GM INHERITED;
+};
+
+/// Tests correctness of *optimized* codepaths in gradients.
+
+class ClampedGradientsGM : public GM {
+public:
+    ClampedGradientsGM() {}
+
+protected:
+    SkString onShortName() { return SkString("clamped_gradients"); }
+
+    virtual SkISize onISize() { return make_isize(640, 510); }
+
+    void drawBG(SkCanvas* canvas) {
+        canvas->drawColor(0xFFDDDDDD);
+    }
+
+    virtual void onDraw(SkCanvas* canvas) {
+        this->drawBG(canvas);
+
+        SkRect r = { 0, 0, SkIntToScalar(100), SkIntToScalar(300) };
+        SkPaint paint;
+        paint.setAntiAlias(true);
+
+        SkPoint center;
+        center.iset(0, 300);
+        canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
+        SkShader* shader = SkGradientShader::CreateRadial(
+            SkPoint(center),
+            SkIntToScalar(200), gColors, NULL, 5,
+            SkShader::kClamp_TileMode, NULL);
+        paint.setShader(shader);
+        canvas->drawRect(r, paint);
+        shader->unref();
+    }
+
+private:
+    typedef GM INHERITED;
+};
+
+
 ///////////////////////////////////////////////////////////////////////////////
 
 static GM* MyFactory(void*) { return new GradientsGM; }
 static GMRegistry reg(MyFactory);
+
+static GM* MyFactory2(void*) { return new GradientsDegenrate2PointGM; }
+static GMRegistry reg2(MyFactory2);
+
+static GM* MyFactory3(void*) { return new ClampedGradientsGM; }
+static GMRegistry reg3(MyFactory3);
 
 }
 

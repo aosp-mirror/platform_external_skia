@@ -1,7 +1,16 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef skiagm_DEFINED
 #define skiagm_DEFINED
 
+#include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkDevice.h"
 #include "SkPaint.h"
 #include "SkRefCnt.h"
 #include "SkSize.h"
@@ -21,22 +30,39 @@ namespace skiagm {
         GM();
         virtual ~GM();
 		
-		void draw(SkCanvas*);
+        enum Flags {
+            kSkipPDF_Flag       = 1 << 0,
+            kSkipPicture_Flag   = 1 << 1
+        };
+
+        void draw(SkCanvas*);
+        void drawBackground(SkCanvas*);
+        void drawContent(SkCanvas*);
+        
 		SkISize getISize() { return this->onISize(); }
-        const char* shortName() {
-            if (fShortName.size() == 0) {
-                fShortName = this->onShortName();
-            }
-            return fShortName.c_str();
+        const char* shortName();
+
+        uint32_t getFlags() const {
+            return this->onGetFlags();
         }
+        
+        SkColor getBGColor() const { return fBGColor; }
+        void setBGColor(SkColor);
+
+        // helper: fill a rect in the specified color based on the
+        // GM's getISize bounds.
+        void drawSizeBounds(SkCanvas*, SkColor);
 
 	protected:
 		virtual void onDraw(SkCanvas*) = 0;
+		virtual void onDrawBackground(SkCanvas*);
 		virtual SkISize onISize() = 0;
         virtual SkString onShortName() = 0;
+        virtual uint32_t onGetFlags() const { return 0; }
         
     private:
         SkString fShortName;
+        SkColor  fBGColor;
     };
 
     typedef SkTRegistry<GM*, void*> GMRegistry;

@@ -1,45 +1,28 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
 
-#ifndef SkOSWindow_Mac_DEFINED
-#define SkOSWindow_Mac_DEFINED
+#ifndef SkOSWindow_MacCocoa_DEFINED
+#define SkOSWindow_MacCocoa_DEFINED
 
-#include <Carbon/Carbon.h>
 #include "SkWindow.h"
 
 class SkOSWindow : public SkWindow {
 public:
     SkOSWindow(void* hwnd);
-
+    ~SkOSWindow();
     void*   getHWND() const { return fHWND; }
-    void*   getHVIEW() const { return fHVIEW; }
-    void    updateSize();
-
-    static bool PostEvent(SkEvent* evt, SkEventSinkID, SkMSec delay);
-
-    static OSStatus EventHandler(EventHandlerCallRef inHandler,
-                                 EventRef inEvent, void* userData);
-
-    void   doPaint(void* ctx);
-
-
-    bool attachGL();
-    void detachGL();
-    void presentGL();
-
+    
+    virtual bool onDispatchClick(int x, int y, Click::State state, 
+                                 void* owner);
+    void    detachGL();
+    bool    attachGL();
+    void    presentGL();
+    
 protected:
     // overrides from SkEventSink
     virtual bool onEvent(const SkEvent& evt);
@@ -47,16 +30,15 @@ protected:
     virtual void onHandleInval(const SkIRect&);
     // overrides from SkView
     virtual void onAddMenu(const SkOSMenu*);
+    virtual void onUpdateMenu(const SkOSMenu*);
     virtual void onSetTitle(const char[]);
     
-
 private:
     void*   fHWND;
-    void*   fHVIEW;
-    void*   fAGLCtx;
-
+    bool    fInvalEventIsPending;
+    void*   fNotifier;
+    void*   fGLContext;
     typedef SkWindow INHERITED;
 };
 
 #endif
-

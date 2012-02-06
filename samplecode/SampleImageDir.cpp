@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -29,6 +36,10 @@ static void drawmarshmallow(SkCanvas* canvas) {
     SkMatrix m;
 
     SkImageDecoder::DecodeFile("/Users/reed/Downloads/3elfs.jpg", &bitmap);
+    if (!bitmap.pixelRef()) {
+        return;
+    }
+
     SkShader* s = SkShader::CreateBitmapShader(bitmap,
                                                SkShader::kRepeat_TileMode,
                                                SkShader::kRepeat_TileMode);
@@ -61,33 +72,33 @@ static void DrawRoundRect(SkCanvas& canvas) {
 
    // set up clipper
    SkRect skclip;
-   skclip.set(SkIntToFixed(284), SkIntToFixed(40), SkIntToFixed(1370), SkIntToFixed(708));
+   skclip.set(SkIntToScalar(284), SkIntToScalar(40), SkIntToScalar(1370), SkIntToScalar(708));
 
 //   ret = canvas.clipRect(skclip);
 //   SkASSERT(ret);
 
-   matrix.set(SkMatrix::kMTransX, SkFloatToFixed(-1153.28));
-   matrix.set(SkMatrix::kMTransY, SkFloatToFixed(1180.50));
+   matrix.set(SkMatrix::kMTransX, SkFloatToScalar(-1153.28f));
+   matrix.set(SkMatrix::kMTransY, SkFloatToScalar(1180.50f));
 
-   matrix.set(SkMatrix::kMScaleX, SkFloatToFixed(0.177171));
-   matrix.set(SkMatrix::kMScaleY, SkFloatToFixed(0.177043));
+   matrix.set(SkMatrix::kMScaleX, SkFloatToScalar(0.177171f));
+   matrix.set(SkMatrix::kMScaleY, SkFloatToScalar(0.177043f));
 
-   matrix.set(SkMatrix::kMSkewX, SkFloatToFixed(0.126968));
-   matrix.set(SkMatrix::kMSkewY, SkFloatToFixed(-0.126876));
+   matrix.set(SkMatrix::kMSkewX, SkFloatToScalar(0.126968f));
+   matrix.set(SkMatrix::kMSkewY, SkFloatToScalar(-0.126876f));
 
-   matrix.set(SkMatrix::kMPersp0, SkFloatToFixed(0.0));
-   matrix.set(SkMatrix::kMPersp1, SkFloatToFixed(0.0));
+   matrix.set(SkMatrix::kMPersp0, SkFloatToScalar(0.0f));
+   matrix.set(SkMatrix::kMPersp1, SkFloatToScalar(0.0f));
 
    ret = canvas.concat(matrix);
 
    paint.setAntiAlias(true);
    paint.setColor(0xb2202020);
    paint.setStyle(SkPaint::kStroke_Style);
-   paint.setStrokeWidth(SkFloatToFixed(68.13));
+   paint.setStrokeWidth(SkFloatToScalar(68.13f));
 
    SkRect r;
-   r.set(SkFloatToFixed(-313.714417), SkFloatToFixed(-4.826389), SkFloatToFixed(18014.447266), SkFloatToFixed(1858.154541));
-   canvas.drawRoundRect(r, SkFloatToFixed(91.756363), SkFloatToFixed(91.756363), paint);
+   r.set(SkFloatToScalar(-313.714417f), SkFloatToScalar(-4.826389f), SkFloatToScalar(18014.447266f), SkFloatToScalar(1858.154541f));
+   canvas.drawRoundRect(r, SkFloatToScalar(91.756363f), SkFloatToScalar(91.756363f), paint);
 }
 
 static bool SetImageRef(SkBitmap* bitmap, SkStream* stream,

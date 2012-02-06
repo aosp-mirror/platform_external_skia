@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef SkClipStack_DEFINED
 #define SkClipStack_DEFINED
 
@@ -27,10 +34,10 @@ public:
                      SkRegion::Op op = SkRegion::kIntersect_Op) {
         SkRect r;
         r.set(ir);
-        this->clipDevRect(r, op);
+        this->clipDevRect(r, op, false);
     }
-    void clipDevRect(const SkRect&, SkRegion::Op = SkRegion::kIntersect_Op);
-    void clipDevPath(const SkPath&, SkRegion::Op = SkRegion::kIntersect_Op);
+    void clipDevRect(const SkRect&, SkRegion::Op, bool doAA);
+    void clipDevPath(const SkPath&, SkRegion::Op, bool doAA);
 
     class B2FIter {
     public:
@@ -42,11 +49,13 @@ public:
         B2FIter(const SkClipStack& stack);
 
         struct Clip {
+            Clip() : fRect(NULL), fPath(NULL), fOp(SkRegion::kIntersect_Op) {}
             friend bool operator==(const Clip& a, const Clip& b);
             friend bool operator!=(const Clip& a, const Clip& b);
             const SkRect*   fRect;  // if non-null, this is a rect clip
             const SkPath*   fPath;  // if non-null, this is a path clip
             SkRegion::Op    fOp;
+            bool            fDoAA;
         };
 
         /**

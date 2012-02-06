@@ -56,8 +56,6 @@ SOURCE := \
     OverView.cpp \
     SampleFuzz.cpp \
     SampleShaders.cpp \
-    SampleText.cpp \
-    SampleTextBox.cpp \
     SampleImage.cpp \
     SampleMovie.cpp \
     SampleImageDir.cpp \

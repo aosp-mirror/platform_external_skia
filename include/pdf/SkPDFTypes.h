@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright 2010 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPDFTypes_DEFINED
 #define SkPDFTypes_DEFINED
@@ -39,15 +32,6 @@ public:
     SkPDFObject();
     virtual ~SkPDFObject();
 
-    /** Subclasses must implement this method to print the object to the
-     *  PDF file.
-     *  @param catalog  The object catalog to use.
-     *  @param indirect If true, output an object identifier with the object.
-     *  @param stream   The writable output stream to send the output to.
-     */
-    virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog,
-                            bool indirect) = 0;
-
     /** Return the size (number of bytes) of this object in the final output
      *  file. Compound objects or objects that are computationally intensive
      *  to output should override this method.
@@ -65,6 +49,12 @@ public:
      */
     virtual void getResources(SkTDArray<SkPDFObject*>* resourceList);
 
+    /** Emit this object unless the catalog has a substitute object, in which
+     *  case emit that.
+     *  @see emitObject
+     */
+    void emit(SkWStream* stream, SkPDFCatalog* catalog, bool indirect);
+
     /** Helper function to output an indirect object.
      *  @param catalog The object catalog to use.
      *  @param stream  The writable output stream to send the output to.
@@ -75,6 +65,32 @@ public:
      *  @param catalog The object catalog to use.
      */
     size_t getIndirectOutputSize(SkPDFCatalog* catalog);
+
+    /** Static helper function to add a resource to a list.  The list takes
+     *  a reference.
+     * @param resource  The resource to add.
+     * @param list      The list to add the resource to.
+     */
+    static void AddResourceHelper(SkPDFObject* resource,
+                                  SkTDArray<SkPDFObject*>* list);
+
+    /** Static helper function to copy and reference the resources (and all
+     *   their subresources) into a new list.
+     * @param resources The resource list.
+     * @param result    The list to add to.
+     */
+    static void GetResourcesHelper(SkTDArray<SkPDFObject*>* resources,
+                                   SkTDArray<SkPDFObject*>* result);
+
+protected:
+    /** Subclasses must implement this method to print the object to the
+     *  PDF file.
+     *  @param catalog  The object catalog to use.
+     *  @param indirect If true, output an object identifier with the object.
+     *  @param stream   The writable output stream to send the output to.
+     */
+    virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog,
+                            bool indirect) = 0;
 };
 
 /** \class SkPDFObjRef
@@ -187,15 +203,15 @@ public:
                             bool indirect);
     virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
 
-    static SkString formatString(const char* input, size_t len);
-    static SkString formatString(const uint16_t* input, size_t len,
+    static SkString FormatString(const char* input, size_t len);
+    static SkString FormatString(const uint16_t* input, size_t len,
                                  bool wideChars);
 private:
     static const size_t kMaxLen = 65535;
 
     const SkString fValue;
 
-    static SkString doFormatString(const void* input, size_t len,
+    static SkString DoFormatString(const void* input, size_t len,
                                  bool wideInput, bool wideOutput);
 };
 
@@ -212,6 +228,8 @@ public:
     explicit SkPDFName(const SkString& name);
     virtual ~SkPDFName();
 
+    bool operator==(const SkPDFName& b) const;
+
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                             bool indirect);
@@ -222,7 +240,7 @@ private:
 
     const SkString fValue;
 
-    static SkString formatName(const SkString& input);
+    static SkString FormatName(const SkString& input);
 };
 
 /** \class SkPDFArray
@@ -267,6 +285,21 @@ public:
      *  @return The value argument is returned.
      */
     SkPDFObject* append(SkPDFObject* value);
+
+    /** Creates a SkPDFInt object and appends it to the array.
+     *  @param value The value to add to the array.
+     */
+    void appendInt(int32_t value);
+
+    /** Creates a SkPDFScalar object and appends it to the array.
+     *  @param value The value to add to the array.
+     */
+    void appendScalar(SkScalar value);
+
+    /** Creates a SkPDFName object and appends it to the array.
+     *  @param value The value to add to the array.
+     */
+    void appendName(const char name[]);
 
 private:
     static const int kMaxLen = 8191;
@@ -314,17 +347,55 @@ public:
      */
     SkPDFObject* insert(const char key[], SkPDFObject* value);
 
+    /** Add the int to the dictionary with the given key.
+     *  @param key   The text of the key for this dictionary entry.
+     *  @param value The int value for this dictionary entry.
+     */
+    void insertInt(const char key[], int32_t value);
+
+    /** Add the scalar to the dictionary with the given key.
+     *  @param key   The text of the key for this dictionary entry.
+     *  @param value The scalar value for this dictionary entry.
+     */
+    void insertScalar(const char key[], SkScalar value);
+
+    /** Add the name to the dictionary with the given key.
+     *  @param key   The text of the key for this dictionary entry.
+     *  @param name  The name for this dictionary entry.
+     */
+    void insertName(const char key[], const char name[]);
+
+    /** Add the name to the dictionary with the given key.
+     *  @param key   The text of the key for this dictionary entry.
+     *  @param name  The name for this dictionary entry.
+     */
+    void insertName(const char key[], const SkString& name) {
+        this->insertName(key, name.c_str());
+    }
+
     /** Remove all entries from the dictionary.
      */
     void clear();
 
 private:
-    static const int kMaxLen = 4095;
-
     struct Rec {
       SkPDFName* key;
       SkPDFObject* value;
     };
+
+public:
+    class Iter {
+    public:
+        explicit Iter(const SkPDFDict& dict);
+        SkPDFName* next(SkPDFObject** value);
+
+    private:
+        Rec* fIter;
+        Rec* fStop;
+    };
+
+private:
+    static const int kMaxLen = 4095;
 
     SkTDArray<struct Rec> fValue;
 };

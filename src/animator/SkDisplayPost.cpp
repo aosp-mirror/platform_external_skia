@@ -1,19 +1,11 @@
-/* libs/graphics/animator/SkDisplayPost.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkDisplayPost.h"
 #include "SkAnimateMaker.h"
@@ -51,13 +43,13 @@ SkPost::SkPost() : delay(0), /*initialized(SkBool(-1)), */ mode(kImmediate), fMa
 }
 
 SkPost::~SkPost() {
-    for (SkData** part = fParts.begin(); part < fParts.end();  part++)
+    for (SkDataInput** part = fParts.begin(); part < fParts.end();  part++)
         delete *part;
 }
 
 bool SkPost::add(SkAnimateMaker& , SkDisplayable* child) {
-    SkASSERT(child && child->isData());
-    SkData* part = (SkData*) child;
+    SkASSERT(child && child->isDataInput());
+    SkDataInput* part = (SkDataInput*) child;
     *fParts.append() = part;
     return true;
 }
@@ -113,8 +105,8 @@ void SkPost::dump(SkAnimateMaker* maker) {
     //for some reason the last part is id, which i don't want
     //and the parts seem to be in the reverse order from the one in which we find the 
     //data itself
-    //SkData** ptr = fParts.end();
-    //SkData* data;
+    //SkDataInput** ptr = fParts.end();
+    //SkDataInput* data;
     //const char* ID;
     while ((name = iter.next(&type, &number)) != NULL) {
         //ptr--;
@@ -190,7 +182,7 @@ bool SkPost::enable(SkAnimateMaker& maker ) {
             fEvent.getMetaData().reset();
             if (preserveID.size() > 0)
                 fEvent.setString("id", preserveID);
-            for (SkData** part = fParts.begin(); part < fParts.end();  part++) {
+            for (SkDataInput** part = fParts.begin(); part < fParts.end();  part++) {
                 if ((*part)->add())
                     maker.setErrorCode(SkDisplayXMLParserError::kErrorAddingDataToPost);
             }
@@ -284,7 +276,7 @@ bool SkPost::hasEnable() const {
 void SkPost::onEndElement(SkAnimateMaker& maker) {
     fTargetMaker = fMaker = &maker;
     if (fChildHasID == false) {
-        for (SkData** part = fParts.begin(); part < fParts.end();  part++)
+        for (SkDataInput** part = fParts.begin(); part < fParts.end();  part++)
             delete *part;
         fParts.reset();
     }

@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkScalar_DEFINED
 #define SkScalar_DEFINED
@@ -99,7 +92,7 @@
          *
          * Either way, it's not good.
          */
-        SkASSERT(!"looks like you passed an SkScalar into SkIntToScalar");
+        SkDEBUGFAIL("looks like you passed an SkScalar into SkIntToScalar");
         return (float)0;
     }
 #else  // not SK_DEBUG
@@ -123,15 +116,15 @@
     /** SkScalarFraction(x) returns the signed fractional part of the argument
     */
     #define SkScalarFraction(x)     sk_float_mod(x, 1.0f)
-    /** Rounds the SkScalar to the nearest integer value
-    */
-    #define SkScalarRound(x)        sk_float_round2int(x)
-    /** Returns the smallest integer that is >= the specified SkScalar
-    */
-    #define SkScalarCeil(x)         sk_float_ceil2int(x)
-    /** Returns the largest integer that is <= the specified SkScalar
-    */
-    #define SkScalarFloor(x)        sk_float_floor2int(x)
+
+    #define SkScalarFloorToScalar(x)    sk_float_floor(x)
+    #define SkScalarCeilToScalar(x)     sk_float_ceil(x)
+    #define SkScalarRoundToScalar(x)    sk_float_floor((x) + 0.5f)
+
+    #define SkScalarFloorToInt(x)       sk_float_floor2int(x)
+    #define SkScalarCeilToInt(x)        sk_float_ceil2int(x)
+    #define SkScalarRoundToInt(x)       sk_float_round2int(x)
+
     /** Returns the absolute value of the specified SkScalar
     */
     #define SkScalarAbs(x)          sk_float_abs(x)
@@ -237,9 +230,15 @@
         #define SkDoubleToScalar(n) SkDoubleToFixed(n)
     #endif
     #define SkScalarFraction(x)     SkFixedFraction(x)
-    #define SkScalarRound(x)        SkFixedRound(x)
-    #define SkScalarCeil(x)         SkFixedCeil(x)
-    #define SkScalarFloor(x)        SkFixedFloor(x)
+
+    #define SkScalarFloorToScalar(x)    SkFixedFloorToFixed(x)
+    #define SkScalarCeilToScalar(x)     SkFixedCeilToFixed(x)
+    #define SkScalarRoundToScalar(x)    SkFixedRoundToFixed(x)
+
+    #define SkScalarFloorToInt(x)       SkFixedFloorToInt(x)
+    #define SkScalarCeilToInt(x)        SkFixedCeilToInt(x)
+    #define SkScalarRoundToInt(x)       SkFixedRoundToInt(x)
+
     #define SkScalarAbs(x)          SkFixedAbs(x)
     #define SkScalarCopySign(x, y)  SkCopySign32(x, y)
     #define SkScalarClampMax(x, max) SkClampMax(x, max)
@@ -284,15 +283,41 @@
     }
 #endif
 
+// DEPRECATED : use ToInt or ToScalar variant
+#define SkScalarFloor(x)    SkScalarFloorToInt(x)
+#define SkScalarCeil(x)     SkScalarCeilToInt(x)
+#define SkScalarRound(x)    SkScalarRoundToInt(x)
+
+/**
+ *  Returns -1 || 0 || 1 depending on the sign of value:
+ *  -1 if x < 0
+ *   0 if x == 0
+ *   1 if x > 0
+ */
+static inline int SkScalarSignAsInt(SkScalar x) {
+    return x < 0 ? -1 : (x > 0);
+}
+
+// Scalar result version of above
+static inline SkScalar SkScalarSignAsScalar(SkScalar x) {
+    return x < 0 ? -SK_Scalar1 : ((x > 0) ? SK_Scalar1 : 0);
+}
+
 #define SK_ScalarNearlyZero         (SK_Scalar1 / (1 << 12))
 
 /*  <= is slower than < for floats, so we use < for our tolerance test
 */
 
 static inline bool SkScalarNearlyZero(SkScalar x,
-                                  SkScalar tolerance = SK_ScalarNearlyZero) {
+                                    SkScalar tolerance = SK_ScalarNearlyZero) {
     SkASSERT(tolerance > 0);
     return SkScalarAbs(x) < tolerance;
+}
+
+static inline bool SkScalarNearlyEqual(SkScalar x, SkScalar y,
+                                     SkScalar tolerance = SK_ScalarNearlyZero) {
+    SkASSERT(tolerance > 0);
+    return SkScalarAbs(x-y) < tolerance;
 }
 
 /** Linearly interpolate between A and B, based on t.

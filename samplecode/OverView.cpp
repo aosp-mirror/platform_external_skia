@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkCanvas.h"
 #include "SkView.h"
@@ -6,9 +13,14 @@ static const int N = 8;
 const SkScalar W = SkIntToScalar(640);
 const SkScalar H = SkIntToScalar(480); 
 
+static const char gIsOverview[] = "is-overview";
+bool is_overview(SkView* view) {
+    SkEvent isOverview(gIsOverview);
+    return view->doQuery(&isOverview); 
+}
 class OverView : public SkView {
 public:
-    OverView(int count, const SkViewFactory factories[]);
+    OverView(int count, const SkViewFactory* factories[]);
     virtual ~OverView();
     
 protected:
@@ -24,6 +36,9 @@ protected:
     virtual bool onQuery(SkEvent* evt) {
         if (SampleCode::TitleQ(*evt)) {
             SampleCode::TitleR(evt, "Overview");
+            return true;
+        }
+        if (evt->isType(gIsOverview)) {
             return true;
         }
         return this->INHERITED::onQuery(evt);
@@ -46,17 +61,16 @@ protected:
 
 private:
     int             fCount;
-    const SkViewFactory*  fFactories;
+    const SkViewFactory**  fFactories;
 
     typedef SkView INHERITED;
 };
 
-SkView* create_overview(int count, const SkViewFactory factories[]);
-SkView* create_overview(int count, const SkViewFactory factories[]) {
+SkView* create_overview(int count, const SkViewFactory* factories[]) {
     return SkNEW_ARGS(OverView, (count, factories));
 };
 
-OverView::OverView(int count, const SkViewFactory factories[]) {
+OverView::OverView(int count, const SkViewFactory* factories[]) {
     fCount = count;
     fFactories = factories;
 }
@@ -74,7 +88,7 @@ void OverView::onSizeChange() {
     SkScalar locX = 0;
     SkScalar locY = 0;
     for (int i = 0; i < fCount; i++) {
-        SkView* view = fFactories[i]();
+        SkView* view = (*fFactories[i])();
         view->setVisibleP(true);
         this->attachChildToBack(view)->unref();
         view->setLoc(locX, locY);

@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkSpriteBlitter_ARGB32.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkSpriteBlitter.h"
 #include "SkBlitRow.h"
@@ -44,8 +36,8 @@ public:
 
     virtual void blitRect(int x, int y, int width, int height) {
         SkASSERT(width > 0 && height > 0);
-        SK_RESTRICT uint32_t* dst = fDevice->getAddr32(x, y);
-        const SK_RESTRICT uint32_t* src = fSource->getAddr32(x - fLeft,
+        uint32_t* SK_RESTRICT dst = fDevice->getAddr32(x, y);
+        const uint32_t* SK_RESTRICT src = fSource->getAddr32(x - fLeft,
                                                              y - fTop);
         size_t dstRB = fDevice->rowBytes();
         size_t srcRB = fSource->rowBytes();
@@ -54,8 +46,8 @@ public:
 
         do {
             proc(dst, src, width, alpha);
-            dst = (SK_RESTRICT uint32_t*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT uint32_t*)((const char*)src + srcRB);
+            dst = (uint32_t* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const uint32_t* SK_RESTRICT)((const char*)src + srcRB);
         } while (--height != 0);
     }
 
@@ -132,8 +124,8 @@ public:
 
     virtual void blitRect(int x, int y, int width, int height) {
         SkASSERT(width > 0 && height > 0);
-        SK_RESTRICT uint32_t* dst = fDevice->getAddr32(x, y);
-        const SK_RESTRICT uint32_t* src = fSource->getAddr32(x - fLeft,
+        uint32_t* SK_RESTRICT dst = fDevice->getAddr32(x, y);
+        const uint32_t* SK_RESTRICT src = fSource->getAddr32(x - fLeft,
                                                              y - fTop);
         unsigned dstRB = fDevice->rowBytes();
         unsigned srcRB = fSource->rowBytes();
@@ -154,8 +146,8 @@ public:
                 fProc32(dst, tmp, width, fAlpha);
             }
 
-            dst = (SK_RESTRICT uint32_t*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT uint32_t*)((const char*)src + srcRB);
+            dst = (uint32_t* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const uint32_t* SK_RESTRICT)((const char*)src + srcRB);
         } while (--height != 0);
     }
 
@@ -163,8 +155,8 @@ private:
     typedef Sprite_D32_XferFilter INHERITED;
 };
 
-static void fillbuffer(SK_RESTRICT SkPMColor dst[],
-                       const SK_RESTRICT SkPMColor16 src[], int count) {
+static void fillbuffer(SkPMColor* SK_RESTRICT dst,
+                       const SkPMColor16* SK_RESTRICT src, int count) {
     SkASSERT(count > 0);
 
     do {
@@ -179,12 +171,12 @@ public:
 
     virtual void blitRect(int x, int y, int width, int height) {
         SkASSERT(width > 0 && height > 0);
-        SK_RESTRICT SkPMColor* dst = fDevice->getAddr32(x, y);
-        const SK_RESTRICT SkPMColor16* src = fSource->getAddr16(x - fLeft,
+        SkPMColor* SK_RESTRICT dst = fDevice->getAddr32(x, y);
+        const SkPMColor16* SK_RESTRICT src = fSource->getAddr16(x - fLeft,
                                                                 y - fTop);
         unsigned dstRB = fDevice->rowBytes();
         unsigned srcRB = fSource->rowBytes();
-        SK_RESTRICT SkPMColor* buffer = fBuffer;
+        SkPMColor* SK_RESTRICT buffer = fBuffer;
         SkColorFilter* colorFilter = fColorFilter;
         SkXfermode* xfermode = fXfermode;
 
@@ -200,8 +192,8 @@ public:
                 fProc32(dst, buffer, width, fAlpha);
             }
 
-            dst = (SK_RESTRICT SkPMColor*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT SkPMColor16*)((const char*)src + srcRB);
+            dst = (SkPMColor* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const SkPMColor16* SK_RESTRICT)((const char*)src + srcRB);
         } while (--height != 0);
     }
 
@@ -211,8 +203,8 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void src_row(SK_RESTRICT SkPMColor dst[],
-                    const SK_RESTRICT SkPMColor16 src[], int count) {
+static void src_row(SkPMColor* SK_RESTRICT dst,
+                    const SkPMColor16* SK_RESTRICT src, int count) {
     do {
         *dst = SkPixel4444ToPixel32(*src);
         src += 1;
@@ -226,22 +218,22 @@ public:
 
     virtual void blitRect(int x, int y, int width, int height) {
         SkASSERT(width > 0 && height > 0);
-        SK_RESTRICT SkPMColor* dst = fDevice->getAddr32(x, y);
-        const SK_RESTRICT SkPMColor16* src = fSource->getAddr16(x - fLeft,
+        SkPMColor* SK_RESTRICT dst = fDevice->getAddr32(x, y);
+        const SkPMColor16* SK_RESTRICT src = fSource->getAddr16(x - fLeft,
                                                                 y - fTop);
         unsigned dstRB = fDevice->rowBytes();
         unsigned srcRB = fSource->rowBytes();
 
         do {
             src_row(dst, src, width);
-            dst = (SK_RESTRICT SkPMColor*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT SkPMColor16*)((const char*)src + srcRB);
+            dst = (SkPMColor* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const SkPMColor16* SK_RESTRICT)((const char*)src + srcRB);
         } while (--height != 0);
     }
 };
 
-static void srcover_row(SK_RESTRICT SkPMColor dst[],
-                        const SK_RESTRICT SkPMColor16 src[], int count) {
+static void srcover_row(SkPMColor* SK_RESTRICT dst,
+                        const SkPMColor16* SK_RESTRICT src, int count) {
     do {
         *dst = SkPMSrcOver(SkPixel4444ToPixel32(*src), *dst);
         src += 1;
@@ -255,16 +247,16 @@ public:
 
     virtual void blitRect(int x, int y, int width, int height) {
         SkASSERT(width > 0 && height > 0);
-        SK_RESTRICT SkPMColor* dst = fDevice->getAddr32(x, y);
-        const SK_RESTRICT SkPMColor16* src = fSource->getAddr16(x - fLeft,
+        SkPMColor* SK_RESTRICT dst = fDevice->getAddr32(x, y);
+        const SkPMColor16* SK_RESTRICT src = fSource->getAddr16(x - fLeft,
                                                                 y - fTop);
         unsigned dstRB = fDevice->rowBytes();
         unsigned srcRB = fSource->rowBytes();
 
         do {
             srcover_row(dst, src, width);
-            dst = (SK_RESTRICT SkPMColor*)((char*)dst + dstRB);
-            src = (const SK_RESTRICT SkPMColor16*)((const char*)src + srcRB);
+            dst = (SkPMColor* SK_RESTRICT)((char*)dst + dstRB);
+            src = (const SkPMColor16* SK_RESTRICT)((const char*)src + srcRB);
         } while (--height != 0);
     }
 };
@@ -319,4 +311,3 @@ SkSpriteBlitter* SkSpriteBlitter::ChooseD32(const SkBitmap& source,
     }
     return blitter;
 }
-

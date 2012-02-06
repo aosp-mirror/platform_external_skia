@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkTDArray_DEFINED
 #define SkTDArray_DEFINED
@@ -71,7 +64,7 @@ public:
         return *this;
     }
 
-    friend int operator==(const SkTDArray<T>& a, const SkTDArray<T>& b) {
+    friend bool operator==(const SkTDArray<T>& a, const SkTDArray<T>& b) {
         return  a.fCount == b.fCount &&
                 (a.fCount == 0 ||
                  !memcmp(a.fArray, b.fArray, a.fCount * sizeof(T)));
@@ -98,7 +91,17 @@ public:
     }
 
     bool isEmpty() const { return fCount == 0; }
+
+    /**
+     *  Return the number of elements in the array
+     */
     int count() const { return fCount; }
+
+    /**
+     *  return the number of bytes in the array: count * sizeof(T)
+     */
+    size_t bytes() const { return fCount * sizeof(T); }
+
     T*  begin() const { return fArray; }
     T*  end() const { return fArray ? fArray + fCount : NULL; }
     T&  operator[](int index) const {

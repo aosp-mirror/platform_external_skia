@@ -24,15 +24,16 @@
 #define VENDOR_FONTS_FILE "/vendor/etc/fallback_fonts.xml"
 
 
-// These defines are used to determine the kind of tag that we're currently populating with data.
-// We only care about the sibling tags nameset and fileset for now.
+// These defines are used to determine the kind of tag that we're currently
+// populating with data. We only care about the sibling tags nameset and fileset
+// for now.
 #define NO_TAG 0
 #define NAMESET_TAG 1
 #define FILESET_TAG 2
 
 /**
- * The FamilyData structure is passed around by the parser so that each handler can read these
- * variables that are relevant to the current parsing.
+ * The FamilyData structure is passed around by the parser so that each handler
+ * can read these variables that are relevant to the current parsing.
  */
 struct FamilyData {
     FamilyData(XML_Parser *parserRef, SkTDArray<FontFamily*> &familiesRef) :
@@ -45,8 +46,8 @@ struct FamilyData {
 };
 
 /**
- * Handler for arbitrary text. This is used to parse the text inside each name or file tag. The
- * resulting strings are put into the fNames or fFileNames arrays.
+ * Handler for arbitrary text. This is used to parse the text inside each name
+ * or file tag. The resulting strings are put into the fNames or fFileNames arrays.
  */
 void textHandler(void *data, const char *s, int len) {
     FamilyData *familyData = (FamilyData*) data;
@@ -73,8 +74,8 @@ void textHandler(void *data, const char *s, int len) {
 }
 
 /**
- * Handler for the start of a tag. The only tags we expect are family, nameset, fileset, name,
- * and file.
+ * Handler for the start of a tag. The only tags we expect are family, nameset,
+ * fileset, name, and file.
  */
 void startElementHandler(void *data, const char *tag, const char **atts) {
     FamilyData *familyData = (FamilyData*) data;
@@ -105,7 +106,8 @@ void startElementHandler(void *data, const char *tag, const char **atts) {
 }
 
 /**
- * Handler for the end of tags. We only care about family, nameset, fileset, name, and file.
+ * Handler for the end of tags. We only care about family, nameset, fileset,
+ * name, and file.
  */
 void endElementHandler(void *data, const char *tag) {
     FamilyData *familyData = (FamilyData*) data;
@@ -126,7 +128,8 @@ void endElementHandler(void *data, const char *tag) {
 }
 
 /**
- * This function parses the given filename and stores the results in the given families array.
+ * This function parses the given filename and stores the results in the given
+ * families array.
  */
 void parseConfigFile(const char *filename, SkTDArray<FontFamily*> &families) {
     XML_Parser parser = XML_ParserCreate(NULL);
@@ -134,9 +137,9 @@ void parseConfigFile(const char *filename, SkTDArray<FontFamily*> &families) {
     XML_SetUserData(parser, familyData);
     XML_SetElementHandler(parser, startElementHandler, endElementHandler);
     FILE *file = fopen(filename, "r");
+    // Some of the files we attempt to parse (in particular, /vendor/etc/fallback_fonts.xml)
+    // are optional - failure here is okay because one of these optional files may not exist.
     if (file == NULL) {
-        // Some of the files we attempt to parse (in particular, /vendor/etc/fallback_fonts.xml)
-        // are optional - failure here is okay because one of these optional files may not exist.
         return;
     }
     char buffer[512];
@@ -152,8 +155,8 @@ void parseConfigFile(const char *filename, SkTDArray<FontFamily*> &families) {
 }
 
 /**
- * Loads data on font families from various expected configuration files. The resulting data
- * is returned in the given fontFamilies array.
+ * Loads data on font families from various expected configuration files. The
+ * resulting data is returned in the given fontFamilies array.
  */
 void getFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
 
@@ -163,8 +166,8 @@ void getFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
     parseConfigFile(FALLBACK_FONTS_FILE, fallbackFonts);
     parseConfigFile(VENDOR_FONTS_FILE, vendorFonts);
 
-    // This loop inserts the vendor fallback fonts in the correct order in the overall
-    // fallbacks list.
+    // This loop inserts the vendor fallback fonts in the correct order in the
+    // overall fallbacks list.
     int currentOrder = -1;
     for (int i = 0; i < vendorFonts.count(); ++i) {
         FontFamily* family = vendorFonts[i];
@@ -179,8 +182,8 @@ void getFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
                 *fallbackFonts.insert(currentOrder++) = family;
             }
         } else {
-            // Add the font into the fallback list in the specified order. Set currentOrder
-            // for correct placement of other fonts in the vendor list.
+            // Add the font into the fallback list in the specified order. Set
+            // currentOrder for correct placement of other fonts in the vendor list.
             *fallbackFonts.insert(order) = family;
             currentOrder = order + 1;
         }

@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkColorMatrixFilter.h"
 #include "SkColorMatrix.h"
 #include "SkColorPriv.h"
@@ -110,7 +117,9 @@ static void Add16(SkColorMatrixFilter::State* state,
 #define kNO_ALPHA_FLAGS (SkColorFilter::kAlphaUnchanged_Flag |  \
                          SkColorFilter::kHasFilter16_Flag)
 
-void SkColorMatrixFilter::setup(const SkScalar SK_RESTRICT src[20]) {
+// src is [20] but some compilers won't accept __restrict__ on anything
+// but an raw pointer or reference
+void SkColorMatrixFilter::setup(const SkScalar* SK_RESTRICT src) {
     if (NULL == src) {
         fProc = NULL;   // signals identity
         fFlags  = kNO_ALPHA_FLAGS;
@@ -118,7 +127,7 @@ void SkColorMatrixFilter::setup(const SkScalar SK_RESTRICT src[20]) {
         return;
     }
 
-    int32_t* SK_RESTRICT array = fState.fArray;
+    int32_t* array = fState.fArray;
 
     int i;
     SkFixed max = 0;
@@ -223,7 +232,7 @@ void SkColorMatrixFilter::filterSpan(const SkPMColor src[], int count,
                                      SkPMColor dst[]) {
     Proc proc = fProc;
     State* state = &fState;
-    int32_t* SK_RESTRICT result = state->fResult;
+    int32_t* result = state->fResult;
 
     if (NULL == proc) {
         if (src != dst) {
@@ -261,13 +270,7 @@ void SkColorMatrixFilter::filterSpan(const SkPMColor src[], int count,
         b = pin(result[2], SK_B32_MASK);
         a = pin(result[3], SK_A32_MASK);
         // re-prepremultiply if needed
-        if (255 != a) {
-            int scale = SkAlpha255To256(a);
-            r = SkAlphaMul(r, scale);
-            g = SkAlphaMul(g, scale);
-            b = SkAlphaMul(b, scale);
-        }
-        dst[i] = SkPackARGB32(a, r, g, b);
+        dst[i] = SkPremultiplyARGBInline(a, r, g, b);
     }
 }
 
@@ -277,7 +280,7 @@ void SkColorMatrixFilter::filterSpan16(const uint16_t src[], int count,
 
     Proc   proc = fProc;
     State* state = &fState;
-    int32_t* SK_RESTRICT result = state->fResult;
+    int32_t* result = state->fResult;
 
     if (NULL == proc) {
         if (src != dst) {
@@ -324,10 +327,33 @@ SkColorMatrixFilter::SkColorMatrixFilter(SkFlattenableReadBuffer& buffer)
     fFlags = buffer.readU32();
 }
 
+bool SkColorMatrixFilter::asColorMatrix(SkScalar matrix[20]) {
+    int32_t* array = fState.fArray;
+    int unshift = 16 - fState.fShift;
+    for (int i = 0; i < 20; i++) {
+        matrix[i] = SkFixedToScalar(array[i] << unshift);
+    }
+    if (NULL != fProc) {
+        // Undo the offset applied to the constant column in setup().
+        SkFixed offset = 1 << (fState.fShift - 1);
+        matrix[4] = SkFixedToScalar((array[4] - offset) << unshift);
+        matrix[9] = SkFixedToScalar((array[9] - offset) << unshift);
+        matrix[14] = SkFixedToScalar((array[14] - offset) << unshift);
+        matrix[19] = SkFixedToScalar((array[19] - offset) << unshift);
+    }
+    return true;
+}
+
 SkFlattenable* SkColorMatrixFilter::CreateProc(SkFlattenableReadBuffer& buf) {
     return SkNEW_ARGS(SkColorMatrixFilter, (buf));
 }
 
-static SkFlattenable::Registrar
-  gSkColorMatrixFilterReg("SkColorMatrixFilter",
-                          SkColorMatrixFilter::CreateProc);
+void SkColorMatrixFilter::setMatrix(const SkColorMatrix& matrix) {
+    setup(matrix.fMat);
+}
+
+void SkColorMatrixFilter::setArray(const SkScalar array[20]) {
+    setup(array);
+}
+
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkColorMatrixFilter)

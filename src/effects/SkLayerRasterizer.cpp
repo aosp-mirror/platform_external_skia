@@ -1,19 +1,11 @@
-/* libs/graphics/effects/SkLayerRasterizer.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkLayerRasterizer.h"
 #include "SkBuffer.h"
@@ -22,7 +14,7 @@
 #include "SkMaskFilter.h"
 #include "SkPaint.h"
 #include "SkPath.h"
-#include "SkRegion.h"
+#include "../core/SkRasterClip.h"
 #include "SkXfermode.h"
 #include <new>
 
@@ -115,13 +107,13 @@ bool SkLayerRasterizer::onRasterize(const SkPath& path, const SkMatrix& matrix,
     }
 
     if (SkMask::kJustComputeBounds_CreateMode != mode) {
-        SkBitmap device;
-        SkDraw   draw;
-        SkMatrix translatedMatrix;  // this translates us to our local pixels
-        SkMatrix drawMatrix;        // this translates the path by each layer's offset
-        SkRegion rectClip;
+        SkBitmap        device;
+        SkRasterClip    rectClip;
+        SkDraw          draw;
+        SkMatrix        translatedMatrix;  // this translates us to our local pixels
+        SkMatrix        drawMatrix;        // this translates the path by each layer's offset
 
-        rectClip.setRect(0, 0, mask->fBounds.width(), mask->fBounds.height());
+        rectClip.setRect(SkIRect::MakeWH(mask->fBounds.width(), mask->fBounds.height()));
 
         translatedMatrix = matrix;
         translatedMatrix.postTranslate(-SkIntToScalar(mask->fBounds.fLeft),
@@ -132,7 +124,8 @@ bool SkLayerRasterizer::onRasterize(const SkPath& path, const SkMatrix& matrix,
 
         draw.fBitmap    = &device;
         draw.fMatrix    = &drawMatrix;
-        draw.fClip      = &rectClip;
+        draw.fRC        = &rectClip;
+        draw.fClip      = &rectClip.bwRgn();
         // we set the matrixproc in the loop, as the matrix changes each time (potentially)
         draw.fBounder   = NULL;
 
@@ -230,4 +223,6 @@ SkFlattenable* SkLayerRasterizer::CreateProc(SkFlattenableReadBuffer& buffer) {
 SkFlattenable::Factory SkLayerRasterizer::getFactory() {
     return CreateProc;
 }
+
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkLayerRasterizer)
 

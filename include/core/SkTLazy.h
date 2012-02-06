@@ -1,24 +1,18 @@
+
 /*
-    Copyright 2011 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #ifndef SkTLazy_DEFINED
 #define SkTLazy_DEFINED
 
 #include "SkTypes.h"
+#include <new>
 
 /**
  *  Efficient way to defer allocating/initializing a class until it is needed
@@ -35,14 +29,15 @@ public:
     }
 
     SkTLazy(const SkTLazy<T>& src) : fPtr(NULL) {
-        const T* ptr = src.get();
-        if (ptr) {
-            fPtr = new (fStorage) T(*ptr);
+        if (src.isValid()) {
+            fPtr = new (fStorage) T(*src->get());
+        } else {
+            fPtr = NULL;
         }
     }
 
     ~SkTLazy() {
-        if (fPtr) {
+        if (this->isValid()) {
             fPtr->~T();
         }
     }
@@ -54,13 +49,13 @@ public:
      *  always returned.
      */
     T* init() {
-        if (fPtr) {
+        if (this->isValid()) {
             fPtr->~T();
         }
-        fPtr = new (fStorage) T;
+        fPtr = new (SkTCast<T*>(fStorage)) T;
         return fPtr;
     }
-        
+
     /**
      *  Copy src into this, and return a pointer to a copy of it. Note this
      *  will always return the same pointer, so if it is called on a lazy that
@@ -68,19 +63,25 @@ public:
      *  contents.
      */
     T* set(const T& src) {
-        if (fPtr) {
+        if (this->isValid()) {
             *fPtr = src;
         } else {
-            fPtr = new (fStorage) T(src);
+            fPtr = new (SkTCast<T*>(fStorage)) T(src);
         }
         return fPtr;
     }
+
+    /**
+     *  Returns true if a valid object has been initialized in the SkTLazy,
+     *  false otherwise.
+     */
+    bool isValid() const { return NULL != fPtr; }
     
     /**
      *  Returns either NULL, or a copy of the object that was passed to
      *  set() or the constructor.
      */
-    T* get() const { return fPtr; }
+    T* get() const { SkASSERT(this->isValid()); return fPtr; }
     
 private:
     T*   fPtr; // NULL or fStorage

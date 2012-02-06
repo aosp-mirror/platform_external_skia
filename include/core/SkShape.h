@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef SkShape_DEFINED
 #define SkShape_DEFINED
 
@@ -30,6 +37,8 @@ public:
 
     // public for Registrar
     static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     virtual void onDraw(SkCanvas*);

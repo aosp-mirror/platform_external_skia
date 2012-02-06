@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 
 namespace skiagm {
@@ -13,10 +20,6 @@ protected:
 
 	virtual SkISize onISize() {
         return make_isize(835, 840);
-    }
-
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(SK_ColorWHITE);
     }
 	
     static void doDraw(SkCanvas* canvas, SkPaint* paint, const int isrc[],
@@ -45,7 +48,7 @@ protected:
         paint->setColor(SK_ColorRED);
         paint->setStyle(SkPaint::kFill_Style);
         SkScalar x = D/2;
-        float y = D/2 - (fm.fAscent + fm.fDescent)/2;
+        SkScalar y = D/2 - (fm.fAscent + fm.fDescent)/2;
         SkString str;
         str.appendS32(count);
         canvas->drawText(str.c_str(), str.size(), x, y, *paint);
@@ -53,9 +56,7 @@ protected:
         canvas->restore();
     }
     
-    virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
-        
+    virtual void onDraw(SkCanvas* canvas) {        
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setStrokeWidth(SkIntToScalar(4));

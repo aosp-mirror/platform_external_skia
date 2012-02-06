@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPath_DEFINED
 #define SkPath_DEFINED
@@ -20,7 +13,7 @@
 #include "SkMatrix.h"
 #include "SkTDArray.h"
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 #define GEN_ID_INC              fGenerationID++
 #define GEN_ID_PTR_INC(ptr)     ptr->fGenerationID++
 #else
@@ -45,7 +38,7 @@ public:
     ~SkPath();
 
     SkPath& operator=(const SkPath&);
-    
+
     friend bool operator==(const SkPath&, const SkPath&);
     friend bool operator!=(const SkPath& a, const SkPath& b) {
         return !(a == b);
@@ -77,7 +70,7 @@ public:
 
     /** Set the path's fill type. This is used to define how "inside" is
         computed. The default value is kWinding_FillType.
-     
+
         @param ft The new fill type for this path
     */
     void setFillType(FillType ft) {
@@ -186,6 +179,35 @@ public:
         @return true if the path is empty (contains no lines or curves)
     */
     bool isEmpty() const;
+
+    /** Test a line for zero length
+
+        @return true if the line is of zero length; otherwise false.
+    */
+    static bool IsLineDegenerate(const SkPoint& p1, const SkPoint& p2) {
+        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero);
+    }
+
+    /** Test a quad for zero length
+
+        @return true if the quad is of zero length; otherwise false.
+    */
+    static bool IsQuadDegenerate(const SkPoint& p1, const SkPoint& p2,
+                                 const SkPoint& p3) {
+        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero) &&
+               p2.equalsWithinTolerance(p3, SK_ScalarNearlyZero);
+    }
+
+    /** Test a cubic curve for zero length
+
+        @return true if the cubic is of zero length; otherwise false.
+    */
+    static bool IsCubicDegenerate(const SkPoint& p1, const SkPoint& p2,
+                                  const SkPoint& p3, const SkPoint& p4) {
+        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero) &&
+               p2.equalsWithinTolerance(p3, SK_ScalarNearlyZero) &&
+               p3.equalsWithinTolerance(p4, SK_ScalarNearlyZero);
+    }
 
     /** Returns true if the path specifies a rectangle. If so, and if rect is
         not null, set rect to the bounds of the path. If the path does not
@@ -431,6 +453,24 @@ public:
         kCCW_Direction
     };
 
+    /**
+     *  Tries to quickly compute the direction of the first non-degenerate
+     *  contour. If it can be computed, return true and set dir to that
+     *  direction. If it cannot be (quickly) determined, return false and ignore
+     *  the dir parameter.
+     */
+    bool cheapComputeDirection(Direction* dir) const;
+
+    /**
+     *  Returns true if the path's direction can be computed via
+     *  cheapComputDirection() and if that computed direction matches the
+     *  specified direction.
+     */
+    bool cheapIsDirection(Direction dir) const {
+        Direction computedDir;
+        return this->cheapComputeDirection(&computedDir) && computedDir == dir;
+    }
+
     /** Add a closed rectangle contour to the path
         @param rect The rectangle to add as a closed contour to the path
         @param dir  The direction to wind the rectangle's contour
@@ -504,7 +544,7 @@ public:
         @param dx   The amount to translate the path in X as it is added
         @param dx   The amount to translate the path in Y as it is added
     */
-    void    addPath(const SkPath& src, SkScalar dx, SkScalar dy);
+    void addPath(const SkPath& src, SkScalar dx, SkScalar dy);
 
     /** Add a copy of src to the path
     */
@@ -518,6 +558,11 @@ public:
         @param src  The path to add as a new contour
     */
     void addPath(const SkPath& src, const SkMatrix& matrix);
+
+    /**
+     *  Same as addPath(), but reverses the src input
+     */
+    void reverseAddPath(const SkPath& src);
 
     /** Offset the path by (dx,dy), returning true on success
      
@@ -553,11 +598,12 @@ public:
     }
 
     /** Return the last point on the path. If no points have been added, (0,0)
-        is returned.
+        is returned. If there are no points, this returns false, otherwise it
+        returns true.
      
         @param lastPt   The last point on the path is returned here
     */
-    void getLastPt(SkPoint* lastPt) const;
+    bool getLastPt(SkPoint* lastPt) const;
 
     /** Set the last point on the path. If no points have been added,
         moveTo(x,y) is automatically called.
@@ -576,28 +622,47 @@ public:
         this->setLastPt(p.fX, p.fY);
     }
 
+    enum SegmentMask {
+        kLine_SegmentMask   = 1 << 0,
+        kQuad_SegmentMask   = 1 << 1,
+        kCubic_SegmentMask  = 1 << 2
+    };
+
+    /**
+     *  Returns a mask, where each bit corresponding to a SegmentMask is
+     *  set if the path contains 1 or more segments of that type.
+     *  Returns 0 for an empty path (no segments).
+     */
+    uint32_t getSegmentMasks() const { return fSegmentMask; }
+
     enum Verb {
         kMove_Verb,     //!< iter.next returns 1 point
         kLine_Verb,     //!< iter.next returns 2 points
         kQuad_Verb,     //!< iter.next returns 3 points
         kCubic_Verb,    //!< iter.next returns 4 points
-        kClose_Verb,    //!< iter.next returns 1 point (the last point)
+        kClose_Verb,    //!< iter.next returns 1 point (contour's moveTo pt)
         kDone_Verb      //!< iter.next returns 0 points
     };
 
     /** Iterate through all of the segments (lines, quadratics, cubics) of
         each contours in a path.
+
+        The iterator cleans up the segments along the way, removing degenerate
+        segments and adding close verbs where necessary. When the forceClose
+        argument is provided, each contour (as defined by a new starting
+        move command) will be completed with a close verb regardless of the
+        contour's contents.
     */
     class SK_API Iter {
     public:
-                Iter();
-                Iter(const SkPath&, bool forceClose);
+        Iter();
+        Iter(const SkPath&, bool forceClose);
 
         void setPath(const SkPath&, bool forceClose);
 
         /** Return the next verb in this iteration of the path. When all
             segments have been visited, return kDone_Verb.
-         
+
             @param  pts The points representing the current verb and/or segment
             @return The verb for the current segment
         */
@@ -607,12 +672,12 @@ public:
             line was the result of a close() command (i.e. the end point is the
             initial moveto for this contour). If next() returned a different
             verb, this returns an undefined value.
-         
+
             @return If the last call to next() returned kLine_Verb, return true
                     if it was the result of an explicit close command.
         */
         bool isCloseLine() const { return SkToBool(fCloseLine); }
-        
+
         /** Returns true if the current contour is closed (has a kClose_Verb)
             @return true if the current contour is closed (has a kClose_Verb)
         */
@@ -626,11 +691,37 @@ public:
         SkPoint         fLastPt;
         SkBool8         fForceClose;
         SkBool8         fNeedClose;
-        SkBool8         fNeedMoveTo;
         SkBool8         fCloseLine;
+        SkBool8         fSegmentState;
 
         bool cons_moveTo(SkPoint pts[1]);
         Verb autoClose(SkPoint pts[2]);
+        void consumeDegenerateSegments();
+    };
+
+    /** Iterate through the verbs in the path, providing the associated points.
+    */
+    class SK_API RawIter {
+    public:
+        RawIter();
+        RawIter(const SkPath&);
+
+        void setPath(const SkPath&);
+
+        /** Return the next verb in this iteration of the path. When all
+            segments have been visited, return kDone_Verb.
+         
+            @param  pts The points representing the current verb and/or segment
+            @return The verb for the current segment
+        */
+        Verb next(SkPoint pts[4]);
+
+    private:
+        const SkPoint*  fPts;
+        const uint8_t*  fVerbs;
+        const uint8_t*  fVerbStop;
+        SkPoint         fMoveTo;
+        SkPoint         fLastPt;
     };
 
     void dump(bool forceClose, const char title[] = NULL) const;
@@ -639,13 +730,7 @@ public:
     void flatten(SkWriter32&) const;
     void unflatten(SkReader32&);
 
-    /** Subdivide the path so that no segment is longer that dist.
-        If bendLines is true, then turn all line segments into curves.
-        If dst == null, then the original path itself is modified (not const!)
-    */
-    void subdivide(SkScalar dist, bool bendLines, SkPath* dst = NULL) const;
-
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     uint32_t getGenerationID() const;
 #endif
 
@@ -655,10 +740,11 @@ private:
     SkTDArray<SkPoint>  fPts;
     SkTDArray<uint8_t>  fVerbs;
     mutable SkRect      fBounds;
-    mutable uint8_t     fBoundsIsDirty;
     uint8_t             fFillType;
+    uint8_t             fSegmentMask;
+    mutable uint8_t     fBoundsIsDirty;
     mutable uint8_t     fConvexity;
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     uint32_t            fGenerationID;
 #endif
 
@@ -686,4 +772,3 @@ private:
 };
 
 #endif
-

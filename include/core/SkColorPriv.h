@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkColorPriv_DEFINED
 #define SkColorPriv_DEFINED
@@ -49,6 +42,21 @@ static inline unsigned SkAlpha255To256(U8CPU alpha) {
 static inline int SkAlphaBlend(int src, int dst, int scale256) {
     SkASSERT((unsigned)scale256 <= 256);
     return dst + SkAlphaMul(src - dst, scale256);
+}
+
+/**
+ *  Returns (src * alpha + dst * (255 - alpha)) / 255
+ *
+ *  This is more accurate than SkAlphaBlend, but slightly slower
+ */
+static inline int SkAlphaBlend255(S16CPU src, S16CPU dst, U8CPU alpha) {
+    SkASSERT((int16_t)src == src);
+    SkASSERT((int16_t)dst == dst);
+    SkASSERT((uint8_t)alpha == alpha);
+    
+    int prod = SkMulS16(src - dst, alpha) + 128;
+    prod = (prod + (prod >> 8)) >> 8;
+    return dst + prod;
 }
 
 #define SK_R16_BITS     5
@@ -214,6 +222,21 @@ static inline SkPMColor SkPackARGB32(U8CPU a, U8CPU r, U8CPU g, U8CPU b) {
 static inline SkPMColor SkPackARGB32NoCheck(U8CPU a, U8CPU r, U8CPU g, U8CPU b) {
     return (a << SK_A32_SHIFT) | (r << SK_R32_SHIFT) |
            (g << SK_G32_SHIFT) | (b << SK_B32_SHIFT);
+}
+
+static inline
+SkPMColor SkPremultiplyARGBInline(U8CPU a, U8CPU r, U8CPU g, U8CPU b) {
+    SkA32Assert(a);
+    SkA32Assert(r);
+    SkA32Assert(g);
+    SkA32Assert(b);
+
+    if (a != 255) {
+        r = SkMulDiv255Round(r, a);
+        g = SkMulDiv255Round(g, a);
+        b = SkMulDiv255Round(b, a);
+    }
+    return SkPackARGB32(a, r, g, b);
 }
 
 SK_API extern const uint32_t gMask_00FF00FF;

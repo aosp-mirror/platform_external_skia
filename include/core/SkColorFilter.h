@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkColorFilter_DEFINED
 #define SkColorFilter_DEFINED
@@ -29,6 +22,31 @@ public:
      *  If not, this returns false and ignores the parameters.
      */
     virtual bool asColorMode(SkColor* color, SkXfermode::Mode* mode);
+
+    /**
+     *  If the filter can be represented by a 5x4 matrix, this
+     *  returns true, and sets the matrix appropriately.
+     *  If not, this returns false and ignores the parameter.
+     */
+    virtual bool asColorMatrix(SkScalar matrix[20]);
+
+    /**
+     *  If the filter can be represented by per-component table, return true,
+     *  and if table is not null, copy the bitmap containing the table into it.
+     *
+     *  The table bitmap will be in SkBitmap::kA8_Config. Each row corresponding
+     *  to each component in ARGB order. e.g. row[0] == alpha, row[1] == red,
+     *  etc. To transform a color, you (logically) perform the following:
+     *
+     *      a' = *table.getAddr8(a, 0);
+     *      r' = *table.getAddr8(r, 1);
+     *      g' = *table.getAddr8(g, 2);
+     *      b' = *table.getAddr8(b, 3);
+     *
+     *  The original component value is the horizontal index for a given row,
+     *  and the stored value at that index is the new value for that component.
+     */
+    virtual bool asComponentTable(SkBitmap* table);
 
     /** Called with a scanline of colors, as if there was a shader installed.
         The implementation writes out its filtered version into result[].
@@ -99,7 +117,8 @@ public:
         are ignored.
     */
     static SkColorFilter* CreateLightingFilter(SkColor mul, SkColor add);
-
+    
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 protected:
     SkColorFilter() {}
     SkColorFilter(SkFlattenableReadBuffer& rb) : INHERITED(rb) {}
@@ -126,8 +145,8 @@ public:
 
 protected:
     SkFilterShader(SkFlattenableReadBuffer& );
-    virtual void flatten(SkFlattenableWriteBuffer& );
-    virtual Factory getFactory() { return CreateProc; }
+    virtual void flatten(SkFlattenableWriteBuffer& ) SK_OVERRIDE;
+    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; }
 private:
     static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
         return SkNEW_ARGS(SkFilterShader, (buffer)); }

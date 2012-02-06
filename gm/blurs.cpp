@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkBlurMaskFilter.h"
 
@@ -5,7 +12,9 @@ namespace skiagm {
 
 class BlursGM : public GM {
 public:
-    BlursGM() {}
+    BlursGM() {
+        this->setBGColor(0xFFDDDDDD);
+    }
 
 protected:
     virtual SkString onShortName() {
@@ -16,13 +25,7 @@ protected:
         return make_isize(700, 500);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        drawBG(canvas);
-
         SkBlurMaskFilter::BlurStyle NONE = SkBlurMaskFilter::BlurStyle(-999);
         static const struct {
             SkBlurMaskFilter::BlurStyle fStyle;

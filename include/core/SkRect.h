@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkRect_DEFINED
 #define SkRect_DEFINED
@@ -56,27 +49,39 @@ struct SK_API SkIRect {
         r.set(x, y, x + w, y + h);
         return r;
     }
+
+    int left() const { return fLeft; }
+    int top() const { return fTop; }
+    int right() const { return fRight; }
+    int bottom() const { return fBottom; }
     
-    /** Return true if the rectangle's width or height are <= 0
-    */
+    /** return the left edge of the rect */
+    int x() const { return fLeft; }
+    /** return the top edge of the rect */
+    int y() const { return fTop; }
+    /**
+     *  Returns the rectangle's width. This does not check for a valid rect
+     *  (i.e. left <= right) so the result may be negative.
+     */
+    int width() const { return fRight - fLeft; }
+    
+    /**
+     *  Returns the rectangle's height. This does not check for a valid rect
+     *  (i.e. top <= bottom) so the result may be negative.
+     */
+    int height() const { return fBottom - fTop; }
+    
+    /**
+     *  Return true if the rectangle's width or height are <= 0
+     */
     bool isEmpty() const { return fLeft >= fRight || fTop >= fBottom; }
 
-    /** Returns the rectangle's width. This does not check for a valid rectangle (i.e. left <= right)
-        so the result may be negative.
-    */
-    int width() const { return fRight - fLeft; }
-
-    /** Returns the rectangle's height. This does not check for a valid rectangle (i.e. top <= bottom)
-        so the result may be negative.
-    */
-    int height() const { return fBottom - fTop; }
-
-    friend int operator==(const SkIRect& a, const SkIRect& b) {
+    friend bool operator==(const SkIRect& a, const SkIRect& b) {
         return !memcmp(&a, &b, sizeof(a));
     }
 
-    friend int operator!=(const SkIRect& a, const SkIRect& b) {
-        return memcmp(&a, &b, sizeof(a));
+    friend bool operator!=(const SkIRect& a, const SkIRect& b) {
+        return !(a == b);
     }
 
     bool is16Bit() const {
@@ -330,10 +335,34 @@ struct SK_API SkRect {
         return r;
     }
 
-    /** Return true if the rectangle's width or height are <= 0
-    */
-    bool        isEmpty() const { return fLeft >= fRight || fTop >= fBottom; }
-    bool        hasValidCoordinates() const;
+    /**
+     *  Return true if the rectangle's width or height are <= 0
+     */
+    bool isEmpty() const { return fLeft >= fRight || fTop >= fBottom; }
+    
+    /**
+     *  Returns true iff all values in the rect are finite. If any are
+     *  infinite or NaN (or SK_FixedNaN when SkScalar is fixed) then this
+     *  returns false.
+     */
+    bool isFinite() const {
+#ifdef SK_SCALAR_IS_FLOAT
+        // x * 0 will be NaN iff x is infinity or NaN.
+        // a + b will be NaN iff either a or b is NaN.
+        float value = fLeft * 0 + fTop * 0 + fRight * 0 + fBottom * 0;
+        
+        // value is either NaN or it is finite (zero).
+        // value==value will be true iff value is not NaN
+        return value == value;
+#else
+        // use bit-or for speed, since we don't care about short-circuting the
+        // tests, and we expect the common case will be that we need to check all.
+        int isNaN = (SK_FixedNaN == fLeft)  | (SK_FixedNaN == fTop) |
+                    (SK_FixedNaN == fRight) | (SK_FixedNaN == fBottom);
+        return !isNaN;
+#endif
+    }
+
     SkScalar    left() const { return fLeft; }
     SkScalar    top() const { return fTop; }
     SkScalar    right() const { return fRight; }
@@ -343,12 +372,12 @@ struct SK_API SkRect {
     SkScalar    centerX() const { return SkScalarHalf(fLeft + fRight); }
     SkScalar    centerY() const { return SkScalarHalf(fTop + fBottom); }
 
-    friend int operator==(const SkRect& a, const SkRect& b) {
-        return !memcmp(&a, &b, sizeof(a));
+    friend bool operator==(const SkRect& a, const SkRect& b) {
+        return 0 == memcmp(&a, &b, sizeof(a));
     }
 
-    friend int operator!=(const SkRect& a, const SkRect& b) {
-        return memcmp(&a, &b, sizeof(a));
+    friend bool operator!=(const SkRect& a, const SkRect& b) {
+        return 0 != memcmp(&a, &b, sizeof(a));
     }
 
     /** return the 4 points that enclose the rectangle
@@ -436,9 +465,10 @@ struct SK_API SkRect {
         this->offset(delta.fX, delta.fY);
     }
 
-    /** Inset the rectangle by (dx,dy). If dx is positive, then the sides are moved inwards,
-        making the rectangle narrower. If dx is negative, then the sides are moved outwards,
-        making the rectangle wider. The same hods true for dy and the top and bottom.
+    /** Inset the rectangle by (dx,dy). If dx is positive, then the sides are
+        moved inwards, making the rectangle narrower. If dx is negative, then
+        the sides are moved outwards, making the rectangle wider. The same holds
+         true for dy and the top and bottom.
     */
     void inset(SkScalar dx, SkScalar dy)  {
         fLeft   += dx;
@@ -446,6 +476,13 @@ struct SK_API SkRect {
         fRight  -= dx;
         fBottom -= dy;
     }
+
+   /** Outset the rectangle by (dx,dy). If dx is positive, then the sides are
+       moved outwards, making the rectangle wider. If dx is negative, then the
+       sides are moved inwards, making the rectangle narrower. The same hods
+       true for dy and the top and bottom.
+    */
+    void outset(SkScalar dx, SkScalar dy)  { this->inset(-dx, -dy); }
 
     /** If this rectangle intersects r, return true and set this rectangle to that
         intersection, otherwise return false and do not change this rectangle.
@@ -472,6 +509,12 @@ struct SK_API SkRect {
                fLeft < right && left < fRight &&
                fTop < bottom && top < fBottom;
     }
+
+    /** If rectangles a and b intersect, return true and set this rectangle to
+     *  that intersection, otherwise return false and do not change this
+     *  rectangle. If either rectangle is empty, do nothing and return false.
+     */
+    bool intersect(const SkRect& a, const SkRect& b);
     
     /**
      *  Return true if rectangles a and b are not empty and intersect.
@@ -571,6 +614,18 @@ struct SK_API SkRect {
         SkASSERT(dst);
         dst->set(SkScalarFloor(fLeft), SkScalarFloor(fTop),
                  SkScalarCeil(fRight), SkScalarCeil(fBottom));
+    }
+
+    /**
+     *  Expand this rectangle by rounding its coordinates "out", choosing the
+     *  floor of top and left, and the ceil of right and bottom. If this rect
+     *  is already on integer coordinates, then it will be unchanged.
+     */
+    void roundOut() {
+        this->set(SkScalarFloorToScalar(fLeft),
+                  SkScalarFloorToScalar(fTop),
+                  SkScalarCeilToScalar(fRight),
+                  SkScalarCeilToScalar(fBottom));
     }
 
     /**

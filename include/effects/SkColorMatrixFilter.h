@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright 2007 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkColorMatrixFilter_DEFINED
 #define SkColorMatrixFilter_DEFINED
@@ -20,7 +13,7 @@
 #include "SkColorFilter.h"
 #include "SkColorMatrix.h"
 
-class SkColorMatrixFilter : public SkColorFilter {
+class SK_API SkColorMatrixFilter : public SkColorFilter {
 public:
     SkColorMatrixFilter();
     explicit SkColorMatrixFilter(const SkColorMatrix&);
@@ -30,12 +23,13 @@ public:
     void setArray(const SkScalar array[20]);
 
     // overrides from SkColorFilter
-    virtual void filterSpan(const SkPMColor src[], int count, SkPMColor[]);
-    virtual void filterSpan16(const uint16_t src[], int count, uint16_t[]);
-    virtual uint32_t getFlags();
+    virtual void filterSpan(const SkPMColor src[], int count, SkPMColor[]) SK_OVERRIDE;
+    virtual void filterSpan16(const uint16_t src[], int count, uint16_t[]) SK_OVERRIDE;
+    virtual uint32_t getFlags() SK_OVERRIDE;
+    virtual bool asColorMatrix(SkScalar matrix[20]) SK_OVERRIDE;
 
     // overrides for SkFlattenable
-    virtual void flatten(SkFlattenableWriteBuffer& buffer);
+    virtual void flatten(SkFlattenableWriteBuffer& buffer) SK_OVERRIDE;
 
     struct State {
         int32_t fArray[20];
@@ -44,6 +38,8 @@ public:
     };
 
     static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer);
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     // overrides for SkFlattenable

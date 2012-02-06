@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPreConfig_DEFINED
 #define SkPreConfig_DEFINED
@@ -23,7 +16,7 @@
 
 //////////////////////////////////////////////////////////////////////
 
-#if !defined(SK_BUILD_FOR_ANDROID_NDK) && !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_PALM) && !defined(SK_BUILD_FOR_WINCE) && !defined(SK_BUILD_FOR_WIN32) && !defined(SK_BUILD_FOR_SYMBIAN) && !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_SDL) && !defined(SK_BUILD_FOR_BREW)
+#if !defined(SK_BUILD_FOR_ANDROID) && !defined(SK_BUILD_FOR_ANDROID_NDK) && !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_PALM) && !defined(SK_BUILD_FOR_WINCE) && !defined(SK_BUILD_FOR_WIN32) && !defined(SK_BUILD_FOR_SYMBIAN) && !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_SDL) && !defined(SK_BUILD_FOR_BREW)
 
     #ifdef __APPLE__
         #include "TargetConditionals.h"
@@ -37,7 +30,12 @@
         #define SK_BUILD_FOR_WIN32
     #elif defined(__SYMBIAN32__)
         #define SK_BUILD_FOR_WIN32
-    #elif defined(linux)
+    #elif defined(ANDROID_NDK)
+        #define SK_BUILD_FOR_ANDROID_NDK
+    #elif defined(ANDROID)
+        #define SK_BUILD_FOR_ANDROID
+    #elif defined(linux) || defined(__FreeBSD__) || defined(__OpenBSD__) || \
+          defined(__sun) || defined(__NetBSD__) || defined(__DragonFly__)
         #define SK_BUILD_FOR_UNIX
     #elif TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
         #define SK_BUILD_FOR_IOS
@@ -45,12 +43,15 @@
         #define SK_BUILD_FOR_MAC
     #endif
 
-    #if defined(ANDROID)
-        #define SK_BUILD_FOR_ANDROID
-    #endif
-    #if defined(ANDROID_NDK)
-        #define SK_BUILD_FOR_ANDROID_NDK
-    #endif
+#endif
+
+/* Even if the user only defined the NDK variant we still need to build
+ * the default Android code. Therefore, when attempting to include/exclude
+ * something from the NDK variant check first that we are building for 
+ * Android then check the status of the NDK define.
+ */
+#if defined(SK_BUILD_FOR_ANDROID_NDK) && !defined(SK_BUILD_FOR_ANDROID)
+    #define SK_BUILD_FOR_ANDROID
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -64,7 +65,9 @@
 #endif
 
 #ifdef SK_BUILD_FOR_WIN32
-    #define SK_RESTRICT
+    #if !defined(SK_RESTRICT)
+        #define SK_RESTRICT __restrict
+    #endif
     #include "sk_stdint.h"
 #endif
 

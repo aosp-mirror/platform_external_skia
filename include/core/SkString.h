@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkString_DEFINED
 #define SkString_DEFINED
@@ -73,7 +66,7 @@ public:
                 SkString(const SkString&);
                 ~SkString();
 
-    bool        isEmpty() const { return fRec->fLength == 0; }
+    bool        isEmpty() const { return 0 == fRec->fLength; }
     size_t      size() const { return (size_t) fRec->fLength; }
     const char* c_str() const { return fRec->data(); }
     char operator[](size_t n) const { return this->c_str()[n]; }
@@ -89,19 +82,19 @@ public:
         return SkStrEndsWith(fRec->data(), suffix);
     }
 
-    friend int operator==(const SkString& a, const SkString& b) {
+    friend bool operator==(const SkString& a, const SkString& b) {
         return a.equals(b);
     }
-    friend int operator!=(const SkString& a, const SkString& b) {
+    friend bool operator!=(const SkString& a, const SkString& b) {
         return !a.equals(b);
     }
 
     // these methods edit the string
 
-    SkString&   operator=(const SkString&);
-    SkString&   operator=(const char text[]);
+    SkString& operator=(const SkString&);
+    SkString& operator=(const char text[]);
 
-    char*   writable_str();
+    char* writable_str();
     char& operator[](size_t n) { return this->writable_str()[n]; }
 
     void reset();
@@ -158,8 +151,8 @@ public:
 private:
     struct Rec {
     public:
-        uint16_t    fLength;
-        uint16_t    fRefCnt;
+        size_t      fLength;
+        int32_t     fRefCnt;
         char        fBeginningOfData;
 
         char* data() { return &fBeginningOfData; }
@@ -175,7 +168,7 @@ private:
 #endif
 
     static const Rec gEmptyRec;
-    static Rec* AllocRec(const char text[], U16CPU len);
+    static Rec* AllocRec(const char text[], size_t len);
     static Rec* RefRec(Rec*);
 };
 
@@ -196,5 +189,8 @@ private:
     int         fCount;
     uint16_t*   fUCS2;
 };
+
+/// Creates a new string and writes into it using a printf()-style format.
+SkString SkStringPrintf(const char* format, ...);
 
 #endif

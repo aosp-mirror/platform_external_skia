@@ -1,21 +1,12 @@
 /*
- **
- ** Copyright 2009, The Android Open Source Project
- **
- ** Licensed under the Apache License, Version 2.0 (the "License");
- ** you may not use this file except in compliance with the License.
- ** You may obtain a copy of the License at
- **
- **     http://www.apache.org/licenses/LICENSE-2.0
- **
- ** Unless required by applicable law or agreed to in writing, software
- ** distributed under the License is distributed on an "AS IS" BASIS,
- ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- ** See the License for the specific language governing permissions and
- ** limitations under the License.
+ * Copyright 2009 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
 
 #include "SkBitmapProcState_opts_SSE2.h"
+#include "SkBlitMask.h"
 #include "SkBlitRow_opts_SSE2.h"
 #include "SkUtils_opts_SSE2.h"
 #include "SkUtils.h"
@@ -64,8 +55,13 @@ static inline bool hasSSE2() {
 }
 #endif
 
+static bool cachedHasSSE2() {
+    static bool gHasSSE2 = hasSSE2();
+    return gHasSSE2;
+}
+
 void SkBitmapProcState::platformProcs() {
-    if (hasSSE2()) {
+    if (cachedHasSSE2()) {
         if (fSampleProc32 == S32_opaque_D32_filter_DX) {
             fSampleProc32 = S32_opaque_D32_filter_DX_SSE2;
         } else if (fSampleProc32 == S32_alpha_D32_filter_DX) {
@@ -90,7 +86,7 @@ SkBlitRow::Proc SkBlitRow::PlatformProcs565(unsigned flags) {
 }
 
 SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
-    if (hasSSE2()) {
+    if (cachedHasSSE2()) {
         return Color32_SSE2;
     } else {
         return NULL;
@@ -98,7 +94,7 @@ SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
 }
 
 SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
-    if (hasSSE2()) {
+    if (cachedHasSSE2()) {
         return platform_32_procs[flags];
     } else {
         return NULL;
@@ -106,28 +102,38 @@ SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
 }
 
 
-SkBlitMask::Proc SkBlitMask::PlatformProcs(SkBitmap::Config dstConfig,
-                                           SkColor color)
-{
-
-    SkBlitMask::Proc proc = NULL;
-    if (hasSSE2()) {
+SkBlitMask::ColorProc SkBlitMask::PlatformColorProcs(SkBitmap::Config dstConfig,
+                                                     SkMask::Format maskFormat,
+                                                     SkColor color) {
+    if (SkMask::kA8_Format != maskFormat) {
+        return NULL;
+    }
+    
+    ColorProc proc = NULL;
+    if (cachedHasSSE2()) {
         switch (dstConfig) {
             case SkBitmap::kARGB_8888_Config:
-                // TODO: is our current SSE2 faster than the portable, even in
-                // the case of black or opaque? If so, no need for this check.
-                if ( SK_ColorBLACK != color && 0xFF != SkColorGetA(color))
-                    proc = SkARGB32_BlitMask_SSE2;
+                // The SSE2 version is not (yet) faster for black, so we check
+                // for that.
+                if (SK_ColorBLACK != color) {
+                    proc = SkARGB32_A8_BlitMask_SSE2;
+                }
                 break;
             default:
-                 break;
+                break;
         }
     }
     return proc;
 }
 
+SkBlitMask::RowProc SkBlitMask::PlatformRowProcs(SkBitmap::Config dstConfig,
+                                                 SkMask::Format maskFormat,
+                                                 RowFlags flags) {
+    return NULL;
+}
+
 SkMemset16Proc SkMemset16GetPlatformProc() {
-    if (hasSSE2()) {
+    if (cachedHasSSE2()) {
         return sk_memset16_SSE2;
     } else {
         return NULL;
@@ -135,7 +141,7 @@ SkMemset16Proc SkMemset16GetPlatformProc() {
 }
 
 SkMemset32Proc SkMemset32GetPlatformProc() {
-    if (hasSSE2()) {
+    if (cachedHasSSE2()) {
         return sk_memset32_SSE2;
     } else {
         return NULL;

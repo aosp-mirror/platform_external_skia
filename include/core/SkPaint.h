@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPaint_DEFINED
 #define SkPaint_DEFINED
@@ -29,6 +22,7 @@ class SkFlattenableWriteBuffer;
 struct SkGlyph;
 struct SkRect;
 class SkGlyphCache;
+class SkImageFilter;
 class SkMaskFilter;
 class SkMatrix;
 class SkPath;
@@ -55,8 +49,8 @@ public:
 
     SkPaint& operator=(const SkPaint&);
 
-    SK_API friend int operator==(const SkPaint& a, const SkPaint& b);
-    friend int operator!=(const SkPaint& a, const SkPaint& b) {
+    SK_API friend bool operator==(const SkPaint& a, const SkPaint& b);
+    friend bool operator!=(const SkPaint& a, const SkPaint& b) {
         return !(a == b);
     }
 
@@ -105,10 +99,12 @@ public:
         kLCDRenderText_Flag   = 0x200,  //!< mask to enable subpixel glyph renderering
         kEmbeddedBitmapText_Flag = 0x400, //!< mask to enable embedded bitmap strikes
         kAutoHinting_Flag     = 0x800,  //!< mask to force Freetype's autohinter
+        kVerticalText_Flag    = 0x1000,
+
         // when adding extra flags, note that the fFlags member is specified
         // with a bit-width and you'll have to expand it.
 
-        kAllFlags = 0xFFF
+        kAllFlags = 0x1FFF
     };
 
     /** Return the paint's flags. Use the Flag enum to test flag values.
@@ -165,21 +161,24 @@ public:
         return SkToBool(this->getFlags() & kSubpixelText_Flag);
     }
 
-    /** Helper for setFlags(), setting or clearing the kSubpixelText_Flag
-       bit @param subpixelText true to set the subpixelText bit in the paint's flags,
-                               false to clear it.
-    */
+    /**
+     *  Helper for setFlags(), setting or clearing the kSubpixelText_Flag.
+     *  @param subpixelText true to set the subpixelText bit in the paint's
+     *                      flags, false to clear it.
+     */
     void setSubpixelText(bool subpixelText);
 
     bool isLCDRenderText() const {
         return SkToBool(this->getFlags() & kLCDRenderText_Flag);
     }
 
-    /** Helper for setFlags(), setting or clearing the kLCDRenderText_Flag bit
-        @param subpixelRender true to set the subpixelRenderText bit in the paint's flags,
-                              false to clear it.
-    */
-    void setLCDRenderText(bool subpixelRender);
+    /**
+     *  Helper for setFlags(), setting or clearing the kLCDRenderText_Flag.
+     *  Note: antialiasing must also be on for lcd rendering
+     *  @param lcdText true to set the LCDRenderText bit in the paint's flags,
+     *                 false to clear it.
+     */
+    void setLCDRenderText(bool lcdText);
 
     bool isEmbeddedBitmapText() const {
         return SkToBool(this->getFlags() & kEmbeddedBitmapText_Flag);
@@ -201,6 +200,20 @@ public:
                              false to clear it.
     */
     void setAutohinted(bool useAutohinter);
+
+    bool isVerticalText() const {
+        return SkToBool(this->getFlags() & kVerticalText_Flag);
+    }
+    
+    /**
+     *  Helper for setting or clearing the kVerticalText_Flag bit in
+     *  setFlags(...).
+     *
+     *  If this bit is set, then advances are treated as Y values rather than
+     *  X values, and drawText will places its glyphs vertically rather than
+     *  horizontally.
+     */
+    void setVerticalText(bool);
 
     /** Helper for getFlags(), returning true if kUnderlineText_Flag bit is set
         @return true if the underlineText bit is set in the paint's flags.
@@ -600,6 +613,9 @@ public:
     */
     SkRasterizer* setRasterizer(SkRasterizer* rasterizer);
 
+    SkImageFilter* getImageFilter() const { return fImageFilter; }
+    SkImageFilter* setImageFilter(SkImageFilter*);
+
     /**
      *  Return the paint's SkDrawLooper (if any). Does not affect the looper's
      *  reference count.
@@ -748,23 +764,29 @@ public:
         return this->textToGlyphs(text, byteLength, NULL);
     }
 
-    /** Return the width of the text.
-        @param text         The text to be measured
-        @param length       Number of bytes of text to measure
-        @param bounds       If not NULL, returns the bounds of the text,
-                            relative to (0, 0).
-        @param scale        If not 0, return width as if the canvas were scaled
-                            by this value
-        @return             The advance width of the text
-    */
+    /** Return the width of the text. This will return the vertical measure
+     *  if isVerticalText() is true, in which case the returned value should
+     *  be treated has a height instead of a width.
+     *
+     *  @param text         The text to be measured
+     *  @param length       Number of bytes of text to measure
+     *  @param bounds       If not NULL, returns the bounds of the text,
+     *                      relative to (0, 0).
+     *  @param scale        If not 0, return width as if the canvas were scaled
+     *                      by this value
+     *  @return             The advance width of the text
+     */
     SkScalar measureText(const void* text, size_t length,
                          SkRect* bounds, SkScalar scale = 0) const;
 
-    /** Return the width of the text.
-        @param text         Address of the text
-        @param length       Number of bytes of text to measure
-        @return The width of the text
-    */
+    /** Return the width of the text. This will return the vertical measure
+     *  if isVerticalText() is true, in which case the returned value should
+     *  be treated has a height instead of a width.
+     *
+     *  @param text     Address of the text
+     *  @param length   Number of bytes of text to measure
+     *  @return         The width of the text
+     */
     SkScalar measureText(const void* text, size_t length) const {
         return this->measureText(text, length, NULL, 0);
     }
@@ -782,33 +804,38 @@ public:
         kBackward_TextBufferDirection
     };
 
-    /** Return the width of the text.
-        @param text     The text to be measured
-        @param length   Number of bytes of text to measure
-        @param maxWidth Maximum width. Only the subset of text whose accumulated
-                        widths are <= maxWidth are measured.
-        @param measuredWidth Optional. If non-null, this returns the actual
-                        width of the measured text.
-        @param tbd      Optional. The direction the text buffer should be
-                        traversed during measuring.
-        @return         The number of bytes of text that were measured. Will be
-                        <= length.
-    */
+    /** Return the number of bytes of text that were measured. If
+     *  isVerticalText() is true, then the vertical advances are used for
+     *  the measurement.
+     *  
+     *  @param text     The text to be measured
+     *  @param length   Number of bytes of text to measure
+     *  @param maxWidth Maximum width. Only the subset of text whose accumulated
+     *                  widths are <= maxWidth are measured.
+     *  @param measuredWidth Optional. If non-null, this returns the actual
+     *                  width of the measured text.
+     *  @param tbd      Optional. The direction the text buffer should be
+     *                  traversed during measuring.
+     *  @return         The number of bytes of text that were measured. Will be
+     *                  <= length.
+     */
     size_t  breakText(const void* text, size_t length, SkScalar maxWidth,
                       SkScalar* measuredWidth = NULL,
                       TextBufferDirection tbd = kForward_TextBufferDirection)
                       const;
 
-    /** Return the advance widths for the characters in the string.
-        @param text         the text
-        @param byteLength   number of bytes to of text
-        @param widths       If not null, returns the array of advance widths of
-                            the glyphs. If not NULL, must be at least a large
-                            as the number of unichars in the specified text.
-        @param bounds       If not null, returns the bounds for each of
-                            character, relative to (0, 0)
-        @return the number of unichars in the specified text.
-    */
+    /** Return the advances for the text. These will be vertical advances if
+     *  isVerticalText() returns true.
+     *
+     *  @param text         the text
+     *  @param byteLength   number of bytes to of text
+     *  @param widths       If not null, returns the array of advances for
+     *                      the glyphs. If not NULL, must be at least a large
+     *                      as the number of unichars in the specified text.
+     *  @param bounds       If not null, returns the bounds for each of
+     *                      character, relative to (0, 0)
+     *  @return the number of unichars in the specified text.
+     */
     int getTextWidths(const void* text, size_t byteLength, SkScalar widths[],
                       SkRect bounds[] = NULL) const;
 
@@ -819,13 +846,21 @@ public:
     void getTextPath(const void* text, size_t length, SkScalar x, SkScalar y,
                      SkPath* path) const;
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     const SkGlyph& getUnicharMetrics(SkUnichar);
     const SkGlyph& getGlyphMetrics(uint16_t);
     const void* findImage(const SkGlyph&);
 
     uint32_t getGenerationID() const;
+
+    /** Returns the base glyph count for the strike associated with this paint
+    */
+    unsigned getBaseGlyphCount(SkUnichar text) const;
 #endif
+
+    // returns true if the paint's settings (e.g. xfermode + alpha) resolve to
+    // mean that we need not draw at all (e.g. SrcOver + 0-alpha)
+    bool nothingToDraw() const;
 
 private:
     SkTypeface*     fTypeface;
@@ -840,20 +875,18 @@ private:
     SkColorFilter*  fColorFilter;
     SkRasterizer*   fRasterizer;
     SkDrawLooper*   fLooper;
+    SkImageFilter*  fImageFilter;
 
     SkColor         fColor;
     SkScalar        fWidth;
     SkScalar        fMiterLimit;
-    unsigned        fFlags : 12;
+    unsigned        fFlags : 14;
     unsigned        fTextAlign : 2;
     unsigned        fCapType : 2;
     unsigned        fJoinType : 2;
     unsigned        fStyle : 2;
     unsigned        fTextEncoding : 2;  // 3 values
     unsigned        fHinting : 2;
-#ifdef ANDROID
-    uint32_t        fGenerationID;
-#endif
 
     SkDrawCacheProc    getDrawCacheProc() const;
     SkMeasureCacheProc getMeasureCacheProc(TextBufferDirection dir,
@@ -878,9 +911,15 @@ private:
     friend class SkDraw;
     friend class SkPDFDevice;
     friend class SkTextToPathIter;
+
+#ifdef SK_BUILD_FOR_ANDROID
+    // In order for the == operator to work properly this must be the last field
+    // in the struct so that we can do a memcmp to this field's offset.
+    uint32_t        fGenerationID;
+#endif
 };
 
-//////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 #include "SkPathEffect.h"
 
@@ -898,20 +937,18 @@ public:
                        SkPaint::Cap, SkScalar miterLimit = -1);
 
     // overrides
-    // This method is not exported to java.
     virtual bool filterPath(SkPath* dst, const SkPath& src, SkScalar* width);
 
     // overrides for SkFlattenable
-    // This method is not exported to java.
     virtual void flatten(SkFlattenableWriteBuffer&);
-    // This method is not exported to java.
     virtual Factory getFactory();
+
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
 
 private:
     SkScalar    fWidth, fMiter;
     uint8_t     fStyle, fJoin, fCap;
 
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
     SkStrokePathEffect(SkFlattenableReadBuffer&);
 
     typedef SkPathEffect INHERITED;

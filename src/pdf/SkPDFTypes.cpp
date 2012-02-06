@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2011 Google Inc.
+ * Copyright 2011 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #include "SkPDFCatalog.h"
 #include "SkPDFTypes.h"
@@ -27,9 +20,15 @@
 SkPDFObject::SkPDFObject() {}
 SkPDFObject::~SkPDFObject() {}
 
+void SkPDFObject::emit(SkWStream* stream, SkPDFCatalog* catalog,
+                       bool indirect) {
+    SkPDFObject* realObject = catalog->getSubstituteObject(this);
+    return realObject->emitObject(stream, catalog, indirect);
+}
+
 size_t SkPDFObject::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
     SkDynamicMemoryWStream buffer;
-    emitObject(&buffer, catalog, indirect);
+    emit(&buffer, catalog, indirect);
     return buffer.getOffset();
 }
 
@@ -38,17 +37,35 @@ void SkPDFObject::getResources(SkTDArray<SkPDFObject*>* resourceList) {}
 void SkPDFObject::emitIndirectObject(SkWStream* stream, SkPDFCatalog* catalog) {
     catalog->emitObjectNumber(stream, this);
     stream->writeText(" obj\n");
-    emitObject(stream, catalog, false);
+    emit(stream, catalog, false);
     stream->writeText("\nendobj\n");
 }
-
-SkPDFObjRef::SkPDFObjRef(SkPDFObject* obj) : fObj(obj) {}
-SkPDFObjRef::~SkPDFObjRef() {}
 
 size_t SkPDFObject::getIndirectOutputSize(SkPDFCatalog* catalog) {
     return catalog->getObjectNumberSize(this) + strlen(" obj\n") +
         this->getOutputSize(catalog, false) + strlen("\nendobj\n");
 }
+
+void SkPDFObject::AddResourceHelper(SkPDFObject* resource,
+                                    SkTDArray<SkPDFObject*>* list) {
+    list->push(resource);
+    resource->ref();
+}
+
+void SkPDFObject::GetResourcesHelper(SkTDArray<SkPDFObject*>* resources,
+                                     SkTDArray<SkPDFObject*>* result) {
+    if (resources->count()) {
+        result->setReserve(result->count() + resources->count());
+        for (int i = 0; i < resources->count(); i++) {
+            result->push((*resources)[i]);
+            (*resources)[i]->ref();
+            (*resources)[i]->getResources(result);
+        }
+    }
+}
+
+SkPDFObjRef::SkPDFObjRef(SkPDFObject* obj) : fObj(obj) {}
+SkPDFObjRef::~SkPDFObjRef() {}
 
 void SkPDFObjRef::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                              bool indirect) {
@@ -67,8 +84,9 @@ SkPDFInt::~SkPDFInt() {}
 
 void SkPDFInt::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                           bool indirect) {
-    if (indirect)
+    if (indirect) {
         return emitIndirectObject(stream, catalog);
+    }
     stream->writeDecAsText(fValue);
 }
 
@@ -87,8 +105,9 @@ void SkPDFBool::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
 
 size_t SkPDFBool::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
     SkASSERT(!indirect);
-    if (fValue)
+    if (fValue) {
         return strlen("true");
+    }
     return strlen("false");
 }
 
@@ -97,8 +116,9 @@ SkPDFScalar::~SkPDFScalar() {}
 
 void SkPDFScalar::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                              bool indirect) {
-    if (indirect)
+    if (indirect) {
         return emitIndirectObject(stream, catalog);
+    }
 
     Append(fValue, stream);
 }
@@ -159,15 +179,15 @@ void SkPDFScalar::Append(SkScalar value, SkWStream* stream) {
 }
 
 SkPDFString::SkPDFString(const char value[])
-    : fValue(formatString(value, strlen(value))) {
+    : fValue(FormatString(value, strlen(value))) {
 }
 
 SkPDFString::SkPDFString(const SkString& value)
-    : fValue(formatString(value.c_str(), value.size())) {
+    : fValue(FormatString(value.c_str(), value.size())) {
 }
 
 SkPDFString::SkPDFString(const uint16_t* value, size_t len, bool wideChars)
-    : fValue(formatString(value, len, wideChars)) {
+    : fValue(FormatString(value, len, wideChars)) {
 }
 
 SkPDFString::~SkPDFString() {}
@@ -186,17 +206,17 @@ size_t SkPDFString::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
 }
 
 // static
-SkString SkPDFString::formatString(const char* input, size_t len) {
-    return doFormatString(input, len, false, false);
+SkString SkPDFString::FormatString(const char* input, size_t len) {
+    return DoFormatString(input, len, false, false);
 }
 
-SkString SkPDFString::formatString(const uint16_t* input, size_t len,
+SkString SkPDFString::FormatString(const uint16_t* input, size_t len,
                                    bool wideChars) {
-    return doFormatString(input, len, true, wideChars);
+    return DoFormatString(input, len, true, wideChars);
 }
 
 // static
-SkString SkPDFString::doFormatString(const void* input, size_t len,
+SkString SkPDFString::DoFormatString(const void* input, size_t len,
                                      bool wideInput, bool wideOutput) {
     SkASSERT(len <= kMaxLen);
     const uint16_t* win = (const uint16_t*) input;
@@ -206,8 +226,9 @@ SkString SkPDFString::doFormatString(const void* input, size_t len,
         SkASSERT(wideInput);
         SkString result;
         result.append("<");
-        for (size_t i = 0; i < len; i++)
+        for (size_t i = 0; i < len; i++) {
             result.appendHex(win[i], 4);
+        }
         result.append(">");
         return result;
     }
@@ -230,8 +251,9 @@ SkString SkPDFString::doFormatString(const void* input, size_t len,
         for (size_t i = 0; i < len; i++) {
             SkASSERT(!wideInput || !(win[i] & ~0xFF));
             char val = wideInput ? win[i] : cin[i];
-            if (val == '\\' || val == '(' || val == ')')
+            if (val == '\\' || val == '(' || val == ')') {
                 result.append("\\");
+            }
             result.append(&val, 1);
         }
         result.append(")");
@@ -248,9 +270,13 @@ SkString SkPDFString::doFormatString(const void* input, size_t len,
     return result;
 }
 
-SkPDFName::SkPDFName(const char name[]) : fValue(formatName(SkString(name))) {}
-SkPDFName::SkPDFName(const SkString& name) : fValue(formatName(name)) {}
+SkPDFName::SkPDFName(const char name[]) : fValue(FormatName(SkString(name))) {}
+SkPDFName::SkPDFName(const SkString& name) : fValue(FormatName(name)) {}
 SkPDFName::~SkPDFName() {}
+
+bool SkPDFName::operator==(const SkPDFName& b) const {
+    return fValue == b.fValue;
+}
 
 void SkPDFName::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                            bool indirect) {
@@ -264,7 +290,7 @@ size_t SkPDFName::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
 }
 
 // static
-SkString SkPDFName::formatName(const SkString& input) {
+SkString SkPDFName::FormatName(const SkString& input) {
     SkASSERT(input.size() <= kMaxLen);
 
     SkString result("/");
@@ -282,32 +308,37 @@ SkString SkPDFName::formatName(const SkString& input) {
 
 SkPDFArray::SkPDFArray() {}
 SkPDFArray::~SkPDFArray() {
-    fValue.safeUnrefAll();
+    fValue.unrefAll();
 }
 
 void SkPDFArray::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                             bool indirect) {
-    if (indirect)
+    if (indirect) {
         return emitIndirectObject(stream, catalog);
+    }
 
     stream->writeText("[");
     for (int i = 0; i < fValue.count(); i++) {
-        fValue[i]->emitObject(stream, catalog, false);
-        if (i + 1 < fValue.count())
+        fValue[i]->emit(stream, catalog, false);
+        if (i + 1 < fValue.count()) {
             stream->writeText(" ");
+        }
     }
     stream->writeText("]");
 }
 
 size_t SkPDFArray::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
-    if (indirect)
+    if (indirect) {
         return getIndirectOutputSize(catalog);
+    }
 
     size_t result = strlen("[]");
-    if (fValue.count())
+    if (fValue.count()) {
         result += fValue.count() - 1;
-    for (int i = 0; i < fValue.count(); i++)
+    }
+    for (int i = 0; i < fValue.count(); i++) {
         result += fValue[i]->getOutputSize(catalog, false);
+    }
     return result;
 }
 
@@ -318,23 +349,40 @@ void SkPDFArray::reserve(int length) {
 
 SkPDFObject* SkPDFArray::setAt(int offset, SkPDFObject* value) {
     SkASSERT(offset < fValue.count());
-    SkSafeUnref(fValue[offset]);
+    value->ref();
+    fValue[offset]->unref();
     fValue[offset] = value;
-    SkSafeRef(fValue[offset]);
     return value;
 }
 
 SkPDFObject* SkPDFArray::append(SkPDFObject* value) {
     SkASSERT(fValue.count() < kMaxLen);
-    SkSafeRef(value);
+    value->ref();
     fValue.push(value);
     return value;
 }
 
+void SkPDFArray::appendInt(int32_t value) {
+    SkASSERT(fValue.count() < kMaxLen);
+    fValue.push(new SkPDFInt(value));
+}
+
+void SkPDFArray::appendScalar(SkScalar value) {
+    SkASSERT(fValue.count() < kMaxLen);
+    fValue.push(new SkPDFScalar(value));
+}
+
+void SkPDFArray::appendName(const char name[]) {
+    SkASSERT(fValue.count() < kMaxLen);
+    fValue.push(new SkPDFName(name));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 SkPDFDict::SkPDFDict() {}
 
 SkPDFDict::SkPDFDict(const char type[]) {
-    insert("Type", new SkPDFName(type))->unref();
+    insertName("Type", type);
 }
 
 SkPDFDict::~SkPDFDict() {
@@ -343,22 +391,24 @@ SkPDFDict::~SkPDFDict() {
 
 void SkPDFDict::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
                            bool indirect) {
-    if (indirect)
+    if (indirect) {
         return emitIndirectObject(stream, catalog);
+    }
 
     stream->writeText("<<");
     for (int i = 0; i < fValue.count(); i++) {
         fValue[i].key->emitObject(stream, catalog, false);
         stream->writeText(" ");
-        fValue[i].value->emitObject(stream, catalog, false);
+        fValue[i].value->emit(stream, catalog, false);
         stream->writeText("\n");
     }
     stream->writeText(">>");
 }
 
 size_t SkPDFDict::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
-    if (indirect)
+    if (indirect) {
         return getIndirectOutputSize(catalog);
+    }
 
     size_t result = strlen("<<>>") + (fValue.count() * 2);
     for (int i = 0; i < fValue.count(); i++) {
@@ -369,24 +419,60 @@ size_t SkPDFDict::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
 }
 
 SkPDFObject* SkPDFDict::insert(SkPDFName* key, SkPDFObject* value) {
+    key->ref();
+    value->ref();
     struct Rec* newEntry = fValue.append();
     newEntry->key = key;
-    SkSafeRef(newEntry->key);
     newEntry->value = value;
-    SkSafeRef(newEntry->value);
     return value;
 }
 
 SkPDFObject* SkPDFDict::insert(const char key[], SkPDFObject* value) {
-    SkRefPtr<SkPDFName> keyName = new SkPDFName(key);
-    keyName->unref();  // SkRefPtr and new both took a reference.
-    return insert(keyName.get(), value);
+    value->ref();
+    struct Rec* newEntry = fValue.append();
+    newEntry->key = new SkPDFName(key);
+    newEntry->value = value;
+    return value;
+}
+
+void SkPDFDict::insertInt(const char key[], int32_t value) {
+    struct Rec* newEntry = fValue.append();
+    newEntry->key = new SkPDFName(key);
+    newEntry->value = new SkPDFInt(value);
+}
+
+void SkPDFDict::insertScalar(const char key[], SkScalar value) {
+    struct Rec* newEntry = fValue.append();
+    newEntry->key = new SkPDFName(key);
+    newEntry->value = new SkPDFScalar(value);
+}
+
+void SkPDFDict::insertName(const char key[], const char name[]) {
+    struct Rec* newEntry = fValue.append();
+    newEntry->key = new SkPDFName(key);
+    newEntry->value = new SkPDFName(name);
 }
 
 void SkPDFDict::clear() {
     for (int i = 0; i < fValue.count(); i++) {
-        SkSafeUnref(fValue[i].key);
-        SkSafeUnref(fValue[i].value);
+        fValue[i].key->unref();
+        fValue[i].value->unref();
     }
     fValue.reset();
+}
+
+SkPDFDict::Iter::Iter(const SkPDFDict& dict)
+    : fIter(dict.fValue.begin()),
+      fStop(dict.fValue.end()) {
+}
+
+SkPDFName* SkPDFDict::Iter::next(SkPDFObject** value) {
+    if (fIter != fStop) {
+        Rec* cur = fIter;
+        fIter++;
+        *value = cur->value;
+        return cur->key;
+    }
+    *value = NULL;
+    return NULL;
 }
