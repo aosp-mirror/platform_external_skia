@@ -3,11 +3,21 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
+  aarectmodes.cpp \
   bitmapfilters.cpp \
+  bitmapscroll.cpp \
   blurs.cpp \
   complexclip.cpp \
+  complexclip2.cpp \
+  emptypath.cpp \
   filltypes.cpp \
+  filltypespersp.cpp \
+  gm.cpp \
+  gmmain.cpp \
   gradients.cpp \
+  hairmodes.cpp \
+  lcdtext.cpp \
+  ninepatchstretch.cpp \
   nocolorbleed.cpp \
   pathfill.cpp \
   points.cpp \
@@ -16,13 +26,11 @@ LOCAL_SRC_FILES := \
   shadows.cpp \
   shapes.cpp \
   strokerects.cpp \
+  strokes.cpp \
+  texdata.cpp \
   tilemodes.cpp \
-  xfermodes.cpp \
-  gmmain.cpp
-
-# additional optional class for this tool
-LOCAL_SRC_FILES += \
-  ../src/utils/SkEGLContext_none.cpp
+  tinybitmap.cpp \
+  xfermodes.cpp
 
 LOCAL_STATIC_LIBRARIES := libskiagpu
 LOCAL_SHARED_LIBRARIES := \
@@ -35,11 +43,11 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES := \
   external/skia/include/config \
   external/skia/include/core \
+  external/skia/include/effects \
+  external/skia/include/gpu \
   external/skia/include/images \
   external/skia/include/utils \
-  external/skia/include/effects \
-  external/skia/gpu/include \
-  external/skia/include/gpu
+  external/skia/gm
 
 #LOCAL_CFLAGS := 
 

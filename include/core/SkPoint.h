@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPoint_DEFINED
 #define SkPoint_DEFINED
@@ -196,6 +189,16 @@ struct SK_API SkPoint {
     }
     void setRectFan(SkScalar l, SkScalar t, SkScalar r, SkScalar b, size_t stride);
 
+    static void Offset(SkPoint points[], int count, const SkPoint& offset) {
+        Offset(points, count, offset.fX, offset.fY);
+    }
+
+    static void Offset(SkPoint points[], int count, SkScalar dx, SkScalar dy) {
+        for (int i = 0; i < count; ++i) {
+            points[i].offset(dx, dy);
+        }
+    }
+
     void offset(SkScalar dx, SkScalar dy) {
         fX += dx;
         fY += dy;
@@ -206,10 +209,19 @@ struct SK_API SkPoint {
     SkScalar length() const { return SkPoint::Length(fX, fY); }
     SkScalar distanceToOrigin() const { return this->length(); }
 
+    /**
+     *  Return true if the computed length of the vector is >= the internal
+     *  tolerance (used to avoid dividing by tiny values).
+     */
+    static bool CanNormalize(SkScalar dx, SkScalar dy);
+
+    bool canNormalize() const {
+        return CanNormalize(fX, fY);
+    }
+
     /** Set the point (vector) to be unit-length in the same direction as it
-        currently is, and return its old length. If the old length is
-        degenerately small (nearly zero), do nothing and return false, otherwise
-        return true.
+        already points.  If the point has a degenerate length (i.e. nearly 0)
+        then return false and do nothing; otherwise return true.
     */
     bool normalize();
 
@@ -303,6 +315,13 @@ struct SK_API SkPoint {
         return a.fX != b.fX || a.fY != b.fY;
     }
 
+    /** Return true if this and the given point are componentwise within tol.
+    */
+    bool equalsWithinTolerance(const SkPoint& v, SkScalar tol) const {
+        return SkScalarNearlyZero(fX - v.fX, tol)
+               && SkScalarNearlyZero(fY - v.fY, tol);
+    }
+
     /** Returns a new point whose coordinates are the difference between
         a's and b's (a - b)
     */
@@ -325,7 +344,13 @@ struct SK_API SkPoint {
     static SkScalar Length(SkScalar x, SkScalar y);
 
     /** Normalize pt, returning its previous length. If the prev length is too
-        small (degenerate), return 0 and leave pt unchanged.
+        small (degenerate), return 0 and leave pt unchanged. This uses the same
+        tolerance as CanNormalize.
+
+        Note that this method may be significantly more expensive than
+        the non-static normalize(), because it has to return the previous length
+        of the point.  If you don't need the previous length, call the
+        non-static normalize() method instead.
      */
     static SkScalar Normalize(SkPoint* pt);
 
@@ -364,17 +389,70 @@ struct SK_API SkPoint {
         SkScalar dy = fY - pt.fY;
         return SkScalarMul(dx, dx) + SkScalarMul(dy, dy);
     }
-    
-    SkScalar distanceToLineSegmentBetweenSqd(const SkPoint& a, 
+
+    /**
+     * The side of a point relative to a line. If the line is from a to b then
+     * the values are consistent with the sign of (b-a) cross (pt-a)
+     */
+    enum Side {
+        kLeft_Side  = -1,
+        kOn_Side    =  0,
+        kRight_Side =  1
+    };
+
+    /**
+     * Returns the squared distance to the infinite line between two pts. Also
+     * optionally returns the side of the line that the pt falls on (looking
+     * along line from a to b)
+     */
+    SkScalar distanceToLineBetweenSqd(const SkPoint& a,
+                                      const SkPoint& b,
+                                      Side* side = NULL) const;
+
+    /**
+     * Returns the distance to the infinite line between two pts. Also
+     * optionally returns the side of the line that the pt falls on (looking
+     * along the line from a to b)
+     */
+    SkScalar distanceToLineBetween(const SkPoint& a,
+                                   const SkPoint& b,
+                                   Side* side = NULL) const {
+        return SkScalarSqrt(this->distanceToLineBetweenSqd(a, b, side));
+    }
+
+    /**
+     * Returns the squared distance to the line segment between pts a and b
+     */
+    SkScalar distanceToLineSegmentBetweenSqd(const SkPoint& a,
                                              const SkPoint& b) const;
-    
-    SkScalar distanceToLineSegmentBetween(const SkPoint& a, 
+
+    /**
+     * Returns the distance to the line segment between pts a and b.
+     */
+    SkScalar distanceToLineSegmentBetween(const SkPoint& a,
                                           const SkPoint& b) const {
         return SkScalarSqrt(this->distanceToLineSegmentBetweenSqd(a, b));
+    }
+
+    /**
+     * Make this vector be orthogonal to vec. Looking down vec the
+     * new vector will point in direction indicated by side (which
+     * must be kLeft_Side or kRight_Side).
+     */
+    void setOrthog(const SkPoint& vec, Side side = kLeft_Side) {
+        // vec could be this
+        SkScalar tmp = vec.fX;
+        if (kLeft_Side == side) {
+            fX = -vec.fY;
+            fY = tmp;
+        } else {
+            SkASSERT(kRight_Side == side);
+            fX = vec.fY;
+            fY = -tmp;
+        }
     }
 };
 
 typedef SkPoint SkVector;
 
 #endif
-

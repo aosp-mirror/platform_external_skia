@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "Test.h"
 #include "SkBitmap.h"
 #include "SkRect.h"
@@ -543,6 +550,7 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                         reportCopyVerification(subset, bufBm, coords,
                         "copyPixelsTo(buf, bufSize, rowBytes()-1)", reporter);
 
+#if 0   // copyPixelsFrom is gone
                     // Test #5 ////////////////////////////////////////////
                     // Tests the case where the source stride is too small
                     // for the source configuration.
@@ -577,6 +585,7 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                             false);
 
                     delete [] buf;
+#endif
                 }
             }
         } // for (size_t copyCase ...

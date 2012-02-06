@@ -1,10 +1,19 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 
 namespace skiagm {
 
 class NoColorBleedGM : public GM {
 public:
-    NoColorBleedGM() {}
+    NoColorBleedGM() {
+        this->setBGColor(0xFFDDDDDD);
+    }
 
 protected:
     virtual SkString onShortName() {
@@ -15,13 +24,7 @@ protected:
         return make_isize(200, 200);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        drawBG(canvas);
-
         SkBitmap sprite;
         sprite.setConfig(SkBitmap::kARGB_8888_Config, 4, 4, 4*sizeof(SkColor));
         const SkColor spriteData[16] = {

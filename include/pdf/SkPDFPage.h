@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright 2010 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPDFPage_DEFINED
 #define SkPDFPage_DEFINED
@@ -37,7 +30,7 @@ public:
      *  have content on it yet.
      *  @param content    The page content.
      */
-    explicit SkPDFPage(const SkRefPtr<SkPDFDevice>& content);
+    explicit SkPDFPage(SkPDFDevice* content);
     ~SkPDFPage();
 
     /** Before a page and its contents can be sized and emitted, it must
@@ -81,7 +74,7 @@ public:
      *                    nodes of the pageTree.
      *  @param rootNode   An output parameter set to the root node.
      */
-    static void generatePageTree(const SkTDArray<SkPDFPage*>& pages,
+    static void GeneratePageTree(const SkTDArray<SkPDFPage*>& pages,
                                  SkPDFCatalog* catalog,
                                  SkTDArray<SkPDFDict*>* pageTree,
                                  SkPDFDict** rootNode);
@@ -89,6 +82,11 @@ public:
     /** Get the fonts used on this page.
      */
     SK_API const SkTDArray<SkPDFFont*>& getFontResources() const;
+
+    /** Returns a SkPDFGlyphSetMap which represents glyph usage of every font
+     *  that shows on this page.
+     */
+    const SkPDFGlyphSetMap& getFontGlyphUsage() const;
 
 private:
     // Multiple pages may reference the content.

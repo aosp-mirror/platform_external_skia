@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkPicture.h"
 #include "SkRectShape.h"
@@ -118,13 +125,7 @@ protected:
         return make_isize(640, 480);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(SK_ColorWHITE);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
-
         SkPaint paint;
         paint.setAntiAlias(true);
         

@@ -1,23 +1,15 @@
-/* libs/graphics/sgl/SkScan.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkScan.h"
 #include "SkBlitter.h"
-#include "SkRegion.h"
+#include "SkRasterClip.h"
 
 static inline void blitrect(SkBlitter* blitter, const SkIRect& r) {
     blitter->blitRect(r.fLeft, r.fTop, r.width(), r.height());
@@ -69,6 +61,57 @@ void SkScan::FillRect(const SkRect& r, const SkRegion* clip,
     
     r.round(&ir);
     SkScan::FillIRect(ir, clip, blitter);
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+void SkScan::FillIRect(const SkIRect& r, const SkRasterClip& clip,
+                       SkBlitter* blitter) {
+    if (clip.isEmpty() || r.isEmpty()) {
+        return;
+    }
+    
+    if (clip.isBW()) {
+        FillIRect(r, &clip.bwRgn(), blitter);
+        return;
+    }
+
+    SkAAClipBlitterWrapper wrapper(clip, blitter);
+    FillIRect(r, &wrapper.getRgn(), wrapper.getBlitter());
+}
+
+void SkScan::FillXRect(const SkXRect& xr, const SkRasterClip& clip,
+                       SkBlitter* blitter) {
+    if (clip.isEmpty() || xr.isEmpty()) {
+        return;
+    }
+    
+    if (clip.isBW()) {
+        FillXRect(xr, &clip.bwRgn(), blitter);
+        return;
+    }
+
+    SkAAClipBlitterWrapper wrapper(clip, blitter);
+    FillXRect(xr, &wrapper.getRgn(), wrapper.getBlitter());
+}
+
+#ifdef SK_SCALAR_IS_FLOAT
+
+void SkScan::FillRect(const SkRect& r, const SkRasterClip& clip,
+                      SkBlitter* blitter) {
+    if (clip.isEmpty() || r.isEmpty()) {
+        return;
+    }
+    
+    if (clip.isBW()) {
+        FillRect(r, &clip.bwRgn(), blitter);
+        return;
+    }
+
+    SkAAClipBlitterWrapper wrapper(clip, blitter);
+    FillRect(r, &wrapper.getRgn(), wrapper.getBlitter());
 }
 
 #endif

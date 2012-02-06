@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkFloatingPoint_DEFINED
 #define SkFloatingPoint_DEFINED
@@ -65,12 +58,24 @@ static inline float sk_float_copysign(float x, float y) {
     #define sk_float_acos(x)        acosf(x)
     #define sk_float_asin(x)        asinf(x)
 #endif
-    #define sk_float_atan2(y,x) atan2f(y,x)
+    #define sk_float_atan2(y,x)     atan2f(y,x)
     #define sk_float_abs(x)         fabsf(x)
     #define sk_float_mod(x,y)       fmodf(x,y)
     #define sk_float_exp(x)         expf(x)
     #define sk_float_log(x)         logf(x)
-    #define sk_float_isNaN(x)       _isnan(x)
+#endif
+
+#ifdef SK_BUILD_FOR_WIN
+    #define sk_float_isfinite(x)    _finite(x)
+    #define sk_float_isnan(x)       _isnan(x)
+    static inline int sk_float_isinf(float x) {
+        int32_t bits = SkFloat2Bits(x);
+        return (bits << 1) == (0xFF << 24);
+    }
+#else
+    #define sk_float_isfinite(x)    isfinite(x)
+    #define sk_float_isnan(x)       isnan(x)
+    #define sk_float_isinf(x)       isinf(x)
 #endif
 
 #ifdef SK_USE_FLOATBITS

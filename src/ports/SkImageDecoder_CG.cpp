@@ -1,25 +1,26 @@
-/* Copyright 2008, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
 
-#include <Carbon/Carbon.h>
+/*
+ * Copyright 2008 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkMovie.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkCGUtils.h"
+
+#ifdef SK_BUILD_FOR_MAC
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
+#ifdef SK_BUILD_FOR_IOS
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 
 static void malloc_release_proc(void* info, const void* data, size_t size) {
     sk_free(info);
@@ -76,12 +77,12 @@ bool SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     bm->lockPixels();
     bm->eraseColor(0);
 
-    CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+    // use the same colorspace, so we don't change the pixels at all
+    CGColorSpaceRef cs = CGImageGetColorSpace(image);
     CGContextRef cg = CGBitmapContextCreate(bm->getPixels(), width, height,
                                             8, bm->rowBytes(), cs, BITMAP_INFO);
     CGContextDrawImage(cg, CGRectMake(0, 0, width, height), image);
     CGContextRelease(cg);
-    CGColorSpaceRelease(cs);
 
     bm->unlockPixels();
     return true;

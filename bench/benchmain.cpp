@@ -1,18 +1,30 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+
+#include "BenchTimer.h"
+
+#include "GrContext.h"
+#include "GrRenderTarget.h"
+
+#include "SkBenchmark.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
+#include "SkGpuDevice.h"
 #include "SkGraphics.h"
 #include "SkImageEncoder.h"
+#include "SkNativeGLContext.h"
+#include "SkNullGLContext.h"
 #include "SkNWayCanvas.h"
 #include "SkPicture.h"
 #include "SkString.h"
-#include "GrContext.h"
-#include "SkGpuDevice.h"
-#include "SkEGLContext.h"
 
-#include "SkBenchmark.h"
-#include "BenchTimer.h"
-
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
 static void log_error(const char msg[]) { SkDebugf("%s", msg); }
 static void log_progress(const char msg[]) { SkDebugf("%s", msg); }
 #else
@@ -161,8 +173,67 @@ enum Backend {
     kPDF_Backend,
 };
 
+class GLHelper {
+public:
+    GLHelper() {
+    }
+
+    bool init(SkGLContext* glCtx, int width, int height) {
+        GrContext* grCtx;
+        GrRenderTarget* rt;
+        if (glCtx->init(width, height)) {
+            GrPlatform3DContext ctx =
+                reinterpret_cast<GrPlatform3DContext>(glCtx->gl());
+            grCtx = GrContext::Create(kOpenGL_Shaders_GrEngine, ctx);
+            if (NULL != grCtx) {
+                GrPlatformRenderTargetDesc desc;
+                desc.fConfig = kSkia8888_PM_GrPixelConfig;
+                desc.fWidth = width;
+                desc.fHeight = height;
+                desc.fStencilBits = 8;
+                desc.fRenderTargetHandle = glCtx->getFBOID();
+                rt = grCtx->createPlatformRenderTarget(desc);
+                if (NULL == rt) {
+                    grCtx->unref();
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+        glCtx->ref();
+        fGLContext.reset(glCtx);
+        fGrContext.reset(grCtx);
+        fRenderTarget.reset(rt);
+        return true;
+    }
+
+    bool isValid() {
+        return NULL != fGLContext.get();
+    }
+
+    SkGLContext* glContext() {
+        return fGLContext.get();
+    }
+
+    GrRenderTarget* renderTarget() {
+        return fRenderTarget.get();
+    }
+
+    GrContext* grContext() {
+        return fGrContext.get();
+    }
+private:
+    SkAutoTUnref<SkGLContext> fGLContext;
+    SkAutoTUnref<GrContext> fGrContext;
+    SkAutoTUnref<GrRenderTarget> fRenderTarget;
+};
+
+static GLHelper gRealGLHelper;
+static GLHelper gNullGLHelper;
+
 static SkDevice* make_device(SkBitmap::Config config, const SkIPoint& size,
-                             Backend backend, GrContext* context) {
+                             Backend backend, GLHelper* glHelper) {
     SkDevice* device = NULL;
     SkBitmap bitmap;
     bitmap.setConfig(config, size.fX, size.fY);
@@ -171,11 +242,11 @@ static SkDevice* make_device(SkBitmap::Config config, const SkIPoint& size,
         case kRaster_Backend:
             bitmap.allocPixels();
             erase(bitmap);
-            device = new SkDevice(NULL, bitmap, true);
+            device = new SkDevice(bitmap);
             break;
         case kGPU_Backend:
-            device = new SkGpuDevice(context, bitmap, SkGpuDevice::Current3DApiRenderTarget());
-//            device->clear(0xFFFFFFFF);
+            device = new SkGpuDevice(glHelper->grContext(),
+                                     glHelper->renderTarget());
             break;
         case kPDF_Backend:
         default:
@@ -188,10 +259,12 @@ static const struct {
     SkBitmap::Config    fConfig;
     const char*         fName;
     Backend             fBackend;
+    GLHelper*           fGLHelper;
 } gConfigs[] = {
-    { SkBitmap::kARGB_8888_Config,  "8888",     kRaster_Backend },
-    { SkBitmap::kRGB_565_Config,    "565",      kRaster_Backend },
-    { SkBitmap::kARGB_8888_Config,  "GPU",      kGPU_Backend },
+    { SkBitmap::kARGB_8888_Config,  "8888",     kRaster_Backend, NULL },
+    { SkBitmap::kRGB_565_Config,    "565",      kRaster_Backend, NULL },
+    { SkBitmap::kARGB_8888_Config,  "GPU",      kGPU_Backend, &gRealGLHelper },
+    { SkBitmap::kARGB_8888_Config,  "NULLGPU",  kGPU_Backend, &gNullGLHelper },
 };
 
 static int findConfig(const char config[]) {
@@ -201,6 +274,36 @@ static int findConfig(const char config[]) {
         }
     }
     return -1;
+}
+
+static void determine_gpu_context_size(SkTDict<const char*>& defineDict,
+                                       int* contextWidth,
+                                       int* contextHeight) {
+    Iter iter(&defineDict);
+    SkBenchmark* bench;
+    while ((bench = iter.next()) != NULL) {
+        SkIPoint dim = bench->getSize();
+        if (*contextWidth < dim.fX) {
+            *contextWidth = dim.fX;
+        }
+        if (*contextHeight < dim.fY) {
+            *contextHeight = dim.fY;
+        }
+    }
+}
+
+static bool skip_name(const SkTDArray<const char*> array, const char name[]) {
+    if (0 == array.count()) {
+        // no names, so don't skip anything
+        return false;
+    }
+    for (int i = 0; i < array.count(); ++i) {
+        if (strstr(name, array[i])) {
+            // found the name, so don't skip
+            return false;
+        }
+    }
+    return true;
 }
 
 int main (int argc, char * const argv[]) {
@@ -218,12 +321,13 @@ int main (int argc, char * const argv[]) {
     bool doScale = false;
     bool doRotate = false;
     bool doClip = false;
-    const char* matchStr = NULL;
     bool hasStrokeWidth = false;
     float strokeWidth;
+    SkTDArray<const char*> fMatches;
     
     SkString outDir;
     SkBitmap::Config outConfig = SkBitmap::kNo_Config;
+    GLHelper* glHelper = NULL;
     const char* configName = "";
     Backend backend = kRaster_Backend;  // for warning
     int configCount = SK_ARRAY_COUNT(gConfigs);
@@ -312,7 +416,7 @@ int main (int argc, char * const argv[]) {
         } else if (strcmp(*argv, "-match") == 0) {
             argv++;
             if (argv < stop) {
-                matchStr = *argv;
+                *fMatches.append() = *argv;
             } else {
                 log_error("missing arg for -match\n");
                 return -1;
@@ -325,6 +429,7 @@ int main (int argc, char * const argv[]) {
                     outConfig = gConfigs[index].fConfig;
                     configName = gConfigs[index].fName;
                     backend = gConfigs[index].fBackend;
+                    glHelper = gConfigs[index].fGLHelper;
                     configCount = 1;
                 } else {
                     SkString str;
@@ -355,19 +460,63 @@ int main (int argc, char * const argv[]) {
     // report our current settings
     {
         SkString str;
-        str.printf("skia bench: alpha=0x%02X antialias=%d filter=%d\n",
+        str.printf("skia bench: alpha=0x%02X antialias=%d filter=%d",
                    forceAlpha, forceAA, forceFilter);
+        str.appendf(" rotate=%d scale=%d clip=%d",
+                   doRotate, doScale, doClip);
+                   
+        const char * ditherName;
+        switch (forceDither) {
+            case SkTriState::kDefault: ditherName = "default"; break;
+            case SkTriState::kTrue: ditherName = "true"; break;
+            case SkTriState::kFalse: ditherName = "false"; break;
+            default: ditherName = "<invalid>"; break;
+        }
+        str.appendf(" dither=%s", ditherName);
+        
+        if (hasStrokeWidth) {
+            str.appendf(" strokeWidth=%f", strokeWidth);
+        } else {
+            str.append(" strokeWidth=none");
+        }
+        
+#if defined(SK_SCALAR_IS_FLOAT)
+        str.append(" scalar=float");
+#elif defined(SK_SCALAR_IS_FIXED)
+        str.append(" scalar=fixed");
+#endif
+
+#if defined(SK_BUILD_FOR_WIN32)
+        str.append(" system=WIN32");
+#elif defined(SK_BUILD_FOR_MAC)
+        str.append(" system=MAC");
+#elif defined(SK_BUILD_FOR_ANDROID)
+        str.append(" system=ANDROID");
+#elif defined(SK_BUILD_FOR_UNIX)
+        str.append(" system=UNIX");
+#else
+        str.append(" system=other");
+#endif
+
+#if defined(SK_DEBUG)
+        str.append(" DEBUG");
+#endif
+        str.append("\n");
         log_progress(str);
     }
-    
-    GrContext* context = NULL;
-    SkEGLContext eglContext;
-    if (eglContext.init(1024, 1024)) {
-        context = GrContext::CreateGLShaderContext();
-    }
-    
-    BenchTimer timer = BenchTimer();
-    
+
+    //Don't do GL when fixed.
+#if !defined(SK_SCALAR_IS_FIXED)
+    int contextWidth = 1024;
+    int contextHeight = 1024;
+    determine_gpu_context_size(defineDict, &contextWidth, &contextHeight);
+    SkAutoTUnref<SkGLContext> realGLCtx(new SkNativeGLContext);
+    SkAutoTUnref<SkGLContext> nullGLCtx(new SkNullGLContext);
+    gRealGLHelper.init(realGLCtx.get(), contextWidth, contextHeight);
+    gNullGLHelper.init(nullGLCtx.get(), contextWidth, contextHeight);
+#endif
+    BenchTimer timer = BenchTimer(gRealGLHelper.glContext());
+
     Iter iter(&defineDict);
     SkBenchmark* bench;
     while ((bench = iter.next()) != NULL) {
@@ -385,7 +534,7 @@ int main (int argc, char * const argv[]) {
         }
         
         // only run benchmarks if their name contains matchStr
-        if (matchStr && strstr(bench->getName(), matchStr) == NULL) {
+        if (skip_name(fMatches, bench->getName())) {
             continue;
         }
         
@@ -401,13 +550,15 @@ int main (int argc, char * const argv[]) {
                 outConfig = gConfigs[configIndex].fConfig;
                 configName = gConfigs[configIndex].fName;
                 backend = gConfigs[configIndex].fBackend;
+                glHelper = gConfigs[configIndex].fGLHelper;
             }
-            
-            if (kGPU_Backend == backend && NULL == context) {
+
+            if (kGPU_Backend == backend &&
+                (NULL == glHelper || !glHelper->isValid())) {
                 continue;
             }
             
-            SkDevice* device = make_device(outConfig, dim, backend, context);
+            SkDevice* device = make_device(outConfig, dim, backend, glHelper);
             SkCanvas canvas(device);
             device->unref();
             
@@ -420,15 +571,14 @@ int main (int argc, char * const argv[]) {
             if (doRotate) {
                 performRotate(&canvas, dim.fX, dim.fY);
             }
-            
-            bool gpu = kGPU_Backend == backend && context;
+
             //warm up caches if needed
             if (repeatDraw > 1) {
                 SkAutoCanvasRestore acr(&canvas, true);
                 bench->draw(&canvas);
-                if (gpu) {
-                    context->flush();
-                    glFinish();
+                if (glHelper) {
+                    glHelper->grContext()->flush();
+                    SK_GL(*glHelper->glContext(), Finish());
                 }
             }
             
@@ -436,8 +586,14 @@ int main (int argc, char * const argv[]) {
             for (int i = 0; i < repeatDraw; i++) {
                 SkAutoCanvasRestore acr(&canvas, true);
                 bench->draw(&canvas);
+                if (glHelper) {
+                    glHelper->grContext()->flush();
+                }
             }
-            timer.end();
+           if (glHelper) {
+                SK_GL(*glHelper->glContext(), Finish());
+           }
+           timer.end();
             
             if (repeatDraw > 1) {
                 SkString str;
@@ -448,7 +604,7 @@ int main (int argc, char * const argv[]) {
                 if (timerCpu) {
                     str.appendf(" cmsecs = %6.2f", timer.fCpu / repeatDraw);
                 }
-                if (timerGpu && gpu && timer.fGpu > 0) {
+                if (timerGpu && glHelper && timer.fGpu > 0) {
                     str.appendf(" gmsecs = %6.2f", timer.fGpu / repeatDraw);
                 }
                 log_progress(str);
@@ -460,6 +616,6 @@ int main (int argc, char * const argv[]) {
         }
         log_progress("\n");
     }
-    
+
     return 0;
 }

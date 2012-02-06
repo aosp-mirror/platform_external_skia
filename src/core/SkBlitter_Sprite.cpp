@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkBlitter_Sprite.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkSpriteBlitter.h"
 
@@ -36,20 +28,20 @@ void SkSpriteBlitter::setup(const SkBitmap& device, int left, int top,
 
 #ifdef SK_DEBUG
 void SkSpriteBlitter::blitH(int x, int y, int width) {
-    SkASSERT(!"how did we get here?");
+    SkDEBUGFAIL("how did we get here?");
 }
 
 void SkSpriteBlitter::blitAntiH(int x, int y, const SkAlpha antialias[],
                                 const int16_t runs[]) {
-    SkASSERT(!"how did we get here?");
+    SkDEBUGFAIL("how did we get here?");
 }
 
 void SkSpriteBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
-    SkASSERT(!"how did we get here?");
+    SkDEBUGFAIL("how did we get here?");
 }
 
 void SkSpriteBlitter::blitMask(const SkMask&, const SkIRect& clip) {
-    SkASSERT(!"how did we get here?");
+    SkDEBUGFAIL("how did we get here?");
 }
 #endif
 

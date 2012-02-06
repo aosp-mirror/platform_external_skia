@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkGradientShader.h"
@@ -102,7 +109,9 @@ static const GradMaker gGradMakers[] = {
 
 class ShaderTextGM : public GM {
 public:
-	ShaderTextGM() {}
+	ShaderTextGM() {
+        this->setBGColor(0xFFDDDDDD);
+    }
 
 protected:
 
@@ -110,18 +119,12 @@ protected:
         return SkString("shadertext");
     }
 
-	SkISize onISize() { return make_isize(950, 500); }
-
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
+	SkISize onISize() { return make_isize(1450, 500); }
 
     virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
-
         const char text[] = "Shaded Text";
         const int textLen = SK_ARRAY_COUNT(text) - 1;
-        const int pointSize = 48;
+        const int pointSize = 36;
 
         int w = pointSize * textLen;
         int h = pointSize;
@@ -169,19 +172,34 @@ protected:
         canvas->save();
         canvas->translate(SkIntToScalar(20), SkIntToScalar(10));
 
+        SkPath path;
+        path.arcTo(SkRect::MakeXYWH(SkIntToScalar(-40), SkIntToScalar(15),
+                                    SkIntToScalar(300), SkIntToScalar(90)), 
+                                    SkIntToScalar(225), SkIntToScalar(90), 
+                                    false);
+        path.close();
+
         static const int testsPerCol = 8;
         static const int rowHeight = 60;
         static const int colWidth = 300;
         canvas->save();
         for (size_t s = 0; s < SK_ARRAY_COUNT(shaders); s++) {
             canvas->save();
-            canvas->translate(SkIntToScalar((s / testsPerCol) * colWidth),
-                              SkIntToScalar((s % testsPerCol) * rowHeight));
-                              paint.setShader(shaders[s])->ref();
+            int i = 2*s;
+            canvas->translate(SkIntToScalar((i / testsPerCol) * colWidth),
+                              SkIntToScalar((i % testsPerCol) * rowHeight));
+            paint.setShader(shaders[s])->unref();
             canvas->drawText(text, textLen, 0, textBase, paint);
+            canvas->restore();
+            canvas->save();
+            ++i;
+            canvas->translate(SkIntToScalar((i / testsPerCol) * colWidth),
+                              SkIntToScalar((i % testsPerCol) * rowHeight));
+            canvas->drawTextOnPath(text, textLen, path, NULL, paint);
             canvas->restore();
         }
         canvas->restore();
+
     }
 
 private:

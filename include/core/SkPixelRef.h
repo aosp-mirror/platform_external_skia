@@ -1,26 +1,19 @@
+
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright 2008 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPixelRef_DEFINED
 #define SkPixelRef_DEFINED
 
+#include "SkBitmap.h"
 #include "SkRefCnt.h"
 #include "SkString.h"
 
-class SkBitmap;
 class SkColorTable;
 struct SkIRect;
 class SkMutex;
@@ -29,6 +22,25 @@ class SkFlattenableWriteBuffer;
 
 // this is an opaque class, not interpreted by skia
 class SkGpuTexture;
+
+#if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+
+#define SK_DECLARE_PIXEL_REF_REGISTRAR() 
+
+#define SK_DEFINE_PIXEL_REF_REGISTRAR(pixelRef) \
+    static SkPixelRef::Registrar g##pixelRef##Reg(#pixelRef, \
+                                                  pixelRef::Create);
+                                                      
+#else
+
+#define SK_DECLARE_PIXEL_REF_REGISTRAR() static void Init();
+
+#define SK_DEFINE_PIXEL_REF_REGISTRAR(pixelRef) \
+    void pixelRef::Init() { \
+        SkPixelRef::Registrar(#pixelRef, Create); \
+    }
+
+#endif
 
 /** \class SkPixelRef
 
@@ -65,6 +77,14 @@ public:
         memory (if the subclass implements caching/deferred-decoding.)
     */
     void unlockPixels();
+
+    /**
+     *  Some bitmaps can return a copy of their pixels for lockPixels(), but
+     *  that copy, if modified, will not be pushed back. These bitmaps should
+     *  not be used as targets for a raster device/canvas (since all pixels
+     *  modifications will be lost when unlockPixels() is called.)
+     */
+    bool lockPixelsAreWritable() const;
 
     /** Returns a non-zero, unique value corresponding to the pixels in this
         pixelref. Each time the pixels are changed (and notifyPixelsChanged is
@@ -116,6 +136,12 @@ public:
 
     bool readPixels(SkBitmap* dst, const SkIRect* subset = NULL);
 
+    /** Makes a deep copy of this PixelRef, respecting the requested config.
+        Returns NULL if either there is an error (e.g. the destination could
+        not be created with the given config), or this PixelRef does not 
+        support deep copies.  */
+    virtual SkPixelRef* deepCopy(SkBitmap::Config config) { return NULL; }
+
     // serialization
 
     typedef SkPixelRef* (*Factory)(SkFlattenableReadBuffer&);
@@ -123,7 +149,7 @@ public:
     virtual Factory getFactory() const { return NULL; }
     virtual void flatten(SkFlattenableWriteBuffer&) const;
 
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
     /**
      *  Acquire a "global" ref on this object.
      *  The default implementation just calls ref(), but subclasses can override
@@ -161,6 +187,9 @@ protected:
     */
     virtual void onUnlockPixels() = 0;
 
+    /** Default impl returns true */
+    virtual bool onLockPixelsAreWritable() const;
+
     /**
      *  For pixelrefs that don't have access to their raw pixels, they may be
      *  able to make a copy of them (e.g. if the pixels are on the GPU).
@@ -177,6 +206,10 @@ protected:
     SkPixelRef(SkFlattenableReadBuffer&, SkMutex*);
 
 private:
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+    static void InitializeFlattenables();
+#endif
+
     SkMutex*        fMutex; // must remain in scope for the life of this object
     void*           fPixels;
     SkColorTable*   fColorTable;    // we do not track ownership, subclass does
@@ -188,6 +221,8 @@ private:
 
     // can go from false to true, but never from true to false
     bool    fIsImmutable;
+
+    friend class SkGraphics;
 };
 
 #endif

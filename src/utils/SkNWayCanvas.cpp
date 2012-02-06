@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkNWayCanvas.h"
 
 SkNWayCanvas::SkNWayCanvas() {}
@@ -122,20 +129,20 @@ void SkNWayCanvas::setMatrix(const SkMatrix& matrix) {
     this->INHERITED::setMatrix(matrix);
 }
 
-bool SkNWayCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
+bool SkNWayCanvas::clipRect(const SkRect& rect, SkRegion::Op op, bool doAA) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->clipRect(rect, op);
+        iter->clipRect(rect, op, doAA);
     }
-    return this->INHERITED::clipRect(rect, op);
+    return this->INHERITED::clipRect(rect, op, doAA);
 }
 
-bool SkNWayCanvas::clipPath(const SkPath& path, SkRegion::Op op) {
+bool SkNWayCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->clipPath(path, op);
+        iter->clipPath(path, op, doAA);
     }
-    return this->INHERITED::clipPath(path, op);
+    return this->INHERITED::clipPath(path, op, doAA);
 }
 
 bool SkNWayCanvas::clipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
@@ -245,13 +252,6 @@ void SkNWayCanvas::drawPicture(SkPicture& picture) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawPicture(picture);
-    }
-}
-
-void SkNWayCanvas::drawShape(SkShape* shape) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->drawShape(shape);
     }
 }
 

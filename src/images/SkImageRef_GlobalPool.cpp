@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkImageRef_GlobalPool.h"
 #include "SkImageRefPool.h"
 #include "SkThread.h"
@@ -50,8 +57,7 @@ SkPixelRef* SkImageRef_GlobalPool::Create(SkFlattenableReadBuffer& buffer) {
     return SkNEW_ARGS(SkImageRef_GlobalPool, (buffer));
 }
 
-static SkPixelRef::Registrar reg("SkImageRef_GlobalPool",
-                                 SkImageRef_GlobalPool::Create);
+SK_DEFINE_PIXEL_REF_REGISTRAR(SkImageRef_GlobalPool)
 
 ///////////////////////////////////////////////////////////////////////////////
 // global imagerefpool wrappers

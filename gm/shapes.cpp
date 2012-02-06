@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkPicture.h"
 #include "SkRectShape.h"
@@ -43,6 +50,8 @@ class ShapesGM : public GM {
     SkMatrixRef*    fMatrixRefs[4];
 public:
 	ShapesGM() {
+        this->setBGColor(0xFFDDDDDD);
+        
         SkMatrix m;
         fGroup.appendShape(make_shape0(false))->unref();
         m.setRotate(SkIntToScalar(30), SkIntToScalar(50), SkIntToScalar(50));
@@ -76,13 +85,7 @@ protected:
         return make_isize(380, 480);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(0xFFDDDDDD);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        this->drawBG(canvas);
-
         SkMatrix matrix;
 
         SkGroupShape* gs = new SkGroupShape;
@@ -95,16 +98,14 @@ protected:
         matrix.preScale(SK_Scalar1*2, SK_Scalar1*2);
         gs->appendShape(&fGroup, matrix);
 
-#if 0
-        canvas->drawShape(gs);
-#else
+#if 1
         SkPicture* pict = new SkPicture;
         SkCanvas* cv = pict->beginRecording(1000, 1000);
         cv->scale(SK_ScalarHalf, SK_ScalarHalf);
-        cv->drawShape(gs);
+        gs->draw(cv);
         cv->translate(SkIntToScalar(680), SkIntToScalar(480));
         cv->scale(-SK_Scalar1, SK_Scalar1);
-        cv->drawShape(gs);
+        gs->draw(cv);
         pict->endRecording();
         canvas->drawPicture(*pict);
         pict->unref();

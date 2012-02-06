@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 // 
 #ifndef SkOSFile_DEFINED
@@ -20,7 +13,7 @@
 
 #include "SkString.h"
 
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX)
+#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
     #include <dirent.h>
 #endif
 
@@ -55,13 +48,17 @@ public:
         ~Iter();
 
         void reset(const char path[], const char suffix[] = NULL);
+        /** If getDir is true, only returns directories.
+            Results are undefined if true and false calls are
+            interleaved on a single iterator.
+        */
         bool next(SkString* name, bool getDir = false);
 
     private:
 #ifdef SK_BUILD_FOR_WIN
         HANDLE      fHandle;
         uint16_t*   fPath16;
-#elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX)
+#elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
         DIR*        fDIR;
         SkString    fPath, fSuffix;
 #endif

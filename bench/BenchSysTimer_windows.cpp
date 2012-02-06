@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "BenchSysTimer_windows.h"
 
 //Time
@@ -35,7 +42,7 @@ void BenchSysTimer::startCpu() {
 
 double BenchSysTimer::endCpu() {
     ULONGLONG end_cpu = winCpuTime();
-    return (end_cpu - this->fStartCpu) / 10000;
+    return static_cast<double>((end_cpu - this->fStartCpu)) / 10000.0L;
 }
 double BenchSysTimer::endWall() {
     LARGE_INTEGER end_wall;
@@ -48,8 +55,10 @@ double BenchSysTimer::endWall() {
     
     LARGE_INTEGER frequency;
     if (0 == ::QueryPerformanceFrequency(&frequency)) {
-        return 0;
+        return 0.0L;
     } else {
-        return (double)ticks_elapsed.QuadPart / frequency.QuadPart * 1000;
+        return static_cast<double>(ticks_elapsed.QuadPart)
+             / static_cast<double>(frequency.QuadPart)
+             * 1000.0L;
     }
 }

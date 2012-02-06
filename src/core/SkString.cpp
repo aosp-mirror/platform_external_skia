@@ -1,22 +1,15 @@
-/* libs/graphics/sgl/SkString.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkString.h"
 #include "SkFixed.h"
+#include "SkThread.h"
 #include "SkUtils.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -25,7 +18,8 @@
 static const size_t kBufferSize = 256;
 
 #ifdef SK_BUILD_FOR_WIN
-    #define VSNPRINTF   _vsnprintf
+    #define VSNPRINTF(buffer, size, format, args) \
+        _vsnprintf_s(buffer, size, _TRUNCATE, format, args)
     #define SNPRINTF    _snprintf
 #else
     #define VSNPRINTF   vsnprintf
@@ -188,22 +182,20 @@ char* SkStrAppendFixed(char string[], SkFixed x) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#define kMaxRefCnt_SkString     SK_MaxU16
-
 // the 3 values are [length] [refcnt] [terminating zero data]
 const SkString::Rec SkString::gEmptyRec = { 0, 0, 0 };
 
 #define SizeOfRec()     (gEmptyRec.data() - (const char*)&gEmptyRec)
 
-SkString::Rec* SkString::AllocRec(const char text[], U16CPU len) {
+SkString::Rec* SkString::AllocRec(const char text[], size_t len) {
     Rec* rec;
 
-    if (len == 0) {
+    if (0 == len) {
         rec = const_cast<Rec*>(&gEmptyRec);
     } else {
         // add 1 for terminating 0, then align4 so we can have some slop when growing the string
         rec = (Rec*)sk_malloc_throw(SizeOfRec() + SkAlign4(len + 1));
-        rec->fLength = SkToU16(len);
+        rec->fLength = len;
         rec->fRefCnt = 1;
         if (text) {
             memcpy(rec->data(), text, len);
@@ -215,11 +207,7 @@ SkString::Rec* SkString::AllocRec(const char text[], U16CPU len) {
 
 SkString::Rec* SkString::RefRec(Rec* src) {
     if (src != &gEmptyRec) {
-        if (src->fRefCnt == kMaxRefCnt_SkString) {
-            src = AllocRec(src->data(), src->fLength);
-        } else {
-            src->fRefCnt += 1;
-        }
+        sk_atomic_inc(&src->fRefCnt);
     }
     return src;
 }
@@ -227,14 +215,14 @@ SkString::Rec* SkString::RefRec(Rec* src) {
 #ifdef SK_DEBUG
 void SkString::validate() const {
     // make sure know one has written over our global
-    SkASSERT(gEmptyRec.fLength == 0);
-    SkASSERT(gEmptyRec.fRefCnt == 0);
-    SkASSERT(gEmptyRec.data()[0] == 0);
+    SkASSERT(0 == gEmptyRec.fLength);
+    SkASSERT(0 == gEmptyRec.fRefCnt);
+    SkASSERT(0 == gEmptyRec.data()[0]);
 
     if (fRec != &gEmptyRec) {
         SkASSERT(fRec->fLength > 0);
         SkASSERT(fRec->fRefCnt > 0);
-        SkASSERT(fRec->data()[fRec->fLength] == 0);
+        SkASSERT(0 == fRec->data()[fRec->fLength]);
     }
     SkASSERT(fStr == c_str());
 }
@@ -287,7 +275,7 @@ SkString::~SkString() {
 
     if (fRec->fLength) {
         SkASSERT(fRec->fRefCnt > 0);
-        if (--fRec->fRefCnt == 0) {
+        if (sk_atomic_dec(&fRec->fRefCnt) == 1) {
             sk_free(fRec);
         }
     }
@@ -331,7 +319,7 @@ void SkString::reset() {
 
     if (fRec->fLength) {
         SkASSERT(fRec->fRefCnt > 0);
-        if (--fRec->fRefCnt == 0) {
+        if (sk_atomic_dec(&fRec->fRefCnt) == 1) {
             sk_free(fRec);
         }
     }
@@ -347,8 +335,14 @@ char* SkString::writable_str() {
 
     if (fRec->fLength) {
         if (fRec->fRefCnt > 1) {
-            fRec->fRefCnt -= 1;
-            fRec = AllocRec(fRec->data(), fRec->fLength);
+            Rec* rec = AllocRec(fRec->data(), fRec->fLength);
+            if (sk_atomic_dec(&fRec->fRefCnt) == 1) {
+                // In this case after our check of fRecCnt > 1, we suddenly
+                // did become the only owner, so now we have two copies of the
+                // data (fRec and rec), so we need to delete one of them.
+                sk_free(fRec);
+            }
+            fRec = rec;
         #ifdef SK_DEBUG
             fStr = fRec->data();
         #endif
@@ -362,9 +356,9 @@ void SkString::set(const char text[]) {
 }
 
 void SkString::set(const char text[], size_t len) {
-    if (len == 0) {
+    if (0 == len) {
         this->reset();
-    } else if (fRec->fRefCnt == 1 && len <= fRec->fLength) {
+    } else if (1 == fRec->fRefCnt && len <= fRec->fLength) {
         // should we resize if len <<<< fLength, to save RAM? (e.g. len < (fLength>>1))?
         // just use less of the buffer without allocating a smaller one
         char* p = this->writable_str();
@@ -372,15 +366,15 @@ void SkString::set(const char text[], size_t len) {
             memcpy(p, text, len);
         }
         p[len] = 0;
-        fRec->fLength = SkToU16(len);
-    } else if (fRec->fRefCnt == 1 && ((unsigned)fRec->fLength >> 2) == (len >> 2)) {
+        fRec->fLength = len;
+    } else if (1 == fRec->fRefCnt && (fRec->fLength >> 2) == (len >> 2)) {
         // we have spare room in the current allocation, so don't alloc a larger one
         char* p = this->writable_str();
         if (text) {
             memcpy(p, text, len);
         }
         p[len] = 0;
-        fRec->fLength = SkToU16(len);
+        fRec->fLength = len;
     } else {
         SkString tmp(text, len);
         this->swap(tmp);
@@ -397,7 +391,7 @@ void SkString::setUTF16(const uint16_t src[]) {
 }
 
 void SkString::setUTF16(const uint16_t src[], size_t count) {
-    if (count == 0) {
+    if (0 == count) {
         this->reset();
     } else if (count <= fRec->fLength) {
         // should we resize if len <<<< fLength, to save RAM? (e.g. len < (fLength>>1))
@@ -441,7 +435,7 @@ void SkString::insert(size_t offset, const char text[], size_t len) {
             which is equivalent for testing to (length + 1 + 3) >> 2 == (length + 1 + 3 + len) >> 2
             and we can then eliminate the +1+3 since that doesn't affec the answer
         */
-        if (fRec->fRefCnt == 1 && (length >> 2) == ((length + len) >> 2)) {
+        if (1 == fRec->fRefCnt && (length >> 2) == ((length + len) >> 2)) {
             char* dst = this->writable_str();
 
             if (offset < length) {
@@ -450,7 +444,7 @@ void SkString::insert(size_t offset, const char text[], size_t len) {
             memcpy(dst + offset, text, len);
 
             dst[length + len] = 0;
-            fRec->fLength = SkToU16(length + len);
+            fRec->fLength = length + len;
         } else {
             /*  Seems we should use realloc here, since that is safe if it fails
                 (we have the original data), and might be faster than alloc/copy/free.
@@ -542,8 +536,6 @@ void SkString::prependf(const char format[], ...) {
     this->prepend(buffer, strlen(buffer));
 }
 
-#undef VSNPRINTF
-
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkString::remove(size_t offset, size_t length) {
@@ -605,3 +597,17 @@ SkAutoUCS2::SkAutoUCS2(const char utf8[]) {
 SkAutoUCS2::~SkAutoUCS2() {
     sk_free(fUCS2);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+SkString SkStringPrintf(const char* format, ...) {
+    SkString formattedOutput;
+    char buffer[kBufferSize];
+    ARGS_TO_BUFFER(format, buffer, kBufferSize);
+    formattedOutput.set(buffer);
+    return formattedOutput;
+}
+
+#undef VSNPRINTF
+#undef SNPRINTF
+

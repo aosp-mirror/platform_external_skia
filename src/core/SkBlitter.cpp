@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkBlitter.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkBlitter.h"
 #include "SkAntiRun.h"
@@ -32,12 +24,12 @@ const SkBitmap* SkBlitter::justAnOpaqueColor(uint32_t* value) {
 }
 
 void SkBlitter::blitH(int x, int y, int width) {
-    SkASSERT(!"unimplemented");
+    SkDEBUGFAIL("unimplemented");
 }
 
 void SkBlitter::blitAntiH(int x, int y, const SkAlpha antialias[],
                           const int16_t runs[]) {
-    SkASSERT(!"unimplemented");
+    SkDEBUGFAIL("unimplemented");
 }
 
 void SkBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
@@ -55,9 +47,23 @@ void SkBlitter::blitV(int x, int y, int height, SkAlpha alpha) {
 }
 
 void SkBlitter::blitRect(int x, int y, int width, int height) {
+    SkASSERT(width > 0);
     while (--height >= 0) {
         this->blitH(x, y++, width);
     }
+}
+
+/// Default implementation doesn't check for any easy optimizations
+/// such as alpha == 0 or 255; also uses blitV(), which some subclasses
+/// may not support.
+void SkBlitter::blitAntiRect(int x, int y, int width, int height,
+                             SkAlpha leftAlpha, SkAlpha rightAlpha) {
+    this->blitV(x++, y, height, leftAlpha);
+    if (width > 0) {
+        this->blitRect(x, y, width, height);
+        x += width;
+    }
+    this->blitV(x, y, height, rightAlpha);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -159,7 +165,7 @@ void SkBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
         int                         width = clip.width();
         SkAutoSTMalloc<64, int16_t> runStorage(width + 1);
         int16_t*                    runs = runStorage.get();
-        const uint8_t*              aa = mask.getAddr(clip.fLeft, clip.fTop);
+        const uint8_t*              aa = mask.getAddr8(clip.fLeft, clip.fTop);
 
         sk_memset16((uint16_t*)runs, 1, width);
         runs[width] = 0;
@@ -343,6 +349,37 @@ void SkRectClipBlitter::blitRect(int left, int y, int width, int height) {
     }
 }
 
+void SkRectClipBlitter::blitAntiRect(int left, int y, int width, int height,
+                                     SkAlpha leftAlpha, SkAlpha rightAlpha) {
+    SkIRect    r;
+
+    // The *true* width of the rectangle blitted is width+2:
+    r.set(left, y, left + width + 2, y + height);
+    if (r.intersect(fClipRect)) {
+        if (r.fLeft != left) {
+            SkASSERT(r.fLeft > left);
+            leftAlpha = 255;
+        }
+        if (r.fRight != left + width + 2) {
+            SkASSERT(r.fRight < left + width + 2);
+            rightAlpha = 255;
+        }
+        if (255 == leftAlpha && 255 == rightAlpha) {
+            fBlitter->blitRect(r.fLeft, r.fTop, r.width(), r.height());
+        } else if (1 == r.width()) {
+            if (r.fLeft == left) {
+                fBlitter->blitV(r.fLeft, r.fTop, r.height(), leftAlpha);
+            } else {
+                SkASSERT(r.fLeft == left + width + 1);
+                fBlitter->blitV(r.fLeft, r.fTop, r.height(), rightAlpha);
+            }
+        } else {
+            fBlitter->blitAntiRect(r.fLeft, r.fTop, r.width() - 2, r.height(),
+                                   leftAlpha, rightAlpha);
+        }
+    }
+}
+
 void SkRectClipBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     SkASSERT(mask.fBounds.contains(clip));
 
@@ -438,6 +475,44 @@ void SkRgnClipBlitter::blitRect(int x, int y, int width, int height) {
     }
 }
 
+void SkRgnClipBlitter::blitAntiRect(int x, int y, int width, int height,
+                                    SkAlpha leftAlpha, SkAlpha rightAlpha) {
+    // The *true* width of the rectangle to blit is width + 2
+    SkIRect    bounds;
+    bounds.set(x, y, x + width + 2, y + height);
+
+    SkRegion::Cliperator    iter(*fRgn, bounds);
+
+    while (!iter.done()) {
+        const SkIRect& r = iter.rect();
+        SkASSERT(bounds.contains(r));
+        SkASSERT(r.fLeft >= x);
+        SkASSERT(r.fRight <= x + width + 2);
+
+        SkAlpha effectiveLeftAlpha = (r.fLeft == x) ? leftAlpha : 255;
+        SkAlpha effectiveRightAlpha = (r.fRight == x + width + 2) ?
+                                      rightAlpha : 255;
+
+        if (255 == effectiveLeftAlpha && 255 == effectiveRightAlpha) {
+            fBlitter->blitRect(r.fLeft, r.fTop, r.width(), r.height());
+        } else if (1 == r.width()) {
+            if (r.fLeft == x) {
+                fBlitter->blitV(r.fLeft, r.fTop, r.height(), 
+                                effectiveLeftAlpha);
+            } else {
+                SkASSERT(r.fLeft == x + width + 1);
+                fBlitter->blitV(r.fLeft, r.fTop, r.height(),
+                                effectiveRightAlpha);
+            }
+        } else {
+            fBlitter->blitAntiRect(r.fLeft, r.fTop, r.width() - 2, r.height(),
+                                   effectiveLeftAlpha, effectiveRightAlpha);
+        }
+        iter.next();
+    }
+}
+
+
 void SkRgnClipBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     SkASSERT(mask.fBounds.contains(clip));
 
@@ -521,7 +596,7 @@ public:
         SkASSERT(fMask->fBounds.contains(x + count - 1, y));
 
         size_t          size = fMask->computeImageSize();
-        const uint8_t*  alpha = fMask->getAddr(x, y);
+        const uint8_t*  alpha = fMask->getAddr8(x, y);
         const uint8_t*  mulp = alpha + size;
         const uint8_t*  addp = mulp + size;
 
@@ -724,7 +799,7 @@ static XferInterp interpret_xfermode(const SkPaint& paint, SkXfermode* xfer,
                                      SkBitmap::Config deviceConfig) {
     SkXfermode::Mode  mode;
 
-    if (SkXfermode::IsMode(xfer, &mode)) {
+    if (SkXfermode::AsMode(xfer, &mode)) {
         switch (mode) {
             case SkXfermode::kSrc_Mode:
                 if (just_solid_color(paint)) {
@@ -871,7 +946,7 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
             break;
 
         default:
-            SkASSERT(!"unsupported device config");
+            SkDEBUGFAIL("unsupported device config");
             SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
             break;
     }

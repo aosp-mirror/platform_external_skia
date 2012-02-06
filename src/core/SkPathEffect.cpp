@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkPathEffect.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkPathEffect.h"
 #include "SkPath.h"
@@ -30,8 +22,8 @@ SkPairPathEffect::SkPairPathEffect(SkPathEffect* pe0, SkPathEffect* pe1)
 }
 
 SkPairPathEffect::~SkPairPathEffect() {
-    fPE0->unref();
-    fPE1->unref();
+    SkSafeUnref(fPE0);
+    SkSafeUnref(fPE1);
 }
 
 /*
@@ -45,12 +37,18 @@ void SkPairPathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
 SkPairPathEffect::SkPairPathEffect(SkFlattenableReadBuffer& buffer) {
     fPE0 = (SkPathEffect*)buffer.readFlattenable();
     fPE1 = (SkPathEffect*)buffer.readFlattenable();
+    // either of these may fail, so we have to check for nulls later on
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkComposePathEffect::filterPath(SkPath* dst, const SkPath& src,
                                      SkScalar* width) {
+    // we may have failed to unflatten these, so we have to check
+    if (!fPE0 || !fPE1) {
+        return false;
+    }
+
     SkPath          tmp;
     const SkPath*   ptr = &src;
 
@@ -133,4 +131,12 @@ SkStrokePathEffect::SkStrokePathEffect(SkFlattenableReadBuffer& buffer) {
     fJoin = buffer.readU8();
     fCap = buffer.readU8();
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkPathEffect)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkComposePathEffect)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkStrokePathEffect)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSumPathEffect)
+SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
 

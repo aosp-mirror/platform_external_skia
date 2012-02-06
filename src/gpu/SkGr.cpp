@@ -1,18 +1,11 @@
+
 /*
-    Copyright 2010 Google Inc.
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-         http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+ * Copyright 2010 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 
 #include "SkGr.h"
@@ -33,7 +26,7 @@ static void build_compressed_data(void* buffer, const SkBitmap& bitmap) {
 
     SkAutoLockPixels apl(bitmap);
     if (!bitmap.readyToDraw()) {
-        SkASSERT(!"bitmap not ready to draw!");
+        SkDEBUGFAIL("bitmap not ready to draw!");
         return;
     }
 
@@ -63,13 +56,15 @@ static void build_compressed_data(void* buffer, const SkBitmap& bitmap) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrTextureEntry* sk_gr_create_bitmap_texture(GrContext* ctx,
-                                            GrTextureKey* key,
-                                            const GrSamplerState& sampler,
-                                            const SkBitmap& origBitmap) {
+GrContext::TextureCacheEntry sk_gr_create_bitmap_texture(GrContext* ctx,
+                                                GrContext::TextureKey key,
+                                                const GrSamplerState* sampler,
+                                                const SkBitmap& origBitmap) {
     SkAutoLockPixels alp(origBitmap);
+    GrContext::TextureCacheEntry entry;
+
     if (!origBitmap.readyToDraw()) {
-        return NULL;
+        return entry;
     }
 
     SkBitmap tmpBitmap;
@@ -97,8 +92,18 @@ GrTextureEntry* sk_gr_create_bitmap_texture(GrContext* ctx,
 
             // our compressed data will be trimmed, so pass width() for its
             // "rowBytes", since they are the same now.
-            return ctx->createAndLockTexture(key, sampler, desc, storage.get(),
-                                             bitmap->width());
+            
+            if (gUNCACHED_KEY != key) {
+                return ctx->createAndLockTexture(key, sampler, desc, storage.get(),
+                                                 bitmap->width());
+            } else {
+                entry = ctx->lockScratchTexture(desc,
+                                        GrContext::kExact_ScratchTexMatch);
+                entry.texture()->writePixels(0, 0, bitmap->width(), 
+                                             bitmap->height(), desc.fConfig,
+                                             storage.get(), 0);
+                return entry;
+            }
 
         } else {
             origBitmap.copyTo(&tmpBitmap, SkBitmap::kARGB_8888_Config);
@@ -107,9 +112,21 @@ GrTextureEntry* sk_gr_create_bitmap_texture(GrContext* ctx,
         }
     }
 
-    desc.fFormat = SkGr::Bitmap2PixelConfig(*bitmap);
-    return ctx->createAndLockTexture(key, sampler, desc, bitmap->getPixels(),
+    desc.fConfig = SkGr::Bitmap2PixelConfig(*bitmap);
+    if (gUNCACHED_KEY != key) {
+        return ctx->createAndLockTexture(key, sampler, desc,
+                                         bitmap->getPixels(),
+                                         bitmap->rowBytes());
+    } else {
+        entry = ctx->lockScratchTexture(desc,
+                                        GrContext::kExact_ScratchTexMatch);
+        entry.texture()->writePixels(0, 0,
+                                     bitmap->width(), bitmap->height(),
+                                     desc.fConfig,
+                                     bitmap->getPixels(),
                                      bitmap->rowBytes());
+        return entry;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -194,11 +211,7 @@ GrPixelConfig SkGr::BitmapConfig2PixelConfig(SkBitmap::Config config,
         case SkBitmap::kARGB_4444_Config:
             return kRGBA_4444_GrPixelConfig;
         case SkBitmap::kARGB_8888_Config:
-            if (isOpaque) {
-                return kRGBX_8888_GrPixelConfig;
-            } else {
-                return kRGBA_8888_GrPixelConfig;
-            }
+            return kSkia8888_PM_GrPixelConfig;
         default:
             return kUnknown_GrPixelConfig;
     }

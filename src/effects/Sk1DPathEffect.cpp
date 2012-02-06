@@ -1,69 +1,57 @@
-/* libs/graphics/effects/Sk1DPathEffect.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "Sk1DPathEffect.h"
 #include "SkPathMeasure.h"
 
-bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* width)
-{
+bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* width) {
     SkPathMeasure   meas(src, false);
     do {
         SkScalar    length = meas.getLength();
         SkScalar    distance = this->begin(length);
-        while (distance < length)
-        {
+        while (distance < length) {
             SkScalar delta = this->next(dst, distance, meas);
-            if (delta <= 0)
+            if (delta <= 0) {
                 break;
+            }
             distance += delta;
         }
     } while (meas.nextContour());
     return true;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance, 
     SkScalar phase, Style style) : fPath(path)
 {
-    if (advance <= 0 || path.isEmpty())
-    {
+    if (advance <= 0 || path.isEmpty()) {
         SkDEBUGF(("SkPath1DPathEffect can't use advance <= 0\n"));
         fAdvance = 0;   // signals we can't draw anything
-    }
-    else
-    {
+    } else {
         // cleanup their phase parameter, inverting it so that it becomes an
         // offset along the path (to match the interpretation in PostScript)
-        if (phase < 0)
-        {
+        if (phase < 0) {
             phase = -phase;
-            if (phase > advance)
+            if (phase > advance) {
                 phase = SkScalarMod(phase, advance);
-        }
-        else
-        {
-            if (phase > advance)
+            }
+        } else {
+            if (phase > advance) {
                 phase = SkScalarMod(phase, advance);
+            }
             phase = advance - phase;
         }
         // now catch the edge case where phase == advance (within epsilon)
-        if (phase >= advance)
+        if (phase >= advance) {
             phase = 0;
+        }
         SkASSERT(phase >= 0);
 
         fAdvance = advance;
@@ -76,10 +64,9 @@ SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance,
     }
 }
 
-bool SkPath1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* width)
-{
-    if (fAdvance > 0)
-    {
+bool SkPath1DPathEffect::filterPath(SkPath* dst, const SkPath& src,
+                                    SkScalar* width) {
+    if (fAdvance > 0) {
         *width = -1;
         return this->INHERITED::filterPath(dst, src, width);
     }
@@ -87,10 +74,8 @@ bool SkPath1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* wi
 }
 
 static void morphpoints(SkPoint dst[], const SkPoint src[], int count,
-                        SkPathMeasure& meas, SkScalar dist)
-{
-    for (int i = 0; i < count; i++)
-    {
+                        SkPathMeasure& meas, SkScalar dist) {
+    for (int i = 0; i < count; i++) {
         SkPoint pos;
         SkVector tangent;
         
@@ -116,14 +101,13 @@ Need differentially more subdivisions when the follow-path is curvy. Not sure ho
 determine that, but we need it. I guess a cheap answer is let the caller tell us,
 but that seems like a cop-out. Another answer is to get Rob Johnson to figure it out.
 */
-static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas, SkScalar dist)
-{
+static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas,
+                      SkScalar dist) {
     SkPath::Iter    iter(src, false);
     SkPoint         srcP[4], dstP[3];
     SkPath::Verb    verb;
-    
-    while ((verb = iter.next(srcP)) != SkPath::kDone_Verb)
-    {
+
+    while ((verb = iter.next(srcP)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
                 morphpoints(dstP, srcP, 1, meas, dist);
@@ -146,14 +130,13 @@ static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas, SkSca
                 dst->close();
                 break;
             default:
-                SkASSERT(!"unknown verb");
+                SkDEBUGFAIL("unknown verb");
                 break;
         }
     }
 }
 
-SkPath1DPathEffect::SkPath1DPathEffect(SkFlattenableReadBuffer& buffer)
-{
+SkPath1DPathEffect::SkPath1DPathEffect(SkFlattenableReadBuffer& buffer) {
     fAdvance = buffer.readScalar();
     if (fAdvance > 0) {
         fPath.unflatten(buffer);
@@ -162,13 +145,11 @@ SkPath1DPathEffect::SkPath1DPathEffect(SkFlattenableReadBuffer& buffer)
     }
 }
 
-SkScalar SkPath1DPathEffect::begin(SkScalar contourLength)
-{
+SkScalar SkPath1DPathEffect::begin(SkScalar contourLength) {
     return fInitialOffset;
 }
 
-void SkPath1DPathEffect::flatten(SkFlattenableWriteBuffer& buffer)
-{
+void SkPath1DPathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
     buffer.writeScalar(fAdvance);
     if (fAdvance > 0) {
         fPath.flatten(buffer);
@@ -177,30 +158,30 @@ void SkPath1DPathEffect::flatten(SkFlattenableWriteBuffer& buffer)
     }
 }
 
-SkScalar SkPath1DPathEffect::next(SkPath* dst, SkScalar distance, SkPathMeasure& meas)
-{
+SkScalar SkPath1DPathEffect::next(SkPath* dst, SkScalar distance,
+                                  SkPathMeasure& meas) {
     switch (fStyle) {
-        case kTranslate_Style:
-        {
+        case kTranslate_Style: {
             SkPoint pos;
             meas.getPosTan(distance, &pos, NULL);
             dst->addPath(fPath, pos.fX, pos.fY);
-        }
-            break;
-        case kRotate_Style:
-        {
+        } break;
+        case kRotate_Style: {
             SkMatrix matrix;
             meas.getMatrix(distance, &matrix);
             dst->addPath(fPath, matrix);
-        }
-            break;
+        } break;
         case kMorph_Style:
             morphpath(dst, fPath, meas, distance);
             break;
         default:
-            SkASSERT(!"unknown Style enum");
+            SkDEBUGFAIL("unknown Style enum");
             break;
     }
     return fAdvance;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkPath1DPathEffect)
 

@@ -1,8 +1,16 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBenchmark.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkPaint.h"
+#include "SkRandom.h"
 #include "SkShader.h"
 #include "SkString.h"
 
@@ -20,7 +28,7 @@ class PathBench : public SkBenchmark {
     SkPaint     fPaint;
     SkString    fName;
     Flags       fFlags;
-    enum { N = 1000 };
+    enum { N = SkBENCHLOOP(1000) };
 public:
     PathBench(void* param, Flags flags) : INHERITED(param), fFlags(flags) {
         fPaint.setStyle(flags & kStroke_Flag ? SkPaint::kStroke_Style :
@@ -31,7 +39,7 @@ public:
 
     virtual void appendName(SkString*) = 0;
     virtual void makePath(SkPath*) = 0;
-    virtual bool iscomplex() { return false; }
+    virtual int complexity() { return 0; }
 
 protected:
     virtual const char* onGetName() {
@@ -58,9 +66,7 @@ protected:
         if (fFlags & kBig_Flag) {
             count >>= 2;
         }
-        if (this->iscomplex()) {
-            count >>= 3;
-        }
+        count >>= (3 * complexity());
 
         for (int i = 0; i < count; i++) {
             canvas->drawPath(path, paint);
@@ -146,10 +152,37 @@ public:
         path->lineTo(x0, y + 2 * dy);
         path->close();
     }
-    virtual bool iscomplex() { return true; }
+    virtual int complexity() { return 1; }
 private:
     typedef PathBench INHERITED;
 };
+
+class LongCurvedPathBench : public PathBench {
+public:
+    LongCurvedPathBench(void * param, Flags flags)
+        : INHERITED(param, flags) {
+    }
+
+    virtual void appendName(SkString* name) {
+        name->append("long_curved");
+    }
+    virtual void makePath(SkPath* path) {
+        SkRandom rand (12);
+        int i;
+        for (i = 0; i < 100; i++) {
+            path->quadTo(SkScalarMul(rand.nextUScalar1(), SkIntToScalar(640)),
+                         SkScalarMul(rand.nextUScalar1(), SkIntToScalar(480)),
+                         SkScalarMul(rand.nextUScalar1(), SkIntToScalar(640)),
+                         SkScalarMul(rand.nextUScalar1(), SkIntToScalar(480)));
+        }
+        path->close();
+    }
+    virtual int complexity() { return 2; }
+private:
+    typedef PathBench INHERITED;
+};
+
+
 
 static SkBenchmark* FactT00(void* p) { return new TrianglePathBench(p, FLAGS00); }
 static SkBenchmark* FactT01(void* p) { return new TrianglePathBench(p, FLAGS01); }
@@ -169,6 +202,13 @@ static SkBenchmark* FactO11(void* p) { return new OvalPathBench(p, FLAGS11); }
 static SkBenchmark* FactS00(void* p) { return new SawToothPathBench(p, FLAGS00); }
 static SkBenchmark* FactS01(void* p) { return new SawToothPathBench(p, FLAGS01); }
 
+static SkBenchmark* FactLC00(void* p) {
+    return new LongCurvedPathBench(p, FLAGS00);
+}
+static SkBenchmark* FactLC01(void* p) {
+    return new LongCurvedPathBench(p, FLAGS01);
+}
+
 static BenchRegistry gRegT00(FactT00);
 static BenchRegistry gRegT01(FactT01);
 static BenchRegistry gRegT10(FactT10);
@@ -186,4 +226,7 @@ static BenchRegistry gRegO11(FactO11);
 
 static BenchRegistry gRegS00(FactS00);
 static BenchRegistry gRegS01(FactS01);
+
+static BenchRegistry gRegLC00(FactLC00);
+static BenchRegistry gRegLC01(FactLC01);
 

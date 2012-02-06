@@ -1,4 +1,12 @@
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkBlitRow.h"
+#include "SkBlitMask.h"
 #include "SkColorPriv.h"
 #include "SkUtils.h"
 
@@ -146,13 +154,15 @@ SkBlitRow::Proc32 SkBlitRow::ColorProcFactory() {
     return proc;
 }
 
-void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[],
+void SkBlitRow::Color32(SkPMColor* SK_RESTRICT dst,
+                        const SkPMColor* SK_RESTRICT src,
                         int count, SkPMColor color) {
     if (count > 0) {
         if (0 == color) {
             if (src != dst) {
                 memcpy(dst, src, count * sizeof(SkPMColor));
             }
+            return;
         }
         unsigned colorA = SkGetPackedA32(color);
         if (255 == colorA) {
@@ -166,86 +176,5 @@ void SkBlitRow::Color32(SkPMColor dst[], const SkPMColor src[],
             } while (--count);
         }
     }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-static void D32_Mask_Color(void* dst, size_t dstRB, SkBitmap::Config,
-                           const uint8_t* mask, size_t maskRB, SkColor color,
-                           int width, int height) {
-    SkPMColor pmc = SkPreMultiplyColor(color);
-    size_t dstOffset = dstRB - (width << 2);
-    size_t maskOffset = maskRB - width;
-    SkPMColor *device = (SkPMColor *)dst;
-    do {
-        int w = width;
-        do {
-            unsigned aa = *mask++;
-            *device = SkBlendARGB32(pmc, *device, aa);
-            device += 1;
-        } while (--w != 0);
-        device = (uint32_t*)((char*)device + dstOffset);
-        mask += maskOffset;
-    } while (--height != 0);
-}
-
-static void D32_Mask_Opaque(void* dst, size_t dstRB, SkBitmap::Config,
-                            const uint8_t* mask, size_t maskRB, SkColor color,
-                            int width, int height) {
-    SkPMColor pmc = SkPreMultiplyColor(color);
-    uint32_t* device = (uint32_t*)dst;
-
-    maskRB -= width;
-    dstRB -= (width << 2);
-    do {
-        int w = width;
-        do {
-            unsigned aa = *mask++;
-            *device = SkAlphaMulQ(pmc, SkAlpha255To256(aa)) + SkAlphaMulQ(*device, SkAlpha255To256(255 - aa));
-            device += 1;
-        } while (--w != 0);
-        device = (uint32_t*)((char*)device + dstRB);
-        mask += maskRB;
-    } while (--height != 0);
-}
-
-static void D32_Mask_Black(void* dst, size_t dstRB, SkBitmap::Config,
-                           const uint8_t* mask, size_t maskRB, SkColor,
-                           int width, int height) {
-    uint32_t* device = (uint32_t*)dst;
-
-    maskRB -= width;
-    dstRB -= (width << 2);
-    do {
-        int w = width;
-        do {
-            unsigned aa = *mask++;
-            *device = (aa << SK_A32_SHIFT) + SkAlphaMulQ(*device, SkAlpha255To256(255 - aa));
-            device += 1;
-        } while (--w != 0);
-        device = (uint32_t*)((char*)device + dstRB);
-        mask += maskRB;
-    } while (--height != 0);
-}
-
-SkBlitMask::Proc SkBlitMask::Factory(SkBitmap::Config config, SkColor color) {
-    SkBlitMask::Proc proc = PlatformProcs(config, color);
-    proc = NULL;
-    if (NULL == proc) {
-        switch (config) {
-            case SkBitmap::kARGB_8888_Config:
-                if (SK_ColorBLACK == color) {
-                    proc = D32_Mask_Black;
-                } else if (0xFF == SkColorGetA(color)) {
-                    proc = D32_Mask_Opaque;
-                } else {
-                    proc = D32_Mask_Color;
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    return proc;
 }
 

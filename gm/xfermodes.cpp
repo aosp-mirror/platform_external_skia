@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "gm.h"
 #include "SkBitmap.h"
 #include "SkShader.h"
@@ -31,11 +38,10 @@ static void make_bitmaps(int w, int h, SkBitmap* src, SkBitmap* dst) {
     c.drawRect(r, p);
 }
 
-static uint16_t gBG[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
-
 class XfermodesGM : public GM {
     SkBitmap    fBG;
     SkBitmap    fSrcB, fDstB;
+    bool        fOnce;
 
     void draw_mode(SkCanvas* canvas, SkXfermode* mode, int alpha,
                    SkScalar x, SkScalar y) {
@@ -47,20 +53,25 @@ class XfermodesGM : public GM {
         canvas->drawBitmap(fDstB, x, y, &p);
     }
 
+    void init() {
+        if (!fOnce) {
+            // Do all this work in a temporary so we get a deep copy
+            uint16_t localData[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
+            SkBitmap scratchBitmap;
+            scratchBitmap.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4);
+            scratchBitmap.setPixels(localData);
+            scratchBitmap.setIsOpaque(true);
+            scratchBitmap.copyTo(&fBG, SkBitmap::kARGB_4444_Config);
+            
+            make_bitmaps(W, H, &fSrcB, &fDstB);
+            fOnce = true;
+        }
+    }
+
 public:
     const static int W = 64;
     const static int H = 64;
-    XfermodesGM() {
-        // Do all this work in a temporary so we get a deep copy,
-        // especially of gBG.
-        SkBitmap scratchBitmap;
-        scratchBitmap.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4);
-        scratchBitmap.setPixels(gBG);
-        scratchBitmap.setIsOpaque(true);
-        scratchBitmap.copyTo(&fBG, SkBitmap::kARGB_4444_Config);
-
-        make_bitmaps(W, H, &fSrcB, &fDstB);
-    }
+    XfermodesGM() : fOnce(false) {}
 
 protected:
     virtual SkString onShortName() {
@@ -71,14 +82,10 @@ protected:
         return make_isize(790, 640);
     }
 
-    void drawBG(SkCanvas* canvas) {
-        canvas->drawColor(SK_ColorWHITE);
-    }
-
     virtual void onDraw(SkCanvas* canvas) {
-        canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
+        this->init();
 
-        this->drawBG(canvas);
+        canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
         const struct {
             SkXfermode::Mode  fMode;

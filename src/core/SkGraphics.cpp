@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkGraphics.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkGraphics.h"
 
@@ -22,11 +14,11 @@
 #include "SkCanvas.h"
 #include "SkFloat.h"
 #include "SkGeometry.h"
-#include "SkGlobals.h"
 #include "SkMath.h"
 #include "SkMatrix.h"
 #include "SkPath.h"
 #include "SkPathEffect.h"
+#include "SkPixelRef.h"
 #include "SkRandom.h"
 #include "SkRefCnt.h"
 #include "SkScalerContext.h"
@@ -36,6 +28,18 @@
 #include "SkTime.h"
 #include "SkUtils.h"
 #include "SkXfermode.h"
+
+void SkGraphics::GetVersion(int32_t* major, int32_t* minor, int32_t* patch) {
+    if (major) {
+        *major = SKIA_VERSION_MAJOR;
+    }
+    if (minor) {
+        *minor = SKIA_VERSION_MINOR;
+    }
+    if (patch) {
+        *patch = SKIA_VERSION_PATCH;
+    }
+}
 
 #define typesizeline(type)  { #type , sizeof(type) }
 
@@ -48,8 +52,10 @@
 #endif
 
 void SkGraphics::Init() {
-    SkGlobals::Init();
-
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+    SkFlattenable::InitializeFlattenables();
+    SkPixelRef::InitializeFlattenables();
+#endif
 #ifdef BUILD_EMBOSS_TABLE
     SkEmbossMask_BuildTable();
 #endif
@@ -109,6 +115,8 @@ void SkGraphics::Init() {
         SkDebugf("SkGraphics: sizeof(%s) = %d\n",
                  gTypeSize[i].fTypeName, gTypeSize[i].fSizeOf);
     }
+    SkDebugf("SkGraphics: font cache limit %dK\n",
+             GetFontCacheLimit() >> 10);
 
 #endif
 }
@@ -116,29 +124,88 @@ void SkGraphics::Init() {
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkGlyphCache.h"
+#include "SkTypefaceCache.h"
 
 void SkGraphics::Term() {
-    SkGraphics::SetFontCacheUsed(0);
-    SkGlobals::Term();
+    PurgeFontCache();
 }
 
-size_t SkGraphics::GetFontCacheUsed() {
-    return SkGlyphCache::GetCacheUsed();
+#ifndef SK_DEFAULT_FONT_CACHE_LIMIT
+    #define SK_DEFAULT_FONT_CACHE_LIMIT (2 * 1024 * 1024)
+#endif
+
+#define SK_MIN_FONT_CACHE_LIMIT    (256 * 1024)
+
+static size_t gFontCacheLimit = SK_DEFAULT_FONT_CACHE_LIMIT;
+
+size_t SkGraphics::GetFontCacheLimit() {
+    return gFontCacheLimit;
 }
 
-bool SkGraphics::SetFontCacheUsed(size_t usageInBytes) {
-    return SkGlyphCache::SetCacheUsed(usageInBytes);
-}
+size_t SkGraphics::SetFontCacheLimit(size_t bytes) {
+    size_t prev = gFontCacheLimit;
 
-void SkGraphics::GetVersion(int32_t* major, int32_t* minor, int32_t* patch) {
-    if (major) {
-        *major = SKIA_VERSION_MAJOR;
+    if (bytes < SK_MIN_FONT_CACHE_LIMIT) {
+        bytes = SK_MIN_FONT_CACHE_LIMIT;
     }
-    if (minor) {
-        *minor = SKIA_VERSION_MINOR;
+    gFontCacheLimit = bytes;
+    
+    // trigger a purge if the new size is smaller that our currently used amount
+    if (bytes < SkGlyphCache::GetCacheUsed()) {
+        SkGlyphCache::SetCacheUsed(bytes);
     }
-    if (patch) {
-        *patch = SKIA_VERSION_PATCH;
-    }
+    return prev;
 }
 
+void SkGraphics::PurgeFontCache() {
+    SkGlyphCache::SetCacheUsed(0);
+    SkTypefaceCache::PurgeAll();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+static const char kFontCacheLimitStr[] = "font-cache-limit";
+static const size_t kFontCacheLimitLen = sizeof(kFontCacheLimitStr) - 1; 
+
+static const struct {
+    const char* fStr;
+    size_t fLen;
+    size_t (*fFunc)(size_t);
+} gFlags[] = {
+    {kFontCacheLimitStr, kFontCacheLimitLen, SkGraphics::SetFontCacheLimit}
+};
+
+/* flags are of the form param; or param=value; */
+void SkGraphics::SetFlags(const char* flags) {
+    if (!flags) {
+        return;
+    }
+    const char* nextSemi;
+    do {
+        size_t len = strlen(flags);
+        const char* paramEnd = flags + len;
+        const char* nextEqual = strchr(flags, '=');
+        if (nextEqual && paramEnd > nextEqual) {
+            paramEnd = nextEqual;
+        }
+        nextSemi = strchr(flags, ';');
+        if (nextSemi && paramEnd > nextSemi) {
+            paramEnd = nextSemi;
+        }
+        size_t paramLen = paramEnd - flags;
+        for (int i = 0; i < (int)SK_ARRAY_COUNT(gFlags); ++i) {
+            if (paramLen != gFlags[i].fLen) {
+                continue;
+            }
+            if (strncmp(flags, gFlags[i].fStr, paramLen) == 0) {
+                size_t val = 0;
+                if (nextEqual) {
+                    val = (size_t) atoi(nextEqual + 1);
+                }
+                (gFlags[i].fFunc)(val);
+                break;
+            }
+        }
+        flags = nextSemi + 1;
+    } while (nextSemi);
+}

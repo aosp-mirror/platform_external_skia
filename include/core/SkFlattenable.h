@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkFlattenable_DEFINED
 #define SkFlattenable_DEFINED
@@ -26,6 +19,40 @@
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 class SkString;
+
+#if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+
+#define SK_DECLARE_FLATTENABLE_REGISTRAR() 
+
+#define SK_DEFINE_FLATTENABLE_REGISTRAR(flattenable) \
+    static SkFlattenable::Registrar g##flattenable##Reg(#flattenable, \
+                                                      flattenable::CreateProc);
+                                                      
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(flattenable)
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(flattenable) \
+    static SkFlattenable::Registrar g##flattenable##Reg(#flattenable, \
+                                                      flattenable::CreateProc);
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
+
+#else
+
+#define SK_DECLARE_FLATTENABLE_REGISTRAR() static void Init();
+
+#define SK_DEFINE_FLATTENABLE_REGISTRAR(flattenable) \
+    void flattenable::Init() { \
+        SkFlattenable::Registrar(#flattenable, CreateProc); \
+    }
+
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(flattenable) \
+    void flattenable::Init() {
+    
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(flattenable) \
+        SkFlattenable::Registrar(#flattenable, flattenable::CreateProc);
+    
+#define SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END \
+    }
+
+#endif
 
 /** \class SkFlattenable
  
@@ -68,6 +95,13 @@ public:
     
 protected:
     SkFlattenable(SkFlattenableReadBuffer&) {}
+
+private:
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+    static void InitializeFlattenables();
+#endif
+
+    friend class SkGraphics;
 };
 
 // helpers for matrix and region
@@ -100,10 +134,26 @@ public:
         fTFArray = array;
         fTFCount = count;
     }
-    
+
+    /**
+     *  Call this with a pre-loaded array of Factories, in the same order as
+     *  were created/written by the writer. SkPicture uses this.
+     */
     void setFactoryPlayback(SkFlattenable::Factory array[], int count) {
+        fFactoryTDArray = NULL;
         fFactoryArray = array;
         fFactoryCount = count;
+    }
+
+    /**
+     *  Call this with an initially empty array, so the reader can cache each
+     *  factory it sees by name. Used by the pipe code in conjunction with
+     *  the writer's kInlineFactoryNames_Flag.
+     */
+    void setFactoryArray(SkTDArray<SkFlattenable::Factory>* array) {
+        fFactoryTDArray = array;
+        fFactoryArray = NULL;
+        fFactoryCount = 0;
     }
     
     SkTypeface* readTypeface();
@@ -118,6 +168,7 @@ private:
     SkTypeface** fTFArray;
     int        fTFCount;
     
+    SkTDArray<SkFlattenable::Factory>* fFactoryTDArray;
     SkFlattenable::Factory* fFactoryArray;
     int                     fFactoryCount;
     
@@ -165,12 +216,22 @@ public:
     SkFactorySet* setFactoryRecorder(SkFactorySet*);
 
     enum Flags {
-        kCrossProcess_Flag      = 0x01
+        kCrossProcess_Flag       = 0x01,
+        /**
+         *  Instructs the writer to inline Factory names as there are seen the
+         *  first time (after that we store an index). The pipe code uses this.
+         */
+        kInlineFactoryNames_Flag = 0x02,
     };
-    Flags getFlags() const { return fFlags; }
+    Flags getFlags() const { return (Flags)fFlags; }
     void setFlags(Flags flags) { fFlags = flags; }
     
-    bool isCrossProcess() const { return (fFlags & kCrossProcess_Flag) != 0; }
+    bool isCrossProcess() const {
+        return SkToBool(fFlags & kCrossProcess_Flag);
+    }
+    bool inlineFactoryNames() const {
+        return SkToBool(fFlags & kInlineFactoryNames_Flag);
+    }
 
     bool persistBitmapPixels() const {
         return (fFlags & kCrossProcess_Flag) != 0;
@@ -179,10 +240,10 @@ public:
     bool persistTypeface() const { return (fFlags & kCrossProcess_Flag) != 0; }
 
 private:
-    Flags          fFlags;
-    SkRefCntSet*   fTFSet;
-    SkRefCntSet*   fRCSet;
-    SkFactorySet*  fFactorySet;
+    uint32_t        fFlags;
+    SkRefCntSet*    fTFSet;
+    SkRefCntSet*    fRCSet;
+    SkFactorySet*   fFactorySet;
     
     typedef SkWriter32 INHERITED;
 };

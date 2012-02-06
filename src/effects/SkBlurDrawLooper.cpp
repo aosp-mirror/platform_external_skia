@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBlurDrawLooper.h"
 #include "SkBlurMaskFilter.h"
 #include "SkCanvas.h"
@@ -38,7 +45,9 @@ SkBlurDrawLooper::SkBlurDrawLooper(SkScalar radius, SkScalar dx, SkScalar dy,
     }
 }
 
-SkBlurDrawLooper::SkBlurDrawLooper(SkFlattenableReadBuffer& buffer) {
+SkBlurDrawLooper::SkBlurDrawLooper(SkFlattenableReadBuffer& buffer)
+: INHERITED(buffer) {
+
     fDx = buffer.readScalar();
     fDy = buffer.readScalar();
     fBlurColor = buffer.readU32();
@@ -73,7 +82,7 @@ bool SkBlurDrawLooper::next(SkCanvas* canvas, SkPaint* paint) {
                 fState = kDone;
                 return false;
             }
-#ifdef ANDROID
+#ifdef SK_BUILD_FOR_ANDROID
             SkColor blurColor;
             blurColor = fBlurColor;
             if (SkColorGetA(blurColor) == 255) {
@@ -107,6 +116,5 @@ bool SkBlurDrawLooper::next(SkCanvas* canvas, SkPaint* paint) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkFlattenable::Registrar gReg("SkBlurDrawLooper",
-                                     SkBlurDrawLooper::CreateProc);
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkBlurDrawLooper)
 

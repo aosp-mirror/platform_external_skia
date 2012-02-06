@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkPostConfig_DEFINED
 #define SkPostConfig_DEFINED
@@ -63,6 +56,32 @@
     #endif
 #endif
 
+#if !defined(SK_HAS_COMPILER_FEATURE)
+    #if defined(__has_feature)
+        #define SK_HAS_COMPILER_FEATURE(x) __has_feature(x)
+    #else
+        #define SK_HAS_COMPILER_FEATURE(x) 0
+    #endif
+#endif
+
+/**
+ * The clang static analyzer likes to know that when the program is not
+ * expected to continue (crash, assertion failure, etc). It will notice that
+ * some combination of parameters lead to a function call that does not return.
+ * It can then make appropriate assumptions about the parameters in code
+ * executed only if the non-returning function was *not* called.
+ */
+#if !defined(SkNO_RETURN_HINT)
+    #if SK_HAS_COMPILER_FEATURE(attribute_analyzer_noreturn)
+        namespace {
+            inline void SkNO_RETURN_HINT() __attribute__((analyzer_noreturn));
+            void SkNO_RETURN_HINT() {}
+        }
+    #else
+        #define SkNO_RETURN_HINT() do {} while (false)
+    #endif
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifndef SkNEW
@@ -75,9 +94,9 @@
 
 #ifndef SK_CRASH
 #if 1   // set to 0 for infinite loop, which can help connecting gdb
-    #define SK_CRASH() *(int *)(uintptr_t)0xbbadbeef = 0
+    #define SK_CRASH() do { SkNO_RETURN_HINT(); *(int *)(uintptr_t)0xbbadbeef = 0; } while (false)
 #else
-    #define SK_CRASH()  do {} while (true)
+    #define SK_CRASH() do { SkNO_RETURN_HINT(); } while (true)
 #endif
 #endif
 
@@ -107,7 +126,7 @@
     #endif
 
     #ifndef SK_DEBUGBREAK
-        #define SK_DEBUGBREAK(cond)     do { if (!(cond)) __debugbreak(); } while (false)
+        #define SK_DEBUGBREAK(cond)     do { if (!(cond)) { SkNO_RETURN_HINT(); __debugbreak(); }} while (false)
     #endif
 
     #ifndef SK_A32_SHIFT
@@ -252,7 +271,28 @@
 #define DEBUG_CLIENTBLOCK
 #endif // _DEBUG
 
-#endif
 
 #endif
 
+#endif
+
+//////////////////////////////////////////////////////////////////////
+
+#ifndef SK_OVERRIDE
+#if defined(_MSC_VER)
+#define SK_OVERRIDE override
+#elif defined(__clang__)
+// Some documentation suggests we should be using __attribute__((override)),
+// but it doesn't work.
+#define SK_OVERRIDE override
+#else
+// Linux GCC ignores "__attribute__((override))" and rejects "override".
+#define SK_OVERRIDE
+#endif
+#endif
+
+//////////////////////////////////////////////////////////////////////
+
+#ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
+#define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
+#endif

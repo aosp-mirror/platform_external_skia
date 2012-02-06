@@ -1,15 +1,25 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef SkCGUtils_DEFINED
 #define SkCGUtils_DEFINED
 
 #include "SkTypes.h"
 
 #ifdef SK_BUILD_FOR_MAC
-    #include <Carbon/Carbon.h>
-#else
-    #include <CoreGraphics/CoreGraphics.h>
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
+#ifdef SK_BUILD_FOR_IOS
+#include <CoreGraphics/CoreGraphics.h>
 #endif
 
 class SkBitmap;
+class SkStream;
 
 /**
  *  Create an imageref from the specified bitmap using the specified colorspace.
@@ -33,5 +43,7 @@ static inline CGImageRef SkCreateCGImageRef(const SkBitmap& bm) {
  *  colorspace returned by CGColorSpaceCreateDeviceRGB()
  */
 void SkCGDrawBitmap(CGContextRef, const SkBitmap&, float x, float y);
+
+bool SkPDFDocumentToBitmap(SkStream* stream, SkBitmap* output);
 
 #endif

@@ -1,19 +1,11 @@
-/* libs/graphics/animator/SkDrawMatrix.cpp
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "SkDrawMatrix.h"
 #include "SkAnimateMaker.h"
@@ -127,10 +119,10 @@ void SkDrawMatrix::dump(SkAnimateMaker* maker) {
     result = fMatrix.getTranslateY();
     if (result)
         SkDebugf("ty=\"%g\" ", SkScalarToFloat(result));
-    result = fMatrix.getPerspX();
+    result = SkPerspToScalar(fMatrix.getPerspX());
     if (result)
         SkDebugf("perspect-x=\"%g\" ", SkScalarToFloat(result));
-    result = fMatrix.getPerspY();
+    result = SkPerspToScalar(fMatrix.getPerspY());
     if (result)
         SkDebugf("perspect-y=\"%g\" ", SkScalarToFloat(result));
     SkDebugf("/>\n");
@@ -198,14 +190,9 @@ void SkDrawMatrix::onEndElement(SkAnimateMaker& ) {
         fMatrix.setSkewY(vals[3]);
         fMatrix.setScaleY(vals[4]);
         fMatrix.setTranslateY(vals[5]);
-#ifdef SK_SCALAR_IS_FIXED
-        fMatrix.setPerspX(SkFixedToFract(vals[6]));
-        fMatrix.setPerspY(SkFixedToFract(vals[7]));
-#else
-        fMatrix.setPerspX(vals[6]);
-        fMatrix.setPerspY(vals[7]);
-#endif
-//      fMatrix.setPerspW(vals[8]);
+        fMatrix.setPerspX(SkScalarToPersp(vals[6]));
+        fMatrix.setPerspY(SkScalarToPersp(vals[7]));
+//      fMatrix.setPerspW(SkScalarToPersp(vals[8]));
         goto setConcat;
     }
     if (fChildHasID == false) {
@@ -237,18 +224,10 @@ bool SkDrawMatrix::setProperty(int index, SkScriptValue& scriptValue) {
             fMatrix.setTranslateY((*scriptValue.fOperand.fArray)[1].fScalar);
             return true;
         case SK_PROPERTY(perspectX):
-#ifdef SK_SCALAR_IS_FIXED
-            fMatrix.setPerspX(SkFixedToFract(number));
-#else
-            fMatrix.setPerspX(number);
-#endif  
+            fMatrix.setPerspX(SkScalarToPersp((number)));
             break;
         case SK_PROPERTY(perspectY):
-#ifdef SK_SCALAR_IS_FIXED
-            fMatrix.setPerspY(SkFixedToFract(number));
-#else
-            fMatrix.setPerspY(number);
-#endif  
+            fMatrix.setPerspY(SkScalarToPersp((number)));
             break;
         case SK_PROPERTY(rotate): {
             SkMatrix temp;

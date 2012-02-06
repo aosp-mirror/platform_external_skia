@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #ifndef SkImageRef_ashmem_DEFINED
 #define SkImageRef_ashmem_DEFINED
 
@@ -22,6 +29,7 @@ public:
     }
     static SkPixelRef* Create(SkFlattenableReadBuffer&);
 
+    SK_DECLARE_PIXEL_REF_REGISTRAR()
 protected:
     virtual bool onDecode(SkImageDecoder* codec, SkStream* stream,
                           SkBitmap* bitmap, SkBitmap::Config config,

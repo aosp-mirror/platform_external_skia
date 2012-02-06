@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkDumpCanvas.h"
 #include "SkPicture.h"
 #include "SkPixelRef.h"
@@ -226,18 +233,24 @@ void SkDumpCanvas::setMatrix(const SkMatrix& matrix) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkDumpCanvas::clipRect(const SkRect& rect, SkRegion::Op op) {
-    SkString str;
-    toString(rect, &str);
-    this->dump(kClip_Verb, NULL, "clipRect(%s %s)", str.c_str(), toString(op));
-    return this->INHERITED::clipRect(rect, op);
+static const char* bool_to_aastring(bool doAA) {
+    return doAA ? "AA" : "BW";
 }
 
-bool SkDumpCanvas::clipPath(const SkPath& path, SkRegion::Op op) {
+bool SkDumpCanvas::clipRect(const SkRect& rect, SkRegion::Op op, bool doAA) {
+    SkString str;
+    toString(rect, &str);
+    this->dump(kClip_Verb, NULL, "clipRect(%s %s %s)", str.c_str(), toString(op),
+               bool_to_aastring(doAA));
+    return this->INHERITED::clipRect(rect, op, doAA);
+}
+
+bool SkDumpCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     SkString str;
     toString(path, &str);
-    this->dump(kClip_Verb, NULL, "clipPath(%s %s)", str.c_str(), toString(op));
-    return this->INHERITED::clipPath(path, op);
+    this->dump(kClip_Verb, NULL, "clipPath(%s %s %s)", str.c_str(), toString(op),
+               bool_to_aastring(doAA));
+    return this->INHERITED::clipPath(path, op, doAA);
 }
 
 bool SkDumpCanvas::clipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
@@ -349,14 +362,6 @@ void SkDumpCanvas::drawTextOnPath(const void* text, size_t byteLength,
     toString(text, byteLength, paint.getTextEncoding(), &str);
     this->dump(kDrawText_Verb, &paint, "drawTextOnPath(%s [%d])",
                str.c_str(), byteLength);
-}
-
-void SkDumpCanvas::drawShape(SkShape* shape) {
-    this->dump(kDrawShape_Verb, NULL, "drawShape(%p)", shape);
-    fNestLevel += 1;
-    this->INHERITED::drawShape(shape);
-    fNestLevel -= 1;
-    this->dump(kDrawShape_Verb, NULL, "endShape(%p)", shape);
 }
 
 void SkDumpCanvas::drawPicture(SkPicture& picture) {

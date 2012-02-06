@@ -1,19 +1,10 @@
-/* libs/graphics/sgl/SkMask.cpp
-**
-** Copyright 2007, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+/*
+ * Copyright 2007 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #include "Sk64.h"
 #include "SkMask.h"
@@ -54,5 +45,33 @@ uint8_t* SkMask::AllocImage(size_t size) {
 */
 void SkMask::FreeImage(void* image) {
     sk_free(image);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+static const int gMaskFormatToShift[] = {
+    ~0, // BW -- not supported
+    0,  // A8
+    0,  // 3D
+    2,  // ARGB32
+    1,  // LCD16
+    2   // LCD32
+};
+
+static int maskFormatToShift(SkMask::Format format) {
+    SkASSERT((unsigned)format < SK_ARRAY_COUNT(gMaskFormatToShift));
+    SkASSERT(SkMask::kBW_Format != format);
+    return gMaskFormatToShift[format];
+}
+
+void* SkMask::getAddr(int x, int y) const {
+    SkASSERT(kBW_Format != fFormat);
+    SkASSERT(fBounds.contains(x, y));
+    SkASSERT(fImage);
+    
+    char* addr = (char*)fImage;
+    addr += (y - fBounds.fTop) * fRowBytes;
+    addr += (x - fBounds.fLeft) << maskFormatToShift(fFormat);
+    return addr;
 }
 

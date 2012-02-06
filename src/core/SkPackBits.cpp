@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkPackBits.h"
 
 #define GATHER_STATSx
@@ -151,8 +158,8 @@ static uint8_t* flush_same8(uint8_t dst[], uint8_t value, int count) {
     return dst;
 }
 
-static uint8_t* flush_diff16(uint8_t SK_RESTRICT dst[],
-                             const uint16_t SK_RESTRICT src[], int count) {
+static uint8_t* flush_diff16(uint8_t* SK_RESTRICT dst,
+                             const uint16_t* SK_RESTRICT src, int count) {
     while (count > 0) {
         int n = count;
         if (n > 128) {
@@ -167,8 +174,8 @@ static uint8_t* flush_diff16(uint8_t SK_RESTRICT dst[],
     return dst;
 }
 
-static uint8_t* flush_diff8(uint8_t SK_RESTRICT dst[],
-                            const uint8_t SK_RESTRICT src[], int count) {
+static uint8_t* flush_diff8(uint8_t* SK_RESTRICT dst,
+                            const uint8_t* SK_RESTRICT src, int count) {
     while (count > 0) {
         int n = count;
         if (n > 128) {
@@ -183,8 +190,8 @@ static uint8_t* flush_diff8(uint8_t SK_RESTRICT dst[],
     return dst;
 }
 
-size_t SkPackBits::Pack16(const uint16_t SK_RESTRICT src[], int count,
-                          uint8_t SK_RESTRICT dst[]) {
+size_t SkPackBits::Pack16(const uint16_t* SK_RESTRICT src, int count,
+                          uint8_t* SK_RESTRICT dst) {
     uint8_t* origDst = dst;
     const uint16_t* stop = src + count;
 
@@ -226,8 +233,8 @@ size_t SkPackBits::Pack16(const uint16_t SK_RESTRICT src[], int count,
     }
 }
 
-size_t SkPackBits::Pack8(const uint8_t SK_RESTRICT src[], int count,
-                         uint8_t SK_RESTRICT dst[]) {
+size_t SkPackBits::Pack8(const uint8_t* SK_RESTRICT src, int count,
+                         uint8_t* SK_RESTRICT dst) {
     uint8_t* origDst = dst;
     const uint8_t* stop = src + count;
 
@@ -272,8 +279,8 @@ size_t SkPackBits::Pack8(const uint8_t SK_RESTRICT src[], int count,
 
 #include "SkUtils.h"
 
-int SkPackBits::Unpack16(const uint8_t SK_RESTRICT src[], size_t srcSize,
-                         uint16_t SK_RESTRICT dst[]) {
+int SkPackBits::Unpack16(const uint8_t* SK_RESTRICT src, size_t srcSize,
+                         uint16_t* SK_RESTRICT dst) {
     uint16_t* origDst = dst;
     const uint8_t* stop = src + srcSize;
     
@@ -294,8 +301,8 @@ int SkPackBits::Unpack16(const uint8_t SK_RESTRICT src[], size_t srcSize,
     return dst - origDst;
 }
 
-int SkPackBits::Unpack8(const uint8_t SK_RESTRICT src[], size_t srcSize,
-                        uint8_t SK_RESTRICT dst[]) {
+int SkPackBits::Unpack8(const uint8_t* SK_RESTRICT src, size_t srcSize,
+                        uint8_t* SK_RESTRICT dst) {
     uint8_t* origDst = dst;
     const uint8_t* stop = src + srcSize;
     
@@ -321,8 +328,8 @@ enum UnpackState {
     COPY_SRC_STATE
 };
 
-void SkPackBits::Unpack8(uint8_t SK_RESTRICT dst[], size_t dstSkip,
-                         size_t dstWrite, const uint8_t SK_RESTRICT src[]) {
+void SkPackBits::Unpack8(uint8_t* SK_RESTRICT dst, size_t dstSkip,
+                         size_t dstWrite, const uint8_t* SK_RESTRICT src) {
     if (dstWrite == 0) {
         return;
     }
@@ -402,6 +409,3 @@ void SkPackBits::Unpack8(uint8_t SK_RESTRICT dst[], size_t dstSkip,
     }
     SkASSERT(0 == dstWrite);
 }
-
-
-

@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkShader_DEFINED
 #define SkShader_DEFINED
@@ -102,6 +95,15 @@ public:
      *  faster.
      */
     virtual uint32_t getFlags() { return 0; }
+
+    /**
+     *  Returns true if the shader is guaranteed to produce only opaque
+     *  colors, subject to the SkPaint using the shader to apply an opaque
+     *  alpha value. Subclasses should override this to allow some
+     *  optimizations.  isOpaque() can be called at any time, unlike getFlags,
+     *  which only works properly when the context is set.
+     */
+    virtual bool isOpaque() const { return false; }
 
     /**
      *  Return the alpha associated with the data returned by shadeSpan16(). If
@@ -277,7 +279,7 @@ public:
     static SkShader* CreateBitmapShader(const SkBitmap& src,
                                         TileMode tmx, TileMode tmy);
 
-    virtual void flatten(SkFlattenableWriteBuffer& );
+    virtual void flatten(SkFlattenableWriteBuffer& ) SK_OVERRIDE;
 protected:
     enum MatrixClass {
         kLinear_MatrixClass,            // no perspective

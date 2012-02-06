@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
@@ -25,7 +32,7 @@ const int HEIGHT = 500;
 const long EVENT_MASK = StructureNotifyMask|ButtonPressMask|ButtonReleaseMask
         |ExposureMask|PointerMotionMask|KeyPressMask|KeyReleaseMask;
 
-SkOSWindow::SkOSWindow(void* unused) : fGLAttached(false), fVi(0)
+SkOSWindow::SkOSWindow(void* unused) : INHERITED(), fGLAttached(false), fVi(0)
 {
     fUnixWindow.fDisplay = XOpenDisplay(NULL);
     Display* dsp = fUnixWindow.fDisplay;
@@ -84,6 +91,7 @@ void SkOSWindow::post_linuxevent()
     event.data.l[0] = 0;
     XSendEvent(fUnixWindow.fDisplay, fUnixWindow.fWin, false, 0,
                (XEvent*) &event);
+    XFlush(fUnixWindow.fDisplay);
 }
 
 void SkOSWindow::loop()
@@ -214,10 +222,8 @@ void SkOSWindow::onSetTitle(const char title[])
     XSetWMName(fUnixWindow.fDisplay, fUnixWindow.fWin, &textProp);
 }
 
-void SkOSWindow::onHandleInval(const SkIRect&)
-{
-    SkEvent* evt = new SkEvent("inval-imageview");
-    evt->post(getSinkID());
+void SkOSWindow::onHandleInval(const SkIRect&) {
+    (new SkEvent("inval-imageview", this->getSinkID()))->post();
 }
 
 bool SkOSWindow::onEvent(const SkEvent& evt)

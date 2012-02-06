@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SkBenchmark.h"
 #include "SkBitmap.h"
 #include "SkImageDecoder.h"
@@ -11,7 +18,7 @@ class DecodeBench : public SkBenchmark {
     const char* fFilename;
     SkBitmap::Config fPrefConfig;
     SkString fName;
-    enum { N = 10 };
+    enum { N = SkBENCHLOOP(10) };
 public:
     DecodeBench(void* param, SkBitmap::Config c) : SkBenchmark(param) {
         fFilename = this->findDefine("decode-filename");

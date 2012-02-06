@@ -1,19 +1,13 @@
+
 /*
- * Copyright (C) 2011 Google Inc.
+ * Copyright 2011 Google Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
 
+
+#include "SkGeometry.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPDFUtils.h"
@@ -24,12 +18,14 @@
 // static
 SkPDFArray* SkPDFUtils::MatrixToArray(const SkMatrix& matrix) {
     SkScalar values[6];
-    SkAssertResult(matrix.pdfTransform(values));
+    if (!matrix.asAffine(values)) {
+        SkMatrix::SetAffineIdentity(values);
+    }
 
     SkPDFArray* result = new SkPDFArray;
     result->reserve(6);
     for (size_t i = 0; i < SK_ARRAY_COUNT(values); i++) {
-        result->append(new SkPDFScalar(values[i]))->unref();
+        result->appendScalar(values[i]);
     }
     return result;
 }
@@ -37,7 +33,9 @@ SkPDFArray* SkPDFUtils::MatrixToArray(const SkMatrix& matrix) {
 // static
 void SkPDFUtils::AppendTransform(const SkMatrix& matrix, SkWStream* content) {
     SkScalar values[6];
-    SkAssertResult(matrix.pdfTransform(values));
+    if (!matrix.asAffine(values)) {
+        SkMatrix::SetAffineIdentity(values);
+    }
     for (size_t i = 0; i < SK_ARRAY_COUNT(values); i++) {
         SkPDFScalar::Append(values[i], content);
         content->writeText(" ");
@@ -115,15 +113,10 @@ void SkPDFUtils::EmitPath(const SkPath& path, SkWStream* content) {
                 AppendLine(args[1].fX, args[1].fY, content);
                 break;
             case SkPath::kQuad_Verb: {
-                // Convert quad to cubic (degree elevation). http://goo.gl/vS4i
-                const SkScalar three = SkIntToScalar(3);
-                args[1].scale(SkIntToScalar(2));
-                SkScalar ctl1X = SkScalarDiv(args[0].fX + args[1].fX, three);
-                SkScalar ctl1Y = SkScalarDiv(args[0].fY + args[1].fY, three);
-                SkScalar ctl2X = SkScalarDiv(args[2].fX + args[1].fX, three);
-                SkScalar ctl2Y = SkScalarDiv(args[2].fY + args[1].fY, three);
-                AppendCubic(ctl1X, ctl1Y, ctl2X, ctl2Y, args[2].fX, args[2].fY,
-                            content);
+                SkPoint cubic[4];
+                SkConvertQuadToCubic(args, cubic);
+                AppendCubic(cubic[1].fX, cubic[1].fY, cubic[2].fX, cubic[2].fY,
+                            cubic[3].fX, cubic[3].fY, content);
                 break;
             }
             case SkPath::kCubic_Verb:
@@ -132,8 +125,6 @@ void SkPDFUtils::EmitPath(const SkPath& path, SkWStream* content) {
                 break;
             case SkPath::kClose_Verb:
                 ClosePath(content);
-                break;
-            case SkPath::kDone_Verb:
                 break;
             default:
                 SkASSERT(false);
@@ -150,18 +141,20 @@ void SkPDFUtils::ClosePath(SkWStream* content) {
 // static
 void SkPDFUtils::PaintPath(SkPaint::Style style, SkPath::FillType fill,
                            SkWStream* content) {
-    if (style == SkPaint::kFill_Style)
+    if (style == SkPaint::kFill_Style) {
         content->writeText("f");
-    else if (style == SkPaint::kStrokeAndFill_Style)
+    } else if (style == SkPaint::kStrokeAndFill_Style) {
         content->writeText("B");
-    else if (style == SkPaint::kStroke_Style)
+    } else if (style == SkPaint::kStroke_Style) {
         content->writeText("S");
+    }
 
     if (style != SkPaint::kStroke_Style) {
         NOT_IMPLEMENTED(fill == SkPath::kInverseEvenOdd_FillType, false);
         NOT_IMPLEMENTED(fill == SkPath::kInverseWinding_FillType, false);
-        if (fill == SkPath::kEvenOdd_FillType)
+        if (fill == SkPath::kEvenOdd_FillType) {
             content->writeText("*");
+        }
     }
     content->writeText("\n");
 }

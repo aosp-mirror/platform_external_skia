@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkMatrix_DEFINED
 #define SkMatrix_DEFINED
@@ -20,6 +13,16 @@
 #include "SkRect.h"
 
 class SkString;
+
+#ifdef SK_SCALAR_IS_FLOAT
+    typedef SkScalar SkPersp;
+    #define SkScalarToPersp(x) (x)
+    #define SkPerspToScalar(x) (x)
+#else
+    typedef SkFract SkPersp;
+    #define SkScalarToPersp(x) SkFixedToFract(x)
+    #define SkPerspToScalar(x) SkFractToFixed(x)
+#endif
 
 /** \class SkMatrix
 
@@ -74,10 +77,11 @@ public:
     bool preservesAxisAlignment() const { return this->rectStaysRect(); }
 
     /**
-     *  Returns true if the perspective contains perspective elements.
+     *  Returns true if the matrix contains perspective elements.
      */
     bool hasPerspective() const {
-        return SkToBool(this->getType() & kPerspective_Mask);
+        return SkToBool(this->getPerspectiveTypeMaskOnly() &
+                        kPerspective_Mask);
     }
 
     enum {
@@ -92,6 +96,18 @@ public:
         kMPersp2
     };
     
+    /** Affine arrays are in column major order
+        because that's how PDF and XPS like it.
+     */
+    enum {
+        kAScaleX,
+        kASkewY,
+        kASkewX,
+        kAScaleY,
+        kATransX,
+        kATransY
+    };
+
     SkScalar operator[](int index) const {
         SkASSERT((unsigned)index < 9);
         return fMat[index];
@@ -108,8 +124,8 @@ public:
     SkScalar getSkewX() const { return fMat[kMSkewX]; }
     SkScalar getTranslateX() const { return fMat[kMTransX]; }
     SkScalar getTranslateY() const { return fMat[kMTransY]; }
-    SkScalar getPerspX() const { return fMat[kMPersp0]; }
-    SkScalar getPerspY() const { return fMat[kMPersp1]; }
+    SkPersp getPerspX() const { return fMat[kMPersp0]; }
+    SkPersp getPerspY() const { return fMat[kMPersp1]; }
 
     SkScalar& operator[](int index) {
         SkASSERT((unsigned)index < 9);
@@ -129,12 +145,12 @@ public:
     void setSkewX(SkScalar v) { this->set(kMSkewX, v); }
     void setTranslateX(SkScalar v) { this->set(kMTransX, v); }
     void setTranslateY(SkScalar v) { this->set(kMTransY, v); }
-    void setPerspX(SkScalar v) { this->set(kMPersp0, v); }
-    void setPerspY(SkScalar v) { this->set(kMPersp1, v); }
+    void setPerspX(SkPersp v) { this->set(kMPersp0, v); }
+    void setPerspY(SkPersp v) { this->set(kMPersp1, v); }
 
     void setAll(SkScalar scaleX, SkScalar skewX, SkScalar transX,
                 SkScalar skewY, SkScalar scaleY, SkScalar transY,
-                SkScalar persp0, SkScalar persp1, SkScalar persp2) {
+                SkPersp persp0, SkPersp persp1, SkPersp persp2) {
         fMat[kMScaleX] = scaleX;
         fMat[kMSkewX]  = skewX;
         fMat[kMTransX] = transX;
@@ -164,6 +180,10 @@ public:
     /** Set the matrix to scale by sx and sy.
     */
     void setScale(SkScalar sx, SkScalar sy);
+    /** Set the matrix to scale by 1/divx and 1/divy. Returns false and doesn't
+        touch the matrix if either divx or divy is zero.
+    */
+    bool setIDiv(int divx, int divy);
     /** Set the matrix to rotate by the specified number of degrees, with a
         pivot point at (px, py). The pivot point is the coordinate that should
         remain unchanged by the specified transformation.
@@ -318,12 +338,19 @@ public:
     */
     bool invert(SkMatrix* inverse) const;
 
-    /** Fills the passed array with the tranform values in the right order
-        for PDFs.  If the matrix is a perspective transform, returns false
-        and fills the array with an identity transform.
-        @param transform  The array to fill in.
+    /** Fills the passed array with affine identity values
+        in column major order.
+        @param affine  The array to fill with affine identity values.
+        Must not be NULL.
     */
-    bool pdfTransform(SkScalar transform[6]) const;
+    static void SetAffineIdentity(SkScalar affine[6]);
+
+    /** Fills the passed array with the affine values in column major order.
+        If the matrix is a perspective transform, returns false
+        and does not change the passed array.
+        @param affine  The array to fill with affine values. Ignored if NULL.
+    */
+    bool asAffine(SkScalar affine[6]) const;
 
     /** Apply this matrix to the array of points specified by src, and write
         the transformed points into the array of points specified by dst.
@@ -348,6 +375,31 @@ public:
         this->mapPoints(pts, pts, count);
     }
     
+    /** Like mapPoints but with custom byte stride between the points. Stride
+     *  should be a multiple of sizeof(SkScalar).
+     */
+    void mapPointsWithStride(SkPoint pts[], size_t stride, int count) const {
+        SkASSERT(stride >= sizeof(SkPoint));
+        SkASSERT(0 == stride % sizeof(SkScalar));
+        for (int i = 0; i < count; ++i) {
+            this->mapPoints(pts, pts, 1);
+            pts = (SkPoint*)((intptr_t)pts + stride);
+        }
+    }
+
+    /** Like mapPoints but with custom byte stride between the points.
+    */
+    void mapPointsWithStride(SkPoint dst[], SkPoint src[],
+                             size_t stride, int count) const {
+        SkASSERT(stride >= sizeof(SkPoint));
+        SkASSERT(0 == stride % sizeof(SkScalar));
+        for (int i = 0; i < count; ++i) {
+            this->mapPoints(dst, src, 1);
+            src = (SkPoint*)((intptr_t)src + stride);
+            dst = (SkPoint*)((intptr_t)dst + stride);
+        }
+    }
+
     void mapXY(SkScalar x, SkScalar y, SkPoint* result) const {
         SkASSERT(result);
         this->getMapXYProc()(*this, x, y, result);
@@ -395,13 +447,6 @@ public:
         return this->mapRect(rect, *rect);
     }
 
-    void mapPointsWithStride(SkPoint pts[], size_t stride, int count) const {
-        for (int i = 0; i < count; ++i) {            
-            this->mapPoints(pts, pts, 1);
-            pts = (SkPoint*)((intptr_t)pts + stride);
-        }
-    }
-    
     /** Return the mean radius of a circle after it has been mapped by
         this matrix. NOTE: in perspective this value assumes the circle
         has its center at the origin.
@@ -466,10 +511,10 @@ public:
     void toDumpString(SkString*) const;
 
     /**
-     * Calculates the maximum stretching factor of the matrix. Only defined if
-     * the matrix does not have perspective.
+     * Calculates the maximum stretching factor of the matrix. If the matrix has
+     * perspective -1 is returned.
      *
-     * @return maximum strecthing factor or negative if matrix has perspective.
+     * @return maximum strecthing factor
      */
     SkScalar getMaxStretch() const;
 
@@ -484,6 +529,14 @@ public:
      */
     static const SkMatrix& InvalidMatrix();
 
+    /**
+     * Testing routine; the matrix's type cache should never need to be
+     * manually invalidated during normal use.
+     */
+    void dirtyMatrixTypeCache() {
+        this->setTypeMask(kUnknown_Mask);
+    }
+
 private:
     enum {
         /** Set if the matrix will map a rectangle to another rectangle. This
@@ -493,6 +546,11 @@ private:
             This bit will be set on identity matrices
         */
         kRectStaysRect_Mask = 0x10,
+
+        /** Set if the perspective bit is valid even though the rest of
+            the matrix is Unknown.
+        */
+        kOnlyPerspectiveValid_Mask = 0x40,
 
         kUnknown_Mask = 0x80,
 
@@ -512,10 +570,13 @@ private:
     mutable uint8_t fTypeMask;
 
     uint8_t computeTypeMask() const;
+    uint8_t computePerspectiveTypeMask() const;
 
     void setTypeMask(int mask) {
         // allow kUnknown or a valid mask
-        SkASSERT(kUnknown_Mask == mask || (mask & kAllMasks) == mask);
+        SkASSERT(kUnknown_Mask == mask || (mask & kAllMasks) == mask ||
+                 ((kUnknown_Mask | kOnlyPerspectiveValid_Mask | kPerspective_Mask) & mask)
+                 == mask);
         fTypeMask = SkToU8(mask);
     }
 
@@ -528,6 +589,24 @@ private:
         // only allow a valid mask
         SkASSERT((mask & kAllMasks) == mask);
         fTypeMask &= ~mask;
+    }
+
+    TypeMask getPerspectiveTypeMaskOnly() const {
+        if ((fTypeMask & kUnknown_Mask) &&
+            !(fTypeMask & kOnlyPerspectiveValid_Mask)) {
+            fTypeMask = this->computePerspectiveTypeMask();
+        }
+        return (TypeMask)(fTypeMask & 0xF);
+    }
+
+    /** Returns true if we already know that the matrix is identity;
+        false otherwise.
+    */
+    bool isTriviallyIdentity() const {
+        if (fTypeMask & kUnknown_Mask) {
+            return false;
+        }
+        return ((fTypeMask & 0xF) == 0);
     }
     
     static bool Poly2Proc(const SkPoint[], SkMatrix*, const SkPoint& scale);
@@ -560,4 +639,3 @@ private:
 };
 
 #endif
-

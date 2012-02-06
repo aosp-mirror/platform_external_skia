@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -24,6 +31,7 @@ public:
 protected:
     // overrides
     virtual void onDraw(SkCanvas*);
+    virtual bool onQuery(SkEvent* evt);
     
 private:
     SkString fBaseURI;
@@ -119,8 +127,8 @@ bool SkAnimatorView::decodeStream(SkStream* stream) {
 #include "SkTime.h"
 
 void SkAnimatorView::onDraw(SkCanvas* canvas) {
+    canvas->drawColor(SK_ColorWHITE);
     if (fAnimator) {
-        canvas->drawColor(SK_ColorWHITE);
         fAnimator->draw(canvas, 0);
 #if 0
         canvas->save();
@@ -138,6 +146,14 @@ void SkAnimatorView::onDraw(SkCanvas* canvas) {
         this->inval(NULL);
 #endif
     }
+}
+
+bool SkAnimatorView::onQuery(SkEvent* evt) {
+    if (SampleCode::TitleQ(*evt)) {
+        SampleCode::TitleR(evt, "Animator");
+        return true;
+    }
+    return this->INHERITED::onQuery(evt);
 }
 
 //////////////////////////////////////////////////////////////////////////////

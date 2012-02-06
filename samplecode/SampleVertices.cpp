@@ -1,3 +1,10 @@
+
+/*
+ * Copyright 2011 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 #include "SampleCode.h"
 #include "SkView.h"
 #include "SkCanvas.h"
@@ -17,7 +24,6 @@
 
 #include "SkOSFile.h"
 #include "SkStream.h"
-#include "SkNinePatch.h"
 
 static SkShader* make_shader0(SkIPoint* size) {
     SkBitmap    bm;

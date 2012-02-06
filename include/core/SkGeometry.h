@@ -1,19 +1,11 @@
-/* libs/graphics/sgl/SkGeometry.h
-**
-** Copyright 2006, The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
-**
-**     http://www.apache.org/licenses/LICENSE-2.0 
-**
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
-** limitations under the License.
-*/
+
+/*
+ * Copyright 2006 The Android Open Source Project
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 
 #ifndef SkGeometry_DEFINED
 #define SkGeometry_DEFINED
@@ -113,7 +105,11 @@ void SkEvalCubicAt(const SkPoint src[4], SkScalar t, SkPoint* locOrNull,
     dst[0..3] and dst[3..6]
 */
 void SkChopCubicAt(const SkPoint src[4], SkPoint dst[7], SkScalar t);
-void SkChopCubicAt(const SkPoint src[4], SkPoint dst[7], const SkScalar t[],
+/** Given a src cubic bezier, chop it at the specified t values,
+    where 0 < t < 1, and return the new cubics in dst:
+    dst[0..3],dst[3..6],...,dst[3*t_count..3*(t_count+1)]
+*/
+void SkChopCubicAt(const SkPoint src[4], SkPoint dst[], const SkScalar t[],
                    int t_count);
 
 /** Given a src cubic bezier, chop it at the specified t == 1/2,
@@ -149,8 +145,9 @@ int SkChopCubicAtXExtrema(const SkPoint src[4], SkPoint dst[10]);
 */
 int SkFindCubicInflections(const SkPoint src[4], SkScalar tValues[2]);
 
-/** Return 1 for no chop, or 2 for having chopped the cubic at its
-    inflection point.
+/** Return 1 for no chop, 2 for having chopped the cubic at a single
+    inflection point, 3 for having chopped at 2 inflection points.
+    dst will hold the resulting 1, 2, or 3 cubics.
 */
 int SkChopCubicAtInflections(const SkPoint src[4], SkPoint dst[10]);
 

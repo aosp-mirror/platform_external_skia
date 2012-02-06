@@ -1,18 +1,11 @@
+
 /*
- * Copyright (C) 2006 The Android Open Source Project
+ * Copyright 2006 The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
  */
+
 
 #ifndef SkTemplates_DEFINED
 #define SkTemplates_DEFINED
@@ -179,35 +172,87 @@ private:
 */
 template <typename T> class SkAutoTMalloc : SkNoncopyable {
 public:
-    SkAutoTMalloc(size_t count)
-    {
+    SkAutoTMalloc(size_t count) {
         fPtr = (T*)sk_malloc_flags(count * sizeof(T), SK_MALLOC_THROW | SK_MALLOC_TEMP);
     }
-    ~SkAutoTMalloc()
-    {
+
+    ~SkAutoTMalloc() {
         sk_free(fPtr);
     }
+
+    // doesn't preserve contents
+    void reset (size_t count) {
+        sk_free(fPtr);
+        fPtr = fPtr = (T*)sk_malloc_flags(count * sizeof(T), SK_MALLOC_THROW | SK_MALLOC_TEMP);
+    }
+
     T* get() const { return fPtr; }
+
+    operator T*() {
+        return fPtr;
+    }
+
+    operator const T*() const {
+        return fPtr;
+    }
+
+    T& operator[](int index) {
+        return fPtr[index];
+    }
+
+    const T& operator[](int index) const {
+        return fPtr[index];
+    }
 
 private:
     T*  fPtr;
 };
 
-template <size_t N, typename T> class SkAutoSTMalloc : SkNoncopyable {
+template <size_t N, typename T> class SK_API SkAutoSTMalloc : SkNoncopyable {
 public:
-    SkAutoSTMalloc(size_t count)
-    {
-        if (count <= N)
+    SkAutoSTMalloc(size_t count) {
+        if (count <= N) {
             fPtr = fTStorage;
-        else
+        } else {
             fPtr = (T*)sk_malloc_flags(count * sizeof(T), SK_MALLOC_THROW | SK_MALLOC_TEMP);
+        }
     }
-    ~SkAutoSTMalloc()
-    {
-        if (fPtr != fTStorage)
+
+    ~SkAutoSTMalloc() {
+        if (fPtr != fTStorage) {
             sk_free(fPtr);
+        }
     }
+
+    // doesn't preserve contents
+    void reset(size_t count) {
+        if (fPtr != fTStorage) {
+            sk_free(fPtr);
+        }
+        if (count <= N) {
+            fPtr = fTStorage;
+        } else {
+            fPtr = (T*)sk_malloc_flags(count * sizeof(T), SK_MALLOC_THROW | SK_MALLOC_TEMP);
+        }
+    }
+
     T* get() const { return fPtr; }
+
+    operator T*() {
+        return fPtr;
+    }
+
+    operator const T*() const {
+        return fPtr;
+    }
+
+    T& operator[](int index) {
+        return fPtr[index];
+    }
+
+    const T& operator[](int index) const {
+        return fPtr[index];
+    }
 
 private:
     T*          fPtr;
@@ -215,6 +260,38 @@ private:
         uint32_t    fStorage32[(N*sizeof(T) + 3) >> 2];
         T           fTStorage[1];   // do NOT want to invoke T::T()
     };
+};
+
+/**
+ * Reserves memory that is aligned on double and pointer boundaries.
+ * Hopefully this is sufficient for all practical purposes.
+ */
+template <size_t N> class SkAlignedSStorage : SkNoncopyable {
+public:
+    void* get() { return fData; }
+private:
+    union {
+        void*   fPtr;
+        double  fDouble;
+        char    fData[N];
+    };
+};
+
+/**
+ * Reserves memory that is aligned on double and pointer boundaries.
+ * Hopefully this is sufficient for all practical purposes. Otherwise,
+ * we have to do some arcane trickery to determine alignment of non-POD
+ * types. Lifetime of the memory is the lifetime of the object.
+ */
+template <int N, typename T> class SkAlignedSTStorage : SkNoncopyable {
+public:
+    /**
+     * Returns void* because this object does not initialize the
+     * memory. Use placement new for types that require a cons.
+     */
+    void* get() { return fStorage.get(); }
+private:
+    SkAlignedSStorage<sizeof(T)*N> fStorage;
 };
 
 #endif
