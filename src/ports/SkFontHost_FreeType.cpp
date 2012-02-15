@@ -857,16 +857,6 @@ SkScalerContext_FreeType::~SkScalerContext_FreeType() {
     this face with other context (at different sizes).
 */
 FT_Error SkScalerContext_FreeType::setupSize() {
-    /*  In the off-chance that a font has been removed, we want to error out
-        right away, so call resolve just to be sure.
-
-        TODO: perhaps we can skip this, by walking the global font cache and
-        killing all of the contexts when we know that a given fontID is going
-        away...
-     */
-    if (!SkFontHost::ValidFontID(fRec.fFontID)) {
-        return (FT_Error)-1;
-    }
 
     FT_Error    err = FT_Activate_Size(fFTSize);
 
@@ -1477,12 +1467,11 @@ SkScalerContext* SkFontHost::CreateScalerContext(const SkDescriptor* desc) {
 /*  Export this so that other parts of our FonttHost port can make use of our
     ability to extract the name+style from a stream, using FreeType's api.
 */
-SkTypeface::Style find_name_and_attributes(SkStream* stream, SkString* name,
-                                           bool* isFixedWidth) {
+bool find_name_and_attributes(SkStream* stream, SkString* name,
+                              SkTypeface::Style* style, bool* isFixedWidth) {
     FT_Library  library;
     if (FT_Init_FreeType(&library)) {
-        name->reset();
-        return SkTypeface::kNormal;
+        return false;
     }
 
     FT_Open_Args    args;
@@ -1509,18 +1498,22 @@ SkTypeface::Style find_name_and_attributes(SkStream* stream, SkString* name,
     FT_Face face;
     if (FT_Open_Face(library, &args, 0, &face)) {
         FT_Done_FreeType(library);
-        name->reset();
-        return SkTypeface::kNormal;
+        return false;
     }
 
-    name->set(face->family_name);
-    int style = SkTypeface::kNormal;
-
+    int tempStyle = SkTypeface::kNormal;
     if (face->style_flags & FT_STYLE_FLAG_BOLD) {
-        style |= SkTypeface::kBold;
+        tempStyle |= SkTypeface::kBold;
     }
     if (face->style_flags & FT_STYLE_FLAG_ITALIC) {
-        style |= SkTypeface::kItalic;
+        tempStyle |= SkTypeface::kItalic;
+    }
+
+    if (name) {
+        name->set(face->family_name);
+    }
+    if (style) {
+        *style = (SkTypeface::Style) tempStyle;
     }
     if (isFixedWidth) {
         *isFixedWidth = FT_IS_FIXED_WIDTH(face);
@@ -1528,5 +1521,5 @@ SkTypeface::Style find_name_and_attributes(SkStream* stream, SkString* name,
 
     FT_Done_Face(face);
     FT_Done_FreeType(library);
-    return (SkTypeface::Style)style;
+    return true;
 }
