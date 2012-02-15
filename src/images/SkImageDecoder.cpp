@@ -45,7 +45,7 @@ void SkImageDecoder::SetDeviceConfig(SkBitmap::Config config)
 SkImageDecoder::SkImageDecoder()
     : fReporter(NULL), fPeeker(NULL), fChooser(NULL), fAllocator(NULL),
       fSampleSize(1), fDefaultPref(SkBitmap::kNo_Config), fDitherImage(true),
-      fUsePrefTable(false) {
+      fUsePrefTable(false),fPreferQualityOverSpeed(false) {
 }
 
 SkImageDecoder::~SkImageDecoder() {
