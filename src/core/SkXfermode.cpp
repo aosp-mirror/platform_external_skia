@@ -755,6 +755,12 @@ protected:
             : INHERITED(buffer) {
         fMode = (SkXfermode::Mode)buffer.readU32();
 
+        if (buffer.getPictureVersion() == PICTURE_VERSION_ICS) {
+            fSrcCoeff = (Coeff)buffer.readU32();
+            fDstCoeff = (Coeff)buffer.readU32();
+            return;
+        }
+
         const ProcCoeff& rec = gProcCoeffs[fMode];
         // these may be valid, or may be CANNOT_USE_COEFF
         fSrcCoeff = rec.fSC;

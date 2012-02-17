@@ -1722,11 +1722,16 @@ void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
     uint32_t tmp = *pod++;
     this->setFlags(tmp >> 16);
 
-    // hinting added later. 0 in this nibble means use the default.
-    uint32_t hinting = (tmp >> 12) & 0xF;
-    this->setHinting(0 == hinting ? kNormal_Hinting : static_cast<Hinting>(hinting-1));
+    if (buffer.getPictureVersion() == PICTURE_VERSION_ICS) {
+        this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xFF));
+        this->setHinting(kNormal_Hinting);
+    } else {
+        // hinting added later. 0 in this nibble means use the default.
+        uint32_t hinting = (tmp >> 12) & 0xF;
+        this->setHinting(0 == hinting ? kNormal_Hinting : static_cast<Hinting>(hinting-1));
 
-    this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xF));
+        this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xF));
+    }
 
     uint8_t flatFlags = tmp & 0xFF;
 
@@ -1750,7 +1755,10 @@ void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
         SkSafeUnref(this->setColorFilter((SkColorFilter*) buffer.readFlattenable()));
         SkSafeUnref(this->setRasterizer((SkRasterizer*) buffer.readFlattenable()));
         SkSafeUnref(this->setLooper((SkDrawLooper*) buffer.readFlattenable()));
-        SkSafeUnref(this->setImageFilter((SkImageFilter*) buffer.readFlattenable()));
+        if (buffer.getPictureVersion() != PICTURE_VERSION_ICS)
+            SkSafeUnref(this->setImageFilter((SkImageFilter*) buffer.readFlattenable()));
+        else
+            this->setImageFilter(NULL);
     } else {
         this->setPathEffect(NULL);
         this->setShader(NULL);

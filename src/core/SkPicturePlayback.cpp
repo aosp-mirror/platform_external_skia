@@ -263,6 +263,7 @@ void SkPicturePlayback::dumpSize() const {
 #define PICT_PAINT_TAG      SkSetFourByteTag('p', 'n', 't', ' ')
 #define PICT_PATH_TAG       SkSetFourByteTag('p', 't', 'h', ' ')
 #define PICT_REGION_TAG     SkSetFourByteTag('r', 'g', 'n', ' ')
+#define PICT_SHAPE_TAG      SkSetFourByteTag('s', 'h', 'p', ' ')
 
 #include "SkStream.h"
 
@@ -391,7 +392,7 @@ static int readTagSize(SkStream* stream, uint32_t expectedTag) {
     return stream->readU32();
 }
 
-SkPicturePlayback::SkPicturePlayback(SkStream* stream) {
+SkPicturePlayback::SkPicturePlayback(SkStream* stream, uint32_t pictureVersion) {
     this->init();
 
     int i;
@@ -401,6 +402,7 @@ SkPicturePlayback::SkPicturePlayback(SkStream* stream) {
         void* storage = sk_malloc_throw(size);
         stream->read(storage, size);
         fReader.setMemory(storage, size);
+        fReader.setPictureVersion(pictureVersion);
     }
 
     int factoryCount = readTagSize(stream, PICT_FACTORY_TAG);
@@ -434,6 +436,7 @@ SkPicturePlayback::SkPicturePlayback(SkStream* stream) {
     stream->read(storage.get(), size);
 
     SkFlattenableReadBuffer buffer(storage.get(), size);
+    buffer.setPictureVersion(pictureVersion);
     fFactoryPlayback->setupBuffer(buffer);
     fTFPlayback.setupBuffer(buffer);
 
@@ -466,6 +469,13 @@ SkPicturePlayback::SkPicturePlayback(SkStream* stream) {
         uint32_t size = buffer.readU32();
         SkDEBUGCODE(uint32_t bytes =) fRegions[i].unflatten(buffer.skip(size));
         SkASSERT(size == bytes);
+    }
+
+    if (pictureVersion == PICTURE_VERSION_ICS) {
+        int shapeCount = readTagSize(buffer, PICT_SHAPE_TAG);
+        for (i = 0; i < shapeCount; i++) {
+            buffer.readFlattenable();
+        }
     }
 }
 

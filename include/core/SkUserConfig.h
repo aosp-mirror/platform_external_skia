@@ -41,6 +41,9 @@
 // ANDROID Specific changes - NO NOT CHECK BACK INTO code.google.com/p/skia
 //
 
+#define PICTURE_VERSION_ICS 1 // r1562 of Skia
+#define PICTURE_VERSION_JB  2
+
 // do this build check for other tools that still read this header
 #ifdef ANDROID
     #include <utils/misc.h>

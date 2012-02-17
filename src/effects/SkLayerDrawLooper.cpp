@@ -218,6 +218,8 @@ SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
 
     for (int i = 0; i < count; i++) {
         LayerInfo info;
+        if (buffer.getPictureVersion() == PICTURE_VERSION_ICS)
+            info.fFlagsMask = buffer.readInt();
         info.fPaintBits = buffer.readInt();
         info.fColorMode = (SkXfermode::Mode)buffer.readInt();
         info.fOffset.fX = buffer.readScalar();
