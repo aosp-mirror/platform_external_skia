@@ -116,7 +116,7 @@ SkPath::SkPath(const SkPath& src) {
     *this = src;
 #ifdef SK_BUILD_FOR_ANDROID
     // the assignment operator above increments the ID so correct for that here
-    fGenerationID--;
+    fGenerationID = src.fGenerationID;
 #endif
 }
 
