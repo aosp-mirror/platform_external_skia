@@ -732,6 +732,8 @@ public:
 
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t getGenerationID() const;
+    const SkPath* getSourcePath() const;
+    void setSourcePath(const SkPath* path);
 #endif
 
     SkDEBUGCODE(void validate() const;)
@@ -746,6 +748,7 @@ private:
     mutable uint8_t     fConvexity;
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t            fGenerationID;
+    const SkPath*       fSourcePath;
 #endif
 
     // called, if dirty, by getBounds()

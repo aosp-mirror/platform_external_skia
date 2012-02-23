@@ -108,6 +108,7 @@ SkPath::SkPath()
     fSegmentMask = 0;
 #ifdef SK_BUILD_FOR_ANDROID
     fGenerationID = 0;
+    fSourcePath = NULL;
 #endif
 }
 
@@ -117,6 +118,7 @@ SkPath::SkPath(const SkPath& src) {
 #ifdef SK_BUILD_FOR_ANDROID
     // the assignment operator above increments the ID so correct for that here
     fGenerationID = src.fGenerationID;
+    fSourcePath = NULL;
 #endif
 }
 
@@ -172,6 +174,14 @@ void SkPath::swap(SkPath& other) {
 #ifdef SK_BUILD_FOR_ANDROID
 uint32_t SkPath::getGenerationID() const {
     return fGenerationID;
+}
+
+const SkPath* SkPath::getSourcePath() const {
+    return fSourcePath;
+}
+
+void SkPath::setSourcePath(const SkPath* path) {
+    fSourcePath = path;
 }
 #endif
 
