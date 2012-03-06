@@ -78,13 +78,16 @@
         'defines': [
           'SK_SAMPLES_FOR_X',
           'SK_BUILD_FOR_UNIX',
+          'SK_USE_COLOR_LUMINANCE',
+          'SK_GAMMA_APPLY_TO_A8',
         ],
         'configurations': {
           'Debug': {
             'cflags': ['-g']
           },
           'Release': {
-            'cflags': ['-O2']
+            'cflags': ['-O2'],
+            'defines': [ 'NDEBUG' ],
           },
         },
         'cflags': [
@@ -119,6 +122,7 @@
             'xcode_settings': {
               'GCC_OPTIMIZATION_LEVEL': '3',
             },
+            'defines': [ 'NDEBUG' ],
           },
         },
         'xcode_settings': {
@@ -161,7 +165,8 @@
             'cflags': ['-g']
           },
           'Release': {
-            'cflags': ['-O2']
+            'cflags': ['-O2'],
+            'defines': [ 'NDEBUG' ],
           },
         },
         'libraries': [
@@ -174,6 +179,12 @@
           '-fno-rtti',
         ],
         'conditions': [
+          [ 'skia_target_arch == "arm"', {
+            'ldflags': [
+              '-Wl',
+              '--fix-cortex-a8',
+            ],
+          }],
           [ 'skia_target_arch == "arm" and arm_thumb == 1', {
             'cflags': [
               '-mthumb',
@@ -185,6 +196,7 @@
             ],
             'cflags': [
               '-march=armv7-a',
+              '-mfloat-abi=softfp',
             ],
             'conditions': [
               [ 'arm_neon == 1', {
@@ -192,7 +204,6 @@
                   '__ARM_HAVE_NEON',
                 ],
                 'cflags': [
-                  '-mfloat-abi=softfp',
                   '-mfpu=neon',
                 ],
              }],
@@ -201,6 +212,14 @@
         ], 
       },
     ],
+
+    # We can POD-style initialization of static mutexes to avoid generating
+    # static initializers if we're using a pthread-compatible thread interface.
+    [ 'skia_os != "win"', {
+      'defines': [
+        'SK_USE_POSIX_THREADS'
+      ],
+    }],
 
   ], # end 'conditions'
 }

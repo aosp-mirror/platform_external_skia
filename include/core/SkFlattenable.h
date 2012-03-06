@@ -161,6 +161,9 @@ public:
     void* readFunctionPtr();
     SkFlattenable* readFlattenable();
     
+    void setPictureVersion(uint32_t version) { fPictureVersion = version; }
+    uint32_t getPictureVersion() { return fPictureVersion; }
+
 private:
     SkRefCnt** fRCArray;
     int        fRCCount;
@@ -172,6 +175,8 @@ private:
     SkFlattenable::Factory* fFactoryArray;
     int                     fFactoryCount;
     
+    uint32_t fPictureVersion;
+
     typedef SkReader32 INHERITED;
 };
 

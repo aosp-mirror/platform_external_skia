@@ -732,6 +732,8 @@ public:
 
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t getGenerationID() const;
+    const SkPath* getSourcePath() const;
+    void setSourcePath(const SkPath* path);
 #endif
 
     SkDEBUGCODE(void validate() const;)
@@ -740,19 +742,20 @@ private:
     SkTDArray<SkPoint>  fPts;
     SkTDArray<uint8_t>  fVerbs;
     mutable SkRect      fBounds;
+    int                 fLastMoveToIndex;
     uint8_t             fFillType;
     uint8_t             fSegmentMask;
     mutable uint8_t     fBoundsIsDirty;
     mutable uint8_t     fConvexity;
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t            fGenerationID;
+    const SkPath*       fSourcePath;
 #endif
 
     // called, if dirty, by getBounds()
     void computeBounds() const;
 
     friend class Iter;
-    void cons_moveto();
 
     friend class SkPathStroker;
     /*  Append the first contour of path, ignoring path's initial point. If no
@@ -767,7 +770,14 @@ private:
     */
     void reversePathTo(const SkPath&);
 
-    friend const SkPoint* sk_get_path_points(const SkPath&, int index);
+    // called before we add points for lineTo, quadTo, cubicTo, checking to see
+    // if we need to inject a leading moveTo first
+    //
+    //  SkPath path; path.lineTo(...);   <--- need a leading moveTo(0, 0)
+    // SkPath path; ... path.close(); path.lineTo(...) <-- need a moveTo(previous moveTo)
+    //
+    inline void injectMoveToIfNeeded();
+
     friend class SkAutoPathBoundsUpdate;
 };
 

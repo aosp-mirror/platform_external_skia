@@ -21,6 +21,7 @@ LOCAL_SRC_FILES += \
   MatrixBench.cpp \
   MutexBench.cpp \
   PathBench.cpp \
+  PicturePlaybackBench.cpp \
   RectBench.cpp \
   RepeatTileBench.cpp \
   ScalarBench.cpp \

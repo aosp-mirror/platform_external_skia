@@ -23,14 +23,11 @@
 #include "SkXfermode.h"
 #include "SkAutoKern.h"
 #include "SkGlyphCache.h"
+#include "SkPaintDefaults.h"
 
 // define this to get a printf for out-of-range parameter in setters
 // e.g. setTextSize(-1)
 //#define SK_REPORT_API_RANGE_CHECK
-
-#define SK_DefaultTextSize      SkIntToScalar(12)
-
-#define SK_DefaultFlags         0   //(kNativeHintsText_Flag)
 
 #ifdef SK_BUILD_FOR_ANDROID
 #define GEN_ID_INC                  fGenerationID++
@@ -60,17 +57,17 @@ SkPaint::SkPaint() {
     fWidth      = 0;
 #endif
 
-    fTextSize   = SK_DefaultTextSize;
+    fTextSize   = SkPaintDefaults_TextSize;
     fTextScaleX = SK_Scalar1;
     fColor      = SK_ColorBLACK;
-    fMiterLimit = SK_DefaultMiterLimit;
-    fFlags      = SK_DefaultFlags;
+    fMiterLimit = SkPaintDefaults_MiterLimit;
+    fFlags      = SkPaintDefaults_Flags;
     fCapType    = kDefault_Cap;
     fJoinType   = kDefault_Join;
     fTextAlign  = kLeft_Align;
     fStyle      = kFill_Style;
     fTextEncoding = kUTF8_TextEncoding;
-    fHinting    = kNormal_Hinting;
+    fHinting    = SkPaintDefaults_Hinting;
 #ifdef SK_BUILD_FOR_ANDROID
     fGenerationID = 0;
 #endif
@@ -1312,6 +1309,39 @@ static bool justAColor(const SkPaint& paint, SkColor* color) {
     return true;
 }
 
+#ifdef SK_USE_COLOR_LUMINANCE
+static SkColor computeLuminanceColor(const SkPaint& paint) {
+    SkColor c;
+    if (!justAColor(paint, &c)) {
+        c = SkColorSetRGB(0x7F, 0x80, 0x7F);
+    }
+    return c;
+}
+
+#define assert_byte(x)  SkASSERT(0 == ((x) >> 8))
+
+static U8CPU reduce_lumbits(U8CPU x) {
+    static const uint8_t gReduceBits[] = {
+        0x0, 0x55, 0xAA, 0xFF
+    };
+    assert_byte(x);
+    return gReduceBits[x >> 6];
+}
+
+static unsigned computeLuminance(SkColor c) {
+    int r = SkColorGetR(c);
+    int g = SkColorGetG(c);
+    int b = SkColorGetB(c);
+    // compute luminance
+    // R=0.2126 G=0.7152 B=0.0722
+    // scaling by 127 yields 27, 92, 9
+    int luminance = r * 27 + g * 92 + b * 9;
+    luminance >>= 7;
+    assert_byte(luminance);
+    return luminance;
+}
+
+#else
 // returns 0..kLuminance_Max
 static unsigned computeLuminance(const SkPaint& paint) {
     SkColor c;
@@ -1335,6 +1365,7 @@ static unsigned computeLuminance(const SkPaint& paint) {
     // if we're not a single color, return the middle of the luminance range
     return SkScalerContext::kLuminance_Max >> 1;
 }
+#endif
 
 // Beyond this size, LCD doesn't appreciably improve quality, but it always
 // cost more RAM and draws slower, so we set a cap.
@@ -1458,11 +1489,18 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
     if (paint.isVerticalText()) {
         flags |= SkScalerContext::kVertical_Flag;
     }
+    if (paint.getFlags() & SkPaint::kGenA8FromLCD_Flag) {
+        flags |= SkScalerContext::kGenA8FromLCD_Flag;
+    }
     rec->fFlags = SkToU16(flags);
 
     // these modify fFlags, so do them after assigning fFlags
     rec->setHinting(computeHinting(paint));
+#ifdef SK_USE_COLOR_LUMINANCE
+    rec->setLuminanceColor(computeLuminanceColor(paint));
+#else
     rec->setLuminanceBits(computeLuminance(paint));
+#endif
 
     /*  Allow the fonthost to modify our rec before we use it as a key into the
         cache. This way if we're asking for something that they will ignore,
@@ -1471,9 +1509,51 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
      */
     SkFontHost::FilterRec(rec);
 
-    // No need to differentiate gamma if we're BW
-    if (SkMask::kBW_Format == rec->fMaskFormat) {
-        rec->setLuminanceBits(0);
+    // be sure to call PostMakeRec(rec) before you actually use it!
+}
+
+/**
+ *  We ensure that the rec is self-consistent and efficient (where possible)
+ */
+void SkScalerContext::PostMakeRec(SkScalerContext::Rec* rec) {
+
+    /**
+     *  If we're asking for A8, we force the colorlum to be gray, since that
+     *  that limits the number of unique entries, and the scaler will only
+     *  look at the lum of one of them.
+     */
+    switch (rec->fMaskFormat) {
+        case SkMask::kLCD16_Format:
+        case SkMask::kLCD32_Format: {
+#ifdef SK_USE_COLOR_LUMINANCE
+            // filter down the luminance color to a finite number of bits
+            SkColor c = rec->getLuminanceColor();
+            c = SkColorSetRGB(reduce_lumbits(SkColorGetR(c)),
+                              reduce_lumbits(SkColorGetG(c)),
+                              reduce_lumbits(SkColorGetB(c)));
+            rec->setLuminanceColor(c);
+#endif
+            break;
+        }
+        case SkMask::kA8_Format: {
+#ifdef SK_USE_COLOR_LUMINANCE
+            // filter down the luminance to a single component, since A8 can't
+            // use per-component information
+            unsigned lum = computeLuminance(rec->getLuminanceColor());
+            // reduce to our finite number of bits
+            lum = reduce_lumbits(lum);
+            rec->setLuminanceColor(SkColorSetRGB(lum, lum, lum));
+#endif
+            break;
+        }
+        case SkMask::kBW_Format:
+            // No need to differentiate gamma if we're BW
+#ifdef SK_USE_COLOR_LUMINANCE
+            rec->setLuminanceColor(0);
+#else
+            rec->setLuminanceBits(0);
+#endif
+            break;
     }
 }
 
@@ -1497,7 +1577,11 @@ void SkPaint::descriptorProc(const SkMatrix* deviceMatrix,
 
     SkScalerContext::MakeRec(*this, deviceMatrix, &rec);
     if (ignoreGamma) {
+#ifdef SK_USE_COLOR_LUMINANCE
+        rec.setLuminanceColor(0);
+#else
         rec.setLuminanceBits(0);
+#endif
     }
 
     size_t          descSize = sizeof(rec);
@@ -1529,6 +1613,11 @@ void SkPaint::descriptorProc(const SkMatrix* deviceMatrix,
         entryCount += 1;
         rec.fMaskFormat = SkMask::kA8_Format;   // force antialiasing when we do the scan conversion
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Now that we're done tweaking the rec, call the PostMakeRec cleanup
+    SkScalerContext::PostMakeRec(&rec);
+    
     descSize += SkDescriptor::ComputeOverhead(entryCount);
 
     SkAutoDescriptor    ad(descSize);
@@ -1722,11 +1811,16 @@ void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
     uint32_t tmp = *pod++;
     this->setFlags(tmp >> 16);
 
-    // hinting added later. 0 in this nibble means use the default.
-    uint32_t hinting = (tmp >> 12) & 0xF;
-    this->setHinting(0 == hinting ? kNormal_Hinting : static_cast<Hinting>(hinting-1));
+    if (buffer.getPictureVersion() == PICTURE_VERSION_ICS) {
+        this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xFF));
+        this->setHinting(SkPaintDefaults_Hinting);
+    } else {
+        // hinting added later. 0 in this nibble means use the default.
+        uint32_t hinting = (tmp >> 12) & 0xF;
+        this->setHinting(0 == hinting ? kNormal_Hinting : static_cast<Hinting>(hinting-1));
 
-    this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xF));
+        this->setTextAlign(static_cast<Align>((tmp >> 8) & 0xF));
+    }
 
     uint8_t flatFlags = tmp & 0xFF;
 
@@ -1750,7 +1844,10 @@ void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
         SkSafeUnref(this->setColorFilter((SkColorFilter*) buffer.readFlattenable()));
         SkSafeUnref(this->setRasterizer((SkRasterizer*) buffer.readFlattenable()));
         SkSafeUnref(this->setLooper((SkDrawLooper*) buffer.readFlattenable()));
-        SkSafeUnref(this->setImageFilter((SkImageFilter*) buffer.readFlattenable()));
+        if (buffer.getPictureVersion() != PICTURE_VERSION_ICS)
+            SkSafeUnref(this->setImageFilter((SkImageFilter*) buffer.readFlattenable()));
+        else
+            this->setImageFilter(NULL);
     } else {
         this->setPathEffect(NULL);
         this->setShader(NULL);
@@ -2051,7 +2148,16 @@ bool SkImageFilter::asABlur(SkSize* sigma) const {
     return false;
 }
 
-///////////////////////////////////////////////////////////////////////////////
+bool SkImageFilter::asAnErode(SkISize* radius) const {
+    return false;
+}
+
+bool SkImageFilter::asADilate(SkISize* radius) const {
+    return false;
+}
+
+//////
+
 bool SkDrawLooper::canComputeFastBounds(const SkPaint& paint) {
     SkCanvas canvas;
 
@@ -2073,7 +2179,7 @@ bool SkDrawLooper::canComputeFastBounds(const SkPaint& paint) {
 void SkDrawLooper::computeFastBounds(const SkPaint& paint, const SkRect& src,
                                      SkRect* dst) {
     SkCanvas canvas;
-
+    
     this->init(&canvas);
     for (bool firstTime = true;; firstTime = false) {
         SkPaint p(paint);

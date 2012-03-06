@@ -22,7 +22,7 @@
 #include "GrContext.h"
 #include "SkTypeface.h"
 
-#include "GrGLInterface.h"
+#include "gl/GrGLInterface.h"
 #include "GrRenderTarget.h"
 
 #include "SkPDFDevice.h"
@@ -1542,6 +1542,17 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
                 fDeviceType=  kNullGPU_DeviceType;
                 this->inval(NULL);
                 this->updateTitle();
+            }
+            return true;
+        case 'p':
+            {
+                GrContext* grContext = this->getGrContext();
+                if (grContext) {
+                    size_t cacheBytes = grContext->getGpuTextureCacheBytes();
+                    grContext->freeGpuResources();
+                    SkDebugf("Purged %d bytes from the GPU resource cache.\n",
+                             cacheBytes);
+                }
             }
             return true;
         case 's':

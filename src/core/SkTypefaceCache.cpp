@@ -82,7 +82,7 @@ SkFontID SkTypefaceCache::NewFontID() {
     return sk_atomic_inc(&gFontID) + 1;
 }
 
-static SkMutex gMutex;
+SK_DECLARE_STATIC_MUTEX(gMutex);
 
 void SkTypefaceCache::Add(SkTypeface* face, SkTypeface::Style requestedStyle) {
     SkAutoMutexAcquire ama(gMutex);
@@ -94,12 +94,15 @@ SkTypeface* SkTypefaceCache::FindByID(SkFontID fontID) {
     return Get().findByID(fontID);
 }
 
-SkTypeface* SkTypefaceCache::FindByProc(FindProc proc, void* ctx) {
+SkTypeface* SkTypefaceCache::FindByProcAndRef(FindProc proc, void* ctx) {
     SkAutoMutexAcquire ama(gMutex);
-    return Get().findByProc(proc, ctx);
+    SkTypeface* typeface = Get().findByProc(proc, ctx);
+    SkSafeRef(typeface);
+    return typeface;
 }
 
 void SkTypefaceCache::PurgeAll() {
+    SkAutoMutexAcquire ama(gMutex);
     Get().purgeAll();
 }
 
