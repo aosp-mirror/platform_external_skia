@@ -75,6 +75,11 @@ public:
      */
     void freeGpuResources();
 
+    /**
+     * Returns the number of bytes of GPU memory hosted by the texture cache.
+     */
+    size_t getGpuTextureCacheBytes() const;
+
     ///////////////////////////////////////////////////////////////////////////
     // Textures
 
@@ -82,7 +87,7 @@ public:
      * Token that refers to an entry in the texture cache. Returned by
      * functions that lock textures. Passed to unlockTexture.
      */
-    class TextureCacheEntry {
+    class SK_API TextureCacheEntry {
     public:
         TextureCacheEntry() : fEntry(NULL) {}
         TextureCacheEntry(const TextureCacheEntry& e) : fEntry(e.fEntry) {}
@@ -294,26 +299,6 @@ public:
      */
      GrRenderTarget* createPlatformRenderTarget(
                                     const GrPlatformRenderTargetDesc& desc);
-
-    /**
-     * This interface is depracted and will be removed in a future revision.
-     * Callers should use createPlatformTexture or createPlatformRenderTarget
-     * instead.
-     *
-     * Wraps an existing 3D API surface in a GrObject. desc.fFlags determines
-     * the type of object returned. If kIsTexture is set the returned object
-     * will be a GrTexture*. Otherwise, it will be a GrRenderTarget*. If both 
-     * are set the render target object is accessible by
-     * GrTexture::asRenderTarget().
-     *
-     * GL: if the object is a texture Gr may change its GL texture parameters
-     *     when it is drawn.
-     *
-     * @param   desc    description of the object to create.
-     * @return either a GrTexture* or GrRenderTarget* depending on desc. NULL
-     *         on failure.
-     */
-    GrResource* createPlatformSurface(const GrPlatformSurfaceDesc& desc);
 
     ///////////////////////////////////////////////////////////////////////////
     // Matrix state
@@ -577,31 +562,48 @@ public:
      * @param dst           the render target to copy to.
      */
     void copyTexture(GrTexture* src, GrRenderTarget* dst);
+
     /**
-     * Applies a 1D convolution kernel in the X direction to a rectangle of
+     * Resolves a render target that has MSAA. The intermediate MSAA buffer is
+     * downsampled to the associated GrTexture (accessible via
+     * GrRenderTarget::asTexture()). Any pending draws to the render target will
+     * be executed before the resolve.
+     *
+     * This is only necessary when a client wants to access the object directly
+     * using the underlying graphics API. GrContext will detect when it must
+     * perform a resolve to a GrTexture used as the source of a draw or before
+     * reading pixels back from a GrTexture or GrRenderTarget.
+     */
+    void resolveRenderTarget(GrRenderTarget* target);
+
+    /**
+     * Applies a 1D convolution kernel in the given direction to a rectangle of
      * pixels from a given texture.
      * @param texture         the texture to read from
      * @param rect            the destination rectangle
      * @param kernel          the convolution kernel (kernelWidth elements)
      * @param kernelWidth     the width of the convolution kernel
+     * @param direction       the direction in which to apply the kernel
      */
-    void convolveInX(GrTexture* texture,
-                     const SkRect& rect,
-                     const float* kernel,
-                     int kernelWidth);
+    void convolve(GrTexture* texture,
+                  const SkRect& rect,
+                  const float* kernel,
+                  int kernelWidth,
+                  GrSamplerState::FilterDirection direction);
     /**
-     * Applies a 1D convolution kernel in the Y direction to a rectangle of
+     * Applies a 1D morphology in the given direction to a rectangle of
      * pixels from a given texture.
-     * direction.
      * @param texture         the texture to read from
      * @param rect            the destination rectangle
-     * @param kernel          the convolution kernel (kernelWidth elements)
-     * @param kernelWidth     the width of the convolution kernel
+     * @param radius          the radius of the morphological operator
+     * @param filter          the filter kernel (must be kDilate or kErode)
+     * @param direction       the direction in which to apply the morphology
      */
-    void convolveInY(GrTexture* texture,
-                     const SkRect& rect,
-                     const float* kernel,
-                     int kernelWidth);
+    void applyMorphology(GrTexture* texture,
+                         const SkRect& rect,
+                         int radius,
+                         GrSamplerState::Filter filter,
+                         GrSamplerState::FilterDirection direction);
     ///////////////////////////////////////////////////////////////////////////
     // Helpers
 
@@ -670,7 +672,6 @@ private:
 
     GrIndexBuffer*              fAAFillRectIndexBuffer;
     GrIndexBuffer*              fAAStrokeRectIndexBuffer;
-    int                         fMaxOffscreenAASize;
 
     GrContext(GrGpu* gpu);
 
@@ -699,46 +700,8 @@ private:
 
     GrPathRenderer* getPathRenderer(const GrPath& path,
                                     GrPathFill fill,
+                                    const GrDrawTarget* target,
                                     bool antiAlias);
-
-    struct OffscreenRecord;
-
-    // determines whether offscreen AA should be applied
-    bool doOffscreenAA(GrDrawTarget* target,
-                       bool isHairLines) const;
-
-    // attempts to setup offscreen AA. All paint state must be transferred to
-    // target by the time this is called.
-    bool prepareForOffscreenAA(GrDrawTarget* target,
-                               bool requireStencil,
-                               const GrIRect& boundRect,
-                               GrPathRenderer* pr,
-                               OffscreenRecord* record);
-
-    // sets up target to draw coverage to the supersampled render target
-    void setupOffscreenAAPass1(GrDrawTarget* target,
-                               const GrIRect& boundRect,
-                               int tileX, int tileY,
-                               OffscreenRecord* record);
-
-    // sets up target to sample coverage of supersampled render target back
-    // to the main render target using stage kOffscreenStage.
-    void doOffscreenAAPass2(GrDrawTarget* target,
-                            const GrPaint& paint,
-                            const GrIRect& boundRect,
-                            int tileX, int tileY,
-                            OffscreenRecord* record);
-
-    // restored the draw target state and releases offscreen target to cache
-    void cleanupOffscreenAA(GrDrawTarget* target,
-                            GrPathRenderer* pr,
-                            OffscreenRecord* record);
-
-    void convolve(GrTexture* texture,
-                  const SkRect& rect,
-                  float imageIncrement[2],
-                  const float* kernel,
-                  int kernelWidth);
 
     /**
      * Flags to the internal read/write pixels funcs
@@ -878,4 +841,3 @@ private:
 };
 
 #endif
-

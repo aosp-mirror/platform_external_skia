@@ -62,7 +62,7 @@ public:
      *                  draw into this device such that all of the pixels will
      *                  be opaque.
      */
-    SkDevice* createCompatibleDevice(SkBitmap::Config config, 
+    SkDevice* createCompatibleDevice(SkBitmap::Config config,
                                      int width, int height,
                                      bool isOpaque);
 
@@ -258,7 +258,7 @@ protected:
      *  kARGB_8888_Config as SkPMColor
      *
      *  If the bitmap has pixels already allocated, the device pixels will be
-     *  written there. If not, bitmap->allocPixels() will be called 
+     *  written there. If not, bitmap->allocPixels() will be called
      *  automatically. If the bitmap is backed by a texture readPixels will
      *  fail.
      *
@@ -279,11 +279,14 @@ protected:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /** Update as needed the pixel value in the bitmap, so that the caller can access
-        the pixels directly. Note: only the pixels field should be altered. The config/width/height/rowbytes
-        must remain unchanged.
+    /** Update as needed the pixel value in the bitmap, so that the caller can
+        access the pixels directly. Note: only the pixels field should be
+        altered. The config/width/height/rowbytes must remain unchanged.
+        @param bitmap The device's bitmap
+        @return Echo the bitmap parameter, or an alternate (shadow) bitmap 
+            maintained by the subclass.
     */
-    virtual void onAccessBitmap(SkBitmap*);
+    virtual const SkBitmap& onAccessBitmap(SkBitmap*);
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
     // just for subclasses, to assign a custom pixelref
@@ -291,7 +294,7 @@ protected:
         fBitmap.setPixelRef(pr, offset);
         return pr;
     }
-    
+
     /**
      * Implements readPixels API. The caller will ensure that:
      *  1. bitmap has pixel config kARGB_8888_Config.
@@ -327,7 +330,7 @@ protected:
                              const SkMatrix& ctm,
                              SkBitmap* result, SkIPoint* offset);
 
-    // This is equal kBGRA_Premul_Config8888 or kRGBA_Premul_Config8888 if 
+    // This is equal kBGRA_Premul_Config8888 or kRGBA_Premul_Config8888 if
     // either is identical to kNative_Premul_Config8888. Otherwise, -1.
     static const SkCanvas::Config8888 kPMColorAlias;
 
@@ -342,15 +345,15 @@ private:
     // just called by SkCanvas when built as a layer
     void setOrigin(int x, int y) { fOrigin.set(x, y); }
     // just called by SkCanvas for saveLayer
-    SkDevice* createCompatibleDeviceForSaveLayer(SkBitmap::Config config, 
+    SkDevice* createCompatibleDeviceForSaveLayer(SkBitmap::Config config,
                                                  int width, int height,
                                                  bool isOpaque);
 
     /**
      * Subclasses should override this to implement createCompatibleDevice.
      */
-    virtual SkDevice* onCreateCompatibleDevice(SkBitmap::Config config, 
-                                               int width, int height, 
+    virtual SkDevice* onCreateCompatibleDevice(SkBitmap::Config config,
+                                               int width, int height,
                                                bool isOpaque,
                                                Usage usage);
 

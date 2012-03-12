@@ -53,38 +53,44 @@ SK_API int32_t sk_atomic_dec(int32_t* addr);
 
 #endif // !SK_BUILD_FOR_ANDROID
 
-#if defined(SK_BUILD_FOR_ANDROID) && !defined(SK_BUILD_FOR_ANDROID_NDK)
+#ifdef SK_USE_POSIX_THREADS
 
-#include <utils/threads.h>
+#include <pthread.h>
 
-class SkMutex : android::Mutex {
-public:
-    // if isGlobal is true, then ignore any errors in the platform-specific
-    // destructor
-    SkMutex(bool isGlobal = true) {}
-    ~SkMutex() {}
-
-    void    acquire() { this->lock(); }
-    void    release() { this->unlock(); }
+// A SkBaseMutex is a POD structure that can be directly initialized
+// at declaration time with SK_DECLARE_STATIC/GLOBAL_MUTEX. This avoids the
+// generation of a static initializer in the final machine code (and
+// a corresponding static finalizer).
+//
+struct SkBaseMutex {
+    void    acquire() { pthread_mutex_lock(&fMutex); }
+    void    release() { pthread_mutex_unlock(&fMutex); }
+    pthread_mutex_t  fMutex;
 };
 
-#else
+// Using POD-style initialization prevents the generation of a static initializer
+// and keeps the acquire() implementation small and fast.
+#define SK_DECLARE_STATIC_MUTEX(name)   static SkBaseMutex  name = { PTHREAD_MUTEX_INITIALIZER }
 
-/** Implemented by the porting layer, this function adds 1 to the int specified
-    by the address (in a thread-safe manner), and returns the previous value.
-*/
-SK_API int32_t sk_atomic_inc(int32_t* addr);
-/** Implemented by the porting layer, this function subtracts 1 to the int
-    specified by the address (in a thread-safe manner), and returns the previous
-    value.
-*/
-SK_API int32_t sk_atomic_dec(int32_t* addr);
+// Special case used when the static mutex must be available globally.
+#define SK_DECLARE_GLOBAL_MUTEX(name)   SkBaseMutex  name = { PTHREAD_MUTEX_INITIALIZER }
 
-class SkMutex {
+// A normal mutex that requires to be initialized through normal C++ construction,
+// i.e. when it's a member of another class, or allocated on the heap.
+class SkMutex : public SkBaseMutex, SkNoncopyable {
 public:
-    // if isGlobal is true, then ignore any errors in the platform-specific
-    // destructor
-    SkMutex(bool isGlobal = true);
+    SkMutex();
+    ~SkMutex();
+};
+
+#else // !SK_USE_POSIX_THREADS
+
+// In the generic case, SkBaseMutex and SkMutex are the same thing, and we
+// can't easily get rid of static initializers.
+//
+class SkMutex : SkNoncopyable {
+public:
+    SkMutex();
     ~SkMutex();
 
     void    acquire();
@@ -98,6 +104,12 @@ private:
     uint32_t    fStorage[kStorageIntCount];
 };
 
-#endif
+typedef SkMutex SkBaseMutex;
+
+#define SK_DECLARE_STATIC_MUTEX(name)  static SkBaseMutex  name
+#define SK_DECLARE_GLOBAL_MUTEX(name)  SkBaseMutex  name
+
+#endif // !SK_USE_POSIX_THREADS
+
 
 #endif

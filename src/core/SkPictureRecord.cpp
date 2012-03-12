@@ -23,6 +23,7 @@ SkPictureRecord::SkPictureRecord(uint32_t flags) :
     fRestoreOffsetStack.push(0);
 
     fPathHeap = NULL;   // lazy allocate
+    fFirstSavedLayerIndex = kNoSavedLayerIndex;
 }
 
 SkPictureRecord::~SkPictureRecord() {
@@ -50,6 +51,10 @@ int SkPictureRecord::saveLayer(const SkRect* bounds, const SkPaint* paint,
 
     fRestoreOffsetStack.push(0);
 
+    if (kNoSavedLayerIndex == fFirstSavedLayerIndex) {
+        fFirstSavedLayerIndex = fRestoreOffsetStack.count();
+    }
+
     validate();
     /*  Don't actually call saveLayer, because that will try to allocate an
         offscreen device (potentially very big) which we don't actually need
@@ -57,7 +62,13 @@ int SkPictureRecord::saveLayer(const SkRect* bounds, const SkPaint* paint,
         clip starts out the size of the picture, which is often much larger
         than the size of the actual device we'll use during playback).
      */
-    return this->INHERITED::save(flags);
+    int count = this->INHERITED::save(flags);
+    this->clipRectBounds(bounds, flags, NULL);
+    return count;
+}
+
+bool SkPictureRecord::isDrawingToLayer() const {
+    return fFirstSavedLayerIndex != kNoSavedLayerIndex;
 }
 
 void SkPictureRecord::restore() {
@@ -74,6 +85,11 @@ void SkPictureRecord::restore() {
         offset = *peek;
         *peek = restoreOffset;
     }
+
+    if (fRestoreOffsetStack.count() == fFirstSavedLayerIndex) {
+        fFirstSavedLayerIndex = kNoSavedLayerIndex;
+    }
+
     fRestoreOffsetStack.pop();
 
     addDraw(RESTORE);
@@ -157,7 +173,7 @@ void SkPictureRecord::recordOffsetForRestore(SkRegion::Op op) {
             *peek = 0;
         }
     }
-    
+
     size_t offset = fWriter.size();
     addInt(fRestoreOffsetStack.top());
     fRestoreOffsetStack.top() = offset;

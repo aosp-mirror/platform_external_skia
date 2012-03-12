@@ -12,6 +12,25 @@ static bool nearly_equal(const SkPoint& a, const SkPoint& b) {
     return SkScalarNearlyEqual(a.fX, b.fX) && SkScalarNearlyEqual(a.fY, b.fY);
 }
 
+static void testChopCubic(skiatest::Reporter* reporter) {
+    /*
+        Inspired by this test, which used to assert that the tValues had dups
+     
+        <path stroke="#202020" d="M0,0 C0,0 1,1 2190,5130 C2190,5070 2220,5010 2205,4980" />
+     */
+    const SkPoint src[] = {
+        { SkIntToScalar(2190), SkIntToScalar(5130) },
+        { SkIntToScalar(2190), SkIntToScalar(5070) },
+        { SkIntToScalar(2220), SkIntToScalar(5010) },
+        { SkIntToScalar(2205), SkIntToScalar(4980) },
+    };
+    SkPoint dst[13];
+    SkScalar tValues[3];
+    // make sure we don't assert internally
+    int count = SkChopCubicAtMaxCurvature(src, dst, tValues);
+}
+
+
 static void TestGeometry(skiatest::Reporter* reporter) {
     SkPoint pts[3], dst[5];
 
@@ -35,6 +54,8 @@ static void TestGeometry(skiatest::Reporter* reporter) {
     for (int i = 0; i < 4; ++i) {
         REPORTER_ASSERT(reporter, nearly_equal(cubic[i], dst[i]));
     }
+    
+    testChopCubic(reporter);
 }
 
 #include "TestClassDef.h"

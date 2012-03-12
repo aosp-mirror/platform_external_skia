@@ -14,7 +14,7 @@
 #include "GrContext.h"
 #include "GrIndexBuffer.h"
 #include "GrPathRenderer.h"
-#include "GrGLStencilBuffer.h"
+#include "GrStencilBuffer.h"
 #include "GrVertexBuffer.h"
 
 // probably makes no sense for this to be less than a page
@@ -215,11 +215,6 @@ GrRenderTarget* GrGpu::createPlatformRenderTarget(const GrPlatformRenderTargetDe
     return this->onCreatePlatformRenderTarget(desc);
 }
 
-GrResource* GrGpu::createPlatformSurface(const GrPlatformSurfaceDesc& desc) {
-    this->handleDirtyContext();
-    return this->onCreatePlatformSurface(desc);
-}
-
 GrVertexBuffer* GrGpu::createVertexBuffer(uint32_t size, bool dynamic) {
     this->handleDirtyContext();
     return this->onCreateVertexBuffer(size, dynamic);
@@ -264,6 +259,13 @@ void GrGpu::writeTexturePixels(GrTexture* texture,
     this->onWriteTexturePixels(texture, left, top, width, height,
                                config, buffer, rowBytes);
 }
+
+void GrGpu::resolveRenderTarget(GrRenderTarget* target) {
+    GrAssert(target);
+    this->handleDirtyContext();
+    this->onResolveRenderTarget(target);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -341,15 +343,17 @@ const GrVertexBuffer* GrGpu::getUnitSquareVertexBuffer() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// stencil settings to use when clip is in stencil
-GR_STATIC_CONST_SAME_STENCIL(gClipStencilSettings,
-    kKeep_StencilOp,
-    kKeep_StencilOp,
-    kAlwaysIfInClip_StencilFunc,
-    0x0000,
-    0x0000,
-    0x0000);
-const GrStencilSettings& GrGpu::gClipStencilSettings = ::gClipStencilSettings;
+const GrStencilSettings* GrGpu::GetClipStencilSettings(void) {
+    // stencil settings to use when clip is in stencil
+    GR_STATIC_CONST_SAME_STENCIL_STRUCT(sClipStencilSettings,
+        kKeep_StencilOp,
+        kKeep_StencilOp,
+        kAlwaysIfInClip_StencilFunc,
+        0x0000,
+        0x0000,
+        0x0000);
+    return GR_CONST_STENCIL_SETTINGS_PTR_FROM_STRUCT_PTR(&sClipStencilSettings);
+}
 
 // mapping of clip-respecting stencil funcs to normal stencil funcs
 // mapping depends on whether stencil-clipping is in effect.
@@ -439,7 +443,7 @@ void GrGpu::ConvertStencilFuncAndMask(GrStencilFunc func,
 #if VISUALIZE_COMPLEX_CLIP
     #include "GrRandom.h"
     GrRandom gRandom;
-    #define SET_RANDOM_COLOR this->setColor(0xff000000 | gRandom.nextU());
+    #define SET_RANDOM_COLOR drawState->setColor(0xff000000 | gRandom.nextU());
 #else
     #define SET_RANDOM_COLOR
 #endif
@@ -628,7 +632,6 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
 
                 GrPathRenderer* pr = NULL;
                 const GrPath* clipPath = NULL;
-                GrPathRenderer::AutoClearPath arp;
                 if (kRect_ClipType == clip.getElementType(c)) {
                     canRenderDirectToStencil = true;
                     fill = kEvenOdd_PathFill;
@@ -651,8 +654,7 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                         return false;
                     }
                     canRenderDirectToStencil =
-                        !pr->requiresStencilPass(this, *clipPath, fill);
-                    arp.set(pr, this, clipPath, fill, false, NULL);
+                        !pr->requiresStencilPass(*clipPath, fill, this);
                 }
 
                 GrSetOp op = (c == start) ? startOp : clip.getOp(c);
@@ -686,9 +688,9 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                     } else {
                         if (canRenderDirectToStencil) {
                             *drawState->stencil() = gDrawToStencil;
-                            pr->drawPath(0);
+                            pr->drawPath(*clipPath, fill, NULL, this, 0, false);
                         } else {
-                            pr->drawPathToStencil();
+                            pr->drawPathToStencil(*clipPath, fill, this);
                         }
                     }
                 }
@@ -704,7 +706,7 @@ bool GrGpu::setupClipAndFlushState(GrPrimitiveType type) {
                             this->drawSimpleRect(clip.getRect(c), NULL, 0);
                         } else {
                             SET_RANDOM_COLOR
-                            pr->drawPath(0);
+                            pr->drawPath(*clipPath, fill, NULL, this, 0, false);
                         }
                     } else {
                         SET_RANDOM_COLOR
@@ -735,8 +737,7 @@ GrPathRenderer* GrGpu::getClipPathRenderer(const GrPath& path,
             new GrPathRendererChain(this->getContext(),
                                     GrPathRendererChain::kNonAAOnly_UsageFlag);
     }
-    return fPathRendererChain->getPathRenderer(this->getCaps(),
-                                               path, fill, false);
+    return fPathRendererChain->getPathRenderer(path, fill, this, false);
 }
 
 

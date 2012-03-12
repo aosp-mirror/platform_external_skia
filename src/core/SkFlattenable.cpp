@@ -58,6 +58,7 @@ SkFlattenableReadBuffer::SkFlattenableReadBuffer() {
     fFactoryTDArray = NULL;
     fFactoryArray = NULL;
     fFactoryCount = 0;
+    fPictureVersion = PICTURE_VERSION_JB;
 }
 
 SkFlattenableReadBuffer::SkFlattenableReadBuffer(const void* data) :
@@ -71,6 +72,7 @@ SkFlattenableReadBuffer::SkFlattenableReadBuffer(const void* data) :
     fFactoryTDArray = NULL;
     fFactoryArray = NULL;
     fFactoryCount = 0;
+    fPictureVersion = PICTURE_VERSION_JB;
 }
 
 SkFlattenableReadBuffer::SkFlattenableReadBuffer(const void* data, size_t size)
@@ -84,6 +86,7 @@ SkFlattenableReadBuffer::SkFlattenableReadBuffer(const void* data, size_t size)
     fFactoryTDArray = NULL;
     fFactoryArray = NULL;
     fFactoryCount = 0;
+    fPictureVersion = PICTURE_VERSION_JB;
 }
 
 SkTypeface* SkFlattenableReadBuffer::readTypeface() {
@@ -110,6 +113,43 @@ SkRefCnt* SkFlattenableReadBuffer::readRefCnt() {
 }
 
 SkFlattenable* SkFlattenableReadBuffer::readFlattenable() {
+
+    if(fPictureVersion == PICTURE_VERSION_ICS) {
+        SkFlattenable::Factory factory = NULL;
+
+        if (fFactoryCount > 0) {
+            uint32_t index = this->readU32();
+            if (index > 0) {
+                index -= 1;
+                SkASSERT(index < (unsigned)fFactoryCount);
+                factory = fFactoryArray[index];
+                // if we recorded an index, but failed to get a factory, we need
+                // to skip the flattened data in the buffer
+                if (NULL == factory) {
+                    uint32_t size = this->readU32();
+                    this->skip(size);
+                    // fall through and return NULL for the object
+                }
+            }
+        } else {
+            factory = (SkFlattenable::Factory)readFunctionPtr();
+        }
+
+        SkFlattenable* obj = NULL;
+        if (factory) {
+            uint32_t sizeRecorded = this->readU32();
+            uint32_t offset = this->offset();
+            obj = (*factory)(*this);
+            // check that we read the amount we expected
+            uint32_t sizeRead = this->offset() - offset;
+            if (sizeRecorded != sizeRead) {
+                // we could try to fix up the offset...
+                sk_throw();
+            }
+        }
+        return obj;
+    }
+
     SkFlattenable::Factory factory = NULL;
 
     if (fFactoryCount > 0) {

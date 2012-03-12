@@ -272,7 +272,58 @@ static void test_irect(skiatest::Reporter* reporter) {
             }
             REPORTER_ASSERT(reporter, nonEmptyAA == nonEmptyBW);
             REPORTER_ASSERT(reporter, clip2.getBounds() == rgn2.getBounds());
+            
+            SkMask maskBW, maskAA;
+            copyToMask(rgn2, &maskBW);
+            clip2.copyToMask(&maskAA);
+            REPORTER_ASSERT(reporter, maskBW == maskAA);
         }
+    }
+}
+
+static void test_path_with_hole(skiatest::Reporter* reporter) {
+    static const uint8_t gExpectedImage[] = {
+        0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF,
+    };
+    SkMask expected;
+    expected.fBounds.set(0, 0, 4, 6);
+    expected.fRowBytes = 4;
+    expected.fFormat = SkMask::kA8_Format;
+    expected.fImage = (uint8_t*)gExpectedImage;
+
+    SkPath path;
+    path.addRect(SkRect::MakeXYWH(0, 0,
+                                  SkIntToScalar(4), SkIntToScalar(2)));
+    path.addRect(SkRect::MakeXYWH(0, SkIntToScalar(4),
+                                  SkIntToScalar(4), SkIntToScalar(2)));
+
+    for (int i = 0; i < 2; ++i) {
+        SkAAClip clip;
+        clip.setPath(path, NULL, 1 == i);
+        
+        SkMask mask;
+        clip.copyToMask(&mask);
+        
+        REPORTER_ASSERT(reporter, expected == mask);
+    }
+}
+
+static void test_regressions(skiatest::Reporter* reporter) {
+    // these should not assert in the debug build
+    // bug was introduced in rev. 3209
+    {
+        SkAAClip clip;
+        SkRect r;
+        r.fLeft = SkFloatToScalar(129.892181);
+        r.fTop = SkFloatToScalar(10.3999996);
+        r.fRight = SkFloatToScalar(130.892181); 
+        r.fBottom = SkFloatToScalar(20.3999996);
+        clip.setRect(r, true);
     }
 }
 
@@ -281,6 +332,8 @@ static void TestAAClip(skiatest::Reporter* reporter) {
     test_path_bounds(reporter);
     test_irect(reporter);
     test_rgn(reporter);
+    test_path_with_hole(reporter);
+    test_regressions(reporter);
 }
 
 #include "TestClassDef.h"

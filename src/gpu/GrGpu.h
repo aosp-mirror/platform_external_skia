@@ -132,11 +132,6 @@ public:
     GrRenderTarget* createPlatformRenderTarget(const GrPlatformRenderTargetDesc& desc);
 
     /**
-     * DEPRECATED. This will be removed.
-     */
-    GrResource* createPlatformSurface(const GrPlatformSurfaceDesc& desc);
-
-    /**
      * Creates a vertex buffer.
      *
      * @param size    size in bytes of the vertex buffer
@@ -177,11 +172,23 @@ public:
     const GrVertexBuffer* getUnitSquareVertexBuffer() const;
 
     /**
+     * Resolves MSAA.
+     */
+    void resolveRenderTarget(GrRenderTarget* target);
+
+    /**
      * Ensures that the current render target is actually set in the
      * underlying 3D API. Used when client wants to use 3D API to directly
      * render to the RT.
      */
     void forceRenderTargetFlush();
+
+    /**
+     * If this returns true then a sequence that reads unpremultiplied pixels
+     * from a surface, writes back the same values, and reads them again will
+     * give the same pixel values back in both reads.
+     */
+    virtual bool canPreserveReadWriteUnpremulPixels() = 0;
 
     /**
      * readPixels with some configs may be slow. Given a desired config this
@@ -355,7 +362,7 @@ protected:
 
     // stencil settings to clip drawing when stencil clipping is in effect
     // and the client isn't using the stencil test.
-    static const GrStencilSettings& gClipStencilSettings;
+    static const GrStencilSettings* GetClipStencilSettings();
 
     GrGpuStats fStats;
 
@@ -401,7 +408,6 @@ protected:
                                        size_t rowBytes) = 0;
     virtual GrTexture* onCreatePlatformTexture(const GrPlatformTextureDesc& desc) = 0;
     virtual GrRenderTarget* onCreatePlatformRenderTarget(const GrPlatformRenderTargetDesc& desc) = 0;
-    virtual GrResource* onCreatePlatformSurface(const GrPlatformSurfaceDesc& desc) = 0;
     virtual GrVertexBuffer* onCreateVertexBuffer(uint32_t size,
                                                  bool dynamic) = 0;
     virtual GrIndexBuffer* onCreateIndexBuffer(uint32_t size,
@@ -438,6 +444,9 @@ protected:
                                       int left, int top, int width, int height,
                                       GrPixelConfig config, const void* buffer,
                                       size_t rowBytes) = 0;
+
+    // overridden by API-specific derived class to perform the resolve
+    virtual void onResolveRenderTarget(GrRenderTarget* target) = 0;
 
     // called to program the vertex data, indexCount will be 0 if drawing non-
     // indexed geometry. The subclass may adjust the startVertex and/or

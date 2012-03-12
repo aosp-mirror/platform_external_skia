@@ -15,6 +15,21 @@
 #include "SkSize.h"
 #include "SkWriter32.h"
 
+/**
+ * cheapIsDirection can take a shortcut when a path is marked convex.
+ * This function ensures that we always test cheapIsDirection when the path
+ * is flagged with unknown convexity status.
+ */
+static void check_direction(SkPath* path,
+                            SkPath::Direction expectedDir,
+                            skiatest::Reporter* reporter) {
+    if (SkPath::kConvex_Convexity == path->getConvexity()) {
+        REPORTER_ASSERT(reporter, path->cheapIsDirection(expectedDir));
+        path->setConvexity(SkPath::kUnknown_Convexity);
+    }
+    REPORTER_ASSERT(reporter, path->cheapIsDirection(expectedDir));
+}
+
 static void test_direction(skiatest::Reporter* reporter) {
     size_t i;
     SkPath path;
@@ -40,24 +55,48 @@ static void test_direction(skiatest::Reporter* reporter) {
     static const char* gCW[] = {
         "M 10 10 L 10 10 Q 20 10 20 20",
         "M 10 10 C 20 10 20 20 20 20",
+        "M 20 10 Q 20 20 30 20 L 10 20", // test double-back at y-max
     };
     for (i = 0; i < SK_ARRAY_COUNT(gCW); ++i) {
         path.reset();
         bool valid = SkParsePath::FromSVGString(gCW[i], &path);
         REPORTER_ASSERT(reporter, valid);
-        REPORTER_ASSERT(reporter, path.cheapIsDirection(SkPath::kCW_Direction));
+        check_direction(&path, SkPath::kCW_Direction, reporter);
     }
     
     static const char* gCCW[] = {
         "M 10 10 L 10 10 Q 20 10 20 -20",
         "M 10 10 C 20 10 20 -20 20 -20",
+        "M 20 10 Q 20 20 10 20 L 30 20", // test double-back at y-max
     };
     for (i = 0; i < SK_ARRAY_COUNT(gCCW); ++i) {
         path.reset();
         bool valid = SkParsePath::FromSVGString(gCCW[i], &path);
         REPORTER_ASSERT(reporter, valid);
-        REPORTER_ASSERT(reporter, path.cheapIsDirection(SkPath::kCCW_Direction));
+        check_direction(&path, SkPath::kCCW_Direction, reporter);
     }
+
+    // Test two donuts, each wound a different direction. Only the outer contour
+    // determines the cheap direction
+    path.reset();
+    path.addCircle(0, 0, SkIntToScalar(2), SkPath::kCW_Direction);
+    path.addCircle(0, 0, SkIntToScalar(1), SkPath::kCCW_Direction);
+    check_direction(&path, SkPath::kCW_Direction, reporter);
+
+    path.reset();
+    path.addCircle(0, 0, SkIntToScalar(1), SkPath::kCW_Direction);
+    path.addCircle(0, 0, SkIntToScalar(2), SkPath::kCCW_Direction);
+    check_direction(&path, SkPath::kCCW_Direction, reporter);
+
+#ifdef SK_SCALAR_IS_FLOAT
+    // triangle with one point really far from the origin.
+    path.reset();
+    // the first point is roughly 1.05e10, 1.05e10
+    path.moveTo(SkFloatToScalar(SkBits2Float(0x501c7652)), SkFloatToScalar(SkBits2Float(0x501c7652)));
+    path.lineTo(110 * SK_Scalar1, -10 * SK_Scalar1);
+    path.lineTo(-10 * SK_Scalar1, 60 * SK_Scalar1);
+    check_direction(&path, SkPath::kCCW_Direction, reporter);
+#endif
 }
 
 static void add_rect(SkPath* path, const SkRect& r) {
@@ -889,12 +928,14 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
     // Max of 10 segments, max 3 points per segment
     SkRandom rand(9876543);
     SkPoint          expectedPts[31]; // May have leading moveTo
-    SkPath::Verb     expectedVerbs[11]; // May have leading moveTo
+    SkPath::Verb     expectedVerbs[22]; // May have leading moveTo
     SkPath::Verb     nextVerb;
+
     for (int i = 0; i < 500; ++i) {
         p.reset();
         bool lastWasClose = true;
         bool haveMoveTo = false;
+        SkPoint lastMoveToPt = { 0, 0 };
         int numPoints = 0;
         int numVerbs = (rand.nextU() >> 16) % 10;
         int numIterVerbs = 0;
@@ -907,13 +948,14 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
                 case SkPath::kMove_Verb:
                     expectedPts[numPoints] = randomPts[(rand.nextU() >> 16) % 25];
                     p.moveTo(expectedPts[numPoints]);
+                    lastMoveToPt = expectedPts[numPoints];
                     numPoints += 1;
                     lastWasClose = false;
                     haveMoveTo = true;
                     break;
                 case SkPath::kLine_Verb:
                     if (!haveMoveTo) {
-                        expectedPts[numPoints++].set(0, 0);
+                        expectedPts[numPoints++] = lastMoveToPt;
                         expectedVerbs[numIterVerbs++] = SkPath::kMove_Verb;
                         haveMoveTo = true;
                     }
@@ -924,7 +966,7 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
                     break;
                 case SkPath::kQuad_Verb:
                     if (!haveMoveTo) {
-                        expectedPts[numPoints++].set(0, 0);
+                        expectedPts[numPoints++] = lastMoveToPt;
                         expectedVerbs[numIterVerbs++] = SkPath::kMove_Verb;
                         haveMoveTo = true;
                     }
@@ -936,7 +978,7 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
                     break;
                 case SkPath::kCubic_Verb:
                     if (!haveMoveTo) {
-                        expectedPts[numPoints++].set(0, 0);
+                        expectedPts[numPoints++] = lastMoveToPt;
                         expectedVerbs[numIterVerbs++] = SkPath::kMove_Verb;
                         haveMoveTo = true;
                     }
@@ -950,6 +992,7 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
                     break;
                 case SkPath::kClose_Verb:
                     p.close();
+                    haveMoveTo = false;
                     lastWasClose = true;
                     break;
                 default:;

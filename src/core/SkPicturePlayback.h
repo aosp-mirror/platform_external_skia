@@ -32,7 +32,7 @@ public:
     SkPicturePlayback();
     SkPicturePlayback(const SkPicturePlayback& src);
     explicit SkPicturePlayback(const SkPictureRecord& record);
-    explicit SkPicturePlayback(SkStream*);
+    explicit SkPicturePlayback(SkStream*, uint32_t pictureVersion = PICTURE_VERSION_JB);
 
     virtual ~SkPicturePlayback();
 
@@ -41,7 +41,7 @@ public:
     void serialize(SkWStream*) const;
 
     void dumpSize() const;
-    
+
     // Can be called in the middle of playback (the draw() call). WIll abort the
     // drawing and return from draw() after the "current" op code is done
     void abort();
@@ -83,7 +83,7 @@ private:
         SkASSERT(index > 0 && index <= fPictureCount);
         return *fPictureRefs[index - 1];
     }
-    
+
     const SkPaint* getPaint() {
         int index = getInt();
         if (index == 0) {
