@@ -28,8 +28,8 @@ extern "C" void arm_memset32(uint32_t* dst, uint32_t value, int count);
 SkMemset16Proc SkMemset16GetPlatformProc() {
 #if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
     return memset16_neon;
-//#elif defined(SK_CPU_LENDIAN)
-//    return arm_memset16;
+#elif defined(SK_CPU_LENDIAN)
+    return arm_memset16;
 #else
     return NULL;
 #endif

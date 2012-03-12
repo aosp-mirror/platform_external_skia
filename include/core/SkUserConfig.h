@@ -41,10 +41,15 @@
 // ANDROID Specific changes - NO NOT CHECK BACK INTO code.google.com/p/skia
 //
 
+#define PICTURE_VERSION_ICS 1 // r1562 of Skia
+#define PICTURE_VERSION_JB  2
+
 // do this build check for other tools that still read this header
 #ifdef ANDROID
     #include <utils/misc.h>
 #endif
+
+#define SK_USE_POSIX_THREADS
 
 /*  Scalars (the fractional value type in skia) can be implemented either as
     floats or 16.16 integers (fixed). Exactly one of these two symbols must be
@@ -111,7 +116,7 @@
     printf conventions (e.g. const char* format, ...). If you want to redirect
     this to something other than printf, define yours here
  */
-//#define SkDebugf(...) MyFunction(__VA_ARGS__)
+//#define SkDebugf(...)  MyFunction(__VA_ARGS__)
 
 /*
  *  To specify a different default font cache limit, define this. If this is

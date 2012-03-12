@@ -45,7 +45,7 @@ void SkImageDecoder::SetDeviceConfig(SkBitmap::Config config)
 SkImageDecoder::SkImageDecoder()
     : fReporter(NULL), fPeeker(NULL), fChooser(NULL), fAllocator(NULL),
       fSampleSize(1), fDefaultPref(SkBitmap::kNo_Config), fDitherImage(true),
-      fUsePrefTable(false) {
+      fUsePrefTable(false),fPreferQualityOverSpeed(false) {
 }
 
 SkImageDecoder::~SkImageDecoder() {
@@ -208,7 +208,13 @@ void SkImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
     }
     dest->setConfig(src->getConfig(), w, h);
     dest->setIsOpaque(src->isOpaque());
-    this->allocPixelRef(dest, NULL);
+
+    if (!this->allocPixelRef(dest, NULL)) {
+#ifdef SK_DEBUG
+        SkDebugf("failed to allocate pixels needed to crop the bitmap");
+#endif
+        return;
+    }
 
     SkCanvas canvas(*dest);
     canvas.drawBitmap(*src, (srcX - destX) / sampleSize,

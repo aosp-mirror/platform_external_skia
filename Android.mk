@@ -79,12 +79,14 @@ LOCAL_SRC_FILES:= \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
 	src/core/SkConcaveToTriangles.cpp \
+	src/core/SkConfig8888.cpp \
 	src/core/SkCordic.cpp \
 	src/core/SkCubicClipper.cpp \
 	src/core/SkData.cpp \
 	src/core/SkDebug.cpp \
 	src/core/SkDeque.cpp \
 	src/core/SkDevice.cpp \
+	src/core/SkDeviceProfile.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
   src/core/SkEdgeBuilder.cpp \
@@ -172,6 +174,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkKernel33MaskFilter.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
+	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
@@ -215,12 +218,15 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkThread_pthread.cpp \
 	src/ports/SkTime_Unix.cpp \
+	src/utils/SkBase64.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkCamera.cpp \
 	src/utils/SkColorMatrix.cpp \
   src/utils/SkCubicInterval.cpp \
 	src/utils/SkCullPoints.cpp \
+	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
@@ -320,18 +326,19 @@ endif
 
 LOCAL_SRC_FILES:= \
   src/gpu/GrPrintf_skia.cpp \
-  src/gpu/SkGLContext.cpp \
   src/gpu/SkGpuCanvas.cpp \
   src/gpu/SkGpuDevice.cpp \
   src/gpu/SkGr.cpp \
   src/gpu/SkGrFontScaler.cpp \
   src/gpu/SkGrTexturePixelRef.cpp \
-  src/gpu/SkNullGLContext.cpp \
-  src/gpu/android/SkNativeGLContext_android.cpp
+  src/gpu/android/SkNativeGLContext_android.cpp \
+  src/gpu/gl/SkGLContext.cpp \
+  src/gpu/gl/SkNullGLContext.cpp
 
 LOCAL_SRC_FILES += \
   src/gpu/GrAAHairLinePathRenderer.cpp \
-  src/gpu/GrAddPathRenderers_aahairline.cpp \
+  src/gpu/GrAAConvexPathRenderer.cpp \
+  src/gpu/GrAddPathRenderers_default.cpp \
   src/gpu/GrAllocPool.cpp \
   src/gpu/GrAtlas.cpp \
   src/gpu/GrBufferAllocPool.cpp \
@@ -339,21 +346,8 @@ LOCAL_SRC_FILES += \
   src/gpu/GrContext.cpp \
   src/gpu/GrDefaultPathRenderer.cpp \
   src/gpu/GrDrawTarget.cpp \
-  src/gpu/GrGLCreateNullInterface.cpp \
-  src/gpu/GrGLDefaultInterface_native.cpp \
-  src/gpu/GrGLIndexBuffer.cpp \
-  src/gpu/GrGLInterface.cpp \
-  src/gpu/GrGLProgram.cpp \
-  src/gpu/GrGLRenderTarget.cpp \
-  src/gpu/GrGLSL.cpp \
-  src/gpu/GrGLStencilBuffer.cpp \
-  src/gpu/GrGLTexture.cpp \
-  src/gpu/GrGLUtil.cpp \
-  src/gpu/GrGLVertexBuffer.cpp \
   src/gpu/GrGpu.cpp \
   src/gpu/GrGpuFactory.cpp \
-  src/gpu/GrGpuGL.cpp \
-  src/gpu/GrGpuGLShaders.cpp \
   src/gpu/GrInOrderDrawBuffer.cpp \
   src/gpu/GrMatrix.cpp \
   src/gpu/GrMemory.cpp \
@@ -372,6 +366,23 @@ LOCAL_SRC_FILES += \
   src/gpu/GrTexture.cpp \
   src/gpu/gr_unittests.cpp \
   src/gpu/android/GrGLCreateNativeInterface_android.cpp
+
+LOCAL_SRC_FILES += \
+  src/gpu/gl/GrGLCaps.cpp \
+  src/gpu/gl/GrGLContextInfo.cpp \
+  src/gpu/gl/GrGLCreateNullInterface.cpp \
+  src/gpu/gl/GrGLDefaultInterface_native.cpp \
+  src/gpu/gl/GrGLIndexBuffer.cpp \
+  src/gpu/gl/GrGLInterface.cpp \
+  src/gpu/gl/GrGLProgram.cpp \
+  src/gpu/gl/GrGLRenderTarget.cpp \
+  src/gpu/gl/GrGLSL.cpp \
+  src/gpu/gl/GrGLStencilBuffer.cpp \
+  src/gpu/gl/GrGLTexture.cpp \
+  src/gpu/gl/GrGLUtil.cpp \
+  src/gpu/gl/GrGLVertexBuffer.cpp \
+  src/gpu/gl/GrGpuGL.cpp \
+  src/gpu/gl/GrGpuGLShaders.cpp
   
 LOCAL_STATIC_LIBRARIES := libskiatess
 LOCAL_SHARED_LIBRARIES := \

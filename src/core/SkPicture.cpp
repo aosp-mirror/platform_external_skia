@@ -192,7 +192,9 @@ void SkPicture::draw(SkCanvas* surface) {
 #define PICTURE_VERSION     1
 
 SkPicture::SkPicture(SkStream* stream) : SkRefCnt() {
-    if (stream->readU32() != PICTURE_VERSION) {
+    const uint32_t  pictureVersion = stream->readU32();
+    if (pictureVersion != PICTURE_VERSION_ICS &&
+        pictureVersion != PICTURE_VERSION_JB) {
         sk_throw();
     }
 
@@ -203,7 +205,7 @@ SkPicture::SkPicture(SkStream* stream) : SkRefCnt() {
     fPlayback = NULL;
 
     if (stream->readBool()) {
-        fPlayback = SkNEW_ARGS(SkPicturePlayback, (stream));
+        fPlayback = SkNEW_ARGS(SkPicturePlayback, (stream, pictureVersion));
     }
 }
 
@@ -214,7 +216,7 @@ void SkPicture::serialize(SkWStream* stream) const {
         playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
     }
 
-    stream->write32(PICTURE_VERSION);
+    stream->write32(PICTURE_VERSION_JB);
     stream->write32(fWidth);
     stream->write32(fHeight);
     if (playback) {

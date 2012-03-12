@@ -21,6 +21,7 @@
 #include "GrTexture.h"
 
 #include "SkXfermode.h"
+#include "SkTLazy.h"
 
 class GrTexture;
 class GrClipIterator;
@@ -50,7 +51,6 @@ public:
         bool fFSAASupport               : 1;
         bool fDualSourceBlendingSupport : 1;
         bool fBufferLockSupport         : 1;
-        bool fSupportPerVertexCoverage  : 1;
         int fMaxRenderTargetSize;
         int fMaxTextureSize;
     };
@@ -140,7 +140,7 @@ public:
      */
     struct SavedDrawState {
     private:
-        GrDrawState fState;
+        SkTLazy<GrDrawState> fState;
         friend class GrDrawTarget;
     };
 
@@ -240,8 +240,7 @@ public:
     enum VertexLayoutBits {
         /* vertices have colors (GrColor) */
         kColor_VertexLayoutBit              = 1 << (STAGE_BIT_CNT + 0),
-        /* vertices have coverage (GrColor where all channels should have the 
-         * same value)
+        /* vertices have coverage (GrColor)
          */
         kCoverage_VertexLayoutBit           = 1 << (STAGE_BIT_CNT + 1),
         /* Use text vertices. (Pos and tex coords may be a different type for
@@ -928,10 +927,12 @@ protected:
 
     // Helpers for GrDrawTarget subclasses that won't have private access to
     // SavedDrawState but need to peek at the state values.
-    static GrDrawState& accessSavedDrawState(SavedDrawState& sds)
-                                                        { return sds.fState; }
-    static const GrDrawState& accessSavedDrawState(const SavedDrawState& sds)
-                                                        { return sds.fState; }
+    static GrDrawState& accessSavedDrawState(SavedDrawState& sds) {
+        return *sds.fState.get();
+    }
+    static const GrDrawState& accessSavedDrawState(const SavedDrawState& sds){
+        return *sds.fState.get();
+    }
 
     // implemented by subclass to allocate space for reserved geom
     virtual bool onReserveVertexSpace(GrVertexLayout vertexLayout,
