@@ -6,19 +6,21 @@
  */
 
 #include "gm.h"
+#include "system_preferences.h"
 #include "GrContext.h"
 #include "GrRenderTarget.h"
 
 #include "SkColorPriv.h"
 #include "SkData.h"
+#include "SkDeferredCanvas.h"
 #include "SkDevice.h"
 #include "SkGpuCanvas.h"
 #include "SkGpuDevice.h"
 #include "SkGraphics.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
-#include "SkNativeGLContext.h"
-#include "SkMesaGLContext.h"
+#include "gl/SkNativeGLContext.h"
+#include "gl/SkMesaGLContext.h"
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "SkRefCnt.h"
@@ -32,6 +34,9 @@ extern bool gSkSuppressFontCachePurgeSpew;
     #include "SkPDFDocument.h"
 #endif
 
+// Until we resolve http://code.google.com/p/skia/issues/detail?id=455 ,
+// stop writing out XPS-format image baselines in gm.
+#undef SK_SUPPORT_XPS
 #ifdef SK_SUPPORT_XPS
     #include "SkXPSDevice.h"
 #endif
@@ -268,26 +273,41 @@ static void invokeGM(GM* gm, SkCanvas* canvas) {
 static ErrorBitfield generate_image(GM* gm, const ConfigData& gRec,
                                     GrContext* context,
                                     GrRenderTarget* rt,
-                                    SkBitmap* bitmap) {
+                                    SkBitmap* bitmap,
+                                    bool deferred) {
     SkISize size (gm->getISize());
     setup_bitmap(gRec, size, bitmap);
-    SkCanvas canvas(*bitmap);
 
     if (gRec.fBackend == kRaster_Backend) {
-        invokeGM(gm, &canvas);
+        SkCanvas* canvas;
+        if (deferred) {
+            canvas = new SkDeferredCanvas;
+            canvas->setDevice(new SkDevice(*bitmap))->unref();
+        } else {
+            canvas = new SkCanvas(*bitmap);
+        }
+        SkAutoUnref canvasUnref(canvas);
+        invokeGM(gm, canvas);
+        canvas->flush();
     } else {  // GPU
         if (NULL == context) {
             return ERROR_NO_GPU_CONTEXT;
         }
-        SkGpuCanvas gc(context, rt);
-        gc.setDevice(new SkGpuDevice(context, rt))->unref();
-        invokeGM(gm, &gc);
+        SkCanvas* gc;
+        if (deferred) {
+            gc = new SkDeferredCanvas;
+        } else {
+            gc = new SkGpuCanvas(context, rt);
+        }
+        SkAutoUnref gcUnref(gc);
+        gc->setDevice(new SkGpuDevice(context, rt))->unref();
+        invokeGM(gm, gc);
         // the device is as large as the current rendertarget, so we explicitly
         // only readback the amount we expect (in size)
         // overwrite our previous allocation
         bitmap->setConfig(SkBitmap::kARGB_8888_Config, size.fWidth,
                                                        size.fHeight);
-        gc.readPixels(bitmap, 0, 0);
+        gc->readPixels(bitmap, 0, 0);
     }
     return ERROR_NONE;
 }
@@ -488,7 +508,8 @@ static ErrorBitfield test_drawing(GM* gm,
     if (gRec.fBackend == kRaster_Backend ||
         gRec.fBackend == kGPU_Backend) {
         // Early exit if we can't generate the image.
-        ErrorBitfield errors = generate_image(gm, gRec, context, rt, bitmap);
+        ErrorBitfield errors = generate_image(gm, gRec, context, rt, bitmap,
+            false);
         if (ERROR_NONE != errors) {
             return errors;
         }
@@ -504,6 +525,28 @@ static ErrorBitfield test_drawing(GM* gm,
     }
     return handle_test_results(gm, gRec, writePath, readPath, diffPath,
                                "", *bitmap, &document, NULL);
+}
+
+static ErrorBitfield test_deferred_drawing(GM* gm,
+                         const ConfigData& gRec,
+                         const SkBitmap& comparisonBitmap,
+                         const char diffPath [],
+                         GrContext* context,
+                         GrRenderTarget* rt) {
+    SkDynamicMemoryWStream document;
+
+    if (gRec.fBackend == kRaster_Backend ||
+        gRec.fBackend == kGPU_Backend) {
+        SkBitmap bitmap;
+        // Early exit if we can't generate the image, but this is
+        // expected in some cases, so don't report a test failure.
+        if (!generate_image(gm, gRec, context, rt, &bitmap, true)) {
+            return ERROR_NONE;
+        }
+        return handle_test_results(gm, gRec, NULL, NULL, diffPath,
+                                   "-deferred", bitmap, NULL, &comparisonBitmap);
+    }
+    return ERROR_NONE;
 }
 
 static ErrorBitfield test_picture_playback(GM* gm,
@@ -545,20 +588,30 @@ static ErrorBitfield test_picture_serialization(GM* gm,
 }
 
 static void usage(const char * argv0) {
-    SkDebugf("%s [-w writePath] [-r readPath] [-d diffPath]\n", argv0);
-    SkDebugf("    [--replay] [--serialize]\n");
+    SkDebugf(
+        "%s [-w writePath] [-r readPath] [-d diffPath] [--noreplay]\n"
+        "    [--serialize] [--forceBWtext] [--nopdf] [--nodeferred]\n"
+        "    [--match substring] [--notexturecache]"
+#if SK_MESA
+        " [--mesagl]"
+#endif
+        "\n\n", argv0);
     SkDebugf("    writePath: directory to write rendered images in.\n");
     SkDebugf(
 "    readPath: directory to read reference images from;\n"
 "        reports if any pixels mismatch between reference and new images\n");
     SkDebugf("    diffPath: directory to write difference images in.\n");
-    SkDebugf("    --replay: exercise SkPicture replay.\n");
+    SkDebugf("    --noreplay: do not exercise SkPicture replay.\n");
     SkDebugf(
 "    --serialize: exercise SkPicture serialization & deserialization.\n");
+    SkDebugf("    --forceBWtext: disable text anti-aliasing.\n");
+    SkDebugf("    --nopdf: skip the pdf rendering test pass.\n");
+    SkDebugf("    --nodeferred: skip the deferred rendering test pass.\n");
     SkDebugf("    --match foo will only run tests that substring match foo.\n");
 #if SK_MESA
     SkDebugf("    --mesagl will run using the osmesa sw gl rasterizer.\n");
 #endif
+    SkDebugf("    --notexturecache: disable the gpu texture cache.\n");
 }
 
 static const ConfigData gRec[] = {
@@ -602,17 +655,21 @@ int main(int argc, char * const argv[]) {
     // we don't need to see this during a run
     gSkSuppressFontCachePurgeSpew = true;
 
+    setSystemPreferences();
+
     const char* writePath = NULL;   // if non-null, where we write the originals
     const char* readPath = NULL;    // if non-null, were we read from to compare
     const char* diffPath = NULL;    // if non-null, where we write our diffs (from compare)
 
     SkTDArray<const char*> fMatches;
-    
+
     bool doPDF = true;
     bool doReplay = true;
     bool doSerialize = false;
     bool useMesa = false;
-    
+    bool doDeferred = true;
+    bool disableTextureCache = false;
+
     const char* const commandName = argv[0];
     char* const* stop = argv + argc;
     for (++argv; argv < stop; ++argv) {
@@ -637,6 +694,8 @@ int main(int argc, char * const argv[]) {
             doReplay = false;
         } else if (strcmp(*argv, "--nopdf") == 0) {
             doPDF = false;
+        } else if (strcmp(*argv, "--nodeferred") == 0) {
+            doDeferred = false;
         } else if (strcmp(*argv, "--serialize") == 0) {
             doSerialize = true;
         } else if (strcmp(*argv, "--match") == 0) {
@@ -649,6 +708,8 @@ int main(int argc, char * const argv[]) {
         } else if (strcmp(*argv, "--mesagl") == 0) {
             useMesa = true;
 #endif
+        } else if (strcmp(*argv, "--notexturecache") == 0) {
+          disableTextureCache = true;
         } else {
           usage(commandName);
           return -1;
@@ -705,6 +766,10 @@ int main(int argc, char * const argv[]) {
     int testsFailed = 0;
     int testsMissingReferenceImages = 0;
 
+    if (disableTextureCache) {
+        skiagm::GetGr()->setTextureCacheLimits(0, 0);
+    }
+
     iter.reset();
     while ((gm = iter.next()) != NULL) {
         const char* shortName = gm->shortName();
@@ -734,7 +799,7 @@ int main(int argc, char * const argv[]) {
         for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
             // Skip any tests that we don't even need to try.
             uint32_t gmFlags = gm->getFlags();
-            if ((kPDF_Backend == gRec[i].fBackend) && 
+            if ((kPDF_Backend == gRec[i].fBackend) &&
                 (!doPDF || (gmFlags & GM::kSkipPDF_Flag)))
             {
                 continue;
@@ -756,6 +821,14 @@ int main(int argc, char * const argv[]) {
                                            writePath, readPath, diffPath,
                                            gGrContext,
                                            rt.get(), &forwardRenderedBitmap);
+            }
+
+            if (doDeferred && !testErrors &&
+                (kGPU_Backend == gRec[i].fBackend ||
+                kRaster_Backend == gRec[i].fBackend)) {
+                testErrors |= test_deferred_drawing(gm, gRec[i],
+                                    forwardRenderedBitmap,
+                                    diffPath, gGrContext, rt.get());
             }
 
             if ((ERROR_NONE == testErrors) && doReplay &&

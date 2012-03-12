@@ -16,11 +16,14 @@ LOCAL_SRC_FILES:= \
   ColorFilterTest.cpp \
   ColorTest.cpp \
   DataRefTest.cpp \
+  DeferredCanvasTest.cpp \
   DequeTest.cpp \
   DrawBitmapRectTest.cpp \
+  DrawTextTest.cpp \
   EmptyPathTest.cpp \
   FillPathTest.cpp \
   FlateTest.cpp \
+  FontHostTest.cpp \
   GeometryTest.cpp \
   GLInterfaceValidation.cpp \
   GLProgramsTest.cpp \
@@ -37,6 +40,7 @@ LOCAL_SRC_FILES:= \
   PathMeasureTest.cpp \
   PathTest.cpp \
   PointTest.cpp \
+  PremulAlphaRoundTripTest.cpp \
   QuickRejectTest.cpp \
   Reader32Test.cpp \
   ReadPixelsTest.cpp \

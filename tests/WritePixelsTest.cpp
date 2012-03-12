@@ -233,6 +233,7 @@ bool checkWrite(skiatest::Reporter* reporter,
     intptr_t canvasPixels = reinterpret_cast<intptr_t>(devBmp.getPixels());
     size_t canvasRowBytes = devBmp.rowBytes();
     SkIRect writeRect = SkIRect::MakeXYWH(writeX, writeY, bitmap.width(), bitmap.height());
+    bool success = true;
     for (int cy = 0; cy < DEV_H; ++cy) {
         const SkPMColor* canvasRow = reinterpret_cast<const SkPMColor*>(canvasPixels);
         for (int cx = 0; cx < DEV_W; ++cx) {
@@ -246,14 +247,14 @@ bool checkWrite(skiatest::Reporter* reporter,
                 bool check;
                 REPORTER_ASSERT(reporter, check = checkPixel(bmpPMColor, canvasPixel, mul));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             } else {
                 bool check;
                 SkPMColor testColor = getCanvasColor(cx, cy);
                 REPORTER_ASSERT(reporter, check = (canvasPixel == testColor));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             }
         }
@@ -263,14 +264,14 @@ bool checkWrite(skiatest::Reporter* reporter,
                 bool check;
                 REPORTER_ASSERT(reporter, check = (pad[px] == static_cast<char>(DEV_PAD)));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             }
         }
         canvasPixels += canvasRowBytes;
     }
 
-    return true;
+    return success;
 }
 
 enum DevType {

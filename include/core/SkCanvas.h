@@ -62,6 +62,11 @@ public:
     ///////////////////////////////////////////////////////////////////////////
 
     /**
+     *  Trigger the immediate execution of all pending draw operations.
+     */
+    void flush();
+
+    /**
      *  Return the width/height of the underlying device. The current drawable
      *  area may be small (due to clipping or saveLayer). For a canvas with
      *  no device, 0,0 will be returned.
@@ -78,7 +83,7 @@ public:
         reference count is incremented. If the canvas was already holding a
         device, its reference count is decremented. The new device is returned.
     */
-    SkDevice* setDevice(SkDevice* device);
+    virtual SkDevice* setDevice(SkDevice* device);
 
     /**
      *  saveLayer() can create another device (which is later drawn onto
@@ -99,7 +104,7 @@ public:
      *  Shortcut for getDevice()->createCompatibleDevice(...).
      *  If getDevice() == NULL, this method does nothing, and returns NULL.
      */
-    SkDevice* createCompatibleDevice(SkBitmap::Config config, 
+    SkDevice* createCompatibleDevice(SkBitmap::Config config,
                                     int width, int height,
                                     bool isOpaque);
 
@@ -152,7 +157,7 @@ public:
      *  kARGB_8888_Config as SkPMColor
      *
      *  If the bitmap has pixels already allocated, the canvas pixels will be
-     *  written there. If not, bitmap->allocPixels() will be called 
+     *  written there. If not, bitmap->allocPixels() will be called
      *  automatically. If the bitmap is backed by a texture readPixels will
      *  fail.
      *
@@ -290,7 +295,7 @@ public:
     /** Returns true if drawing is currently going to a layer (from saveLayer)
      *  rather than to the root device.
      */
-    bool isDrawingToLayer() const;
+    virtual bool isDrawingToLayer() const;
 
     /** Preconcat the current matrix with the specified translation
         @param dx   The distance to translate in X
@@ -424,7 +429,16 @@ public:
         @return true if the horizontal band is completely clipped out (i.e. does
                      not intersect the current clip)
     */
-    bool quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const;
+    bool quickRejectY(SkScalar top, SkScalar bottom, EdgeType et) const {
+        SkASSERT(SkScalarToCompareType(top) <= SkScalarToCompareType(bottom));
+        const SkRectCompareType& clipR = this->getLocalClipBoundsCompareType(et);
+        // In the case where the clip is empty and we are provided with a
+        // negative top and positive bottom parameter then this test will return
+        // false even though it will be clipped. We have chosen to exclude that
+        // check as it is rare and would result double the comparisons.
+        return SkScalarToCompareType(top) >= clipR.fBottom
+            || SkScalarToCompareType(bottom) <= clipR.fTop;
+    }
 
     /** Return the bounds of the current clip (in local coordinates) in the
         bounds parameter, and return true if it is non-empty. This can be useful
@@ -438,7 +452,7 @@ public:
         then taking its bounds.
     */
     bool getClipDeviceBounds(SkIRect* bounds) const;
-       
+
 
     /** Fill the entire canvas' bitmap (restricted to the current clip) with the
         specified ARGB color, using the specified mode.
@@ -921,9 +935,20 @@ public:
     };
 
 protected:
+    // Returns the canvas to be used by DrawIter. Default implementation
+    // returns this. Subclasses that encapsulate an indirect canvas may
+    // need to overload this method. The impl must keep track of this, as it
+    // is not released or deleted by the caller.
+    virtual SkCanvas* canvasForDrawIter();
+
     // all of the drawBitmap variants call this guy
     virtual void commonDrawBitmap(const SkBitmap&, const SkIRect*,
                                   const SkMatrix&, const SkPaint& paint);
+
+    // Clip rectangle bounds. Called internally by saveLayer.
+    // returns false if the entire rectangle is entirely clipped out
+    bool clipRectBounds(const SkRect* bounds, SaveFlags flags,
+                         SkIRect* intersection);
 
 private:
     class MCRec;
@@ -947,7 +972,7 @@ private:
 
     friend class SkDrawIter;    // needs setupDrawForLayerDevice()
 
-    SkDevice* createLayerDevice(SkBitmap::Config, int width, int height, 
+    SkDevice* createLayerDevice(SkBitmap::Config, int width, int height,
                                 bool isOpaque);
 
     SkDevice* init(SkDevice*);
@@ -962,7 +987,7 @@ private:
                                 const SkRect& dst, const SkPaint* paint);
     void internalDrawPaint(const SkPaint& paint);
 
-        
+
     void drawDevice(SkDevice*, int x, int y, const SkPaint*);
     // shared by save() and saveLayer()
     int internalSave(SaveFlags flags);

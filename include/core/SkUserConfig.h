@@ -49,6 +49,8 @@
     #include <utils/misc.h>
 #endif
 
+#define SK_USE_POSIX_THREADS
+
 /*  Scalars (the fractional value type in skia) can be implemented either as
     floats or 16.16 integers (fixed). Exactly one of these two symbols must be
     defined.
@@ -114,7 +116,7 @@
     printf conventions (e.g. const char* format, ...). If you want to redirect
     this to something other than printf, define yours here
  */
-//#define SkDebugf(...) MyFunction(__VA_ARGS__)
+//#define SkDebugf(...)  MyFunction(__VA_ARGS__)
 
 /*
  *  To specify a different default font cache limit, define this. If this is

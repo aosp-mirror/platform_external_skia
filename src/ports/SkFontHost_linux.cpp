@@ -60,7 +60,7 @@ struct NameFamilyPair {
 static int32_t gUniqueFontID;
 
 // this is the mutex that protects these globals
-static SkMutex gFamilyMutex;
+SK_DECLARE_STATIC_MUTEX(gFamilyMutex);
 static FamilyRec* gFamilyHead;
 static SkTDArray<NameFamilyPair> gNameList;
 
@@ -541,12 +541,6 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
    
     SkSafeRef(tf); 
     return tf;
-}
-
-bool SkFontHost::ValidFontID(uint32_t fontID) {
-    SkAutoMutexAcquire  ac(gFamilyMutex);
-    
-    return valid_uniqueID(fontID);
 }
 
 SkStream* SkFontHost::OpenStream(uint32_t fontID) {
