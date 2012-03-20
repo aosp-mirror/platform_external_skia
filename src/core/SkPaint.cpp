@@ -2018,9 +2018,12 @@ SkTextToPathIter::SkTextToPathIter( const char text[], size_t length,
     }
 
     // can't use our canonical size if we need to apply patheffects/strokes
-    if (fPaint.isLinearText() && !applyStrokeAndPathEffects) {
+    if (fPaint.getPathEffect() == NULL) {
         fPaint.setTextSize(SkIntToScalar(SkPaint::kCanonicalTextSizeForPaths));
         fScale = paint.getTextSize() / SkPaint::kCanonicalTextSizeForPaths;
+        if (has_thick_frame(fPaint)) {
+            fPaint.setStrokeWidth(SkScalarDiv(fPaint.getStrokeWidth(), fScale));
+        }
     } else {
         fScale = SK_Scalar1;
     }
