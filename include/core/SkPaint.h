@@ -13,6 +13,7 @@
 #include "SkColor.h"
 #include "SkDrawLooper.h"
 #include "SkXfermode.h"
+#include "SkString.h"
 
 class SkAutoGlyphCache;
 class SkColorFilter;
@@ -654,6 +655,18 @@ public:
     */
     void    setTextAlign(Align align);
 
+#ifdef SK_BUILD_FOR_ANDROID
+    /** Return the paint's text locale value.
+        @return the paint's text locale value used for drawing text.
+    */
+    const SkString& getTextLocale() const { return fTextLocale; }
+
+    /** Set the paint's text locale.
+        @param locale set the paint's locale value for drawing text.
+    */
+    void    setTextLocale(const SkString& locale);
+#endif
+
     /** Return the paint's text size.
         @return the paint's text size.
     */
@@ -888,6 +901,9 @@ private:
     unsigned        fStyle : 2;
     unsigned        fTextEncoding : 2;  // 3 values
     unsigned        fHinting : 2;
+#ifdef SK_BUILD_FOR_ANDROID
+    SkString        fTextLocale;
+#endif
 
     SkDrawCacheProc    getDrawCacheProc() const;
     SkMeasureCacheProc getMeasureCacheProc(TextBufferDirection dir,

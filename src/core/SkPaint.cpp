@@ -7,6 +7,8 @@
  */
 
 
+#include <new>
+
 #include "SkPaint.h"
 #include "SkColorFilter.h"
 #include "SkFontHost.h"
@@ -69,6 +71,7 @@ SkPaint::SkPaint() {
     fTextEncoding = kUTF8_TextEncoding;
     fHinting    = SkPaintDefaults_Hinting;
 #ifdef SK_BUILD_FOR_ANDROID
+    new(&fTextLocale) SkString();
     fGenerationID = 0;
 #endif
 }
@@ -85,6 +88,9 @@ SkPaint::SkPaint(const SkPaint& src) {
     SkSafeRef(fRasterizer);
     SkSafeRef(fLooper);
     SkSafeRef(fImageFilter);
+#ifdef SK_BUILD_FOR_ANDROID
+    new(&fTextLocale) SkString(src.fTextLocale);
+#endif
 }
 
 SkPaint::~SkPaint() {
@@ -123,10 +129,12 @@ SkPaint& SkPaint::operator=(const SkPaint& src) {
     SkSafeUnref(fImageFilter);
 
 #ifdef SK_BUILD_FOR_ANDROID
+    fTextLocale.~SkString();
     uint32_t oldGenerationID = fGenerationID;
 #endif
     memcpy(this, &src, sizeof(src));
 #ifdef SK_BUILD_FOR_ANDROID
+    new(&fTextLocale) SkString(src.fTextLocale);
     fGenerationID = oldGenerationID + 1;
 #endif
 
@@ -356,6 +364,15 @@ void SkPaint::setTextEncoding(TextEncoding encoding) {
 #endif
     }
 }
+
+#ifdef SK_BUILD_FOR_ANDROID
+void SkPaint::setTextLocale(const SkString& locale) {
+    if(!fTextLocale.equals(locale)) {
+        fTextLocale.set(locale);
+        GEN_ID_INC;
+    }
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
