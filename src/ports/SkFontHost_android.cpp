@@ -28,8 +28,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FONT_CACHE_MEMORY_BUDGET    (768 * 1024)
-
 #ifndef SK_FONT_FILE_PREFIX
     #define SK_FONT_FILE_PREFIX          "/fonts/"
 #endif
