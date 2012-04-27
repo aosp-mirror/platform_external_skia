@@ -191,10 +191,18 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
                 return error_return(gif, *bm, "chooseFromOneChoice");
             }
             
-            bm->setConfig(SkBitmap::kIndex8_Config, width, height);
-            if (SkImageDecoder::kDecodeBounds_Mode == mode)
+            if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+                bm->setConfig(SkBitmap::kIndex8_Config, width, height);
                 return true;
+            }
+#ifdef SK_BUILD_FOR_ANDROID
+            // No Bitmap reuse supported for this format
+            if (!bm->isNull()) {
+                return false;
+            }
+#endif
 
+            bm->setConfig(SkBitmap::kIndex8_Config, width, height);
             SavedImage* image = &gif->SavedImages[gif->ImageCount-1];
             const GifImageDesc& desc = image->ImageDesc;
             

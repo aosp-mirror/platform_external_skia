@@ -110,13 +110,22 @@ bool SkWBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
     int width = head.fWidth;
     int height = head.fHeight;
     
+    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+        // assign these directly, in case we return kDimensions_Result
+        decodedBitmap->setConfig(SkBitmap::kIndex8_Config, width, height);
+        decodedBitmap->setIsOpaque(true);
+        return true;
+    }
+#ifdef SK_BUILD_FOR_ANDROID
+    // No Bitmap reuse supported for this format
+    if (!decodedBitmap->isNull()) {
+        return false;
+    }
+#endif
     // assign these directly, in case we return kDimensions_Result
     decodedBitmap->setConfig(SkBitmap::kIndex8_Config, width, height);
     decodedBitmap->setIsOpaque(true);
-    
-    if (SkImageDecoder::kDecodeBounds_Mode == mode)
-        return true;
-    
+
     const SkPMColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
     SkColorTable* ct = SkNEW_ARGS(SkColorTable, (colors, 2));
     SkAutoUnref   aur(ct);

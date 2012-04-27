@@ -111,11 +111,19 @@ bool SkBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     SkScaledBitmapSampler sampler(width, height, getSampleSize());
 
-    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-    bm->setIsOpaque(true);
     if (justBounds) {
+        bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+        bm->setIsOpaque(true);
         return true;
     }
+#ifdef SK_BUILD_FOR_ANDROID
+    // No Bitmap reuse supported for this format
+    if (!bm->isNull()) {
+        return false;
+    }
+#endif
+    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bm->setIsOpaque(true);
 
     if (!this->allocPixelRef(bm, NULL)) {
         return false;
