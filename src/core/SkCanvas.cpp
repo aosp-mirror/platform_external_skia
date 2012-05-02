@@ -573,6 +573,9 @@ bool SkCanvas::readPixels(SkBitmap* bitmap,
 
 bool SkCanvas::readPixels(const SkIRect& srcRect, SkBitmap* bitmap) {
     SkDevice* device = this->getDevice();
+    if (!device) {
+        return false;
+    }
 
     SkIRect bounds;
     bounds.set(0, 0, device->width(), device->height());
@@ -1058,6 +1061,10 @@ static bool clipPathHelper(const SkCanvas* canvas, SkRasterClip* currClip,
         }
     } else {
         const SkDevice* device = canvas->getDevice();
+        if (!device) {
+            return currClip->setEmpty();
+        }
+
         base.setRect(0, 0, device->width(), device->height());
 
         if (SkRegion::kReplace_Op == op) {
@@ -1114,6 +1121,11 @@ bool SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
 void SkCanvas::validateClip() const {
     // construct clipRgn from the clipstack
     const SkDevice* device = this->getDevice();
+    if (!device) {
+        SkASSERT(this->getTotalClip().isEmpty());
+        return;
+    }
+
     SkIRect ir;
     ir.set(0, 0, device->width(), device->height());
     SkRasterClip tmpClip(ir);
