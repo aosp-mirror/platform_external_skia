@@ -404,6 +404,75 @@ static void S32_D565_Blend_Dither_neon(uint16_t *dst, const SkPMColor *src,
 #define S32A_D565_Opaque_PROC       S32A_D565_Opaque_neon
 #define S32A_D565_Blend_PROC        S32A_D565_Blend_neon
 #define S32_D565_Blend_Dither_PROC  S32_D565_Blend_Dither_neon
+#elif __ARM_ARCH__ >= 7 && !defined(SK_CPU_BENDIAN)
+static void S32A_D565_Opaque_v7(uint16_t* SK_RESTRICT dst,
+                                  const SkPMColor* SK_RESTRICT src, int count,
+                                  U8CPU alpha, int /*x*/, int /*y*/) {
+    SkASSERT(255 == alpha);
+
+    asm volatile (
+                  "1:                                   \n\t"
+                  "ldr     r3, [%[src]], #4             \n\t"
+                  "cmp     r3, #0xff000000              \n\t"
+                  "blo     2f                           \n\t"
+                  "and     r4, r3, #0x0000f8            \n\t"
+                  "and     r5, r3, #0x00fc00            \n\t"
+                  "and     r6, r3, #0xf80000            \n\t"
+                  "pld     [r1, #32]                    \n\t"
+                  "lsl     r3, r4, #8                   \n\t"
+                  "orr     r3, r3, r5, lsr #5           \n\t"
+                  "orr     r3, r3, r6, lsr #19          \n\t"
+                  "subs    %[count], %[count], #1       \n\t"
+                  "strh    r3, [%[dst]], #2             \n\t"
+                  "bne     1b                           \n\t"
+                  "b       4f                           \n\t"
+                  "2:                                   \n\t"
+                  "lsrs    r7, r3, #24                  \n\t"
+                  "beq     3f                           \n\t"
+                  "ldrh    r4, [%[dst]]                 \n\t"
+                  "rsb     r7, r7, #255                 \n\t"
+                  "and     r6, r4, #0x001f              \n\t"
+                  "ubfx    r5, r4, #5, #6               \n\t"
+                  "pld     [r0, #16]                    \n\t"
+                  "lsr     r4, r4, #11                  \n\t"
+                  "smulbb  r6, r6, r7                   \n\t"
+                  "smulbb  r5, r5, r7                   \n\t"
+                  "smulbb  r4, r4, r7                   \n\t"
+                  "ubfx    r7, r3, #16, #8              \n\t"
+                  "ubfx    ip, r3, #8, #8               \n\t"
+                  "and     r3, r3, #0xff                \n\t"
+                  "add     r6, r6, #16                  \n\t"
+                  "add     r5, r5, #32                  \n\t"
+                  "add     r4, r4, #16                  \n\t"
+                  "add     r6, r6, r6, lsr #5           \n\t"
+                  "add     r5, r5, r5, lsr #6           \n\t"
+                  "add     r4, r4, r4, lsr #5           \n\t"
+                  "add     r6, r7, r6, lsr #5           \n\t"
+                  "add     r5, ip, r5, lsr #6           \n\t"
+                  "add     r4, r3, r4, lsr #5           \n\t"
+                  "lsr     r6, r6, #3                   \n\t"
+                  "and     r5, r5, #0xfc                \n\t"
+                  "and     r4, r4, #0xf8                \n\t"
+                  "orr     r6, r6, r5, lsl #3           \n\t"
+                  "orr     r4, r6, r4, lsl #8           \n\t"
+                  "strh    r4, [%[dst]], #2             \n\t"
+                  "pld     [r1, #32]                    \n\t"
+                  "subs    %[count], %[count], #1       \n\t"
+                  "bne     1b                           \n\t"
+                  "b       4f                           \n\t"
+                  "3:                                   \n\t"
+                  "subs    %[count], %[count], #1       \n\t"
+                  "add     %[dst], %[dst], #2           \n\t"
+                  "bne     1b                           \n\t"
+                  "4:                                   \n\t"
+                  : [dst] "+r" (dst), [src] "+r" (src), [count] "+r" (count)
+                  :
+                  : "memory", "cc", "r3", "r4", "r5", "r6", "r7", "ip"
+                  );
+}
+#define S32A_D565_Opaque_PROC       S32A_D565_Opaque_v7
+#define S32A_D565_Blend_PROC        NULL
+#define S32_D565_Blend_Dither_PROC  NULL
 #else
 #define S32A_D565_Opaque_PROC       NULL
 #define S32A_D565_Blend_PROC        NULL
@@ -418,7 +487,181 @@ static void S32_D565_Blend_Dither_neon(uint16_t *dst, const SkPMColor *src,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
+#if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN) && defined(TEST_SRC_ALPHA)
+
+static void S32A_Opaque_BlitRow32_neon_test_alpha(SkPMColor* SK_RESTRICT dst,
+                                  const SkPMColor* SK_RESTRICT src,
+                                  int count, U8CPU alpha) {
+	SkASSERT(255 == alpha);
+	if (count <= 0)
+	return;
+
+	/* Use these to check if src is transparent or opaque */
+	const unsigned int ALPHA_OPAQ  = 0xFF000000;
+	const unsigned int ALPHA_TRANS = 0x00FFFFFF;
+
+#define UNROLL  4
+	const SkPMColor* SK_RESTRICT src_end = src + count - (UNROLL + 1);
+	const SkPMColor* SK_RESTRICT src_temp = src;
+
+	/* set up the NEON variables */
+	uint8x8_t alpha_mask;
+	static const uint8_t alpha_mask_setup[] = {3,3,3,3,7,7,7,7};
+	alpha_mask = vld1_u8(alpha_mask_setup);
+
+	uint8x8_t src_raw, dst_raw, dst_final;
+	uint8x8_t src_raw_2, dst_raw_2, dst_final_2;
+	uint8x8_t dst_cooked;
+	uint16x8_t dst_wide;
+	uint8x8_t alpha_narrow;
+	uint16x8_t alpha_wide;
+
+	/* choose the first processing type */
+	if( src >= src_end)
+		goto TAIL;
+	if(*src <= ALPHA_TRANS)
+		goto ALPHA_0;
+	if(*src >= ALPHA_OPAQ)
+		goto ALPHA_255;
+	/* fall-thru */
+
+ALPHA_1_TO_254:
+	do {
+
+		/* get the source */
+		src_raw = vreinterpret_u8_u32(vld1_u32(src));
+		src_raw_2 = vreinterpret_u8_u32(vld1_u32(src+2));
+
+		/* get and hold the dst too */
+		dst_raw = vreinterpret_u8_u32(vld1_u32(dst));
+		dst_raw_2 = vreinterpret_u8_u32(vld1_u32(dst+2));
+
+
+		/* get the alphas spread out properly */
+		alpha_narrow = vtbl1_u8(src_raw, alpha_mask);
+		/* reflect SkAlpha255To256() semantics a+1 vs a+a>>7 */
+		/* we collapsed (255-a)+1 ... */
+		alpha_wide = vsubw_u8(vdupq_n_u16(256), alpha_narrow);
+
+		/* spread the dest */
+		dst_wide = vmovl_u8(dst_raw);
+
+		/* alpha mul the dest */
+		dst_wide = vmulq_u16 (dst_wide, alpha_wide);
+		dst_cooked = vshrn_n_u16(dst_wide, 8);
+
+		/* sum -- ignoring any byte lane overflows */
+		dst_final = vadd_u8(src_raw, dst_cooked);
+
+		alpha_narrow = vtbl1_u8(src_raw_2, alpha_mask);
+		/* reflect SkAlpha255To256() semantics a+1 vs a+a>>7 */
+		/* we collapsed (255-a)+1 ... */
+		alpha_wide = vsubw_u8(vdupq_n_u16(256), alpha_narrow);
+
+		/* spread the dest */
+		dst_wide = vmovl_u8(dst_raw_2);
+
+		/* alpha mul the dest */
+		dst_wide = vmulq_u16 (dst_wide, alpha_wide);
+		dst_cooked = vshrn_n_u16(dst_wide, 8);
+
+		/* sum -- ignoring any byte lane overflows */
+		dst_final_2 = vadd_u8(src_raw_2, dst_cooked);
+
+		vst1_u32(dst, vreinterpret_u32_u8(dst_final));
+		vst1_u32(dst+2, vreinterpret_u32_u8(dst_final_2));
+
+		src += UNROLL;
+		dst += UNROLL;
+
+		/* if 2 of the next pixels aren't between 1 and 254
+		it might make sense to go to the optimized loops */
+		if((src[0] <= ALPHA_TRANS && src[1] <= ALPHA_TRANS) || (src[0] >= ALPHA_OPAQ && src[1] >= ALPHA_OPAQ))
+			break;
+
+	} while(src < src_end);
+
+	if (src >= src_end)
+		goto TAIL;
+
+	if(src[0] >= ALPHA_OPAQ && src[1] >= ALPHA_OPAQ)
+		goto ALPHA_255;
+
+	/*fall-thru*/
+
+ALPHA_0:
+
+	/*In this state, we know the current alpha is 0 and
+	 we optimize for the next alpha also being zero. */
+	src_temp = src;  //so we don't have to increment dst every time
+	do {
+		if(*(++src) > ALPHA_TRANS)
+			break;
+		if(*(++src) > ALPHA_TRANS)
+			break;
+		if(*(++src) > ALPHA_TRANS)
+			break;
+		if(*(++src) > ALPHA_TRANS)
+			break;
+	} while(src < src_end);
+
+	dst += (src - src_temp);
+
+	/* no longer alpha 0, so determine where to go next. */
+	if( src >= src_end)
+		goto TAIL;
+	if(*src >= ALPHA_OPAQ)
+		goto ALPHA_255;
+	else
+		goto ALPHA_1_TO_254;
+
+ALPHA_255:
+	while((src[0] & src[1] & src[2] & src[3]) >= ALPHA_OPAQ) {
+		dst[0]=src[0];
+		dst[1]=src[1];
+		dst[2]=src[2];
+		dst[3]=src[3];
+		src+=UNROLL;
+		dst+=UNROLL;
+		if(src >= src_end)
+			goto TAIL;
+	}
+
+	//Handle remainder.
+	if(*src >= ALPHA_OPAQ) { *dst++ = *src++;
+		if(*src >= ALPHA_OPAQ) { *dst++ = *src++;
+			if(*src >= ALPHA_OPAQ) { *dst++ = *src++; }
+		}
+	}
+
+	if( src >= src_end)
+		goto TAIL;
+	if(*src <= ALPHA_TRANS)
+		goto ALPHA_0;
+	else
+		goto ALPHA_1_TO_254;
+
+TAIL:
+	/* do any residual iterations */
+	src_end += UNROLL + 1;  //goto the real end
+	while(src != src_end) {
+		if( *src != 0 ) {
+			if( *src >= ALPHA_OPAQ ) {
+				*dst = *src;
+			}
+			else {
+				*dst = SkPMSrcOver(*src, *dst);
+			}
+		}
+		src++;
+		dst++;
+	}
+	return;
+}
+
+#define S32A_Opaque_BlitRow32_PROC  S32A_Opaque_BlitRow32_neon_test_alpha
+
+#elif defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
 
 static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
                                   const SkPMColor* SK_RESTRICT src,
@@ -544,11 +787,312 @@ static void S32A_Opaque_BlitRow32_neon(SkPMColor* SK_RESTRICT dst,
 
 #define	S32A_Opaque_BlitRow32_PROC	S32A_Opaque_BlitRow32_neon
 
-#else
+#elif defined (__ARM_ARCH__) /* #if defined(__ARM_HAVE_NEON) && defined... */
 
-#ifdef TEST_SRC_ALPHA
-#error The ARM asm version of S32A_Opaque_BlitRow32 does not support TEST_SRC_ALPHA
-#endif
+#if defined(TEST_SRC_ALPHA)
+
+static void __attribute__((naked)) S32A_Opaque_BlitRow32_arm_test_alpha
+                                        (SkPMColor* SK_RESTRICT dst,
+                                         const SkPMColor* SK_RESTRICT src,
+                                         int count, U8CPU alpha) {
+
+/* Optimizes for alpha == 0, alpha == 255, and 1 < alpha < 255 cases individually */
+/* Predicts that the next pixel will have the same alpha type as the current pixel */
+
+asm volatile (
+
+    "\tSTMDB  r13!, {r4-r12, r14}        \n" /* saving r4-r12, lr on the stack */
+                                             /* we should not save r0-r3 according to ABI */
+
+    "\tCMP    r2, #0                     \n" /* if (count == 0) */
+    "\tBEQ    9f                         \n" /* go to EXIT */
+
+    "\tMOV    r12, #0xff                 \n" /* load the 0xff mask in r12 */
+    "\tORR    r12, r12, r12, LSL #16     \n" /* convert it to 0xff00ff in r12 */
+
+    "\tMOV    r14, #255                  \n" /* r14 = 255 */
+                                             /* will be used later for left-side comparison */
+
+    "\tADD    r2, %[src], r2, LSL #2     \n" /* r2 points to last array element which can be used */
+    "\tSUB    r2, r2, #16                \n" /* as a base for 4-way processing algorithm */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer is bigger than */
+    "\tBGT    8f                         \n" /* calculated marker for 4-way -> */
+                                             /* use simple one-by-one processing */
+
+    /* START OF DISPATCHING BLOCK */
+
+    "\t0:                                \n"
+
+    "\tLDM    %[src]!, {r3, r4, r5, r6}  \n" /* 4-way loading of source values to r3-r6 */
+
+    "\tLSR    r7, r3, #24                \n" /* if not all src alphas of 4-way block are equal -> */
+    "\tCMP    r7, r4, LSR #24            \n"
+    "\tCMPEQ  r7, r5, LSR #24            \n"
+    "\tCMPEQ  r7, r6, LSR #24            \n"
+    "\tBNE    1f                         \n" /* -> go to general 4-way processing routine */
+
+    "\tCMP    r14, r7                    \n" /* if all src alphas are equal to 255 */
+    "\tBEQ    3f                         \n" /* go to alpha == 255 optimized routine */
+
+    "\tCMP    r7,  #0                    \n" /* if all src alphas are equal to 0 */
+    "\tBEQ    6f                         \n" /* go to alpha == 0 optimized routine */
+
+    /* END OF DISPATCHING BLOCK */
+
+    /* START OF BLOCK OPTIMIZED FOR 0 < ALPHA < 255 */
+
+    "\t1:                                \n"
+                                             /* we do not have enough registers to make */
+                                             /* 4-way [dst] loading -> we are using 2 * 2-way */
+
+    "\tLDM    %[dst], {r7, r8}           \n" /* 1st 2-way loading of dst values to r7-r8 */
+
+    /* PROCESSING BLOCK 1 */
+    /* r3 = src, r7 = dst */
+
+    "\tLSR    r11, r3,  #24              \n" /* extracting alpha from source and storing to r11 */
+    "\tAND    r9,  r12, r7               \n" /* r9 = br masked by r12 (0xff00ff) */
+    "\tRSB    r11, r11, #256             \n" /* subtracting the alpha from 255 -> r11 = scale */
+    "\tAND    r10, r12, r7, LSR #8       \n" /* r10 = ag masked by r12 (0xff00ff) */
+    "\tMUL    r9,  r9,  r11              \n" /* br = br * scale */
+    "\tAND    r9,  r12, r9, LSR #8       \n" /* lsr br by 8 and mask it */
+    "\tMUL    r10, r10, r11              \n" /* ag = ag * scale */
+    "\tAND    r10, r10, r12, LSL #8      \n" /* mask ag with reverse mask */
+    "\tORR    r7,  r9,  r10              \n" /* br | ag */
+    "\tADD    r7,  r3,  r7               \n" /* dst = src + calc dest(r8) */
+
+    /* PROCESSING BLOCK 2 */
+    /* r4 = src, r8 = dst */
+
+    "\tLSR    r11, r4,  #24              \n" /* see PROCESSING BLOCK 1 */
+    "\tAND    r9,  r12, r8               \n"
+    "\tRSB    r11, r11, #256             \n"
+    "\tAND    r10, r12, r8, LSR #8       \n"
+    "\tMUL    r9,  r9,  r11              \n"
+    "\tAND    r9,  r12, r9, LSR #8       \n"
+    "\tMUL    r10, r10, r11              \n"
+    "\tAND    r10, r10, r12, LSL #8      \n"
+    "\tORR    r8,  r9,  r10              \n"
+    "\tADD    r8,  r4,  r8               \n"
+
+    "\tSTM    %[dst]!, {r7, r8}          \n" /* 1st 2-way storing of processed dst values */
+
+    "\tLDM    %[dst], {r9, r10}          \n" /* 2nd 2-way loading of dst values to r9-r10 */
+
+    /* PROCESSING BLOCK 3 */
+    /* r5 = src, r9 = dst */
+
+    "\tLSR    r11, r5,  #24              \n" /* see PROCESSING BLOCK 1 */
+    "\tAND    r7,  r12, r9               \n"
+    "\tRSB    r11, r11, #256             \n"
+    "\tAND    r8,  r12, r9, LSR #8       \n"
+    "\tMUL    r7,  r7,  r11              \n"
+    "\tAND    r7,  r12, r7, LSR #8       \n"
+    "\tMUL    r8,  r8,  r11              \n"
+    "\tAND    r8,  r8,  r12, LSL #8      \n"
+    "\tORR    r9,  r7,  r8               \n"
+    "\tADD    r9,  r5,  r9               \n"
+
+    /* PROCESSING BLOCK 4 */
+    /* r6 = src, r10 = dst */
+
+    "\tLSR    r11, r6,  #24              \n" /* see PROCESSING BLOCK 1 */
+    "\tAND    r7,  r12, r10              \n"
+    "\tRSB    r11, r11, #256             \n"
+    "\tAND    r8,  r12, r10, LSR #8      \n"
+    "\tMUL    r7,  r7,  r11              \n"
+    "\tAND    r7,  r12, r7, LSR #8       \n"
+    "\tMUL    r8,  r8,  r11              \n"
+    "\tAND    r8,  r8,  r12, LSL #8      \n"
+    "\tORR    r10, r7,  r8               \n"
+    "\tADD    r10, r6,  r10              \n"
+
+    "\tSTM    %[dst]!, {r9, r10}         \n" /* 2nd 2-way storing of processed dst values */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] pointer <= calculated marker */
+    "\tBLE    0b                         \n" /* we could run 4-way processing -> go to dispatcher */
+    "\tBGT    8f                         \n" /* else -> use simple one-by-one processing */
+
+    /* END OF BLOCK OPTIMIZED FOR 0 < ALPHA < 255 */
+
+    /* START OF BLOCK OPTIMIZED FOR ALPHA == 255 */
+
+    "\t2:                                \n" /* ENTRY 1: LOADING [src] to registers */
+
+    "\tLDM    %[src]!, {r3, r4, r5, r6}  \n" /* 4-way loading of source values to r3-r6 */
+
+    "\tAND    r7, r3, r4                 \n" /* if not all alphas == 255 -> */
+    "\tAND    r8, r5, r6                 \n"
+    "\tAND    r9, r7, r8                 \n"
+    "\tCMP    r14, r9, LSR #24           \n"
+    "\tBNE    4f                         \n" /* -> go to alpha == 0 check */
+
+    "\t3:                                \n" /* ENTRY 2: [src] already loaded by DISPATCHER */
+
+    "\tSTM    %[dst]!, {r3, r4, r5, r6}  \n" /* all alphas == 255 -> 4-way copy [src] to [dst] */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer <= marker */
+    "\tBLE    2b                         \n" /* we could run 4-way processing */
+                                             /* because now we're in ALPHA == 255 state */
+                                             /* run next cycle with priority alpha == 255 checks */
+
+    "\tBGT    8f                         \n" /* if our current [src] array pointer > marker */
+                                             /* use simple one-by-one processing */
+
+    "\t4:                                \n"
+
+    "\tORR    r7, r3, r4                 \n" /* if not all alphas == 0 -> */
+    "\tORR    r8, r5, r6                 \n"
+    "\tORR    r9, r7, r8                 \n"
+    "\tLSRS   r9, #24                    \n"
+    "\tBNE    1b                         \n" /* -> go to general processing mode */
+                                             /* (we already checked for alpha == 255) */
+
+    "\tADD    %[dst], %[dst], #16        \n" /* all src alphas == 0 -> do not change dst values */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer <= marker */
+    "\tBLE    5f                         \n" /* we could run 4-way processing one more time */
+                                             /* because now we're in ALPHA == 0 state */
+                                             /* run next cycle with priority alpha == 0 checks */
+
+    "\tBGT    8f                         \n" /* if our current [src] array pointer > marker */
+                                             /* use simple one-by-one processing */
+
+    /* END OF BLOCK OPTIMIZED FOR ALPHA == 255 */
+
+    /* START OF BLOCK OPTIMIZED FOR ALPHA == 0 */
+
+    "\t5:                                \n" /* ENTRY 1: LOADING [src] to registers */
+
+    "\tLDM    %[src]!, {r3, r4, r5, r6}  \n" /* 4-way loading of source values to r3-r6 */
+
+    "\tORR    r7, r3, r4                 \n" /* if not all alphas == 0 -> */
+    "\tORR    r8, r5, r6                 \n"
+    "\tORR    r9, r7, r8                 \n"
+    "\tLSRS   r9, #24                    \n"
+    "\tBNE    7f                         \n" /* -> go to alpha == 255 check */
+
+    "\t6:                                \n" /* ENTRY 2: [src] already loaded by DISPATCHER */
+
+    "\tADD    %[dst], %[dst], #16        \n" /* all src alphas == 0 -> do not change dst values */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer <= marker */
+    "\tBLE    5b                         \n" /* we could run 4-way processing one more time */
+                                             /* because now we're in ALPHA == 0 state */
+                                             /* run next cycle with priority alpha == 0 checks */
+
+    "\tBGT    8f                         \n" /* if our current [src] array pointer > marker */
+                                             /* use simple one-by-one processing */
+    "\t7:                                \n"
+
+    "\tAND    r7, r3, r4                 \n" /* if not all alphas == 255 -> */
+    "\tAND    r8, r5, r6                 \n"
+    "\tAND    r9, r7, r8                 \n"
+    "\tCMP    r14, r9, LSR #24           \n"
+    "\tBNE    1b                         \n" /* -> go to general processing mode */
+                                             /* (we already checked for alpha == 0) */
+
+    "\tSTM    %[dst]!, {r3, r4, r5, r6}  \n" /* all alphas == 255 -> 4-way copy [src] to [dst] */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer <= marker */
+    "\tBLE    2b                         \n" /* we could run 4-way processing one more time */
+                                             /* because now we're in ALPHA == 255 state */
+                                             /* run next cycle with priority alpha == 255 checks */
+
+    "\tBGT    8f                         \n" /* if our current [src] array pointer > marker */
+                                             /* use simple one-by-one processing */
+
+    /* END OF BLOCK OPTIMIZED FOR ALPHA == 0 */
+
+    /* START OF TAIL BLOCK */
+    /* (used when array is too small to be processed with 4-way algorithm)*/
+
+    "\t8:                                \n"
+
+    "\tADD    r2, r2, #16                \n" /* now r2 points to the element just after array */
+                                             /* we've done r2 = r2 - 16 at procedure start */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer > final marker */
+    "\tBEQ    9f                         \n" /* goto EXIT */
+
+    /* TAIL PROCESSING BLOCK 1 */
+
+    "\tLDR    r3, [%[src]], #4           \n" /* r3 = *src, src++ */
+    "\tLDR    r7, [%[dst]]               \n" /* r7 = *dst */
+
+    "\tLSR    r11, r3,  #24              \n" /* extracting alpha from source */
+    "\tAND    r9,  r12, r7               \n" /* r9 = br masked by r12 (0xff00ff) */
+    "\tRSB    r11, r11, #256             \n" /* subtracting the alpha from 255 -> r11 = scale */
+    "\tAND    r10, r12, r7, LSR #8       \n" /* r10 = ag masked by r12 (0xff00ff) */
+    "\tMUL    r9,  r9,  r11              \n" /* br = br * scale */
+    "\tAND    r9,  r12, r9, LSR #8       \n" /* lsr br by 8 and mask it */
+    "\tMUL    r10, r10, r11              \n" /* ag = ag * scale */
+    "\tAND    r10, r10, r12, LSL #8      \n" /* mask ag with reverse mask */
+    "\tORR    r7,  r9,  r10              \n" /* br | ag */
+    "\tADD    r7,  r3,  r7               \n" /* dst = src + calc dest(r8) */
+
+    "\tSTR    r7, [%[dst]], #4           \n" /* *dst = r7; dst++ */
+
+    "\tCMP    %[src], r2                 \n" /* if our current [src] array pointer > final marker */
+    "\tBEQ    9f                         \n" /* goto EXIT */
+
+    /* TAIL PROCESSING BLOCK 2 */
+
+    "\tLDR    r3, [%[src]], #4           \n" /* see TAIL PROCESSING BLOCK 1 */
+    "\tLDR    r7, [%[dst]]               \n"
+
+    "\tLSR    r11, r3,  #24              \n"
+    "\tAND    r9,  r12, r7               \n"
+    "\tRSB    r11, r11, #256             \n"
+    "\tAND    r10, r12, r7, LSR #8       \n"
+    "\tMUL    r9,  r9,  r11              \n"
+    "\tAND    r9,  r12, r9, LSR #8       \n"
+    "\tMUL    r10, r10, r11              \n"
+    "\tAND    r10, r10, r12, LSL #8      \n"
+    "\tORR    r7,  r9,  r10              \n"
+    "\tADD    r7,  r3,  r7               \n"
+
+    "\tSTR    r7, [%[dst]], #4           \n"
+
+    "\tCMP    %[src], r2                 \n"
+    "\tBEQ    9f                         \n"
+
+    /* TAIL PROCESSING BLOCK 3 */
+
+    "\tLDR    r3, [%[src]], #4           \n" /* see TAIL PROCESSING BLOCK 1 */
+    "\tLDR    r7, [%[dst]]               \n"
+
+    "\tLSR    r11, r3,  #24              \n"
+    "\tAND    r9,  r12, r7               \n"
+    "\tRSB    r11, r11, #256             \n"
+    "\tAND    r10, r12, r7, LSR #8       \n"
+    "\tMUL    r9,  r9,  r11              \n"
+    "\tAND    r9,  r12, r9, LSR #8       \n"
+    "\tMUL    r10, r10, r11              \n"
+    "\tAND    r10, r10, r12, LSL #8      \n"
+    "\tORR    r7,  r9,  r10              \n"
+    "\tADD    r7,  r3,  r7               \n"
+
+    "\tSTR    r7, [%[dst]], #4           \n"
+
+    /* END OF TAIL BLOCK */
+
+    "\t9:                                \n" /* EXIT */
+
+    "\tLDMIA  r13!, {r4-r12, r14}        \n" /* restoring r4-r12, lr from stack */
+    "\tBX     lr                         \n" /* return */
+
+    : [dst] "+r" (dst), [src] "+r" (src)
+    :
+    : "cc", "r2", "r3", "memory"
+
+    );
+
+}
+
+#define	S32A_Opaque_BlitRow32_PROC S32A_Opaque_BlitRow32_arm_test_alpha
+#else /* !defined(TEST_SRC_ALPHA) */
 
 static void S32A_Opaque_BlitRow32_arm(SkPMColor* SK_RESTRICT dst,
                                   const SkPMColor* SK_RESTRICT src,
@@ -642,6 +1186,9 @@ static void S32A_Opaque_BlitRow32_arm(SkPMColor* SK_RESTRICT dst,
                   );
 }
 #define	S32A_Opaque_BlitRow32_PROC	S32A_Opaque_BlitRow32_arm
+#endif /* !defined(TEST_SRC_ALPHA) */
+#else /* ... #elif defined (__ARM_ARCH__) */
+#define	S32A_Opaque_BlitRow32_PROC	NULL
 #endif
 
 /*
