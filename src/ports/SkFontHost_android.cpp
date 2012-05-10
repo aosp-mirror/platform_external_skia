@@ -28,6 +28,8 @@
 #include <stdio.h>
 #include <string.h>
 
+//#define SkDEBUGF(args       )       SkDebugf args
+
 #ifndef SK_FONT_FILE_PREFIX
     #define SK_FONT_FILE_PREFIX          "/fonts/"
 #endif
@@ -89,7 +91,7 @@ struct NameFamilyPair {
 
     void construct(const char name[], FamilyRec* family) {
         fName = strdup(name);
-        fFamily = family;   // we don't own this, so just record the referene
+        fFamily = family;   // we don't own this, so just record the reference
     }
 
     void destruct() {
@@ -105,27 +107,16 @@ static int32_t gUniqueFontID;
 // this is the mutex that protects all of the global data structures in this module
 // functions with the Locked() suffix must be called while holding this mutex
 SK_DECLARE_STATIC_MUTEX(gFamilyHeadAndNameListMutex);
-static FamilyRec* gFamilyHead;
+static FamilyRec* gFamilyHead = NULL;
 static SkTDArray<NameFamilyPair> gFallbackFilenameList;
-static NameFamilyPairList* gNameList;
-
-static NameFamilyPairList& getNameListLocked() {
-    if (NULL == gNameList) {
-        gNameList = SkNEW(NameFamilyPairList);
-        // register a delete proc with sk_atexit(..) when available
-    }
-    return *gNameList;
-}
+static NameFamilyPairList gNameList;
 
 struct FamilyRec {
     FamilyRec*  fNext;
     SkTypeface* fFaces[4];
 
-    FamilyRec()
-    {
-        fNext = gFamilyHead;
+    FamilyRec() : fNext(NULL) {
         memset(fFaces, 0, sizeof(fFaces));
-        gFamilyHead = this;
     }
 };
 
@@ -229,14 +220,13 @@ static void detachAndDeleteFamilyLocked(FamilyRec* family) {
 }
 
 static SkTypeface* findTypefaceLocked(const char name[], SkTypeface::Style style) {
-    NameFamilyPairList& namelist = getNameListLocked();
-    NameFamilyPair* list = namelist.begin();
-    int             count = namelist.count();
-
-    int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
-
-    if (index >= 0) {
-        return findBestFaceLocked(list[index].fFamily, style);
+    int count = gNameList.count();
+    if (count) {
+        NameFamilyPair* list = gNameList.begin();
+        int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
+        if (index >= 0) {
+            return findBestFaceLocked(list[index].fFamily, style);
+        }
     }
     return NULL;
 }
@@ -251,15 +241,14 @@ static void addNameLocked(const char name[], FamilyRec* family) {
     SkAutoAsciiToLC tolc(name);
     name = tolc.lc();
 
-    NameFamilyPairList& namelist = getNameListLocked();
-    NameFamilyPair* list = namelist.begin();
-    int             count = namelist.count();
-
-    int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
-
-    if (index < 0) {
-        list = namelist.insert(~index);
-        list->construct(name, family);
+    int count = gNameList.count();
+    if (count) {
+        NameFamilyPair* list = gNameList.begin();
+        int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
+        if (index < 0) {
+            list = gNameList.insert(~index);
+            list->construct(name, family);
+        }
     }
 }
 
@@ -270,15 +259,38 @@ static void removeFromNamesLocked(FamilyRec* emptyFamily) {
     }
 #endif
 
-    SkTDArray<NameFamilyPair>& list = getNameListLocked();
-
     // must go backwards when removing
-    for (int i = list.count() - 1; i >= 0; --i) {
-        NameFamilyPair* pair = &list[i];
-        if (pair->fFamily == emptyFamily) {
-            pair->destruct();
-            list.remove(i);
+    for (int i = gNameList.count() - 1; i >= 0; --i) {
+        NameFamilyPair& pair = gNameList[i];
+        if (pair.fFamily == emptyFamily) {
+            pair.destruct();
+            gNameList.remove(i);
         }
+    }
+}
+
+static void addTypefaceLocked(SkTypeface* typeface, SkTypeface* familyMember) {
+    FamilyRec* rec = NULL;
+    if (familyMember) {
+        rec = findFamilyLocked(familyMember);
+        SkASSERT(rec);
+    } else {
+        rec = SkNEW(FamilyRec);
+        rec->fNext = gFamilyHead;
+        gFamilyHead = rec;
+    }
+    rec->fFaces[typeface->style()] = typeface;
+}
+
+static void removeTypeface(SkTypeface* typeface) {
+    SkAutoMutexAcquire ac(gFamilyHeadAndNameListMutex);
+
+    // remove us from our family. If the family is now empty, we return
+    // that and then remove that family from the name list
+    FamilyRec* family = removeFromFamilyLocked(typeface);
+    if (NULL != family) {
+        removeFromNamesLocked(family);
+        detachAndDeleteFamilyLocked(family);
     }
 }
 
@@ -286,34 +298,14 @@ static void removeFromNamesLocked(FamilyRec* emptyFamily) {
 
 class FamilyTypeface : public SkTypeface {
 protected:
-    // Must hold lock.
-    FamilyTypeface(Style style, bool sysFont, SkTypeface* familyMember,
-                   bool isFixedWidth)
+    FamilyTypeface(Style style, bool sysFont, bool isFixedWidth)
     : SkTypeface(style, sk_atomic_inc(&gUniqueFontID) + 1, isFixedWidth) {
         fIsSysFont = sysFont;
-
-        // our caller has acquired the gFamilyHeadAndNameListMutex so this is safe
-        FamilyRec* rec = NULL;
-        if (familyMember) {
-            rec = findFamilyLocked(familyMember);
-            SkASSERT(rec);
-        } else {
-            rec = SkNEW(FamilyRec);
-        }
-        rec->fFaces[style] = this;
     }
 
 public:
     virtual ~FamilyTypeface() {
-        SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
-
-        // remove us from our family. If the family is now empty, we return
-        // that and then remove that family from the name list
-        FamilyRec* family = removeFromFamilyLocked(this);
-        if (NULL != family) {
-            removeFromNamesLocked(family);
-            detachAndDeleteFamilyLocked(family);
-        }
+        removeTypeface(this);
     }
 
     bool isSysFont() const { return fIsSysFont; }
@@ -331,20 +323,12 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 class StreamTypeface : public FamilyTypeface {
-private:
-    // Must hold lock.
-    StreamTypeface(Style style, bool sysFont, SkTypeface* familyMember,
-                   SkStream* stream, bool isFixedWidth)
-    : INHERITED(style, sysFont, familyMember, isFixedWidth) {
+public:
+    StreamTypeface(Style style, bool sysFont, SkStream* stream, bool isFixedWidth)
+    : INHERITED(style, sysFont, isFixedWidth) {
         SkASSERT(stream);
         stream->ref();
         fStream = stream;
-    }
-
-public:
-    static StreamTypeface* createLocked(Style style, bool sysFont, SkTypeface* familyMember,
-            SkStream* stream, bool isFixedWidth) {
-        return SkNEW_ARGS(StreamTypeface, (style, sysFont, familyMember, stream, isFixedWidth));
     }
 
     virtual ~StreamTypeface() {
@@ -370,24 +354,10 @@ private:
 };
 
 class FileTypeface : public FamilyTypeface {
-private:
-    // Must hold lock.
-    FileTypeface(Style style, bool sysFont, SkTypeface* familyMember,
-                 const char path[], bool isFixedWidth)
-    : INHERITED(style, sysFont, familyMember, isFixedWidth) {
-        SkString fullpath;
-
-        if (sysFont) {
-            getFullPathForSysFonts(&fullpath, path);
-            path = fullpath.c_str();
-        }
-        fPath.set(path);
-    }
-
 public:
-    static FileTypeface* createLocked(Style style, bool sysFont, SkTypeface* familyMember,
-            const char path[], bool isFixedWidth) {
-        return SkNEW_ARGS(FileTypeface, (style, sysFont, familyMember, path, isFixedWidth));
+    FileTypeface(Style style, bool sysFont, const char path[], bool isFixedWidth)
+    : INHERITED(style, sysFont, isFixedWidth) {
+        fPath.set(path);
     }
 
     // overrides
@@ -440,14 +410,13 @@ static const char* gFBNames[] = { NULL };
     list of names (even if that list is empty), and the following members having
     null for the list. The names list must be NULL-terminated.
 */
-static FontInitRec *gSystemFonts;
-static size_t gNumSystemFonts = 0;
+static SkTDArray<FontInitRec> gSystemFonts;
+static SkTDArray<SkFontID> gFallbackFonts;
 
 // these globals are assigned (once) by loadSystemFontsLocked()
-static FamilyRec* gDefaultFamily;
-static SkTypeface* gDefaultNormal;
+static FamilyRec* gDefaultFamily = NULL;
+static SkTypeface* gDefaultNormal = NULL;
 static char** gDefaultNames = NULL;
-static uint32_t *gFallbackFonts;
 
 static void dumpGlobalsLocked() {
     SkDebugf("gDefaultNormal=%p id=%u refCnt=%d", gDefaultNormal,
@@ -469,10 +438,10 @@ static void dumpGlobalsLocked() {
         SkDebugf("gDefaultFamily=%p", gDefaultFamily);
     }
 
-    SkDebugf("gNumSystemFonts=%d gSystemFonts=%p gFallbackFonts=%p",
-             gNumSystemFonts, gSystemFonts, gFallbackFonts);
+    SkDebugf("gSystemFonts.count()=%d gFallbackFonts.count()=%d",
+            gSystemFonts.count(), gFallbackFonts.count());
 
-    for (size_t i = 0; i < gNumSystemFonts; ++i) {
+    for (int i = 0; i < gSystemFonts.count(); ++i) {
         SkDebugf("gSystemFonts[%d] fileName=%s", i, gSystemFonts[i].fFileName);
         size_t namesIndex = 0;
         if (gSystemFonts[i].fNames)
@@ -506,20 +475,35 @@ static void dumpGlobalsLocked() {
 }
 
 
+static bool haveSystemFont(const char* filename) {
+    for (int i = 0; i < gSystemFonts.count(); i++) {
+        if (strcmp(gSystemFonts[i].fFileName, filename) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /*  Load info from a configuration file that populates the system/fallback font structures
 */
 static void loadFontInfoLocked() {
     SkTDArray<FontFamily*> fontFamilies;
     getFontFamilies(fontFamilies);
 
-    SkTDArray<FontInitRec> fontInfo;
-    bool firstInFamily = false;
+    gSystemFonts.reset();
+
     for (int i = 0; i < fontFamilies.count(); ++i) {
         FontFamily *family = fontFamilies[i];
-        firstInFamily = true;
         for (int j = 0; j < family->fFileNames.count(); ++j) {
+            const char* filename = family->fFileNames[j];
+            if (haveSystemFont(filename)) {
+                SkDebugf("---- system font and fallback font files specify a duplicate "
+                        "font %s, skipping the second occurrence", filename);
+                continue;
+            }
+
             FontInitRec fontInfoRecord;
-            fontInfoRecord.fFileName = family->fFileNames[j];
+            fontInfoRecord.fFileName = filename;
             if (j == 0) {
                 if (family->fNames.count() == 0) {
                     // Fallback font
@@ -544,25 +528,17 @@ static void loadFontInfoLocked() {
             } else {
                 fontInfoRecord.fNames = NULL;
             }
-            *fontInfo.append() = fontInfoRecord;
+            *gSystemFonts.append() = fontInfoRecord;
         }
     }
-    gNumSystemFonts = fontInfo.count();
-    gSystemFonts = (FontInitRec*) malloc(gNumSystemFonts * sizeof(FontInitRec));
-    gFallbackFonts = (uint32_t*) malloc((gNumSystemFonts + 1) * sizeof(uint32_t));
-    if (gSystemFonts == NULL) {
-        // shouldn't get here
-        SkDEBUGFAIL("No system fonts were found");
-        gNumSystemFonts = 0;
-    }
-    SkDEBUGF(("---- We have %d system fonts", gNumSystemFonts));
-    for (size_t i = 0; i < gNumSystemFonts; ++i) {
-        gSystemFonts[i].fFileName = fontInfo[i].fFileName;
-        gSystemFonts[i].fNames = fontInfo[i].fNames;
-        SkDEBUGF(("---- gSystemFonts[%d] fileName=%s", i, fontInfo[i].fFileName));
-    }
     fontFamilies.deleteAll();
+
+    SkDEBUGF(("---- We have %d system fonts", gSystemFonts.count()));
+    for (int i = 0; i < gSystemFonts.count(); ++i) {
+        SkDEBUGF(("---- gSystemFonts[%d] fileName=%s", i, gSystemFonts[i].fFileName));
+    }
 }
+
 
 /*
  *  Called once (ensured by the sentinel check at the beginning of our body).
@@ -578,13 +554,13 @@ static void initSystemFontsLocked() {
 
     loadFontInfoLocked();
 
-    const FontInitRec* rec = gSystemFonts;
-    SkTypeface* firstInFamily = NULL;
-    int fallbackCount = 0;
+    gFallbackFonts.reset();
 
-    for (size_t i = 0; i < gNumSystemFonts; i++) {
+    SkTypeface* firstInFamily = NULL;
+    for (int i = 0; i < gSystemFonts.count(); i++) {
         // if we're the first in a new family, clear firstInFamily
-        if (rec[i].fNames != NULL) {
+        const char* const* names = gSystemFonts[i].fNames;
+        if (names != NULL) {
             firstInFamily = NULL;
         }
 
@@ -593,9 +569,9 @@ static void initSystemFontsLocked() {
         SkTypeface::Style style;
 
         // we expect all the fonts, except the "fallback" fonts
-        bool isExpected = (rec[i].fNames != gFBNames);
-        if (!getNameAndStyle(rec[i].fFileName, &name, &style,
-                                &isFixedWidth, isExpected)) {
+        bool isExpected = (names != gFBNames);
+        if (!getNameAndStyle(gSystemFonts[i].fFileName, &name, &style,
+                &isFixedWidth, isExpected)) {
             // We need to increase gUniqueFontID here so that the unique id of
             // each font matches its index in gSystemFonts array, as expected
             // by findUniqueIDLocked.
@@ -603,26 +579,28 @@ static void initSystemFontsLocked() {
             continue;
         }
 
-        SkTypeface* tf = FileTypeface::createLocked(style,
+        SkString fullpath;
+        getFullPathForSysFonts(&fullpath, gSystemFonts[i].fFileName);
+
+        SkTypeface* tf = SkNEW_ARGS(FileTypeface, (style,
                 true,  // system-font (cannot delete)
-                firstInFamily, // what family to join
-                rec[i].fFileName, // filename
-                isFixedWidth);
+                fullpath.c_str(), // filename
+                isFixedWidth));
+        addTypefaceLocked(tf, firstInFamily);
 
         SkDEBUGF(("---- SkTypeface[%d] %s fontID %d\n",
-                  i, rec[i].fFileName, tf->uniqueID()));
+                  i, gSystemFonts[i].fFileName, tf->uniqueID()));
 
-        if (rec[i].fNames != NULL) {
+        if (names != NULL) {
             // see if this is one of our fallback fonts
-            if (rec[i].fNames == gFBNames) {
+            if (names == gFBNames) {
                 SkDEBUGF(("---- adding %s as fallback[%d] fontID %d\n",
-                          rec[i].fFileName, fallbackCount, tf->uniqueID()));
-                gFallbackFonts[fallbackCount++] = tf->uniqueID();
+                        gSystemFonts[i].fFileName, gFallbackFonts.count(), tf->uniqueID()));
+                *gFallbackFonts.append() = tf->uniqueID();
             }
 
             firstInFamily = tf;
             FamilyRec* family = findFamilyLocked(tf);
-            const char* const* names = rec[i].fNames;
 
             // record the default family if this is it
             if (names == gDefaultNames) {
@@ -639,23 +617,29 @@ static void initSystemFontsLocked() {
     // do this after all fonts are loaded. This is our default font, and it
     // acts as a sentinel so we only execute loadSystemFontsLocked() once
     gDefaultNormal = findBestFaceLocked(gDefaultFamily, SkTypeface::kNormal);
-    // now terminate our fallback list with the sentinel value
-    gFallbackFonts[fallbackCount] = 0;
 
     SkDEBUGCODE(dumpGlobalsLocked());
 }
 
-static size_t findUniqueIDLocked(const char* filename) {
+static SkFontID findUniqueIDLocked(const char* filename) {
     // uniqueID is the index, offset by one, of the associated element in
     // gSystemFonts[] (assumes system fonts are loaded before external fonts)
     // return 0 if not found
-    const FontInitRec* rec = gSystemFonts;
-    for (size_t i = 0; i < gNumSystemFonts; i++) {
-        if (strcmp(rec[i].fFileName, filename) == 0) {
-            return i+1;
+    for (int i = 0; i < gSystemFonts.count(); i++) {
+        if (strcmp(gSystemFonts[i].fFileName, filename) == 0) {
+            return i + 1; // assume unique id of i'th system font is i + 1
         }
     }
     return 0;
+}
+
+static int findFallbackFontIndex(SkFontID fontId) {
+    for (int i = 0; i < gFallbackFonts.count(); i++) {
+        if (gFallbackFonts[i] == fontId) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 static void reloadFallbackFontsLocked() {
@@ -664,35 +648,47 @@ static void reloadFallbackFontsLocked() {
     SkTDArray<FontFamily*> fallbackFamilies;
     getFallbackFontFamilies(fallbackFamilies);
 
-    int fallbackCount = 0;
+    gFallbackFonts.reset();
+
     for (int i = 0; i < fallbackFamilies.count(); ++i) {
         FontFamily *family = fallbackFamilies[i];
 
         for (int j = 0; j < family->fFileNames.count(); ++j) {
-            if (family->fFileNames[j]) {
+            const char* filename = family->fFileNames[j];
+            if (filename) {
+                if (!haveSystemFont(filename)) {
+                    SkDebugf("---- skipping fallback font %s because it was not "
+                            "previously loaded as a system font", filename);
+                    continue;
+                }
 
                 // ensure the fallback font exists before adding it to the list
                 bool isFixedWidth;
                 SkString name;
                 SkTypeface::Style style;
-                if (!getNameAndStyle(family->fFileNames[j], &name, &style,
+                if (!getNameAndStyle(filename, &name, &style,
                                         &isFixedWidth, false)) {
                     continue;
                 }
 
-                size_t uniqueID = findUniqueIDLocked(family->fFileNames[j]);
+                SkFontID uniqueID = findUniqueIDLocked(filename);
                 SkASSERT(uniqueID != 0);
-                SkDEBUGF(("---- reload %s as fallback[%d] fontID %d oldFontID %d\n",
-                          family->fFileNames[j], fallbackCount, uniqueID,
-                          gFallbackFonts[fallbackCount]));
+                if (findFallbackFontIndex(uniqueID) >= 0) {
+                    SkDebugf("---- system font and fallback font files specify a duplicate "
+                            "font %s, skipping the second occurrence", filename);
+                    continue;
+                }
 
-                gFallbackFonts[fallbackCount++] = uniqueID;
+                SkDEBUGF(("---- reload %s as fallback[%d] fontID %d\n",
+                          filename, gFallbackFonts.count(), uniqueID));
+
+                *gFallbackFonts.append() = uniqueID;
                 break;  // The fallback set contains only the first font of each family
             }
         }
     }
-    // reset the sentinel the end of the newly ordered array
-    gFallbackFonts[fallbackCount] = 0;
+
+    fallbackFamilies.deleteAll();
 }
 
 static void loadSystemFontsLocked() {
@@ -798,15 +794,14 @@ static SkTypeface* deserializeLocked(SkStream* stream) {
             str.resize(len);
             stream->read(str.writable_str(), len);
 
-            const FontInitRec* rec = gSystemFonts;
-            for (size_t i = 0; i < gNumSystemFonts; i++) {
-                if (strcmp(rec[i].fFileName, str.c_str()) == 0) {
+            for (int i = 0; i < gSystemFonts.count(); i++) {
+                if (strcmp(gSystemFonts[i].fFileName, str.c_str()) == 0) {
                     // backup until we hit the fNames
                     for (int j = i; j >= 0; --j) {
-                        if (rec[j].fNames != NULL) {
+                        if (gSystemFonts[j].fNames != NULL) {
                             return createTypefaceLocked(NULL,
-                                        rec[j].fNames[0], NULL, 0,
-                                        (SkTypeface::Style)style);
+                                    gSystemFonts[j].fNames[0], NULL, 0,
+                                    (SkTypeface::Style)style);
                         }
                     }
                 }
@@ -905,31 +900,31 @@ static SkFontID nextLogicalFontLocked(SkFontID currFontID, SkFontID origFontID) 
 
     SkASSERT(origTypeface != 0);
     SkASSERT(currTypeface != 0);
-    SkASSERT(gFallbackFonts);
 
     // Our fallback list always stores the id of the plain in each fallback
     // family, so we transform currFontID to its plain equivalent.
-    currFontID = findTypefaceLocked(currTypeface, SkTypeface::kNormal)->uniqueID();
+    SkFontID plainFontID = findTypefaceLocked(currTypeface, SkTypeface::kNormal)->uniqueID();
 
     /*  First see if fontID is already one of our fallbacks. If so, return
         its successor. If fontID is not in our list, then return the first one
         in our list. Note: list is zero-terminated, and returning zero means
         we have no more fonts to use for fallbacks.
      */
-    const uint32_t* list = gFallbackFonts;
-    for (int i = 0; list[i] != 0; i++) {
-        if (list[i] == currFontID) {
-            if (list[i+1] == 0)
-                return 0;
-            const SkTypeface* nextTypeface = findFromUniqueIDLocked(list[i+1]);
-            return findTypefaceLocked(nextTypeface, origTypeface->style())->uniqueID();
-        }
+    int plainFallbackFontIndex = findFallbackFontIndex(plainFontID);
+    int nextFallbackFontIndex = plainFallbackFontIndex + 1;
+    SkFontID nextFontID;
+    if (nextFallbackFontIndex == gFallbackFonts.count()) {
+        nextFontID = 0; // no more fallbacks
+    } else {
+        const SkTypeface* nextTypeface = findFromUniqueIDLocked(gFallbackFonts[nextFallbackFontIndex]);
+        nextFontID = findTypefaceLocked(nextTypeface, origTypeface->style())->uniqueID();
     }
 
-    // If we get here, currFontID was not a fallback, so we start at the
-    // beginning of our list.
-    const SkTypeface* firstTypeface = findFromUniqueIDLocked(list[0]);
-    return findTypefaceLocked(firstTypeface, origTypeface->style())->uniqueID();
+    SkDEBUGF(("---- nextLogicalFont: currFontID=%d, origFontID=%d, plainFontID=%d, "
+            "plainFallbackFontIndex=%d, nextFallbackFontIndex=%d "
+            "=> nextFontID=%d", currFontID, origFontID, plainFontID,
+            plainFallbackFontIndex, nextFallbackFontIndex, nextFontID));
+    return nextFontID;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -952,7 +947,9 @@ static SkTypeface* createTypefaceFromStreamLocked(SkStream* stream) {
     SkTypeface::Style style;
 
     if (find_name_and_attributes(stream, NULL, &style, &isFixedWidth)) {
-        return StreamTypeface::createLocked(style, false, NULL, stream, isFixedWidth);
+        SkTypeface* typeface = SkNEW_ARGS(StreamTypeface, (style, false, stream, isFixedWidth));
+        addTypefaceLocked(typeface, NULL);
+        return typeface;
     } else {
         return NULL;
     }
