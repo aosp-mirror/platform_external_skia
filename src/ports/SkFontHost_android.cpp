@@ -221,12 +221,10 @@ static void detachAndDeleteFamilyLocked(FamilyRec* family) {
 
 static SkTypeface* findTypefaceLocked(const char name[], SkTypeface::Style style) {
     int count = gNameList.count();
-    if (count) {
-        NameFamilyPair* list = gNameList.begin();
-        int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
-        if (index >= 0) {
-            return findBestFaceLocked(list[index].fFamily, style);
-        }
+    NameFamilyPair* list = gNameList.begin();
+    int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
+    if (index >= 0) {
+        return findBestFaceLocked(list[index].fFamily, style);
     }
     return NULL;
 }
@@ -242,13 +240,11 @@ static void addNameLocked(const char name[], FamilyRec* family) {
     name = tolc.lc();
 
     int count = gNameList.count();
-    if (count) {
-        NameFamilyPair* list = gNameList.begin();
-        int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
-        if (index < 0) {
-            list = gNameList.insert(~index);
-            list->construct(name, family);
-        }
+    NameFamilyPair* list = gNameList.begin();
+    int index = SkStrLCSearch(&list[0].fName, count, name, sizeof(list[0]));
+    if (index < 0) {
+        list = gNameList.insert(~index);
+        list->construct(name, family);
     }
 }
 
