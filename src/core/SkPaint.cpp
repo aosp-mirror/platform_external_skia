@@ -440,6 +440,37 @@ const void* SkPaint::findImage(const SkGlyph& glyph) {
     SkGlyphCache::AttachCache(cache);
     return image;
 }
+
+int SkPaint::utfToGlyphs(const void* textData, TextEncoding encoding,
+                         size_t byteLength, uint16_t glyphs[]) const {
+
+    SkAutoGlyphCache autoCache(*this, NULL);
+    SkGlyphCache* cache = autoCache.getCache();
+    
+    const char* text = (const char*) textData;
+    const char* stop = text + byteLength;
+    uint16_t* gptr = glyphs;
+    
+    switch (encoding) {
+        case SkPaint::kUTF8_TextEncoding:
+            while (text < stop) {
+                *gptr++ = cache->unicharToGlyph(SkUTF8_NextUnichar(&text));
+            }
+            break;
+        case SkPaint::kUTF16_TextEncoding: {
+            const uint16_t* text16 = (const uint16_t*)text;
+            const uint16_t* stop16 = (const uint16_t*)stop;
+            while (text16 < stop16) {
+                *gptr++ = cache->unicharToGlyph(SkUTF16_NextUnichar(&text16));
+            }
+            break;
+        }
+        default:
+            SkDEBUGFAIL("unknown text encoding");
+    }
+    return gptr - glyphs;
+}
+
 #endif
 
 int SkPaint::textToGlyphs(const void* textData, size_t byteLength,
