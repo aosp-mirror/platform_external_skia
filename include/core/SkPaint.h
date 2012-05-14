@@ -870,6 +870,9 @@ public:
     /** Returns the base glyph count for the strike associated with this paint
     */
     unsigned getBaseGlyphCount(SkUnichar text) const;
+    
+    int utfToGlyphs(const void* text, TextEncoding encoding,
+            size_t byteLength, uint16_t glyphs[]) const;
 #endif
 
     // returns true if the paint's settings (e.g. xfermode + alpha) resolve to
