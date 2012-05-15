@@ -1,9 +1,0 @@
-# Copyright 2010 Google Inc. All Rights Reserved.
-#Fri Jul 16 10:03:09 PDT 2010
-currentVersion=Unknown
-version=Unknown
-isNative=true
-name=skia
-keywords=skia
-onDevice=true
-homepage=http\://code.google.com/p/skia/
