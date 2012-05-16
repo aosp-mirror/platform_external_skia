@@ -63,9 +63,10 @@ public:
     */
     SkColorTable* colorTable() const { return fColorTable; }
 
-    /** Return the current lockcount (defaults to 0)
-    */
-    int getLockCount() const { return fLockCount; }
+    /**
+     *  Returns true if the lockcount > 0
+     */
+    bool isLocked() const { return fLockCount > 0; }
 
     /** Call to access the pixel memory, which is returned. Balance with a call
         to unlockPixels().
@@ -205,6 +206,18 @@ protected:
 
     SkPixelRef(SkFlattenableReadBuffer&, SkBaseMutex*);
 
+    // only call from constructor. Flags this to always be locked, removing
+    // the need to grab the mutex and call onLockPixels/onUnlockPixels.
+    // Performance tweak to avoid those calls (esp. in multi-thread use case).
+    void setPreLocked(void* pixels, SkColorTable* ctable);
+
+    // only call from constructor. Specify a (possibly) different mutex, or
+    // null to use the default. Use with caution.
+    // The default logic is to provide a mutex, but possibly one that is
+    // shared with other instances, though this sharing is implementation
+    // specific, and it is legal for each instance to have its own mutex.
+    void useDefaultMutex() { this->setMutex(NULL); }
+
 private:
 #if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
     static void InitializeFlattenables();
@@ -221,6 +234,10 @@ private:
 
     // can go from false to true, but never from true to false
     bool    fIsImmutable;
+    // only ever set in constructor, const after that
+    bool    fPreLocked;
+
+    void setMutex(SkBaseMutex* mutex);
 
     friend class SkGraphics;
 };
