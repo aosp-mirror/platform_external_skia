@@ -75,6 +75,8 @@ struct SkBaseMutex {
 // Special case used when the static mutex must be available globally.
 #define SK_DECLARE_GLOBAL_MUTEX(name)   SkBaseMutex  name = { PTHREAD_MUTEX_INITIALIZER }
 
+#define SK_DECLARE_MUTEX_ARRAY(name, count)    SkBaseMutex name[count] = { PTHREAD_MUTEX_INITIALIZER }
+
 // A normal mutex that requires to be initialized through normal C++ construction,
 // i.e. when it's a member of another class, or allocated on the heap.
 class SkMutex : public SkBaseMutex, SkNoncopyable {
@@ -106,8 +108,9 @@ private:
 
 typedef SkMutex SkBaseMutex;
 
-#define SK_DECLARE_STATIC_MUTEX(name)  static SkBaseMutex  name
-#define SK_DECLARE_GLOBAL_MUTEX(name)  SkBaseMutex  name
+#define SK_DECLARE_STATIC_MUTEX(name)           static SkBaseMutex  name
+#define SK_DECLARE_GLOBAL_MUTEX(name)           SkBaseMutex  name
+#define SK_DECLARE_MUTEX_ARRAY(name, count)     SkBaseMutex name[count]
 
 #endif // !SK_USE_POSIX_THREADS
 
