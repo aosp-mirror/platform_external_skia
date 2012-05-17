@@ -666,12 +666,25 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect rect) {
 
     SkAutoUnref aur(colorTable);
 
-    if (!this->allocPixelRef(decodedBitmap,
-                             SkBitmap::kIndex8_Config == config ?
-                                colorTable : NULL)) {
-        return false;
+    // Check ahead of time if the swap(dest, src) is possible in crop or not.
+    // If yes, then we will stick to AllocPixelRef since it's cheaper with the swap happening.
+    // If no, then we will use alloc to allocate pixels to prevent garbage collection.
+    int w = requestedWidth / sampleSize;
+    int h = requestedHeight / sampleSize;
+    if (w == decodedBitmap->width() && h == decodedBitmap->height() &&
+        (0 - rect.fLeft / sampleSize) == 0 && (rect.fTop - rect.fTop) / sampleSize == 0 &&
+        bm->isNull()) {
+        if (!this->allocPixelRef(decodedBitmap,
+                SkBitmap::kIndex8_Config == config ? colorTable : NULL)) {
+            return false;
+        }
     }
-
+    else {
+        if (!decodedBitmap->allocPixels(
+            NULL, SkBitmap::kIndex8_Config == config ? colorTable : NULL)) {
+            return false;
+        }
+    }
     SkAutoLockPixels alp(*decodedBitmap);
 
     /* Add filler (or alpha) byte (before/after each RGB triplet) */

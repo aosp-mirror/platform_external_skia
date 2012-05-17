@@ -604,9 +604,27 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     {
         bitmap->setConfig(config, cinfo->output_width, height);
         bitmap->setIsOpaque(true);
-        if (!this->allocPixelRef(bitmap, NULL)) {
-            return return_false(*cinfo, *bitmap, "allocPixelRef");
+        // Check ahead of time if the swap(dest, src) is possible in crop or
+        // not. If yes, then we will stick to AllocPixelRef since it's cheaper
+        // with the swap happening. If no, then we will use alloc to allocate
+        // pixels to prevent garbage collection.
+        int w = oriWidth / actualSampleSize;
+        int h = oriHeight / actualSampleSize;
+        if (w == bitmap->width() && h == bitmap->height() &&
+            (startX - oriStartX) / actualSampleSize == 0 &&
+            (startY - oriStartY) / actualSampleSize == 0 && bm->isNull()) {
+            // Not using a recycled-bitmap and the output rect is same as the
+            // decoded region.
+            if (!this->allocPixelRef(bitmap, NULL)) {
+                return return_false(*cinfo, *bitmap, "allocPixelRef");
+            }
         }
+        else {
+            if (!bitmap->allocPixels()) {
+                return return_false(*cinfo, *bitmap, "allocPixels");
+            }
+        }
+
         SkAutoLockPixels alp(*bitmap);
         JSAMPLE* rowptr = (JSAMPLE*)bitmap->getPixels();
         INT32 const bpr = bitmap->rowBytes();
@@ -653,8 +671,23 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     bitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
     bitmap->setIsOpaque(true);
 
-    if (!this->allocPixelRef(bitmap, NULL)) {
-        return return_false(*cinfo, *bitmap, "allocPixelRef");
+    // Check ahead of time if the swap(dest, src) is possible in crop or not.
+    // If yes, then we will stick to AllocPixelRef since it's cheaper with the
+    // swap happening. If no, then we will use alloc to allocate pixels to
+    // prevent garbage collection.
+    int w = oriWidth / actualSampleSize;
+    int h = oriHeight / actualSampleSize;
+    if (w == bitmap->width() && h == bitmap->height() &&
+        (startX - oriStartX) / actualSampleSize == 0 &&
+        (startY - oriStartY) / actualSampleSize == 0 && bm->isNull()) {
+        if (!this->allocPixelRef(bitmap, NULL)) {
+            return return_false(*cinfo, *bitmap, "allocPixelRef");
+        }
+    }
+    else {
+        if (!bitmap->allocPixels()) {
+            return return_false(*cinfo, *bitmap, "allocPixels");
+        }
     }
 
     SkAutoLockPixels alp(*bitmap);
