@@ -77,6 +77,8 @@ protected:
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
 private:
     SkJPEGImageIndex *index;
+    int imageWidth;
+    int imageHeight;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -528,7 +530,8 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
     index->cinfo = cinfo;
     *height = cinfo->output_height;
     *width = cinfo->output_width;
-
+    this->imageWidth = *width;
+    this->imageHeight = *height;
     this->index = index;
     return true;
 }
@@ -537,11 +540,14 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     if (index == NULL) {
         return false;
     }
-    int startX = region.fLeft;
-    int startY = region.fTop;
-    int width = region.width();
-    int height = region.height();
     jpeg_decompress_struct *cinfo = index->cinfo;
+
+    SkIRect rect = SkIRect::MakeWH(this->imageWidth, this->imageHeight);
+    if (!rect.intersect(region)) {
+        // If the requested region is entirely outsides the image, just
+        // returns false
+        return false;
+    }
     SkAutoMalloc  srcStorage;
     skjpeg_error_mgr        sk_err;
     cinfo->err = jpeg_std_error(&sk_err);
@@ -579,11 +585,11 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
         }
     }
 #endif
+    int startX = rect.fLeft;
+    int startY = rect.fTop;
+    int width = rect.width();
+    int height = rect.height();
 
-    int oriStartX = startX;
-    int oriStartY = startY;
-    int oriWidth = width;
-    int oriHeight = height;
     jpeg_init_read_tile_scanline(cinfo, index->index,
                                  &startX, &startY, &width, &height);
     int skiaSampleSize = recompute_sampleSize(requestedSampleSize, *cinfo);
@@ -604,22 +610,25 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     {
         bitmap->setConfig(config, cinfo->output_width, height);
         bitmap->setIsOpaque(true);
-        // Check ahead of time if the swap(dest, src) is possible in crop or
-        // not. If yes, then we will stick to AllocPixelRef since it's cheaper
+
+        // Check ahead of time if the swap(dest, src) is possible or not.
+        // If yes, then we will stick to AllocPixelRef since it's cheaper
         // with the swap happening. If no, then we will use alloc to allocate
         // pixels to prevent garbage collection.
-        int w = oriWidth / actualSampleSize;
-        int h = oriHeight / actualSampleSize;
-        if (w == bitmap->width() && h == bitmap->height() &&
-            (startX - oriStartX) / actualSampleSize == 0 &&
-            (startY - oriStartY) / actualSampleSize == 0 && bm->isNull()) {
-            // Not using a recycled-bitmap and the output rect is same as the
-            // decoded region.
+        //
+        // Not using a recycled-bitmap and the output rect is same as the
+        // decoded region.
+        int w = rect.width() / actualSampleSize;
+        int h = rect.height() / actualSampleSize;
+        bool swapOnly = (rect == region) && bm->isNull() &&
+                        (w == bitmap->width()) && (h == bitmap->height()) &&
+                        ((startX - rect.x()) / actualSampleSize == 0) &&
+                        ((startY - rect.y()) / actualSampleSize == 0);
+        if (swapOnly) {
             if (!this->allocPixelRef(bitmap, NULL)) {
                 return return_false(*cinfo, *bitmap, "allocPixelRef");
             }
-        }
-        else {
+        } else {
             if (!bitmap->allocPixels()) {
                 return return_false(*cinfo, *bitmap, "allocPixels");
             }
@@ -644,8 +653,13 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             row_total_count += row_count;
             rowptr += bpr;
         }
-        cropBitmap(bm, bitmap, actualSampleSize, oriStartX, oriStartY,
-                   oriWidth, oriHeight, startX, startY);
+
+        if (swapOnly) {
+            bm->swap(*bitmap);
+        } else {
+            cropBitmap(bm, bitmap, actualSampleSize, region.x(), region.y(),
+                       region.width(), region.height(), startX, startY);
+        }
         return true;
     }
 #endif
@@ -671,20 +685,21 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
     bitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
     bitmap->setIsOpaque(true);
 
-    // Check ahead of time if the swap(dest, src) is possible in crop or not.
+    // Check ahead of time if the swap(dest, src) is possible or not.
     // If yes, then we will stick to AllocPixelRef since it's cheaper with the
     // swap happening. If no, then we will use alloc to allocate pixels to
     // prevent garbage collection.
-    int w = oriWidth / actualSampleSize;
-    int h = oriHeight / actualSampleSize;
-    if (w == bitmap->width() && h == bitmap->height() &&
-        (startX - oriStartX) / actualSampleSize == 0 &&
-        (startY - oriStartY) / actualSampleSize == 0 && bm->isNull()) {
+    int w = rect.width() / actualSampleSize;
+    int h = rect.height() / actualSampleSize;
+    bool swapOnly = (rect == region) && bm->isNull() &&
+                    (w == bitmap->width()) && (h == bitmap->height()) &&
+                    ((startX - rect.x()) / actualSampleSize == 0) &&
+                    ((startY - rect.y()) / actualSampleSize == 0);
+    if (swapOnly) {
         if (!this->allocPixelRef(bitmap, NULL)) {
             return return_false(*cinfo, *bitmap, "allocPixelRef");
         }
-    }
-    else {
+    } else {
         if (!bitmap->allocPixels()) {
             return return_false(*cinfo, *bitmap, "allocPixels");
         }
@@ -724,8 +739,12 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             return return_false(*cinfo, *bitmap, "skip rows");
         }
     }
-    cropBitmap(bm, bitmap, actualSampleSize, oriStartX, oriStartY,
-               oriWidth, oriHeight, startX, startY);
+    if (swapOnly) {
+        bm->swap(*bitmap);
+    } else {
+        cropBitmap(bm, bitmap, actualSampleSize, region.x(), region.y(),
+                   region.width(), region.height(), startX, startY);
+    }
     return true;
 }
 
