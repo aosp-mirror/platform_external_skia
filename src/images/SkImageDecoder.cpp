@@ -195,19 +195,8 @@ void SkImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
                                     int width, int height, int srcX, int srcY) {
     int w = width / sampleSize;
     int h = height / sampleSize;
-    if (w == src->width() && h == src->height() &&
-          (srcX - destX) / sampleSize == 0 &&
-          (srcY - destY) / sampleSize == 0 &&
-          dest->isNull()
-          ) {
-        // The output rect is the same as the decode result
-        dest->swap(*src);
-        return;
-    }
-
     // if the destination has no pixels then we must allocate them.
     if (dest->isNull()) {
-        // The output rect is smaller than the decode result
         dest->setConfig(src->getConfig(), w, h);
         dest->setIsOpaque(src->isOpaque());
 
