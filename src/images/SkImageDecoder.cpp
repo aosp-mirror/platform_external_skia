@@ -171,19 +171,14 @@ bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
 
 bool SkImageDecoder::decodeRegion(SkBitmap* bm, SkIRect rect,
                                   SkBitmap::Config pref) {
-    // pass a temporary bitmap, so that if we return false, we are assured of
-    // leaving the caller's bitmap untouched.
-    SkBitmap    tmp;
-
     // we reset this to false before calling onDecodeRegion
     fShouldCancelDecode = false;
     // assign this, for use by getPrefConfig(), in case fUsePrefTable is false
     fDefaultPref = pref;
 
-    if (!this->onDecodeRegion(&tmp, rect)) {
+    if (!this->onDecodeRegion(bm, rect)) {
         return false;
     }
-    bm->swap(tmp);
     return true;
 }
 
@@ -201,24 +196,40 @@ void SkImageDecoder::cropBitmap(SkBitmap *dest, SkBitmap *src,
     int w = width / sampleSize;
     int h = height / sampleSize;
     if (w == src->width() && h == src->height() &&
-          (srcX - destX) / sampleSize == 0 && (srcY - destY) / sampleSize == 0) {
+          (srcX - destX) / sampleSize == 0 &&
+          (srcY - destY) / sampleSize == 0 &&
+          dest->isNull()
+          ) {
         // The output rect is the same as the decode result
         dest->swap(*src);
         return;
     }
-    dest->setConfig(src->getConfig(), w, h);
-    dest->setIsOpaque(src->isOpaque());
 
-    if (!this->allocPixelRef(dest, NULL)) {
-#ifdef SK_DEBUG
-        SkDebugf("failed to allocate pixels needed to crop the bitmap");
-#endif
-        return;
+    // if the destination has no pixels then we must allocate them.
+    if (dest->isNull()) {
+        // The output rect is smaller than the decode result
+        dest->setConfig(src->getConfig(), w, h);
+        dest->setIsOpaque(src->isOpaque());
+
+        if (!this->allocPixelRef(dest, NULL)) {
+            SkDEBUGF(("failed to allocate pixels needed to crop the bitmap"));
+            return;
+        }
     }
+    // check to see if the destination is large enough to decode the desired
+    // region. If this assert fails we will just draw as much of the source
+    // into the destination that we can.
+    SkASSERT(dest->width() >= w && dest->height() >= h);
+
+    // Set the Src_Mode for the paint to prevent transparency issue in the
+    // dest in the event that the dest was being re-used.
+    SkPaint paint;
+    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
 
     SkCanvas canvas(*dest);
-    canvas.drawBitmap(*src, (srcX - destX) / sampleSize,
-                             (srcY - destY) / sampleSize);
+    canvas.drawSprite(*src, (srcX - destX) / sampleSize,
+                            (srcY - destY) / sampleSize,
+                            &paint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
