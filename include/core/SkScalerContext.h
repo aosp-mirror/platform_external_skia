@@ -15,6 +15,7 @@
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPoint.h"
+#include "SkTypeface.h"
 
 //#define SK_USE_COLOR_LUMINANCE
 
@@ -299,6 +300,19 @@ public:
                                SkPaint::FontMetrics* mY);
 
 #ifdef SK_BUILD_FOR_ANDROID
+    // This function must be public for SkTypeface_android.h, but should not be
+    // called by other callers
+    SkFontID findTypefaceIdForChar(SkUnichar uni) {
+        SkScalerContext* ctx = this;
+        while (NULL != ctx) {
+            if (ctx->generateCharToGlyph(uni)) {
+                return ctx->fRec.fFontID;
+            }
+            ctx = ctx->getNextContext();
+        }
+        return 0;
+    }
+
     unsigned getBaseGlyphCount(SkUnichar charCode);
 #endif
 

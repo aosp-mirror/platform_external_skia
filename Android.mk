@@ -291,6 +291,7 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
 	external/freetype/include \

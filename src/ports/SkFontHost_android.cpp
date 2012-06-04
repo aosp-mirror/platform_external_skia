@@ -27,6 +27,9 @@
 #include "FontHostConfiguration_android.h"
 #include <stdio.h>
 #include <string.h>
+#include "SkGlyphCache.h"
+#include "SkTypeface_android.h"
+
 
 //#define SkDEBUGF(args       )       SkDebugf args
 
@@ -958,3 +961,135 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
     stream->unref();
     return face;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Function from SkTypeface_android.h
+///////////////////////////////////////////////////////////////////////////////
+
+struct FBScriptInfo {
+    const FallbackScripts fScript;
+    const char* fScriptID;
+    const SkTypeface::Style fStyle;
+    const SkUnichar fChar; // representative character for that script type
+    SkFontID fFontID;
+};
+
+#define SK_DEFINE_SCRIPT_ENTRY(script, style, unichar) \
+    { script, #script, style, unichar, 0 }
+
+static FBScriptInfo gFBScriptInfo[] = {
+    SK_DEFINE_SCRIPT_ENTRY(kArabic_FallbackScript,        SkTypeface::kNormal, 0x0600),
+    SK_DEFINE_SCRIPT_ENTRY(kArmenian_FallbackScript,      SkTypeface::kNormal, 0x0531),
+    SK_DEFINE_SCRIPT_ENTRY(kBengali_FallbackScript,       SkTypeface::kNormal, 0x0981),
+    SK_DEFINE_SCRIPT_ENTRY(kDevanagari_FallbackScript,    SkTypeface::kNormal, 0x0901),
+    SK_DEFINE_SCRIPT_ENTRY(kEthiopic_FallbackScript,      SkTypeface::kNormal, 0x1200),
+    SK_DEFINE_SCRIPT_ENTRY(kGeorgian_FallbackScript,      SkTypeface::kNormal, 0x10A0),
+    SK_DEFINE_SCRIPT_ENTRY(kHebrewRegular_FallbackScript, SkTypeface::kNormal, 0x0591),
+    SK_DEFINE_SCRIPT_ENTRY(kHebrewBold_FallbackScript,    SkTypeface::kBold,   0x0591),
+    SK_DEFINE_SCRIPT_ENTRY(kKannada_FallbackScript,       SkTypeface::kNormal, 0x0C90),
+    SK_DEFINE_SCRIPT_ENTRY(kMalayalam_FallbackScript,     SkTypeface::kNormal, 0x0D10),
+    SK_DEFINE_SCRIPT_ENTRY(kTamilRegular_FallbackScript,  SkTypeface::kNormal, 0x0B82),
+    SK_DEFINE_SCRIPT_ENTRY(kTamilBold_FallbackScript,     SkTypeface::kBold,   0x0B82),
+    SK_DEFINE_SCRIPT_ENTRY(kThai_FallbackScript,          SkTypeface::kNormal, 0x0E01),
+    SK_DEFINE_SCRIPT_ENTRY(kTelugu_FallbackScript,        SkTypeface::kNormal, 0x0C10),
+};
+
+static bool gFBScriptInitialized = false;
+static const int gFBScriptInfoCount = sizeof(gFBScriptInfo) / sizeof(FBScriptInfo);
+
+// ensure that if any value is added to the public enum it is also added here
+SK_COMPILE_ASSERT(gFBScriptInfoCount == kFallbackScriptNumber, FBScript_count_mismatch);
+
+
+// this function can't be called if the gFamilyHeadAndNameListMutex is already locked
+static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style) {
+    gFamilyHeadAndNameListMutex.acquire();
+    SkTypeface* face = findBestFaceLocked(gDefaultFamily, style);
+    gFamilyHeadAndNameListMutex.release();
+    if (!face) {
+        return 0;
+    }
+
+    SkPaint paint;
+    paint.setTypeface(face);
+    paint.setTextEncoding(SkPaint::kUTF16_TextEncoding);
+
+    SkAutoGlyphCache autoCache(paint, NULL);
+    SkGlyphCache*    cache = autoCache.getCache();
+    SkFontID         fontID = 0;
+
+    SkScalerContext* ctx = cache->getScalerContext();
+    if (ctx) {
+        return ctx->findTypefaceIdForChar(uni);
+    }
+    return 0;
+}
+
+// this function can't be called if the gFamilyHeadAndNameListMutex is already locked
+static void initFBScriptInfo() {
+    if (gFBScriptInitialized) {
+        return;
+    }
+
+    // ensure the system fonts are loaded
+    gFamilyHeadAndNameListMutex.acquire();
+    loadSystemFontsLocked();
+    gFamilyHeadAndNameListMutex.release();
+
+    for (int i = 0; i < gFBScriptInfoCount; i++) {
+        FBScriptInfo& scriptInfo = gFBScriptInfo[i];
+        // selects the best available style for the desired font. However, if
+        // bold is requested and no bold font exists for the typeface containing
+        // the character the next best style is chosen (e.g. normal).
+        scriptInfo.fFontID = findFontIDForChar(scriptInfo.fChar, scriptInfo.fStyle);
+        SkDEBUGF(("gFBScriptInfo[%s] --> %d", scriptInfo.fScriptID, scriptInfo.fFontID));
+    }
+    // mark the value as initialized so we don't repeat our work unnecessarily
+    gFBScriptInitialized = true;
+}
+
+SkTypeface* SkCreateTypefaceForScript(FallbackScripts script) {
+    if (!SkTypeface_ValidScript(script)) {
+        return NULL;
+    }
+
+    // ensure that our table is populated
+    initFBScriptInfo();
+
+    FBScriptInfo& scriptInfo = gFBScriptInfo[script];
+
+    // ensure the element with that index actually maps to the correct script
+    SkASSERT(scriptInfo.fScript == script);
+
+    // if a suitable script could not be found then return NULL
+    if (scriptInfo.fFontID == 0) {
+        return NULL;
+    }
+
+    SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
+
+    // retrieve the typeface the corresponds to this fontID
+    SkTypeface* tf = findFromUniqueIDLocked(scriptInfo.fFontID);
+    // we ref(), since the semantic is to return a new instance
+    tf->ref();
+    return tf;
+}
+
+const char* SkGetFallbackScriptID(FallbackScripts script) {
+    for (int i = 0; i < gFBScriptInfoCount; i++) {
+        if (gFBScriptInfo[i].fScript == script) {
+            return gFBScriptInfo[i].fScriptID;
+        }
+    }
+    return NULL;
+}
+
+FallbackScripts SkGetFallbackScriptFromID(const char* id) {
+    for (int i = 0; i < gFBScriptInfoCount; i++) {
+        if (strcmp(gFBScriptInfo[i].fScriptID, id) == 0) {
+            return gFBScriptInfo[i].fScript;
+        }
+    }
+    return kFallbackScriptNumber; // Use kFallbackScriptNumber as an invalid value.
+}
+
