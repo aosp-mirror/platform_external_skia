@@ -1029,7 +1029,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
             break;
         }
 
-        if (fRec.fFlags & kEmbolden_Flag) {
+        if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
             emboldenOutline(&fFace->glyph->outline);
         }
 
@@ -1051,7 +1051,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
       }
 
       case FT_GLYPH_FORMAT_BITMAP:
-        if (fRec.fFlags & kEmbolden_Flag) {
+        if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
             FT_GlyphSlot_Own_Bitmap(fFace->glyph);
             FT_Bitmap_Embolden(gFTLibrary, &fFace->glyph->bitmap, kBitmapEmboldenStrength, 0);
         }
@@ -1100,7 +1100,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
                 goto ERROR;
             }
 
-            if (fRec.fFlags & kEmbolden_Flag) {
+            if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
                 emboldenOutline(&fFace->glyph->outline);
             }
         }
@@ -1330,7 +1330,7 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
             FT_BBox     bbox;
             FT_Bitmap   target;
 
-            if (fRec.fFlags & kEmbolden_Flag) {
+            if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
                 emboldenOutline(outline);
             }
 
@@ -1373,7 +1373,7 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
         } break;
 
         case FT_GLYPH_FORMAT_BITMAP: {
-            if (fRec.fFlags & kEmbolden_Flag) {
+            if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
                 FT_GlyphSlot_Own_Bitmap(fFace->glyph);
                 FT_Bitmap_Embolden(gFTLibrary, &fFace->glyph->bitmap, kBitmapEmboldenStrength, 0);
             }
@@ -1516,7 +1516,7 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
         return;
     }
 
-    if (fRec.fFlags & kEmbolden_Flag) {
+    if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
         emboldenOutline(&fFace->glyph->outline);
     }
 
@@ -1598,7 +1598,7 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         if (x_glyph) {
             FT_BBox bbox;
             FT_Load_Glyph(fFace, x_glyph, fLoadGlyphFlags);
-            if (fRec.fFlags & kEmbolden_Flag) {
+            if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
                 emboldenOutline(&fFace->glyph->outline);
             }
             FT_Outline_Get_CBox(&fFace->glyph->outline, &bbox);

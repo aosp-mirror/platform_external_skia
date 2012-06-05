@@ -51,6 +51,10 @@ endif
 # procedures (C and assembly) seriously improve skia performance
 LOCAL_CFLAGS += -DTEST_SRC_ALPHA
 
+# using freetype's embolden allows us to adjust fake bold settings at
+# draw-time, at which point we know which SkTypeface is being drawn
+LOCAL_CFLAGS += -DSK_USE_FREETYPE_EMBOLDEN
+
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
 	src/core/SkAAClip.cpp \
