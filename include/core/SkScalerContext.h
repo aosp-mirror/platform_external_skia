@@ -210,6 +210,9 @@ public:
 #ifdef SK_USE_COLOR_LUMINANCE
         uint32_t    fLumBits;
 #endif
+#ifdef SK_BUILD_FOR_ANDROID
+        SkPaint::FontVariant fFontVariant;
+#endif
         uint8_t     fMaskFormat;
         uint8_t     fStrokeJoin;
         uint16_t    fFlags;
@@ -234,7 +237,6 @@ public:
         SkMask::Format getFormat() const {
             return static_cast<SkMask::Format>(fMaskFormat);
         }
-        
 #ifdef SK_USE_COLOR_LUMINANCE
         SkColor getLuminanceColor() const {
             return fLumBits;
