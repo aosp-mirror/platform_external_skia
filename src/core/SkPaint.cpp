@@ -1447,7 +1447,8 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
                               const SkMatrix* deviceMatrix, Rec* rec) {
     SkASSERT(deviceMatrix == NULL || !deviceMatrix->hasPerspective());
 
-    rec->fOrigFontID = SkTypeface::UniqueID(paint.getTypeface());
+    SkTypeface* typeface = paint.getTypeface();
+    rec->fOrigFontID = SkTypeface::UniqueID(typeface);
     rec->fFontID = rec->fOrigFontID;
     rec->fTextSize = paint.getTextSize();
     rec->fPreScaleX = paint.getTextScaleX();
@@ -1468,10 +1469,21 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
 
     unsigned flags = 0;
 
-    if (paint.isFakeBoldText()) {
 #ifdef SK_USE_FREETYPE_EMBOLDEN
+    // It is possible that the SkTypeface used to draw glyphs has
+    // different properties than the SkTypeface set in the SkPaint.
+    // If we are asked to render bold text with a bold font, and are
+    // forced to fall back to a font with normal weight for some
+    // glyphs, we need to use fake bold to render those glyphs. In
+    // order to do that, we set SkScalerContext's "embolden" flag
+    // here if we are trying to draw bold text via any means, and
+    // ignore it at the glyph outline generation stage if the font
+    // actually being used is already bold.
+    if (paint.isFakeBoldText() || (typeface && typeface->isBold())) {
         flags |= SkScalerContext::kEmbolden_Flag;
+    }
 #else
+    if (paint.isFakeBoldText()) {
         SkScalar fakeBoldScale = SkScalarInterpFunc(paint.getTextSize(),
                                                     kStdFakeBoldInterpKeys,
                                                     kStdFakeBoldInterpValues,
@@ -1484,8 +1496,8 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
         } else {
             strokeWidth += extra;
         }
-#endif
     }
+#endif
 
     if (paint.isDevKernText()) {
         flags |= SkScalerContext::kDevKernText_Flag;
