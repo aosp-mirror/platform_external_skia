@@ -665,25 +665,6 @@ public:
         @param locale set the paint's locale value for drawing text.
     */
     void    setTextLocale(const SkString& locale);
-
-
-    enum FontVariant {
-       kDefault_Variant, // Currently setting yourself to Default gives you Compact Variant
-       kCompact_Variant,
-       kElegant_Variant,
-       kLast_Variant = kElegant_Variant,
-    };
-
-    /** Return the font variant
-        @return the font variant used by this paint object
-    */
-    FontVariant getFontVariant() const { return fFontVariant; }
-
-
-    /** Set the font variant
-      @param fontVariant set the paint's font variant for choosing fonts
-    */
-    void setFontVariant(FontVariant fontVariant);
 #endif
 
     /** Return the paint's text size.
@@ -925,7 +906,6 @@ private:
     unsigned        fHinting : 2;
 #ifdef SK_BUILD_FOR_ANDROID
     SkString        fTextLocale;
-    FontVariant     fFontVariant;
 #endif
 
     SkDrawCacheProc    getDrawCacheProc() const;

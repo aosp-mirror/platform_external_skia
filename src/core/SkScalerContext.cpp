@@ -118,13 +118,7 @@ static SkScalerContext* allocNextContext(const SkScalerContext::Rec& rec) {
     // fonthost will determine the next possible font to search, based
     // on the current font in fRec. It will return NULL if ctx is our
     // last font that can be searched (i.e. ultimate fallback font)
-#ifdef SK_BUILD_FOR_ANDROID
-        // On Android, pass entire rec structure so that clients can change fallback behavior
-        uint32_t newFontID = SkFontHost::NextLogicalFont(rec);
-#else
-        uint32_t newFontID = SkFontHost::NextLogicalFont(rec.fFontID, rec.fOrigFontID);
-#endif
-
+    uint32_t newFontID = SkFontHost::NextLogicalFont(rec.fFontID, rec.fOrigFontID);
     if (0 == newFontID) {
         return NULL;
     }
