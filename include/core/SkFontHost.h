@@ -154,6 +154,15 @@ public:
      */
     static SkFontID NextLogicalFont(SkFontID currFontID, SkFontID origFontID);
 
+#ifdef SK_BUILD_FOR_ANDROID
+    /*
+     * This Android-only version of NextLogicalFont allows us to pass in an
+     * entire Rec structure so that a caller can change fallback behavior
+     */
+    static SkFontID NextLogicalFont(const SkScalerContext::Rec& rec);
+#endif
+
+
     ///////////////////////////////////////////////////////////////////////////
 
     /** Given a filled-out rec, the fonthost may decide to modify it to reflect

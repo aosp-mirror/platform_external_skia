@@ -72,6 +72,7 @@ SkPaint::SkPaint() {
     fHinting    = SkPaintDefaults_Hinting;
 #ifdef SK_BUILD_FOR_ANDROID
     new(&fTextLocale) SkString();
+    fFontVariant = kDefault_Variant;
     fGenerationID = 0;
 #endif
 }
@@ -372,6 +373,18 @@ void SkPaint::setTextLocale(const SkString& locale) {
         GEN_ID_INC;
     }
 }
+
+void SkPaint::setFontVariant(FontVariant fontVariant) {
+    if ((unsigned)fontVariant <= kLast_Variant) {
+        GEN_ID_INC_EVAL((unsigned)fontVariant != fFontVariant);
+        fFontVariant = fontVariant;
+    } else {
+#ifdef SK_REPORT_API_RANGE_CHECK
+        SkDebugf("SkPaint::setFontVariant(%d) out of range\n", fontVariant);
+#endif
+    }
+}
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1561,6 +1574,9 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
 #else
     rec->setLuminanceBits(computeLuminance(paint));
 #endif
+#ifdef SK_BUILD_FOR_ANDROID
+    rec->fFontVariant = paint.getFontVariant();
+#endif //SK_BUILD_FOR_ANDROID
 
     /*  Allow the fonthost to modify our rec before we use it as a key into the
         cache. This way if we're asking for something that they will ignore,
