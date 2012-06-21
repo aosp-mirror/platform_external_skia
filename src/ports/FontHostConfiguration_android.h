@@ -18,27 +18,18 @@
 #define FONTHOSTCONFIGURATION_ANDROID_H_
 
 #include "SkTDArray.h"
-#include "SkPaint.h"
-
-struct FontFileInfo {
-    FontFileInfo() : fVariant(SkPaint::kDefault_Variant), fLanguage(NULL), fFileName(NULL) {}
-    const char*          fFileName;
-    SkPaint::FontVariant fVariant;
-    const char*          fLanguage;  // We may eventually use a enum for this
-};
-
 
 /**
  * The FontFamily data structure is created during parsing and handed back to
  * Skia to fold into its representation of font families. fNames is the list of
- * font names that alias to a font family. fontFileArray is the list of information
- * about each file.  Order is the priority order for the font. This is
+ * font names that alias to a font family. fFileNames is the list of font
+ * filenames for the family. Order is the priority order for the font. This is
  * used internally to determine the order in which to place fallback fonts as
  * they are read from the configuration files.
  */
 struct FontFamily {
-    SkTDArray<const char*>   fNames;
-    SkTDArray<FontFileInfo*> fFontFileArray;
+    SkTDArray<const char*>  fNames;
+    SkTDArray<const char*>  fFileNames;
     int order;
 };
 

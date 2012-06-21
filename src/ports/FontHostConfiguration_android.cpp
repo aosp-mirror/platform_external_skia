@@ -18,7 +18,6 @@
 #include "FontHostConfiguration_android.h"
 #include "SkString.h"
 #include "SkTDArray.h"
-#include "SkTypeface.h"
 #include <expat.h>
 #if !defined(SK_BUILD_FOR_ANDROID_NDK)
     #include <cutils/properties.h>
@@ -47,13 +46,12 @@ struct FamilyData {
     XML_Parser *parser;                // The expat parser doing the work
     SkTDArray<FontFamily*> &families;  // The array that each family is put into as it is parsed
     FontFamily *currentFamily;         // The current family being created
-    FontFileInfo *currentFontInfo;     // The current fontInfo being created
     int currentTag;                    // A flag to indicate whether we're in nameset/fileset tags
 };
 
 /**
  * Handler for arbitrary text. This is used to parse the text inside each name
- * or file tag. The resulting strings are put into the fNames or FontFileInfo arrays.
+ * or file tag. The resulting strings are put into the fNames or fFileNames arrays.
  */
 void textHandler(void *data, const char *s, int len) {
     FamilyData *familyData = (FamilyData*) data;
@@ -70,48 +68,13 @@ void textHandler(void *data, const char *s, int len) {
             *(familyData->currentFamily->fNames.append()) = buff;
             break;
         case FILESET_TAG:
-            if (familyData->currentFontInfo) {
-                familyData->currentFontInfo->fFileName = buff;
-            }
+            *(familyData->currentFamily->fFileNames.append()) = buff;
             break;
         default:
             // Noop - don't care about any text that's not in the Fonts or Names list
             break;
         }
     }
-}
-
-/**
- * Handler for font files. This processes the attributes for language and variants
- * then lets textHandler handle the actual file name
- */
-void fontFileElementHandler(FamilyData *familyData, const char **attributes) {
-    FontFileInfo* newFileInfo = new FontFileInfo();
-    if (attributes) {
-        int currentAttributeIndex = 0;
-        while (attributes[currentAttributeIndex]) {
-            const char* attributeName = attributes[currentAttributeIndex];
-            const char* attributeValue = attributes[currentAttributeIndex+1];
-            int nameLength = strlen(attributeName);
-            int valueLength = strlen(attributeValue);
-            if (strncmp(attributeName, "variant", nameLength) == 0) {
-                if (strncmp(attributeValue, "elegant", valueLength) == 0) {
-                    newFileInfo->fVariant = SkPaint::kElegant_Variant;
-                } else if (strncmp(attributeValue, "compact", valueLength) == 0) {
-                    newFileInfo->fVariant = SkPaint::kCompact_Variant;
-                }
-            } else if (strncmp(attributeName, "language", nameLength) == 0) {
-                if (strncmp(attributeValue, "ja", valueLength) == 0) {
-                    newFileInfo->fLanguage = "ja";
-                }  //else if (other languages)
-            }
-            //each element is a pair of attributeName/attributeValue string pairs
-            currentAttributeIndex += 2;
-        }
-    }
-    *(familyData->currentFamily->fFontFileArray.append()) = newFileInfo;
-    familyData->currentFontInfo = newFileInfo;
-    XML_SetCharacterDataHandler(*familyData->parser, textHandler);
 }
 
 /**
@@ -135,16 +98,14 @@ void startElementHandler(void *data, const char *tag, const char **atts) {
                 familyData->currentFamily->order = value;
             }
         }
-    } else if (len == 7 && strncmp(tag, "nameset", len) == 0) {
+    } else if (len == 7 && strncmp(tag, "nameset", len)== 0) {
         familyData->currentTag = NAMESET_TAG;
     } else if (len == 7 && strncmp(tag, "fileset", len) == 0) {
         familyData->currentTag = FILESET_TAG;
-    } else if (strncmp(tag, "name", len) == 0 && familyData->currentTag == NAMESET_TAG) {
+    } else if ((strncmp(tag, "name", len) == 0 && familyData->currentTag == NAMESET_TAG) ||
+            (strncmp(tag, "file", len) == 0 && familyData->currentTag == FILESET_TAG)) {
         // If it's a Name, parse the text inside
         XML_SetCharacterDataHandler(*familyData->parser, textHandler);
-    } else if (strncmp(tag, "file", len) == 0 && familyData->currentTag == FILESET_TAG) {
-        // If it's a file, parse the attributes, then parse the text inside
-        fontFileElementHandler(familyData, atts);
     }
 }
 
@@ -159,9 +120,9 @@ void endElementHandler(void *data, const char *tag) {
         // Done parsing a Family - store the created currentFamily in the families array
         *familyData->families.append() = familyData->currentFamily;
         familyData->currentFamily = NULL;
-    } else if (len == 7 && strncmp(tag, "nameset", len) == 0) {
+    } else if (len == 7 && strncmp(tag, "nameset", len)== 0) {
         familyData->currentTag = NO_TAG;
-    } else if (len == 7 && strncmp(tag, "fileset", len) == 0) {
+    } else if (len == 7 && strncmp(tag, "fileset", len)== 0) {
         familyData->currentTag = NO_TAG;
     } else if ((strncmp(tag, "name", len) == 0 && familyData->currentTag == NAMESET_TAG) ||
             (strncmp(tag, "file", len) == 0 && familyData->currentTag == FILESET_TAG)) {
