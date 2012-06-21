@@ -10,6 +10,8 @@
 #define SkTypeface_android_DEFINED
 
 #include "SkTypeface.h"
+#include "SkPaint.h"
+#include "../harfbuzz/src/harfbuzz-shaper.h"
 
 enum FallbackScripts {
     kArabic_FallbackScript,
@@ -30,5 +32,7 @@ enum FallbackScripts {
 };
 
 
-SK_API SkTypeface* SkCreateTypefaceForScript(FallbackScripts script) {return NULL; }
+SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style style,
+        SkPaint::FontVariant fontVariant) { return NULL; }
+
 #endif

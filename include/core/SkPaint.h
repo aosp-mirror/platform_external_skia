@@ -848,6 +848,10 @@ public:
                      SkPath* path) const;
 
 #ifdef SK_BUILD_FOR_ANDROID
+
+    enum FontVariant {
+            kElegant_Variant,
+    };
     const SkGlyph& getUnicharMetrics(SkUnichar);
     const SkGlyph& getGlyphMetrics(uint16_t);
     const void* findImage(const SkGlyph&);
