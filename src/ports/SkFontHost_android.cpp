@@ -29,7 +29,7 @@
 #include <string.h>
 #include "SkGlyphCache.h"
 #include "SkTypeface_android.h"
-
+#include "SkTSearch.h"
 
 //#define SkDEBUGF(args       )       SkDebugf args
 
@@ -76,7 +76,7 @@ static SkTypeface* createTypefaceLocked(const SkTypeface* familyFace,
         SkTypeface::Style style);
 static SkStream* openStreamLocked(uint32_t fontID);
 static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int32_t* index);
-static SkFontID nextLogicalFontLocked(SkFontID currFontID, SkFontID origFontID);
+static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec);
 static SkTypeface* createTypefaceFromStreamLocked(SkStream* stream);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -150,6 +150,12 @@ static SkTypeface* findBestFaceLocked(const FamilyRec* family,
     return NULL;
 }
 
+static SkTypeface* FindBestFace(const FamilyRec* family,
+            SkTypeface::Style style) {
+    SkAutoMutexAcquire ac(gFamilyHeadAndNameListMutex);
+    return findBestFaceLocked(family, style);
+}
+
 static FamilyRec* findFamilyLocked(const SkTypeface* member) {
     FamilyRec* curr = gFamilyHead;
     while (curr != NULL) {
@@ -178,6 +184,14 @@ static SkTypeface* findFromUniqueIDLocked(uint32_t uniqueID) {
         curr = curr->fNext;
     }
     return NULL;
+}
+
+/*  Returns the matching typeface, or NULL. If a typeface is found, its refcnt
+    is not modified.
+ */
+static SkTypeface* FindFromUniqueID(uint32_t uniqueID) {
+    SkAutoMutexAcquire ac(gFamilyHeadAndNameListMutex);
+    return findFromUniqueIDLocked(uniqueID);
 }
 
 /*  Remove reference to this face from its family. If the resulting family
@@ -397,8 +411,15 @@ private:
 
 // used to record our notion of the pre-existing fonts
 struct FontInitRec {
-    const char*         fFileName;
-    const char* const*  fNames;     // null-terminated list
+    const char*          fFileName;
+    const char* const*   fNames;     // null-terminated list
+    SkPaint::FontVariant fVariant;
+};
+
+//used to record information about the fallback fonts
+struct FallbackFontRec {
+    SkFontID             fFontID;
+    SkPaint::FontVariant fVariant;
 };
 
 // deliberately empty, but we use the address to identify fallback fonts
@@ -410,7 +431,7 @@ static const char* gFBNames[] = { NULL };
     null for the list. The names list must be NULL-terminated.
 */
 static SkTDArray<FontInitRec> gSystemFonts;
-static SkTDArray<SkFontID> gFallbackFonts;
+static SkTDArray<FallbackFontRec> gFallbackFonts;
 
 // these globals are assigned (once) by loadSystemFontsLocked()
 static FamilyRec* gDefaultFamily = NULL;
@@ -493,8 +514,8 @@ static void loadFontInfoLocked() {
 
     for (int i = 0; i < fontFamilies.count(); ++i) {
         FontFamily *family = fontFamilies[i];
-        for (int j = 0; j < family->fFileNames.count(); ++j) {
-            const char* filename = family->fFileNames[j];
+        for (int j = 0; j < family->fFontFileArray.count(); ++j) {
+            const char* filename = family->fFontFileArray[j]->fFileName;
             if (haveSystemFont(filename)) {
                 SkDebugf("---- system font and fallback font files specify a duplicate "
                         "font %s, skipping the second occurrence", filename);
@@ -503,6 +524,7 @@ static void loadFontInfoLocked() {
 
             FontInitRec fontInfoRecord;
             fontInfoRecord.fFileName = filename;
+            fontInfoRecord.fVariant = family->fFontFileArray[j]->fVariant;
             if (j == 0) {
                 if (family->fNames.count() == 0) {
                     // Fallback font
@@ -595,7 +617,10 @@ static void initSystemFontsLocked() {
             if (names == gFBNames) {
                 SkDEBUGF(("---- adding %s as fallback[%d] fontID %d\n",
                         gSystemFonts[i].fFileName, gFallbackFonts.count(), tf->uniqueID()));
-                *gFallbackFonts.append() = tf->uniqueID();
+                FallbackFontRec newFallbackRec;
+                newFallbackRec.fFontID = tf->uniqueID();
+                newFallbackRec.fVariant = gSystemFonts[i].fVariant;
+                *gFallbackFonts.append() = newFallbackRec;
             }
 
             firstInFamily = tf;
@@ -634,7 +659,7 @@ static SkFontID findUniqueIDLocked(const char* filename) {
 
 static int findFallbackFontIndex(SkFontID fontId) {
     for (int i = 0; i < gFallbackFonts.count(); i++) {
-        if (gFallbackFonts[i] == fontId) {
+        if (gFallbackFonts[i].fFontID == fontId) {
             return i;
         }
     }
@@ -652,8 +677,8 @@ static void reloadFallbackFontsLocked() {
     for (int i = 0; i < fallbackFamilies.count(); ++i) {
         FontFamily *family = fallbackFamilies[i];
 
-        for (int j = 0; j < family->fFileNames.count(); ++j) {
-            const char* filename = family->fFileNames[j];
+        for (int j = 0; j < family->fFontFileArray.count(); ++j) {
+            const char* filename = family->fFontFileArray[j]->fFileName;
             if (filename) {
                 if (!haveSystemFont(filename)) {
                     SkDebugf("---- skipping fallback font %s because it was not "
@@ -680,8 +705,10 @@ static void reloadFallbackFontsLocked() {
 
                 SkDEBUGF(("---- reload %s as fallback[%d] fontID %d\n",
                           filename, gFallbackFonts.count(), uniqueID));
-
-                *gFallbackFonts.append() = uniqueID;
+                FallbackFontRec newFallbackFont;
+                newFallbackFont.fFontID = uniqueID;
+                newFallbackFont.fVariant = family->fFontFileArray[j]->fVariant;
+                *gFallbackFonts.append() = newFallbackFont;
                 break;  // The fallback set contains only the first font of each family
             }
         }
@@ -886,16 +913,16 @@ static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int
     }
 }
 
-SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
+SkFontID SkFontHost::NextLogicalFont(const SkScalerContext::Rec& rec) {
     SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
-    return nextLogicalFontLocked(currFontID, origFontID);
+    return nextLogicalFontLocked(rec);
 }
 
-static SkFontID nextLogicalFontLocked(SkFontID currFontID, SkFontID origFontID) {
+static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
     loadSystemFontsLocked();
 
-    const SkTypeface* origTypeface = findFromUniqueIDLocked(origFontID);
-    const SkTypeface* currTypeface = findFromUniqueIDLocked(currFontID);
+    const SkTypeface* origTypeface = findFromUniqueIDLocked(rec.fOrigFontID);
+    const SkTypeface* currTypeface = findFromUniqueIDLocked(rec.fFontID);
 
     SkASSERT(origTypeface != 0);
     SkASSERT(currTypeface != 0);
@@ -911,17 +938,30 @@ static SkFontID nextLogicalFontLocked(SkFontID currFontID, SkFontID origFontID) 
      */
     int plainFallbackFontIndex = findFallbackFontIndex(plainFontID);
     int nextFallbackFontIndex = plainFallbackFontIndex + 1;
-    SkFontID nextFontID;
-    if (nextFallbackFontIndex == gFallbackFonts.count()) {
-        nextFontID = 0; // no more fallbacks
-    } else {
-        const SkTypeface* nextTypeface = findFromUniqueIDLocked(gFallbackFonts[nextFallbackFontIndex]);
-        nextFontID = findTypefaceLocked(nextTypeface, origTypeface->style())->uniqueID();
+
+    // If a rec object is set to prefer "kDefault_Variant" it means they have no preference
+    // In this case, we set the value to "kCompact_Variant"
+    SkPaint::FontVariant recPreference = rec.fFontVariant;
+    if (recPreference == SkPaint::kDefault_Variant) {
+        recPreference = SkPaint::kCompact_Variant;
+    }
+    SkFontID nextFontID = 0;
+    while (nextFallbackFontIndex < gFallbackFonts.count()) {
+        bool normalFont =
+                (gFallbackFonts[nextFallbackFontIndex].fVariant == SkPaint::kDefault_Variant);
+        bool fontChosen = (gFallbackFonts[nextFallbackFontIndex].fVariant == recPreference);
+        if (normalFont || fontChosen) {
+            const SkTypeface* nextTypeface =
+                    findFromUniqueIDLocked(gFallbackFonts[nextFallbackFontIndex].fFontID);
+            nextFontID = findTypefaceLocked(nextTypeface, origTypeface->style())->uniqueID();
+            break;
+        }
+        nextFallbackFontIndex++;
     }
 
     SkDEBUGF(("---- nextLogicalFont: currFontID=%d, origFontID=%d, plainFontID=%d, "
             "plainFallbackFontIndex=%d, nextFallbackFontIndex=%d "
-            "=> nextFontID=%d", currFontID, origFontID, plainFontID,
+            "=> nextFontID=%d", rec.fFontID, rec.fOrigFontID, plainFontID,
             plainFallbackFontIndex, nextFallbackFontIndex, nextFontID));
     return nextFontID;
 }
@@ -966,46 +1006,9 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
 // Function from SkTypeface_android.h
 ///////////////////////////////////////////////////////////////////////////////
 
-struct FBScriptInfo {
-    const FallbackScripts fScript;
-    const char* fScriptID;
-    const SkTypeface::Style fStyle;
-    const SkUnichar fChar; // representative character for that script type
-    SkFontID fFontID;
-};
-
-#define SK_DEFINE_SCRIPT_ENTRY(script, style, unichar) \
-    { script, #script, style, unichar, 0 }
-
-static FBScriptInfo gFBScriptInfo[] = {
-    SK_DEFINE_SCRIPT_ENTRY(kArabic_FallbackScript,        SkTypeface::kNormal, 0x0600),
-    SK_DEFINE_SCRIPT_ENTRY(kArmenian_FallbackScript,      SkTypeface::kNormal, 0x0531),
-    SK_DEFINE_SCRIPT_ENTRY(kBengali_FallbackScript,       SkTypeface::kNormal, 0x0981),
-    SK_DEFINE_SCRIPT_ENTRY(kDevanagari_FallbackScript,    SkTypeface::kNormal, 0x0901),
-    SK_DEFINE_SCRIPT_ENTRY(kEthiopic_FallbackScript,      SkTypeface::kNormal, 0x1200),
-    SK_DEFINE_SCRIPT_ENTRY(kGeorgian_FallbackScript,      SkTypeface::kNormal, 0x10A0),
-    SK_DEFINE_SCRIPT_ENTRY(kHebrewRegular_FallbackScript, SkTypeface::kNormal, 0x0591),
-    SK_DEFINE_SCRIPT_ENTRY(kHebrewBold_FallbackScript,    SkTypeface::kBold,   0x0591),
-    SK_DEFINE_SCRIPT_ENTRY(kKannada_FallbackScript,       SkTypeface::kNormal, 0x0C90),
-    SK_DEFINE_SCRIPT_ENTRY(kMalayalam_FallbackScript,     SkTypeface::kNormal, 0x0D10),
-    SK_DEFINE_SCRIPT_ENTRY(kTamilRegular_FallbackScript,  SkTypeface::kNormal, 0x0B82),
-    SK_DEFINE_SCRIPT_ENTRY(kTamilBold_FallbackScript,     SkTypeface::kBold,   0x0B82),
-    SK_DEFINE_SCRIPT_ENTRY(kThai_FallbackScript,          SkTypeface::kNormal, 0x0E01),
-    SK_DEFINE_SCRIPT_ENTRY(kTelugu_FallbackScript,        SkTypeface::kNormal, 0x0C10),
-};
-
-static bool gFBScriptInitialized = false;
-static const int gFBScriptInfoCount = sizeof(gFBScriptInfo) / sizeof(FBScriptInfo);
-
-// ensure that if any value is added to the public enum it is also added here
-SK_COMPILE_ASSERT(gFBScriptInfoCount == kFallbackScriptNumber, FBScript_count_mismatch);
-
-
-// this function can't be called if the gFamilyHeadAndNameListMutex is already locked
-static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style) {
-    gFamilyHeadAndNameListMutex.acquire();
-    SkTypeface* face = findBestFaceLocked(gDefaultFamily, style);
-    gFamilyHeadAndNameListMutex.release();
+static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style,
+        SkPaint::FontVariant fontVariant) {
+    SkTypeface* face = FindBestFace(gDefaultFamily, style);
     if (!face) {
         return 0;
     }
@@ -1013,6 +1016,7 @@ static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style) {
     SkPaint paint;
     paint.setTypeface(face);
     paint.setTextEncoding(SkPaint::kUTF16_TextEncoding);
+    paint.setFontVariant(fontVariant);
 
     SkAutoGlyphCache autoCache(paint, NULL);
     SkGlyphCache*    cache = autoCache.getCache();
@@ -1025,71 +1029,93 @@ static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style) {
     return 0;
 }
 
-// this function can't be called if the gFamilyHeadAndNameListMutex is already locked
-static void initFBScriptInfo() {
-    if (gFBScriptInitialized) {
-        return;
-    }
+struct HB_UnicodeMapping {
+    HB_Script script;
+    const SkUnichar unicode;
+};
 
-    // ensure the system fonts are loaded
-    gFamilyHeadAndNameListMutex.acquire();
-    loadSystemFontsLocked();
-    gFamilyHeadAndNameListMutex.release();
+static HB_UnicodeMapping HB_UnicodeMappingArray[] {
+    {HB_Script_Arabic,        0x0600},
+    {HB_Script_Armenian,      0x0531},
+    {HB_Script_Bengali,       0x0981},
+    {HB_Script_Devanagari,    0x0901},
+    // we don't currently support HB_Script_Ethiopic, it is a placeholder for an upstream merge
+    //{HB_Script_Ethiopic,    0x1200},
+    {HB_Script_Georgian,      0x10A0},
+    {HB_Script_Hebrew,        0x0591},
+    {HB_Script_Kannada,       0x0C90},
+    {HB_Script_Malayalam,     0x0D10},
+    {HB_Script_Tamil,         0x0B82},
+    {HB_Script_Thai,          0x0E01},
+    {HB_Script_Telugu,        0x0C10},
+};
 
-    for (int i = 0; i < gFBScriptInfoCount; i++) {
-        FBScriptInfo& scriptInfo = gFBScriptInfo[i];
-        // selects the best available style for the desired font. However, if
-        // bold is requested and no bold font exists for the typeface containing
-        // the character the next best style is chosen (e.g. normal).
-        scriptInfo.fFontID = findFontIDForChar(scriptInfo.fChar, scriptInfo.fStyle);
-        SkDEBUGF(("gFBScriptInfo[%s] --> %d", scriptInfo.fScriptID, scriptInfo.fFontID));
-    }
-    // mark the value as initialized so we don't repeat our work unnecessarily
-    gFBScriptInitialized = true;
-}
-
-SkTypeface* SkCreateTypefaceForScript(FallbackScripts script) {
-    if (!SkTypeface_ValidScript(script)) {
-        return NULL;
-    }
-
-    // ensure that our table is populated
-    initFBScriptInfo();
-
-    FBScriptInfo& scriptInfo = gFBScriptInfo[script];
-
-    // ensure the element with that index actually maps to the correct script
-    SkASSERT(scriptInfo.fScript == script);
-
-    // if a suitable script could not be found then return NULL
-    if (scriptInfo.fFontID == 0) {
-        return NULL;
-    }
-
-    SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
-
-    // retrieve the typeface the corresponds to this fontID
-    SkTypeface* tf = findFromUniqueIDLocked(scriptInfo.fFontID);
-    // we ref(), since the semantic is to return a new instance
-    tf->ref();
-    return tf;
-}
-
-const char* SkGetFallbackScriptID(FallbackScripts script) {
-    for (int i = 0; i < gFBScriptInfoCount; i++) {
-        if (gFBScriptInfo[i].fScript == script) {
-            return gFBScriptInfo[i].fScriptID;
+// returns 0 for "Not Found"
+static SkUnichar getUnicodeFromHBScript(HB_Script script) {
+    SkUnichar unichar = 0;
+    int numSupportedFonts = sizeof(HB_UnicodeMappingArray) / sizeof(HB_UnicodeMapping);
+    for (int i = 0; i < numSupportedFonts; i++) {
+        if (script == HB_UnicodeMappingArray[i].script) {
+            unichar = HB_UnicodeMappingArray[i].unicode;
+            break;
         }
     }
-    return NULL;
+    return unichar;
 }
 
-FallbackScripts SkGetFallbackScriptFromID(const char* id) {
-    for (int i = 0; i < gFBScriptInfoCount; i++) {
-        if (strcmp(gFBScriptInfo[i].fScriptID, id) == 0) {
-            return gFBScriptInfo[i].fScript;
-        }
+struct TypefaceLookupStruct {
+    HB_Script            script;
+    SkTypeface::Style    style;
+    SkPaint::FontVariant fontVariant;
+    SkTypeface*          typeface;
+};
+
+SK_DECLARE_STATIC_MUTEX(gTypefaceTableMutex);  // This is the mutex for gTypefaceTable
+static SkTDArray<TypefaceLookupStruct> gTypefaceTable;  // This is protected by gTypefaceTableMutex
+
+static int typefaceLookupCompare(const TypefaceLookupStruct& first,
+        const TypefaceLookupStruct& second) {
+    if (first.script != second.script) {
+        return (first.script > second.script) ? 1 : -1;
     }
-    return kFallbackScriptNumber; // Use kFallbackScriptNumber as an invalid value.
+    if (first.style != second.style) {
+        return (first.style > second.style) ? 1 : -1;
+    }
+    if (first.fontVariant != second.fontVariant) {
+        return (first.fontVariant > second.fontVariant) ? 1 : -1;
+    }
+    return 0;
 }
 
+SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style style,
+        SkPaint::FontVariant fontVariant) {
+    SkTypeface* retTypeface = NULL;
+
+    SkAutoMutexAcquire ac(gTypefaceTableMutex); // Note: NOT gFamilyHeadAndNameListMutex
+    TypefaceLookupStruct key;
+    key.script = script;
+    key.style = style;
+    key.fontVariant = fontVariant;
+    int index = SkTSearch<TypefaceLookupStruct>(
+            (const TypefaceLookupStruct*) gTypefaceTable.begin(),
+            gTypefaceTable.count(), key, sizeof(TypefaceLookupStruct),
+            &typefaceLookupCompare);
+    if (index >= 0) {
+        retTypeface = gTypefaceTable[index].typeface;
+    }
+    else {
+        SkUnichar unichar = getUnicodeFromHBScript(script);
+        if (!unichar) {
+            return NULL;
+        }
+        SkFontID newFontID = findFontIDForChar(unichar, style, fontVariant);
+        // retrieve the typeface that corresponds to this fontID
+        retTypeface = FindFromUniqueID(newFontID);
+        // we ref(), since the semantic is to return a new instance
+        retTypeface->ref();
+        key.typeface = retTypeface;
+        index = ~index;
+        *gTypefaceTable.insert(index) = key;
+    }
+    return retTypeface;
+}
