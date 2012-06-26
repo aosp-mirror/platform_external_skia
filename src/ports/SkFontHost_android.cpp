@@ -1034,20 +1034,42 @@ struct HB_UnicodeMapping {
     const SkUnichar unicode;
 };
 
+/*
+ * The following scripts are not complex fonts and we do not expect them to be parsed by this table
+ * HB_Script_Common,
+ * HB_Script_Greek,
+ * HB_Script_Cyrillic,
+ * HB_Script_Hangul
+ * HB_Script_Inherited
+ */
+
 static HB_UnicodeMapping HB_UnicodeMappingArray[] {
-    {HB_Script_Arabic,        0x0600},
     {HB_Script_Armenian,      0x0531},
-    {HB_Script_Bengali,       0x0981},
-    {HB_Script_Devanagari,    0x0901},
-    // we don't currently support HB_Script_Ethiopic, it is a placeholder for an upstream merge
-    //{HB_Script_Ethiopic,    0x1200},
-    {HB_Script_Georgian,      0x10A0},
     {HB_Script_Hebrew,        0x0591},
+    {HB_Script_Arabic,        0x0600},
+    {HB_Script_Syriac,        0x0710},
+    {HB_Script_Thaana,        0x0780},
+    {HB_Script_Nko,           0x07C0},
+    {HB_Script_Devanagari,    0x0901},
+    {HB_Script_Bengali,       0x0981},
+    {HB_Script_Gurmukhi,      0x0A10},
+    {HB_Script_Gujarati,      0x0A90},
+    {HB_Script_Oriya,         0x0B10},
+    {HB_Script_Tamil,         0x0B82},
+    {HB_Script_Telugu,        0x0C10},
     {HB_Script_Kannada,       0x0C90},
     {HB_Script_Malayalam,     0x0D10},
-    {HB_Script_Tamil,         0x0B82},
+    {HB_Script_Sinhala,       0x0D90},
     {HB_Script_Thai,          0x0E01},
-    {HB_Script_Telugu,        0x0C10},
+    {HB_Script_Lao,           0x0E81},
+    {HB_Script_Tibetan,       0x0F00},
+    {HB_Script_Myanmar,       0x1000},
+    {HB_Script_Georgian,      0x10A0},
+    // we don't currently support HB_Script_Ethiopic, it is a placeholder for an upstream merge
+    //{HB_Script_Ethiopic,    0x1200},
+    {HB_Script_Ogham,         0x1680},
+    {HB_Script_Runic,         0x16A0},
+    {HB_Script_Khmer,         0x1780},
 };
 
 // returns 0 for "Not Found"
@@ -1111,11 +1133,11 @@ SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style
         SkFontID newFontID = findFontIDForChar(unichar, style, fontVariant);
         // retrieve the typeface that corresponds to this fontID
         retTypeface = FindFromUniqueID(newFontID);
-        // we ref(), since the semantic is to return a new instance
-        retTypeface->ref();
         key.typeface = retTypeface;
         index = ~index;
         *gTypefaceTable.insert(index) = key;
     }
+    // we ref(), the caller is expected to unref when they are done
+    SkSafeRef(retTypeface);
     return retTypeface;
 }
