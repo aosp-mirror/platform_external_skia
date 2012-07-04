@@ -16,7 +16,7 @@
 */
 
 #include "FontHostConfiguration_android.h"
-#include "SkString.h"
+#include "SkLanguage.h"
 #include "SkTDArray.h"
 #include "SkTypeface.h"
 #include <expat.h>
@@ -27,7 +27,6 @@
 #define SYSTEM_FONTS_FILE "/system/etc/system_fonts.xml"
 #define FALLBACK_FONTS_FILE "/system/etc/fallback_fonts.xml"
 #define VENDOR_FONTS_FILE "/vendor/etc/fallback_fonts.xml"
-
 
 // These defines are used to determine the kind of tag that we're currently
 // populating with data. We only care about the sibling tags nameset and fileset
@@ -82,8 +81,8 @@ void textHandler(void *data, const char *s, int len) {
 }
 
 /**
- * Handler for font files. This processes the attributes for language and variants
- * then lets textHandler handle the actual file name
+ * Handler for font files. This processes the attributes for language and
+ * variants then lets textHandler handle the actual file name
  */
 void fontFileElementHandler(FamilyData *familyData, const char **attributes) {
     FontFileInfo* newFileInfo = new FontFileInfo();
@@ -100,10 +99,8 @@ void fontFileElementHandler(FamilyData *familyData, const char **attributes) {
                 } else if (strncmp(attributeValue, "compact", valueLength) == 0) {
                     newFileInfo->fVariant = SkPaint::kCompact_Variant;
                 }
-            } else if (strncmp(attributeName, "language", nameLength) == 0) {
-                if (strncmp(attributeValue, "ja", valueLength) == 0) {
-                    newFileInfo->fLanguage = "ja";
-                }  //else if (other languages)
+            } else if (strncmp(attributeName, "lang", nameLength) == 0) {
+                newFileInfo->fLanguage = SkLanguage(attributeValue);
             }
             //each element is a pair of attributeName/attributeValue string pairs
             currentAttributeIndex += 2;
@@ -170,65 +167,6 @@ void endElementHandler(void *data, const char *tag) {
     }
 }
 
-#if !defined(SK_BUILD_FOR_ANDROID_NDK)
-/**
- * Read the persistent locale.
- */
-void getLocale(char* language, char* region)
-{
-    char propLang[PROPERTY_VALUE_MAX], propRegn[PROPERTY_VALUE_MAX];
-
-    property_get("persist.sys.language", propLang, "");
-    property_get("persist.sys.country", propRegn, "");
-    if (*propLang == 0 && *propRegn == 0) {
-        /* Set to ro properties, default is en_US */
-        property_get("ro.product.locale.language", propLang, "en");
-        property_get("ro.product.locale.region", propRegn, "US");
-    }
-    strncat(language, propLang, 2);
-    strncat(region, propRegn, 2);
-}
-#endif
-
-/**
- * Use the current system locale (language and region) to open the best matching
- * customization. For example, when the language is Japanese, the sequence might be:
- *      /system/etc/fallback_fonts-ja-JP.xml
- *      /system/etc/fallback_fonts-ja.xml
- *      /system/etc/fallback_fonts.xml
- */
-FILE* openLocalizedFile(const char* origname) {
-    FILE* file = 0;
-
-#if !defined(SK_BUILD_FOR_ANDROID_NDK)
-    SkString basename;
-    SkString filename;
-    char language[3] = "";
-    char region[3] = "";
-
-    basename.set(origname);
-    // Remove the .xml suffix. We'll add it back in a moment.
-    if (basename.endsWith(".xml")) {
-        basename.resize(basename.size()-4);
-    }
-    getLocale(language, region);
-    // Try first with language and region
-    filename.printf("%s-%s-%s.xml", basename.c_str(), language, region);
-    file = fopen(filename.c_str(), "r");
-    if (!file) {
-        // If not found, try next with just language
-        filename.printf("%s-%s.xml", basename.c_str(), language);
-        file = fopen(filename.c_str(), "r");
-    }
-#endif
-
-    if (!file) {
-        // If still not found, try just the original name
-        file = fopen(origname, "r");
-    }
-    return file;
-}
-
 /**
  * This function parses the given filename and stores the results in the given
  * families array.
@@ -238,7 +176,7 @@ void parseConfigFile(const char *filename, SkTDArray<FontFamily*> &families) {
     FamilyData *familyData = new FamilyData(&parser, families);
     XML_SetUserData(parser, familyData);
     XML_SetElementHandler(parser, startElementHandler, endElementHandler);
-    FILE *file = openLocalizedFile(filename);
+    FILE *file = fopen(filename, "r");
     // Some of the files we attempt to parse (in particular, /vendor/etc/fallback_fonts.xml)
     // are optional - failure here is okay because one of these optional files may not exist.
     if (file == NULL) {
@@ -254,6 +192,7 @@ void parseConfigFile(const char *filename, SkTDArray<FontFamily*> &families) {
         }
         XML_Parse(parser, buffer, len, done);
     }
+    fclose(file);
 }
 
 void getSystemFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
