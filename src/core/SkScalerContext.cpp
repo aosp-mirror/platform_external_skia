@@ -162,6 +162,22 @@ SkScalerContext* SkScalerContext::getNextContext() {
     return next;
 }
 
+SkScalerContext* SkScalerContext::getContextFromChar(SkUnichar uni, unsigned& glyphID) {
+    SkScalerContext* ctx = this;
+    for (;;) {
+        glyphID = ctx->generateCharToGlyph(uni);
+        if (glyphID) {
+            break;  // found it
+        }
+        ctx = ctx->getNextContext();
+        if (NULL == ctx) {
+            SkDebugf("--- no context for char %x\n", uni);
+            return NULL;
+        }
+    }
+    return ctx;
+}
+
 SkScalerContext* SkScalerContext::getGlyphContext(const SkGlyph& glyph) {
     unsigned glyphID = glyph.getGlyphID();
     SkScalerContext* ctx = this;
@@ -182,6 +198,16 @@ SkScalerContext* SkScalerContext::getGlyphContext(const SkGlyph& glyph) {
 }
 
 #ifdef SK_BUILD_FOR_ANDROID
+SkFontID SkScalerContext::findTypefaceIdForChar(SkUnichar uni) {
+    unsigned glyphID;
+    SkScalerContext* ctx = getContextFromChar(uni, glyphID);
+    if (ctx) {
+        return ctx->fRec.fFontID;
+    } else {
+        return 0;
+    }
+}
+
 /*  This loops through all available fallback contexts (if needed) until it
     finds some context that can handle the unichar and return it.
 
@@ -189,21 +215,13 @@ SkScalerContext* SkScalerContext::getGlyphContext(const SkGlyph& glyph) {
     char of a run.
  */
 unsigned SkScalerContext::getBaseGlyphCount(SkUnichar uni) {
-    SkScalerContext* ctx = this;
     unsigned glyphID;
-    for (;;) {
-        glyphID = ctx->generateCharToGlyph(uni);
-        if (glyphID) {
-            break;  // found it
-        }
-        ctx = ctx->getNextContext();
-        if (NULL == ctx) {
-            SkDebugf("--- no context for char %x\n", uni);
-            // just return the original context (this)
-            return this->fBaseGlyphCount;
-        }
+    SkScalerContext* ctx = getContextFromChar(uni, glyphID);
+    if (ctx) {
+        return ctx->fBaseGlyphCount;
+    } else {
+        return this->fBaseGlyphCount;
     }
-    return ctx->fBaseGlyphCount;
 }
 #endif
 
@@ -211,17 +229,11 @@ unsigned SkScalerContext::getBaseGlyphCount(SkUnichar uni) {
     finds some context that can handle the unichar. If all fail, returns 0
  */
 uint16_t SkScalerContext::charToGlyphID(SkUnichar uni) {
-    SkScalerContext* ctx = this;
+
     unsigned glyphID;
-    for (;;) {
-        glyphID = ctx->generateCharToGlyph(uni);
-        if (glyphID) {
-            break;  // found it
-        }
-        ctx = ctx->getNextContext();
-        if (NULL == ctx) {
-            return 0;   // no more contexts, return missing glyph
-        }
+    SkScalerContext* ctx = getContextFromChar(uni, glyphID);
+    if (!ctx) {
+        return 0; // no more contexts, return missing glyph
     }
     // add the ctx's base, making glyphID unique for chain of contexts
     glyphID += ctx->fBaseGlyphCount;

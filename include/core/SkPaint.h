@@ -10,10 +10,15 @@
 #ifndef SkPaint_DEFINED
 #define SkPaint_DEFINED
 
+#include "SkTypes.h"
 #include "SkColor.h"
 #include "SkDrawLooper.h"
 #include "SkXfermode.h"
 #include "SkString.h"
+
+#ifdef SK_BUILD_FOR_ANDROID
+#include "SkLanguage.h"
+#endif
 
 class SkAutoGlyphCache;
 class SkColorFilter;
@@ -656,15 +661,15 @@ public:
     void    setTextAlign(Align align);
 
 #ifdef SK_BUILD_FOR_ANDROID
-    /** Return the paint's text locale value.
-        @return the paint's text locale value used for drawing text.
+    /** Return the paint's language value used for drawing text.
+        @return the paint's language value used for drawing text.
     */
-    const SkString& getTextLocale() const { return fTextLocale; }
+    const SkLanguage& getLanguage() const { return fLanguage; }
 
-    /** Set the paint's text locale.
-        @param locale set the paint's locale value for drawing text.
+    /** Set the paint's language value used for drawing text.
+        @param language set the paint's language value for drawing text.
     */
-    void    setTextLocale(const SkString& locale);
+    void setLanguage(const SkLanguage& language);
 
 
     enum FontVariant {
@@ -924,7 +929,7 @@ private:
     unsigned        fTextEncoding : 2;  // 3 values
     unsigned        fHinting : 2;
 #ifdef SK_BUILD_FOR_ANDROID
-    SkString        fTextLocale;
+    SkLanguage      fLanguage;
     FontVariant     fFontVariant;
 #endif
 

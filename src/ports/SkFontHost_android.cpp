@@ -28,7 +28,10 @@
 #include <stdio.h>
 #include <string.h>
 #include "SkGlyphCache.h"
+#include "SkLanguage.h"
 #include "SkTypeface_android.h"
+#include "SkTArray.h"
+#include "SkTDict.h"
 #include "SkTSearch.h"
 
 //#define SkDEBUGF(args       )       SkDebugf args
@@ -78,6 +81,7 @@ static SkStream* openStreamLocked(uint32_t fontID);
 static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int32_t* index);
 static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec);
 static SkTypeface* createTypefaceFromStreamLocked(SkStream* stream);
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -414,6 +418,7 @@ struct FontInitRec {
     const char*          fFileName;
     const char* const*   fNames;     // null-terminated list
     SkPaint::FontVariant fVariant;
+    SkLanguage           fLanguage;
 };
 
 //used to record information about the fallback fonts
@@ -422,22 +427,28 @@ struct FallbackFontRec {
     SkPaint::FontVariant fVariant;
 };
 
+struct FallbackFontList {
+    FallbackFontList(const SkLanguage& language) : fLanguage(language) { }
+    SkTDArray<FallbackFontRec> fList;
+    SkLanguage                 fLanguage;
+};
+
 // deliberately empty, but we use the address to identify fallback fonts
 static const char* gFBNames[] = { NULL };
-
 
 /*  Fonts are grouped by family, with the first font in a family having the
     list of names (even if that list is empty), and the following members having
     null for the list. The names list must be NULL-terminated.
 */
-static SkTDArray<FontInitRec> gSystemFonts;
-static SkTDArray<FallbackFontRec> gFallbackFonts;
+static SkTArray<FontInitRec> gSystemFonts;
+static SkTDArray<FallbackFontList*> gFallbackFontLists;
 
 // these globals are assigned (once) by loadSystemFontsLocked()
 static FamilyRec* gDefaultFamily = NULL;
 static SkTypeface* gDefaultNormal = NULL;
 static char** gDefaultNames = NULL;
 
+static FallbackFontList* getFallbackFontListLocked(const SkLanguage& lang);
 static void dumpGlobalsLocked() {
     SkDebugf("gDefaultNormal=%p id=%u refCnt=%d", gDefaultNormal,
              gDefaultNormal ? gDefaultNormal->uniqueID() : 0,
@@ -458,8 +469,11 @@ static void dumpGlobalsLocked() {
         SkDebugf("gDefaultFamily=%p", gDefaultFamily);
     }
 
-    SkDebugf("gSystemFonts.count()=%d gFallbackFonts.count()=%d",
-            gSystemFonts.count(), gFallbackFonts.count());
+    FallbackFontList* defaultFallbackList =
+            getFallbackFontListLocked(SkLanguage());
+    SkASSERT(defaultFallbackList != NULL);
+    SkDebugf("gSystemFonts.count()=%d defaultFallbackList->fList.count()=%d",
+           gSystemFonts.count(), defaultFallbackList->fList.count());
 
     for (int i = 0; i < gSystemFonts.count(); ++i) {
         SkDebugf("gSystemFonts[%d] fileName=%s", i, gSystemFonts[i].fFileName);
@@ -504,9 +518,164 @@ static bool haveSystemFont(const char* filename) {
     return false;
 }
 
+// (SkLanguage)<->(fallback chain index) translation
+static const size_t kLangDictSize = 128;
+static SkTDict<FallbackFontList*> gLangTagToFallbackFontList(kLangDictSize);
+static bool gIsOKToUseFallbackFontListCache = false;
+
+// crawl fallback font lists by hand looking for a specific language
+static FallbackFontList* getFallbackFontListNoCacheLocked(
+        const SkLanguage& lang) {
+    unsigned int numLists = gFallbackFontLists.count();
+    for (unsigned int listIdx = 0; listIdx < numLists; ++listIdx) {
+        FallbackFontList* list = gFallbackFontLists[listIdx];
+        SkASSERT(list != NULL);
+        if (list->fLanguage == lang) {
+            return list;
+        }
+    }
+    return NULL;
+}
+
+// perform fancy fuzzy-matching memoized query for a fallback font list.
+// should only be called after fallback font lists are fully loaded.
+static FallbackFontList* getFallbackFontListLocked(const SkLanguage& lang) {
+    SkASSERT(gIsOKToUseFallbackFontListCache);
+    const SkString& langTag = lang.getTag();
+    FallbackFontList* fallbackFontList;
+    if (gLangTagToFallbackFontList.find(langTag.c_str(), langTag.size(),
+            &fallbackFontList)) {
+        // cache hit!
+        return fallbackFontList;
+    }
+
+    // try again without the cache
+    fallbackFontList = getFallbackFontListNoCacheLocked(lang);
+    if (fallbackFontList != NULL) {
+        // found it - cache and return
+        gLangTagToFallbackFontList.set(langTag.c_str(), langTag.size(),
+                fallbackFontList);
+        SkDEBUGF(("new fallback cache entry: \"%s\"", langTag.c_str()));
+        return fallbackFontList;
+    }
+
+    // no hit - can we fuzzy-match?
+    if (lang.getTag().isEmpty()) {
+        // nope! this happens if attempting to direct match with no default
+        return NULL;
+    }
+
+    // attempt fuzzy match
+    SkLanguage parent = lang.getParent();
+    fallbackFontList = getFallbackFontListLocked(parent);
+    if (fallbackFontList != NULL) {
+        // found it - cache and return
+        gLangTagToFallbackFontList.set(langTag.c_str(), langTag.size(),
+                fallbackFontList);
+        SkDEBUGF(("new fallback cache entry: \"%s\" -> \"%s\"", langTag.c_str(),
+                fallbackFontList->fLanguage.getTag().c_str()));
+        return fallbackFontList;
+    }
+
+    // utter failure. this happens if attempting to fuzzy-match with no default
+    SkASSERT(fallbackFontList != NULL);
+    return NULL;
+}
+
+// creates a new fallback font list for the specified language
+static FallbackFontList* createFallbackFontListLocked(const SkLanguage& lang) {
+    SkASSERT(!gIsOKToUseFallbackFontListCache);
+    SkDEBUGF(("new fallback list: \"%s\"", lang.getTag().c_str()));
+    FallbackFontList* fallbackFontList = new FallbackFontList(lang);
+    gFallbackFontLists.push(fallbackFontList);
+    return fallbackFontList;
+}
+
+// adds a fallback font record to both the default fallback chain and the
+// language-specific fallback chain to which it belongs, if any
+static void addFallbackFontLocked(const FallbackFontRec& fallbackRec,
+        const SkLanguage& lang) {
+    SkASSERT(!gIsOKToUseFallbackFontListCache);
+    SkDEBUGF(("new fallback font: %d, in \"%s\"", fallbackRec.fFontID,
+            lang.getTag().c_str()));
+    // add to the default fallback list
+    FallbackFontList* fallbackList =
+            getFallbackFontListNoCacheLocked(SkLanguage());
+    if (fallbackList == NULL) {
+        // oops! no default list yet. create one.
+        fallbackList = createFallbackFontListLocked(SkLanguage());
+    }
+    SkASSERT(fallbackList != NULL);
+    fallbackList->fList.push(fallbackRec);
+    if (lang.getTag().isEmpty()) {
+        return;
+    }
+    // also add to the appropriate language's fallback list
+    fallbackList = getFallbackFontListNoCacheLocked(lang);
+    if (fallbackList == NULL) {
+        // first entry for this list!
+        fallbackList = createFallbackFontListLocked(lang);
+    }
+    SkASSERT(fallbackList != NULL);
+    fallbackList->fList.push(fallbackRec);
+}
+
+static int getSystemFontIndexForFontID(SkFontID fontID) {
+    // font unique id = one-based index in system font table
+    SkASSERT(fontID - 1 < gSystemFonts.count());
+    return fontID - 1;
+}
+
+// scans the default fallback font chain, adding every entry to every other
+// fallback font chain to which it does not belong. this results in every
+// language-specific fallback font chain having all of its fallback fonts at
+// the front of the chain, and everything else at the end. after this has been
+// run, it is ok to use the fallback font chain lookup table.
+static void finaliseFallbackFontListsLocked() {
+    SkASSERT(!gIsOKToUseFallbackFontListCache);
+    // if we have more than one list, we need to finalise non-default lists
+    unsigned int numLists = gFallbackFontLists.count();
+    if (numLists > 1) {
+        // pull fonts off of the default list...
+        FallbackFontList* defaultList = getFallbackFontListNoCacheLocked(
+                SkLanguage());
+        SkASSERT(defaultList != NULL);
+        int numDefaultFonts = defaultList->fList.count();
+        for (int fontIdx = 0; fontIdx < numDefaultFonts; ++fontIdx) {
+            // figure out which language they represent
+            SkFontID fontID = defaultList->fList[fontIdx].fFontID;
+            int sysFontIdx = getSystemFontIndexForFontID(fontID);
+            const SkLanguage& lang = gSystemFonts[sysFontIdx].fLanguage;
+            for (unsigned int listIdx = 0; listIdx < numLists; ++listIdx) {
+                // and add them to every other language's list
+                FallbackFontList* thisList = gFallbackFontLists[listIdx];
+                SkASSERT(thisList != NULL);
+                if (thisList != defaultList && thisList->fLanguage != lang) {
+                    thisList->fList.push(defaultList->fList[fontIdx]);
+                }
+            }
+        }
+    }
+    gIsOKToUseFallbackFontListCache = true;
+}
+
+static void resetFallbackFontListsLocked() {
+    // clear cache
+    gLangTagToFallbackFontList.reset();
+    // clear the data it pointed at
+    int numFallbackLists = gFallbackFontLists.count();
+    for (int fallbackIdx = 0; fallbackIdx < numFallbackLists; ++fallbackIdx) {
+        delete gFallbackFontLists[fallbackIdx];
+    }
+    gFallbackFontLists.reset();
+    gIsOKToUseFallbackFontListCache = false;
+}
+
 /*  Load info from a configuration file that populates the system/fallback font structures
 */
 static void loadFontInfoLocked() {
+    resetFallbackFontListsLocked();
+
     SkTDArray<FontFamily*> fontFamilies;
     getFontFamilies(fontFamilies);
 
@@ -525,6 +694,7 @@ static void loadFontInfoLocked() {
             FontInitRec fontInfoRecord;
             fontInfoRecord.fFileName = filename;
             fontInfoRecord.fVariant = family->fFontFileArray[j]->fVariant;
+            fontInfoRecord.fLanguage = family->fFontFileArray[j]->fLanguage;
             if (j == 0) {
                 if (family->fNames.count() == 0) {
                     // Fallback font
@@ -549,7 +719,7 @@ static void loadFontInfoLocked() {
             } else {
                 fontInfoRecord.fNames = NULL;
             }
-            *gSystemFonts.append() = fontInfoRecord;
+            gSystemFonts.push_back(fontInfoRecord);
         }
     }
     fontFamilies.deleteAll();
@@ -559,7 +729,6 @@ static void loadFontInfoLocked() {
         SkDEBUGF(("---- gSystemFonts[%d] fileName=%s", i, gSystemFonts[i].fFileName));
     }
 }
-
 
 /*
  *  Called once (ensured by the sentinel check at the beginning of our body).
@@ -574,8 +743,6 @@ static void initSystemFontsLocked() {
     SkASSERT(gUniqueFontID == 0);
 
     loadFontInfoLocked();
-
-    gFallbackFonts.reset();
 
     SkTypeface* firstInFamily = NULL;
     for (int i = 0; i < gSystemFonts.count(); i++) {
@@ -615,12 +782,11 @@ static void initSystemFontsLocked() {
         if (names != NULL) {
             // see if this is one of our fallback fonts
             if (names == gFBNames) {
-                SkDEBUGF(("---- adding %s as fallback[%d] fontID %d\n",
-                        gSystemFonts[i].fFileName, gFallbackFonts.count(), tf->uniqueID()));
-                FallbackFontRec newFallbackRec;
-                newFallbackRec.fFontID = tf->uniqueID();
-                newFallbackRec.fVariant = gSystemFonts[i].fVariant;
-                *gFallbackFonts.append() = newFallbackRec;
+                // add to appropriate fallback chains
+                FallbackFontRec fallbackRec;
+                fallbackRec.fFontID = tf->uniqueID();
+                fallbackRec.fVariant = gSystemFonts[i].fVariant;
+                addFallbackFontLocked(fallbackRec, gSystemFonts[i].fLanguage);
             }
 
             firstInFamily = tf;
@@ -637,6 +803,7 @@ static void initSystemFontsLocked() {
             }
         }
     }
+    finaliseFallbackFontListsLocked();
 
     // do this after all fonts are loaded. This is our default font, and it
     // acts as a sentinel so we only execute loadSystemFontsLocked() once
@@ -645,102 +812,19 @@ static void initSystemFontsLocked() {
     SkDEBUGCODE(dumpGlobalsLocked());
 }
 
-static SkFontID findUniqueIDLocked(const char* filename) {
-    // uniqueID is the index, offset by one, of the associated element in
-    // gSystemFonts[] (assumes system fonts are loaded before external fonts)
-    // return 0 if not found
-    for (int i = 0; i < gSystemFonts.count(); i++) {
-        if (strcmp(gSystemFonts[i].fFileName, filename) == 0) {
-            return i + 1; // assume unique id of i'th system font is i + 1
-        }
-    }
-    return 0;
-}
-
-static int findFallbackFontIndex(SkFontID fontId) {
-    for (int i = 0; i < gFallbackFonts.count(); i++) {
-        if (gFallbackFonts[i].fFontID == fontId) {
+static int findFallbackFontIndex(SkFontID fontId, FallbackFontList* currentFallbackList) {
+    for (int i = 0; i < currentFallbackList->fList.count(); i++) {
+        if (currentFallbackList->fList[i].fFontID == fontId) {
             return i;
         }
     }
     return -1;
 }
 
-static void reloadFallbackFontsLocked() {
-    SkGraphics::PurgeFontCache();
-
-    SkTDArray<FontFamily*> fallbackFamilies;
-    getFallbackFontFamilies(fallbackFamilies);
-
-    gFallbackFonts.reset();
-
-    for (int i = 0; i < fallbackFamilies.count(); ++i) {
-        FontFamily *family = fallbackFamilies[i];
-
-        for (int j = 0; j < family->fFontFileArray.count(); ++j) {
-            const char* filename = family->fFontFileArray[j]->fFileName;
-            if (filename) {
-                if (!haveSystemFont(filename)) {
-                    SkDebugf("---- skipping fallback font %s because it was not "
-                            "previously loaded as a system font", filename);
-                    continue;
-                }
-
-                // ensure the fallback font exists before adding it to the list
-                bool isFixedWidth;
-                SkString name;
-                SkTypeface::Style style;
-                if (!getNameAndStyle(filename, &name, &style,
-                                        &isFixedWidth, false)) {
-                    continue;
-                }
-
-                SkFontID uniqueID = findUniqueIDLocked(filename);
-                SkASSERT(uniqueID != 0);
-                if (findFallbackFontIndex(uniqueID) >= 0) {
-                    SkDebugf("---- system font and fallback font files specify a duplicate "
-                            "font %s, skipping the second occurrence", filename);
-                    continue;
-                }
-
-                SkDEBUGF(("---- reload %s as fallback[%d] fontID %d\n",
-                          filename, gFallbackFonts.count(), uniqueID));
-                FallbackFontRec newFallbackFont;
-                newFallbackFont.fFontID = uniqueID;
-                newFallbackFont.fVariant = family->fFontFileArray[j]->fVariant;
-                *gFallbackFonts.append() = newFallbackFont;
-                break;  // The fallback set contains only the first font of each family
-            }
-        }
-    }
-
-    fallbackFamilies.deleteAll();
-}
-
 static void loadSystemFontsLocked() {
-#if !defined(SK_BUILD_FOR_ANDROID_NDK)
-    static char prevLanguage[3];
-    static char prevRegion[3];
-    char language[3] = "";
-    char region[3] = "";
-
-    getLocale(language, region);
-
-    if (!gDefaultNormal) {
-        strncpy(prevLanguage, language, 2);
-        strncpy(prevRegion, region, 2);
-        initSystemFontsLocked();
-    } else if (strncmp(language, prevLanguage, 2) || strncmp(region, prevRegion, 2)) {
-        strncpy(prevLanguage, language, 2);
-        strncpy(prevRegion, region, 2);
-        reloadFallbackFontsLocked();
-    }
-#else
     if (!gDefaultNormal) {
         initSystemFontsLocked();
-        reloadFallbackFontsLocked();
     }
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -924,6 +1008,10 @@ static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
     const SkTypeface* origTypeface = findFromUniqueIDLocked(rec.fOrigFontID);
     const SkTypeface* currTypeface = findFromUniqueIDLocked(rec.fFontID);
 
+    FallbackFontList* currentFallbackList =
+            getFallbackFontListLocked(rec.fLanguage);
+    SkASSERT(currentFallbackList);
+
     SkASSERT(origTypeface != 0);
     SkASSERT(currTypeface != 0);
 
@@ -936,7 +1024,7 @@ static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
         in our list. Note: list is zero-terminated, and returning zero means
         we have no more fonts to use for fallbacks.
      */
-    int plainFallbackFontIndex = findFallbackFontIndex(plainFontID);
+    int plainFallbackFontIndex = findFallbackFontIndex(plainFontID, currentFallbackList);
     int nextFallbackFontIndex = plainFallbackFontIndex + 1;
 
     // If a rec object is set to prefer "kDefault_Variant" it means they have no preference
@@ -946,13 +1034,13 @@ static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
         recPreference = SkPaint::kCompact_Variant;
     }
     SkFontID nextFontID = 0;
-    while (nextFallbackFontIndex < gFallbackFonts.count()) {
+    while (nextFallbackFontIndex < currentFallbackList->fList.count()) {
         bool normalFont =
-                (gFallbackFonts[nextFallbackFontIndex].fVariant == SkPaint::kDefault_Variant);
-        bool fontChosen = (gFallbackFonts[nextFallbackFontIndex].fVariant == recPreference);
+                (currentFallbackList->fList[nextFallbackFontIndex].fVariant == SkPaint::kDefault_Variant);
+        bool fontChosen = (currentFallbackList->fList[nextFallbackFontIndex].fVariant == recPreference);
         if (normalFont || fontChosen) {
             const SkTypeface* nextTypeface =
-                    findFromUniqueIDLocked(gFallbackFonts[nextFallbackFontIndex].fFontID);
+                    findFromUniqueIDLocked(currentFallbackList->fList[nextFallbackFontIndex].fFontID);
             nextFontID = findTypefaceLocked(nextTypeface, origTypeface->style())->uniqueID();
             break;
         }

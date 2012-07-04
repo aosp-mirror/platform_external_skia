@@ -17,16 +17,21 @@
 #ifndef FONTHOSTCONFIGURATION_ANDROID_H_
 #define FONTHOSTCONFIGURATION_ANDROID_H_
 
-#include "SkTDArray.h"
+#include "SkTypes.h"
+
+#include "SkLanguage.h"
 #include "SkPaint.h"
+#include "SkTDArray.h"
 
 struct FontFileInfo {
-    FontFileInfo() : fVariant(SkPaint::kDefault_Variant), fLanguage(NULL), fFileName(NULL) {}
+    FontFileInfo() : fFileName(NULL), fVariant(SkPaint::kDefault_Variant),
+            fLanguage() {
+    }
+
     const char*          fFileName;
     SkPaint::FontVariant fVariant;
-    const char*          fLanguage;  // We may eventually use a enum for this
+    SkLanguage           fLanguage;
 };
-
 
 /**
  * The FontFamily data structure is created during parsing and handed back to
@@ -54,15 +59,10 @@ void getFontFamilies(SkTDArray<FontFamily*> &fontFamilies);
  */
 void getSystemFontFamilies(SkTDArray<FontFamily*> &fontFamilies);
 
-
 /**
  * Parse the fallback and vendor system font configuration files and return the
  * results in an array of FontFamily structures.
  */
 void getFallbackFontFamilies(SkTDArray<FontFamily*> &fallbackFonts);
-
-#if !defined(SK_BUILD_FOR_ANDROID_NDK)
-    void getLocale(char* language, char* region);
-#endif
 
 #endif /* FONTHOSTCONFIGURATION_ANDROID_H_ */
