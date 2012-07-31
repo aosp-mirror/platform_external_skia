@@ -63,6 +63,16 @@
     #define SK_GAMMA_EXPONENT   2.2
 #endif
 
+// hand-tuned value to reduce outline embolden strength
+#ifndef SK_OUTLINE_EMBOLDEN_DIVISOR
+    #ifdef SK_BUILD_FOR_ANDROID
+        #define SK_OUTLINE_EMBOLDEN_DIVISOR   34
+    #else
+        #define SK_OUTLINE_EMBOLDEN_DIVISOR   24
+    #endif
+#endif
+
+
 #ifdef SK_DEBUG
     #define SkASSERT_CONTINUE(pred)                                                         \
         do {                                                                                \
@@ -892,7 +902,7 @@ FT_Error SkScalerContext_FreeType::setupSize() {
 void SkScalerContext_FreeType::emboldenOutline(FT_Outline* outline) {
     FT_Pos strength;
     strength = FT_MulFix(fFace->units_per_EM, fFace->size->metrics.y_scale)
-               / 24;
+               / SK_OUTLINE_EMBOLDEN_DIVISOR;
     FT_Outline_Embolden(outline, strength);
 }
 
