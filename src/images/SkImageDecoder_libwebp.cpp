@@ -146,16 +146,20 @@ static bool return_false(const SkBitmap& bm, const char msg[]) {
     return false; // must always return false
 }
 
-static WEBP_CSP_MODE webp_decode_mode(SkBitmap* decodedBitmap) {
+static WEBP_CSP_MODE webp_decode_mode(SkBitmap* decodedBitmap, int hasAlpha) {
     WEBP_CSP_MODE mode = MODE_LAST;
     SkBitmap::Config config = decodedBitmap->config();
+    // For images that have alpha, choose appropriate color mode (MODE_rgbA,
+    // MODE_rgbA_4444) that pre-multiplies RGB pixel values with transparency
+    // factor (alpha).
     if (config == SkBitmap::kARGB_8888_Config) {
-      mode = MODE_RGBA;
+      mode = hasAlpha ? MODE_rgbA : MODE_RGBA;
     } else if (config == SkBitmap::kARGB_4444_Config) {
-      mode = MODE_RGBA_4444;
+      mode = hasAlpha ? MODE_rgbA_4444 : MODE_RGBA_4444;
     } else if (config == SkBitmap::kRGB_565_Config) {
       mode = MODE_RGB_565;
     }
+    SkASSERT(mode != MODE_LAST);
     return mode;
 }
 
@@ -211,8 +215,8 @@ static bool webp_idecode(SkStream* stream, WebPDecoderConfig& config) {
 
 static bool webp_get_config_resize(WebPDecoderConfig& config,
                                    SkBitmap* decodedBitmap,
-                                   int width, int height) {
-    WEBP_CSP_MODE mode = webp_decode_mode(decodedBitmap);
+                                   int width, int height, int hasAlpha) {
+    WEBP_CSP_MODE mode = webp_decode_mode(decodedBitmap, hasAlpha);
     if (mode == MODE_LAST) {
         return false;
     }
@@ -239,10 +243,12 @@ static bool webp_get_config_resize(WebPDecoderConfig& config,
 
 static bool webp_get_config_resize_crop(WebPDecoderConfig& config,
                                         SkBitmap* decodedBitmap,
-                                        SkIRect region) {
+                                        SkIRect region, int hasAlpha) {
 
-    if (!webp_get_config_resize(config, decodedBitmap,
-                                region.width(), region.height())) return false;
+    if (!webp_get_config_resize(
+        config, decodedBitmap, region.width(), region.height(), hasAlpha)) {
+      return false;
+    }
 
     config.options.use_cropping = 1;
     config.options.crop_left = region.fLeft;
@@ -360,7 +366,7 @@ bool SkWEBPImageDecoder::onDecodeRegion(SkBitmap* decodedBitmap,
 
     SkAutoLockPixels alp(*bitmap);
     WebPDecoderConfig config;
-    if (!webp_get_config_resize_crop(config, bitmap, rect)) {
+    if (!webp_get_config_resize_crop(config, bitmap, rect, hasAlpha)) {
         return false;
     }
 
@@ -418,7 +424,8 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
     SkAutoLockPixels alp(*decodedBitmap);
 
     WebPDecoderConfig config;
-    if (!webp_get_config_resize(config, decodedBitmap, origWidth, origHeight)) {
+    if (!webp_get_config_resize(config, decodedBitmap, origWidth, origHeight,
+                                hasAlpha)) {
         return false;
     }
 
@@ -560,7 +567,7 @@ bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
 static SkImageDecoder* DFactory(SkStream* stream) {
     int width, height, hasAlpha;
     if (!webp_parse_header(stream, &width, &height, &hasAlpha)) {
-        return false;
+        return NULL;
     }
 
     // Magic matches, call decoder
