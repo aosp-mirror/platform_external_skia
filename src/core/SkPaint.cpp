@@ -372,6 +372,10 @@ void SkPaint::setTextLocale(const SkString& locale) {
         GEN_ID_INC;
     }
 }
+
+void SkPaint::setLanguage(const SkLanguage& language) {
+    setTextLocale(SkString(language.getTag()));
+}
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////

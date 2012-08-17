@@ -15,6 +15,10 @@
 #include "SkXfermode.h"
 #include "SkString.h"
 
+#ifdef SK_BUILD_FOR_ANDROID
+#include "SkLanguage.h"
+#endif
+
 class SkAutoGlyphCache;
 class SkColorFilter;
 class SkDescriptor;
@@ -665,6 +669,11 @@ public:
         @param locale set the paint's locale value for drawing text.
     */
     void    setTextLocale(const SkString& locale);
+
+    /** Set the paint's language value used for drawing text.
+        @param language set the paint's language value for drawing text.
+    */
+    void setLanguage(const SkLanguage& language);
 #endif
 
     /** Return the paint's text size.
