@@ -425,7 +425,8 @@ SkCanvas::SkCanvas()
 : fMCStack(sizeof(MCRec), fMCRecStorage, sizeof(fMCRecStorage)) {
     inc_canvas();
 
-    this->init(NULL);
+    SkBitmap bitmap;
+    this->init(SkNEW_ARGS(SkDevice, (bitmap)))->unref();
 }
 
 SkCanvas::SkCanvas(SkDevice* device)
