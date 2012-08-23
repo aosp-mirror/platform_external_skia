@@ -171,7 +171,6 @@ SkScalerContext* SkScalerContext::getContextFromChar(SkUnichar uni, unsigned& gl
         }
         ctx = ctx->getNextContext();
         if (NULL == ctx) {
-            SkDebugf("--- no context for char %x\n", uni);
             return NULL;
         }
     }
@@ -220,6 +219,7 @@ unsigned SkScalerContext::getBaseGlyphCount(SkUnichar uni) {
     if (ctx) {
         return ctx->fBaseGlyphCount;
     } else {
+        SkDEBUGF(("--- no context for char %x\n", uni));
         return this->fBaseGlyphCount;
     }
 }
