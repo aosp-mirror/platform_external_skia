@@ -34,7 +34,6 @@ extern "C" {
 // If moving libwebp out of skia source tree, path for webp headers must be
 // updated accordingly. Here, we enforce using local copy in webp sub-directory.
 #include "webp/decode.h"
-#include "webp/decode_vp8.h"
 #include "webp/encode.h"
 }
 
