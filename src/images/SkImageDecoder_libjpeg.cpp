@@ -48,9 +48,9 @@ public:
     SkJPEGImageIndex() {}
     virtual ~SkJPEGImageIndex() {
         jpeg_destroy_huffman_index(index);
-        delete cinfo->src;
         jpeg_finish_decompress(cinfo);
         jpeg_destroy_decompress(cinfo);
+        delete cinfo->src;
         free(cinfo);
     }
     jpeg_decompress_struct *cinfo;
