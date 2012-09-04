@@ -1208,6 +1208,7 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             }
         }
 
+        // swap() will increment the gen id if needed
         dst->swap(tmp);
         matrix.mapPoints(dst->fPts.begin(), dst->fPts.count());
     } else {
@@ -1218,7 +1219,6 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             matrix.mapRect(&dst->fBounds, fBounds);
             dst->fBoundsIsDirty = false;
         } else {
-            GEN_ID_PTR_INC(dst);
             dst->fBoundsIsDirty = true;
         }
 
@@ -1229,7 +1229,12 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             dst->fSegmentMask = fSegmentMask;
             dst->fConvexity = fConvexity;
         }
+
+        if (!matrix.isIdentity()) {
+            GEN_ID_PTR_INC(dst);
+        }
         matrix.mapPoints(dst->fPts.begin(), fPts.begin(), fPts.count());
+
         SkDEBUGCODE(dst->validate();)
     }
 }
