@@ -1046,7 +1046,9 @@ void Linear_Gradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
         }
 
         LinearShadeProc shadeProc = shadeSpan_linear_repeat;
-        if (SkFixedNearlyZero(dx)) {
+        // We really should check the endpoint colors, but short of that change
+        // we reduce the tolerance of SkFixedNearlyZero to be more restrictive.
+        if (SkFixedNearlyZero(dx, (SK_Fixed1 >> 14))) {
 #ifdef SK_SIMPLE_TWOCOLOR_VERTICAL_GRADIENTS
             if (fColorCount > 2) {
                 shadeProc = shadeSpan_linear_vertical_lerp;
