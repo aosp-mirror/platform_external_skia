@@ -174,6 +174,7 @@ private:
     FT_Matrix   fMatrix22;
     uint32_t    fLoadGlyphFlags;
     bool        fDoLinearMetrics;
+    bool        fUseVertMetrics;
 
     FT_Error setupSize();
     void emboldenOutline(FT_Outline* outline);
@@ -777,6 +778,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
     fScaleY = SkScalarToFixed(sy);
 
     // compute the flags we send to Load_Glyph
+    fUseVertMetrics = false;
     {
         FT_Int32 loadFlags = FT_LOAD_DEFAULT;
         bool linearMetrics = false;
@@ -832,6 +834,12 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
         // advances, as fontconfig and cairo do.
         // See http://code.google.com/p/skia/issues/detail?id=222.
         loadFlags |= FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
+
+        // Use vertical layout if requested and supported.
+        if ((fRec.fFlags & SkScalerContext::kVertical_Flag) && FT_HAS_VERTICAL(fFace)) {
+            loadFlags |= FT_LOAD_VERTICAL_LAYOUT;
+            fUseVertMetrics = true;
+        }
 
         fLoadGlyphFlags = loadFlags;
         fDoLinearMetrics = linearMetrics;
@@ -1002,6 +1010,20 @@ void SkScalerContext_FreeType::getBBoxForCurrentGlyph(SkGlyph* glyph,
         bbox->xMax  = (bbox->xMax + 63) & ~63;
         bbox->yMax  = (bbox->yMax + 63) & ~63;
     }
+
+    // Must come after snapToPixelBoundary so that the width and height are
+    // consistent. Otherwise asserts will fire later on when generating the
+    // glyph image.
+    if (fUseVertMetrics) {
+        FT_Vector vector;
+        vector.x = fFace->glyph->metrics.vertBearingX - fFace->glyph->metrics.horiBearingX;
+        vector.y = -fFace->glyph->metrics.vertBearingY - fFace->glyph->metrics.horiBearingY;
+        FT_Vector_Transform(&vector, &fMatrix22);
+        bbox->xMin += vector.x;
+        bbox->xMax += vector.x;
+        bbox->yMin += vector.y;
+        bbox->yMax += vector.y;
+    }
 }
 
 void SkScalerContext_FreeType::updateGlyphIfLCD(SkGlyph* glyph) {
@@ -1072,6 +1094,16 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
             FT_GlyphSlot_Own_Bitmap(fFace->glyph);
             FT_Bitmap_Embolden(gFTLibrary, &fFace->glyph->bitmap, kBitmapEmboldenStrength, 0);
         }
+
+        if (fUseVertMetrics) {
+            FT_Vector vector;
+            vector.x = fFace->glyph->metrics.vertBearingX - fFace->glyph->metrics.horiBearingX;
+            vector.y = -fFace->glyph->metrics.vertBearingY - fFace->glyph->metrics.horiBearingY;
+            FT_Vector_Transform(&vector, &fMatrix22);
+            fFace->glyph->bitmap_left += SkFDot6Floor(vector.x);
+            fFace->glyph->bitmap_top  += SkFDot6Floor(vector.y);
+        }
+
         glyph->fWidth   = SkToU16(fFace->glyph->bitmap.width);
         glyph->fHeight  = SkToU16(fFace->glyph->bitmap.rows);
         glyph->fTop     = -SkToS16(fFace->glyph->bitmap_top);
@@ -1095,8 +1127,17 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
         glyph->fAdvanceY = -SkFixedMul(fMatrix22.yx, fFace->glyph->linearHoriAdvance);
     }
 
-    if ((fRec.fFlags & SkScalerContext::kVertical_Flag)
-            && fFace->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+    if (fUseVertMetrics) {
+        if (fDoLinearMetrics) {
+            glyph->fAdvanceX = -SkFixedMul(fMatrix22.xy, fFace->glyph->linearVertAdvance);
+            glyph->fAdvanceY = SkFixedMul(fMatrix22.yy, fFace->glyph->linearVertAdvance);
+        } else {
+            glyph->fAdvanceX = -SkFDot6ToFixed(fFace->glyph->advance.x);
+            glyph->fAdvanceY = SkFDot6ToFixed(fFace->glyph->advance.y);
+        }
+
+    } else if ((fRec.fFlags & SkScalerContext::kVertical_Flag)
+                && fFace->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
 
         //TODO: do we need to specially handle SubpixelPositioning and Kerning?
 
@@ -1535,6 +1576,14 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
 
     if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
         emboldenOutline(&fFace->glyph->outline);
+    }
+
+    if (fUseVertMetrics) {
+        FT_Vector vector;
+        vector.x = fFace->glyph->metrics.vertBearingX - fFace->glyph->metrics.horiBearingX;
+        vector.y = -fFace->glyph->metrics.vertBearingY - fFace->glyph->metrics.horiBearingY;
+        FT_Vector_Transform(&vector, &fMatrix22);
+        FT_Outline_Translate(&fFace->glyph->outline, vector.x, vector.y);
     }
 
     FT_Outline_Funcs    funcs;
