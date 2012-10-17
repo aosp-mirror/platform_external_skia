@@ -513,6 +513,16 @@ public:
     */
     int extractMipLevel(SkBitmap* dst, SkFixed sx, SkFixed sy);
 
+#ifdef SK_BUILD_FOR_ANDROID
+    bool hasHardwareMipMap() const {
+        return fHasHardwareMipMap;
+    }
+
+    void setHasHardwareMipMap(bool hasHardwareMipMap) {
+        fHasHardwareMipMap = hasHardwareMipMap;
+    }
+#endif
+
     bool extractAlpha(SkBitmap* dst) const {
         return this->extractAlpha(dst, NULL, NULL, NULL);
     }
@@ -613,6 +623,10 @@ private:
     uint8_t     fConfig;
     uint8_t     fFlags;
     uint8_t     fBytesPerPixel; // based on config
+
+#ifdef SK_BUILD_FOR_ANDROID
+    bool fHasHardwareMipMap;
+#endif
 
     /* Internal computations for safe size.
     */
