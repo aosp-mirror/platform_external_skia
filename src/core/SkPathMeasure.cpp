@@ -51,17 +51,6 @@ static inline int tspan_big_enough(int tspan) {
     return tspan >> 10;
 }
 
-#if 0
-static inline bool tangents_too_curvy(const SkVector& tan0, SkVector& tan1) {
-    static const SkScalar kFlatEnoughTangentDotProd = SK_Scalar1 * 99 / 100;
-
-    SkASSERT(kFlatEnoughTangentDotProd > 0 &&
-             kFlatEnoughTangentDotProd < SK_Scalar1);
-
-    return SkPoint::DotProduct(tan0, tan1) < kFlatEnoughTangentDotProd;
-}
-#endif
-
 // can't use tangents, since we need [0..1..................2] to be seen
 // as definitely not a line (it is when drawn, but not parametrically)
 // so we compare midpoints
@@ -107,9 +96,9 @@ SkScalar SkPathMeasure::compute_quad_segs(const SkPoint pts[3],
         distance = this->compute_quad_segs(&tmp[2], distance, halft, maxt, ptIndex);
     } else {
         SkScalar d = SkPoint::Distance(pts[0], pts[2]);
-        SkASSERT(d >= 0);
-        if (!SkScalarNearlyZero(d)) {
-            distance += d;
+        SkScalar prevD = distance;
+        distance += d;
+        if (distance > prevD) {
             Segment* seg = fSegments.append();
             seg->fDistance = distance;
             seg->fPtIndex = ptIndex;
@@ -131,9 +120,9 @@ SkScalar SkPathMeasure::compute_cubic_segs(const SkPoint pts[4],
         distance = this->compute_cubic_segs(&tmp[3], distance, halft, maxt, ptIndex);
     } else {
         SkScalar d = SkPoint::Distance(pts[0], pts[3]);
-        SkASSERT(d >= 0);
-        if (!SkScalarNearlyZero(d)) {
-            distance += d;
+        SkScalar prevD = distance;
+        distance += d;
+        if (distance > prevD) {
             Segment* seg = fSegments.append();
             seg->fDistance = distance;
             seg->fPtIndex = ptIndex;
@@ -147,11 +136,18 @@ SkScalar SkPathMeasure::compute_cubic_segs(const SkPoint pts[4],
 void SkPathMeasure::buildSegments() {
     SkPoint         pts[4];
     int             ptIndex = fFirstPtIndex;
-    SkScalar        d, distance = 0;
+    SkScalar        distance = 0;
     bool            isClosed = fForceClosed;
     bool            firstMoveTo = ptIndex < 0;
     Segment*        seg;
 
+    /*  Note:
+     *  as we accumulate distance, we have to check that the result of +=
+     *  actually made it larger, since a very small delta might be > 0, but
+     *  still have no effect on distance (if distance >>> delta).
+     *
+     *  We do this check below, and in compute_quad_segs and compute_cubic_segs
+     */
     fSegments.reset();
     bool done = false;
     do {
@@ -166,37 +162,46 @@ void SkPathMeasure::buildSegments() {
                 firstMoveTo = false;
                 break;
 
-            case SkPath::kLine_Verb:
-                d = SkPoint::Distance(pts[0], pts[1]);
+            case SkPath::kLine_Verb: {
+                SkScalar d = SkPoint::Distance(pts[0], pts[1]);
                 SkASSERT(d >= 0);
+                SkScalar prevD = distance;
                 distance += d;
-                seg = fSegments.append();
-                seg->fDistance = distance;
-                seg->fPtIndex = ptIndex;
-                seg->fType = kLine_SegType;
-                seg->fTValue = kMaxTValue;
-                fPts.append(1, pts + 1);
-                ptIndex++;
-                break;
+                if (distance > prevD) {
+                    seg = fSegments.append();
+                    seg->fDistance = distance;
+                    seg->fPtIndex = ptIndex;
+                    seg->fType = kLine_SegType;
+                    seg->fTValue = kMaxTValue;
+                    fPts.append(1, pts + 1);
+                    ptIndex++;
+                }
+            } break;
 
-            case SkPath::kQuad_Verb:
+            case SkPath::kQuad_Verb: {
+                SkScalar prevD = distance;
                 distance = this->compute_quad_segs(pts, distance, 0,
                                                    kMaxTValue, ptIndex);
-                fPts.append(2, pts + 1);
-                ptIndex += 2;
-                break;
+                if (distance > prevD) {
+                    fPts.append(2, pts + 1);
+                    ptIndex += 2;
+                }
+            } break;
 
-            case SkPath::kCubic_Verb:
+            case SkPath::kCubic_Verb: {
+                SkScalar prevD = distance;
                 distance = this->compute_cubic_segs(pts, distance, 0,
                                                     kMaxTValue, ptIndex);
-                fPts.append(3, pts + 1);
-                ptIndex += 3;
-                break;
+                if (distance > prevD) {
+                    fPts.append(3, pts + 1);
+                    ptIndex += 3;
+                }
+            } break;
 
             case SkPath::kClose_Verb:
                 isClosed = true;
                 break;
-                
+
             case SkPath::kDone_Verb:
                 done = true;
                 break;
@@ -235,15 +240,13 @@ void SkPathMeasure::buildSegments() {
 #endif
 }
 
-static void compute_pos_tan(const SkTDArray<SkPoint>& segmentPts, int ptIndex,
-                    int segType, SkScalar t, SkPoint* pos, SkVector* tangent) {
-    const SkPoint*  pts = &segmentPts[ptIndex];
-
+static void compute_pos_tan(const SkPoint pts[], int segType,
+                            SkScalar t, SkPoint* pos, SkVector* tangent) {
     switch (segType) {
         case kLine_SegType:
             if (pos) {
                 pos->set(SkScalarInterp(pts[0].fX, pts[1].fX, t),
-                        SkScalarInterp(pts[0].fY, pts[1].fY, t));
+                         SkScalarInterp(pts[0].fY, pts[1].fY, t));
             }
             if (tangent) {
                 tangent->setNormalize(pts[1].fX - pts[0].fX, pts[1].fY - pts[0].fY);
@@ -266,17 +269,16 @@ static void compute_pos_tan(const SkTDArray<SkPoint>& segmentPts, int ptIndex,
     }
 }
 
-static void seg_to(const SkTDArray<SkPoint>& segmentPts, int ptIndex,
-                   int segType, SkScalar startT, SkScalar stopT, SkPath* dst) {
+static void seg_to(const SkPoint pts[], int segType,
+                   SkScalar startT, SkScalar stopT, SkPath* dst) {
     SkASSERT(startT >= 0 && startT <= SK_Scalar1);
     SkASSERT(stopT >= 0 && stopT <= SK_Scalar1);
     SkASSERT(startT <= stopT);
 
-    if (SkScalarNearlyZero(stopT - startT)) {
-        return;
+    if (startT == stopT) {
+        return; // should we report this, to undo a moveTo?
     }
 
-    const SkPoint*  pts = &segmentPts[ptIndex];
     SkPoint         tmp0[7], tmp1[7];
 
     switch (segType) {
@@ -416,8 +418,7 @@ const SkPathMeasure::Segment* SkPathMeasure::distanceToSegment(
 
 bool SkPathMeasure::getPosTan(SkScalar distance, SkPoint* pos,
                               SkVector* tangent) {
-    SkASSERT(fPath);
-    if (fPath == NULL) {
+    if (NULL == fPath) {
         return false;
     }
 
@@ -434,16 +435,20 @@ bool SkPathMeasure::getPosTan(SkScalar distance, SkPoint* pos,
     } else if (distance > length) {
         distance = length;
     }
-    
+
     SkScalar        t;
     const Segment*  seg = this->distanceToSegment(distance, &t);
 
-    compute_pos_tan(fPts, seg->fPtIndex, seg->fType, t, pos, tangent);
+    compute_pos_tan(&fPts[seg->fPtIndex], seg->fType, t, pos, tangent);
     return true;
 }
 
 bool SkPathMeasure::getMatrix(SkScalar distance, SkMatrix* matrix,
                               MatrixFlags flags) {
+    if (NULL == fPath) {
+        return false;
+    }
+
     SkPoint     position;
     SkVector    tangent;
 
@@ -486,19 +491,19 @@ bool SkPathMeasure::getSegment(SkScalar startD, SkScalar stopD, SkPath* dst,
     SkASSERT(seg <= stopSeg);
 
     if (startWithMoveTo) {
-        compute_pos_tan(fPts, seg->fPtIndex, seg->fType, startT, &p, NULL);
+        compute_pos_tan(&fPts[seg->fPtIndex], seg->fType, startT, &p, NULL);
         dst->moveTo(p);
     }
 
     if (seg->fPtIndex == stopSeg->fPtIndex) {
-        seg_to(fPts, seg->fPtIndex, seg->fType, startT, stopT, dst);
+        seg_to(&fPts[seg->fPtIndex], seg->fType, startT, stopT, dst);
     } else {
         do {
-            seg_to(fPts, seg->fPtIndex, seg->fType, startT, SK_Scalar1, dst);
+            seg_to(&fPts[seg->fPtIndex], seg->fType, startT, SK_Scalar1, dst);
             seg = SkPathMeasure::NextSegment(seg);
             startT = 0;
         } while (seg->fPtIndex < stopSeg->fPtIndex);
-        seg_to(fPts, seg->fPtIndex, seg->fType, 0, stopT, dst);
+        seg_to(&fPts[seg->fPtIndex], seg->fType, 0, stopT, dst);
     }
     return true;
 }

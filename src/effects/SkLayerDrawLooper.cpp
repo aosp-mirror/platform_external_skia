@@ -7,9 +7,12 @@
  */
 #include "SkCanvas.h"
 #include "SkColor.h"
+#include "SkFlattenableBuffers.h"
 #include "SkLayerDrawLooper.h"
 #include "SkPaint.h"
 #include "SkUnPreMultiply.h"
+
+SK_DEFINE_INST_COUNT(SkLayerDrawLooper)
 
 SkLayerDrawLooper::LayerInfo::LayerInfo() {
     fFlagsMask = 0;                     // ignore our paint flags
@@ -180,7 +183,7 @@ SkLayerDrawLooper::Rec* SkLayerDrawLooper::Rec::Reverse(Rec* head) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
 #ifdef SK_DEBUG
@@ -196,15 +199,15 @@ void SkLayerDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
 #endif
 
     buffer.writeInt(fCount);
-    
+
     Rec* rec = fRecs;
     for (int i = 0; i < fCount; i++) {
+        buffer.writeInt(rec->fInfo.fFlagsMask);
         buffer.writeInt(rec->fInfo.fPaintBits);
         buffer.writeInt(rec->fInfo.fColorMode);
-        buffer.writeScalar(rec->fInfo.fOffset.fX);
-        buffer.writeScalar(rec->fInfo.fOffset.fY);
+        buffer.writePoint(rec->fInfo.fOffset);
         buffer.writeBool(rec->fInfo.fPostTranslate);
-        rec->fPaint.flatten(buffer);
+        buffer.writePaint(rec->fPaint);
         rec = rec->fNext;
     }
 }
@@ -218,20 +221,18 @@ SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
 
     for (int i = 0; i < count; i++) {
         LayerInfo info;
-        if (buffer.getPictureVersion() == PICTURE_VERSION_ICS)
-            info.fFlagsMask = buffer.readInt();
+        info.fFlagsMask = buffer.readInt();
         info.fPaintBits = buffer.readInt();
         info.fColorMode = (SkXfermode::Mode)buffer.readInt();
-        info.fOffset.fX = buffer.readScalar();
-        info.fOffset.fY = buffer.readScalar();
+        buffer.readPoint(&info.fOffset);
         info.fPostTranslate = buffer.readBool();
-        this->addLayer(info)->unflatten(buffer);
+        buffer.readPaint(this->addLayer(info));
     }
     SkASSERT(count == fCount);
 
     // we're in reverse order, so fix it now
     fRecs = Rec::Reverse(fRecs);
-    
+
 #ifdef SK_DEBUG
     {
         Rec* rec = fRecs;
@@ -244,7 +245,3 @@ SkLayerDrawLooper::SkLayerDrawLooper(SkFlattenableReadBuffer& buffer)
     }
 #endif
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkLayerDrawLooper)

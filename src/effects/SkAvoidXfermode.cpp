@@ -9,6 +9,7 @@
 
 #include "SkAvoidXfermode.h"
 #include "SkColorPriv.h"
+#include "SkFlattenableBuffers.h"
 
 SkAvoidXfermode::SkAvoidXfermode(SkColor opColor, U8CPU tolerance, Mode mode)
 {
@@ -24,28 +25,18 @@ SkAvoidXfermode::SkAvoidXfermode(SkColor opColor, U8CPU tolerance, Mode mode)
 SkAvoidXfermode::SkAvoidXfermode(SkFlattenableReadBuffer& buffer)
     : INHERITED(buffer)
 {
-    fOpColor = buffer.readU32();
-    fDistMul = buffer.readU32();
-    fMode = (Mode)buffer.readU8();
+    fOpColor = buffer.readColor();
+    fDistMul = buffer.readUInt();
+    fMode = (Mode)buffer.readUInt();
 }
 
-void SkAvoidXfermode::flatten(SkFlattenableWriteBuffer& buffer)
+void SkAvoidXfermode::flatten(SkFlattenableWriteBuffer& buffer) const
 {
     this->INHERITED::flatten(buffer);
 
-    buffer.write32(fOpColor);
-    buffer.write32(fDistMul);
-    buffer.write8(fMode);
-}
-
-SkFlattenable* SkAvoidXfermode::Create(SkFlattenableReadBuffer& rb)
-{
-    return SkNEW_ARGS(SkAvoidXfermode, (rb));
-}
-
-SkFlattenable::Factory SkAvoidXfermode::getFactory()
-{
-    return Create;
+    buffer.writeColor(fOpColor);
+    buffer.writeUInt(fDistMul);
+    buffer.writeUInt(fMode);
 }
 
 // returns 0..31
@@ -138,7 +129,7 @@ void SkAvoidXfermode::xfer32(SkPMColor dst[], const SkPMColor src[], int count,
                     continue;
                 }
             }
-            dst[i] = SkFourByteInterp(src[i], dst[i], d);
+            dst[i] = SkFourByteInterp256(src[i], dst[i], d);
         }
     }
 }
@@ -239,5 +230,3 @@ void SkAvoidXfermode::xferA8(SkAlpha dst[], const SkPMColor src[], int count, co
 {
     // override in subclass
 }
-
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkAvoidXfermode)

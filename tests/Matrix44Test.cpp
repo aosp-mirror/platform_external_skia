@@ -69,14 +69,14 @@ static void test_common_angles(skiatest::Reporter* reporter) {
     // Test precision of rotation in common cases
     int common_angles[] = { 0, 90, -90, 180, -180, 270, -270, 360, -360 };
     for (int i = 0; i < 9; ++i) {
-        rot.setRotateDegreesAbout(0, 0, -1, common_angles[i]);
+        rot.setRotateDegreesAbout(0, 0, -1, SkIntToScalar(common_angles[i]));
 
         SkMatrix rot3x3 = rot;
         REPORTER_ASSERT(reporter, rot3x3.rectStaysRect());
     }
 }
 
-void TestMatrix44(skiatest::Reporter* reporter) {
+static void TestMatrix44(skiatest::Reporter* reporter) {
 #ifdef SK_SCALAR_IS_FLOAT
     SkMatrix44 mat, inverse, iden1, iden2, rot;
 
@@ -115,7 +115,7 @@ void TestMatrix44(skiatest::Reporter* reporter) {
         mat.setTranslate(2, 3, 4);
         float dataf[16];
         double datad[16];
-        
+
         mat.asColMajorf(dataf);
         assert16<float>(reporter, dataf,
                  1, 0, 0, 0,
@@ -139,9 +139,9 @@ void TestMatrix44(skiatest::Reporter* reporter) {
                         0, 0, 0, 1);
     }
 
-#if 0   // working on making this pass
-    test_common_angles(reporter);
-#endif
+    if (false) { // avoid bit rot, suppress warning (working on making this pass)
+        test_common_angles(reporter);
+    }
 #endif
 }
 

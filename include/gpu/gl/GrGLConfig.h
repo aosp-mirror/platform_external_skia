@@ -12,7 +12,6 @@
 #define GrGLConfig_DEFINED
 
 #include "GrTypes.h"
-#include "GrGLDefines.h"
 
 /**
  * Optional GL config file.
@@ -50,14 +49,8 @@
  * GR_GL_NO_CONSTANT_ATTRIBUTES: if this evaluates to true then the GL backend
  * will use uniforms instead of attributes in all cases when there is not
  * per-vertex data. This is important when the underlying GL implementation
- * doesn't actually support immediate style attribute values (e.g. when 
+ * doesn't actually support immediate style attribute values (e.g. when
  * the GL stream is converted to DX as in ANGLE on Chrome). Defaults to 0.
- *
- * GR_GL_ATTRIBUTE_MATRICES: If changing uniforms is very expensive it may be
- * faster to use vertex attributes for matrices (set via glVertexAttrib3fv). 
- * Setting this build flag enables this behavior. GR_GL_NO_CONSTANT_ATTRIBUTES
- * must not be set since this uses constant attributes for the matrices. 
- * Defaults to 0.
  *
  * GR_GL_USE_BUFFER_DATA_NULL_HINT: When specifing new data for a vertex/index
  * buffer that replaces old data Ganesh can give a hint to the driver that the
@@ -99,6 +92,10 @@
  * check the first time we use a color format or a combination of color /
  * stencil formats as attachments. If the FBO is complete we will assume
  * subsequent attachments with the same formats are complete as well.
+ *
+ * GR_GL_USE_NV_PATH_RENDERING: Enable experimental support for
+ * GL_NV_path_rendering. There are known issues with clipping, non-AA paths, and
+ * perspective.
  */
 
 #if !defined(GR_GL_LOG_CALLS)
@@ -119,10 +116,6 @@
 
 #if !defined(GR_GL_NO_CONSTANT_ATTRIBUTES)
     #define GR_GL_NO_CONSTANT_ATTRIBUTES                0
-#endif
-
-#if !defined(GR_GL_ATTRIBUTE_MATRICES)
-    #define GR_GL_ATTRIBUTE_MATRICES                    0
 #endif
 
 #if !defined(GR_GL_USE_BUFFER_DATA_NULL_HINT)
@@ -147,6 +140,10 @@
 
 #if !defined(GR_GL_CHECK_FBO_STATUS_ONCE_PER_FORMAT)
     #define GR_GL_CHECK_FBO_STATUS_ONCE_PER_FORMAT      0
+#endif
+
+#if !defined(GR_GL_USE_NV_PATH_RENDERING)
+    #define GR_GL_USE_NV_PATH_RENDERING                 0
 #endif
 
 /**
@@ -177,126 +174,5 @@
 #define GR_GL_MAC_BUFFER_OBJECT_PERFOMANCE_WORKAROUND   \
     (GR_MAC_BUILD &&                                    \
      !GR_GL_USE_BUFFER_DATA_NULL_HINT)
-
-#if(GR_GL_NO_CONSTANT_ATTRIBUTES) && (GR_GL_ATTRIBUTE_MATRICES)
-    #error "Cannot combine GR_GL_NO_CONSTANT_ATTRIBUTES and GR_GL_ATTRIBUTE_MATRICES"
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-#if GR_SCALAR_IS_FIXED
-    #define GrGLType   GL_FIXED
-#elif GR_SCALAR_IS_FLOAT
-    #define GrGLType   GR_GL_FLOAT
-#else
-    #error "unknown GR_SCALAR type"
-#endif
-
-#if GR_TEXT_SCALAR_IS_USHORT
-    #define GrGLTextType                    GR_GL_UNSIGNED_SHORT
-    #define GR_GL_TEXT_TEXTURE_NORMALIZED   1
-#elif GR_TEXT_SCALAR_IS_FLOAT
-    #define GrGLTextType                    GR_GL_FLOAT
-    #define GR_GL_TEXT_TEXTURE_NORMALIZED   0
-#elif GR_TEXT_SCALAR_IS_FIXED
-    #define GrGLTextType                    GR_GL_FIXED
-    #define GR_GL_TEXT_TEXTURE_NORMALIZED   0
-#else
-    #error "unknown GR_TEXT_SCALAR type"
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct GrGLInterface;
-
-extern void GrGLCheckErr(const GrGLInterface* gl,
-                         const char* location,
-                         const char* call);
-
-extern void GrGLClearErr(const GrGLInterface* gl);
-
-#if GR_GL_CHECK_ERROR
-    extern bool gCheckErrorGL;
-    #define GR_GL_CHECK_ERROR_IMPL(IFACE, X)                    \
-        if (gCheckErrorGL)                                      \
-            GrGLCheckErr(IFACE, GR_FILE_AND_LINE_STR, #X)
-#else
-    #define GR_GL_CHECK_ERROR_IMPL(IFACE, X)
-#endif
-
-#if GR_GL_LOG_CALLS
-    extern bool gLogCallsGL;
-    #define GR_GL_LOG_CALLS_IMPL(X)                             \
-        if (gLogCallsGL)                                        \
-            GrPrintf(GR_FILE_AND_LINE_STR "GL: " #X "\n")
-#else
-    #define GR_GL_LOG_CALLS_IMPL(X)
-#endif
-
-#if GR_GL_PER_GL_FUNC_CALLBACK
-    #define GR_GL_CALLBACK_IMPL(IFACE) (IFACE)->fCallback(IFACE)
-#else
-    #define GR_GL_CALLBACK_IMPL(IFACE)
-#endif
-
-#define GR_GL_CALL(IFACE, X)                                    \
-    do {                                                        \
-        GR_GL_CALL_NOERRCHECK(IFACE, X);                        \
-        GR_GL_CHECK_ERROR_IMPL(IFACE, X);                       \
-    } while (false)
-
-#define GR_GL_CALL_NOERRCHECK(IFACE, X)                         \
-    do {                                                        \
-        GR_GL_CALLBACK_IMPL(IFACE);                             \
-        (IFACE)->f##X;                                          \
-        GR_GL_LOG_CALLS_IMPL(X);                                \
-    } while (false)
-
-#define GR_GL_CALL_RET(IFACE, RET, X)                           \
-    do {                                                        \
-        GR_GL_CALL_RET_NOERRCHECK(IFACE, RET, X);               \
-        GR_GL_CHECK_ERROR_IMPL(IFACE, X);                       \
-    } while (false)
-
-#define GR_GL_CALL_RET_NOERRCHECK(IFACE, RET, X)                \
-    do {                                                        \
-        GR_GL_CALLBACK_IMPL(IFACE);                             \
-        (RET) = (IFACE)->f##X;                                  \
-        GR_GL_LOG_CALLS_IMPL(X);                                \
-    } while (false)
-
-#define GR_GL_GET_ERROR(IFACE) (IFACE)->fGetError()
-
-////////////////////////////////////////////////////////////////////////////////
-
-/**
- *  Some drivers want the var-int arg to be zero-initialized on input.
- */
-#define GR_GL_INIT_ZERO     0
-#define GR_GL_GetIntegerv(gl, e, p)     \
-    do {                            \
-        *(p) = GR_GL_INIT_ZERO;     \
-        GR_GL_CALL(gl, GetIntegerv(e, p));   \
-    } while (0)
-
-#define GR_GL_GetFramebufferAttachmentParameteriv(gl, t, a, pname, p)           \
-    do {                                                                        \
-        *(p) = GR_GL_INIT_ZERO;                                                 \
-        GR_GL_CALL(gl, GetFramebufferAttachmentParameteriv(t, a, pname, p));    \
-    } while (0)
-
-#define GR_GL_GetRenderbufferParameteriv(gl, t, pname, p)                       \
-    do {                                                                        \
-        *(p) = GR_GL_INIT_ZERO;                                                 \
-        GR_GL_CALL(gl, GetRenderbufferParameteriv(t, pname, p));                \
-    } while (0)
-
-#define GR_GL_GetTexLevelParameteriv(gl, t, l, pname, p)                        \
-    do {                                                                        \
-        *(p) = GR_GL_INIT_ZERO;                                                 \
-        GR_GL_CALL(gl, GetTexLevelParameteriv(t, l, pname, p));                 \
-    } while (0)
-
-////////////////////////////////////////////////////////////////////////////////
 
 #endif

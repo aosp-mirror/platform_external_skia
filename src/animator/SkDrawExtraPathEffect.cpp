@@ -22,7 +22,7 @@ class SkDrawShapePathEffect : public SkDrawPathEffect {
     DECLARE_PRIVATE_MEMBER_INFO(DrawShapePathEffect);
     SkDrawShapePathEffect();
     virtual ~SkDrawShapePathEffect();
-    virtual bool add(SkAnimateMaker& , SkDisplayable* );
+    virtual bool add(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
     virtual SkPathEffect* getPathEffect();
 protected:
     SkDrawable* addPath;
@@ -60,7 +60,7 @@ class SkDrawComposePathEffect : public SkDrawPathEffect {
     DECLARE_EXTRAS_MEMBER_INFO(SkDrawComposePathEffect);
     SkDrawComposePathEffect(SkDisplayTypes );
     virtual ~SkDrawComposePathEffect();
-    virtual bool add(SkAnimateMaker& , SkDisplayable* );
+    virtual bool add(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
     virtual SkPathEffect* getPathEffect();
     virtual bool isPaint() const;
 private:
@@ -90,6 +90,8 @@ public:
     SkShape1DPathEffect(SkDrawShape1DPathEffect* draw, SkAnimateMaker* maker) :
         fDraw(draw), fMaker(maker) {
     }
+
+    SK_DECLARE_UNFLATTENABLE_OBJECT()
 
 protected:
     virtual SkScalar begin(SkScalar contourLength)
@@ -138,9 +140,6 @@ protected:
     }
 
 private:
-    virtual void flatten(SkFlattenableWriteBuffer& ) {}
-    virtual Factory getFactory() { return NULL; }
-
     static bool GetContourLength(const char* token, size_t len, void* clen, SkScriptValue* value) {
         if (SK_LITERAL_STR_EQUAL("contourLength", token, len)) {
             value->fOperand.fScalar = *(SkScalar*) clen;

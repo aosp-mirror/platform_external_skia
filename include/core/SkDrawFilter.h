@@ -21,8 +21,10 @@ class SkPaint;
  *  used for the actual drawing. Note: this modification only lasts for the
  *  current draw, as a temporary copy of the paint is used.
  */
-class SkDrawFilter : public SkRefCnt {
+class SK_API SkDrawFilter : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(SkDrawFilter)
+
     enum Type {
         kPaint_Type,
         kPoint_Type,
@@ -38,6 +40,9 @@ public:
      *  The implementation may modify the paint as they wish.
      */
     virtual void filter(SkPaint*, Type) = 0;
+
+private:
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

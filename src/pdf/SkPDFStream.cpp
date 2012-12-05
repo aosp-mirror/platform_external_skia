@@ -14,7 +14,8 @@
 #include "SkStream.h"
 
 static bool skip_compression(SkPDFCatalog* catalog) {
-    return catalog->getDocumentFlags() & SkPDFDocument::kNoCompression_Flag;
+    return SkToBool(catalog->getDocumentFlags() &
+                    SkPDFDocument::kNoCompression_Flags);
 }
 
 SkPDFStream::SkPDFStream(SkStream* stream)
@@ -94,7 +95,7 @@ bool SkPDFStream::populate(SkPDFCatalog* catalog) {
             SkAssertResult(SkFlate::Deflate(fData.get(), &compressedData));
             if (compressedData.getOffset() < fData->getLength()) {
                 SkMemoryStream* stream = new SkMemoryStream;
-                stream->setData(compressedData.copyToData());
+                stream->setData(compressedData.copyToData())->unref();
                 fData = stream;
                 fData->unref();  // SkRefPtr and new both took a reference.
                 insertName("Filter", "FlateDecode");

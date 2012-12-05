@@ -56,10 +56,10 @@ bool SkImageRef_GlobalPool::onDecode(SkImageDecoder* codec, SkStream* stream,
     }
     return true;
 }
-    
+
 void SkImageRef_GlobalPool::onUnlockPixels() {
     this->INHERITED::onUnlockPixels();
-    
+
     // by design, onUnlockPixels() already is inside the mutex-lock
     GetGlobalPool()->canLosePixels(this);
 }
@@ -70,12 +70,6 @@ SkImageRef_GlobalPool::SkImageRef_GlobalPool(SkFlattenableReadBuffer& buffer)
     GetGlobalPool()->addToHead(this);
     this->mutex()->release();
 }
-
-SkPixelRef* SkImageRef_GlobalPool::Create(SkFlattenableReadBuffer& buffer) {
-    return SkNEW_ARGS(SkImageRef_GlobalPool, (buffer));
-}
-
-SK_DEFINE_PIXEL_REF_REGISTRAR(SkImageRef_GlobalPool)
 
 ///////////////////////////////////////////////////////////////////////////////
 // global imagerefpool wrappers
@@ -91,7 +85,7 @@ void SkImageRef_GlobalPool::SetRAMBudget(size_t size) {
 }
 
 size_t SkImageRef_GlobalPool::GetRAMUsed() {
-    SkAutoMutexAcquire ac(gImageRefMutex);    
+    SkAutoMutexAcquire ac(gImageRefMutex);
     return GetGlobalPool()->getRAMUsed();
 }
 

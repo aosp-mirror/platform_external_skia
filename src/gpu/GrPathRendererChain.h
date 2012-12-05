@@ -20,13 +20,14 @@ class SkPath;
 class GrPathRenderer;
 
 /**
- * Keeps track of a ordered list of path renderers. When a path needs to be
+ * Keeps track of an ordered list of path renderers. When a path needs to be
  * drawn this list is scanned to find the most preferred renderer. To add your
  * path renderer to the list implement the GrPathRenderer::AddPathRenderers
  * function.
  */
 class GrPathRendererChain : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(GrPathRendererChain)
 
     enum UsageFlags {
         kNone_UsageFlag      = 0,
@@ -58,6 +59,8 @@ private:
     GrContext*                                          fOwner;
     UsageFlags                                          fFlags;
     SkSTArray<kPreAllocCount, GrPathRenderer*, true>    fChain;
+
+    typedef SkRefCnt INHERITED;
 };
 
 GR_MAKE_BITFIELD_OPS(GrPathRendererChain::UsageFlags)

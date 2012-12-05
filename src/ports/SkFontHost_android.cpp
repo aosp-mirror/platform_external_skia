@@ -16,6 +16,8 @@
 */
 
 #include "SkFontHost.h"
+#include "SkFontDescriptor.h"
+#include "SkGlyphCache.h"
 #include "SkGraphics.h"
 #include "SkDescriptor.h"
 #include "SkMMapStream.h"
@@ -75,8 +77,7 @@ static bool getNameAndStyle(const char path[], SkString* name,
 
 static SkTypeface* deserializeLocked(SkStream* stream);
 static SkTypeface* createTypefaceLocked(const SkTypeface* familyFace,
-        const char familyName[], const void* data, size_t bytelength,
-        SkTypeface::Style style);
+        const char familyName[], SkTypeface::Style style);
 static SkStream* openStreamLocked(uint32_t fontID);
 static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int32_t* index);
 static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec);
@@ -910,7 +911,7 @@ static SkTypeface* deserializeLocked(SkStream* stream) {
                     for (int j = i; j >= 0; --j) {
                         if (gSystemFonts[j].fNames != NULL) {
                             return createTypefaceLocked(NULL,
-                                    gSystemFonts[j].fNames[0], NULL, 0,
+                                    gSystemFonts[j].fNames[0],
                                     (SkTypeface::Style)style);
                         }
                     }
@@ -925,15 +926,13 @@ static SkTypeface* deserializeLocked(SkStream* stream) {
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                                        const char familyName[],
-                                       const void* data, size_t bytelength,
                                        SkTypeface::Style style) {
     SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
-    return createTypefaceLocked(familyFace, familyName, data, bytelength, style);
+    return createTypefaceLocked(familyFace, familyName, style);
 }
 
 static SkTypeface* createTypefaceLocked(const SkTypeface* familyFace,
-        const char familyName[], const void* data, size_t bytelength,
-        SkTypeface::Style style) {
+        const char familyName[], SkTypeface::Style style) {
     loadSystemFontsLocked();
 
     // clip to legal style bits
@@ -997,12 +996,12 @@ static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int
     }
 }
 
-SkFontID SkFontHost::NextLogicalFont(const SkScalerContext::Rec& rec) {
+SkFontID SkFontHost::NextLogicalFont(const SkScalerContextRec& rec) {
     SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
     return nextLogicalFontLocked(rec);
 }
 
-static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
+static SkFontID nextLogicalFontLocked(const SkScalerContextRec& rec) {
     loadSystemFontsLocked();
 
     const SkTypeface* origTypeface = findFromUniqueIDLocked(rec.fOrigFontID);
@@ -1183,16 +1182,16 @@ struct TypefaceLookupStruct {
 SK_DECLARE_STATIC_MUTEX(gTypefaceTableMutex);  // This is the mutex for gTypefaceTable
 static SkTDArray<TypefaceLookupStruct> gTypefaceTable;  // This is protected by gTypefaceTableMutex
 
-static int typefaceLookupCompare(const TypefaceLookupStruct& first,
-        const TypefaceLookupStruct& second) {
-    if (first.script != second.script) {
-        return (first.script > second.script) ? 1 : -1;
+static int typefaceLookupCompare(const TypefaceLookupStruct* first,
+        const TypefaceLookupStruct* second) {
+    if (first->script != second->script) {
+        return (first->script > second->script) ? 1 : -1;
     }
-    if (first.style != second.style) {
-        return (first.style > second.style) ? 1 : -1;
+    if (first->style != second->style) {
+        return (first->style > second->style) ? 1 : -1;
     }
-    if (first.fontVariant != second.fontVariant) {
-        return (first.fontVariant > second.fontVariant) ? 1 : -1;
+    if (first->fontVariant != second->fontVariant) {
+        return (first->fontVariant > second->fontVariant) ? 1 : -1;
     }
     return 0;
 }

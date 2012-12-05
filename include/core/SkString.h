@@ -15,9 +15,18 @@
 /*  Some helper functions for C strings
 */
 
-bool SkStrStartsWith(const char string[], const char prefix[]);
+static bool SkStrStartsWith(const char string[], const char prefix[]) {
+    SkASSERT(string);
+    SkASSERT(prefix);
+    return !strncmp(string, prefix, strlen(prefix));
+}
 bool SkStrEndsWith(const char string[], const char suffix[]);
 int SkStrStartsWithOneOf(const char string[], const char prefixes[]);
+static bool SkStrContains(const char string[], const char substring[]) {
+    SkASSERT(string);
+    SkASSERT(substring);
+    return (NULL != strstr(string, substring));
+}
 
 #define SkStrAppendS32_MaxSize  11
 char*   SkStrAppendS32(char buffer[], int32_t);
@@ -46,9 +55,7 @@ char*   SkStrAppendS64(char buffer[], int64_t, int minDigits);
     #define SkStrAppendScalar SkStrAppendFixed
 #endif
 
-#ifdef SK_CAN_USE_FLOAT
 char* SkStrAppendFloat(char buffer[], float);
-#endif
 char* SkStrAppendFixed(char buffer[], SkFixed);
 
 /** \class SkString
@@ -80,6 +87,9 @@ public:
     }
     bool endsWith(const char suffix[]) const {
         return SkStrEndsWith(fRec->data(), suffix);
+    }
+    bool contains(const char substring[]) const {
+        return SkStrContains(fRec->data(), substring);
     }
 
     friend bool operator==(const SkString& a, const SkString& b) {
@@ -132,9 +142,9 @@ public:
     void prependHex(uint32_t value, int minDigits = 0) { this->insertHex(0, value, minDigits); }
     void prependScalar(SkScalar value) { this->insertScalar((size_t)-1, value); }
 
-    void printf(const char format[], ...);
-    void appendf(const char format[], ...);
-    void prependf(const char format[], ...);
+    void printf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
+    void appendf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
+    void prependf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
 
     void remove(size_t offset, size_t length);
 

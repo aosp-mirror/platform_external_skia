@@ -19,21 +19,23 @@
 #include "SkPathEffect.h"
 #include "SkMaskFilter.h"
 
+SK_DEFINE_INST_COUNT(SkDumpCanvas::Dumper)
+
 static void toString(const SkRect& r, SkString* str) {
-    str->printf("[%g,%g %g:%g]",
-                SkScalarToFloat(r.fLeft), SkScalarToFloat(r.fTop),
-                SkScalarToFloat(r.width()), SkScalarToFloat(r.height()));
+    str->appendf("[%g,%g %g:%g]",
+                 SkScalarToFloat(r.fLeft), SkScalarToFloat(r.fTop),
+                 SkScalarToFloat(r.width()), SkScalarToFloat(r.height()));
 }
 
 static void toString(const SkIRect& r, SkString* str) {
-    str->printf("[%d,%d %d:%d]", r.fLeft, r.fTop, r.width(), r.height());
+    str->appendf("[%d,%d %d:%d]", r.fLeft, r.fTop, r.width(), r.height());
 }
 
 static void dumpVerbs(const SkPath& path, SkString* str) {
     SkPath::Iter iter(path, false);
     SkPoint pts[4];
     for (;;) {
-        switch (iter.next(pts)) {
+        switch (iter.next(pts, false)) {
             case SkPath::kMove_Verb:
                 str->appendf(" M%g,%g", pts[0].fX, pts[0].fY);
                 break;
@@ -59,7 +61,7 @@ static void dumpVerbs(const SkPath& path, SkString* str) {
 
 static void toString(const SkPath& path, SkString* str) {
     if (path.isEmpty()) {
-        str->set("path:empty");
+        str->append("path:empty");
     } else {
         toString(path.getBounds(), str);
 #if 1
@@ -80,8 +82,8 @@ static const char* toString(SkRegion::Op op) {
 }
 
 static void toString(const SkRegion& rgn, SkString* str) {
+    str->append("Region:[");
     toString(rgn.getBounds(), str);
-    str->prepend("Region:[");
     str->append("]");
     if (rgn.isComplex()) {
         str->append(".complex");
@@ -110,7 +112,7 @@ static const char* toString(SkBitmap::Config config) {
 }
 
 static void toString(const SkBitmap& bm, SkString* str) {
-    str->printf("bitmap:[%d %d] %s", bm.width(), bm.height(),
+    str->appendf("bitmap:[%d %d] %s", bm.width(), bm.height(),
                 toString(bm.config()));
 
     SkPixelRef* pr = bm.pixelRef();
@@ -127,34 +129,46 @@ static void toString(const SkBitmap& bm, SkString* str) {
     }
 }
 
-static void toString(const void* text, size_t len, SkPaint::TextEncoding enc,
+static void toString(const void* text, size_t byteLen, SkPaint::TextEncoding enc,
                      SkString* str) {
+    // FIXME: this code appears to be untested - and probably unused - and probably wrong
     switch (enc) {
         case SkPaint::kUTF8_TextEncoding:
-            str->printf("\"%.*s\"%s", SkMax32(len, 32), text,
-                        len > 32 ? "..." : "");
+            str->appendf("\"%.*s\"%s", SkMax32(byteLen, 32), (const char*) text,
+                        byteLen > 32 ? "..." : "");
             break;
         case SkPaint::kUTF16_TextEncoding:
-            str->printf("\"%.*S\"%s", SkMax32(len, 32), text,
-                        len > 64 ? "..." : "");
+            str->appendf("\"%.*ls\"%s", SkMax32(byteLen, 32), (const wchar_t*) text,
+                        byteLen > 64 ? "..." : "");
+            break;
+        case SkPaint::kUTF32_TextEncoding:
+            str->appendf("\"%.*ls\"%s", SkMax32(byteLen, 32), (const wchar_t*) text,
+                        byteLen > 128 ? "..." : "");
             break;
         case SkPaint::kGlyphID_TextEncoding:
-            str->set("<glyphs>");
+            str->append("<glyphs>");
+            break;
+
+        default:
+            SkASSERT(false);
             break;
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkDumpCanvas::SkDumpCanvas(Dumper* dumper) : fNestLevel(0) {
+static SkBitmap make_wideopen_bm() {
+    static const int WIDE_OPEN = 16384;
+
+    SkBitmap bm;
+    bm.setConfig(SkBitmap::kNo_Config, WIDE_OPEN, WIDE_OPEN);
+    return bm;
+}
+
+SkDumpCanvas::SkDumpCanvas(Dumper* dumper) : INHERITED(make_wideopen_bm()) {
+    fNestLevel = 0;
     SkSafeRef(dumper);
     fDumper = dumper;
-
-    static const int WIDE_OPEN = 16384;
-    SkBitmap emptyBitmap;
-
-    emptyBitmap.setConfig(SkBitmap::kNo_Config, WIDE_OPEN, WIDE_OPEN);
-    this->setBitmapDevice(emptyBitmap);
 }
 
 SkDumpCanvas::~SkDumpCanvas() {
@@ -185,7 +199,21 @@ int SkDumpCanvas::save(SaveFlags flags) {
 
 int SkDumpCanvas::saveLayer(const SkRect* bounds, const SkPaint* paint,
                              SaveFlags flags) {
-    this->dump(kSave_Verb, paint, "saveLayer(0x%X)", flags);
+    SkString str;
+    str.printf("saveLayer(0x%X)", flags);
+    if (bounds) {
+        str.append(" bounds");
+        toString(*bounds, &str);
+    }
+    if (paint) {
+        if (paint->getAlpha() != 0xFF) {
+            str.appendf(" alpha:0x%02X", paint->getAlpha());
+        }
+        if (paint->getXfermode()) {
+            str.appendf(" xfermode:%p", paint->getXfermode());
+        }
+    }
+    this->dump(kSave_Verb, paint, str.c_str());
     return this->INHERITED::saveLayer(bounds, paint, flags);
 }
 
@@ -293,21 +321,21 @@ void SkDumpCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
                SkScalarToFloat(x), SkScalarToFloat(y));
 }
 
-void SkDumpCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
-                                   const SkRect& dst, const SkPaint* paint) {
+void SkDumpCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
+                                        const SkRect& dst, const SkPaint* paint) {
     SkString bs, rs;
     toString(bitmap, &bs);
     toString(dst, &rs);
     // show the src-rect only if its not everything
     if (src && (src->fLeft > 0 || src->fTop > 0 ||
-                src->fRight < bitmap.width() ||
-                src->fBottom < bitmap.height())) {
+                src->fRight < SkIntToScalar(bitmap.width()) ||
+                src->fBottom < SkIntToScalar(bitmap.height()))) {
         SkString ss;
         toString(*src, &ss);
         rs.prependf("%s ", ss.c_str());
     }
 
-    this->dump(kDrawBitmap_Verb, paint, "drawBitmapRect(%s %s)",
+    this->dump(kDrawBitmap_Verb, paint, "drawBitmapRectToRect(%s %s)",
                bs.c_str(), rs.c_str());
 }
 
@@ -407,12 +435,7 @@ static void appendPtr(SkString* str, const void* ptr, const char name[]) {
 static void appendFlattenable(SkString* str, const SkFlattenable* ptr,
                               const char name[]) {
     if (ptr) {
-        SkString info;
-        if (ptr->toDumpString(&info)) {
-            str->appendf(" %s", info.c_str());
-        } else {
-            str->appendf(" %s:%p", name, ptr);
-        }
+        str->appendf(" %s:%p", name, ptr);
     }
 }
 
@@ -422,7 +445,11 @@ void SkFormatDumper::dump(SkDumpCanvas* canvas, SkDumpCanvas::Verb verb,
     const int level = canvas->getNestLevel() + canvas->getSaveCount() - 1;
     SkASSERT(level >= 0);
     for (int i = 0; i < level; i++) {
+#if 0
         tab.append("\t");
+#else
+        tab.append("    ");   // tabs are often too wide to be useful
+#endif
     }
     msg.printf("%s%s", tab.c_str(), str);
 

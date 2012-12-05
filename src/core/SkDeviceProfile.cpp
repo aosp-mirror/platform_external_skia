@@ -1,9 +1,17 @@
+/*
+ * Copyright 2012 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 
 
 #include "SkDeviceProfile.h"
 
-#define DEFAULT_GAMMAEXP        2.2
-#define DEFAULT_CONTRASTSCALE   0.5
+SK_DEFINE_INST_COUNT(SkDeviceProfile)
+
+#define DEFAULT_GAMMAEXP        2.2f
+#define DEFAULT_CONTRASTSCALE   0.5f
 #define DEFAULT_LCDCONFIG       SkDeviceProfile::kNone_LCDConfig
 #define DEFAULT_FONTHINTLEVEL   SkDeviceProfile::kSlight_FontHintLevel
 
@@ -62,7 +70,7 @@ SkDeviceProfile* SkDeviceProfile::RefGlobal() {
     gGlobalProfile->ref();
     return gGlobalProfile;
 }
-    
+
 void SkDeviceProfile::SetGlobal(SkDeviceProfile* profile) {
     SkAutoMutexAcquire amc(gMutex);
 

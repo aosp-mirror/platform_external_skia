@@ -5,8 +5,13 @@
  * found in the LICENSE file.
  */
 
+#include "SkBitmap.h"
 #include "SkBlurImageFilter.h"
 #include "SkColorPriv.h"
+#include "SkFlattenableBuffers.h"
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#endif
 
 SkBlurImageFilter::SkBlurImageFilter(SkFlattenableReadBuffer& buffer)
   : INHERITED(buffer) {
@@ -14,17 +19,12 @@ SkBlurImageFilter::SkBlurImageFilter(SkFlattenableReadBuffer& buffer)
     fSigma.fHeight = buffer.readScalar();
 }
 
-SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX, SkScalar sigmaY)
-    : fSigma(SkSize::Make(sigmaX, sigmaY)) {
+SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX, SkScalar sigmaY, SkImageFilter* input)
+    : INHERITED(input), fSigma(SkSize::Make(sigmaX, sigmaY)) {
     SkASSERT(sigmaX >= 0 && sigmaY >= 0);
 }
 
-bool SkBlurImageFilter::asABlur(SkSize* sigma) const {
-    *sigma = fSigma;
-    return true;
-}
-
-void SkBlurImageFilter::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkBlurImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeScalar(fSigma.fWidth);
     buffer.writeScalar(fSigma.fHeight);
@@ -133,9 +133,10 @@ static void getBox3Params(SkScalar s, int *kernelSize, int* kernelSize3, int *lo
     }
 }
 
-bool SkBlurImageFilter::onFilterImage(Proxy*,
-                                      const SkBitmap& src, const SkMatrix&,
-                                      SkBitmap* dst, SkIPoint*) {
+bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
+                                      const SkBitmap& source, const SkMatrix& ctm,
+                                      SkBitmap* dst, SkIPoint* offset) {
+    SkBitmap src = this->getInputResult(proxy, source, ctm, offset);
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -186,4 +187,13 @@ bool SkBlurImageFilter::onFilterImage(Proxy*,
     return true;
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkBlurImageFilter)
+GrTexture* SkBlurImageFilter::onFilterImageGPU(Proxy* proxy, GrTexture* src, const SkRect& rect) {
+#if SK_SUPPORT_GPU
+    SkAutoTUnref<GrTexture> input(this->getInputResultAsTexture(proxy, src, rect));
+    return src->getContext()->gaussianBlur(input.get(), false, rect,
+                                           fSigma.width(), fSigma.height());
+#else
+    SkDEBUGFAIL("Should not call in GPU-less build");
+    return NULL;
+#endif
+}

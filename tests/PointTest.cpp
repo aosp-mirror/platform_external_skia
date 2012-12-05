@@ -18,7 +18,9 @@ static void test_length(skiatest::Reporter* reporter, SkScalar x, SkScalar y,
     point.set(x, y);
     SkScalar s1 = point.length();
     SkScalar s2 = SkPoint::Length(x, y);
-    REPORTER_ASSERT(reporter, s1 == s2);
+    //The following should be exactly the same, but need not be.
+    //See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=323
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(s1, s2));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(s1, expectedLength));
 }
 
@@ -30,16 +32,16 @@ static void test_Normalize(skiatest::Reporter* reporter,
     SkScalar oldLength = point.length();
     SkScalar returned = SkPoint::Normalize(&point);
     SkScalar newLength = point.length();
-    REPORTER_ASSERT(reporter, returned == oldLength);
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(returned, oldLength));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(newLength, SK_Scalar1));
 }
 
-void PointTest(skiatest::Reporter* reporter) {
+static void PointTest(skiatest::Reporter* reporter) {
     test_length(reporter, SkIntToScalar(3), SkIntToScalar(4), SkIntToScalar(5));
-    test_length(reporter, SkFloatToScalar(0.6), SkFloatToScalar(0.8),
+    test_length(reporter, SkFloatToScalar(0.6f), SkFloatToScalar(0.8f),
                 SK_Scalar1);
     test_Normalize(reporter, SkIntToScalar(3), SkIntToScalar(4));
-    test_Normalize(reporter, SkFloatToScalar(0.6), SkFloatToScalar(0.8));
+    test_Normalize(reporter, SkFloatToScalar(0.6f), SkFloatToScalar(0.8f));
 }
 
 #include "TestClassDef.h"

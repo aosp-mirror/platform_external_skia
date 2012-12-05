@@ -8,6 +8,10 @@
 #include "SkGraphics.h"
 #include "Test.h"
 
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#endif
+
 using namespace skiatest;
 
 // need to explicitly declare this, or we get some weird infinite loop llist
@@ -102,8 +106,12 @@ private:
     bool fAndroidMode;
 };
 
-int main (int argc, char * const argv[]) {
-    SkAutoGraphics ag;
+int tool_main(int argc, char** argv);
+int tool_main(int argc, char** argv) {
+#ifdef SK_ENABLE_INST_COUNT
+    gPrintInstCount = true;
+#endif
+    SkGraphics::Init();
 
     bool androidMode = false;
     const char* matchStr = NULL;
@@ -112,7 +120,7 @@ int main (int argc, char * const argv[]) {
     for (++argv; argv < stop; ++argv) {
         if (strcmp(*argv, "-android") == 0) {
             androidMode = true;
-        
+
         } else if (strcmp(*argv, "--match") == 0) {
             ++argv;
             if (argv < stop && **argv) {
@@ -166,5 +174,25 @@ int main (int argc, char * const argv[]) {
         SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
                  count, failCount, skipCount);
     }
+
+#if SK_SUPPORT_GPU
+
+#if GR_CACHE_STATS
+    GrContext *gr = GpuTest::GetContext();
+
+    gr->printCacheStats();
+#endif
+
+#endif
+
+    SkGraphics::Term();
+
     return (failCount == 0) ? 0 : 1;
 }
+
+#if !defined SK_BUILD_FOR_IOS
+int main(int argc, char * const argv[]) {
+    return tool_main(argc, (char**) argv);
+}
+#endif
+

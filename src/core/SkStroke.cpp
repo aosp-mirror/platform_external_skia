@@ -63,7 +63,8 @@ static bool set_normal_unitnormal(const SkVector& vec,
 
 class SkPathStroker {
 public:
-    SkPathStroker(SkScalar radius, SkScalar miterLimit, SkPaint::Cap cap,
+    SkPathStroker(const SkPath& src,
+                  SkScalar radius, SkScalar miterLimit, SkPaint::Cap cap,
                   SkPaint::Join join);
 
     void moveTo(const SkPoint&);
@@ -171,13 +172,16 @@ void SkPathStroker::finishContour(bool close, bool currIsLine) {
             fOuter.close();
         }
     }
-    fInner.reset();
+    // since we may re-use fInner, we rewind instead of reset, to save on
+    // reallocating its internal storage.
+    fInner.rewind();
     fSegmentCount = -1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkPathStroker::SkPathStroker(SkScalar radius, SkScalar miterLimit,
+SkPathStroker::SkPathStroker(const SkPath& src,
+                             SkScalar radius, SkScalar miterLimit,
                              SkPaint::Cap cap, SkPaint::Join join)
         : fRadius(radius) {
 
@@ -197,6 +201,15 @@ SkPathStroker::SkPathStroker(SkScalar radius, SkScalar miterLimit,
     fJoiner = SkStrokerPriv::JoinFactory(join);
     fSegmentCount = -1;
     fPrevIsLine = false;
+
+    // Need some estimate of how large our final result (fOuter)
+    // and our per-contour temp (fInner) will be, so we don't spend
+    // extra time repeatedly growing these arrays.
+    //
+    // 3x for result == inner + outer + join (swag)
+    // 1x for inner == 'wag' (worst contour length would be better guess)
+    fOuter.incReserve(src.countPoints() * 3);
+    fInner.incReserve(src.countPoints());
 }
 
 void SkPathStroker::moveTo(const SkPoint& pt) {
@@ -306,7 +319,7 @@ DRAW_LINE:
         this->cubic_to(&tmp[3], norm, unit, &dummy, &unitDummy, subDivide);
     } else {
         SkVector    normalB, normalC;
-        
+
         // need normals to inset/outset the off-curve pts B and C
 
         if (0) {    // this is normal to the line between our adjacent pts
@@ -449,6 +462,15 @@ void SkPathStroker::cubicTo(const SkPoint& pt1, const SkPoint& pt2,
 
         }
 
+#if 0
+        /*
+         *  Why was this code here? It caused us to draw circles where we didn't
+         *  want them. See http://code.google.com/p/chromium/issues/detail?id=112145
+         *  and gm/dashcubics.cpp
+         *
+         *  Simply removing this code seemed to fix the problem (no more circles).
+         *  Wish I had a repro case earlier when I added this check/hack...
+         */
         // check for too pinchy
         for (i = 1; i < count; i++) {
             SkPoint p;
@@ -463,7 +485,7 @@ void SkPathStroker::cubicTo(const SkPoint& pt1, const SkPoint& pt2,
                 fExtra.addCircle(p.fX, p.fY, fRadius, SkPath::kCW_Direction);
             }
         }
-
+#endif
     }
 
     this->postJoinTo(pt3, normalCD, unitCD);
@@ -550,16 +572,43 @@ void SkStroke::setJoin(SkPaint::Join join) {
     #define APPLY_PROC(proc, pts, count)
 #endif
 
+// If src==dst, then we use a tmp path to record the stroke, and then swap
+// its contents with src when we're done.
+class AutoTmpPath {
+public:
+    AutoTmpPath(const SkPath& src, SkPath** dst) : fSrc(src) {
+        if (&src == *dst) {
+            *dst = &fTmpDst;
+            fSwapWithSrc = true;
+        } else {
+            (*dst)->reset();
+            fSwapWithSrc = false;
+        }
+    }
+
+    ~AutoTmpPath() {
+        if (fSwapWithSrc) {
+            fTmpDst.swap(*const_cast<SkPath*>(&fSrc));
+        }
+    }
+
+private:
+    SkPath          fTmpDst;
+    const SkPath&   fSrc;
+    bool            fSwapWithSrc;
+};
+
 void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
     SkASSERT(&src != NULL && dst != NULL);
 
     SkScalar radius = SkScalarHalf(fWidth);
 
-    dst->reset();
+    AutoTmpPath tmp(src, &dst);
+
     if (radius <= 0) {
         return;
     }
-    
+
 #ifdef SK_SCALAR_IS_FIXED
     void (*proc)(SkPoint pts[], int count) = identity_proc;
     if (needs_to_shrink(src)) {
@@ -571,14 +620,14 @@ void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
     }
 #endif
 
-    SkPathStroker   stroker(radius, fMiterLimit, this->getCap(),
+    SkPathStroker   stroker(src, radius, fMiterLimit, this->getCap(),
                             this->getJoin());
 
     SkPath::Iter    iter(src, false);
     SkPoint         pts[4];
     SkPath::Verb    verb, lastSegment = SkPath::kMove_Verb;
 
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+    while ((verb = iter.next(pts, false)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
                 APPLY_PROC(proc, &pts[0], 1);
@@ -637,7 +686,7 @@ void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
             paint.setStrokeWidth(7);
             paint.setStrokeCap(SkPaint::kRound_Cap);
             canvas->drawLine(pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, paint);
-        }        
+        }
 #endif
 #if 0
         if (2 == src.countPoints()) {
@@ -651,14 +700,5 @@ void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
         SkASSERT(!dst->isInverseFillType());
         dst->toggleInverseFillType();
     }
-}
-
-void SkStroke::strokeLine(const SkPoint& p0, const SkPoint& p1,
-                          SkPath* dst) const {
-    SkPath  tmp;
-
-    tmp.moveTo(p0);
-    tmp.lineTo(p1);
-    this->strokePath(tmp, dst);
 }
 

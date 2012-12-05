@@ -7,11 +7,14 @@
  */
 #include "SkNWayCanvas.h"
 
-SkNWayCanvas::SkNWayCanvas(int width, int height) {
+static SkBitmap make_noconfig_bm(int width, int height) {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kNo_Config, width, height);
-    this->setBitmapDevice(bm);
+    return bm;
 }
+
+SkNWayCanvas::SkNWayCanvas(int width, int height)
+        : INHERITED(make_noconfig_bm(width, height)) {}
 
 SkNWayCanvas::~SkNWayCanvas() {
     this->removeAll();
@@ -194,11 +197,11 @@ void SkNWayCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
     }
 }
 
-void SkNWayCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
+void SkNWayCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
                                   const SkRect& dst, const SkPaint* paint) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->drawBitmapRect(bitmap, src, dst, paint);
+        iter->drawBitmapRectToRect(bitmap, src, dst, paint);
     }
 }
 

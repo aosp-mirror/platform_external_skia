@@ -1,7 +1,4 @@
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'zlib',
@@ -17,6 +14,14 @@
       ],
       'conditions': [
         [ 'skia_os == "mac"', {
+          'link_settings': {
+            'libraries': [
+              '$(SDKROOT)/usr/lib/libz.dylib',
+            ],
+          },
+          'defines': [ 'SK_ZLIB_INCLUDE=<zlib.h>', ],
+        }],
+        [ 'skia_os == "ios"', {
           'link_settings': {
             'libraries': [
               '$(SDKROOT)/usr/lib/libz.dylib',

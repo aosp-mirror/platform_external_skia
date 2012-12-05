@@ -10,11 +10,17 @@
 #include "GrResource.h"
 #include "GrGpu.h"
 
+SK_DEFINE_INST_COUNT(GrResource)
+
 GrResource::GrResource(GrGpu* gpu) {
     fGpu        = gpu;
-    fNext       = NULL;
-    fPrevious   = NULL;
+    fCacheEntry = NULL;
     fGpu->insertResource(this);
+}
+
+GrResource::~GrResource() {
+    // subclass should have released this.
+    GrAssert(!this->isValid());
 }
 
 void GrResource::release() {

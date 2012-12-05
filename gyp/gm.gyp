@@ -2,12 +2,15 @@
 {
   'includes': [
     'apptype_console.gypi',
-    'common.gypi',
   ],
   'targets': [
     {
       'target_name': 'gm',
       'type': 'executable',
+      'include_dirs' : [
+        '../src/core',
+        '../src/pipe/utils/',
+      ],
       'includes': [
         'gmslides.gypi',
       ],
@@ -15,16 +18,14 @@
         '../gm/gm.cpp',
         '../gm/gmmain.cpp',
         '../gm/system_preferences_default.cpp',
+        '../src/pipe/utils/SamplePipeControllers.h',
+        '../src/pipe/utils/SamplePipeControllers.cpp',
       ],
       'dependencies': [
-        'core.gyp:core',
+        'skia_base_libs.gyp:skia_base_libs',
         'effects.gyp:effects',
-        'gpu.gyp:gr',
-        'gpu.gyp:skgr',
         'images.gyp:images',
-        'ports.gyp:ports',
         'pdf.gyp:pdf',
-        'utils.gyp:utils',        
       ],
       'conditions': [
         ['skia_os == "mac"', {
@@ -46,7 +47,12 @@
             'xps.gyp:xps',
           ],
         }],
-      ],  
+        ['skia_gpu == 1', {
+          'include_dirs': [
+            '../src/gpu',
+          ],
+        }],
+      ],
     },
   ],
 }

@@ -9,8 +9,11 @@
 
 #include "SkScalar.h"
 #include "SkShader.h"
+#include "SkFlattenableBuffers.h"
 #include "SkPaint.h"
 #include "SkMallocPixelRef.h"
+
+SK_DEFINE_INST_COUNT(SkShader)
 
 SkShader::SkShader() : fLocalMatrix(NULL) {
     SkDEBUGCODE(fInSession = false;)
@@ -20,7 +23,7 @@ SkShader::SkShader(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer), fLocalMatrix(NULL) {
     if (buffer.readBool()) {
         SkMatrix matrix;
-        SkReadMatrix(&buffer, &matrix);
+        buffer.readMatrix(&matrix);
         setLocalMatrix(matrix);
     }
     SkDEBUGCODE(fInSession = false;)
@@ -41,11 +44,11 @@ void SkShader::endSession() {
     SkDEBUGCODE(fInSession = false;)
 }
 
-void SkShader::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkShader::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeBool(fLocalMatrix != NULL);
     if (fLocalMatrix) {
-        SkWriteMatrix(&buffer, *fLocalMatrix);
+        buffer.writeMatrix(*fLocalMatrix);
     }
 }
 
@@ -98,6 +101,10 @@ bool SkShader::setContext(const SkBitmap& device,
         return true;
     }
     return false;
+}
+
+SkShader::ShadeProc SkShader::asAShadeProc(void** ctx) {
+    return NULL;
 }
 
 #include "SkColorPriv.h"
@@ -190,12 +197,16 @@ SkShader::MatrixClass SkShader::ComputeMatrixClass(const SkMatrix& mat) {
 //////////////////////////////////////////////////////////////////////////////
 
 SkShader::BitmapType SkShader::asABitmap(SkBitmap*, SkMatrix*,
-                                         TileMode*, SkScalar*) const {
+                                         TileMode*) const {
     return kNone_BitmapType;
 }
 
 SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
+}
+
+bool SkShader::asNewCustomStage(GrContext*, GrSamplerState*) const {
+    return false;
 }
 
 SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
@@ -231,28 +242,20 @@ bool SkColorShader::isOpaque() const {
 SkColorShader::SkColorShader(SkFlattenableReadBuffer& b) : INHERITED(b) {
     fFlags = 0; // computed in setContext
 
-    fInheritColor = b.readU8();
+    fInheritColor = b.readBool();
     if (fInheritColor) {
         return;
     }
-    fColor = b.readU32();
+    fColor = b.readColor();
 }
 
-void SkColorShader::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkColorShader::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.write8(fInheritColor);
+    buffer.writeBool(fInheritColor);
     if (fInheritColor) {
         return;
     }
-    buffer.write32(fColor);
-}
-
-SkFlattenable* SkColorShader::CreateProc(SkFlattenableReadBuffer& buffer) {
-    return SkNEW_ARGS(SkColorShader, (buffer));
-}
-
-SkFlattenable::Factory SkColorShader::getFactory() {
-    return CreateProc;
+    buffer.writeColor(fColor);
 }
 
 uint32_t SkColorShader::getFlags() {
@@ -317,8 +320,7 @@ void SkColorShader::shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) {
 
 // if we had a asAColor method, that would be more efficient...
 SkShader::BitmapType SkColorShader::asABitmap(SkBitmap* bitmap, SkMatrix* matrix,
-                                              TileMode modes[],
-                                      SkScalar* twoPointRadialParams) const {
+                                              TileMode modes[]) const {
     return kNone_BitmapType;
 }
 
@@ -337,8 +339,6 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 
 #include "SkEmptyShader.h"
 
-SkEmptyShader::SkEmptyShader(SkFlattenableReadBuffer& b) : INHERITED(b) {}
-
 uint32_t SkEmptyShader::getFlags() { return 0; }
 uint8_t SkEmptyShader::getSpan16Alpha() const { return 0; }
 
@@ -356,10 +356,3 @@ void SkEmptyShader::shadeSpan16(int x, int y, uint16_t span[], int count) {
 void SkEmptyShader::shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) {
     SkDEBUGFAIL("should never get called, since setContext() returned false");
 }
-
-SkFlattenable::Factory SkEmptyShader::getFactory() { return NULL; }
-
-void SkEmptyShader::flatten(SkFlattenableWriteBuffer& buffer) {
-    this->INHERITED::flatten(buffer);
-}
-

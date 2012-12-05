@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkWindow_DEFINED
 #define SkWindow_DEFINED
@@ -40,7 +38,7 @@ public:
     void    eraseRGB(U8CPU r, U8CPU g, U8CPU b);
 
     bool    isDirty() const { return !fDirtyRgn.isEmpty(); }
-    bool    update(SkIRect* updateArea, SkCanvas* = NULL);
+    bool    update(SkIRect* updateArea);
     // does not call through to onHandleInval(), but does force the fDirtyRgn
     // to be wide open. Call before update() to ensure we redraw everything.
     void    forceInvalAll();
@@ -54,7 +52,7 @@ public:
 
     void    addMenu(SkOSMenu*);
     const SkTDArray<SkOSMenu*>* getMenus() { return &fMenus; }
-    
+
     const char* getTitle() const { return fTitle.c_str(); }
     void    setTitle(const char title[]);
 
@@ -62,6 +60,8 @@ public:
     void    setMatrix(const SkMatrix&);
     void    preConcat(const SkMatrix&);
     void    postConcat(const SkMatrix&);
+
+    virtual SkCanvas* createCanvas();
 
     virtual void onPDFSaved(const char title[], const char desc[],
         const char path[]) {}
@@ -93,18 +93,16 @@ private:
 
     SkView* fFocusView;
     bool    fWaitingOnInval;
-    
+
     SkString    fTitle;
     SkMatrix    fMatrix;
 
     typedef SkView INHERITED;
 };
 
-///////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_USE_WXWIDGETS
-    #include "SkOSWindow_wxwidgets.h"
-#elif defined(SK_BUILD_FOR_MAC)
+#if defined(SK_BUILD_FOR_MAC)
     #include "SkOSWindow_Mac.h"
 #elif defined(SK_BUILD_FOR_WIN)
     #include "SkOSWindow_Win.h"
@@ -119,4 +117,3 @@ private:
 #endif
 
 #endif
-

@@ -185,7 +185,7 @@ typedef uint8_t SkBool8;
 #define SK_MaxU16   0xFFFF
 #define SK_MinU16   0
 #define SK_MaxS32   0x7FFFFFFF
-#define SK_MinS32   0x80000001
+#define SK_MinS32   -SK_MaxS32
 #define SK_MaxU32   0xFFFFFFFF
 #define SK_MinU32   0
 #define SK_NaN32    0x80000000
@@ -204,21 +204,21 @@ static inline bool SkIsU16(long x) {
 
 //////////////////////////////////////////////////////////////////////////////
 #ifndef SK_OFFSETOF
-    #define SK_OFFSETOF(type, field)    ((char*)&(((type*)1)->field) - (char*)1)
+    #define SK_OFFSETOF(type, field)    (size_t)((char*)&(((type*)1)->field) - (char*)1)
 #endif
 
 /** Returns the number of entries in an array (not a pointer)
 */
 #define SK_ARRAY_COUNT(array)       (sizeof(array) / sizeof(array[0]))
 
-/** Returns x rounded up to a multiple of 2
-*/
 #define SkAlign2(x)     (((x) + 1) >> 1 << 1)
-/** Returns x rounded up to a multiple of 4
-*/
-#define SkAlign4(x)     (((x) + 3) >> 2 << 2)
+#define SkIsAlign2(x)   (0 == ((x) & 1))
 
-#define SkIsAlign4(x) (((x) & 3) == 0)
+#define SkAlign4(x)     (((x) + 3) >> 2 << 2)
+#define SkIsAlign4(x)   (0 == ((x) & 3))
+
+#define SkAlign8(x)     (((x) + 7) >> 3 << 3)
+#define SkIsAlign8(x)   (0 == ((x) & 7))
 
 typedef uint32_t SkFourByteTag;
 #define SkSetFourByteTag(a, b, c, d)    (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
@@ -432,13 +432,13 @@ public:
          *  malloc a new block of the smaller size.
          */
         kAlloc_OnShrink,
-        
+
         /**
          *  If the requested size is smaller than the current size, and the
          *  current block is dynamically allocated, just return the old
          *  block.
          */
-        kReuse_OnShrink,
+        kReuse_OnShrink
     };
 
     /**

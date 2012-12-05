@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkPorterDuff_DEFINED
 #define SkPorterDuff_DEFINED
@@ -17,7 +15,7 @@ class SkXfermode;
 
 /** DEPRECATED - use SkXfermode::Mode instead
  */
-class SkPorterDuff {
+class SK_API SkPorterDuff {
 public:
     /** List of predefined xfermodes. In general, the algebra for the modes
         uses the following symbols:
@@ -55,19 +53,19 @@ public:
     /** Return an SkXfermode object for the specified mode.
     */
     static SkXfermode* CreateXfermode(Mode mode);
-    
+
     /** Return a function pointer to a routine that applies the specified
         porter-duff transfer mode.
     */
     static SkXfermodeProc GetXfermodeProc(Mode mode);
-    
+
     /** Return a function pointer to a routine that applies the specified
         porter-duff transfer mode and srcColor to a 16bit device color. Note,
         if the mode+srcColor might return a non-opaque color, then there is not
         16bit proc, and this will return NULL.
     */
     static SkXfermodeProc16 GetXfermodeProc16(Mode mode, SkColor srcColor);
-    
+
     /** If the specified xfermode advertises itself as one of the porterduff
         modes (via SkXfermode::Coeff), return true and if not null, set mode
         to the corresponding porterduff mode. If it is not recognized as a one,
@@ -81,4 +79,3 @@ public:
 };
 
 #endif
-

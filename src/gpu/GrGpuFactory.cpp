@@ -9,15 +9,10 @@
 
 #include "GrTypes.h"
 
-// must be before GrGLConfig.h
-#if GR_WIN32_BUILD
-//    #include "GrGpuD3D9.h"
-#endif
-
 #include "gl/GrGLConfig.h"
 
 #include "GrGpu.h"
-#include "gl/GrGpuGLShaders.h"
+#include "gl/GrGpuGL.h"
 
 GrGpu* GrGpu::Create(GrEngine engine, GrPlatform3DContext context3D) {
 
@@ -41,7 +36,7 @@ GrGpu* GrGpu::Create(GrEngine engine, GrPlatform3DContext context3D) {
         }
         GrGLContextInfo ctxInfo(glInterface);
         if (ctxInfo.isInitialized()) {
-            return new GrGpuGLShaders(ctxInfo);
+            return SkNEW_ARGS(GrGpuGL, (ctxInfo));
         }
     }
     return NULL;

@@ -13,19 +13,12 @@ public:
 
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
                         const SkAlpha aa[]) SK_OVERRIDE;
-    virtual Factory getFactory() SK_OVERRIDE;
 
-    static SkFlattenable* Create(SkFlattenableReadBuffer& buffer) {
-        return NULL;
-    }
+    SK_DECLARE_UNFLATTENABLE_OBJECT()
 
 private:
     SkScalar fK[4];
 };
-
-SkFlattenable::Factory SkArithmeticMode_scalar::getFactory() {
-    return Create;
-}
 
 static int pinToByte(int value) {
     if (value < 0) {
@@ -73,7 +66,7 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
 
             int a, r, g, b;
 
-            if (!srcNeedsUnpremul && !srcNeedsUnpremul) {
+            if (!srcNeedsUnpremul && !dstNeedsUnpremul) {
                 a = arith(k1, k2, k3, k4, sa, sa);
                 r = arith(k1, k2, k3, k4, SkGetPackedR32(sc), SkGetPackedR32(dc));
                 g = arith(k1, k2, k3, k4, SkGetPackedG32(sc), SkGetPackedG32(dc));
@@ -140,6 +133,7 @@ static bool fitsInBits(SkScalar x, int bits) {
 #endif
 }
 
+#if 0 // UNUSED
 static int32_t toDot8(SkScalar x) {
 #ifdef SK_SCALAR_IS_FIXED
     x += 1 << 7;
@@ -149,17 +143,18 @@ static int32_t toDot8(SkScalar x) {
     return (int32_t)(x * 256);
 #endif
 }
+#endif
 
 SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
                                      SkScalar k3, SkScalar k4) {
     if (fitsInBits(k1, 8) && fitsInBits(k2, 16) &&
         fitsInBits(k2, 16) && fitsInBits(k2, 24)) {
 
+#if 0 // UNUSED
         int32_t i1 = toDot8(k1);
         int32_t i2 = toDot8(k2);
         int32_t i3 = toDot8(k3);
         int32_t i4 = toDot8(k4);
-#if 0
         if (i1) {
             return SkNEW_ARGS(SkArithmeticMode_quad, (i1, i2, i3, i4));
         }

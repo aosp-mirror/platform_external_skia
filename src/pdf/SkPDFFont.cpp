@@ -463,6 +463,13 @@ static void append_bfrange_section(const SkTDArray<BFRange>& bfrange,
 // For the worst case (having 65536 continuous unicode and we use every other
 // one of them), the possible savings by aggressive optimization is 416KB
 // pre-compressed and does not provide enough motivation for implementation.
+
+// FIXME: this should be in a header so that it is separately testable
+// ( see caller in tests/ToUnicode.cpp )
+void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
+                          const SkPDFGlyphSet* subset,
+                          SkDynamicMemoryWStream* cmap);
+
 void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
                           const SkPDFGlyphSet* subset,
                           SkDynamicMemoryWStream* cmap) {
@@ -525,14 +532,16 @@ static SkPDFStream* generate_tounicode_cmap(
     append_cmap_footer(&cmap);
     SkRefPtr<SkMemoryStream> cmapStream = new SkMemoryStream();
     cmapStream->unref();  // SkRefPtr and new took a reference.
-    cmapStream->setData(cmap.copyToData());
+    cmapStream->setData(cmap.copyToData())->unref();
     return new SkPDFStream(cmapStream.get());
 }
 
+#if defined (SK_SFNTLY_SUBSETTER)
 static void sk_delete_array(const void* ptr, size_t, void*) {
     // Use C-style cast to cast away const and cast type simultaneously.
     delete[] (unsigned char*)ptr;
 }
+#endif
 
 static int get_subset_font_stream(const char* fontName,
                                   const SkTypeface* typeface,
@@ -763,9 +772,8 @@ SkPDFFont* SkPDFFont::GetFontResource(SkTypeface* typeface, uint16_t glyphID) {
 #endif
         fontMetrics =
             SkFontHost::GetAdvancedTypefaceMetrics(fontID, info, NULL, 0);
-#if defined (SK_SFNTLY_SUBSETTER)
-        SkASSERT(fontMetrics);
         SkSafeUnref(fontMetrics.get());  // SkRefPtr and Get both took a ref.
+#if defined (SK_SFNTLY_SUBSETTER)
         if (fontMetrics &&
             fontMetrics->fType != SkAdvancedTypefaceMetrics::kTrueType_Font) {
             // Font does not support subsetting, get new info with advance.
@@ -1379,7 +1387,7 @@ bool SkPDFType3Font::populate(int16_t glyphID) {
                                     &content);
         const SkPath* path = cache->findPath(glyph);
         if (path) {
-            SkPDFUtils::EmitPath(*path, &content);
+            SkPDFUtils::EmitPath(*path, paint.getStyle(), &content);
             SkPDFUtils::PaintPath(paint.getStyle(), path->getFillType(),
                                   &content);
         }

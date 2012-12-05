@@ -2,10 +2,14 @@
 #
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+#
+# This file is automatically included by gyp_skia when building any target.
+
 {
   'includes': [
     'common_variables.gypi',
   ],
+
   'target_defaults': {
 
     # Validate the 'skia_os' setting against 'OS', because only certain
@@ -17,10 +21,16 @@
           {'error': '<!(Cannot build with skia_os=<(skia_os) on OS=<(OS))'}],
         ['skia_mesa and skia_os not in ["mac", "linux"]',
           {'error': '<!(skia_mesa=1 only supported with skia_os="mac" or "linux".)'}],
+        ['skia_angle and not skia_os == "win"',
+          {'error': '<!(skia_angle=1 only supported with skia_os="win".)'
+        }],
+        ['skia_arch_width != 32 and skia_arch_width != 64',
+          {'error': '<!(skia_arch_width can only be 32 or 64 bits not <(skia_arch_width) bits)'
+        }],
       ],
     },
     'includes': [
-      'common_conditions.gypi'
+      'common_conditions.gypi',
     ],
     'conditions': [
       [ 'skia_scalar == "float"',
@@ -46,11 +56,22 @@
           ],
         },
       }],
+      [ 'skia_angle', {
+        'defines': [
+          'SK_ANGLE',
+        ],
+        'direct_dependent_settings': {
+          'defines': [
+            'SK_ANGLE',
+          ],
+        },
+      }],
     ],
     'configurations': {
       'Debug': {
         'defines': [
           'SK_DEBUG',
+          'SK_ENABLE_INST_COUNT',
           'GR_DEBUG=1',
         ],
       },

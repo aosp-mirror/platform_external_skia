@@ -10,23 +10,20 @@
 #include "SkColorFilter.h"
 #include "SkRandom.h"
 #include "SkXfermode.h"
+#include "SkOrderedReadBuffer.h"
+#include "SkOrderedWriteBuffer.h"
 
 static SkFlattenable* reincarnate_flattenable(SkFlattenable* obj) {
-    SkFlattenable::Factory fact = obj->getFactory();
-    if (NULL == fact) {
-        return NULL;
-    }
-
-    SkFlattenableWriteBuffer wb(1024);
-    obj->flatten(wb);
+    SkOrderedWriteBuffer wb(1024);
+    wb.writeFlattenable(obj);
 
     size_t size = wb.size();
     SkAutoSMalloc<1024> storage(size);
     // make a copy into storage
-    wb.flatten(storage.get());
+    wb.writeToMemory(storage.get());
 
-    SkFlattenableReadBuffer rb(storage.get(), size);
-    return fact(rb);
+    SkOrderedReadBuffer rb(storage.get(), size);
+    return rb.readFlattenable();
 }
 
 template <typename T> T* reincarnate(T* obj) {
@@ -75,13 +72,13 @@ static void test_asColorMode(skiatest::Reporter* reporter) {
             if (m != expectedMode) {
                 expectedMode = SkXfermode::kSrc_Mode;
             }
-        } 
+        }
 
 //        SkDebugf("--- got [%d %x] expected [%d %x]\n", m, c, expectedMode, expectedColor);
 
         REPORTER_ASSERT(reporter, c == expectedColor);
         REPORTER_ASSERT(reporter, m == expectedMode);
-        
+
         {
             SkColorFilter* cf2 = reincarnate(cf);
             SkAutoUnref aur2(cf2);

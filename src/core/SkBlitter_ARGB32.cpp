@@ -15,24 +15,24 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 static void SkARGB32_Blit32(const SkBitmap& device, const SkMask& mask,
-							const SkIRect& clip, SkPMColor srcColor) {
-	U8CPU alpha = SkGetPackedA32(srcColor);
-	unsigned flags = SkBlitRow::kSrcPixelAlpha_Flag32;
-	if (alpha != 255) {
-		flags |= SkBlitRow::kGlobalAlpha_Flag32;
-	}
-	SkBlitRow::Proc32 proc = SkBlitRow::Factory32(flags);
+                            const SkIRect& clip, SkPMColor srcColor) {
+    U8CPU alpha = SkGetPackedA32(srcColor);
+    unsigned flags = SkBlitRow::kSrcPixelAlpha_Flag32;
+    if (alpha != 255) {
+        flags |= SkBlitRow::kGlobalAlpha_Flag32;
+    }
+    SkBlitRow::Proc32 proc = SkBlitRow::Factory32(flags);
 
     int x = clip.fLeft;
     int y = clip.fTop;
     int width = clip.width();
     int height = clip.height();
 
-    SkPMColor*		 dstRow = device.getAddr32(x, y);
+    SkPMColor*         dstRow = device.getAddr32(x, y);
     const SkPMColor* srcRow = reinterpret_cast<const SkPMColor*>(mask.getAddr8(x, y));
 
     do {
-		proc(dstRow, srcRow, width, alpha);
+        proc(dstRow, srcRow, width, alpha);
         dstRow = (SkPMColor*)((char*)dstRow + device.rowBytes());
         srcRow = (const SkPMColor*)((const char*)srcRow + mask.fRowBytes);
     } while (--height != 0);
@@ -53,6 +53,7 @@ SkARGB32_Blitter::SkARGB32_Blitter(const SkBitmap& device, const SkPaint& paint)
 
     fPMColor = SkPackARGB32(fSrcA, fSrcR, fSrcG, fSrcB);
     fColor32Proc = SkBlitRow::ColorProcFactory();
+    fColorRect32Proc = SkBlitRow::ColorRectProcFactory();
 }
 
 const SkBitmap* SkARGB32_Blitter::justAnOpaqueColor(uint32_t* value) {
@@ -161,7 +162,7 @@ void SkARGB32_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     if (mask.fFormat == SkMask::kBW_Format) {
         SkARGB32_BlendBW(fDevice, mask, clip, fPMColor, SkAlpha255To256(255 - fSrcA));
     } else if (SkMask::kARGB32_Format == mask.fFormat) {
-		SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
+        SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
     }
 }
 
@@ -172,12 +173,12 @@ void SkARGB32_Opaque_Blitter::blitMask(const SkMask& mask,
     if (SkBlitMask::BlitColor(fDevice, mask, clip, fColor)) {
         return;
     }
-    
+
     if (mask.fFormat == SkMask::kBW_Format) {
         SkARGB32_BlitBW(fDevice, mask, clip, fPMColor);
     } else if (SkMask::kARGB32_Format == mask.fFormat) {
-		SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
-	}
+        SkARGB32_Blit32(fDevice, mask, clip, fPMColor);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -213,9 +214,13 @@ void SkARGB32_Blitter::blitRect(int x, int y, int width, int height) {
     uint32_t    color = fPMColor;
     size_t      rowBytes = fDevice.rowBytes();
 
-    while (--height >= 0) {
-        fColor32Proc(device, device, width, color);
-        device = (uint32_t*)((char*)device + rowBytes);
+    if (255 == SkGetPackedA32(color)) {
+        fColorRect32Proc(device, width, height, rowBytes, color);
+    } else {
+        while (--height >= 0) {
+            fColor32Proc(device, device, width, color);
+            device = (uint32_t*)((char*)device + rowBytes);
+        }
     }
 }
 
@@ -294,6 +299,52 @@ void SkARGB32_Shader_Blitter::blitH(int x, int y, int width) {
             fXfermode->xfer32(device, span, width, NULL);
         } else {
             fProc32(device, span, width, 255);
+        }
+    }
+}
+
+void SkARGB32_Shader_Blitter::blitRect(int x, int y, int width, int height) {
+    SkASSERT(x >= 0 && y >= 0 &&
+             x + width <= fDevice.width() && y + height <= fDevice.height());
+
+    uint32_t*   device = fDevice.getAddr32(x, y);
+    size_t      deviceRB = fDevice.rowBytes();
+    SkShader*   shader = fShader;
+
+    if (fXfermode == NULL && (shader->getFlags() & SkShader::kOpaqueAlpha_Flag)) {
+        void* ctx;
+        SkShader::ShadeProc shadeProc = fShader->asAShadeProc(&ctx);
+        if (shadeProc) {
+            do {
+                shadeProc(ctx, x, y, device, width);
+                y += 1;
+                device = (uint32_t*)((char*)device + deviceRB);
+            } while (--height > 0);
+        } else {
+            do {
+                shader->shadeSpan(x, y, device, width);
+                y += 1;
+                device = (uint32_t*)((char*)device + deviceRB);
+            } while (--height > 0);
+        }
+    } else {
+        SkPMColor* span = fBuffer;
+        SkXfermode* xfer = fXfermode;
+        if (xfer) {
+            do {
+                shader->shadeSpan(x, y, span, width);
+                xfer->xfer32(device, span, width, NULL);
+                y += 1;
+                device = (uint32_t*)((char*)device + deviceRB);
+            } while (--height > 0);
+        } else {
+            SkBlitRow::Proc32 proc = fProc32;
+            do {
+                shader->shadeSpan(x, y, span, width);
+                proc(device, span, width, 255);
+                y += 1;
+                device = (uint32_t*)((char*)device + deviceRB);
+            } while (--height > 0);
         }
     }
 }

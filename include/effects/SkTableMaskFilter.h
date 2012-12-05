@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkTableMaskFilter_DEFINED
 #define SkTableMaskFilter_DEFINED
@@ -14,11 +12,11 @@
 #include "SkScalar.h"
 
 /** \class SkTableMaskFilter
- 
+
     Applies a table lookup on each of the alpha values in the mask.
     Helper methods create some common tables (e.g. gamma, clipping)
  */
-class SkTableMaskFilter : public SkMaskFilter {
+class SK_API SkTableMaskFilter : public SkMaskFilter {
 public:
     SkTableMaskFilter();
     SkTableMaskFilter(const uint8_t table[256]);
@@ -50,20 +48,17 @@ public:
     // overrides from SkMaskFilter
     virtual SkMask::Format getFormat();
     virtual bool filterMask(SkMask*, const SkMask&, const SkMatrix&, SkIPoint*);
-    
-    // overrides from SkFlattenable
-    virtual void flatten(SkFlattenableWriteBuffer& wb);
-    virtual Factory getFactory();
+
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTableMaskFilter)
 
 protected:
     SkTableMaskFilter(SkFlattenableReadBuffer& rb);
-    static SkFlattenable* Factory(SkFlattenableReadBuffer&);
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
 private:
     uint8_t fTable[256];
-    
+
     typedef SkMaskFilter INHERITED;
 };
 
 #endif
-

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -11,7 +10,7 @@
 #ifndef GrGLVertexBuffer_DEFINED
 #define GrGLVertexBuffer_DEFINED
 
-#include "../GrVertexBuffer.h"
+#include "GrVertexBuffer.h"
 #include "gl/GrGLInterface.h"
 
 class GrGpuGL;
@@ -35,8 +34,8 @@ protected:
                      bool dynamic);
 
     // overrides of GrResource
-    virtual void onAbandon();
-    virtual void onRelease();
+    virtual void onAbandon() SK_OVERRIDE;
+    virtual void onRelease() SK_OVERRIDE;
 
 private:
     void bind() const;

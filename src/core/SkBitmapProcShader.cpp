@@ -7,6 +7,7 @@
  */
 #include "SkBitmapProcShader.h"
 #include "SkColorPriv.h"
+#include "SkFlattenableBuffers.h"
 #include "SkPixelRef.h"
 
 bool SkBitmapProcShader::CanDo(const SkBitmap& bm, TileMode tx, TileMode ty) {
@@ -33,9 +34,9 @@ SkBitmapProcShader::SkBitmapProcShader(const SkBitmap& src,
 
 SkBitmapProcShader::SkBitmapProcShader(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer) {
-    fRawBitmap.unflatten(buffer);
-    fState.fTileModeX = buffer.readU8();
-    fState.fTileModeY = buffer.readU8();
+    buffer.readBitmap(&fRawBitmap);
+    fState.fTileModeX = buffer.readUInt();
+    fState.fTileModeY = buffer.readUInt();
     fFlags = 0; // computed in setContext
 }
 
@@ -53,8 +54,7 @@ void SkBitmapProcShader::endSession() {
 
 SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
                                                    SkMatrix* texM,
-                                                   TileMode xy[],
-                                       SkScalar* twoPointRadialParams) const {
+                                                   TileMode xy[]) const {
     if (texture) {
         *texture = fRawBitmap;
     }
@@ -68,12 +68,12 @@ SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
     return kDefault_BitmapType;
 }
 
-void SkBitmapProcShader::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkBitmapProcShader::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
-    fRawBitmap.flatten(buffer);
-    buffer.write8(fState.fTileModeX);
-    buffer.write8(fState.fTileModeY);
+    buffer.writeBitmap(fRawBitmap);
+    buffer.writeUInt(fState.fTileModeX);
+    buffer.writeUInt(fState.fTileModeY);
 }
 
 static bool only_scale_and_translate(const SkMatrix& matrix) {
@@ -161,14 +161,14 @@ bool SkBitmapProcShader::setContext(const SkBitmap& device,
 
 void SkBitmapProcShader::shadeSpan(int x, int y, SkPMColor dstC[], int count) {
     const SkBitmapProcState& state = fState;
-    if (state.fShaderProc32) {
-        state.fShaderProc32(state, x, y, dstC, count);
+    if (state.getShaderProc32()) {
+        state.getShaderProc32()(state, x, y, dstC, count);
         return;
     }
 
     uint32_t buffer[BUF_MAX + TEST_BUFFER_EXTRA];
-    SkBitmapProcState::MatrixProc   mproc = state.fMatrixProc;
-    SkBitmapProcState::SampleProc32 sproc = state.fSampleProc32;
+    SkBitmapProcState::MatrixProc   mproc = state.getMatrixProc();
+    SkBitmapProcState::SampleProc32 sproc = state.getSampleProc32();
     int max = fState.maxCountForBufferSize(sizeof(buffer[0]) * BUF_MAX);
 
     SkASSERT(state.fBitmap->getPixels());
@@ -203,16 +203,24 @@ void SkBitmapProcShader::shadeSpan(int x, int y, SkPMColor dstC[], int count) {
     }
 }
 
+SkShader::ShadeProc SkBitmapProcShader::asAShadeProc(void** ctx) {
+    if (fState.getShaderProc32()) {
+        *ctx = &fState;
+        return (ShadeProc)fState.getShaderProc32();
+    }
+    return NULL;
+}
+
 void SkBitmapProcShader::shadeSpan16(int x, int y, uint16_t dstC[], int count) {
     const SkBitmapProcState& state = fState;
-    if (state.fShaderProc16) {
-        state.fShaderProc16(state, x, y, dstC, count);
+    if (state.getShaderProc16()) {
+        state.getShaderProc16()(state, x, y, dstC, count);
         return;
     }
 
     uint32_t buffer[BUF_MAX];
-    SkBitmapProcState::MatrixProc   mproc = state.fMatrixProc;
-    SkBitmapProcState::SampleProc16 sproc = state.fSampleProc16;
+    SkBitmapProcState::MatrixProc   mproc = state.getMatrixProc();
+    SkBitmapProcState::SampleProc16 sproc = state.getSampleProc16();
     int max = fState.maxCountForBufferSize(sizeof(buffer));
 
     SkASSERT(state.fBitmap->getPixels());
@@ -271,12 +279,22 @@ static bool canUseColorShader(const SkBitmap& bm, SkColor* color) {
 
 #include "SkTemplatesPriv.h"
 
+static bool bitmapIsTooBig(const SkBitmap& bm) {
+    // SkBitmapProcShader stores bitmap coordinates in a 16bit buffer, as it
+    // communicates between its matrix-proc and its sampler-proc. Until we can
+    // widen that, we have to reject bitmaps that are larger.
+    //
+    const int maxSize = 65535;
+
+    return bm.width() > maxSize || bm.height() > maxSize;
+}
+
 SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
                                        TileMode tmx, TileMode tmy,
                                        void* storage, size_t storageSize) {
     SkShader* shader;
     SkColor color;
-    if (src.isNull()) {
+    if (src.isNull() || bitmapIsTooBig(src)) {
         SK_PLACEMENT_NEW(shader, SkEmptyShader, storage, storageSize);
     }
     else if (canUseColorShader(src, &color)) {
@@ -288,8 +306,6 @@ SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
     }
     return shader;
 }
-
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkBitmapProcShader)
 
 ///////////////////////////////////////////////////////////////////////////////
 

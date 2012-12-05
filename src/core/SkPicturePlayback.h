@@ -12,12 +12,15 @@
 #include "SkReader32.h"
 
 #include "SkBitmap.h"
+#include "SkData.h"
 #include "SkMatrix.h"
+#include "SkOrderedReadBuffer.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPathHeap.h"
 #include "SkRegion.h"
 #include "SkPictureFlat.h"
+#include "SkSerializationHelpers.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include "SkThread.h"
@@ -26,19 +29,47 @@
 class SkPictureRecord;
 class SkStream;
 class SkWStream;
+class SkBBoxHierarchy;
+class SkPictureStateTree;
+
+struct SkPictInfo {
+    enum Flags {
+        kCrossProcess_Flag      = 1 << 0,
+        kScalarIsFloat_Flag     = 1 << 1,
+        kPtrIs64Bit_Flag        = 1 << 2,
+    };
+
+    uint32_t    fVersion;
+    uint32_t    fWidth;
+    uint32_t    fHeight;
+    uint32_t    fFlags;
+};
+
+/**
+ * Container for data that is needed to deep copy a SkPicture. The container
+ * enables the data to be generated once and reused for subsequent copies.
+ */
+struct SkPictCopyInfo {
+    SkPictCopyInfo() : initialized(false), controller(1024) {}
+
+    bool initialized;
+    SkChunkFlatController controller;
+    SkTDArray<SkFlatData*> paintData;
+};
 
 class SkPicturePlayback {
 public:
     SkPicturePlayback();
-    SkPicturePlayback(const SkPicturePlayback& src);
-    explicit SkPicturePlayback(const SkPictureRecord& record);
-    explicit SkPicturePlayback(SkStream*, uint32_t pictureVersion = PICTURE_VERSION_JB);
+    SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInfo* deepCopyInfo = NULL);
+    explicit SkPicturePlayback(const SkPictureRecord& record, bool deepCopy = false);
+    SkPicturePlayback(SkStream*, const SkPictInfo&, bool* isValid,
+                      SkSerializationHelpers::DecodeBitmap decoder);
 
     virtual ~SkPicturePlayback();
 
     void draw(SkCanvas& canvas);
 
-    void serialize(SkWStream*) const;
+    void serialize(SkWStream*, SkSerializationHelpers::EncodeBitmap) const;
 
     void dumpSize() const;
 
@@ -47,7 +78,6 @@ public:
     void abort();
 
 private:
-
     class TextContainer {
     public:
         size_t length() { return fByteLength; }
@@ -56,70 +86,61 @@ private:
         const char* fText;
     };
 
-    const SkBitmap& getBitmap() {
-        int index = getInt();
-        SkASSERT(index > 0);
-        return fBitmaps[index - 1];
+    const SkBitmap& getBitmap(SkReader32& reader) {
+        int index = reader.readInt();
+        return (*fBitmaps)[index];
     }
 
-    int getIndex() { return fReader.readInt(); }
-    int getInt() { return fReader.readInt(); }
-
-    const SkMatrix* getMatrix() {
-        int index = getInt();
+    const SkMatrix* getMatrix(SkReader32& reader) {
+        int index = reader.readInt();
         if (index == 0) {
             return NULL;
         }
-        SkASSERT(index > 0 && index <= fMatrixCount);
-        return &fMatrices[index - 1];
+        return &(*fMatrices)[index - 1];
     }
 
-    const SkPath& getPath() {
-        return (*fPathHeap)[getInt() - 1];
+    const SkPath& getPath(SkReader32& reader) {
+        return (*fPathHeap)[reader.readInt() - 1];
     }
 
-    SkPicture& getPicture() {
-        int index = getInt();
+    SkPicture& getPicture(SkReader32& reader) {
+        int index = reader.readInt();
         SkASSERT(index > 0 && index <= fPictureCount);
         return *fPictureRefs[index - 1];
     }
 
-    const SkPaint* getPaint() {
-        int index = getInt();
+    const SkPaint* getPaint(SkReader32& reader) {
+        int index = reader.readInt();
         if (index == 0) {
             return NULL;
         }
-        SkASSERT(index > 0 && index <= fPaintCount);
-        return &fPaints[index - 1];
+        return &(*fPaints)[index - 1];
     }
 
-    const SkRect* getRectPtr() {
-        if (fReader.readBool()) {
-            return &fReader.skipT<SkRect>();
+    const SkRect* getRectPtr(SkReader32& reader) {
+        if (reader.readBool()) {
+            return &reader.skipT<SkRect>();
         } else {
             return NULL;
         }
     }
 
-    const SkIRect* getIRectPtr() {
-        if (fReader.readBool()) {
-            return &fReader.skipT<SkIRect>();
+    const SkIRect* getIRectPtr(SkReader32& reader) {
+        if (reader.readBool()) {
+            return &reader.skipT<SkIRect>();
         } else {
             return NULL;
         }
     }
 
-    const SkRegion& getRegion() {
-        int index = getInt();
-        SkASSERT(index > 0);
-        return fRegions[index - 1];
+    const SkRegion& getRegion(SkReader32& reader) {
+        int index = reader.readInt();
+        return (*fRegions)[index - 1];
     }
 
-    SkScalar getScalar() { return fReader.readScalar(); }
-
-    void getText(TextContainer* text) {
-        size_t length = text->fByteLength = getInt();
-        text->fText = (const char*)fReader.skip(length);
+    void getText(SkReader32& reader, TextContainer* text) {
+        size_t length = text->fByteLength = reader.readInt();
+        text->fText = (const char*)reader.skip(length);
     }
 
     void init();
@@ -156,24 +177,31 @@ public:
     void dump() const;
 #endif
 
+private:    // these help us with reading/writing
+    bool parseStreamTag(SkStream*, const SkPictInfo&, uint32_t tag, size_t size,
+                        SkSerializationHelpers::DecodeBitmap decoder);
+    bool parseBufferTag(SkOrderedReadBuffer&, uint32_t tag, size_t size);
+    void flattenToBuffer(SkOrderedWriteBuffer&) const;
+
 private:
-    SkPathHeap* fPathHeap;  // reference counted
-    SkBitmap* fBitmaps;
-    int fBitmapCount;
-    SkMatrix* fMatrices;
-    int fMatrixCount;
-    SkPaint* fPaints;
-    int fPaintCount;
-    SkRegion* fRegions;
-    int fRegionCount;
-    mutable SkFlattenableReadBuffer fReader;
+    SkAutoTUnref<SkBitmapHeap> fBitmapHeap;
+    SkAutoTUnref<SkPathHeap> fPathHeap;
+
+    SkTRefArray<SkBitmap>* fBitmaps;
+    SkTRefArray<SkMatrix>* fMatrices;
+    SkTRefArray<SkPaint>* fPaints;
+    SkTRefArray<SkRegion>* fRegions;
+
+    SkData* fOpData;    // opcodes and parameters
 
     SkPicture** fPictureRefs;
     int fPictureCount;
 
-    SkRefCntPlayback fRCPlayback;
+    SkBBoxHierarchy* fBoundingHierarchy;
+    SkPictureStateTree* fStateTree;
+
     SkTypefacePlayback fTFPlayback;
-    SkFactoryPlayback*   fFactoryPlayback;
+    SkFactoryPlayback* fFactoryPlayback;
 #ifdef SK_BUILD_FOR_ANDROID
     SkMutex fDrawMutex;
 #endif

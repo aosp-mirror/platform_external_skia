@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #include "GrGLRenderTarget.h"
 
@@ -27,6 +25,21 @@ void GrGLRenderTarget::init(const Desc& desc,
     GrSafeRef(fTexIDObj);
 }
 
+namespace {
+GrTextureDesc MakeDesc(GrTextureFlags flags,
+                       int width, int height,
+                       GrPixelConfig config, int sampleCnt) {
+    GrTextureDesc temp;
+    temp.fFlags = flags;
+    temp.fWidth = width;
+    temp.fHeight = height;
+    temp.fConfig = config;
+    temp.fSampleCnt = sampleCnt;
+    return temp;
+}
+
+};
+
 GrGLRenderTarget::GrGLRenderTarget(GrGpuGL* gpu,
                                    const Desc& desc,
                                    const GrGLIRect& viewport,
@@ -34,10 +47,9 @@ GrGLRenderTarget::GrGLRenderTarget(GrGpuGL* gpu,
                                    GrGLTexture* texture)
     : INHERITED(gpu,
                 texture,
-                viewport.fWidth,
-                viewport.fHeight,
-                desc.fConfig,
-                desc.fSampleCnt) {
+                MakeDesc(kNone_GrTextureFlags,
+                         viewport.fWidth, viewport.fHeight,
+                         desc.fConfig, desc.fSampleCnt)) {
     GrAssert(NULL != texID);
     GrAssert(NULL != texture);
     // FBO 0 can't also be a texture, right?
@@ -56,10 +68,9 @@ GrGLRenderTarget::GrGLRenderTarget(GrGpuGL* gpu,
                                    const GrGLIRect& viewport)
     : INHERITED(gpu,
                 NULL,
-                viewport.fWidth,
-                viewport.fHeight,
-                desc.fConfig,
-                desc.fSampleCnt) {
+                MakeDesc(kNone_GrTextureFlags,
+                         viewport.fWidth, viewport.fHeight,
+                         desc.fConfig, desc.fSampleCnt)) {
     this->init(desc, viewport, NULL);
 }
 
@@ -81,7 +92,7 @@ void GrGLRenderTarget::onRelease() {
     fMSColorRenderbufferID  = 0;
     GrSafeUnref(fTexIDObj);
     fTexIDObj = NULL;
-    this->setStencilBuffer(NULL);
+    INHERITED::onRelease();
 }
 
 void GrGLRenderTarget::onAbandon() {
@@ -92,6 +103,6 @@ void GrGLRenderTarget::onAbandon() {
         fTexIDObj->abandon();
         fTexIDObj = NULL;
     }
-    this->setStencilBuffer(NULL);
+    INHERITED::onAbandon();
 }
 

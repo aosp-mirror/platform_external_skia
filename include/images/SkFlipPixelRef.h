@@ -21,7 +21,7 @@ class SkFlipPixelRef : public SkPixelRef {
 public:
             SkFlipPixelRef(SkBitmap::Config, int width, int height);
     virtual ~SkFlipPixelRef();
-    
+
     bool isDirty() const { return fFlipper.isDirty(); }
     const SkRegion& dirtyRgn() const { return fFlipper.dirtyRgn(); }
 
@@ -32,7 +32,16 @@ public:
 
     const SkRegion& beginUpdate(SkBitmap* device);
     void endUpdate();
-    
+
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkFlipPixelRef)
+
+protected:
+    virtual void* onLockPixels(SkColorTable**);
+    virtual void onUnlockPixels();
+
+    SkFlipPixelRef(SkFlattenableReadBuffer&);
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+
 private:
     void getFrontBack(const void** front, void** back) const {
         if (front) {
@@ -50,25 +59,9 @@ private:
     static void CopyBitsFromAddr(const SkBitmap& dst, const SkRegion& clip,
                                  const void* srcAddr);
 
-    // serialization
-
-public:
-    virtual Factory getFactory() const { return Create; }
-    virtual void flatten(SkFlattenableWriteBuffer&) const;
-    static SkPixelRef* Create(SkFlattenableReadBuffer& buffer);
-
-    SK_DECLARE_PIXEL_REF_REGISTRAR()
-
-protected:
-    virtual void* onLockPixels(SkColorTable**);
-    virtual void onUnlockPixels();
-
-    SkFlipPixelRef(SkFlattenableReadBuffer&);
-
-private:
     SkMutex         fMutex;
     SkPageFlipper   fFlipper;
-    
+
     void*           fStorage;
     void*           fPage0; // points into fStorage;
     void*           fPage1; // points into fStorage;
@@ -88,10 +81,10 @@ public:
             fRef->endUpdate();
         }
     }
-    
+
     const SkBitmap& bitmap() const { return fBitmap; }
     const SkRegion& dirty() const { return *fDirty; }
-    
+
     // optional. This gets automatically called in the destructor (only once)
     void endUpdate() {
         if (fRef) {

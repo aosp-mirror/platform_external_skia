@@ -45,17 +45,48 @@ class _ExtremeType(object):
 Max = _ExtremeType(1, "Max")
 Min = _ExtremeType(-1, "Min")
 
-def parse(settings, lines):
+class _ListAlgorithm(object):
+    """Algorithm for selecting the representation value from a given list.
+    representation is one of 'avg', 'min', 'med', '25th' (average, minimum,
+    median, 25th percentile)"""
+    def __init__(self, data, representation=None):
+        if not representation:
+            representation = 'avg'  # default algorithm is average
+        self._data = data
+        self._len = len(data)
+        if representation == 'avg':
+            self._rep = sum(self._data) / self._len
+        else:
+            self._data.sort()
+            if representation == 'min':
+                self._rep = self._data[0]
+            else:
+                # for percentiles, we use the value below which x% of values are
+                # found, which allows for better detection of quantum behaviors.
+                if representation == 'med':
+                    x = int(round(0.5 * self._len + 0.5))
+                elif representation == '25th':
+                    x = int(round(0.25 * self._len + 0.5))
+                else:
+                    raise Exception("invalid representation algorithm %s!" %
+                                    representation)
+                self._rep = self._data[x - 1]
+
+    def compute(self):
+        return self._rep
+
+def parse(settings, lines, representation='avg'):
     """Parses bench output into a useful data structure.
     
-    ({str:str}, __iter__ -> str) -> [BenchDataPoint]"""
+    ({str:str}, __iter__ -> str) -> [BenchDataPoint]
+    representation should match one of those defined in class _ListAlgorithm."""
     
     benches = []
     current_bench = None
     setting_re = '([^\s=]+)(?:=(\S+))?'
     settings_re = 'skia bench:((?:\s+' + setting_re + ')*)'
     bench_re = 'running bench (?:\[\d+ \d+\] )?\s*(\S+)'
-    time_re = '(?:(\w*)msecs = )?\s*(\d+\.\d+)'
+    time_re = '(?:(\w*)msecs = )?\s*((?:\d+\.\d+)(?:,\d+\.\d+)*)'
     config_re = '(\S+): ((?:' + time_re + '\s+)+)'
     
     for line in lines:
@@ -82,12 +113,13 @@ def parse(settings, lines):
                 times = new_config.group(2)
                 for new_time in re.finditer(time_re, times):
                     current_time_type = new_time.group(1)
-                    current_time = float(new_time.group(2))
+                    iters = [float(i) for i in
+                             new_time.group(2).strip().split(',')]
                     benches.append(BenchDataPoint(
                             current_bench
                             , current_config
                             , current_time_type
-                            , current_time
+                            , _ListAlgorithm(iters, representation).compute()
                             , settings))
     
     return benches
@@ -119,15 +151,19 @@ class LinearRegression:
             Sxy += x*y
             Syy += y*y
         
-        B = (n*Sxy - Sx*Sy) / (n*Sxx - Sx*Sx)
+        denom = n*Sxx - Sx*Sx
+        if (denom != 0.0):
+            B = (n*Sxy - Sx*Sy) / denom
+        else:
+            B = 0.0
         a = (1.0/n)*(Sy - B*Sx)
         
         se2 = 0
         sB2 = 0
         sa2 = 0
-        if (n >= 3):
-            se2 = (1.0/(n*(n-2)) * (n*Syy - Sy*Sy - B*B*(n*Sxx - Sx*Sx)))
-            sB2 = (n*se2) / (n*Sxx - Sx*Sx)
+        if (n >= 3 and denom != 0.0):
+            se2 = (1.0/(n*(n-2)) * (n*Syy - Sy*Sy - B*B*denom))
+            sB2 = (n*se2) / denom
             sa2 = sB2 * (1.0/n) * Sxx
         
         
@@ -176,3 +212,10 @@ def CreateRevisionLink(revision_number):
     """
     return '<a href="http://code.google.com/p/skia/source/detail?r=%s">%s</a>'%(
         revision_number, revision_number)
+
+def main():
+    foo = [[0.0, 0.0], [0.0, 1.0], [0.0, 2.0], [0.0, 3.0]]
+    LinearRegression(foo)
+
+if __name__ == "__main__":
+    main()

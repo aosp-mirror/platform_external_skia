@@ -7,11 +7,36 @@
  */
 #include "Test.h"
 #include "SkRandom.h"
-#include "SkTSearch.h"
+#include "SkChecksum.h"
 #include "SkTSort.h"
 
+// assert that as we change values (from 0 to non-zero) in our buffer, we
+// get a different value
+static void test_checksum(skiatest::Reporter* reporter, size_t size) {
+    SkAutoMalloc storage(size);
+    uint32_t*    ptr = (uint32_t*)storage.get();
+    char*        cptr = (char*)ptr;
+
+    sk_bzero(ptr, size);
+    uint32_t prev = 0;
+    for (size_t i = 0; i < size; ++i) {
+        cptr[i] = 0x5B; // just need some non-zero value here
+        uint32_t curr = SkChecksum::Compute(ptr, size);
+        REPORTER_ASSERT(reporter, prev != curr);
+        prev = curr;
+    }
+}
+
+static void test_checksum(skiatest::Reporter* reporter) {
+    REPORTER_ASSERT(reporter, SkChecksum::Compute(NULL, 0) == 0);
+
+    for (size_t size = 4; size <= 1000; size += 4) {
+        test_checksum(reporter, size);
+    }
+}
+
 extern "C" {
-    int compare_int(const void* a, const void* b) {
+    static int compare_int(const void* a, const void* b) {
         return *(const int*)a - *(const int*)b;
     }
 }
@@ -42,13 +67,18 @@ static void TestSort(skiatest::Reporter* reporter) {
         int count = rand.nextRangeU(1, SK_ARRAY_COUNT(array));
 
         rand_array(rand, array, count);
-        SkQSort(array, count, sizeof(int), compare_int);
-        check_sort(reporter, "Quick", array, count);
-
-        rand_array(rand, array, count);
         SkTHeapSort<int>(array, count);
         check_sort(reporter, "Heap", array, count);
+
+        rand_array(rand, array, count);
+        SkTQSort<int>(array, array + count - 1);
+        check_sort(reporter, "Quick", array, count);
     }
+    if (false) { // avoid bit rot, suppress warning
+        compare_int(array, array);
+    }
+
+    test_checksum(reporter);
 }
 
 // need tests for SkStrSearch

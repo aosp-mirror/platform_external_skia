@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -56,7 +55,7 @@ bool GrGLContextInfo::initialize(const GrGLInterface* interface) {
         const char* ver = reinterpret_cast<const char*>(verUByte);
         GrGLBinding binding = GrGLGetBindingInUseFromString(ver);
 
-        if (!interface->validate(fBindingInUse)) {
+        if (interface->validate(binding)) {
 
             fInterface = interface;
             interface->ref();

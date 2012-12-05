@@ -26,7 +26,7 @@ public:
     }
 
     enum {
-        N = SkBENCHLOOP(1000),   // number of times to playback the picture
+        N = SkBENCHLOOP(200),   // number of times to playback the picture
         PICTURE_WIDTH = 1000,
         PICTURE_HEIGHT = 4000,
         TEXT_SIZE = 10
@@ -119,7 +119,7 @@ protected:
                     if (fDrawPosH)
                         pos[i].set(x + advX, y);
                     else
-                        pos[i].set(x + advX, y + SkIntToScalar(i));
+                        pos[i].set(x + advX, y + i);
                     advX += adv[i];
                 }
 

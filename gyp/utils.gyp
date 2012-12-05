@@ -1,21 +1,21 @@
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'utils',
+      'product_name': 'skia_utils',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',
+        '../include/effects',
+        '../include/pipe',
         '../include/utils',
         '../include/utils/mac',
         '../include/utils/unix',
         '../include/utils/win',
-        '../include/views',
-        '../include/effects',
         '../include/xml',
+        '../src/utils',
       ],
       'sources': [
         '../include/utils/SkBoundaryPatch.h',
@@ -30,59 +30,63 @@
         '../include/utils/SkMeshUtils.h',
         '../include/utils/SkNinePatch.h',
         '../include/utils/SkNWayCanvas.h',
+        '../include/utils/SkNullCanvas.h',
         '../include/utils/SkParse.h',
         '../include/utils/SkParsePaint.h',
         '../include/utils/SkParsePath.h',
         '../include/utils/SkProxyCanvas.h',
-        '../include/utils/SkSfntUtils.h',
-        '../include/utils/SkTextBox.h',
         '../include/utils/SkUnitMappers.h',
         '../include/utils/SkWGL.h',
 
         '../src/utils/SkBase64.cpp',
         '../src/utils/SkBase64.h',
+        '../src/utils/SkBitSet.cpp',
+        '../src/utils/SkBitSet.h',
         '../src/utils/SkBoundaryPatch.cpp',
         '../src/utils/SkCamera.cpp',
-        '../src/utils/SkColorMatrix.cpp',
         '../src/utils/SkCubicInterval.cpp',
         '../src/utils/SkCullPoints.cpp',
         '../src/utils/SkDeferredCanvas.cpp',
         '../src/utils/SkDumpCanvas.cpp',
+        '../src/utils/SkFloatUtils.h',
         '../src/utils/SkInterpolator.cpp',
         '../src/utils/SkLayer.cpp',
         '../src/utils/SkMatrix44.cpp',
         '../src/utils/SkMeshUtils.cpp',
         '../src/utils/SkNinePatch.cpp',
         '../src/utils/SkNWayCanvas.cpp',
+        '../src/utils/SkNullCanvas.cpp',
         '../src/utils/SkOSFile.cpp',
         '../src/utils/SkParse.cpp',
         '../src/utils/SkParseColor.cpp',
         '../src/utils/SkParsePath.cpp',
         '../src/utils/SkProxyCanvas.cpp',
-        '../src/utils/SkSfntUtils.cpp',
+        '../src/utils/SkThreadUtils.h',
+        '../src/utils/SkThreadUtils_pthread.cpp',
+        '../src/utils/SkThreadUtils_pthread.h',
+        '../src/utils/SkThreadUtils_pthread_linux.cpp',
+        '../src/utils/SkThreadUtils_pthread_mach.cpp',
+        '../src/utils/SkThreadUtils_pthread_other.cpp',
+        '../src/utils/SkThreadUtils_win.cpp',
+        '../src/utils/SkThreadUtils_win.h',
         '../src/utils/SkUnitMappers.cpp',
 
         #mac
         '../include/utils/mac/SkCGUtils.h',
         '../src/utils/mac/SkCreateCGImageRef.cpp',
 
-        #sdl
-        '../src/utils/SDL/SkOSWindow_SDL.cpp',
-
-        #*nix
-        '../src/utils/unix/keysym2ucs.c',
-        '../src/utils/unix/SkOSWindow_Unix.cpp',
-        
         #windows
         '../include/utils/win/SkAutoCoInitialize.h',
         '../include/utils/win/SkHRESULT.h',
         '../include/utils/win/SkIStream.h',
         '../include/utils/win/SkTScopedComPtr.h',
         '../src/utils/win/SkAutoCoInitialize.cpp',
-        '../src/utils/win/skia_win.cpp',
+        '../src/utils/win/SkDWriteFontFileStream.cpp',
+        '../src/utils/win/SkDWriteFontFileStream.h',
+        '../src/utils/win/SkDWriteGeometrySink.cpp',
+        '../src/utils/win/SkDWriteGeometrySink.h',
         '../src/utils/win/SkHRESULT.cpp',
         '../src/utils/win/SkIStream.cpp',
-        '../src/utils/win/SkOSWindow_win.cpp',
         '../src/utils/win/SkWGL_win.cpp',
       ],
       'sources!': [
@@ -95,11 +99,16 @@
               '$(SDKROOT)/System/Library/Frameworks/AGL.framework',
             ],
           },
+        }],
+        [ 'skia_os in ["mac", "ios"]', {
           'direct_dependent_settings': {
             'include_dirs': [
               '../include/utils/mac',
             ],
           },
+          'sources!': [
+            '../src/utils/SkThreadUtils_pthread_other.cpp',
+          ],
         },{ #else if 'skia_os != "mac"'
           'include_dirs!': [
             '../include/utils/mac',
@@ -107,8 +116,7 @@
           'sources!': [
             '../include/utils/mac/SkCGUtils.h',
             '../src/utils/mac/SkCreateCGImageRef.cpp',
-            '../src/utils/mac/skia_mac.mm',
-            '../src/utils/mac/SkOSWindow_Mac.mm',
+            '../src/utils/SkThreadUtils_pthread_mach.cpp',
           ],
         }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
@@ -118,13 +126,15 @@
               '-lGLU',
             ],
           },
+          'sources!': [
+            '../src/utils/SkThreadUtils_pthread_other.cpp',
+          ],
         },{ #else if 'skia_os not in ["linux", "freebsd", "openbsd", "solaris"]'
           'include_dirs!': [
             '../include/utils/unix',
           ],
           'sources!': [
-            '../src/utils/unix/keysym2ucs.c',
-            '../src/utils/unix/SkOSWindow_Unix.cpp',
+            '../src/utils/SkThreadUtils_pthread_linux.cpp',
           ],
         }],
         [ 'skia_os == "win"', {
@@ -133,6 +143,11 @@
               '../include/utils/win',
             ],
           },
+          'sources!': [
+            '../src/utils/SkThreadUtils_pthread.cpp',
+            '../src/utils/SkThreadUtils_pthread.h',
+            '../src/utils/SkThreadUtils_pthread_other.cpp',
+          ],
         },{ #else if 'skia_os != "win"'
           'include_dirs!': [
             '../include/utils/win',
@@ -144,8 +159,20 @@
             '../include/utils/win/SkIStream.h',
             '../include/utils/win/SkTScopedComPtr.h',
             '../src/utils/win/SkAutoCoInitialize.cpp',
+            '../src/utils/win/SkDWriteFontFileStream.cpp',
+            '../src/utils/win/SkDWriteFontFileStream.h',
+            '../src/utils/win/SkDWriteGeometrySink.cpp',
+            '../src/utils/win/SkDWriteGeometrySink.h',
             '../src/utils/win/SkHRESULT.cpp',
             '../src/utils/win/SkIStream.cpp',
+          ],
+        }],
+        [ 'skia_nacl == 1', {
+          'sources': [
+            '../src/utils/SkThreadUtils_pthread_other.cpp',
+          ],
+          'sources!': [
+            '../src/utils/SkThreadUtils_pthread_linux.cpp',
           ],
         }],
       ],

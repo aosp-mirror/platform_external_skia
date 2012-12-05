@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2007 The Android Open Source Project
  *
@@ -6,16 +5,15 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkColorMatrix_DEFINED
 #define SkColorMatrix_DEFINED
 
 #include "SkScalar.h"
 
-class SkColorMatrix {
+class SK_API SkColorMatrix {
 public:
     SkScalar    fMat[20];
-    
+
     void setIdentity();
     void setScale(SkScalar rScale, SkScalar gScale, SkScalar bScale,
                   SkScalar aScale = SK_Scalar1);

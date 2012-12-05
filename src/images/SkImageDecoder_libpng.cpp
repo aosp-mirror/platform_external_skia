@@ -756,7 +756,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             for (int i = 0; i < number_passes; i++) {
                 png_configure_decoder(png_ptr, &actualTop, i);
                 for (int j = 0; j < rect.fTop - actualTop; j++) {
-                    uint8_t* bmRow = decodedBitmap->getAddr8(0, 0);
+                    uint8_t* bmRow = (uint8_t*)decodedBitmap->getPixels();
                     png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
                 }
                 uint8_t* row = base;
@@ -780,7 +780,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             skip_src_rows(png_ptr, srcRow, sampler.srcY0());
 
             for (int i = 0; i < rect.fTop - actualTop; i++) {
-                uint8_t* bmRow = decodedBitmap->getAddr8(0, 0);
+                uint8_t* bmRow = (uint8_t*)decodedBitmap->getPixels();
                 png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
             }
             for (int y = 0; y < height; y++) {
@@ -1167,6 +1167,9 @@ bool SkPNGImageEncoder::doEncode(SkWStream* stream, const SkBitmap& bitmap,
     return true;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+DEFINE_DECODER_CREATOR(PNGImageDecoder);
+DEFINE_ENCODER_CREATOR(PNGImageEncoder);
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"

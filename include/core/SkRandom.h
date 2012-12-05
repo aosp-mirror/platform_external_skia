@@ -57,6 +57,14 @@ public:
         return min + this->nextU() % (max - min + 1);
     }
 
+    /** Return the next pseudo random unsigned number, mapped to lie within
+        [0, count).
+     */
+    uint32_t nextULessThan(uint32_t count) {
+        SkASSERT(count > 0);
+        return this->nextRangeU(0, count - 1);
+    }
+
     /** Return the next pseudo random number expressed as an unsigned SkFixed
         in the range [0..SK_Fixed1).
     */
@@ -73,9 +81,20 @@ public:
     SkScalar nextUScalar1() { return SkFixedToScalar(this->nextUFixed1()); }
 
     /** Return the next pseudo random number expressed as a SkScalar
+        in the range [min..max).
+    */
+    SkScalar nextRangeScalar(SkScalar min, SkScalar max) {
+        return SkScalarMul(this->nextSScalar1(), (max - min)) + min;
+    }
+
+    /** Return the next pseudo random number expressed as a SkScalar
         in the range (-SK_Scalar1..SK_Scalar1).
     */
     SkScalar nextSScalar1() { return SkFixedToScalar(this->nextSFixed1()); }
+
+    /** Return the next pseudo random number as a bool.
+    */
+    bool nextBool() { return this->nextU() >= 0x80000000; }
 
     /** Return the next pseudo random number as a signed 64bit value.
     */
@@ -83,6 +102,12 @@ public:
         SkASSERT(a);
         a->set(this->nextS(), this->nextU());
     }
+
+    /**
+     *  Return the current seed. This allows the caller to later reset to the
+     *  same seed (using setSeed) so it can generate the same sequence.
+     */
+    int32_t getSeed() const { return fSeed; }
 
     /** Set the seed of the random object. The seed is initialized to 0 when the
         object is first created, and is updated each time the next pseudo random

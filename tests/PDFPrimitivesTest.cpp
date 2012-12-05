@@ -7,8 +7,6 @@
  */
 
 
-#include <string>
-
 #include "Test.h"
 #include "SkData.h"
 #include "SkFlate.h"
@@ -40,10 +38,10 @@ private:
 static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
                           const void* buffer, size_t len) {
     SkAutoDataUnref data(stream.copyToData());
-    if (offset + len > data.size()) {
+    if (offset + len > data->size()) {
         return false;
     }
-    return memcmp(data.bytes() + offset, buffer, len) == 0;
+    return memcmp(data->bytes() + offset, buffer, len) == 0;
 }
 
 static void CheckObjectOutput(skiatest::Reporter* reporter, SkPDFObject* obj,
@@ -51,7 +49,7 @@ static void CheckObjectOutput(skiatest::Reporter* reporter, SkPDFObject* obj,
                               bool indirect, bool compression) {
     SkPDFDocument::Flags docFlags = (SkPDFDocument::Flags) 0;
     if (!compression) {
-        docFlags = SkTBitOr(docFlags, SkPDFDocument::kNoCompression_Flag);
+        docFlags = SkTBitOr(docFlags, SkPDFDocument::kNoCompression_Flags);
     }
     SkPDFCatalog catalog(docFlags);
     size_t directSize = obj->getOutputSize(&catalog, false);
@@ -89,9 +87,9 @@ static void CheckObjectOutput(skiatest::Reporter* reporter, SkPDFObject* obj,
 
 static void SimpleCheckObjectOutput(skiatest::Reporter* reporter,
                                     SkPDFObject* obj,
-                                    const std::string& expectedResult) {
-    CheckObjectOutput(reporter, obj, expectedResult.c_str(),
-                      expectedResult.length(), true, false);
+                                    const char* expectedResult) {
+    CheckObjectOutput(reporter, obj, expectedResult,
+                      strlen(expectedResult), true, false);
 }
 
 static void TestPDFStream(skiatest::Reporter* reporter) {
@@ -130,19 +128,19 @@ static void TestPDFStream(skiatest::Reporter* reporter) {
         expectedResult1.writeText("\nendstream");
         SkAutoDataUnref expectedResultData1(expectedResult1.copyToData());
         CheckObjectOutput(reporter, stream.get(),
-                          (const char*) expectedResultData1.data(),
-                          expectedResultData1.size(), true, false);
+                          (const char*) expectedResultData1->data(),
+                          expectedResultData1->size(), true, false);
 
         // Then again with compression.
         SkDynamicMemoryWStream expectedResult2;
         expectedResult2.writeText("<</Filter /FlateDecode\n/Length 116\n"
                                  ">> stream\n");
-        expectedResult2.write(compressedData.data(), compressedData.size());
+        expectedResult2.write(compressedData->data(), compressedData->size());
         expectedResult2.writeText("\nendstream");
         SkAutoDataUnref expectedResultData2(expectedResult2.copyToData());
         CheckObjectOutput(reporter, stream.get(),
-                          (const char*) expectedResultData2.data(),
-                          expectedResultData2.size(), true, true);
+                          (const char*) expectedResultData2->data(),
+                          expectedResultData2->size(), true, true);
     }
 }
 
@@ -242,7 +240,7 @@ static void TestPDFPrimitives(skiatest::Reporter* reporter) {
     SimpleCheckObjectOutput(reporter, realHalf.get(), "0.5");
 
 #if defined(SK_SCALAR_IS_FLOAT)
-    SkRefPtr<SkPDFScalar> bigScalar = new SkPDFScalar(110999.75);
+    SkRefPtr<SkPDFScalar> bigScalar = new SkPDFScalar(110999.75f);
     bigScalar->unref();  // SkRefPtr and new both took a reference.
 #if !defined(SK_ALLOW_LARGE_PDF_SCALARS)
     SimpleCheckObjectOutput(reporter, bigScalar.get(), "111000");
@@ -274,6 +272,20 @@ static void TestPDFPrimitives(skiatest::Reporter* reporter) {
     const char expectedResult[] = "/Test#20name#09with#23tab";
     CheckObjectOutput(reporter, name.get(), expectedResult,
                       strlen(expectedResult), false, false);
+
+    SkRefPtr<SkPDFName> escapedName = new SkPDFName("A#/%()<>[]{}B");
+    escapedName->unref();  // SkRefPtr and new both took a reference.
+    const char escapedNameExpected[] = "/A#23#2F#25#28#29#3C#3E#5B#5D#7B#7DB";
+    CheckObjectOutput(reporter, escapedName.get(), escapedNameExpected,
+                      strlen(escapedNameExpected), false, false);
+
+    // Test that we correctly handle characters with the high-bit set.
+    const unsigned char highBitCString[] = {0xDE, 0xAD, 'b', 'e', 0xEF, 0};
+    SkRefPtr<SkPDFName> highBitName = new SkPDFName((const char*)highBitCString);
+    highBitName->unref();  // SkRefPtr and new both took a reference.
+    const char highBitExpectedResult[] = "/#DE#ADbe#EF";
+    CheckObjectOutput(reporter, highBitName.get(), highBitExpectedResult,
+                      strlen(highBitExpectedResult), false, false);
 
     SkRefPtr<SkPDFArray> array = new SkPDFArray;
     array->unref();  // SkRefPtr and new both took a reference.
