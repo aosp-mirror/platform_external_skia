@@ -17,6 +17,7 @@
 #include "GrTextStrike.h"
 #include "GrTextStrike_impl.h"
 #include "SkPath.h"
+#include "SkStrokeRec.h"
 
 enum {
     kGlyphMaskStage = GrPaint::kTotalStages,
@@ -29,12 +30,12 @@ void GrTextContext::flushGlyphs() {
     GrDrawState* drawState = fDrawTarget->drawState();
     if (fCurrVertex > 0) {
         // setup our sampler state for our text texture/atlas
-        drawState->sampler(kGlyphMaskStage)->reset();
+        drawState->stage(kGlyphMaskStage)->reset();
 
         GrAssert(GrIsALIGN4(fCurrVertex));
         GrAssert(fCurrTexture);
         GrTextureParams params(SkShader::kRepeat_TileMode, false);
-        drawState->createTextureEffect(kGlyphMaskStage, fCurrTexture, GrMatrix::I(), params);
+        drawState->createTextureEffect(kGlyphMaskStage, fCurrTexture, SkMatrix::I(), params);
 
         if (!GrPixelConfigIsAlphaOnly(fCurrTexture->config())) {
             if (kOne_GrBlendCoeff != fPaint.getSrcBlendCoeff() ||
@@ -131,8 +132,8 @@ void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
         return;
     }
 
-    vx += GrIntToFixed(glyph->fBounds.fLeft);
-    vy += GrIntToFixed(glyph->fBounds.fTop);
+    vx += SkIntToFixed(glyph->fBounds.fLeft);
+    vy += SkIntToFixed(glyph->fBounds.fTop);
 
     // keep them as ints until we've done the clip-test
     GrFixed width = glyph->fBounds.width();
@@ -143,7 +144,7 @@ void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
         int x = vx >> 16;
         int y = vy >> 16;
         if (fClipRect.quickReject(x, y, x + width, y + height)) {
-//            Gr_clz(3);    // so we can set a break-point in the debugger
+//            SkCLZ(3);    // so we can set a break-point in the debugger
             return;
         }
     }
@@ -174,12 +175,13 @@ void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
         }
 
         GrContext::AutoMatrix am;
-        GrMatrix translate;
-        translate.setTranslate(GrFixedToScalar(vx - GrIntToFixed(glyph->fBounds.fLeft)),
-                               GrFixedToScalar(vy - GrIntToFixed(glyph->fBounds.fTop)));
+        SkMatrix translate;
+        translate.setTranslate(SkFixedToScalar(vx - SkIntToFixed(glyph->fBounds.fLeft)),
+                               SkFixedToScalar(vy - SkIntToFixed(glyph->fBounds.fTop)));
         GrPaint tmpPaint(fPaint);
         am.setPreConcat(fContext, translate, &tmpPaint);
-        fContext->drawPath(tmpPaint, *glyph->fPath, kWinding_GrPathFill);
+        SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
+        fContext->drawPath(tmpPaint, *glyph->fPath, stroke);
         return;
     }
 
@@ -187,8 +189,8 @@ HAS_ATLAS:
     GrAssert(glyph->fAtlas);
 
     // now promote them to fixed
-    width = GrIntToFixed(width);
-    height = GrIntToFixed(height);
+    width = SkIntToFixed(width);
+    height = SkIntToFixed(height);
 
     GrTexture* texture = glyph->fAtlas->texture();
     GrAssert(texture);
@@ -234,8 +236,8 @@ HAS_ATLAS:
         GrAlwaysAssert(success);
     }
 
-    GrFixed tx = GrIntToFixed(glyph->fAtlasLocation.fX);
-    GrFixed ty = GrIntToFixed(glyph->fAtlasLocation.fY);
+    GrFixed tx = SkIntToFixed(glyph->fAtlasLocation.fX);
+    GrFixed ty = SkIntToFixed(glyph->fAtlasLocation.fY);
 
 #if GR_TEXT_SCALAR_IS_USHORT
     int x = vx >> 16;

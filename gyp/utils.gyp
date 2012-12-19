@@ -5,6 +5,9 @@
       'product_name': 'skia_utils',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        'cityhash',
+      ],
       'include_dirs': [
         '../include/config',
         '../include/core',
@@ -18,6 +21,15 @@
         '../src/utils',
       ],
       'sources': [
+        # Classes for a threadpool.
+        '../include/utils/SkCondVar.h',
+        '../include/utils/SkCountdown.h',
+        '../include/utils/SkRunnable.h',
+        '../include/utils/SkThreadPool.h',
+        '../src/utils/SkCondVar.cpp',
+        '../src/utils/SkCountdown.cpp',
+        '../src/utils/SkThreadPool.cpp',
+
         '../include/utils/SkBoundaryPatch.h',
         '../include/utils/SkCamera.h',
         '../include/utils/SkCubicInterval.h',
@@ -34,16 +46,23 @@
         '../include/utils/SkParse.h',
         '../include/utils/SkParsePaint.h',
         '../include/utils/SkParsePath.h',
+        '../include/utils/SkPictureUtils.h',
         '../include/utils/SkProxyCanvas.h',
         '../include/utils/SkUnitMappers.h',
         '../include/utils/SkWGL.h',
 
         '../src/utils/SkBase64.cpp',
         '../src/utils/SkBase64.h',
+        '../src/utils/SkBitmapChecksummer.cpp',
+        '../src/utils/SkBitmapChecksummer.h',
+        '../src/utils/SkBitmapTransformer.cpp',
+        '../src/utils/SkBitmapTransformer.h',
         '../src/utils/SkBitSet.cpp',
         '../src/utils/SkBitSet.h',
         '../src/utils/SkBoundaryPatch.cpp',
         '../src/utils/SkCamera.cpp',
+        '../src/utils/SkCityHash.cpp',
+        '../src/utils/SkCityHash.h',
         '../src/utils/SkCubicInterval.cpp',
         '../src/utils/SkCullPoints.cpp',
         '../src/utils/SkDeferredCanvas.cpp',
@@ -60,6 +79,7 @@
         '../src/utils/SkParse.cpp',
         '../src/utils/SkParseColor.cpp',
         '../src/utils/SkParsePath.cpp',
+        '../src/utils/SkPictureUtils.cpp',
         '../src/utils/SkProxyCanvas.cpp',
         '../src/utils/SkThreadUtils.h',
         '../src/utils/SkThreadUtils_pthread.cpp',
@@ -120,12 +140,6 @@
           ],
         }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
-          'link_settings': {
-            'libraries': [
-              '-lGL',
-              '-lGLU',
-            ],
-          },
           'sources!': [
             '../src/utils/SkThreadUtils_pthread_other.cpp',
           ],
@@ -167,7 +181,7 @@
             '../src/utils/win/SkIStream.cpp',
           ],
         }],
-        [ 'skia_nacl == 1', {
+        [ 'skia_os == "nacl"', {
           'sources': [
             '../src/utils/SkThreadUtils_pthread_other.cpp',
           ],
@@ -175,10 +189,34 @@
             '../src/utils/SkThreadUtils_pthread_linux.cpp',
           ],
         }],
+        [ 'skia_os == "android"', {
+          'sources': [
+            '../src/utils/android/ashmem.c',
+          ],
+        }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
           '../include/utils',
+        ],
+      },
+    },
+    {
+      'target_name': 'cityhash',
+      'type': 'static_library',
+      'standalone_static_library': 1,
+      'include_dirs': [
+        '../include/config',
+        '../include/core',
+        '../src/utils/cityhash',
+        '../third_party/externals/cityhash/src',
+      ],
+      'sources': [
+        '../third_party/externals/cityhash/src/city.cc',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [
+          '../third_party/externals/cityhash/src',
         ],
       },
     },

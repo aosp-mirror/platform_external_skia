@@ -6,7 +6,7 @@
  * found in the LICENSE file.
  */
 #include "SkFlipPixelRef.h"
-#include "SkFlattenableBuffers.h"
+#include "SkFlattenable.h"
 #include "SkRegion.h"
 
 SkFlipPixelRef::SkFlipPixelRef(SkBitmap::Config config, int width, int height)
@@ -60,21 +60,6 @@ void SkFlipPixelRef::swapPages() {
     fMutex.release();
 }
 
-void SkFlipPixelRef::flatten(SkFlattenableWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
-    // only need to write page0
-    buffer.writeByteArray(fPage0, fSize);
-}
-
-SkFlipPixelRef::SkFlipPixelRef(SkFlattenableReadBuffer& buffer)
-        : INHERITED(buffer, NULL) {
-    fSize = buffer.getArrayCount();
-    fStorage = sk_malloc_throw(fSize << 1);
-    fPage0 = fStorage;
-    fPage1 = (char*)fStorage + fSize;
-    buffer.readByteArray(fPage0);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 static void copyRect(const SkBitmap& dst, const SkIRect& rect,
@@ -84,7 +69,7 @@ static void copyRect(const SkBitmap& dst, const SkIRect& rect,
     const char* srcP = static_cast<const char*>(srcAddr) + offset;
     const size_t rb = dst.rowBytes();
     const size_t bytes = rect.width() << shift;
-
+    
     int height = rect.height();
     while (--height >= 0) {
         memcpy(dstP, srcP, bytes);
@@ -114,10 +99,10 @@ void SkFlipPixelRef::CopyBitsFromAddr(const SkBitmap& dst, const SkRegion& clip,
     if (shift < 0) {
         return;
     }
-
+    
     const SkIRect bounds = {0, 0, dst.width(), dst.height()};
     SkRegion::Cliperator iter(clip, bounds);
-
+    
     while (!iter.done()) {
         copyRect(dst, iter.rect(), srcAddr, shift);
         iter.next();

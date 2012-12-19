@@ -10,9 +10,10 @@
 #include "SkFlattenableBuffers.h"
 #include "SkThread.h"
 
+#include "android/ashmem.h"
+
 #include <sys/mman.h>
 #include <unistd.h>
-#include <cutils/ashmem.h>
 
 //#define TRACE_ASH_PURGE     // just trace purges
 

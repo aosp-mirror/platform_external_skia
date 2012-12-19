@@ -12,7 +12,10 @@
 #if SK_SUPPORT_GPU
 #include "SkGr.h"
 #include "SkGrPixelRef.h"
-#include "gl/GrGLProgramStage.h"
+#include "gl/GrGLEffect.h"
+#include "gl/GrGLEffectMatrix.h"
+#include "effects/GrSingleTextureEffect.h"
+#include "GrTBackendEffectFactory.h"
 #endif
 
 namespace {
@@ -52,7 +55,7 @@ SkPMColor multiply_proc(SkPMColor src, SkPMColor dst) {
 ///////////////////////////////////////////////////////////////////////////////
 
 SkBlendImageFilter::SkBlendImageFilter(SkBlendImageFilter::Mode mode, SkImageFilter* background, SkImageFilter* foreground)
-  : INHERITED(2, background, foreground), fMode(mode)
+  : INHERITED(background, foreground), fMode(mode)
 {
 }
 
@@ -110,39 +113,42 @@ bool SkBlendImageFilter::onFilterImage(Proxy* proxy,
 ///////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
-class GrGLBlendEffect  : public GrGLProgramStage {
+class GrGLBlendEffect : public GrGLEffect {
 public:
-    GrGLBlendEffect(const GrProgramStageFactory& factory,
-                    const GrCustomStage& stage);
+    GrGLBlendEffect(const GrBackendEffectFactory& factory,
+                    const GrEffect& effect);
     virtual ~GrGLBlendEffect();
 
-    virtual void emitFS(GrGLShaderBuilder* builder,
-                        const char* outputColor,
-                        const char* inputColor,
-                        const TextureSamplerArray&) SK_OVERRIDE;
+    virtual void emitCode(GrGLShaderBuilder*,
+                          const GrEffectStage&,
+                          EffectKey,
+                          const char* vertexCoords,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void emitVS(GrGLShaderBuilder* builder,
-                        const char* vertexCoords) SK_OVERRIDE {}
+    static inline EffectKey GenKey(const GrEffectStage&, const GrGLCaps&);
 
-    static inline StageKey GenKey(const GrCustomStage& s, const GrGLCaps&);
+    virtual void setData(const GrGLUniformManager&, const GrEffectStage&);
 
 private:
-    typedef GrGLProgramStage INHERITED;
+    typedef GrGLEffect INHERITED;
     SkBlendImageFilter::Mode fMode;
+    GrGLEffectMatrix fEffectMatrix;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class GrBlendEffect : public GrSingleTextureEffect {
 public:
-    GrBlendEffect(SkBlendImageFilter::Mode mode, GrTexture* foreground);
+    GrBlendEffect(SkBlendImageFilter::Mode mode, GrTexture* foreground, const SkMatrix&);
     virtual ~GrBlendEffect();
 
-    virtual bool isEqual(const GrCustomStage&) const SK_OVERRIDE;
-    const GrProgramStageFactory& getFactory() const;
+    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
+    const GrBackendEffectFactory& getFactory() const;
     SkBlendImageFilter::Mode mode() const { return fMode; }
 
-    typedef GrGLBlendEffect GLProgramStage;
+    typedef GrGLBlendEffect GLEffect;
     static const char* Name() { return "Blend"; }
 
 private:
@@ -203,54 +209,64 @@ GrTexture* SkBlendImageFilter::onFilterImageGPU(Proxy* proxy, GrTexture* src, co
     GrContext::AutoRenderTarget art(context, dst->asRenderTarget());
     GrContext::AutoClip ac(context, rect);
 
-    GrMatrix sampleM;
-    sampleM.setIDiv(background->width(), background->height());
+    SkMatrix backgroundTexMatrix, foregroundTexMatrix;
+    backgroundTexMatrix.setIDiv(background->width(), background->height());
+    foregroundTexMatrix.setIDiv(foreground->width(), foreground->height());
     GrPaint paint;
-    paint.colorSampler(0)->setCustomStage(SkNEW_ARGS(GrSingleTextureEffect, (background.get())), sampleM)->unref();
-    paint.colorSampler(1)->setCustomStage(SkNEW_ARGS(GrBlendEffect, (fMode, foreground.get())), sampleM)->unref();
+    paint.colorStage(0)->setEffect(
+        SkNEW_ARGS(GrSingleTextureEffect, (background.get(), backgroundTexMatrix)))->unref();
+    paint.colorStage(1)->setEffect(
+        SkNEW_ARGS(GrBlendEffect, (fMode, foreground.get(), foregroundTexMatrix)))->unref();
     context->drawRect(paint, rect);
     return dst;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrBlendEffect::GrBlendEffect(SkBlendImageFilter::Mode mode, GrTexture* foreground)
-    : INHERITED(foreground), fMode(mode) {
+GrBlendEffect::GrBlendEffect(SkBlendImageFilter::Mode mode,
+                             GrTexture* foreground,
+                             const SkMatrix& matrix)
+    : INHERITED(foreground, matrix), fMode(mode) {
 }
 
 GrBlendEffect::~GrBlendEffect() {
 }
 
-bool GrBlendEffect::isEqual(const GrCustomStage& sBase) const {
+bool GrBlendEffect::isEqual(const GrEffect& sBase) const {
     const GrBlendEffect& s = static_cast<const GrBlendEffect&>(sBase);
-    return INHERITED::isEqual(sBase) &&
-           fMode == s.fMode;
+    return INHERITED::isEqual(sBase) && fMode == s.fMode;
 }
 
-const GrProgramStageFactory& GrBlendEffect::getFactory() const {
-    return GrTProgramStageFactory<GrBlendEffect>::getInstance();
+const GrBackendEffectFactory& GrBlendEffect::getFactory() const {
+    return GrTBackendEffectFactory<GrBlendEffect>::getInstance();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGLBlendEffect::GrGLBlendEffect(const GrProgramStageFactory& factory,
-                                 const GrCustomStage& stage)
-    : GrGLProgramStage(factory),
-      fMode(static_cast<const GrBlendEffect&>(stage).mode()) {
+GrGLBlendEffect::GrGLBlendEffect(const GrBackendEffectFactory& factory,
+                                 const GrEffect& effect)
+    : INHERITED(factory),
+      fMode(static_cast<const GrBlendEffect&>(effect).mode()) {
 }
 
 GrGLBlendEffect::~GrGLBlendEffect() {
 }
 
-void GrGLBlendEffect::emitFS(GrGLShaderBuilder* builder,
-                             const char* outputColor,
-                             const char* inputColor,
-                             const TextureSamplerArray& samplers) {
+void GrGLBlendEffect::emitCode(GrGLShaderBuilder* builder,
+                               const GrEffectStage&,
+                               EffectKey key,
+                               const char* vertexCoords,
+                               const char* outputColor,
+                               const char* inputColor,
+                               const TextureSamplerArray& samplers) {
+    const char* coords;
+    GrSLType coordsType =  fEffectMatrix.emitCode(builder, key, vertexCoords, &coords);
+
     SkString* code = &builder->fFSCode;
     const char* bgColor = inputColor;
     const char* fgColor = "fgColor";
     code->appendf("\t\tvec4 %s = ", fgColor);
-    builder->appendTextureLookup(code, samplers[0]);
+    builder->appendTextureLookup(code, samplers[0], coords, coordsType);
     code->append(";\n");
     code->appendf("\t\t%s.a = 1.0 - (1.0 - %s.a) * (1.0 - %s.b);\n", outputColor, bgColor, fgColor);
     switch (fMode) {
@@ -272,7 +288,16 @@ void GrGLBlendEffect::emitFS(GrGLShaderBuilder* builder,
     }
 }
 
-GrGLProgramStage::StageKey GrGLBlendEffect::GenKey(const GrCustomStage& s, const GrGLCaps&) {
-    return static_cast<const GrBlendEffect&>(s).mode();
+void GrGLBlendEffect::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
+    const GrBlendEffect& blend = static_cast<const GrBlendEffect&>(*stage.getEffect());
+    fEffectMatrix.setData(uman, blend.getMatrix(), stage.getCoordChangeMatrix(), blend.texture(0));
+}
+
+GrGLEffect::EffectKey GrGLBlendEffect::GenKey(const GrEffectStage& stage, const GrGLCaps&) {
+    const GrBlendEffect& blend = static_cast<const GrBlendEffect&>(*stage.getEffect());
+    EffectKey key =
+        GrGLEffectMatrix::GenKey(blend.getMatrix(), stage.getCoordChangeMatrix(), blend.texture(0));
+    key |= (blend.mode() << GrGLEffectMatrix::kKeyBits);
+    return key;
 }
 #endif

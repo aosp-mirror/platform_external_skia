@@ -17,6 +17,7 @@
 #include "GrPath.h"
 
 #include "SkClipStack.h"
+#include "SkStrokeRec.h"
 #include "SkTemplates.h"
 
 class GrGpu;
@@ -114,9 +115,9 @@ public:
 
     // overrides from GrDrawTarget
     virtual void drawRect(const GrRect& rect,
-                          const GrMatrix* matrix = NULL,
+                          const SkMatrix* matrix = NULL,
                           const GrRect* srcRects[] = NULL,
-                          const GrMatrix* srcMatrices[] = NULL) SK_OVERRIDE;
+                          const SkMatrix* srcMatrices[] = NULL) SK_OVERRIDE;
 
     virtual void drawIndexedInstances(GrPrimitiveType type,
                                       int instanceCount,
@@ -157,8 +158,11 @@ private:
     };
 
     struct StencilPath {
+        StencilPath();
+
         SkAutoTUnref<const GrPath>  fPath;
-        GrPathFill                  fFill;
+        SkStrokeRec                 fStroke;
+        SkPath::FillType            fFill;
     };
 
     struct Clear {
@@ -179,7 +183,7 @@ private:
     virtual void onDrawNonIndexed(GrPrimitiveType primitiveType,
                                   int startVertex,
                                   int vertexCount) SK_OVERRIDE;
-    virtual void onStencilPath(const GrPath*, GrPathFill) SK_OVERRIDE;
+    virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType) SK_OVERRIDE;
     virtual bool onReserveVertexSpace(GrVertexLayout layout,
                                       int vertexCount,
                                       void** vertices) SK_OVERRIDE;

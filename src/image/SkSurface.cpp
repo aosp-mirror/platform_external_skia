@@ -43,8 +43,6 @@ void SkSurface_Base::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
     }
 }
 
-void SkSurface_Base::onCopyOnWrite(SkImage*, SkCanvas*) {}
-
 SkCanvas* SkSurface_Base::getCachedCanvas() {
     if (NULL == fCachedCanvas) {
         fCachedCanvas = this->onNewCanvas();
@@ -125,8 +123,8 @@ SkImage* SkSurface::newImageShapshot() {
     return image;
 }
 
-SkSurface* SkSurface::newSurface(const SkImage::Info& info, SkColorSpace* cs) {
-    return asSB(this)->onNewSurface(info, cs);
+SkSurface* SkSurface::newSurface(const SkImage::Info& info) {
+    return asSB(this)->onNewSurface(info);
 }
 
 void SkSurface::draw(SkCanvas* canvas, SkScalar x, SkScalar y,

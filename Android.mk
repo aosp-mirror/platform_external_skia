@@ -166,6 +166,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
 	src/core/SkRegion_path.cpp \
+	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
@@ -180,7 +181,10 @@ LOCAL_SRC_FILES:= \
 	src/core/SkStream.cpp \
 	src/core/SkString.cpp \
 	src/core/SkStroke.cpp \
+	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
+	src/core/SkTileGrid.cpp \
+	src/core/SkTileGridPicture.cpp \
 	src/core/SkTLS.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
@@ -215,7 +219,9 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkLightingImageFilter.cpp \
 	src/effects/SkMagnifierImageFilter.cpp \
 	src/effects/SkMatrixConvolutionImageFilter.cpp \
+	src/effects/SkMergeImageFilter.cpp \
 	src/effects/SkMorphologyImageFilter.cpp \
+	src/effects/SkOffsetImageFilter.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
@@ -243,6 +249,7 @@ LOCAL_SRC_FILES:= \
 	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/images/bmpdecoderhelper.cpp \
+	src/images/SkBitmapFactory.cpp \
 	src/images/SkBitmapRegionDecoder.cpp \
 	src/images/SkFDStream.cpp \
 	src/images/SkFlipPixelRef.cpp \
@@ -273,7 +280,7 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkFontDescriptor.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
-  src/ports/SkFontHost_FreeType_common.cpp \
+	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkFontHost_sandbox_none.cpp	\
 	src/ports/SkFontHost_android.cpp \
 	src/ports/SkFontHost_tables.cpp \
@@ -283,6 +290,7 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkThread_pthread.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/utils/SkBase64.cpp \
+	src/utils/SkBitmapTransformer.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkCamera.cpp \
@@ -300,10 +308,14 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
+	src/utils/SkPictureUtils.cpp \
 	src/utils/SkProxyCanvas.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/utils/SkUnitMappers.cpp
+
+#	src/utils/SkBitmapChecksummer.cpp \
+#	src/utils/SkCityHash.cpp \
 
 # maps to the 'skgr' gyp target
 LOCAL_SRC_FILES += \
@@ -329,17 +341,16 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrCacheID.cpp \
 	src/gpu/GrClipData.cpp \
 	src/gpu/GrContext.cpp \
-	src/gpu/GrCustomStage.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
+	src/gpu/GrEffect.cpp \
 	src/gpu/GrGeometryBuffer.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
-	src/gpu/GrMatrix.cpp \
 	src/gpu/GrMemory.cpp \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrPath.cpp \
@@ -347,6 +358,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrRectanizer.cpp \
+	src/gpu/GrReducedClip.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrResource.cpp \
 	src/gpu/GrResourceCache.cpp \
@@ -362,7 +374,6 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/gr_unittests.cpp \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
-	src/gpu/effects/GrColorTableEffect.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
@@ -371,11 +382,12 @@ LOCAL_SRC_FILES += \
 	src/gpu/gl/GrGLContextInfo.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
+	src/gpu/gl/GrGLEffect.cpp \
+	src/gpu/gl/GrGLEffectMatrix.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
-	src/gpu/gl/GrGLProgramStage.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLShaderBuilder.cpp \
 	src/gpu/gl/GrGLSL.cpp \
@@ -492,7 +504,7 @@ include $(BUILD_SHARED_LIBRARY)
 include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
-include $(BASE_PATH)/gm/Android.mk
+#include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk

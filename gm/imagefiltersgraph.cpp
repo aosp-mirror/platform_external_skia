@@ -8,9 +8,12 @@
 #include "gm.h"
 
 #include "SkBitmapSource.h"
+#include "SkBlendImageFilter.h"
 #include "SkBlurImageFilter.h"
 #include "SkColorFilter.h"
+#include "SkColorMatrixFilter.h"
 #include "SkColorFilterImageFilter.h"
+#include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 
 #include "SkTestImageFilters.h"
@@ -40,7 +43,7 @@ protected:
         canvas.drawText(str, strlen(str), SkIntToScalar(20), SkIntToScalar(70), paint);
     }
 
-    virtual SkISize onISize() { return SkISize::Make(500, 500); }
+    virtual SkISize onISize() { return SkISize::Make(200, 100); }
 
     virtual void onDraw(SkCanvas* canvas) {
         if (!fInitialized) {
@@ -48,19 +51,35 @@ protected:
             fInitialized = true;
         }
         canvas->clear(0x00000000);
+        {
+            SkAutoTUnref<SkImageFilter> bitmapSource(new SkBitmapSource(fBitmap));
+            SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(SK_ColorRED,
+                                                         SkXfermode::kSrcIn_Mode));
+            SkAutoTUnref<SkImageFilter> blur(new SkBlurImageFilter(4.0f, 4.0f, bitmapSource));
+            SkAutoTUnref<SkImageFilter> erode(new SkErodeImageFilter(4, 4, blur));
+            SkAutoTUnref<SkImageFilter> color(SkColorFilterImageFilter::Create(cf, erode));
+            SkAutoTUnref<SkImageFilter> merge(new SkMergeImageFilter(blur, color));
 
-        SkAutoTUnref<SkImageFilter> bitmapSource(new SkBitmapSource(fBitmap));
+            SkPaint paint;
+            paint.setImageFilter(merge);
+            canvas->drawPaint(paint);
+        }
+        {
+            SkAutoTUnref<SkImageFilter> morph(new SkDilateImageFilter(5, 5));
 
-        SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(SK_ColorRED,
-                                                     SkXfermode::kSrcIn_Mode));
-        SkAutoTUnref<SkImageFilter> blur(new SkBlurImageFilter(4.0f, 4.0f, bitmapSource));
-        SkAutoTUnref<SkImageFilter> erode(new SkErodeImageFilter(4, 4, blur));
-        SkAutoTUnref<SkImageFilter> color(new SkColorFilterImageFilter(cf, erode));
-        SkAutoTUnref<SkImageFilter> merge(new SkMergeImageFilter(blur, color));
+            SkScalar matrix[20] = { SK_Scalar1, 0, 0, 0, 0,
+                                    0, SK_Scalar1, 0, 0, 0,
+                                    0, 0, SK_Scalar1, 0, 0,
+                                    0, 0, 0, SkFloatToScalar(0.5f), 0 };
 
-        SkPaint paint;
-        paint.setImageFilter(merge);
-        canvas->drawPaint(paint);
+            SkAutoTUnref<SkColorFilter> matrixFilter(new SkColorMatrixFilter(matrix));
+            SkAutoTUnref<SkImageFilter> colorMorph(SkColorFilterImageFilter::Create(matrixFilter, morph));
+            SkAutoTUnref<SkImageFilter> blendColor(new SkBlendImageFilter(SkBlendImageFilter::kNormal_Mode, colorMorph));
+
+            SkPaint paint;
+            paint.setImageFilter(blendColor);
+            canvas->drawBitmap(fBitmap, 100, 0, &paint);
+        }
     }
 
 private:

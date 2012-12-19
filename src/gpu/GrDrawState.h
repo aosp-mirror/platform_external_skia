@@ -8,11 +8,11 @@
 #ifndef GrDrawState_DEFINED
 #define GrDrawState_DEFINED
 
+#include "GrBackendEffectFactory.h"
 #include "GrColor.h"
-#include "GrMatrix.h"
-#include "GrNoncopyable.h"
+#include "SkMatrix.h"
 #include "GrRefCnt.h"
-#include "GrSamplerState.h"
+#include "GrEffectStage.h"
 #include "GrStencil.h"
 #include "GrTexture.h"
 #include "GrRenderTarget.h"
@@ -27,23 +27,29 @@ public:
     SK_DECLARE_INST_COUNT(GrDrawState)
 
     /**
-     * Number of texture stages. Each stage takes as input a color and
-     * 2D texture coordinates. The color input to the first enabled stage is the
-     * per-vertex color or the constant color (setColor/setAlpha) if there are
-     * no per-vertex colors. For subsequent stages the input color is the output
-     * color from the previous enabled stage. The output color of each stage is
-     * the input color modulated with the result of a texture lookup. Texture
-     * lookups are specified by a texture a sampler (setSamplerState). Texture
-     * coordinates for each stage come from the vertices based on a
-     * GrVertexLayout bitfield. The output fragment color is the output color of
-     * the last enabled stage. The presence or absence of texture coordinates
-     * for each stage in the vertex layout indicates whether a stage is enabled
-     * or not.
+     * Total number of effect stages. Each stage can host a GrEffect. A stage is enabled if it has a
+     * GrEffect. The effect produces an output color in the fragment shader. It's inputs are the
+     * output from the previous enabled stage and a position. The position is either derived from
+     * the interpolated vertex positions or explicit per-vertex coords, depending upon the
+     * GrVertexLayout used to draw.
      *
-     * Stages 0 through GrPaint::kTotalStages-1 are reserved for setting up
-     * the draw (i.e., textures and filter masks). Stages GrPaint::kTotalStages
-     * through kNumStages-2 are earmarked for use by GrTextContext and
-     * GrPathRenderer-derived classes. kNumStages-1 is earmarked for clipping
+     * The stages are divided into two sets, color-computing and coverage-computing. The final color
+     * stage produces the final pixel color. The coverage-computing stages function exactly as the
+     * color-computing but the output of the final coverage stage is treated as a fractional pixel
+     * coverage rather than as input to the src/dst color blend step.
+     *
+     * The input color to the first enabled color-stage is either the constant color or interpolated
+     * per-vertex colors, depending upon GrVertexLayout. The input to the first coverage stage is
+     * either a constant coverage (usually full-coverage), interpolated per-vertex coverage, or
+     * edge-AA computed coverage. (This latter is going away as soon as it can be rewritten as a
+     * GrEffect).
+     *
+     * See the documentation of kCoverageDrawing_StateBit for information about disabling the
+     * the color / coverage distinction.
+     *
+     * Stages 0 through GrPaint::kTotalStages-1 are reserved for stages copied from the client's
+     * GrPaint. Stages GrPaint::kTotalStages through kNumStages-2 are earmarked for use by
+     * GrTextContext and GrPathRenderer-derived classes. kNumStages-1 is earmarked for clipping
      * by GrClipMaskManager.
      */
     enum {
@@ -70,8 +76,7 @@ public:
 
     /**
      * Resets to the default state.
-     * Sampler states *will* be modified: textures or CustomStage objects
-     * will be released.
+     * GrEffects will be removed from all stages.
      */
     void reset() {
 
@@ -190,41 +195,40 @@ public:
     /**
      * Creates a GrSingleTextureEffect.
      */
-    void createTextureEffect(int stage, GrTexture* texture) {
-        GrAssert(!this->getSampler(stage).getCustomStage());
-        this->sampler(stage)->setCustomStage(
-            SkNEW_ARGS(GrSingleTextureEffect, (texture)))->unref();
+    void createTextureEffect(int stageIdx, GrTexture* texture) {
+        GrAssert(!this->getStage(stageIdx).getEffect());
+        this->stage(stageIdx)->setEffect(SkNEW_ARGS(GrSingleTextureEffect, (texture)))->unref();
     }
-    void createTextureEffect(int stage, GrTexture* texture, const GrMatrix& matrix) {
-        GrAssert(!this->getSampler(stage).getCustomStage());
-        GrCustomStage* customStage = SkNEW_ARGS(GrSingleTextureEffect, (texture));
-        this->sampler(stage)->setCustomStage(customStage, matrix)->unref();
+    void createTextureEffect(int stageIdx, GrTexture* texture, const SkMatrix& matrix) {
+        GrAssert(!this->getStage(stageIdx).getEffect());
+        GrEffect* effect = SkNEW_ARGS(GrSingleTextureEffect, (texture, matrix));
+        this->stage(stageIdx)->setEffect(effect)->unref();
     }
-    void createTextureEffect(int stage, GrTexture* texture,
-                             const GrMatrix& matrix,
+    void createTextureEffect(int stageIdx,
+                             GrTexture* texture,
+                             const SkMatrix& matrix,
                              const GrTextureParams& params) {
-        GrAssert(!this->getSampler(stage).getCustomStage());
-        GrCustomStage* customStage = SkNEW_ARGS(GrSingleTextureEffect, (texture, params));
-        this->sampler(stage)->setCustomStage(customStage, matrix)->unref();
+        GrAssert(!this->getStage(stageIdx).getEffect());
+        GrEffect* effect = SkNEW_ARGS(GrSingleTextureEffect, (texture, matrix, params));
+        this->stage(stageIdx)->setEffect(effect)->unref();
     }
 
 
     bool stagesDisabled() {
         for (int i = 0; i < kNumStages; ++i) {
-            if (NULL != fSamplerStates[i].getCustomStage()) {
+            if (NULL != fStages[i].getEffect()) {
                 return false;
             }
         }
         return true;
     }
 
-    void disableStage(int index) {
-        fSamplerStates[index].setCustomStage(NULL);
+    void disableStage(int stageIdx) {
+        fStages[stageIdx].setEffect(NULL);
     }
 
     /**
-     * Release all the textures and custom stages referred to by this
-     * draw state.
+     * Release all the GrEffects referred to by this draw state.
      */
     void disableStages() {
         for (int i = 0; i < kNumStages; ++i) {
@@ -247,52 +251,53 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Samplers
+    /// @name Stages
     ////
 
     /**
-     * Returns the current sampler for a stage.
+     * Returns the current stage by index.
      */
-    const GrSamplerState& getSampler(int stage) const {
-        GrAssert((unsigned)stage < kNumStages);
-        return fSamplerStates[stage];
+    const GrEffectStage& getStage(int stageIdx) const {
+        GrAssert((unsigned)stageIdx < kNumStages);
+        return fStages[stageIdx];
     }
 
     /**
-     * Writable pointer to a stage's sampler.
+     * Writable pointer to a stage.
      */
-    GrSamplerState* sampler(int stage) {
-        GrAssert((unsigned)stage < kNumStages);
-        return fSamplerStates + stage;
+    GrEffectStage* stage(int stageIdx) {
+        GrAssert((unsigned)stageIdx < kNumStages);
+        return fStages + stageIdx;
     }
 
     /**
-     * Preconcats the matrix of all samplers of enabled stages with a matrix.
+     * Called when the source coord system is changing. preConcat gives the transformation from the
+     * old coord system to the new coord system.
      */
-    void preConcatSamplerMatrices(const GrMatrix& matrix) {
+    void preConcatStageMatrices(const SkMatrix& preConcat) {
         for (int i = 0; i < kNumStages; ++i) {
             if (this->isStageEnabled(i)) {
-                fSamplerStates[i].preConcatMatrix(matrix);
+                fStages[i].preConcatCoordChange(preConcat);
             }
         }
     }
 
     /**
-     * Preconcats the matrix of all samplers in the mask with the inverse of a
-     * matrix. If the matrix inverse cannot be computed (and there is at least
-     * one enabled stage) then false is returned.
+     * Called when the source coord system is changing. preConcatInverse is the inverse of the
+     * transformation from the old coord system to the new coord system. Returns false if the matrix
+     * cannot be inverted.
      */
-    bool preConcatSamplerMatricesWithInverse(const GrMatrix& matrix) {
-        GrMatrix inv;
+    bool preConcatStageMatricesWithInverse(const SkMatrix& preConcatInverse) {
+        SkMatrix inv;
         bool computed = false;
         for (int i = 0; i < kNumStages; ++i) {
             if (this->isStageEnabled(i)) {
-                if (!computed && !matrix.invert(&inv)) {
+                if (!computed && !preConcatInverse.invert(&inv)) {
                     return false;
                 } else {
                     computed = true;
                 }
-                fSamplerStates[i].preConcatMatrix(inv);
+                fStages[i].preConcatCoordChange(preConcatInverse);
             }
         }
         return true;
@@ -413,12 +418,12 @@ public:
      * fully covers the render target. (w and h are the width and height of the
      * the rendertarget.)
      */
-    void setViewMatrix(const GrMatrix& m) { fViewMatrix = m; }
+    void setViewMatrix(const SkMatrix& m) { fViewMatrix = m; }
 
     /**
      * Gets a writable pointer to the view matrix.
      */
-    GrMatrix* viewMatrix() { return &fViewMatrix; }
+    SkMatrix* viewMatrix() { return &fViewMatrix; }
 
     /**
      *  Multiplies the current view matrix by a matrix
@@ -430,7 +435,7 @@ public:
      *
      *  @param m the matrix used to modify the view matrix.
      */
-    void preConcatViewMatrix(const GrMatrix& m) { fViewMatrix.preConcat(m); }
+    void preConcatViewMatrix(const SkMatrix& m) { fViewMatrix.preConcat(m); }
 
     /**
      *  Multiplies the current view matrix by a matrix
@@ -442,13 +447,13 @@ public:
      *
      *  @param m the matrix used to modify the view matrix.
      */
-    void postConcatViewMatrix(const GrMatrix& m) { fViewMatrix.postConcat(m); }
+    void postConcatViewMatrix(const SkMatrix& m) { fViewMatrix.postConcat(m); }
 
     /**
      * Retrieves the current view matrix
      * @return the current view matrix.
      */
-    const GrMatrix& getViewMatrix() const { return fViewMatrix; }
+    const SkMatrix& getViewMatrix() const { return fViewMatrix; }
 
     /**
      *  Retrieves the inverse of the current view matrix.
@@ -459,10 +464,10 @@ public:
      *
      * @param matrix if not null, will receive a copy of the current inverse.
      */
-    bool getViewInverse(GrMatrix* matrix) const {
+    bool getViewInverse(SkMatrix* matrix) const {
         // TODO: determine whether we really need to leave matrix unmodified
         // at call sites when inversion fails.
-        GrMatrix inverse;
+        SkMatrix inverse;
         if (fViewMatrix.invert(&inverse)) {
             if (matrix) {
                 *matrix = inverse;
@@ -476,14 +481,14 @@ public:
 
     /**
      * Preconcats the current view matrix and restores the previous view matrix in the destructor.
-     * Stage matrices are automatically adjusted to compensate.
+     * Effect matrices are automatically adjusted to compensate.
      */
     class AutoViewMatrixRestore : public ::GrNoncopyable {
     public:
         AutoViewMatrixRestore() : fDrawState(NULL) {}
 
         AutoViewMatrixRestore(GrDrawState* ds,
-                              const GrMatrix& preconcatMatrix,
+                              const SkMatrix& preconcatMatrix,
                               uint32_t explicitCoordStageMask = 0) {
             fDrawState = NULL;
             this->set(ds, preconcatMatrix, explicitCoordStageMask);
@@ -497,16 +502,16 @@ public:
         void restore();
 
         void set(GrDrawState* drawState,
-                 const GrMatrix& preconcatMatrix,
+                 const SkMatrix& preconcatMatrix,
                  uint32_t explicitCoordStageMask = 0);
 
         bool isSet() const { return NULL != fDrawState; }
 
     private:
-        GrDrawState*       fDrawState;
-        GrMatrix           fViewMatrix;
-        GrMatrix           fSamplerMatrices[GrDrawState::kNumStages];
-        uint32_t           fRestoreMask;
+        GrDrawState*                        fDrawState;
+        SkMatrix                            fViewMatrix;
+        GrEffectStage::SavedCoordChange     fSavedCoordChanges[GrDrawState::kNumStages];
+        uint32_t                            fRestoreMask;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -546,7 +551,7 @@ public:
          * Returns the matrix that was set previously set on the drawState. This is only valid
          * if succeeded returns true.
          */
-        const GrMatrix& getOriginalMatrix() const {
+        const SkMatrix& getOriginalMatrix() const {
             GrAssert(this->succeeded());
             return fViewMatrix;
         }
@@ -557,10 +562,10 @@ public:
         void restore();
 
     private:
-        GrDrawState*       fDrawState;
-        GrMatrix           fViewMatrix;
-        GrMatrix           fSamplerMatrices[GrDrawState::kNumStages];
-        uint32_t           fRestoreMask;
+        GrDrawState*                        fDrawState;
+        SkMatrix                            fViewMatrix;
+        GrEffectStage::SavedCoordChange     fSavedCoordChanges[GrDrawState::kNumStages];
+        uint32_t                            fRestoreMask;
     };
 
     /// @}
@@ -651,22 +656,6 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Color Matrix
-    ////
-
-    /**
-     * Sets the color matrix to use for the next draw.
-     * @param matrix  the 5x4 matrix to apply to the incoming color
-     */
-    void setColorMatrix(const float matrix[20]) {
-        memcpy(fColorMatrix, matrix, sizeof(fColorMatrix));
-    }
-
-    const float* getColorMatrix() const { return fColorMatrix; }
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
     // @name Edge AA
     // Edge equations can be specified to perform anti-aliasing. Because the
     // edges are specified as per-vertex data, vertices that are shared by
@@ -676,7 +665,7 @@ public:
 
     /**
      * When specifying edges as vertex data this enum specifies what type of
-     * edges are in use. The edges are always 4 GrScalars in memory, even when
+     * edges are in use. The edges are always 4 SkScalars in memory, even when
      * the edge type requires fewer than 4.
      *
      * TODO: Fix the fact that HairLine and Circle edge types use y-down coords.
@@ -729,9 +718,9 @@ public:
          */
         kDither_StateBit        = 0x01,
         /**
-         * Perform HW anti-aliasing. This means either HW FSAA, if supported
-         * by the render target, or smooth-line rendering if a line primitive
-         * is drawn and line smoothing is supported by the 3D API.
+         * Perform HW anti-aliasing. This means either HW FSAA, if supported by the render target,
+         * or smooth-line rendering if a line primitive is drawn and line smoothing is supported by
+         * the 3D API.
          */
         kHWAntialias_StateBit   = 0x02,
         /**
@@ -743,11 +732,16 @@ public:
          * operations.
          */
         kNoColorWrites_StateBit = 0x08,
+
         /**
-         * Draws will apply the color matrix, otherwise the color matrix is
-         * ignored.
+         * Usually coverage is applied after color blending. The color is blended using the coeffs
+         * specified by setBlendFunc(). The blended color is then combined with dst using coeffs
+         * of src_coverage, 1-src_coverage. Sometimes we are explicitly drawing a coverage mask. In
+         * this case there is no distinction between coverage and color and the caller needs direct
+         * control over the blend coeffs. When set, there will be a single blend step controlled by
+         * setBlendFunc() which will use coverage*color as the src color.
          */
-        kColorMatrix_StateBit   = 0x10,
+         kCoverageDrawing_StateBit = 0x10,
 
         // Users of the class may add additional bits to the vector
         kDummyStateBit,
@@ -806,6 +800,10 @@ public:
         return 0 != (fFlagBits & kNoColorWrites_StateBit);
     }
 
+    bool isCoverageDrawing() const {
+        return 0 != (fFlagBits & kCoverageDrawing_StateBit);
+    }
+
     bool isStateFlagEnabled(uint32_t stateBit) const {
         return 0 != (stateBit & fFlagBits);
     }
@@ -846,7 +844,7 @@ public:
 
     bool isStageEnabled(int s) const {
         GrAssert((unsigned)s < kNumStages);
-        return (NULL != fSamplerStates[s].getCustomStage());
+        return (NULL != fStages[s].getEffect());
     }
 
     // Most stages are usually not used, so conditionals here
@@ -874,18 +872,10 @@ public:
             if (enabled != s.isStageEnabled(i)) {
                 return false;
             }
-            if (enabled && this->fSamplerStates[i] != s.fSamplerStates[i]) {
+            if (enabled && this->fStages[i] != s.fStages[i]) {
                 return false;
             }
         }
-        if (kColorMatrix_StateBit & s.fFlagBits) {
-            if (memcmp(fColorMatrix,
-                        s.fColorMatrix,
-                        sizeof(fColorMatrix))) {
-                return false;
-            }
-        }
-
         return true;
     }
     bool operator !=(const GrDrawState& s) const { return !(*this == s); }
@@ -910,12 +900,8 @@ public:
 
         for (int i = 0; i < kNumStages; i++) {
             if (s.isStageEnabled(i)) {
-                this->fSamplerStates[i] = s.fSamplerStates[i];
+                this->fStages[i] = s.fStages[i];
             }
-        }
-
-        if (kColorMatrix_StateBit & s.fFlagBits) {
-            memcpy(this->fColorMatrix, s.fColorMatrix, sizeof(fColorMatrix));
         }
 
         return *this;
@@ -925,7 +911,7 @@ private:
 
     // These fields are roughly sorted by decreasing likelihood of being different in op==
     GrColor             fColor;
-    GrMatrix            fViewMatrix;
+    SkMatrix            fViewMatrix;
     GrRenderTarget*     fRenderTarget;
     GrBlendCoeff        fSrcBlend;
     GrBlendCoeff        fDstBlend;
@@ -941,9 +927,7 @@ private:
 
     // This field must be last; it will not be copied or compared
     // if the corresponding fTexture[] is NULL.
-    GrSamplerState      fSamplerStates[kNumStages];
-    // only compared if the color matrix enable flag is set
-    float               fColorMatrix[20];       // 5 x 4 matrix
+    GrEffectStage       fStages[kNumStages];
 
     typedef GrRefCnt INHERITED;
 };

@@ -36,13 +36,16 @@ public:
     virtual bool concat(const SkMatrix& matrix) SK_OVERRIDE;
     virtual void setMatrix(const SkMatrix& matrix) SK_OVERRIDE;
     virtual bool clipRect(const SkRect&, SkRegion::Op, bool) SK_OVERRIDE;
+    virtual bool clipRRect(const SkRRect&, SkRegion::Op, bool) SK_OVERRIDE;
     virtual bool clipPath(const SkPath&, SkRegion::Op, bool) SK_OVERRIDE;
     virtual bool clipRegion(const SkRegion& region, SkRegion::Op op) SK_OVERRIDE;
     virtual void clear(SkColor) SK_OVERRIDE;
     virtual void drawPaint(const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPoints(PointMode, size_t count, const SkPoint pts[],
                             const SkPaint&) SK_OVERRIDE;
-    virtual void drawRect(const SkRect& rect, const SkPaint&) SK_OVERRIDE;
+    virtual void drawOval(const SkRect&, const SkPaint&) SK_OVERRIDE;
+    virtual void drawRect(const SkRect&, const SkPaint&) SK_OVERRIDE;
+    virtual void drawRRect(const SkRRect&, const SkPaint&) SK_OVERRIDE;
     virtual void drawPath(const SkPath& path, const SkPaint&) SK_OVERRIDE;
     virtual void drawBitmap(const SkBitmap&, SkScalar left, SkScalar top,
                             const SkPaint*) SK_OVERRIDE;
@@ -72,7 +75,8 @@ public:
     virtual void drawData(const void*, size_t) SK_OVERRIDE;
     virtual bool isDrawingToLayer() const SK_OVERRIDE;
 
-    void addFontMetricsTopBottom(const SkPaint& paint, SkScalar minY, SkScalar maxY);
+    void addFontMetricsTopBottom(const SkPaint& paint, int paintIndex,
+                                 SkScalar minY, SkScalar maxY);
 
     const SkTDArray<SkPicture* >& getPictureRefs() const {
         return fPictureRefs;
@@ -118,8 +122,8 @@ private:
     void addBitmap(const SkBitmap& bitmap);
     void addMatrix(const SkMatrix& matrix);
     void addMatrixPtr(const SkMatrix* matrix);
-    void addPaint(const SkPaint& paint);
-    void addPaintPtr(const SkPaint* paint);
+    int  addPaint(const SkPaint& paint) { return this->addPaintPtr(&paint); }
+    int  addPaintPtr(const SkPaint* paint);
     void addPath(const SkPath& path);
     void addPicture(SkPicture& picture);
     void addPoint(const SkPoint& point);
@@ -128,6 +132,7 @@ private:
     void addRectPtr(const SkRect* rect);
     void addIRect(const SkIRect& rect);
     void addIRectPtr(const SkIRect* rect);
+    void addRRect(const SkRRect&);
     void addRegion(const SkRegion& region);
     void addText(const void* text, size_t byteLength);
 
@@ -174,8 +179,10 @@ protected:
     SkBBoxHierarchy* fBoundingHierarchy;
     SkPictureStateTree* fStateTree;
 
-private:
+    // Allocated in the constructor and managed by this class.
     SkBitmapHeap* fBitmapHeap;
+
+private:
     SkChunkFlatController fFlattenableHeap;
 
     SkMatrixDictionary fMatrices;

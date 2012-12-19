@@ -474,28 +474,34 @@ void SkLinearGradient::shadeSpan16(int x, int y,
 
 #if SK_SUPPORT_GPU
 
+#include "GrTBackendEffectFactory.h"
+
 /////////////////////////////////////////////////////////////////////
 
-class GrGLLinearGradient : public GrGLGradientStage {
+class GrGLLinearGradient : public GrGLGradientEffect {
 public:
 
-    GrGLLinearGradient(const GrProgramStageFactory& factory,
-                       const GrCustomStage&)
+    GrGLLinearGradient(const GrBackendEffectFactory& factory,
+                       const GrEffect&)
                        : INHERITED (factory) { }
 
     virtual ~GrGLLinearGradient() { }
 
-    virtual void emitVS(GrGLShaderBuilder* builder,
-                        const char* vertexCoords) SK_OVERRIDE { }
-    virtual void emitFS(GrGLShaderBuilder* builder,
-                        const char* outputColor,
-                        const char* inputColor,
-                        const TextureSamplerArray&) SK_OVERRIDE;
-    static StageKey GenKey(const GrCustomStage& s, const GrGLCaps& caps) { return 0; }
+    virtual void emitCode(GrGLShaderBuilder*,
+                          const GrEffectStage&,
+                          EffectKey,
+                          const char* vertexCoords,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray&) SK_OVERRIDE;
+
+    static EffectKey GenKey(const GrEffectStage& stage, const GrGLCaps&) {
+        return GenMatrixKey(stage);
+    }
 
 private:
 
-    typedef GrGLGradientStage INHERITED;
+    typedef GrGLGradientEffect INHERITED;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -503,30 +509,33 @@ private:
 class GrLinearGradient : public GrGradientEffect {
 public:
 
-    GrLinearGradient(GrContext* ctx, const SkLinearGradient& shader, SkShader::TileMode tm)
-        : INHERITED(ctx, shader, tm) { }
+    GrLinearGradient(GrContext* ctx,
+                     const SkLinearGradient& shader,
+                     const SkMatrix& matrix,
+                     SkShader::TileMode tm)
+        : INHERITED(ctx, shader, matrix, tm) { }
     virtual ~GrLinearGradient() { }
 
     static const char* Name() { return "Linear Gradient"; }
-    const GrProgramStageFactory& getFactory() const SK_OVERRIDE {
-        return GrTProgramStageFactory<GrLinearGradient>::getInstance();
+    const GrBackendEffectFactory& getFactory() const SK_OVERRIDE {
+        return GrTBackendEffectFactory<GrLinearGradient>::getInstance();
     }
 
-    typedef GrGLLinearGradient GLProgramStage;
+    typedef GrGLLinearGradient GLEffect;
 
 private:
-    GR_DECLARE_CUSTOM_STAGE_TEST;
+    GR_DECLARE_EFFECT_TEST;
 
     typedef GrGradientEffect INHERITED;
 };
 
 /////////////////////////////////////////////////////////////////////
 
-GR_DEFINE_CUSTOM_STAGE_TEST(GrLinearGradient);
+GR_DEFINE_EFFECT_TEST(GrLinearGradient);
 
-GrCustomStage* GrLinearGradient::TestCreate(SkRandom* random,
-                                            GrContext* context,
-                                            GrTexture**) {
+GrEffect* GrLinearGradient::TestCreate(SkRandom* random,
+                                       GrContext* context,
+                                       GrTexture**) {
     SkPoint points[] = {{random->nextUScalar1(), random->nextUScalar1()},
                         {random->nextUScalar1(), random->nextUScalar1()}};
 
@@ -538,49 +547,48 @@ GrCustomStage* GrLinearGradient::TestCreate(SkRandom* random,
     SkAutoTUnref<SkShader> shader(SkGradientShader::CreateLinear(points,
                                                                  colors, stops, colorCount,
                                                                  tm));
-    GrSamplerState sampler;
-    shader->asNewCustomStage(context, &sampler);
-    GrAssert(NULL != sampler.getCustomStage());
-    // const_cast and ref is a hack! Will remove when asNewCustomStage returns GrCustomStage*
-    sampler.getCustomStage()->ref();
-    return const_cast<GrCustomStage*>(sampler.getCustomStage());
+    GrEffectStage stage;
+    shader->asNewEffect(context, &stage);
+    GrAssert(NULL != stage.getEffect());
+    // const_cast and ref is a hack! Will remove when asNewEffect returns GrEffect*
+    stage.getEffect()->ref();
+    return const_cast<GrEffect*>(stage.getEffect());
 }
 
 /////////////////////////////////////////////////////////////////////
 
-void GrGLLinearGradient::emitFS(GrGLShaderBuilder* builder,
-                                const char* outputColor,
-                                const char* inputColor,
-                                const TextureSamplerArray& samplers) {
+void GrGLLinearGradient::emitCode(GrGLShaderBuilder* builder,
+                                  const GrEffectStage& stage,
+                                  EffectKey key,
+                                  const char* vertexCoords,
+                                  const char* outputColor,
+                                  const char* inputColor,
+                                  const TextureSamplerArray& samplers) {
+    this->emitYCoordUniform(builder);
+    const char* coords;
+    this->setupMatrix(builder, key, vertexCoords, &coords);
     SkString t;
-    t.printf("%s.x", builder->defaultTexCoordsName());
+    t.append(coords);
+    t.append(".x");
     this->emitColorLookup(builder, t.c_str(), outputColor, inputColor, samplers[0]);
 }
 
 /////////////////////////////////////////////////////////////////////
 
-bool SkLinearGradient::asNewCustomStage(GrContext* context, GrSamplerState* sampler) const {
-    SkASSERT(NULL != context && NULL != sampler);
-
-    SkAutoTUnref<GrCustomStage> stage(SkNEW_ARGS(GrLinearGradient, (context, *this, fTileMode)));
-
+bool SkLinearGradient::asNewEffect(GrContext* context, GrEffectStage* stage) const {
+    SkASSERT(NULL != context && NULL != stage);
     SkMatrix matrix;
-    if (this->getLocalMatrix(&matrix)) {
-        if (!matrix.invert(&matrix)) {
-            return false;
-        }
-        matrix.postConcat(fPtsToUnit);
-        sampler->setCustomStage(stage, matrix);
-    } else {
-        sampler->setCustomStage(stage, fPtsToUnit);
+    if (!this->getLocalMatrix().invert(&matrix)) {
+        return false;
     }
-    
+    matrix.postConcat(fPtsToUnit);
+    stage->setEffect(SkNEW_ARGS(GrLinearGradient, (context, *this, matrix, fTileMode)))->unref();
     return true;
 }
 
 #else
 
-bool SkLinearGradient::asNewCustomStage(GrContext*, GrSamplerState*) const {
+bool SkLinearGradient::asNewEffect(GrContext*, GrEffectStage*) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }

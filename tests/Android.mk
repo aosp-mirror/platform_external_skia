@@ -6,11 +6,13 @@ LOCAL_SRC_FILES:= \
   AAClipTest.cpp \
   AtomicTest.cpp \
   BitmapCopyTest.cpp \
+  BitmapFactoryTest.cpp \
   BitmapGetColorTest.cpp \
+  BitmapHeapTest.cpp \
+  BitmapTransformerTest.cpp \
   BitSetTest.cpp \
   BlitRowTest.cpp \
   BlurTest.cpp \
-  CanvasTest.cpp \
   ClampRangeTest.cpp \
   ClipCacheTest.cpp \
   ClipCubicTest.cpp \
@@ -39,6 +41,7 @@ LOCAL_SRC_FILES:= \
   GrMemoryPoolTest.cpp \
   HashCacheTest.cpp \
   InfRectTest.cpp \
+  LListTest.cpp \
   MathTest.cpp \
   Matrix44Test.cpp \
   MatrixTest.cpp \
@@ -61,6 +64,7 @@ LOCAL_SRC_FILES:= \
   RefCntTest.cpp \
   RefDictTest.cpp \
   RegionTest.cpp \
+  RoundRectTest.cpp \
   RTreeTest.cpp \
   ScalarTest.cpp \
   ShaderOpacityTest.cpp \
@@ -70,10 +74,10 @@ LOCAL_SRC_FILES:= \
   SrcOverTest.cpp \
   StreamTest.cpp \
   StringTest.cpp \
-  TDLinkedListTest.cpp \
+  StrokeTest.cpp \
   Test.cpp \
-  Test.h \
   TestSize.cpp \
+  TileGridTest.cpp \
   TLSTest.cpp \
   UnicodeTest.cpp \
   UtilsTest.cpp \
@@ -89,6 +93,8 @@ LOCAL_SRC_FILES += \
 # TODO: tests that currently are causing build problems
 #LOCAL_SRC_FILES += \
 #  AnnotationTest.cpp \
+#  CanvasTest.cpp \
+#  ChecksumTest.cpp \
 #  PDFPrimitivesTest.cpp \
 #  PictureUtilsTest.cpp \
 #  ToUnicode.cpp

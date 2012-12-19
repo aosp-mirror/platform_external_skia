@@ -157,6 +157,12 @@ void SkPicture::clone(SkPicture* pictures, int count) const {
         clone->fHeight = fHeight;
         clone->fRecord = NULL;
 
+        if (NULL != clone->fRecord) {
+            clone->fRecord->unref();
+            clone->fRecord = NULL;
+        }
+        SkDELETE(clone->fPlayback);
+
         /*  We want to copy the src's playback. However, if that hasn't been built
             yet, we need to fake a call to endRecording() without actually calling
             it (since it is destructive, and we don't want to change src).
@@ -190,11 +196,12 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
     bm.setConfig(SkBitmap::kNo_Config, width, height);
     SkAutoTUnref<SkDevice> dev(SkNEW_ARGS(SkDevice, (bm)));
 
+    // Must be set before calling createBBoxHierarchy
+    fWidth = width;
+    fHeight = height;
+
     if (recordingFlags & kOptimizeForClippedPlayback_RecordingFlag) {
-        SkScalar aspectRatio = SkScalarDiv(SkIntToScalar(width),
-                                           SkIntToScalar(height));
-        SkRTree* tree = SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
-                                        aspectRatio);
+        SkBBoxHierarchy* tree = this->createBBoxHierarchy();
         SkASSERT(NULL != tree);
         fRecord = SkNEW_ARGS(SkBBoxHierarchyRecord, (recordingFlags, tree, dev));
         tree->unref();
@@ -203,10 +210,19 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
     }
     fRecord->beginRecording();
 
-    fWidth = width;
-    fHeight = height;
-
     return fRecord;
+}
+
+SkBBoxHierarchy* SkPicture::createBBoxHierarchy() const {
+    // These values were empirically determined to produce reasonable
+    // performance in most cases.
+    static const int kRTreeMinChildren = 6;
+    static const int kRTreeMaxChildren = 11;
+
+    SkScalar aspectRatio = SkScalarDiv(SkIntToScalar(fWidth),
+                                       SkIntToScalar(fHeight));
+    return SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
+                           aspectRatio);
 }
 
 SkCanvas* SkPicture::getRecordingCanvas() const {
@@ -236,17 +252,6 @@ void SkPicture::draw(SkCanvas* surface) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkStream.h"
-
-// V2 : adds SkPixelRef's generation ID.
-// V3 : PictInfo tag at beginning, and EOF tag at the end
-// V4 : move SkPictInfo to be the header
-// V5 : don't read/write FunctionPtr on cross-process (we can detect that)
-// V6 : added serialization of SkPath's bounds (and packed its flags tighter)
-// V7 : changed drawBitmapRect(IRect) to drawBitmapRectToRect(Rect)
-// V8 : Add an option for encoding bitmaps
-// V9 : Allow the reader and writer of an SKP disagree on whether to support
-//      SK_SUPPORT_HINTING_SCALE_FACTOR
-#define PICTURE_VERSION     9
 
 SkPicture::SkPicture(SkStream* stream, bool* success, SkSerializationHelpers::DecodeBitmap decoder) : SkRefCnt() {
     if (success) {

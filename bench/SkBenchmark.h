@@ -13,12 +13,6 @@
 #include "SkTDict.h"
 #include "SkTRegistry.h"
 
-
-#define SK_MACRO_CONCAT(X, Y)       SK_MACRO_CONCAT_IMPL(X, Y)
-#define SK_MACRO_CONCAT_IMPL(X, Y)  X ## Y
-
-#define SK_MACRO_APPEND_LINE(name)  SK_MACRO_CONCAT(name, __LINE__)
-
 #define DEF_BENCH(code) \
 static SkBenchmark* SK_MACRO_APPEND_LINE(F_)(void* p) { code; } \
 static BenchRegistry SK_MACRO_APPEND_LINE(R_)(SK_MACRO_APPEND_LINE(F_));
@@ -113,7 +107,7 @@ public:
     bool findDefineScalar(const char* key, SkScalar* value) const;
 
 protected:
-    void setupPaint(SkPaint* paint);
+    virtual void setupPaint(SkPaint* paint);
 
     virtual const char* onGetName() = 0;
     virtual void onPreDraw() {}

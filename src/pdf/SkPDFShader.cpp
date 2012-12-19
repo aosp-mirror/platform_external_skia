@@ -74,8 +74,9 @@ static void interpolateColorCode(SkScalar range, SkScalar* curColor,
     }
 
     for (int i = 0; i < components; i++) {
-        // If the next components needs t, make a copy.
-        if (dupInput[i]) {
+        // If the next components needs t and this component will consume a
+        // copy, make another copy.
+        if (dupInput[i] && multiplier[i] != 0) {
             result->append("dup ");
         }
 
@@ -936,7 +937,7 @@ SkPDFShader::State::State(const SkShader& shader,
     fInfo.fColorCount = 0;
     fInfo.fColors = NULL;
     fInfo.fColorOffsets = NULL;
-    shader.getLocalMatrix(&fShaderTransform);
+    fShaderTransform = shader.getLocalMatrix();
     fImageTileModes[0] = fImageTileModes[1] = SkShader::kClamp_TileMode;
 
     fType = shader.asAGradient(&fInfo);

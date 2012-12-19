@@ -19,12 +19,10 @@
 #include "SkUnitMappers.h"
 #include "SkBlurDrawLooper.h"
 
-namespace skiagm {
-
 static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
     bm->setConfig(config, w, h);
     bm->allocPixels();
-    bm->eraseColor(0);
+    bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
     SkPoint     pts[] = { { 0, 0 }, { SkIntToScalar(w), SkIntToScalar(h)} };
@@ -60,15 +58,12 @@ static const SkBitmap::Config gConfigs[] = {
 static const int gWidth = 32;
 static const int gHeight = 32;
 
-class TilingGM : public GM {
+class TilingGM : public skiagm::GM {
     SkBlurDrawLooper    fLooper;
 public:
     TilingGM()
             : fLooper(SkIntToScalar(1), SkIntToScalar(2), SkIntToScalar(2),
                       0x88000000) {
-        for (size_t i = 0; i < SK_ARRAY_COUNT(gConfigs); i++) {
-            makebm(&fTexture[i], gConfigs[i], gWidth, gHeight);
-        }
     }
 
     SkBitmap    fTexture[SK_ARRAY_COUNT(gConfigs)];
@@ -78,9 +73,15 @@ protected:
         return SkString("tilemodes");
     }
 
-    SkISize onISize() { return make_isize(880, 560); }
+    SkISize onISize() { return SkISize::Make(880, 560); }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onOnceBeforeDraw() SK_OVERRIDE {
+        for (size_t i = 0; i < SK_ARRAY_COUNT(gConfigs); i++) {
+            makebm(&fTexture[i], gConfigs[i], gWidth, gHeight);
+        }
+    }
+
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
 
         SkRect r = { 0, 0, SkIntToScalar(gWidth*2), SkIntToScalar(gHeight*2) };
 
@@ -145,13 +146,124 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    typedef skiagm::GM INHERITED;
+};
+
+static SkShader* make_bm(SkShader::TileMode tx, SkShader::TileMode ty) {
+    SkBitmap bm;
+    makebm(&bm, SkBitmap::kARGB_8888_Config, gWidth, gHeight);
+    return SkShader::CreateBitmapShader(bm, tx, ty);
+}
+
+static SkShader* make_grad(SkShader::TileMode tx, SkShader::TileMode ty) {
+    SkPoint pts[] = { { 0, 0 }, { SkIntToScalar(gWidth), SkIntToScalar(gHeight)} };
+    SkPoint center = { SkIntToScalar(gWidth)/2, SkIntToScalar(gHeight)/2 };
+    SkScalar rad = SkIntToScalar(gWidth)/2;
+    SkColor colors[] = { 0xFFFF0000, 0xFF0044FF };
+
+    int index = (int)ty;
+    switch (index % 3) {
+        case 0:
+            return SkGradientShader::CreateLinear(pts, colors, NULL, SK_ARRAY_COUNT(colors), tx);
+        case 1:
+            return SkGradientShader::CreateRadial(center, rad, colors, NULL, SK_ARRAY_COUNT(colors), tx);
+        case 2:
+            return SkGradientShader::CreateSweep(center.fX, center.fY, colors, NULL, SK_ARRAY_COUNT(colors));
+    }
+
+    return NULL;
+}
+
+static SkShader* make_radial(SkShader::TileMode tx, SkShader::TileMode ty) {
+    SkPoint center = { SkIntToScalar(gWidth)/2, SkIntToScalar(gHeight)/2 };
+    SkScalar rad = SkIntToScalar(gWidth)/2;
+    SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE };
+
+    return SkGradientShader::CreateRadial(center, rad, colors, NULL, SK_ARRAY_COUNT(colors), tx);
+}
+
+typedef SkShader* (*ShaderProc)(SkShader::TileMode, SkShader::TileMode);
+
+class Tiling2GM : public skiagm::GM {
+    ShaderProc fProc;
+    SkString   fName;
+public:
+    Tiling2GM(ShaderProc proc, const char name[]) : fProc(proc) {
+        fName.printf("tilemode_%s", name);
+    }
+
+protected:
+    SkString onShortName() {
+        return fName;
+    }
+
+    SkISize onISize() { return SkISize::Make(880, 560); }
+
+    virtual void onDraw(SkCanvas* canvas) {
+        canvas->scale(SkIntToScalar(3)/2, SkIntToScalar(3)/2);
+
+        const SkScalar w = SkIntToScalar(gWidth);
+        const SkScalar h = SkIntToScalar(gHeight);
+        SkRect r = { -w, -h, w*2, h*2 };
+
+        static const SkShader::TileMode gModes[] = {
+            SkShader::kClamp_TileMode, SkShader::kRepeat_TileMode, SkShader::kMirror_TileMode
+        };
+        static const char* gModeNames[] = {
+            "Clamp", "Repeat", "Mirror"
+        };
+
+        SkScalar y = SkIntToScalar(24);
+        SkScalar x = SkIntToScalar(66);
+
+        SkPaint p;
+        p.setAntiAlias(true);
+        p.setTextAlign(SkPaint::kCenter_Align);
+
+        for (size_t kx = 0; kx < SK_ARRAY_COUNT(gModes); kx++) {
+            SkString str(gModeNames[kx]);
+            canvas->drawText(str.c_str(), str.size(), x + r.width()/2, y, p);
+            x += r.width() * 4 / 3;
+        }
+
+        y += SkIntToScalar(16) + h;
+        p.setTextAlign(SkPaint::kRight_Align);
+
+        for (size_t ky = 0; ky < SK_ARRAY_COUNT(gModes); ky++) {
+            x = SkIntToScalar(16) + w;
+
+            SkString str(gModeNames[ky]);
+            canvas->drawText(str.c_str(), str.size(), x, y + h/2, p);
+
+            x += SkIntToScalar(50);
+            for (size_t kx = 0; kx < SK_ARRAY_COUNT(gModes); kx++) {
+                SkPaint paint;
+                paint.setShader(fProc(gModes[kx], gModes[ky]))->unref();
+
+                canvas->save();
+                canvas->translate(x, y);
+                canvas->drawRect(r, paint);
+                canvas->restore();
+
+                x += r.width() * 4 / 3;
+            }
+            y += r.height() * 4 / 3;
+        }
+    }
+
+private:
+    typedef skiagm::GM INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new TilingGM; }
-static GMRegistry reg(MyFactory);
+static skiagm::GM* MyFactory(void*) { return new TilingGM; }
+static skiagm::GMRegistry reg(MyFactory);
 
-}
+static skiagm::GM* MyFactory2(void*) { return new Tiling2GM(make_bm, "bitmap"); }
+static skiagm::GMRegistry reg2(MyFactory2);
+
+static skiagm::GM* MyFactory3(void*) { return new Tiling2GM(make_grad, "gradient"); }
+static skiagm::GMRegistry reg3(MyFactory3);
+
 

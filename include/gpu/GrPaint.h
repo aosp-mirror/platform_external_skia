@@ -10,9 +10,8 @@
 #ifndef GrPaint_DEFINED
 #define GrPaint_DEFINED
 
-#include "GrTexture.h"
 #include "GrColor.h"
-#include "GrSamplerState.h"
+#include "GrEffectStage.h"
 
 #include "SkXfermode.h"
 
@@ -21,13 +20,12 @@
  * functions and the how color is blended with the destination pixel.
  *
  * The paint allows installation of custom color and coverage stages. New types of stages are
- * created by subclassing GrCustomStage.
+ * created by subclassing GrEffect.
  *
  * The primitive color computation starts with the color specified by setColor(). This color is the
  * input to the first color stage. Each color stage feeds its output to the next color stage. The
  * final color stage's output color is input to the color filter specified by
- * setXfermodeColorFilter which it turn feeds into the color matrix. The output of the color matrix
- * is the final source color, S.
+ * setXfermodeColorFilter which produces the final source color, S.
  *
  * Fractional pixel coverage follows a similar flow. The coverage is initially the value specified
  * by setCoverage(). This is input to the first coverage stage. Coverage stages are chained
@@ -41,7 +39,7 @@
  * Note that the coverage is applied after the blend. This is why they are computed as distinct
  * values.
  *
- * TODO: Encapsulate setXfermodeColorFilter and color matrix in stages and remove from GrPaint.
+ * TODO: Encapsulate setXfermodeColorFilter in a GrEffect and remove from GrPaint.
  */
 class GrPaint {
 public:
@@ -105,67 +103,50 @@ public:
     GrColor getColorFilterColor() const { return fColorFilterColor; }
 
     /**
-     * Turns off application of a color matrix. By default the color matrix is disabled.
-     */
-    void disableColorMatrix() { fColorMatrixEnabled = false; }
-
-    /**
-     * Specifies and enables a 4 x 5 color matrix.
-     */
-    void setColorMatrix(const float matrix[20]) {
-        fColorMatrixEnabled = true;
-        memcpy(fColorMatrix, matrix, sizeof(fColorMatrix));
-    }
-
-    bool isColorMatrixEnabled() const { return fColorMatrixEnabled; }
-    const float* getColorMatrix() const { return fColorMatrix; }
-
-    /**
-     * Disables both the matrix and SkXfermode::Mode color filters.
+     * Disables the SkXfermode::Mode color filter.
      */
     void resetColorFilter() {
         fColorFilterXfermode = SkXfermode::kDst_Mode;
         fColorFilterColor = GrColorPackRGBA(0xff, 0xff, 0xff, 0xff);
-        fColorMatrixEnabled = false;
     }
 
     /**
      * Specifies a stage of the color pipeline. Usually the texture matrices of color stages apply
      * to the primitive's positions. Some GrContext calls take explicit coords as an array or a
-     * rect. In this case these are the pre-matrix coords to colorSampler(0).
+     * rect. In this case these are the pre-matrix coords to colorStage(0).
      */
-    GrSamplerState* colorSampler(int i) {
+    GrEffectStage* colorStage(int i) {
         GrAssert((unsigned)i < kMaxColorStages);
-        return fColorSamplers + i;
+        return fColorStages + i;
     }
 
-    const GrSamplerState& getColorSampler(int i) const {
+    const GrEffectStage& getColorStage(int i) const {
         GrAssert((unsigned)i < kMaxColorStages);
-        return fColorSamplers[i];
+        return fColorStages[i];
     }
 
     bool isColorStageEnabled(int i) const {
         GrAssert((unsigned)i < kMaxColorStages);
-        return (NULL != fColorSamplers[i].getCustomStage());
+        return (NULL != fColorStages[i].getEffect());
     }
 
     /**
      * Specifies a stage of the coverage pipeline. Coverage stages' texture matrices are always
      * applied to the primitive's position, never to explicit texture coords.
      */
-    GrSamplerState* coverageSampler(int i) {
+    GrEffectStage* coverageStage(int i) {
         GrAssert((unsigned)i < kMaxCoverageStages);
-        return fCoverageSamplers + i;
+        return fCoverageStages + i;
     }
 
-    const GrSamplerState& getCoverageSampler(int i) const {
+    const GrEffectStage& getCoverageStage(int i) const {
         GrAssert((unsigned)i < kMaxCoverageStages);
-        return fCoverageSamplers[i];
+        return fCoverageStages[i];
     }
 
     bool isCoverageStageEnabled(int i) const {
         GrAssert((unsigned)i < kMaxCoverageStages);
-        return (NULL != fCoverageSamplers[i].getCustomStage());
+        return (NULL != fCoverageStages[i].getEffect());
     }
 
     bool hasCoverageStage() const {
@@ -189,47 +170,49 @@ public:
     bool hasStage() const { return this->hasColorStage() || this->hasCoverageStage(); }
 
     /**
-     * Preconcats the matrix of all enabled stages with the inverse of a matrix. If the matrix
-     * inverse cannot be computed (and there is at least one enabled stage) then false is returned.
+     * Called when the source coord system is changing. preConcatInverse is the inverse of the
+     * transformation from the old coord system to the new coord system. Returns false if the matrix
+     * cannot be inverted.
      */
-    bool preConcatSamplerMatricesWithInverse(const GrMatrix& matrix) {
-        GrMatrix inv;
+    bool sourceCoordChangeByInverse(const SkMatrix& preConcatInverse) {
+        SkMatrix inv;
         bool computed = false;
         for (int i = 0; i < kMaxColorStages; ++i) {
             if (this->isColorStageEnabled(i)) {
-                if (!computed && !matrix.invert(&inv)) {
+                if (!computed && !preConcatInverse.invert(&inv)) {
                     return false;
                 } else {
                     computed = true;
                 }
-                fColorSamplers[i].preConcatMatrix(inv);
+                fColorStages[i].preConcatCoordChange(inv);
             }
         }
         for (int i = 0; i < kMaxCoverageStages; ++i) {
             if (this->isCoverageStageEnabled(i)) {
-                if (!computed && !matrix.invert(&inv)) {
+                if (!computed && !preConcatInverse.invert(&inv)) {
                     return false;
                 } else {
                     computed = true;
                 }
-                fCoverageSamplers[i].preConcatMatrix(inv);
+                fCoverageStages[i].preConcatCoordChange(inv);
             }
         }
         return true;
     }
 
     /**
-     * Preconcats the matrix of all stages with a matrix.
+     * Called when the source coord system is changing. preConcat gives the transformation from the
+     * old coord system to the new coord system.
      */
-    void preConcatSamplerMatrices(const GrMatrix& matrix) {
+    void sourceCoordChange(const SkMatrix& preConcat) {
         for (int i = 0; i < kMaxColorStages; ++i) {
             if (this->isColorStageEnabled(i)) {
-                fColorSamplers[i].preConcatMatrix(matrix);
+                fColorStages[i].preConcatCoordChange(preConcat);
             }
         }
         for (int i = 0; i < kMaxCoverageStages; ++i) {
             if (this->isCoverageStageEnabled(i)) {
-                fCoverageSamplers[i].preConcatMatrix(matrix);
+                fCoverageStages[i].preConcatCoordChange(preConcat);
             }
         }
     }
@@ -245,19 +228,15 @@ public:
 
         fColorFilterColor = paint.fColorFilterColor;
         fColorFilterXfermode = paint.fColorFilterXfermode;
-        fColorMatrixEnabled = paint.fColorMatrixEnabled;
-        if (fColorMatrixEnabled) {
-            memcpy(fColorMatrix, paint.fColorMatrix, sizeof(fColorMatrix));
-        }
 
         for (int i = 0; i < kMaxColorStages; ++i) {
             if (paint.isColorStageEnabled(i)) {
-                fColorSamplers[i] = paint.fColorSamplers[i];
+                fColorStages[i] = paint.fColorStages[i];
             }
         }
         for (int i = 0; i < kMaxCoverageStages; ++i) {
             if (paint.isCoverageStageEnabled(i)) {
-                fCoverageSamplers[i] = paint.fCoverageSamplers[i];
+                fCoverageStages[i] = paint.fCoverageStages[i];
             }
         }
         return *this;
@@ -271,9 +250,8 @@ public:
         this->resetOptions();
         this->resetColor();
         this->resetCoverage();
-        this->resetTextures();
+        this->resetStages();
         this->resetColorFilter();
-        this->resetMasks();
     }
 
     // internal use
@@ -287,21 +265,19 @@ public:
 
 private:
 
-    GrSamplerState              fColorSamplers[kMaxColorStages];
-    GrSamplerState              fCoverageSamplers[kMaxCoverageStages];
+    GrEffectStage               fColorStages[kMaxColorStages];
+    GrEffectStage               fCoverageStages[kMaxCoverageStages];
 
     GrBlendCoeff                fSrcBlendCoeff;
     GrBlendCoeff                fDstBlendCoeff;
     bool                        fAntiAlias;
     bool                        fDither;
-    bool                        fColorMatrixEnabled;
 
     GrColor                     fColor;
     uint8_t                     fCoverage;
 
     GrColor                     fColorFilterColor;
     SkXfermode::Mode            fColorFilterXfermode;
-    float                       fColorMatrix[20];
 
     void resetBlend() {
         fSrcBlendCoeff = kOne_GrBlendCoeff;
@@ -321,15 +297,12 @@ private:
         fCoverage = 0xff;
     }
 
-    void resetTextures() {
+    void resetStages() {
         for (int i = 0; i < kMaxColorStages; ++i) {
-            fColorSamplers[i].reset();
+            fColorStages[i].reset();
         }
-    }
-
-    void resetMasks() {
         for (int i = 0; i < kMaxCoverageStages; ++i) {
-            fCoverageSamplers[i].reset();
+            fCoverageStages[i].reset();
         }
     }
 };

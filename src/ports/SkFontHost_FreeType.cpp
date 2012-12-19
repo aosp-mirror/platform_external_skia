@@ -144,6 +144,19 @@ static bool InitFreetype() {
     return true;
 }
 
+// Lazy, once, wrapper to ask the FreeType Library if it can support LCD text
+static bool is_lcd_supported() {
+    if (!gLCDSupportValid) {
+        SkAutoMutexAcquire  ac(gFTMutex);
+
+        if (!gLCDSupportValid) {
+            InitFreetype();
+            FT_Done_FreeType(gFTLibrary);
+        }
+    }
+    return gLCDSupport;
+}
+
 class SkScalerContext_FreeType : public SkScalerContext_FreeType_Base {
 public:
     SkScalerContext_FreeType(const SkDescriptor* desc);
@@ -156,15 +169,15 @@ public:
     }
 
 protected:
-    virtual unsigned generateGlyphCount();
-    virtual uint16_t generateCharToGlyph(SkUnichar uni);
-    virtual void generateAdvance(SkGlyph* glyph);
-    virtual void generateMetrics(SkGlyph* glyph);
-    virtual void generateImage(const SkGlyph& glyph, SkMaskGamma::PreBlend* maskPreBlend);
-    virtual void generatePath(const SkGlyph& glyph, SkPath* path);
+    virtual unsigned generateGlyphCount() SK_OVERRIDE;
+    virtual uint16_t generateCharToGlyph(SkUnichar uni) SK_OVERRIDE;
+    virtual void generateAdvance(SkGlyph* glyph) SK_OVERRIDE;
+    virtual void generateMetrics(SkGlyph* glyph) SK_OVERRIDE;
+    virtual void generateImage(const SkGlyph& glyph) SK_OVERRIDE;
+    virtual void generatePath(const SkGlyph& glyph, SkPath* path) SK_OVERRIDE;
     virtual void generateFontMetrics(SkPaint::FontMetrics* mx,
-                                     SkPaint::FontMetrics* my);
-    virtual SkUnichar generateGlyphToChar(uint16_t glyph);
+                                     SkPaint::FontMetrics* my) SK_OVERRIDE;
+    virtual SkUnichar generateGlyphToChar(uint16_t glyph) SK_OVERRIDE;
 
 private:
     SkFaceRec*  fFaceRec;
@@ -575,7 +588,7 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
                 getAdvances(face, gID, advanceCount, FT_LOAD_NO_SCALE,
                             advances);
                 for (int i = 0; i < advanceCount; i++) {
-                    int16_t advance = advances[gID + i];
+                    int16_t advance = advances[i];
                     info->fGlyphWidths->fAdvance.append(1, &advance);
                 }
             }
@@ -648,14 +661,7 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
         rec->fTextSize = SkIntToScalar(1 << 14);
     }
 
-    SkAutoMutexAcquire  ac(gFTMutex);
-
-    if (!gLCDSupportValid) {
-        InitFreetype();
-        FT_Done_FreeType(gFTLibrary);
-    }
-
-    if (!gLCDSupport && isLCD(*rec)) {
+    if (!is_lcd_supported() && isLCD(*rec)) {
         // If the runtime Freetype library doesn't support LCD mode, we disable
         // it here.
         rec->fMaskFormat = SkMask::kA8_Format;
@@ -672,12 +678,10 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
         }
     }
 
-#ifndef SK_IGNORE_ROTATED_FREETYPE_FIX
     // rotated text looks bad with hinting, so we disable it as needed
     if (!isAxisAligned(*rec)) {
         h = SkPaint::kNo_Hinting;
     }
-#endif
     rec->setHinting(h);
 
 #ifndef SK_GAMMA_APPLY_TO_A8
@@ -1044,8 +1048,10 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
 
     err = FT_Load_Glyph( fFace, glyph->getGlyphID(fBaseGlyphCount), fLoadGlyphFlags );
     if (err != 0) {
-        SkDEBUGF(("SkScalerContext_FreeType::generateMetrics(%x): FT_Load_Glyph(glyph:%d flags:%d) returned 0x%x\n",
+#if 0
+        SkDEBUGF(("SkScalerContext_FreeType::generateMetrics(%x): FT_Load_Glyph(glyph:%d flags:%x) returned 0x%x\n",
                     fFaceRec->fFontID, glyph->getGlyphID(fBaseGlyphCount), fLoadGlyphFlags, err));
+#endif
     ERROR:
         glyph->zeroMetrics();
         return;
@@ -1136,7 +1142,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
 }
 
 
-void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph, SkMaskGamma::PreBlend* maskPreBlend) {
+void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
     SkAutoMutexAcquire  ac(gFTMutex);
 
     FT_Error    err;
@@ -1154,7 +1160,7 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph, SkMaskGamma::
         return;
     }
 
-    generateGlyphImage(fFace, glyph, maskPreBlend);
+    generateGlyphImage(fFace, glyph);
 }
 
 

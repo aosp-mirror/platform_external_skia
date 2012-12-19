@@ -213,6 +213,8 @@ bool SkGradientShaderBase::setContext(const SkBitmap& device,
     const SkMatrix& inverse = this->getTotalInverse();
 
     if (!fDstToIndex.setConcat(fPtsToUnit, inverse)) {
+        // need to keep our set/end context calls balanced.
+        this->INHERITED::endContext();
         return false;
     }
 
@@ -675,40 +677,61 @@ SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
 #include "effects/GrTextureStripAtlas.h"
 #include "SkGr.h"
 
-GrGLGradientStage::GrGLGradientStage(const GrProgramStageFactory& factory)
+GrGLGradientEffect::GrGLGradientEffect(const GrBackendEffectFactory& factory)
     : INHERITED(factory)
-    , fCachedYCoord(GR_ScalarMax)
-    , fFSYUni(GrGLUniformManager::kInvalidUniformHandle) { }
+    , fCachedYCoord(SK_ScalarMax)
+    , fFSYUni(GrGLUniformManager::kInvalidUniformHandle) {
+}
 
-GrGLGradientStage::~GrGLGradientStage() { }
+GrGLGradientEffect::~GrGLGradientEffect() { }
 
-void GrGLGradientStage::setupVariables(GrGLShaderBuilder* builder) {
+void GrGLGradientEffect::emitYCoordUniform(GrGLShaderBuilder* builder) {
     fFSYUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                   kFloat_GrSLType, "GradientYCoordFS");
 }
 
-void GrGLGradientStage::setData(const GrGLUniformManager& uman,
-                                const GrCustomStage& stage,
-                                const GrRenderTarget*,
-                                int stageNum) {
-    GrScalar yCoord = static_cast<const GrGradientEffect&>(stage).getYCoord();
+void GrGLGradientEffect::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
+    const GrGradientEffect& e = static_cast<const GrGradientEffect&>(*stage.getEffect());
+    const GrTexture* texture = e.texture(0);
+    fEffectMatrix.setData(uman, e.getMatrix(), stage.getCoordChangeMatrix(), texture);
+
+    SkScalar yCoord = e.getYCoord();
     if (yCoord != fCachedYCoord) {
         uman.set1f(fFSYUni, yCoord);
         fCachedYCoord = yCoord;
     }
 }
 
-void GrGLGradientStage::emitColorLookup(GrGLShaderBuilder* builder,
-                                        const char* gradientTValue,
-                                        const char* outputColor,
-                                        const char* inputColor,
-                                        const GrGLShaderBuilder::TextureSampler& sampler) {
+GrGLEffect::EffectKey GrGLGradientEffect::GenMatrixKey(const GrEffectStage& s) {
+    const GrGradientEffect& e = static_cast<const GrGradientEffect&>(*s.getEffect());
+    const GrTexture* texture = e.texture(0);
+    return GrGLEffectMatrix::GenKey(e.getMatrix(), s.getCoordChangeMatrix(), texture);
+}
+
+void GrGLGradientEffect::setupMatrix(GrGLShaderBuilder* builder,
+                                     EffectKey key,
+                                     const char* vertexCoords,
+                                     const char** fsCoordName,
+                                     const char** vsVaryingName,
+                                     GrSLType* vsVaryingType) {
+    fEffectMatrix.emitCodeMakeFSCoords2D(builder,
+                                         key & kMatrixKeyMask,
+                                         vertexCoords,
+                                         fsCoordName,
+                                         vsVaryingName,
+                                         vsVaryingType);
+}
+
+void GrGLGradientEffect::emitColorLookup(GrGLShaderBuilder* builder,
+                                         const char* gradientTValue,
+                                         const char* outputColor,
+                                         const char* inputColor,
+                                         const GrGLShaderBuilder::TextureSampler& sampler) {
 
     SkString* code = &builder->fFSCode;
     code->appendf("\tvec2 coord = vec2(%s, %s);\n",
                   gradientTValue,
                   builder->getUniformVariable(fFSYUni).c_str());
-    GrGLSLMulVarBy4f(code, 1, outputColor, inputColor);
     code->appendf("\t%s = ", outputColor);
     builder->appendTextureLookupAndModulate(code, inputColor, sampler, "coord");
     code->append(";\n");
@@ -718,12 +741,15 @@ void GrGLGradientStage::emitColorLookup(GrGLShaderBuilder* builder,
 
 GrGradientEffect::GrGradientEffect(GrContext* ctx,
                                    const SkGradientShaderBase& shader,
+                                   const SkMatrix& matrix,
                                    SkShader::TileMode tileMode)
     : INHERITED(1) {
     // TODO: check for simple cases where we don't need a texture:
     //GradientInfo info;
     //shader.asAGradient(&info);
     //if (info.fColorCount == 2) { ...
+
+    fMatrix = matrix;
 
     SkBitmap bitmap;
     shader.getGradientTableBitmap(&bitmap);
@@ -744,13 +770,13 @@ GrGradientEffect::GrGradientEffect(GrContext* ctx,
 
     fRow = fAtlas->lockRow(bitmap);
     if (-1 != fRow) {
-        fYCoord = fAtlas->getYOffset(fRow) + GR_ScalarHalf *
+        fYCoord = fAtlas->getYOffset(fRow) + SK_ScalarHalf *
                   fAtlas->getVerticalScaleFactor();
         fTextureAccess.reset(fAtlas->getTexture(), params);
     } else {
         GrTexture* texture = GrLockCachedBitmapTexture(ctx, bitmap, &params);
         fTextureAccess.reset(texture, params);
-        fYCoord = GR_ScalarHalf;
+        fYCoord = SK_ScalarHalf;
 
         // Unlock immediately, this is not great, but we don't have a way of
         // knowing when else to unlock it currently, so it may get purged from
@@ -781,7 +807,7 @@ int GrGradientEffect::RandomGradientParams(SkRandom* random,
         *stops = NULL;
     }
 
-    GrScalar stop = 0.f;
+    SkScalar stop = 0.f;
     for (int i = 0; i < outColors; ++i) {
         colors[i] = random->nextU();
         if (NULL != *stops) {

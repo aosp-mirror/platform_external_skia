@@ -1,6 +1,11 @@
 # conditions used in both common.gypi and skia.gyp in chromium
 #
 {
+  'defines': [
+    'SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=<(skia_static_initializers)',
+#    'SK_SUPPORT_HINTING_SCALE_FACTOR',
+     'SK_REDEFINE_ROOT2OVER2_TO_MAKE_ARCTOS_CONVEX',
+  ],
   'conditions' : [
     ['skia_gpu == 1',
       {
@@ -93,7 +98,7 @@
       },
     ],
 
-    ['skia_os in ["linux", "freebsd", "openbsd", "solaris"]',
+    ['skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]',
       {
         'defines': [
           'SK_SAMPLES_FOR_X',
@@ -120,6 +125,11 @@
           '-Wno-c++11-extensions'
         ],
         'conditions' : [
+          ['skia_warnings_as_errors == 1', {
+            'cflags': [
+              '-Werror',
+            ],
+          }],
           ['skia_arch_width == 64', {
             'cflags': [
               '-m64',
@@ -136,9 +146,23 @@
               '-m32',
             ],
           }],
-        ],
-        'include_dirs' : [
-          '/usr/include/freetype2',
+          [ 'skia_os == "nacl"', {
+            'defines': [
+              'SK_BUILD_FOR_NACL',
+            ],
+            'link_settings': {
+              'libraries': [
+                '-lppapi',
+                '-lppapi_cpp',
+                '-lnosys',
+                '-pthread',
+              ],
+            },
+          }, { # skia_os != "nacl"
+            'include_dirs' : [
+              '/usr/include/freetype2',
+            ],
+          }],
         ],
       },
     ],
@@ -271,6 +295,14 @@
           '<(android_base)/toolchains/<(android_toolchain)/sysroot/usr/include',
         ],
         'conditions': [
+          [ 'skia_warnings_as_errors == 1', {
+            'cflags': [
+              '-Werror',
+            ],
+          }],
+          [ 'skia_profile_enabled == 1', {
+            'cflags': ['-g', '-fno-omit-frame-pointer', '-marm', '-mapcs'],
+          }],
           [ 'skia_arch_type == "arm"', {
             'ldflags': [
               '-Wl',
@@ -316,7 +348,7 @@
     # static initializers if we're using a pthread-compatible thread interface.
     [ 'skia_os != "win"', {
       'defines': [
-        'SK_USE_POSIX_THREADS'
+        'SK_USE_POSIX_THREADS',
       ],
     }],
   ], # end 'conditions'

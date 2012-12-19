@@ -19,6 +19,7 @@
 #include "SkPath.h"
 #include "SkPathHeap.h"
 #include "SkRegion.h"
+#include "SkRRect.h"
 #include "SkPictureFlat.h"
 #include "SkSerializationHelpers.h"
 
@@ -77,6 +78,12 @@ public:
     // drawing and return from draw() after the "current" op code is done
     void abort();
 
+protected:
+#ifdef SK_PICTURE_PROFILING_STUBS
+    virtual size_t preDraw(size_t offset, int type);
+    virtual void postDraw(size_t offset);
+#endif
+
 private:
     class TextContainer {
     public:
@@ -87,7 +94,11 @@ private:
     };
 
     const SkBitmap& getBitmap(SkReader32& reader) {
-        int index = reader.readInt();
+        const int index = reader.readInt();
+        if (SkBitmapHeap::INVALID_SLOT == index) {
+            SkDebugf("An invalid bitmap was recorded!\n");
+            return fBadBitmap;
+        }
         return (*fBitmaps)[index];
     }
 
@@ -184,6 +195,10 @@ private:    // these help us with reading/writing
     void flattenToBuffer(SkOrderedWriteBuffer&) const;
 
 private:
+    // Only used by getBitmap() if the passed in index is SkBitmapHeap::INVALID_SLOT. This empty
+    // bitmap allows playback to draw nothing and move on.
+    SkBitmap fBadBitmap;
+
     SkAutoTUnref<SkBitmapHeap> fBitmapHeap;
     SkAutoTUnref<SkPathHeap> fPathHeap;
 

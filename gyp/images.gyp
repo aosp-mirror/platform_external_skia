@@ -18,7 +18,7 @@
         '../include/images',
       ],
       'sources': [
-        '../include/images/SkFlipPixelRef.h',
+        '../include/images/SkBitmapFactory.h',
         '../include/images/SkImageDecoder.h',
         '../include/images/SkImageEncoder.h',
         '../include/images/SkImageRef.h',
@@ -32,8 +32,8 @@
         '../src/images/SkBitmapRegionDecoder.cpp',
         '../src/images/SkBitmap_RLEPixels.h',
         '../src/images/SkCreateRLEPixelRef.cpp',
+        '../src/images/SkBitmapFactory.cpp',
         '../src/images/SkFDStream.cpp',
-        '../src/images/SkFlipPixelRef.cpp',
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_Factory.cpp',
         '../src/images/SkImageDecoder_libbmp.cpp',
@@ -92,7 +92,7 @@
             '../src/ports/SkImageDecoder_CG.cpp',
           ],
         }],
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
           'sources!': [
             '../src/images/SkImageDecoder_libgif.cpp',
             '../src/images/SkMovie_gif.cpp',

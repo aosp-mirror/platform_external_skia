@@ -116,7 +116,7 @@ static void draw_bitmap(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kARGB_8888_Config, bounds.width(), bounds.height());
     bm.allocPixels();
-    bm.eraseColor(0);
+    bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
     draw_path(&c, r, NULL);
 
@@ -133,7 +133,7 @@ static void draw_sprite(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kARGB_8888_Config, bounds.width(), bounds.height());
     bm.allocPixels();
-    bm.eraseColor(0);
+    bm.eraseColor(SK_ColorTRANSPARENT);
     SkCanvas c(bm);
     draw_path(&c, r, NULL);
 
@@ -176,12 +176,10 @@ protected:
         SkColorFilter* cf = SkColorFilter::CreateModeFilter(SK_ColorRED,
                                                      SkXfermode::kSrcIn_Mode);
         SkImageFilter* filters[] = {
-#if 1
             NULL,
             new IdentityImageFilter,
             new FailImageFilter,
-            new SkColorFilterImageFilter(cf),
-#endif
+            SkColorFilterImageFilter::Create(cf),
             new SkBlurImageFilter(12.0f, 0.0f),
         };
         cf->unref();

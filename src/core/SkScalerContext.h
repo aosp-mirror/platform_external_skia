@@ -79,7 +79,7 @@ struct SkScalerContextRec {
      *  paint and device gamma to be effectively 1.0.
      */
     void ignorePreBlend() {
-        setLuminanceColor(0x00000000);
+        setLuminanceColor(SK_ColorTRANSPARENT);
         setPaintGamma(SK_Scalar1);
         setDeviceGamma(SK_Scalar1);
         setContrast(0);
@@ -212,7 +212,7 @@ protected:
     virtual uint16_t generateCharToGlyph(SkUnichar) = 0;
     virtual void generateAdvance(SkGlyph*) = 0;
     virtual void generateMetrics(SkGlyph*) = 0;
-    virtual void generateImage(const SkGlyph&, SkMaskGamma::PreBlend* maskPreBlend) = 0;
+    virtual void generateImage(const SkGlyph&) = 0;
     virtual void generatePath(const SkGlyph&, SkPath*) = 0;
     virtual void generateFontMetrics(SkPaint::FontMetrics* mX,
                                      SkPaint::FontMetrics* mY) = 0;
@@ -245,8 +245,14 @@ private:
     // link-list of context, to handle missing chars. null-terminated.
     SkScalerContext* fNextContext;
 
-    // converts linear masks to gamma correcting masks.
-    SkMaskGamma::PreBlend fMaskPreBlend;
+    // SkMaskGamma::PreBlend converts linear masks to gamma correcting masks.
+protected:
+    // Visible to subclasses so that generateImage can apply the pre-blend directly.
+    const SkMaskGamma::PreBlend fPreBlend;
+private:
+    // When there is a filter, previous steps must create a linear mask
+    // and the pre-blend applied as a final step.
+    const SkMaskGamma::PreBlend fPreBlendForFilter;
 };
 
 #define kRec_SkDescriptorTag            SkSetFourByteTag('s', 'r', 'e', 'c')

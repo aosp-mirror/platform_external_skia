@@ -10,10 +10,11 @@
 
 #include "GrDrawTarget.h"
 #include "GrGpuVertex.h"
-#include "GrIndexBuffer.h"
 #include "GrRenderTarget.h"
 #include "GrTexture.h"
 #include "GrVertexBuffer.h"
+
+#include "SkStrokeRec.h"
 
 SK_DEFINE_INST_COUNT(GrDrawTarget)
 
@@ -126,7 +127,7 @@ size_t GrDrawTarget::VertexSize(GrVertexLayout vertexLayout) {
         size += sizeof(GrColor);
     }
     if (vertexLayout & kEdge_VertexLayoutBit) {
-        size += 4 * sizeof(GrScalar);
+        size += 4 * sizeof(SkScalar);
     }
     return size;
 }
@@ -146,13 +147,13 @@ size_t GrDrawTarget::VertexSize(GrVertexLayout vertexLayout) {
  * Coverage
  */
 
-int GrDrawTarget::VertexStageCoordOffset(int stage, GrVertexLayout vertexLayout) {
+int GrDrawTarget::VertexStageCoordOffset(int stageIdx, GrVertexLayout vertexLayout) {
     GrAssert(check_layout(vertexLayout));
 
-    if (!StageUsesTexCoords(vertexLayout, stage)) {
+    if (!StageUsesTexCoords(vertexLayout, stageIdx)) {
         return 0;
     }
-    int tcIdx = VertexTexCoordsForStage(stage, vertexLayout);
+    int tcIdx = VertexTexCoordsForStage(stageIdx, vertexLayout);
     if (tcIdx >= 0) {
 
         int vecSize = (vertexLayout & kTextFormat_VertexLayoutBit) ?
@@ -269,7 +270,7 @@ int GrDrawTarget::VertexSizeAndOffsetsByIdx(
         if (NULL != edgeOffset) {
             *edgeOffset = size;
         }
-        size += 4 * sizeof(GrScalar);
+        size += 4 * sizeof(SkScalar);
     } else {
         if (NULL != edgeOffset) {
             *edgeOffset = -1;
@@ -313,17 +314,17 @@ bool GrDrawTarget::VertexUsesTexCoordIdx(int coordIndex,
     return !!(gTexCoordMasks[coordIndex] & vertexLayout);
 }
 
-int GrDrawTarget::VertexTexCoordsForStage(int stage,
+int GrDrawTarget::VertexTexCoordsForStage(int stageIdx,
                                           GrVertexLayout vertexLayout) {
-    GrAssert(stage < GrDrawState::kNumStages);
+    GrAssert(stageIdx < GrDrawState::kNumStages);
     GrAssert(check_layout(vertexLayout));
-    int bit = vertexLayout & gStageTexCoordMasks[stage];
+    int bit = vertexLayout & gStageTexCoordMasks[stageIdx];
     if (bit) {
         // figure out which set of texture coordates is used
         // bits are ordered T0S0, T0S1, T0S2, ..., T1S0, T1S1, ...
         // and start at bit 0.
         GR_STATIC_ASSERT(sizeof(GrVertexLayout) <= sizeof(uint32_t));
-        return (32 - Gr_clz(bit) - 1) / GrDrawState::kNumStages;
+        return (32 - SkCLZ(bit) - 1) / GrDrawState::kNumStages;
     }
     return -1;
 }
@@ -542,8 +543,8 @@ bool GrDrawTarget::reserveIndexSpace(int indexCount,
 
 }
 
-bool GrDrawTarget::StageUsesTexCoords(GrVertexLayout layout, int stage) {
-    return SkToBool(layout & gStageTexCoordMasks[stage]);
+bool GrDrawTarget::StageUsesTexCoords(GrVertexLayout layout, int stageIdx) {
+    return SkToBool(layout & gStageTexCoordMasks[stageIdx]);
 }
 
 bool GrDrawTarget::reserveVertexAndIndexSpace(GrVertexLayout vertexLayout,
@@ -748,10 +749,10 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
     GrAssert(NULL != drawState.getRenderTarget());
     for (int s = 0; s < GrDrawState::kNumStages; ++s) {
         if (drawState.isStageEnabled(s)) {
-            const GrCustomStage* stage = drawState.getSampler(s).getCustomStage();
-            int numTextures = stage->numTextures();
+            const GrEffect* effect = drawState.getStage(s).getEffect();
+            int numTextures = effect->numTextures();
             for (int t = 0; t < numTextures; ++t) {
-                GrTexture* texture = stage->texture(t);
+                GrTexture* texture = effect->texture(t);
                 GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
             }
         }
@@ -783,13 +784,13 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
     }
 }
 
-void GrDrawTarget::stencilPath(const GrPath* path, GrPathFill fill) {
+void GrDrawTarget::stencilPath(const GrPath* path, const SkStrokeRec& stroke, SkPath::FillType fill) {
     // TODO: extract portions of checkDraw that are relevant to path stenciling.
     GrAssert(NULL != path);
     GrAssert(fCaps.pathStencilingSupport());
-    GrAssert(kHairLine_GrPathFill != fill);
-    GrAssert(!GrIsFillInverted(fill));
-    this->onStencilPath(path, fill);
+    GrAssert(!stroke.isHairlineStyle());
+    GrAssert(!SkPath::IsInverseFillType(fill));
+    this->onStencilPath(path, stroke, fill);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -804,14 +805,15 @@ bool GrDrawTarget::canTweakAlphaForCoverage() const {
      * We want the blend to compute: f*Cs*S + (f*Cd + (1-f))D
      * By tweaking the source color's alpha we're replacing S with S'=fS. It's
      * obvious that that first term will always be ok. The second term can be
-     * rearranged as [1-(1-Cd)f]D. By substituing in the various possbilities
+     * rearranged as [1-(1-Cd)f]D. By substituting in the various possibilities
      * for Cd we find that only 1, ISA, and ISC produce the correct depth
-     * coeffecient in terms of S' and D.
+     * coefficient in terms of S' and D.
      */
     GrBlendCoeff dstCoeff = this->getDrawState().getDstBlendCoeff();
     return kOne_GrBlendCoeff == dstCoeff ||
            kISA_GrBlendCoeff == dstCoeff ||
-           kISC_GrBlendCoeff == dstCoeff;
+           kISC_GrBlendCoeff == dstCoeff ||
+           this->getDrawState().isCoverageDrawing();
 }
 
 bool GrDrawTarget::srcAlphaWillBeOne(GrVertexLayout layout) const {
@@ -828,14 +830,24 @@ bool GrDrawTarget::srcAlphaWillBeOne(GrVertexLayout layout) const {
     if (SkXfermode::kDst_Mode != drawState.getColorFilterMode()) {
         return false;
     }
+    int stageCnt;
+    // Check whether coverage is treated as color
+    if (drawState.isCoverageDrawing()) {
+        if (0xff != GrColorUnpackA(drawState.getCoverage())) {
+            return false;
+        }
+        stageCnt = GrDrawState::kNumStages;
+    } else {
+        stageCnt = drawState.getFirstCoverageStage();
+    }
     // Check if a color stage could create a partial alpha
-    for (int s = 0; s < drawState.getFirstCoverageStage(); ++s) {
-        if (this->isStageEnabled(s)) {
-            const GrCustomStage* stage = drawState.getSampler(s).getCustomStage();
-            // FIXME: The param indicates whether the texture is opaque or not. However, the stage
+    for (int s = 0; s < stageCnt; ++s) {
+        const GrEffect* effect = drawState.getStage(s).getEffect();
+        if (NULL != effect) {
+            // FIXME: The param indicates whether the texture is opaque or not. However, the effect
             // already controls its textures. It really needs to know whether the incoming color
             // (from a uni, per-vertex colors, or previous stage) is opaque or not.
-            if (!stage->isOpaque(true)) {
+            if (!effect->isOpaque(true)) {
                 return false;
             }
         }
@@ -875,17 +887,6 @@ GrDrawTarget::getBlendOpts(bool forceCoverage,
     }
     *dstCoeff = drawState.getDstBlendCoeff();
 
-    // We don't ever expect source coeffecients to reference the source
-    GrAssert(kSA_GrBlendCoeff != *srcCoeff &&
-             kISA_GrBlendCoeff != *srcCoeff &&
-             kSC_GrBlendCoeff != *srcCoeff &&
-             kISC_GrBlendCoeff != *srcCoeff);
-    // same for dst
-    GrAssert(kDA_GrBlendCoeff != *dstCoeff &&
-             kIDA_GrBlendCoeff != *dstCoeff &&
-             kDC_GrBlendCoeff != *dstCoeff &&
-             kIDC_GrBlendCoeff != *dstCoeff);
-
     if (drawState.isColorWriteDisabled()) {
         *srcCoeff = kZero_GrBlendCoeff;
         *dstCoeff = kOne_GrBlendCoeff;
@@ -897,13 +898,13 @@ GrDrawTarget::getBlendOpts(bool forceCoverage,
     bool dstCoeffIsZero = kZero_GrBlendCoeff == *dstCoeff ||
                          (kISA_GrBlendCoeff == *dstCoeff && srcAIsOne);
 
-
+    bool covIsZero = !drawState.isCoverageDrawing() &&
+                     !(layout & kCoverage_VertexLayoutBit) &&
+                     0 == drawState.getCoverage();
     // When coeffs are (0,1) there is no reason to draw at all, unless
     // stenciling is enabled. Having color writes disabled is effectively
     // (0,1). The same applies when coverage is known to be 0.
-    if ((kZero_GrBlendCoeff == *srcCoeff && dstCoeffIsOne) ||
-        (!(layout & kCoverage_VertexLayoutBit) &&
-         0 == drawState.getCoverage())) {
+    if ((kZero_GrBlendCoeff == *srcCoeff && dstCoeffIsOne) || covIsZero) {
         if (drawState.getStencil().doesWrite()) {
             return kDisableBlend_BlendOptFlag |
                    kEmitTransBlack_BlendOptFlag;
@@ -913,7 +914,7 @@ GrDrawTarget::getBlendOpts(bool forceCoverage,
     }
 
     // check for coverage due to constant coverage, per-vertex coverage,
-    // edge aa or coverage texture stage
+    // edge aa or coverage stage
     bool hasCoverage = forceCoverage ||
                        0xffffffff != drawState.getCoverage() ||
                        (layout & kCoverage_VertexLayoutBit) ||
@@ -939,10 +940,12 @@ GrDrawTarget::getBlendOpts(bool forceCoverage,
                 // or blend, just write transparent black into the dst.
                 *srcCoeff = kOne_GrBlendCoeff;
                 *dstCoeff = kZero_GrBlendCoeff;
-                return kDisableBlend_BlendOptFlag |
-                       kEmitTransBlack_BlendOptFlag;
+                return kDisableBlend_BlendOptFlag | kEmitTransBlack_BlendOptFlag;
             }
         }
+    } else if (drawState.isCoverageDrawing()) {
+        // we have coverage but we aren't distinguishing it from alpha by request.
+        return kCoverageAsAlpha_BlendOptFlag;
     } else {
         // check whether coverage can be safely rolled into alpha
         // of if we can skip color computation and just emit coverage
@@ -1027,9 +1030,9 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
 ////////////////////////////////////////////////////////////////////////////////
 
 void GrDrawTarget::drawRect(const GrRect& rect,
-                            const GrMatrix* matrix,
+                            const SkMatrix* matrix,
                             const GrRect* srcRects[],
-                            const GrMatrix* srcMatrices[]) {
+                            const SkMatrix* srcMatrices[]) {
     GrVertexLayout layout = GetRectVertexLayout(srcRects);
 
     AutoReleaseGeometry geo(this, layout, 4, 0);
@@ -1070,9 +1073,9 @@ GrVertexLayout GrDrawTarget::GetRectVertexLayout(const GrRect* srcRects[]) {
 // Note: the color parameter will only be used when kColor_VertexLayoutBit
 // is present in 'layout'
 void GrDrawTarget::SetRectVertices(const GrRect& rect,
-                                   const GrMatrix* matrix,
+                                   const SkMatrix* matrix,
                                    const GrRect* srcRects[],
-                                   const GrMatrix* srcMatrices[],
+                                   const SkMatrix* srcMatrices[],
                                    GrColor color,
                                    GrVertexLayout layout,
                                    void* vertices) {
@@ -1212,6 +1215,15 @@ void GrDrawTarget::AutoReleaseGeometry::reset() {
     }
     fVertices = NULL;
     fIndices = NULL;
+}
+
+GrDrawTarget::AutoClipRestore::AutoClipRestore(GrDrawTarget* target, const SkIRect& newClip) {
+    fTarget = target;
+    fClip = fTarget->getClip();
+    fStack.init();
+    fStack.get()->clipDevRect(newClip, SkRegion::kReplace_Op);
+    fReplacementClip.fClipStack = fStack.get();
+    target->setClip(&fReplacementClip);
 }
 
 void GrDrawTarget::Caps::print() const {

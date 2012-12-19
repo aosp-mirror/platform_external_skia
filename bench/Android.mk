@@ -25,7 +25,9 @@ LOCAL_SRC_FILES += \
   GradientBench.cpp \
   GrMemoryPoolBench.cpp \
   InterpBench.cpp \
+  LineBench.cpp \
   MathBench.cpp \
+  Matrix44Bench.cpp \
   MatrixBench.cpp \
   MatrixConvolutionBench.cpp \
   MemoryBench.cpp \
@@ -37,6 +39,7 @@ LOCAL_SRC_FILES += \
   PictureRecordBench.cpp \
   ReadPixBench.cpp \
   RectBench.cpp \
+  RefCntBench.cpp \
   RegionBench.cpp \
   RepeatTileBench.cpp \
   RTreeBench.cpp \
@@ -46,10 +49,6 @@ LOCAL_SRC_FILES += \
   TextBench.cpp \
   VertBench.cpp \
   WriterBench.cpp
-
-# TODO: tests that currently are causing build problems
-LOCAL_SRC_FILES += \
-  RefCntBench.cpp
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL 
 

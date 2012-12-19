@@ -17,7 +17,10 @@ namespace skiagm {
 */
 class CMYKJpegGM : public GM {
 public:
-    CMYKJpegGM() {
+    CMYKJpegGM() {}
+
+protected:
+    virtual void onOnceBeforeDraw() SK_OVERRIDE {
 
         // parameters to the "decode" call
         bool dither = false;
@@ -41,7 +44,6 @@ public:
         }
     }
 
-protected:
     virtual SkString onShortName() {
         return SkString("cmykjpeg");
     }

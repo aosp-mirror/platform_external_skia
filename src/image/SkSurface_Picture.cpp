@@ -20,10 +20,11 @@ public:
     virtual ~SkSurface_Picture();
 
     virtual SkCanvas* onNewCanvas() SK_OVERRIDE;
-    virtual SkSurface* onNewSurface(const SkImage::Info&, SkColorSpace*) SK_OVERRIDE;
+    virtual SkSurface* onNewSurface(const SkImage::Info&) SK_OVERRIDE;
     virtual SkImage* onNewImageShapshot() SK_OVERRIDE;
     virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y,
                         const SkPaint*) SK_OVERRIDE;
+    virtual void onCopyOnWrite(SkImage*, SkCanvas*) SK_OVERRIDE;
 
 private:
     SkPicture*  fPicture;
@@ -51,7 +52,7 @@ SkCanvas* SkSurface_Picture::onNewCanvas() {
     return canvas;
 }
 
-SkSurface* SkSurface_Picture::onNewSurface(const SkImage::Info& info, SkColorSpace*) {
+SkSurface* SkSurface_Picture::onNewSurface(const SkImage::Info& info) {
     return SkSurface::NewPicture(info.fWidth, info.fHeight);
 }
 
@@ -63,7 +64,7 @@ SkImage* SkSurface_Picture::onNewImageShapshot() {
         info.fWidth = info.fHeight = 0;
         info.fColorType = SkImage::kPMColor_ColorType;
         info.fAlphaType = SkImage::kOpaque_AlphaType;
-        return SkImage::NewRasterCopy(info, NULL, NULL, 0);
+        return SkImage::NewRasterCopy(info, NULL, 0);
     }
 }
 
@@ -73,6 +74,11 @@ void SkSurface_Picture::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
         return;
     }
     SkImagePrivDrawPicture(canvas, fPicture, x, y, paint);
+}
+
+void SkSurface_Picture::onCopyOnWrite(SkImage* cachedImage, SkCanvas*) {
+    // We always spawn a copy of the recording picture when we
+    // are asked for a snapshot, so we never need to do anything here.
 }
 
 ///////////////////////////////////////////////////////////////////////////////

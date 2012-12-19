@@ -21,15 +21,16 @@ LOCAL_SRC_FILES += \
   bitmapscroll.cpp \
   blend.cpp \
   blurs.cpp \
+  blurrect.cpp \
   circles.cpp \
   colorfilterimagefilter.cpp \
-  cmykjpeg.cpp \
   colormatrix.cpp \
   complexclip.cpp \
   complexclip2.cpp \
   composeshader.cpp \
   convexpaths.cpp \
   cubicpaths.cpp \
+  cmykjpeg.cpp \
   degeneratesegments.cpp \
   dashcubics.cpp \
   dashing.cpp \
@@ -38,6 +39,8 @@ LOCAL_SRC_FILES += \
   drawlooper.cpp \
   extractbitmap.cpp \
   emptypath.cpp \
+  fatpathfill.cpp \
+  factory.cpp \
   filltypes.cpp \
   filltypespersp.cpp \
   fontscaler.cpp \
@@ -57,15 +60,19 @@ LOCAL_SRC_FILES += \
   lcdtext.cpp \
   linepaths.cpp \
   matrixconvolution.cpp \
+  modecolorfilters.cpp \
   morphology.cpp \
   ninepatchstretch.cpp \
   nocolorbleed.cpp \
   patheffects.cpp \
   pathfill.cpp \
+  pathinterior.cpp \
   pathreverse.cpp \
   points.cpp \
   poly2poly.cpp \
   quadpaths.cpp \
+  rrect.cpp \
+  rrects.cpp \
   samplerstress.cpp \
   shaderbounds.cpp \
   shadertext.cpp \
@@ -73,8 +80,9 @@ LOCAL_SRC_FILES += \
   shadertext3.cpp \
   shadows.cpp \
   simpleaaclip.cpp \
+  srcmode.cpp \
   strokefill.cpp \
-  strokerects.cpp \
+  strokerect.cpp \
   strokes.cpp \
   tablecolorfilter.cpp \
   texteffects.cpp \
@@ -107,7 +115,8 @@ LOCAL_C_INCLUDES := \
   external/skia/gm \
   external/skia/src/core \
   external/skia/src/gpu \
-  external/skia/src/pipe/utils
+  external/skia/src/pipe/utils \
+  external/skia/src/utils
 
 LOCAL_MODULE := skia_gm
 

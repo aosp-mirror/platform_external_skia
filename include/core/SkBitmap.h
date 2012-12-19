@@ -144,7 +144,7 @@ public:
 
     /** Return the number of bytes from the pointer returned by getPixels()
         to the end of the allocated space in the buffer. Required in
-        cases where extractBitmap has been called.
+        cases where extractSubset has been called.
     */
     size_t getSafeSize() const ;
 
@@ -221,6 +221,24 @@ public:
 
     static Sk64 ComputeSize64(Config, int width, int height);
     static size_t ComputeSize(Config, int width, int height);
+
+    /**
+     *  This will brute-force return true if all of the pixels in the bitmap
+     *  are opaque. If it fails to read the pixels, or encounters an error,
+     *  it will return false.
+     *
+     *  Since this can be an expensive operation, the bitmap stores a flag for
+     *  this (isOpaque, setIsOpaque). Only call this if you need to compute this
+     *  value from "unknown" pixels.
+     */
+    static bool ComputeIsOpaque(const SkBitmap&);
+
+    /**
+     *  Calls ComputeIsOpaque, and passes its result to setIsOpaque().
+     */
+    void computeAndSetOpaquePredicate() {
+        this->setIsOpaque(ComputeIsOpaque(*this));
+    }
 
     /**
      *  Return the bitmap's bounds [0, 0, width, height] as an SkRect

@@ -6,25 +6,32 @@
  */
 
 #include "GrConfigConversionEffect.h"
-#include "gl/GrGLProgramStage.h"
+#include "GrContext.h"
+#include "GrTBackendEffectFactory.h"
+#include "gl/GrGLEffect.h"
+#include "gl/GrGLEffectMatrix.h"
+#include "SkMatrix.h"
 
-class GrGLConfigConversionEffect : public GrGLProgramStage {
+class GrGLConfigConversionEffect : public GrGLEffect {
 public:
-    GrGLConfigConversionEffect(const GrProgramStageFactory& factory,
-                               const GrCustomStage& s) : INHERITED (factory) {
-        const GrConfigConversionEffect& stage = static_cast<const GrConfigConversionEffect&>(s);
-        fSwapRedAndBlue = stage.swapsRedAndBlue();
-        fPMConversion = stage.pmConversion();
+    GrGLConfigConversionEffect(const GrBackendEffectFactory& factory,
+                               const GrEffect& s) : INHERITED (factory) {
+        const GrConfigConversionEffect& effect = static_cast<const GrConfigConversionEffect&>(s);
+        fSwapRedAndBlue = effect.swapsRedAndBlue();
+        fPMConversion = effect.pmConversion();
     }
 
-    virtual void emitVS(GrGLShaderBuilder* builder,
-                        const char* vertexCoords) SK_OVERRIDE { }
-    virtual void emitFS(GrGLShaderBuilder* builder,
-                        const char* outputColor,
-                        const char* inputColor,
-                        const TextureSamplerArray& samplers) SK_OVERRIDE {
+    virtual void emitCode(GrGLShaderBuilder* builder,
+                          const GrEffectStage&,
+                          EffectKey key,
+                          const char* vertexCoords,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray& samplers) SK_OVERRIDE {
+        const char* coords;
+        GrSLType coordsType = fEffectMatrix.emitCode(builder, key, vertexCoords, &coords);
         builder->fFSCode.appendf("\t\t%s = ", outputColor);
-        builder->appendTextureLookup(&builder->fFSCode, samplers[0]);
+        builder->appendTextureLookup(&builder->fFSCode, samplers[0], coords, coordsType);
         builder->fFSCode.append(";\n");
         if (GrConfigConversionEffect::kNone_PMConversion == fPMConversion) {
             GrAssert(fSwapRedAndBlue);
@@ -58,16 +65,34 @@ public:
         GrGLSLMulVarBy4f(&builder->fFSCode, 2, outputColor, inputColor);
     }
 
-    static inline StageKey GenKey(const GrCustomStage& s, const GrGLCaps&) {
-        const GrConfigConversionEffect& stage = static_cast<const GrConfigConversionEffect&>(s);
-        return static_cast<int>(stage.swapsRedAndBlue()) | (stage.pmConversion() << 1);
+    void setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
+        const GrConfigConversionEffect& effect =
+            static_cast<const GrConfigConversionEffect&>(*stage.getEffect());
+        fEffectMatrix.setData(uman,
+                              effect.getMatrix(),
+                              stage.getCoordChangeMatrix(),
+                              effect.texture(0));
+    }
+
+    static inline EffectKey GenKey(const GrEffectStage& s, const GrGLCaps&) {
+        const GrConfigConversionEffect& effect =
+            static_cast<const GrConfigConversionEffect&>(*s.getEffect());
+        EffectKey key = static_cast<EffectKey>(effect.swapsRedAndBlue()) |
+                        (effect.pmConversion() << 1);
+        key <<= GrGLEffectMatrix::kKeyBits;
+        EffectKey matrixKey =  GrGLEffectMatrix::GenKey(effect.getMatrix(),
+                                                        s.getCoordChangeMatrix(),
+                                                        effect.texture(0));
+        GrAssert(!(matrixKey & key));
+        return matrixKey | key;
     }
 
 private:
     bool                                    fSwapRedAndBlue;
     GrConfigConversionEffect::PMConversion  fPMConversion;
+    GrGLEffectMatrix                        fEffectMatrix;
 
-    typedef GrGLProgramStage INHERITED;
+    typedef GrGLEffect INHERITED;
 
 };
 
@@ -75,8 +100,9 @@ private:
 
 GrConfigConversionEffect::GrConfigConversionEffect(GrTexture* texture,
                                                    bool swapRedAndBlue,
-                                                   PMConversion pmConversion)
-    : GrSingleTextureEffect(texture)
+                                                   PMConversion pmConversion,
+                                                   const SkMatrix& matrix)
+    : GrSingleTextureEffect(texture, matrix)
     , fSwapRedAndBlue(swapRedAndBlue)
     , fPMConversion(pmConversion) {
     GrAssert(kRGBA_8888_GrPixelConfig == texture->config() ||
@@ -85,22 +111,22 @@ GrConfigConversionEffect::GrConfigConversionEffect(GrTexture* texture,
     GrAssert(swapRedAndBlue || kNone_PMConversion != pmConversion);
 }
 
-const GrProgramStageFactory& GrConfigConversionEffect::getFactory() const {
-    return GrTProgramStageFactory<GrConfigConversionEffect>::getInstance();
+const GrBackendEffectFactory& GrConfigConversionEffect::getFactory() const {
+    return GrTBackendEffectFactory<GrConfigConversionEffect>::getInstance();
 }
 
-bool GrConfigConversionEffect::isEqual(const GrCustomStage& s) const {
+bool GrConfigConversionEffect::isEqual(const GrEffect& s) const {
     const GrConfigConversionEffect& other = static_cast<const GrConfigConversionEffect&>(s);
     return other.fSwapRedAndBlue == fSwapRedAndBlue && other.fPMConversion == fPMConversion;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GR_DEFINE_CUSTOM_STAGE_TEST(GrConfigConversionEffect);
+GR_DEFINE_EFFECT_TEST(GrConfigConversionEffect);
 
-GrCustomStage* GrConfigConversionEffect::TestCreate(SkRandom* random,
-                                                    GrContext* context,
-                                                    GrTexture* textures[]) {
+GrEffect* GrConfigConversionEffect::TestCreate(SkRandom* random,
+                                               GrContext* context,
+                                               GrTexture* textures[]) {
     PMConversion pmConv = static_cast<PMConversion>(random->nextULessThan(kPMConversionCnt));
     bool swapRB;
     if (kNone_PMConversion == pmConv) {
@@ -108,8 +134,10 @@ GrCustomStage* GrConfigConversionEffect::TestCreate(SkRandom* random,
     } else {
         swapRB = random->nextBool();
     }
-    return SkNEW_ARGS(GrConfigConversionEffect,
-            (textures[GrCustomStageUnitTest::kSkiaPMTextureIdx], swapRB, pmConv));
+    return SkNEW_ARGS(GrConfigConversionEffect, (textures[GrEffectUnitTest::kSkiaPMTextureIdx],
+                                                 swapRB,
+                                                 pmConv,
+                                                 GrEffectUnitTest::TestMatrix(random)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -169,32 +197,40 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         *pmToUPMRule = kConversionRules[i][0];
         *upmToPMRule = kConversionRules[i][1];
 
-        static const GrRect kDstRect = GrRect::MakeWH(GrIntToScalar(256), GrIntToScalar(256));
-        static const GrRect kSrcRect = GrRect::MakeWH(GR_Scalar1, GR_Scalar1);
+        static const GrRect kDstRect = GrRect::MakeWH(SkIntToScalar(256), SkIntToScalar(256));
+        static const GrRect kSrcRect = GrRect::MakeWH(SK_Scalar1, SK_Scalar1);
         // We do a PM->UPM draw from dataTex to readTex and read the data. Then we do a UPM->PM draw
         // from readTex to tempTex followed by a PM->UPM draw to readTex and finally read the data.
         // We then verify that two reads produced the same values.
 
         GrPaint paint;
-
-        SkAutoTUnref<GrCustomStage> pmToUPMStage1(SkNEW_ARGS(GrConfigConversionEffect,
-                                                             (dataTex, false, *pmToUPMRule)));
-        SkAutoTUnref<GrCustomStage> upmToPMStage(SkNEW_ARGS(GrConfigConversionEffect,
-                                                            (readTex, false, *upmToPMRule)));
-        SkAutoTUnref<GrCustomStage> pmToUPMStage2(SkNEW_ARGS(GrConfigConversionEffect,
-                                                             (tempTex, false, *pmToUPMRule)));
+        SkAutoTUnref<GrEffect> pmToUPMEffect1(SkNEW_ARGS(GrConfigConversionEffect,
+                                                        (dataTex,
+                                                         false,
+                                                         *pmToUPMRule,
+                                                         SkMatrix::I())));
+        SkAutoTUnref<GrEffect> upmToPMEffect(SkNEW_ARGS(GrConfigConversionEffect,
+                                                       (readTex,
+                                                        false,
+                                                        *upmToPMRule,
+                                                        SkMatrix::I())));
+        SkAutoTUnref<GrEffect> pmToUPMEffect2(SkNEW_ARGS(GrConfigConversionEffect,
+                                                        (tempTex,
+                                                         false,
+                                                         *pmToUPMRule,
+                                                         SkMatrix::I())));
 
         context->setRenderTarget(readTex->asRenderTarget());
-        paint.colorSampler(0)->setCustomStage(pmToUPMStage1);
+        paint.colorStage(0)->setEffect(pmToUPMEffect1);
         context->drawRectToRect(paint, kDstRect, kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, firstRead);
 
         context->setRenderTarget(tempTex->asRenderTarget());
-        paint.colorSampler(0)->setCustomStage(upmToPMStage);
+        paint.colorStage(0)->setEffect(upmToPMEffect);
         context->drawRectToRect(paint, kDstRect, kSrcRect);
         context->setRenderTarget(readTex->asRenderTarget());
-        paint.colorSampler(0)->setCustomStage(pmToUPMStage2);
+        paint.colorStage(0)->setEffect(pmToUPMEffect2);
         context->drawRectToRect(paint, kDstRect, kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, secondRead);
@@ -215,21 +251,27 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
     }
 }
 
-GrCustomStage* GrConfigConversionEffect::Create(GrTexture* texture,
-                                                bool swapRedAndBlue,
-                                                PMConversion pmConversion) {
+bool GrConfigConversionEffect::InstallEffect(GrTexture* texture,
+                                             bool swapRedAndBlue,
+                                             PMConversion pmConversion,
+                                             const SkMatrix& matrix,
+                                             GrEffectStage* stage) {
     if (!swapRedAndBlue && kNone_PMConversion == pmConversion) {
         // If we returned a GrConfigConversionEffect that was equivalent to a GrSingleTextureEffect
         // then we may pollute our texture cache with redundant shaders. So in the case that no
         // conversions were requested we instead return a GrSingleTextureEffect.
-        return SkNEW_ARGS(GrSingleTextureEffect, (texture));
+        stage->setEffect(SkNEW_ARGS(GrSingleTextureEffect, (texture, matrix)))->unref();
+        return true;
     } else {
         if (kRGBA_8888_GrPixelConfig != texture->config() &&
             kBGRA_8888_GrPixelConfig != texture->config() &&
             kNone_PMConversion != pmConversion) {
             // The PM conversions assume colors are 0..255
-            return NULL;
+            return false;
         }
-        return SkNEW_ARGS(GrConfigConversionEffect, (texture, swapRedAndBlue, pmConversion));
+        stage->setEffect(SkNEW_ARGS(GrConfigConversionEffect, (texture,
+                                                               swapRedAndBlue,
+                                                               pmConversion, matrix)))->unref();
+        return true;
     }
 }

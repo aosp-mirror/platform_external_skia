@@ -126,8 +126,12 @@ typedef unsigned __int64 uint64_t;
  *  macros here before anyone else has a chance to include stdint.h without
  *  these.
  */
+#ifndef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS
+#endif
+#ifndef __STDC_CONSTANT_MACROS
 #define __STDC_CONSTANT_MACROS
+#endif
 #include <stdint.h>
 #endif
 
@@ -139,7 +143,7 @@ typedef unsigned __int64 uint64_t;
  *  GR_USER_CONFIG_FILE. It should be defined relative to GrConfig.h
  *
  *  e.g. it can specify GR_DEBUG/GR_RELEASE as it please, change the BUILD
- *  target, or supply its own defines for anything else (e.g. GR_SCALAR)
+ *  target, or supply its own defines for anything else (e.g. GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT)
  */
 #if !defined(GR_USER_CONFIG_FILE)
     #include "GrUserConfig.h"
@@ -311,13 +315,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #endif
 #endif
 
-#if !defined(GR_SCALAR_IS_FLOAT)
-    #define GR_SCALAR_IS_FLOAT   0
-#endif
-#if !defined(GR_SCALAR_IS_FIXED)
-    #define GR_SCALAR_IS_FIXED   0
-#endif
-
 #if !defined(GR_TEXT_SCALAR_TYPE_IS_USHORT)
     #define GR_TEXT_SCALAR_TYPE_IS_USHORT  0
 #endif
@@ -369,6 +366,24 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #define GR_GEOM_BUFFER_LOCK_THRESHOLD (1 << 15)
 #endif
 
+/**
+ * GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT gives a threshold (in megabytes) for the
+ * maximum size of the texture cache in vram. The value is only a default and
+ * can be overridden at runtime.
+ */
+#if !defined(GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT)
+    #define GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT 96
+#endif
+
+/**
+ * GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE is for compatibility with the new version
+ * of the OpenGLES2.0 headers from Khronos.  glShaderSource now takes a const char * const *,
+ * instead of a const char **.
+ */
+#if !defined(GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE)
+    #define GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE 0
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 // tail section:
 //
@@ -387,12 +402,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #error "More than one GR_BUILD defined"
 #endif
 
-
-#if !GR_SCALAR_IS_FLOAT && !GR_SCALAR_IS_FIXED
-    #undef  GR_SCALAR_IS_FLOAT
-    #define GR_SCALAR_IS_FLOAT              1
-    #pragma message GR_WARN("Scalar type not defined, defaulting to float")
-#endif
 
 #if !GR_TEXT_SCALAR_IS_FLOAT && \
     !GR_TEXT_SCALAR_IS_FIXED && \
