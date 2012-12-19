@@ -46,7 +46,7 @@ enum benchModes {
 
 static void erase(SkBitmap& bm) {
     if (bm.config() == SkBitmap::kA8_Config) {
-        bm.eraseColor(0);
+        bm.eraseColor(SK_ColorTRANSPARENT);
     } else {
         bm.eraseColor(SK_ColorWHITE);
     }
@@ -203,17 +203,16 @@ public:
         if (!glCtx->init(width, height)) {
             return false;
         }
-        GrPlatform3DContext ctx =
-            reinterpret_cast<GrPlatform3DContext>(glCtx->gl());
-        grCtx = GrContext::Create(kOpenGL_Shaders_GrEngine, ctx);
+        GrBackendContext ctx = reinterpret_cast<GrBackendContext>(glCtx->gl());
+        grCtx = GrContext::Create(kOpenGL_GrBackend, ctx);
         if (NULL != grCtx) {
-            GrPlatformRenderTargetDesc desc;
+            GrBackendRenderTargetDesc desc;
             desc.fConfig = kSkia8888_PM_GrPixelConfig;
             desc.fWidth = width;
             desc.fHeight = height;
             desc.fStencilBits = 8;
             desc.fRenderTargetHandle = glCtx->getFBOID();
-            GrRenderTarget* rt = grCtx->createPlatformRenderTarget(desc);
+            GrRenderTarget* rt = grCtx->wrapBackendRenderTarget(desc);
             if (NULL == rt) {
                 grCtx->unref();
                 return false;
@@ -909,7 +908,7 @@ int tool_main(int argc, char** argv) {
     return 0;
 }
 
-#if !defined SK_BUILD_FOR_IOS
+#if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)
 int main(int argc, char * const argv[]) {
     return tool_main(argc, (char**) argv);
 }

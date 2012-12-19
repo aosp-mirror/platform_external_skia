@@ -51,6 +51,7 @@
         '../samplecode/SampleEmboss.cpp',
         '../samplecode/SampleEmptyPath.cpp',
         '../samplecode/SampleEncode.cpp',
+        '../samplecode/SampleFatBits.cpp',
         '../samplecode/SampleFillType.cpp',
         '../samplecode/SampleFilter.cpp',
         '../samplecode/SampleFilter2.cpp',
@@ -70,7 +71,6 @@
         '../samplecode/SampleMovie.cpp',
         '../samplecode/SampleOvalTest.cpp',
         '../samplecode/SampleOverflow.cpp',
-        '../samplecode/SamplePageFlip.cpp',
         '../samplecode/SamplePatch.cpp',
         '../samplecode/SamplePath.cpp',
         '../samplecode/SamplePathClip.cpp',
@@ -155,7 +155,6 @@
           'sources!': [
             # require UNIX functions
             '../samplecode/SampleEncode.cpp',
-            '../samplecode/SamplePageFlip.cpp',
           ],
         }],
         [ 'skia_os == "mac"', {
@@ -281,12 +280,17 @@
             'experimental.gyp:experimental',
           ],
           'dependencies': [
-            'android_system.gyp:SampleAppAndroid',
+            'android_deps.gyp:Android_SampleApp',
           ],
         }],
         [ 'skia_gpu == 1', {
           'include_dirs': [
             '../src/gpu', # To pull gl/GrGLUtil.h
+          ],
+        }],
+        [ 'skia_os == "nacl"', {
+          'sources': [
+            '../../nacl/src/nacl_sample.cpp',
           ],
         }],
       ],

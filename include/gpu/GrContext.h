@@ -10,42 +10,45 @@
 #ifndef GrContext_DEFINED
 #define GrContext_DEFINED
 
-#include "GrConfig.h"
-#include "GrPaint.h"
+#include "GrColor.h"
 #include "GrAARectRenderer.h"
 #include "GrClipData.h"
+#include "SkMatrix.h"
+#include "GrPaint.h"
+#include "GrPathRendererChain.h"
 // not strictly needed but requires WK change in LayerTextureUpdaterCanvas to
 // remove.
 #include "GrRenderTarget.h"
-#include "SkClipStack.h"
+#include "GrRefCnt.h"
+#include "GrTexture.h"
 
 class GrAutoScratchTexture;
-class GrCacheKey;
 class GrDrawState;
 class GrDrawTarget;
+class GrEffect;
 class GrFontCache;
 class GrGpu;
 class GrIndexBuffer;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
 class GrPathRenderer;
-class GrPathRendererChain;
 class GrResourceEntry;
 class GrResourceCache;
 class GrStencilBuffer;
+class GrTextureParams;
 class GrVertexBuffer;
 class GrVertexBufferAllocPool;
 class GrSoftwarePathRenderer;
+class SkStrokeRec;
 
 class GR_API GrContext : public GrRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrContext)
 
     /**
-     * Creates a GrContext from within a 3D context.
+     * Creates a GrContext for a backend context.
      */
-    static GrContext* Create(GrEngine engine,
-                             GrPlatform3DContext context3D);
+    static GrContext* Create(GrBackend, GrBackendContext);
 
     /**
      * Returns the number of GrContext instances for the current thread.
@@ -132,12 +135,6 @@ public:
                              const GrTextureDesc& desc,
                              const GrCacheData& cacheData,
                              void* srcData, size_t rowBytes);
-
-    /**
-     * Look for a texture that matches 'key' in the cache. If not found,
-     * return NULL.
-     */
-    GrTexture* findTexture(const GrCacheKey& key);
 
     /**
      *  Search for an entry based on key and dimensions. If found,
@@ -286,7 +283,7 @@ public:
     bool isConfigRenderable(GrPixelConfig config) const;
 
     ///////////////////////////////////////////////////////////////////////////
-    // Platform Surfaces
+    // Backend Surfaces
 
     /**
      * Wraps an existing texture with a GrTexture object.
@@ -298,11 +295,11 @@ public:
      *
      * @return GrTexture object or NULL on failure.
      */
-    GrTexture* createPlatformTexture(const GrPlatformTextureDesc& desc);
+    GrTexture* wrapBackendTexture(const GrBackendTextureDesc& desc);
 
     /**
      * Wraps an existing render target with a GrRenderTarget object. It is
-     * similar to createPlatformTexture but can be used to draw into surfaces
+     * similar to wrapBackendTexture but can be used to draw into surfaces
      * that are not also textures (e.g. FBO 0 in OpenGL, or an MSAA buffer that
      * the client will resolve to a texture).
      *
@@ -310,8 +307,7 @@ public:
      *
      * @return GrTexture object or NULL on failure.
      */
-     GrRenderTarget* createPlatformRenderTarget(
-                                    const GrPlatformRenderTargetDesc& desc);
+     GrRenderTarget* wrapBackendRenderTarget(const GrBackendRenderTargetDesc& desc);
 
     ///////////////////////////////////////////////////////////////////////////
     // Matrix state
@@ -320,13 +316,13 @@ public:
      * Gets the current transformation matrix.
      * @return the current matrix.
      */
-    const GrMatrix& getMatrix() const;
+    const SkMatrix& getMatrix() const;
 
     /**
      * Sets the transformation matrix.
      * @param m the matrix to set.
      */
-    void setMatrix(const GrMatrix& m);
+    void setMatrix(const SkMatrix& m);
 
     /**
      * Sets the current transformation matrix to identity.
@@ -338,7 +334,7 @@ public:
      * current matrix.
      * @param m the matrix to concat.
      */
-    void concatMatrix(const GrMatrix& m) const;
+    void concatMatrix(const SkMatrix& m) const;
 
 
     ///////////////////////////////////////////////////////////////////////////
@@ -386,8 +382,8 @@ public:
      */
     void drawRect(const GrPaint& paint,
                   const GrRect&,
-                  GrScalar strokeWidth = -1,
-                  const GrMatrix* matrix = NULL);
+                  SkScalar strokeWidth = -1,
+                  const SkMatrix* matrix = NULL);
 
     /**
      * Maps a rect of paint coordinates onto the a rect of destination
@@ -407,19 +403,17 @@ public:
     void drawRectToRect(const GrPaint& paint,
                         const GrRect& dstRect,
                         const GrRect& srcRect,
-                        const GrMatrix* dstMatrix = NULL,
-                        const GrMatrix* srcMatrix = NULL);
+                        const SkMatrix* dstMatrix = NULL,
+                        const SkMatrix* srcMatrix = NULL);
 
     /**
      * Draws a path.
      *
      * @param paint         describes how to color pixels.
      * @param path          the path to draw
-     * @param fill          the path filling rule to use.
-     * @param translate     optional additional translation applied to the
-     *                      path.
+     * @param stroke        the stroke information (width, join, cap)
      */
-    void drawPath(const GrPaint& paint, const SkPath& path, GrPathFill fill);
+    void drawPath(const GrPaint& paint, const SkPath& path, const SkStrokeRec& stroke);
 
     /**
      * Draws vertices with a paint.
@@ -590,11 +584,15 @@ public:
 
 
     /**
-     * Copies all texels from one texture to another.
+     * Copies a rectangle of texels from src to dst. The size of dst is the size of the rectangle
+     * copied and topLeft is the position of the rect in src. The rectangle is clipped to src's
+     * bounds.
      * @param src           the texture to copy from.
      * @param dst           the render target to copy to.
+     * @param topLeft       the point in src that will be copied to the top-left of dst. If NULL,
+     *                      (0, 0) will be used.
      */
-    void copyTexture(GrTexture* src, GrRenderTarget* dst);
+    void copyTexture(GrTexture* src, GrRenderTarget* dst, const SkIPoint* topLeft = NULL);
 
     /**
      * Resolves a render target that has MSAA. The intermediate MSAA buffer is
@@ -603,7 +601,7 @@ public:
      * be executed before the resolve.
      *
      * This is only necessary when a client wants to access the object directly
-     * using the underlying graphics API. GrContext will detect when it must
+     * using the backend API directly. GrContext will detect when it must
      * perform a resolve to a GrTexture used as the source of a draw or before
      * reading pixels back from a GrTexture or GrRenderTarget.
      */
@@ -672,10 +670,10 @@ public:
      * Save/restore the view-matrix in the context. It can optionally adjust a paint to account
      * for a coordinate system change. Here is an example of how the paint param can be used:
      *
-     * A GrPaint is setup with custom stages. The stages will have access to the pre-matrix source
+     * A GrPaint is setup with GrEffects. The stages will have access to the pre-matrix source
      * geometry positions when the draw is executed. Later on a decision is made to transform the
-     * geometry to device space on the CPU. The custom stages now need to know that the space in
-     * which the geometry will be specified has changed.
+     * geometry to device space on the CPU. The effects now need to know that the space in which
+     * the geometry will be specified has changed.
      *
      * Note that when restore is called (or in the destructor) the context's matrix will be
      * restored. However, the paint will not be restored. The caller must make a copy of the
@@ -691,7 +689,7 @@ public:
         /**
          * Initializes by pre-concat'ing the context's current matrix with the preConcat param.
          */
-        void setPreConcat(GrContext* context, const GrMatrix& preConcat, GrPaint* paint = NULL) {
+        void setPreConcat(GrContext* context, const SkMatrix& preConcat, GrPaint* paint = NULL) {
             GrAssert(NULL != context);
 
             this->restore();
@@ -711,7 +709,7 @@ public:
             this->restore();
 
             if (NULL != paint) {
-                if (!paint->preConcatSamplerMatricesWithInverse(context->getMatrix())) {
+                if (!paint->sourceCoordChangeByInverse(context->getMatrix())) {
                     return false;
                 }
             }
@@ -725,7 +723,7 @@ public:
          * Replaces the context's matrix with a new matrix. Returns false if the inverse matrix is
          * required to update a paint but the matrix cannot be inverted.
          */
-        bool set(GrContext* context, const GrMatrix& newMatrix, GrPaint* paint = NULL) {
+        bool set(GrContext* context, const SkMatrix& newMatrix, GrPaint* paint = NULL) {
             if (NULL != paint) {
                 if (!this->setIdentity(context, paint)) {
                     return false;
@@ -747,9 +745,9 @@ public:
          * made, not the matrix at the time AutoMatrix was first initialized. In other words, this
          * performs an incremental update of the paint.
          */
-        void preConcat(const GrMatrix& preConcat, GrPaint* paint = NULL) {
+        void preConcat(const SkMatrix& preConcat, GrPaint* paint = NULL) {
             if (NULL != paint) {
-                paint->preConcatSamplerMatrices(preConcat);
+                paint->sourceCoordChange(preConcat);
             }
             fContext->concatMatrix(preConcat);
         }
@@ -772,7 +770,7 @@ public:
 
     private:
         GrContext*  fContext;
-        GrMatrix    fMatrix;
+        SkMatrix    fMatrix;
     };
 
     class AutoClip : GrNoncopyable {
@@ -846,15 +844,27 @@ public:
     void addStencilBuffer(GrStencilBuffer* sb);
     GrStencilBuffer* findStencilBuffer(int width, int height, int sampleCnt);
 
-    GrPathRenderer* getPathRenderer(const SkPath& path,
-                                    GrPathFill fill,
-                                    const GrDrawTarget* target,
-                                    bool antiAlias,
-                                    bool allowSW);
+    GrPathRenderer* getPathRenderer(
+                    const SkPath& path,
+                    const SkStrokeRec& stroke,
+                    const GrDrawTarget* target,
+                    bool allowSW,
+                    GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
+                    GrPathRendererChain::StencilSupport* stencilSupport = NULL);
 
 #if GR_CACHE_STATS
     void printCacheStats() const;
 #endif
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Legacy names that will be kept until WebKit can be updated.
+    GrTexture* createPlatformTexture(const GrPlatformTextureDesc& desc) {
+        return this->wrapBackendTexture(desc);
+    }
+
+    GrRenderTarget* createPlatformRenderTarget(const GrPlatformRenderTargetDesc& desc) {
+        return wrapBackendRenderTarget(desc);
+    }
 
 private:
     // Used to indicate whether a draw should be performed immediately or queued in fDrawBuffer.
@@ -900,7 +910,7 @@ private:
     /// draw state is left unmodified.
     GrDrawTarget* prepareToDraw(const GrPaint*, BufferedDraw);
 
-    void internalDrawPath(const GrPaint& paint, const SkPath& path, GrPathFill fill);
+    void internalDrawPath(const GrPaint& paint, const SkPath& path, const SkStrokeRec& stroke);
 
     GrTexture* createResizedTexture(const GrTextureDesc& desc,
                                     const GrCacheData& cacheData,
@@ -916,8 +926,14 @@ private:
     // for use with textures released from an GrAutoScratchTexture.
     void addExistingTextureToCache(GrTexture* texture);
 
-    GrCustomStage* createPMToUPMEffect(GrTexture* texture, bool swapRAndB);
-    GrCustomStage* createUPMToPMEffect(GrTexture* texture, bool swapRAndB);
+    bool installPMToUPMEffect(GrTexture* texture,
+                              bool swapRAndB,
+                              const SkMatrix& matrix,
+                              GrEffectStage* stage);
+    bool installUPMToPMEffect(GrTexture* texture,
+                              bool swapRAndB,
+                              const SkMatrix& matrix,
+                              GrEffectStage* stage);
 
     typedef GrRefCnt INHERITED;
 };

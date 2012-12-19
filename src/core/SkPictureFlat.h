@@ -29,6 +29,7 @@ enum DrawType {
     CLIP_PATH,
     CLIP_REGION,
     CLIP_RECT,
+    CLIP_RRECT,
     CONCAT,
     DRAW_BITMAP,
     DRAW_BITMAP_MATRIX,
@@ -36,6 +37,7 @@ enum DrawType {
     DRAW_BITMAP_RECT_TO_RECT,
     DRAW_CLEAR,
     DRAW_DATA,
+    DRAW_OVAL,
     DRAW_PAINT,
     DRAW_PATH,
     DRAW_PICTURE,
@@ -45,6 +47,7 @@ enum DrawType {
     DRAW_POS_TEXT_H,
     DRAW_POS_TEXT_H_TOP_BOTTOM, // fast variant of DRAW_POS_TEXT_H
     DRAW_RECT,
+    DRAW_RRECT,
     DRAW_SPRITE,
     DRAW_TEXT,
     DRAW_TEXT_ON_PATH,
@@ -329,8 +332,33 @@ public:
         return !memcmp(a.dataToCompare(), b.dataToCompare(), N);
     }
 
+    // returns true if fTopBot[] has been recorded
+    bool isTopBotValid() const {
+        return fTopBot[0] < fTopBot[1];
+    }
+
+    // Returns fTopBot array, so it can be passed to a routine to compute them.
+    // For efficiency, we assert that fTopBot have not been recorded yet.
+    SkScalar* writableTopBot() {
+        SkASSERT(!this->isTopBotValid());
+        return fTopBot;
+    }
+
+    // return the topbot[] after it has been recorded
+    const SkScalar* topBot() const {
+        SkASSERT(this->isTopBotValid());
+        return fTopBot;
+    }
+
 private:
+    // This is *not* part of the key for search/sort
     int fIndex;
+
+    // Cache of paint's FontMetrics fTop,fBottom
+    // initialied to [0,0] as a sentinel that they have not been recorded yet
+    //
+    // This is *not* part of the key for search/sort
+    SkScalar fTopBot[2];
 
     // From here down is the data we look at in the search/sort. We always begin
     // with the checksum and then length.
@@ -445,20 +473,6 @@ public:
      */
     int find(const T& element) {
         return this->findAndReturnFlat(element)->index();
-    }
-
-    /**
-     * Given a pointer to an array of type T we allocate the array and fill it
-     * with the unflattened dictionary contents. The return value is the size of
-     * the allocated array.
-     */
-    int unflattenDictionary(T*& array) const {
-        int elementCount = fData.count();
-        if (elementCount > 0) {
-            array = SkNEW_ARRAY(T, elementCount);
-            this->unflattenIntoArray(array);
-        }
-        return elementCount;
     }
 
     /**
@@ -634,6 +648,10 @@ class SkPaintDictionary : public SkFlatDictionary<SkPaint> {
     : SkFlatDictionary<SkPaint>(controller) {
         fFlattenProc = &SkFlattenObjectProc<SkPaint>;
         fUnflattenProc = &SkUnflattenObjectProc<SkPaint>;
+    }
+
+    SkFlatData* writableFlatData(int index) {
+        return const_cast<SkFlatData*>((*this)[index]);
     }
 };
 

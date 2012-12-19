@@ -173,6 +173,8 @@ public:
     /** Set the matrix to translate by (dx, dy).
     */
     void setTranslate(SkScalar dx, SkScalar dy);
+    void setTranslate(const SkVector& v) { this->setTranslate(v.fX, v.fY); }
+
     /** Set the matrix to scale by sx and sy, with a pivot point at (px, py).
         The pivot point is the coordinate that should remain unchanged by the
         specified transformation.
@@ -337,7 +339,16 @@ public:
         set inverse to be the inverse of this matrix. If this matrix cannot be
         inverted, ignore inverse and return false
     */
-    bool SK_WARN_UNUSED_RESULT invert(SkMatrix* inverse) const;
+    bool SK_WARN_UNUSED_RESULT invert(SkMatrix* inverse) const {
+        // Allow the trivial case to be inlined.
+        if (this->isIdentity()) {
+            if (NULL != inverse) {
+                inverse->reset();
+            }
+            return true;
+        }
+        return this->invertNonIdentity(inverse);
+    }
 
     /** Fills the passed array with affine identity values
         in column major order.
@@ -617,6 +628,8 @@ private:
         }
         return ((fTypeMask & 0xF) == 0);
     }
+
+    bool SK_WARN_UNUSED_RESULT invertNonIdentity(SkMatrix* inverse) const;
 
     static bool Poly2Proc(const SkPoint[], SkMatrix*, const SkPoint& scale);
     static bool Poly3Proc(const SkPoint[], SkMatrix*, const SkPoint& scale);

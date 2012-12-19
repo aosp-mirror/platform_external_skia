@@ -19,7 +19,7 @@ static const SimplifyFindTopTest::Segment* testCommon(
         SkTArray<SimplifyFindTopTest::Contour>& contours,
         int& index, int& end) {
     SkTDArray<SimplifyFindTopTest::Contour*> contourList;
-    makeContourList(contours, contourList);
+    makeContourList(contours, contourList, false, false);
     addIntersectTs(contourList[0], contourList[0]);
     if (contours.count() > 1) {
         SkASSERT(contours.count() == 2);
@@ -27,9 +27,16 @@ static const SimplifyFindTopTest::Segment* testCommon(
         addIntersectTs(contourList[1], contourList[1]);
     }
     fixOtherTIndex(contourList);
+#if SORTABLE_CONTOURS // old way
     SimplifyFindTopTest::Segment* topStart = findTopContour(contourList);
     const SimplifyFindTopTest::Segment* topSegment = topStart->findTop(index,
             end);
+#else
+    SkPoint bestXY = {SK_ScalarMin, SK_ScalarMin};
+    bool unsortable = false;
+    const SimplifyFindTopTest::Segment* topSegment =
+            findSortableTop(contourList, index, end, bestXY, unsortable, true);
+#endif
     return topSegment;
 }
 

@@ -599,7 +599,7 @@ void SkGlyphCache::AttachCache(SkGlyphCache* cache) {
     // if we have a fixed budget for our cache, do a purge here
     {
         size_t allocated = globals.fTotalMemoryUsed + cache->fMemoryUsed;
-        size_t budgeted = SkGraphics::GetFontCacheLimit();
+        size_t budgeted = globals.getFontCacheLimit();
         if (allocated > budgeted) {
             (void)InternalFreeCache(&globals, allocated - budgeted);
         }
@@ -693,6 +693,7 @@ size_t SkGlyphCache::InternalFreeCache(SkGlyphCache_Globals* globals,
 
 #ifdef SK_DEBUG
 void SkGlyphCache::validate() const {
+#ifdef SK_DEBUG_GLYPH_CACHE
     int count = fGlyphArray.count();
     for (int i = 0; i < count; i++) {
         const SkGlyph* glyph = fGlyphArray[i];
@@ -702,6 +703,7 @@ void SkGlyphCache::validate() const {
             SkASSERT(fImageAlloc.contains(glyph->fImage));
         }
     }
+#endif
 }
 #endif
 

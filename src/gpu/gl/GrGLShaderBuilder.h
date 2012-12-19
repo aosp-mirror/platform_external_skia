@@ -9,7 +9,8 @@
 #define GrGLShaderBuilder_DEFINED
 
 #include "GrAllocator.h"
-#include "GrCustomStage.h"
+#include "GrBackendEffectFactory.h"
+#include "GrEffect.h"
 #include "gl/GrGLShaderVar.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLUniformManager.h"
@@ -23,7 +24,7 @@ class GrGLContextInfo;
 class GrGLShaderBuilder {
 public:
     /**
-     * Used by GrGLProgramStages to add texture reads to their shader code.
+     * Used by GrGLEffects to add texture reads to their shader code.
      */
     class TextureSampler {
     public:
@@ -76,18 +77,12 @@ public:
 
     GrGLShaderBuilder(const GrGLContextInfo&, GrGLUniformManager&);
 
-    /** Determines whether we should use texture2D() or texture2Dproj(), and if an explicit divide
-        is required for the sample coordinates, creates the new variable and emits the code to
-        initialize it. This should only be called by GrGLProgram.*/
-    void setupTextureAccess(const char* varyingFSName, GrSLType varyingType);
-
-    /** Appends a texture sample with projection if necessary; if coordName is not
-        specified, uses fSampleCoords. coordType must either be Vec2f or Vec3f. The latter is
-        interpreted as projective texture coords. The vec length and swizzle order of the result
-        depends on the GrTextureAccess associated with the TextureSampler. */
+    /** Appends a 2D texture sample with projection if necessary. coordType must either be Vec2f or
+        Vec3f. The latter is interpreted as projective texture coords. The vec length and swizzle
+        order of the result depends on the GrTextureAccess associated with the TextureSampler. */
     void appendTextureLookup(SkString* out,
                              const TextureSampler&,
-                             const char* coordName = NULL,
+                             const char* coordName,
                              GrSLType coordType = kVec2f_GrSLType) const;
 
     /** Does the work of appendTextureLookup and modulates the result by modulation. The result is
@@ -97,17 +92,8 @@ public:
     void appendTextureLookupAndModulate(SkString* out,
                                         const char* modulation,
                                         const TextureSampler&,
-                                        const char* coordName = NULL,
+                                        const char* coordName,
                                         GrSLType coordType = kVec2f_GrSLType) const;
-
-    /** Gets the name of the default texture coords which are always kVec2f */
-    const char* defaultTexCoordsName() const { return fDefaultTexCoordsName.c_str(); }
-
-    /* Returns true if the texture matrix from which the default texture coords are computed has
-       perspective. */
-    bool defaultTextureMatrixIsPerspective() const {
-        return fTexCoordVaryingType == kVec3f_GrSLType;
-    }
 
     /** Emits a helper function outside of main(). Currently ShaderType must be
         kFragment_ShaderType. */
@@ -119,17 +105,17 @@ public:
                       const char* body,
                       SkString* outName);
 
-    /** Generates a StageKey for the shader code based on the texture access parameters and the
+    /** Generates a EffectKey for the shader code based on the texture access parameters and the
         capabilities of the GL context.  This is useful for keying the shader programs that may
         have multiple representations, based on the type/format of textures used. */
-    static GrCustomStage::StageKey KeyForTextureAccess(const GrTextureAccess& access,
-                                                       const GrGLCaps& caps);
+    static GrBackendEffectFactory::EffectKey KeyForTextureAccess(const GrTextureAccess&,
+                                                                 const GrGLCaps&);
 
     /** If texture swizzling is available using tex parameters then it is preferred over mangling
         the generated shader code. This potentially allows greater reuse of cached shaders. */
     static const GrGLenum* GetTexParamSwizzle(GrPixelConfig config, const GrGLCaps& caps);
 
-    /** Add a uniform variable to the current program, that has visibilty in one or more shaders.
+    /** Add a uniform variable to the current program, that has visibility in one or more shaders.
         visibility is a bitfield of ShaderType values indicating from which shaders the uniform
         should be accessible. At least one bit must be set. Geometry shader uniforms are not
         supported at this time. The actual uniform name will be mangled. If outName is not NULL then
@@ -151,7 +137,7 @@ public:
     const GrGLShaderVar& getUniformVariable(GrGLUniformManager::UniformHandle) const;
 
     /**
-     * Shorcut for getUniformVariable(u).c_str()
+     * Shortcut for getUniformVariable(u).c_str()
      */
     const char* getUniformCStr(GrGLUniformManager::UniformHandle u) const {
         return this->getUniformVariable(u).c_str();
@@ -165,20 +151,31 @@ public:
                     const char** vsOutName = NULL,
                     const char** fsInName = NULL);
 
+    /** Returns a variable name that represents the position of the fragment in the FS. The position
+        is in device space (e.g. 0,0 is the top left and pixel centers are at half-integers). */
+    const char* fragmentPosition();
+
+    /** Returns a vertex attribute that represents the vertex position in the VS. This is the
+        pre-matrix position and is commonly used by effects to compute texture coords via a matrix.
+      */
+    const GrGLShaderVar& positionAttribute() const { return *fPositionVar; }
+
     /** Called after building is complete to get the final shader string. */
     void getShader(ShaderType, SkString*) const;
 
     /**
-     * TODO: Make this do all the compiling, linking, etc. Hide from the custom stages
+     * TODO: Make this do all the compiling, linking, etc. Hide from the GrEffects
      */
     void finished(GrGLuint programID);
 
     /**
      * Sets the current stage (used to make variable names unique).
-     * TODO: Hide from the custom stages
+     * TODO: Hide from the GrEffects
      */
-    void setCurrentStage(int stage) { fCurrentStage = stage; }
-    void setNonStage() { fCurrentStage = kNonStageIdx; }
+    void setCurrentStage(int stageIdx) { fCurrentStageIdx = stageIdx; }
+    void setNonStage() { fCurrentStageIdx = kNonStageIdx; }
+
+    GrGLUniformManager::UniformHandle getRTHeightUniform() const { return fRTHeightUniform; }
 
 private:
 
@@ -211,18 +208,16 @@ private:
         kNonStageIdx = -1,
     };
 
-    const GrGLContextInfo&  fContext;
-    GrGLUniformManager&     fUniformManager;
-    int                     fCurrentStage;
-    SkString                fFSFunctions;
+    const GrGLContextInfo&              fContext;
+    GrGLUniformManager&                 fUniformManager;
+    int                                 fCurrentStageIdx;
+    SkString                            fFSFunctions;
+    SkString                            fFSHeader;
 
-    /// Per-stage settings - only valid while we're inside GrGLProgram::genStageCode().
-    //@{
-    GrSLType         fTexCoordVaryingType;  // the type, either Vec2f or Vec3f, of the coords passed
-                                            // as a varying from the VS to the FS.
-    SkString         fDefaultTexCoordsName; // the name of the default 2D coords value.
-    //@}
+    bool                                fSetupFragPosition;
+    GrGLUniformManager::UniformHandle   fRTHeightUniform;
 
+    GrGLShaderVar*                      fPositionVar;
 };
 
 #endif

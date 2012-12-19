@@ -4,7 +4,7 @@
 # found in the LICENSE file.
 
 # "Makefile" replacement to build skia for Windows.
-# More info at http://code.google.com/p/skia/wiki/DocRoot
+# More info at https://sites.google.com/site/skiadocs/
 #
 # Some usage examples:
 #   make clean
@@ -20,10 +20,10 @@ import sys
 BUILDTYPE = 'Debug'
 
 # special targets
-TARGET_ALL = 'all'
-TARGET_CLEAN = 'clean'
-TARGET_GYP = 'gyp'
-LIST_OF_ALL_TARGETS = ['SampleApp', 'bench', 'gm', 'tests', 'tools']
+TARGET_ALL     = 'all'
+TARGET_CLEAN   = 'clean'
+TARGET_DEFAULT = 'most'
+TARGET_GYP     = 'gyp'
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 OUT_SUBDIR = 'out'
@@ -133,10 +133,18 @@ def Make(args):
     """
     # handle any variable-setting parameters or special targets
     global BUILDTYPE
+
+    # if no targets were specified at all, make default target
+    if not args:
+        args = [TARGET_DEFAULT]
+
     targets = []
     for arg in args:
+        # If user requests "make all", chain to our explicitly-declared "everything"
+        # target. See https://code.google.com/p/skia/issues/detail?id=932 ("gyp
+        # automatically creates "all" target on some build flavors but not others")
         if arg == TARGET_ALL:
-            targets.extend(LIST_OF_ALL_TARGETS)
+            targets.append('everything')
         elif arg == TARGET_CLEAN:
             MakeClean()
         elif arg.startswith('BUILDTYPE='):
@@ -157,19 +165,19 @@ def Make(args):
     elif os.name == 'posix':
         if sys.platform == 'darwin':
             print 'Mac developers should not run this script; see ' \
-                'http://code.google.com/p/skia/wiki/GettingStartedOnMac'
+                'https://sites.google.com/site/skiadocs/user-documentation/quick-start-guides/mac'
             sys.exit(1)
         elif sys.platform == 'cygwin':
-            print 'Windows development on Cygwin is not currently supported; ' \
-                'see http://code.google.com/p/skia/wiki/GettingStartedOnWindows'
+            print 'Windows development on Cygwin is not currently supported; see ' \
+                'https://sites.google.com/site/skiadocs/user-documentation/quick-start-guides/windows'
             sys.exit(1)
         else:
             print 'Unix developers should not run this script; see ' \
-                'http://code.google.com/p/skia/wiki/GettingStartedOnLinux'
+                'https://sites.google.com/site/skiadocs/user-documentation/quick-start-guides/linux'
             sys.exit(1)
     else:
         print 'unknown platform (os.name=%s, sys.platform=%s); see %s' % (
-            os.name, sys.platform, 'http://code.google.com/p/skia/wiki/DocRoot')
+            os.name, sys.platform, 'https://sites.google.com/site/skiadocs/')
         sys.exit(1)
     sys.exit(0)
 

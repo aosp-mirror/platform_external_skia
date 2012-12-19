@@ -18,45 +18,10 @@
 #include <strings.h>
 #include <sys/types.h>
 
-bool AlmostEqualUlps(float A, float B, int maxUlpsDiff);
+extern bool AlmostEqualUlps(float A, float B);
+// FIXME: delete
 int UlpsDiff(float A, float B);
 int FloatAsInt(float A);
-
-#define USE_EPSILON 0
-
-#if USE_EPSILON
-extern const double PointEpsilon;
-extern const double SquaredEpsilon;
-
-inline bool approximately_equal(double x, double y) {
-    return fabs(x - y) < PointEpsilon;
-}
-
-inline bool approximately_equal_squared(double x, double y) {
-    return fabs(x - y) < SquaredEpsilon;
-}
-
-inline bool approximately_greater(double x, double y) {
-    return x > y - PointEpsilon;
-}
-
-inline bool approximately_lesser(double x, double y) {
-    return x < y + PointEpsilon;
-}
-
-inline bool approximately_zero(double x) {
-    return fabs(x) < PointEpsilon;
-}
-
-inline bool approximately_zero_squared(double x) {
-    return fabs(x) < SquaredEpsilon;
-}
-
-inline bool approximately_negative(double x) {
-    return x < PointEpsilon;
-}
-#else
-extern const int UlpsEpsilon;
 
 #if defined(IN_TEST)
 // FIXME: move to test-only header
@@ -84,11 +49,7 @@ inline bool approximately_zero_squared(double x) {
 }
 
 inline bool approximately_equal(double x, double y) {
-    if (approximately_zero(x - y)) {
-        return true;
-    }
-    //  FIXME: since no other function uses ULPS, this one shouldn't either
-    return AlmostEqualUlps((float) x, (float) y, UlpsEpsilon);
+    return approximately_zero(x - y);
 }
 
 inline bool approximately_equal_squared(double x, double y) {
@@ -115,8 +76,16 @@ inline bool approximately_greater_than_one(double x) {
     return x > 1 - FLT_EPSILON;
 }
 
+inline bool precisely_greater_than_one(double x) {
+    return x > 1 - DBL_EPSILON;
+}
+
 inline bool approximately_less_than_zero(double x) {
     return x < FLT_EPSILON;
+}
+
+inline bool precisely_less_than_zero(double x) {
+    return x < DBL_EPSILON;
 }
 
 inline bool approximately_negative(double x) {
@@ -135,6 +104,10 @@ inline bool approximately_positive(double x) {
     return x > -FLT_EPSILON;
 }
 
+inline bool approximately_positive_squared(double x) {
+    return x > -(FLT_EPSILON * FLT_EPSILON);
+}
+
 inline bool approximately_zero_or_more(double x) {
     return x > -FLT_EPSILON;
 }
@@ -150,8 +123,6 @@ inline bool between(double a, double b, double c) {
     assert(((a <= b && b <= c) || (a >= b && b >= c)) == ((a - b) * (c - b) <= 0));
     return (a - b) * (c - b) <= 0;
 }
-
-#endif
 
 struct _Point {
     double x;
@@ -170,8 +141,12 @@ struct _Point {
         return a.x!= b.x || a.y != b.y;
     }
 
+    // note: this can not be implemented with
+    // return approximately_equal(a.y, y) && approximately_equal(a.x, x);
+    // because that will not take the magnitude of the values
     bool approximatelyEqual(const _Point& a) const {
-        return approximately_equal(a.y, y) && approximately_equal(a.x, x);
+        return AlmostEqualUlps((float) x, (float) a.x)
+                && AlmostEqualUlps((float) y, (float) a.y);
     }
 
 };

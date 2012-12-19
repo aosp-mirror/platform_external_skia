@@ -21,6 +21,10 @@
         'sources/': [ ['exclude', '_android.(h|cpp)$'],
         ],
       }],
+      ['skia_os != "nacl"', {
+        'sources/': [ ['exclude', '_nacl.(h|cpp)$'],
+        ],
+      }],
       [ 'skia_os == "android"', {
         'defines': [
           'GR_ANDROID_BUILD=1',
@@ -70,6 +74,11 @@
             ['exclude', '.*'],
           ],
         },
+      }],
+      [ 'skia_texture_cache_mb_limit != 0', {
+        'defines': [
+          'GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT=<(skia_texture_cache_mb_limit)',
+        ],
       }],
     ],
     'direct_dependent_settings': {
@@ -204,7 +213,15 @@
           'link_settings': {
             'libraries': [
               '-lGL',
+              '-lGLU',
               '-lX11',
+            ],
+          },
+        }],
+        [ 'skia_os == "nacl"', {
+          'link_settings': {
+            'libraries': [
+              '-lppapi_gles2',
             ],
           },
         }],

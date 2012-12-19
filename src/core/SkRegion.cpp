@@ -313,8 +313,8 @@ bool SkRegion::contains(int32_t x, int32_t y) const {
     if (this->isRect()) {
         return true;
     }
-
     SkASSERT(this->isComplex());
+
     const RunType* runs = fRunHead->findScanline(y);
 
     // Skip the Bottom and IntervalCount
@@ -336,6 +336,10 @@ bool SkRegion::contains(int32_t x, int32_t y) const {
         runs += 2;
     }
     return false;
+}
+
+static SkRegion::RunType scanline_bottom(const SkRegion::RunType runs[]) {
+    return runs[0];
 }
 
 static const SkRegion::RunType* scanline_next(const SkRegion::RunType runs[]) {
@@ -367,16 +371,18 @@ bool SkRegion::contains(const SkIRect& r) const {
     if (this->isRect()) {
         return true;
     }
-
     SkASSERT(this->isComplex());
-    const RunType* scanline = fRunHead->findScanline(r.fTop);
 
-    do {
+    const RunType* scanline = fRunHead->findScanline(r.fTop);
+    for (;;) {
         if (!scanline_contains(scanline, r.fLeft, r.fRight)) {
             return false;
         }
+        if (r.fBottom <= scanline_bottom(scanline)) {
+            break;
+        }
         scanline = scanline_next(scanline);
-    } while (r.fBottom >= scanline[0]);
+    }
     return true;
 }
 
@@ -450,14 +456,18 @@ bool SkRegion::intersects(const SkIRect& r) const {
     if (this->isRect()) {
         return true;
     }
+    SkASSERT(this->isComplex());
 
     const RunType* scanline = fRunHead->findScanline(sect.fTop);
-    do {
+    for (;;) {
         if (scanline_intersects(scanline, sect.fLeft, sect.fRight)) {
             return true;
         }
+        if (sect.fBottom <= scanline_bottom(scanline)) {
+            break;
+        }
         scanline = scanline_next(scanline);
-    } while (sect.fBottom >= scanline[0]);
+    }
     return false;
 }
 

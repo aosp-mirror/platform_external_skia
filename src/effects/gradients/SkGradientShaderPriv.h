@@ -91,7 +91,6 @@ public:
                 int colorCount, SkShader::TileMode mode, SkUnitMapper* mapper);
     virtual ~SkGradientShaderBase();
 
-    // overrides
     virtual bool setContext(const SkBitmap&, const SkPaint&, const SkMatrix&) SK_OVERRIDE;
     virtual uint32_t getFlags() SK_OVERRIDE { return fFlags; }
     virtual bool isOpaque() const SK_OVERRIDE;
@@ -192,13 +191,14 @@ private:
 
 #if SK_SUPPORT_GPU
 
-#include "gl/GrGLProgramStage.h"
+#include "gl/GrGLEffect.h"
+#include "gl/GrGLEffectMatrix.h"
 
-class GrSamplerState;
-class GrProgramStageFactory;
+class GrEffectStage;
+class GrBackendEffectFactory;
 
 /*
- * The intepretation of the texture matrix depends on the sample mode. The
+ * The interpretation of the texture matrix depends on the sample mode. The
  * texture matrix is applied both when the texture coordinates are explicit
  * and  when vertex positions are used as texture  coordinates. In the latter
  * case the texture matrix is applied to the pre-view-matrix position
@@ -223,11 +223,12 @@ class GrProgramStageFactory;
  class GrTextureStripAtlas;
 
 // Base class for Gr gradient effects
-class GrGradientEffect : public GrCustomStage {
+class GrGradientEffect : public GrEffect {
 public:
 
     GrGradientEffect(GrContext* ctx,
                      const SkGradientShaderBase& shader,
+                     const SkMatrix& matrix,
                      SkShader::TileMode tileMode);
 
     virtual ~GrGradientEffect();
@@ -235,12 +236,13 @@ public:
     virtual const GrTextureAccess& textureAccess(int index) const SK_OVERRIDE;
 
     bool useAtlas() const { return SkToBool(-1 != fRow); }
-    GrScalar getYCoord() const { return fYCoord; };
+    SkScalar getYCoord() const { return fYCoord; };
+    const SkMatrix& getMatrix() const { return fMatrix;}
 
-    virtual bool isEqual(const GrCustomStage& stage) const SK_OVERRIDE {
-        const GrGradientEffect& s = static_cast<const GrGradientEffect&>(stage);
-        return INHERITED::isEqual(stage) && this->useAtlas() == s.useAtlas() &&
-               fYCoord == s.getYCoord();
+    virtual bool isEqual(const GrEffect& effect) const SK_OVERRIDE {
+        const GrGradientEffect& s = static_cast<const GrGradientEffect&>(effect);
+        return INHERITED::isEqual(effect) && this->useAtlas() == s.useAtlas() &&
+               fYCoord == s.getYCoord() && fMatrix.cheapEqualTo(s.getMatrix());
     }
 
 protected:
@@ -260,31 +262,63 @@ protected:
 
 private:
     GrTextureAccess fTextureAccess;
-    GrScalar fYCoord;
+    SkScalar fYCoord;
     GrTextureStripAtlas* fAtlas;
     int fRow;
+    SkMatrix fMatrix;
 
-    typedef GrCustomStage INHERITED;
+    typedef GrEffect INHERITED;
 
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// Base class for GL gradient custom stages
-class GrGLGradientStage : public GrGLProgramStage {
+// Base class for GL gradient effects
+class GrGLGradientEffect : public GrGLEffect {
 public:
+    GrGLGradientEffect(const GrBackendEffectFactory& factory);
+    virtual ~GrGLGradientEffect();
 
-    GrGLGradientStage(const GrProgramStageFactory& factory);
-    virtual ~GrGLGradientStage();
+    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
 
-    virtual void setupVariables(GrGLShaderBuilder* builder) SK_OVERRIDE;
-    virtual void setData(const GrGLUniformManager&,
-                         const GrCustomStage&,
-                         const GrRenderTarget*,
-                         int stageNum) SK_OVERRIDE;
+protected:
+    /**
+     * Subclasses must reserve the lower kMatrixKeyBitCnt of their key for use by
+     * GrGLGradientEffect.
+     */
+    enum {
+        kMatrixKeyBitCnt = GrGLEffectMatrix::kKeyBits,
+        kMatrixKeyMask = (1 << kMatrixKeyBitCnt) - 1,
+    };
 
-    // emit code that gets a fragment's color from an expression for t; for now
-    // this always uses the texture, but for simpler cases we'll be able to lerp
+    /**
+     * Subclasses must call this. It will return a value restricted to the lower kMatrixKeyBitCnt
+     * bits.
+     */
+    static EffectKey GenMatrixKey(const GrEffectStage& s);
+
+    /**
+     * Inserts code to implement the GrGradientEffect's matrix. This should be called before a
+     * subclass emits its own code. The name of the 2D coords is output via fsCoordName and already
+     * incorporates any perspective division. The caller can also optionally retrieve the name of
+     * the varying inserted in the VS and its type, which may be either vec2f or vec3f depending
+     * upon whether the matrix has perspective or not. It is not necessary to mask the key before
+     * calling.
+     */
+    void setupMatrix(GrGLShaderBuilder* builder,
+                     EffectKey key,
+                     const char* vertexCoords,
+                     const char** fsCoordName,
+                     const char** vsVaryingName = NULL,
+                     GrSLType* vsVaryingType = NULL);
+
+    // Emits the uniform used as the y-coord to texture samples in derived classes. Subclasses
+    // should call this method from their emitCode().
+    void emitYCoordUniform(GrGLShaderBuilder* builder);
+
+    // emit code that gets a fragment's color from an expression for t; for now this always uses the
+    // texture, but for simpler cases we'll be able to lerp. Subclasses should call this method from
+    // their emitCode().
     void emitColorLookup(GrGLShaderBuilder* builder,
                          const char* gradientTValue,
                          const char* outputColor,
@@ -292,11 +326,11 @@ public:
                          const GrGLShaderBuilder::TextureSampler&);
 
 private:
-
-    GrScalar fCachedYCoord;
+    SkScalar fCachedYCoord;
     GrGLUniformManager::UniformHandle fFSYUni;
+    GrGLEffectMatrix fEffectMatrix;
 
-    typedef GrGLProgramStage INHERITED;
+    typedef GrGLEffect INHERITED;
 };
 
 #endif

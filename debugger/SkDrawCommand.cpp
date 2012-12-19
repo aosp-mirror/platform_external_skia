@@ -75,11 +75,12 @@ void Clear::execute(SkCanvas* canvas) {
     canvas->clear(this->fColor);
 }
 
-ClipPath::ClipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
+ClipPath::ClipPath(const SkPath& path, SkRegion::Op op, bool doAA, SkBitmap& bitmap) {
     this->fPath = &path;
     this->fOp = op;
     this->fDoAA = doAA;
     this->fDrawType = CLIP_PATH;
+    this->fBitmap = bitmap;
 
     this->fInfo.push(SkObjectParser::PathToString(path));
     this->fInfo.push(SkObjectParser::RegionOpToString(op));
@@ -88,6 +89,10 @@ ClipPath::ClipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
 
 void ClipPath::execute(SkCanvas* canvas) {
     canvas->clipPath(*this->fPath, this->fOp, this->fDoAA);
+}
+
+const SkBitmap* ClipPath::getBitmap() const {
+    return &fBitmap;
 }
 
 ClipRegion::ClipRegion(const SkRegion& region, SkRegion::Op op) {
@@ -130,12 +135,13 @@ void Concat::execute(SkCanvas* canvas) {
 }
 
 DrawBitmap::DrawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar top,
-        const SkPaint* paint) {
+        const SkPaint* paint, SkBitmap& resizedBitmap) {
     this->fBitmap = &bitmap;
     this->fLeft = left;
     this->fTop = top;
     this->fPaint = paint;
     this->fDrawType = DRAW_BITMAP;
+    this->fResizedBitmap = resizedBitmap;
 
     this->fInfo.push(SkObjectParser::BitmapToString(bitmap));
     this->fInfo.push(SkObjectParser::ScalarToString(left, "SkScalar left: "));
@@ -146,12 +152,17 @@ void DrawBitmap::execute(SkCanvas* canvas) {
     canvas->drawBitmap(*this->fBitmap, this->fLeft, this->fTop, this->fPaint);
 }
 
+const SkBitmap* DrawBitmap::getBitmap() const {
+    return &fResizedBitmap;
+}
+
 DrawBitmapMatrix::DrawBitmapMatrix(const SkBitmap& bitmap,
-        const SkMatrix& matrix, const SkPaint* paint) {
+        const SkMatrix& matrix, const SkPaint* paint, SkBitmap& resizedBitmap) {
     this->fBitmap = &bitmap;
     this->fMatrix = &matrix;
     this->fPaint = paint;
     this->fDrawType = DRAW_BITMAP_MATRIX;
+    this->fResizedBitmap = resizedBitmap;
 
     this->fInfo.push(SkObjectParser::BitmapToString(bitmap));
     this->fInfo.push(SkObjectParser::MatrixToString(matrix));
@@ -162,17 +173,22 @@ void DrawBitmapMatrix::execute(SkCanvas* canvas) {
     canvas->drawBitmapMatrix(*this->fBitmap, *this->fMatrix, this->fPaint);
 }
 
+const SkBitmap* DrawBitmapMatrix::getBitmap() const {
+    return &fResizedBitmap;
+}
+
 DrawBitmapNine::DrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
-        const SkRect& dst, const SkPaint* paint) {
+        const SkRect& dst, const SkPaint* paint, SkBitmap& resizedBitmap) {
     this->fBitmap = &bitmap;
     this->fCenter = &center;
     this->fDst = &dst;
     this->fPaint = paint;
     this->fDrawType = DRAW_BITMAP_NINE;
+    this->fResizedBitmap = resizedBitmap;
 
     this->fInfo.push(SkObjectParser::BitmapToString(bitmap));
     this->fInfo.push(SkObjectParser::IRectToString(center));
-    this->fInfo.push(SkObjectParser::RectToString(dst));
+    this->fInfo.push(SkObjectParser::RectToString(dst, "Dst: "));
     if (paint) this->fInfo.push(SkObjectParser::PaintToString(*paint));
 }
 
@@ -180,22 +196,31 @@ void DrawBitmapNine::execute(SkCanvas* canvas) {
     canvas->drawBitmapNine(*this->fBitmap, *this->fCenter, *this->fDst, this->fPaint);
 }
 
+const SkBitmap* DrawBitmapNine::getBitmap() const {
+    return &fResizedBitmap;
+}
+
 DrawBitmapRect::DrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
-        const SkRect& dst, const SkPaint* paint) {
+        const SkRect& dst, const SkPaint* paint, SkBitmap& resizedBitmap) {
     this->fBitmap = &bitmap;
     this->fSrc = src;
     this->fDst = &dst;
     this->fPaint = paint;
     this->fDrawType = DRAW_BITMAP_RECT_TO_RECT;
+    this->fResizedBitmap = resizedBitmap;
 
     this->fInfo.push(SkObjectParser::BitmapToString(bitmap));
-    if (src) this->fInfo.push(SkObjectParser::RectToString(*src));
-    this->fInfo.push(SkObjectParser::RectToString(dst));
+    if (src) this->fInfo.push(SkObjectParser::RectToString(*src, "Src: "));
+    this->fInfo.push(SkObjectParser::RectToString(dst, "Dst: "));
     if (paint) this->fInfo.push(SkObjectParser::PaintToString(*paint));
 }
 
 void DrawBitmapRect::execute(SkCanvas* canvas) {
     canvas->drawBitmapRectToRect(*this->fBitmap, this->fSrc, *this->fDst, this->fPaint);
+}
+
+const SkBitmap* DrawBitmapRect::getBitmap() const {
+    return &fResizedBitmap;
 }
 
 DrawData::DrawData(const void* data, size_t length) {
@@ -220,9 +245,10 @@ void DrawPaint::execute(SkCanvas* canvas) {
     canvas->drawPaint(*this->fPaint);
 }
 
-DrawPath::DrawPath(const SkPath& path, const SkPaint& paint) {
+DrawPath::DrawPath(const SkPath& path, const SkPaint& paint, SkBitmap& bitmap) {
     this->fPath = &path;
     this->fPaint = &paint;
+    this->fBitmap = bitmap;
     this->fDrawType = DRAW_PATH;
 
     this->fInfo.push(SkObjectParser::PathToString(path));
@@ -231,6 +257,10 @@ DrawPath::DrawPath(const SkPath& path, const SkPaint& paint) {
 
 void DrawPath::execute(SkCanvas* canvas) {
     canvas->drawPath(*this->fPath, *this->fPaint);
+}
+
+const SkBitmap* DrawPath::getBitmap() const {
+    return &fBitmap;
 }
 
 DrawPicture::DrawPicture(SkPicture& picture) {
@@ -314,12 +344,13 @@ void DrawRectC::execute(SkCanvas* canvas) {
 }
 
 DrawSprite::DrawSprite(const SkBitmap& bitmap, int left, int top,
-        const SkPaint* paint) {
+        const SkPaint* paint, SkBitmap& resizedBitmap) {
     this->fBitmap = &bitmap;
     this->fLeft = left;
     this->fTop = top;
     this->fPaint = paint;
     this->fDrawType = DRAW_SPRITE;
+    this->fResizedBitmap = resizedBitmap;
 
     this->fInfo.push(SkObjectParser::BitmapToString(bitmap));
     this->fInfo.push(SkObjectParser::IntToString(left, "Left: "));
@@ -328,6 +359,10 @@ DrawSprite::DrawSprite(const SkBitmap& bitmap, int left, int top,
 
 void DrawSprite::execute(SkCanvas* canvas) {
     canvas->drawSprite(*this->fBitmap, this->fLeft, this->fTop, this->fPaint);
+}
+
+const SkBitmap* DrawSprite::getBitmap() const {
+    return &fResizedBitmap;
 }
 
 DrawTextC::DrawTextC(const void* text, size_t byteLength, SkScalar x, SkScalar y,
@@ -401,6 +436,10 @@ void Restore::execute(SkCanvas* canvas) {
     canvas->restore();
 }
 
+void Restore::trackSaveState(int* state) {
+    (*state)--;
+}
+
 Rotate::Rotate(SkScalar degrees) {
     this->fDegrees = degrees;
     this->fDrawType = ROTATE;
@@ -422,6 +461,10 @@ void Save::execute(SkCanvas* canvas) {
     canvas->save(this->fFlags);
 }
 
+void Save::trackSaveState(int* state) {
+    (*state)++;
+}
+
 SaveLayer::SaveLayer(const SkRect* bounds, const SkPaint* paint,
         SkCanvas::SaveFlags flags) {
     this->fBounds = bounds;
@@ -429,13 +472,17 @@ SaveLayer::SaveLayer(const SkRect* bounds, const SkPaint* paint,
     this->fFlags = flags;
     this->fDrawType = SAVE_LAYER;
 
-    if (bounds) this->fInfo.push(SkObjectParser::RectToString(*bounds));
+    if (bounds) this->fInfo.push(SkObjectParser::RectToString(*bounds, "Bounds: "));
     if (paint) this->fInfo.push(SkObjectParser::PaintToString(*paint));
     this->fInfo.push(SkObjectParser::SaveFlagsToString(flags));
 }
 
 void SaveLayer::execute(SkCanvas* canvas) {
     canvas->saveLayer(this->fBounds, this->fPaint, this->fFlags);
+}
+
+void SaveLayer::trackSaveState(int* state) {
+    (*state)++;
 }
 
 Scale::Scale(SkScalar sx, SkScalar sy) {

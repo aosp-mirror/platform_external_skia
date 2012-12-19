@@ -92,6 +92,8 @@ SkTDArray<char> gTempDataStore;
 
 static SampleWindow* gSampleWindow;
 
+static bool gShowGMBounds;
+
 static void postEventToSink(SkEvent* evt, SkEventSink* sink) {
     evt->setTargetID(sink->getSinkID())->post();
 }
@@ -226,8 +228,7 @@ public:
         }
 
         SkASSERT(NULL == fCurContext);
-        fCurContext = GrContext::Create(kOpenGL_Shaders_GrEngine,
-                                        (GrPlatform3DContext) fCurIntf);
+        fCurContext = GrContext::Create(kOpenGL_GrBackend, (GrBackendContext) fCurIntf);
 
         if (NULL == fCurContext || NULL == fCurIntf) {
             // We need some context and interface to see results
@@ -315,7 +316,7 @@ public:
         if (fCurContext) {
             win->attach(fBackend, fMSAASampleCount);
 
-            GrPlatformRenderTargetDesc desc;
+            GrBackendRenderTargetDesc desc;
             desc.fWidth = SkScalarRound(win->width());
             desc.fHeight = SkScalarRound(win->height());
             desc.fConfig = kSkia8888_PM_GrPixelConfig;
@@ -326,7 +327,7 @@ public:
             desc.fRenderTargetHandle = buffer;
 
             SkSafeUnref(fCurRenderTarget);
-            fCurRenderTarget = fCurContext->createPlatformRenderTarget(desc);
+            fCurRenderTarget = fCurContext->wrapBackendRenderTarget(desc);
         }
 #endif
     }
@@ -467,7 +468,7 @@ static void testpdf() {
         SkBitmap bm;
         bm.setConfig(SkBitmap::kA8_Config, 64, 64);
         bm.allocPixels();
-        bm.eraseColor(0);
+        bm.eraseColor(SK_ColorTRANSPARENT);
 
         SkCanvas canvas(bm);
 
@@ -490,7 +491,7 @@ public:
                     SkOSMenu::TriState hinting) :
         fLCDState(lcd), fAAState(aa), fFilterState(filter), fHintingState(hinting) {}
 
-    virtual void filter(SkPaint* paint, Type t) {
+    virtual bool filter(SkPaint* paint, Type t) {
         if (kText_Type == t && SkOSMenu::kMixedState != fLCDState) {
             paint->setLCDRenderText(SkOSMenu::kOnState == fLCDState);
         }
@@ -505,6 +506,7 @@ public:
                               SkPaint::kNormal_Hinting :
                               SkPaint::kSlight_Hinting);
         }
+        return true;
     }
 
 private:
@@ -1049,6 +1051,10 @@ void SampleWindow::draw(SkCanvas* canvas) {
         this->updateMatrix();
     }
 
+    if (fMeasureFPS) {
+        fMeasureFPS_Time = 0;
+    }
+
     if (fNClip) {
         this->INHERITED::draw(canvas);
         SkBitmap orig = capture_bitmap(canvas);
@@ -1107,6 +1113,11 @@ void SampleWindow::draw(SkCanvas* canvas) {
     }
     if (fMagnify && !fSaveToPdf) {
         magnify(canvas);
+    }
+
+    if (fMeasureFPS && fMeasureFPS_Time) {
+        this->updateTitle();
+        this->postInvalDelay();
     }
 
     // do this last
@@ -1394,10 +1405,8 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
     }
 
     // Do this after presentGL and other finishing, rather than in afterChild
-    if (fMeasureFPS && fMeasureFPS_Time) {
-        fMeasureFPS_Time = SkTime::GetMSecs() - fMeasureFPS_Time;
-        this->updateTitle();
-        this->postInvalDelay();
+    if (fMeasureFPS && fMeasureFPS_StartTime) {
+        fMeasureFPS_Time += SkTime::GetMSecs() - fMeasureFPS_StartTime;
     }
 
     //    if ((fScrollTestX | fScrollTestY) != 0)
@@ -1469,9 +1478,8 @@ void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
     this->installDrawFilter(canvas);
 
     if (fMeasureFPS) {
-        fMeasureFPS_Time = 0;   // 0 means the child is not aware of repeat-draw
         if (SampleView::SetRepeatDraw(child, FPS_REPEAT_COUNT)) {
-            fMeasureFPS_Time = SkTime::GetMSecs();
+            fMeasureFPS_StartTime = SkTime::GetMSecs();
         }
     } else {
         (void)SampleView::SetRepeatDraw(child, 1);
@@ -1732,6 +1740,8 @@ static void cleanup_for_filename(SkString* name) {
 }
 #endif
 
+//extern bool gIgnoreFastBlurRect;
+
 bool SampleWindow::onHandleChar(SkUnichar uni) {
     {
         SkView* view = curr_view(this);
@@ -1774,12 +1784,30 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
     }
 
     switch (uni) {
+        case 'b':
+            {
+            postEventToSink(SkNEW_ARGS(SkEvent, ("PictFileView::toggleBBox")), curr_view(this));
+            this->updateTitle();
+            this->inval(NULL);
+            break;
+            }
+        case 'B':
+//            gIgnoreFastBlurRect = !gIgnoreFastBlurRect;
+            this->inval(NULL);
+            break;
+
         case 'f':
             // only
             toggleFPS();
             break;
         case 'g':
             fRequestGrabImage = true;
+            this->inval(NULL);
+            break;
+        case 'G':
+            gShowGMBounds = !gShowGMBounds;
+            postEventToSink(GMSampleView::NewShowSizeEvt(gShowGMBounds),
+                            curr_view(this));
             this->inval(NULL);
             break;
         case 'i':

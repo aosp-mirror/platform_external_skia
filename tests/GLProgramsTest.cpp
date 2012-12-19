@@ -13,42 +13,33 @@
 #if SK_SUPPORT_GPU && SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 
 #include "gl/GrGpuGL.h"
-#include "GrProgramStageFactory.h"
+#include "GrBackendEffectFactory.h"
 #include "effects/GrConfigConversionEffect.h"
 
-#include "GrRandom.h"
+#include "SkRandom.h"
 #include "Test.h"
 
 namespace {
 
-// GrRandoms nextU() values have patterns in the low bits
+// SkRandoms nextU() values have patterns in the low bits
 // So using nextU() % array_count might never take some values.
-int random_int(GrRandom* r, int count) {
+int random_int(SkRandom* r, int count) {
     return (int)(r->nextF() * count);
 }
 
-bool random_bool(GrRandom* r) {
+bool random_bool(SkRandom* r) {
     return r->nextF() > .5f;
 }
 
-typedef GrGLProgram::StageDesc StageDesc;
-// TODO: Effects should be able to register themselves for inclusion in the
-// randomly generated shaders. They should be able to configure themselves
-// randomly.
-const GrCustomStage* create_random_effect(StageDesc* stageDesc,
-                                          GrRandom* random,
-                                          GrContext* context,
-                                          GrTexture* dummyTextures[]) {
+const GrEffect* create_random_effect(SkRandom* random,
+                                     GrContext* context,
+                                     GrTexture* dummyTextures[]) {
 
-    // The new code uses SkRandom not GrRandom.
-    // TODO: Remove GrRandom.
     SkRandom sk_random;
     sk_random.setSeed(random->nextU());
-    GrCustomStage* stage = GrCustomStageTestFactory::CreateStage(&sk_random,
-                                                                    context,
-                                                                    dummyTextures);
-    GrAssert(stage);
-    return stage;
+    GrEffect* effect = GrEffectTestFactory::CreateStage(&sk_random, context, dummyTextures);
+    GrAssert(effect);
+    return effect;
 }
 }
 
@@ -64,16 +55,9 @@ bool GrGpuGL::programUnitTest() {
     dummyDesc.fHeight = 22;
     SkAutoTUnref<GrTexture> dummyTexture2(this->createTexture(dummyDesc, NULL, 0));
 
-    // GrGLSLGeneration glslGeneration =
-            GrGetGLSLGeneration(this->glBinding(), this->glInterface());
-    static const int STAGE_OPTS[] = {
-        0,
-        StageDesc::kNoPerspective_OptFlagBit,
-    };
-
     static const int NUM_TESTS = 512;
 
-    GrRandom random;
+    SkRandom random;
     for (int t = 0; t < NUM_TESTS; ++t) {
 
 #if 0
@@ -108,13 +92,13 @@ bool GrGpuGL::programUnitTest() {
             pdesc.fVertexLayout |= GrDrawTarget::kEdge_VertexLayoutBit;
             if (this->getCaps().shaderDerivativeSupport()) {
                 pdesc.fVertexEdgeType = (GrDrawState::VertexEdgeType) random_int(&random, GrDrawState::kVertexEdgeTypeCnt);
+                pdesc.fDiscardIfOutsideEdge = random.nextBool();
             } else {
                 pdesc.fVertexEdgeType = GrDrawState::kHairLine_EdgeType;
+                pdesc.fDiscardIfOutsideEdge = false;
             }
         } else {
         }
-
-        pdesc.fColorMatrixEnabled = random_bool(&random);
 
         if (this->getCaps().dualSourceBlendingSupport()) {
             pdesc.fDualSrcOutput = random_int(&random, ProgramDesc::kDualSrcOutputCnt);
@@ -122,10 +106,9 @@ bool GrGpuGL::programUnitTest() {
             pdesc.fDualSrcOutput = ProgramDesc::kNone_DualSrcOutput;
         }
 
-        SkAutoTUnref<const GrCustomStage> customStages[GrDrawState::kNumStages];
+        GrEffectStage stages[GrDrawState::kNumStages];
 
         for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            StageDesc& stage = pdesc.fStages[s];
             // enable the stage?
             if (random_bool(&random)) {
                 // use separate tex coords?
@@ -133,35 +116,29 @@ bool GrGpuGL::programUnitTest() {
                     int t = random_int(&random, GrDrawState::kMaxTexCoords);
                     pdesc.fVertexLayout |= StageTexCoordVertexLayoutBit(s, t);
                 }
-                stage.setEnabled(true);
-            }
-            // use text-formatted verts?
-            if (random_bool(&random)) {
-                pdesc.fVertexLayout |= kTextFormat_VertexLayoutBit;
-            }
+                // use text-formatted verts?
+                if (random_bool(&random)) {
+                    pdesc.fVertexLayout |= kTextFormat_VertexLayoutBit;
+                }
 
-            stage.fCustomStageKey = 0;
-
-            stage.fOptFlags |= STAGE_OPTS[random_int(&random, GR_ARRAY_COUNT(STAGE_OPTS))];
-
-            if (stage.isEnabled()) {
                 GrTexture* dummyTextures[] = {dummyTexture1.get(), dummyTexture2.get()};
-                customStages[s].reset(create_random_effect(&stage,
-                                                           &random,
-                                                           getContext(),
-                                                           dummyTextures));
-                if (NULL != customStages[s]) {
-                    stage.fCustomStageKey =
-                        customStages[s]->getFactory().glStageKey(*customStages[s], this->glCaps());
+                SkAutoTUnref<const GrEffect> effect(create_random_effect(&random,
+                                                                            getContext(),
+                                                                            dummyTextures));
+                stages[s].setEffect(effect.get());
+                if (NULL != stages[s].getEffect()) {
+                    pdesc.fEffectKeys[s] =
+                        stages[s].getEffect()->getFactory().glEffectKey(stages[s], this->glCaps());
                 }
             }
         }
-        GR_STATIC_ASSERT(sizeof(customStages) ==
-                         GrDrawState::kNumStages * sizeof(GrCustomStage*));
-        const GrCustomStage** stages = reinterpret_cast<const GrCustomStage**>(&customStages);
+        const GrEffectStage* stagePtrs[GrDrawState::kNumStages];
+        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
+            stagePtrs[s] = &stages[s];
+        }
         SkAutoTUnref<GrGLProgram> program(GrGLProgram::Create(this->glContextInfo(),
                                                               pdesc,
-                                                              stages));
+                                                              stagePtrs));
         if (NULL == program.get()) {
             return false;
         }
@@ -174,24 +151,31 @@ static void GLProgramsTest(skiatest::Reporter* reporter, GrContext* context) {
     REPORTER_ASSERT(reporter, shadersGpu->programUnitTest());
 }
 
-
 #include "TestClassDef.h"
 DEFINE_GPUTESTCLASS("GLPrograms", GLProgramsTestClass, GLProgramsTest)
 
 // This is evil evil evil. The linker may throw away whole translation units as dead code if it
-// thinks none of the functions are called. It will do this even if there are static initilializers
+// thinks none of the functions are called. It will do this even if there are static initializers
 // in the unit that could pass pointers to functions from the unit out to other translation units!
 // We force some of the effects that would otherwise be discarded to link here.
 
 #include "SkLightingImageFilter.h"
 #include "SkMagnifierImageFilter.h"
+#include "SkColorMatrixFilter.h"
 
 void forceLinking();
 
 void forceLinking() {
     SkLightingImageFilter::CreateDistantLitDiffuse(SkPoint3(0,0,0), 0, 0, 0);
     SkMagnifierImageFilter mag(SkRect::MakeWH(SK_Scalar1, SK_Scalar1), SK_Scalar1);
-    GrConfigConversionEffect::Create(NULL, false);
+    GrEffectStage dummyStage;
+    GrConfigConversionEffect::InstallEffect(NULL,
+                                            false,
+                                            GrConfigConversionEffect::kNone_PMConversion,
+                                            SkMatrix::I(),
+                                            &dummyStage);
+    SkScalar matrix[20];
+    SkColorMatrixFilter cmf(matrix);
 }
 
 #endif

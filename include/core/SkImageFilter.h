@@ -17,7 +17,7 @@ class SkMatrix;
 struct SkIPoint;
 struct SkIRect;
 struct SkRect;
-class GrCustomStage;
+class GrEffect;
 class GrTexture;
 
 /**
@@ -83,19 +83,22 @@ public:
 
     /**
      *  Returns true if the filter can be expressed a single-pass
-     *  GrCustomStage, used to process this filter on the GPU, or false if
+     *  GrEffect, used to process this filter on the GPU, or false if
      *  not.
      *
-     *  If stage is non-NULL, a new GrCustomStage instance is stored
+     *  If effect is non-NULL, a new GrEffect instance is stored
      *  in it.  The caller assumes ownership of the stage, and it is up to the
      *  caller to unref it.
+     *
+     *  The effect can assume its vertexCoords space maps 1-to-1 with texels
+     *  in the texture.
      */
-    virtual bool asNewCustomStage(GrCustomStage** stage, GrTexture*) const;
+    virtual bool asNewEffect(GrEffect** effect, GrTexture*) const;
 
     /**
      *  Returns true if the filter can be processed on the GPU.  This is most
      *  often used for multi-pass effects, where intermediate results must be
-     *  rendered to textures.  For single-pass effects, use asNewCustomStage().
+     *  rendered to textures.  For single-pass effects, use asNewEffect().
      *  The default implementation returns false.
      */
     virtual bool canFilterImageGPU() const;
@@ -133,10 +136,11 @@ public:
 protected:
     SkImageFilter(int inputCount, SkImageFilter** inputs);
 
-    // The ... represents inputCount SkImageFilter pointers, upon which this
-    // constructor will call SkSafeRef().  This is the same behaviour as
-    // the SkImageFilter(int, SkImageFilter**) constructor above.
-    explicit SkImageFilter(int inputCount, ...);
+    // Convenience constructor for 1-input filters.
+    explicit SkImageFilter(SkImageFilter* input);
+
+    // Convenience constructor for 2-input filters.
+    SkImageFilter(SkImageFilter* input1, SkImageFilter* input2);
 
     virtual ~SkImageFilter();
 

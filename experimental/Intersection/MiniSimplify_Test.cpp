@@ -18,7 +18,15 @@ struct curve test1[] = {
 {SkPath::kDone_Verb}
 };
 
+struct curve test2[] = {
+{SkPath::kQuad_Verb, {{366.608826f, 151.196014f}, {378.803101f, 136.674606f}, {398.164948f, 136.674606f}}},
+{SkPath::kQuad_Verb, {{359.978058f, 136.581512f}, {378.315979f, 136.581512f}, {388.322723f, 149.613556f}}},
+{SkPath::kQuad_Verb, {{364.390686f, 157.898193f}, {375.281769f, 136.674606f}, {396.039917f, 136.674606f}}},
+{SkPath::kDone_Verb}
+};
+
 struct curve* testSet[] = {
+    test2,
     test1
 };
 
@@ -50,6 +58,8 @@ static void construct() {
                 case SkPath::kCubic_Verb:
                     path.cubicTo(test->pts[1].fX, test->pts[1].fY, test->pts[2].fX, test->pts[2].fY, test->pts[3].fX, test->pts[3].fY);
                     break;
+                default:
+                    SkASSERT(0);
             }
             test++;
         } while (!pathComplete);

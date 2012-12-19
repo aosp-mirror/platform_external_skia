@@ -16,6 +16,7 @@
 #include "SkPath.h"
 #include "SkPoint.h"
 #include "SkRect.h"
+#include "SkRRect.h"
 #include "SkMatrix.h"
 #include "SkRegion.h"
 
@@ -37,6 +38,7 @@ public:
           fSize(0),
           fSingleBlock(NULL),
           fSingleBlockSize(0),
+          fWrittenBeforeLastBlock(0),
           fHead(NULL),
           fTail(NULL),
           fHeadIsExternalStorage(false) {}
@@ -106,6 +108,10 @@ public:
 
     void writeRect(const SkRect& rect) {
         *(SkRect*)this->reserve(sizeof(rect)) = rect;
+    }
+
+    void writeRRect(const SkRRect& rrect) {
+        rrect.writeToMemory(this->reserve(SkRRect::kSizeInMemory));
     }
 
     void writePath(const SkPath& path) {
@@ -196,6 +202,9 @@ private:
 
     char*       fSingleBlock;
     uint32_t    fSingleBlockSize;
+
+    // sum of bytes written in all blocks *before* fTail
+    uint32_t    fWrittenBeforeLastBlock;
 
     struct Block;
     Block*  fHead;

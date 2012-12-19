@@ -292,16 +292,15 @@ void SkTwoPointRadialGradient::shadeSpan(int x, int y, SkPMColor* dstCParam,
     }
 }
 
-bool SkTwoPointRadialGradient::setContext(
-    const SkBitmap& device,
-    const SkPaint& paint,
-    const SkMatrix& matrix){
-    if (!this->INHERITED::setContext(device, paint, matrix)) {
+bool SkTwoPointRadialGradient::setContext( const SkBitmap& device,
+                                          const SkPaint& paint,
+                                          const SkMatrix& matrix){
+    // For now, we might have divided by zero, so detect that
+    if (0 == fDiffRadius) {
         return false;
     }
 
-    // For now, we might have divided by zero, so detect that
-    if (0 == fDiffRadius) {
+    if (!this->INHERITED::setContext(device, paint, matrix)) {
         return false;
     }
 
@@ -349,31 +348,30 @@ void SkTwoPointRadialGradient::init() {
 
 #if SK_SUPPORT_GPU
 
+#include "GrTBackendEffectFactory.h"
+
 // For brevity
 typedef GrGLUniformManager::UniformHandle UniformHandle;
 static const UniformHandle kInvalidUniformHandle = GrGLUniformManager::kInvalidUniformHandle;
 
-class GrGLRadial2Gradient : public GrGLGradientStage {
+class GrGLRadial2Gradient : public GrGLGradientEffect {
 
 public:
 
-    GrGLRadial2Gradient(const GrProgramStageFactory& factory,
-                        const GrCustomStage&);
+    GrGLRadial2Gradient(const GrBackendEffectFactory& factory,
+                        const GrEffect&);
     virtual ~GrGLRadial2Gradient() { }
 
-    virtual void setupVariables(GrGLShaderBuilder* builder) SK_OVERRIDE;
-    virtual void emitVS(GrGLShaderBuilder* builder,
-                        const char* vertexCoords) SK_OVERRIDE;
-    virtual void emitFS(GrGLShaderBuilder* builder,
-                        const char* outputColor,
-                        const char* inputColor,
-                        const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLUniformManager&,
-                         const GrCustomStage&,
-                         const GrRenderTarget*,
-                         int stageNum) SK_OVERRIDE;
+    virtual void emitCode(GrGLShaderBuilder*,
+                          const GrEffectStage&,
+                          EffectKey,
+                          const char* vertexCoords,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray&) SK_OVERRIDE;
+    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
 
-    static StageKey GenKey(const GrCustomStage& s, const GrGLCaps& caps);
+    static EffectKey GenKey(const GrEffectStage&, const GrGLCaps& caps);
 
 protected:
 
@@ -388,15 +386,15 @@ protected:
     // @{
     /// Values last uploaded as uniforms
 
-    GrScalar fCachedCenter;
-    GrScalar fCachedRadius;
+    SkScalar fCachedCenter;
+    SkScalar fCachedRadius;
     bool     fCachedPosRoot;
 
     // @}
 
 private:
 
-    typedef GrGLGradientStage INHERITED;
+    typedef GrGLGradientEffect INHERITED;
 
 };
 
@@ -405,18 +403,21 @@ private:
 class GrRadial2Gradient : public GrGradientEffect {
 public:
 
-    GrRadial2Gradient(GrContext* ctx, const SkTwoPointRadialGradient& shader, SkShader::TileMode tm)
-        : INHERITED(ctx, shader, tm)
+    GrRadial2Gradient(GrContext* ctx,
+                      const SkTwoPointRadialGradient& shader,
+                      const SkMatrix& matrix,
+                      SkShader::TileMode tm)
+        : INHERITED(ctx, shader, matrix, tm)
         , fCenterX1(shader.getCenterX1())
         , fRadius0(shader.getStartRadius())
         , fPosRoot(shader.getDiffRadius() < 0) { }
     virtual ~GrRadial2Gradient() { }
 
     static const char* Name() { return "Two-Point Radial Gradient"; }
-    virtual const GrProgramStageFactory& getFactory() const SK_OVERRIDE {
-        return GrTProgramStageFactory<GrRadial2Gradient>::getInstance();
+    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE {
+        return GrTBackendEffectFactory<GrRadial2Gradient>::getInstance();
     }
-    virtual bool isEqual(const GrCustomStage& sBase) const SK_OVERRIDE {
+    virtual bool isEqual(const GrEffect& sBase) const SK_OVERRIDE {
         const GrRadial2Gradient& s = static_cast<const GrRadial2Gradient&>(sBase);
         return (INHERITED::isEqual(sBase) &&
                 this->fCenterX1 == s.fCenterX1 &&
@@ -425,22 +426,22 @@ public:
     }
 
     // The radial gradient parameters can collapse to a linear (instead of quadratic) equation.
-    bool isDegenerate() const { return GR_Scalar1 == fCenterX1; }
-    GrScalar center() const { return fCenterX1; }
-    GrScalar radius() const { return fRadius0; }
+    bool isDegenerate() const { return SK_Scalar1 == fCenterX1; }
+    SkScalar center() const { return fCenterX1; }
+    SkScalar radius() const { return fRadius0; }
     bool isPosRoot() const { return SkToBool(fPosRoot); }
 
-    typedef GrGLRadial2Gradient GLProgramStage;
+    typedef GrGLRadial2Gradient GLEffect;
 
 private:
-    GR_DECLARE_CUSTOM_STAGE_TEST;
+    GR_DECLARE_EFFECT_TEST;
 
     // @{
     // Cache of values - these can change arbitrarily, EXCEPT
     // we shouldn't change between degenerate and non-degenerate?!
 
-    GrScalar fCenterX1;
-    GrScalar fRadius0;
+    SkScalar fCenterX1;
+    SkScalar fRadius0;
     SkBool8  fPosRoot;
 
     // @}
@@ -450,17 +451,17 @@ private:
 
 /////////////////////////////////////////////////////////////////////
 
-GR_DEFINE_CUSTOM_STAGE_TEST(GrRadial2Gradient);
+GR_DEFINE_EFFECT_TEST(GrRadial2Gradient);
 
-GrCustomStage* GrRadial2Gradient::TestCreate(SkRandom* random,
-                                             GrContext* context,
-                                             GrTexture**) {
+GrEffect* GrRadial2Gradient::TestCreate(SkRandom* random,
+                                        GrContext* context,
+                                        GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1();
     SkPoint center2;
     SkScalar radius2;
     do {
-        center1.set(random->nextUScalar1(), random->nextUScalar1());
+        center2.set(random->nextUScalar1(), random->nextUScalar1());
         radius2 = random->nextUScalar1 ();
         // There is a bug in two point radial gradients with idenitical radii
     } while (radius1 == radius2);
@@ -474,26 +475,26 @@ GrCustomStage* GrRadial2Gradient::TestCreate(SkRandom* random,
                                                                          center2, radius2,
                                                                          colors, stops, colorCount,
                                                                          tm));
-    GrSamplerState sampler;
-    shader->asNewCustomStage(context, &sampler);
-    GrAssert(NULL != sampler.getCustomStage());
-    // const_cast and ref is a hack! Will remove when asNewCustomStage returns GrCustomStage*
-    sampler.getCustomStage()->ref();
-    return const_cast<GrCustomStage*>(sampler.getCustomStage());
+    GrEffectStage stage;
+    shader->asNewEffect(context, &stage);
+    GrAssert(NULL != stage.getEffect());
+    // const_cast and ref is a hack! Will remove when asNewEffect returns GrEffect*
+    stage.getEffect()->ref();
+    return const_cast<GrEffect*>(stage.getEffect());
 }
 
 /////////////////////////////////////////////////////////////////////
 
 GrGLRadial2Gradient::GrGLRadial2Gradient(
-        const GrProgramStageFactory& factory,
-        const GrCustomStage& baseData)
+        const GrBackendEffectFactory& factory,
+        const GrEffect& baseData)
     : INHERITED(factory)
     , fVSParamUni(kInvalidUniformHandle)
     , fFSParamUni(kInvalidUniformHandle)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
-    , fCachedCenter(GR_ScalarMax)
-    , fCachedRadius(-GR_ScalarMax)
+    , fCachedCenter(SK_ScalarMax)
+    , fCachedRadius(-SK_ScalarMax)
     , fCachedPosRoot(0) {
 
     const GrRadial2Gradient& data =
@@ -501,8 +502,20 @@ GrGLRadial2Gradient::GrGLRadial2Gradient(
     fIsDegenerate = data.isDegenerate();
 }
 
-void GrGLRadial2Gradient::setupVariables(GrGLShaderBuilder* builder) {
-    INHERITED::setupVariables(builder);
+void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
+                                   const GrEffectStage& stage,
+                                   EffectKey key,
+                                   const char* vertexCoords,
+                                   const char* outputColor,
+                                   const char* inputColor,
+                                   const TextureSamplerArray& samplers) {
+
+    this->emitYCoordUniform(builder);
+    const char* fsCoords;
+    const char* vsCoordsVarying;
+    GrSLType coordsVaryingType;
+    this->setupMatrix(builder, key, vertexCoords, &fsCoords, &vsCoordsVarying, &coordsVaryingType);
+
     // 2 copies of uniform array, 1 for each of vertex & fragment shader,
     // to work around Xoom bug. Doesn't seem to cause performance decrease
     // in test apps, but need to keep an eye on it.
@@ -513,113 +526,104 @@ void GrGLRadial2Gradient::setupVariables(GrGLShaderBuilder* builder) {
 
     // For radial gradients without perspective we can pass the linear
     // part of the quadratic as a varying.
-    if (!builder->defaultTextureMatrixIsPerspective()) {
-        builder->addVarying(kFloat_GrSLType, "Radial2BCoeff",
-                          &fVSVaryingName, &fFSVaryingName);
+    if (kVec2f_GrSLType == coordsVaryingType) {
+        builder->addVarying(kFloat_GrSLType, "Radial2BCoeff", &fVSVaryingName, &fFSVaryingName);
+    }
+
+    // VS
+    {
+        SkString* code = &builder->fVSCode;
+        SkString p2;
+        SkString p3;
+        builder->getUniformVariable(fVSParamUni).appendArrayAccess(2, &p2);
+        builder->getUniformVariable(fVSParamUni).appendArrayAccess(3, &p3);
+
+        // For radial gradients without perspective we can pass the linear
+        // part of the quadratic as a varying.
+        if (kVec2f_GrSLType == coordsVaryingType) {
+            // r2Var = 2 * (r2Parm[2] * varCoord.x - r2Param[3])
+            code->appendf("\t%s = 2.0 *(%s * %s.x - %s);\n",
+                          fVSVaryingName, p2.c_str(),
+                          vsCoordsVarying, p3.c_str());
+        }
+    }
+
+    // FS
+    {
+        SkString* code = &builder->fFSCode;
+        SkString cName("c");
+        SkString ac4Name("ac4");
+        SkString rootName("root");
+        SkString t;
+        SkString p0;
+        SkString p1;
+        SkString p2;
+        SkString p3;
+        SkString p4;
+        SkString p5;
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(0, &p0);
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(1, &p1);
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(2, &p2);
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(3, &p3);
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(4, &p4);
+        builder->getUniformVariable(fFSParamUni).appendArrayAccess(5, &p5);
+
+        // If we we're able to interpolate the linear component,
+        // bVar is the varying; otherwise compute it
+        SkString bVar;
+        if (kVec2f_GrSLType == coordsVaryingType) {
+            bVar = fFSVaryingName;
+        } else {
+            bVar = "b";
+            code->appendf("\tfloat %s = 2.0 * (%s * %s.x - %s);\n",
+                          bVar.c_str(), p2.c_str(), fsCoords, p3.c_str());
+        }
+
+        // c = (x^2)+(y^2) - params[4]
+        code->appendf("\tfloat %s = dot(%s, %s) - %s;\n",
+                      cName.c_str(),
+                      fsCoords,
+                      fsCoords,
+                      p4.c_str());
+
+        // If we aren't degenerate, emit some extra code, and accept a slightly
+        // more complex coord.
+        if (!fIsDegenerate) {
+
+            // ac4 = 4.0 * params[0] * c
+            code->appendf("\tfloat %s = %s * 4.0 * %s;\n",
+                          ac4Name.c_str(), p0.c_str(),
+                          cName.c_str());
+
+            // root = sqrt(b^2-4ac)
+            // (abs to avoid exception due to fp precision)
+            code->appendf("\tfloat %s = sqrt(abs(%s*%s - %s));\n",
+                          rootName.c_str(), bVar.c_str(), bVar.c_str(),
+                          ac4Name.c_str());
+
+            // t is: (-b + params[5] * sqrt(b^2-4ac)) * params[1]
+            t.printf("(-%s + %s * %s) * %s", bVar.c_str(), p5.c_str(),
+                     rootName.c_str(), p1.c_str());
+        } else {
+            // t is: -c/b
+            t.printf("-%s / %s", cName.c_str(), bVar.c_str());
+        }
+
+        this->emitColorLookup(builder, t.c_str(), outputColor, inputColor, samplers[0]);
     }
 }
 
-void GrGLRadial2Gradient::emitVS(GrGLShaderBuilder* builder,
-                                 const char* vertexCoords) {
-    SkString* code = &builder->fVSCode;
-    SkString p2;
-    SkString p3;
-    builder->getUniformVariable(fVSParamUni).appendArrayAccess(2, &p2);
-    builder->getUniformVariable(fVSParamUni).appendArrayAccess(3, &p3);
-
-    // For radial gradients without perspective we can pass the linear
-    // part of the quadratic as a varying.
-    if (!builder->defaultTextureMatrixIsPerspective()) {
-        // r2Var = 2 * (r2Parm[2] * varCoord.x - r2Param[3])
-        code->appendf("\t%s = 2.0 *(%s * %s.x - %s);\n",
-                      fVSVaryingName, p2.c_str(),
-                      vertexCoords, p3.c_str());
-    }
-}
-
-void GrGLRadial2Gradient::emitFS(GrGLShaderBuilder* builder,
-                                 const char* outputColor,
-                                 const char* inputColor,
-                                 const TextureSamplerArray& samplers) {
-    SkString* code = &builder->fFSCode;
-    SkString cName("c");
-    SkString ac4Name("ac4");
-    SkString rootName("root");
-    SkString t;
-    SkString p0;
-    SkString p1;
-    SkString p2;
-    SkString p3;
-    SkString p4;
-    SkString p5;
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(0, &p0);
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(1, &p1);
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(2, &p2);
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(3, &p3);
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(4, &p4);
-    builder->getUniformVariable(fFSParamUni).appendArrayAccess(5, &p5);
-
-    // If we we're able to interpolate the linear component,
-    // bVar is the varying; otherwise compute it
-    SkString bVar;
-    if (!builder->defaultTextureMatrixIsPerspective()) {
-        bVar = fFSVaryingName;
-    } else {
-        bVar = "b";
-        //bVar.appendS32(stageNum);
-        code->appendf("\tfloat %s = 2.0 * (%s * %s.x - %s);\n",
-                      bVar.c_str(), p2.c_str(),
-                      builder->defaultTexCoordsName(), p3.c_str());
-    }
-
-    // c = (x^2)+(y^2) - params[4]
-    code->appendf("\tfloat %s = dot(%s, %s) - %s;\n",
-                  cName.c_str(),
-                  builder->defaultTexCoordsName(),
-                  builder->defaultTexCoordsName(),
-                  p4.c_str());
-
-    // If we aren't degenerate, emit some extra code, and accept a slightly
-    // more complex coord.
-    if (!fIsDegenerate) {
-
-        // ac4 = 4.0 * params[0] * c
-        code->appendf("\tfloat %s = %s * 4.0 * %s;\n",
-                      ac4Name.c_str(), p0.c_str(),
-                      cName.c_str());
-
-        // root = sqrt(b^2-4ac)
-        // (abs to avoid exception due to fp precision)
-        code->appendf("\tfloat %s = sqrt(abs(%s*%s - %s));\n",
-                      rootName.c_str(), bVar.c_str(), bVar.c_str(),
-                      ac4Name.c_str());
-
-        // t is: (-b + params[5] * sqrt(b^2-4ac)) * params[1]
-        t.printf("(-%s + %s * %s) * %s", bVar.c_str(), p5.c_str(),
-                 rootName.c_str(), p1.c_str());
-    } else {
-        // t is: -c/b
-        t.printf("-%s / %s", cName.c_str(), bVar.c_str());
-    }
-
-    this->emitColorLookup(builder, t.c_str(), outputColor, inputColor, samplers[0]);
-}
-
-void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman,
-                                  const GrCustomStage& baseData,
-                                  const GrRenderTarget* target,
-                                  int stageNum) {
-    INHERITED::setData(uman, baseData, target, stageNum);
-    const GrRadial2Gradient& data =
-        static_cast<const GrRadial2Gradient&>(baseData);
+void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
+    INHERITED::setData(uman, stage);
+    const GrRadial2Gradient& data = static_cast<const GrRadial2Gradient&>(*stage.getEffect());
     GrAssert(data.isDegenerate() == fIsDegenerate);
-    GrScalar centerX1 = data.center();
-    GrScalar radius0 = data.radius();
+    SkScalar centerX1 = data.center();
+    SkScalar radius0 = data.radius();
     if (fCachedCenter != centerX1 ||
         fCachedRadius != radius0 ||
         fCachedPosRoot != data.isPosRoot()) {
 
-        GrScalar a = GrMul(centerX1, centerX1) - GR_Scalar1;
+        SkScalar a = SkScalarMul(centerX1, centerX1) - SK_Scalar1;
 
         // When we're in the degenerate (linear) case, the second
         // value will be INF but the program doesn't read it. (We
@@ -627,11 +631,11 @@ void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman,
         // all in the linear case just to keep the code complexity
         // down).
         float values[6] = {
-            GrScalarToFloat(a),
-            1 / (2.f * GrScalarToFloat(a)),
-            GrScalarToFloat(centerX1),
-            GrScalarToFloat(radius0),
-            GrScalarToFloat(GrMul(radius0, radius0)),
+            SkScalarToFloat(a),
+            1 / (2.f * SkScalarToFloat(a)),
+            SkScalarToFloat(centerX1),
+            SkScalarToFloat(radius0),
+            SkScalarToFloat(SkScalarMul(radius0, radius0)),
             data.isPosRoot() ? 1.f : -1.f
         };
 
@@ -643,42 +647,46 @@ void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman,
     }
 }
 
-GrCustomStage::StageKey GrGLRadial2Gradient::GenKey(const GrCustomStage& s, const GrGLCaps& caps) {
-    return (static_cast<const GrRadial2Gradient&>(s).isDegenerate());
+GrGLEffect::EffectKey GrGLRadial2Gradient::GenKey(const GrEffectStage& s, const GrGLCaps&) {
+    enum {
+        kIsDegenerate = 1 << kMatrixKeyBitCnt,
+    };
+
+    EffectKey key = GenMatrixKey(s);
+    if (static_cast<const GrRadial2Gradient&>(*s.getEffect()).isDegenerate()) {
+        key |= kIsDegenerate;
+    }
+    return key;
 }
 
 /////////////////////////////////////////////////////////////////////
 
-bool SkTwoPointRadialGradient::asNewCustomStage(GrContext* context,
-                                                GrSamplerState* sampler) const {
-    SkASSERT(NULL != context && NULL != sampler);
-    SkScalar diffLen = fDiff.length();
+bool SkTwoPointRadialGradient::asNewEffect(GrContext* context,
+                                           GrEffectStage* stage) const {
+    SkASSERT(NULL != context && NULL != stage);
+    // invert the localM, translate to center1 (fPtsToUni), rotate so center2 is on x axis.
     SkMatrix matrix;
+    if (!this->getLocalMatrix().invert(&matrix)) {
+        return false;
+    }
+    matrix.postConcat(fPtsToUnit);
+
+    SkScalar diffLen = fDiff.length();
     if (0 != diffLen) {
         SkScalar invDiffLen = SkScalarInvert(diffLen);
-        matrix.setSinCos(-SkScalarMul(invDiffLen, fDiff.fY),
-                         SkScalarMul(invDiffLen, fDiff.fX));
-    } else {
-        matrix.reset();
-    }
-    
-    matrix.preConcat(fPtsToUnit);
-
-    SkMatrix localM;
-    if (this->getLocalMatrix(&localM)) {
-        if (!localM.invert(&localM)) {
-            return false;
-        }
-        matrix.preConcat(localM);
+        SkMatrix rot;
+        rot.setSinCos(-SkScalarMul(invDiffLen, fDiff.fY),
+                       SkScalarMul(invDiffLen, fDiff.fX));
+        matrix.postConcat(rot);
     }
 
-    sampler->setCustomStage(SkNEW_ARGS(GrRadial2Gradient, (context, *this, fTileMode)), matrix)->unref();
+    stage->setEffect(SkNEW_ARGS(GrRadial2Gradient, (context, *this, matrix, fTileMode)))->unref();
     return true;
 }
 
 #else
 
-bool SkTwoPointRadialGradient::asNewCustomStage(GrContext*, GrSamplerState*) const {
+bool SkTwoPointRadialGradient::asNewEffect(GrContext*, GrEffectStage*) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }

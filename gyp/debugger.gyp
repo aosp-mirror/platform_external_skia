@@ -81,6 +81,8 @@
         '../debugger',      # To pull SkDebugger.h
         '../debugger/QT',   # For all the QT UI Goodies
         '../src/gpu',       # To pull gl/GrGLUtil.h
+        '../bench',
+        '../tools',
         '<@(qt_includes)',
       ],
       'sources': [
@@ -106,6 +108,8 @@
         '../debugger/QT/SkGLWidget.cpp',
         '../debugger/QT/SkRasterWidget.h',
         '../debugger/QT/SkRasterWidget.cpp',
+        '../debugger/QT/SkImageWidget.h',
+        '../debugger/QT/SkImageWidget.cpp',
 
         # To update this file edit SkIcons.qrc and rerun rcc to generate cpp
         '../debugger/QT/qrc_SkIcons.cpp',
@@ -116,12 +120,15 @@
         '<(moc_gen_dir)/moc_SkInspectorWidget.cpp',
         '<(moc_gen_dir)/moc_SkSettingsWidget.cpp',
         '<(moc_gen_dir)/moc_SkRasterWidget.cpp',
+        '<(moc_gen_dir)/moc_SkImageWidget.cpp',
         '<(moc_gen_dir)/moc_SkGLWidget.cpp',
       ],
       'dependencies': [
         'skia_base_libs.gyp:skia_base_libs',
         'images.gyp:images',
         'effects.gyp:effects',
+        'bench.gyp:bench_timer',
+        'tools.gyp:picture_renderer',
         'debugger_mocs',
       ],
       'link_settings': {
@@ -139,6 +146,7 @@
         '<(moc_src_dir)/SkInspectorWidget.h',
         '<(moc_src_dir)/SkSettingsWidget.h',
         '<(moc_src_dir)/SkRasterWidget.h',
+        '<(moc_src_dir)/SkImageWidget.h',
         '<(moc_src_dir)/SkGLWidget.h',
       ],
       'rules': [

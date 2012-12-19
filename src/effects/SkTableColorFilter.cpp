@@ -38,10 +38,14 @@ public:
         SkDELETE(fBitmap);
     }
 
-    virtual bool asComponentTable(SkBitmap* table) SK_OVERRIDE;
+    virtual bool asComponentTable(SkBitmap* table) const SK_OVERRIDE;
+
+#if SK_SUPPORT_GPU
+    virtual GrEffect* asNewEffect(GrContext* context) const SK_OVERRIDE;
+#endif
 
     virtual void filterSpan(const SkPMColor src[], int count,
-                            SkPMColor dst[]) SK_OVERRIDE;
+                            SkPMColor dst[]) const SK_OVERRIDE;
 
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTable_ColorFilter)
 
@@ -50,7 +54,7 @@ protected:
     virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
 private:
-    SkBitmap* fBitmap;
+    mutable const SkBitmap* fBitmap; // lazily allocated
 
     enum {
         kA_Flag = 1 << 0,
@@ -100,7 +104,7 @@ static const uint8_t gIdentityTable[] = {
 };
 
 void SkTable_ColorFilter::filterSpan(const SkPMColor src[], int count,
-                                     SkPMColor dst[]) {
+                                     SkPMColor dst[]) const {
     const uint8_t* table = fStorage;
     const uint8_t* tableA = gIdentityTable;
     const uint8_t* tableR = gIdentityTable;
@@ -184,13 +188,13 @@ SkTable_ColorFilter::SkTable_ColorFilter(SkFlattenableReadBuffer& buffer) : INHE
     SkASSERT(raw == count * 256);
 }
 
-bool SkTable_ColorFilter::asComponentTable(SkBitmap* table) {
+bool SkTable_ColorFilter::asComponentTable(SkBitmap* table) const {
     if (table) {
         if (NULL == fBitmap) {
-            fBitmap = SkNEW(SkBitmap);
-            fBitmap->setConfig(SkBitmap::kA8_Config, 256, 4, 256);
-            fBitmap->allocPixels();
-            uint8_t* bitmapPixels = fBitmap->getAddr8(0, 0);
+            SkBitmap* bmp = SkNEW(SkBitmap);
+            bmp->setConfig(SkBitmap::kA8_Config, 256, 4, 256);
+            bmp->allocPixels();
+            uint8_t* bitmapPixels = bmp->getAddr8(0, 0);
             int offset = 0;
             static const unsigned kFlags[] = { kA_Flag, kR_Flag, kG_Flag, kB_Flag };
 
@@ -203,11 +207,168 @@ bool SkTable_ColorFilter::asComponentTable(SkBitmap* table) {
                 }
                 bitmapPixels += 256;
             }
+            fBitmap = bmp;
         }
         *table = *fBitmap;
     }
     return true;
 }
+
+#if SK_SUPPORT_GPU
+
+#include "GrEffect.h"
+#include "GrTBackendEffectFactory.h"
+#include "gl/GrGLEffect.h"
+#include "SkGr.h"
+
+class GLColorTableEffect;
+
+class ColorTableEffect : public GrEffect {
+public:
+
+    explicit ColorTableEffect(GrTexture* texture);
+    virtual ~ColorTableEffect();
+
+    static const char* Name() { return "ColorTable"; }
+    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
+
+    virtual const GrTextureAccess& textureAccess(int index) const SK_OVERRIDE;
+
+    typedef GLColorTableEffect GLEffect;
+
+private:
+    GR_DECLARE_EFFECT_TEST;
+
+    GrTextureAccess fTextureAccess;
+
+    typedef GrEffect INHERITED;
+};
+
+class GLColorTableEffect : public GrGLEffect {
+public:
+    GLColorTableEffect(const GrBackendEffectFactory& factory,
+                         const GrEffect& effect);
+
+    virtual void emitCode(GrGLShaderBuilder*,
+                          const GrEffectStage&,
+                          EffectKey,
+                          const char* vertexCoords,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray&) SK_OVERRIDE;
+
+    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE {}
+
+    static EffectKey GenKey(const GrEffectStage&, const GrGLCaps&);
+
+private:
+
+    typedef GrGLEffect INHERITED;
+};
+
+GLColorTableEffect::GLColorTableEffect(
+    const GrBackendEffectFactory& factory, const GrEffect& effect)
+    : INHERITED(factory) {
+ }
+
+void GLColorTableEffect::emitCode(GrGLShaderBuilder* builder,
+                                  const GrEffectStage&,
+                                  EffectKey,
+                                  const char* vertexCoords,
+                                  const char* outputColor,
+                                  const char* inputColor,
+                                  const TextureSamplerArray& samplers) {
+
+    static const float kColorScaleFactor = 255.0f / 256.0f;
+    static const float kColorOffsetFactor = 1.0f / 512.0f;
+    SkString* code = &builder->fFSCode;
+    if (NULL == inputColor) {
+        // the input color is solid white (all ones).
+        static const float kMaxValue = kColorScaleFactor + kColorOffsetFactor;
+        code->appendf("\t\tvec4 coord = vec4(%f, %f, %f, %f);\n",
+                      kMaxValue, kMaxValue, kMaxValue, kMaxValue);
+
+    } else {
+        code->appendf("\t\tfloat nonZeroAlpha = max(%s.a, .0001);\n", inputColor);
+        code->appendf("\t\tvec4 coord = vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha);\n", inputColor);
+        code->appendf("\t\tcoord = coord * %f + vec4(%f, %f, %f, %f);\n",
+                      kColorScaleFactor,
+                      kColorOffsetFactor, kColorOffsetFactor,
+                      kColorOffsetFactor, kColorOffsetFactor);
+    }
+
+    code->appendf("\t\t%s.a = ", outputColor);
+    builder->appendTextureLookup(code, samplers[0], "vec2(coord.a, 0.125)");
+    code->append(";\n");
+
+    code->appendf("\t\t%s.r = ", outputColor);
+    builder->appendTextureLookup(code, samplers[0], "vec2(coord.r, 0.375)");
+    code->append(";\n");
+
+    code->appendf("\t\t%s.g = ", outputColor);
+    builder->appendTextureLookup(code, samplers[0], "vec2(coord.g, 0.625)");
+    code->append(";\n");
+
+    code->appendf("\t\t%s.b = ", outputColor);
+    builder->appendTextureLookup(code, samplers[0], "vec2(coord.b, 0.875)");
+    code->append(";\n");
+
+    code->appendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+}
+
+GrGLEffect::EffectKey GLColorTableEffect::GenKey(const GrEffectStage&, const GrGLCaps&) {
+    return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+ColorTableEffect::ColorTableEffect(GrTexture* texture)
+    : INHERITED(1)
+    , fTextureAccess(texture, "a") {
+}
+
+ColorTableEffect::~ColorTableEffect() {
+}
+
+const GrBackendEffectFactory&  ColorTableEffect::getFactory() const {
+    return GrTBackendEffectFactory<ColorTableEffect>::getInstance();
+}
+
+bool ColorTableEffect::isEqual(const GrEffect& sBase) const {
+    return INHERITED::isEqual(sBase);
+}
+
+const GrTextureAccess& ColorTableEffect::textureAccess(int index) const {
+    GrAssert(0 == index);
+    return fTextureAccess;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+GR_DEFINE_EFFECT_TEST(ColorTableEffect);
+
+GrEffect* ColorTableEffect::TestCreate(SkRandom* random,
+                                       GrContext* context,
+                                       GrTexture* textures[]) {
+    return SkNEW_ARGS(ColorTableEffect, (textures[GrEffectUnitTest::kAlphaTextureIdx]));
+}
+
+GrEffect* SkTable_ColorFilter::asNewEffect(GrContext* context) const {
+    SkBitmap bitmap;
+    this->asComponentTable(&bitmap);
+    // passing NULL because this effect does no tiling or filtering.
+    GrTexture* texture = GrLockCachedBitmapTexture(context, bitmap, NULL);
+    GrEffect* effect = SkNEW_ARGS(ColorTableEffect, (texture));
+
+    // Unlock immediately, this is not great, but we don't have a way of
+    // knowing when else to unlock it currently. TODO: Remove this when
+    // unref becomes the unlock replacement for all types of textures.
+    GrUnlockCachedBitmapTexture(texture);
+    return effect;
+}
+
+#endif // SK_SUPPORT_GPU
 
 ///////////////////////////////////////////////////////////////////////////////
 

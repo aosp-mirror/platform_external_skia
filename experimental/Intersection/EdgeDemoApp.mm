@@ -12,13 +12,13 @@ public:
     SkSampleView() {
         this->setVisibleP(true);
         this->setClipToBounds(false);
-        useOld = true;
+        useOld = false;
     };
 protected:
     virtual void onDraw(SkCanvas* canvas) {
-        static int step = 0; // 12752; // 17908 ; // 17904; // drawLetters first error
-                             // drawStars triggers error at 23275
-                             // error is not easy to debug in its current state
+        static int step = 0; // 17907 drawLetters first error
+                             // drawStars triggers error at 33348
+                             // drawStars error not easy to debug last time I checked
         static double seconds;
         if (step == -1) {
             timeval t;
@@ -29,7 +29,7 @@ protected:
         canvas->drawColor(SK_ColorWHITE);
         if (DrawEdgeDemo(canvas, step, useOld)) {
             ++step;
-            if (step == 23270) {
+            if (step == -1) {
                 timeval t;
                 gettimeofday(&t, NULL);
                 double last = seconds;

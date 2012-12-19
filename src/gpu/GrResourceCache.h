@@ -14,7 +14,7 @@
 #include "GrConfig.h"
 #include "GrTypes.h"
 #include "GrTHashCache.h"
-#include "SkTDLinkedList.h"
+#include "SkTInternalLList.h"
 
 class GrResource;
 
@@ -119,26 +119,6 @@ private:
 };
 
 
-class GrCacheKey {
-public:
-    GrCacheKey(const GrTextureDesc& desc, const GrResourceKey& key)
-        : fDesc(desc)
-        , fKey(key) {
-    }
-
-    void set(const GrTextureDesc& desc, const GrResourceKey& key) {
-        fDesc = desc;
-        fKey = key;
-    }
-
-    const GrTextureDesc& desc() const { return fDesc; }
-    const GrResourceKey& key() const { return fKey; }
-
-protected:
-    GrTextureDesc fDesc;
-    GrResourceKey fKey;
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 
 class GrResourceEntry {
@@ -159,8 +139,8 @@ private:
     GrResourceKey    fKey;
     GrResource*      fResource;
 
-    // we're a dlinklist
-    SK_DEFINE_DLINKEDLIST_INTERFACE(GrResourceEntry);
+    // we're a linked list
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrResourceEntry);
 
     friend class GrResourceCache;
     friend class GrDLinkedList;
@@ -220,20 +200,41 @@ public:
      */
     size_t getCachedResourceBytes() const { return fEntryBytes; }
 
+    // For a found or added resource to be completely exclusive to the caller
+    // both the kNoOtherOwners and kHide flags need to be specified
+    enum OwnershipFlags {
+        kNoOtherOwners_OwnershipFlag = 0x1, // found/added resource has no other owners
+        kHide_OwnershipFlag = 0x2  // found/added resource is hidden from future 'find's
+    };
+
     /**
      *  Search for an entry with the same Key. If found, return it.
      *  If not found, return null.
+     *  If ownershipFlags includes kNoOtherOwners and a resource is returned
+     *  then that resource has no other refs to it.
+     *  If ownershipFlags includes kHide and a resource is returned then that
+     *  resource will not be returned from future 'find' calls until it is
+     *  'freed' (and recycled) or makeNonExclusive is called.
+     *  For a resource to be completely exclusive to a caller both kNoOtherOwners
+     *  and kHide must be specified.
      */
-    GrResource* find(const GrResourceKey& key);
+    GrResource* find(const GrResourceKey& key,
+                     uint32_t ownershipFlags = 0);
 
     /**
-     *  Create a new cache entry, based on the provided key and resource, and
-     *  return it.
+     *  Add the new resource to the cache (by creating a new cache entry based
+     *  on the provided key and resource).
      *
      *  Ownership of the resource is transferred to the resource cache,
      *  which will unref() it when it is purged or deleted.
+     *
+     *  If ownershipFlags includes kHide, subsequent calls to 'find' will not
+     *  return 'resource' until it is 'freed' (and recycled) or makeNonExclusive
+     *  is called.
      */
-    void create(const GrResourceKey&, GrResource*);
+    void addResource(const GrResourceKey& key,
+                     GrResource* resource,
+                     uint32_t ownershipFlags = 0);
 
     /**
      * Determines if the cache contains an entry matching a key. If a matching
@@ -278,16 +279,21 @@ public:
 #endif
 
 private:
-    void internalDetach(GrResourceEntry*, bool);
-    void attachToHead(GrResourceEntry*, bool);
+    enum BudgetBehaviors {
+        kAccountFor_BudgetBehavior,
+        kIgnore_BudgetBehavior
+    };
+
+    void internalDetach(GrResourceEntry*, BudgetBehaviors behavior = kAccountFor_BudgetBehavior);
+    void attachToHead(GrResourceEntry*, BudgetBehaviors behavior = kAccountFor_BudgetBehavior);
 
     void removeInvalidResource(GrResourceEntry* entry);
 
     class Key;
     GrTHashTable<GrResourceEntry, Key, 8> fCache;
 
-    // manage the dlink list
-    typedef SkTDLinkedList<GrResourceEntry> EntryList;
+    // We're an internal doubly linked list
+    typedef SkTInternalLList<GrResourceEntry> EntryList;
     EntryList    fList;
 
 #if GR_DEBUG
@@ -316,7 +322,7 @@ private:
     bool fPurging;
 
 #if GR_DEBUG
-    static size_t countBytes(const SkTDLinkedList<GrResourceEntry>& list);
+    static size_t countBytes(const SkTInternalLList<GrResourceEntry>& list);
 #endif
 };
 

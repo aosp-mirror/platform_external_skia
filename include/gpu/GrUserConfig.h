@@ -54,11 +54,14 @@
  */
 //#define GR_GEOM_BUFFER_LOCK_THRESHOLD (1<<15)
 
+/**
+ * This gives a threshold in megabytes for the maximum size of the texture cache
+ * in vram. The value is only a default and can be overridden at runtime.
+ */
+//#define GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT 96
+
 ///////////////////////////////////////////////////////////////////////////////
 // Decide Ganesh types
-
-#define GR_SCALAR_IS_FIXED          0
-#define GR_SCALAR_IS_FLOAT          1
 
 #define GR_TEXT_SCALAR_IS_USHORT    0
 #define GR_TEXT_SCALAR_IS_FIXED     0

@@ -13,19 +13,19 @@
 
 SK_DEFINE_INST_COUNT(SkColorFilter)
 
-bool SkColorFilter::asColorMode(SkColor* color, SkXfermode::Mode* mode) {
+bool SkColorFilter::asColorMode(SkColor* color, SkXfermode::Mode* mode) const {
     return false;
 }
 
-bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) {
+bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) const {
     return false;
 }
 
-bool SkColorFilter::asComponentTable(SkBitmap*) {
+bool SkColorFilter::asComponentTable(SkBitmap*) const {
     return false;
 }
 
-void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) {
+void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) const {
     SkASSERT(this->getFlags() & SkColorFilter::kHasFilter16_Flag);
     SkDEBUGFAIL("missing implementation of SkColorFilter::filterSpan16");
 
@@ -34,10 +34,14 @@ void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) {
     }
 }
 
-SkColor SkColorFilter::filterColor(SkColor c) {
+SkColor SkColorFilter::filterColor(SkColor c) const {
     SkPMColor dst, src = SkPreMultiplyColor(c);
     this->filterSpan(&src, 1, &dst);
     return SkUnPreMultiply::PMColorToColor(dst);
+}
+
+GrEffect* SkColorFilter::asNewEffect(GrContext*) const {
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -56,16 +60,6 @@ SkFilterShader::SkFilterShader(SkFlattenableReadBuffer& buffer) :
 SkFilterShader::~SkFilterShader() {
     fFilter->unref();
     fShader->unref();
-}
-
-void SkFilterShader::beginSession() {
-    this->INHERITED::beginSession();
-    fShader->beginSession();
-}
-
-void SkFilterShader::endSession() {
-    fShader->endSession();
-    this->INHERITED::endSession();
 }
 
 void SkFilterShader::flatten(SkFlattenableWriteBuffer& buffer) const {
@@ -92,8 +86,22 @@ uint32_t SkFilterShader::getFlags() {
 bool SkFilterShader::setContext(const SkBitmap& device,
                                 const SkPaint& paint,
                                 const SkMatrix& matrix) {
-    return  this->INHERITED::setContext(device, paint, matrix) &&
-            fShader->setContext(device, paint, matrix);
+    // we need to keep the setContext/endContext calls balanced. If we return
+    // false, our endContext() will not be called.
+
+    if (!this->INHERITED::setContext(device, paint, matrix)) {
+        return false;
+    }
+    if (!fShader->setContext(device, paint, matrix)) {
+        this->INHERITED::endContext();
+        return false;
+    }
+    return true;
+}
+
+void SkFilterShader::endContext() {
+    fShader->endContext();
+    this->INHERITED::endContext();
 }
 
 void SkFilterShader::shadeSpan(int x, int y, SkPMColor result[], int count) {

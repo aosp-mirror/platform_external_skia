@@ -10,6 +10,7 @@
 #define GrGLProgram_DEFINED
 
 #include "GrDrawState.h"
+#include "GrGLEffect.h"
 #include "GrGLContextInfo.h"
 #include "GrGLSL.h"
 #include "GrGLTexture.h"
@@ -19,7 +20,7 @@
 #include "SkXfermode.h"
 
 class GrBinHashKeyBuilder;
-class GrGLProgramStage;
+class GrGLEffect;
 class GrGLShaderBuilder;
 
 // optionally compile the experimental GS code. Set to GR_DEBUG
@@ -43,7 +44,7 @@ public:
 
     static GrGLProgram* Create(const GrGLContextInfo& gl,
                                const Desc& desc,
-                               const GrCustomStage** customStages);
+                               const GrEffectStage* stages[]);
 
     virtual ~GrGLProgram();
 
@@ -51,36 +52,32 @@ public:
     void abandon();
 
     /**
-     * The shader may modify the blend coeffecients. Params are in/out
+     * The shader may modify the blend coefficients. Params are in/out
      */
     void overrideBlend(GrBlendCoeff* srcCoeff, GrBlendCoeff* dstCoeff) const;
 
     const Desc& getDesc() { return fDesc; }
 
     /**
-     * Attribute indices. These should not overlap. Matrices consume 3 slots.
+     * Attribute indices. These should not overlap.
      */
     static int PositionAttributeIdx() { return 0; }
-    static int TexCoordAttributeIdx(int tcIdx) { return 1 + tcIdx; }
-    static int ColorAttributeIdx() { return 1 + GrDrawState::kMaxTexCoords; }
-    static int CoverageAttributeIdx() {
-        return 2 + GrDrawState::kMaxTexCoords;
-    }
-    static int EdgeAttributeIdx() { return 3 + GrDrawState::kMaxTexCoords; }
+    static int ColorAttributeIdx() { return 1; }
+    static int CoverageAttributeIdx() { return 2; }
+    static int EdgeAttributeIdx() { return 3; }
+    static int TexCoordAttributeIdx(int tcIdx) { return 4 + tcIdx; }
 
-    static int ViewMatrixAttributeIdx() {
-        return 4 + GrDrawState::kMaxTexCoords;
-    }
-    static int TextureMatrixAttributeIdx(int stage) {
-        return 7 + GrDrawState::kMaxTexCoords + 3 * stage;
-    }
+    /**
+     * This function uploads uniforms and calls each GrEffect's setData. It is called before a draw
+     * occurs using the program after the program has already been bound.
+     */
+    void setData(const GrDrawState& drawState);
 
     // Parameters that affect code generation
-    // These structs should be kept compact; they are the input to an
-    // expensive hash key generator.
+    // This structs should be kept compact; it is input to an expensive hash key generator.
     struct Desc {
         Desc() {
-            // since we use this as part of a key we can't have any unitialized
+            // since we use this as part of a key we can't have any uninitialized
             // padding
             memset(this, 0, sizeof(Desc));
         }
@@ -90,33 +87,7 @@ public:
             return reinterpret_cast<const uint32_t*>(this);
         }
 
-        struct StageDesc {
-            enum OptFlagBits {
-                kNoPerspective_OptFlagBit       = 1 << 0,
-                kIdentityMatrix_OptFlagBit      = 1 << 1,
-                kIsEnabled_OptFlagBit           = 1 << 7
-            };
-
-            uint8_t fOptFlags;
-
-            /** Non-zero if user-supplied code will write the stage's
-                contribution to the fragment shader. */
-            GrProgramStageFactory::StageKey fCustomStageKey;
-
-            inline bool isEnabled() const {
-                return SkToBool(fOptFlags & kIsEnabled_OptFlagBit);
-            }
-            inline void setEnabled(bool newValue) {
-                if (newValue) {
-                    fOptFlags |= kIsEnabled_OptFlagBit;
-                } else {
-                    fOptFlags &= ~kIsEnabled_OptFlagBit;
-                }
-            }
-        };
-
-        // Specifies where the intitial color comes from before the stages are
-        // applied.
+        // Specifies where the initial color comes from before the stages are applied.
         enum ColorInput {
             kSolidWhite_ColorInput,
             kTransBlack_ColorInput,
@@ -126,7 +97,7 @@ public:
             kColorInputCnt
         };
         // Dual-src blending makes use of a secondary output color that can be
-        // used as a per-pixel blend coeffecient. This controls whether a
+        // used as a per-pixel blend coefficient. This controls whether a
         // secondary source is output and what value it holds.
         enum DualSrcOutput {
             kNone_DualSrcOutput,
@@ -137,12 +108,16 @@ public:
             kDualSrcOutputCnt
         };
 
+        // TODO: remove these two members when edge-aa can be rewritten as a GrEffect.
         GrDrawState::VertexEdgeType fVertexEdgeType;
+        // should the FS discard if the edge-aa coverage is zero (to avoid stencil manipulation)
+        bool                        fDiscardIfOutsideEdge;
 
-        // stripped of bits that don't affect prog generation
+        // stripped of bits that don't affect program generation
         GrVertexLayout fVertexLayout;
 
-        StageDesc fStages[GrDrawState::kNumStages];
+        /** Non-zero if this stage has an effect */
+        GrGLEffect::EffectKey fEffectKeys[GrDrawState::kNumStages];
 
         // To enable experimental geometry shader code (not for use in
         // production)
@@ -155,38 +130,34 @@ public:
         uint8_t fDualSrcOutput;     // casts to enum DualSrcOutput
         int8_t fFirstCoverageStage;
         SkBool8 fEmitsPointSize;
-        SkBool8 fColorMatrixEnabled;
 
         uint8_t fColorFilterXfermode;  // casts to enum SkXfermode::Mode
     };
     GR_STATIC_ASSERT(!(sizeof(Desc) % 4));
-
-    // for code readability
-    typedef Desc::StageDesc StageDesc;
 
 private:
     struct StageUniforms;
 
     GrGLProgram(const GrGLContextInfo& gl,
                 const Desc& desc,
-                const GrCustomStage** customStages);
+                const GrEffectStage* stages[]);
 
     bool succeeded() const { return 0 != fProgramID; }
 
     /**
-     *  This is the heavy initilization routine for building a GLProgram.
+     *  This is the heavy initialization routine for building a GLProgram.
      */
-    bool genProgram(const GrCustomStage** customStages);
+    bool genProgram(const GrEffectStage* stages[]);
 
     void genInputColor(GrGLShaderBuilder* builder, SkString* inColor);
 
-    static GrGLProgramStage* GenStageCode(const GrCustomStage* stage,
-                                          const StageDesc& desc, // TODO: Eliminate this
-                                          StageUniforms* stageUniforms, // TODO: Eliminate this
-                                          const char* fsInColor, // NULL means no incoming color
-                                          const char* fsOutColor,
-                                          const char* vsInCoord,
-                                          GrGLShaderBuilder* builder);
+    static GrGLEffect* GenStageCode(const GrEffectStage& stage,
+                                    GrGLEffect::EffectKey key,
+                                    StageUniforms* stageUniforms, // TODO: Eliminate this
+                                    const char* fsInColor, // NULL means no incoming color
+                                    const char* fsOutColor,
+                                    const char* vsInCoord,
+                                    GrGLShaderBuilder* builder);
 
     void genGeometryShader(GrGLShaderBuilder* segments) const;
 
@@ -200,7 +171,8 @@ private:
     bool genEdgeCoverage(SkString* coverageVar, GrGLShaderBuilder* builder) const;
 
     // Creates a GL program ID, binds shader attributes to GL vertex attrs, and links the program
-    bool bindOutputsAttribsAndLinkProgram(SkString texCoordAttrNames[GrDrawState::kMaxTexCoords],
+    bool bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& builder,
+                                          SkString texCoordAttrNames[GrDrawState::kMaxTexCoords],
                                           bool bindColorOut,
                                           bool bindDualSrcOut);
 
@@ -212,11 +184,7 @@ private:
     const char* adjustInColor(const SkString& inColor) const;
 
     struct StageUniforms {
-        UniformHandle fTextureMatrixUni;
         SkTArray<UniformHandle, true> fSamplerUniforms;
-        StageUniforms() {
-            fTextureMatrixUni = GrGLUniformManager::kInvalidUniformHandle;
-        }
     };
 
     struct Uniforms {
@@ -224,16 +192,16 @@ private:
         UniformHandle fColorUni;
         UniformHandle fCoverageUni;
         UniformHandle fColorFilterUni;
-        UniformHandle fColorMatrixUni;
-        UniformHandle fColorMatrixVecUni;
+        // We use the render target height to provide a y-down frag coord when specifying
+        // origin_upper_left is not supported.
+        UniformHandle fRTHeight;
         StageUniforms fStages[GrDrawState::kNumStages];
         Uniforms() {
             fViewMatrixUni = GrGLUniformManager::kInvalidUniformHandle;
             fColorUni = GrGLUniformManager::kInvalidUniformHandle;
             fCoverageUni = GrGLUniformManager::kInvalidUniformHandle;
             fColorFilterUni = GrGLUniformManager::kInvalidUniformHandle;
-            fColorMatrixUni = GrGLUniformManager::kInvalidUniformHandle;
-            fColorMatrixVecUni = GrGLUniformManager::kInvalidUniformHandle;
+            fRTHeight = GrGLUniformManager::kInvalidUniformHandle;
         }
     };
 
@@ -245,7 +213,7 @@ private:
 
     // The matrix sent to GL is determined by both the client's matrix and
     // the size of the viewport.
-    GrMatrix  fViewMatrix;
+    SkMatrix  fViewMatrix;
     SkISize   fViewportSize;
 
     // these reflect the current values of uniforms
@@ -253,12 +221,9 @@ private:
     GrColor                     fColor;
     GrColor                     fCoverage;
     GrColor                     fColorFilterColor;
-    /// When it is sent to GL, the texture matrix will be flipped if the texture orientation
-    /// (below) requires.
-    GrMatrix                    fTextureMatrices[GrDrawState::kNumStages];
-    GrGLTexture::Orientation    fTextureOrientation[GrDrawState::kNumStages];
+    int                         fRTHeight;
 
-    GrGLProgramStage*           fProgramStage[GrDrawState::kNumStages];
+    GrGLEffect*                 fEffects[GrDrawState::kNumStages];
 
     Desc fDesc;
     const GrGLContextInfo&      fContextInfo;

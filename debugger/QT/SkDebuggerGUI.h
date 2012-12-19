@@ -17,6 +17,7 @@
 #include "SkListWidget.h"
 #include "SkInspectorWidget.h"
 #include "SkRasterWidget.h"
+#include "SkImageWidget.h"
 #include "SkSettingsWidget.h"
 #include <QtCore/QVariant>
 #include <QtGui/QAction>
@@ -34,6 +35,11 @@
 #include <QtGui/QMenu>
 #include <QtGui/QMenuBar>
 #include <vector>
+
+class SkTimedPicture;
+namespace sk_tools {
+    class PictureRenderer;
+}
 
 /** \class SkDebuggerGUI
 
@@ -59,6 +65,11 @@ private slots:
         Toggles breakpoint view in the list widget.
      */
     void actionBreakpoints();
+
+    /**
+        Profile the commands
+     */
+    void actionProfile();
 
     /**
         Cancels the command filter in the list widget.
@@ -206,6 +217,7 @@ private:
 
     QAction fActionOpen;
     QAction fActionBreakpoint;
+    QAction fActionProfile;
     QAction fActionCancel;
     QAction fActionClearBreakpoints;
     QAction fActionClearDeletes;
@@ -233,17 +245,22 @@ private:
     QHBoxLayout fContainerLayout;
     QVBoxLayout fLeftColumnLayout;
     QVBoxLayout fMainAndRightColumnLayout;
-    QHBoxLayout fCanvasAndSettingsLayout;
+    QHBoxLayout fCanvasSettingsAndImageLayout;
+    QVBoxLayout fSettingsAndImageLayout;
 
     QListWidget fListWidget;
     QListWidget fDirectoryWidget;
 
     SkDebugger fDebugger;
     SkCanvasWidget fCanvasWidget;
+    SkImageWidget fImageWidget;
     SkInspectorWidget fInspectorWidget;
     SkSettingsWidget fSettingsWidget;
 
     QString fPath;
+    SkString fFileName;
+    SkTDArray<size_t> fOffsets; // the offset of each command in the SkPicture
+    SkTDArray<bool> fSkipCommands; // has a specific command been deleted?
     bool fDirectoryWidgetActive;
 
     QMenuBar fMenuBar;
@@ -268,28 +285,41 @@ private:
         Pipes a QString in with the location of the filename, proceeds to updating
         the listwidget, combowidget and inspectorwidget.
      */
-    void loadPicture(QString fileName);
+    void loadPicture(const SkString& fileName);
 
     /**
         Creates a picture of the current canvas.
      */
-    void saveToFile(QString filename);
+    void saveToFile(const SkString& filename);
 
     /**
         Populates the list widget with the vector of strings passed in.
      */
-    void setupListWidget(SkTDArray<SkString*>* command);
+    void setupListWidget(SkTArray<SkString>* command);
 
     /**
         Populates the combo box widget with the vector of strings passed in.
      */
-    void setupComboBox(SkTDArray<SkString*>* command);
+    void setupComboBox(SkTArray<SkString>* command);
+
+    /**
+        Fills in the overview pane with text
+     */
+    void setupOverviewText(const SkTDArray<double>* typeTimes, double totTime);
 
     /**
         Updates the directory widget with the latest directory path stored in
         the global class variable fPath.
      */
     void setupDirectoryWidget();
+
+    /**
+        Render the supplied picture several times tracking the time consumed
+        by each command.
+     */
+    void run(SkTimedPicture* pict,
+             sk_tools::PictureRenderer* renderer,
+             int repeats);
 };
 
 #endif // SKDEBUGGERUI_H

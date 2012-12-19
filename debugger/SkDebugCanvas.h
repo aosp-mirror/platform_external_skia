@@ -13,7 +13,7 @@
 #include "SkCanvas.h"
 #include "SkDrawCommand.h"
 #include "SkPicture.h"
-#include "SkTDArray.h"
+#include "SkTArray.h"
 #include "SkString.h"
 
 class SkDebugCanvas : public SkCanvas {
@@ -85,12 +85,12 @@ public:
     /**
         Returns the vector of draw commands
      */
-    SkTDArray<SkDrawCommand*> getDrawCommands();
+    const SkTDArray<SkDrawCommand*>& getDrawCommands() const;
 
     /**
      * Returns the string vector of draw commands
      */
-    SkTDArray<SkString*>* getDrawCommandsAsStrings();
+    SkTArray<SkString>* getDrawCommandsAsStrings() const;
 
     /**
         Returns length of draw command vector.
@@ -207,6 +207,14 @@ private:
     float fUserScale;
     SkMatrix fMatrix;
     SkIRect fClip;
+
+    /**
+        Number of unmatched save() calls at any point during a draw.
+        If there are any saveLayer() calls outstanding, we need to resolve
+        all of them, which in practice means resolving all save() calls,
+        to avoid corruption of our canvas.
+    */
+    int fOutstandingSaveCount;
 
     /**
         Adds the command to the classes vector of commands.

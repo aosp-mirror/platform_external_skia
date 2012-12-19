@@ -46,9 +46,13 @@ static int quadraticRootsX(const double A, const double B, const double C,
     /* normal form: x^2 + px + q = 0 */
     const double p = B / (2 * A);
     const double q = C / A;
-    const double D = p * p - q;
+    double D = p * p - q;
     if (D < 0) {
-        return 0;
+        if (approximately_positive_squared(D)) {
+            D = 0;
+        } else {
+            return 0;
+        }
     }
     double sqrt_D = sqrt(D);
     if (approximately_less_than_zero(sqrt_D)) {
@@ -155,7 +159,7 @@ static int cubicRootsX(double A, double B, double C, double D, double s[3]) {
     double r;
     double* roots = s;
 
-    if (R2MinusQ3 > -FLT_EPSILON / 10 && R2MinusQ3 < FLT_EPSILON / 10 ) {
+    if (approximately_zero_squared(R2MinusQ3)) {
         if (approximately_zero(R)) {/* one triple solution */
             *roots++ = -adiv3;
         } else { /* one single and one double solution */
@@ -216,7 +220,7 @@ int quarticRoots(const double A, const double B, const double C, const double D,
         s[num++] = 0;
         return num;
     }
-    if (approximately_zero(A + B + C + D + E)) { // 1 is one root
+    if (approximately_zero_squared(A + B + C + D + E)) { // 1 is one root
         num = cubicRootsX(A, A + B, -(D + E), -E, s); // note that -C==A+B+D+E
         for (i = 0; i < num; ++i) {
             if (approximately_equal(s[i], 1)) {

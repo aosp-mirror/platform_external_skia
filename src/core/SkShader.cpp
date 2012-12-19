@@ -15,92 +15,60 @@
 
 SK_DEFINE_INST_COUNT(SkShader)
 
-SkShader::SkShader() : fLocalMatrix(NULL) {
-    SkDEBUGCODE(fInSession = false;)
+SkShader::SkShader() {
+    fLocalMatrix.reset();
+    SkDEBUGCODE(fInSetContext = false;)
 }
 
 SkShader::SkShader(SkFlattenableReadBuffer& buffer)
-        : INHERITED(buffer), fLocalMatrix(NULL) {
+        : INHERITED(buffer) {
     if (buffer.readBool()) {
-        SkMatrix matrix;
-        buffer.readMatrix(&matrix);
-        setLocalMatrix(matrix);
+        buffer.readMatrix(&fLocalMatrix);
+    } else {
+        fLocalMatrix.reset();
     }
-    SkDEBUGCODE(fInSession = false;)
+
+    SkDEBUGCODE(fInSetContext = false;)
 }
 
 SkShader::~SkShader() {
-    SkASSERT(!fInSession);
-    sk_free(fLocalMatrix);
-}
-
-void SkShader::beginSession() {
-    SkASSERT(!fInSession);
-    SkDEBUGCODE(fInSession = true;)
-}
-
-void SkShader::endSession() {
-    SkASSERT(fInSession);
-    SkDEBUGCODE(fInSession = false;)
+    SkASSERT(!fInSetContext);
 }
 
 void SkShader::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.writeBool(fLocalMatrix != NULL);
-    if (fLocalMatrix) {
-        buffer.writeMatrix(*fLocalMatrix);
-    }
-}
-
-bool SkShader::getLocalMatrix(SkMatrix* localM) const {
-    if (fLocalMatrix) {
-        if (localM) {
-            *localM = *fLocalMatrix;
-        }
-        return true;
-    } else {
-        if (localM) {
-            localM->reset();
-        }
-        return false;
-    }
-}
-
-void SkShader::setLocalMatrix(const SkMatrix& localM) {
-    if (localM.isIdentity()) {
-        this->resetLocalMatrix();
-    } else {
-        if (fLocalMatrix == NULL) {
-            fLocalMatrix = (SkMatrix*)sk_malloc_throw(sizeof(SkMatrix));
-        }
-        *fLocalMatrix = localM;
-    }
-}
-
-void SkShader::resetLocalMatrix() {
-    if (fLocalMatrix) {
-        sk_free(fLocalMatrix);
-        fLocalMatrix = NULL;
+    bool hasLocalM = this->hasLocalMatrix();
+    buffer.writeBool(hasLocalM);
+    if (hasLocalM) {
+        buffer.writeMatrix(fLocalMatrix);
     }
 }
 
 bool SkShader::setContext(const SkBitmap& device,
                           const SkPaint& paint,
                           const SkMatrix& matrix) {
+    SkASSERT(!this->setContextHasBeenCalled());
+
     const SkMatrix* m = &matrix;
     SkMatrix        total;
 
     fDeviceConfig = SkToU8(device.getConfig());
     fPaintAlpha = paint.getAlpha();
-    if (fLocalMatrix) {
-        total.setConcat(matrix, *fLocalMatrix);
+    if (this->hasLocalMatrix()) {
+        total.setConcat(matrix, this->getLocalMatrix());
         m = &total;
     }
     if (m->invert(&fTotalInverse)) {
         fTotalInverseClass = (uint8_t)ComputeMatrixClass(fTotalInverse);
+        SkDEBUGCODE(fInSetContext = true;)
         return true;
     }
     return false;
+}
+
+void SkShader::endContext() {
+    SkASSERT(fInSetContext);
+    SkDEBUGCODE(fInSetContext = false;)
 }
 
 SkShader::ShadeProc SkShader::asAShadeProc(void** ctx) {
@@ -205,7 +173,7 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
 }
 
-bool SkShader::asNewCustomStage(GrContext*, GrSamplerState*) const {
+bool SkShader::asNewEffect(GrContext*, GrEffectStage*) const {
     return false;
 }
 

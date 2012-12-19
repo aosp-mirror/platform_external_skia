@@ -11,7 +11,41 @@
 /* TODO(chudy): Replace all std::strings with char */
 
 SkString* SkObjectParser::BitmapToString(const SkBitmap& bitmap) {
-    SkString* mBitmap = new SkString("SkBitmap: Data unavailable");
+    SkString* mBitmap = new SkString("SkBitmap: ");
+    mBitmap->append("W: ");
+    mBitmap->appendS32(bitmap.width());
+    mBitmap->append(" H: ");
+    mBitmap->appendS32(bitmap.height());
+
+    const char* gConfigStrings[] = {
+        "None", "A1", "A8", "Index8", "RGB565", "ARGB4444", "ARGB8888", "RLE8"
+    };
+    SkASSERT(SkBitmap::kConfigCount == 8);
+
+    mBitmap->append(" Config: ");
+    mBitmap->append(gConfigStrings[bitmap.getConfig()]);
+
+    if (bitmap.isOpaque()) {
+        mBitmap->append(" opaque");
+    } else {
+        mBitmap->append(" not-opaque");
+    }
+
+    if (bitmap.isImmutable()) {
+        mBitmap->append(" immutable");
+    } else {
+        mBitmap->append(" not-immutable");
+    }
+
+    if (bitmap.isVolatile()) {
+        mBitmap->append(" volatile");
+    } else {
+        mBitmap->append(" not-volatile");
+    }
+
+    mBitmap->append(" genID: ");
+    mBitmap->appendS32(bitmap.getGenerationID());
+
     return mBitmap;
 }
 
@@ -40,13 +74,13 @@ SkString* SkObjectParser::IntToString(int x, const char* text) {
 SkString* SkObjectParser::IRectToString(const SkIRect& rect) {
     SkString* mRect = new SkString("SkIRect: ");
     mRect->append("L: ");
-    mRect->appendScalar(SkIntToScalar(rect.left()));
+    mRect->appendS32(rect.left());
     mRect->append(", T: ");
-    mRect->appendScalar(SkIntToScalar(rect.top()));
+    mRect->appendS32(rect.top());
     mRect->append(", R: ");
-    mRect->appendScalar(SkIntToScalar(rect.right()));
+    mRect->appendS32(rect.right());
     mRect->append(", B: ");
-    mRect->appendScalar(SkIntToScalar(rect.bottom()));
+    mRect->appendS32(rect.bottom());
     return mRect;
 }
 
@@ -63,20 +97,75 @@ SkString* SkObjectParser::MatrixToString(const SkMatrix& matrix) {
 
 SkString* SkObjectParser::PaintToString(const SkPaint& paint) {
     SkColor color = paint.getColor();
-    SkString* mPaint = new SkString("SkPaint: 0x");
+    SkString* mPaint = new SkString("SkPaint: Color: 0x");
     mPaint->appendHex(color);
+
     return mPaint;
 }
 
 SkString* SkObjectParser::PathToString(const SkPath& path) {
-    SkString* mPath = new SkString("SkPath: ");
-    for (int i = 0; i < path.countPoints(); i++) {
-        mPath->append("(");
-        mPath->appendScalar(path.getPoint(i).fX);
-        mPath->append(", ");
-        mPath->appendScalar(path.getPoint(i).fY);
-        mPath->append(") ");
+    SkString* mPath = new SkString("Path (");
+
+    static const char* gFillStrings[] = {
+        "Winding", "EvenOdd", "InverseWinding", "InverseEvenOdd"
+    };
+
+    mPath->append(gFillStrings[path.getFillType()]);
+    mPath->append(", ");
+
+    static const char* gConvexityStrings[] = {
+        "Unknown", "Convex", "Concave"
+    };
+    SkASSERT(SkPath::kConcave_Convexity == 2);
+
+    mPath->append(gConvexityStrings[path.getConvexity()]);
+    mPath->append(", ");
+
+    if (path.isRect(NULL)) {
+        mPath->append("isRect, ");
+    } else {
+        mPath->append("isNotRect, ");
     }
+
+    mPath->appendS32(path.countVerbs());
+    mPath->append("V, ");
+    mPath->appendS32(path.countPoints());
+    mPath->append("P): ");
+
+    static const char* gVerbStrings[] = {
+        "Move", "Line", "Quad", "Cubic", "Close", "Done"
+    };
+    static const int gPtsPerVerb[] = { 1, 1, 2, 3, 0, 0 };
+    static const int gPtOffsetPerVerb[] = { 0, 1, 1, 1, 0, 0 };
+    SkASSERT(SkPath::kDone_Verb == 5);
+
+    SkPath::Iter iter(const_cast<SkPath&>(path), false);
+    SkPath::Verb verb;
+    SkPoint points[4];
+
+    for(verb = iter.next(points, false);
+        verb != SkPath::kDone_Verb;
+        verb = iter.next(points, false)) {
+
+        mPath->append(gVerbStrings[verb]);
+        mPath->append(" ");
+
+        for (int i = 0; i < gPtsPerVerb[verb]; ++i) {
+            mPath->append("(");
+            mPath->appendScalar(points[gPtOffsetPerVerb[verb]+i].fX);
+            mPath->append(", ");
+            mPath->appendScalar(points[gPtOffsetPerVerb[verb]+i].fY);
+            mPath->append(") ");
+        }
+    }
+
+    SkString* boundStr = SkObjectParser::RectToString(path.getBounds(), "    Bound: ");
+
+    if (NULL != boundStr) {
+        mPath->append(*boundStr);
+        SkDELETE(boundStr);
+    }
+
     return mPath;
 }
 
@@ -104,8 +193,15 @@ SkString* SkObjectParser::PointModeToString(SkCanvas::PointMode mode) {
     return mMode;
 }
 
-SkString* SkObjectParser::RectToString(const SkRect& rect) {
-    SkString* mRect = new SkString("SkRect: ");
+SkString* SkObjectParser::RectToString(const SkRect& rect, const char* title) {
+
+    SkString* mRect = new SkString;
+
+    if (NULL == title) {
+        mRect->append("SkRect: ");
+    } else {
+        mRect->append(title);
+    }
     mRect->append("(");
     mRect->appendScalar(rect.left());
     mRect->append(", ");

@@ -35,21 +35,10 @@ SkBitmapProcShader::SkBitmapProcShader(const SkBitmap& src,
 SkBitmapProcShader::SkBitmapProcShader(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer) {
     buffer.readBitmap(&fRawBitmap);
+    fRawBitmap.setImmutable();
     fState.fTileModeX = buffer.readUInt();
     fState.fTileModeY = buffer.readUInt();
     fFlags = 0; // computed in setContext
-}
-
-void SkBitmapProcShader::beginSession() {
-    this->INHERITED::beginSession();
-
-    fRawBitmap.lockPixels();
-}
-
-void SkBitmapProcShader::endSession() {
-    fRawBitmap.unlockPixels();
-
-    this->INHERITED::endSession();
 }
 
 SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
@@ -101,6 +90,7 @@ bool SkBitmapProcShader::setContext(const SkBitmap& device,
     }
 
     if (!fState.chooseProcs(this->getTotalInverse(), paint)) {
+        fState.fOrigBitmap.unlockPixels();
         return false;
     }
 
@@ -146,6 +136,11 @@ bool SkBitmapProcShader::setContext(const SkBitmap& device,
 
     fFlags = flags;
     return true;
+}
+
+void SkBitmapProcShader::endContext() {
+    fState.fOrigBitmap.unlockPixels();
+    this->INHERITED::endContext();
 }
 
 #define BUF_MAX     128
@@ -329,10 +324,9 @@ bool SkBitmapProcShader::toDumpString(SkString* str) const {
 
     // add the (optional) matrix
     {
-        SkMatrix m;
-        if (this->getLocalMatrix(&m)) {
+        if (this->hasLocalMatrix()) {
             SkString info;
-            m.toDumpString(&info);
+            this->getLocalMatrix().toDumpString(&info);
             str->appendf(" %s", info.c_str());
         }
     }

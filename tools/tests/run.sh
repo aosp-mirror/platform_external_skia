@@ -2,7 +2,9 @@
 
 # Tests for our tools.
 # TODO: for now, it only tests skdiff
-# TODO: for now, assumes that it is being run from .../trunk
+
+# cd into .../trunk so all the paths will work
+cd $(dirname $0)/../..
 
 # TODO: make it look in Release and/or Debug
 SKDIFF_BINARY=out/Debug/skdiff
@@ -13,6 +15,10 @@ SKDIFF_BINARY=out/Debug/skdiff
 # we exit with a nonzero return value.
 # Otherwise, we write nothing to stdout and return.
 function compare_directories {
+  if [ $# != 2 ]; then
+    echo "compare_directories requires exactly 2 parameters, got $#"
+    exit 1
+  fi
   diff --exclude=.* $1 $2
   if [ $? != 0 ]; then
     echo "failed in: compare_directories $1 $2"
@@ -24,6 +30,10 @@ function compare_directories {
 # to write its output, if any, to directory $2/output-actual).
 # Then compare its results against those in $2/output-expected.
 function skdiff_test {
+  if [ $# != 2 ]; then
+    echo "skdiff_test requires exactly 2 parameters, got $#"
+    exit 1
+  fi
   SKDIFF_ARGS="$1"
   ACTUAL_OUTPUT_DIR="$2/output-actual"
   EXPECTED_OUTPUT_DIR="$2/output-expected"
@@ -49,7 +59,7 @@ skdiff_test "$SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TES
 #   baseDir or comparisonDir)
 # - list filenames with each result type to stdout
 # - don't generate HTML output files
-skdiff_test "--failonresult DifferentPixels --failonresult DifferentSizes --failonresult DifferentOther --failonresult Unknown --listfilenames --nodiffs $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test2"
+skdiff_test "--failonresult DifferentPixels --failonresult DifferentSizes --failonresult Unknown --failonstatus CouldNotDecode,CouldNotRead any --failonstatus any CouldNotDecode,CouldNotRead --listfilenames --nodiffs $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test2"
 
 # Run skdiff over just the files that have identical bits.
 skdiff_test "--nodiffs --match identical-bits $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits"

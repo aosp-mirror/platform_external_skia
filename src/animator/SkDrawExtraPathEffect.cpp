@@ -22,7 +22,7 @@ class SkDrawShapePathEffect : public SkDrawPathEffect {
     DECLARE_PRIVATE_MEMBER_INFO(DrawShapePathEffect);
     SkDrawShapePathEffect();
     virtual ~SkDrawShapePathEffect();
-    virtual bool add(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
+    virtual bool addChild(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
     virtual SkPathEffect* getPathEffect();
 protected:
     SkDrawable* addPath;
@@ -60,7 +60,7 @@ class SkDrawComposePathEffect : public SkDrawPathEffect {
     DECLARE_EXTRAS_MEMBER_INFO(SkDrawComposePathEffect);
     SkDrawComposePathEffect(SkDisplayTypes );
     virtual ~SkDrawComposePathEffect();
-    virtual bool add(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
+    virtual bool addChild(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
     virtual SkPathEffect* getPathEffect();
     virtual bool isPaint() const;
 private:
@@ -94,8 +94,7 @@ public:
     SK_DECLARE_UNFLATTENABLE_OBJECT()
 
 protected:
-    virtual SkScalar begin(SkScalar contourLength)
-    {
+    virtual SkScalar begin(SkScalar contourLength) const {
         SkScriptValue value;
         SkAnimatorScript engine(*fMaker, NULL, SkType_Float);
         engine.propertyCallBack(GetContourLength, &contourLength);
@@ -104,8 +103,7 @@ protected:
         return value.fOperand.fScalar;
     }
 
-    virtual SkScalar next(SkPath* dst, SkScalar distance, SkPathMeasure& )
-    {
+    virtual SkScalar next(SkPath* dst, SkScalar distance, SkPathMeasure&) const {
         fMaker->setExtraPropertyCallBack(fDraw->fType, GetDistance, &distance);
         SkDrawPath* drawPath = NULL;
         if (fDraw->addPath->isPath()) {
@@ -184,7 +182,7 @@ SkDrawShapePathEffect::~SkDrawShapePathEffect() {
     SkSafeUnref(fPathEffect);
 }
 
-bool SkDrawShapePathEffect::add(SkAnimateMaker& , SkDisplayable* child) {
+bool SkDrawShapePathEffect::addChild(SkAnimateMaker& , SkDisplayable* child) {
     path = (SkDrawPath*) child;
     return true;
 }
@@ -354,7 +352,7 @@ SkDrawComposePathEffect::~SkDrawComposePathEffect() {
     delete effect2;
 }
 
-bool SkDrawComposePathEffect::add(SkAnimateMaker& , SkDisplayable* child) {
+bool SkDrawComposePathEffect::addChild(SkAnimateMaker& , SkDisplayable* child) {
     if (effect1 == NULL)
         effect1 = (SkDrawPathEffect*) child;
     else
