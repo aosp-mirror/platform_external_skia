@@ -30,6 +30,13 @@ class SkPicture;
 class SkRRect;
 class SkSurface_Base;
 
+#ifdef SK_BUILD_FOR_ANDROID
+namespace WebCore {
+  class RasterRenderer;
+  class GaneshRenderer;
+}
+#endif
+
 /** \class SkCanvas
 
     A Canvas encapsulates all of the state about drawing into a device (bitmap).
@@ -1004,6 +1011,11 @@ protected:
      device, its reference count is decremented. The new device is returned.
      */
     virtual SkDevice* setDevice(SkDevice* device);
+
+#ifdef SK_BUILD_FOR_ANDROID
+    friend class WebCore::GaneshRenderer;
+    friend class WebCore::RasterRenderer;
+#endif
 
 private:
     class MCRec;
