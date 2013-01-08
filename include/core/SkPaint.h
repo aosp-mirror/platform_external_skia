@@ -885,9 +885,9 @@ public:
                      SkPath* path) const;
 
 #ifdef SK_BUILD_FOR_ANDROID
-    const SkGlyph& getUnicharMetrics(SkUnichar);
-    const SkGlyph& getGlyphMetrics(uint16_t);
-    const void* findImage(const SkGlyph&);
+    const SkGlyph& getUnicharMetrics(SkUnichar, const SkMatrix*);
+    const SkGlyph& getGlyphMetrics(uint16_t, const SkMatrix*);
+    const void* findImage(const SkGlyph&, const SkMatrix*);
 
     uint32_t getGenerationID() const;
 
