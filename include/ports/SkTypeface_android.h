@@ -13,6 +13,7 @@
 #include "SkPaint.h"
 
 #include "../harfbuzz/src/harfbuzz-shaper.h"
+#include "../harfbuzz_ng/src/hb.h"
 
 /**
  *  Return a new typeface for a fallback script. If the script is
@@ -23,6 +24,9 @@
  *  @return          reference to the matching typeface. Caller must call
  *                   unref() when they are done.
  */
+SK_API SkTypeface* SkCreateTypefaceForScriptNG(hb_script_t script, SkTypeface::Style style,
+        SkPaint::FontVariant fontVariant = SkPaint::kDefault_Variant);
+
 SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style style,
         SkPaint::FontVariant fontVariant = SkPaint::kDefault_Variant);
 
