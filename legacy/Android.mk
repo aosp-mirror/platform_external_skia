@@ -3,25 +3,11 @@ LOCAL_PATH:= $(call my-dir)
 
 ###############################################################################
 #
-# PROBLEMS WITH SKIA DEBUGGING?? READ THIS...
+# This is a older copy of Skia that is intended only to be used to support
+# playback of webpages saved as SkPictures in older versions of the Android
+# Browser.  As such, all symbols are hidden with the exception of a few
+# functions that are needed to enable that behavior.
 #
-# The debug build results in changes to the Skia headers. This means that those
-# using libskia must also be built with the debug version of the Skia headers.
-# There are a few scenarios where this comes into play:
-#
-# (1) You're building debug code that depends on libskia.
-#   (a) If libskia is built in release, then define SK_RELEASE when building
-#       your sources.
-#   (b) If libskia is built with debugging (see step 2), then no changes are
-#       needed since your sources and libskia have been built with SK_DEBUG.
-# (2) You're building libskia in debug mode.
-#   (a) RECOMMENDED: You can build the entire system in debug mode. Do this by
-#       updating your buildspec.mk to include TARGET_BUILD_TYPE=debug
-#   (b) You can update all the users of libskia to define SK_DEBUG when they are
-#       building their sources.
-#
-# NOTE: If neither SK_DEBUG or SK_RELEASE are defined then Skia checks NDEBUG to
-#       determine which build type to use.
 ###############################################################################
 
 
@@ -59,7 +45,11 @@ LOCAL_CFLAGS += -DTEST_SRC_ALPHA
 # draw-time, at which point we know which SkTypeface is being drawn
 LOCAL_CFLAGS += -DSK_USE_FREETYPE_EMBOLDEN
 
-LOCAL_SRC_FILES:= \
+
+LOCAL_CFLAGS += -fvisibility=hidden
+LOCAL_SRC_FILES:= SavedPagePlayback.cpp
+
+LOCAL_SRC_FILES += \
 	src/core/Sk64.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
@@ -318,162 +308,6 @@ endif
 
 LOCAL_LDLIBS += -lpthread
 
-LOCAL_MODULE:= libskia
+LOCAL_MODULE:= libskia_legacy
 
 include $(BUILD_SHARED_LIBRARY)
-
-#############################################################
-# Build the skia gpu (ganesh) library
-#
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-ifneq ($(ARCH_ARM_HAVE_VFP),true)
-       LOCAL_CFLAGS += -DSK_SOFTWARE_FLOAT
-endif
-
-ifeq ($(ARCH_ARM_HAVE_NEON),true)
-       LOCAL_CFLAGS += -DGR_ANDROID_BUILD=1
-endif
-
-LOCAL_SRC_FILES:= \
-  src/gpu/GrPrintf_skia.cpp \
-  src/gpu/SkGpuCanvas.cpp \
-  src/gpu/SkGpuDevice.cpp \
-  src/gpu/SkGr.cpp \
-  src/gpu/SkGrFontScaler.cpp \
-  src/gpu/SkGrTexturePixelRef.cpp \
-  src/gpu/android/SkNativeGLContext_android.cpp \
-  src/gpu/gl/SkGLContext.cpp \
-  src/gpu/gl/SkNullGLContext.cpp
-
-LOCAL_SRC_FILES += \
-  src/gpu/GrAAHairLinePathRenderer.cpp \
-  src/gpu/GrAAConvexPathRenderer.cpp \
-  src/gpu/GrAddPathRenderers_default.cpp \
-  src/gpu/GrAllocPool.cpp \
-  src/gpu/GrAtlas.cpp \
-  src/gpu/GrBufferAllocPool.cpp \
-  src/gpu/GrClip.cpp \
-  src/gpu/GrContext.cpp \
-  src/gpu/GrDefaultPathRenderer.cpp \
-  src/gpu/GrDrawTarget.cpp \
-  src/gpu/GrGpu.cpp \
-  src/gpu/GrGpuFactory.cpp \
-  src/gpu/GrInOrderDrawBuffer.cpp \
-  src/gpu/GrMatrix.cpp \
-  src/gpu/GrMemory.cpp \
-  src/gpu/GrPathRendererChain.cpp \
-  src/gpu/GrPathRenderer.cpp \
-  src/gpu/GrPathUtils.cpp \
-  src/gpu/GrRectanizer.cpp \
-  src/gpu/GrRenderTarget.cpp \
-  src/gpu/GrResource.cpp \
-  src/gpu/GrResourceCache.cpp \
-  src/gpu/GrStencil.cpp \
-  src/gpu/GrStencilBuffer.cpp \
-  src/gpu/GrTesselatedPathRenderer.cpp \
-  src/gpu/GrTextContext.cpp \
-  src/gpu/GrTextStrike.cpp \
-  src/gpu/GrTexture.cpp \
-  src/gpu/gr_unittests.cpp \
-  src/gpu/android/GrGLCreateNativeInterface_android.cpp
-
-LOCAL_SRC_FILES += \
-  src/gpu/gl/GrGLCaps.cpp \
-  src/gpu/gl/GrGLContextInfo.cpp \
-  src/gpu/gl/GrGLCreateNullInterface.cpp \
-  src/gpu/gl/GrGLDefaultInterface_native.cpp \
-  src/gpu/gl/GrGLIndexBuffer.cpp \
-  src/gpu/gl/GrGLInterface.cpp \
-  src/gpu/gl/GrGLProgram.cpp \
-  src/gpu/gl/GrGLRenderTarget.cpp \
-  src/gpu/gl/GrGLSL.cpp \
-  src/gpu/gl/GrGLStencilBuffer.cpp \
-  src/gpu/gl/GrGLTexture.cpp \
-  src/gpu/gl/GrGLUtil.cpp \
-  src/gpu/gl/GrGLVertexBuffer.cpp \
-  src/gpu/gl/GrGpuGL.cpp \
-  src/gpu/gl/GrGpuGLShaders.cpp
-  
-LOCAL_STATIC_LIBRARIES := libskiatess
-LOCAL_SHARED_LIBRARIES := \
-  libcutils \
-  libutils \
-  libskia \
-  libEGL \
-  libGLESv2
-
-LOCAL_C_INCLUDES += \
-  $(LOCAL_PATH)/include/core \
-  $(LOCAL_PATH)/include/config \
-  $(LOCAL_PATH)/include/gpu \
-  $(LOCAL_PATH)/src/core \
-  $(LOCAL_PATH)/src/gpu \
-  $(LOCAL_PATH)/third_party/glu \
-  frameworks/base/opengl/include
-
-LOCAL_LDLIBS += -lpthread
-
-LOCAL_MODULE:= libskiagpu
-LOCAL_MODULE_TAGS := optional
-
-include $(BUILD_STATIC_LIBRARY)
-
-#############################################################
-# Build the skia gpu (ganesh) library
-#
-
-include $(CLEAR_VARS)
-
-LOCAL_ARM_MODE := arm
-
-LOCAL_SRC_FILES := \
-  third_party/glu/libtess/dict.c \
-  third_party/glu/libtess/geom.c \
-  third_party/glu/libtess/memalloc.c \
-  third_party/glu/libtess/mesh.c \
-  third_party/glu/libtess/normal.c \
-  third_party/glu/libtess/priorityq.c \
-  third_party/glu/libtess/render.c \
-  third_party/glu/libtess/sweep.c \
-  third_party/glu/libtess/tess.c \
-  third_party/glu/libtess/tessmono.c
-
-LOCAL_SHARED_LIBRARIES := \
-  libcutils \
-  libutils \
-  libEGL \
-  libGLESv2
-
-LOCAL_C_INCLUDES += \
-  $(LOCAL_PATH)/third_party/glu \
-  $(LOCAL_PATH)/third_party/glu/libtess \
-  frameworks/base/opengl/include
-
-LOCAL_LDLIBS += -lpthread
-
-LOCAL_MODULE:= libskiatess
-LOCAL_MODULE_TAGS := optional
-
-include $(BUILD_STATIC_LIBRARY)
-
-#############################################################
-# Build the skia tools
-#
-
-# benchmark (timings)
-include $(BASE_PATH)/bench/Android.mk
-
-# golden-master (fidelity / regression test)
-include $(BASE_PATH)/gm/Android.mk
-
-# unit-tests
-include $(BASE_PATH)/tests/Android.mk
-
-#############################################################
-# Build the legacy skia library for playback of saved webpages
-#
-include $(BASE_PATH)/legacy/Android.mk
