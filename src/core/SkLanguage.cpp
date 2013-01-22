@@ -16,7 +16,6 @@
 
 SkLanguage SkLanguage::getParent() const {
     SkASSERT(fInfo != NULL);
-    SkASSERT(fInfo->fTag != NULL);
     const char* tag = fInfo->fTag.c_str();
     SkASSERT(tag != NULL);
 
