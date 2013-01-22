@@ -508,3 +508,8 @@ include $(BASE_PATH)/bench/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk
+
+#############################################################
+# Build the legacy skia library for playback of saved webpages
+#
+include $(BASE_PATH)/legacy/Android.mk
