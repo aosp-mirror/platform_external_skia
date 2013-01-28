@@ -439,6 +439,11 @@ bool SkPNGImageDecoder::onBuildTileIndex(SkStream* sk_stream, int *width,
         return false;
     }
 
+    if (setjmp(png_jmpbuf(png_ptr)) != 0) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, png_infopp_NULL);
+        return false;
+    }
+
     int bit_depth, color_type, interlace_type;
     png_uint_32 origWidth, origHeight;
     png_get_IHDR(png_ptr, info_ptr, &origWidth, &origHeight, &bit_depth,
