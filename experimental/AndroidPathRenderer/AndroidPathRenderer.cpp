@@ -12,7 +12,7 @@
 #define VERTEX_DEBUG 0
 
 #include <SkPath.h>
-#include <SkPaint.h>
+#include <SkStrokeRec.h>
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -46,14 +46,14 @@ SkRect PathRenderer::ComputePathBounds(const SkPath& path, const SkPaint* paint)
     return bounds;
 }
 
-void computeInverseScales(const SkMatrix* transform, float &inverseScaleX, float& inverseScaleY) {
+inline void computeInverseScales(const SkMatrix* transform, float &inverseScaleX, float& inverseScaleY) {
     if (transform && transform->getType() & (SkMatrix::kScale_Mask|SkMatrix::kAffine_Mask|SkMatrix::kPerspective_Mask)) {
         float m00 = transform->getScaleX();
         float m01 = transform->getSkewY();
         float m10 = transform->getSkewX();
         float m11 = transform->getScaleY();
-        float scaleX = sqrt(m00 * m00 + m01 * m01);
-        float scaleY = sqrt(m10 * m10 + m11 * m11);
+        float scaleX = sk_float_sqrt(m00 * m00 + m01 * m01);
+        float scaleY = sk_float_sqrt(m10 * m10 + m11 * m11);
         inverseScaleX = (scaleX != 0) ? (1.0f / scaleX) : 1.0f;
         inverseScaleY = (scaleY != 0) ? (1.0f / scaleY) : 1.0f;
     } else {
@@ -82,7 +82,7 @@ inline void copyAlphaVertex(AlphaVertex* destPtr, const AlphaVertex* srcPtr) {
  */
 inline SkVector totalOffsetFromNormals(const SkVector& normalA, const SkVector& normalB) {
     SkVector pseudoNormal = normalA + normalB;
-    pseudoNormal.scale(1.0f / (1.0f + fabs(normalA.dot(normalB))));
+    pseudoNormal.scale(1.0f / (1.0f + sk_float_abs(normalA.dot(normalB))));
     return pseudoNormal;
 }
 
@@ -97,7 +97,7 @@ inline void scaleOffsetForStrokeWidth(SkVector& offset, float halfStrokeWidth,
     }
 }
 
-void getFillVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, VertexBuffer* vertexBuffer) {
+static void getFillVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, VertexBuffer* vertexBuffer) {
     Vertex* buffer = vertexBuffer->alloc<Vertex>(perimeter.count());
 
     int currentIndex = 0;
@@ -114,7 +114,7 @@ void getFillVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, Verte
     }
 }
 
-void getStrokeVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, float halfStrokeWidth,
+static void getStrokeVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, float halfStrokeWidth,
         VertexBuffer* vertexBuffer, float inverseScaleX, float inverseScaleY) {
     Vertex* buffer = vertexBuffer->alloc<Vertex>(perimeter.count() * 2 + 2);
 
@@ -153,7 +153,7 @@ void getStrokeVerticesFromPerimeter(const SkTArray<Vertex, true>& perimeter, flo
     copyVertex(&buffer[currentIndex++], &buffer[1]);
 }
 
-void getStrokeVerticesFromUnclosedVertices(const SkTArray<Vertex, true>& vertices, float halfStrokeWidth,
+static void getStrokeVerticesFromUnclosedVertices(const SkTArray<Vertex, true>& vertices, float halfStrokeWidth,
         VertexBuffer* vertexBuffer, float inverseScaleX, float inverseScaleY) {
     Vertex* buffer = vertexBuffer->alloc<Vertex>(vertices.count() * 2);
 
@@ -203,7 +203,7 @@ void getStrokeVerticesFromUnclosedVertices(const SkTArray<Vertex, true>& vertice
 #endif
 }
 
-void getFillVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, VertexBuffer* vertexBuffer,
+static void getFillVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, VertexBuffer* vertexBuffer,
          float inverseScaleX, float inverseScaleY) {
     AlphaVertex* buffer = vertexBuffer->alloc<AlphaVertex>(perimeter.count() * 3 + 2);
 
@@ -268,7 +268,7 @@ void getFillVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, Ver
 }
 
 
-void getStrokeVerticesFromUnclosedVerticesAA(const SkTArray<Vertex, true>& vertices, float halfStrokeWidth,
+static void getStrokeVerticesFromUnclosedVerticesAA(const SkTArray<Vertex, true>& vertices, float halfStrokeWidth,
         VertexBuffer* vertexBuffer, float inverseScaleX, float inverseScaleY) {
     AlphaVertex* buffer = vertexBuffer->alloc<AlphaVertex>(6 * vertices.count() + 2);
 
@@ -427,7 +427,7 @@ void getStrokeVerticesFromUnclosedVerticesAA(const SkTArray<Vertex, true>& verti
 }
 
 
-void getStrokeVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, float halfStrokeWidth,
+static void getStrokeVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, float halfStrokeWidth,
         VertexBuffer* vertexBuffer, float inverseScaleX, float inverseScaleY) {
     AlphaVertex* buffer = vertexBuffer->alloc<AlphaVertex>(6 * perimeter.count() + 8);
 
@@ -520,12 +520,11 @@ void getStrokeVerticesFromPerimeterAA(const SkTArray<Vertex, true>& perimeter, f
 #endif
 }
 
-void PathRenderer::ConvexPathVertices(const SkPath &path, const SkPaint* paint,
+void PathRenderer::ConvexPathVertices(const SkPath &path, const SkStrokeRec& stroke, bool isAA,
         const SkMatrix* transform, VertexBuffer* vertexBuffer) {
     SK_TRACE_EVENT0("PathRenderer::convexPathVertices");
 
-    SkPaint::Style style = paint->getStyle();
-    bool isAA = paint->isAntiAlias();
+    SkStrokeRec::Style style = stroke.getStyle();
 
     float inverseScaleX, inverseScaleY;
     computeInverseScales(transform, inverseScaleX, inverseScaleY);
@@ -533,18 +532,18 @@ void PathRenderer::ConvexPathVertices(const SkPath &path, const SkPaint* paint,
     SkTArray<Vertex, true> tempVertices;
     float threshInvScaleX = inverseScaleX;
     float threshInvScaleY = inverseScaleY;
-    if (style == SkPaint::kStroke_Style) {
+    if (style == SkStrokeRec::kStroke_Style) {
         // alter the bezier recursion threshold values we calculate in order to compensate for
         // expansion done after the path vertices are found
         SkRect bounds = path.getBounds();
         if (!bounds.isEmpty()) {
-            threshInvScaleX *= bounds.width() / (bounds.width() + paint->getStrokeWidth());
-            threshInvScaleY *= bounds.height() / (bounds.height() + paint->getStrokeWidth());
+            threshInvScaleX *= bounds.width() / (bounds.width() + stroke.getWidth());
+            threshInvScaleY *= bounds.height() / (bounds.height() + stroke.getWidth());
         }
     }
 
     // force close if we're filling the path, since fill path expects closed perimeter.
-    bool forceClose = style != SkPaint::kStroke_Style;
+    bool forceClose = style != SkStrokeRec::kStroke_Style;
     bool wasClosed = ConvexPathPerimeterVertices(path, forceClose, threshInvScaleX * threshInvScaleX,
             threshInvScaleY * threshInvScaleY, &tempVertices);
 
@@ -559,8 +558,8 @@ void PathRenderer::ConvexPathVertices(const SkPath &path, const SkPaint* paint,
     }
 #endif
 
-    if (style == SkPaint::kStroke_Style) {
-        float halfStrokeWidth = paint->getStrokeWidth() * 0.5f;
+    if (style == SkStrokeRec::kStroke_Style) {
+        float halfStrokeWidth = stroke.getWidth() * 0.5f;
         if (!isAA) {
             if (wasClosed) {
                 getStrokeVerticesFromPerimeter(tempVertices, halfStrokeWidth, vertexBuffer,
@@ -590,7 +589,7 @@ void PathRenderer::ConvexPathVertices(const SkPath &path, const SkPaint* paint,
 }
 
 
-void pushToVector(SkTArray<Vertex, true>* vertices, float x, float y) {
+static void pushToVector(SkTArray<Vertex, true>* vertices, float x, float y) {
     // TODO: make this not yuck
     vertices->push_back();
     Vertex* newVertex = &((*vertices)[vertices->count() - 1]);
@@ -607,7 +606,7 @@ bool PathRenderer::ConvexPathPerimeterVertices(const SkPath& path, bool forceClo
     SkPath::Iter iter(path, forceClose);
     SkPoint pts[4];
     SkPath::Verb v;
-    Vertex* newVertex = 0;
+
     while (SkPath::kDone_Verb != (v = iter.next(pts))) {
             switch (v) {
                 case SkPath::kMove_Verb:
@@ -661,8 +660,8 @@ void PathRenderer::RecursiveCubicBezierVertices(
         float sqrInvScaleX, float sqrInvScaleY, SkTArray<Vertex, true>* outputVertices) {
     float dx = p2x - p1x;
     float dy = p2y - p1y;
-    float d1 = fabs((c1x - p2x) * dy - (c1y - p2y) * dx);
-    float d2 = fabs((c2x - p2x) * dy - (c2y - p2y) * dx);
+    float d1 = sk_float_abs((c1x - p2x) * dy - (c1y - p2y) * dx);
+    float d2 = sk_float_abs((c2x - p2x) * dy - (c2y - p2y) * dx);
     float d = d1 + d2;
 
     // multiplying by sqrInvScaleY/X equivalent to multiplying in dimensional scale factors

@@ -7,6 +7,7 @@
 
 #include "gm.h"
 #include "SkBlurMaskFilter.h"
+#include "SkBlurMask.h"
 #include "SkCanvas.h"
 #include "SkPath.h"
 
@@ -16,13 +17,6 @@ typedef void (*Proc)(SkCanvas*, const SkRect&, const SkPaint&);
 
 static void fill_rect(SkCanvas* canvas, const SkRect& r, const SkPaint& p) {
     canvas->drawRect(r, p);
-}
-
-static void stroke_rect(SkCanvas* canvas, const SkRect& r, const SkPaint& p) {
-    SkPaint paint(p);
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(STROKE_WIDTH);
-    canvas->drawRect(r, paint);
 }
 
 static void draw_donut(SkCanvas* canvas, const SkRect& r, const SkPaint& p) {
@@ -62,14 +56,6 @@ static void draw_donut_skewed(SkCanvas* canvas, const SkRect& r, const SkPaint& 
 #include "SkGradientShader.h"
 
 typedef void (*PaintProc)(SkPaint*, SkScalar width);
-
-static void setgrad(SkPaint* paint, SkScalar width) {
-    SkPoint pts[] = { { 0, 0 }, { width, 0 } };
-    SkColor colors[] = { SK_ColorRED, SK_ColorGREEN };
-    SkShader* s = SkGradientShader::CreateLinear(pts, colors, NULL, 2,
-                                                 SkShader::kClamp_TileMode);
-    paint->setShader(s)->unref();
-}
 
 static const char* gBlurStyle2Name[] = {
     "normal",
@@ -149,6 +135,87 @@ private:
     typedef GM INHERITED;
 };
 
+class BlurRectCompareGM : public skiagm::GM {
+    SkString  fName;
+    unsigned int fRectWidth, fRectHeight;
+    SkScalar fRadius;
+public:
+    BlurRectCompareGM(const char name[], unsigned int rectWidth, unsigned int rectHeight, float radius)
+        : fName(name)
+        , fRectWidth(rectWidth)
+        , fRectHeight(rectHeight)
+        , fRadius(radius)
+    {}
+
+  int width() const { return fRectWidth; }
+  int height() const { return fRectHeight; }
+  SkScalar radius() const { return fRadius; }
+
+protected:
+    virtual SkString onShortName() {
+        return fName;
+    }
+
+    virtual SkISize onISize() {
+        return SkISize::Make(640, 480);
+    }
+
+    virtual void makeMask(SkMask *m, const SkRect&) = 0;
+
+    virtual void onDraw(SkCanvas* canvas) {
+      SkRect r;
+      r.setWH(SkIntToScalar(fRectWidth), SkIntToScalar(fRectHeight));
+
+      SkMask mask;
+
+      this->makeMask(&mask, r);
+      SkAutoMaskFreeImage amfi(mask.fImage);
+
+      SkBitmap bm;
+      bm.setConfig(SkBitmap::kA8_Config, mask.fBounds.width(), mask.fBounds.height());
+      bm.setPixels(mask.fImage);
+      canvas->drawBitmap(bm, 50, 50, NULL);
+    }
+
+    virtual uint32_t onGetFlags() const { return kSkipPipe_Flag; }
+
+private:
+    typedef GM INHERITED;
+};
+
+class BlurRectFastGM: public BlurRectCompareGM {
+public:
+    BlurRectFastGM(const char name[], unsigned int rect_width,
+                   unsigned int rect_height, float blur_radius) :
+        BlurRectCompareGM(name, rect_width, rect_height, blur_radius) {}
+protected:
+    virtual void makeMask(SkMask *m, const SkRect& r) SK_OVERRIDE {
+        SkBlurMask::BlurRect(m, r, radius(), SkBlurMask::kNormal_Style,
+                             SkBlurMask::kHigh_Quality );
+    }
+};
+
+class BlurRectSlowGM: public BlurRectCompareGM {
+public:
+  BlurRectSlowGM(const char name[], unsigned int rect_width, unsigned int rect_height, float blur_radius) :
+    BlurRectCompareGM( name, rect_width, rect_height, blur_radius ) {}
+protected:
+    virtual void makeMask(SkMask *m, const SkRect& r) SK_OVERRIDE {
+        SkMask src;
+        r.roundOut(&src.fBounds);
+        src.fBounds.offset(-src.fBounds.fLeft, -src.fBounds.fTop);  // move to origin
+        src.fFormat = SkMask::kA8_Format;
+        src.fRowBytes = src.fBounds.width();
+        src.fImage = SkMask::AllocImage( src.computeTotalImageSize() );
+        SkAutoMaskFreeImage amfi(src.fImage);
+
+        memset(src.fImage, 0xff, src.computeTotalImageSize());
+
+        SkBlurMask::BlurSeparable(m, src, radius()/2, SkBlurMask::kNormal_Style, SkBlurMask::kHigh_Quality);
+    }
+};
+
+
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new BlurRectGM("blurrect", NULL, 0xFF, SkBlurMaskFilter::kNormal_BlurStyle);)
@@ -156,5 +223,12 @@ DEF_GM(return new BlurRectGM("blurrect", NULL, 0xFF, SkBlurMaskFilter::kSolid_Bl
 DEF_GM(return new BlurRectGM("blurrect", NULL, 0xFF, SkBlurMaskFilter::kOuter_BlurStyle);)
 DEF_GM(return new BlurRectGM("blurrect", NULL, 0xFF, SkBlurMaskFilter::kInner_BlurStyle);)
 
-DEF_GM(return new BlurRectGM("blurrect_grad_80", setgrad, 0x80, SkBlurMaskFilter::kNormal_BlurStyle);)
+DEF_GM(return new BlurRectFastGM("blurrect_fast_100_100_10", 100, 100, 10);)
+DEF_GM(return new BlurRectFastGM("blurrect_fast_100_100_2", 100, 100, 2);)
+DEF_GM(return new BlurRectFastGM("blurrect_fast_10_10_100", 10, 10, 100);)
+DEF_GM(return new BlurRectFastGM("blurrect_fast_10_100_10", 10, 100, 10);)
 
+DEF_GM(return new BlurRectSlowGM("blurrect_slow_100_100_10", 100, 100, 10);)
+DEF_GM(return new BlurRectSlowGM("blurrect_slow_100_100_2", 100, 100, 2);)
+DEF_GM(return new BlurRectSlowGM("blurrect_slow_10_10_100", 10, 10, 100);)
+DEF_GM(return new BlurRectSlowGM("blurrect_slow_10_100_10", 10, 100, 10);)

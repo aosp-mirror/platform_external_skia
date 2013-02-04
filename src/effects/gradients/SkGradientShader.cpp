@@ -364,14 +364,6 @@ static inline U16CPU bitsTo16(unsigned x, const unsigned bits) {
     return 0;
 }
 
-/** We duplicate the last value in each half of the cache so that
-    interpolation doesn't have to special-case being at the last point.
-*/
-static void complete_16bit_cache(uint16_t* cache, int stride) {
-    cache[stride - 1] = cache[stride - 2];
-    cache[2 * stride - 1] = cache[2 * stride - 2];
-}
-
 const uint16_t* SkGradientShaderBase::getCache16() const {
     if (fCache16 == NULL) {
         // double the count for dither entries
@@ -384,7 +376,7 @@ const uint16_t* SkGradientShaderBase::getCache16() const {
         fCache16 = fCache16Storage;
         if (fColorCount == 2) {
             Build16bitCache(fCache16, fOrigColors[0], fOrigColors[1],
-                            kGradient16Length);
+                            kCache16Count);
         } else {
             Rec* rec = fRecs;
             int prevIndex = 0;
@@ -396,8 +388,6 @@ const uint16_t* SkGradientShaderBase::getCache16() const {
                     Build16bitCache(fCache16 + prevIndex, fOrigColors[i-1], fOrigColors[i], nextIndex - prevIndex + 1);
                 prevIndex = nextIndex;
             }
-            // one extra space left over at the end for complete_16bit_cache()
-            SkASSERT(prevIndex == kGradient16Length - 1);
         }
 
         if (fMapper) {
@@ -405,7 +395,7 @@ const uint16_t* SkGradientShaderBase::getCache16() const {
             uint16_t* linear = fCache16;         // just computed linear data
             uint16_t* mapped = fCache16Storage;  // storage for mapped data
             SkUnitMapper* map = fMapper;
-            for (int i = 0; i < kGradient16Length; i++) {
+            for (int i = 0; i < kCache16Count; i++) {
                 int index = map->mapUnit16(bitsTo16(i, kCache16Bits)) >> kCache16Shift;
                 mapped[i] = linear[index];
                 mapped[i + kCache16Count] = linear[index + kCache16Count];
@@ -413,17 +403,8 @@ const uint16_t* SkGradientShaderBase::getCache16() const {
             sk_free(fCache16);
             fCache16 = fCache16Storage;
         }
-        complete_16bit_cache(fCache16, kCache16Count);
     }
     return fCache16;
-}
-
-/** We duplicate the last value in each half of the cache so that
-    interpolation doesn't have to special-case being at the last point.
-*/
-static void complete_32bit_cache(SkPMColor* cache, int stride) {
-    cache[stride - 1] = cache[stride - 2];
-    cache[2 * stride - 1] = cache[2 * stride - 2];
 }
 
 const SkPMColor* SkGradientShaderBase::getCache32() const {
@@ -439,13 +420,13 @@ const SkPMColor* SkGradientShaderBase::getCache32() const {
         fCache32 = (SkPMColor*)fCache32PixelRef->getAddr();
         if (fColorCount == 2) {
             Build32bitCache(fCache32, fOrigColors[0], fOrigColors[1],
-                            kGradient32Length, fCacheAlpha);
+                            kCache32Count, fCacheAlpha);
         } else {
             Rec* rec = fRecs;
             int prevIndex = 0;
             for (int i = 1; i < fColorCount; i++) {
                 int nextIndex = SkFixedToFFFF(rec[i].fPos) >> kCache32Shift;
-                SkASSERT(nextIndex < kGradient32Length);
+                SkASSERT(nextIndex < kCache32Count);
 
                 if (nextIndex > prevIndex)
                     Build32bitCache(fCache32 + prevIndex, fOrigColors[i-1],
@@ -453,7 +434,6 @@ const SkPMColor* SkGradientShaderBase::getCache32() const {
                                     nextIndex - prevIndex + 1, fCacheAlpha);
                 prevIndex = nextIndex;
             }
-            SkASSERT(prevIndex == kGradient32Length - 1);
         }
 
         if (fMapper) {
@@ -462,7 +442,7 @@ const SkPMColor* SkGradientShaderBase::getCache32() const {
             SkPMColor* linear = fCache32;           // just computed linear data
             SkPMColor* mapped = (SkPMColor*)newPR->getAddr();    // storage for mapped data
             SkUnitMapper* map = fMapper;
-            for (int i = 0; i < kGradient32Length; i++) {
+            for (int i = 0; i < kCache32Count; i++) {
                 int index = map->mapUnit16((i << 8) | i) >> 8;
                 mapped[i] = linear[index];
                 mapped[i + kCache32Count] = linear[index + kCache32Count];
@@ -471,7 +451,6 @@ const SkPMColor* SkGradientShaderBase::getCache32() const {
             fCache32PixelRef = newPR;
             fCache32 = (SkPMColor*)newPR->getAddr();
         }
-        complete_32bit_cache(fCache32, kCache32Count);
     }
     return fCache32;
 }
@@ -493,7 +472,7 @@ void SkGradientShaderBase::getGradientTableBitmap(SkBitmap* bitmap) const {
     if (fMapper) {
         // force our cahce32pixelref to be built
         (void)this->getCache32();
-        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kGradient32Length, 1);
+        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kCache32Count, 1);
         bitmap->setPixelRef(fCache32PixelRef);
         return;
     }
@@ -533,9 +512,7 @@ void SkGradientShaderBase::getGradientTableBitmap(SkBitmap* bitmap) const {
     if (!gCache->find(storage.get(), size, bitmap)) {
         // force our cahce32pixelref to be built
         (void)this->getCache32();
-        // Only expose the linear section of the cache; don't let the caller
-        // know about the padding at the end to make interpolation faster.
-        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kGradient32Length, 1);
+        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kCache32Count, 1);
         bitmap->setPixelRef(fCache32PixelRef);
 
         gCache->add(storage.get(), size, *bitmap);
@@ -546,16 +523,16 @@ void SkGradientShaderBase::commonAsAGradient(GradientInfo* info) const {
     if (info) {
         if (info->fColorCount >= fColorCount) {
             if (info->fColors) {
-                memcpy(info->fColors, fOrigColors,
-                       fColorCount * sizeof(SkColor));
+                memcpy(info->fColors, fOrigColors, fColorCount * sizeof(SkColor));
             }
             if (info->fColorOffsets) {
                 if (fColorCount == 2) {
                     info->fColorOffsets[0] = 0;
                     info->fColorOffsets[1] = SK_Scalar1;
                 } else if (fColorCount > 2) {
-                    for (int i = 0; i < fColorCount; i++)
+                    for (int i = 0; i < fColorCount; ++i) {
                         info->fColorOffsets[i] = SkFixedToScalar(fRecs[i].fPos);
+                    }
                 }
             }
         }
@@ -563,6 +540,42 @@ void SkGradientShaderBase::commonAsAGradient(GradientInfo* info) const {
         info->fTileMode = fTileMode;
     }
 }
+
+#ifdef SK_DEVELOPER
+void SkGradientShaderBase::toString(SkString* str) const {
+
+    str->appendf("%d colors: ", fColorCount);
+
+    for (int i = 0; i < fColorCount; ++i) {
+        str->appendHex(fOrigColors[i]);
+        if (i < fColorCount-1) {
+            str->append(", ");
+        }
+    }
+
+    if (fColorCount > 2) {
+        str->append(" points: (");
+        for (int i = 0; i < fColorCount; ++i) {
+            str->appendScalar(SkFixedToScalar(fRecs[i].fPos));
+            if (i < fColorCount-1) {
+                str->append(", ");
+            }
+        }
+        str->append(")");
+    }
+
+    static const char* gTileModeName[SkShader::kTileModeCount] = {
+        "clamp", "repeat", "mirror"
+    };
+
+    str->append(" ");
+    str->append(gTileModeName[fTileMode]);
+
+    // TODO: add "fMapper->toString(str);" when SkUnitMapper::toString is added
+
+    this->INHERITED::toString(str);
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -691,7 +704,7 @@ void GrGLGradientEffect::emitYCoordUniform(GrGLShaderBuilder* builder) {
 }
 
 void GrGLGradientEffect::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
-    const GrGradientEffect& e = static_cast<const GrGradientEffect&>(*stage.getEffect());
+    const GrGradientEffect& e = GetEffectFromStage<GrGradientEffect>(stage);
     const GrTexture* texture = e.texture(0);
     fEffectMatrix.setData(uman, e.getMatrix(), stage.getCoordChangeMatrix(), texture);
 
@@ -703,7 +716,7 @@ void GrGLGradientEffect::setData(const GrGLUniformManager& uman, const GrEffectS
 }
 
 GrGLEffect::EffectKey GrGLGradientEffect::GenMatrixKey(const GrEffectStage& s) {
-    const GrGradientEffect& e = static_cast<const GrGradientEffect&>(*s.getEffect());
+    const GrGradientEffect& e = GetEffectFromStage<GrGradientEffect>(s);
     const GrTexture* texture = e.texture(0);
     return GrGLEffectMatrix::GenKey(e.getMatrix(), s.getCoordChangeMatrix(), texture);
 }
@@ -742,8 +755,7 @@ void GrGLGradientEffect::emitColorLookup(GrGLShaderBuilder* builder,
 GrGradientEffect::GrGradientEffect(GrContext* ctx,
                                    const SkGradientShaderBase& shader,
                                    const SkMatrix& matrix,
-                                   SkShader::TileMode tileMode)
-    : INHERITED(1) {
+                                   SkShader::TileMode tileMode) {
     // TODO: check for simple cases where we don't need a texture:
     //GradientInfo info;
     //shader.asAGradient(&info);
@@ -753,6 +765,8 @@ GrGradientEffect::GrGradientEffect(GrContext* ctx,
 
     SkBitmap bitmap;
     shader.getGradientTableBitmap(&bitmap);
+
+    fIsOpaque = shader.isOpaque();
 
     GrTextureStripAtlas::Desc desc;
     desc.fWidth  = bitmap.width();
@@ -774,15 +788,16 @@ GrGradientEffect::GrGradientEffect(GrContext* ctx,
                   fAtlas->getVerticalScaleFactor();
         fTextureAccess.reset(fAtlas->getTexture(), params);
     } else {
-        GrTexture* texture = GrLockCachedBitmapTexture(ctx, bitmap, &params);
+        GrTexture* texture = GrLockAndRefCachedBitmapTexture(ctx, bitmap, &params);
         fTextureAccess.reset(texture, params);
         fYCoord = SK_ScalarHalf;
 
         // Unlock immediately, this is not great, but we don't have a way of
         // knowing when else to unlock it currently, so it may get purged from
         // the cache, but it'll still be ref'd until it's no longer being used.
-        GrUnlockCachedBitmapTexture(texture);
+        GrUnlockAndUnrefCachedBitmapTexture(texture);
     }
+    this->addTextureAccess(&fTextureAccess);
 }
 
 GrGradientEffect::~GrGradientEffect() {
@@ -791,9 +806,22 @@ GrGradientEffect::~GrGradientEffect() {
     }
 }
 
-const GrTextureAccess& GrGradientEffect::textureAccess(int index) const {
-    GrAssert(0 == index);
-    return fTextureAccess;
+bool GrGradientEffect::onIsEqual(const GrEffect& effect) const {
+    const GrGradientEffect& s = CastEffect<GrGradientEffect>(effect);
+    return fTextureAccess.getTexture() == s.fTextureAccess.getTexture()  &&
+           fTextureAccess.getParams().getTileModeX() ==
+                s.fTextureAccess.getParams().getTileModeX() &&
+           this->useAtlas() == s.useAtlas() &&
+           fYCoord == s.getYCoord() &&
+           fMatrix.cheapEqualTo(s.getMatrix());
+}
+
+void GrGradientEffect::getConstantColorComponents(GrColor* color, uint32_t* validFlags) const {
+    if (fIsOpaque && (kA_ValidComponentFlag & *validFlags) && 0xff == GrColorUnpackA(*color)) {
+        *validFlags = kA_ValidComponentFlag;
+    } else {
+        *validFlags = 0;
+    }
 }
 
 int GrGradientEffect::RandomGradientParams(SkRandom* random,

@@ -32,7 +32,7 @@ static void usage(const char* argv0) {
 "     [--pipe]\n"
 "     [--bbh bbhType]\n"
 "     [--multi count]\n"
-"     [--validate]\n"
+"     [--validate [--maxComponentDiff n]]\n"
 "     [--writeWholeImage]\n"
 "     [--clone n]\n"
 "     [--viewport width height][--scale sf]\n"
@@ -86,6 +86,8 @@ static void usage(const char* argv0) {
     SkDebugf(
 "     --validate: Verify that the rendered image contains the same pixels as "
 "the picture rendered in simple mode.\n"
+"     --maxComponentDiff: maximum diff on a component. Default is 256, "
+"which means we report but we do not generate an error.\n"
 "     --writeWholeImage: In tile mode, write the entire rendered image to a "
 "file, instead of an image for each tile.\n");
     SkDebugf(
@@ -166,19 +168,28 @@ static bool render_picture(const SkString& inputPath, const SkString* outputDir,
         SkDELETE(outputPath);
     }
 
-    renderer.resetState();
-
     renderer.end();
 
     SkDELETE(picture);
     return success;
 }
 
+static inline int getByte(uint32_t value, int index) {
+    SkASSERT(0 <= index && index < 4);
+    return (value >> (index * 8)) & 0xFF;
+}
+
+static int MaxByteDiff(uint32_t v1, uint32_t v2) {
+    return SkMax32(SkMax32(abs(getByte(v1, 0) - getByte(v2, 0)), abs(getByte(v1, 1) - getByte(v2, 1))),
+                   SkMax32(abs(getByte(v1, 2) - getByte(v2, 2)), abs(getByte(v1, 3) - getByte(v2, 3))));
+}
+
 static bool render_picture(const SkString& inputPath, const SkString* outputDir,
                            sk_tools::PictureRenderer& renderer,
-                           bool validate,
+                           bool validate, int maxComponentDiff,
                            bool writeWholeImage,
                            int clones) {
+    int diffs[256] = {0};
     SkBitmap* bitmap = NULL;
     bool success = render_picture(inputPath,
         writeWholeImage ? NULL : outputDir,
@@ -218,13 +229,19 @@ static bool render_picture(const SkString& inputPath, const SkString* outputDir,
             SkDELETE(referenceBitmap);
             return false;
         }
-        
+
         for (int y = 0; success && y < bitmap->height(); y++) {
             for (int x = 0; success && x < bitmap->width(); x++) {
-                if (*referenceBitmap->getAddr32(x, y) != *bitmap->getAddr32(x, y)) {
-                    SkDebugf("Expected pixel at (%i %i): 0x%x, actual 0x%x\n",
-                             x, y,
-                             referenceBitmap->getAddr32(x, y),
+                int diff = MaxByteDiff(*referenceBitmap->getAddr32(x, y),
+                                       *bitmap->getAddr32(x, y));
+                SkASSERT(diff >= 0 && diff <= 255);
+                diffs[diff]++;
+
+                if (diff > maxComponentDiff) {
+                    SkDebugf("Expected pixel at (%i %i) exceedds maximum "
+                                 "component diff of %i: 0x%x, actual 0x%x\n",
+                             x, y, maxComponentDiff,
+                             *referenceBitmap->getAddr32(x, y),
                              *bitmap->getAddr32(x, y));
                     SkDELETE(bitmap);
                     SkDELETE(referenceBitmap);
@@ -233,6 +250,12 @@ static bool render_picture(const SkString& inputPath, const SkString* outputDir,
             }
         }
         SkDELETE(referenceBitmap);
+
+        for (int i = 1; i <= 255; ++i) {
+            if(diffs[i] > 0) {
+                SkDebugf("Number of pixels with max diff of %i is %i\n", i, diffs[i]);
+            }
+        }
     }
 
     if (writeWholeImage) {
@@ -258,7 +281,8 @@ static bool render_picture(const SkString& inputPath, const SkString* outputDir,
 
 static int process_input(const SkString& input, const SkString* outputDir,
                          sk_tools::PictureRenderer& renderer,
-                         bool validate, bool writeWholeImage, int clones) {
+                         bool validate, int maxComponentDiff,
+                         bool writeWholeImage, int clones) {
     SkOSFile::Iter iter(input.c_str(), "skp");
     SkString inputFilename;
     int failures = 0;
@@ -268,14 +292,16 @@ static int process_input(const SkString& input, const SkString* outputDir,
             SkString inputPath;
             sk_tools::make_filepath(&inputPath, input, inputFilename);
             if (!render_picture(inputPath, outputDir, renderer,
-                                validate, writeWholeImage, clones)) {
+                                validate, maxComponentDiff,
+                                writeWholeImage, clones)) {
                 ++failures;
             }
         } while(iter.next(&inputFilename));
     } else if (SkStrEndsWith(input.c_str(), ".skp")) {
         SkString inputPath(input);
         if (!render_picture(inputPath, outputDir, renderer,
-                            validate, writeWholeImage, clones)) {
+                            validate, maxComponentDiff,
+                            writeWholeImage, clones)) {
             ++failures;
         }
     } else {
@@ -288,7 +314,8 @@ static int process_input(const SkString& input, const SkString* outputDir,
 
 static void parse_commandline(int argc, char* const argv[], SkTArray<SkString>* inputs,
                               sk_tools::PictureRenderer*& renderer, SkString*& outputDir,
-                              bool* validate, bool* writeWholeImage,
+                              bool* validate, int* maxComponentDiff,
+                              bool* writeWholeImage,
                               int* clones){
     const char* argv0 = argv[0];
     char* const* stop = argv + argc;
@@ -312,6 +339,7 @@ static void parse_commandline(int argc, char* const argv[], SkTArray<SkString>* 
     sk_tools::PictureRenderer::BBoxHierarchyType bbhType =
         sk_tools::PictureRenderer::kNone_BBoxHierarchyType;
     *validate = false;
+    *maxComponentDiff = 256;
     *writeWholeImage = false;
     *clones = 0;
     SkISize viewport;
@@ -425,7 +453,7 @@ static void parse_commandline(int argc, char* const argv[], SkTArray<SkString>* 
                 usage(argv0);
                 exit(-1);
             }
-            scaleFactor = atof(*argv);
+            scaleFactor = SkDoubleToScalar(atof(*argv));
         } else if (0 == strcmp(*argv, "--tiles")) {
             ++argv;
             if (argv >= stop) {
@@ -511,6 +539,25 @@ static void parse_commandline(int argc, char* const argv[], SkTArray<SkString>* 
             outputDir = SkNEW_ARGS(SkString, (*argv));
         } else if (0 == strcmp(*argv, "--validate")) {
             *validate = true;
+        } else if (0 == strcmp(*argv, "--maxComponentDiff")) {
+            if (!*validate) {
+                SkDebugf("--maxComponentDiff must be used only with --validate\n");
+                usage(argv0);
+                exit(-1);
+            }
+            ++argv;
+            if (argv >= stop) {
+                SkDebugf("Missing arg for --maxComponentDiff\n");
+                usage(argv0);
+                exit(-1);
+            }
+            *maxComponentDiff = atoi(*argv);
+            if (*maxComponentDiff < 0 || *maxComponentDiff > 256) {
+                SkSafeUnref(renderer);
+                SkDebugf("maxComponentDiff: 0 - 256.\n");
+                usage(argv0);
+                exit(-1);
+            }
         } else if (0 == strcmp(*argv, "--writeWholeImage")) {
             *writeWholeImage = true;
         } else {
@@ -676,16 +723,18 @@ int tool_main(int argc, char** argv) {
     sk_tools::PictureRenderer* renderer = NULL;
     SkString* outputDir = NULL;
     bool validate = false;
+    int maxComponentDiff = 256;
     bool writeWholeImage = false;
     int clones = 0;
     parse_commandline(argc, argv, &inputs, renderer, outputDir,
-                      &validate, &writeWholeImage, &clones);
+                      &validate, &maxComponentDiff, &writeWholeImage, &clones);
     SkASSERT(renderer);
 
     int failures = 0;
     for (int i = 0; i < inputs.count(); i ++) {
         failures += process_input(inputs[i], outputDir, *renderer,
-                                  validate, writeWholeImage, clones);
+                                  validate, maxComponentDiff,
+                                  writeWholeImage, clones);
     }
     if (failures != 0) {
         SkDebugf("Failed to render %i pictures.\n", failures);

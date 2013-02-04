@@ -60,19 +60,15 @@ public:
 
     void loadPicture(SkPicture* picture);
 
-    SkPicture* makePicture();
+    SkPicture* copyPicture();
 
     int getSize() {
         return fDebugCanvas->getSize();
     }
 
-    void setUserOffset(SkIPoint userOffset) {
+    void setUserMatrix(SkMatrix userMatrix) {
         // Should this live in debugger instead?
-        fDebugCanvas->setUserOffset(userOffset);
-    }
-
-    void setUserScale(float userScale) {
-        fDebugCanvas->setUserScale(userScale);
+        fDebugCanvas->setUserMatrix(userMatrix);
     }
 
     int getCommandAtPoint(int x, int y, int index) {

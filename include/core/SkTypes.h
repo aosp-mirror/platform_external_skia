@@ -112,6 +112,16 @@ inline void operator delete(void* p) {
     #define SkAssertResult(cond)        cond
 #endif
 
+#ifdef SK_DEVELOPER
+    #define SkDEVCODE(code)             code
+    // the 'toString' helper functions convert Sk* objects to human-readable
+    // form in developer mode
+    #define SK_DEVELOPER_TO_STRING()    virtual void toString(SkString* str) const SK_OVERRIDE;
+#else
+    #define SkDEVCODE(code)
+    #define SK_DEVELOPER_TO_STRING()
+#endif
+
 template <bool>
 struct SkCompileAssert {
 };
@@ -201,7 +211,7 @@ typedef uint8_t SkBool8;
 #define SK_MinS32   -SK_MaxS32
 #define SK_MaxU32   0xFFFFFFFF
 #define SK_MinU32   0
-#define SK_NaN32    0x80000000
+#define SK_NaN32    (1 << 31)
 
 /** Returns true if the value can be represented with signed 16bits
  */
@@ -281,6 +291,13 @@ static inline int32_t SkAbs32(int32_t value) {
     int32_t mask = value >> 31;
     return (value ^ mask) - mask;
 #endif
+}
+
+template <typename T> inline T SkTAbs(T value) {
+    if (value < 0) {
+        value = -value;
+    }
+    return value;
 }
 
 static inline int32_t SkMax32(int32_t a, int32_t b) {

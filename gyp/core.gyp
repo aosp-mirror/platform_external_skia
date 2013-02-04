@@ -17,6 +17,7 @@
         '../include/core',
         '../include/pipe',
         '../include/ports',
+        '../include/utils',
         '../include/xml',
         '../src/core',
         '../src/image',
@@ -91,6 +92,12 @@
           'sources': [
             '../src/core/SkUtilsArm.cpp',
             '../src/core/SkUtilsArm.h',
+          ],
+        }],
+        ['skia_gpu == 1', {
+          'include_dirs': [
+              '../include/gpu',
+              '../src/gpu',
           ],
         }],
       ],

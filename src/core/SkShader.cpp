@@ -173,14 +173,23 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
 }
 
-bool SkShader::asNewEffect(GrContext*, GrEffectStage*) const {
-    return false;
+GrEffectRef* SkShader::asNewEffect(GrContext*, const SkPaint&) const {
+    return NULL;
 }
 
 SkShader* SkShader::CreateBitmapShader(const SkBitmap& src,
                                        TileMode tmx, TileMode tmy) {
     return SkShader::CreateBitmapShader(src, tmx, tmy, NULL, 0);
 }
+
+#ifdef SK_DEVELOPER
+void SkShader::toString(SkString* str) const {
+    if (this->hasLocalMatrix()) {
+        str->append(" ");
+        this->getLocalMatrix().toString(str);
+    }
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -303,6 +312,23 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
     return kColor_GradientType;
 }
 
+#ifdef SK_DEVELOPER
+void SkColorShader::toString(SkString* str) const {
+    str->append("SkColorShader: (");
+
+    if (fInheritColor) {
+        str->append("Color: inherited from paint");
+    } else {
+        str->append("Color: ");
+        str->appendHex(fColor);
+    }
+
+    this->INHERITED::toString(str);
+
+    str->append(")");
+}
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkEmptyShader.h"
@@ -324,3 +350,13 @@ void SkEmptyShader::shadeSpan16(int x, int y, uint16_t span[], int count) {
 void SkEmptyShader::shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) {
     SkDEBUGFAIL("should never get called, since setContext() returned false");
 }
+
+#ifdef SK_DEVELOPER
+void SkEmptyShader::toString(SkString* str) const {
+    str->append("SkEmptyShader: (");
+
+    this->INHERITED::toString(str);
+
+    str->append(")");
+}
+#endif

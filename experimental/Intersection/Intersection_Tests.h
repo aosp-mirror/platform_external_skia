@@ -4,18 +4,22 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#if !defined(IN_TEST)
-    #define IN_TEST 1
-#endif
+#include "DataTypes_Test.h"
 
 void ActiveEdge_Test();
 void ConvexHull_Test();
 void ConvexHull_X_Test();
 void CubicBezierClip_Test();
 void CubicCoincidence_Test();
+void CubicIntersection_ComputeDeltaTest();
+void CubicIntersection_OneOffTest();
 void CubicIntersection_Test();
+void CubicIntersection_RandTest();
+void CubicIntersection_RandTestOld();
 void CubicParameterization_Test();
 void CubicReduceOrder_Test();
+void CubicsToQuadratics_RandTest();
+void CubicToQuadratics_Test();
 void Inline_Tests();
 void Intersection_Tests();
 void LineCubicIntersection_Test();
@@ -37,6 +41,7 @@ void Simplify4x4QuadralateralsThreaded_Test(int& );
 void Simplify4x4QuadraticsThreaded_Test(int& );
 void Simplify4x4RectsThreaded_Test(int& );
 void SimplifyRectangularPaths_Test();
+void ShapeOps4x4CubicsThreaded_Test(int& );
 void ShapeOps4x4RectsThreaded_Test(int& );
 void QuadLineIntersectThreaded_Test(int& );
 void QuadraticBezierClip_Test();

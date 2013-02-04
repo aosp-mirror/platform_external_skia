@@ -131,7 +131,7 @@ void PictureRenderer::scaleToScaleFactor(SkCanvas* canvas) {
 }
 
 void PictureRenderer::end() {
-    this->resetState();
+    this->resetState(true);
     SkSafeUnref(fPicture);
     fPicture = NULL;
     fCanvas.reset(NULL);
@@ -172,7 +172,7 @@ void PictureRenderer::buildBBoxHierarchy() {
     }
 }
 
-void PictureRenderer::resetState() {
+void PictureRenderer::resetState(bool callFinish) {
 #if SK_SUPPORT_GPU
     if (this->isUsingGpuDevice()) {
         SkGLContext* glContext = fGrContextFactory.getGLContext(
@@ -184,14 +184,17 @@ void PictureRenderer::resetState() {
         }
 
         fGrContext->flush();
-        SK_GL(*glContext, Finish());
+        if (callFinish) {
+            SK_GL(*glContext, Finish());
+        }
     }
 #endif
 }
 
 uint32_t PictureRenderer::recordFlags() {
-    return kNone_BBoxHierarchyType == fBBoxHierarchyType ? 0 :
-        SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
+    return ((kNone_BBoxHierarchyType == fBBoxHierarchyType) ? 0 :
+        SkPicture::kOptimizeForClippedPlayback_RecordingFlag) |
+        SkPicture::kUsePathBoundsForClip_RecordingFlag;
 }
 
 /**
@@ -288,7 +291,7 @@ bool PipePictureRenderer::render(const SkString* path, SkBitmap** out) {
         *out = SkNEW(SkBitmap);
         setup_bitmap(*out, fPicture->width(), fPicture->height());
         fCanvas->readPixels(*out, 0, 0);
-    }    
+    }
     return true;
 }
 
@@ -315,7 +318,7 @@ bool SimplePictureRenderer::render(const SkString* path, SkBitmap** out) {
     if (NULL != path) {
         return write(fCanvas, *path);
     }
-    
+
     if (NULL != out) {
         *out = SkNEW(SkBitmap);
         setup_bitmap(*out, fPicture->width(), fPicture->height());
@@ -522,8 +525,8 @@ bool TiledPictureRenderer::render(const SkString* path, SkBitmap** out) {
         }
         if (NULL != out) {
             if (fCanvas->readPixels(&bitmap, 0, 0)) {
-                bitmapCopySubset(bitmap, *out, fTileRects[i].left(),
-                                 fTileRects[i].top());
+                bitmapCopySubset(bitmap, *out, SkScalarFloorToInt(fTileRects[i].left()),
+                                 SkScalarFloorToInt(fTileRects[i].top()));
             } else {
                 success = false;
             }
@@ -594,9 +597,9 @@ public:
         SkBitmap bitmap;
         if (fBitmap != NULL) {
             // All tiles are the same size.
-            setup_bitmap(&bitmap, fRects[0].width(), fRects[0].height());
+            setup_bitmap(&bitmap, SkScalarFloorToInt(fRects[0].width()), SkScalarFloorToInt(fRects[0].height()));
         }
-        
+
         for (int i = fStart; i < fEnd; i++) {
             DrawTileToCanvas(fCanvas, fRects[i], fClone);
             if (fPath != NULL && !writeAppendNumber(fCanvas, fPath, i)
@@ -608,8 +611,8 @@ public:
             if (fBitmap != NULL) {
                 if (fCanvas->readPixels(&bitmap, 0, 0)) {
                     SkAutoLockPixels alp(*fBitmap);
-                    bitmapCopySubset(bitmap, fBitmap, fRects[i].left(),
-                                     fRects[i].top());
+                    bitmapCopySubset(bitmap, fBitmap, SkScalarFloorToInt(fRects[i].left()),
+                                     SkScalarFloorToInt(fRects[i].top()));
                 } else {
                     *fSuccess = false;
                     // If one tile fails to read pixels, do not continue drawing the rest.

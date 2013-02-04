@@ -14,6 +14,7 @@
 #include "SkClipStack.h"
 #include "SkData.h"
 #include "SkDraw.h"
+#include "SkFontHost.h"
 #include "SkGlyphCache.h"
 #include "SkPaint.h"
 #include "SkPath.h"
@@ -28,6 +29,7 @@
 #include "SkRect.h"
 #include "SkString.h"
 #include "SkTextFormatParams.h"
+#include "SkTemplates.h"
 #include "SkTypeface.h"
 #include "SkTypes.h"
 
@@ -75,7 +77,7 @@ static void align_text(SkDrawCacheProc glyphCacheProc, const SkPaint& paint,
 
     SkMatrix ident;
     ident.reset();
-    SkAutoGlyphCache autoCache(paint, &ident);
+    SkAutoGlyphCache autoCache(paint, NULL, &ident);
     SkGlyphCache* cache = autoCache.getCache();
 
     const char* start = reinterpret_cast<const char*>(glyphs);
@@ -100,6 +102,69 @@ static void align_text(SkDrawCacheProc glyphCacheProc, const SkPaint& paint,
     }
     *x = *x - xAdj;
     *y = *y - yAdj;
+}
+
+static size_t max_glyphid_for_typeface(const SkTypeface* typeface) {
+    SkAdvancedTypefaceMetrics* metrics;
+    metrics = SkFontHost::GetAdvancedTypefaceMetrics(
+            SkTypeface::UniqueID(typeface),
+            SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo,
+            NULL, 0);
+
+    int lastGlyphID = 0;
+    if (metrics) {
+        lastGlyphID = metrics->fLastGlyphID;
+        metrics->unref();
+    }
+    return lastGlyphID;
+}
+
+typedef SkAutoSTMalloc<128, uint16_t> SkGlyphStorage;
+
+static size_t force_glyph_encoding(const SkPaint& paint, const void* text,
+                                   size_t len, SkGlyphStorage* storage,
+                                   uint16_t** glyphIDs) {
+    // Make sure we have a glyph id encoding.
+    if (paint.getTextEncoding() != SkPaint::kGlyphID_TextEncoding) {
+        size_t numGlyphs = paint.textToGlyphs(text, len, NULL);
+        storage->reset(numGlyphs);
+        paint.textToGlyphs(text, len, storage->get());
+        *glyphIDs = storage->get();
+        return numGlyphs;
+    }
+
+    // For user supplied glyph ids we need to validate them.
+    SkASSERT((len & 1) == 0);
+    size_t numGlyphs = len / 2;
+    const uint16_t* input =
+        reinterpret_cast<uint16_t*>(const_cast<void*>((text)));
+
+    int maxGlyphID = max_glyphid_for_typeface(paint.getTypeface());
+    size_t validated;
+    for (validated = 0; validated < numGlyphs; ++validated) {
+        if (input[validated] > maxGlyphID) {
+            break;
+        }
+    }
+    if (validated >= numGlyphs) {
+        *glyphIDs = reinterpret_cast<uint16_t*>(const_cast<void*>((text)));
+        return numGlyphs;
+    }
+
+    // Silently drop anything out of range.
+    storage->reset(numGlyphs);
+    if (validated > 0) {
+        memcpy(storage->get(), input, validated * sizeof(uint16_t));
+    }
+
+    for (size_t i = validated; i < numGlyphs; ++i) {
+        storage->get()[i] = input[i];
+        if (input[i] > maxGlyphID) {
+            storage->get()[i] = 0;
+        }
+    }
+    *glyphIDs = storage->get();
+    return numGlyphs;
 }
 
 static void set_text_transform(SkScalar x, SkScalar y, SkScalar textSkewX,
@@ -816,20 +881,11 @@ void SkPDFDevice::drawText(const SkDraw& d, const void* text, size_t len,
         return;
     }
 
-    // We want the text in glyph id encoding and a writable buffer, so we end
-    // up making a copy either way.
-    size_t numGlyphs = paint.textToGlyphs(text, len, NULL);
-    uint16_t* glyphIDs = reinterpret_cast<uint16_t*>(
-            sk_malloc_flags(numGlyphs * 2, SK_MALLOC_TEMP | SK_MALLOC_THROW));
-    SkAutoFree autoFreeGlyphIDs(glyphIDs);
-    if (paint.getTextEncoding() != SkPaint::kGlyphID_TextEncoding) {
-        paint.textToGlyphs(text, len, glyphIDs);
-        textPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-    } else {
-        SkASSERT((len & 1) == 0);
-        SkASSERT(len / 2 == numGlyphs);
-        memcpy(glyphIDs, text, len);
-    }
+    SkGlyphStorage storage(0);
+    uint16_t* glyphIDs = NULL;
+    size_t numGlyphs = force_glyph_encoding(paint, text, len, &storage,
+                                            &glyphIDs);
+    textPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
 
     SkDrawCacheProc glyphCacheProc = textPaint.getDrawCacheProc();
     align_text(glyphCacheProc, textPaint, glyphIDs, numGlyphs, &x, &y);
@@ -865,22 +921,11 @@ void SkPDFDevice::drawPosText(const SkDraw& d, const void* text, size_t len,
         return;
     }
 
-    // Make sure we have a glyph id encoding.
-    SkAutoFree glyphStorage;
-    uint16_t* glyphIDs;
-    size_t numGlyphs;
-    if (paint.getTextEncoding() != SkPaint::kGlyphID_TextEncoding) {
-        numGlyphs = paint.textToGlyphs(text, len, NULL);
-        glyphIDs = reinterpret_cast<uint16_t*>(sk_malloc_flags(
-                numGlyphs * 2, SK_MALLOC_TEMP | SK_MALLOC_THROW));
-        glyphStorage.set(glyphIDs);
-        paint.textToGlyphs(text, len, glyphIDs);
-        textPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-    } else {
-        SkASSERT((len & 1) == 0);
-        numGlyphs = len / 2;
-        glyphIDs = reinterpret_cast<uint16_t*>(const_cast<void*>((text)));
-    }
+    SkGlyphStorage storage(0);
+    uint16_t* glyphIDs = NULL;
+    size_t numGlyphs = force_glyph_encoding(paint, text, len, &storage,
+                                            &glyphIDs);
+    textPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
 
     SkDrawCacheProc glyphCacheProc = textPaint.getDrawCacheProc();
     content.entry()->fContent.writeText("BT\n");
@@ -1006,8 +1051,7 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
         fResourceDict = SkNEW(SkPDFDict);
 
         if (fGraphicStateResources.count()) {
-            SkRefPtr<SkPDFDict> extGState = new SkPDFDict();
-            extGState->unref();  // SkRefPtr and new both took a reference.
+            SkAutoTUnref<SkPDFDict> extGState(new SkPDFDict());
             for (int i = 0; i < fGraphicStateResources.count(); i++) {
                 SkString nameString("G");
                 nameString.appendS32(i);
@@ -1019,8 +1063,7 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
         }
 
         if (fXObjectResources.count()) {
-            SkRefPtr<SkPDFDict> xObjects = new SkPDFDict();
-            xObjects->unref();  // SkRefPtr and new both took a reference.
+            SkAutoTUnref<SkPDFDict> xObjects(new SkPDFDict());
             for (int i = 0; i < fXObjectResources.count(); i++) {
                 SkString nameString("X");
                 nameString.appendS32(i);
@@ -1032,8 +1075,7 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
         }
 
         if (fFontResources.count()) {
-            SkRefPtr<SkPDFDict> fonts = new SkPDFDict();
-            fonts->unref();  // SkRefPtr and new both took a reference.
+            SkAutoTUnref<SkPDFDict> fonts(new SkPDFDict());
             for (int i = 0; i < fFontResources.count(); i++) {
                 SkString nameString("F");
                 nameString.appendS32(i);
@@ -1044,8 +1086,7 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
         }
 
         if (fShaderResources.count()) {
-            SkRefPtr<SkPDFDict> patterns = new SkPDFDict();
-            patterns->unref();  // SkRefPtr and new both took a reference.
+            SkAutoTUnref<SkPDFDict> patterns(new SkPDFDict());
             for (int i = 0; i < fShaderResources.count(); i++) {
                 SkString nameString("P");
                 nameString.appendS32(i);
@@ -1058,8 +1099,7 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
         // For compatibility, add all proc sets (only used for output to PS
         // devices).
         const char procs[][7] = {"PDF", "Text", "ImageB", "ImageC", "ImageI"};
-        SkRefPtr<SkPDFArray> procSets = new SkPDFArray();
-        procSets->unref();  // SkRefPtr and new both took a reference.
+        SkAutoTUnref<SkPDFArray> procSets(new SkPDFArray());
         procSets->reserve(SK_ARRAY_COUNT(procs));
         for (size_t i = 0; i < SK_ARRAY_COUNT(procs); i++)
             procSets->appendName(procs[i]);
@@ -1266,9 +1306,8 @@ void SkPDFDevice::drawFormXObjectWithClip(SkPDFFormXObject* xobject,
     SkPaint stockPaint;
     this->drawPaint(draw, stockPaint);
     SkAutoTUnref<SkPDFFormXObject> maskFormXObject(createFormXObjectFromDevice());
-    SkRefPtr<SkPDFGraphicState> sMaskGS =
-        SkPDFGraphicState::GetSMaskGraphicState(maskFormXObject, invertClip);
-    sMaskGS->unref();  // SkRefPtr and getSMaskGraphicState both took a ref.
+    SkAutoTUnref<SkPDFGraphicState> sMaskGS(
+        SkPDFGraphicState::GetSMaskGraphicState(maskFormXObject, invertClip));
 
     // Draw the xobject with the clip as a mask.
     ScopedContentEntry content(this, &fExistingClipStack, fExistingClipRegion,
@@ -1283,8 +1322,7 @@ void SkPDFDevice::drawFormXObjectWithClip(SkPDFFormXObject* xobject,
     fXObjectResources.push(xobject);
     xobject->ref();
 
-    sMaskGS = SkPDFGraphicState::GetNoSMaskGraphicState();
-    sMaskGS->unref();  // SkRefPtr and getSMaskGraphicState both took a ref.
+    sMaskGS.reset(SkPDFGraphicState::GetNoSMaskGraphicState());
     SkPDFUtils::ApplyGraphicState(addGraphicStateResource(sMaskGS.get()),
                                   &content.entry()->fContent);
 }
@@ -1421,27 +1459,25 @@ void SkPDFDevice::finishContentEntry(const SkXfermode::Mode xfermode,
         return;
     }
 
-    SkRefPtr<SkPDFGraphicState> sMaskGS;
+    SkAutoTUnref<SkPDFGraphicState> sMaskGS;
     if (xfermode == SkXfermode::kSrcIn_Mode ||
             xfermode == SkXfermode::kSrcOut_Mode) {
-        sMaskGS = SkPDFGraphicState::GetSMaskGraphicState(
-                dst, xfermode == SkXfermode::kSrcOut_Mode);
+        sMaskGS.reset(SkPDFGraphicState::GetSMaskGraphicState(
+                dst, xfermode == SkXfermode::kSrcOut_Mode));
         fXObjectResources.push(srcFormXObject.get());
         srcFormXObject.get()->ref();
     } else {
-        sMaskGS = SkPDFGraphicState::GetSMaskGraphicState(
-                srcFormXObject.get(), xfermode == SkXfermode::kDstOut_Mode);
+        sMaskGS.reset(SkPDFGraphicState::GetSMaskGraphicState(
+                srcFormXObject.get(), xfermode == SkXfermode::kDstOut_Mode));
         // dst already added to fXObjectResources in drawFormXObjectWithClip.
     }
-    sMaskGS->unref();  // SkRefPtr and getSMaskGraphicState both took a ref.
     SkPDFUtils::ApplyGraphicState(addGraphicStateResource(sMaskGS.get()),
                                   &inClipContentEntry.entry()->fContent);
 
     SkPDFUtils::DrawFormXObject(fXObjectResources.count() - 1,
                                 &inClipContentEntry.entry()->fContent);
 
-    sMaskGS = SkPDFGraphicState::GetNoSMaskGraphicState();
-    sMaskGS->unref();  // SkRefPtr and getSMaskGraphicState both took a ref.
+    sMaskGS.reset(SkPDFGraphicState::GetNoSMaskGraphicState());
     SkPDFUtils::ApplyGraphicState(addGraphicStateResource(sMaskGS.get()),
                                   &inClipContentEntry.entry()->fContent);
 }
@@ -1474,7 +1510,7 @@ void SkPDFDevice::populateGraphicStateEntryFromPaint(
     entry->fShaderIndex = -1;
 
     // PDF treats a shader as a color, so we only set one or the other.
-    SkRefPtr<SkPDFObject> pdfShader;
+    SkAutoTUnref<SkPDFObject> pdfShader;
     const SkShader* shader = paint.getShader();
     SkColor color = paint.getColor();
     if (shader) {
@@ -1494,8 +1530,7 @@ void SkPDFDevice::populateGraphicStateEntryFromPaint(
         fInitialTransform.mapRect(&boundsTemp);
         boundsTemp.roundOut(&bounds);
 
-        pdfShader = SkPDFShader::GetPDFShader(*shader, transform, bounds);
-        SkSafeUnref(pdfShader.get());  // getShader and SkRefPtr both took a ref
+        pdfShader.reset(SkPDFShader::GetPDFShader(*shader, transform, bounds));
 
         if (pdfShader.get()) {
             // pdfShader has been canonicalized so we can directly compare
@@ -1504,7 +1539,7 @@ void SkPDFDevice::populateGraphicStateEntryFromPaint(
             if (resourceIndex < 0) {
                 resourceIndex = fShaderResources.count();
                 fShaderResources.push(pdfShader.get());
-                pdfShader->ref();
+                pdfShader.get()->ref();
             }
             entry->fShaderIndex = resourceIndex;
         } else {
@@ -1523,15 +1558,16 @@ void SkPDFDevice::populateGraphicStateEntryFromPaint(
         }
     }
 
-    SkRefPtr<SkPDFGraphicState> newGraphicState;
+    SkAutoTUnref<SkPDFGraphicState> newGraphicState;
     if (color == paint.getColor()) {
-        newGraphicState = SkPDFGraphicState::GetGraphicStateForPaint(paint);
+        newGraphicState.reset(
+                SkPDFGraphicState::GetGraphicStateForPaint(paint));
     } else {
         SkPaint newPaint = paint;
         newPaint.setColor(color);
-        newGraphicState = SkPDFGraphicState::GetGraphicStateForPaint(newPaint);
+        newGraphicState.reset(
+                SkPDFGraphicState::GetGraphicStateForPaint(newPaint));
     }
-    newGraphicState->unref();  // getGraphicState and SkRefPtr both took a ref.
     int resourceIndex = addGraphicStateResource(newGraphicState.get());
     entry->fGraphicStateIndex = resourceIndex;
 
@@ -1572,13 +1608,12 @@ void SkPDFDevice::updateFont(const SkPaint& paint, uint16_t glyphID,
 }
 
 int SkPDFDevice::getFontResourceIndex(SkTypeface* typeface, uint16_t glyphID) {
-    SkRefPtr<SkPDFFont> newFont = SkPDFFont::GetFontResource(typeface, glyphID);
-    newFont->unref();  // getFontResource and SkRefPtr both took a ref.
+    SkAutoTUnref<SkPDFFont> newFont(SkPDFFont::GetFontResource(typeface, glyphID));
     int resourceIndex = fFontResources.find(newFont.get());
     if (resourceIndex < 0) {
         resourceIndex = fFontResources.count();
         fFontResources.push(newFont.get());
-        newFont->ref();
+        newFont.get()->ref();
     }
     return resourceIndex;
 }
@@ -1625,4 +1660,3 @@ bool SkPDFDevice::onReadPixels(const SkBitmap& bitmap, int x, int y,
 bool SkPDFDevice::allowImageFilter(SkImageFilter*) {
     return false;
 }
-

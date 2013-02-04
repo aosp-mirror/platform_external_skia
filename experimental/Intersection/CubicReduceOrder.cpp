@@ -69,13 +69,13 @@ static int check_quadratic(const Cubic& cubic, Cubic& reduction) {
     double dx10 = cubic[1].x - cubic[0].x;
     double dx23 = cubic[2].x - cubic[3].x;
     double midX = cubic[0].x + dx10 * 3 / 2;
-    if (!approximately_equal(midX - cubic[3].x, dx23 * 3 / 2)) {
+    if (!AlmostEqualUlps(midX - cubic[3].x, dx23 * 3 / 2)) {
         return 0;
     }
     double dy10 = cubic[1].y - cubic[0].y;
     double dy23 = cubic[2].y - cubic[3].y;
     double midY = cubic[0].y + dy10 * 3 / 2;
-    if (!approximately_equal(midY - cubic[3].y, dy23 * 3 / 2)) {
+    if (!AlmostEqualUlps(midY - cubic[3].y, dy23 * 3 / 2)) {
         return 0;
     }
     reduction[0] = cubic[0];
@@ -92,8 +92,8 @@ static int check_linear(const Cubic& cubic, Cubic& reduction,
     while (cubic[startIndex].approximatelyEqual(cubic[endIndex])) {
         --endIndex;
         if (endIndex == 0) {
-            printf("%s shouldn't get here if all four points are about equal", __FUNCTION__);
-            assert(0);
+            printf("%s shouldn't get here if all four points are about equal\n", __FUNCTION__);
+            SkASSERT(0);
         }
     }
     if (!isLinear(cubic, startIndex, endIndex)) {
@@ -149,22 +149,14 @@ static int check_linear(const Cubic& cubic, Cubic& reduction,
 bool isLinear(const Cubic& cubic, int startIndex, int endIndex) {
     LineParameters lineParameters;
     lineParameters.cubicEndPoints(cubic, startIndex, endIndex);
-    double normalSquared = lineParameters.normalSquared();
-    double distance[2]; // distance is not normalized
-    int mask = other_two(startIndex, endIndex);
-    int inner1 = startIndex ^ mask;
-    int inner2 = endIndex ^ mask;
-    lineParameters.controlPtDistance(cubic, inner1, inner2, distance);
-    double limit = normalSquared;
-    int index;
-    for (index = 0; index < 2; ++index) {
-        double distSq = distance[index];
-        distSq *= distSq;
-        if (approximately_greater(distSq, limit)) {
-            return false;
-        }
+    // FIXME: maybe it's possible to avoid this and compare non-normalized
+    lineParameters.normalize();
+    double distance = lineParameters.controlPtDistance(cubic, 1);
+    if (!approximately_zero(distance)) {
+        return false;
     }
-    return true;
+    distance = lineParameters.controlPtDistance(cubic, 2);
+    return approximately_zero(distance);
 }
 
 /* food for thought:
@@ -213,10 +205,10 @@ int reduceOrder(const Cubic& cubic, Cubic& reduction, ReduceOrder_Flags allowQua
         }
     }
     for (index = 0; index < 4; ++index) {
-        if (approximately_equal(cubic[index].x, cubic[minX].x)) {
+        if (AlmostEqualUlps(cubic[index].x, cubic[minX].x)) {
             minXSet |= 1 << index;
         }
-        if (approximately_equal(cubic[index].y, cubic[minY].y)) {
+        if (AlmostEqualUlps(cubic[index].y, cubic[minY].y)) {
             minYSet |= 1 << index;
         }
     }

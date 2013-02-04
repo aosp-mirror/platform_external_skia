@@ -261,10 +261,11 @@ protected:
         }
     }
 
-    virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y) {
+    virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y,
+                                              unsigned modi) {
         fDoAA = !fDoAA;
         this->inval(NULL);
-        return this->INHERITED::onFindClickHandler(x, y);
+        return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
 
@@ -276,4 +277,3 @@ private:
 
 static SkView* MyFactory() { return new HairlineView; }
 static SkViewRegister reg(MyFactory);
-

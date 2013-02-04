@@ -127,6 +127,7 @@
       'include_dirs': [
         '../include/config',
         '../include/core',
+        '../include/utils',
         '../src/core',
         '../include/gpu',
         '../src/gpu',
@@ -177,6 +178,7 @@
      'include_dirs': [
         '../include/core',
         '../include/config',
+        '../include/utils',
         '../include/gpu',
         '../src/core', # SkRasterClip.h
         '../src/gpu'
@@ -203,6 +205,27 @@
         [ 'skia_nv_path_rendering', {
           'defines': [
             'GR_GL_USE_NV_PATH_RENDERING=1',
+          ],
+        }],
+        [ 'skia_stroke_path_rendering', {
+          'sources': [
+            '../experimental/StrokePathRenderer/GrStrokePathRenderer.h',
+            '../experimental/StrokePathRenderer/GrStrokePathRenderer.cpp',
+          ],
+          'defines': [
+            'GR_STROKE_PATH_RENDERING=1',
+          ],
+        }],
+        [ 'skia_android_path_rendering', {
+          'sources': [
+            '../experimental/AndroidPathRenderer/GrAndroidPathRenderer.cpp',
+            '../experimental/AndroidPathRenderer/GrAndroidPathRenderer.h',
+            '../experimental/AndroidPathRenderer/AndroidPathRenderer.cpp',
+            '../experimental/AndroidPathRenderer/AndroidPathRenderer.h',
+            '../experimental/AndroidPathRenderer/Vertex.h',
+          ],
+          'defines': [
+            'GR_ANDROID_PATH_RENDERING=1',
           ],
         }],
         [ 'skia_os == "linux"', {

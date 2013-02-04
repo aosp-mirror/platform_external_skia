@@ -10,54 +10,49 @@
 
 #include "GrEffect.h"
 #include "SkMatrix.h"
-#include "GrTexture.h"
 
-class GrGLSingleTextureEffect;
+class GrTexture;
 
 /**
- * An effect that draws a single texture with a texture matrix; commonly used as a base class. The
- * output color is the texture color is modulated against the input color.
+ * A base class for effects that draw a single texture with a texture matrix.
  */
 class GrSingleTextureEffect : public GrEffect {
-
 public:
-    /** These three constructors assume an identity matrix. TODO: Remove these.*/
-    GrSingleTextureEffect(GrTexture* texture); /* unfiltered, clamp mode */
-    GrSingleTextureEffect(GrTexture* texture, bool bilerp); /* clamp mode */
-    GrSingleTextureEffect(GrTexture* texture, const GrTextureParams&);
+    virtual ~GrSingleTextureEffect();
 
-    /** These three constructors take an explicit matrix */
+    const SkMatrix& getMatrix() const { return fMatrix; }
+
+protected:
     GrSingleTextureEffect(GrTexture*, const SkMatrix&); /* unfiltered, clamp mode */
     GrSingleTextureEffect(GrTexture*, const SkMatrix&, bool bilerp); /* clamp mode */
     GrSingleTextureEffect(GrTexture*, const SkMatrix&, const GrTextureParams&);
 
-    virtual ~GrSingleTextureEffect();
-
-    virtual const GrTextureAccess& textureAccess(int index) const SK_OVERRIDE;
-
-    static const char* Name() { return "Single Texture"; }
-
-    const SkMatrix& getMatrix() const { return fMatrix; }
-
-    typedef GrGLSingleTextureEffect GLEffect;
-
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
-
-    virtual bool isEqual(const GrEffect& effect) const SK_OVERRIDE {
-        const GrSingleTextureEffect& ste = static_cast<const GrSingleTextureEffect&>(effect);
-        return INHERITED::isEqual(effect) && fMatrix.cheapEqualTo(ste.getMatrix());
+    /**
+     * Helper for subclass onIsEqual() functions.
+     */
+    bool hasSameTextureParamsAndMatrix(const GrSingleTextureEffect& other) const {
+        const GrTextureAccess& otherAccess = other.fTextureAccess;
+        // We don't have to check the accesses' swizzles because they are inferred from the texture.
+        return fTextureAccess.getTexture() == otherAccess.getTexture() &&
+               fTextureAccess.getParams() == otherAccess.getParams() &&
+               this->getMatrix().cheapEqualTo(other.getMatrix());
     }
 
-    static inline SkMatrix MakeDivByTextureWHMatrix(const GrTexture* texture) {
-        GrAssert(NULL != texture);
-        SkMatrix mat;
-        mat.setIDiv(texture->width(), texture->height());
-        return mat;
+    /**
+     * Can be used as a helper to implement subclass getConstantColorComponents(). It assumes that
+     * the subclass output color will be a modulation of the input color with a value read from the
+     * texture.
+     */
+    void updateConstantColorComponentsForModulation(GrColor* color, uint32_t* validFlags) const {
+        if ((*validFlags & kA_ValidComponentFlag) && 0xFF == GrColorUnpackA(*color) &&
+            GrPixelConfigIsOpaque(this->texture(0)->config())) {
+            *validFlags = kA_ValidComponentFlag;
+        } else {
+            *validFlags = 0;
+        }
     }
 
 private:
-    GR_DECLARE_EFFECT_TEST;
-
     GrTextureAccess fTextureAccess;
     SkMatrix        fMatrix;
 

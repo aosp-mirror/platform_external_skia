@@ -398,7 +398,7 @@ static void help() {
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
-#ifdef SK_ENABLE_INST_COUNT
+#if SK_ENABLE_INST_COUNT
     gPrintInstCount = true;
 #endif
     SkAutoGraphics ag;
@@ -775,7 +775,8 @@ int tool_main(int argc, char** argv) {
                     canvas = new SkDeferredCanvas(device);
                     break;
                 case kRecord_benchModes:
-                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY);
+                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                        SkPicture::kUsePathBoundsForClip_RecordingFlag);
                     canvas->ref();
                     break;
                 case kPictureRecord_benchModes: {
@@ -784,10 +785,12 @@ int tool_main(int argc, char** argv) {
                     // pictureRecordFrom. As the benchmark, we will time how
                     // long it takes to playback pictureRecordFrom into
                     // pictureRecordTo.
-                    SkCanvas* tempCanvas = pictureRecordFrom.beginRecording(dim.fX, dim.fY);
+                    SkCanvas* tempCanvas = pictureRecordFrom.beginRecording(dim.fX, dim.fY,
+                        SkPicture::kUsePathBoundsForClip_RecordingFlag);
                     bench->draw(tempCanvas);
                     pictureRecordFrom.endRecording();
-                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY);
+                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                        SkPicture::kUsePathBoundsForClip_RecordingFlag);
                     canvas->ref();
                     break;
                 }
@@ -845,7 +848,8 @@ int tool_main(int argc, char** argv) {
                      || benchMode == kPictureRecord_benchModes)) {
                     // This will clear the recorded commands so that they do not
                     // acculmulate.
-                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY);
+                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                        SkPicture::kUsePathBoundsForClip_RecordingFlag);
                 }
 
                 timer.start();
@@ -887,6 +891,7 @@ int tool_main(int argc, char** argv) {
             if (outDir.size() > 0) {
                 saveFile(bench->getName(), configName, outDir.c_str(),
                          device->accessBitmap(false));
+                canvas->clear(SK_ColorWHITE);
             }
         }
         logger.logProgress(SkString("\n"));
@@ -913,4 +918,3 @@ int main(int argc, char * const argv[]) {
     return tool_main(argc, (char**) argv);
 }
 #endif
-

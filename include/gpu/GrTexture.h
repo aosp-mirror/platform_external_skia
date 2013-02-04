@@ -10,7 +10,6 @@
 #define GrTexture_DEFINED
 
 #include "GrSurface.h"
-#include "GrCacheID.h"
 
 class GrRenderTarget;
 class GrResourceKey;
@@ -20,8 +19,6 @@ class GrTexture : public GrSurface {
 
 public:
     SK_DECLARE_INST_COUNT(GrTexture)
-    GR_DECLARE_RESOURCE_CACHE_TYPE()
-
     // from GrResource
     /**
      * Informational texture flags
@@ -130,15 +127,12 @@ public:
 #else
     void validate() const {}
 #endif
-
     static GrResourceKey ComputeKey(const GrGpu* gpu,
-                                    const GrTextureParams* sampler,
+                                    const GrTextureParams* params,
                                     const GrTextureDesc& desc,
-                                    const GrCacheData& cacheData,
-                                    bool scratch);
-
+                                    const GrCacheID& cacheID);
+    static GrResourceKey ComputeScratchKey(const GrTextureDesc& desc);
     static bool NeedsResizing(const GrResourceKey& key);
-    static bool IsScratchTexture(const GrResourceKey& key);
     static bool NeedsFiltering(const GrResourceKey& key);
 
 protected:
@@ -146,8 +140,8 @@ protected:
                                    // base class cons sets to NULL
                                    // subclass cons can create and set
 
-    GrTexture(GrGpu* gpu, const GrTextureDesc& desc, Origin origin)
-    : INHERITED(gpu, desc, origin)
+    GrTexture(GrGpu* gpu, bool isWrapped, const GrTextureDesc& desc, GrSurfaceOrigin origin)
+    : INHERITED(gpu, isWrapped, desc, origin)
     , fRenderTarget(NULL) {
 
         // only make sense if alloc size is pow2
@@ -173,4 +167,3 @@ private:
 };
 
 #endif
-

@@ -11,10 +11,31 @@
 static const SkScalar kWidth = 100.0f;
 static const SkScalar kHeight = 100.0f;
 
+static void test_inset(skiatest::Reporter* reporter) {
+    SkRRect rr, rr2;
+    SkRect r = { 0, 0, 100, 100 };
+
+    rr.setRect(r);
+    rr.inset(-20, -20, &rr2);
+    REPORTER_ASSERT(reporter, rr2.isRect());
+
+    rr.inset(20, 20, &rr2);
+    REPORTER_ASSERT(reporter, rr2.isRect());
+
+    rr.inset(r.width()/2, r.height()/2, &rr2);
+    REPORTER_ASSERT(reporter, rr2.isEmpty());
+
+    rr.setRectXY(r, 20, 20);
+    rr.inset(19, 19, &rr2);
+    REPORTER_ASSERT(reporter, rr2.isSimple());
+    rr.inset(20, 20, &rr2);
+    REPORTER_ASSERT(reporter, rr2.isRect());
+}
+
 // Test out the basic API entry points
 static void test_round_rect_basic(skiatest::Reporter* reporter) {
     // Test out initialization methods
-    SkPoint zeroPt = { 0.0, 0.0 };
+    SkPoint zeroPt = { 0, 0 };
     SkRRect empty;
 
     empty.setEmpty();
@@ -302,6 +323,7 @@ static void TestRoundRect(skiatest::Reporter* reporter) {
     test_round_rect_ovals(reporter);
     test_round_rect_general(reporter);
     test_round_rect_iffy_parameters(reporter);
+    test_inset(reporter);
 }
 
 #include "TestClassDef.h"

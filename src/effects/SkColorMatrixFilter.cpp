@@ -325,17 +325,60 @@ bool SkColorMatrixFilter::asColorMatrix(SkScalar matrix[20]) const {
 
 class ColorMatrixEffect : public GrEffect {
 public:
-    static const char* Name() { return "Color Matrix"; }
+    static GrEffectRef* Create(const SkColorMatrix& matrix) {
+        AutoEffectUnref effect(SkNEW_ARGS(ColorMatrixEffect, (matrix)));
+        return CreateEffectRef(effect);
+    }
 
-    ColorMatrixEffect(const SkColorMatrix& matrix) : GrEffect(0), fMatrix(matrix) {}
+    static const char* Name() { return "Color Matrix"; }
 
     virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE {
         return GrTBackendEffectFactory<ColorMatrixEffect>::getInstance();
     }
 
-    virtual bool isEqual(const GrEffect& s) const {
-        const ColorMatrixEffect& cme = static_cast<const ColorMatrixEffect&>(s);
-        return cme.fMatrix == fMatrix;
+    virtual void getConstantColorComponents(GrColor* color,
+                                            uint32_t* validFlags) const SK_OVERRIDE {
+        // We only bother to check whether the alpha channel will be constant. If SkColorMatrix had
+        // type flags it might be worth checking the other components.
+
+        // The matrix is defined such the 4th row determines the output alpha. The first four
+        // columns of that row multiply the input r, g, b, and a, respectively, and the last column
+        // is the "translation".
+        static const ValidComponentFlags kRGBAFlags[] = {
+            kR_ValidComponentFlag,
+            kG_ValidComponentFlag,
+            kB_ValidComponentFlag,
+            kA_ValidComponentFlag
+        };
+        static const int kShifts[] = {
+            GrColor_SHIFT_R, GrColor_SHIFT_G, GrColor_SHIFT_B, GrColor_SHIFT_A,
+        };
+        enum {
+            kAlphaRowStartIdx = 15,
+            kAlphaRowTranslateIdx = 19,
+        };
+
+        SkScalar outputA = 0;
+        for (int i = 0; i < 4; ++i) {
+            // If any relevant component of the color to be passed through the matrix is non-const
+            // then we can't know the final result.
+            if (0 != fMatrix.fMat[kAlphaRowStartIdx + i]) {
+                if (!(*validFlags & kRGBAFlags[i])) {
+                    *validFlags = 0;
+                    return;
+                } else {
+                    uint32_t component = (*color >> kShifts[i]) & 0xFF;
+                    outputA += fMatrix.fMat[kAlphaRowStartIdx + i] * component;
+                }
+            }
+        }
+        outputA += fMatrix.fMat[kAlphaRowTranslateIdx];
+        *validFlags = kA_ValidComponentFlag;
+        // We pin the color to [0,1]. This would happen to the *final* color output from the frag
+        // shader but currently the effect does not pin its own output. So in the case of over/
+        // underflow this may deviate from the actual result. Maybe the effect should pin its
+        // result if the matrix could over/underflow for any component?
+        *color = static_cast<uint8_t>(SkScalarPin(outputA, 0, 255)) << GrColor_SHIFT_A;
     }
 
     GR_DECLARE_EFFECT_TEST;
@@ -346,7 +389,7 @@ public:
         static EffectKey GenKey(const GrEffectStage&, const GrGLCaps&) { return 0; }
 
         GLEffect(const GrBackendEffectFactory& factory,
-                 const GrEffect& effect)
+                 const GrEffectRef& effect)
         : INHERITED(factory)
         , fMatrixHandle(GrGLUniformManager::kInvalidUniformHandle)
         , fVectorHandle(GrGLUniformManager::kInvalidUniformHandle) {}
@@ -382,8 +425,7 @@ public:
 
         virtual void setData(const GrGLUniformManager& uniManager,
                              const GrEffectStage& stage) SK_OVERRIDE {
-            const ColorMatrixEffect& cme =
-                static_cast<const ColorMatrixEffect&>(*stage.getEffect());
+            const ColorMatrixEffect& cme = GetEffectFromStage<ColorMatrixEffect>(stage);
             const float* m = cme.fMatrix.fMat;
             // The GL matrix is transposed from SkColorMatrix.
             GrGLfloat mt[]  = {
@@ -406,6 +448,13 @@ public:
     };
 
 private:
+    ColorMatrixEffect(const SkColorMatrix& matrix) : fMatrix(matrix) {}
+
+    virtual bool onIsEqual(const GrEffect& s) const {
+        const ColorMatrixEffect& cme = CastEffect<ColorMatrixEffect>(s);
+        return cme.fMatrix == fMatrix;
+    }
+
     SkColorMatrix fMatrix;
 
     typedef GrGLEffect INHERITED;
@@ -413,18 +462,18 @@ private:
 
 GR_DEFINE_EFFECT_TEST(ColorMatrixEffect);
 
-GrEffect* ColorMatrixEffect::TestCreate(SkRandom* random,
-                                        GrContext*,
-                                        GrTexture* dummyTextures[2]) {
+GrEffectRef* ColorMatrixEffect::TestCreate(SkRandom* random,
+                                           GrContext*,
+                                           GrTexture* dummyTextures[2]) {
     SkColorMatrix colorMatrix;
     for (size_t i = 0; i < SK_ARRAY_COUNT(colorMatrix.fMat); ++i) {
         colorMatrix.fMat[i] = random->nextSScalar1();
     }
-    return SkNEW_ARGS(ColorMatrixEffect, (colorMatrix));
+    return ColorMatrixEffect::Create(colorMatrix);
 }
 
-GrEffect* SkColorMatrixFilter::asNewEffect(GrContext*) const {
-    return SkNEW_ARGS(ColorMatrixEffect, (fMatrix));
+GrEffectRef* SkColorMatrixFilter::asNewEffect(GrContext*) const {
+    return ColorMatrixEffect::Create(fMatrix);
 }
 
 #endif

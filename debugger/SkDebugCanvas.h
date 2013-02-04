@@ -96,7 +96,7 @@ public:
         Returns length of draw command vector.
      */
     int getSize() {
-        return commandVector.count();
+        return fCommandVector.count();
     }
 
     /**
@@ -110,12 +110,8 @@ public:
         fHeight = height;
     }
 
-    void setUserOffset(SkIPoint offset) {
-        fUserOffset = offset;
-    }
-
-    void setUserScale(float scale) {
-        fUserScale = scale;
+    void setUserMatrix(SkMatrix matrix) {
+        fUserMatrix = matrix;
     }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,6 +123,10 @@ public:
     virtual bool clipPath(const SkPath&, SkRegion::Op, bool) SK_OVERRIDE;
 
     virtual bool clipRect(const SkRect&, SkRegion::Op, bool) SK_OVERRIDE;
+
+    virtual bool clipRRect(const SkRRect& rrect,
+                           SkRegion::Op op = SkRegion::kIntersect_Op,
+                           bool doAntiAlias = false) SK_OVERRIDE;
 
     virtual bool clipRegion(const SkRegion& region, SkRegion::Op op) SK_OVERRIDE;
 
@@ -146,6 +146,8 @@ public:
 
     virtual void drawData(const void*, size_t) SK_OVERRIDE;
 
+    virtual void drawOval(const SkRect& oval, const SkPaint&) SK_OVERRIDE;
+
     virtual void drawPaint(const SkPaint& paint) SK_OVERRIDE;
 
     virtual void drawPath(const SkPath& path, const SkPaint&) SK_OVERRIDE;
@@ -159,9 +161,12 @@ public:
                              const SkPoint pos[], const SkPaint&) SK_OVERRIDE;
 
     virtual void drawPosTextH(const void* text, size_t byteLength,
-                      const SkScalar xpos[], SkScalar constY, const SkPaint&) SK_OVERRIDE;
+                              const SkScalar xpos[], SkScalar constY,
+                              const SkPaint&) SK_OVERRIDE;
 
     virtual void drawRect(const SkRect& rect, const SkPaint&) SK_OVERRIDE;
+
+    virtual void drawRRect(const SkRRect& rrect, const SkPaint& paint) SK_OVERRIDE;
 
     virtual void drawSprite(const SkBitmap&, int left, int top,
                             const SkPaint*) SK_OVERRIDE;
@@ -170,13 +175,13 @@ public:
                           SkScalar y, const SkPaint&) SK_OVERRIDE;
 
     virtual void drawTextOnPath(const void* text, size_t byteLength,
-                            const SkPath& path, const SkMatrix* matrix,
+                                const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint&) SK_OVERRIDE;
 
     virtual void drawVertices(VertexMode, int vertexCount,
-                          const SkPoint vertices[], const SkPoint texs[],
-                          const SkColor colors[], SkXfermode*,
-                          const uint16_t indices[], int indexCount,
+                              const SkPoint vertices[], const SkPoint texs[],
+                              const SkColor colors[], SkXfermode*,
+                              const uint16_t indices[], int indexCount,
                               const SkPaint&) SK_OVERRIDE;
 
     virtual void restore() SK_OVERRIDE;
@@ -195,16 +200,17 @@ public:
 
     virtual bool translate(SkScalar dx, SkScalar dy) SK_OVERRIDE;
 
+    static const int kVizImageHeight = 256;
+    static const int kVizImageWidth = 256;
+
 private:
-    typedef SkCanvas INHERITED;
-    SkTDArray<SkDrawCommand*> commandVector;
+    SkTDArray<SkDrawCommand*> fCommandVector;
     int fHeight;
     int fWidth;
     SkBitmap fBm;
     bool fFilter;
     int fIndex;
-    SkIPoint fUserOffset;
-    float fUserScale;
+    SkMatrix fUserMatrix;
     SkMatrix fMatrix;
     SkIRect fClip;
 
@@ -227,6 +233,8 @@ private:
         drawing anything else into the canvas.
      */
     void applyUserTransform(SkCanvas* canvas);
+
+    typedef SkCanvas INHERITED;
 };
 
 #endif

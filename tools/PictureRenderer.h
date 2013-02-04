@@ -110,7 +110,12 @@ public:
      */
     virtual TiledPictureRenderer* getTiledRenderer() { return NULL; }
 
-    void resetState();
+    /**
+     * Resets the GPU's state. Does nothing if the backing is raster. For a GPU renderer, calls
+     * flush, and calls finish if callFinish is true.
+     * @param callFinish Whether to call finish.
+     */
+    void resetState(bool callFinish);
 
     void setDeviceType(SkDeviceTypes deviceType) {
         fDeviceType = deviceType;
@@ -184,10 +189,10 @@ public:
         , fBBoxHierarchyType(kNone_BBoxHierarchyType)
         , fGridWidth(0)
         , fGridHeight(0)
-        , fScaleFactor(SK_Scalar1)
 #if SK_SUPPORT_GPU
         , fGrContext(fGrContextFactory.get(GrContextFactory::kNative_GLContextType))
 #endif
+        , fScaleFactor(SK_Scalar1)
         {
             sk_bzero(fDrawFilters, sizeof(fDrawFilters));
             fViewport.set(0, 0);

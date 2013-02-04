@@ -264,7 +264,7 @@ public:
                                  SkScalar kd, SkImageFilter* input);
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDiffuseLightingImageFilter)
 
-    virtual bool asNewEffect(GrEffect** effect, GrTexture*) const SK_OVERRIDE;
+    virtual bool asNewEffect(GrEffectRef** effect, GrTexture*) const SK_OVERRIDE;
     SkScalar kd() const { return fKD; }
 
 protected:
@@ -284,7 +284,7 @@ public:
     SkSpecularLightingImageFilter(SkLight* light, SkScalar surfaceScale, SkScalar ks, SkScalar shininess, SkImageFilter* input);
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkSpecularLightingImageFilter)
 
-    virtual bool asNewEffect(GrEffect** effect, GrTexture*) const SK_OVERRIDE;
+    virtual bool asNewEffect(GrEffectRef** effect, GrTexture*) const SK_OVERRIDE;
     SkScalar ks() const { return fKS; }
     SkScalar shininess() const { return fShininess; }
 
@@ -307,10 +307,18 @@ public:
     GrLightingEffect(GrTexture* texture, const SkLight* light, SkScalar surfaceScale);
     virtual ~GrLightingEffect();
 
-    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
-
     const SkLight* light() const { return fLight; }
     SkScalar surfaceScale() const { return fSurfaceScale; }
+
+    virtual void getConstantColorComponents(GrColor* color,
+                                            uint32_t* validFlags) const SK_OVERRIDE {
+        // lighting shaders are complicated. We just throw up our hands.
+        *validFlags = 0;
+    }
+
+protected:
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
+
 private:
     typedef GrSingleTextureEffect INHERITED;
     const SkLight* fLight;
@@ -319,19 +327,32 @@ private:
 
 class GrDiffuseLightingEffect : public GrLightingEffect {
 public:
-    GrDiffuseLightingEffect(GrTexture* texture,
-                            const SkLight* light,
-                            SkScalar surfaceScale,
-                            SkScalar kd);
+    static GrEffectRef* Create(GrTexture* texture,
+                               const SkLight* light,
+                               SkScalar surfaceScale,
+                               SkScalar kd) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrDiffuseLightingEffect, (texture,
+                                                                    light,
+                                                                    surfaceScale,
+                                                                    kd)));
+        return CreateEffectRef(effect);
+    }
 
     static const char* Name() { return "DiffuseLighting"; }
 
     typedef GrGLDiffuseLightingEffect GLEffect;
 
     virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
-    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
     SkScalar kd() const { return fKD; }
+
 private:
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
+
+    GrDiffuseLightingEffect(GrTexture* texture,
+                            const SkLight* light,
+                            SkScalar surfaceScale,
+                            SkScalar kd);
+
     GR_DECLARE_EFFECT_TEST;
     typedef GrLightingEffect INHERITED;
     SkScalar fKD;
@@ -339,22 +360,35 @@ private:
 
 class GrSpecularLightingEffect : public GrLightingEffect {
 public:
+    static GrEffectRef* Create(GrTexture* texture,
+                               const SkLight* light,
+                               SkScalar surfaceScale,
+                               SkScalar ks,
+                               SkScalar shininess) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrSpecularLightingEffect, (texture,
+                                                                     light,
+                                                                     surfaceScale,
+                                                                     ks,
+                                                                     shininess)));
+        return CreateEffectRef(effect);
+    }
+    static const char* Name() { return "SpecularLighting"; }
+
+    typedef GrGLSpecularLightingEffect GLEffect;
+
+    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    SkScalar ks() const { return fKS; }
+    SkScalar shininess() const { return fShininess; }
+
+private:
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
+
     GrSpecularLightingEffect(GrTexture* texture,
                              const SkLight* light,
                              SkScalar surfaceScale,
                              SkScalar ks,
                              SkScalar shininess);
 
-    static const char* Name() { return "SpecularLighting"; }
-
-    typedef GrGLSpecularLightingEffect GLEffect;
-
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
-    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
-    SkScalar ks() const { return fKS; }
-    SkScalar shininess() const { return fShininess; }
-
-private:
     GR_DECLARE_EFFECT_TEST;
     typedef GrLightingEffect INHERITED;
     SkScalar fKS;
@@ -825,12 +859,12 @@ bool SkDiffuseLightingImageFilter::onFilterImage(Proxy*,
     return true;
 }
 
-bool SkDiffuseLightingImageFilter::asNewEffect(GrEffect** effect,
+bool SkDiffuseLightingImageFilter::asNewEffect(GrEffectRef** effect,
                                                GrTexture* texture) const {
 #if SK_SUPPORT_GPU
     if (effect) {
         SkScalar scale = SkScalarMul(surfaceScale(), SkIntToScalar(255));
-        *effect = SkNEW_ARGS(GrDiffuseLightingEffect, (texture, light(), scale, kd()));
+        *effect = GrDiffuseLightingEffect::Create(texture, light(), scale, kd());
     }
     return true;
 #else
@@ -894,12 +928,12 @@ bool SkSpecularLightingImageFilter::onFilterImage(Proxy*,
     return true;
 }
 
-bool SkSpecularLightingImageFilter::asNewEffect(GrEffect** effect,
+bool SkSpecularLightingImageFilter::asNewEffect(GrEffectRef** effect,
                                                 GrTexture* texture) const {
 #if SK_SUPPORT_GPU
     if (effect) {
         SkScalar scale = SkScalarMul(surfaceScale(), SkIntToScalar(255));
-        *effect = SkNEW_ARGS(GrSpecularLightingEffect, (texture, light(), scale, ks(), shininess()));
+        *effect = GrSpecularLightingEffect::Create(texture, light(), scale, ks(), shininess());
     }
     return true;
 #else
@@ -946,7 +980,7 @@ SkLight* create_random_light(SkRandom* random) {
 class GrGLLightingEffect  : public GrGLEffect {
 public:
     GrGLLightingEffect(const GrBackendEffectFactory& factory,
-                       const GrEffect& effect);
+                       const GrEffectRef& effect);
     virtual ~GrGLLightingEffect();
 
     virtual void emitCode(GrGLShaderBuilder*,
@@ -981,7 +1015,7 @@ private:
 class GrGLDiffuseLightingEffect  : public GrGLLightingEffect {
 public:
     GrGLDiffuseLightingEffect(const GrBackendEffectFactory& factory,
-                              const GrEffect& effect);
+                              const GrEffectRef& effect);
     virtual void emitLightFunc(GrGLShaderBuilder*, SkString* funcName) SK_OVERRIDE;
     virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
 
@@ -996,7 +1030,7 @@ private:
 class GrGLSpecularLightingEffect  : public GrGLLightingEffect {
 public:
     GrGLSpecularLightingEffect(const GrBackendEffectFactory& factory,
-                               const GrEffect& effect);
+                               const GrEffectRef& effect);
     virtual void emitLightFunc(GrGLShaderBuilder*, SkString* funcName) SK_OVERRIDE;
     virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
 
@@ -1020,10 +1054,9 @@ GrLightingEffect::~GrLightingEffect() {
     fLight->unref();
 }
 
-bool GrLightingEffect::isEqual(const GrEffect& sBase) const {
-    const GrLightingEffect& s =
-        static_cast<const GrLightingEffect&>(sBase);
-    return INHERITED::isEqual(sBase) &&
+bool GrLightingEffect::onIsEqual(const GrEffect& sBase) const {
+    const GrLightingEffect& s = CastEffect<GrLightingEffect>(sBase);
+    return this->texture(0) == s.texture(0) &&
            fLight->isEqual(*s.fLight) &&
            fSurfaceScale == s.fSurfaceScale;
 }
@@ -1038,34 +1071,33 @@ const GrBackendEffectFactory& GrDiffuseLightingEffect::getFactory() const {
     return GrTBackendEffectFactory<GrDiffuseLightingEffect>::getInstance();
 }
 
-bool GrDiffuseLightingEffect::isEqual(const GrEffect& sBase) const {
-    const GrDiffuseLightingEffect& s =
-        static_cast<const GrDiffuseLightingEffect&>(sBase);
-    return INHERITED::isEqual(sBase) &&
+bool GrDiffuseLightingEffect::onIsEqual(const GrEffect& sBase) const {
+    const GrDiffuseLightingEffect& s = CastEffect<GrDiffuseLightingEffect>(sBase);
+    return INHERITED::onIsEqual(sBase) &&
             this->kd() == s.kd();
 }
 
 GR_DEFINE_EFFECT_TEST(GrDiffuseLightingEffect);
 
-GrEffect* GrDiffuseLightingEffect::TestCreate(SkRandom* random,
-                                              GrContext* context,
-                                              GrTexture* textures[]) {
+GrEffectRef* GrDiffuseLightingEffect::TestCreate(SkRandom* random,
+                                                 GrContext* context,
+                                                 GrTexture* textures[]) {
     SkScalar surfaceScale = random->nextSScalar1();
     SkScalar kd = random->nextUScalar1();
     SkAutoTUnref<SkLight> light(create_random_light(random));
-    return SkNEW_ARGS(GrDiffuseLightingEffect, (textures[GrEffectUnitTest::kAlphaTextureIdx],
-                                                light, surfaceScale, kd));
+    return GrDiffuseLightingEffect::Create(textures[GrEffectUnitTest::kAlphaTextureIdx],
+                                           light, surfaceScale, kd);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGLLightingEffect::GrGLLightingEffect(const GrBackendEffectFactory& factory,
-                                       const GrEffect& effect)
+                                       const GrEffectRef& effect)
     : INHERITED(factory)
     , fImageIncrementUni(kInvalidUniformHandle)
     , fSurfaceScaleUni(kInvalidUniformHandle) {
-    const GrLightingEffect& m = static_cast<const GrLightingEffect&>(effect);
+    const GrLightingEffect& m = CastEffect<GrLightingEffect>(effect);
     fLight = m.light()->createGLLight();
 }
 
@@ -1174,8 +1206,8 @@ void GrGLLightingEffect::emitCode(GrGLShaderBuilder* builder,
 
 GrGLEffect::EffectKey GrGLLightingEffect::GenKey(const GrEffectStage& s,
                                                  const GrGLCaps& caps) {
-    const GrLightingEffect& effect = static_cast<const GrLightingEffect&>(*s.getEffect());
-    EffectKey key = static_cast<const GrLightingEffect&>(*s.getEffect()).light()->type();
+    const GrLightingEffect& effect = GetEffectFromStage<GrLightingEffect>(s);
+    EffectKey key = effect.light()->type();
     key <<= GrGLEffectMatrix::kKeyBits;
     EffectKey matrixKey = GrGLEffectMatrix::GenKey(effect.getMatrix(),
                                                    s.getCoordChangeMatrix(),
@@ -1184,9 +1216,9 @@ GrGLEffect::EffectKey GrGLLightingEffect::GenKey(const GrEffectStage& s,
 }
 
 void GrGLLightingEffect::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
-    const GrLightingEffect& effect =static_cast<const GrLightingEffect&>(*stage.getEffect());
+    const GrLightingEffect& effect = GetEffectFromStage<GrLightingEffect>(stage);
     GrTexture* texture = effect.texture(0);
-    float ySign = texture->origin() == GrSurface::kTopLeft_Origin ? -1.0f : 1.0f;
+    float ySign = texture->origin() == kTopLeft_GrSurfaceOrigin ? -1.0f : 1.0f;
     uman.set2f(fImageIncrementUni, 1.0f / texture->width(), ySign / texture->height());
     uman.set1f(fSurfaceScaleUni, effect.surfaceScale());
     fLight->setData(uman, effect.light());
@@ -1201,7 +1233,7 @@ void GrGLLightingEffect::setData(const GrGLUniformManager& uman, const GrEffectS
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGLDiffuseLightingEffect::GrGLDiffuseLightingEffect(const GrBackendEffectFactory& factory,
-                                                     const GrEffect& effect)
+                                                     const GrEffectRef& effect)
     : INHERITED(factory, effect)
     , fKDUni(kInvalidUniformHandle) {
 }
@@ -1233,8 +1265,7 @@ void GrGLDiffuseLightingEffect::emitLightFunc(GrGLShaderBuilder* builder, SkStri
 void GrGLDiffuseLightingEffect::setData(const GrGLUniformManager& uman,
                                         const GrEffectStage& stage) {
     INHERITED::setData(uman, stage);
-    const GrDiffuseLightingEffect& effect =
-        static_cast<const GrDiffuseLightingEffect&>(*stage.getEffect());
+    const GrDiffuseLightingEffect& effect = GetEffectFromStage<GrDiffuseLightingEffect>(stage);
     uman.set1f(fKDUni, effect.kd());
 }
 
@@ -1250,31 +1281,30 @@ const GrBackendEffectFactory& GrSpecularLightingEffect::getFactory() const {
     return GrTBackendEffectFactory<GrSpecularLightingEffect>::getInstance();
 }
 
-bool GrSpecularLightingEffect::isEqual(const GrEffect& sBase) const {
-    const GrSpecularLightingEffect& s =
-        static_cast<const GrSpecularLightingEffect&>(sBase);
-    return INHERITED::isEqual(sBase) &&
+bool GrSpecularLightingEffect::onIsEqual(const GrEffect& sBase) const {
+    const GrSpecularLightingEffect& s = CastEffect<GrSpecularLightingEffect>(sBase);
+    return INHERITED::onIsEqual(sBase) &&
            this->ks() == s.ks() &&
            this->shininess() == s.shininess();
 }
 
 GR_DEFINE_EFFECT_TEST(GrSpecularLightingEffect);
 
-GrEffect* GrSpecularLightingEffect::TestCreate(SkRandom* random,
-                                               GrContext* context,
-                                               GrTexture* textures[]) {
+GrEffectRef* GrSpecularLightingEffect::TestCreate(SkRandom* random,
+                                                  GrContext* context,
+                                                  GrTexture* textures[]) {
     SkScalar surfaceScale = random->nextSScalar1();
     SkScalar ks = random->nextUScalar1();
     SkScalar shininess = random->nextUScalar1();
     SkAutoTUnref<SkLight> light(create_random_light(random));
-    return SkNEW_ARGS(GrSpecularLightingEffect, (textures[GrEffectUnitTest::kAlphaTextureIdx],
-                                                 light, surfaceScale, ks, shininess));
+    return GrSpecularLightingEffect::Create(textures[GrEffectUnitTest::kAlphaTextureIdx],
+                                            light, surfaceScale, ks, shininess);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 GrGLSpecularLightingEffect::GrGLSpecularLightingEffect(const GrBackendEffectFactory& factory,
-                                            const GrEffect& effect)
+                                                       const GrEffectRef& effect)
     : GrGLLightingEffect(factory, effect)
     , fKSUni(kInvalidUniformHandle)
     , fShininessUni(kInvalidUniformHandle) {
@@ -1311,8 +1341,7 @@ void GrGLSpecularLightingEffect::emitLightFunc(GrGLShaderBuilder* builder, SkStr
 void GrGLSpecularLightingEffect::setData(const GrGLUniformManager& uman,
                                          const GrEffectStage& stage) {
     INHERITED::setData(uman, stage);
-    const GrSpecularLightingEffect& effect =
-        static_cast<const GrSpecularLightingEffect&>(*stage.getEffect());
+    const GrSpecularLightingEffect& effect = GetEffectFromStage<GrSpecularLightingEffect>(stage);
     uman.set1f(fKSUni, effect.ks());
     uman.set1f(fShininessUni, effect.shininess());
 }

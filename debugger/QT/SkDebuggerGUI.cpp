@@ -66,6 +66,7 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     , fLoading(false)
 {
     setupUi(this);
+    fListWidget.setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(&fListWidget, SIGNAL(currentItemChanged(QListWidgetItem*, QListWidgetItem*)), this, SLOT(registerListClick(QListWidgetItem *)));
     connect(&fActionOpen, SIGNAL(triggered()), this, SLOT(openFile()));
     connect(&fActionDirectory, SIGNAL(triggered()), this, SLOT(toggleDirectory()));
@@ -98,12 +99,12 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     connect(&fActionSaveAs, SIGNAL(triggered()), this, SLOT(actionSaveAs()));
     connect(&fActionSave, SIGNAL(triggered()), this, SLOT(actionSave()));
 
-    fMapper.setMapping(&fActionZoomIn, 1);
-    fMapper.setMapping(&fActionZoomOut, -1);
+    fMapper.setMapping(&fActionZoomIn, SkCanvasWidget::kIn_ZoomCommand);
+    fMapper.setMapping(&fActionZoomOut, SkCanvasWidget::kOut_ZoomCommand);
 
     connect(&fActionZoomIn, SIGNAL(triggered()), &fMapper, SLOT(map()));
     connect(&fActionZoomOut, SIGNAL(triggered()), &fMapper, SLOT(map()));
-    connect(&fMapper, SIGNAL(mapped(int)), &fCanvasWidget, SLOT(keyZoom(int)));
+    connect(&fMapper, SIGNAL(mapped(int)), &fCanvasWidget, SLOT(zoom(int)));
 
     fInspectorWidget.setDisabled(true);
     fMenuEdit.setDisabled(true);
@@ -144,10 +145,10 @@ public:
                            const SkTDArray<size_t>& offsets,
                            const SkTDArray<bool>& deletedCommands)
         : INHERITED(stream, info, isValid, decoder)
-        , fTot(0.0)
-        , fCurCommand(0)
         , fOffsets(offsets)
-        , fSkipCommands(deletedCommands) {
+        , fSkipCommands(deletedCommands)
+        , fTot(0.0)
+        , fCurCommand(0) {
         fTimes.setCount(fOffsets.count());
         fTypeTimes.setCount(LAST_DRAWTYPE_ENUM+1);
         this->resetTimes();
@@ -326,7 +327,7 @@ void SkDebuggerGUI::run(SkTimedPicture* pict,
 
     renderer->setup();
     renderer->render(NULL);
-    renderer->resetState();
+    renderer->resetState(true);
 
     // We throw this away the first batch of times to remove first time effects (such as paging in this program)
     pict->resetTimes();
@@ -334,7 +335,7 @@ void SkDebuggerGUI::run(SkTimedPicture* pict,
     for (int i = 0; i < repeats; ++i) {
         renderer->setup();
         renderer->render(NULL);
-        renderer->resetState();
+        renderer->resetState(true);
     }
 
     renderer->end();
@@ -385,6 +386,13 @@ void SkDebuggerGUI::actionProfile() {
     sk_tools::SimplePictureRenderer* renderer = NULL;
 
     renderer = SkNEW(sk_tools::SimplePictureRenderer);
+
+#if SK_SUPPORT_GPU
+    if (Qt::Checked == fSettingsWidget.getGLCheckBox()->checkState()) {
+        renderer->setDeviceType(sk_tools::PictureRenderer::kGPU_DeviceType);
+    }
+#endif
+
 #endif
 
     static const int kNumRepeats = 10;
@@ -448,18 +456,26 @@ void SkDebuggerGUI::actionClose() {
 }
 
 void SkDebuggerGUI::actionDelete() {
-    int currentRow = fListWidget.currentRow();
-    QListWidgetItem* item = fListWidget.currentItem();
 
-    if (fDebugger.isCommandVisible(currentRow)) {
-        item->setData(Qt::UserRole + 2, QPixmap(":/delete.png"));
-        fDebugger.setCommandVisible(currentRow, false);
-        fSkipCommands[currentRow] = true;
-    } else {
-        item->setData(Qt::UserRole + 2, QPixmap(":/blank.png"));
-        fDebugger.setCommandVisible(currentRow, true);
-        fSkipCommands[currentRow] = false;
+    for (int row = 0; row < fListWidget.count(); ++row) {
+        QListWidgetItem* item = fListWidget.item(row);
+
+        if (!item->isSelected()) {
+            continue;
+        }
+
+        if (fDebugger.isCommandVisible(row)) {
+            item->setData(Qt::UserRole + 2, QPixmap(":/delete.png"));
+            fDebugger.setCommandVisible(row, false);
+            fSkipCommands[row] = true;
+        } else {
+            item->setData(Qt::UserRole + 2, QPixmap(":/blank.png"));
+            fDebugger.setCommandVisible(row, true);
+            fSkipCommands[row] = false;
+        }
     }
+
+    int currentRow = fListWidget.currentRow();
 
     if (fPause) {
         fCanvasWidget.drawTo(fPausedRow);
@@ -505,9 +521,9 @@ void SkDebuggerGUI::actionRewind() {
 }
 
 void SkDebuggerGUI::actionSave() {
-    fFileName = fPath.toAscii();
+    fFileName = fPath.toAscii().data();
     fFileName.append("/");
-    fFileName.append(fDirectoryWidget.currentItem()->text().toAscii());
+    fFileName.append(fDirectoryWidget.currentItem()->text().toAscii().data());
     saveToFile(fFileName);
 }
 
@@ -555,14 +571,16 @@ void SkDebuggerGUI::drawComplete() {
 
 void SkDebuggerGUI::saveToFile(const SkString& filename) {
     SkFILEWStream file(filename.c_str());
-    fDebugger.makePicture()->serialize(&file);
+    SkAutoTUnref<SkPicture> copy(fDebugger.copyPicture());
+
+    copy->serialize(&file);
 }
 
 void SkDebuggerGUI::loadFile(QListWidgetItem *item) {
     if (fDirectoryWidgetActive) {
-        fFileName = fPath.toAscii();
+        fFileName = fPath.toAscii().data();
         fFileName.append("/");
-        fFileName.append(item->text().toAscii());
+        fFileName.append(item->text().toAscii().data());
         loadPicture(fFileName);
     }
 }
@@ -570,12 +588,15 @@ void SkDebuggerGUI::loadFile(QListWidgetItem *item) {
 void SkDebuggerGUI::openFile() {
     QString temp = QFileDialog::getOpenFileName(this, tr("Open File"), "",
             tr("Files (*.*)"));
+    openFile(temp);
+}
+
+void SkDebuggerGUI::openFile(const QString &filename) {
     fDirectoryWidgetActive = false;
-    if (!temp.isEmpty()) {
-        QFileInfo pathInfo(temp);
-        fPath = pathInfo.path();
-        loadPicture(SkString(temp.toAscii().data()));
-        setupDirectoryWidget();
+    if (!filename.isEmpty()) {
+        QFileInfo pathInfo(filename);
+        loadPicture(SkString(filename.toAscii().data()));
+        setupDirectoryWidget(pathInfo.path());
     }
     fDirectoryWidgetActive = true;
 }
@@ -827,9 +848,8 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
 
     // TODO(chudy): Remove static call.
     fDirectoryWidgetActive = false;
-    fPath = "";
     fFileName = "";
-    setupDirectoryWidget();
+    setupDirectoryWidget("");
     fDirectoryWidgetActive = true;
 
     // Menu Bar
@@ -878,8 +898,9 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
     QMetaObject::connectSlotsByName(SkDebuggerGUI);
 }
 
-void SkDebuggerGUI::setupDirectoryWidget() {
-    QDir dir(fPath);
+void SkDebuggerGUI::setupDirectoryWidget(const QString& path) {
+    fPath = path;
+    QDir dir(path);
     QRegExp r(".skp");
     fDirectoryWidget.clear();
     const QStringList files = dir.entryList();

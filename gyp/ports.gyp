@@ -23,8 +23,6 @@
         '../src/ports/SkDebug_nacl.cpp',
         '../src/ports/SkDebug_stdio.cpp',
         '../src/ports/SkDebug_win.cpp',
-        '../src/ports/SkFontDescriptor.h',
-        '../src/ports/SkFontDescriptor.cpp',
         '../src/ports/SkFontHost_sandbox_none.cpp',
         '../src/ports/SkFontHost_win.cpp',
         '../src/ports/SkFontHost_win_dw.cpp',
@@ -163,7 +161,6 @@
             '../src/ports/SkFontHost_FreeType.cpp',
             '../src/ports/SkFontHost_FreeType_common.cpp',
             '../src/ports/FontHostConfiguration_android.cpp',
-            '../src/ports/SkImageRef_ashmem.cpp',
           ],
           'dependencies': [
              'freetype.gyp:freetype',

@@ -31,6 +31,108 @@ static SkSurface* new_surface(int w, int h) {
     return SkSurface::NewRaster(info);
 }
 
+static void build_path_170666(SkPath& path) {
+    path.moveTo(17.9459f, 21.6344f);
+    path.lineTo(139.545f, -47.8105f);
+    path.lineTo(139.545f, -47.8105f);
+    path.lineTo(131.07f, -47.3888f);
+    path.lineTo(131.07f, -47.3888f);
+    path.lineTo(122.586f, -46.9532f);
+    path.lineTo(122.586f, -46.9532f);
+    path.lineTo(18076.6f, 31390.9f);
+    path.lineTo(18076.6f, 31390.9f);
+    path.lineTo(18085.1f, 31390.5f);
+    path.lineTo(18085.1f, 31390.5f);
+    path.lineTo(18076.6f, 31390.9f);
+    path.lineTo(18076.6f, 31390.9f);
+    path.lineTo(17955, 31460.3f);
+    path.lineTo(17955, 31460.3f);
+    path.lineTo(17963.5f, 31459.9f);
+    path.lineTo(17963.5f, 31459.9f);
+    path.lineTo(17971.9f, 31459.5f);
+    path.lineTo(17971.9f, 31459.5f);
+    path.lineTo(17.9551f, 21.6205f);
+    path.lineTo(17.9551f, 21.6205f);
+    path.lineTo(9.47091f, 22.0561f);
+    path.lineTo(9.47091f, 22.0561f);
+    path.lineTo(17.9459f, 21.6344f);
+    path.lineTo(17.9459f, 21.6344f);
+    path.close();path.moveTo(0.995934f, 22.4779f);
+    path.lineTo(0.986725f, 22.4918f);
+    path.lineTo(0.986725f, 22.4918f);
+    path.lineTo(17955, 31460.4f);
+    path.lineTo(17955, 31460.4f);
+    path.lineTo(17971.9f, 31459.5f);
+    path.lineTo(17971.9f, 31459.5f);
+    path.lineTo(18093.6f, 31390.1f);
+    path.lineTo(18093.6f, 31390.1f);
+    path.lineTo(18093.6f, 31390);
+    path.lineTo(18093.6f, 31390);
+    path.lineTo(139.555f, -47.8244f);
+    path.lineTo(139.555f, -47.8244f);
+    path.lineTo(122.595f, -46.9671f);
+    path.lineTo(122.595f, -46.9671f);
+    path.lineTo(0.995934f, 22.4779f);
+    path.lineTo(0.995934f, 22.4779f);
+    path.close();
+    path.moveTo(5.43941f, 25.5223f);
+    path.lineTo(798267, -28871.1f);
+    path.lineTo(798267, -28871.1f);
+    path.lineTo(3.12512e+06f, -113102);
+    path.lineTo(3.12512e+06f, -113102);
+    path.cubicTo(5.16324e+06f, -186882, 8.15247e+06f, -295092, 1.1957e+07f, -432813);
+    path.cubicTo(1.95659e+07f, -708257, 3.04359e+07f, -1.10175e+06f, 4.34798e+07f, -1.57394e+06f);
+    path.cubicTo(6.95677e+07f, -2.51831e+06f, 1.04352e+08f, -3.77748e+06f, 1.39135e+08f, -5.03666e+06f);
+    path.cubicTo(1.73919e+08f, -6.29583e+06f, 2.08703e+08f, -7.555e+06f, 2.34791e+08f, -8.49938e+06f);
+    path.cubicTo(2.47835e+08f, -8.97157e+06f, 2.58705e+08f, -9.36506e+06f, 2.66314e+08f, -9.6405e+06f);
+    path.cubicTo(2.70118e+08f, -9.77823e+06f, 2.73108e+08f, -9.88644e+06f, 2.75146e+08f, -9.96022e+06f);
+    path.cubicTo(2.76165e+08f, -9.99711e+06f, 2.76946e+08f, -1.00254e+07f, 2.77473e+08f, -1.00444e+07f);
+    path.lineTo(2.78271e+08f, -1.00733e+07f);
+    path.lineTo(2.78271e+08f, -1.00733e+07f);
+    path.cubicTo(2.78271e+08f, -1.00733e+07f, 2.08703e+08f, -7.555e+06f, 135.238f, 23.3517f);
+    path.cubicTo(131.191f, 23.4981f, 125.995f, 23.7976f, 123.631f, 24.0206f);
+    path.cubicTo(121.267f, 24.2436f, 122.631f, 24.3056f, 126.677f, 24.1591f);
+    path.cubicTo(2.08703e+08f, -7.555e+06f, 2.78271e+08f, -1.00733e+07f, 2.78271e+08f, -1.00733e+07f);
+    path.lineTo(2.77473e+08f, -1.00444e+07f);
+    path.lineTo(2.77473e+08f, -1.00444e+07f);
+    path.cubicTo(2.76946e+08f, -1.00254e+07f, 2.76165e+08f, -9.99711e+06f, 2.75146e+08f, -9.96022e+06f);
+    path.cubicTo(2.73108e+08f, -9.88644e+06f, 2.70118e+08f, -9.77823e+06f, 2.66314e+08f, -9.6405e+06f);
+    path.cubicTo(2.58705e+08f, -9.36506e+06f, 2.47835e+08f, -8.97157e+06f, 2.34791e+08f, -8.49938e+06f);
+    path.cubicTo(2.08703e+08f, -7.555e+06f, 1.73919e+08f, -6.29583e+06f, 1.39135e+08f, -5.03666e+06f);
+    path.cubicTo(1.04352e+08f, -3.77749e+06f, 6.95677e+07f, -2.51831e+06f, 4.34798e+07f, -1.57394e+06f);
+    path.cubicTo(3.04359e+07f, -1.10175e+06f, 1.95659e+07f, -708258, 1.1957e+07f, -432814);
+    path.cubicTo(8.15248e+06f, -295092, 5.16324e+06f, -186883, 3.12513e+06f, -113103);
+    path.lineTo(798284, -28872);
+    path.lineTo(798284, -28872);
+    path.lineTo(22.4044f, 24.6677f);
+    path.lineTo(22.4044f, 24.6677f);
+    path.cubicTo(22.5186f, 24.5432f, 18.8134f, 24.6337f, 14.1287f, 24.8697f);
+    path.cubicTo(9.4439f, 25.1057f, 5.55359f, 25.3978f, 5.43941f, 25.5223f);
+    path.close();
+}
+
+static void build_path_simple_170666(SkPath& path) {
+    path.moveTo(126.677f, 24.1591f);
+    path.cubicTo(2.08703e+08f, -7.555e+06f, 2.78271e+08f, -1.00733e+07f, 2.78271e+08f, -1.00733e+07f);
+}
+
+// This used to assert in the SK_DEBUG build, as the clip step would fail with
+// too-few interations in our cubic-line intersection code. That code now runs
+// 24 interations (instead of 16).
+static void test_crbug_170666(skiatest::Reporter* reporter) {
+    SkPath path;
+    SkPaint paint;
+    paint.setAntiAlias(true);
+
+    SkAutoTUnref<SkSurface> surface(new_surface(1000, 1000));
+
+    build_path_simple_170666(path);
+    surface->getCanvas()->drawPath(path, paint);
+
+    build_path_170666(path);
+    surface->getCanvas()->drawPath(path, paint);
+}
+
 // Make sure we stay non-finite once we get there (unless we reset or rewind).
 static void test_addrect_isfinite(skiatest::Reporter* reporter) {
     SkPath path;
@@ -50,6 +152,45 @@ static void test_addrect_isfinite(skiatest::Reporter* reporter) {
 
     path.addRect(SkRect::MakeWH(50, 100));
     REPORTER_ASSERT(reporter, path.isFinite());
+}
+
+static void build_big_path(SkPath* path, bool reducedCase) {
+    if (reducedCase) {
+        path->moveTo(577330, 1971.72f);
+        path->cubicTo(10.7082f, -116.596f, 262.057f, 45.6468f, 294.694f, 1.96237f);
+    } else {
+        path->moveTo(60.1631f, 7.70567f);
+        path->quadTo(60.1631f, 7.70567f, 0.99474f, 0.901199f);
+        path->lineTo(577379, 1977.77f);
+        path->quadTo(577364, 1979.57f, 577325, 1980.26f);
+        path->quadTo(577286, 1980.95f, 577245, 1980.13f);
+        path->quadTo(577205, 1979.3f, 577187, 1977.45f);
+        path->quadTo(577168, 1975.6f, 577183, 1973.8f);
+        path->quadTo(577198, 1972, 577238, 1971.31f);
+        path->quadTo(577277, 1970.62f, 577317, 1971.45f);
+        path->quadTo(577330, 1971.72f, 577341, 1972.11f);
+        path->cubicTo(10.7082f, -116.596f, 262.057f, 45.6468f, 294.694f, 1.96237f);
+        path->moveTo(306.718f, -32.912f);
+        path->cubicTo(30.531f, 10.0005f, 1502.47f, 13.2804f, 84.3088f, 9.99601f);
+    }
+}
+
+static void test_clipped_cubic(skiatest::Reporter* reporter) {
+    SkAutoTUnref<SkSurface> surface(new_surface(640, 480));
+
+    // This path used to assert, because our cubic-chopping code incorrectly
+    // moved control points after the chop. This test should be run in SK_DEBUG
+    // mode to ensure that we no long assert.
+    SkPath path;
+    for (int doReducedCase = 0; doReducedCase <= 1; ++doReducedCase) {
+        build_big_path(&path, SkToBool(doReducedCase));
+
+        SkPaint paint;
+        for (int doAA = 0; doAA <= 1; ++doAA) {
+            paint.setAntiAlias(SkToBool(doAA));
+            surface->getCanvas()->drawPath(path, paint);
+        }
+    }
 }
 
 // Inspired by http://ie.microsoft.com/testdrive/Performance/Chalkboard/
@@ -167,7 +308,7 @@ static void test_arb_round_rect_is_convex(skiatest::Reporter* reporter) {
 
         make_arb_round_rect(&temp, r, r.width() / 10, r.height() / 15);
 
-#ifdef SK_REDEFINE_ROOT2OVER2_TO_MAKE_ARCTOS_CONVEX
+#ifndef SK_IGNORE_CONVEX_QUAD_OPT
         REPORTER_ASSERT(reporter, temp.isConvex());
 #endif
     }
@@ -196,7 +337,7 @@ static void test_arb_zero_rad_round_rect_is_rect(skiatest::Reporter* reporter) {
 
         make_arb_round_rect(&temp, r, 0, 0);
 
-#ifdef SK_REDEFINE_ROOT2OVER2_TO_MAKE_ARCTOS_CONVEX
+#ifndef SK_IGNORE_CONVEX_QUAD_OPT
         SkRect result;
         REPORTER_ASSERT(reporter, temp.isRect(&result));
         REPORTER_ASSERT(reporter, r == result);
@@ -239,6 +380,7 @@ static void test_rect_isfinite(skiatest::Reporter* reporter) {
 
 static void test_path_isfinite(skiatest::Reporter* reporter) {
     const SkScalar inf = SK_ScalarInfinity;
+    const SkScalar negInf = SK_ScalarNegativeInfinity;
     const SkScalar nan = SK_ScalarNaN;
 
     SkPath path;
@@ -252,7 +394,7 @@ static void test_path_isfinite(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, path.isFinite());
 
     path.reset();
-    path.moveTo(inf, -inf);
+    path.moveTo(inf, negInf);
     REPORTER_ASSERT(reporter, !path.isFinite());
 
     path.reset();
@@ -2213,6 +2355,8 @@ static void TestPath(skiatest::Reporter* reporter) {
     test_arb_round_rect_is_convex(reporter);
     test_arb_zero_rad_round_rect_is_rect(reporter);
     test_addrect_isfinite(reporter);
+    test_clipped_cubic(reporter);
+    test_crbug_170666(reporter);
 }
 
 #include "TestClassDef.h"

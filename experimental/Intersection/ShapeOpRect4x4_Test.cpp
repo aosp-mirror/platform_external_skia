@@ -26,7 +26,6 @@ static void* testShapeOps4x4RectsMain(void* data)
         for (int b = a + 1 ; b < 7; ++b)  {
         for (int c = 0 ; c < 6; ++c)          {
         for (int d = c + 1 ; d < 7; ++d)           {
-        for (int op = 0 ; op < kShapeOp_Count; ++op)    {
         for (int e = SkPath::kWinding_FillType ; e <= SkPath::kEvenOdd_FillType; ++e) {
         for (int f = SkPath::kWinding_FillType ; f <= SkPath::kEvenOdd_FillType; ++f)   {
             SkPath pathA, pathB;
@@ -53,19 +52,11 @@ static void* testShapeOps4x4RectsMain(void* data)
             str += sprintf(str, "    pathB.addRect(%d, %d, %d, %d,"
                     " SkPath::kCW_Direction);\n", c, c, d, d);
             pathB.close();
-            outputProgress(state, pathStr, kDifference_Op);
-            testShapeOp(pathA, pathB, kDifference_Op);
-            state.testsRun++;
-            outputProgress(state, pathStr, kIntersect_Op);
-            testShapeOp(pathA, pathB, kIntersect_Op);
-            state.testsRun++;
-            outputProgress(state, pathStr, kUnion_Op);
-            testShapeOp(pathA, pathB, kUnion_Op);
-            state.testsRun++;
-            outputProgress(state, pathStr, kXor_Op);
-            testShapeOp(pathA, pathB, kXor_Op);
-            state.testsRun++;
-                                    }
+            for (int op = 0 ; op < kShapeOp_Count; ++op)    {
+                outputProgress(state, pathStr, (ShapeOp) op);
+                testShapeOp(pathA, pathB, (ShapeOp) op);
+                state.testsRun++;
+            }
                                 }
                             }
                         }

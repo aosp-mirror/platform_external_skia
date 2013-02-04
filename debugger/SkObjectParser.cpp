@@ -7,6 +7,13 @@
  */
 
 #include "SkObjectParser.h"
+#include "SkData.h"
+#include "SkFontDescriptor.h"
+#include "SkRRect.h"
+#include "SkShader.h"
+#include "SkStream.h"
+#include "SkStringUtils.h"
+#include "SkTypeface.h"
 
 /* TODO(chudy): Replace all std::strings with char */
 
@@ -96,10 +103,165 @@ SkString* SkObjectParser::MatrixToString(const SkMatrix& matrix) {
 }
 
 SkString* SkObjectParser::PaintToString(const SkPaint& paint) {
-    SkColor color = paint.getColor();
-    SkString* mPaint = new SkString("SkPaint: Color: 0x");
-    mPaint->appendHex(color);
+    SkString* mPaint = new SkString("<dl><dt>SkPaint:</dt><dd><dl>");
 
+    SkTypeface* typeface = paint.getTypeface();
+    if (NULL != typeface) {
+        SkDynamicMemoryWStream ostream;
+        typeface->serialize(&ostream);
+        SkAutoTUnref<SkData> data(ostream.copyToData());
+
+        SkMemoryStream stream(data);
+        SkFontDescriptor descriptor(&stream);
+
+        mPaint->append("<dt>Font Family Name:</dt><dd>");
+        mPaint->append(descriptor.getFamilyName());
+        mPaint->append("</dd><dt>Font Full Name:</dt><dd>");
+        mPaint->append(descriptor.getFullName());
+        mPaint->append("</dd><dt>Font PS Name:</dt><dd>");
+        mPaint->append(descriptor.getPostscriptName());
+        mPaint->append("</dd><dt>Font File Name:</dt><dd>");
+        mPaint->append(descriptor.getFontFileName());
+        mPaint->append("</dd>");
+    }
+
+    mPaint->append("<dt>TextSize:</dt><dd>");
+    mPaint->appendScalar(paint.getTextSize());
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>TextScaleX:</dt><dd>");
+    mPaint->appendScalar(paint.getTextScaleX());
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>TextSkewX:</dt><dd>");
+    mPaint->appendScalar(paint.getTextSkewX());
+    mPaint->append("</dd>");
+
+    SkPathEffect* pathEffect = paint.getPathEffect();
+    if (NULL != pathEffect) {
+        mPaint->append("<dt>PathEffect:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    SkShader* shader = paint.getShader();
+    if (NULL != shader) {
+        mPaint->append("<dt>Shader:</dt><dd>");
+        SkDEVCODE(shader->toString(mPaint);)
+        mPaint->append("</dd>");
+    }
+
+    SkXfermode* xfer = paint.getXfermode();
+    if (NULL != xfer) {
+        mPaint->append("<dt>Xfermode:</dt><dd>");
+        SkDEVCODE(xfer->toString(mPaint);)
+        mPaint->append("</dd>");
+    }
+
+    SkMaskFilter* maskFilter = paint.getMaskFilter();
+    if (NULL != maskFilter) {
+        mPaint->append("<dt>MaskFilter:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    SkColorFilter* colorFilter = paint.getColorFilter();
+    if (NULL != colorFilter) {
+        mPaint->append("<dt>ColorFilter:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    SkRasterizer* rasterizer = paint.getRasterizer();
+    if (NULL != rasterizer) {
+        mPaint->append("<dt>Rasterizer:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    SkDrawLooper* looper = paint.getLooper();
+    if (NULL != looper) {
+        mPaint->append("<dt>DrawLooper:</dt><dd>");
+        SkDEVCODE(looper->toString(mPaint);)
+        mPaint->append("</dd>");
+    }
+
+    SkImageFilter* imageFilter = paint.getImageFilter();
+    if (NULL != imageFilter) {
+        mPaint->append("<dt>ImageFilter:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    SkAnnotation* annotation = paint.getAnnotation();
+    if (NULL != annotation) {
+        mPaint->append("<dt>Annotation:</dt><dd>");
+        mPaint->append("</dd>");
+    }
+
+    mPaint->append("<dt>Color:</dt><dd>0x");
+    SkColor color = paint.getColor();
+    mPaint->appendHex(color);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>Stroke Width:</dt><dd>");
+    mPaint->appendScalar(paint.getStrokeWidth());
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>Stroke Miter:</dt><dd>");
+    mPaint->appendScalar(paint.getStrokeMiter());
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>Flags:</dt><dd>(");
+    if (paint.getFlags()) {
+        bool needSeparator = false;
+        SkAddFlagToString(mPaint, paint.isAntiAlias(), "AntiAlias", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isFilterBitmap(), "FilterBitmap", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isDither(), "Dither", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isUnderlineText(), "UnderlineText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isStrikeThruText(), "StrikeThruText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isFakeBoldText(), "FakeBoldText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isLinearText(), "LinearText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isSubpixelText(), "SubpixelText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isDevKernText(), "DevKernText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isLCDRenderText(), "LCDRenderText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isEmbeddedBitmapText(),
+                          "EmbeddedBitmapText", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isAutohinted(), "Autohinted", &needSeparator);
+        SkAddFlagToString(mPaint, paint.isVerticalText(), "VerticalText", &needSeparator);
+        SkAddFlagToString(mPaint, SkToBool(paint.getFlags() & SkPaint::kGenA8FromLCD_Flag),
+                          "GenA8FromLCD", &needSeparator);
+    } else {
+        mPaint->append("None");
+    }
+    mPaint->append(")</dd>");
+
+    mPaint->append("<dt>TextAlign:</dt><dd>");
+    static const char* gTextAlignStrings[SkPaint::kAlignCount] = { "Left", "Center", "Right" };
+    mPaint->append(gTextAlignStrings[paint.getTextAlign()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>CapType:</dt><dd>");
+    static const char* gStrokeCapStrings[SkPaint::kCapCount] = { "Butt", "Round", "Square" };
+    mPaint->append(gStrokeCapStrings[paint.getStrokeCap()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>JoinType:</dt><dd>");
+    static const char* gJoinStrings[SkPaint::kJoinCount] = { "Miter", "Round", "Bevel" };
+    mPaint->append(gJoinStrings[paint.getStrokeJoin()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>Style:</dt><dd>");
+    static const char* gStyleStrings[SkPaint::kStyleCount] = { "Fill", "Stroke", "StrokeAndFill" };
+    mPaint->append(gStyleStrings[paint.getStyle()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>TextEncoding:</dt><dd>");
+    static const char* gTextEncodingStrings[] = { "UTF8", "UTF16", "UTF32", "GlyphID" };
+    mPaint->append(gTextEncodingStrings[paint.getTextEncoding()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("<dt>Hinting:</dt><dd>");
+    static const char* gHintingStrings[] = { "None", "Slight", "Normal", "Full" };
+    mPaint->append(gHintingStrings[paint.getHinting()]);
+    mPaint->append("</dd>");
+
+    mPaint->append("</dd></dl></dl>");
     return mPaint;
 }
 
@@ -212,6 +374,50 @@ SkString* SkObjectParser::RectToString(const SkRect& rect, const char* title) {
     mRect->appendScalar(rect.bottom());
     mRect->append(")");
     return mRect;
+}
+
+SkString* SkObjectParser::RRectToString(const SkRRect& rrect, const char* title) {
+
+    SkString* mRRect = new SkString;
+
+    if (NULL == title) {
+        mRRect->append("SkRRect (");
+        if (rrect.isEmpty()) {
+            mRRect->append("empty");
+        } else if (rrect.isRect()) {
+            mRRect->append("rect");
+        } else if (rrect.isOval()) {
+            mRRect->append("oval");
+        } else if (rrect.isSimple()) {
+            mRRect->append("simple");
+        } else {
+            SkASSERT(rrect.isComplex());
+            mRRect->append("complex");
+        }
+        mRRect->append("): ");
+    } else {
+        mRRect->append(title);
+    }
+    mRRect->append("(");
+    mRRect->appendScalar(rrect.rect().left());
+    mRRect->append(", ");
+    mRRect->appendScalar(rrect.rect().top());
+    mRRect->append(", ");
+    mRRect->appendScalar(rrect.rect().right());
+    mRRect->append(", ");
+    mRRect->appendScalar(rrect.rect().bottom());
+    mRRect->append(") radii: (");
+    for (int i = 0; i < 4; ++i) {
+        const SkVector& radii = rrect.radii((SkRRect::Corner) i);
+        mRRect->appendScalar(radii.fX);
+        mRRect->append(", ");
+        mRRect->appendScalar(radii.fY);
+        if (i < 3) {
+            mRRect->append(", ");
+        }
+    }
+    mRRect->append(")");
+    return mRRect;
 }
 
 SkString* SkObjectParser::RegionOpToString(SkRegion::Op op) {

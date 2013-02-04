@@ -46,6 +46,9 @@ static void cubicToH(SkPath* path, const uint32_t raw[]) {
 //
 // http://code.google.com/p/chromium/issues/detail?id=131181
 //
+
+// we're not calling this test anymore; is that for a reason?
+
 static void test_crbug131181(skiatest::Reporter*) {
     /*
      fX = 18.8943768,
@@ -257,7 +260,7 @@ static void test_crbug_165432(skiatest::Reporter* reporter) {
 
     SkPath filteredPath;
     SkStrokeRec rec(paint);
-    REPORTER_ASSERT(reporter, !dash.filterPath(&filteredPath, path, &rec));
+    REPORTER_ASSERT(reporter, !dash.filterPath(&filteredPath, path, &rec, NULL));
     REPORTER_ASSERT(reporter, filteredPath.isEmpty());
 }
 
@@ -269,7 +272,8 @@ static void TestDrawPath(skiatest::Reporter* reporter) {
     test_crbug_140642(reporter);
     test_crbug_140803(reporter);
     test_inversepathwithclip(reporter);
-//    test_crbug131181(reporter);
+    // why?
+    if (false) test_crbug131181(reporter);
     test_infinite_dash(reporter);
     test_crbug_165432(reporter);
 }

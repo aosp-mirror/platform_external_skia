@@ -85,6 +85,11 @@ public:
                         kPerspective_Mask);
     }
 
+    /** Returns true if the matrix contains only translation, rotation or uniform scale
+        Returns false if other transformation types are included or is degenerate
+     */
+    bool isSimilarity(SkScalar tol = SK_ScalarNearlyZero) const;
+
     enum {
         kMScaleX,
         kMSkewX,
@@ -527,8 +532,8 @@ public:
     // return the number of bytes read
     uint32_t readFromMemory(const void* buffer);
 
-    void dump() const;
-    void toDumpString(SkString*) const;
+    SkDEVCODE(void dump() const;)
+    SkDEVCODE(void toString(SkString*) const;)
 
     /**
      * Calculates the maximum stretching factor of the matrix. If the matrix has

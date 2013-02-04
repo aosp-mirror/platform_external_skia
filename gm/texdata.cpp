@@ -12,7 +12,7 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "effects/GrSingleTextureEffect.h"
+#include "effects/GrSimpleTextureEffect.h"
 #include "SkColorPriv.h"
 #include "SkDevice.h"
 
@@ -113,8 +113,7 @@ protected:
                 SkMatrix tm;
                 tm = vm;
                 tm.postIDiv(2*S, 2*S);
-                paint.colorStage(0)->setEffect(SkNEW_ARGS(GrSingleTextureEffect,
-                                                          (texture, tm)))->unref();
+                paint.colorStage(0)->setEffect(GrSimpleTextureEffect::Create(texture, tm))->unref();
 
                 ctx->drawRect(paint, GrRect::MakeWH(2*S, 2*S));
 

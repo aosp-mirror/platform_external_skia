@@ -124,10 +124,23 @@ static void print_label_cell(SkFILEWStream* stream, const DiffRecord& diff) {
         if (diff.fFractionDifference < 0.01) {
             print_pixel_count(stream, diff);
         }
+        stream->writeText("<br>");
+        if (SkScalarRoundToInt(diff.fAverageMismatchA) > 0) {
+          stream->writeText("<br>Average alpha channel mismatch ");
+          stream->writeDecAsText(SkScalarRoundToInt(diff.fAverageMismatchA));
+        }
+
+        stream->writeText("<br>Max alpha channel mismatch ");
+        stream->writeDecAsText(SkScalarRoundToInt(diff.fMaxMismatchA));
+
+        stream->writeText("<br>Total alpha channel mismatch ");
+        stream->writeDecAsText(static_cast<int>(diff.fTotalMismatchA));
+
+        stream->writeText("<br>");
         stream->writeText("<br>Average color mismatch ");
-        stream->writeDecAsText(static_cast<int>(MAX3(diff.fAverageMismatchR,
-                                                     diff.fAverageMismatchG,
-                                                     diff.fAverageMismatchB)));
+        stream->writeDecAsText(SkScalarRoundToInt(MAX3(diff.fAverageMismatchR,
+                                                       diff.fAverageMismatchG,
+                                                       diff.fAverageMismatchB)));
         stream->writeText("<br>Max color mismatch ");
         stream->writeDecAsText(MAX3(diff.fMaxMismatchR,
                                     diff.fMaxMismatchG,

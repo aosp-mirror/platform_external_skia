@@ -249,10 +249,11 @@ protected:
         canvas->restore();
     }
 
-    virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y) {
+    virtual SkView::Click* onFindClickHandler(SkScalar x, SkScalar y,
+                                              unsigned modi) SK_OVERRIDE {
         this->inval(NULL);
 
-        return this->INHERITED::onFindClickHandler(x, y);
+        return this->INHERITED::onFindClickHandler(x, y, modi);
     }
 
     virtual bool onClick(Click* click) {
@@ -272,4 +273,3 @@ private:
 
 static SkView* MyFactory() { return new LayersView; }
 static SkViewRegister reg(MyFactory);
-

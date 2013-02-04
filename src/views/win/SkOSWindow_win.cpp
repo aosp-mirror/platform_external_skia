@@ -103,6 +103,10 @@ static SkKey winToskKey(WPARAM vk) {
     return kNONE_SkKey;
 }
 
+static unsigned getModifiers(UINT message) {
+    return 0;   // TODO
+}
+
 bool SkOSWindow::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_KEYDOWN: {
@@ -146,15 +150,18 @@ bool SkOSWindow::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         } break;
 
         case WM_LBUTTONDOWN:
-            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), Click::kDown_State);
+            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam),
+                              Click::kDown_State, NULL, getModifiers(message));
             return true;
 
         case WM_MOUSEMOVE:
-            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), Click::kMoved_State);
+            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam),
+                              Click::kMoved_State, NULL, getModifiers(message));
             return true;
 
         case WM_LBUTTONUP:
-            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), Click::kUp_State);
+            this->handleClick(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam),
+                              Click::kUp_State, NULL, getModifiers(message));
             return true;
 
         case WM_EVENT_CALLBACK:
@@ -531,7 +538,7 @@ bool SkOSWindow::attachANGLE(int msaaSampleCount) {
         if (false == bResult) {
             return false;
         }
-        const GrGLInterface* intf = GrGLCreateANGLEInterface();
+        SkAutoTUnref<const GrGLInterface> intf(GrGLCreateANGLEInterface());
 
         if (intf) {
             ANGLE_GL_CALL(intf, ClearStencil(0));
@@ -541,7 +548,7 @@ bool SkOSWindow::attachANGLE(int msaaSampleCount) {
         }
     }
     if (eglMakeCurrent(fDisplay, fSurface, fSurface, fContext)) {
-        const GrGLInterface* intf = GrGLCreateANGLEInterface();
+        SkAutoTUnref<const GrGLInterface> intf(GrGLCreateANGLEInterface());
 
         if (intf ) {
             ANGLE_GL_CALL(intf, Viewport(0, 0, SkScalarRound(this->width()),
@@ -566,7 +573,7 @@ void SkOSWindow::detachANGLE() {
 }
 
 void SkOSWindow::presentANGLE() {
-    const GrGLInterface* intf = GrGLCreateANGLEInterface();
+    SkAutoTUnref<const GrGLInterface> intf(GrGLCreateANGLEInterface());
 
     if (intf) {
         ANGLE_GL_CALL(intf, Flush());

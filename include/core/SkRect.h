@@ -384,7 +384,17 @@ struct SK_API SkRect {
         return r;
     }
 
+    // DEPRECATED: call Make(r)
     static SkRect SK_WARN_UNUSED_RESULT MakeFromIRect(const SkIRect& irect) {
+        SkRect r;
+        r.set(SkIntToScalar(irect.fLeft),
+              SkIntToScalar(irect.fTop),
+              SkIntToScalar(irect.fRight),
+              SkIntToScalar(irect.fBottom));
+        return r;
+    }
+
+    static SkRect SK_WARN_UNUSED_RESULT Make(const SkIRect& irect) {
         SkRect r;
         r.set(SkIntToScalar(irect.fLeft),
               SkIntToScalar(irect.fTop),
@@ -479,6 +489,16 @@ struct SK_API SkRect {
         fTop    = SkIntToScalar(top);
         fRight  = SkIntToScalar(right);
         fBottom = SkIntToScalar(bottom);
+    }
+
+    /**
+     *  Set this rectangle to be left/top at 0,0, and have the specified width
+     *  and height (automatically converted to SkScalar).
+     */
+    void isetWH(int width, int height) {
+        fLeft = fTop = 0;
+        fRight = SkIntToScalar(width);
+        fBottom = SkIntToScalar(height);
     }
 
     /** Set this rectangle to be the bounds of the array of points.
@@ -752,4 +772,3 @@ struct SK_API SkRect {
 };
 
 #endif
-

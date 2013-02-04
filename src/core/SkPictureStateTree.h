@@ -36,7 +36,7 @@ public:
         SkMatrix* fMatrix;
         Node* fNode;
         uint32_t fOffset;
-        bool operator<(const Draw& other) { return fOffset < other.fOffset; }
+        bool operator<(const Draw& other) const { return fOffset < other.fOffset; }
     };
 
     class Iterator;
@@ -133,4 +133,3 @@ private:
 };
 
 #endif
-

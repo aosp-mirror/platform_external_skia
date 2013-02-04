@@ -150,6 +150,26 @@ void SkOSWindow::post_linuxevent() {
     XFlush(fUnixWindow.fDisplay);
 }
 
+static unsigned getModi(const XEvent& evt) {
+    static const struct {
+        unsigned    fXMask;
+        unsigned    fSkMask;
+    } gModi[] = {
+        // X values found by experiment. Is there a better way?
+        { 1,    kShift_SkModifierKey },
+        { 4,    kControl_SkModifierKey },
+        { 8,    kOption_SkModifierKey },
+    };
+
+    unsigned modi = 0;
+    for (size_t i = 0; i < SK_ARRAY_COUNT(gModi); ++i) {
+        if (evt.xkey.state & gModi[i].fXMask) {
+            modi |= gModi[i].fSkMask;
+        }
+    }
+    return modi;
+}
+
 void SkOSWindow::loop() {
     Display* dsp = fUnixWindow.fDisplay;
     if (NULL == dsp) {
@@ -171,14 +191,17 @@ void SkOSWindow::loop() {
                 break;
             case ButtonPress:
                 if (evt.xbutton.button == Button1)
-                    this->handleClick(evt.xbutton.x, evt.xbutton.y, SkView::Click::kDown_State);
+                    this->handleClick(evt.xbutton.x, evt.xbutton.y,
+                                SkView::Click::kDown_State, NULL, getModi(evt));
                 break;
             case ButtonRelease:
                 if (evt.xbutton.button == Button1)
-                    this->handleClick(evt.xbutton.x, evt.xbutton.y, SkView::Click::kUp_State);
+                    this->handleClick(evt.xbutton.x, evt.xbutton.y,
+                                  SkView::Click::kUp_State, NULL, getModi(evt));
                 break;
             case MotionNotify:
-                this->handleClick(evt.xmotion.x, evt.xmotion.y, SkView::Click::kMoved_State);
+                this->handleClick(evt.xmotion.x, evt.xmotion.y,
+                               SkView::Click::kMoved_State, NULL, getModi(evt));
                 break;
             case KeyPress: {
                 KeySym keysym = XkbKeycodeToKeysym(dsp, evt.xkey.keycode, 0, 0);

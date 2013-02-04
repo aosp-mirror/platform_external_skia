@@ -7,11 +7,20 @@
  */
 
 
-#include <iostream>
 #include "SkDebugCanvas.h"
 #include "SkDrawCommand.h"
 #include "SkDevice.h"
-#include "SkImageWidget.h"
+
+#ifdef SK_BUILD_FOR_WIN
+    // iostream includes xlocale which generates warning 4530 because we're compiling without
+    // exceptions
+    #pragma warning(push)
+    #pragma warning(disable : 4530)
+#endif
+#include <iostream>
+#ifdef SK_BUILD_FOR_WIN
+    #pragma warning(pop)
+#endif
 
 static SkBitmap make_noconfig_bm(int width, int height) {
     SkBitmap bm;
@@ -29,37 +38,30 @@ SkDebugCanvas::SkDebugCanvas(int width, int height)
     fBm.setConfig(SkBitmap::kNo_Config, fWidth, fHeight);
     fFilter = false;
     fIndex = 0;
-    fUserOffset.set(0,0);
-    fUserScale = 1.0;
+    fUserMatrix.reset();
 }
 
 SkDebugCanvas::~SkDebugCanvas() {
-    commandVector.deleteAll();
+    fCommandVector.deleteAll();
 }
 
 void SkDebugCanvas::addDrawCommand(SkDrawCommand* command) {
-    commandVector.push(command);
+    fCommandVector.push(command);
 }
 
 void SkDebugCanvas::draw(SkCanvas* canvas) {
-    if(!commandVector.isEmpty()) {
-        for (int i = 0; i < commandVector.count(); i++) {
-            if (commandVector[i]->isVisible()) {
-                commandVector[i]->execute(canvas);
+    if(!fCommandVector.isEmpty()) {
+        for (int i = 0; i < fCommandVector.count(); i++) {
+            if (fCommandVector[i]->isVisible()) {
+                fCommandVector[i]->execute(canvas);
             }
         }
     }
-    fIndex = commandVector.count() - 1;
+    fIndex = fCommandVector.count() - 1;
 }
 
 void SkDebugCanvas::applyUserTransform(SkCanvas* canvas) {
-    canvas->translate(SkIntToScalar(fUserOffset.fX),
-                      SkIntToScalar(fUserOffset.fY));
-    if (fUserScale < 0) {
-        canvas->scale((1.0f / -fUserScale), (1.0f / -fUserScale));
-    } else if (fUserScale > 0) {
-        canvas->scale(fUserScale, fUserScale);
-    }
+    canvas->concat(fUserMatrix);
 }
 
 int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
@@ -74,8 +76,8 @@ int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
     int layer = 0;
     SkColor prev = bitmap.getColor(0,0);
     for (int i = 0; i < index; i++) {
-        if (commandVector[i]->isVisible()) {
-            commandVector[i]->execute(&canvas);
+        if (fCommandVector[i]->isVisible()) {
+            fCommandVector[i]->execute(&canvas);
         }
         if (prev != bitmap.getColor(0,0)) {
             layer = i;
@@ -86,9 +88,8 @@ int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
 }
 
 void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
-    int counter = 0;
-    SkASSERT(!commandVector.isEmpty());
-    SkASSERT(index < commandVector.count());
+    SkASSERT(!fCommandVector.isEmpty());
+    SkASSERT(index < fCommandVector.count());
     int i;
 
     // This only works assuming the canvas and device are the same ones that
@@ -125,9 +126,9 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
             canvas->restore();
         }
 
-        if (commandVector[i]->isVisible()) {
-            commandVector[i]->execute(canvas);
-            commandVector[i]->trackSaveState(&fOutstandingSaveCount);
+        if (fCommandVector[i]->isVisible()) {
+            fCommandVector[i]->execute(canvas);
+            fCommandVector[i]->trackSaveState(&fOutstandingSaveCount);
         }
     }
     fMatrix = canvas->getTotalMatrix();
@@ -136,30 +137,30 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
 }
 
 SkDrawCommand* SkDebugCanvas::getDrawCommandAt(int index) {
-    SkASSERT(index < commandVector.count());
-    return commandVector[index];
+    SkASSERT(index < fCommandVector.count());
+    return fCommandVector[index];
 }
 
 SkTDArray<SkString*>* SkDebugCanvas::getCommandInfo(int index) {
-    SkASSERT(index < commandVector.count());
-    return commandVector[index]->Info();
+    SkASSERT(index < fCommandVector.count());
+    return fCommandVector[index]->Info();
 }
 
 bool SkDebugCanvas::getDrawCommandVisibilityAt(int index) {
-    SkASSERT(index < commandVector.count());
-    return commandVector[index]->isVisible();
+    SkASSERT(index < fCommandVector.count());
+    return fCommandVector[index]->isVisible();
 }
 
 const SkTDArray <SkDrawCommand*>& SkDebugCanvas::getDrawCommands() const {
-    return commandVector;
+    return fCommandVector;
 }
 
 // TODO(chudy): Free command string memory.
 SkTArray<SkString>* SkDebugCanvas::getDrawCommandsAsStrings() const {
-    SkTArray<SkString>* commandString = new SkTArray<SkString>(commandVector.count());
-    if (!commandVector.isEmpty()) {
-        for (int i = 0; i < commandVector.count(); i ++) {
-            commandString->push_back() = commandVector[i]->toString();
+    SkTArray<SkString>* commandString = new SkTArray<SkString>(fCommandVector.count());
+    if (!fCommandVector.isEmpty()) {
+        for (int i = 0; i < fCommandVector.count(); i ++) {
+            commandString->push_back() = fCommandVector[i]->toString();
         }
     }
     return commandString;
@@ -176,8 +177,8 @@ void SkDebugCanvas::clear(SkColor color) {
 static SkBitmap createBitmap(const SkPath& path) {
     SkBitmap bitmap;
     bitmap.setConfig(SkBitmap::kARGB_8888_Config,
-                     SkImageWidget::kImageWidgetWidth,
-                     SkImageWidget::kImageWidgetHeight);
+                     SkDebugCanvas::kVizImageWidth,
+                     SkDebugCanvas::kVizImageHeight);
     bitmap.allocPixels();
     bitmap.eraseColor(SK_ColorWHITE);
     SkDevice* device = new SkDevice(bitmap);
@@ -188,11 +189,11 @@ static SkBitmap createBitmap(const SkPath& path) {
     const SkRect& bounds = path.getBounds();
 
     if (bounds.width() > bounds.height()) {
-        canvas.scale(SkDoubleToScalar((0.9*SkImageWidget::kImageWidgetWidth)/bounds.width()),
-                     SkDoubleToScalar((0.9*SkImageWidget::kImageWidgetHeight)/bounds.width()));
+        canvas.scale(SkDoubleToScalar((0.9*SkDebugCanvas::kVizImageWidth)/bounds.width()),
+                     SkDoubleToScalar((0.9*SkDebugCanvas::kVizImageHeight)/bounds.width()));
     } else {
-        canvas.scale(SkDoubleToScalar((0.9*SkImageWidget::kImageWidgetWidth)/bounds.height()),
-                     SkDoubleToScalar((0.9*SkImageWidget::kImageWidgetHeight)/bounds.height()));
+        canvas.scale(SkDoubleToScalar((0.9*SkDebugCanvas::kVizImageWidth)/bounds.height()),
+                     SkDoubleToScalar((0.9*SkDebugCanvas::kVizImageHeight)/bounds.height()));
     }
     canvas.translate(-bounds.fLeft+2, -bounds.fTop+2);
 
@@ -208,8 +209,8 @@ static SkBitmap createBitmap(const SkPath& path) {
 static SkBitmap createBitmap(const SkBitmap& input, const SkRect* srcRect) {
     SkBitmap bitmap;
     bitmap.setConfig(SkBitmap::kARGB_8888_Config,
-                     SkImageWidget::kImageWidgetWidth,
-                     SkImageWidget::kImageWidgetHeight);
+                     SkDebugCanvas::kVizImageWidth,
+                     SkDebugCanvas::kVizImageHeight);
     bitmap.allocPixels();
     bitmap.eraseColor(SK_ColorLTGRAY);
     SkDevice* device = new SkDevice(bitmap);
@@ -217,8 +218,8 @@ static SkBitmap createBitmap(const SkBitmap& input, const SkRect* srcRect) {
     SkCanvas canvas(device);
     device->unref();
 
-    SkScalar xScale = (SkImageWidget::kImageWidgetWidth-2.0) / input.width();
-    SkScalar yScale = (SkImageWidget::kImageWidgetHeight-2.0) / input.height();
+    SkScalar xScale = SkIntToScalar(SkDebugCanvas::kVizImageWidth-2) / input.width();
+    SkScalar yScale = SkIntToScalar(SkDebugCanvas::kVizImageHeight-2) / input.height();
 
     if (input.width() > input.height()) {
         yScale *= input.height() / (float) input.width();
@@ -255,6 +256,11 @@ bool SkDebugCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
 
 bool SkDebugCanvas::clipRect(const SkRect& rect, SkRegion::Op op, bool doAA) {
     addDrawCommand(new ClipRect(rect, op, doAA));
+    return true;
+}
+
+bool SkDebugCanvas::clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA) {
+    addDrawCommand(new ClipRRect(rrect, op, doAA));
     return true;
 }
 
@@ -296,6 +302,10 @@ void SkDebugCanvas::drawData(const void* data, size_t length) {
     addDrawCommand(new DrawData(data, length));
 }
 
+void SkDebugCanvas::drawOval(const SkRect& oval, const SkPaint& paint) {
+    addDrawCommand(new DrawOval(oval, paint));
+}
+
 void SkDebugCanvas::drawPaint(const SkPaint& paint) {
     addDrawCommand(new DrawPaint(paint));
 }
@@ -327,6 +337,10 @@ void SkDebugCanvas::drawPosTextH(const void* text, size_t byteLength,
 void SkDebugCanvas::drawRect(const SkRect& rect, const SkPaint& paint) {
     // NOTE(chudy): Messing up when renamed to DrawRect... Why?
     addDrawCommand(new DrawRectC(rect, paint));
+}
+
+void SkDebugCanvas::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
+    addDrawCommand(new DrawRRect(rrect, paint));
 }
 
 void SkDebugCanvas::drawSprite(const SkBitmap& bitmap, int left, int top,
@@ -393,6 +407,6 @@ bool SkDebugCanvas::translate(SkScalar dx, SkScalar dy) {
 }
 
 void SkDebugCanvas::toggleCommand(int index, bool toggle) {
-    SkASSERT(index < commandVector.count());
-    commandVector[index]->setVisible(toggle);
+    SkASSERT(index < fCommandVector.count());
+    fCommandVector[index]->setVisible(toggle);
 }

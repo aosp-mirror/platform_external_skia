@@ -34,11 +34,11 @@ public:
         kDecal_WrapMode,
     };
 
-    static GrEffect* Create(GrTexture*,
-                            const SkMatrix&,
-                            const SkRect& domain,
-                            WrapMode,
-                            bool bilerp = false);
+    static GrEffectRef* Create(GrTexture*,
+                               const SkMatrix&,
+                               const SkRect& domain,
+                               WrapMode,
+                               bool bilerp = false);
 
     virtual ~GrTextureDomainEffect();
 
@@ -47,7 +47,7 @@ public:
     typedef GrGLTextureDomainEffect GLEffect;
 
     virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
-    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
+    virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
 
     const SkRect& domain() const { return fTextureDomain; }
     WrapMode wrapMode() const { return fWrapMode; }
@@ -76,6 +76,8 @@ private:
                           const GrRect& domain,
                           WrapMode,
                           bool bilerp);
+
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
 
     GR_DECLARE_EFFECT_TEST;
 

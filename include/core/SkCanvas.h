@@ -803,10 +803,7 @@ public:
 
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state
-        of this canvas will be unchanged after this call. This contrasts with
-        the more immediate method SkPicture::draw(), which does not bracket
-        the canvas with save/restore, thus the canvas may be left in a changed
-        state after the call.
+        of this canvas will be unchanged after this call.
         @param picture The recorded drawing commands to playback into this
                        canvas.
     */
@@ -830,7 +827,7 @@ public:
         @param xmode Used if both texs and colors are present. In this
                     case the colors are combined with the texture using mode,
                     before being drawn using the paint. If mode is null, then
-                    kMultiply_Mode is used.
+                    kModulate_Mode is used.
         @param indices If not null, array of indices to reference into the
                     vertex (texs, colors) array.
         @param indexCount number of entries in the indices array (if not null)

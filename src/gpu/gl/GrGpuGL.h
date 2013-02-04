@@ -36,6 +36,11 @@ public:
         return fGLContextInfo.glslGeneration();
     }
 
+    // Used by GrGLProgram to bind necessary textures for GrGLEffects.
+    void bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture);
+
+    bool programUnitTest();
+
     // GrGpu overrides
     virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config)
                                                             const SK_OVERRIDE;
@@ -51,10 +56,7 @@ public:
 
     virtual void abandonResources() SK_OVERRIDE;
 
-    bool programUnitTest();
-
-
-protected:
+private:
     // GrGpu overrides
     virtual void onResetContext() SK_OVERRIDE;
 
@@ -94,14 +96,7 @@ protected:
 
     virtual void onResolveRenderTarget(GrRenderTarget* target) SK_OVERRIDE;
 
-    virtual void onGpuDrawIndexed(GrPrimitiveType type,
-                                  uint32_t startVertex,
-                                  uint32_t startIndex,
-                                  uint32_t vertexCount,
-                                  uint32_t indexCount) SK_OVERRIDE;
-    virtual void onGpuDrawNonIndexed(GrPrimitiveType type,
-                                     uint32_t vertexCount,
-                                     uint32_t numVertices) SK_OVERRIDE;
+    virtual void onGpuDraw(const DrawInfo&) SK_OVERRIDE;
 
     virtual void setStencilPathSettings(const GrPath&,
                                         SkPath::FillType,
@@ -113,31 +108,26 @@ protected:
     virtual void clearStencilClip(const GrIRect& rect,
                                   bool insideClip) SK_OVERRIDE;
     virtual bool flushGraphicsState(DrawType) SK_OVERRIDE;
-    virtual void setupGeometry(int* startVertex,
-                               int* startIndex,
-                               int vertexCount,
-                               int indexCount) SK_OVERRIDE;
-
-private:
 
     const GrGLCaps& glCaps() const { return fGLContextInfo.caps(); }
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
 
-    // binds appropriate vertex and index buffers, also returns any extra
-    // extra verts or indices to offset by.
-    void setBuffers(bool indexed,
-                    int* extraVertexOffset,
-                    int* extraIndexOffset);
+    // Sets up vertex attribute pointers and strides. On return startIndexOffset specifies an
+    // offset into the index buffer to the first index to be read (in addition to
+    // info.startIndex()). It accounts for the fact that index buffer pool may have provided space
+    // in the middle of a larger index buffer.
+    void setupGeometry(const DrawInfo& info, int* startIndexOffset);
+    // binds appropriate vertex and index buffers, also returns any extra verts or indices to
+    // offset by based on how space was allocated in pool VB/IBs.
+    void setBuffers(bool indexed, int* extraVertexOffset, int* extraIndexOffset);
 
     // Subclasses should call this to flush the blend state.
-    // The params should be the final coeffecients to apply
+    // The params should be the final coefficients to apply
     // (after any blending optimizations or dual source blending considerations
     // have been accounted for).
-    void flushBlend(bool isLines,
-                    GrBlendCoeff srcCoeff,
-                    GrBlendCoeff dstCoeff);
+    void flushBlend(bool isLines, GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff);
 
     bool hasExtension(const char* ext) const {
         return fGLContextInfo.hasExtension(ext);
@@ -195,16 +185,6 @@ private:
         unsigned int                fCurrLRUStamp;
         const GrGLContextInfo&      fGL;
     };
-
-    // binds the texture and sets its texture params
-    // This may also perform a downsample on the src texture which may or may
-    // not modify the scissor test and rect. So in flushGraphicsState a
-    // call to flushScissor must occur after all textures have been flushed via
-    // this function.
-    void flushBoundTextureAndParams(int stage);
-    void flushBoundTextureAndParams(int stage,
-                                    const GrTextureParams& params,
-                                    GrGLTexture* nextTexture);
 
     // sets the color specified by GrDrawState::setColor()
     void flushColor(GrColor color);
@@ -370,4 +350,3 @@ private:
 };
 
 #endif
-

@@ -26,6 +26,40 @@ class GrGLMagnifierEffect;
 class GrMagnifierEffect : public GrSingleTextureEffect {
 
 public:
+    static GrEffectRef* Create(GrTexture* texture,
+                               float xOffset,
+                               float yOffset,
+                               float xZoom,
+                               float yZoom,
+                               float xInset,
+                               float yInset) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrMagnifierEffect, (texture,
+                                                              xOffset,
+                                                              yOffset,
+                                                              xZoom,
+                                                              yZoom,
+                                                              xInset,
+                                                              yInset)));
+        return CreateEffectRef(effect);
+    }
+
+    virtual ~GrMagnifierEffect() {};
+
+    static const char* Name() { return "Magnifier"; }
+
+    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
+
+    float x_offset() const { return fXOffset; }
+    float y_offset() const { return fYOffset; }
+    float x_zoom() const { return fXZoom; }
+    float y_zoom() const { return fYZoom; }
+    float x_inset() const { return fXInset; }
+    float y_inset() const { return fYInset; }
+
+    typedef GrGLMagnifierEffect GLEffect;
+
+private:
     GrMagnifierEffect(GrTexture* texture,
                       float xOffset,
                       float yOffset,
@@ -41,23 +75,8 @@ public:
         , fXInset(xInset)
         , fYInset(yInset) {}
 
-    virtual ~GrMagnifierEffect() {};
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
 
-    static const char* Name() { return "Magnifier"; }
-
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
-    virtual bool isEqual(const GrEffect&) const SK_OVERRIDE;
-
-    float x_offset() const { return fXOffset; }
-    float y_offset() const { return fYOffset; }
-    float x_zoom() const { return fXZoom; }
-    float y_zoom() const { return fYZoom; }
-    float x_inset() const { return fXInset; }
-    float y_inset() const { return fYInset; }
-
-    typedef GrGLMagnifierEffect GLEffect;
-
-private:
     GR_DECLARE_EFFECT_TEST;
 
     float fXOffset;
@@ -75,8 +94,7 @@ typedef GrGLUniformManager::UniformHandle UniformHandle;
 
 class GrGLMagnifierEffect : public GrGLEffect {
 public:
-    GrGLMagnifierEffect(const GrBackendEffectFactory& factory,
-                        const GrEffect& effect);
+    GrGLMagnifierEffect(const GrBackendEffectFactory& factory, const GrEffectRef& effect);
 
     virtual void emitCode(GrGLShaderBuilder*,
                           const GrEffectStage&,
@@ -101,8 +119,7 @@ private:
     typedef GrGLEffect INHERITED;
 };
 
-GrGLMagnifierEffect::GrGLMagnifierEffect(const GrBackendEffectFactory& factory,
-                                         const GrEffect& effect)
+GrGLMagnifierEffect::GrGLMagnifierEffect(const GrBackendEffectFactory& factory, const GrEffectRef&)
     : INHERITED(factory)
     , fOffsetVar(GrGLUniformManager::kInvalidUniformHandle)
     , fZoomVar(GrGLUniformManager::kInvalidUniformHandle)
@@ -165,8 +182,7 @@ void GrGLMagnifierEffect::emitCode(GrGLShaderBuilder* builder,
 
 void GrGLMagnifierEffect::setData(const GrGLUniformManager& uman,
                                   const GrEffectStage& stage) {
-    const GrMagnifierEffect& zoom = static_cast<const GrMagnifierEffect&>(*stage.getEffect());
-
+    const GrMagnifierEffect& zoom = GetEffectFromStage<GrMagnifierEffect>(stage);
     uman.set2f(fOffsetVar, zoom.x_offset(), zoom.y_offset());
     uman.set2f(fZoomVar, zoom.x_zoom(), zoom.y_zoom());
     uman.set2f(fInsetVar, zoom.x_inset(), zoom.y_inset());
@@ -174,7 +190,7 @@ void GrGLMagnifierEffect::setData(const GrGLUniformManager& uman,
 }
 
 GrGLEffect::EffectKey GrGLMagnifierEffect::GenKey(const GrEffectStage& stage, const GrGLCaps&) {
-    const GrMagnifierEffect& zoom = static_cast<const GrMagnifierEffect&>(*stage.getEffect());
+    const GrMagnifierEffect& zoom = GetEffectFromStage<GrMagnifierEffect>(stage);
     return GrGLEffectMatrix::GenKey(zoom.getMatrix(),
                                     stage.getCoordChangeMatrix(),
                                     zoom.texture(0));
@@ -184,9 +200,9 @@ GrGLEffect::EffectKey GrGLMagnifierEffect::GenKey(const GrEffectStage& stage, co
 
 GR_DEFINE_EFFECT_TEST(GrMagnifierEffect);
 
-GrEffect* GrMagnifierEffect::TestCreate(SkRandom* random,
-                                        GrContext* context,
-                                        GrTexture** textures) {
+GrEffectRef* GrMagnifierEffect::TestCreate(SkRandom* random,
+                                           GrContext* context,
+                                           GrTexture** textures) {
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
     const int kMaxInset = 20;
@@ -201,7 +217,7 @@ GrEffect* GrMagnifierEffect::TestCreate(SkRandom* random,
                 SkRect::MakeXYWH(SkIntToScalar(x), SkIntToScalar(y),
                                  SkIntToScalar(width), SkIntToScalar(height)),
                 inset));
-    GrEffect* effect;
+    GrEffectRef* effect;
     filter->asNewEffect(&effect, textures[0]);
     GrAssert(NULL != effect);
     return effect;
@@ -213,15 +229,19 @@ const GrBackendEffectFactory& GrMagnifierEffect::getFactory() const {
     return GrTBackendEffectFactory<GrMagnifierEffect>::getInstance();
 }
 
-bool GrMagnifierEffect::isEqual(const GrEffect& sBase) const {
-     const GrMagnifierEffect& s =
-        static_cast<const GrMagnifierEffect&>(sBase);
-    return (this->fXOffset == s.fXOffset &&
+bool GrMagnifierEffect::onIsEqual(const GrEffect& sBase) const {
+    const GrMagnifierEffect& s = CastEffect<GrMagnifierEffect>(sBase);
+    return (this->texture(0) == s.texture(0) &&
+            this->fXOffset == s.fXOffset &&
             this->fYOffset == s.fYOffset &&
             this->fXZoom == s.fXZoom &&
             this->fYZoom == s.fYZoom &&
             this->fXInset == s.fXInset &&
             this->fYInset == s.fYInset);
+}
+
+void GrMagnifierEffect::getConstantColorComponents(GrColor* color, uint32_t* validFlags) const {
+    this->updateConstantColorComponentsForModulation(color, validFlags);
 }
 
 #endif
@@ -243,17 +263,16 @@ SkMagnifierImageFilter::SkMagnifierImageFilter(SkRect srcRect, SkScalar inset)
     SkASSERT(srcRect.x() >= 0 && srcRect.y() >= 0 && inset >= 0);
 }
 
-bool SkMagnifierImageFilter::asNewEffect(GrEffect** effect,
-                                         GrTexture* texture) const {
+bool SkMagnifierImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* texture) const {
 #if SK_SUPPORT_GPU
     if (effect) {
-      *effect = SkNEW_ARGS(GrMagnifierEffect, (texture,
-                                               fSrcRect.x() / texture->width(),
-                                               fSrcRect.y() / texture->height(),
-                                               texture->width() / fSrcRect.width(),
-                                               texture->height() / fSrcRect.height(),
-                                               fInset / texture->width(),
-                                               fInset / texture->height()));
+      *effect = GrMagnifierEffect::Create(texture,
+                                          fSrcRect.x() / texture->width(),
+                                          fSrcRect.y() / texture->height(),
+                                          texture->width() / fSrcRect.width(),
+                                          texture->height() / fSrcRect.height(),
+                                          fInset / texture->width(),
+                                          fInset / texture->height());
     }
     return true;
 #else

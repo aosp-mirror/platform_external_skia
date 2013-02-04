@@ -98,6 +98,16 @@ private:
     bool fDoAA;
 };
 
+class ClipRRect : public SkDrawCommand {
+public:
+    ClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA);
+    virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+private:
+    SkRRect fRRect;
+    SkRegion::Op fOp;
+    bool fDoAA;
+};
+
 class Concat : public SkDrawCommand {
 public:
     Concat(const SkMatrix& matrix);
@@ -153,9 +163,20 @@ public:
             const SkRect& dst, const SkPaint* paint, SkBitmap& resizedBitmap);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
+
+    // The non-const 'paint' method allows modification of this object's
+    // SkPaint. For this reason the ctor and setPaint method make a local copy.
+    // The 'fPaintPtr' member acts a signal that the local SkPaint is valid
+    // (since only an SkPaint* is passed into the ctor).
+    const SkPaint* paint() const { return fPaintPtr; }
+    SkPaint* paint() { return fPaintPtr; }
+
+    void setPaint(const SkPaint& paint) { fPaint = paint; fPaintPtr = &fPaint; }
+
 private:
     const SkRect* fSrc;
-    const SkPaint* fPaint;
+    SkPaint fPaint;
+    SkPaint* fPaintPtr;
     const SkBitmap* fBitmap;
     const SkRect* fDst;
     SkBitmap fResizedBitmap;
@@ -168,6 +189,15 @@ public:
 private:
     const void* fData;
     size_t fLength;
+};
+
+class DrawOval : public SkDrawCommand {
+public:
+    DrawOval(const SkRect& oval, const SkPaint& paint);
+    virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+private:
+    const SkRect* fOval;
+    const SkPaint* fPaint;
 };
 
 class DrawPaint : public SkDrawCommand {
@@ -273,6 +303,15 @@ private:
     const SkPaint* fPaint;
 };
 
+class DrawRRect : public SkDrawCommand {
+public:
+    DrawRRect(const SkRRect& rrect, const SkPaint& paint);
+    virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+private:
+    SkRRect fRRect;
+    const SkPaint* fPaint;
+};
+
 class DrawSprite : public SkDrawCommand {
 public:
     DrawSprite(const SkBitmap& bitmap, int left, int top, const SkPaint* paint,
@@ -329,6 +368,9 @@ public:
             SkCanvas::SaveFlags flags);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual void trackSaveState(int* state) SK_OVERRIDE;
+
+    const SkPaint* paint() const { return fPaint; }
+
 private:
     const SkRect* fBounds;
     const SkPaint* fPaint;
