@@ -58,6 +58,22 @@ SK_DEFINE_INST_COUNT(SkDrawFilter)
 #ifdef SK_DEBUG
 #include "SkPixelRef.h"
 
+/*
+ *  Some pixelref subclasses can support being "locked" from another thread
+ *  during the lock-scope of skia calling them. In these instances, this balance
+ *  check will fail, but may not be indicative of a problem, so we allow a build
+ *  flag to disable this check.
+ *
+ *  Potentially another fix would be to have a (debug-only) virtual or flag on
+ *  pixelref, which could tell us at runtime if this check is valid. That would
+ *  eliminate the need for this heavy-handed build check.
+ */
+#ifdef SK_DISABLE_PIXELREF_LOCKCOUNT_BALANCE_CHECK
+class AutoCheckLockCountBalance {
+public:
+    AutoCheckLockCountBalance(const SkBitmap&) { /* do nothing */ }
+};
+#else
 class AutoCheckLockCountBalance {
 public:
     AutoCheckLockCountBalance(const SkBitmap& bm) : fPixelRef(bm.pixelRef()) {
@@ -72,6 +88,7 @@ private:
     const SkPixelRef* fPixelRef;
     int               fLockCount;
 };
+#endif
 
 class AutoCheckNoSetContext {
 public:
@@ -1542,10 +1559,13 @@ void SkCanvas::drawOval(const SkRect& oval, const SkPaint& paint) {
         }
     }
 
-    SkPath  path;
-    path.addOval(oval);
-    // call the non-virtual version
-    this->SkCanvas::drawPath(path, paint);
+    LOOPER_BEGIN(paint, SkDrawFilter::kOval_Type)
+
+    while (iter.next()) {
+        iter.fDevice->drawOval(iter, oval, looper.paint());
+    }
+
+    LOOPER_END
 }
 
 void SkCanvas::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
@@ -1708,10 +1728,10 @@ void SkCanvas::internalDrawBitmapNine(const SkBitmap& bitmap,
     c.fBottom = SkPin32(center.fBottom, c.fTop, h);
 
     const SkScalar srcX[4] = {
-        0, SkIntToScalar(c.fLeft), SkIntToScalar(c.fRight), w
+        0, SkIntToScalar(c.fLeft), SkIntToScalar(c.fRight), SkIntToScalar(w)
     };
     const SkScalar srcY[4] = {
-        0, SkIntToScalar(c.fTop), SkIntToScalar(c.fBottom), h
+        0, SkIntToScalar(c.fTop), SkIntToScalar(c.fBottom), SkIntToScalar(h)
     };
     SkScalar dstX[4] = {
         dst.fLeft, dst.fLeft + SkIntToScalar(c.fLeft),
@@ -2115,5 +2135,3 @@ int SkCanvas::LayerIter::y() const { return fImpl->getY(); }
 ///////////////////////////////////////////////////////////////////////////////
 
 SkCanvas::ClipVisitor::~ClipVisitor() { }
-
-

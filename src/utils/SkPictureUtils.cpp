@@ -11,6 +11,7 @@
 #include "SkDevice.h"
 #include "SkPixelRef.h"
 #include "SkShader.h"
+#include "SkRRect.h"
 
 class PixelRefSet {
 public:
@@ -58,7 +59,11 @@ private:
         SkShader* shader = paint.getShader();
         if (shader) {
             SkBitmap bm;
-            if (shader->asABitmap(&bm, NULL, NULL)) {
+            // Check whether the shader is a gradient in order to short-circuit
+            // call to asABitmap to prevent generation of bitmaps from
+            // gradient shaders, which implement asABitmap.
+            if (SkShader::kNone_GradientType == shader->asAGradient(NULL) &&
+                shader->asABitmap(&bm, NULL, NULL)) {
                 fPRSet->add(bm.pixelRef());
             }
         }
@@ -84,7 +89,11 @@ public:
                             const SkPoint[], const SkPaint& paint) SK_OVERRIDE {
         this->addBitmapFromPaint(paint);
     }
-    virtual void drawRect(const SkDraw&, const SkRect& r,
+    virtual void drawRect(const SkDraw&, const SkRect&,
+                          const SkPaint& paint) SK_OVERRIDE {
+        this->addBitmapFromPaint(paint);
+    }
+    virtual void drawOval(const SkDraw&, const SkRect&,
                           const SkPaint& paint) SK_OVERRIDE {
         this->addBitmapFromPaint(paint);
     }
@@ -173,6 +182,10 @@ public:
                           bool doAA) SK_OVERRIDE {
         return this->INHERITED::clipRect(path.getBounds(), op, false);
     }
+    virtual bool clipRRect(const SkRRect& rrect, SkRegion::Op op,
+                           bool doAA) SK_OVERRIDE {
+        return this->INHERITED::clipRect(rrect.getBounds(), op, false);
+    }
 
 private:
     typedef SkCanvas INHERITED;
@@ -210,4 +223,3 @@ SkData* SkPictureUtils::GatherPixelRefs(SkPicture* pict, const SkRect& area) {
     }
     return data;
 }
-

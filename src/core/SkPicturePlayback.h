@@ -74,12 +74,14 @@ public:
 
     void dumpSize() const;
 
+#ifdef SK_BUILD_FOR_ANDROID
     // Can be called in the middle of playback (the draw() call). WIll abort the
     // drawing and return from draw() after the "current" op code is done
-    void abort();
+    void abort() { fAbortCurrentPlayback = true; }
+#endif
 
 protected:
-#ifdef SK_PICTURE_PROFILING_STUBS
+#ifdef SK_DEVELOPER
     virtual size_t preDraw(size_t offset, int type);
     virtual void postDraw(size_t offset);
 #endif
@@ -219,6 +221,7 @@ private:
     SkFactoryPlayback* fFactoryPlayback;
 #ifdef SK_BUILD_FOR_ANDROID
     SkMutex fDrawMutex;
+    bool fAbortCurrentPlayback;
 #endif
 };
 

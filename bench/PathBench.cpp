@@ -122,7 +122,7 @@ public:
         name->append("oval");
     }
     virtual void makePath(SkPath* path) SK_OVERRIDE {
-        SkRect r = { 10, 10, 20, 20 };
+        SkRect r = { 10, 10, 23, 20 };
         path->addOval(r);
     }
 private:
@@ -624,13 +624,14 @@ private:
 class CirclesBench : public SkBenchmark {
 protected:
     SkString            fName;
+    Flags               fFlags;
 
     enum {
         N = SkBENCHLOOP(100)
     };
 public:
-    CirclesBench(void* param) : INHERITED(param) {
-        fName.printf("circles");
+    CirclesBench(void* param, Flags flags) : INHERITED(param), fFlags(flags) {
+        fName.printf("circles_%s", fFlags & kStroke_Flag ? "stroke" : "fill");
     }
 
 protected:
@@ -643,6 +644,9 @@ protected:
 
         paint.setColor(SK_ColorBLACK);
         paint.setAntiAlias(true);
+        if (fFlags & kStroke_Flag) {
+            paint.setStyle(SkPaint::kStroke_Style);
+        }
 
         SkRandom rand;
 
@@ -654,6 +658,10 @@ protected:
             r.fTop =  rand.nextUScalar1() * 300;
             r.fRight =  r.fLeft + 2 * radius;
             r.fBottom = r.fTop + 2 * radius;
+
+            if (fFlags & kStroke_Flag) {
+                paint.setStrokeWidth(rand.nextUScalar1() * 5.0f);
+            }
 
             SkPath temp;
 
@@ -670,6 +678,7 @@ protected:
 private:
     typedef SkBenchmark INHERITED;
 };
+
 
 // Chrome creates its own round rects with each corner possibly being different.
 // In its "zero radius" incarnation it creates degenerate round rects.
@@ -736,7 +745,7 @@ protected:
         add_corner_arc(path, r, xCorner, yCorner, 180);
         path->close();
 
-#ifdef SK_REDEFINE_ROOT2OVER2_TO_MAKE_ARCTOS_CONVEX
+#ifndef SK_IGNORE_CONVEX_QUAD_OPT
         SkASSERT(path->isConvex());
 #endif
     }
@@ -959,8 +968,11 @@ static BenchRegistry gRegPathTo(FactPathTo);
 static BenchRegistry gRegReverseAdd(FactReverseAdd);
 static BenchRegistry gRegReverseTo(FactReverseTo);
 
-static SkBenchmark* CirclesTest(void* p) { return new CirclesBench(p); }
+static SkBenchmark* CirclesTest(void* p) { return new CirclesBench(p, FLAGS00); }
 static BenchRegistry gRegCirclesTest(CirclesTest);
+
+static SkBenchmark* CirclesStrokeTest(void* p) { return new CirclesBench(p, FLAGS01); }
+static BenchRegistry gRegCirclesStrokeTest(CirclesStrokeTest);
 
 static SkBenchmark* ArbRoundRectTest(void* p) { return new ArbRoundRectBench(p, false); }
 static BenchRegistry gRegArbRoundRectTest(ArbRoundRectTest);

@@ -20,6 +20,7 @@
 #include "SkRasterizer.h"
 #include "SkScan.h"
 #include "SkShader.h"
+#include "SkString.h"
 #include "SkStroke.h"
 #include "SkTemplatesPriv.h"
 #include "SkTLazy.h"
@@ -28,6 +29,7 @@
 #include "SkAutoKern.h"
 #include "SkBitmapProcShader.h"
 #include "SkDrawProcs.h"
+#include "SkMatrixUtils.h"
 
 //#define TRACE_BITMAP_DRAWS
 
@@ -118,6 +120,23 @@ SkDraw::SkDraw() {
 
 SkDraw::SkDraw(const SkDraw& src) {
     memcpy(this, &src, sizeof(*this));
+}
+
+bool SkDraw::computeConservativeLocalClipBounds(SkRect* localBounds) const {
+    if (fRC->isEmpty()) {
+        return false;
+    }
+
+    SkMatrix inverse;
+    if (!fMatrix->invert(&inverse)) {
+        return false;
+    }
+
+    SkIRect devBounds = fRC->getBounds();
+    // outset to have slop for antialasing and hairlines
+    devBounds.outset(1, 1);
+    inverse.mapRect(localBounds, SkRect::Make(devBounds));
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -666,7 +685,10 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
                     path.moveTo(pts[0]);
                     path.lineTo(pts[1]);
 
-                    if (paint.getPathEffect()->asPoints(&pointData, path, rec, *fMatrix)) {
+                    SkRect cullRect = SkRect::Make(fRC->getBounds());
+
+                    if (paint.getPathEffect()->asPoints(&pointData, path, rec,
+                                                        *fMatrix, &cullRect)) {
                         // 'asPoints' managed to find some fast path
 
                         SkPaint newP(paint);
@@ -1055,7 +1077,12 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
     }
 
     if (paint->getPathEffect() || paint->getStyle() != SkPaint::kFill_Style) {
-        doFill = paint->getFillPath(*pathPtr, &tmpPath);
+        SkRect cullRect;
+        const SkRect* cullRectPtr = NULL;
+        if (this->computeConservativeLocalClipBounds(&cullRect)) {
+            cullRectPtr = &cullRect;
+        }
+        doFill = paint->getFillPath(*pathPtr, &tmpPath, cullRectPtr);
         pathPtr = &tmpPath;
     }
 
@@ -1113,6 +1140,7 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
     go ahead and treat it as if it were, so that subsequent code can go fast.
  */
 static bool just_translate(const SkMatrix& matrix, const SkBitmap& bitmap) {
+#ifdef SK_IGNORE_TRANS_CLAMP_FIX
     SkMatrix::TypeMask mask = matrix.getType();
 
     if (mask & (SkMatrix::kAffine_Mask | SkMatrix::kPerspective_Mask)) {
@@ -1129,6 +1157,11 @@ static bool just_translate(const SkMatrix& matrix, const SkBitmap& bitmap) {
     }
     // if we got here, we're either kTranslate_Mask or identity
     return true;
+#else
+    unsigned bits = 0;  // TODO: find a way to allow the caller to tell us to
+                        // respect filtering.
+    return SkTreatAsSprite(matrix, bitmap.width(), bitmap.height(), bits);
+#endif
 }
 
 void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap,
@@ -1650,7 +1683,7 @@ void SkDraw::drawText(const char text[], size_t byteLength,
 
     const SkMatrix* matrix = fMatrix;
 
-    SkAutoGlyphCache    autoCache(paint, matrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, matrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     // transform our starting point
@@ -1844,7 +1877,7 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
     const SkMatrix* matrix = fMatrix;
 
     SkDrawCacheProc     glyphCacheProc = paint.getDrawCacheProc();
-    SkAutoGlyphCache    autoCache(paint, matrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, matrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     SkAAClipBlitterWrapper wrapper;
@@ -1875,13 +1908,9 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
 
                 tmsProc(tms, pos);
 
-#ifdef SK_DRAW_POS_TEXT_IGNORE_SUBPIXEL_LEFT_ALIGN_FIX
-                SkFixed fx = SkScalarToFixed(tms.fLoc.fX);
-                SkFixed fy = SkScalarToFixed(tms.fLoc.fY);
-#else
                 SkFixed fx = SkScalarToFixed(tms.fLoc.fX) + (SK_FixedHalf >> SkGlyph::kSubBits);
                 SkFixed fy = SkScalarToFixed(tms.fLoc.fY) + (SK_FixedHalf >> SkGlyph::kSubBits);
-#endif
+
                 SkFixed fxMask = ~0;
                 SkFixed fyMask = ~0;
 
@@ -2137,7 +2166,7 @@ void SkDraw::drawPosTextOnPath(const char text[], size_t byteLength,
     // End copied from SkTextToPathIter constructor
 
     // detach cache
-    SkGlyphCache* cache = tempPaint.detachCache(NULL);
+    SkGlyphCache* cache = tempPaint.detachCache(NULL, NULL);
 
     // Must set scale, even if 1
     SkScalar scale = SK_Scalar1;
@@ -2328,6 +2357,7 @@ public:
 
     virtual void shadeSpan(int x, int y, SkPMColor dstC[], int count) SK_OVERRIDE;
 
+    SK_DEVELOPER_TO_STRING()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTriColorShader)
 
 protected:
@@ -2400,6 +2430,16 @@ void SkTriColorShader::shadeSpan(int x, int y, SkPMColor dstC[], int count) {
     }
 }
 
+#ifdef SK_DEVELOPER
+void SkTriColorShader::toString(SkString* str) const {
+    str->append("SkTriColorShader: (");
+
+    this->INHERITED::toString(str);
+
+    str->append(")");
+}
+#endif
+
 void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
                           const SkPoint vertices[], const SkPoint textures[],
                           const SkColor colors[], SkXfermode* xmode,
@@ -2459,7 +2499,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
             SkASSERT(shader);
             bool releaseMode = false;
             if (NULL == xmode) {
-                xmode = SkXfermode::Create(SkXfermode::kMultiply_Mode);
+                xmode = SkXfermode::Create(SkXfermode::kModulate_Mode);
                 releaseMode = true;
             }
             SkShader* compose = SkNEW_ARGS(SkComposeShader,

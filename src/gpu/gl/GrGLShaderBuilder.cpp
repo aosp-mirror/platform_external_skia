@@ -172,7 +172,7 @@ GrGLUniformManager::UniformHandle GrGLShaderBuilder::addUniformArray(uint32_t vi
                                                                      int count,
                                                                      const char** outName) {
     GrAssert(name && strlen(name));
-    static const uint32_t kVisibilityMask = kVertex_ShaderType | kFragment_ShaderType;
+    SkDEBUGCODE(static const uint32_t kVisibilityMask = kVertex_ShaderType | kFragment_ShaderType);
     GrAssert(0 == (~kVisibilityMask & visibility));
     GrAssert(0 != visibility);
 
@@ -411,4 +411,40 @@ void GrGLShaderBuilder::getShader(ShaderType type, SkString* shaderStr) const {
 
 void GrGLShaderBuilder::finished(GrGLuint programID) {
     fUniformManager.getUniformLocations(programID, fUniforms);
+}
+
+GrGLEffect* GrGLShaderBuilder::createAndEmitGLEffect(
+                                const GrEffectStage& stage,
+                                GrGLEffect::EffectKey key,
+                                const char* fsInColor,
+                                const char* fsOutColor,
+                                const char* vsInCoord,
+                                SkTArray<GrGLUniformManager::UniformHandle, true>* samplerHandles) {
+    GrAssert(NULL != stage.getEffect());
+
+    const GrEffectRef& effect = *stage.getEffect();
+    int numTextures = effect->numTextures();
+    SkSTArray<8, GrGLShaderBuilder::TextureSampler> textureSamplers;
+    textureSamplers.push_back_n(numTextures);
+    for (int i = 0; i < numTextures; ++i) {
+        textureSamplers[i].init(this, &effect->textureAccess(i), i);
+        samplerHandles->push_back(textureSamplers[i].fSamplerUniform);
+    }
+
+    GrGLEffect* glEffect = effect->getFactory().createGLInstance(effect);
+
+    // Enclose custom code in a block to avoid namespace conflicts
+    this->fVSCode.appendf("\t{ // %s\n", glEffect->name());
+    this->fFSCode.appendf("\t{ // %s \n", glEffect->name());
+    glEffect->emitCode(this,
+                       stage,
+                       key,
+                       vsInCoord,
+                       fsOutColor,
+                       fsInColor,
+                       textureSamplers);
+    this->fVSCode.appendf("\t}\n");
+    this->fFSCode.appendf("\t}\n");
+
+    return glEffect;
 }

@@ -22,6 +22,7 @@ class SkAnnotation;
 class SkAutoGlyphCache;
 class SkColorFilter;
 class SkDescriptor;
+struct SkDeviceProperties;
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 struct SkGlyph;
@@ -428,16 +429,20 @@ public:
     */
     void setStrokeJoin(Join join);
 
-    /** Applies any/all effects (patheffect, stroking) to src, returning the
-        result in dst. The result is that drawing src with this paint will be
-        the same as drawing dst with a default paint (at least from the
-        geometric perspective).
-        @param src  input path
-        @param dst  output path (may be the same as src)
-        @return     true if the path should be filled, or false if it should be
-                    drawn with a hairline (width == 0)
-    */
-    bool getFillPath(const SkPath& src, SkPath* dst) const;
+    /**
+     *  Applies any/all effects (patheffect, stroking) to src, returning the
+     *  result in dst. The result is that drawing src with this paint will be
+     *  the same as drawing dst with a default paint (at least from the
+     *  geometric perspective).
+     *
+     *  @param src  input path
+     *  @param dst  output path (may be the same as src)
+     *  @param cullRect If not null, the dst path may be culled to this rect.
+     *  @return     true if the path should be filled, or false if it should be
+     *              drawn with a hairline (width == 0)
+     */
+    bool getFillPath(const SkPath& src, SkPath* dst,
+                     const SkRect* cullRect = NULL) const;
 
     /** Get the paint's shader object.
         <p />
@@ -1000,9 +1005,9 @@ private:
     SkScalar measure_text(SkGlyphCache*, const char* text, size_t length,
                           int* count, SkRect* bounds) const;
 
-    SkGlyphCache*   detachCache(const SkMatrix*) const;
+    SkGlyphCache* detachCache(const SkDeviceProperties* deviceProperties, const SkMatrix*) const;
 
-    void descriptorProc(const SkMatrix* deviceMatrix,
+    void descriptorProc(const SkDeviceProperties* deviceProperties, const SkMatrix* deviceMatrix,
                         void (*proc)(const SkDescriptor*, void*),
                         void* context, bool ignoreGamma = false) const;
 
@@ -1026,4 +1031,3 @@ private:
 };
 
 #endif
-

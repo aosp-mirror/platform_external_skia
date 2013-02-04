@@ -181,6 +181,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInf
     SkSafeRef(fStateTree);
 
     if (deepCopyInfo) {
+        int paintCount = SafeCount(src.fPaints);
 
         if (src.fBitmaps) {
             fBitmaps = SkTRefArray<SkBitmap>::Create(src.fBitmaps->begin(), src.fBitmaps->count());
@@ -192,7 +193,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInf
              * this point we would need to pass the SkBitmapHeap so that we don't unnecessarily
              * flatten the pixels in a bitmap shader.
              */
-            deepCopyInfo->paintData.setCount(src.fPaints->count());
+            deepCopyInfo->paintData.setCount(paintCount);
 
             /* Use an SkBitmapHeap to avoid flattening bitmaps in shaders. If there already is one,
              * use it. If this SkPicturePlayback was created from a stream, fBitmapHeap will be
@@ -209,7 +210,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInf
             }
 
             SkDEBUGCODE(int heapSize = SafeCount(fBitmapHeap.get());)
-            for (int i = 0; i < src.fPaints->count(); i++) {
+            for (int i = 0; i < paintCount; i++) {
                 if (needs_deep_copy(src.fPaints->at(i))) {
                     deepCopyInfo->paintData[i] = SkFlatData::Create(&deepCopyInfo->controller,
                                                                     &src.fPaints->at(i), 0,
@@ -226,11 +227,11 @@ SkPicturePlayback::SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInf
             deepCopyInfo->initialized = true;
         }
 
-        fPaints = SkTRefArray<SkPaint>::Create(src.fPaints->count());
-        SkASSERT(deepCopyInfo->paintData.count() == src.fPaints->count());
+        fPaints = SkTRefArray<SkPaint>::Create(paintCount);
+        SkASSERT(deepCopyInfo->paintData.count() == paintCount);
         SkBitmapHeap* bmHeap = deepCopyInfo->controller.getBitmapHeap();
         SkTypefacePlayback* tfPlayback = deepCopyInfo->controller.getTypefacePlayback();
-        for (int i = 0; i < src.fPaints->count(); i++) {
+        for (int i = 0; i < paintCount; i++) {
             if (deepCopyInfo->paintData[i]) {
                 deepCopyInfo->paintData[i]->unflatten(&fPaints->writableAt(i),
                                                       &SkUnflattenObjectProc<SkPaint>,
@@ -619,7 +620,7 @@ struct SkipClipRec {
 };
 #endif
 
-#ifdef SK_PICTURE_PROFILING_STUBS
+#ifdef SK_DEVELOPER
 size_t SkPicturePlayback::preDraw(size_t offset, int type) {
     return 0;
 }
@@ -679,12 +680,22 @@ void SkPicturePlayback::draw(SkCanvas& canvas) {
     // Record this, so we can concat w/ it if we encounter a setMatrix()
     SkMatrix initialMatrix = canvas.getTotalMatrix();
 
+#ifdef SK_BUILD_FOR_ANDROID
+    fAbortCurrentPlayback = false;
+#endif
+
     while (!reader.eof()) {
-#ifdef SK_PICTURE_PROFILING_STUBS
+#ifdef SK_BUILD_FOR_ANDROID
+        if (fAbortCurrentPlayback) {
+            return;
+        }
+#endif
+
+#ifdef SK_DEVELOPER
         size_t curOffset = reader.offset();
 #endif
         int type = reader.readInt();
-#ifdef SK_PICTURE_PROFILING_STUBS
+#ifdef SK_DEVELOPER
         size_t skipTo = this->preDraw(curOffset, type);
         if (0 != skipTo) {
             if (kDrawComplete == skipTo) {
@@ -962,7 +973,7 @@ void SkPicturePlayback::draw(SkCanvas& canvas) {
                 SkASSERT(0);
         }
 
-#ifdef SK_PICTURE_PROFILING_STUBS
+#ifdef SK_DEVELOPER
         this->postDraw(curOffset);
 #endif
 
@@ -984,11 +995,6 @@ void SkPicturePlayback::draw(SkCanvas& canvas) {
     }
 #endif
 //    this->dumpSize();
-}
-
-void SkPicturePlayback::abort() {
-    SkASSERT(!"not supported");
-//    fReader.skip(fReader.size() - fReader.offset());
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -89,7 +89,7 @@ SkRegion::~SkRegion() {
 }
 
 void SkRegion::freeRuns() {
-    if (fRunHead->isComplex()) {
+    if (this->isComplex()) {
         SkASSERT(fRunHead->fRefCnt >= 1);
         if (sk_atomic_dec(&fRunHead->fRefCnt) == 1) {
             //SkASSERT(gRgnAllocCounter > 0);
@@ -152,7 +152,7 @@ bool SkRegion::setRegion(const SkRegion& src) {
 
         fBounds = src.fBounds;
         fRunHead = src.fRunHead;
-        if (fRunHead->isComplex()) {
+        if (this->isComplex()) {
             sk_atomic_inc(&fRunHead->fRefCnt);
         }
     }
@@ -277,7 +277,7 @@ bool SkRegion::setRuns(RunType runs[], int count) {
 
     //  if we get here, we need to become a complex region
 
-    if (!fRunHead->isComplex() || fRunHead->fRunCount != count) {
+    if (!this->isComplex() || fRunHead->fRunCount != count) {
         this->freeRuns();
         this->allocateRuns(count);
     }
@@ -518,7 +518,7 @@ bool SkRegion::operator==(const SkRegion& b) const {
         return true;
     }
     // now we insist that both are complex (but different ptrs)
-    if (!ah->isComplex() || !bh->isComplex()) {
+    if (!this->isComplex() || !b.isComplex()) {
         return false;
     }
     return  ah->fRunCount == bh->fRunCount &&
@@ -848,7 +848,6 @@ static int operate(const SkRegion::RunType a_runs[],
 
     RgnOper oper(SkMin32(a_top, b_top), dst, op);
 
-    bool firstInterval = true;
     int prevBot = SkRegion::kRunTypeSentinel; // so we fail the first test
 
     while (a_bot < SkRegion::kRunTypeSentinel ||
@@ -895,7 +894,6 @@ static int operate(const SkRegion::RunType a_runs[],
             oper.addSpan(top, gSentinel, gSentinel);
         }
         oper.addSpan(bot, run0, run1);
-        firstInterval = false;
 
         if (quickExit && !oper.isEmpty()) {
             return QUICK_EXIT_TRUE_COUNT;
@@ -1020,6 +1018,12 @@ bool SkRegion::Oper(const SkRegion& rgnaOrig, const SkRegion& rgnbOrig, Op op,
         }
         if (a_rect & b_rect) {
             return setRectCheck(result, bounds);
+        }
+        if (a_rect && rgna->fBounds.contains(rgnb->fBounds)) {
+            return setRegionCheck(result, *rgnb);
+        }
+        if (b_rect && rgnb->fBounds.contains(rgna->fBounds)) {
+            return setRegionCheck(result, *rgna);
         }
         break;
 

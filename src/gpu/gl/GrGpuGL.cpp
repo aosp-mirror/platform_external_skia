@@ -485,6 +485,12 @@ GrTexture* GrGpuGL::onWrapBackendTexture(const GrBackendTextureDesc& desc) {
         return NULL;
     }
 
+    // FIXME:  add support for TopLeft RT's by flipping all draws.
+    if (desc.fFlags & kRenderTarget_GrBackendTextureFlag &&
+        kBottomLeft_GrSurfaceOrigin != desc.fOrigin) {
+        return NULL;
+    }
+
     int maxSize = this->getCaps().maxTextureSize();
     if (desc.fWidth > maxSize || desc.fHeight > maxSize) {
         return NULL;
@@ -498,8 +504,8 @@ GrTexture* GrGpuGL::onWrapBackendTexture(const GrBackendTextureDesc& desc) {
     glTexDesc.fConfig = desc.fConfig;
     glTexDesc.fSampleCnt = desc.fSampleCnt;
     glTexDesc.fTextureID = static_cast<GrGLuint>(desc.fTextureHandle);
-    glTexDesc.fOwnsID = false;
-    glTexDesc.fOrigin = GrSurface::kBottomLeft_Origin;
+    glTexDesc.fIsWrapped = true;
+    glTexDesc.fOrigin = desc.fOrigin;
 
     GrGLTexture* texture = NULL;
     if (desc.fFlags & kRenderTarget_GrBackendTextureFlag) {
@@ -507,7 +513,6 @@ GrTexture* GrGpuGL::onWrapBackendTexture(const GrBackendTextureDesc& desc) {
         glRTDesc.fRTFBOID = 0;
         glRTDesc.fTexFBOID = 0;
         glRTDesc.fMSColorRenderbufferID = 0;
-        glRTDesc.fOwnIDs = true;
         glRTDesc.fConfig = desc.fConfig;
         glRTDesc.fSampleCnt = desc.fSampleCnt;
         if (!this->createRenderTargetObjects(glTexDesc.fWidth,
@@ -535,7 +540,7 @@ GrRenderTarget* GrGpuGL::onWrapBackendRenderTarget(const GrBackendRenderTargetDe
     glDesc.fMSColorRenderbufferID = 0;
     glDesc.fTexFBOID = GrGLRenderTarget::kUnresolvableFBOID;
     glDesc.fSampleCnt = desc.fSampleCnt;
-    glDesc.fOwnIDs = false;
+    glDesc.fIsWrapped = true;
     GrGLIRect viewport;
     viewport.fLeft   = 0;
     viewport.fBottom = 0;
@@ -550,8 +555,10 @@ GrRenderTarget* GrGpuGL::onWrapBackendRenderTarget(const GrBackendRenderTargetDe
         format.fPacked = false;
         format.fStencilBits = desc.fStencilBits;
         format.fTotalBits = desc.fStencilBits;
+        static const bool kIsSBWrapped = false;
         GrGLStencilBuffer* sb = SkNEW_ARGS(GrGLStencilBuffer,
                                            (this,
+                                            kIsSBWrapped,
                                             0,
                                             desc.fWidth,
                                             desc.fHeight,
@@ -674,7 +681,7 @@ bool GrGpuGL::uploadTexData(const GrGLTexture::Desc& desc,
     bool swFlipY = false;
     bool glFlipY = false;
     if (NULL != data) {
-        if (GrSurface::kBottomLeft_Origin == desc.fOrigin) {
+        if (kBottomLeft_GrSurfaceOrigin == desc.fOrigin) {
             if (this->glCaps().unpackFlipYSupport()) {
                 glFlipY = true;
             } else {
@@ -827,7 +834,7 @@ bool GrGpuGL::createRenderTargetObjects(int width, int height,
     desc->fMSColorRenderbufferID = 0;
     desc->fRTFBOID = 0;
     desc->fTexFBOID = 0;
-    desc->fOwnIDs = true;
+    desc->fIsWrapped = false;
 
     GrGLenum status;
 
@@ -862,7 +869,7 @@ bool GrGpuGL::createRenderTargetObjects(int width, int height,
     // below here we may bind the FBO
     fHWBoundRenderTarget = NULL;
     if (desc->fRTFBOID != desc->fTexFBOID) {
-        GrAssert(desc->fSampleCnt > 1);
+        GrAssert(desc->fSampleCnt > 0);
         GL_CALL(BindRenderbuffer(GR_GL_RENDERBUFFER,
                                desc->fMSColorRenderbufferID));
         if (!renderbuffer_storage_msaa(fGLContextInfo,
@@ -941,13 +948,12 @@ GrTexture* GrGpuGL::onCreateTexture(const GrTextureDesc& desc,
     glTexDesc.fHeight = desc.fHeight;
     glTexDesc.fConfig = desc.fConfig;
     glTexDesc.fSampleCnt = desc.fSampleCnt;
-
-    glTexDesc.fOwnsID = true;
+    glTexDesc.fIsWrapped = false;
 
     glRTDesc.fMSColorRenderbufferID = 0;
     glRTDesc.fRTFBOID = 0;
     glRTDesc.fTexFBOID = 0;
-    glRTDesc.fOwnIDs = true;
+    glRTDesc.fIsWrapped = false;
     glRTDesc.fConfig = glTexDesc.fConfig;
 
     bool renderTarget = 0 != (desc.fFlags & kRenderTarget_GrTextureFlagBit);
@@ -957,7 +963,7 @@ GrTexture* GrGpuGL::onCreateTexture(const GrTextureDesc& desc,
     // We keep GrRenderTargets in GL's normal orientation so that they
     // can be drawn to by the outside world without the client having
     // to render upside down.
-    glTexDesc.fOrigin = renderTarget ? GrSurface::kBottomLeft_Origin : GrSurface::kTopLeft_Origin;
+    glTexDesc.fOrigin = renderTarget ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin;
 
     glRTDesc.fSampleCnt = desc.fSampleCnt;
     if (GrGLCaps::kNone_MSFBOType == this->glCaps().msFBOType() &&
@@ -1112,8 +1118,9 @@ bool GrGpuGL::createStencilBufferForRenderTarget(GrRenderTarget* rt,
             // whatever sizes GL gives us. In that case we query for the size.
             GrGLStencilBuffer::Format format = sFmt;
             get_stencil_rb_sizes(this->glInterface(), sbID, &format);
+            static const bool kIsWrapped = false;
             SkAutoTUnref<GrStencilBuffer> sb(SkNEW_ARGS(GrGLStencilBuffer,
-                                                  (this, sbID, width, height,
+                                                  (this, kIsWrapped, sbID, width, height,
                                                   samples, format)));
             if (this->attachStencilBufferToRenderTarget(sb, rt)) {
                 fLastSuccessfulStencilFmtIdx = sIdx;
@@ -1214,8 +1221,9 @@ GrVertexBuffer* GrGpuGL::onCreateVertexBuffer(uint32_t size, bool dynamic) {
             fHWGeometryState.fVertexBuffer = NULL;
             return NULL;
         }
+        static const bool kIsWrapped = false;
         GrGLVertexBuffer* vertexBuffer = SkNEW_ARGS(GrGLVertexBuffer,
-                                                    (this, id,
+                                                    (this, kIsWrapped, id,
                                                      size, dynamic));
         fHWGeometryState.fVertexBuffer = vertexBuffer;
         return vertexBuffer;
@@ -1242,8 +1250,9 @@ GrIndexBuffer* GrGpuGL::onCreateIndexBuffer(uint32_t size, bool dynamic) {
             fHWGeometryState.fIndexBuffer = NULL;
             return NULL;
         }
+        static const bool kIsWrapped = false;
         GrIndexBuffer* indexBuffer = SkNEW_ARGS(GrGLIndexBuffer,
-                                                (this, id, size, dynamic));
+                                                (this, kIsWrapped, id, size, dynamic));
         fHWGeometryState.fIndexBuffer = indexBuffer;
         return indexBuffer;
     }
@@ -1597,53 +1606,28 @@ GrGLenum gPrimitiveType2GLMode[] = {
     #endif
 #endif
 
-void GrGpuGL::onGpuDrawIndexed(GrPrimitiveType type,
-                               uint32_t startVertex,
-                               uint32_t startIndex,
-                               uint32_t vertexCount,
-                               uint32_t indexCount) {
-    GrAssert((size_t)type < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
+void GrGpuGL::onGpuDraw(const DrawInfo& info) {
+    int extraStartIndexOffset;
+    this->setupGeometry(info, &extraStartIndexOffset);
 
-    GrGLvoid* indices = (GrGLvoid*)(sizeof(uint16_t) * startIndex);
-
-    GrAssert(NULL != fHWGeometryState.fIndexBuffer);
+    GrAssert((size_t)info.primitiveType() < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
     GrAssert(NULL != fHWGeometryState.fVertexBuffer);
 
-    // our setupGeometry better have adjusted this to zero since
-    // DrawElements always draws from the begining of the arrays for idx 0.
-    GrAssert(0 == startVertex);
-
-    GL_CALL(DrawElements(gPrimitiveType2GLMode[type], indexCount,
-                         GR_GL_UNSIGNED_SHORT, indices));
-#if SWAP_PER_DRAW
-    glFlush();
-    #if GR_MAC_BUILD
-        aglSwapBuffers(aglGetCurrentContext());
-        int set_a_break_pt_here = 9;
-        aglSwapBuffers(aglGetCurrentContext());
-    #elif GR_WIN32_BUILD
-        SwapBuf();
-        int set_a_break_pt_here = 9;
-        SwapBuf();
-    #endif
-#endif
-}
-
-void GrGpuGL::onGpuDrawNonIndexed(GrPrimitiveType type,
-                                  uint32_t startVertex,
-                                  uint32_t vertexCount) {
-    GrAssert((size_t)type < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
-
-    GrAssert(NULL != fHWGeometryState.fVertexBuffer);
-
-    // our setupGeometry better have adjusted this to zero.
-    // DrawElements doesn't take an offset so we always adjus the startVertex.
-    GrAssert(0 == startVertex);
-
-    // pass 0 for parameter first. We have to adjust gl*Pointer() to
-    // account for startVertex in the DrawElements case. So we always
-    // rely on setupGeometry to have accounted for startVertex.
-    GL_CALL(DrawArrays(gPrimitiveType2GLMode[type], 0, vertexCount));
+    if (info.isIndexed()) {
+        GrAssert(NULL != fHWGeometryState.fIndexBuffer);
+        GrGLvoid* indices = (GrGLvoid*)(sizeof(uint16_t) * (info.startIndex() +
+                                                            extraStartIndexOffset));
+        // info.startVertex() was accounted for by setupGeometry.
+        GL_CALL(DrawElements(gPrimitiveType2GLMode[info.primitiveType()],
+                             info.indexCount(),
+                             GR_GL_UNSIGNED_SHORT,
+                             indices));
+    } else {
+        // Pass 0 for parameter first. We have to adjust glVertexAttribPointer() to account for
+        // startVertex in the DrawElements case. So we always rely on setupGeometry to have
+        // accounted for startVertex.
+        GL_CALL(DrawArrays(gPrimitiveType2GLMode[info.primitiveType()], 0, info.vertexCount()));
+    }
 #if SWAP_PER_DRAW
     glFlush();
     #if GR_MAC_BUILD
@@ -1678,7 +1662,6 @@ const GrStencilSettings& even_odd_nv_path_stencil_settings() {
     return *GR_CONST_STENCIL_SETTINGS_PTR_FROM_STRUCT_PTR(&gSettings);
 }
 }
-
 
 void GrGpuGL::setStencilPathSettings(const GrPath&,
                                      SkPath::FillType fill,
@@ -2024,43 +2007,25 @@ inline GrGLenum tile_to_gl_wrap(SkShader::TileMode tm) {
 
 }
 
-void GrGpuGL::flushBoundTextureAndParams(int stageIdx) {
-    GrDrawState* drawState = this->drawState();
-    // FIXME: Assuming at most one texture per effect
-    const GrEffect* effect = drawState->stage(stageIdx)->getEffect();
-    if (effect->numTextures() > 0) {
-        GrGLTexture* nextTexture =  static_cast<GrGLTexture*>(effect->texture(0));
-        if (NULL != nextTexture) {
-            const GrTextureParams& texParams = effect->textureAccess(0).getParams();
-            this->flushBoundTextureAndParams(stageIdx, texParams, nextTexture);
-        }
-    }
-}
+void GrGpuGL::bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture) {
+    GrAssert(NULL != texture);
 
-void GrGpuGL::flushBoundTextureAndParams(int stageIdx,
-                                         const GrTextureParams& params,
-                                         GrGLTexture* nextTexture) {
-
-    // true for now, but maybe not with GrEffect.
-    GrAssert(NULL != nextTexture);
     // If we created a rt/tex and rendered to it without using a texture and now we're texturing
     // from the rt it will still be the last bound texture, but it needs resolving. So keep this
     // out of the "last != next" check.
-    GrGLRenderTarget* texRT =  static_cast<GrGLRenderTarget*>(nextTexture->asRenderTarget());
+    GrGLRenderTarget* texRT =  static_cast<GrGLRenderTarget*>(texture->asRenderTarget());
     if (NULL != texRT) {
         this->onResolveRenderTarget(texRT);
     }
 
-    if (fHWBoundTextures[stageIdx] != nextTexture) {
-        this->setTextureUnit(stageIdx);
-        GL_CALL(BindTexture(GR_GL_TEXTURE_2D, nextTexture->textureID()));
-        //GrPrintf("---- bindtexture %d\n", nextTexture->textureID());
-        fHWBoundTextures[stageIdx] = nextTexture;
+    if (fHWBoundTextures[unitIdx] != texture) {
+        this->setTextureUnit(unitIdx);
+        GL_CALL(BindTexture(GR_GL_TEXTURE_2D, texture->textureID()));
+        fHWBoundTextures[unitIdx] = texture;
     }
 
     ResetTimestamp timestamp;
-    const GrGLTexture::TexParams& oldTexParams =
-                            nextTexture->getCachedTexParams(&timestamp);
+    const GrGLTexture::TexParams& oldTexParams = texture->getCachedTexParams(&timestamp);
     bool setAll = timestamp < this->getResetTimestamp();
     GrGLTexture::TexParams newTexParams;
 
@@ -2069,10 +2034,10 @@ void GrGpuGL::flushBoundTextureAndParams(int stageIdx,
     newTexParams.fWrapS = tile_to_gl_wrap(params.getTileModeX());
     newTexParams.fWrapT = tile_to_gl_wrap(params.getTileModeY());
     memcpy(newTexParams.fSwizzleRGBA,
-           GrGLShaderBuilder::GetTexParamSwizzle(nextTexture->config(), this->glCaps()),
+           GrGLShaderBuilder::GetTexParamSwizzle(texture->config(), this->glCaps()),
            sizeof(newTexParams.fSwizzleRGBA));
     if (setAll || newTexParams.fFilter != oldTexParams.fFilter) {
-        this->setTextureUnit(stageIdx);
+        this->setTextureUnit(unitIdx);
         GL_CALL(TexParameteri(GR_GL_TEXTURE_2D,
                               GR_GL_TEXTURE_MAG_FILTER,
                               newTexParams.fFilter));
@@ -2081,13 +2046,13 @@ void GrGpuGL::flushBoundTextureAndParams(int stageIdx,
                               newTexParams.fFilter));
     }
     if (setAll || newTexParams.fWrapS != oldTexParams.fWrapS) {
-        this->setTextureUnit(stageIdx);
+        this->setTextureUnit(unitIdx);
         GL_CALL(TexParameteri(GR_GL_TEXTURE_2D,
                               GR_GL_TEXTURE_WRAP_S,
                               newTexParams.fWrapS));
     }
     if (setAll || newTexParams.fWrapT != oldTexParams.fWrapT) {
-        this->setTextureUnit(stageIdx);
+        this->setTextureUnit(unitIdx);
         GL_CALL(TexParameteri(GR_GL_TEXTURE_2D,
                               GR_GL_TEXTURE_WRAP_T,
                               newTexParams.fWrapT));
@@ -2096,12 +2061,11 @@ void GrGpuGL::flushBoundTextureAndParams(int stageIdx,
         (setAll || memcmp(newTexParams.fSwizzleRGBA,
                           oldTexParams.fSwizzleRGBA,
                           sizeof(newTexParams.fSwizzleRGBA)))) {
-        this->setTextureUnit(stageIdx);
+        this->setTextureUnit(unitIdx);
         set_tex_swizzle(newTexParams.fSwizzleRGBA,
                         this->glInterface());
     }
-    nextTexture->setCachedTexParams(newTexParams,
-                                    this->getResetTimestamp());
+    texture->setCachedTexParams(newTexParams, this->getResetTimestamp());
 }
 
 void GrGpuGL::flushMiscFixedFunctionState() {
@@ -2382,4 +2346,3 @@ void GrGpuGL::setBuffers(bool indexed,
         }
     }
 }
-

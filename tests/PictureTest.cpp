@@ -11,6 +11,7 @@
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkRandom.h"
+#include "SkRRect.h"
 #include "SkShader.h"
 #include "SkStream.h"
 
@@ -54,6 +55,10 @@ static void drawshader_proc(SkCanvas* canvas, const SkBitmap& bm,
     SkPaint paint;
     paint.setShader(s)->unref();
     canvas->drawRect(r, paint);
+    canvas->drawOval(r, paint);
+    SkRRect rr;
+    rr.setRectXY(r, 10, 10);
+    canvas->drawRRect(rr, paint);
 }
 
 // Return a picture with the bitmaps drawn at the specified positions.
@@ -130,10 +135,10 @@ static void gather_from_colors(const SkBitmap& bm, SkPixelRef* const refs[],
             // the color is transparent, meaning no bitmap was drawn in that
             // pixel.
             if (pmc) {
-                int index = SkGetPackedR32(pmc);
+                uint32_t index = SkGetPackedR32(pmc);
                 SkASSERT(SkGetPackedG32(pmc) == index);
                 SkASSERT(SkGetPackedB32(pmc) == index);
-                SkASSERT(index < count);
+                SkASSERT(static_cast<int>(index) < count);
                 bitarray |= 1 << index;
             }
         }
@@ -390,6 +395,28 @@ static void test_bitmap_with_encoded_data(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, picture1->equals(picture2));
 }
 
+static void test_clone_empty(skiatest::Reporter* reporter) {
+    // This is a regression test for crbug.com/172062
+    // Before the fix, we used to crash accessing a null pointer when we
+    // had a picture with no paints. This test passes by not crashing.
+    {
+        SkPicture picture;
+        picture.beginRecording(1, 1);
+        picture.endRecording();
+        SkPicture* destPicture = picture.clone();
+        REPORTER_ASSERT(reporter, NULL != destPicture);
+        destPicture->unref();
+    }
+    {
+        // Test without call to endRecording
+        SkPicture picture;
+        picture.beginRecording(1, 1);
+        SkPicture* destPicture = picture.clone();
+        REPORTER_ASSERT(reporter, NULL != destPicture);
+        destPicture->unref();
+    }
+}
+
 static void TestPicture(skiatest::Reporter* reporter) {
 #ifdef SK_DEBUG
     test_deleting_empty_playback();
@@ -400,6 +427,7 @@ static void TestPicture(skiatest::Reporter* reporter) {
     test_peephole(reporter);
     test_gatherpixelrefs(reporter);
     test_bitmap_with_encoded_data(reporter);
+    test_clone_empty(reporter);
 }
 
 #include "TestClassDef.h"

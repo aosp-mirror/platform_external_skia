@@ -76,10 +76,8 @@
  */
 #if !defined(SkNO_RETURN_HINT)
     #if SK_HAS_COMPILER_FEATURE(attribute_analyzer_noreturn)
-        namespace {
-            inline void SkNO_RETURN_HINT() __attribute__((analyzer_noreturn));
-            inline void SkNO_RETURN_HINT() {}
-        }
+        static inline void SkNO_RETURN_HINT() __attribute__((analyzer_noreturn));
+        static inline void SkNO_RETURN_HINT() {}
     #else
         #define SkNO_RETURN_HINT() do {} while (false)
     #endif
@@ -94,14 +92,14 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifndef SkNEW
-    #define SkNEW(type_name)                new type_name
-    #define SkNEW_ARGS(type_name, args)     new type_name args
-    #define SkNEW_ARRAY(type_name, count)   new type_name[count]
-    #define SkNEW_PLACEMENT(buf, type_name) new (buf) type_name
+    #define SkNEW(type_name)                (new type_name)
+    #define SkNEW_ARGS(type_name, args)     (new type_name args)
+    #define SkNEW_ARRAY(type_name, count)   (new type_name[(count)])
+    #define SkNEW_PLACEMENT(buf, type_name) (new (buf) type_name)
     #define SkNEW_PLACEMENT_ARGS(buf, type_name, args) \
-                                            new (buf) type_name args
-    #define SkDELETE(obj)                   delete obj
-    #define SkDELETE_ARRAY(array)           delete[] array
+                                            (new (buf) type_name args)
+    #define SkDELETE(obj)                   (delete (obj))
+    #define SkDELETE_ARRAY(array)           (delete[] (array))
 #endif
 
 #ifndef SK_CRASH
@@ -110,6 +108,17 @@
 #else
     #define SK_CRASH() do { SkNO_RETURN_HINT(); } while (true)
 #endif
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+// SK_ENABLE_INST_COUNT defaults to 1 in DEBUG and 0 in RELEASE
+#ifndef SK_ENABLE_INST_COUNT
+    #ifdef SK_DEBUG
+        #define SK_ENABLE_INST_COUNT 1
+    #else
+        #define SK_ENABLE_INST_COUNT 0
+    #endif
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////

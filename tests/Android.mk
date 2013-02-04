@@ -42,6 +42,7 @@ LOCAL_SRC_FILES:= \
   HashCacheTest.cpp \
   InfRectTest.cpp \
   LListTest.cpp \
+  MD5Test.cpp \
   MathTest.cpp \
   Matrix44Test.cpp \
   MatrixTest.cpp \
@@ -66,6 +67,7 @@ LOCAL_SRC_FILES:= \
   RegionTest.cpp \
   RoundRectTest.cpp \
   RTreeTest.cpp \
+  SHA1Test.cpp \
   ScalarTest.cpp \
   ShaderOpacityTest.cpp \
   Sk64Test.cpp \

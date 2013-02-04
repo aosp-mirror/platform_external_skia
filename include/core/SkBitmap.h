@@ -21,6 +21,7 @@ struct SkRect;
 class SkPaint;
 class SkPixelRef;
 class SkRegion;
+class SkString;
 
 // This is an opaque class, not interpreted by skia
 class SkGpuTexture;
@@ -634,6 +635,8 @@ public:
         uint8_t** fYPtrs;
         int       fHeight;
     };
+
+    SkDEVCODE(void toString(SkString* str) const;)
 
 private:
     struct MipMap;

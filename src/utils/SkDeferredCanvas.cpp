@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2012 Google Inc.
+ * Copyright 2013 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -14,13 +14,14 @@
 #include "SkDrawFilter.h"
 #include "SkGPipe.h"
 #include "SkPaint.h"
+#include "SkPaintPriv.h"
 #include "SkRRect.h"
 #include "SkShader.h"
 
 enum {
     // Deferred canvas will auto-flush when recording reaches this limit
     kDefaultMaxRecordingStorageBytes = 64*1024*1024,
-    kDeferredCanvasBitmapSizeThreshold = ~0, // Disables this feature
+    kDeferredCanvasBitmapSizeThreshold = ~0U, // Disables this feature
 };
 
 enum PlaybackMode {
@@ -53,75 +54,6 @@ bool shouldDrawImmediately(const SkBitmap* bitmap, const SkPaint* paint,
     return false;
 }
 }
-
-namespace {
-
-bool isPaintOpaque(const SkPaint* paint,
-                   const SkBitmap* bmpReplacesShader = NULL) {
-    // TODO: SkXfermode should have a virtual isOpaque method, which would
-    // make it possible to test modes that do not have a Coeff representation.
-
-    if (!paint) {
-        return bmpReplacesShader ? bmpReplacesShader->isOpaque() : true;
-    }
-
-    SkXfermode::Coeff srcCoeff, dstCoeff;
-    if (SkXfermode::AsCoeff(paint->getXfermode(), &srcCoeff, &dstCoeff)){
-        if (SkXfermode::kDA_Coeff == srcCoeff || SkXfermode::kDC_Coeff == srcCoeff ||
-            SkXfermode::kIDA_Coeff == srcCoeff || SkXfermode::kIDC_Coeff == srcCoeff) {
-            return false;
-        }
-        switch (dstCoeff) {
-        case SkXfermode::kZero_Coeff:
-            return true;
-        case SkXfermode::kISA_Coeff:
-            if (paint->getAlpha() != 255) {
-                break;
-            }
-            if (bmpReplacesShader) {
-                if (!bmpReplacesShader->isOpaque()) {
-                    break;
-                }
-            } else if (paint->getShader() && !paint->getShader()->isOpaque()) {
-                break;
-            }
-            if (paint->getColorFilter() &&
-                ((paint->getColorFilter()->getFlags() &
-                SkColorFilter::kAlphaUnchanged_Flag) == 0)) {
-                break;
-            }
-            return true;
-        case SkXfermode::kSA_Coeff:
-            if (paint->getAlpha() != 0) {
-                break;
-            }
-            if (paint->getColorFilter() &&
-                ((paint->getColorFilter()->getFlags() &
-                SkColorFilter::kAlphaUnchanged_Flag) == 0)) {
-                break;
-            }
-            return true;
-        case SkXfermode::kSC_Coeff:
-            if (paint->getColor() != 0) { // all components must be 0
-                break;
-            }
-            if (bmpReplacesShader || paint->getShader()) {
-                break;
-            }
-            if (paint->getColorFilter() && (
-                (paint->getColorFilter()->getFlags() &
-                SkColorFilter::kAlphaUnchanged_Flag) == 0)) {
-                break;
-            }
-            return true;
-        default:
-            break;
-        }
-    }
-    return false;
-}
-
-} // unnamed namespace
 
 //-----------------------------------------------------------------------------
 // DeferredPipeController
@@ -320,8 +252,10 @@ private:
 
 DeferredDevice::DeferredDevice(
     SkDevice* immediateDevice, SkDeferredCanvas::NotificationClient* notificationClient) :
-    SkDevice(SkBitmap::kNo_Config, immediateDevice->width(),
-             immediateDevice->height(), immediateDevice->isOpaque())
+    SkDevice(SkBitmap::kNo_Config,
+             immediateDevice->width(), immediateDevice->height(),
+             immediateDevice->isOpaque(),
+             immediateDevice->getDeviceProperties())
     , fRecordingCanvas(NULL)
     , fFreshFrame(true)
     , fPreviousStorageAllocated(0)

@@ -16,7 +16,7 @@ LOCAL_SRC_FILES += \
   BitmapBench.cpp \
   BitmapRectBench.cpp \
   BlurBench.cpp \
-  ChecksumBench.cpp \
+  BlurRectBench.cpp \
   ChromeBench.cpp \
   DashBench.cpp \
   DecodeBench.cpp \
@@ -41,14 +41,22 @@ LOCAL_SRC_FILES += \
   RectBench.cpp \
   RefCntBench.cpp \
   RegionBench.cpp \
+  RegionContainBench.cpp \
   RepeatTileBench.cpp \
   RTreeBench.cpp \
   ScalarBench.cpp \
   ShaderMaskBench.cpp \
+  SortBench.cpp \
   TableBench.cpp \
   TextBench.cpp \
+  TileBench.cpp \
   VertBench.cpp \
   WriterBench.cpp
+
+# Files that are missing dependencies
+#LOCAL_SRC_FILES += \
+#  ChecksumBench.cpp
+#
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL 
 
@@ -63,6 +71,8 @@ LOCAL_C_INCLUDES := \
   external/skia/include/pipe \
   external/skia/include/utils \
   external/skia/src/core \
+  external/skia/src/effects \
+  external/skia/src/utils \
   external/skia/src/gpu \
   external/stlport/stlport \
   bionic

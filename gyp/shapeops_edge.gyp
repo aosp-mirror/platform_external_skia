@@ -29,6 +29,8 @@
         '../experimental/Intersection/CubicReduceOrder.cpp',
         '../experimental/Intersection/CubicReduceOrder_Test.cpp',
         '../experimental/Intersection/CubicSubDivide.cpp',
+        '../experimental/Intersection/CubicToQuadratics.cpp',
+        '../experimental/Intersection/CubicToQuadratics_Test.cpp',
         '../experimental/Intersection/CubicUtilities.cpp',
         '../experimental/Intersection/DataTypes.cpp',
         '../experimental/Intersection/EdgeMain.cpp',
@@ -73,6 +75,7 @@
         '../experimental/Intersection/QuarticRoot.cpp',
         '../experimental/Intersection/QuarticRoot_Test.cpp',
         '../experimental/Intersection/ShapeOps.cpp',
+        '../experimental/Intersection/ShapeOpCubic4x4_Test.cpp',
         '../experimental/Intersection/ShapeOpRect4x4_Test.cpp',
         '../experimental/Intersection/Simplify.cpp',
         '../experimental/Intersection/SimplifyAddIntersectingTs_Test.cpp',
@@ -111,9 +114,7 @@
       'dependencies': [
         'skia_base_libs.gyp:skia_base_libs',
         'effects.gyp:effects',
-        'experimental.gyp:experimental',
         'images.gyp:images',
-        'pdf.gyp:pdf',
       ],
       'conditions': [
         [ 'skia_gpu == 1', {

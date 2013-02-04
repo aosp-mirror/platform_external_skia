@@ -940,6 +940,96 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
     SkDEBUGCODE(this->validate();)
 }
 
+static void add_corner_arc(SkPath* path, const SkRect& rect,
+                           SkScalar rx, SkScalar ry, int startAngle,
+                           SkPath::Direction dir, bool forceMoveTo) {
+    // These two asserts are not sufficient, since really we want to know
+    // that the pair of radii (e.g. left and right, or top and bottom) sum
+    // to <= dimension, but we don't have that data here, so we just have
+    // these conservative asserts.
+    SkASSERT(0 <= rx && rx <= rect.width());
+    SkASSERT(0 <= ry && ry <= rect.height());
+
+    SkRect   r;
+    r.set(-rx, -ry, rx, ry);
+
+    switch (startAngle) {
+        case   0:
+            r.offset(rect.fRight - r.fRight, rect.fBottom - r.fBottom);
+            break;
+        case  90:
+            r.offset(rect.fLeft - r.fLeft,   rect.fBottom - r.fBottom);
+            break;
+        case 180: r.offset(rect.fLeft - r.fLeft,   rect.fTop - r.fTop); break;
+        case 270: r.offset(rect.fRight - r.fRight, rect.fTop - r.fTop); break;
+        default: SkDEBUGFAIL("unexpected startAngle in add_corner_arc");
+    }
+
+    SkScalar start = SkIntToScalar(startAngle);
+    SkScalar sweep = SkIntToScalar(90);
+    if (SkPath::kCCW_Direction == dir) {
+        start += sweep;
+        sweep = -sweep;
+    }
+
+    path->arcTo(r, start, sweep, forceMoveTo);
+}
+
+void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
+                          Direction dir) {
+    SkRRect rrect;
+    rrect.setRectRadii(rect, (const SkVector*) radii);
+    this->addRRect(rrect, dir);
+}
+
+void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
+    assert_known_direction(dir);
+
+    if (rrect.isEmpty()) {
+        return;
+    }
+
+    const SkRect& bounds = rrect.getBounds();
+
+    if (rrect.isRect()) {
+        this->addRect(bounds, dir);
+    } else if (rrect.isOval()) {
+        this->addOval(bounds, dir);
+    } else if (rrect.isSimple()) {
+        const SkVector& rad = rrect.getSimpleRadii();
+        this->addRoundRect(bounds, rad.x(), rad.y(), dir);
+    } else {
+        SkAutoPathBoundsUpdate apbu(this, bounds);
+
+        if (kCW_Direction == dir) {
+            add_corner_arc(this, bounds, rrect.fRadii[0].fX, rrect.fRadii[0].fY, 180, dir, true);
+            add_corner_arc(this, bounds, rrect.fRadii[1].fX, rrect.fRadii[1].fY, 270, dir, false);
+            add_corner_arc(this, bounds, rrect.fRadii[2].fX, rrect.fRadii[2].fY,   0, dir, false);
+            add_corner_arc(this, bounds, rrect.fRadii[3].fX, rrect.fRadii[3].fY,  90, dir, false);
+        } else {
+            add_corner_arc(this, bounds, rrect.fRadii[0].fX, rrect.fRadii[0].fY, 180, dir, true);
+            add_corner_arc(this, bounds, rrect.fRadii[3].fX, rrect.fRadii[3].fY,  90, dir, false);
+            add_corner_arc(this, bounds, rrect.fRadii[2].fX, rrect.fRadii[2].fY,   0, dir, false);
+            add_corner_arc(this, bounds, rrect.fRadii[1].fX, rrect.fRadii[1].fY, 270, dir, false);
+        }
+        this->close();
+    }
+}
+
+bool SkPath::hasOnlyMoveTos() const {
+    int count = fPathRef->countVerbs();
+    const uint8_t* verbs = const_cast<const SkPathRef*>(fPathRef.get())->verbsMemBegin();
+    for (int i = 0; i < count; ++i) {
+        if (*verbs == kLine_Verb ||
+            *verbs == kQuad_Verb ||
+            *verbs == kCubic_Verb) {
+            return false;
+        }
+        ++verbs;
+    }
+    return true;
+}
+
 #define CUBIC_ARC_FACTOR    ((SK_ScalarSqrt2 - SK_Scalar1) * 4 / 3)
 
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
@@ -1033,96 +1123,6 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     this->close();
 }
 
-static void add_corner_arc(SkPath* path, const SkRect& rect,
-                           SkScalar rx, SkScalar ry, int startAngle,
-                           SkPath::Direction dir, bool forceMoveTo) {
-    // These two asserts are not sufficient, since really we want to know
-    // that the pair of radii (e.g. left and right, or top and bottom) sum
-    // to <= dimension, but we don't have that data here, so we just have
-    // these conservative asserts.
-    SkASSERT(0 <= rx && rx <= rect.width());
-    SkASSERT(0 <= ry && ry <= rect.height());
-
-    SkRect   r;
-    r.set(-rx, -ry, rx, ry);
-
-    switch (startAngle) {
-        case   0:
-            r.offset(rect.fRight - r.fRight, rect.fBottom - r.fBottom);
-            break;
-        case  90:
-            r.offset(rect.fLeft - r.fLeft,   rect.fBottom - r.fBottom);
-            break;
-        case 180: r.offset(rect.fLeft - r.fLeft,   rect.fTop - r.fTop); break;
-        case 270: r.offset(rect.fRight - r.fRight, rect.fTop - r.fTop); break;
-        default: SkDEBUGFAIL("unexpected startAngle in add_corner_arc");
-    }
-
-    SkScalar start = SkIntToScalar(startAngle);
-    SkScalar sweep = SkIntToScalar(90);
-    if (SkPath::kCCW_Direction == dir) {
-        start += sweep;
-        sweep = -sweep;
-    }
-
-    path->arcTo(r, start, sweep, forceMoveTo);
-}
-
-void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
-                          Direction dir) {
-    SkRRect rrect;
-    rrect.setRectRadii(rect, (const SkVector*) radii);
-    this->addRRect(rrect, dir);
-}
-
-void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
-    assert_known_direction(dir);
-
-    if (rrect.isEmpty()) {
-        return;
-    }
-
-    const SkRect& bounds = rrect.getBounds();
-
-    if (rrect.isRect()) {
-        this->addRect(bounds, dir);
-    } else if (rrect.isOval()) {
-        this->addOval(bounds, dir);
-    } else if (rrect.isSimple()) {
-        const SkVector& rad = rrect.getSimpleRadii();
-        this->addRoundRect(bounds, rad.x(), rad.y(), dir);
-    } else {
-        SkAutoPathBoundsUpdate apbu(this, bounds);
-
-        if (kCW_Direction == dir) {
-            add_corner_arc(this, bounds, rrect.fRadii[0].fX, rrect.fRadii[0].fY, 180, dir, true);
-            add_corner_arc(this, bounds, rrect.fRadii[1].fX, rrect.fRadii[1].fY, 270, dir, false);
-            add_corner_arc(this, bounds, rrect.fRadii[2].fX, rrect.fRadii[2].fY,   0, dir, false);
-            add_corner_arc(this, bounds, rrect.fRadii[3].fX, rrect.fRadii[3].fY,  90, dir, false);
-        } else {
-            add_corner_arc(this, bounds, rrect.fRadii[0].fX, rrect.fRadii[0].fY, 180, dir, true);
-            add_corner_arc(this, bounds, rrect.fRadii[3].fX, rrect.fRadii[3].fY,  90, dir, false);
-            add_corner_arc(this, bounds, rrect.fRadii[2].fX, rrect.fRadii[2].fY,   0, dir, false);
-            add_corner_arc(this, bounds, rrect.fRadii[1].fX, rrect.fRadii[1].fY, 270, dir, false);
-        }
-        this->close();
-    }
-}
-
-bool SkPath::hasOnlyMoveTos() const {
-    int count = fPathRef->countVerbs();
-    const uint8_t* verbs = const_cast<const SkPathRef*>(fPathRef.get())->verbsMemBegin();
-    for (int i = 0; i < count; ++i) {
-        if (*verbs == kLine_Verb ||
-            *verbs == kQuad_Verb ||
-            *verbs == kCubic_Verb) {
-            return false;
-        }
-        ++verbs;
-    }
-    return true;
-}
-
 void SkPath::addOval(const SkRect& oval, Direction dir) {
     assert_known_direction(dir);
 
@@ -1148,24 +1148,7 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
     SkScalar    cy = oval.centerY();
     SkScalar    rx = SkScalarHalf(oval.width());
     SkScalar    ry = SkScalarHalf(oval.height());
-#if 0   // these seem faster than using quads (1/2 the number of edges)
-    SkScalar    sx = SkScalarMul(rx, CUBIC_ARC_FACTOR);
-    SkScalar    sy = SkScalarMul(ry, CUBIC_ARC_FACTOR);
 
-    this->incReserve(13);
-    this->moveTo(cx + rx, cy);
-    if (dir == kCCW_Direction) {
-        this->cubicTo(cx + rx, cy - sy, cx + sx, cy - ry, cx, cy - ry);
-        this->cubicTo(cx - sx, cy - ry, cx - rx, cy - sy, cx - rx, cy);
-        this->cubicTo(cx - rx, cy + sy, cx - sx, cy + ry, cx, cy + ry);
-        this->cubicTo(cx + sx, cy + ry, cx + rx, cy + sy, cx + rx, cy);
-    } else {
-        this->cubicTo(cx + rx, cy + sy, cx + sx, cy + ry, cx, cy + ry);
-        this->cubicTo(cx - sx, cy + ry, cx - rx, cy + sy, cx - rx, cy);
-        this->cubicTo(cx - rx, cy - sy, cx - sx, cy - ry, cx, cy - ry);
-        this->cubicTo(cx + sx, cy - ry, cx + rx, cy - sy, cx + rx, cy);
-    }
-#else
     SkScalar    sx = SkScalarMul(rx, SK_ScalarTanPIOver8);
     SkScalar    sy = SkScalarMul(ry, SK_ScalarTanPIOver8);
     SkScalar    mx = SkScalarMul(rx, SK_ScalarRoot2Over2);
@@ -1203,7 +1186,6 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
         this->quadTo(cx + sx,       T, cx + mx, cy - my);
         this->quadTo(      R, cy - sy,       R, cy     );
     }
-#endif
     this->close();
 }
 
@@ -2130,6 +2112,34 @@ uint32_t SkPath::readFromMemory(const void* storage) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "SkString.h"
+
+static void append_scalar(SkString* str, SkScalar value) {
+    SkString tmp;
+    tmp.printf("%g", value);
+    if (tmp.contains('.')) {
+        tmp.appendUnichar('f');
+    }
+    str->append(tmp);
+}
+
+static void append_params(SkString* str, const char label[], const SkPoint pts[],
+                          int count) {
+    str->append(label);
+    str->append("(");
+
+    const SkScalar* values = &pts[0].fX;
+    count *= 2;
+
+    for (int i = 0; i < count; ++i) {
+        append_scalar(str, values[i]);
+        if (i < count - 1) {
+            str->append(", ");
+        }
+    }
+    str->append(");\n");
+}
+
 void SkPath::dump(bool forceClose, const char title[]) const {
     Iter    iter(*this, forceClose);
     SkPoint pts[4];
@@ -2138,29 +2148,25 @@ void SkPath::dump(bool forceClose, const char title[]) const {
     SkDebugf("path: forceClose=%s %s\n", forceClose ? "true" : "false",
              title ? title : "");
 
+    SkString builder;
+
     while ((verb = iter.next(pts, false)) != kDone_Verb) {
         switch (verb) {
             case kMove_Verb:
-                SkDebugf("  path: moveTo [%g %g]\n",
-                        SkScalarToFloat(pts[0].fX), SkScalarToFloat(pts[0].fY));
+                append_params(&builder, "path.moveTo", &pts[0], 1);
                 break;
             case kLine_Verb:
-                SkDebugf("  path: lineTo [%g %g]\n",
-                        SkScalarToFloat(pts[1].fX), SkScalarToFloat(pts[1].fY));
+                append_params(&builder, "path.lineTo", &pts[1], 1);
+                append_params(&builder, "path.lineTo", &pts[1], 1);
                 break;
             case kQuad_Verb:
-                SkDebugf("  path: quadTo [%g %g] [%g %g]\n",
-                        SkScalarToFloat(pts[1].fX), SkScalarToFloat(pts[1].fY),
-                        SkScalarToFloat(pts[2].fX), SkScalarToFloat(pts[2].fY));
+                append_params(&builder, "path.quadTo", &pts[1], 2);
                 break;
             case kCubic_Verb:
-                SkDebugf("  path: cubeTo [%g %g] [%g %g] [%g %g]\n",
-                        SkScalarToFloat(pts[1].fX), SkScalarToFloat(pts[1].fY),
-                        SkScalarToFloat(pts[2].fX), SkScalarToFloat(pts[2].fY),
-                        SkScalarToFloat(pts[3].fX), SkScalarToFloat(pts[3].fY));
+                append_params(&builder, "path.cubicTo", &pts[1], 3);
                 break;
             case kClose_Verb:
-                SkDebugf("  path: close\n");
+                builder.append("path.close();\n");
                 break;
             default:
                 SkDebugf("  path: UNKNOWN VERB %d, aborting dump...\n", verb);
@@ -2168,7 +2174,7 @@ void SkPath::dump(bool forceClose, const char title[]) const {
                 break;
         }
     }
-    SkDebugf("path: done %s\n", title ? title : "");
+    SkDebugf("%s\n", builder.c_str());
 }
 
 void SkPath::dump() const {
@@ -2952,4 +2958,3 @@ bool SkPath::contains(SkScalar x, SkScalar y) const {
     }
     return SkToBool(w);
 }
-

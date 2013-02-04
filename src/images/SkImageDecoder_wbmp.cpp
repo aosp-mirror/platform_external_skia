@@ -170,4 +170,3 @@ static SkImageDecoder* sk_wbmp_dfactory(SkStream* stream) {
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gReg(sk_wbmp_dfactory);
-

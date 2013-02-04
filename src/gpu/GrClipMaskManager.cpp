@@ -18,11 +18,8 @@
 #include "GrAAConvexPathRenderer.h"
 #include "GrAAHairLinePathRenderer.h"
 #include "GrSWMaskHelper.h"
-#include "GrCacheID.h"
 
 #include "SkTLazy.h"
-
-GR_DEFINE_RESOURCE_CACHE_DOMAIN(GrClipMaskManager, GetAlphaMaskDomain)
 
 #define GR_AA_CLIP 1
 
@@ -48,12 +45,10 @@ void setup_drawstate_aaclip(GrGpu* gpu,
                      SkIntToScalar(-devBound.fTop));
     mat.preConcat(drawState->getViewMatrix());
 
-    drawState->stage(kMaskStage)->reset();
-
     SkIRect domainTexels = SkIRect::MakeWH(devBound.width(), devBound.height());
     // This could be a long-lived effect that is cached with the alpha-mask.
-    drawState->stage(kMaskStage)->setEffect(
-        GrTextureDomainEffect::Create(result,
+    drawState->setEffect(kMaskStage,
+                         GrTextureDomainEffect::Create(result,
                                       mat,
                                       GrTextureDomainEffect::MakeTexelDomain(result, domainTexels),
                                       GrTextureDomainEffect::kDecal_WrapMode))->unref();
@@ -263,31 +258,6 @@ void setup_boolean_blendcoeffs(GrDrawState* drawState, SkRegion::Op op) {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-bool draw_path_in_software(GrContext* context,
-                           GrGpu* gpu,
-                           const SkPath& path,
-                           bool doAA,
-                           const GrIRect& resultBounds) {
-    SkStrokeRec rec(SkStrokeRec::kFill_InitStyle);
-
-    SkAutoTUnref<GrTexture> texture(
-                GrSWMaskHelper::DrawPathMaskToTexture(context, path,
-                                                      rec,
-                                                      resultBounds,
-                                                      doAA, NULL));
-    if (NULL == texture) {
-        return false;
-    }
-
-    // The ClipMaskManager accumulates the clip mask in the UL corner
-    GrIRect rect = GrIRect::MakeWH(resultBounds.width(), resultBounds.height());
-
-    GrSWMaskHelper::DrawToTargetWithPathMask(texture, gpu, rect);
-
-    GrAssert(!path.isInverseFillType());
-    return true;
-}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -380,7 +350,7 @@ void GrClipMaskManager::mergeMask(GrTexture* dstMask,
 
     SkMatrix sampleM;
     sampleM.setIDiv(srcMask->width(), srcMask->height());
-    drawState->stage(0)->setEffect(
+    drawState->setEffect(0,
         GrTextureDomainEffect::Create(srcMask,
                                       sampleM,
                                       GrTextureDomainEffect::MakeTexelDomain(srcMask, srcBound),
@@ -635,15 +605,12 @@ bool GrClipMaskManager::createStencilClipMask(InitialState initialState,
         SkASSERT((clipBit <= 16) && "Ganesh only handles 16b or smaller stencil buffers");
         clipBit = (1 << (clipBit-1));
 
-        GrIRect devRTRect = GrIRect::MakeWH(rt->width(), rt->height());
-
         fGpu->clearStencilClip(stencilSpaceIBounds, kAllIn_InitialState == initialState);
 
         // walk through each clip element and perform its set op
         // with the existing clip.
         for (ElementList::Iter iter(elements.headIter()); NULL != iter.get(); iter.next()) {
             const Element* element = iter.get();
-            SkPath::FillType fill;
             bool fillInverted = false;
             // enabled at bottom of loop
             drawState->disableState(GrGpu::kModifyStencilClip_StateBit);
@@ -664,16 +631,13 @@ bool GrClipMaskManager::createStencilClipMask(InitialState initialState,
             SkTCopyOnFirstWrite<SkPath> clipPath;
             if (Element::kRect_Type == element->getType()) {
                 stencilSupport = GrPathRenderer::kNoRestriction_StencilSupport;
-                fill = SkPath::kEvenOdd_FillType;
                 fillInverted = false;
             } else {
                 GrAssert(Element::kPath_Type == element->getType());
                 clipPath.init(element->getPath());
-                fill = clipPath->getFillType();
                 fillInverted = clipPath->isInverseFillType();
                 if (fillInverted) {
                     clipPath.writable()->toggleInverseFillType();
-                    fill = clipPath->getFillType();
                 }
                 pr = this->getContext()->getPathRenderer(*clipPath,
                                                          stroke,

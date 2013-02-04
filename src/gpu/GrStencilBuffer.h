@@ -12,7 +12,6 @@
 
 #include "GrClipData.h"
 #include "GrResource.h"
-#include "GrCacheID.h"
 
 class GrRenderTarget;
 class GrResourceEntry;
@@ -21,7 +20,6 @@ class GrResourceKey;
 class GrStencilBuffer : public GrResource {
 public:
     SK_DECLARE_INST_COUNT(GrStencilBuffer);
-    GR_DECLARE_RESOURCE_CACHE_TYPE()
 
     virtual ~GrStencilBuffer() {
         // TODO: allow SB to be purged and detach itself from rts
@@ -57,8 +55,8 @@ public:
     static GrResourceKey ComputeKey(int width, int height, int sampleCnt);
 
 protected:
-    GrStencilBuffer(GrGpu* gpu, int width, int height, int bits, int sampleCnt)
-        : GrResource(gpu)
+    GrStencilBuffer(GrGpu* gpu, bool isWrapped, int width, int height, int bits, int sampleCnt)
+        : GrResource(gpu, isWrapped)
         , fWidth(width)
         , fHeight(height)
         , fBits(bits)

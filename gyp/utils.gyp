@@ -18,6 +18,7 @@
         '../include/utils/unix',
         '../include/utils/win',
         '../include/xml',
+        '../src/core',
         '../src/utils',
       ],
       'sources': [
@@ -47,6 +48,8 @@
         '../include/utils/SkParsePaint.h',
         '../include/utils/SkParsePath.h',
         '../include/utils/SkPictureUtils.h',
+        '../include/utils/SkRandom.h',
+        '../include/utils/SkRTConf.h',
         '../include/utils/SkProxyCanvas.h',
         '../include/utils/SkUnitMappers.h',
         '../include/utils/SkWGL.h',
@@ -71,6 +74,8 @@
         '../src/utils/SkInterpolator.cpp',
         '../src/utils/SkLayer.cpp',
         '../src/utils/SkMatrix44.cpp',
+        '../src/utils/SkMD5.cpp',
+        '../src/utils/SkMD5.h',
         '../src/utils/SkMeshUtils.cpp',
         '../src/utils/SkNinePatch.cpp',
         '../src/utils/SkNWayCanvas.cpp',
@@ -81,6 +86,9 @@
         '../src/utils/SkParsePath.cpp',
         '../src/utils/SkPictureUtils.cpp',
         '../src/utils/SkProxyCanvas.cpp',
+        '../src/utils/SkSHA1.cpp',
+        '../src/utils/SkSHA1.h',
+        '../src/utils/SkRTConf.cpp',
         '../src/utils/SkThreadUtils.h',
         '../src/utils/SkThreadUtils_pthread.cpp',
         '../src/utils/SkThreadUtils_pthread.h',
@@ -219,6 +227,22 @@
           '../third_party/externals/cityhash/src',
         ],
       },
+      'conditions': [
+        [ 'skia_os == "mac"', {
+          'xcode_settings': {
+            'OTHER_CPLUSPLUSFLAGS!': [
+              '-Werror',
+            ]
+          },
+        }],
+        [ 'skia_os == "win"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'WarnAsError': 'false',
+            },
+          },
+        }],
+      ],
     },
   ],
 }

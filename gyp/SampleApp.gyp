@@ -5,7 +5,8 @@
       'type': 'executable',
       'mac_bundle' : 1,
       'include_dirs' : [
-        '../src/core', # needed to get SkConcaveToTriangle, maybe this should be moved to include dir?
+        '../src/core',
+        '../src/effects', #needed for BlurMask.h
         '../gm',       # needed to pull gm.h
         '../samplecode', # To pull SampleApp.h and SampleCode.h
         '../src/pipe/utils', # For TiledPipeController
@@ -66,6 +67,7 @@
         '../samplecode/SampleLayers.cpp',
         '../samplecode/SampleLCD.cpp',
         '../samplecode/SampleLines.cpp',
+        '../samplecode/SampleManyRects.cpp',
         '../samplecode/SampleMeasure.cpp',
         '../samplecode/SampleMipMap.cpp',
         '../samplecode/SampleMovie.cpp',
@@ -81,6 +83,7 @@
         '../samplecode/SamplePolyToPoly.cpp',
         '../samplecode/SampleRegion.cpp',
         '../samplecode/SampleRepeatTile.cpp',
+        '../samplecode/SampleRotateCircles.cpp',
         '../samplecode/SampleShaders.cpp',
         '../samplecode/SampleShaderText.cpp',
         '../samplecode/SampleSkLayer.cpp',
@@ -95,7 +98,6 @@
         '../samplecode/SampleTextureDomain.cpp',
         '../samplecode/SampleTiling.cpp',
         '../samplecode/SampleTinyBitmap.cpp',
-        '../samplecode/SampleTriangles.cpp',
         '../samplecode/SampleTypeface.cpp',
         '../samplecode/SampleUnitMapper.cpp',
         '../samplecode/SampleVertices.cpp',
@@ -115,14 +117,6 @@
         #'../experimental/Networking/SampleNetPipeReader.cpp',
         #'../experimental/Networking/SkSockets.cpp',
         #'../experimental/Networking/SkSockets.h',
-
-        # Debugger
-        '../experimental/Debugger/DebuggerViews.h',
-        '../experimental/Debugger/DebuggerContentView.cpp',
-        '../experimental/Debugger/DebuggerCommandsView.cpp',
-        '../experimental/Debugger/DebuggerStateView.cpp',
-        '../experimental/Debugger/SkDebugDumper.cpp',
-        '../experimental/Debugger/SkDebugDumper.h',
 
         # TiledPipeController
         '../src/pipe/utils/SamplePipeControllers.h',

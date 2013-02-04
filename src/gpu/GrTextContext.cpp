@@ -30,8 +30,6 @@ void GrTextContext::flushGlyphs() {
     GrDrawState* drawState = fDrawTarget->drawState();
     if (fCurrVertex > 0) {
         // setup our sampler state for our text texture/atlas
-        drawState->stage(kGlyphMaskStage)->reset();
-
         GrAssert(GrIsALIGN4(fCurrVertex));
         GrAssert(fCurrTexture);
         GrTextureParams params(SkShader::kRepeat_TileMode, false);
@@ -97,8 +95,8 @@ GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(
     fMaxVertices = 0;
 
     fVertexLayout =
-        GrDrawTarget::kTextFormat_VertexLayoutBit |
-        GrDrawTarget::StageTexCoordVertexLayoutBit(kGlyphMaskStage, 0);
+        GrDrawState::kTextFormat_VertexLayoutBit |
+        GrDrawState::StageTexCoordVertexLayoutBit(kGlyphMaskStage, 0);
 }
 
 GrTextContext::~GrTextContext() {
@@ -206,7 +204,7 @@ HAS_ATLAS:
         // a number of verts to reserve and whether to perform a flush.
         fMaxVertices = kMinRequestedVerts;
         bool flush = (NULL != fDrawTarget) &&
-                     fDrawTarget->geometryHints(fVertexLayout,
+                     fDrawTarget->geometryHints(GrDrawState::VertexSize(fVertexLayout),
                                                 &fMaxVertices,
                                                 NULL);
         if (flush) {
@@ -216,7 +214,7 @@ HAS_ATLAS:
         fDrawTarget = fContext->getTextTarget(fPaint);
         fMaxVertices = kDefaultRequestedVerts;
         // ignore return, no point in flushing again.
-        fDrawTarget->geometryHints(fVertexLayout,
+        fDrawTarget->geometryHints(GrDrawState::VertexSize(fVertexLayout),
                                    &fMaxVertices,
                                    NULL);
 
@@ -263,4 +261,3 @@ HAS_ATLAS:
 #endif
     fCurrVertex += 4;
 }
-

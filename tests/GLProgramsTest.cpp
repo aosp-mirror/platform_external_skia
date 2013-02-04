@@ -31,13 +31,13 @@ bool random_bool(SkRandom* r) {
     return r->nextF() > .5f;
 }
 
-const GrEffect* create_random_effect(SkRandom* random,
-                                     GrContext* context,
-                                     GrTexture* dummyTextures[]) {
+const GrEffectRef* create_random_effect(SkRandom* random,
+                                        GrContext* context,
+                                        GrTexture* dummyTextures[]) {
 
     SkRandom sk_random;
     sk_random.setSeed(random->nextU());
-    GrEffect* effect = GrEffectTestFactory::CreateStage(&sk_random, context, dummyTextures);
+    GrEffectRef* effect = GrEffectTestFactory::CreateStage(&sk_random, context, dummyTextures);
     GrAssert(effect);
     return effect;
 }
@@ -79,7 +79,7 @@ bool GrGpuGL::programUnitTest() {
         pdesc.fFirstCoverageStage = random_int(&random, GrDrawState::kNumStages);
 
         pdesc.fVertexLayout |= random_bool(&random) ?
-                                    GrDrawTarget::kCoverage_VertexLayoutBit :
+                                    GrDrawState::kCoverage_VertexLayoutBit :
                                     0;
 
 #if GR_GL_EXPERIMENTAL_GS
@@ -89,7 +89,7 @@ bool GrGpuGL::programUnitTest() {
 
         bool edgeAA = random_bool(&random);
         if (edgeAA) {
-            pdesc.fVertexLayout |= GrDrawTarget::kEdge_VertexLayoutBit;
+            pdesc.fVertexLayout |= GrDrawState::kEdge_VertexLayoutBit;
             if (this->getCaps().shaderDerivativeSupport()) {
                 pdesc.fVertexEdgeType = (GrDrawState::VertexEdgeType) random_int(&random, GrDrawState::kVertexEdgeTypeCnt);
                 pdesc.fDiscardIfOutsideEdge = random.nextBool();
@@ -114,21 +114,22 @@ bool GrGpuGL::programUnitTest() {
                 // use separate tex coords?
                 if (random_bool(&random)) {
                     int t = random_int(&random, GrDrawState::kMaxTexCoords);
-                    pdesc.fVertexLayout |= StageTexCoordVertexLayoutBit(s, t);
+                    pdesc.fVertexLayout |= GrDrawState::StageTexCoordVertexLayoutBit(s, t);
                 }
                 // use text-formatted verts?
                 if (random_bool(&random)) {
-                    pdesc.fVertexLayout |= kTextFormat_VertexLayoutBit;
+                    pdesc.fVertexLayout |= GrDrawState::kTextFormat_VertexLayoutBit;
                 }
 
                 GrTexture* dummyTextures[] = {dummyTexture1.get(), dummyTexture2.get()};
-                SkAutoTUnref<const GrEffect> effect(create_random_effect(&random,
+                SkAutoTUnref<const GrEffectRef> effect(create_random_effect(&random,
                                                                             getContext(),
                                                                             dummyTextures));
                 stages[s].setEffect(effect.get());
                 if (NULL != stages[s].getEffect()) {
                     pdesc.fEffectKeys[s] =
-                        stages[s].getEffect()->getFactory().glEffectKey(stages[s], this->glCaps());
+                        (*stages[s].getEffect())->getFactory().glEffectKey(stages[s],
+                                                                           this->glCaps());
                 }
             }
         }
@@ -168,12 +169,10 @@ void forceLinking();
 void forceLinking() {
     SkLightingImageFilter::CreateDistantLitDiffuse(SkPoint3(0,0,0), 0, 0, 0);
     SkMagnifierImageFilter mag(SkRect::MakeWH(SK_Scalar1, SK_Scalar1), SK_Scalar1);
-    GrEffectStage dummyStage;
-    GrConfigConversionEffect::InstallEffect(NULL,
-                                            false,
-                                            GrConfigConversionEffect::kNone_PMConversion,
-                                            SkMatrix::I(),
-                                            &dummyStage);
+    GrConfigConversionEffect::Create(NULL,
+                                     false,
+                                     GrConfigConversionEffect::kNone_PMConversion,
+                                     SkMatrix::I());
     SkScalar matrix[20];
     SkColorMatrixFilter cmf(matrix);
 }

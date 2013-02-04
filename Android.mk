@@ -106,7 +106,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkColorFilter.cpp \
 	src/core/SkColorTable.cpp \
 	src/core/SkComposeShader.cpp \
-	src/core/SkConcaveToTriangles.cpp \
 	src/core/SkConfig8888.cpp \
 	src/core/SkCordic.cpp \
 	src/core/SkCubicClipper.cpp \
@@ -125,6 +124,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkFlattenableBuffers.cpp \
 	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
+	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontHost.cpp \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlyphCache.cpp \
@@ -145,6 +145,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkOrderedWriteBuffer.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
+	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
 	src/core/SkPathHeap.cpp \
@@ -180,6 +181,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkSpriteBlitter_RGB16.cpp \
 	src/core/SkStream.cpp \
 	src/core/SkString.cpp \
+	src/core/SkStringUtils.cpp \
 	src/core/SkStroke.cpp \
 	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
@@ -198,6 +200,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAvoidXfermode.cpp \
 	src/effects/SkArithmeticMode.cpp \
+	src/effects/SkBicubicImageFilter.cpp \
 	src/effects/SkBitmapSource.cpp \
 	src/effects/SkBlendImageFilter.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
@@ -211,8 +214,10 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkCornerPathEffect.cpp \
 	src/effects/SkDashPathEffect.cpp \
 	src/effects/SkDiscretePathEffect.cpp \
+	src/effects/SkDisplacementMapEffect.cpp \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
+	src/effects/SkImageFilterUtils.cpp \
 	src/effects/SkKernel33MaskFilter.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
@@ -267,6 +272,7 @@ LOCAL_SRC_FILES:= \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkImageRef.cpp \
 	src/images/SkImageRefPool.cpp \
+	src/images/SkImageRef_ashmem.cpp \
 	src/images/SkImageRef_GlobalPool.cpp \
 	src/images/SkJpegUtility.cpp \
 	src/images/SkMovie.cpp \
@@ -277,14 +283,12 @@ LOCAL_SRC_FILES:= \
 	src/pipe/SkGPipeWrite.cpp \
 	src/ports/FontHostConfiguration_android.cpp \
 	src/ports/SkDebug_android.cpp \
-	src/ports/SkFontDescriptor.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkFontHost_sandbox_none.cpp	\
 	src/ports/SkFontHost_android.cpp \
 	src/ports/SkFontHost_tables.cpp \
-	src/ports/SkImageRef_ashmem.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkThread_pthread.cpp \
@@ -301,6 +305,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix44.cpp \
+	src/utils/SkMD5.cpp \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
@@ -310,6 +315,8 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkParsePath.cpp \
 	src/utils/SkPictureUtils.cpp \
 	src/utils/SkProxyCanvas.cpp \
+	src/utils/SkSHA1.cpp \
+	src/utils/SkRTConf.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/utils/SkUnitMappers.cpp
@@ -376,6 +383,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
+	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomainEffect.cpp \
 	src/gpu/gl/GrGLCaps.cpp \

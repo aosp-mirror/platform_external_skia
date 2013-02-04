@@ -4,7 +4,6 @@
   'defines': [
     'SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=<(skia_static_initializers)',
 #    'SK_SUPPORT_HINTING_SCALE_FACTOR',
-     'SK_REDEFINE_ROOT2OVER2_TO_MAKE_ARCTOS_CONVEX',
   ],
   'conditions' : [
     ['skia_gpu == 1',
@@ -30,7 +29,6 @@
         'msvs_settings': {
           'VCCLCompilerTool': {
             'WarningLevel': '1',
-            'WarnAsError': 'false',
             'DebugInformationFormat': '3',
             'AdditionalOptions': [ '/MP' ],
           },
@@ -89,10 +87,38 @@
         },
         'conditions' : [
           ['skia_arch_width == 64', {
-            'msvs_configuration_platform': 'x64'
+            'msvs_configuration_platform': 'x64',
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'WarnAsError': 'false',
+              },
+            },
           }],
           ['skia_arch_width == 32', {
-            'msvs_configuration_platform': 'Win32',
+            # This gypi file will be included directly into the gyp(i) files in the angle repo by
+            # our gyp_skia script. We don't want force WarnAsError on angle. So angle.gyp defines
+            # skia_building_angle=1 and here we select whether to enable WarnAsError based on that
+            # var's value. Here it defaults to 0.
+            'variables' : {
+              'skia_building_angle%': 0,
+            },
+            'conditions' : [
+              ['skia_building_angle', {
+                'msvs_configuration_platform': 'Win32',
+                'msvs_settings': {
+                  'VCCLCompilerTool': {
+                    'WarnAsError': 'false',
+                  },
+                },
+              },{ # not angle
+                'msvs_configuration_platform': 'Win32',
+                'msvs_settings': {
+                  'VCCLCompilerTool': {
+                    'WarnAsError': 'true',
+                  },
+                },
+              }],
+            ],
           }],
         ],
       },
@@ -181,6 +207,9 @@
           ['skia_arch_width == 32', {
             'xcode_settings': {
               'ARCHS': 'i386',
+              'OTHER_CPLUSPLUSFLAGS': [
+                '-Werror',
+              ],
             },
           }],
         ],
@@ -285,14 +314,6 @@
           '-fno-exceptions',
           '-fno-rtti',
           '-fuse-ld=gold',
-          '--sysroot=<(android_base)/toolchains/<(android_toolchain)/sysroot',
-        ],
-        'include_dirs' : [
-          '<(android_base)/toolchains/<(android_toolchain)/lib/gcc/arm-linux-androideabi/4.6.x-google/include',
-          '<(android_base)/toolchains/<(android_toolchain)/lib/gcc/arm-linux-androideabi/4.6.x-google/include-fixed',
-          '<(android_base)/toolchains/<(android_toolchain)/arm-linux-androideabi/include/c++/4.6',
-          '<(android_base)/toolchains/<(android_toolchain)/arm-linux-androideabi/include/c++/4.6/arm-linux-androideabi',
-          '<(android_base)/toolchains/<(android_toolchain)/sysroot/usr/include',
         ],
         'conditions': [
           [ 'skia_warnings_as_errors == 1', {
@@ -302,11 +323,6 @@
           }],
           [ 'skia_profile_enabled == 1', {
             'cflags': ['-g', '-fno-omit-frame-pointer', '-marm', '-mapcs'],
-          }],
-          [ 'skia_arch_type == "arm"', {
-            'ldflags': [
-              '-Wl',
-            ],
           }],
           [ 'skia_arch_type == "arm" and arm_thumb == 1', {
             'cflags': [
@@ -331,6 +347,10 @@
                 ],
                 'cflags': [
                   '-mfpu=neon',
+                ],
+                'ldflags': [
+                  '-march=armv7-a',
+                  '-Wl,--fix-cortex-a8',
                 ],
               }],
               [ 'arm_neon_optional == 1', {

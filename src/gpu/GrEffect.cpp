@@ -58,42 +58,39 @@ private:
 
 int32_t GrBackendEffectFactory::fCurrEffectClassID = GrBackendEffectFactory::kIllegalEffectClassID;
 
-GrEffect::GrEffect(int numTextures)
-    : fNumTextures(numTextures) {
+///////////////////////////////////////////////////////////////////////////////
+
+SK_DEFINE_INST_COUNT(GrEffectRef)
+
+GrEffectRef::~GrEffectRef() {
+    GrAssert(1 == this->getRefCnt());
+    fEffect->EffectRefDestroyed();
+    fEffect->unref();
 }
+
+void* GrEffectRef::operator new(size_t size) {
+    return GrEffect_Globals::GetTLS()->allocate(size);
+}
+
+void GrEffectRef::operator delete(void* target) {
+    GrEffect_Globals::GetTLS()->release(target);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 GrEffect::~GrEffect() {
-
-}
-
-bool GrEffect::isOpaque(bool inputTextureIsOpaque) const {
-    return false;
+    GrAssert(NULL == fEffectRef);
 }
 
 const char* GrEffect::name() const {
     return this->getFactory().name();
 }
 
-
-bool GrEffect::isEqual(const GrEffect& s) const {
-    if (this->numTextures() != s.numTextures()) {
-        return false;
-    }
-    for (int i = 0; i < this->numTextures(); ++i) {
-        if (this->textureAccess(i) != s.textureAccess(i)) {
-            return false;
-        }
-    }
-    return true;
+void GrEffect::addTextureAccess(const GrTextureAccess* access) {
+    fTextureAccesses.push_back(access);
 }
 
-const GrTextureAccess& GrEffect::textureAccess(int index) const {
-    GrCrash("We shouldn't be calling this function on the base class.");
-    static GrTextureAccess kDummy;
-    return kDummy;
-}
-
-void * GrEffect::operator new(size_t size) {
+void* GrEffect::operator new(size_t size) {
     return GrEffect_Globals::GetTLS()->allocate(size);
 }
 

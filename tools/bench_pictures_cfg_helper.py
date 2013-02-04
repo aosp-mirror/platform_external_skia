@@ -13,6 +13,13 @@ def Config(**kwargs):
   return config
 
 
+def TileArgs(tile_x, tile_y):
+  return {'mode': ['tile', str(tile_x), str(tile_y)],
+          # TODO(borenet): Turn this back on once the parser is working.
+          #'timeIndividualTiles': True
+          }
+
+
 def BitmapConfig(**kwargs):
   return Config(device='bitmap', **kwargs)
 
@@ -22,11 +29,11 @@ def GPUConfig(**kwargs):
 
 
 def TiledBitmapConfig(tile_x, tile_y, **kwargs):
-  return BitmapConfig(mode=['tile', str(tile_x), str(tile_y)], **kwargs)
+  return BitmapConfig(**dict(TileArgs(tile_x, tile_y).items() + kwargs.items()))
 
 
 def TiledGPUConfig(tile_x, tile_y, **kwargs):
-  return GPUConfig(mode=['tile', str(tile_x), str(tile_y)], **kwargs)
+  return GPUConfig(**dict(TileArgs(tile_x, tile_y).items() + kwargs.items()))
 
 
 def ViewportBitmapConfig(viewport_x, viewport_y, **kwargs):
@@ -38,8 +45,8 @@ def ViewportGPUConfig(viewport_x, viewport_y, **kwargs):
 
 
 def ViewportRTreeConfig(viewport_x, viewport_y, **kwargs):
-  return RTreeConfig(viewport_x, viewport_y, mode='simple',
-                     viewport=[str(viewport_x), str(viewport_y)], **kwargs)
+  return RTreeConfig(mode='simple', viewport=[str(viewport_x), str(viewport_y)],
+                     **kwargs)
 
 
 def ViewportGridConfig(viewport_x, viewport_y, **kwargs):
@@ -64,9 +71,8 @@ def MultiThreadTileConfig(threads, tile_x, tile_y, **kwargs):
                            **kwargs)
 
 
-def RTreeConfig(tile_x, tile_y, mode, **kwargs):
-  return BitmapConfig(mode=mode, bbh=['rtree', str(tile_x), str(tile_y)],
-                      **kwargs)
+def RTreeConfig(**kwargs):
+  return BitmapConfig(bbh='rtree', **kwargs)
 
 
 def GridConfig(tile_x, tile_y, mode, **kwargs):
@@ -74,18 +80,16 @@ def GridConfig(tile_x, tile_y, mode, **kwargs):
                       **kwargs)
 
 
-def RecordRTreeConfig(tile_x, tile_y, **kwargs):
-  return RTreeConfig(tile_x=tile_x, tile_y=tile_y, mode='record', **kwargs)
+def RecordRTreeConfig(**kwargs):
+  return RTreeConfig(mode='record', **kwargs)
 
 
-def PlaybackCreationRTreeConfig(tile_x, tile_y, **kwargs):
-  return RTreeConfig(tile_x=tile_x, tile_y=tile_y, mode='playbackCreation',
-                     **kwargs)
+def PlaybackCreationRTreeConfig(**kwargs):
+  return RTreeConfig(mode='playbackCreation', **kwargs)
 
 
 def TileRTreeConfig(tile_x, tile_y, **kwargs):
-  return RTreeConfig(tile_x=tile_x, tile_y=tile_y,
-                     mode=['tile', str(tile_x), str(tile_y)], **kwargs)
+  return RTreeConfig(**dict(TileArgs(tile_x, tile_y).items() + kwargs.items()))
 
 
 def RecordGridConfig(tile_x, tile_y, **kwargs):
@@ -97,5 +101,5 @@ def PlaybackCreationGridConfig(tile_x, tile_y, **kwargs):
 
 
 def TileGridConfig(tile_x, tile_y, **kwargs):
-  return GridConfig(tile_x, tile_y, mode=['tile', str(tile_x), str(tile_y)],
-                    **kwargs)
+  return GridConfig(tile_x, tile_y,
+                    **dict(TileArgs(tile_x, tile_y).items() + kwargs.items()))

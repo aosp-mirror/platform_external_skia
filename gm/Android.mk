@@ -13,6 +13,7 @@ LOCAL_SRC_FILES += \
   aaclip.cpp \
   aarectmodes.cpp \
   arithmode.cpp \
+  bicubicfilter.cpp \
   bigmatrix.cpp \
   bitmapcopy.cpp \
   bitmapmatrix.cpp \
@@ -35,6 +36,7 @@ LOCAL_SRC_FILES += \
   dashcubics.cpp \
   dashing.cpp \
   distantclip.cpp \
+  displacement.cpp \
   drawbitmaprect.cpp \
   drawlooper.cpp \
   extractbitmap.cpp \
@@ -80,6 +82,7 @@ LOCAL_SRC_FILES += \
   shadertext3.cpp \
   shadows.cpp \
   simpleaaclip.cpp \
+  spritebitmap.cpp \
   srcmode.cpp \
   strokefill.cpp \
   strokerect.cpp \
@@ -114,6 +117,7 @@ LOCAL_C_INCLUDES := \
   external/skia/include/utils \
   external/skia/gm \
   external/skia/src/core \
+  external/skia/src/effects \
   external/skia/src/gpu \
   external/skia/src/pipe/utils \
   external/skia/src/utils

@@ -16,7 +16,6 @@
 #include "GrIndexBuffer.h"
 #include "SkMatrix.h"
 #include "GrRefCnt.h"
-#include "GrTemplates.h"
 
 #include "SkClipStack.h"
 #include "SkPath.h"
@@ -27,7 +26,6 @@
 class GrClipData;
 class GrPath;
 class GrVertexBuffer;
-
 class SkStrokeRec;
 
 class GrDrawTarget : public GrRefCnt {
@@ -50,6 +48,8 @@ protected:
         int fMaxRenderTargetSize;
         int fMaxTextureSize;
     };
+
+    class DrawInfo;
 
 public:
     SK_DECLARE_INST_COUNT(GrDrawTarget)
@@ -170,76 +170,6 @@ public:
     bool willUseHWAALines() const;
 
     /**
-     * The format of vertices is represented as a bitfield of flags.
-     * Flags that indicate the layout of vertex data. Vertices always contain
-     * positions and may also contain up to GrDrawState::kMaxTexCoords sets
-     * of 2D texture coordinates, per-vertex colors, and per-vertex coverage.
-     * Each stage can
-     * use any of the texture coordinates as its input texture coordinates or it
-     * may use the positions as texture coordinates.
-     *
-     * If no texture coordinates are specified for a stage then the stage is
-     * disabled.
-     *
-     * Only one type of texture coord can be specified per stage. For
-     * example StageTexCoordVertexLayoutBit(0, 2) and
-     * StagePosAsTexCoordVertexLayoutBit(0) cannot both be specified.
-     *
-     * The order in memory is always (position, texture coord 0, ..., color,
-     * coverage) with any unused fields omitted. Note that this means that if
-     * only texture coordinates 1 is referenced then there is no texture
-     * coordinates 0 and the order would be (position, texture coordinate 1
-     * [, color][, coverage]).
-     */
-
-    /**
-     * Generates a bit indicating that a texture stage uses texture coordinates
-     *
-     * @param stageIdx    the stage that will use texture coordinates.
-     * @param texCoordIdx the index of the texture coordinates to use
-     *
-     * @return the bit to add to a GrVertexLayout bitfield.
-     */
-    static int StageTexCoordVertexLayoutBit(int stageIdx, int texCoordIdx) {
-        GrAssert(stageIdx < GrDrawState::kNumStages);
-        GrAssert(texCoordIdx < GrDrawState::kMaxTexCoords);
-        return 1 << (stageIdx + (texCoordIdx * GrDrawState::kNumStages));
-    }
-
-    static bool StageUsesTexCoords(GrVertexLayout layout, int stageIdx);
-
-private:
-    // non-stage bits start at this index.
-    static const int STAGE_BIT_CNT = GrDrawState::kNumStages *
-                                     GrDrawState::kMaxTexCoords;
-public:
-
-    /**
-     * Additional Bits that can be specified in GrVertexLayout.
-     */
-    enum VertexLayoutBits {
-        /* vertices have colors (GrColor) */
-        kColor_VertexLayoutBit              = 1 << (STAGE_BIT_CNT + 0),
-        /* vertices have coverage (GrColor)
-         */
-        kCoverage_VertexLayoutBit           = 1 << (STAGE_BIT_CNT + 1),
-        /* Use text vertices. (Pos and tex coords may be a different type for
-         * text [GrGpuTextVertex vs GrPoint].)
-         */
-        kTextFormat_VertexLayoutBit         = 1 << (STAGE_BIT_CNT + 2),
-
-        /* Each vertex specificies an edge. Distance to the edge is used to
-         * compute a coverage. See GrDrawState::setVertexEdgeType().
-         */
-        kEdge_VertexLayoutBit               = 1 << (STAGE_BIT_CNT + 3),
-        // for below assert
-        kDummyVertexLayoutBit,
-        kHighVertexLayoutBit = kDummyVertexLayoutBit - 1
-    };
-    // make sure we haven't exceeded the number of bits in GrVertexLayout.
-    GR_STATIC_ASSERT(kHighVertexLayoutBit < ((uint64_t)1 << 8*sizeof(GrVertexLayout)));
-
-    /**
      * There are three types of "sources" of geometry (vertices and indices) for
      * draw calls made on the target. When performing an indexed draw, the
      * indices and vertices can use different source types. Once a source is
@@ -325,7 +255,7 @@ public:
      * Also may hint whether the draw target should be flushed first. This is
      * useful for deferred targets.
      *
-     * @param vertexLayout layout of vertices caller would like to reserve
+     * @param vertexSize   size of vertices caller would like to reserve
      * @param vertexCount  in: hint about how many vertices the caller would
      *                     like to allocate.
      *                     out: a hint about the number of vertices that can be
@@ -339,7 +269,7 @@ public:
      *
      * @return  true if target should be flushed based on the input values.
      */
-    virtual bool geometryHints(GrVertexLayout vertexLayout,
+    virtual bool geometryHints(size_t vertexSize,
                                int* vertexCount,
                                int* indexCount) const;
 
@@ -432,12 +362,15 @@ public:
      * @param indexCount   the number of index elements to read. The index count
      *                     is effectively trimmed to the last completely
      *                     specified primitive.
+     * @param devBounds    optional bounds hint. This is a promise from the caller,
+     *                     not a request for clipping.
      */
     void drawIndexed(GrPrimitiveType type,
                      int startVertex,
                      int startIndex,
                      int vertexCount,
-                     int indexCount);
+                     int indexCount,
+                     const SkRect* devBounds = NULL);
 
     /**
      * Draws non-indexed geometry using the current state and current vertex
@@ -447,10 +380,13 @@ public:
      * @param startVertex  the vertex in the vertex array/buffer corresponding
      *                     to index 0
      * @param vertexCount  one greater than the max index.
+     * @param devBounds    optional bounds hint. This is a promise from the caller,
+     *                     not a request for clipping.
      */
     void drawNonIndexed(GrPrimitiveType type,
                         int startVertex,
-                        int vertexCount);
+                        int vertexCount,
+                        const SkRect* devBounds = NULL);
 
     /**
      * Draws path into the stencil buffer. The fill must be either even/odd or
@@ -464,9 +400,13 @@ public:
      * and vertex sources. After returning, the vertex and index sources may
      * have changed. They should be reestablished before the next drawIndexed
      * or drawNonIndexed. This cannot be called between reserving and releasing
-     * geometry. The GrDrawTarget subclass may be able to perform additional
-     * optimizations if drawRect is used rather than drawIndexed or
-     * drawNonIndexed.
+     * geometry.
+     *
+     * A subclass may override this to perform more optimal rect rendering. Its
+     * draws should be funneled through one of the public GrDrawTarget draw methods
+     * (e.g. drawNonIndexed, drawIndexedInstances, ...). The base class draws a two
+     * triangle fan using drawNonIndexed from reserved vertex space.
+     *
      * @param rect      the rect to draw
      * @param matrix    optional matrix applied to rect (before viewMatrix)
      * @param srcRects  specifies rects for stages enabled by stageEnableMask.
@@ -496,7 +436,6 @@ public:
         this->drawRect(rect, matrix, NULL, NULL);
     }
 
-
     /**
      * This call is used to draw multiple instances of some geometry with a
      * given number of vertices (V) and indices (I) per-instance. The indices in
@@ -511,7 +450,7 @@ public:
      * source. The size of the index buffer limits the number of instances that
      * can be drawn by the GPU in a single draw. However, the caller may specify
      * any (positive) number for instanceCount and if necessary multiple GPU
-     * draws will be issued. Morever, when drawIndexedInstances is called
+     * draws will be issued. Moreover, when drawIndexedInstances is called
      * multiple times it may be possible for GrDrawTarget to group them into a
      * single GPU draw.
      *
@@ -524,11 +463,14 @@ public:
      *                              in the above description).
      * @param indicesPerInstance    The number of indices in each instance (I
      *                              in the above description).
+     * @param devBounds    optional bounds hint. This is a promise from the caller,
+     *                     not a request for clipping.
      */
-    virtual void drawIndexedInstances(GrPrimitiveType type,
-                                      int instanceCount,
-                                      int verticesPerInstance,
-                                      int indicesPerInstance);
+    void drawIndexedInstances(GrPrimitiveType type,
+                              int instanceCount,
+                              int verticesPerInstance,
+                              int indicesPerInstance,
+                              const SkRect* devBounds = NULL);
 
     /**
      * Clear the current render target if one isn't passed in. Ignores the
@@ -544,6 +486,11 @@ public:
      * is intended to give an application some recourse when resources are low.
      */
     virtual void purgeResources() {};
+
+    /**
+     * For subclass internal use to invoke a call to onDraw(). See DrawInfo below.
+     */
+    void executeDraw(const DrawInfo& info) { this->onDraw(info); }
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -671,191 +618,6 @@ public:
         GrDrawTarget* fTarget;
     };
 
-    ////////////////////////////////////////////////////////////////////////////
-    // Helpers for picking apart vertex layouts
-
-    /**
-     * Helper function to compute the size of a vertex from a vertex layout
-     * @return size of a single vertex.
-     */
-    static size_t VertexSize(GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function for determining the index of texture coordinates that
-     * is input for a texture stage. Note that a stage may instead use positions
-     * as texture coordinates, in which case the result of the function is
-     * indistinguishable from the case when the stage is disabled.
-     *
-     * @param stageIdx      the stage to query
-     * @param vertexLayout  layout to query
-     *
-     * @return the texture coordinate index or -1 if the stage doesn't use
-     *         separate (non-position) texture coordinates.
-     */
-    static int VertexTexCoordsForStage(int stageIdx, GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function to compute the offset of texture coordinates in a vertex
-     * @return offset of texture coordinates in vertex layout or -1 if the
-     *         layout has no texture coordinates. Will be 0 if positions are
-     *         used as texture coordinates for the stage.
-     */
-    static int VertexStageCoordOffset(int stageIdx, GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function to compute the offset of the color in a vertex
-     * @return offset of color in vertex layout or -1 if the
-     *         layout has no color.
-     */
-    static int VertexColorOffset(GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function to compute the offset of the coverage in a vertex
-     * @return offset of coverage in vertex layout or -1 if the
-     *         layout has no coverage.
-     */
-    static int VertexCoverageOffset(GrVertexLayout vertexLayout);
-
-     /**
-      * Helper function to compute the offset of the edge pts in a vertex
-      * @return offset of edge in vertex layout or -1 if the
-      *         layout has no edge.
-      */
-     static int VertexEdgeOffset(GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function to determine if vertex layout contains explicit texture
-     * coordinates of some index.
-     *
-     * @param coordIndex    the tex coord index to query
-     * @param vertexLayout  layout to query
-     *
-     * @return true if vertex specifies texture coordinates for the index,
-     *              false otherwise.
-     */
-    static bool VertexUsesTexCoordIdx(int coordIndex,
-                                      GrVertexLayout vertexLayout);
-
-    /**
-     * Helper function to compute the size of each vertex and the offsets of
-     * texture coordinates and color. Determines tex coord offsets by tex coord
-     * index rather than by stage. (Each stage can be mapped to any t.c. index
-     * by StageTexCoordVertexLayoutBit.)
-     *
-     * @param vertexLayout          the layout to query
-     * @param texCoordOffsetsByIdx  after return it is the offset of each
-     *                              tex coord index in the vertex or -1 if
-     *                              index isn't used. (optional)
-     * @param colorOffset           after return it is the offset of the
-     *                              color field in each vertex, or -1 if
-     *                              there aren't per-vertex colors. (optional)
-     * @param coverageOffset        after return it is the offset of the
-     *                              coverage field in each vertex, or -1 if
-     *                              there aren't per-vertex coeverages.
-     *                              (optional)
-     * @param edgeOffset            after return it is the offset of the
-     *                              edge eq field in each vertex, or -1 if
-     *                              there aren't per-vertex edge equations.
-     *                              (optional)
-     * @return size of a single vertex
-     */
-    static int VertexSizeAndOffsetsByIdx(GrVertexLayout vertexLayout,
-                   int texCoordOffsetsByIdx[GrDrawState::kMaxTexCoords],
-                   int *colorOffset,
-                   int *coverageOffset,
-                   int* edgeOffset);
-
-    /**
-     * Helper function to compute the size of each vertex and the offsets of
-     * texture coordinates and color. Determines tex coord offsets by stage
-     * rather than by index. (Each stage can be mapped to any t.c. index
-     * by StageTexCoordVertexLayoutBit.) If a stage uses positions for
-     * tex coords then that stage's offset will be 0 (positions are always at 0).
-     *
-     * @param vertexLayout              the layout to query
-     * @param texCoordOffsetsByStage    after return it is the offset of each
-     *                                  tex coord index in the vertex or -1 if
-     *                                  index isn't used. (optional)
-     * @param colorOffset               after return it is the offset of the
-     *                                  color field in each vertex, or -1 if
-     *                                  there aren't per-vertex colors.
-     *                                  (optional)
-     * @param coverageOffset            after return it is the offset of the
-     *                                  coverage field in each vertex, or -1 if
-     *                                  there aren't per-vertex coeverages.
-     *                                  (optional)
-     * @param edgeOffset                after return it is the offset of the
-     *                                  edge eq field in each vertex, or -1 if
-     *                                  there aren't per-vertex edge equations.
-     *                                  (optional)
-     * @return size of a single vertex
-     */
-    static int VertexSizeAndOffsetsByStage(GrVertexLayout vertexLayout,
-                   int texCoordOffsetsByStage[GrDrawState::kNumStages],
-                   int* colorOffset,
-                   int* coverageOffset,
-                   int* edgeOffset);
-
-    /**
-     * Accessing positions, texture coords, or colors, of a vertex within an
-     * array is a hassle involving casts and simple math. These helpers exist
-     * to keep GrDrawTarget clients' code a bit nicer looking.
-     */
-
-    /**
-     * Gets a pointer to a GrPoint of a vertex's position or texture
-     * coordinate.
-     * @param vertices      the vetex array
-     * @param vertexIndex   the index of the vertex in the array
-     * @param vertexSize    the size of each vertex in the array
-     * @param offset        the offset in bytes of the vertex component.
-     *                      Defaults to zero (corresponding to vertex position)
-     * @return pointer to the vertex component as a GrPoint
-     */
-    static GrPoint* GetVertexPoint(void* vertices,
-                                   int vertexIndex,
-                                   int vertexSize,
-                                   int offset = 0) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<GrPoint*>(start + offset +
-                                 vertexIndex * vertexSize);
-    }
-    static const GrPoint* GetVertexPoint(const void* vertices,
-                                         int vertexIndex,
-                                         int vertexSize,
-                                         int offset = 0) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<const GrPoint*>(start + offset +
-                                       vertexIndex * vertexSize);
-    }
-
-    /**
-     * Gets a pointer to a GrColor inside a vertex within a vertex array.
-     * @param vertices      the vetex array
-     * @param vertexIndex   the index of the vertex in the array
-     * @param vertexSize    the size of each vertex in the array
-     * @param offset        the offset in bytes of the vertex color
-     * @return pointer to the vertex component as a GrColor
-     */
-    static GrColor* GetVertexColor(void* vertices,
-                                   int vertexIndex,
-                                   int vertexSize,
-                                   int offset) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<GrColor*>(start + offset +
-                                 vertexIndex * vertexSize);
-    }
-    static const GrColor* GetVertexColor(const void* vertices,
-                                         int vertexIndex,
-                                         int vertexSize,
-                                         int offset) {
-        const intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<const GrColor*>(start + offset +
-                                       vertexIndex * vertexSize);
-    }
-
-    static void VertexLayoutUnitTest();
-
 protected:
 
     /**
@@ -906,9 +668,6 @@ protected:
                                GrBlendCoeff* srcCoeff = NULL,
                                GrBlendCoeff* dstCoeff = NULL) const;
 
-    // determine if src alpha is guaranteed to be one for all src pixels
-    bool srcAlphaWillBeOne(GrVertexLayout vertexLayout) const;
-
     enum GeometrySrcType {
         kNone_GeometrySrcType,     //<! src has not been specified
         kReserved_GeometrySrcType, //<! src was set using reserve*Space
@@ -952,93 +711,110 @@ protected:
         }
     }
 
-    bool isStageEnabled(int stageIdx) const {
-        return this->getDrawState().isStageEnabled(stageIdx);
-    }
-
-    // A sublcass can optionally overload this function to be notified before
-    // vertex and index space is reserved.
-    virtual void willReserveVertexAndIndexSpace(GrVertexLayout vertexLayout,
-                                                int vertexCount,
-                                                int indexCount) {}
-
-
-    // implemented by subclass to allocate space for reserved geom
-    virtual bool onReserveVertexSpace(GrVertexLayout vertexLayout,
-                                      int vertexCount,
-                                      void** vertices) = 0;
-    virtual bool onReserveIndexSpace(int indexCount, void** indices) = 0;
-    // implemented by subclass to handle release of reserved geom space
-    virtual void releaseReservedVertexSpace() = 0;
-    virtual void releaseReservedIndexSpace() = 0;
-    // subclass must consume array contents when set
-    virtual void onSetVertexSourceToArray(const void* vertexArray,
-                                          int vertexCount) = 0;
-    virtual void onSetIndexSourceToArray(const void* indexArray,
-                                         int indexCount) = 0;
-    // subclass is notified that geom source will be set away from an array
-    virtual void releaseVertexArray() = 0;
-    virtual void releaseIndexArray() = 0;
-    // subclass overrides to be notified just before geo src state
-    // is pushed/popped.
-    virtual void geometrySourceWillPush() = 0;
-    virtual void geometrySourceWillPop(const GeometrySrcState& restoredState) = 0;
-    // subclass called to perform drawing
-    virtual void onDrawIndexed(GrPrimitiveType type,
-                               int startVertex,
-                               int startIndex,
-                               int vertexCount,
-                               int indexCount) = 0;
-    virtual void onDrawNonIndexed(GrPrimitiveType type,
-                                  int startVertex,
-                                  int vertexCount) = 0;
-    virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill) = 0;
-
-    // subclass overrides to be notified when clip is set. Must call
-    // INHERITED::clipwillBeSet
-    virtual void clipWillBeSet(const GrClipData* clipData) {}
-
-    // Helpers for drawRect, protected so subclasses that override drawRect
-    // can use them.
-    static GrVertexLayout GetRectVertexLayout(const GrRect* srcRects[]);
-
-    static void SetRectVertices(const GrRect& rect,
-                                const SkMatrix* matrix,
-                                const GrRect* srcRects[],
-                                const SkMatrix* srcMatrices[],
-                                GrColor color,
-                                GrVertexLayout layout,
-                                void* vertices);
-
-    // accessors for derived classes
-    const GeometrySrcState& getGeomSrc() const {
-        return fGeoSrcStateStack.back();
-    }
-    // it is prefereable to call this rather than getGeomSrc()->fVertexLayout
-    // because of the assert.
-    GrVertexLayout getVertexLayout() const {
-        // the vertex layout is only valid if a vertex source has been
-        // specified.
-        GrAssert(this->getGeomSrc().fVertexSrc != kNone_GeometrySrcType);
-        return this->getGeomSrc().fVertexLayout;
-    }
-
     // allows derived class to set the caps
     CapsInternals* capsInternals() { return &fCaps.fInternals; }
 
-    const GrClipData* fClip;
-
-    GrDrawState* fDrawState;
-    GrDrawState fDefaultDrawState;
-
-    Caps fCaps;
+    // A subclass may override this function if it wishes to be notified when the clip is changed.
+    // The override should call INHERITED::clipWillBeSet().
+    virtual void clipWillBeSet(const GrClipData* clipData);
 
     // subclasses must call this in their destructors to ensure all vertex
     // and index sources have been released (including those held by
     // pushGeometrySource())
     void releaseGeometry();
 
+    // accessors for derived classes
+    const GeometrySrcState& getGeomSrc() const { return fGeoSrcStateStack.back(); }
+    // it is preferable to call this rather than getGeomSrc()->fVertexLayout because of the assert.
+    GrVertexLayout getVertexLayout() const {
+        // the vertex layout is only valid if a vertex source has been specified.
+        GrAssert(this->getGeomSrc().fVertexSrc != kNone_GeometrySrcType);
+        return this->getGeomSrc().fVertexLayout;
+    }
+
+    Caps fCaps;
+
+    /**
+     * Used to communicate draws to subclass's onDraw function.
+     */
+    class DrawInfo {
+    public:
+        DrawInfo(const DrawInfo& di) { (*this) = di; }
+        DrawInfo& operator =(const DrawInfo& di);
+
+        GrPrimitiveType primitiveType() const { return fPrimitiveType; }
+        int startVertex() const { return fStartVertex; }
+        int startIndex() const { return fStartIndex; }
+        int vertexCount() const { return fVertexCount; }
+        int indexCount() const { return fIndexCount; }
+        int verticesPerInstance() const { return fVerticesPerInstance; }
+        int indicesPerInstance() const { return fIndicesPerInstance; }
+        int instanceCount() const { return fInstanceCount; }
+
+        bool isIndexed() const { return fIndexCount > 0; }
+#if GR_DEBUG
+        bool isInstanced() const; // this version is longer because of asserts
+#else
+        bool isInstanced() const { return fInstanceCount > 0; }
+#endif
+
+        // adds or remove instances
+        void adjustInstanceCount(int instanceOffset);
+        // shifts the start vertex
+        void adjustStartVertex(int vertexOffset);
+        // shifts the start index
+        void adjustStartIndex(int indexOffset);
+
+        void setDevBounds(const SkRect& bounds) {
+            fDevBoundsStorage = bounds;
+            fDevBounds = &fDevBoundsStorage;
+        }
+        const SkRect* getDevBounds() const { return fDevBounds; }
+
+    private:
+        DrawInfo() { fDevBounds = NULL; }
+
+        friend class GrDrawTarget;
+
+        GrPrimitiveType fPrimitiveType;
+
+        int             fStartVertex;
+        int             fStartIndex;
+        int             fVertexCount;
+        int             fIndexCount;
+
+        int             fInstanceCount;
+        int             fVerticesPerInstance;
+        int             fIndicesPerInstance;
+
+        SkRect          fDevBoundsStorage;
+        SkRect*         fDevBounds;
+    };
+
 private:
+    // A subclass can optionally overload this function to be notified before
+    // vertex and index space is reserved.
+    virtual void willReserveVertexAndIndexSpace(size_t vertexSize, int vertexCount, int indexCount) {}
+
+    // implemented by subclass to allocate space for reserved geom
+    virtual bool onReserveVertexSpace(size_t vertexSize, int vertexCount, void** vertices) = 0;
+    virtual bool onReserveIndexSpace(int indexCount, void** indices) = 0;
+    // implemented by subclass to handle release of reserved geom space
+    virtual void releaseReservedVertexSpace() = 0;
+    virtual void releaseReservedIndexSpace() = 0;
+    // subclass must consume array contents when set
+    virtual void onSetVertexSourceToArray(const void* vertexArray, int vertexCount) = 0;
+    virtual void onSetIndexSourceToArray(const void* indexArray, int indexCount) = 0;
+    // subclass is notified that geom source will be set away from an array
+    virtual void releaseVertexArray() = 0;
+    virtual void releaseIndexArray() = 0;
+    // subclass overrides to be notified just before geo src state is pushed/popped.
+    virtual void geometrySourceWillPush() = 0;
+    virtual void geometrySourceWillPop(const GeometrySrcState& restoredState) = 0;
+    // subclass called to perform drawing
+    virtual void onDraw(const DrawInfo&) = 0;
+    virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill) = 0;
+
     // helpers for reserving vertex and index space.
     bool reserveVertexSpace(GrVertexLayout vertexLayout,
                             int vertexCount,
@@ -1057,8 +833,10 @@ private:
     enum {
         kPreallocGeoSrcStateStackCnt = 4,
     };
-    SkSTArray<kPreallocGeoSrcStateStackCnt,
-              GeometrySrcState, true>           fGeoSrcStateStack;
+    SkSTArray<kPreallocGeoSrcStateStackCnt, GeometrySrcState, true> fGeoSrcStateStack;
+    const GrClipData*                                               fClip;
+    GrDrawState*                                                    fDrawState;
+    GrDrawState                                                     fDefaultDrawState;
 
     typedef GrRefCnt INHERITED;
 };

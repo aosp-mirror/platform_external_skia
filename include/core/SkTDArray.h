@@ -109,6 +109,10 @@ public:
         return fArray[index];
     }
 
+    T&  getAt(int index) const {
+        return (*this)[index];
+    }
+
     void reset() {
         if (fArray) {
             sk_free(fArray);
@@ -300,6 +304,15 @@ public:
             iter += 1;
         }
         this->reset();
+    }
+
+    void visitAll(void visitor(T&)) const {
+        T* stop = this->end();
+        for (T* curr = this->begin(); curr < stop; curr++) {
+            if (*curr) {
+                visitor(*curr);
+            }
+        }
     }
 
 #ifdef SK_DEBUG

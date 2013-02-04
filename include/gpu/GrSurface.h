@@ -33,19 +33,8 @@ public:
      */
     int height() const { return fDesc.fHeight; }
 
-    /**
-     * Some surfaces will be stored such that the upper and left edges of the content meet at the
-     * the origin (in texture coord space) and for other surfaces the lower and left edges meet at
-     * the origin. Render-targets are always consistent with the convention of the underlying
-     * backend API to make it easier to mix native backend rendering with Skia rendering. Wrapped
-     * backend surfaces always use the backend's convention as well.
-     */
-    enum Origin {
-        kTopLeft_Origin,
-        kBottomLeft_Origin,
-    };
-    Origin origin() const {
-        GrAssert(kTopLeft_Origin == fOrigin || kBottomLeft_Origin == fOrigin);
+    GrSurfaceOrigin origin() const {
+        GrAssert(kTopLeft_GrSurfaceOrigin == fOrigin || kBottomLeft_GrSurfaceOrigin == fOrigin);
         return fOrigin;
     }
 
@@ -115,8 +104,8 @@ public:
                              uint32_t pixelOpsFlags = 0) = 0;
 
 protected:
-    GrSurface(GrGpu* gpu, const GrTextureDesc& desc, Origin origin)
-    : INHERITED(gpu)
+    GrSurface(GrGpu* gpu, bool isWrapped, const GrTextureDesc& desc, GrSurfaceOrigin origin)
+    : INHERITED(gpu, isWrapped)
     , fDesc(desc)
     , fOrigin(origin) {
     }
@@ -124,7 +113,7 @@ protected:
     GrTextureDesc fDesc;
 
 private:
-    Origin fOrigin;
+    GrSurfaceOrigin fOrigin;
 
     typedef GrResource INHERITED;
 };

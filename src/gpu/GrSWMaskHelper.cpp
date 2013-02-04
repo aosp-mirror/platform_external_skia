@@ -22,7 +22,7 @@ SkXfermode::Mode op_to_mode(SkRegion::Op op) {
 
     static const SkXfermode::Mode modeMap[] = {
         SkXfermode::kDstOut_Mode,   // kDifference_Op
-        SkXfermode::kMultiply_Mode, // kIntersect_Op
+        SkXfermode::kModulate_Mode, // kIntersect_Op
         SkXfermode::kSrcOver_Mode,  // kUnion_Op
         SkXfermode::kXor_Mode,      // kXOR_Op
         SkXfermode::kClear_Mode,    // kReverseDifference_Op
@@ -197,8 +197,7 @@ void GrSWMaskHelper::DrawToTargetWithPathMask(GrTexture* texture,
         kPathMaskStage = GrPaint::kTotalStages,
     };
     GrAssert(!drawState->isStageEnabled(kPathMaskStage));
-    drawState->stage(kPathMaskStage)->reset();
-    drawState->createTextureEffect(kPathMaskStage, texture);
+    drawState->createTextureEffect(kPathMaskStage, texture, SkMatrix::I());
     SkScalar w = SkIntToScalar(rect.width());
     SkScalar h = SkIntToScalar(rect.height());
     GrRect maskRect = GrRect::MakeWH(w / texture->width(),
@@ -214,4 +213,3 @@ void GrSWMaskHelper::DrawToTargetWithPathMask(GrTexture* texture,
     target->drawRect(dstRect, NULL, srcRects, NULL);
     drawState->disableStage(kPathMaskStage);
 }
-

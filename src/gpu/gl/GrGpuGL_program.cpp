@@ -151,7 +151,9 @@ void GrGpuGL::flushViewMatrix(DrawType type) {
             SkScalarToFloat(m[SkMatrix::kMTransY]),
             SkScalarToFloat(m[SkMatrix::kMPersp2])
         };
-        fCurrentProgram->fUniformManager.setMatrix3f(fCurrentProgram->fUniforms.fViewMatrixUni, mt);
+        fCurrentProgram->fUniformManager.setMatrix3f(
+                                            fCurrentProgram->fUniformHandles.fViewMatrixUni,
+                                            mt);
         fCurrentProgram->fViewMatrix = vm;
         fCurrentProgram->fViewportSize = viewportSize;
     }
@@ -163,7 +165,7 @@ void GrGpuGL::flushColor(GrColor color) {
     const ProgramDesc& desc = fCurrentProgram->getDesc();
     const GrDrawState& drawState = this->getDrawState();
 
-    if (this->getVertexLayout() & kColor_VertexLayoutBit) {
+    if (this->getVertexLayout() & GrDrawState::kColor_VertexLayoutBit) {
         // color will be specified per-vertex as an attribute
         // invalidate the const vertex attrib color
         fHWConstAttribColor = GrColor_ILLEGAL;
@@ -183,9 +185,10 @@ void GrGpuGL::flushColor(GrColor color) {
                     // OpenGL ES doesn't support unsigned byte varieties of glUniform
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(color, c);
-                    GrAssert(kInvalidUniformHandle !=  fCurrentProgram->fUniforms.fColorUni);
-                    fCurrentProgram->fUniformManager.set4fv(fCurrentProgram->fUniforms.fColorUni,
-                                                            0, 1, c);
+                    GrAssert(kInvalidUniformHandle !=  fCurrentProgram->fUniformHandles.fColorUni);
+                    fCurrentProgram->fUniformManager.set4fv(
+                                                        fCurrentProgram->fUniformHandles.fColorUni,
+                                                        0, 1, c);
                     fCurrentProgram->fColor = color;
                 }
                 break;
@@ -196,7 +199,7 @@ void GrGpuGL::flushColor(GrColor color) {
                 GrCrash("Unknown color type.");
         }
     }
-    UniformHandle filterColorUni = fCurrentProgram->fUniforms.fColorFilterUni;
+    UniformHandle filterColorUni = fCurrentProgram->fUniformHandles.fColorFilterUni;
     if (kInvalidUniformHandle != filterColorUni &&
         fCurrentProgram->fColorFilterColor != drawState.getColorFilterColor()) {
         GrGLfloat c[4];
@@ -211,7 +214,7 @@ void GrGpuGL::flushCoverage(GrColor coverage) {
     // const GrDrawState& drawState = this->getDrawState();
 
 
-    if (this->getVertexLayout() & kCoverage_VertexLayoutBit) {
+    if (this->getVertexLayout() & GrDrawState::kCoverage_VertexLayoutBit) {
         // coverage will be specified per-vertex as an attribute
         // invalidate the const vertex attrib coverage
         fHWConstAttribCoverage = GrColor_ILLEGAL;
@@ -234,9 +237,11 @@ void GrGpuGL::flushCoverage(GrColor coverage) {
                     // glUniform
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(coverage, c);
-                    GrAssert(kInvalidUniformHandle !=  fCurrentProgram->fUniforms.fCoverageUni);
-                    fCurrentProgram->fUniformManager.set4fv(fCurrentProgram->fUniforms.fCoverageUni,
-                                                            0, 1, c);
+                    GrAssert(kInvalidUniformHandle !=
+                             fCurrentProgram->fUniformHandles.fCoverageUni);
+                    fCurrentProgram->fUniformManager.set4fv(
+                                                    fCurrentProgram->fUniformHandles.fCoverageUni,
+                                                    0, 1, c);
                     fCurrentProgram->fCoverage = coverage;
                 }
                 break;
@@ -302,13 +307,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type) {
         this->flushColor(color);
         this->flushCoverage(coverage);
 
-        fCurrentProgram->setData(drawState);
-
-        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            if (this->isStageEnabled(s)) {
-                this->flushBoundTextureAndParams(s);
-            }
-        }
+        fCurrentProgram->setData(this);
     }
     this->flushStencil(type);
     this->flushViewMatrix(type);
@@ -318,8 +317,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type) {
     GrIRect* devRect = NULL;
     GrIRect devClipBounds;
     if (drawState.isClipState()) {
-        fClip->getConservativeBounds(drawState.getRenderTarget(),
-                                     &devClipBounds);
+        this->getClip()->getConservativeBounds(drawState.getRenderTarget(), &devClipBounds);
         devRect = &devClipBounds;
     }
     // This must come after textures are flushed because a texture may need
@@ -342,10 +340,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type) {
     #error "unknown GR_TEXT_SCALAR type"
 #endif
 
-void GrGpuGL::setupGeometry(int* startVertex,
-                            int* startIndex,
-                            int vertexCount,
-                            int indexCount) {
+void GrGpuGL::setupGeometry(const DrawInfo& info, int* startIndexOffset) {
 
     int newColorOffset;
     int newCoverageOffset;
@@ -354,45 +349,36 @@ void GrGpuGL::setupGeometry(int* startVertex,
 
     GrVertexLayout currLayout = this->getVertexLayout();
 
-    GrGLsizei newStride = VertexSizeAndOffsetsByIdx(
-                                            currLayout,
-                                            newTexCoordOffsets,
-                                            &newColorOffset,
-                                            &newCoverageOffset,
-                                            &newEdgeOffset);
+    GrGLsizei newStride = GrDrawState::VertexSizeAndOffsetsByIdx(currLayout,
+                                                                 newTexCoordOffsets,
+                                                                 &newColorOffset,
+                                                                 &newCoverageOffset,
+                                                                 &newEdgeOffset);
     int oldColorOffset;
     int oldCoverageOffset;
     int oldTexCoordOffsets[GrDrawState::kMaxTexCoords];
     int oldEdgeOffset;
 
-    GrGLsizei oldStride = VertexSizeAndOffsetsByIdx(
-                                            fHWGeometryState.fVertexLayout,
-                                            oldTexCoordOffsets,
-                                            &oldColorOffset,
-                                            &oldCoverageOffset,
-                                            &oldEdgeOffset);
-    bool indexed = NULL != startIndex;
+    GrGLsizei oldStride = GrDrawState::VertexSizeAndOffsetsByIdx(fHWGeometryState.fVertexLayout,
+                                                                 oldTexCoordOffsets,
+                                                                 &oldColorOffset,
+                                                                 &oldCoverageOffset,
+                                                                 &oldEdgeOffset);
 
     int extraVertexOffset;
-    int extraIndexOffset;
-    this->setBuffers(indexed, &extraVertexOffset, &extraIndexOffset);
+    this->setBuffers(info.isIndexed(), &extraVertexOffset, startIndexOffset);
 
     GrGLenum scalarType;
     bool texCoordNorm;
-    if (currLayout & kTextFormat_VertexLayoutBit) {
+    if (currLayout & GrDrawState::kTextFormat_VertexLayoutBit) {
         scalarType = TEXT_COORDS_GL_TYPE;
         texCoordNorm = SkToBool(TEXT_COORDS_ARE_NORMALIZED);
     } else {
-//        GR_STATIC_ASSERT(SK_SCALAR_IS_FLOAT);
         scalarType = GR_GL_FLOAT;
         texCoordNorm = false;
     }
 
-    size_t vertexOffset = (*startVertex + extraVertexOffset) * newStride;
-    *startVertex = 0;
-    if (indexed) {
-        *startIndex += extraIndexOffset;
-    }
+    size_t vertexOffset = (info.startVertex() + extraVertexOffset) * newStride;
 
     // all the Pointers must be set if any of these are true
     bool allOffsetsChange =  fHWGeometryState.fArrayPtrsDirty ||
@@ -403,7 +389,7 @@ void GrGpuGL::setupGeometry(int* startVertex,
     // or the type/normalization changed based on text vs nontext type coords.
     bool posAndTexChange = allOffsetsChange ||
                            (((TEXT_COORDS_GL_TYPE != GR_GL_FLOAT) || TEXT_COORDS_ARE_NORMALIZED) &&
-                                (kTextFormat_VertexLayoutBit &
+                                (GrDrawState::kTextFormat_VertexLayoutBit &
                                   (fHWGeometryState.fVertexLayout ^ currLayout)));
 
     if (posAndTexChange) {
@@ -505,14 +491,14 @@ void GrGpuGL::buildProgram(bool isPoints,
     desc->fEmitsPointSize = isPoints;
 
     bool requiresAttributeColors = !skipColor &&
-                                   SkToBool(desc->fVertexLayout & kColor_VertexLayoutBit);
+                                   SkToBool(desc->fVertexLayout & GrDrawState::kColor_VertexLayoutBit);
     bool requiresAttributeCoverage = !skipCoverage &&
-                                     SkToBool(desc->fVertexLayout & kCoverage_VertexLayoutBit);
+                                     SkToBool(desc->fVertexLayout & GrDrawState::kCoverage_VertexLayoutBit);
 
     // fColorInput/fCoverageInput records how colors are specified for the.
     // program. So we strip the bits from the layout to avoid false negatives
     // when searching for an existing program in the cache.
-    desc->fVertexLayout &= ~(kColor_VertexLayoutBit | kCoverage_VertexLayoutBit);
+    desc->fVertexLayout &= ~(GrDrawState::kColor_VertexLayoutBit | GrDrawState::kCoverage_VertexLayoutBit);
 
     desc->fColorFilterXfermode = skipColor ?
                                 SkXfermode::kDst_Mode :
@@ -521,7 +507,7 @@ void GrGpuGL::buildProgram(bool isPoints,
     // no reason to do edge aa or look at per-vertex coverage if coverage is
     // ignored
     if (skipCoverage) {
-        desc->fVertexLayout &= ~(kEdge_VertexLayoutBit | kCoverage_VertexLayoutBit);
+        desc->fVertexLayout &= ~(GrDrawState::kEdge_VertexLayoutBit | GrDrawState::kCoverage_VertexLayoutBit);
     }
 
     bool colorIsTransBlack = SkToBool(blendOpts & kEmitTransBlack_BlendOptFlag);
@@ -551,7 +537,7 @@ void GrGpuGL::buildProgram(bool isPoints,
 
     int lastEnabledStage = -1;
 
-    if (!skipCoverage && (desc->fVertexLayout &GrDrawTarget::kEdge_VertexLayoutBit)) {
+    if (!skipCoverage && (desc->fVertexLayout &GrDrawState::kEdge_VertexLayoutBit)) {
         desc->fVertexEdgeType = drawState.getVertexEdgeType();
         desc->fDiscardIfOutsideEdge = drawState.getStencil().doesWrite();
     } else {
@@ -565,7 +551,7 @@ void GrGpuGL::buildProgram(bool isPoints,
         bool skip = s < drawState.getFirstCoverageStage() ? skipColor : skipCoverage;
         if (!skip && drawState.isStageEnabled(s)) {
             lastEnabledStage = s;
-            const GrEffect* effect = drawState.getStage(s).getEffect();
+            const GrEffectRef& effect = *drawState.getStage(s).getEffect();
             const GrBackendEffectFactory& factory = effect->getFactory();
             desc->fEffectKeys[s] = factory.glEffectKey(drawState.getStage(s), this->glCaps());
         } else {
@@ -594,7 +580,7 @@ void GrGpuGL::buildProgram(bool isPoints,
     // other coverage inputs
     if (!hasCoverage) {
         hasCoverage = requiresAttributeCoverage ||
-                      (desc->fVertexLayout & GrDrawTarget::kEdge_VertexLayoutBit);
+                      (desc->fVertexLayout & GrDrawState::kEdge_VertexLayoutBit);
     }
 
     if (hasCoverage) {

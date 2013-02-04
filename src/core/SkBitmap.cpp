@@ -701,7 +701,7 @@ bool SkBitmap::ComputeIsOpaque(const SkBitmap& bm) {
             if (!table) {
                 return false;
             }
-            SkPMColor c = ~0;
+            SkPMColor c = (SkPMColor)~0;
             for (int i = bm.getColorTable()->count() - 1; i >= 0; --i) {
                 c &= table[i];
             }
@@ -724,7 +724,7 @@ bool SkBitmap::ComputeIsOpaque(const SkBitmap& bm) {
             return true;
         } break;
         case SkBitmap::kARGB_8888_Config: {
-            SkPMColor c = ~0;
+            SkPMColor c = (SkPMColor)~0;
             for (int y = 0; y < height; ++y) {
                 const SkPMColor* row = bm.getAddr32(0, y);
                 for (int x = 0; x < width; ++x) {
@@ -1636,5 +1636,45 @@ void SkBitmap::validate() const {
         }
     }
 #endif
+}
+#endif
+
+#ifdef SK_DEVELOPER
+void SkBitmap::toString(SkString* str) const {
+
+    static const char* gConfigNames[kConfigCount] = {
+        "NONE", "A1", "A8", "INDEX8", "565", "4444", "8888", "RLE"
+    };
+
+    str->appendf("bitmap: ((%d, %d) %s", this->width(), this->height(),
+                 gConfigNames[this->config()]);
+
+    str->append(" (");
+    if (this->isOpaque()) {
+        str->append("opaque");
+    } else {
+        str->append("transparent");
+    }
+    if (this->isImmutable()) {
+        str->append(", immutable");
+    } else {
+        str->append(", not-immutable");
+    }
+    str->append(")");
+
+    SkPixelRef* pr = this->pixelRef();
+    if (NULL == pr) {
+        // show null or the explicit pixel address (rare)
+        str->appendf(" pixels:%p", this->getPixels());
+    } else {
+        const char* uri = pr->getURI();
+        if (NULL != uri) {
+            str->appendf(" uri:\"%s\"", uri);
+        } else {
+            str->appendf(" pixelref:%p", pr);
+        }
+    }
+
+    str->append(")");
 }
 #endif

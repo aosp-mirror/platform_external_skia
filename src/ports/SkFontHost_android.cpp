@@ -1095,7 +1095,7 @@ static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style,
     paint.setTextEncoding(SkPaint::kUTF16_TextEncoding);
     paint.setFontVariant(fontVariant);
 
-    SkAutoGlyphCache autoCache(paint, NULL);
+    SkAutoGlyphCache autoCache(paint, NULL, NULL);
     SkGlyphCache*    cache = autoCache.getCache();
     SkFontID         fontID = 0;
 

@@ -158,7 +158,7 @@ struct SkBaseMutex {
 
 // A normal mutex that requires to be initialized through normal C++ construction,
 // i.e. when it's a member of another class, or allocated on the heap.
-class SkMutex : public SkBaseMutex, SkNoncopyable {
+class SK_API SkMutex : public SkBaseMutex, SkNoncopyable {
 public:
     SkMutex();
     ~SkMutex();
@@ -169,7 +169,7 @@ public:
 // In the generic case, SkBaseMutex and SkMutex are the same thing, and we
 // can't easily get rid of static initializers.
 //
-class SkMutex : SkNoncopyable {
+class SK_API SkMutex : SkNoncopyable {
 public:
     SkMutex();
     ~SkMutex();
