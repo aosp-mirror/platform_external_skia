@@ -11,7 +11,10 @@
 #define SkPicture_DEFINED
 
 #include "SkRefCnt.h"
+#include "SkSerializationHelpers.h"
 
+class SkBBoxHierarchy;
+class SkBitmap;
 class SkCanvas;
 class SkPicturePlayback;
 class SkPictureRecord;
@@ -25,6 +28,8 @@ class SkWStream;
 */
 class SK_API SkPicture : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(SkPicture)
+
     /** The constructor prepares the picture to record.
         @param width the width of the virtual device the picture records.
         @param height the height of the virtual device the picture records.
@@ -34,14 +39,32 @@ public:
         this call, those elements will not appear in this picture.
     */
     SkPicture(const SkPicture& src);
-    explicit SkPicture(SkStream*);
+    /**
+     *  Recreate a picture that was serialized into a stream. *success is set to
+     *  true if the picture was deserialized successfully and false otherwise.
+     *  decoder is used to decode any SkBitmaps that were encoded into the stream.
+     */
+    explicit SkPicture(SkStream*, bool* success = NULL,
+                       SkSerializationHelpers::DecodeBitmap decoder = NULL);
     virtual ~SkPicture();
-    
+
     /**
      *  Swap the contents of the two pictures. Guaranteed to succeed.
      */
     void swap(SkPicture& other);
-    
+
+    /**
+     *  Creates a thread-safe clone of the picture that is ready for playback.
+     */
+    SkPicture* clone() const;
+
+    /**
+     * Creates multiple thread-safe clones of this picture that are ready for
+     * playback. The resulting clones are stored in the provided array of
+     * SkPictures.
+     */
+    void clone(SkPicture* pictures, int count) const;
+
     enum RecordingFlags {
         /*  This flag specifies that when clipPath() is called, the path will
             be faithfully recorded, but the recording canvas' current clip will
@@ -51,7 +74,25 @@ public:
             clip-query calls will reflect the path's bounds, not the actual
             path.
          */
-        kUsePathBoundsForClip_RecordingFlag = 0x01
+        kUsePathBoundsForClip_RecordingFlag = 0x01,
+        /*  This flag causes the picture to compute bounding boxes and build
+            up a spatial hierarchy (currently an R-Tree), plus a tree of Canvas'
+            usually stack-based clip/etc state. This requires an increase in
+            recording time (often ~2x; likely more for very complex pictures),
+            but allows us to perform much faster culling at playback time, and
+            completely avoid some unnecessary clips and other operations. This
+            is ideal for tiled rendering, or any other situation where you're
+            drawing a fraction of a large scene into a smaller viewport.
+
+            In most cases the record cost is offset by the playback improvement
+            after a frame or two of tiled rendering (and complex pictures that
+            induce the worst record times will generally get the largest
+            speedups at playback time).
+
+            Note: Currently this is not serializable, the bounding data will be
+            discarded if you serialize into a stream and then deserialize.
+        */
+        kOptimizeForClippedPlayback_RecordingFlag = 0x02
     };
 
     /** Returns the canvas that records the drawing commands.
@@ -74,13 +115,13 @@ public:
         is drawn.
     */
     void endRecording();
-    
+
     /** Replays the drawing commands on the specified canvas. This internally
         calls endRecording() if that has not already been called.
         @param surface the canvas receiving the drawing commands.
     */
     void draw(SkCanvas* surface);
-    
+
     /** Return the width of the picture's recording canvas. This
         value reflects what was passed to setSize(), and does not necessarily
         reflect the bounds of what has been recorded into the picture.
@@ -95,21 +136,51 @@ public:
     */
     int height() const { return fHeight; }
 
-    void serialize(SkWStream*) const;
+    /**
+     *  Serialize to a stream. If non NULL, encoder will be used to encode
+     *  any bitmaps in the picture.
+     */
+    void serialize(SkWStream*, SkSerializationHelpers::EncodeBitmap encoder = NULL) const;
 
+#ifdef SK_BUILD_FOR_ANDROID
     /** Signals that the caller is prematurely done replaying the drawing
         commands. This can be called from a canvas virtual while the picture
-        is drawing. Has no effect if the picture is not drawing. 
+        is drawing. Has no effect if the picture is not drawing.
+        @deprecated preserving for legacy purposes
     */
     void abortPlayback();
-    
-private:
-    int fWidth, fHeight;
-    SkPictureRecord* fRecord;
+#endif
+
+protected:
+    // V2 : adds SkPixelRef's generation ID.
+    // V3 : PictInfo tag at beginning, and EOF tag at the end
+    // V4 : move SkPictInfo to be the header
+    // V5 : don't read/write FunctionPtr on cross-process (we can detect that)
+    // V6 : added serialization of SkPath's bounds (and packed its flags tighter)
+    // V7 : changed drawBitmapRect(IRect) to drawBitmapRectToRect(Rect)
+    // V8 : Add an option for encoding bitmaps
+    // V9 : Allow the reader and writer of an SKP disagree on whether to support
+    //      SK_SUPPORT_HINTING_SCALE_FACTOR
+    // V10: add drawRRect, drawOval, clipRRect
+    static const uint32_t PICTURE_VERSION = 10;
+
+    // fPlayback, fRecord, fWidth & fHeight are protected to allow derived classes to
+    // install their own SkPicturePlayback-derived players,SkPictureRecord-derived
+    // recorders and set the picture size
     SkPicturePlayback* fPlayback;
+    SkPictureRecord* fRecord;
+    int fWidth, fHeight;
+
+    // For testing. Derived classes may instantiate an alternate
+    // SkBBoxHierarchy implementation
+    virtual SkBBoxHierarchy* createBBoxHierarchy() const;
+
+private:
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;
+
+    typedef SkRefCnt INHERITED;
 };
 
 class SkAutoPictureRecord : SkNoncopyable {
@@ -122,11 +193,11 @@ public:
     ~SkAutoPictureRecord() {
         fPicture->endRecording();
     }
-    
+
     /** Return the canvas to draw into for recording into the picture.
     */
     SkCanvas* getRecordingCanvas() const { return fCanvas; }
-    
+
 private:
     SkPicture*  fPicture;
     SkCanvas*   fCanvas;

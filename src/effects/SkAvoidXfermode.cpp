@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #include "SkAvoidXfermode.h"
 #include "SkColorPriv.h"
+#include "SkFlattenableBuffers.h"
+#include "SkString.h"
 
-SkAvoidXfermode::SkAvoidXfermode(SkColor opColor, U8CPU tolerance, Mode mode)
-{
+SkAvoidXfermode::SkAvoidXfermode(SkColor opColor, U8CPU tolerance, Mode mode) {
     if (tolerance > 255) {
         tolerance = 255;
     }
@@ -22,35 +21,22 @@ SkAvoidXfermode::SkAvoidXfermode(SkColor opColor, U8CPU tolerance, Mode mode)
 }
 
 SkAvoidXfermode::SkAvoidXfermode(SkFlattenableReadBuffer& buffer)
-    : INHERITED(buffer)
-{
-    fOpColor = buffer.readU32();
-    fDistMul = buffer.readU32();
-    fMode = (Mode)buffer.readU8();
+    : INHERITED(buffer) {
+    fOpColor = buffer.readColor();
+    fDistMul = buffer.readUInt();
+    fMode = (Mode)buffer.readUInt();
 }
 
-void SkAvoidXfermode::flatten(SkFlattenableWriteBuffer& buffer)
-{
+void SkAvoidXfermode::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
-    buffer.write32(fOpColor);
-    buffer.write32(fDistMul);
-    buffer.write8(fMode);
-}
-
-SkFlattenable* SkAvoidXfermode::Create(SkFlattenableReadBuffer& rb)
-{
-    return SkNEW_ARGS(SkAvoidXfermode, (rb));
-}
-
-SkFlattenable::Factory SkAvoidXfermode::getFactory()
-{
-    return Create;
+    buffer.writeColor(fOpColor);
+    buffer.writeUInt(fDistMul);
+    buffer.writeUInt(fMode);
 }
 
 // returns 0..31
-static unsigned color_dist16(uint16_t c, unsigned r, unsigned g, unsigned b)
-{
+static unsigned color_dist16(uint16_t c, unsigned r, unsigned g, unsigned b) {
     SkASSERT(r <= SK_R16_MASK);
     SkASSERT(g <= SK_G16_MASK);
     SkASSERT(b <= SK_B16_MASK);
@@ -63,8 +49,7 @@ static unsigned color_dist16(uint16_t c, unsigned r, unsigned g, unsigned b)
 }
 
 // returns 0..15
-static unsigned color_dist4444(uint16_t c, unsigned r, unsigned g, unsigned b)
-{
+static unsigned color_dist4444(uint16_t c, unsigned r, unsigned g, unsigned b) {
     SkASSERT(r <= 0xF);
     SkASSERT(g <= 0xF);
     SkASSERT(b <= 0xF);
@@ -77,8 +62,7 @@ static unsigned color_dist4444(uint16_t c, unsigned r, unsigned g, unsigned b)
 }
 
 // returns 0..255
-static unsigned color_dist32(SkPMColor c, U8CPU r, U8CPU g, U8CPU b)
-{
+static unsigned color_dist32(SkPMColor c, U8CPU r, U8CPU g, U8CPU b) {
     SkASSERT(r <= 0xFF);
     SkASSERT(g <= 0xFF);
     SkASSERT(b <= 0xFF);
@@ -90,8 +74,7 @@ static unsigned color_dist32(SkPMColor c, U8CPU r, U8CPU g, U8CPU b)
     return SkMax32(dr, SkMax32(dg, db));
 }
 
-static int scale_dist_14(int dist, uint32_t mul, uint32_t sub)
-{
+static int scale_dist_14(int dist, uint32_t mul, uint32_t sub) {
     int tmp = dist * mul - sub;
     int result = (tmp + (1 << 13)) >> 14;
 
@@ -103,8 +86,7 @@ static inline unsigned Accurate255To256(unsigned x) {
 }
 
 void SkAvoidXfermode::xfer32(SkPMColor dst[], const SkPMColor src[], int count,
-                             const SkAlpha aa[])
-{
+                             const SkAlpha aa[]) const {
     unsigned    opR = SkColorGetR(fOpColor);
     unsigned    opG = SkColorGetG(fOpColor);
     unsigned    opB = SkColorGetB(fOpColor);
@@ -138,13 +120,12 @@ void SkAvoidXfermode::xfer32(SkPMColor dst[], const SkPMColor src[], int count,
                     continue;
                 }
             }
-            dst[i] = SkFourByteInterp(src[i], dst[i], d);
+            dst[i] = SkFourByteInterp256(src[i], dst[i], d);
         }
     }
 }
 
-static inline U16CPU SkBlend3216(SkPMColor src, U16CPU dst, unsigned scale)
-{
+static inline U16CPU SkBlend3216(SkPMColor src, U16CPU dst, unsigned scale) {
     SkASSERT(scale <= 32);
     scale <<= 3;
 
@@ -154,8 +135,7 @@ static inline U16CPU SkBlend3216(SkPMColor src, U16CPU dst, unsigned scale)
 }
 
 void SkAvoidXfermode::xfer16(uint16_t dst[], const SkPMColor src[], int count,
-                             const SkAlpha aa[])
-{
+                             const SkAlpha aa[]) const {
     unsigned    opR = SkColorGetR(fOpColor) >> (8 - SK_R16_BITS);
     unsigned    opG = SkColorGetG(fOpColor) >> (8 - SK_G16_BITS);
     unsigned    opB = SkColorGetB(fOpColor) >> (8 - SK_R16_BITS);
@@ -195,8 +175,7 @@ void SkAvoidXfermode::xfer16(uint16_t dst[], const SkPMColor src[], int count,
 }
 
 void SkAvoidXfermode::xfer4444(uint16_t dst[], const SkPMColor src[], int count,
-                               const SkAlpha aa[])
-{
+                               const SkAlpha aa[]) const {
     unsigned    opR = SkColorGetR(fOpColor) >> 4;
     unsigned    opG = SkColorGetG(fOpColor) >> 4;
     unsigned    opB = SkColorGetB(fOpColor) >> 4;
@@ -235,9 +214,19 @@ void SkAvoidXfermode::xfer4444(uint16_t dst[], const SkPMColor src[], int count,
     }
 }
 
-void SkAvoidXfermode::xferA8(SkAlpha dst[], const SkPMColor src[], int count, const SkAlpha aa[])
-{
+void SkAvoidXfermode::xferA8(SkAlpha dst[], const SkPMColor src[], int count,
+                             const SkAlpha aa[]) const {
     // override in subclass
 }
 
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkAvoidXfermode)
+#ifdef SK_DEVELOPER
+void SkAvoidXfermode::toString(SkString* str) const {
+    str->append("SkAvoidXfermode: opColor: ");
+    str->appendHex(fOpColor);
+    str->appendf("distMul: %d ", fDistMul);
+
+    static const char* gModeStrings[] = { "Avoid", "Target" };
+
+    str->appendf("mode: %s", gModeStrings[fMode]);
+}
+#endif

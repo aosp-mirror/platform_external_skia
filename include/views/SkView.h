@@ -15,6 +15,7 @@
 #include "SkDOM.h"
 #include "SkTDict.h"
 #include "SkMatrix.h"
+#include "SkMetaData.h"
 
 class SkCanvas;
 class SkLayerView;
@@ -82,9 +83,9 @@ public:
     void        getLocalBounds(SkRect* bounds) const;
 
     /** Loc - the view's offset with respect to its parent in its view hiearchy.
-        NOTE: For more complex transforms, use Local Matrix. The tranformations 
+        NOTE: For more complex transforms, use Local Matrix. The tranformations
         are applied in the following order:
-             canvas->translate(fLoc.fX, fLoc.fY);		
+             canvas->translate(fLoc.fX, fLoc.fY);
              canvas->concat(fMatrix);
     */
     /** Return the view's left edge */
@@ -96,13 +97,13 @@ public:
     void        setLoc(const SkPoint& loc) { this->setLoc(loc.fX, loc.fY); }
     void        setLocX(SkScalar x) { this->setLoc(x, fLoc.fY); }
     void        setLocY(SkScalar y) { this->setLoc(fLoc.fX, y); }
-    
-    /** Local Matrix - matrix used to tranform the view with respect to its 
-        parent in its view hiearchy. Use setLocalMatrix to apply matrix 
+
+    /** Local Matrix - matrix used to tranform the view with respect to its
+        parent in its view hiearchy. Use setLocalMatrix to apply matrix
         transformations to the current view and in turn affect its children.
         NOTE: For simple offsets, use Loc. The transformations are applied in
         the following order:
-             canvas->translate(fLoc.fX, fLoc.fY);		
+             canvas->translate(fLoc.fX, fLoc.fY);
              canvas->concat(fMatrix);
     */
     const SkMatrix& getLocalMatrix() const { return fMatrix; }
@@ -155,6 +156,9 @@ public:
         SkIPoint    fIOrig, fIPrev, fICurr;
         State       fState;
         void*       fOwner;
+        unsigned    fModifierKeys;
+
+        SkMetaData  fMeta;
     private:
         SkEventSinkID   fTargetID;
         char*           fType;
@@ -164,11 +168,11 @@ public:
 
         friend class SkView;
     };
-    Click*  findClickHandler(SkScalar x, SkScalar y);
+    Click*  findClickHandler(SkScalar x, SkScalar y, unsigned modifierKeys);
 
-    static void DoClickDown(Click*, int x, int y);
-    static void DoClickMoved(Click*, int x, int y);
-    static void DoClickUp(Click*, int x, int y);
+    static void DoClickDown(Click*, int x, int y, unsigned modi);
+    static void DoClickMoved(Click*, int x, int y, unsigned modi);
+    static void DoClickUp(Click*, int x, int y, unsigned modi);
 
     /** Send the event to the view's parent, and its parent etc. until one of them
         returns true from its onEvent call. This view is returned. If no parent handles
@@ -203,15 +207,21 @@ public:
     void        detachAllChildren();
 
     /** Convert the specified point from global coordinates into view-local coordinates
-    */
-    void        globalToLocal(SkPoint* pt) const { if (pt) this->globalToLocal(pt->fX, pt->fY, pt); }
+     *  Return true on success; false on failure
+     */
+    bool        globalToLocal(SkPoint* pt) const {
+        if (NULL != pt) {
+            return this->globalToLocal(pt->fX, pt->fY, pt);
+        }
+        return true;  // nothing to do so return true
+    }
     /** Convert the specified x,y from global coordinates into view-local coordinates, returning
         the answer in the local parameter.
     */
-    void        globalToLocal(SkScalar globalX, SkScalar globalY, SkPoint* local) const;
+    bool        globalToLocal(SkScalar globalX, SkScalar globalY, SkPoint* local) const;
 
     /** \class F2BIter
-    
+
         Iterator that will return each of this view's children, in
         front-to-back order (the order used for clicking). The first
         call to next() returns the front-most child view. When
@@ -226,7 +236,7 @@ public:
     };
 
     /** \class B2FIter
-    
+
         Iterator that will return each of this view's children, in
         back-to-front order (the order they are drawn). The first
         call to next() returns the back-most child view. When
@@ -241,18 +251,22 @@ public:
     };
 
     /** \class Artist
-    
+
         Install a subclass of this in a view (calling setArtist()), and then the
         default implementation of that view's onDraw() will invoke this object
         automatically.
     */
     class Artist : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(Artist)
+
         void draw(SkView*, SkCanvas*);
         void inflate(const SkDOM&, const SkDOM::Node*);
     protected:
         virtual void onDraw(SkView*, SkCanvas*) = 0;
         virtual void onInflate(const SkDOM&, const SkDOM::Node*);
+    private:
+        typedef SkRefCnt INHERITED;
     };
     /** Return the artist attached to this view (or null). The artist's reference
         count is not affected.
@@ -265,18 +279,22 @@ public:
     Artist* setArtist(Artist* artist);
 
     /** \class Layout
-    
+
         Install a subclass of this in a view (calling setLayout()), and then the
         default implementation of that view's onLayoutChildren() will invoke
         this object automatically.
     */
     class Layout : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(Layout)
+
         void layoutChildren(SkView* parent);
         void inflate(const SkDOM&, const SkDOM::Node*);
     protected:
         virtual void onLayoutChildren(SkView* parent) = 0;
         virtual void onInflate(const SkDOM&, const SkDOM::Node*);
+    private:
+        typedef SkRefCnt INHERITED;
     };
 
     /** Return the layout attached to this view (or null). The layout's reference
@@ -328,13 +346,13 @@ protected:
 
     /** Override this if you might handle the click
     */
-    virtual Click* onFindClickHandler(SkScalar x, SkScalar y);
+    virtual Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi);
     /** Override this to decide if your children are targets for a click.
         The default returns true, in which case your children views will be
         candidates for onFindClickHandler. Returning false wil skip the children
         and just call your onFindClickHandler.
      */
-    virtual bool onSendClickToChildren(SkScalar x, SkScalar y);
+    virtual bool onSendClickToChildren(SkScalar x, SkScalar y, unsigned modi);
     /** Override this to track clicks, returning true as long as you want to track
         the pen/mouse.
     */
@@ -368,7 +386,7 @@ private:
 
     friend class B2FIter;
     friend class F2BIter;
-    
+
     friend class SkLayerView;
 
     bool    setFocusView(SkView* fvOrNull);
@@ -379,4 +397,3 @@ private:
 };
 
 #endif
-

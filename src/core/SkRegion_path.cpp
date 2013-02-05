@@ -16,7 +16,7 @@
 class SkRgnBuilder : public SkBlitter {
 public:
     virtual ~SkRgnBuilder();
-    
+
     // returns true if it could allocate the working storage needed
     bool init(int maxHeight, int maxTransitions);
 
@@ -51,13 +51,26 @@ public:
     }
 #endif
 private:
+    /*
+     *  Scanline mimics a row in the region, nearly. A row in a region is:
+     *      [Bottom IntervalCount [L R]... Sentinel]
+     *  while a Scanline is
+     *      [LastY XCount [L R]... uninitialized]
+     *  The two are the same length (which is good), but we have to transmute
+     *  the scanline a little when we convert it to a region-row.
+     *
+     *  Potentially we could recode this to exactly match the row format, in
+     *  which case copyToRgn() could be a single memcpy. Not sure that is worth
+     *  the effort.
+     */
     struct Scanline {
         SkRegion::RunType fLastY;
         SkRegion::RunType fXCount;
 
         SkRegion::RunType* firstX() const { return (SkRegion::RunType*)(this + 1); }
         Scanline* nextScanline() const {
-            return (Scanline*)((SkRegion::RunType*)(this + 1) + fXCount);
+            // add final +1 for the x-sentinel
+            return (Scanline*)((SkRegion::RunType*)(this + 1) + fXCount + 1);
         }
     };
     SkRegion::RunType*  fStorage;
@@ -66,7 +79,7 @@ private:
     //  points at next avialable x[] in fCurrScanline
     SkRegion::RunType*  fCurrXPtr;
     SkRegion::RunType   fTop;           // first Y value
-    
+
     int fStorageCount;
 
     bool collapsWithPrev() {
@@ -171,7 +184,8 @@ int SkRgnBuilder::computeRunCount() const {
 
 void SkRgnBuilder::copyToRect(SkIRect* r) const {
     SkASSERT(fCurrScanline != NULL);
-    SkASSERT((const SkRegion::RunType*)fCurrScanline - fStorage == 4);
+    // A rect's scanline is [bottom intervals left right sentinel] == 5
+    SkASSERT((const SkRegion::RunType*)fCurrScanline - fStorage == 5);
 
     const Scanline* line = (const Scanline*)fStorage;
     SkASSERT(line->fXCount == 2);
@@ -190,6 +204,7 @@ void SkRgnBuilder::copyToRgn(SkRegion::RunType runs[]) const {
     do {
         *runs++ = (SkRegion::RunType)(line->fLastY + 1);
         int count = line->fXCount;
+        *runs++ = count >> 1;   // intervalCount
         if (count) {
             memcpy(runs, line->firstX(), count * sizeof(SkRegion::RunType));
             runs += count;
@@ -228,7 +243,7 @@ static int count_path_runtype_values(const SkPath& path, int* itop, int* ibot) {
     SkScalar    top = SkIntToScalar(SK_MaxS16);
     SkScalar    bot = SkIntToScalar(SK_MinS16);
 
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+    while ((verb = iter.next(pts, false)) != SkPath::kDone_Verb) {
         maxEdges += gPathVerbToMaxEdges[verb];
 
         int lastIndex = gPathVerbToInitialLastIndex[verb];
@@ -275,7 +290,7 @@ bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
     int pathTransitions = count_path_runtype_values(path, &pathTop, &pathBot);
     int clipTop, clipBot;
     int clipTransitions;
-    
+
     clipTransitions = clip.count_runtype_values(&clipTop, &clipBot);
 
     int top = SkMax32(pathTop, clipTop);
@@ -285,7 +300,7 @@ bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
         return this->setEmpty();
 
     SkRgnBuilder builder;
-    
+
     if (!builder.init(bot - top, SkMax32(pathTransitions, clipTransitions))) {
         // can't allocate working space, so return false
         return this->setEmpty();
@@ -301,11 +316,11 @@ bool SkRegion::setPath(const SkPath& path, const SkRegion& clip) {
         builder.copyToRect(&fBounds);
         this->setRect(fBounds);
     } else {
-        SkRegion    tmp;
+        SkRegion tmp;
 
         tmp.fRunHead = RunHead::Alloc(count);
         builder.copyToRgn(tmp.fRunHead->writable_runs());
-        ComputeRunBounds(tmp.fRunHead->readonly_runs(), count, &tmp.fBounds);
+        tmp.fRunHead->computeRunBounds(&tmp.fBounds);
         this->swap(tmp);
     }
     SkDEBUGCODE(this->validate();)
@@ -319,7 +334,7 @@ struct Edge {
     enum {
         kY0Link = 0x01,
         kY1Link = 0x02,
-        
+
         kCompleteLink = (kY0Link | kY1Link)
     };
 
@@ -327,7 +342,7 @@ struct Edge {
     SkRegion::RunType fY0, fY1;
     uint8_t fFlags;
     Edge*   fNext;
-    
+
     void set(int x, int y0, int y1) {
         SkASSERT(y0 != y1);
 
@@ -337,7 +352,7 @@ struct Edge {
         fFlags = 0;
         SkDEBUGCODE(fNext = NULL;)
     }
-    
+
     int top() const {
         return SkFastMin32(fY0, fY1);
     }
@@ -368,7 +383,7 @@ static void find_link(Edge* base, Edge* stop) {
             }
         }
     }
-    
+
     e = base;
     if ((base->fFlags & Edge::kY1Link) == 0) {
         for (;;) {
@@ -381,7 +396,7 @@ static void find_link(Edge* base, Edge* stop) {
             }
         }
     }
-        
+
     base->fFlags = Edge::kCompleteLink;
 }
 
@@ -433,7 +448,7 @@ bool SkRegion::getBoundaryPath(SkPath* path) const {
     const SkIRect& bounds = this->getBounds();
 
     if (this->isRect()) {
-        SkRect  r;        
+        SkRect  r;
         r.set(bounds);      // this converts the ints to scalars
         path->addRect(r);
         return true;
@@ -441,15 +456,14 @@ bool SkRegion::getBoundaryPath(SkPath* path) const {
 
     SkRegion::Iterator  iter(*this);
     SkTDArray<Edge>     edges;
-    
+
     for (const SkIRect& r = iter.rect(); !iter.done(); iter.next()) {
         Edge* edge = edges.append(2);
         edge[0].set(r.fLeft, r.fBottom, r.fTop);
         edge[1].set(r.fRight, r.fTop, r.fBottom);
     }
-    SkQSort(edges.begin(), edges.count(), sizeof(Edge),
-            (SkQSortCompareProc)EdgeProc);
-    
+    qsort(edges.begin(), edges.count(), sizeof(Edge), SkCastForQSort(EdgeProc));
+
     int count = edges.count();
     Edge* start = edges.begin();
     Edge* stop = start + count;
@@ -474,4 +488,3 @@ bool SkRegion::getBoundaryPath(SkPath* path) const {
 
     return true;
 }
-

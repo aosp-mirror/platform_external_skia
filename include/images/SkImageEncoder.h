@@ -23,14 +23,31 @@ public:
     static SkImageEncoder* Create(Type);
 
     virtual ~SkImageEncoder();
-    
+
     /*  Quality ranges from 0..100 */
     enum {
         kDefaultQuality = 80
     };
 
-    bool encodeFile(const char file[], const SkBitmap&, int quality);
-    bool encodeStream(SkWStream*, const SkBitmap&, int quality);
+    /**
+     * Encode bitmap 'bm' in the desired format, writing results to
+     * file 'file', at quality level 'quality' (which can be in range
+     * 0-100).
+     *
+     * Calls the particular implementation's onEncode() method to
+     * actually do the encoding.
+     */
+    bool encodeFile(const char file[], const SkBitmap& bm, int quality);
+
+    /**
+     * Encode bitmap 'bm' in the desired format, writing results to
+     * stream 'stream', at quality level 'quality' (which can be in
+     * range 0-100).
+     *
+     * Calls the particular implementation's onEncode() method to
+     * actually do the encoding.
+     */
+    bool encodeStream(SkWStream* stream, const SkBitmap& bm, int quality);
 
     static bool EncodeFile(const char file[], const SkBitmap&, Type,
                            int quality);
@@ -38,7 +55,32 @@ public:
                            int quality);
 
 protected:
-    virtual bool onEncode(SkWStream*, const SkBitmap&, int quality) = 0;
+    /**
+     * Encode bitmap 'bm' in the desired format, writing results to
+     * stream 'stream', at quality level 'quality' (which can be in
+     * range 0-100).
+     *
+     * This must be overridden by each SkImageEncoder implementation.
+     */
+    virtual bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality) = 0;
 };
+
+// This macro declares a global (i.e., non-class owned) creation entry point
+// for each encoder (e.g., CreateJPEGImageEncoder)
+#define DECLARE_ENCODER_CREATOR(codec)          \
+    SkImageEncoder *Create ## codec ();
+
+// This macro defines the global creation entry point for each encoder. Each
+// encoder implementation that registers with the encoder factory must call it.
+#define DEFINE_ENCODER_CREATOR(codec)           \
+    SkImageEncoder *Create ## codec () {        \
+        return SkNEW( Sk ## codec );            \
+    }
+
+// All the encoders known by Skia. Note that, depending on the compiler settings,
+// not all of these will be available
+DECLARE_ENCODER_CREATOR(JPEGImageEncoder);
+DECLARE_ENCODER_CREATOR(PNGImageEncoder);
+DECLARE_ENCODER_CREATOR(WEBPImageEncoder);
 
 #endif

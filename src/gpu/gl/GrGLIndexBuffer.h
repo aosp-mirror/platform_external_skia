@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -11,7 +10,7 @@
 #ifndef GrGLIndexBuffer_DEFINED
 #define GrGLIndexBuffer_DEFINED
 
-#include "../GrIndexBuffer.h"
+#include "GrIndexBuffer.h"
 #include "gl/GrGLInterface.h"
 
 class GrGpuGL;
@@ -33,13 +32,14 @@ public:
 
 protected:
     GrGLIndexBuffer(GrGpuGL* gpu,
+                    bool isWrapped,
                     GrGLuint id,
                     size_t sizeInBytes,
                     bool dynamic);
 
     // overrides of GrResource
-    virtual void onAbandon();
-    virtual void onRelease();
+    virtual void onAbandon() SK_OVERRIDE;
+    virtual void onRelease() SK_OVERRIDE;
 
 private:
     void bind() const;

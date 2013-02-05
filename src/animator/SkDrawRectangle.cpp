@@ -36,8 +36,8 @@ const SkMemberInfo SkDrawRect::fInfo[] = {
 
 DEFINE_GET_MEMBER(SkDrawRect);
 
-SkDrawRect::SkDrawRect() : fParent(NULL) { 
-    fRect.setEmpty(); 
+SkDrawRect::SkDrawRect() : fParent(NULL) {
+    fRect.setEmpty();
 }
 
 void SkDrawRect::dirty() {
@@ -140,6 +140,3 @@ void SkRoundRect::dump(SkAnimateMaker* maker) {
             SkScalarToFloat(fRect.fBottom), SkScalarToFloat(rx), SkScalarToFloat(ry));
 }
 #endif
-
-
-

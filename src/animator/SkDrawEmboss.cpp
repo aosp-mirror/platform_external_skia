@@ -22,7 +22,7 @@ const SkMemberInfo SkDrawEmboss::fInfo[] = {
 
 DEFINE_GET_MEMBER(SkDrawEmboss);
 
-SkDrawEmboss::SkDrawEmboss() : radius(-1) { 
+SkDrawEmboss::SkDrawEmboss() : radius(-1) {
     direction.setCount(3);
 }
 
@@ -31,4 +31,3 @@ SkMaskFilter* SkDrawEmboss::getMaskFilter() {
         return NULL;
     return SkBlurMaskFilter::CreateEmboss(direction.begin(), ambient, specular, radius);
 }
-

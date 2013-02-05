@@ -1,5 +1,13 @@
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkArithmeticMode.h"
 #include "SkColorPriv.h"
+#include "SkString.h"
 #include "SkUnPreMultiply.h"
 
 class SkArithmeticMode_scalar : public SkXfermode {
@@ -12,20 +20,16 @@ public:
     }
 
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]) SK_OVERRIDE;
-    virtual Factory getFactory() SK_OVERRIDE;
+                        const SkAlpha aa[]) const SK_OVERRIDE;
 
-    static SkFlattenable* Create(SkFlattenableReadBuffer& buffer) {
-        return NULL;
-    }
+    SK_DEVELOPER_TO_STRING()
+    SK_DECLARE_UNFLATTENABLE_OBJECT()
 
 private:
     SkScalar fK[4];
-};
 
-SkFlattenable::Factory SkArithmeticMode_scalar::getFactory() {
-    return Create;
-}
+    typedef SkXfermode INHERITED;
+};
 
 static int pinToByte(int value) {
     if (value < 0) {
@@ -55,7 +59,7 @@ static bool needsUnpremul(int alpha) {
 }
 
 void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
-                                     int count, const SkAlpha aaCoverage[]) {
+                                 int count, const SkAlpha aaCoverage[]) const {
     SkScalar k1 = fK[0] / 255;
     SkScalar k2 = fK[1];
     SkScalar k3 = fK[2];
@@ -73,7 +77,7 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
 
             int a, r, g, b;
 
-            if (!srcNeedsUnpremul && !srcNeedsUnpremul) {
+            if (!srcNeedsUnpremul && !dstNeedsUnpremul) {
                 a = arith(k1, k2, k3, k4, sa, sa);
                 r = arith(k1, k2, k3, k4, SkGetPackedR32(sc), SkGetPackedR32(dc));
                 g = arith(k1, k2, k3, k4, SkGetPackedG32(sc), SkGetPackedG32(dc));
@@ -126,6 +130,17 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
     }
 }
 
+#ifdef SK_DEVELOPER
+void SkArithmeticMode_scalar::toString(SkString* str) const {
+    str->append("SkArithmeticMode_scalar: ");
+    for (int i = 0; i < 4; ++i) {
+        str->appendScalar(fK[i]);
+        if (i < 3) {
+            str->append(" ");
+        }
+    }
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -140,6 +155,7 @@ static bool fitsInBits(SkScalar x, int bits) {
 #endif
 }
 
+#if 0 // UNUSED
 static int32_t toDot8(SkScalar x) {
 #ifdef SK_SCALAR_IS_FIXED
     x += 1 << 7;
@@ -149,17 +165,18 @@ static int32_t toDot8(SkScalar x) {
     return (int32_t)(x * 256);
 #endif
 }
+#endif
 
 SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
                                      SkScalar k3, SkScalar k4) {
     if (fitsInBits(k1, 8) && fitsInBits(k2, 16) &&
         fitsInBits(k2, 16) && fitsInBits(k2, 24)) {
 
+#if 0 // UNUSED
         int32_t i1 = toDot8(k1);
         int32_t i2 = toDot8(k2);
         int32_t i3 = toDot8(k3);
         int32_t i4 = toDot8(k4);
-#if 0
         if (i1) {
             return SkNEW_ARGS(SkArithmeticMode_quad, (i1, i2, i3, i4));
         }
@@ -174,4 +191,3 @@ SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
     }
     return SkNEW_ARGS(SkArithmeticMode_scalar, (k1, k2, k3, k4));
 }
-

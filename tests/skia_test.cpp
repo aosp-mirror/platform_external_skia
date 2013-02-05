@@ -8,6 +8,10 @@
 #include "SkGraphics.h"
 #include "Test.h"
 
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#endif
+
 using namespace skiatest;
 
 // need to explicitly declare this, or we get some weird infinite loop llist
@@ -56,7 +60,7 @@ static const char* result2string(Reporter::Result result) {
 
 class DebugfReporter : public Reporter {
 public:
-    DebugfReporter(bool androidMode) : fAndroidMode(androidMode) {}
+    DebugfReporter() : fIndex(0), fTotal(0) {}
 
     void setIndexOfTotal(int index, int total) {
         fIndex = index;
@@ -64,56 +68,32 @@ public:
     }
 protected:
     virtual void onStart(Test* test) {
-        this->dumpState(test, kStarting_State);
+        SkDebugf("[%d/%d] %s...\n", fIndex+1, fTotal, test->getName());
     }
     virtual void onReport(const char desc[], Reporter::Result result) {
-        if (!fAndroidMode) {
-            SkDebugf("\t%s: %s\n", result2string(result), desc);
-        }
+        SkDebugf("\t%s: %s\n", result2string(result), desc);
     }
     virtual void onEnd(Test* test) {
-        this->dumpState(test, this->getCurrSuccess() ?
-                        kSucceeded_State : kFailed_State);
-    }
-private:
-    enum State {
-        kStarting_State = 1,
-        kSucceeded_State = 0,
-        kFailed_State = -2
-    };
-
-    void dumpState(Test* test, State state) {
-        if (fAndroidMode) {
-            SkDebugf("INSTRUMENTATION_STATUS: test=%s\n", test->getName());
-            SkDebugf("INSTRUMENTATION_STATUS: class=com.skia\n");
-            SkDebugf("INSTRUMENTATION_STATUS: current=%d\n", fIndex+1);
-            SkDebugf("INSTRUMENTATION_STATUS: numtests=%d\n", fTotal);
-            SkDebugf("INSTRUMENTATION_STATUS_CODE: %d\n", state);
-        } else {
-            if (kStarting_State == state) {
-                SkDebugf("[%d/%d] %s...\n", fIndex+1, fTotal, test->getName());
-            } else if (kFailed_State == state) {
-                SkDebugf("---- FAILED\n");
-            }
+        if (!this->getCurrSuccess()) {
+            SkDebugf("---- FAILED\n");
         }
     }
-
+private:
     int fIndex, fTotal;
-    bool fAndroidMode;
 };
 
-int main (int argc, char * const argv[]) {
-    SkAutoGraphics ag;
+int tool_main(int argc, char** argv);
+int tool_main(int argc, char** argv) {
+#if SK_ENABLE_INST_COUNT
+    gPrintInstCount = true;
+#endif
+    SkGraphics::Init();
 
-    bool androidMode = false;
     const char* matchStr = NULL;
 
     char* const* stop = argv + argc;
     for (++argv; argv < stop; ++argv) {
-        if (strcmp(*argv, "-android") == 0) {
-            androidMode = true;
-        
-        } else if (strcmp(*argv, "--match") == 0) {
+        if (strcmp(*argv, "--match") == 0) {
             ++argv;
             if (argv < stop && **argv) {
                 matchStr = *argv;
@@ -136,12 +116,10 @@ int main (int argc, char * const argv[]) {
 #else
         header.append(" SK_SCALAR_IS_FLOAT");
 #endif
-        if (!androidMode) {
-            SkDebugf("%s\n", header.c_str());
-        }
+        SkDebugf("%s\n", header.c_str());
     }
 
-    DebugfReporter reporter(androidMode);
+    DebugfReporter reporter;
     Iter iter(&reporter);
     Test* test;
 
@@ -162,9 +140,27 @@ int main (int argc, char * const argv[]) {
         index += 1;
     }
 
-    if (!androidMode) {
-        SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
-                 count, failCount, skipCount);
-    }
+    SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
+             count, failCount, skipCount);
+
+#if SK_SUPPORT_GPU
+
+#if GR_CACHE_STATS
+    GrContext *gr = GpuTest::GetContext();
+
+    gr->printCacheStats();
+#endif
+
+#endif
+
+    SkGraphics::Term();
+    GpuTest::DestroyContext();
+
     return (failCount == 0) ? 0 : 1;
 }
+
+#if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)
+int main(int argc, char * const argv[]) {
+    return tool_main(argc, (char**) argv);
+}
+#endif

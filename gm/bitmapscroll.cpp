@@ -45,10 +45,19 @@ static void make_bitmap(int quarterWidth, int quarterHeight, SkBitmap *bitmap) {
 }
 
 class BitmapScrollGM : public GM {
-public:
-    BitmapScrollGM() {
+    bool fInited;
+    void init() {
+        if (fInited) {
+            return;
+        }
+        fInited = true;
         // Create the original bitmap.
         make_bitmap(quarterWidth, quarterHeight, &origBitmap);
+    }
+
+public:
+    BitmapScrollGM() {
+        fInited = false;
         this->setBGColor(0xFFDDDDDD);
     }
 
@@ -62,6 +71,7 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
+        this->init();
         SkIRect scrollCenterRegion = SkIRect::MakeXYWH(
             quarterWidth, quarterHeight, quarterWidth*2+1, quarterHeight*2+1);
         int x = quarterWidth;
@@ -121,10 +131,10 @@ protected:
                 // Scroll a new copy of the bitmap, and then draw it.
                 // scrollRect() should always return true, even if it's a no-op
                 SkBitmap scrolledBitmap;
-                bool copyToReturnValue = origBitmap.copyTo(
+                SkDEBUGCODE(bool copyToReturnValue = )origBitmap.copyTo(
                     &scrolledBitmap, origBitmap.config());
                 SkASSERT(copyToReturnValue);
-                bool scrollRectReturnValue = scrolledBitmap.scrollRect(
+                SkDEBUGCODE(bool scrollRectReturnValue = )scrolledBitmap.scrollRect(
                     subset, scrollX * xMult, scrollY * yMult);
                 SkASSERT(scrollRectReturnValue);
                 canvas->drawBitmap(scrolledBitmap, bitmapX, bitmapY);

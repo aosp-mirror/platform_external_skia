@@ -28,12 +28,20 @@ public:
         kHigh_Quality   //!< three pass box blur (similar to gaussian)
     };
 
+    static bool BlurRect(SkMask *dst, const SkRect &src,
+                         SkScalar radius, Style style, Quality quality,
+                         SkIPoint *margin = NULL);
+
     static bool Blur(SkMask* dst, const SkMask& src,
                      SkScalar radius, Style style, Quality quality,
                      SkIPoint* margin = NULL);
+    static bool BlurSeparable(SkMask* dst, const SkMask& src,
+                              SkScalar radius, Style style, Quality quality,
+                              SkIPoint* margin = NULL);
+private:
+    static bool Blur(SkMask* dst, const SkMask& src,
+                     SkScalar radius, Style style, Quality quality,
+                     SkIPoint* margin, bool separable);
 };
 
 #endif
-
-
-

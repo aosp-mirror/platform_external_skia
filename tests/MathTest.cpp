@@ -6,11 +6,47 @@
  * found in the LICENSE file.
  */
 #include "Test.h"
+#include "SkFloatBits.h"
 #include "SkFloatingPoint.h"
-#include "SkMath.h"
+#include "SkMathPriv.h"
 #include "SkPoint.h"
 #include "SkRandom.h"
 #include "SkColorPriv.h"
+
+static float sk_fsel(float pred, float result_ge, float result_lt) {
+    return pred >= 0 ? result_ge : result_lt;
+}
+
+static float fast_floor(float x) {
+//    float big = sk_fsel(x, 0x1.0p+23, -0x1.0p+23);
+    float big = sk_fsel(x, (float)(1 << 23), -(float)(1 << 23));
+    return (float)(x + big) - big;
+}
+
+static float std_floor(float x) {
+    return sk_float_floor(x);
+}
+
+static void test_floor_value(skiatest::Reporter* reporter, float value) {
+    float fast = fast_floor(value);
+    float std = std_floor(value);
+    REPORTER_ASSERT(reporter, std == fast);
+//    SkDebugf("value[%1.9f] std[%g] fast[%g] equal[%d]\n",
+//             value, std, fast, std == fast);
+}
+
+static void test_floor(skiatest::Reporter* reporter) {
+    static const float gVals[] = {
+        0, 1, 1.1f, 1.01f, 1.001f, 1.0001f, 1.00001f, 1.000001f, 1.0000001f
+    };
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(gVals); ++i) {
+        test_floor_value(reporter, gVals[i]);
+//        test_floor_value(reporter, -gVals[i]);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 static float float_blend(int src, int dst, float unit) {
     return dst + (src - dst) * unit;
@@ -38,9 +74,20 @@ static int blend31_old(int src, int dst, int a31) {
     return dst + ((src - dst) * a31 >> 5);
 }
 
+// suppress unused code warning
+static int (*blend_functions[])(int, int, int) = {
+    blend31,
+    blend31_slow,
+    blend31_round,
+    blend31_old
+};
+
 static void test_blend31() {
     int failed = 0;
     int death = 0;
+    if (false) { // avoid bit rot, suppress warning
+        failed = (*blend_functions[0])(0,0,0);
+    }
     for (int src = 0; src <= 255; src++) {
         for (int dst = 0; dst <= 255; dst++) {
             for (int a = 0; a <= 31; a++) {
@@ -117,7 +164,6 @@ static int symmetric_fixmul(int a, int b) {
 
 static void check_length(skiatest::Reporter* reporter,
                          const SkPoint& p, SkScalar targetLen) {
-#ifdef SK_CAN_USE_FLOAT
     float x = SkScalarToFloat(p.fX);
     float y = SkScalarToFloat(p.fY);
     float len = sk_float_sqrt(x*x + y*y);
@@ -125,10 +171,7 @@ static void check_length(skiatest::Reporter* reporter,
     len /= SkScalarToFloat(targetLen);
 
     REPORTER_ASSERT(reporter, len > 0.999f && len < 1.001f);
-#endif
 }
-
-#if defined(SK_CAN_USE_FLOAT)
 
 static float nextFloat(SkRandom& rand) {
     SkFloatIntUnion data;
@@ -141,14 +184,14 @@ static float nextFloat(SkRandom& rand) {
  */
 static bool equal_float_native_skia(float x, uint32_t ni, uint32_t si) {
     if (!(x == x)) {    // NAN
-        return si == SK_MaxS32 || si == SK_MinS32;
+        return ((int32_t)si) == SK_MaxS32 || ((int32_t)si) == SK_MinS32;
     }
     // for out of range, C is undefined, but skia always should return NaN32
     if (x > SK_MaxS32) {
-        return si == SK_MaxS32;
+        return ((int32_t)si) == SK_MaxS32;
     }
     if (x < -SK_MaxS32) {
-        return si == SK_MinS32;
+        return ((int32_t)si) == SK_MinS32;
     }
     return si == ni;
 }
@@ -157,7 +200,8 @@ static void assert_float_equal(skiatest::Reporter* reporter, const char op[],
                                float x, uint32_t ni, uint32_t si) {
     if (!equal_float_native_skia(x, ni, si)) {
         SkString desc;
-        desc.printf("%s float %g bits %x native %x skia %x\n", op, x, ni, si);
+        uint32_t xi = SkFloat2Bits(x);
+        desc.printf("%s float %g bits %x native %x skia %x\n", op, x, xi, ni, si);
         reporter->reportFailed(desc);
     }
 }
@@ -245,8 +289,8 @@ static float make_zero() {
 static void unittest_isfinite(skiatest::Reporter* reporter) {
 #ifdef SK_SCALAR_IS_FLOAT
     float nan = sk_float_asin(2);
-    float inf = 1.0 / make_zero();
-    float big = 3.40282e+038;
+    float inf = 1.0f / make_zero();
+    float big = 3.40282e+038f;
 
     REPORTER_ASSERT(reporter, !SkScalarIsNaN(inf));
     REPORTER_ASSERT(reporter, !SkScalarIsNaN(-inf));
@@ -261,17 +305,14 @@ static void unittest_isfinite(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, !SkScalarIsNaN(big));
     REPORTER_ASSERT(reporter, !SkScalarIsNaN(-big));
     REPORTER_ASSERT(reporter, !SkScalarIsNaN(0));
-    
+
     REPORTER_ASSERT(reporter, !SkScalarIsFinite(nan));
     REPORTER_ASSERT(reporter,  SkScalarIsFinite(big));
     REPORTER_ASSERT(reporter,  SkScalarIsFinite(-big));
     REPORTER_ASSERT(reporter,  SkScalarIsFinite(0));
 }
 
-#endif
-
 static void test_muldiv255(skiatest::Reporter* reporter) {
-#ifdef SK_CAN_USE_FLOAT
     for (int a = 0; a <= 255; a++) {
         for (int b = 0; b <= 255; b++) {
             int ab = a * b;
@@ -290,7 +331,6 @@ static void test_muldiv255(skiatest::Reporter* reporter) {
             REPORTER_ASSERT(reporter, iround <= b);
         }
     }
-#endif
 }
 
 static void test_muldiv255ceiling(skiatest::Reporter* reporter) {
@@ -322,12 +362,10 @@ static void test_copysign(skiatest::Reporter* reporter) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gTriples); i += 3) {
         REPORTER_ASSERT(reporter,
                         SkCopySign32(gTriples[i], gTriples[i+1]) == gTriples[i+2]);
-#ifdef SK_CAN_USE_FLOAT
         float x = (float)gTriples[i];
         float y = (float)gTriples[i+1];
         float expected = (float)gTriples[i+2];
         REPORTER_ASSERT(reporter, sk_float_copysign(x, y) == expected);
-#endif
     }
 
     SkRandom rand;
@@ -416,9 +454,15 @@ static void TestMath(skiatest::Reporter* reporter) {
     for (i = 0; i < 10000; i++) {
         SkPoint p;
 
-        p.setLength(rand.nextS(), rand.nextS(), SK_Scalar1);
+        // These random values are being treated as 32-bit-patterns, not as
+        // ints; calling SkIntToScalar() here produces crashes.
+        p.setLength((SkScalar) rand.nextS(),
+                    (SkScalar) rand.nextS(),
+                    SK_Scalar1);
         check_length(reporter, p, SK_Scalar1);
-        p.setLength(rand.nextS() >> 13, rand.nextS() >> 13, SK_Scalar1);
+        p.setLength((SkScalar) (rand.nextS() >> 13),
+                    (SkScalar) (rand.nextS() >> 13),
+                    SK_Scalar1);
         check_length(reporter, p, SK_Scalar1);
     }
 
@@ -429,10 +473,8 @@ static void TestMath(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, result == 1);
     }
 
-#ifdef SK_CAN_USE_FLOAT
     unittest_fastfloat(reporter);
     unittest_isfinite(reporter);
-#endif
 
 #ifdef SkLONGLONG
     for (i = 0; i < 10000; i++) {
@@ -475,7 +517,6 @@ static void TestMath(skiatest::Reporter* reporter) {
         r2 = SkFixedSquare(numer);
         REPORTER_ASSERT(reporter, result == r2);
 
-#ifdef SK_CAN_USE_FLOAT
         if (numer >= 0 && denom >= 0) {
             SkFixed mean = SkFixedMean(numer, denom);
             float prod = SkFixedToFloat(numer) * SkFixedToFloat(denom);
@@ -495,11 +536,9 @@ static void TestMath(skiatest::Reporter* reporter) {
             int diff = SkAbs32(mod - SkFloatToFixed(m));
             REPORTER_ASSERT(reporter, (diff >> 7) == 0);
         }
-#endif
     }
 #endif
 
-#ifdef SK_CAN_USE_FLOAT
     for (i = 0; i < 10000; i++) {
         SkFract x = rand.nextU() >> 1;
         double xx = (double)x / SK_Fract1;
@@ -519,9 +558,8 @@ static void TestMath(skiatest::Reporter* reporter) {
         check = (int32_t)sqrt(xx);
         REPORTER_ASSERT(reporter, xr == check || xr == check-1);
     }
-#endif
 
-#if !defined(SK_SCALAR_IS_FLOAT) && defined(SK_CAN_USE_FLOAT)
+#if !defined(SK_SCALAR_IS_FLOAT)
     {
         SkFixed s, c;
         s = SkFixedSinCos(0, &c);
@@ -553,8 +591,10 @@ static void TestMath(skiatest::Reporter* reporter) {
     test_blend(reporter);
 #endif
 
+    if (false) test_floor(reporter);
+
     // disable for now
-//    test_blend31();
+    if (false) test_blend31();  // avoid bit rot, suppress warning
 }
 
 #include "TestClassDef.h"

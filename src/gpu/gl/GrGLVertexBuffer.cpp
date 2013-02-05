@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -16,26 +15,31 @@
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
 
 GrGLVertexBuffer::GrGLVertexBuffer(GrGpuGL* gpu,
+                                   bool isWrapped,
                                    GrGLuint id,
                                    size_t sizeInBytes,
                                    bool dynamic)
-    : INHERITED(gpu, sizeInBytes, dynamic)
+    : INHERITED(gpu, isWrapped, sizeInBytes, dynamic)
     , fBufferID(id)
     , fLockPtr(NULL) {
 }
 
 void GrGLVertexBuffer::onRelease() {
     // make sure we've not been abandoned
-    if (fBufferID) {
+    if (fBufferID && !this->isWrapped()) {
         GPUGL->notifyVertexBufferDelete(this);
         GL_CALL(DeleteBuffers(1, &fBufferID));
         fBufferID = 0;
     }
+
+    INHERITED::onRelease();
 }
 
 void GrGLVertexBuffer::onAbandon() {
     fBufferID = 0;
     fLockPtr = NULL;
+
+    INHERITED::onAbandon();
 }
 
 void GrGLVertexBuffer::bind() const {
@@ -50,7 +54,7 @@ GrGLuint GrGLVertexBuffer::bufferID() const {
 void* GrGLVertexBuffer::lock() {
     GrAssert(fBufferID);
     GrAssert(!isLocked());
-    if (this->getGpu()->getCaps().fBufferLockSupport) {
+    if (this->getGpu()->getCaps().bufferLockSupport()) {
         this->bind();
         // Let driver know it can discard the old data
         GL_CALL(BufferData(GR_GL_ARRAY_BUFFER, this->sizeInBytes(), NULL,
@@ -72,7 +76,7 @@ void GrGLVertexBuffer::unlock() {
 
     GrAssert(fBufferID);
     GrAssert(isLocked());
-    GrAssert(this->getGpu()->getCaps().fBufferLockSupport);
+    GrAssert(this->getGpu()->getCaps().bufferLockSupport());
 
     this->bind();
     GL_CALL(UnmapBuffer(GR_GL_ARRAY_BUFFER));
@@ -81,11 +85,12 @@ void GrGLVertexBuffer::unlock() {
 
 bool GrGLVertexBuffer::isLocked() const {
     GrAssert(!this->isValid() || fBufferID);
-#if GR_DEBUG
+    // this check causes a lot of noise in the gl log
+#if 0
     if (this->isValid() && this->getGpu()->getCaps().fBufferLockSupport) {
         GrGLint mapped;
         this->bind();
-        GL_CALL(GetBufferParameteriv(GR_GL_ARRAY_BUFFER, 
+        GL_CALL(GetBufferParameteriv(GR_GL_ARRAY_BUFFER,
                                      GR_GL_BUFFER_MAPPED, &mapped));
         GrAssert(!!mapped == !!fLockPtr);
     }
@@ -112,7 +117,7 @@ bool GrGLVertexBuffer::updateData(const void* src, size_t srcSizeInBytes) {
         // draws that reference the old contents. With this hint it can
         // assign a different allocation for the new contents to avoid
         // flushing the gpu past draws consuming the old contents.
-        GL_CALL(BufferData(GR_GL_ARRAY_BUFFER, 
+        GL_CALL(BufferData(GR_GL_ARRAY_BUFFER,
                            this->sizeInBytes(), NULL, usage));
         GL_CALL(BufferSubData(GR_GL_ARRAY_BUFFER, 0, srcSizeInBytes, src));
     }
@@ -142,4 +147,3 @@ bool GrGLVertexBuffer::updateData(const void* src, size_t srcSizeInBytes) {
 #endif
     return true;
 }
-

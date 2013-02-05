@@ -12,17 +12,18 @@
 
 #include "GrRefCnt.h"
 
+#include "SkTInternalLList.h"
+
 class GrGpu;
 class GrContext;
+class GrResourceEntry;
 
+/**
+ * Base class for the GPU resources created by a GrContext.
+ */
 class GrResource : public GrRefCnt {
 public:
-    explicit GrResource(GrGpu* gpu);
-
-    virtual ~GrResource() {
-        // subclass should have released this.
-        GrAssert(!isValid());
-    }
+    SK_DECLARE_INST_COUNT(GrResource)
 
     /**
      * Frees the resource in the underlying 3D API. It must be safe to call this
@@ -54,33 +55,61 @@ public:
      *
      * @return the size of the buffer in bytes
      */
-     virtual size_t sizeInBytes() const = 0;
+    virtual size_t sizeInBytes() const = 0;
 
-     /**
-      * Retrieves the context that owns the resource. Note that it is possible
-      * for this to return NULL. When resources have been release()ed or
-      * abandon()ed they no longer have an unknowning context. Destroying a
-      * GrContext automatically releases all its resources.
-      */
-     const GrContext* getContext() const;
-     GrContext* getContext();
+    /**
+     * Retrieves the context that owns the resource. Note that it is possible
+     * for this to return NULL. When resources have been release()ed or
+     * abandon()ed they no longer have an owning context. Destroying a
+     * GrContext automatically releases all its resources.
+     */
+    const GrContext* getContext() const;
+    GrContext* getContext();
+
+    void setCacheEntry(GrResourceEntry* cacheEntry) { fCacheEntry = cacheEntry; }
+    GrResourceEntry* getCacheEntry() { return fCacheEntry; }
+
+    void incDeferredRefCount() const { GrAssert(fDeferredRefCount >= 0); ++fDeferredRefCount; }
+    void decDeferredRefCount() const { GrAssert(fDeferredRefCount > 0); --fDeferredRefCount; }
 
 protected:
-
-    virtual void onRelease() = 0;
-    virtual void onAbandon() = 0;
+    /**
+     * isWrapped indicates we have wrapped a client-created backend resource in a GrResource. If it
+     * is true then the client is responsible for the lifetime of the underlying backend resource.
+     * Otherwise, our onRelease() should free the resource.
+     */
+    GrResource(GrGpu* gpu, bool isWrapped);
+    virtual ~GrResource();
 
     GrGpu* getGpu() const { return fGpu; }
 
+    // Derived classes should always call their parent class' onRelease
+    // and onAbandon methods in their overrides.
+    virtual void onRelease() {};
+    virtual void onAbandon() {};
+
+    bool isInCache() const { return NULL != fCacheEntry; }
+    bool isWrapped() const { return kWrapped_Flag & fFlags; }
+
 private:
-    GrResource(); // unimpl
+#if GR_DEBUG
+    friend class GrGpu; // for assert in GrGpu to access getGpu
+#endif
 
-    GrGpu* fGpu; // not reffed. This can outlive the GrGpu.
+    // We're in an internal doubly linked list
+    SK_DECLARE_INTERNAL_LLIST_INTERFACE(GrResource);
 
-    friend class GrGpu; // GrGpu manages list of resources.
+    GrGpu*              fGpu;               // not reffed. The GrGpu can be deleted while there
+                                            // are still live GrResources. It will call
+                                            // release() on all such resources in its
+                                            // destructor.
+    GrResourceEntry*    fCacheEntry;        // NULL if not in cache
+    mutable int         fDeferredRefCount;  // How many references in deferred drawing buffers.
 
-    GrResource* fNext;      // dl-list of resources per-GrGpu
-    GrResource* fPrevious;
+    enum Flags {
+        kWrapped_Flag = 0x1,
+    };
+    uint32_t         fFlags;
 
     typedef GrRefCnt INHERITED;
 };

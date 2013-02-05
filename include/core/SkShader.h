@@ -17,41 +17,65 @@
 #include "SkPaint.h"
 
 class SkPath;
+class GrContext;
+class GrEffectRef;
 
 /** \class SkShader
  *
- *  SkShader is the based class for objects that return horizontal spans of
- *  colors during drawing. A subclass of SkShader is installed in a SkPaint
- *  calling paint.setShader(shader). After that any object (other than a bitmap)
- *  that is drawn with that paint will get its color(s) from the shader.
+ *  Shaders specify the source color(s) for what is being drawn. If a paint
+ *  has no shader, then the paint's color is used. If the paint has a
+ *  shader, then the shader's color(s) are use instead, but they are
+ *  modulated by the paint's alpha. This makes it easy to create a shader
+ *  once (e.g. bitmap tiling or gradient) and then change its transparency
+ *  w/o having to modify the original shader... only the paint's alpha needs
+ *  to be modified.
  */
 class SK_API SkShader : public SkFlattenable {
 public:
-            SkShader();
+    SK_DECLARE_INST_COUNT(SkShader)
+
+    SkShader();
     virtual ~SkShader();
 
     /**
-     *  Return true if the shader has a non-identity local matrix.
-     *  @param localM   Optional: If not null, return the shader's local matrix
-     *  @return true if the shader has a non-identity local matrix.
+     * Returns true if the local matrix is not an identity matrix.
      */
-    bool getLocalMatrix(SkMatrix* localM) const;
+    bool hasLocalMatrix() const { return !fLocalMatrix.isIdentity(); }
+
+    /**
+     *  Returns the local matrix.
+     */
+    const SkMatrix& getLocalMatrix() const { return fLocalMatrix; }
 
     /**
      *  Set the shader's local matrix.
      *  @param localM   The shader's new local matrix.
      */
-    void setLocalMatrix(const SkMatrix& localM);
+    void setLocalMatrix(const SkMatrix& localM) { fLocalMatrix = localM; }
 
     /**
      *  Reset the shader's local matrix to identity.
      */
-    void resetLocalMatrix();
+    void resetLocalMatrix() { fLocalMatrix.reset(); }
 
     enum TileMode {
-        kClamp_TileMode,    //!< replicate the edge color if the shader draws outside of its original bounds
-        kRepeat_TileMode,   //!< repeat the shader's image horizontally and vertically
-        kMirror_TileMode,   //!< repeat the shader's image horizontally and vertically, alternating mirror images so that adjacent images always seam
+        /** replicate the edge color if the shader draws outside of its
+         *  original bounds
+         */
+        kClamp_TileMode,
+
+        /** repeat the shader's image horizontally and vertically */
+        kRepeat_TileMode,
+
+        /** repeat the shader's image horizontally and vertically, alternating
+         *  mirror images so that adjacent images always seam
+         */
+        kMirror_TileMode,
+
+#if 0
+        /** only draw within the original domain, return 0 everywhere else */
+        kDecal_TileMode,
+#endif
 
         kTileModeCount
     };
@@ -114,10 +138,27 @@ public:
     /**
      *  Called once before drawing, with the current paint and device matrix.
      *  Return true if your shader supports these parameters, or false if not.
-     *  If false is returned, nothing will be drawn.
+     *  If false is returned, nothing will be drawn. If true is returned, then
+     *  a balancing call to endContext() will be made before the next call to
+     *  setContext.
+     *
+     *  Subclasses should be sure to call their INHERITED::setContext() if they
+     *  override this method.
      */
     virtual bool setContext(const SkBitmap& device, const SkPaint& paint,
                             const SkMatrix& matrix);
+
+    /**
+     *  Assuming setContext returned true, endContext() will be called when
+     *  the draw using the shader has completed. It is an error for setContext
+     *  to be called twice w/o an intervening call to endContext().
+     *
+     *  Subclasses should be sure to call their INHERITED::endContext() if they
+     *  override this method.
+     */
+    virtual void endContext();
+
+    SkDEBUGCODE(bool setContextHasBeenCalled() const { return SkToBool(fInSetContext); })
 
     /**
      *  Called for each span of the object being drawn. Your subclass should
@@ -125,6 +166,9 @@ public:
      *  to the specified device coordinates.
      */
     virtual void shadeSpan(int x, int y, SkPMColor[], int count) = 0;
+
+    typedef void (*ShadeProc)(void* ctx, int x, int y, SkPMColor[], int count);
+    virtual ShadeProc asAShadeProc(void** ctx);
 
     /**
      *  Called only for 16bit devices when getFlags() returns
@@ -153,14 +197,6 @@ public:
     static bool CanCallShadeSpan16(uint32_t flags) {
         return (flags & kHasSpan16_Flag) != 0;
     }
-
-    /**
-     *  Called before a session using the shader begins. Some shaders override
-     *  this to defer some of their work (like calling bitmap.lockPixels()).
-     *  Must be balanced by a call to endSession.
-     */
-    virtual void beginSession();
-    virtual void endSession();
 
     /**
      Gives method bitmap should be read to implement a shader.
@@ -193,8 +229,20 @@ public:
                             //         space
                             //      2: the second radius minus the first radius
                             //         in pre-transformed space.
+        kTwoPointConical_BitmapType,
+                            //<! Matrix transforms to space where (0,0) is
+                            //   the center of the starting circle.  The second
+                            //   circle will be centered (x, 0) where x  may be
+                            //   0.
+                            //   Three extra parameters are returned:
+                            //      0: x-offset of second circle center
+                            //         to first.
+                            //      1: radius of first circle
+                            //      2: the second radius minus the first radius
+        kLinear_BitmapType, //<! Access bitmap using local coords transformed
+                            //   by matrix. No extras
 
-       kLast_BitmapType = kTwoPointRadial_BitmapType
+       kLast_BitmapType = kLinear_BitmapType
     };
     /** Optional methods for shaders that can pretend to be a bitmap/texture
         to play along with opengl. Default just returns kNone_BitmapType and
@@ -212,7 +260,7 @@ public:
                                     about the first point.
     */
     virtual BitmapType asABitmap(SkBitmap* outTexture, SkMatrix* outMatrix,
-                         TileMode xy[2], SkScalar* twoPointRadialParams) const;
+                         TileMode xy[2]) const;
 
     /**
      *  If the shader subclass can be represented as a gradient, asAGradient
@@ -250,7 +298,8 @@ public:
         kRadial_GradientType,
         kRadial2_GradientType,
         kSweep_GradientType,
-        kLast_GradientType = kSweep_GradientType
+        kConical_GradientType,
+        kLast_GradientType = kConical_GradientType
     };
 
     struct GradientInfo {
@@ -267,19 +316,32 @@ public:
 
     virtual GradientType asAGradient(GradientInfo* info) const;
 
+    /**
+     *  If the shader subclass has a GrEffect implementation, this installs an effect on the stage.
+     *  The GrContext may be used by the effect to create textures. The GPU device does not call
+     *  setContext. Instead we pass the paint here in case the shader needs paint info.
+     */
+    virtual GrEffectRef* asNewEffect(GrContext* context, const SkPaint& paint) const;
+
     //////////////////////////////////////////////////////////////////////////
     //  Factory methods for stock shaders
 
     /** Call this to create a new shader that will draw with the specified bitmap.
-        @param src  The bitmap to use inside the shader
-        @param tmx  The tiling mode to use when sampling the bitmap in the x-direction.
-        @param tmy  The tiling mode to use when sampling the bitmap in the y-direction.
-        @return     Returns a new shader object. Note: this function never returns null.
+     *
+     *  If the bitmap cannot be used (e.g. has no pixels, or its dimensions
+     *  exceed implementation limits (currently at 64K - 1)) then SkEmptyShader
+     *  may be returned.
+     *
+     *  @param src  The bitmap to use inside the shader
+     *  @param tmx  The tiling mode to use when sampling the bitmap in the x-direction.
+     *  @param tmy  The tiling mode to use when sampling the bitmap in the y-direction.
+     *  @return     Returns a new shader object. Note: this function never returns null.
     */
     static SkShader* CreateBitmapShader(const SkBitmap& src,
                                         TileMode tmx, TileMode tmy);
 
-    virtual void flatten(SkFlattenableWriteBuffer& ) SK_OVERRIDE;
+    SkDEVCODE(virtual void toString(SkString* str) const;)
+
 protected:
     enum MatrixClass {
         kLinear_MatrixClass,            // no perspective
@@ -295,13 +357,14 @@ protected:
     MatrixClass         getInverseClass() const { return (MatrixClass)fTotalInverseClass; }
 
     SkShader(SkFlattenableReadBuffer& );
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 private:
-    SkMatrix*           fLocalMatrix;
+    SkMatrix            fLocalMatrix;
     SkMatrix            fTotalInverse;
     uint8_t             fPaintAlpha;
     uint8_t             fDeviceConfig;
     uint8_t             fTotalInverseClass;
-    SkDEBUGCODE(SkBool8 fInSession;)
+    SkDEBUGCODE(SkBool8 fInSetContext;)
 
     static SkShader* CreateBitmapShader(const SkBitmap& src,
                                         TileMode, TileMode,
@@ -311,4 +374,3 @@ private:
 };
 
 #endif
-

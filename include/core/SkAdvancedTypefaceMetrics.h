@@ -26,6 +26,8 @@
 
 class SkAdvancedTypefaceMetrics : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(SkAdvancedTypefaceMetrics)
+
     SkString fFontName;
 
     enum FontType {
@@ -34,7 +36,7 @@ public:
         kCFF_Font,
         kTrueType_Font,
         kOther_Font,
-        kNotEmbeddable_Font,
+        kNotEmbeddable_Font
     };
     // The type of the underlying font program.  This field determines which
     // of the following fields are valid.  If it is kOther_Font or
@@ -56,7 +58,7 @@ public:
         kItalic_Style      = 0x00040,
         kAllCaps_Style     = 0x10000,
         kSmallCaps_Style   = 0x20000,
-        kForceBold_Style   = 0x40000,
+        kForceBold_Style   = 0x40000
     };
     uint16_t fStyle;        // Font style characteristics.
     int16_t fItalicAngle;   // Counterclockwise degrees from vertical of the
@@ -75,7 +77,7 @@ public:
       kHAdvance_PerGlyphInfo   = 0x1, // Populate horizontal advance data.
       kVAdvance_PerGlyphInfo   = 0x2, // Populate vertical advance data.
       kGlyphNames_PerGlyphInfo = 0x4, // Populate glyph names (Type 1 only).
-      kToUnicode_PerGlyphInfo  = 0x8, // Populate ToUnicode table, ignored
+      kToUnicode_PerGlyphInfo  = 0x8  // Populate ToUnicode table, ignored
                                       // for Type 1 fonts
     };
 
@@ -84,7 +86,7 @@ public:
         enum MetricType {
             kDefault,  // Default advance: fAdvance.count = 1
             kRange,    // Advances for a range: fAdvance.count = fEndID-fStartID
-            kRun,      // fStartID-fEndID have same advance: fAdvance.count = 1
+            kRun       // fStartID-fEndID have same advance: fAdvance.count = 1
         };
         MetricType fType;
         uint16_t fStartId;
@@ -112,6 +114,9 @@ public:
     // The mapping from glyph to Unicode, only populated if
     // kToUnicode_PerGlyphInfo is passed to GetAdvancedTypefaceMetrics.
     SkTDArray<SkUnichar> fGlyphToUnicode;
+
+private:
+    typedef SkRefCnt INHERITED;
 };
 
 namespace skia_advanced_typeface_metrics_utils {

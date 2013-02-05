@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,23 +5,14 @@
  * found in the LICENSE file.
  */
 
-
 #include "GrGLTexture.h"
-
 #include "GrGpuGL.h"
+
+SK_DEFINE_INST_COUNT(GrGLTexID)
 
 #define GPUGL static_cast<GrGpuGL*>(getGpu())
 
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
-
-const GrGLenum* GrGLTexture::WrapMode2GLWrap() {
-    static const GrGLenum repeatModes[] = {
-        GR_GL_CLAMP_TO_EDGE,
-        GR_GL_REPEAT,
-        GR_GL_MIRRORED_REPEAT
-    };
-    return repeatModes;
-};
 
 void GrGLTexture::init(GrGpuGL* gpu,
                        const Desc& textureDesc,
@@ -32,59 +22,55 @@ void GrGLTexture::init(GrGpuGL* gpu,
 
     fTexParams.invalidate();
     fTexParamsTimestamp = GrGpu::kExpiredTimestamp;
-    fTexIDObj           = new GrGLTexID(GPUGL->glInterface(),
-                                        textureDesc.fTextureID,
-                                        textureDesc.fOwnsID);
-    fOrientation        = textureDesc.fOrientation;
+    fTexIDObj           = SkNEW_ARGS(GrGLTexID,
+                                     (GPUGL->glInterface(),
+                                      textureDesc.fTextureID,
+                                      textureDesc.fIsWrapped));
 
     if (NULL != rtDesc) {
-        // we render to the top left
+        GrAssert(kBottomLeft_GrSurfaceOrigin == textureDesc.fOrigin);
         GrGLIRect vp;
         vp.fLeft   = 0;
         vp.fWidth  = textureDesc.fWidth;
         vp.fBottom = 0;
         vp.fHeight = textureDesc.fHeight;
 
-        fRenderTarget = new GrGLRenderTarget(gpu, *rtDesc, vp, fTexIDObj, this);
+        fRenderTarget = SkNEW_ARGS(GrGLRenderTarget,
+                                   (gpu, *rtDesc, vp, fTexIDObj, this));
     }
 }
 
 GrGLTexture::GrGLTexture(GrGpuGL* gpu,
-                         const Desc& textureDesc) 
-    : INHERITED(gpu,
-                textureDesc.fWidth,
-                textureDesc.fHeight,
-                textureDesc.fConfig) {
+                         const Desc& textureDesc)
+    : INHERITED(gpu, textureDesc.fIsWrapped, textureDesc, textureDesc.fOrigin) {
     this->init(gpu, textureDesc, NULL);
 }
 
 GrGLTexture::GrGLTexture(GrGpuGL* gpu,
                          const Desc& textureDesc,
                          const GrGLRenderTarget::Desc& rtDesc)
-    : INHERITED(gpu,
-                textureDesc.fWidth,
-                textureDesc.fHeight,
-                textureDesc.fConfig) {
+    : INHERITED(gpu, textureDesc.fIsWrapped, textureDesc, textureDesc.fOrigin) {
     this->init(gpu, textureDesc, &rtDesc);
 }
 
 void GrGLTexture::onRelease() {
-    INHERITED::onRelease();
     GPUGL->notifyTextureDelete(this);
     if (NULL != fTexIDObj) {
         fTexIDObj->unref();
         fTexIDObj = NULL;
     }
+
+    INHERITED::onRelease();
 }
 
 void GrGLTexture::onAbandon() {
-    INHERITED::onAbandon();
     if (NULL != fTexIDObj) {
         fTexIDObj->abandon();
     }
+
+    INHERITED::onAbandon();
 }
 
-intptr_t GrGLTexture::getTextureHandle() const {
+GrBackendObject GrGLTexture::getTextureHandle() const {
     return fTexIDObj->id();
 }
-

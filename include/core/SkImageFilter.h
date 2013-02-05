@@ -11,9 +11,13 @@
 #include "SkFlattenable.h"
 
 class SkBitmap;
+class SkColorFilter;
 class SkDevice;
 class SkMatrix;
-struct SkPoint;
+struct SkIPoint;
+struct SkIRect;
+class GrEffectRef;
+class GrTexture;
 
 /**
  *  Experimental.
@@ -38,16 +42,20 @@ struct SkPoint;
  */
 class SK_API SkImageFilter : public SkFlattenable {
 public:
+    SK_DECLARE_INST_COUNT(SkImageFilter)
+
     class Proxy {
     public:
+        virtual ~Proxy() {};
+
         virtual SkDevice* createDevice(int width, int height) = 0;
-        
+        // returns true if the proxy can handle this filter natively
+        virtual bool canHandleImageFilter(SkImageFilter*) = 0;
         // returns true if the proxy handled the filter itself. if this returns
         // false then the filter's code will be called.
         virtual bool filterImage(SkImageFilter*, const SkBitmap& src,
                                  const SkMatrix& ctm,
                                  SkBitmap* result, SkIPoint* offset) = 0;
-        virtual ~Proxy() {};
     };
 
     /**
@@ -58,7 +66,7 @@ public:
      *  The matrix is the current matrix on the canvas.
      *
      *  Offset is the amount to translate the resulting image relative to the
-     *  src when it is drawn. 
+     *  src when it is drawn.
      *
      *  If the result image cannot be created, return false, in which case both
      *  the result and offset parameters will be ignored by the caller.
@@ -73,32 +81,71 @@ public:
     bool filterBounds(const SkIRect& src, const SkMatrix& ctm, SkIRect* dst);
 
     /**
-     *  Experimental.
+     *  Returns true if the filter can be expressed a single-pass
+     *  GrEffect, used to process this filter on the GPU, or false if
+     *  not.
      *
-     *  If the filter can be expressed as a gaussian-blur, return true and
-     *  set the sigma to the values for horizontal and vertical.
+     *  If effect is non-NULL, a new GrEffect instance is stored
+     *  in it.  The caller assumes ownership of the stage, and it is up to the
+     *  caller to unref it.
+     *
+     *  The effect can assume its vertexCoords space maps 1-to-1 with texels
+     *  in the texture.
      */
-    virtual bool asABlur(SkSize* sigma) const;
+    virtual bool asNewEffect(GrEffectRef** effect, GrTexture*) const;
 
     /**
-     *  Experimental.
-     *
-     *  If the filter can be expressed as an erode, return true and
-     *  set the radius in X and Y.
+     *  Returns true if the filter can be processed on the GPU.  This is most
+     *  often used for multi-pass effects, where intermediate results must be
+     *  rendered to textures.  For single-pass effects, use asNewEffect().
+     *  The default implementation returns false.
      */
-    virtual bool asAnErode(SkISize* radius) const;
+    virtual bool canFilterImageGPU() const;
 
     /**
-     *  Experimental.
-     *
-     *  If the filter can be expressed as a dilation, return true and
-     *  set the radius in X and Y.
+     *  Process this image filter on the GPU.  src is the source image for
+     *  processing, as a texture-backed bitmap.  result is the destination
+     *  bitmap, which should contain a texture-backed pixelref on success.
+     *  The default implementation returns returns false and ignores the
+     *  result parameter.
      */
-    virtual bool asADilate(SkISize* radius) const;
+    virtual bool filterImageGPU(Proxy*, const SkBitmap& src, SkBitmap* result);
+
+    /**
+     *  Returns this image filter as a color filter if possible,
+     *  NULL otherwise.
+     */
+    virtual SkColorFilter* asColorFilter() const;
+
+    /**
+     *  Returns the number of inputs this filter will accept (some inputs can
+     *  be NULL).
+     */
+    int countInputs() const { return fInputCount; }
+
+    /**
+     *  Returns the input filter at a given index, or NULL if no input is
+     *  connected.  The indices used are filter-specific.
+     */
+    SkImageFilter* getInput(int i) const {
+        SkASSERT(i < fInputCount);
+        return fInputs[i];
+    }
 
 protected:
-    SkImageFilter() {}
-    explicit SkImageFilter(SkFlattenableReadBuffer& rb) : INHERITED(rb) {}
+    SkImageFilter(int inputCount, SkImageFilter** inputs);
+
+    // Convenience constructor for 1-input filters.
+    explicit SkImageFilter(SkImageFilter* input);
+
+    // Convenience constructor for 2-input filters.
+    SkImageFilter(SkImageFilter* input1, SkImageFilter* input2);
+
+    virtual ~SkImageFilter();
+
+    explicit SkImageFilter(SkFlattenableReadBuffer& rb);
+
+    virtual void flatten(SkFlattenableWriteBuffer& wb) const SK_OVERRIDE;
 
     // Default impl returns false
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const SkMatrix&,
@@ -106,8 +153,15 @@ protected:
     // Default impl copies src into dst and returns true
     virtual bool onFilterBounds(const SkIRect&, const SkMatrix&, SkIRect*);
 
+    // Return the result of processing the given input, or the source bitmap
+    // if we have no connected input at that index.
+    SkBitmap getInputResult(int index, Proxy*, const SkBitmap& src, const SkMatrix&,
+                            SkIPoint*);
+
 private:
     typedef SkFlattenable INHERITED;
+    int fInputCount;
+    SkImageFilter** fInputs;
 };
 
 #endif

@@ -12,19 +12,24 @@ namespace skiagm {
 class FillTypeGM : public GM {
     SkPath fPath;
 public:
-	FillTypeGM() {
+    FillTypeGM() {
         this->setBGColor(0xFFDDDDDD);
-        const SkScalar radius = SkIntToScalar(45);
-        fPath.addCircle(SkIntToScalar(50), SkIntToScalar(50), radius);
-        fPath.addCircle(SkIntToScalar(100), SkIntToScalar(100), radius);
     }
-    
+
+    void makePath() {
+        if (fPath.isEmpty()) {
+            const SkScalar radius = SkIntToScalar(45);
+            fPath.addCircle(SkIntToScalar(50), SkIntToScalar(50), radius);
+            fPath.addCircle(SkIntToScalar(100), SkIntToScalar(100), radius);
+        }
+    }
+
 protected:
     virtual SkString onShortName() {
         return SkString("filltypes");
     }
 
-	virtual SkISize onISize() {
+    virtual SkISize onISize() {
         return make_isize(835, 840);
     }
 
@@ -57,8 +62,10 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
+        this->makePath();
+
         canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
-        
+
         SkPaint paint;
         const SkScalar scale = SkIntToScalar(5)/4;
 
@@ -75,7 +82,7 @@ protected:
         canvas->translate(SkIntToScalar(450), 0);
         showFour(canvas, scale, paint);
     }
-    
+
 private:
     typedef GM INHERITED;
 };
@@ -86,4 +93,3 @@ static GM* MyFactory(void*) { return new FillTypeGM; }
 static GMRegistry reg(MyFactory);
 
 }
-

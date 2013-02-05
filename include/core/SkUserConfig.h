@@ -41,8 +41,7 @@
 // ANDROID Specific changes - NO NOT CHECK BACK INTO code.google.com/p/skia
 //
 
-#define PICTURE_VERSION_ICS 1 // r1562 of Skia
-#define PICTURE_VERSION_JB  2
+#define SK_BUILD_FOR_ANDROID
 
 // do this build check for other tools that still read this header
 #ifdef ANDROID
@@ -58,13 +57,6 @@
 #define SK_SCALAR_IS_FLOAT
 #undef SK_SCALAR_IS_FIXED
 
-
-/*  Somewhat independent of how SkScalar is implemented, Skia also wants to know
-    if it can use floats at all. Naturally, if SK_SCALAR_IS_FLOAT is defined,
-    SK_CAN_USE_FLOAT must be too; but if scalars are fixed, SK_CAN_USE_FLOAT
-    can go either way.
- */
-#define SK_CAN_USE_FLOAT
 
 /*  For some performance-critical scalar operations, skia will optionally work
     around the standard float operators if it knows that the CPU does not have
@@ -86,6 +78,21 @@
 //#define SK_DEBUG
 //#define SK_RELEASE
 
+/*  Skia has certain debug-only code that is extremely intensive even for debug
+    builds.  This code is useful for diagnosing specific issues, but is not
+    generally applicable, therefore it must be explicitly enabled to avoid
+    the performance impact. By default these flags are undefined, but can be
+    enabled by uncommenting them below.
+ */
+//#define SK_DEBUG_GLYPH_CACHE
+//#define SK_DEBUG_PATH
+
+/*  To assist debugging, Skia provides an instance counting utility in
+    include/core/SkInstCount.h. This flag turns on and off that utility to
+    allow instance count tracking in either debug or release builds. By
+    default it is enabled in debug but disabled in release.
+ */
+//#define SK_ENABLE_INST_COUNT 1
 
 /*  If, in debugging mode, Skia needs to stop (presumably to invoke a debugger)
     it will call SK_CRASH(). If this is not defined it, it is defined in
@@ -104,6 +111,15 @@
     #define SK_CPU_LENDIAN
     #undef  SK_CPU_BENDIAN
 #endif
+
+/*  Most compilers use the same bit endianness for bit flags in a byte as the
+    system byte endianness, and this is the default. If for some reason this
+    needs to be overridden, specify which of the mutually exclusive flags to
+    use. For example, some atom processors in certain configurations have big
+    endian byte order but little endian bit orders.
+*/
+//#define SK_UINT8_BITFIELD_BENDIAN
+//#define SK_UINT8_BITFIELD_LENDIAN
 
 
 /*  Some compilers don't support long long for 64bit integers. If yours does
@@ -131,9 +147,11 @@
 
 /*  If zlib is available and you want to support the flate compression
     algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
-    include path.
+    include path. Alternatively, define SK_SYSTEM_ZLIB to use the system zlib
+    library specified as "#include <zlib.h>".
  */
 //#define SK_ZLIB_INCLUDE <zlib.h>
+//#define SK_SYSTEM_ZLIB
 
 /*  Define this to allow PDF scalars above 32k.  The PDF/A spec doesn't allow
     them, but modern PDF interpreters should handle them just fine.
@@ -149,6 +167,12 @@
  */
 //#define SK_ALLOW_OVER_32K_BITMAPS
 
+/**
+ *  To revert to int-only srcrect behavior in drawBitmapRect(ToRect),
+ *  define this symbol.
+ */
+//#define SK_SUPPORT_INT_SRCRECT_DRAWBITMAPRECT
+
 /*  Define this to set the upper limit for text to support LCD. Values that
     are very large increase the cost in the font cache and draw slower, without
     improving readability. If this is undefined, Skia will use its default
@@ -161,7 +185,7 @@
     so this flag is optional.
  */
 #ifdef SK_DEBUG
-    #define SK_SUPPORT_UNITTEST
+//#define SK_SUPPORT_UNITTEST
 #endif
 
 /* If your system embeds skia and has complex event logging, define this
@@ -184,5 +208,15 @@
         #define SK_B32_SHIFT    0
         #define SK_A32_SHIFT    24
 #endif
+
+
+/* Determines whether to build code that supports the GPU backend. Some classes
+   that are not GPU-specific, such as SkShader subclasses, have optional code
+   that is used allows them to interact with the GPU backend. If you'd like to
+   omit this code set SK_SUPPORT_GPU to 0. This also allows you to omit the gpu
+   directories from your include search path when you're not building the GPU
+   backend. Defaults to 1 (build the GPU code).
+ */
+//#define SK_SUPPORT_GPU 1
 
 #endif

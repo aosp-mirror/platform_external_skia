@@ -21,6 +21,7 @@ namespace skiatest {
 
     class Reporter : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(Reporter)
         Reporter();
 
         enum Result {
@@ -58,11 +59,11 @@ namespace skiatest {
         void reportFailed(const SkString& desc) {
             this->report(desc.c_str(), kFailed);
         }
-        
+
         bool getCurrSuccess() const {
             return fCurrTestSuccess;
         }
-        
+
     protected:
         virtual void onStart(Test*) {}
         virtual void onReport(const char desc[], Result) {}
@@ -102,10 +103,11 @@ namespace skiatest {
         GpuTest() : Test() {
             fContext = GetContext();
         }
+        static GrContext* GetContext();
+        static void DestroyContext();
     protected:
         GrContext* fContext;
     private:
-        static GrContext* GetContext();
     };
 
     typedef SkTRegistry<Test*, void*> TestRegistry;

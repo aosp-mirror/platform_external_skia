@@ -19,7 +19,7 @@ static SkBitmap make_bm() {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kARGB_8888_Config, WW, HH);
     bm.allocPixels();
-    bm.eraseColor(0);
+    bm.eraseColor(SK_ColorTRANSPARENT);
     return bm;
 }
 
@@ -94,7 +94,7 @@ protected:
     virtual void onDraw(SkCanvas* canvas) {
         SkBitmap src = make_src();
         SkBitmap dst = make_dst();
-        
+
         const SkScalar one = SK_Scalar1;
         static const SkScalar K[] = {
             0, 0, 0, 0,
@@ -109,11 +109,10 @@ protected:
             one/4, one/2, one/2, 0,
             -one/4, one/2, one/2, 0,
         };
-        
+
         const SkScalar* k = K;
         const SkScalar* stop = k + SK_ARRAY_COUNT(K);
         SkScalar y = 0;
-        SkScalar x = 0;
         SkScalar gap = SkIntToScalar(src.width() + 20);
         while (k < stop) {
             SkScalar x = 0;

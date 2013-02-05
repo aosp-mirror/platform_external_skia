@@ -58,7 +58,7 @@ static const char* find_points(const char str[], SkPoint value[], int count,
     return str;
 }
 
-static const char* find_scalar(const char str[], SkScalar* value, 
+static const char* find_scalar(const char str[], SkScalar* value,
                                bool isRelative, SkScalar relative) {
     str = SkParse::FindScalar(str, value);
     if (isRelative) {
@@ -103,7 +103,7 @@ bool SkParsePath::FromSVGString(const char data[], SkPath* result) {
                 op = 'L';
                 c = points[0];
                 break;
-            case 'L': 
+            case 'L':
                 data = find_points(data, points, 1, relative, &c);
                 path.lineTo(points[0]);
                 c = points[0];
@@ -120,10 +120,10 @@ bool SkParsePath::FromSVGString(const char data[], SkPath* result) {
                 path.lineTo(c.fX, y);
                 c.fY = y;
             } break;
-            case 'C': 
+            case 'C':
                 data = find_points(data, points, 3, relative, &c);
                 goto cubicCommon;
-            case 'S': 
+            case 'S':
                 data = find_points(data, &points[1], 2, relative, &c);
                 points[0] = c;
                 if (previousOp == 'C' || previousOp == 'S') {
@@ -191,7 +191,7 @@ static void write_scalar(SkWStream* stream, SkScalar value) {
 #ifdef SK_SCALAR_IS_FLOAT
     char buffer[64];
 #ifdef SK_BUILD_FOR_WIN32
-	int len = _snprintf(buffer, sizeof(buffer), "%g", value);
+    int len = _snprintf(buffer, sizeof(buffer), "%g", value);
 #else
     int len = snprintf(buffer, sizeof(buffer), "%g", value);
 #endif
@@ -220,7 +220,7 @@ void SkParsePath::ToSVGString(const SkPath& path, SkString* str) {
     SkPoint         pts[4];
 
     for (;;) {
-        switch (iter.next(pts)) {
+        switch (iter.next(pts, false)) {
             case SkPath::kMove_Verb:
                 append_scalars(&stream, 'M', &pts[0].fX, 2);
                 break;
@@ -243,4 +243,3 @@ void SkParsePath::ToSVGString(const SkPath& path, SkString* str) {
         }
     }
 }
-

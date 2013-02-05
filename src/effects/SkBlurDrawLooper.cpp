@@ -8,13 +8,16 @@
 #include "SkBlurDrawLooper.h"
 #include "SkBlurMaskFilter.h"
 #include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkMaskFilter.h"
 #include "SkColorFilter.h"
+#include "SkFlattenableBuffers.h"
+#include "SkMaskFilter.h"
+#include "SkPaint.h"
+#include "SkString.h"
+#include "SkStringUtils.h"
 
 SkBlurDrawLooper::SkBlurDrawLooper(SkScalar radius, SkScalar dx, SkScalar dy,
                                    SkColor color, uint32_t flags)
-    : fDx(dx), fDy(dy), fBlurColor(color), fBlurFlags(flags) {
+    : fDx(dx), fDy(dy), fBlurColor(color), fBlurFlags(flags), fState(kDone) {
 
     SkASSERT(flags <= kAll_BlurFlag);
     if (radius > 0) {
@@ -23,11 +26,11 @@ SkBlurDrawLooper::SkBlurDrawLooper(SkScalar radius, SkScalar dx, SkScalar dy,
             SkBlurMaskFilter::kNone_BlurFlag;
 
         blurFlags |= flags & kHighQuality_BlurFlag ?
-            SkBlurMaskFilter::kHighQuality_BlurFlag : 
+            SkBlurMaskFilter::kHighQuality_BlurFlag :
             SkBlurMaskFilter::kNone_BlurFlag;
 
         fBlur = SkBlurMaskFilter::Create(radius,
-                                         SkBlurMaskFilter::kNormal_BlurStyle,  
+                                         SkBlurMaskFilter::kNormal_BlurStyle,
                                          blurFlags);
     } else {
         fBlur = NULL;
@@ -50,10 +53,10 @@ SkBlurDrawLooper::SkBlurDrawLooper(SkFlattenableReadBuffer& buffer)
 
     fDx = buffer.readScalar();
     fDy = buffer.readScalar();
-    fBlurColor = buffer.readU32();
-    fBlur = static_cast<SkMaskFilter*>(buffer.readFlattenable());
-    fColorFilter = static_cast<SkColorFilter*>(buffer.readFlattenable());
-    fBlurFlags = buffer.readU32() & kAll_BlurFlag;
+    fBlurColor = buffer.readColor();
+    fBlur = buffer.readFlattenableT<SkMaskFilter>();
+    fColorFilter = buffer.readFlattenableT<SkColorFilter>();
+    fBlurFlags = buffer.readUInt() & kAll_BlurFlag;
 }
 
 SkBlurDrawLooper::~SkBlurDrawLooper() {
@@ -61,13 +64,14 @@ SkBlurDrawLooper::~SkBlurDrawLooper() {
     SkSafeUnref(fColorFilter);
 }
 
-void SkBlurDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkBlurDrawLooper::flatten(SkFlattenableWriteBuffer& buffer) const {
+    this->INHERITED::flatten(buffer);
     buffer.writeScalar(fDx);
     buffer.writeScalar(fDy);
-    buffer.write32(fBlurColor);
+    buffer.writeColor(fBlurColor);
     buffer.writeFlattenable(fBlur);
     buffer.writeFlattenable(fColorFilter);
-    buffer.write32(fBlurFlags);
+    buffer.writeUInt(fBlurFlags);
 }
 
 void SkBlurDrawLooper::init(SkCanvas* canvas) {
@@ -114,7 +118,34 @@ bool SkBlurDrawLooper::next(SkCanvas* canvas, SkPaint* paint) {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////
+#ifdef SK_DEVELOPER
+void SkBlurDrawLooper::toString(SkString* str) const {
+    str->append("SkBlurDrawLooper: ");
 
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkBlurDrawLooper)
+    str->append("dx: ");
+    str->appendScalar(fDx);
 
+    str->append(" dy: ");
+    str->appendScalar(fDy);
+
+    str->append(" color: ");
+    str->appendHex(fBlurColor);
+
+    str->append(" flags: (");
+    if (kNone_BlurFlag == fBlurFlags) {
+        str->append("None");
+    } else {
+        bool needsSeparator = false;
+        SkAddFlagToString(str, SkToBool(kIgnoreTransform_BlurFlag & fBlurFlags), "IgnoreTransform",
+                          &needsSeparator);
+        SkAddFlagToString(str, SkToBool(kOverrideColor_BlurFlag & fBlurFlags), "OverrideColor",
+                          &needsSeparator);
+        SkAddFlagToString(str, SkToBool(kHighQuality_BlurFlag & fBlurFlags), "HighQuality",
+                          &needsSeparator);
+    }
+    str->append(")");
+
+    // TODO: add optional "fBlurFilter->toString(str);" when SkMaskFilter::toString is added
+    // alternatively we could cache the radius in SkBlurDrawLooper and just add it here
+}
+#endif

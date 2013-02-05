@@ -90,10 +90,14 @@ public:
     */
     class Peeker : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(Peeker)
+
         /** Return true to continue decoding, or false to indicate an error, which
             will cause the decoder to not return the image.
         */
         virtual bool peek(const char tag[], const void* data, size_t length) = 0;
+    private:
+        typedef SkRefCnt INHERITED;
     };
 
     Peeker* getPeeker() const { return fPeeker; }
@@ -106,11 +110,16 @@ public:
     */
     class Chooser : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(Chooser)
+
         virtual void begin(int count) {}
         virtual void inspect(int index, SkBitmap::Config config, int width, int height) {}
         /** Return the index of the subimage you want, or -1 to choose none of them.
         */
         virtual int choose() = 0;
+
+    private:
+        typedef SkRefCnt INHERITED;
     };
 
     Chooser* getChooser() const { return fChooser; }
@@ -412,7 +421,12 @@ private:
  */
 class SkImageDecoderFactory : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(SkImageDecoderFactory)
+
     virtual SkImageDecoder* newDecoder(SkStream*) = 0;
+
+private:
+    typedef SkRefCnt INHERITED;
 };
 
 class SkDefaultImageDecoderFactory : SkImageDecoderFactory {
@@ -423,5 +437,26 @@ public:
     }
 };
 
+// This macro declares a global (i.e., non-class owned) creation entry point
+// for each decoder (e.g., CreateJPEGImageDecoder)
+#define DECLARE_DECODER_CREATOR(codec)          \
+    SkImageDecoder *Create ## codec ();
+
+// This macro defines the global creation entry point for each decoder. Each
+// decoder implementation that registers with the decoder factory must call it.
+#define DEFINE_DECODER_CREATOR(codec)           \
+    SkImageDecoder *Create ## codec () {        \
+        return SkNEW( Sk ## codec );            \
+    }
+
+// All the decoders known by Skia. Note that, depending on the compiler settings,
+// not all of these will be available
+DECLARE_DECODER_CREATOR(BMPImageDecoder);
+DECLARE_DECODER_CREATOR(GIFImageDecoder);
+DECLARE_DECODER_CREATOR(ICOImageDecoder);
+DECLARE_DECODER_CREATOR(JPEGImageDecoder);
+DECLARE_DECODER_CREATOR(PNGImageDecoder);
+DECLARE_DECODER_CREATOR(WBMPImageDecoder);
+DECLARE_DECODER_CREATOR(WEBPImageDecoder);
 
 #endif

@@ -25,7 +25,7 @@ protected:
     virtual bool onGetInfo(Info*);
     virtual bool onSetTime(SkMSec);
     virtual bool onGetBitmap(SkBitmap*);
-    
+
 private:
     GifFileType* fGIF;
     int fCurrIndex;
@@ -40,7 +40,11 @@ static int Decode(GifFileType* fileType, GifByteType* out, int size) {
 
 SkGIFMovie::SkGIFMovie(SkStream* stream)
 {
+#if GIFLIB_MAJOR < 5
     fGIF = DGifOpen( stream, Decode );
+#else
+    fGIF = DGifOpen( stream, Decode, NULL );
+#endif
     if (NULL == fGIF)
         return;
 

@@ -18,8 +18,8 @@ static inline char* dupstr(SkChunkAlloc& chunk, const char src[], size_t len)
 {
     SkASSERT(src);
     char*   dst = (char*)chunk.alloc(len + 1, SkChunkAlloc::kThrow_AllocFailType);
-    
-    memcpy(dst, src, len);    
+
+    memcpy(dst, src, len);
     dst[len] = 0;
     return dst;
 }
@@ -37,11 +37,11 @@ static inline int count_pairs(const char** p)
 
 struct Data {
     Data() : fAlloc(2048), fState(NORMAL) {}
-    
+
     XML_Parser              fParser;
     SkXMLPullParser::Curr*  fCurr;
     SkChunkAlloc            fAlloc;
-    
+
     enum State {
         NORMAL,
         MISSED_START_TAG,
@@ -58,7 +58,7 @@ static void XMLCALL start_proc(void *data, const char *el, const char **attr)
     SkChunkAlloc&           alloc = p->fAlloc;
 
     c->fName = dupstr(alloc, el, strlen(el));
-    
+
     int n = count_pairs(attr);
     SkXMLPullParser::AttrInfo* info = (SkXMLPullParser::AttrInfo*)alloc.alloc(n * sizeof(SkXMLPullParser::AttrInfo),
                                                                               SkChunkAlloc::kThrow_AllocFailType);
@@ -88,7 +88,7 @@ static void XMLCALL end_proc(void *data, const char *el)
             so we set a flag to notify them of the missed start_tag
         */
         p->fState = Data::MISSED_START_TAG;
-        
+
         SkASSERT(c->fName != NULL);
         SkASSERT(strcmp(c->fName, el) == 0);
     }
@@ -134,7 +134,7 @@ static void reportError(XML_Parser parser)
     XML_Error code = XML_GetErrorCode(parser);
     int lineNumber = XML_GetCurrentLineNumber(parser);
     const char* msg = XML_ErrorString(code);
-    
+
     printf("-------- XML error [%d] on line %d, %s\n", code, lineNumber, msg);
 }
 
@@ -177,13 +177,13 @@ SkXMLPullParser::EventType SkXMLPullParser::onNextToken()
         return SkXMLPullParser::END_TAG;
     }
 
-    fImpl->fData.fAlloc.reuse();
+    fImpl->fData.fAlloc.reset();
 
     XML_Parser p = fImpl->fData.fParser;
     XML_Status status;
 
     status = XML_ResumeParser(p);
-    
+
 CHECK_STATUS:
     switch (status) {
     case XML_STATUS_OK:
@@ -204,11 +204,10 @@ CHECK_STATUS:
             // return a start_tag, and clear the flag so we return end_tag next
             SkASSERT(SkXMLPullParser::END_TAG == fCurr.fEventType);
             fImpl->fData.fState = Data::RETURN_END_TAG;
-            fImpl->fData.fEndTag = fCurr.fName;  // save this pointer            
+            fImpl->fData.fEndTag = fCurr.fName;  // save this pointer
             return SkXMLPullParser::START_TAG;
         }
         break;
     }
     return fCurr.fEventType;
 }
-

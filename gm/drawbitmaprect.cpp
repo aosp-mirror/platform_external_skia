@@ -8,6 +8,7 @@
 #include "gm.h"
 #include "SkShader.h"
 #include "SkColorPriv.h"
+#include "SkBlurMaskFilter.h"
 
 // effects
 #include "SkGradientShader.h"
@@ -15,10 +16,25 @@
 
 namespace skiagm {
 
+static SkBitmap make_chessbm(int w, int h) {
+    SkBitmap bm;
+    bm.setConfig(SkBitmap::kARGB_8888_Config , w, h);
+    bm.allocPixels();
+
+    for (int y = 0; y < bm.height(); y++) {
+        uint32_t* p = bm.getAddr32(0, y);
+        for (int x = 0; x < bm.width(); x++) {
+            p[x] = ((x + y) & 1) ? SK_ColorWHITE : SK_ColorBLACK;
+        }
+    }
+    bm.unlockPixels();
+    return bm;
+}
+
 static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
     bm->setConfig(config, w, h);
     bm->allocPixels();
-    bm->eraseColor(0);
+    bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
 
@@ -71,9 +87,9 @@ protected:
     SkString onShortName() {
         return SkString("drawbitmaprect");
     }
-    
+
     SkISize onISize() { return make_isize(gSize, gSize); }
-    
+
     virtual void onDraw(SkCanvas* canvas) {
         static const int kBmpSize = 2048;
         if (fLargeBitmap.isNull()) {
@@ -140,6 +156,26 @@ protected:
                 }
             }
         }
+
+        {
+            // test the following code path:
+            // SkGpuDevice::drawPath() -> SkGpuDevice::drawWithMaskFilter()
+            SkIRect srcRect;
+            SkPaint paint;
+            SkBitmap bm;
+
+            bm = make_chessbm(5, 5);
+            paint.setFilterBitmap(true);
+
+            srcRect.setXYWH(1, 1, 3, 3);
+            SkMaskFilter* mf = SkBlurMaskFilter::Create(
+                5,
+                SkBlurMaskFilter::kNormal_BlurStyle,
+                SkBlurMaskFilter::kHighQuality_BlurFlag |
+                SkBlurMaskFilter::kIgnoreTransform_BlurFlag);
+            paint.setMaskFilter(mf)->unref();
+            canvas->drawBitmapRect(bm, &srcRect, dstRect, &paint);
+        }
     }
 
 private:
@@ -148,8 +184,8 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
+#ifndef SK_BUILD_FOR_ANDROID
 static GM* MyFactory(void*) { return new DrawBitmapRectGM; }
 static GMRegistry reg(MyFactory);
-
+#endif
 }
-

@@ -93,6 +93,7 @@ static boolean sk_resync_to_restart(j_decompress_ptr cinfo, int desired) {
 static void sk_term_source(j_decompress_ptr /*cinfo*/) {}
 
 
+#if 0 // UNUSED
 static void skmem_init_source(j_decompress_ptr cinfo) {
     skjpeg_source_mgr*  src = (skjpeg_source_mgr*)cinfo->src;
     src->next_input_byte = (const JOCTET*)src->fMemoryBase;
@@ -119,6 +120,7 @@ static boolean skmem_resync_to_restart(j_decompress_ptr cinfo, int desired) {
 }
 
 static void skmem_term_source(j_decompress_ptr /*cinfo*/) {}
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////

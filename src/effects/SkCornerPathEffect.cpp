@@ -10,22 +10,17 @@
 #include "SkCornerPathEffect.h"
 #include "SkPath.h"
 #include "SkPoint.h"
-#include "SkBuffer.h"
+#include "SkFlattenableBuffers.h"
 
-SkCornerPathEffect::SkCornerPathEffect(SkScalar radius) : fRadius(radius)
-{
-}
-
-SkCornerPathEffect::~SkCornerPathEffect()
-{
-}
+SkCornerPathEffect::SkCornerPathEffect(SkScalar radius) : fRadius(radius) {}
+SkCornerPathEffect::~SkCornerPathEffect() {}
 
 static bool ComputeStep(const SkPoint& a, const SkPoint& b, SkScalar radius,
                         SkPoint* step) {
     SkScalar dist = SkPoint::Distance(a, b);
 
     step->set(b.fX - a.fX, b.fY - a.fY);
-    
+
     if (dist <= radius * 2) {
         step->scale(SK_ScalarHalf);
         return false;
@@ -36,8 +31,8 @@ static bool ComputeStep(const SkPoint& a, const SkPoint& b, SkScalar radius,
 }
 
 bool SkCornerPathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                    SkScalar* width) {
-    if (fRadius == 0) {
+                                    SkStrokeRec*, const SkRect*) const {
+    if (0 == fRadius) {
         return false;
     }
 
@@ -56,7 +51,7 @@ bool SkCornerPathEffect::filterPath(SkPath* dst, const SkPath& src,
     lastCorner.set(0, 0);
 
     for (;;) {
-        switch (verb = iter.next(pts)) {
+        switch (verb = iter.next(pts, false)) {
             case SkPath::kMove_Verb:
                     // close out the previous (open) contour
                 if (SkPath::kLine_Verb == prevVerb) {
@@ -129,21 +124,11 @@ DONE:
     return true;
 }
 
-SkFlattenable::Factory SkCornerPathEffect::getFactory() {
-    return CreateProc;
-}
-
-void SkCornerPathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkCornerPathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
+    this->INHERITED::flatten(buffer);
     buffer.writeScalar(fRadius);
-}
-
-SkFlattenable* SkCornerPathEffect::CreateProc(SkFlattenableReadBuffer& buffer) {
-    return SkNEW_ARGS(SkCornerPathEffect, (buffer));
 }
 
 SkCornerPathEffect::SkCornerPathEffect(SkFlattenableReadBuffer& buffer) {
     fRadius = buffer.readScalar();
 }
-
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkCornerPathEffect)
-

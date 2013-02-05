@@ -51,7 +51,7 @@ void SkTime::GetDateTime(DateTime* t)
     {
         tm      syst;
         time_t  tm;
-        
+
         time(&tm);
         localtime_r(&tm, &syst);
         t->fYear        = SkToU16(syst.tm_year);
@@ -78,4 +78,3 @@ SkMSec SkTime::GetMSecs()
 }
 
 #endif
-

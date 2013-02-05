@@ -10,46 +10,40 @@
 
 #include "GrContext.h"
 #include "GrGpu.h"
+#include "GrResourceCache.h"
 
-void GrStencilBuffer::wasDetachedFromRenderTarget(const GrRenderTarget* rt) {
-    GrAssert(fRTAttachmentCnt > 0);
-    if (0 == --fRTAttachmentCnt) {
-        this->unlockInCache();
-        // At this point we could be deleted!
-    }
+SK_DEFINE_INST_COUNT(GrStencilBuffer)
+
+void GrStencilBuffer::transferToCache() {
+    GrAssert(NULL == this->getCacheEntry());
+
+    this->getGpu()->getContext()->addStencilBuffer(this);
 }
 
-void GrStencilBuffer::transferToCacheAndLock() {
-    GrAssert(NULL == fCacheEntry);
-    fCacheEntry = 
-        this->getGpu()->getContext()->addAndLockStencilBuffer(this);
+namespace {
+// we should never have more than one stencil buffer with same combo of (width,height,samplecount)
+void gen_cache_id(int width, int height, int sampleCnt, GrCacheID* cacheID) {
+    static const GrCacheID::Domain gStencilBufferDomain = GrCacheID::GenerateDomain();
+    GrCacheID::Key key;
+    uint32_t* keyData = key.fData32;
+    keyData[0] = width;
+    keyData[1] = height;
+    keyData[2] = sampleCnt;
+    memset(keyData + 3, 0, sizeof(key) - 3 * sizeof(uint32_t));
+    GR_STATIC_ASSERT(sizeof(key) >= 3 * sizeof(uint32_t));
+    cacheID->reset(gStencilBufferDomain, key);
+}
 }
 
-void GrStencilBuffer::onRelease() {
-    // When the GrGpu rips through its list of resources and releases
-    // them it may release an SB before it releases its attached RTs.
-    // In that case when GrStencilBuffer sees its last detach it no
-    // long has a gpu ptr (gets nulled in GrResource::release()) and can't
-    // access the cache to unlock itself. So if we're being released and still
-    // have attachments go ahead and unlock now.
-    if (fRTAttachmentCnt) {
-        this->unlockInCache();
-        // we shouldn't be deleted here because some RT still has a ref on us.
-    }
-    fCacheEntry = NULL;
-}
+GrResourceKey GrStencilBuffer::ComputeKey(int width,
+                                          int height,
+                                          int sampleCnt) {
+    // All SBs are created internally to attach to RTs so they all use the same domain.
+    static const GrResourceKey::ResourceType gStencilBufferResourceType =
+        GrResourceKey::GenerateResourceType();
+    GrCacheID id;
+    gen_cache_id(width, height, sampleCnt, &id);
 
-void GrStencilBuffer::onAbandon() {
-    // we can use the same behavior as release.
-    this->onRelease();
-}
-
-void GrStencilBuffer::unlockInCache() {
-    if (NULL != fCacheEntry) {
-        GrGpu* gpu = this->getGpu();
-        if (NULL != gpu) {
-            GrAssert(NULL != gpu->getContext());
-            gpu->getContext()->unlockStencilBuffer(fCacheEntry);
-        }
-    }
+    // we don't use any flags for SBs currently.
+    return GrResourceKey(id, gStencilBufferResourceType, 0);
 }

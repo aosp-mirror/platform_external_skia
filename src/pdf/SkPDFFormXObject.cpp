@@ -20,15 +20,23 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
     // We don't want to keep around device because we'd have two copies
     // of content, so reference or copy everything we need (content and
     // resources).
-    device->getResources(&fResources);
+    device->getResources(&fResources, false);
 
-    SkRefPtr<SkStream> content = device->content();
-    content->unref();  // SkRefPtr and content() both took a reference.
+    // Fail fast if in the tree of resources a child references a parent.
+    // If there is an issue, getResources will end up consuming all memory.
+    // TODO: A better approach might be for all SkPDFObject to keep track
+    // of possible cycles.
+#ifdef SK_DEBUG
+    SkTDArray<SkPDFObject*> dummy_resourceList;
+    getResources(&dummy_resourceList);
+#endif
+
+    SkAutoTUnref<SkStream> content(device->content());
     setData(content.get());
 
     insertName("Type", "XObject");
     insertName("Subtype", "Form");
-    insert("BBox", device->getMediaBox().get());
+    SkSafeUnref(this->insert("BBox", device->copyMediaBox()));
     insert("Resources", device->getResourceDict());
 
     // We invert the initial transform and apply that to the xobject so that
@@ -36,15 +44,17 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
     // embedded in things like shaders and images.
     if (!device->initialTransform().isIdentity()) {
         SkMatrix inverse;
-        inverse.reset();
-        device->initialTransform().invert(&inverse);
+        if (!device->initialTransform().invert(&inverse)) {
+            // The initial transform should be invertible.
+            SkASSERT(false);
+            inverse.reset();
+        }
         insert("Matrix", SkPDFUtils::MatrixToArray(inverse))->unref();
     }
 
     // Right now SkPDFFormXObject is only used for saveLayer, which implies
     // isolated blending.  Do this conditionally if that changes.
-    SkRefPtr<SkPDFDict> group = new SkPDFDict("Group");
-    group->unref();  // SkRefPtr and new both took a reference.
+    SkAutoTUnref<SkPDFDict> group(new SkPDFDict("Group"));
     group->insertName("S", "Transparency");
     group->insert("I", new SkPDFBool(true))->unref();  // Isolated.
     insert("Group", group.get());

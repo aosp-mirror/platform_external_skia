@@ -560,10 +560,13 @@ bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
 
 
 ///////////////////////////////////////////////////////////////////////////////
+DEFINE_DECODER_CREATOR(WEBPImageDecoder);
+DEFINE_ENCODER_CREATOR(WEBPImageEncoder);
+///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"
 
-static SkImageDecoder* DFactory(SkStream* stream) {
+static SkImageDecoder* sk_libwebp_dfactory(SkStream* stream) {
     int width, height, hasAlpha;
     if (!webp_parse_header(stream, &width, &height, &hasAlpha)) {
         return NULL;
@@ -573,16 +576,8 @@ static SkImageDecoder* DFactory(SkStream* stream) {
     return SkNEW(SkWEBPImageDecoder);
 }
 
-SkImageDecoder* sk_libwebp_dfactory(SkStream* stream) {
-    return DFactory(stream);
-}
-
-static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
+static SkImageEncoder* sk_libwebp_efactory(SkImageEncoder::Type t) {
       return (SkImageEncoder::kWEBP_Type == t) ? SkNEW(SkWEBPImageEncoder) : NULL;
-}
-
-SkImageEncoder* sk_libwebp_efactory(SkImageEncoder::Type t) {
-    return EFactory(t);
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libwebp_dfactory);

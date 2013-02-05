@@ -7,7 +7,7 @@
  */
 #include "SkImageRef.h"
 #include "SkBitmap.h"
-#include "SkFlattenable.h"
+#include "SkFlattenableBuffers.h"
 #include "SkImageDecoder.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
@@ -15,14 +15,12 @@
 
 //#define DUMP_IMAGEREF_LIFECYCLE
 
-// can't be static, as SkImageRef_Pool needs to see it
-SK_DECLARE_GLOBAL_MUTEX(gImageRefMutex);
 
 ///////////////////////////////////////////////////////////////////////////////
 
 SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
-                       int sampleSize)
-        : SkPixelRef(&gImageRefMutex), fErrorInDecoding(false) {
+                       int sampleSize, SkBaseMutex* mutex)
+        : SkPixelRef(mutex), fErrorInDecoding(false) {
     SkASSERT(stream);
     stream->ref();
     fStream = stream;
@@ -39,7 +37,6 @@ SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
 }
 
 SkImageRef::~SkImageRef() {
-    SkASSERT(&gImageRefMutex == this->mutex());
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("delete ImageRef %p [%d] data=%d\n",
@@ -51,7 +48,7 @@ SkImageRef::~SkImageRef() {
 }
 
 bool SkImageRef::getInfo(SkBitmap* bitmap) {
-    SkAutoMutexAcquire ac(gImageRefMutex);
+    SkAutoMutexAcquire ac(this->mutex());
 
     if (!this->prepareBitmap(SkImageDecoder::kDecodeBounds_Mode)) {
         return false;
@@ -89,7 +86,6 @@ bool SkImageRef::onDecode(SkImageDecoder* codec, SkStream* stream,
 }
 
 bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
-    SkASSERT(&gImageRefMutex == this->mutex());
 
     if (fErrorInDecoding) {
         return false;
@@ -144,8 +140,6 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 }
 
 void* SkImageRef::onLockPixels(SkColorTable** ct) {
-    SkASSERT(&gImageRefMutex == this->mutex());
-
     if (NULL == fBitmap.getPixels()) {
         (void)this->prepareBitmap(SkImageDecoder::kDecodePixels_Mode);
     }
@@ -154,11 +148,6 @@ void* SkImageRef::onLockPixels(SkColorTable** ct) {
         *ct = fBitmap.getColorTable();
     }
     return fBitmap.getPixels();
-}
-
-void SkImageRef::onUnlockPixels() {
-    // we're already have the mutex locked
-    SkASSERT(&gImageRefMutex == this->mutex());
 }
 
 size_t SkImageRef::ramUsed() const {
@@ -175,15 +164,15 @@ size_t SkImageRef::ramUsed() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer)
-        : INHERITED(buffer, &gImageRefMutex), fErrorInDecoding(false) {
-    fConfig = (SkBitmap::Config)buffer.readU8();
-    fSampleSize = buffer.readU8();
+SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
+        : INHERITED(buffer, mutex), fErrorInDecoding(false) {
+    fConfig = (SkBitmap::Config)buffer.readUInt();
+    fSampleSize = buffer.readInt();
     fDoDither = buffer.readBool();
 
-    size_t length = buffer.readU32();
+    size_t length = buffer.getArrayCount();
     fStream = SkNEW_ARGS(SkMemoryStream, (length));
-    buffer.read((void*)fStream->getMemoryBase(), length);
+    buffer.readByteArray((void*)fStream->getMemoryBase());
 
     fPrev = fNext = NULL;
     fFactory = NULL;
@@ -192,12 +181,9 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer)
 void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
-    buffer.write8(fConfig);
-    buffer.write8(fSampleSize);
+    buffer.writeUInt(fConfig);
+    buffer.writeInt(fSampleSize);
     buffer.writeBool(fDoDither);
-    size_t length = fStream->getLength();
-    buffer.write32(length);
     fStream->rewind();
-    buffer.readFromStream(fStream, length);
+    buffer.writeStream(fStream, fStream->getLength());
 }
-

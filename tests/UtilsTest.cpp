@@ -14,41 +14,18 @@
 
 class RefClass : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(RefClass)
+
     RefClass(int n) : fN(n) {}
     int get() const { return fN; }
 
 private:
     int fN;
+
+    typedef SkRefCnt INHERITED;
 };
 
-static void test_refptr(skiatest::Reporter* reporter) {
-    RefClass* r0 = new RefClass(0);
-
-    SkRefPtr<RefClass> rc0;
-    REPORTER_ASSERT(reporter, rc0.get() == NULL);
-    REPORTER_ASSERT(reporter, !rc0);
-
-    SkRefPtr<RefClass> rc1;
-    REPORTER_ASSERT(reporter, rc0 == rc1);
-    REPORTER_ASSERT(reporter, rc0.get() != r0);
-
-    rc0 = r0;
-    REPORTER_ASSERT(reporter, rc0);
-    REPORTER_ASSERT(reporter, rc0 != rc1);
-    REPORTER_ASSERT(reporter, rc0.get() == r0);
-
-    rc1 = rc0;
-    REPORTER_ASSERT(reporter, rc1);
-    REPORTER_ASSERT(reporter, rc0 == rc1);
-    REPORTER_ASSERT(reporter, rc0.get() == r0);
-
-    rc0 = NULL;
-    REPORTER_ASSERT(reporter, rc0.get() == NULL);
-    REPORTER_ASSERT(reporter, !rc0);
-    REPORTER_ASSERT(reporter, rc0 != rc1);
-
-    r0->unref();
-}
+SK_DEFINE_INST_COUNT(RefClass)
 
 static void test_autounref(skiatest::Reporter* reporter) {
     RefClass obj(0);
@@ -172,7 +149,6 @@ static void TestUTF(skiatest::Reporter* reporter) {
 
     test_utf16(reporter);
     test_search(reporter);
-    test_refptr(reporter);
     test_autounref(reporter);
 }
 

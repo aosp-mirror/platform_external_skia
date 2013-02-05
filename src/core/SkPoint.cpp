@@ -31,21 +31,21 @@ void SkIPoint::rotateCCW(SkIPoint* dst) const {
 
 void SkPoint::setIRectFan(int l, int t, int r, int b, size_t stride) {
     SkASSERT(stride >= sizeof(SkPoint));
-    
-    ((SkPoint*)((intptr_t)this + 0 * stride))->set(SkIntToScalar(l), 
+
+    ((SkPoint*)((intptr_t)this + 0 * stride))->set(SkIntToScalar(l),
                                                    SkIntToScalar(t));
-    ((SkPoint*)((intptr_t)this + 1 * stride))->set(SkIntToScalar(l), 
+    ((SkPoint*)((intptr_t)this + 1 * stride))->set(SkIntToScalar(l),
                                                    SkIntToScalar(b));
-    ((SkPoint*)((intptr_t)this + 2 * stride))->set(SkIntToScalar(r), 
+    ((SkPoint*)((intptr_t)this + 2 * stride))->set(SkIntToScalar(r),
                                                    SkIntToScalar(b));
-    ((SkPoint*)((intptr_t)this + 3 * stride))->set(SkIntToScalar(r), 
+    ((SkPoint*)((intptr_t)this + 3 * stride))->set(SkIntToScalar(r),
                                                    SkIntToScalar(t));
 }
 
 void SkPoint::setRectFan(SkScalar l, SkScalar t, SkScalar r, SkScalar b,
                          size_t stride) {
     SkASSERT(stride >= sizeof(SkPoint));
-    
+
     ((SkPoint*)((intptr_t)this + 0 * stride))->set(l, t);
     ((SkPoint*)((intptr_t)this + 1 * stride))->set(l, b);
     ((SkPoint*)((intptr_t)this + 2 * stride))->set(r, b);
@@ -87,31 +87,44 @@ bool SkPoint::setLength(SkScalar length) {
     return this->setLength(fX, fY, length);
 }
 
+#ifdef SK_SCALAR_IS_FLOAT
+
+// Returns the square of the Euclidian distance to (dx,dy).
+static inline float getLengthSquared(float dx, float dy) {
+    return dx * dx + dy * dy;
+}
+
+// Calculates the square of the Euclidian distance to (dx,dy) and stores it in
+// *lengthSquared.  Returns true if the distance is judged to be "nearly zero".
+//
+// This logic is encapsulated in a helper method to make it explicit that we
+// always perform this check in the same manner, to avoid inconsistencies
+// (see http://code.google.com/p/skia/issues/detail?id=560 ).
+static inline bool isLengthNearlyZero(float dx, float dy,
+                                      float *lengthSquared) {
+    *lengthSquared = getLengthSquared(dx, dy);
+    return *lengthSquared <= (SK_ScalarNearlyZero * SK_ScalarNearlyZero);
+}
+
 SkScalar SkPoint::Normalize(SkPoint* pt) {
-    SkScalar mag = SkPoint::Length(pt->fX, pt->fY);
-    if (mag > SK_ScalarNearlyZero) {
-        SkScalar scale = SkScalarInvert(mag);
-        pt->fX = SkScalarMul(pt->fX, scale);
-        pt->fY = SkScalarMul(pt->fY, scale);
+    float mag2;
+    if (!isLengthNearlyZero(pt->fX, pt->fY, &mag2)) {
+        float mag = sk_float_sqrt(mag2);
+        float scale = 1.0f / mag;
+        pt->fX = pt->fX * scale;
+        pt->fY = pt->fY * scale;
         return mag;
     }
     return 0;
 }
 
-#ifdef SK_SCALAR_IS_FLOAT
-
-bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
-    float mag2 = dx * dx + dy * dy;
-    return mag2 > SK_ScalarNearlyZero * SK_ScalarNearlyZero;
-}
-
 SkScalar SkPoint::Length(SkScalar dx, SkScalar dy) {
-    return sk_float_sqrt(dx * dx + dy * dy);
+    return sk_float_sqrt(getLengthSquared(dx, dy));
 }
 
 bool SkPoint::setLength(float x, float y, float length) {
-    float mag2 = x * x + y * y;
-    if (mag2 > SK_ScalarNearlyZero * SK_ScalarNearlyZero) {
+    float mag2;
+    if (!isLengthNearlyZero(x, y, &mag2)) {
         float scale = length / sk_float_sqrt(mag2);
         fX = x * scale;
         fY = y * scale;
@@ -124,12 +137,25 @@ bool SkPoint::setLength(float x, float y, float length) {
 
 #include "Sk64.h"
 
-bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
-    Sk64    tmp1, tmp2, tolSqr;
-    
-    tmp1.setMul(dx, dx);
-    tmp2.setMul(dy, dy);
-    tmp1.add(tmp2);
+// Returns the square of the Euclidian distance to (dx,dy) in *result.
+static inline void getLengthSquared(SkScalar dx, SkScalar dy, Sk64 *result) {
+    Sk64    dySqr;
+
+    result->setMul(dx, dx);
+    dySqr.setMul(dy, dy);
+    result->add(dySqr);
+}
+
+// Calculates the square of the Euclidian distance to (dx,dy) and stores it in
+// *lengthSquared.  Returns true if the distance is judged to be "nearly zero".
+//
+// This logic is encapsulated in a helper method to make it explicit that we
+// always perform this check in the same manner, to avoid inconsistencies
+// (see http://code.google.com/p/skia/issues/detail?id=560 ).
+static inline bool isLengthNearlyZero(SkScalar dx, SkScalar dy,
+                                      Sk64 *lengthSquared) {
+    Sk64 tolSqr;
+    getLengthSquared(dx, dy, lengthSquared);
 
     // we want nearlyzero^2, but to compute it fast we want to just do a
     // 32bit multiply, so we require that it not exceed 31bits. That is true
@@ -138,17 +164,30 @@ bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
     SkASSERT(SK_ScalarNearlyZero <= 0xB504);
 
     tolSqr.set(0, SK_ScalarNearlyZero * SK_ScalarNearlyZero);
-    return tmp1 > tolSqr;
+    return *lengthSquared <= tolSqr;
+}
+
+SkScalar SkPoint::Normalize(SkPoint* pt) {
+    Sk64 mag2;
+    if (!isLengthNearlyZero(pt->fX, pt->fY, &mag2)) {
+        SkScalar mag = mag2.getSqrt();
+        SkScalar scale = SkScalarInvert(mag);
+        pt->fX = SkScalarMul(pt->fX, scale);
+        pt->fY = SkScalarMul(pt->fY, scale);
+        return mag;
+    }
+    return 0;
+}
+
+bool SkPoint::CanNormalize(SkScalar dx, SkScalar dy) {
+    Sk64 mag2_unused;
+    return !isLengthNearlyZero(dx, dy, &mag2_unused);
 }
 
 SkScalar SkPoint::Length(SkScalar dx, SkScalar dy) {
-    Sk64    tmp1, tmp2;
-
-    tmp1.setMul(dx, dx);
-    tmp2.setMul(dy, dy);
-    tmp1.add(tmp2);
-
-    return tmp1.getSqrt();
+    Sk64    tmp;
+    getLengthSquared(dx, dy, &tmp);
+    return tmp.getSqrt();
 }
 
 #ifdef SK_DEBUGx
@@ -215,7 +254,7 @@ static unsigned fast_invsqrt(uint32_t x) {
     SkASSERT(top >= 8 && top <= 63);
     SkASSERT(top - 8 < SK_ARRAY_COUNT(gInvSqrt14GuessTable));
     unsigned U = gInvSqrt14GuessTable[top - 8];
-    
+
     U = invsqrt_iter(V, U);
     return invsqrt_iter(V, U);
 }
@@ -246,7 +285,7 @@ bool SkPoint::setLength(SkFixed ox, SkFixed oy, SkFixed length) {
     // make x,y 1.14 values so our fast sqr won't overflow
     if (zeros > 17) {
         x <<= zeros - 17;
-        y <<= zeros - 17; 
+        y <<= zeros - 17;
     } else {
         x >>= 17 - zeros;
         y >>= 17 - zeros;
@@ -371,7 +410,7 @@ bool SkPoint::setLength(SkFixed ox, SkFixed oy, SkFixed length) {
         x = SkFixedMul(x, length);
         y = SkFixedMul(y, length);
     }
-    
+
     this->set(x, y);
     return true;
 }
@@ -387,7 +426,7 @@ SkScalar SkPoint::distanceToLineBetweenSqd(const SkPoint& a,
 
     SkVector u = b - a;
     SkVector v = *this - a;
-    
+
     SkScalar uLengthSqd = u.lengthSqd();
     SkScalar det = u.cross(v);
     if (NULL != side) {
@@ -402,7 +441,7 @@ SkScalar SkPoint::distanceToLineBetweenSqd(const SkPoint& a,
 SkScalar SkPoint::distanceToLineSegmentBetweenSqd(const SkPoint& a,
                                                   const SkPoint& b) const {
     // See comments to distanceToLineBetweenSqd. If the projection of c onto
-    // u is between a and b then this returns the same result as that 
+    // u is between a and b then this returns the same result as that
     // function. Otherwise, it returns the distance to the closer of a and
     // b. Let the projection of v onto u be v'.  There are three cases:
     //    1. v' points opposite to u. c is not between a and b and is closer
@@ -412,17 +451,17 @@ SkScalar SkPoint::distanceToLineSegmentBetweenSqd(const SkPoint& a,
     //       to the line ab.
     //    3. v' points along u and has greater magnitude than u. c is not
     //       not between a and b and is closer to b than a.
-    // v' = (u dot v) * u / |u|. So if (u dot v)/|u| is less than zero we're 
+    // v' = (u dot v) * u / |u|. So if (u dot v)/|u| is less than zero we're
     // in case 1. If (u dot v)/|u| is > |u| we are in case 3. Otherwise
-    // we're in case 2. We actually compare (u dot v) to 0 and |u|^2 to 
+    // we're in case 2. We actually compare (u dot v) to 0 and |u|^2 to
     // avoid a sqrt to compute |u|.
-    
+
     SkVector u = b - a;
     SkVector v = *this - a;
-    
+
     SkScalar uLengthSqd = u.lengthSqd();
     SkScalar uDotV = SkPoint::DotProduct(u, v);
-    
+
     if (uDotV <= 0) {
         return v.lengthSqd();
     } else if (uDotV > uLengthSqd) {

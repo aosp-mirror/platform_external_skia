@@ -13,9 +13,12 @@
 #include "SkBitmap.h"
 #include "SkChunkAlloc.h"
 #include "SkDescriptor.h"
+#include "SkGlyph.h"
 #include "SkScalerContext.h"
 #include "SkTemplates.h"
+#include "SkTDArray.h"
 
+struct SkDeviceProperties;
 class SkPaint;
 
 class SkGlyphCache_Globals;
@@ -119,9 +122,6 @@ public:
     bool getAuxProcData(void (*auxProc)(void*), void** dataPtr) const;
     //! Add a proc/data pair to the glyphcache. proc should be non-null
     void setAuxProc(void (*auxProc)(void*), void* auxData);
-    //! If found, remove the proc/data pair from the glyphcache (does not
-    //  call the proc)
-    void removeAuxProc(void (*auxProc)(void*));
 
     SkScalerContext* getScalerContext() const { return fScalerContext; }
 
@@ -157,18 +157,6 @@ public:
     static SkGlyphCache* DetachCache(const SkDescriptor* desc) {
         return VisitCache(desc, DetachProc, NULL);
     }
-
-    /** Return the approximate number of bytes used by the font cache
-    */
-    static size_t GetCacheUsed();
-
-    /** This can be called to purge old font data, in an attempt to free
-        enough bytes such that the font cache is not using more than the
-        specified number of bytes. It is thread-safe, and may be called at
-        any time.
-        Return true if some amount of the cache was purged.
-    */
-    static bool SetCacheUsed(size_t bytesUsed);
 
 #ifdef SK_DEBUG
     void validate() const;
@@ -278,7 +266,6 @@ private:
     static size_t InternalFreeCache(SkGlyphCache_Globals*, size_t bytesNeeded);
 
     inline static SkGlyphCache* FindTail(SkGlyphCache* head);
-    static size_t ComputeMemoryUsed(const SkGlyphCache* head);
 
     friend class SkGlyphCache_Globals;
 };
@@ -289,8 +276,10 @@ public:
     SkAutoGlyphCache(const SkDescriptor* desc) {
         fCache = SkGlyphCache::DetachCache(desc);
     }
-    SkAutoGlyphCache(const SkPaint& paint, const SkMatrix* matrix) {
-        fCache = paint.detachCache(matrix);
+    SkAutoGlyphCache(const SkPaint& paint,
+                     const SkDeviceProperties* deviceProperties,
+                     const SkMatrix* matrix) {
+        fCache = paint.detachCache(deviceProperties, matrix);
     }
     ~SkAutoGlyphCache() {
         if (fCache) {
@@ -314,4 +303,3 @@ private:
 };
 
 #endif
-

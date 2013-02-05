@@ -108,18 +108,18 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
         0xFFFFFD, 0xFFFFFE, 0xFFFFFF, 0x1000000, 0x1000001,
         0x7FFFFFFE, 0x7FFFFFFF, 0x80000000, 0x80000001, 0xFFFFFFFE, 0xFFFFFFFF
     };
-    
-    
+
+
     size_t i;
     char buffer[sizeof(sizes) * 4];
-    
+
     SkMemoryWStream wstream(buffer, sizeof(buffer));
     for (i = 0; i < SK_ARRAY_COUNT(sizes); ++i) {
         bool success = wstream.writePackedUInt(sizes[i]);
         REPORTER_ASSERT(reporter, success);
     }
     wstream.flush();
-    
+
     SkMemoryStream rstream(buffer, sizeof(buffer));
     for (i = 0; i < SK_ARRAY_COUNT(sizes); ++i) {
         size_t n = rstream.readPackedUInt();
@@ -130,10 +130,29 @@ static void TestPackedUInt(skiatest::Reporter* reporter) {
     }
 }
 
+// Test that setting an SkMemoryStream to a NULL data does not result in a crash when calling
+// methods that access fData.
+static void TestDereferencingData(SkMemoryStream* memStream) {
+    memStream->read(NULL, 0);
+    memStream->getMemoryBase();
+    SkAutoDataUnref data(memStream->copyToData());
+}
+
+static void TestNullData() {
+    SkData* nullData = NULL;
+    SkMemoryStream memStream(nullData);
+    TestDereferencingData(&memStream);
+
+    memStream.setData(nullData);
+    TestDereferencingData(&memStream);
+
+}
+
 static void TestStreams(skiatest::Reporter* reporter) {
     TestRStream(reporter);
     TestWStream(reporter);
     TestPackedUInt(reporter);
+    TestNullData();
 }
 
 #include "TestClassDef.h"

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -11,20 +10,24 @@
 #ifndef GrGpuGL_DEFINED
 #define GrGpuGL_DEFINED
 
-#include "../GrDrawState.h"
-#include "../GrGpu.h"
+#include "GrBinHashKey.h"
+#include "GrDrawState.h"
+#include "GrGpu.h"
 #include "GrGLContextInfo.h"
 #include "GrGLIndexBuffer.h"
 #include "GrGLIRect.h"
+#include "GrGLProgram.h"
 #include "GrGLStencilBuffer.h"
 #include "GrGLTexture.h"
 #include "GrGLVertexBuffer.h"
+#include "../GrTHashCache.h"
 
 class GrGpuGL : public GrGpu {
 public:
+    GrGpuGL(const GrGLContextInfo& ctxInfo);
     virtual ~GrGpuGL();
 
-    const GrGLInterface* glInterface() const { 
+    const GrGLInterface* glInterface() const {
         return fGLContextInfo.interface();
     }
     GrGLBinding glBinding() const { return fGLContextInfo.binding(); }
@@ -32,6 +35,11 @@ public:
     GrGLSLGeneration glslGeneration() const {
         return fGLContextInfo.glslGeneration();
     }
+
+    // Used by GrGLProgram to bind necessary textures for GrGLEffects.
+    void bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture);
+
+    bool programUnitTest();
 
     // GrGpu overrides
     virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config)
@@ -46,80 +54,37 @@ public:
                                     size_t rowBytes) const SK_OVERRIDE;
     virtual bool fullReadPixelsIsFasterThanPartial() const SK_OVERRIDE;
 
-    virtual bool canPreserveReadWriteUnpremulPixels() SK_OVERRIDE;
+    virtual void abandonResources() SK_OVERRIDE;
 
-protected:
-    GrGpuGL(const GrGLContextInfo& ctxInfo);
-
-    struct {
-        size_t                  fVertexOffset;
-        GrVertexLayout          fVertexLayout;
-        const GrVertexBuffer*   fVertexBuffer;
-        const GrIndexBuffer*    fIndexBuffer;
-        bool                    fArrayPtrsDirty;
-    } fHWGeometryState;
-
-    struct AAState {
-        bool fMSAAEnabled;
-        bool fSmoothLineEnabled;
-    } fHWAAState;
-
-    enum UnpremulConversion {
-        kUpOnWrite_DownOnRead_UnpremulConversion,
-        kDownOnWrite_UpOnRead_UnpremulConversion
-    } fUnpremulConversion;
-
-    GrDrawState fHWDrawState;
-    bool        fHWStencilClip;
-
-    // As flush of GL state proceeds it updates fHDrawState
-    // to reflect the new state. Later parts of the state flush
-    // may perform cascaded changes but cannot refer to fHWDrawState.
-    // These code paths can refer to the dirty flags. Subclass should
-    // call resetDirtyFlags after its flush is complete
-    struct {
-        bool fRenderTargetChanged : 1;
-        int  fTextureChangedMask;
-    } fDirtyFlags;
-    GR_STATIC_ASSERT(8 * sizeof(int) >= GrDrawState::kNumStages);
-
-    // clears the dirty flags
-    void resetDirtyFlags();
-
-    // last scissor / viewport scissor state seen by the GL.
-    struct {
-        bool        fScissorEnabled;
-        GrGLIRect   fScissorRect;
-        GrGLIRect   fViewportRect;
-    } fHWBounds;
-
-    const GrGLCaps& glCaps() const { return fGLContextInfo.caps(); }
-
+private:
     // GrGpu overrides
     virtual void onResetContext() SK_OVERRIDE;
 
     virtual GrTexture* onCreateTexture(const GrTextureDesc& desc,
                                        const void* srcData,
-                                       size_t rowBytes);
+                                       size_t rowBytes) SK_OVERRIDE;
     virtual GrVertexBuffer* onCreateVertexBuffer(uint32_t size,
-                                                 bool dynamic);
+                                                 bool dynamic) SK_OVERRIDE;
     virtual GrIndexBuffer* onCreateIndexBuffer(uint32_t size,
-                                               bool dynamic);
-    virtual GrTexture* onCreatePlatformTexture(const GrPlatformTextureDesc& desc) SK_OVERRIDE;
-    virtual GrRenderTarget* onCreatePlatformRenderTarget(const GrPlatformRenderTargetDesc& desc) SK_OVERRIDE;
+                                               bool dynamic) SK_OVERRIDE;
+    virtual GrPath* onCreatePath(const SkPath&) SK_OVERRIDE;
+    virtual GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&) SK_OVERRIDE;
+    virtual GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) SK_OVERRIDE;
     virtual bool createStencilBufferForRenderTarget(GrRenderTarget* rt,
-                                                    int width, int height);
-    virtual bool attachStencilBufferToRenderTarget(GrStencilBuffer* sb,
-                                                   GrRenderTarget* rt);
+                                                    int width,
+                                                    int height) SK_OVERRIDE;
+    virtual bool attachStencilBufferToRenderTarget(
+        GrStencilBuffer* sb,
+        GrRenderTarget* rt) SK_OVERRIDE;
 
-    virtual void onClear(const GrIRect* rect, GrColor color);
+    virtual void onClear(const GrIRect* rect, GrColor color) SK_OVERRIDE;
 
-    virtual void onForceRenderTargetFlush();
+    virtual void onForceRenderTargetFlush() SK_OVERRIDE;
 
     virtual bool onReadPixels(GrRenderTarget* target,
-                              int left, int top, 
+                              int left, int top,
                               int width, int height,
-                              GrPixelConfig, 
+                              GrPixelConfig,
                               void* buffer,
                               size_t rowBytes,
                               bool invertY) SK_OVERRIDE;
@@ -131,45 +96,38 @@ protected:
 
     virtual void onResolveRenderTarget(GrRenderTarget* target) SK_OVERRIDE;
 
+    virtual void onGpuDraw(const DrawInfo&) SK_OVERRIDE;
 
-    virtual void onGpuDrawIndexed(GrPrimitiveType type,
-                                  uint32_t startVertex,
-                                  uint32_t startIndex,
-                                  uint32_t vertexCount,
-                                  uint32_t indexCount);
-    virtual void onGpuDrawNonIndexed(GrPrimitiveType type,
-                                     uint32_t vertexCount,
-                                     uint32_t numVertices);
-    virtual void flushScissor(const GrIRect* rect);
-    virtual void clearStencil();
-    virtual void clearStencilClip(const GrIRect& rect, bool insideClip);
-    virtual int getMaxEdges() const;
+    virtual void setStencilPathSettings(const GrPath&,
+                                        SkPath::FillType,
+                                        GrStencilSettings* settings)
+                                        SK_OVERRIDE;
+    virtual void onGpuStencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
+
+    virtual void clearStencil() SK_OVERRIDE;
+    virtual void clearStencilClip(const GrIRect& rect,
+                                  bool insideClip) SK_OVERRIDE;
+    virtual bool flushGraphicsState(DrawType) SK_OVERRIDE;
+
+    const GrGLCaps& glCaps() const { return fGLContextInfo.caps(); }
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
 
-    // binds appropriate vertex and index buffers, also returns any extra
-    // extra verts or indices to offset by.
-    void setBuffers(bool indexed,
-                    int* extraVertexOffset,
-                    int* extraIndexOffset);
-
-    // flushes state that is common to fixed and programmable GL
-    // dither
-    // line smoothing
-    // texture binding
-    // sampler state (filtering, tiling)
-    // FBO binding
-    // line width
-    bool flushGLStateCommon(GrPrimitiveType type);
+    // Sets up vertex attribute pointers and strides. On return startIndexOffset specifies an
+    // offset into the index buffer to the first index to be read (in addition to
+    // info.startIndex()). It accounts for the fact that index buffer pool may have provided space
+    // in the middle of a larger index buffer.
+    void setupGeometry(const DrawInfo& info, int* startIndexOffset);
+    // binds appropriate vertex and index buffers, also returns any extra verts or indices to
+    // offset by based on how space was allocated in pool VB/IBs.
+    void setBuffers(bool indexed, int* extraVertexOffset, int* extraIndexOffset);
 
     // Subclasses should call this to flush the blend state.
-    // The params should be the final coeffecients to apply
+    // The params should be the final coefficients to apply
     // (after any blending optimizations or dual source blending considerations
     // have been accounted for).
-    void flushBlend(GrPrimitiveType type,
-                    GrBlendCoeff srcCoeff,
-                    GrBlendCoeff dstCoeff);
+    void flushBlend(bool isLines, GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff);
 
     bool hasExtension(const char* ext) const {
         return fGLContextInfo.hasExtension(ext);
@@ -177,21 +135,80 @@ protected:
 
     const GrGLContextInfo& glContextInfo() const { return fGLContextInfo; }
 
-    // adjusts texture matrix to account for orientation
-    static void AdjustTextureMatrix(const GrGLTexture* texture,
-                                    GrSamplerState::SampleMode mode,
-                                    GrMatrix* matrix);
-
-    // subclass may try to take advantage of identity tex matrices.
-    // This helper determines if matrix will be identity after all
-    // adjustments are applied.
-    static bool TextureMatrixIsIdentity(const GrGLTexture* texture,
-                                        const GrSamplerState& sampler);
-
     static bool BlendCoeffReferencesConstant(GrBlendCoeff coeff);
 
-private:
-    // Inits GrDrawTarget::Caps, sublcass may enable additional caps.
+    // for readability of function impls
+    typedef GrGLProgram::Desc        ProgramDesc;
+
+    class ProgramCache : public ::GrNoncopyable {
+    public:
+        ProgramCache(const GrGLContextInfo& gl);
+
+        void abandon();
+        GrGLProgram* getProgram(const GrGLProgram::Desc& desc, const GrEffectStage* stages[]);
+    private:
+        enum {
+            kKeySize = sizeof(ProgramDesc),
+            // We may actually have kMaxEntries+1 shaders in the GL context because we create a new
+            // shader before evicting from the cache.
+            kMaxEntries = 32
+        };
+
+        class Entry;
+        // The value of the hash key is based on the ProgramDesc.
+        typedef GrTBinHashKey<Entry, kKeySize> ProgramHashKey;
+
+        class Entry : public ::GrNoncopyable {
+        public:
+            Entry() : fProgram(NULL), fLRUStamp(0) {}
+            Entry& operator = (const Entry& entry) {
+                GrSafeRef(entry.fProgram.get());
+                fProgram.reset(entry.fProgram.get());
+                fKey = entry.fKey;
+                fLRUStamp = entry.fLRUStamp;
+                return *this;
+            }
+            int compare(const ProgramHashKey& key) const {
+                return fKey.compare(key);
+            }
+
+        public:
+            SkAutoTUnref<GrGLProgram>   fProgram;
+            ProgramHashKey              fKey;
+            unsigned int                fLRUStamp; // Move outside entry?
+        };
+
+        GrTHashTable<Entry, ProgramHashKey, 8> fHashCache;
+
+        Entry                       fEntries[kMaxEntries];
+        int                         fCount;
+        unsigned int                fCurrLRUStamp;
+        const GrGLContextInfo&      fGL;
+    };
+
+    // sets the color specified by GrDrawState::setColor()
+    void flushColor(GrColor color);
+
+    // sets the color specified by GrDrawState::setCoverage()
+    void flushCoverage(GrColor color);
+
+    // sets the MVP matrix uniform for currently bound program
+    void flushViewMatrix(DrawType type);
+
+
+    // flushes dithering, color-mask, and face culling stat
+    void flushMiscFixedFunctionState();
+
+    // flushes the scissor. see the note on flushBoundTextureAndParams about
+    // flushing the scissor after that function is called.
+    void flushScissor();
+
+    void buildProgram(bool isPoints,
+                      BlendOptFlags blendOpts,
+                      GrBlendCoeff dstCoeff,
+                      ProgramDesc* desc);
+
+    // Inits GrDrawTarget::Caps, subclass may enable additional caps.
     void initCaps();
 
     void initFSAASupport();
@@ -213,8 +230,8 @@ private:
     // bound is region that may be modified and therefore has to be resolved.
     // NULL means whole target. Can be an empty rect.
     void flushRenderTarget(const GrIRect* bound);
-    void flushStencil();
-    void flushAAState(GrPrimitiveType type);
+    void flushStencil(DrawType);
+    void flushAAState(DrawType);
 
     bool configToGLFormats(GrPixelConfig config,
                            bool getSizedInternal,
@@ -233,6 +250,8 @@ private:
                                    GrGLuint texID,
                                    GrGLRenderTarget::Desc* desc);
 
+    void fillInConfigRenderableTable();
+
     friend class GrGLVertexBuffer;
     friend class GrGLIndexBuffer;
     friend class GrGLTexture;
@@ -240,24 +259,90 @@ private:
 
     GrGLContextInfo fGLContextInfo;
 
-    // we want to clear stencil buffers when they are created. We want to clear
-    // the entire buffer even if it is larger than the color attachment. We
-    // attach it to this fbo with no color attachment to do the initial clear.
-    GrGLuint fStencilClearFBO;
+    // GL program-related state
+    ProgramCache*               fProgramCache;
+    SkAutoTUnref<GrGLProgram>   fCurrentProgram;
 
-    bool fHWBlendDisabled;
+    ///////////////////////////////////////////////////////////////////////////
+    ///@name Caching of GL State
+    ///@{
+    int                         fHWActiveTextureUnitIdx;
+    GrGLuint                    fHWProgramID;
+    GrColor                     fHWConstAttribColor;
+    GrColor                     fHWConstAttribCoverage;
 
-    int fActiveTextureUnitIdx;
+    enum TriState {
+        kNo_TriState,
+        kYes_TriState,
+        kUnknown_TriState
+    };
+
+    // last scissor / viewport scissor state seen by the GL.
+    struct {
+        TriState    fEnabled;
+        GrGLIRect   fRect;
+        void invalidate() {
+            fEnabled = kUnknown_TriState;
+            fRect.invalidate();
+        }
+    } fHWScissorSettings;
+
+    GrGLIRect   fHWViewport;
+
+    struct {
+        size_t                  fVertexOffset;
+        GrVertexLayout          fVertexLayout;
+        const GrVertexBuffer*   fVertexBuffer;
+        const GrIndexBuffer*    fIndexBuffer;
+        bool                    fArrayPtrsDirty;
+    } fHWGeometryState;
+
+    struct {
+        GrBlendCoeff    fSrcCoeff;
+        GrBlendCoeff    fDstCoeff;
+        GrColor         fConstColor;
+        bool            fConstColorValid;
+        TriState        fEnabled;
+
+        void invalidate() {
+            fSrcCoeff = kInvalid_GrBlendCoeff;
+            fDstCoeff = kInvalid_GrBlendCoeff;
+            fConstColorValid = false;
+            fEnabled = kUnknown_TriState;
+        }
+    } fHWBlendState;
+
+    struct {
+        TriState fMSAAEnabled;
+        TriState fSmoothLineEnabled;
+        void invalidate() {
+            fMSAAEnabled = kUnknown_TriState;
+            fSmoothLineEnabled = kUnknown_TriState;
+        }
+    } fHWAAState;
+
+    struct {
+        SkMatrix    fViewMatrix;
+        SkISize     fRTSize;
+        void invalidate() {
+            fViewMatrix = SkMatrix::InvalidMatrix();
+            fRTSize.fWidth = -1; // just make the first value compared illegal.
+        }
+    } fHWPathMatrixState;
+
+    GrStencilSettings       fHWStencilSettings;
+    TriState                fHWStencilTestEnabled;
+
+    GrDrawState::DrawFace   fHWDrawFace;
+    TriState                fHWWriteToColor;
+    TriState                fHWDitherEnabled;
+    GrRenderTarget*         fHWBoundRenderTarget;
+    GrTexture*              fHWBoundTextures[GrDrawState::kNumStages];
+    ///@}
 
     // we record what stencil format worked last time to hopefully exit early
     // from our loop that tries stencil formats and calls check fb status.
     int fLastSuccessfulStencilFmtIdx;
-
-    enum CanPreserveUnpremulRoundtrip {
-        kUnknown_CanPreserveUnpremulRoundtrip,
-        kNo_CanPreserveUnpremulRoundtrip,
-        kYes_CanPreserveUnpremulRoundtrip,
-    } fCanPreserveUnpremulRoundtrip;
 
     bool fPrintedCaps;
 
@@ -265,4 +350,3 @@ private:
 };
 
 #endif
-

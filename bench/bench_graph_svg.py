@@ -11,21 +11,38 @@ import bench_util
 import json
 import xml.sax.saxutils
 
+# We throw out any measurement outside this range, and log a warning.
+MIN_REASONABLE_TIME = 0
+MAX_REASONABLE_TIME = 99999
+
+# Constants for prefixes in output title used in buildbot.
+TITLE_PREAMBLE = 'Bench_Performance_for_Skia_'
+TITLE_PREAMBLE_LENGTH = len(TITLE_PREAMBLE)
+
 def usage():
     """Prints simple usage information."""
     
-    print '-d <dir> a directory containing bench_r<revision>_<scalar> files.'
     print '-b <bench> the bench to show.'
     print '-c <config> the config to show (GPU, 8888, 565, etc).'
-    print '-t <time> the time to show (w, c, g, etc).'
-    print '-s <setting>[=<value>] a setting to show (alpha, scalar, etc).'
-    print '-r <revision>[:<revision>] the revisions to show.'
-    print '   Negative <revision> is taken as offset from most recent revision.'
+    print '-d <dir> a directory containing bench_r<revision>_<scalar> files.'
+    print '-e <file> file containing expected bench values/ranges.'
+    print '   Will raise exception if actual bench values are out of range.'
+    print '   See bench_expectations.txt for data format and examples.'
     print '-f <revision>[:<revision>] the revisions to use for fitting.'
     print '   Negative <revision> is taken as offset from most recent revision.'
+    print '-i <time> the time to ignore (w, c, g, etc).'
+    print '   The flag is ignored when -t is set; otherwise we plot all the'
+    print '   times except the one specified here.'
+    print '-l <title> title to use for the output graph'
+    print '-m <representation> representation of bench value.'
+    print '   See _ListAlgorithm class in bench_util.py.'
+    print '-o <path> path to which to write output; writes to stdout if not specified'
+    print '-r <revision>[:<revision>] the revisions to show.'
+    print '   Negative <revision> is taken as offset from most recent revision.'
+    print '-s <setting>[=<value>] a setting to show (alpha, scalar, etc).'
+    print '-t <time> the time to show (w, c, g, etc).'
     print '-x <int> the desired width of the svg.'
     print '-y <int> the desired height of the svg.'
-    print '-l <title> title to use for the output graph'
     print '--default-setting <setting>[=<value>] setting for those without.'
     
 
@@ -83,7 +100,8 @@ def get_latest_revision(directory):
     else:
         return latest_revision_found
 
-def parse_dir(directory, default_settings, oldest_revision, newest_revision):
+def parse_dir(directory, default_settings, oldest_revision, newest_revision,
+              rep):
     """Parses bench data from files like bench_r<revision>_<scalar>.
     
     (str, {str, str}, Number, Number) -> {int:[BenchDataPoints]}"""
@@ -92,25 +110,83 @@ def parse_dir(directory, default_settings, oldest_revision, newest_revision):
         file_name_match = re.match('bench_r(\d+)_(\S+)', bench_file)
         if (file_name_match is None):
             continue
-        
+
         revision = int(file_name_match.group(1))
         scalar_type = file_name_match.group(2)
-        
+
         if (revision < oldest_revision or revision > newest_revision):
             continue
-        
+
         file_handle = open(directory + '/' + bench_file, 'r')
-        
+
         if (revision not in revision_data_points):
             revision_data_points[revision] = []
         default_settings['scalar'] = scalar_type
         revision_data_points[revision].extend(
-                        bench_util.parse(default_settings, file_handle))
+                        bench_util.parse(default_settings, file_handle, rep))
         file_handle.close()
     return revision_data_points
 
+def add_to_revision_data_points(new_point, revision, revision_data_points):
+    """Add new_point to set of revision_data_points we are building up.
+    """
+    if (revision not in revision_data_points):
+        revision_data_points[revision] = []
+    revision_data_points[revision].append(new_point)
+
+def filter_data_points(unfiltered_revision_data_points):
+    """Filter out any data points that are utterly bogus.
+
+    Returns (allowed_revision_data_points, ignored_revision_data_points):
+        allowed_revision_data_points: points that survived the filter
+        ignored_revision_data_points: points that did NOT survive the filter
+    """
+    allowed_revision_data_points = {} # {revision : [BenchDataPoints]}
+    ignored_revision_data_points = {} # {revision : [BenchDataPoints]}
+    revisions = unfiltered_revision_data_points.keys()
+    revisions.sort()
+    for revision in revisions:
+        for point in unfiltered_revision_data_points[revision]:
+            if point.time < MIN_REASONABLE_TIME or point.time > MAX_REASONABLE_TIME:
+                add_to_revision_data_points(point, revision, ignored_revision_data_points)
+            else:
+                add_to_revision_data_points(point, revision, allowed_revision_data_points)
+    return (allowed_revision_data_points, ignored_revision_data_points)
+
+def get_abs_path(relative_path):
+    """My own implementation of os.path.abspath() that better handles paths
+    which approach Window's 260-character limit.
+    See https://code.google.com/p/skia/issues/detail?id=674
+
+    This implementation adds path components one at a time, resolving the
+    absolute path each time, to take advantage of any chdirs into outer
+    directories that will shorten the total path length.
+
+    TODO: share a single implementation with upload_to_bucket.py, instead
+    of pasting this same code into both files."""
+    if os.path.isabs(relative_path):
+        return relative_path
+    path_parts = relative_path.split(os.sep)
+    abs_path = os.path.abspath('.')
+    for path_part in path_parts:
+        abs_path = os.path.abspath(os.path.join(abs_path, path_part))
+    return abs_path
+
+def redirect_stdout(output_path):
+    """Redirect all following stdout to a file.
+
+    You may be asking yourself, why redirect stdout within Python rather than
+    redirecting the script's output in the calling shell?
+    The answer lies in https://code.google.com/p/skia/issues/detail?id=674
+    ('buildbot: windows GenerateBenchGraphs step fails due to filename length'):
+    On Windows, we need to generate the absolute path within Python to avoid
+    the operating system's 260-character pathname limit, including chdirs."""
+    abs_path = get_abs_path(output_path)
+    sys.stdout = open(abs_path, 'w')
+
 def create_lines(revision_data_points, settings
-               , bench_of_interest, config_of_interest, time_of_interest):
+               , bench_of_interest, config_of_interest, time_of_interest
+               , time_to_ignore):
     """Convert revision data into sorted line data.
     
     ({int:[BenchDataPoints]}, {str:str}, str?, str?, str?)
@@ -130,6 +206,9 @@ def create_lines(revision_data_points, settings
             
             if (time_of_interest is not None and
                 not time_of_interest == point.time_type):
+                continue
+            elif (time_to_ignore is not None and
+                  time_to_ignore == point.time_type):
                 continue
             
             skip = False
@@ -205,7 +284,7 @@ def main():
     
     try:
         opts, _ = getopt.getopt(sys.argv[1:]
-                                 , "d:b:c:l:t:s:r:f:x:y:"
+                                 , "b:c:d:e:f:i:l:m:o:r:s:t:x:y:"
                                  , "default-setting=")
     except getopt.GetoptError, err:
         print str(err) 
@@ -216,6 +295,9 @@ def main():
     config_of_interest = None
     bench_of_interest = None
     time_of_interest = None
+    time_to_ignore = None
+    bench_expectations = {}
+    rep = None  # bench representation algorithm
     revision_range = '0:'
     regression_range = '0:'
     latest_revision = None
@@ -248,29 +330,74 @@ def main():
             settings[name] = True
         else:
             settings[name] = value
-        
+
+    def read_expectations(expectations, filename):
+        """Reads expectations data from file and put in expectations dict."""
+        for expectation in open(filename).readlines():
+            elements = expectation.strip().split(',')
+            if not elements[0] or elements[0].startswith('#'):
+                continue
+            if len(elements) != 5:
+                raise Exception("Invalid expectation line format: %s" %
+                                expectation)
+            bench_entry = elements[0] + ',' + elements[1]
+            if bench_entry in expectations:
+                raise Exception("Dup entries for bench expectation %s" %
+                                bench_entry)
+            # [<Bench_BmpConfig_TimeType>,<Platform-Alg>] -> (LB, UB)
+            expectations[bench_entry] = (float(elements[-2]),
+                                         float(elements[-1]))
+
+    def check_expectations(lines, expectations, newest_revision, key_suffix):
+        """Check if there are benches in latest rev outside expected range."""
+        exceptions = []
+        for line in lines:
+            line_str = str(line)
+            bench_platform_key = (line_str[ : line_str.find('_{')] + ',' +
+                key_suffix)
+            this_revision, this_bench_value = lines[line][-1]
+            if (this_revision != newest_revision or
+                bench_platform_key not in expectations):
+                # Skip benches without value for latest revision.
+                continue
+            this_min, this_max = expectations[bench_platform_key]
+            if this_bench_value < this_min or this_bench_value > this_max:
+                exceptions.append('Bench %s value %s out of range [%s, %s].' %
+                    (bench_platform_key, this_bench_value, this_min, this_max))
+        if exceptions:
+            raise Exception('Bench values out of range:\n' +
+                            '\n'.join(exceptions))
+
     try:
         for option, value in opts:
-            if option == "-d":
-                directory = value
-            elif option == "-b":
+            if option == "-b":
                 bench_of_interest = value
             elif option == "-c":
                 config_of_interest = value
-            elif option == "-t":
-                time_of_interest = value
-            elif option == "-s":
-                add_setting(settings, value)
-            elif option == "-r":
-                revision_range = value
+            elif option == "-d":
+                directory = value
+            elif option == "-e":
+                read_expectations(bench_expectations, value)
             elif option == "-f":
                 regression_range = value
+            elif option == "-i":
+                time_to_ignore = value
+            elif option == "-l":
+                title = value
+            elif option == "-m":
+                rep = value
+            elif option == "-o":
+                redirect_stdout(value)
+            elif option == "-r":
+                revision_range = value
+            elif option == "-s":
+                add_setting(settings, value)
+            elif option == "-t":
+                time_of_interest = value
             elif option == "-x":
                 requested_width = int(value)
             elif option == "-y":
                 requested_height = int(value)
-            elif option == "-l":
-                title = value
             elif option == "--default-setting":
                 add_setting(default_settings, value)
             else:
@@ -284,32 +411,56 @@ def main():
         usage()
         sys.exit(2)
 
+    if time_of_interest:
+        time_to_ignore = None
+
+    # The title flag (-l) provided in buildbot slave is in the format
+    # Bench_Performance_for_Skia_<platform>, and we want to extract <platform>
+    # for use in platform_and_alg to track matching benches later. If title flag
+    # is not in this format, there may be no matching benches in the file
+    # provided by the expectation_file flag (-e).
+    platform_and_alg = title
+    if platform_and_alg.startswith(TITLE_PREAMBLE):
+        platform_and_alg = (
+            platform_and_alg[TITLE_PREAMBLE_LENGTH:] + '-' + rep)
+    title += ' [representation: %s]' % rep
+
     latest_revision = get_latest_revision(directory)
     oldest_revision, newest_revision = parse_range(revision_range)
     oldest_regression, newest_regression = parse_range(regression_range)
 
-    revision_data_points = parse_dir(directory
+    unfiltered_revision_data_points = parse_dir(directory
                                    , default_settings
                                    , oldest_revision
-                                   , newest_revision)
+                                   , newest_revision
+                                   , rep)
+
+    # Filter out any data points that are utterly bogus... make sure to report
+    # that we did so later!
+    (allowed_revision_data_points, ignored_revision_data_points) = filter_data_points(
+        unfiltered_revision_data_points)
 
     # Update oldest_revision and newest_revision based on the data we could find
-    all_revision_numbers = revision_data_points.keys()
+    all_revision_numbers = allowed_revision_data_points.keys()
     oldest_revision = min(all_revision_numbers)
     newest_revision = max(all_revision_numbers)
 
-    lines = create_lines(revision_data_points
+    lines = create_lines(allowed_revision_data_points
                    , settings
                    , bench_of_interest
                    , config_of_interest
-                   , time_of_interest)
+                   , time_of_interest
+                   , time_to_ignore)
 
     regressions = create_regressions(lines
                                    , oldest_regression
                                    , newest_regression)
 
-    output_xhtml(lines, oldest_revision, newest_revision,
+    output_xhtml(lines, oldest_revision, newest_revision, ignored_revision_data_points,
                  regressions, requested_width, requested_height, title)
+
+    check_expectations(lines, bench_expectations, newest_revision,
+                       platform_and_alg)
 
 def qa(out):
     """Stringify input and quote as an xml attribute."""
@@ -340,19 +491,47 @@ def create_select(qualifier, lines, select_id=None):
         + ']') + '>'+qe(option)+'</option>'
     print '</select>'
 
-def output_xhtml(lines, oldest_revision, newest_revision,
+def output_ignored_data_points_warning(ignored_revision_data_points):
+    """Write description of ignored_revision_data_points to stdout as xhtml.
+    """
+    num_ignored_points = 0
+    description = ''
+    revisions = ignored_revision_data_points.keys()
+    if revisions:
+        revisions.sort()
+        revisions.reverse()
+        for revision in revisions:
+            num_ignored_points += len(ignored_revision_data_points[revision])
+            points_at_this_revision = []
+            for point in ignored_revision_data_points[revision]:
+                points_at_this_revision.append(point.bench)
+            points_at_this_revision.sort()
+            description += 'r%d: %s\n' % (revision, points_at_this_revision)
+    if num_ignored_points == 0:
+        print 'Did not discard any data points; all were within the range [%d-%d]' % (
+            MIN_REASONABLE_TIME, MAX_REASONABLE_TIME)
+    else:
+        print '<table width="100%" bgcolor="ff0000"><tr><td align="center">'
+        print 'Discarded %d data points outside of range [%d-%d]' % (
+            num_ignored_points, MIN_REASONABLE_TIME, MAX_REASONABLE_TIME)
+        print '</td></tr><tr><td width="100%" align="center">'
+        print ('<textarea rows="4" style="width:97%" readonly="true" wrap="off">'
+            + qe(description) + '</textarea>')
+        print '</td></tr></table>'
+
+def output_xhtml(lines, oldest_revision, newest_revision, ignored_revision_data_points,
                  regressions, requested_width, requested_height, title):
     """Outputs an svg/xhtml view of the data."""
     print '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"',
     print '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'
     print '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">'
     print '<head>'
-    print '<title>%s</title>' % title
+    print '<title>%s</title>' % qe(title)
     print '</head>'
     print '<body>'
     
     output_svg(lines, regressions, requested_width, requested_height)
-    
+
     #output the manipulation controls
     print """
 <script type="text/javascript">//<![CDATA[
@@ -436,28 +615,6 @@ def output_xhtml(lines, oldest_revision, newest_revision,
     }
 //]]></script>"""
 
-    print '<table border="0" width="%s">' % requested_width
-    print """
-<form>
-<tr valign="bottom" align="center">
-<td width="1">Bench&nbsp;Type</td>
-<td width="1">Bitmap Config</td>
-<td width="1">Timer&nbsp;Type (Cpu/Gpu/wall)</td>
-<td width="1"><!--buttons--></td>
-<td width="10%"><!--spacing--></td>"""
-
-    print '<td>%s<br></br>revisions r%s - r%s</td>' % (
-        title,
-        bench_util.CreateRevisionLink(oldest_revision),
-        bench_util.CreateRevisionLink(newest_revision))
-    print '</tr><tr valign="top" align="center">'
-    print '<td width="1">'
-    create_select(lambda l: l.bench, lines, 'benchSelect')
-    print '</td><td width="1">'
-    create_select(lambda l: l.config, lines)
-    print '</td><td width="1">'
-    create_select(lambda l: l.time_type, lines)
-
     all_settings = {}
     variant_settings = set()
     for label in lines.keys():
@@ -467,18 +624,61 @@ def output_xhtml(lines, oldest_revision, newest_revision,
             elif all_settings[key] != value:
                 variant_settings.add(key)
 
+    print '<table border="0" width="%s">' % requested_width
+    #output column headers
+    print """
+<tr valign="top"><td width="50%">
+<table border="0" width="100%">
+<tr><td align="center"><table border="0">
+<form>
+<tr valign="bottom" align="center">
+<td width="1">Bench&nbsp;Type</td>
+<td width="1">Bitmap Config</td>
+<td width="1">Timer&nbsp;Type (Cpu/Gpu/wall)</td>
+"""
+
     for k in variant_settings:
-        create_select(lambda l: l.settings[k], lines)
+        print '<td width="1">%s</td>' % qe(k)
+
+    print '<td width="1"><!--buttons--></td></tr>'
+
+    #output column contents
+    print '<tr valign="top" align="center">'
+    print '<td width="1">'
+    create_select(lambda l: l.bench, lines, 'benchSelect')
+    print '</td><td width="1">'
+    create_select(lambda l: l.config, lines)
+    print '</td><td width="1">'
+    create_select(lambda l: l.time_type, lines)
+
+    for k in variant_settings:
+        print '</td><td width="1">'
+        create_select(lambda l: l.settings.get(k, " "), lines)
 
     print '</td><td width="1"><button type="button"',
     print 'onclick=%s' % qa("mark('url(#circleMark)'); return false;"),
     print '>Mark Points</button>'
     print '<button type="button" onclick="mark(null);">Clear Points</button>'
-
+    print '</td>'
     print """
-</td>
-<td width="10%"></td>
-<td align="left">
+</tr>
+</form>
+</table></td></tr>
+<tr><td align="center">
+<hr />
+"""
+
+    output_ignored_data_points_warning(ignored_revision_data_points)
+    print '</td></tr></table>'
+    print '</td><td width="2%"><!--gutter--></td>'
+
+    print '<td><table border="0">'
+    print '<tr><td align="center">%s<br></br>revisions r%s - r%s</td></tr>' % (
+        qe(title),
+        bench_util.CreateRevisionLink(oldest_revision),
+        bench_util.CreateRevisionLink(newest_revision))
+    print """
+<tr><td align="left">
 <p>Brighter red indicates tests that have gotten worse; brighter green
 indicates tests that have gotten better.</p>
 <p>To highlight individual tests, hold down CONTROL and mouse over
@@ -489,9 +689,11 @@ the graph area.</p>
 tests in the selectors at left.  (To show all, select all.)</p>
 <p>Use buttons at left to mark/clear points on the lines for selected
 benchmarks.</p>
+</td></tr>
+</table>
+
 </td>
 </tr>
-</form>
 </table>
 </body>
 </html>"""
@@ -553,6 +755,8 @@ def output_svg(lines, regressions, requested_width, requested_height):
         """Converts a time to a vertical display position."""
         return pic_height + ch(y - global_min_y)
     
+    print '<!--Picture height %.2f corresponds to bench value %.2f.-->' % (
+        pic_height, h)
     print '<svg',
     print 'width=%s' % qa(str(pic_width)+'px')
     print 'height=%s' % qa(str(pic_height)+'px')
