@@ -8,10 +8,10 @@
 
 
 #include "SkFontHost.h"
-#include "SkScalerContext.h"
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                                      const char famillyName[],
+                                     const void* data, size_t bytelength,
                                      SkTypeface::Style style) {
     SkDEBUGFAIL("SkFontHost::FindTypeface unimplemented");
     return NULL;
@@ -30,14 +30,12 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(char const*) {
 // static
 SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         uint32_t fontID,
-        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
-        const uint32_t* glyphIDs,
-        uint32_t glyphIDsCount) {
+        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo) {
     SkDEBUGFAIL("SkFontHost::GetAdvancedTypefaceMetrics unimplemented");
     return NULL;
 }
 
-void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
+void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -74,3 +72,5 @@ SkScalerContext* SkFontHost::CreateScalerContext(const SkDescriptor* desc) {
 SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
     return 0;
 }
+
+

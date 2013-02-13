@@ -478,3 +478,4 @@ SkBlitter* SkBlitter_ChooseD4444(const SkBitmap& device,
     }
     return blitter;
 }
+

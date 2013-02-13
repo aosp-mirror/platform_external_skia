@@ -33,7 +33,6 @@ public:
     const SkRegion& beginUpdate(SkBitmap* device);
     void endUpdate();
     
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
 private:
     void getFrontBack(const void** front, void** back) const {
         if (front) {
@@ -51,9 +50,20 @@ private:
     static void CopyBitsFromAddr(const SkBitmap& dst, const SkRegion& clip,
                                  const void* srcAddr);
 
+    // serialization
+
+public:
+    virtual Factory getFactory() const { return Create; }
+    virtual void flatten(SkFlattenableWriteBuffer&) const;
+    static SkPixelRef* Create(SkFlattenableReadBuffer& buffer);
+
+    SK_DECLARE_PIXEL_REF_REGISTRAR()
+
 protected:
     virtual void* onLockPixels(SkColorTable**);
     virtual void onUnlockPixels();
+
+    SkFlipPixelRef(SkFlattenableReadBuffer&);
 
 private:
     SkMutex         fMutex;

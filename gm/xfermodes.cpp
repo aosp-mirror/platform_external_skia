@@ -15,39 +15,33 @@ namespace skiagm {
 static void make_bitmaps(int w, int h, SkBitmap* src, SkBitmap* dst) {
     src->setConfig(SkBitmap::kARGB_8888_Config, w, h);
     src->allocPixels();
-    src->eraseColor(SK_ColorTRANSPARENT);
+    src->eraseColor(0);
 
+    SkCanvas c(*src);
     SkPaint p;
-    p.setAntiAlias(true);
-
     SkRect r;
     SkScalar ww = SkIntToScalar(w);
     SkScalar hh = SkIntToScalar(h);
 
-    {
-        SkCanvas c(*src);
-        p.setColor(0xFFFFCC44);
-        r.set(0, 0, ww*3/4, hh*3/4);
-        c.drawOval(r, p);
-    }
+    p.setAntiAlias(true);
+    p.setColor(0xFFFFCC44);
+    r.set(0, 0, ww*3/4, hh*3/4);
+    c.drawOval(r, p);
 
     dst->setConfig(SkBitmap::kARGB_8888_Config, w, h);
     dst->allocPixels();
-    dst->eraseColor(SK_ColorTRANSPARENT);
+    dst->eraseColor(0);
+    c.setBitmapDevice(*dst);
 
-    {
-        SkCanvas c(*dst);
-        p.setColor(0xFF66AAFF);
-        r.set(ww/3, hh/3, ww*19/20, hh*19/20);
-        c.drawRect(r, p);
-    }
+    p.setColor(0xFF66AAFF);
+    r.set(ww/3, hh/3, ww*19/20, hh*19/20);
+    c.drawRect(r, p);
 }
-
-static uint16_t gData[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
 
 class XfermodesGM : public GM {
     SkBitmap    fBG;
     SkBitmap    fSrcB, fDstB;
+    bool        fOnce;
 
     void draw_mode(SkCanvas* canvas, SkXfermode* mode, int alpha,
                    SkScalar x, SkScalar y) {
@@ -59,18 +53,25 @@ class XfermodesGM : public GM {
         canvas->drawBitmap(fDstB, x, y, &p);
     }
 
-    virtual void onOnceBeforeDraw() SK_OVERRIDE {
-        fBG.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4);
-        fBG.setPixels(gData);
-        fBG.setIsOpaque(true);
-
-        make_bitmaps(W, H, &fSrcB, &fDstB);
+    void init() {
+        if (!fOnce) {
+            // Do all this work in a temporary so we get a deep copy
+            uint16_t localData[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
+            SkBitmap scratchBitmap;
+            scratchBitmap.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4);
+            scratchBitmap.setPixels(localData);
+            scratchBitmap.setIsOpaque(true);
+            scratchBitmap.copyTo(&fBG, SkBitmap::kARGB_4444_Config);
+            
+            make_bitmaps(W, H, &fSrcB, &fDstB);
+            fOnce = true;
+        }
     }
 
 public:
     const static int W = 64;
     const static int H = 64;
-    XfermodesGM() {}
+    XfermodesGM() : fOnce(false) {}
 
 protected:
     virtual SkString onShortName() {
@@ -82,6 +83,8 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
+        this->init();
+
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
         const struct {
@@ -102,7 +105,7 @@ protected:
             { SkXfermode::kXor_Mode,      "Xor"       },
 
             { SkXfermode::kPlus_Mode,         "Plus"          },
-            { SkXfermode::kModulate_Mode,     "Modulate"      },
+            { SkXfermode::kMultiply_Mode,     "Multiply"      },
             { SkXfermode::kScreen_Mode,       "Screen"        },
             { SkXfermode::kOverlay_Mode,      "Overlay"       },
             { SkXfermode::kDarken_Mode,       "Darken"        },

@@ -185,3 +185,4 @@ HB_Error SkHarfBuzzFont::GetFontTableFunc(void* voidface, const HB_Tag tag,
     SkFontHost::GetTableData(uniqueID, tag, 0, tableSize, buffer);
     return HB_Err_Ok;
 }
+

@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -5,28 +6,24 @@
  * found in the LICENSE file.
  */
 
+
 #include "SkColorFilter.h"
-#include "SkFilterShader.h"
-#include "SkFlattenableBuffers.h"
 #include "SkShader.h"
 #include "SkUnPreMultiply.h"
-#include "SkString.h"
 
-SK_DEFINE_INST_COUNT(SkColorFilter)
-
-bool SkColorFilter::asColorMode(SkColor* color, SkXfermode::Mode* mode) const {
+bool SkColorFilter::asColorMode(SkColor* color, SkXfermode::Mode* mode) {
     return false;
 }
 
-bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) const {
+bool SkColorFilter::asColorMatrix(SkScalar matrix[20]) {
     return false;
 }
 
-bool SkColorFilter::asComponentTable(SkBitmap*) const {
+bool SkColorFilter::asComponentTable(SkBitmap*) {
     return false;
 }
 
-void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) const {
+void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) {
     SkASSERT(this->getFlags() & SkColorFilter::kHasFilter16_Flag);
     SkDEBUGFAIL("missing implementation of SkColorFilter::filterSpan16");
 
@@ -35,14 +32,10 @@ void SkColorFilter::filterSpan16(const uint16_t s[], int count, uint16_t d[]) co
     }
 }
 
-SkColor SkColorFilter::filterColor(SkColor c) const {
+SkColor SkColorFilter::filterColor(SkColor c) {
     SkPMColor dst, src = SkPreMultiplyColor(c);
     this->filterSpan(&src, 1, &dst);
     return SkUnPreMultiply::PMColorToColor(dst);
-}
-
-GrEffectRef* SkColorFilter::asNewEffect(GrContext*) const {
-    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -54,8 +47,8 @@ SkFilterShader::SkFilterShader(SkShader* shader, SkColorFilter* filter) {
 
 SkFilterShader::SkFilterShader(SkFlattenableReadBuffer& buffer) :
         INHERITED(buffer) {
-    fShader = buffer.readFlattenableT<SkShader>();
-    fFilter = buffer.readFlattenableT<SkColorFilter>();
+    fShader = static_cast<SkShader*>(buffer.readFlattenable());
+    fFilter = static_cast<SkColorFilter*>(buffer.readFlattenable());
 }
 
 SkFilterShader::~SkFilterShader() {
@@ -63,7 +56,17 @@ SkFilterShader::~SkFilterShader() {
     fShader->unref();
 }
 
-void SkFilterShader::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkFilterShader::beginSession() {
+    this->INHERITED::beginSession();
+    fShader->beginSession();
+}
+
+void SkFilterShader::endSession() {
+    fShader->endSession();
+    this->INHERITED::endSession();
+}
+
+void SkFilterShader::flatten(SkFlattenableWriteBuffer& buffer) {
     this->INHERITED::flatten(buffer);
     buffer.writeFlattenable(fShader);
     buffer.writeFlattenable(fFilter);
@@ -72,7 +75,7 @@ void SkFilterShader::flatten(SkFlattenableWriteBuffer& buffer) const {
 uint32_t SkFilterShader::getFlags() {
     uint32_t shaderF = fShader->getFlags();
     uint32_t filterF = fFilter->getFlags();
-
+    
     // if the filter doesn't support 16bit, clear the matching bit in the shader
     if (!(filterF & SkColorFilter::kHasFilter16_Flag)) {
         shaderF &= ~SkShader::kHasSpan16_Flag;
@@ -87,22 +90,8 @@ uint32_t SkFilterShader::getFlags() {
 bool SkFilterShader::setContext(const SkBitmap& device,
                                 const SkPaint& paint,
                                 const SkMatrix& matrix) {
-    // we need to keep the setContext/endContext calls balanced. If we return
-    // false, our endContext() will not be called.
-
-    if (!this->INHERITED::setContext(device, paint, matrix)) {
-        return false;
-    }
-    if (!fShader->setContext(device, paint, matrix)) {
-        this->INHERITED::endContext();
-        return false;
-    }
-    return true;
-}
-
-void SkFilterShader::endContext() {
-    fShader->endContext();
-    this->INHERITED::endContext();
+    return  this->INHERITED::setContext(device, paint, matrix) &&
+            fShader->setContext(device, paint, matrix);
 }
 
 void SkFilterShader::shadeSpan(int x, int y, SkPMColor result[], int count) {
@@ -118,17 +107,3 @@ void SkFilterShader::shadeSpan16(int x, int y, uint16_t result[], int count) {
     fFilter->filterSpan16(result, count, result);
 }
 
-#ifdef SK_DEVELOPER
-void SkFilterShader::toString(SkString* str) const {
-    str->append("SkFilterShader: (");
-
-    str->append("Shader: ");
-    fShader->toString(str);
-    str->append(" Filter: ");
-    // TODO: add "fFilter->toString(str);" once SkColorFilter::toString is added
-
-    this->INHERITED::toString(str);
-
-    str->append(")");
-}
-#endif

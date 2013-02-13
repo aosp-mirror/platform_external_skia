@@ -32,11 +32,13 @@ static SkBitmap make_bitmap() {
 }
 
 class TinyBitmapGM : public GM {
+    SkBitmap    fBM;
 public:
     TinyBitmapGM() {
         this->setBGColor(0xFFDDDDDD);
+        fBM = make_bitmap();
     }
-
+    
 protected:
     SkString onShortName() {
         return SkString("tinybitmap");
@@ -45,16 +47,15 @@ protected:
     virtual SkISize onISize() { return make_isize(100, 100); }
 
     virtual void onDraw(SkCanvas* canvas) {
-        SkBitmap bm = make_bitmap();
-        SkShader* s =
-            SkShader::CreateBitmapShader(bm, SkShader::kRepeat_TileMode,
+        SkShader* s = 
+            SkShader::CreateBitmapShader(fBM, SkShader::kRepeat_TileMode,
                                          SkShader::kMirror_TileMode);
         SkPaint paint;
         paint.setAlpha(0x80);
         paint.setShader(s)->unref();
         canvas->drawPaint(paint);
     }
-
+    
 private:
     typedef GM INHERITED;
 };

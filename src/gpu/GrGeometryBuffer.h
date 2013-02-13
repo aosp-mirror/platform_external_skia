@@ -19,7 +19,6 @@ class GrGpu;
  */
 class GrGeometryBuffer : public GrResource {
 public:
-    SK_DECLARE_INST_COUNT(GrGeometryBuffer);
 
     /**
      *Retrieves whether the buffer was created with the dynamic flag
@@ -76,8 +75,8 @@ public:
     virtual size_t sizeInBytes() const { return fSizeInBytes; }
 
 protected:
-    GrGeometryBuffer(GrGpu* gpu, bool isWrapped, size_t sizeInBytes, bool dynamic)
-        : INHERITED(gpu, isWrapped)
+    GrGeometryBuffer(GrGpu* gpu, size_t sizeInBytes, bool dynamic)
+        : INHERITED(gpu)
         , fSizeInBytes(sizeInBytes)
         , fDynamic(dynamic) {}
 

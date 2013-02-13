@@ -23,12 +23,6 @@
     or pt >> 8 for antialiasing. This is implemented as pt >> (10 - shift).
 */
 
-static inline SkFixed SkFDot6ToFixedDiv2(SkFDot6 value) {
-    // we want to return SkFDot6ToFixed(value >> 1), but we don't want to throw
-    // away data in value, so just perform a modify up-shift
-    return value << (16 - 6 - 1);
-}
-
 /////////////////////////////////////////////////////////////////////////
 
 int SkEdge::setLine(const SkPoint& p0, const SkPoint& p1, const SkIRect* clip,
@@ -72,9 +66,8 @@ int SkEdge::setLine(const SkPoint& p0, const SkPoint& p1, const SkIRect* clip,
     }
 
     SkFixed slope = SkFDot6Div(x1 - x0, y1 - y0);
-    const int dy  = SkEdge_Compute_DY(top, y0);
 
-    fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, dy));   // + SK_Fixed1/2
+    fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, (32 - y0) & 63));   // + SK_Fixed1/2
     fDX         = slope;
     fFirstY     = top;
     fLastY      = bot - 1;
@@ -113,9 +106,8 @@ int SkEdge::updateLine(SkFixed x0, SkFixed y0, SkFixed x1, SkFixed y1)
     x1 >>= 10;
 
     SkFixed slope = SkFDot6Div(x1 - x0, y1 - y0);
-    const int dy  = SkEdge_Compute_DY(top, y0);
 
-    fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, dy));   // + SK_Fixed1/2
+    fX          = SkFDot6ToFixed(x0 + SkFixedMul(slope, (32 - y0) & 63));   // + SK_Fixed1/2
     fDX         = slope;
     fFirstY     = top;
     fLastY      = bot - 1;
@@ -227,40 +219,21 @@ int SkQuadraticEdge::setQuadratic(const SkPoint pts[3], int shift)
     } else if (shift > MAX_COEFF_SHIFT) {
         shift = MAX_COEFF_SHIFT;
     }
-
+    
     fWinding    = SkToS8(winding);
+    fCurveShift = SkToU8(shift);
     //fCubicDShift only set for cubics
     fCurveCount = SkToS8(1 << shift);
 
-    /*
-     *  We want to reformulate into polynomial form, to make it clear how we
-     *  should forward-difference.
-     *
-     *  p0 (1 - t)^2 + p1 t(1 - t) + p2 t^2 ==> At^2 + Bt + C
-     *
-     *  A = p0 - 2p1 + p2
-     *  B = 2(p1 - p0)
-     *  C = p0
-     *
-     *  Our caller must have constrained our inputs (p0..p2) to all fit into
-     *  16.16. However, as seen above, we sometimes compute values that can be
-     *  larger (e.g. B = 2*(p1 - p0)). To guard against overflow, we will store
-     *  A and B at 1/2 of their actual value, and just apply a 2x scale during
-     *  application in updateQuadratic(). Hence we store (shift - 1) in
-     *  fCurveShift.
-     */
-
-    fCurveShift = SkToU8(shift - 1);
-
-    SkFixed A = SkFDot6ToFixedDiv2(x0 - x1 - x1 + x2);  // 1/2 the real value
-    SkFixed B = SkFDot6ToFixed(x1 - x0);                // 1/2 the real value
+    SkFixed A = SkFDot6ToFixed(x0 - x1 - x1 + x2);
+    SkFixed B = SkFDot6ToFixed(x1 - x0 + x1 - x0);
 
     fQx     = SkFDot6ToFixed(x0);
     fQDx    = B + (A >> shift);     // biased by shift
     fQDDx   = A >> (shift - 1);     // biased by shift
 
-    A = SkFDot6ToFixedDiv2(y0 - y1 - y1 + y2);  // 1/2 the real value
-    B = SkFDot6ToFixed(y1 - y0);                // 1/2 the real value
+    A = SkFDot6ToFixed(y0 - y1 - y1 + y2);
+    B = SkFDot6ToFixed(y1 - y0 + y1 - y0);
 
     fQy     = SkFDot6ToFixed(y0);
     fQDy    = B + (A >> shift);     // biased by shift
@@ -478,13 +451,6 @@ int SkCubicEdge::updateCubic()
             newx    = fCLastX;
             newy    = fCLastY;
         }
-
-        // we want to say SkASSERT(oldy <= newy), but our finite fixedpoint
-        // doesn't always achieve that, so we have to explicitly pin it here.
-        if (newy < oldy) {
-            newy = oldy;
-        }
-
         success = this->updateLine(oldx, oldy, newx, newy);
         oldx = newx;
         oldy = newy;
@@ -495,3 +461,6 @@ int SkCubicEdge::updateCubic()
     fCurveCount = SkToS8(count);
     return success;
 }
+
+
+

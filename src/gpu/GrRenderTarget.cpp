@@ -13,38 +13,32 @@
 #include "GrGpu.h"
 #include "GrStencilBuffer.h"
 
-SK_DEFINE_INST_COUNT(GrRenderTarget)
-
 bool GrRenderTarget::readPixels(int left, int top, int width, int height,
-                                GrPixelConfig config,
-                                void* buffer,
-                                size_t rowBytes,
-                                uint32_t pixelOpsFlags) {
+                                GrPixelConfig config, void* buffer,
+                                size_t rowBytes) {
     // go through context so that all necessary flushing occurs
     GrContext* context = this->getContext();
     if (NULL == context) {
         return false;
     }
     return context->readRenderTargetPixels(this,
-                                           left, top, width, height,
-                                           config, buffer, rowBytes,
-                                           pixelOpsFlags);
+                                           left, top,
+                                           width, height,
+                                           config, buffer, rowBytes);
 }
 
 void GrRenderTarget::writePixels(int left, int top, int width, int height,
-                                 GrPixelConfig config,
-                                 const void* buffer,
-                                 size_t rowBytes,
-                                 uint32_t pixelOpsFlags) {
+                                 GrPixelConfig config, const void* buffer,
+                                 size_t rowBytes) {
     // go through context so that all necessary flushing occurs
     GrContext* context = this->getContext();
     if (NULL == context) {
         return;
     }
     context->writeRenderTargetPixels(this,
-                                     left, top, width, height,
-                                     config, buffer, rowBytes,
-                                     pixelOpsFlags);
+                                     left, top,
+                                     width, height,
+                                     config, buffer, rowBytes);
 }
 
 void GrRenderTarget::resolve() {
@@ -58,15 +52,15 @@ void GrRenderTarget::resolve() {
 
 size_t GrRenderTarget::sizeInBytes() const {
     int colorBits;
-    if (kUnknown_GrPixelConfig == fDesc.fConfig) {
+    if (kUnknown_GrPixelConfig == fConfig) {
         colorBits = 32; // don't know, make a guess
     } else {
-        colorBits = GrBytesPerPixel(fDesc.fConfig);
+        colorBits = GrBytesPerPixel(fConfig);
     }
-    uint64_t size = fDesc.fWidth;
-    size *= fDesc.fHeight;
+    uint64_t size = fWidth;
+    size *= fHeight;
     size *= colorBits;
-    size *= GrMax(1, fDesc.fSampleCnt);
+    size *= GrMax(1,fSampleCnt);
     return (size_t)(size / 8);
 }
 
@@ -95,38 +89,13 @@ void GrRenderTarget::overrideResolveRect(const GrIRect rect) {
 }
 
 void GrRenderTarget::setStencilBuffer(GrStencilBuffer* stencilBuffer) {
-    if (stencilBuffer == fStencilBuffer) {
-        return;
-    }
-
     if (NULL != fStencilBuffer) {
+        fStencilBuffer->wasDetachedFromRenderTarget(this);
         fStencilBuffer->unref();
-
-        GrContext* context = this->getContext();
-        if (NULL != context) {
-            context->purgeCache();
-        }
-
-        if (NULL != context) {
-            context->purgeCache();
-        }
     }
-
     fStencilBuffer = stencilBuffer;
-
     if (NULL != fStencilBuffer) {
+        fStencilBuffer->wasAttachedToRenderTarget(this);
         fStencilBuffer->ref();
     }
-}
-
-void GrRenderTarget::onRelease() {
-    this->setStencilBuffer(NULL);
-
-    INHERITED::onRelease();
-}
-
-void GrRenderTarget::onAbandon() {
-    this->setStencilBuffer(NULL);
-
-    INHERITED::onAbandon();
 }

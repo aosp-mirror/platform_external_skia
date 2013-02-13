@@ -57,7 +57,7 @@ size_t SkFDStream::read(void* buffer, size_t size) {
 #endif
                 return 0;
             }
-            return (size_t) size;
+            return size;
         } else if (NULL == buffer) {        // skip
             off_t oldCurr = ::lseek(fFD, 0, SEEK_CUR);
             if (oldCurr < 0) {
@@ -74,7 +74,7 @@ size_t SkFDStream::read(void* buffer, size_t size) {
                 return 0;   // error;
             }
             // return the actual amount we skipped
-            return (size_t) (newCurr - oldCurr);
+            return newCurr - oldCurr;
         } else {                            // read
             ssize_t actual = ::read(fFD, buffer, size);
             // our API can't return an error, so we return 0
@@ -89,3 +89,4 @@ size_t SkFDStream::read(void* buffer, size_t size) {
     }
     return 0;
 }
+

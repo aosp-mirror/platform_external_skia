@@ -1,9 +1,11 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 
 #ifndef SkDiscretePathEffect_DEFINED
 #define SkDiscretePathEffect_DEFINED
@@ -14,7 +16,7 @@
 
     This path effect chops a path into discrete segments, and randomly displaces them.
 */
-class SK_API SkDiscretePathEffect : public SkPathEffect {
+class SkDiscretePathEffect : public SkPathEffect {
 public:
     /** Break the path into segments of segLength length, and randomly move the endpoints
         away from the original path by a maximum of deviation.
@@ -22,19 +24,28 @@ public:
     */
     SkDiscretePathEffect(SkScalar segLength, SkScalar deviation);
 
-    virtual bool filterPath(SkPath* dst, const SkPath& src,
-                            SkStrokeRec*, const SkRect*) const SK_OVERRIDE;
+    // overrides for SkPathEffect
+    //  This method is not exported to java.
+    virtual bool filterPath(SkPath* dst, const SkPath& src, SkScalar* width);
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDiscretePathEffect)
+    // overrides for SkFlattenable
+    //  This method is not exported to java.
+    virtual Factory getFactory();
+    //  This method is not exported to java.
+    virtual void flatten(SkFlattenableWriteBuffer&);
+
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     SkDiscretePathEffect(SkFlattenableReadBuffer&);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
 private:
     SkScalar fSegLength, fPerterb;
-
+    
     typedef SkPathEffect INHERITED;
 };
 
 #endif
+

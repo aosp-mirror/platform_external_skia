@@ -30,14 +30,19 @@
         abbreviated with 'i' or 'I' in variable names
     - supersampled coordinates, scale equal to the output * SCALE
 
-    Enabling SK_USE_LEGACY_AA_COVERAGE keeps the aa coverage calculations as
-    they were before the fix that unified the output of the RLE and MASK
-    supersamplers.
- */
+    NEW_AA is a set of code-changes to try to make both paths produce identical
+    results. Its not quite there yet, though the remaining differences may be
+    in the subsequent blits, and not in the different masks/runs...
 
+    SK_USE_EXACT_COVERAGE makes coverage_to_partial_alpha() behave similarly to
+    coverage_to_exact_alpha(). Enabling it will requrie rebaselining about 1/3
+    of GMs for changes in the 3 least significant bits along the edges of
+    antialiased spans.
+ */
 //#define FORCE_SUPERMASK
 //#define FORCE_RLE
-//#define SK_USE_LEGACY_AA_COVERAGE
+//#define SK_SUPPORT_NEW_AA
+//#define SK_USE_EXACT_COVERAGE
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -85,7 +90,7 @@ BaseSuperBlitter::BaseSuperBlitter(SkBlitter* realBlitter, const SkIRect& ir,
      */
     const int left = clip.getBounds().fLeft;
     const int right = clip.getBounds().fRight;
-
+    
     fLeft = left;
     fSuperLeft = left << SHIFT;
     fWidth = right - left;
@@ -160,11 +165,13 @@ void SuperBlitter::flush() {
     coverage_to_exact_alpha().
 */
 static inline int coverage_to_partial_alpha(int aa) {
+#ifdef SK_USE_EXACT_COVERAGE
+    return aa << (8 - 2 * SHIFT);
+#else
     aa <<= 8 - 2*SHIFT;
-#ifdef SK_USE_LEGACY_AA_COVERAGE
     aa -= aa >> (8 - SHIFT - 1);
-#endif
     return aa;
+#endif
 }
 
 /** coverage_to_exact_alpha() is being used by our blitter, which wants
@@ -197,7 +204,7 @@ void SuperBlitter::blitH(int x, int y, int width) {
         fOffsetX = 0;
         fCurrY = y;
     }
-
+    
     if (iy != fCurrIY) {  // new scanline
         this->flush();
         fCurrIY = iy;
@@ -235,7 +242,6 @@ void SuperBlitter::blitH(int x, int y, int width) {
 #endif
 }
 
-#if 0 // UNUSED
 static void set_left_rite_runs(SkAlphaRuns& runs, int ileft, U8CPU leftA,
                                int n, U8CPU riteA) {
     SkASSERT(leftA <= 0xFF);
@@ -271,7 +277,6 @@ static void set_left_rite_runs(SkAlphaRuns& runs, int ileft, U8CPU leftA,
     }
     run[0] = 0;
 }
-#endif
 
 void SuperBlitter::blitRect(int x, int y, int width, int height) {
     SkASSERT(width > 0);
@@ -447,17 +452,6 @@ static inline uint32_t quadplicate_byte(U8CPU value) {
     return (pair << 16) | pair;
 }
 
-// Perform this tricky subtract, to avoid overflowing to 256. Our caller should
-// only ever call us with at most enough to hit 256 (never larger), so it is
-// enough to just subtract the high-bit. Actually clamping with a branch would
-// be slower (e.g. if (tmp > 255) tmp = 255;)
-//
-static inline void saturated_add(uint8_t* ptr, U8CPU add) {
-    unsigned tmp = *ptr + add;
-    SkASSERT(tmp <= 256);
-    *ptr = SkToU8(tmp - (tmp >> 8));
-}
-
 // minimum count before we want to setup an inner loop, adding 4-at-a-time
 #define MIN_COUNT_FOR_QUAD_LOOP  16
 
@@ -465,8 +459,22 @@ static void add_aa_span(uint8_t* alpha, U8CPU startAlpha, int middleCount,
                         U8CPU stopAlpha, U8CPU maxValue) {
     SkASSERT(middleCount >= 0);
 
-    saturated_add(alpha, startAlpha);
-    alpha += 1;
+    /*  I should be able to just add alpha[x] + startAlpha.
+        However, if the trailing edge of the previous span and the leading
+        edge of the current span round to the same super-sampled x value,
+        I might overflow to 256 with this add, hence the funny subtract.
+    */
+#ifdef SK_SUPPORT_NEW_AA
+    if (startAlpha) {
+        unsigned tmp = *alpha + startAlpha;
+        SkASSERT(tmp <= 256);
+        *alpha++ = SkToU8(tmp - (tmp >> 8));
+    }
+#else
+    unsigned tmp = *alpha + startAlpha;
+    SkASSERT(tmp <= 256);
+    *alpha++ = SkToU8(tmp - (tmp >> 8));
+#endif
 
     if (middleCount >= MIN_COUNT_FOR_QUAD_LOOP) {
         // loop until we're quad-byte aligned
@@ -497,7 +505,7 @@ static void add_aa_span(uint8_t* alpha, U8CPU startAlpha, int middleCount,
     // only happens if stopAlpha is also 0. Rather than test for stopAlpha != 0
     // every time (slow), we just do it, and ensure that we've allocated extra space
     // (see the + 1 comment in fStorage[]
-    saturated_add(alpha, stopAlpha);
+    *alpha = SkToU8(*alpha + stopAlpha);
 }
 
 void MaskSuperBlitter::blitH(int x, int y, int width) {
@@ -544,7 +552,15 @@ void MaskSuperBlitter::blitH(int x, int y, int width) {
         SkASSERT(row < fMask.fImage + kMAX_STORAGE + 1);
         add_aa_span(row, coverage_to_partial_alpha(fe - fb));
     } else {
+#ifdef SK_SUPPORT_NEW_AA
+        if (0 == fb) {
+            n += 1;
+        } else {
+            fb = SCALE - fb;
+        }
+#else
         fb = SCALE - fb;
+#endif
         SkASSERT(row >= fMask.fImage);
         SkASSERT(row + n + 1 < fMask.fImage + kMAX_STORAGE + 1);
         add_aa_span(row,  coverage_to_partial_alpha(fb),
@@ -714,13 +730,13 @@ void SkScan::FillPath(const SkPath& path, const SkRasterClip& clip,
     if (clip.isEmpty()) {
         return;
     }
-
+    
     if (clip.isBW()) {
         FillPath(path, clip.bwRgn(), blitter);
     } else {
         SkRegion        tmp;
         SkAAClipBlitter aaBlitter;
-
+        
         tmp.setRect(clip.getBounds());
         aaBlitter.init(blitter, &clip.aaRgn());
         SkScan::FillPath(path, tmp, &aaBlitter);
@@ -744,3 +760,4 @@ void SkScan::AntiFillPath(const SkPath& path, const SkRasterClip& clip,
         SkScan::AntiFillPath(path, tmp, &aaBlitter, true);
     }
 }
+

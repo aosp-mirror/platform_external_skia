@@ -1,19 +1,21 @@
 {
+  'includes': [
+    'common.gypi',
+  ],
   'targets': [
     {
       'target_name': 'xps',
-      'product_name': 'skia_xps',
       'type': 'static_library',
-      'standalone_static_library': 1,
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
+        'core.gyp:core',
         'images.gyp:images',
+        'utils.gyp:utils',
+        'pdf.gyp:pdf', # needed to get SkBitSet
       ],
       'include_dirs': [
         '../include/device/xps',
         '../include/utils/win',
         '../src/core', # needed to get SkGlyphCache.h
-        '../src/utils', # needed to get SkBitSet.h
       ],
       'sources': [
         '../include/device/xps/SkConstexprMath.h',
@@ -52,7 +54,6 @@
         ],
         'include_dirs': [
           '../include/device/xps',
-          '../src/utils', # needed to get SkBitSet.h
         ],
       },
     },

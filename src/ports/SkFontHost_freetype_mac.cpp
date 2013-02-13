@@ -22,7 +22,7 @@ public:
         fStream->unref();
     }
 
-    SkStream* fStream;
+    SkStream* fStream;    
 };
 
 static FTMacTypeface* create_from_path(const char path[]) {
@@ -42,7 +42,7 @@ static SkTypeface* ref_default_typeface() {
     if (NULL == gDef) {
         gDef = create_from_path(FONT_PATH);
     }
-
+    
     gDef->ref();
     return gDef;
 }
@@ -51,6 +51,7 @@ static SkTypeface* ref_default_typeface() {
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                                        const char familyName[],
+                                       const void* data, size_t bytelength,
                                        SkTypeface::Style style) {
     return ref_default_typeface();
 }
@@ -103,3 +104,4 @@ SkTypeface* SkCreateTypefaceFromCTFont(CTFontRef fontRef) {
     SkDEBUGFAIL("Not supported");
     return NULL;
 }
+

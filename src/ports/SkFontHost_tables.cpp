@@ -203,3 +203,4 @@ size_t SkFontHost::GetTableData(SkFontID fontID, SkFontTableTag tag,
     }
     return 0;
 }
+

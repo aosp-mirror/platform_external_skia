@@ -33,3 +33,4 @@ SkPathEffect* SkDash::getPathEffect() {
         return NULL;
     return new SkDashPathEffect(intervals.begin(), count, phase);
 }
+

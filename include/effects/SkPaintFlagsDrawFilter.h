@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 The Android Open Source Project
  *
@@ -5,20 +6,24 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkPaintFlagsDrawFilter_DEFINED
 #define SkPaintFlagsDrawFilter_DEFINED
 
 #include "SkDrawFilter.h"
 
-class SK_API SkPaintFlagsDrawFilter : public SkDrawFilter {
+class SkPaintFlagsDrawFilter : public SkDrawFilter {
 public:
     SkPaintFlagsDrawFilter(uint32_t clearFlags, uint32_t setFlags);
-
-    virtual bool filter(SkPaint*, Type) SK_OVERRIDE;
-
+    
+    // overrides
+    virtual void filter(SkPaint*, Type);
+    
 private:
+    uint32_t    fPrevFlags;     // local cache for filter/restore
     uint16_t    fClearFlags;    // user specified
     uint16_t    fSetFlags;      // user specified
 };
 
 #endif
+

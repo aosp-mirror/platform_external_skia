@@ -14,13 +14,14 @@ public:
     GrAAConvexPathRenderer();
 
     virtual bool canDrawPath(const SkPath& path,
-                             const SkStrokeRec& stroke,
+                             GrPathFill fill,
                              const GrDrawTarget* target,
                              bool antiAlias) const SK_OVERRIDE;
-
 protected:
     virtual bool onDrawPath(const SkPath& path,
-                            const SkStrokeRec& stroke,
+                            GrPathFill fill,
+                            const GrVec* translate,
                             GrDrawTarget* target,
+                            GrDrawState::StageMask stageMask,
                             bool antiAlias) SK_OVERRIDE;
 };

@@ -5,14 +5,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
-// This test only works with the GPU backend.
-
 #include "gm.h"
-
-#if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "effects/GrSimpleTextureEffect.h"
 #include "SkColorPriv.h"
 #include "SkDevice.h"
 
@@ -87,7 +81,8 @@ protected:
                 desc.fConfig    = kSkia8888_PM_GrPixelConfig;
                 desc.fWidth     = 2 * S;
                 desc.fHeight    = 2 * S;
-                GrTexture* texture =
+                desc.fSampleCnt = 0;
+                GrTexture* texture = 
                     ctx->createUncachedTexture(desc, gTextureData, 0);
 
                 if (!texture) {
@@ -95,13 +90,15 @@ protected:
                 }
                 GrAutoUnref au(texture);
 
-                GrContext::AutoClip acs(ctx, GrRect::MakeWH(2*S, 2*S));
-
+                ctx->setClip(GrRect::MakeWH(2*S, 2*S));
                 ctx->setRenderTarget(target);
 
                 GrPaint paint;
-                paint.setBlendFunc(kOne_GrBlendCoeff, kISA_GrBlendCoeff);
-                SkMatrix vm;
+                paint.reset();
+                paint.fColor = 0xffffffff;
+                paint.fSrcBlendCoeff = kOne_BlendCoeff;
+                paint.fDstBlendCoeff = kISA_BlendCoeff;
+                GrMatrix vm;
                 if (i) {
                     vm.setRotate(90 * SK_Scalar1,
                                  S * SK_Scalar1,
@@ -110,10 +107,12 @@ protected:
                     vm.reset();
                 }
                 ctx->setMatrix(vm);
-                SkMatrix tm;
+                GrMatrix tm;
                 tm = vm;
-                tm.postIDiv(2*S, 2*S);
-                paint.colorStage(0)->setEffect(GrSimpleTextureEffect::Create(texture, tm))->unref();
+                GrMatrix* sampleMat = paint.textureSampler(0)->matrix();
+                *sampleMat = vm;
+                sampleMat->postIDiv(2*S, 2*S);
+                paint.setTexture(0, texture);
 
                 ctx->drawRect(paint, GrRect::MakeWH(2*S, 2*S));
 
@@ -122,7 +121,7 @@ protected:
                 offset = 0;
                 for (int y = 0; y < S; ++y) {
                     for (int x = 0; x < S; ++x) {
-                        gTextureData[offset + y * stride + x] =
+                        gTextureData[offset + y * stride + x] = 
                             ((x + y) % 2) ? (i ? green : red) : blue;
                     }
                 }
@@ -145,4 +144,3 @@ static GMRegistry reg(MyFactory);
 
 }
 
-#endif

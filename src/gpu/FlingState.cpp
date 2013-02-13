@@ -110,16 +110,18 @@ float GrAnimateFloat::evaluate() {
     if (!fTime0) {
         return fValue1;
     }
-
+    
     double elapsed = (SkTime::GetMSecs() - fTime0) * 0.001;
     if (elapsed >= fDuration) {
         fTime0 = 0;
         return fValue1;
     }
-
+    
     double t = elapsed / fDuration;
     if (true) {
         t = (3 - 2 * t) * t * t;
     }
     return fValue0 + t * (fValue1 - fValue0);
 }
+
+

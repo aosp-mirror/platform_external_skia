@@ -1,9 +1,11 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 
 #ifndef SkPoint_DEFINED
 #define SkPoint_DEFINED
@@ -143,11 +145,6 @@ struct SK_API SkPoint {
     SkScalar x() const { return fX; }
     SkScalar y() const { return fY; }
 
-    /**
-     *  Returns true iff fX and fY are both zero.
-     */
-    bool isZero() const { return (0 == fX) & (0 == fY); }
-
     /** Set the point's X and Y coordinates */
     void set(SkScalar x, SkScalar y) { fX = x; fY = y; }
 
@@ -171,7 +168,7 @@ struct SK_API SkPoint {
         fX = SkScalarAbs(pt.fX);
         fY = SkScalarAbs(pt.fY);
     }
-
+    
     // counter-clockwise fan
     void setIRectFan(int l, int t, int r, int b) {
         SkPoint* v = this;
@@ -216,13 +213,7 @@ struct SK_API SkPoint {
      *  Return true if the computed length of the vector is >= the internal
      *  tolerance (used to avoid dividing by tiny values).
      */
-    static bool CanNormalize(SkScalar dx, SkScalar dy)
-#ifdef SK_SCALAR_IS_FLOAT
-    // Simple enough (and performance critical sometimes) so we inline it.
-    { return (dx*dx + dy*dy) > (SK_ScalarNearlyZero * SK_ScalarNearlyZero); }
-#else
-    ;
-#endif
+    static bool CanNormalize(SkScalar dx, SkScalar dy);
 
     bool canNormalize() const {
         return CanNormalize(fX, fY);
@@ -312,35 +303,9 @@ struct SK_API SkPoint {
         fY -= v.fY;
     }
 
-    /**
-     *  Returns true if both X and Y are finite (not infinity or NaN)
-     */
-    bool isFinite() const {
-#ifdef SK_SCALAR_IS_FLOAT
-        SkScalar accum = 0;
-        accum *= fX;
-        accum *= fY;
-
-        // accum is either NaN or it is finite (zero).
-        SkASSERT(0 == accum || !(accum == accum));
-
-        // value==value will be true iff value is not NaN
-        // TODO: is it faster to say !accum or accum==accum?
-        return accum == accum;
-#else
-        // use bit-or for speed, since we don't care about short-circuting the
-        // tests, and we expect the common case will be that we need to check all.
-        int isNaN = (SK_FixedNaN == fX) | (SK_FixedNaN == fX));
-        return !isNaN;
-#endif
-    }
-
-    /**
-     *  Returns true if the point's coordinates equal (x,y)
-     */
-    bool equals(SkScalar x, SkScalar y) const {
-        return fX == x && fY == y;
-    }
+    /** Returns true if the point's coordinates equal (x,y)
+    */
+    bool equals(SkScalar x, SkScalar y) const { return fX == x && fY == y; }
 
     friend bool operator==(const SkPoint& a, const SkPoint& b) {
         return a.fX == b.fX && a.fY == b.fY;
@@ -350,29 +315,11 @@ struct SK_API SkPoint {
         return a.fX != b.fX || a.fY != b.fY;
     }
 
-    /** Return true if this point and the given point are far enough apart
-        such that a vector between them would be non-degenerate.
-
-        WARNING: Unlike the deprecated version of equalsWithinTolerance(),
-        this method does not use componentwise comparison.  Instead, it
-        uses a comparison designed to match judgments elsewhere regarding
-        degeneracy ("points A and B are so close that the vector between them
-        is essentially zero").
+    /** Return true if this and the given point are componentwise within tol.
     */
-    bool equalsWithinTolerance(const SkPoint& p) const {
-        return !CanNormalize(fX - p.fX, fY - p.fY);
-    }
-
-    /** DEPRECATED: Return true if this and the given point are componentwise
-        within tolerance "tol".
-
-        WARNING: There is no guarantee that the result will reflect judgments
-        elsewhere regarding degeneracy ("points A and B are so close that the
-        vector between them is essentially zero").
-    */
-    bool equalsWithinTolerance(const SkPoint& p, SkScalar tol) const {
-        return SkScalarNearlyZero(fX - p.fX, tol)
-               && SkScalarNearlyZero(fY - p.fY, tol);
+    bool equalsWithinTolerance(const SkPoint& v, SkScalar tol) const {
+        return SkScalarNearlyZero(fX - v.fX, tol)
+               && SkScalarNearlyZero(fY - v.fY, tol);
     }
 
     /** Returns a new point whose coordinates are the difference between
@@ -432,11 +379,11 @@ struct SK_API SkPoint {
     SkScalar dot(const SkPoint& vec) const {
         return DotProduct(*this, vec);
     }
-
+    
     SkScalar lengthSqd() const {
         return DotProduct(*this, *this);
     }
-
+    
     SkScalar distanceToSqd(const SkPoint& pt) const {
         SkScalar dx = fX - pt.fX;
         SkScalar dy = fY - pt.fY;

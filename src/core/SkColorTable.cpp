@@ -7,12 +7,10 @@
  */
 
 
-#include "SkColorTable.h"
-#include "SkFlattenableBuffers.h"
+#include "SkBitmap.h"
+#include "SkFlattenable.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
-
-SK_DEFINE_INST_COUNT(SkColorTable)
 
 SkColorTable::SkColorTable(int count)
     : f16BitCache(NULL), fFlags(0)
@@ -30,9 +28,8 @@ SkColorTable::SkColorTable(int count)
     SkDEBUGCODE(f16BitCacheLockCount = 0;)
 }
 
-// As copy constructor is hidden in the class hierarchy, we need to call
-// default constructor explicitly to suppress a compiler warning.
-SkColorTable::SkColorTable(const SkColorTable& src) : INHERITED() {
+// call SkRefCnt's constructor explicitly, to avoid warning
+SkColorTable::SkColorTable(const SkColorTable& src) : SkRefCnt() {
     f16BitCache = NULL;
     fFlags = src.fFlags;
     int count = src.count();
@@ -81,7 +78,7 @@ void SkColorTable::setFlags(unsigned flags)
 void SkColorTable::unlockColors(bool changed)
 {
     SkASSERT(fColorLockCount != 0);
-    SkDEBUGCODE(sk_atomic_dec(&fColorLockCount);)
+    SkDEBUGCODE(fColorLockCount -= 1;)
     if (changed)
         this->inval16BitCache();
 }
@@ -143,17 +140,19 @@ SkColorTable::SkColorTable(SkFlattenableReadBuffer& buffer) {
     SkDEBUGCODE(fColorLockCount = 0;)
     SkDEBUGCODE(f16BitCacheLockCount = 0;)
 
-    fFlags = buffer.readUInt();
-    fCount = buffer.getArrayCount();
-    fColors = (SkPMColor*)sk_malloc_throw(fCount * sizeof(SkPMColor));
-    SkDEBUGCODE(const uint32_t countRead =) buffer.readColorArray(fColors);
-#ifdef SK_DEBUG
+    fCount = buffer.readU16();
     SkASSERT((unsigned)fCount <= 256);
-    SkASSERT(countRead == fCount);
-#endif
+
+    fFlags = buffer.readU8();
+
+    fColors = (SkPMColor*)sk_malloc_throw(fCount * sizeof(SkPMColor));
+    buffer.read(fColors, fCount * sizeof(SkPMColor));
 }
 
 void SkColorTable::flatten(SkFlattenableWriteBuffer& buffer) const {
-    buffer.writeUInt(fFlags);
-    buffer.writeColorArray(fColors, fCount);
+    int count = this->count();
+    buffer.write16(count);
+    buffer.write8(this->getFlags());
+    buffer.writeMul4(fColors, count * sizeof(SkPMColor));
 }
+

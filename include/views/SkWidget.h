@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -5,22 +6,18 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkWidget_DEFINED
 #define SkWidget_DEFINED
 
+#include "SkView.h"
 #include "SkBitmap.h"
 #include "SkDOM.h"
 #include "SkPaint.h"
 #include "SkString.h"
 #include "SkTDArray.h"
-#include "SkTextBox.h"
-#include "SkView.h"
 
-class SkEvent;
-class SkInterpolator;
-class SkShader;
-
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
 class SkWidget : public SkView {
 public:
@@ -44,8 +41,6 @@ private:
     typedef SkView INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class SkHasLabelWidget : public SkWidget {
 public:
     SkHasLabelWidget(uint32_t flags = 0) : SkWidget(flags) {}
@@ -67,8 +62,6 @@ private:
     SkString    fLabel;
     typedef SkWidget INHERITED;
 };
-
-////////////////////////////////////////////////////////////////////////////////
 
 class SkButtonWidget : public SkHasLabelWidget {
 public:
@@ -94,8 +87,6 @@ private:
     typedef SkHasLabelWidget INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class SkPushButtonWidget : public SkButtonWidget {
 public:
     SkPushButtonWidget(uint32_t flags = 0) : SkButtonWidget(flags) {}
@@ -110,8 +101,6 @@ private:
     typedef SkButtonWidget INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class SkCheckBoxWidget : public SkButtonWidget {
 public:
     SkCheckBoxWidget(uint32_t flags = 0);
@@ -125,7 +114,7 @@ private:
     typedef SkButtonWidget INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
+#include "SkTextBox.h"
 
 class SkStaticTextView : public SkView {
 public:
@@ -174,8 +163,6 @@ private:
     typedef SkView INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class SkBitmapView : public SkView {
 public:
             SkBitmapView(uint32_t flags = 0);
@@ -194,7 +181,41 @@ private:
     typedef SkView INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+
+class SkShader;
+class SkInterpolator;
+
+class SkWidgetView : public SkView {
+public:
+            SkWidgetView(uint32_t flags = 0);
+    virtual ~SkWidgetView();
+
+    static const char*  GetEventType();
+};
+
+class SkSliderView : public SkWidgetView {
+public:
+    SkSliderView(uint32_t flags = 0);
+
+    uint16_t    getValue() const { return fValue; }
+    uint16_t    getMax() const { return fMax; }
+
+    void    setMax(U16CPU max);
+    void    setValue(U16CPU value);
+
+protected:
+    virtual void    onDraw(SkCanvas*);
+    virtual Click*  onFindClickHandler(SkScalar x, SkScalar y);
+    virtual bool    onClick(Click*);
+
+private:
+    uint16_t fValue, fMax;
+
+    typedef SkWidgetView INHERITED;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 
 class SkHasLabelView : public SkView {
 public:
@@ -212,8 +233,6 @@ protected:
     virtual void onInflate(const SkDOM& dom, const SkDOM::Node*);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
 class SkPushButtonView : public SkHasLabelView {
 public:
     SkPushButtonView(uint32_t flags = 0);
@@ -222,8 +241,6 @@ protected:
     virtual void onDraw(SkCanvas*);
     virtual void onInflate(const SkDOM& dom, const SkDOM::Node*);
 };
-
-////////////////////////////////////////////////////////////////////////////////
 
 class SkCheckBoxView : public SkHasLabelView {
 public:
@@ -244,8 +261,6 @@ protected:
 private:
     State   fState;
 };
-
-////////////////////////////////////////////////////////////////////////////////
 
 class SkProgressView : public SkView {
 public:
@@ -271,7 +286,50 @@ private:
     typedef SkView INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
+class SkTextView : public SkView {
+public:
+            SkTextView(uint32_t flags = 0);
+    virtual ~SkTextView();
+
+    enum AnimaDir {
+        kNeutral_AnimDir,
+        kForward_AnimDir,
+        kBackward_AnimDir,
+        kAnimDirCount
+    };
+
+    void    getText(SkString*) const;
+    void    setText(const SkString&, AnimaDir dir = kNeutral_AnimDir);
+    void    setText(const char text[], AnimaDir dir = kNeutral_AnimDir);
+    void    setText(const char text[], size_t len, AnimaDir dir = kNeutral_AnimDir);
+
+    void    getMargin(SkPoint* margin) const;
+    void    setMargin(const SkPoint&);
+
+    SkPaint&    paint() { return fPaint; }
+
+protected:
+    virtual void onDraw(SkCanvas*);
+    virtual void onInflate(const SkDOM& dom, const SkDOM::Node* node);
+
+private:
+    SkString fText;
+    SkPaint  fPaint;
+    SkPoint  fMargin;
+
+    class Interp;
+    Interp* fInterp;
+    bool    fDoInterp;
+    // called by the other setText methods. This guy does not check for !=
+    // before doing the assign, so the caller must check for us
+    void privSetText(const SkString&, AnimaDir dir);
+
+    typedef SkView INHERITED;
+};
+
+//////////////////////////////////////////////////////////
+
+class SkEvent;
 
 class SkListSource : public SkEventSink {
 public:
@@ -284,9 +342,7 @@ public:
     static SkListSource* CreateFromDOM(const SkDOM& dom, const SkDOM::Node* node);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-class SkListView : public SkView {
+class SkListView : public SkWidgetView {
 public:
             SkListView(uint32_t flags = 0);
     virtual ~SkListView();
@@ -353,12 +409,12 @@ private:
     bool    getRowRect(int index, SkRect*) const;
     void    ensureSelectionIsVisible();
 
-    typedef SkView INHERITED;
+    typedef SkWidgetView INHERITED;
 };
 
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
 
-class SkGridView : public SkView {
+class SkGridView : public SkWidgetView {
 public:
             SkGridView(uint32_t flags = 0);
     virtual ~SkGridView();
@@ -406,7 +462,8 @@ private:
     bool    getCellRect(int index, SkRect*) const;
     void    ensureSelectionIsVisible();
 
-    typedef SkView INHERITED;
+    typedef SkWidgetView INHERITED;
 };
 
 #endif
+

@@ -13,7 +13,6 @@
 
 #include "SkTypes.h"
 #include "GrConfig.h"
-#include "SkMath.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,11 +58,11 @@
 #define GrIsALIGN4(n)   SkIsAlign4(n)
 
 template <typename T> const T& GrMin(const T& a, const T& b) {
-    return (a < b) ? a : b;
+	return (a < b) ? a : b;
 }
 
 template <typename T> const T& GrMax(const T& a, const T& b) {
-    return (b < a) ? a : b;
+	return (b < a) ? a : b;
 }
 
 // compile time versions of min/max
@@ -80,12 +79,9 @@ static inline int32_t GrIDivRoundUp(int x, int y) {
 static inline uint32_t GrUIDivRoundUp(uint32_t x, uint32_t y) {
     return (x + (y-1)) / y;
 }
-static inline size_t GrSizeDivRoundUp(size_t x, size_t y) {
+static inline size_t GrSizeDivRoundUp(size_t x, uint32_t y) {
     return (x + (y-1)) / y;
 }
-
-// compile time, evaluates Y multiple times
-#define GR_CT_DIV_ROUND_UP(X, Y) (((X) + ((Y)-1)) / (Y))
 
 /**
  *  align up
@@ -93,12 +89,9 @@ static inline size_t GrSizeDivRoundUp(size_t x, size_t y) {
 static inline uint32_t GrUIAlignUp(uint32_t x, uint32_t alignment) {
     return GrUIDivRoundUp(x, alignment) * alignment;
 }
-static inline size_t GrSizeAlignUp(size_t x, size_t alignment) {
+static inline uint32_t GrSizeAlignUp(size_t x, uint32_t alignment) {
     return GrSizeDivRoundUp(x, alignment) * alignment;
 }
-
-// compile time, evaluates A multiple times
-#define GR_CT_ALIGN_UP(X, A) (GR_CT_DIV_ROUND_UP((X),(A)) * (A))
 
 /**
  * amount of pad needed to align up
@@ -106,7 +99,7 @@ static inline size_t GrSizeAlignUp(size_t x, size_t alignment) {
 static inline uint32_t GrUIAlignUpPad(uint32_t x, uint32_t alignment) {
     return (alignment - x % alignment) % alignment;
 }
-static inline size_t GrSizeAlignUpPad(size_t x, size_t alignment) {
+static inline size_t GrSizeAlignUpPad(size_t x, uint32_t alignment) {
     return (alignment - x % alignment) % alignment;
 }
 
@@ -116,7 +109,7 @@ static inline size_t GrSizeAlignUpPad(size_t x, size_t alignment) {
 static inline uint32_t GrUIAlignDown(uint32_t x, uint32_t alignment) {
     return (x / alignment) * alignment;
 }
-static inline size_t GrSizeAlignDown(size_t x, uint32_t alignment) {
+static inline uint32_t GrSizeAlignDown(size_t x, uint32_t alignment) {
     return (x / alignment) * alignment;
 }
 
@@ -138,6 +131,11 @@ static inline void Gr_bzero(void* dst, size_t size) {
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
+ *  Return the number of leading zeros in n
+ */
+extern int Gr_clz(uint32_t n);
+
+/**
  *  Return true if n is a power of 2
  */
 static inline bool GrIsPow2(unsigned n) {
@@ -148,12 +146,12 @@ static inline bool GrIsPow2(unsigned n) {
  *  Return the next power of 2 >= n.
  */
 static inline uint32_t GrNextPow2(uint32_t n) {
-    return n ? (1 << (32 - SkCLZ(n - 1))) : 1;
+    return n ? (1 << (32 - Gr_clz(n - 1))) : 1;
 }
 
 static inline int GrNextPow2(int n) {
     GrAssert(n >= 0); // this impl only works for non-neg.
-    return n ? (1 << (32 - SkCLZ(n - 1))) : 1;
+    return n ? (1 << (32 - Gr_clz(n - 1))) : 1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -182,15 +180,16 @@ static inline int16_t GrToS16(intptr_t x) {
 /**
  * Possible 3D APIs that may be used by Ganesh.
  */
-enum GrBackend {
-    kOpenGL_GrBackend,
+enum GrEngine {
+    kOpenGL_Shaders_GrEngine,
+    kOpenGL_Fixed_GrEngine,
 };
 
 /**
- * Backend-specific 3D context handle
+ * Engine-specific 3D context handle
  *      GrGLInterface* for OpenGL. If NULL will use the default GL interface.
  */
-typedef intptr_t GrBackendContext;
+typedef intptr_t GrPlatform3DContext;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -204,46 +203,44 @@ typedef int GrVertexLayout;
 * Geometric primitives used for drawing.
 */
 enum GrPrimitiveType {
-    kTriangles_GrPrimitiveType,
-    kTriangleStrip_GrPrimitiveType,
-    kTriangleFan_GrPrimitiveType,
-    kPoints_GrPrimitiveType,
-    kLines_GrPrimitiveType,     // 1 pix wide only
-    kLineStrip_GrPrimitiveType  // 1 pix wide only
+    kTriangles_PrimitiveType,
+    kTriangleStrip_PrimitiveType,
+    kTriangleFan_PrimitiveType,
+    kPoints_PrimitiveType,
+    kLines_PrimitiveType,     // 1 pix wide only
+    kLineStrip_PrimitiveType  // 1 pix wide only
 };
 
 static inline bool GrIsPrimTypeLines(GrPrimitiveType type) {
-    return kLines_GrPrimitiveType == type || kLineStrip_GrPrimitiveType == type;
+    return kLines_PrimitiveType == type || kLineStrip_PrimitiveType == type;
 }
 
 static inline bool GrIsPrimTypeTris(GrPrimitiveType type) {
-    return kTriangles_GrPrimitiveType == type     ||
-           kTriangleStrip_GrPrimitiveType == type ||
-           kTriangleFan_GrPrimitiveType == type;
+    return kTriangles_PrimitiveType == type     ||
+           kTriangleStrip_PrimitiveType == type ||
+           kTriangleFan_PrimitiveType == type;
 }
 
 /**
  * Coeffecients for alpha-blending.
  */
 enum GrBlendCoeff {
-    kInvalid_GrBlendCoeff = -1,
+    kZero_BlendCoeff,    //<! 0
+    kOne_BlendCoeff,     //<! 1
+    kSC_BlendCoeff,      //<! src color
+    kISC_BlendCoeff,     //<! one minus src color
+    kDC_BlendCoeff,      //<! dst color
+    kIDC_BlendCoeff,     //<! one minus dst color
+    kSA_BlendCoeff,      //<! src alpha
+    kISA_BlendCoeff,     //<! one minus src alpha
+    kDA_BlendCoeff,      //<! dst alpha
+    kIDA_BlendCoeff,     //<! one minus dst alpha
+    kConstC_BlendCoeff,  //<! constant color
+    kIConstC_BlendCoeff, //<! one minus constant color
+    kConstA_BlendCoeff,  //<! constant color alpha
+    kIConstA_BlendCoeff, //<! one minus constant color alpha
 
-    kZero_GrBlendCoeff,    //<! 0
-    kOne_GrBlendCoeff,     //<! 1
-    kSC_GrBlendCoeff,      //<! src color
-    kISC_GrBlendCoeff,     //<! one minus src color
-    kDC_GrBlendCoeff,      //<! dst color
-    kIDC_GrBlendCoeff,     //<! one minus dst color
-    kSA_GrBlendCoeff,      //<! src alpha
-    kISA_GrBlendCoeff,     //<! one minus src alpha
-    kDA_GrBlendCoeff,      //<! dst alpha
-    kIDA_GrBlendCoeff,     //<! one minus dst alpha
-    kConstC_GrBlendCoeff,  //<! constant color
-    kIConstC_GrBlendCoeff, //<! one minus constant color
-    kConstA_GrBlendCoeff,  //<! constant color alpha
-    kIConstA_GrBlendCoeff, //<! one minus constant color alpha
-
-    kPublicGrBlendCoeffCount
+    kPublicBlendCoeffCount
 };
 
 /**
@@ -271,6 +268,13 @@ static inline int GrMaskFormatBytesPerPixel(GrMaskFormat format) {
 
 /**
  * Pixel configurations.
+ *
+ * Unpremultiplied configs are intended for converting pixel data in and out
+ * from skia. Surfaces with these configs have limited support. As an input
+ * (GrPaint texture) the corresponding GrSamplerState must have its filter set
+ * to kNearest_Filter. Otherwise, the draw will fail. When the render target
+ * has an unpremultiplied config draws must use blend coeffs 1,0 (AKA src-mode).
+ * Other coeffs will cause the draw to fail.
  */
 enum GrPixelConfig {
     kUnknown_GrPixelConfig,
@@ -282,39 +286,52 @@ enum GrPixelConfig {
      */
     kRGBA_4444_GrPixelConfig,
     /**
-     * Premultiplied. Byte order is r,g,b,a.
+     * Premultiplied. Byte order is r,g,b,a
      */
-    kRGBA_8888_GrPixelConfig,
+    kRGBA_8888_PM_GrPixelConfig,
     /**
-     * Premultiplied. Byte order is b,g,r,a.
+     * Unpremultiplied. Byte order is r,g,b,a
      */
-    kBGRA_8888_GrPixelConfig,
+    kRGBA_8888_UPM_GrPixelConfig,
+    /**
+     * Premultiplied. Byte order is b,g,r,a
+     */
+    kBGRA_8888_PM_GrPixelConfig,
+    /**
+     * Unpremultiplied. Byte order is b,g,r,a
+     */
+    kBGRA_8888_UPM_GrPixelConfig,
 
     kGrPixelConfigCount
 };
 
-// Aliases for pixel configs that match skia's byte order.
+// Aliases for pixel configs that match skia's byte order
 #ifndef SK_CPU_LENDIAN
     #error "Skia gpu currently assumes little endian"
 #endif
 #if 24 == SK_A32_SHIFT && 16 == SK_R32_SHIFT && \
      8 == SK_G32_SHIFT &&  0 == SK_B32_SHIFT
-    static const GrPixelConfig kSkia8888_GrPixelConfig = kBGRA_8888_GrPixelConfig;
+    static const GrPixelConfig kSkia8888_PM_GrPixelConfig = kBGRA_8888_PM_GrPixelConfig;
+    static const GrPixelConfig kSkia8888_UPM_GrPixelConfig = kBGRA_8888_UPM_GrPixelConfig;
 #elif 24 == SK_A32_SHIFT && 16 == SK_B32_SHIFT && \
        8 == SK_G32_SHIFT &&  0 == SK_R32_SHIFT
-    static const GrPixelConfig kSkia8888_GrPixelConfig = kRGBA_8888_GrPixelConfig;
+    static const GrPixelConfig kSkia8888_PM_GrPixelConfig = kRGBA_8888_PM_GrPixelConfig;
+    static const GrPixelConfig kSkia8888_UPM_GrPixelConfig = kRGBA_8888_UPM_GrPixelConfig;
 #else
     #error "SK_*32_SHIFT values must correspond to GL_BGRA or GL_RGBA format."
 #endif
 
-// This alias is deprecated and will be removed.
-static const GrPixelConfig kSkia8888_PM_GrPixelConfig = kSkia8888_GrPixelConfig;
+// WebKit is relying on this old name for the native skia PM config. This will
+// be deleted ASAP because it is so similar to kRGBA_PM_8888_GrPixelConfig but
+// has a different interpretation when skia is compiled BGRA.
+static const GrPixelConfig kRGBA_8888_GrPixelConfig = kSkia8888_PM_GrPixelConfig;
 
 // Returns true if the pixel config has 8bit r,g,b,a components in that byte
 // order
 static inline bool GrPixelConfigIsRGBA8888(GrPixelConfig config) {
     switch (config) {
-        case kRGBA_8888_GrPixelConfig:
+        case kRGBA_8888_PM_GrPixelConfig:
+        case kRGBA_8888_UPM_GrPixelConfig:
             return true;
         default:
             return false;
@@ -325,7 +342,8 @@ static inline bool GrPixelConfigIsRGBA8888(GrPixelConfig config) {
 // order
 static inline bool GrPixelConfigIsBGRA8888(GrPixelConfig config) {
     switch (config) {
-        case kBGRA_8888_GrPixelConfig:
+        case kBGRA_8888_PM_GrPixelConfig:
+        case kBGRA_8888_UPM_GrPixelConfig:
             return true;
         default:
             return false;
@@ -335,8 +353,10 @@ static inline bool GrPixelConfigIsBGRA8888(GrPixelConfig config) {
 // Returns true if the pixel config is 32 bits per pixel
 static inline bool GrPixelConfigIs32Bit(GrPixelConfig config) {
     switch (config) {
-        case kRGBA_8888_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
+        case kRGBA_8888_PM_GrPixelConfig:
+        case kRGBA_8888_UPM_GrPixelConfig:
+        case kBGRA_8888_PM_GrPixelConfig:
+        case kBGRA_8888_UPM_GrPixelConfig:
             return true;
         default:
             return false;
@@ -347,10 +367,14 @@ static inline bool GrPixelConfigIs32Bit(GrPixelConfig config) {
 // swapped if such a config exists. Otherwise, kUnknown_GrPixelConfig
 static inline GrPixelConfig GrPixelConfigSwapRAndB(GrPixelConfig config) {
     switch (config) {
-        case kBGRA_8888_GrPixelConfig:
-            return kRGBA_8888_GrPixelConfig;
-        case kRGBA_8888_GrPixelConfig:
-            return kBGRA_8888_GrPixelConfig;
+        case kBGRA_8888_PM_GrPixelConfig:
+            return kRGBA_8888_PM_GrPixelConfig;
+        case kBGRA_8888_UPM_GrPixelConfig:
+            return kRGBA_8888_UPM_GrPixelConfig;
+        case kRGBA_8888_PM_GrPixelConfig:
+            return kBGRA_8888_PM_GrPixelConfig;
+        case kRGBA_8888_UPM_GrPixelConfig:
+            return kBGRA_8888_UPM_GrPixelConfig;
         default:
             return kUnknown_GrPixelConfig;
     }
@@ -364,8 +388,10 @@ static inline size_t GrBytesPerPixel(GrPixelConfig config) {
         case kRGB_565_GrPixelConfig:
         case kRGBA_4444_GrPixelConfig:
             return 2;
-        case kRGBA_8888_GrPixelConfig:
-        case kBGRA_8888_GrPixelConfig:
+        case kRGBA_8888_PM_GrPixelConfig:
+        case kRGBA_8888_UPM_GrPixelConfig:
+        case kBGRA_8888_PM_GrPixelConfig:
+        case kBGRA_8888_UPM_GrPixelConfig:
             return 4;
         default:
             return 0;
@@ -375,6 +401,20 @@ static inline size_t GrBytesPerPixel(GrPixelConfig config) {
 static inline bool GrPixelConfigIsOpaque(GrPixelConfig config) {
     switch (config) {
         case kRGB_565_GrPixelConfig:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
+ * Premultiplied alpha is the usual for skia. Therefore, configs that are
+ * ambiguous (alpha-only or color-only) are considered premultiplied.
+ */
+static inline bool GrPixelConfigIsUnpremultiplied(GrPixelConfig config) {
+    switch (config) {
+        case kRGBA_8888_UPM_GrPixelConfig:
+        case kBGRA_8888_UPM_GrPixelConfig:
             return true;
         default:
             return false;
@@ -391,6 +431,12 @@ static inline bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
 }
 
 /**
+ * DEPRECATED: This will be removed as soon as WebKit no longer references
+ * this (former) enum value.
+ */
+static const int kNone_GrAALevel = 0;
+
+/**
  * Optional bitfield flags that can be passed to createTexture.
  */
 enum GrTextureFlags {
@@ -399,7 +445,7 @@ enum GrTextureFlags {
      * Creates a texture that can be rendered to as a GrRenderTarget. Use
      * GrTexture::asRenderTarget() to access.
      */
-    kRenderTarget_GrTextureFlagBit  = 0x1,
+    kRenderTarget_GrTextureFlagBit  = 0x1,  
     /**
      * By default all render targets have an associated stencil buffer that
      * may be required for path filling. This flag overrides stencil buffer
@@ -411,9 +457,6 @@ enum GrTextureFlags {
      * Hint that the CPU may modify this texture after creation.
      */
     kDynamicUpdate_GrTextureFlagBit = 0x4,
-
-    kDummy_GrTextureFlagBit,
-    kLastPublic_GrTextureFlagBit = kDummy_GrTextureFlagBit-1,
 };
 
 GR_MAKE_BITFIELD_OPS(GrTextureFlags)
@@ -426,99 +469,47 @@ enum {
 };
 
 /**
- * Some textures will be stored such that the upper and left edges of the content meet at the
- * the origin (in texture coord space) and for other textures the lower and left edges meet at
- * the origin. Render-targets are always consistent with the convention of the underlying
- * backend API to make it easier to mix native backend rendering with Skia rendering.
- */
-
-enum GrSurfaceOrigin {
-    kBottomLeft_GrSurfaceOrigin,
-    kTopLeft_GrSurfaceOrigin,
-};
-
-/**
  * Describes a texture to be created.
  */
 struct GrTextureDesc {
-    GrTextureDesc()
-    : fFlags(kNone_GrTextureFlags)
-    , fWidth(0)
-    , fHeight(0)
-    , fConfig(kUnknown_GrPixelConfig)
-    , fSampleCnt(0) {
-    }
-
     GrTextureFlags         fFlags;  //!< bitfield of TextureFlags
     int                    fWidth;  //!< Width of the texture
     int                    fHeight; //!< Height of the texture
 
     /**
-     * Format of source data of the texture. Not guaranteed to be the same as
+     * Format of source data of the texture. Not guaraunteed to be the same as
      * internal format used by 3D API.
      */
     GrPixelConfig          fConfig;
-
+    
     /**
      * The number of samples per pixel or 0 to disable full scene AA. This only
      * applies if the kRenderTarget_GrTextureFlagBit is set. The actual number
      * of samples may not exactly match the request. The request will be rounded
      * up to the next supported sample count, or down if it is larger than the
-     * max supported count.
+     * max supportex count.
      */
-    int                    fSampleCnt;
+    union {
+        /**
+         * This field has two names for legacy reasons. Use the fSampleCnt name.
+         * fAALevel is deprecated and will be removed as soon as WebKit no
+         * longer uses it.
+         */
+        int fSampleCnt;
+        int fAALevel;
+    };
 };
 
 /**
- * GrCacheID is used create and find cached GrResources (e.g. GrTextures). The ID has two parts:
- * the domain and the key. Domains simply allow multiple clients to use 0-based indices as their
- * cache key without colliding. The key uniquely identifies a GrResource within the domain.
- * Users of the cache must obtain a domain via GenerateDomain().
+ * Set Operations used to construct clips.
  */
-struct GrCacheID {
-public:
-    typedef uint8_t  Domain;
-
-    struct Key {
-        union {
-            uint8_t  fData8[16];
-            uint32_t fData32[4];
-            uint64_t fData64[2];
-        };
-    };
-
-    /**
-     * A default cache ID is invalid; a set method must be called before the object is used.
-     */
-    GrCacheID() { fDomain = kInvalid_Domain; }
-
-    /**
-     * Initialize the cache ID to a domain and key.
-     */
-    GrCacheID(Domain domain, const Key& key) {
-        GrAssert(kInvalid_Domain != domain);
-        this->reset(domain, key);
-    }
-
-    void reset(Domain domain, const Key& key) {
-        fDomain = domain;
-        memcpy(&fKey, &key, sizeof(Key));
-    }
-
-    /** Has this been initialized to a valid domain */
-    bool isValid() const { return kInvalid_Domain != fDomain; }
-
-    const Key& getKey() const { GrAssert(this->isValid()); return fKey; }
-    Domain getDomain() const { GrAssert(this->isValid()); return fDomain; }
-
-    /** Creates a new unique ID domain. */
-    static Domain GenerateDomain();
-
-private:
-    Key             fKey;
-    Domain          fDomain;
-
-    static const Domain kInvalid_Domain = 0;
+enum GrSetOp {
+    kReplace_SetOp,
+    kIntersect_SetOp,
+    kUnion_SetOp,
+    kXor_SetOp,
+    kDifference_SetOp,
+    kReverseDifference_SetOp,
 };
 
 /**
@@ -562,16 +553,63 @@ static int inline NumPathCmdPoints(GrPathCmd cmd) {
     return gNumPoints[cmd];
 }
 
+/**
+ * Path filling rules
+ */
+enum GrPathFill {
+    kWinding_PathFill,
+    kEvenOdd_PathFill,
+    kInverseWinding_PathFill,
+    kInverseEvenOdd_PathFill,
+    kHairLine_PathFill,
+
+    kPathFillCount
+};
+
+static inline GrPathFill GrNonInvertedFill(GrPathFill fill) {
+    static const GrPathFill gNonInvertedFills[] = {
+        kWinding_PathFill, // kWinding_PathFill
+        kEvenOdd_PathFill, // kEvenOdd_PathFill
+        kWinding_PathFill, // kInverseWinding_PathFill
+        kEvenOdd_PathFill, // kInverseEvenOdd_PathFill
+        kHairLine_PathFill,// kHairLine_PathFill
+    };
+    GR_STATIC_ASSERT(0 == kWinding_PathFill);
+    GR_STATIC_ASSERT(1 == kEvenOdd_PathFill);
+    GR_STATIC_ASSERT(2 == kInverseWinding_PathFill);
+    GR_STATIC_ASSERT(3 == kInverseEvenOdd_PathFill);
+    GR_STATIC_ASSERT(4 == kHairLine_PathFill);
+    GR_STATIC_ASSERT(5 == kPathFillCount);
+    return gNonInvertedFills[fill];
+}
+
+static inline bool GrIsFillInverted(GrPathFill fill) {
+    static const bool gIsFillInverted[] = {
+        false, // kWinding_PathFill
+        false, // kEvenOdd_PathFill
+        true,  // kInverseWinding_PathFill
+        true,  // kInverseEvenOdd_PathFill
+        false, // kHairLine_PathFill
+    };
+    GR_STATIC_ASSERT(0 == kWinding_PathFill);
+    GR_STATIC_ASSERT(1 == kEvenOdd_PathFill);
+    GR_STATIC_ASSERT(2 == kInverseWinding_PathFill);
+    GR_STATIC_ASSERT(3 == kInverseEvenOdd_PathFill);
+    GR_STATIC_ASSERT(4 == kHairLine_PathFill);
+    GR_STATIC_ASSERT(5 == kPathFillCount);
+    return gIsFillInverted[fill];
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 // opaque type for 3D API object handles
-typedef intptr_t GrBackendObject;
+typedef intptr_t GrPlatform3DObject;
 
 /**
  * Gr can wrap an existing texture created by the client with a GrTexture
  * object. The client is responsible for ensuring that the texture lives at
- * least as long as the GrTexture object wrapping it. We require the client to
- * explicitly provide information about the texture, such as width, height,
+ * least as long as the GrTexture object wrapping it. We require the client to 
+ * explicitly provide information about the texture, such as width, height, 
  * and pixel config, rather than querying the 3D APIfor these values. We expect
  * these to be immutable even if the 3D API doesn't require this (OpenGL).
  *
@@ -584,15 +622,13 @@ typedef intptr_t GrBackendObject;
  * count Gr will create an MSAA buffer that resolves into the texture. Gr auto-
  * resolves when it reads from the texture. The client can explictly resolve
  * using the GrRenderTarget interface.
- *
- * Note: These flags currently form a subset of GrTexture's flags.
  */
 
-enum GrBackendTextureFlags {
+enum GrPlatformTextureFlags {
     /**
      * No flags enabled
      */
-    kNone_GrBackendTextureFlag             = kNone_GrTextureFlags,
+    kNone_GrPlatformTextureFlag              = 0x0,
     /**
      * Indicates that the texture is also a render target, and thus should have
      * a GrRenderTarget object.
@@ -600,14 +636,13 @@ enum GrBackendTextureFlags {
      * D3D (future): client must have created the texture with flags that allow
      * it to be used as a render target.
      */
-    kRenderTarget_GrBackendTextureFlag     = kRenderTarget_GrTextureFlagBit,
+    kRenderTarget_GrPlatformTextureFlag      = 0x1,
 };
-GR_MAKE_BITFIELD_OPS(GrBackendTextureFlags)
+GR_MAKE_BITFIELD_OPS(GrPlatformTextureFlags)
 
-struct GrBackendTextureDesc {
-    GrBackendTextureDesc() { memset(this, 0, sizeof(*this)); }
-    GrBackendTextureFlags           fFlags;
-    GrSurfaceOrigin                 fOrigin;
+struct GrPlatformTextureDesc {
+    GrPlatformTextureDesc() { memset(this, 0, sizeof(*this)); }
+    GrPlatformTextureFlags          fFlags;
     int                             fWidth;         //<! width in pixels
     int                             fHeight;        //<! height in pixels
     GrPixelConfig                   fConfig;        //<! color format
@@ -620,7 +655,7 @@ struct GrBackendTextureDesc {
      * Handle to the 3D API object.
      * OpenGL: Texture ID.
      */
-    GrBackendObject                 fTextureHandle;
+    GrPlatform3DObject              fTextureHandle;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -629,20 +664,20 @@ struct GrBackendTextureDesc {
  * Gr can wrap an existing render target created by the client in the 3D API
  * with a GrRenderTarget object. The client is responsible for ensuring that the
  * underlying 3D API object lives at least as long as the GrRenderTarget object
- * wrapping it. We require the client to explicitly provide information about
+ * wrapping it. We require the client to explicitly provide information about 
  * the target, such as width, height, and pixel config rather than querying the
  * 3D API for these values. We expect these properties to be immutable even if
  * the 3D API doesn't require this (OpenGL).
  */
 
-struct GrBackendRenderTargetDesc {
-    GrBackendRenderTargetDesc() { memset(this, 0, sizeof(*this)); }
+struct GrPlatformRenderTargetDesc {
+    GrPlatformRenderTargetDesc() { memset(this, 0, sizeof(*this)); }
     int                             fWidth;         //<! width in pixels
     int                             fHeight;        //<! height in pixels
     GrPixelConfig                   fConfig;        //<! color format
     /**
      * The number of samples per pixel. Gr uses this to influence decisions
-     * about applying other forms of anti-aliasing.
+     * about applying other forms of antialiasing.
      */
     int                             fSampleCnt;
     /**
@@ -653,27 +688,13 @@ struct GrBackendRenderTargetDesc {
      * Handle to the 3D API object.
      * OpenGL: FBO ID
      */
-    GrBackendObject                 fRenderTargetHandle;
+    GrPlatform3DObject              fRenderTargetHandle;
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// Legacy names that will be kept until WebKit can be updated.
-
-typedef GrBackend GrEngine;
-static const GrBackend kOpenGL_Shaders_GrEngine = kOpenGL_GrBackend;
-
-typedef GrBackendContext GrPlatform3DContext;
-
-typedef GrBackendObject GrPlatform3DObject;
-
-typedef GrBackendTextureFlags GrPlatformTextureFlags;
-static const GrBackendTextureFlags kNone_GrPlatformTextureFlag = kNone_GrBackendTextureFlag;
-static const GrBackendTextureFlags kRenderTarget_GrPlatformTextureFlag = kRenderTarget_GrBackendTextureFlag;
-
-typedef GrBackendTextureDesc GrPlatformTextureDesc;
-
-typedef GrBackendRenderTargetDesc GrPlatformRenderTargetDesc;
 
 ///////////////////////////////////////////////////////////////////////////////
+
+// this is included only to make it easy to use this debugging facility
+#include "GrInstanceCounter.h"
 
 #endif

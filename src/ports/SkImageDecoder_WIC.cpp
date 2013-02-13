@@ -17,16 +17,6 @@
 #include "SkMovie.h"
 #include "SkStream.h"
 #include "SkTScopedComPtr.h"
-#include "SkUnPreMultiply.h"
-
-//All Windows SDKs back to XPSP2 export the CLSID_WICImagingFactory symbol.
-//In the Windows8 SDK the CLSID_WICImagingFactory symbol is still exported
-//but CLSID_WICImagingFactory is then #defined to CLSID_WICImagingFactory2.
-//Undo this #define if it has been done so that we link against the symbols
-//we intended to link against on all SDKs.
-#if defined(CLSID_WICImagingFactory)
-#undef CLSID_WICImagingFactory
-#endif
 
 class SkImageDecoder_WIC : public SkImageDecoder {
 protected:
@@ -39,9 +29,9 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     if (!scopedCo.succeeded()) {
         return false;
     }
-
+    
     HRESULT hr = S_OK;
-
+    
     //Create Windows Imaging Component ImagingFactory.
     SkTScopedComPtr<IWICImagingFactory> piImagingFactory;
     if (SUCCEEDED(hr)) {
@@ -52,19 +42,19 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             , IID_PPV_ARGS(&piImagingFactory)
         );
     }
-
+    
     //Convert SkStream to IStream.
     SkTScopedComPtr<IStream> piStream;
     if (SUCCEEDED(hr)) {
         hr = SkIStream::CreateFromSkStream(stream, false, &piStream);
     }
-
+    
     //Make sure we're at the beginning of the stream.
     if (SUCCEEDED(hr)) {
         LARGE_INTEGER liBeginning = { 0 };
         hr = piStream->Seek(liBeginning, STREAM_SEEK_SET, NULL);
     }
-
+    
     //Create the decoder from the stream content.
     SkTScopedComPtr<IWICBitmapDecoder> piBitmapDecoder;
     if (SUCCEEDED(hr)) {
@@ -75,13 +65,13 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             , &piBitmapDecoder                //Pointer to the decoder
         );
     }
-
+    
     //Get the first frame from the decoder.
     SkTScopedComPtr<IWICBitmapFrameDecode> piBitmapFrameDecode;
     if (SUCCEEDED(hr)) {
         hr = piBitmapDecoder->GetFrame(0, &piBitmapFrameDecode);
     }
-
+    
     //Get the BitmapSource interface of the frame.
     SkTScopedComPtr<IWICBitmapSource> piBitmapSourceOriginal;
     if (SUCCEEDED(hr)) {
@@ -89,14 +79,14 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             IID_PPV_ARGS(&piBitmapSourceOriginal)
         );
     }
-
+    
     //Get the size of the bitmap.
     UINT width;
     UINT height;
     if (SUCCEEDED(hr)) {
         hr = piBitmapSourceOriginal->GetSize(&width, &height);
     }
-
+    
     //Exit early if we're only looking for the bitmap bounds.
     if (SUCCEEDED(hr)) {
         bm->setConfig(SkBitmap::kARGB_8888_Config, width, height);
@@ -107,13 +97,13 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             return false;
         }
     }
-
+    
     //Create a format converter.
     SkTScopedComPtr<IWICFormatConverter> piFormatConverter;
     if (SUCCEEDED(hr)) {
         hr = piImagingFactory->CreateFormatConverter(&piFormatConverter);
     }
-
+    
     if (SUCCEEDED(hr)) {
         hr = piFormatConverter->Initialize(
             piBitmapSourceOriginal.get()      //Input bitmap to convert
@@ -124,7 +114,7 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             , WICBitmapPaletteTypeCustom      //Palette translation type
         );
     }
-
+    
     //Get the BitmapSource interface of the format converter.
     SkTScopedComPtr<IWICBitmapSource> piBitmapSourceConverted;
     if (SUCCEEDED(hr)) {
@@ -132,11 +122,11 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             IID_PPV_ARGS(&piBitmapSourceConverted)
         );
     }
-
+    
     //Copy the pixels into the bitmap.
     if (SUCCEEDED(hr)) {
         SkAutoLockPixels alp(*bm);
-        bm->eraseColor(SK_ColorTRANSPARENT);
+        bm->eraseColor(0);
         const int stride = bm->rowBytes();
         hr = piBitmapSourceConverted->CopyPixels(
             NULL,                             //Get all the pixels
@@ -144,11 +134,8 @@ bool SkImageDecoder_WIC::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             stride * height,
             reinterpret_cast<BYTE *>(bm->getPixels())
         );
-
-        // Note: we don't need to premultiply here since we specified PBGRA
-        bm->computeAndSetOpaquePredicate();
     }
-
+    
     return SUCCEEDED(hr);
 }
 
@@ -196,7 +183,7 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
     //Convert to 8888 if needed.
     const SkBitmap* bitmap;
     SkBitmap bitmapCopy;
-    if (SkBitmap::kARGB_8888_Config == bitmapOrig.config() && bitmapOrig.isOpaque()) {
+    if (SkBitmap::kARGB_8888_Config == bitmapOrig.config()) {
         bitmap = &bitmapOrig;
     } else {
         if (!bitmapOrig.copyTo(&bitmapCopy, SkBitmap::kARGB_8888_Config)) {
@@ -205,31 +192,14 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
         bitmap = &bitmapCopy;
     }
 
-    // We cannot use PBGRA so we need to unpremultiply ourselves
-    if (!bitmap->isOpaque()) {
-        SkAutoLockPixels alp(*bitmap);
-
-        uint8_t* pixels = reinterpret_cast<uint8_t*>(bitmap->getPixels());
-        for (int y = 0; y < bitmap->height(); ++y) {
-            for (int x = 0; x < bitmap->width(); ++x) {
-                uint8_t* bytes = pixels + y * bitmap->rowBytes() + x * bitmap->bytesPerPixel();
-
-                SkPMColor* src = reinterpret_cast<SkPMColor*>(bytes);
-                SkColor* dst = reinterpret_cast<SkColor*>(bytes);
-
-                *dst = SkUnPreMultiply::PMColorToColor(*src);
-            }
-        }
-    }
-
     //Initialize COM.
     SkAutoCoInitialize scopedCo;
     if (!scopedCo.succeeded()) {
         return false;
     }
-
+    
     HRESULT hr = S_OK;
-
+    
     //Create Windows Imaging Component ImagingFactory.
     SkTScopedComPtr<IWICImagingFactory> piImagingFactory;
     if (SUCCEEDED(hr)) {
@@ -240,41 +210,41 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
             , IID_PPV_ARGS(&piImagingFactory)
         );
     }
-
+    
     //Convert the SkWStream to an IStream.
     SkTScopedComPtr<IStream> piStream;
     if (SUCCEEDED(hr)) {
         hr = SkWIStream::CreateFromSkWStream(stream, &piStream);
     }
-
+    
     //Create an encode of the appropriate type.
     SkTScopedComPtr<IWICBitmapEncoder> piEncoder;
     if (SUCCEEDED(hr)) {
         hr = piImagingFactory->CreateEncoder(type, NULL, &piEncoder);
     }
-
+    
     if (SUCCEEDED(hr)) {
         hr = piEncoder->Initialize(piStream.get(), WICBitmapEncoderNoCache);
     }
-
+    
     //Create a the frame.
     SkTScopedComPtr<IWICBitmapFrameEncode> piBitmapFrameEncode;
     SkTScopedComPtr<IPropertyBag2> piPropertybag;
     if (SUCCEEDED(hr)) {
         hr = piEncoder->CreateNewFrame(&piBitmapFrameEncode, &piPropertybag);
     }
-
+    
     if (SUCCEEDED(hr)) {
         PROPBAG2 name = { 0 };
         name.dwType = PROPBAG2_TYPE_DATA;
         name.vt = VT_R4;
         name.pstrName = L"ImageQuality";
-
+    
         VARIANT value;
         VariantInit(&value);
         value.vt = VT_R4;
         value.fltVal = (FLOAT)(quality / 100.0);
-
+        
         //Ignore result code.
         //  This returns E_FAIL if the named property is not in the bag.
         //TODO(bungeman) enumerate the properties,
@@ -284,14 +254,14 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
     if (SUCCEEDED(hr)) {
         hr = piBitmapFrameEncode->Initialize(piPropertybag.get());
     }
-
+    
     //Set the size of the frame.
     const UINT width = bitmap->width();
     const UINT height = bitmap->height();
     if (SUCCEEDED(hr)) {
         hr = piBitmapFrameEncode->SetSize(width, height);
     }
-
+    
     //Set the pixel format of the frame.
     const WICPixelFormatGUID formatDesired = GUID_WICPixelFormat32bppBGRA;
     WICPixelFormatGUID formatGUID = formatDesired;
@@ -302,7 +272,7 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
         //Be sure the image format is the one requested.
         hr = IsEqualGUID(formatGUID, formatDesired) ? S_OK : E_FAIL;
     }
-
+    
     //Write the pixels into the frame.
     if (SUCCEEDED(hr)) {
         SkAutoLockPixels alp(*bitmap);
@@ -312,15 +282,15 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
             , bitmap->rowBytes()*height
             , reinterpret_cast<BYTE*>(bitmap->getPixels()));
     }
-
+    
     if (SUCCEEDED(hr)) {
         hr = piBitmapFrameEncode->Commit();
     }
-
+    
     if (SUCCEEDED(hr)) {
         hr = piEncoder->Commit();
     }
-
+    
     return SUCCEEDED(hr);
 }
 
@@ -334,3 +304,4 @@ SkImageEncoder* SkImageEncoder::Create(Type t) {
     }
     return SkNEW_ARGS(SkImageEncoder_WIC, (t));
 }
+

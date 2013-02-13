@@ -85,3 +85,4 @@ SkBlitter* SkBlitter::ChooseSprite( const SkBitmap& device,
     }
     return blitter;
 }
+

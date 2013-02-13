@@ -43,3 +43,4 @@ SkBlitMask::RowProc SkBlitMask::PlatformRowProcs(SkBitmap::Config dstConfig,
                                                  RowFlags flags) {
     return NULL;
 }
+

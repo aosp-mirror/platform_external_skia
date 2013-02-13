@@ -95,7 +95,7 @@ public:
     /**
      *  Return the number of elements in the array
      */
-    int count() const { return (int)fCount; }
+    int count() const { return fCount; }
 
     /**
      *  return the number of bytes in the array: count * sizeof(T)
@@ -107,10 +107,6 @@ public:
     T&  operator[](int index) const {
         SkASSERT((unsigned)index < fCount);
         return fArray[index];
-    }
-
-    T&  getAt(int index) const {
-        return (*this)[index];
     }
 
     void reset() {
@@ -125,7 +121,7 @@ public:
             SkASSERT(fReserve == 0 && fCount == 0);
         }
     }
-
+    
     void rewind() {
         // same as setCount(0)
         fCount = 0;
@@ -158,7 +154,7 @@ public:
         return this->append(1, NULL);
     }
     T* append(size_t count, const T* src = NULL) {
-        size_t oldCount = fCount;
+        unsigned oldCount = fCount;
         if (count)  {
             SkASSERT(src == NULL || fArray == NULL ||
                     src + count <= fArray || fArray + oldCount <= src);
@@ -170,9 +166,9 @@ public:
         }
         return fArray + oldCount;
     }
-
+    
     T* appendClear() {
-        T* result = this->append();
+        T* result = this->append(); 
         *result = 0;
         return result;
     }
@@ -183,7 +179,7 @@ public:
     T* insert(size_t index, size_t count, const T* src = NULL) {
         SkASSERT(count);
         SkASSERT(index <= fCount);
-        size_t oldCount = fCount;
+        int oldCount = fCount;
         this->growBy(count);
         T* dst = fArray + index;
         memmove(dst + count, dst, sizeof(T) * (oldCount - index));
@@ -201,7 +197,7 @@ public:
 
     void removeShuffle(size_t index) {
         SkASSERT(index < fCount);
-        size_t newCount = fCount - 1;
+        unsigned newCount = fCount - 1;
         fCount = newCount;
         if (index != newCount) {
             memcpy(fArray + index, fArray + newCount, sizeof(T));
@@ -232,32 +228,6 @@ public:
         return -1;
     }
 
-    /**
-     * Returns true iff the array contains this element.
-     */
-    bool contains(const T& elem) const {
-        return (this->find(elem) >= 0);
-    }
-
-    /**
-     * Copies up to max elements into dst. The number of items copied is
-     * capped by count - index. The actual number copied is returned.
-     */
-    int copyRange(T* dst, size_t index, int max) const {
-        SkASSERT(max >= 0);
-        SkASSERT(!max || dst);
-        if (index >= fCount) {
-            return 0;
-        }
-        int count = SkMin32(max, fCount - index);
-        memcpy(dst, fArray + index, sizeof(T) * count);
-        return count;
-    }
-
-    void copy(T* dst) const {
-        this->copyRange(0, fCount, dst);
-    }
-
     // routines to treat the array like a stack
     T*          push() { return this->append(); }
     void        push(const T& elem) { *this->append() = elem; }
@@ -270,7 +240,7 @@ public:
         T*  iter = fArray;
         T*  stop = fArray + fCount;
         while (iter < stop) {
-            SkDELETE (*iter);
+            delete (*iter);
             iter += 1;
         }
         this->reset();
@@ -304,15 +274,6 @@ public:
             iter += 1;
         }
         this->reset();
-    }
-
-    void visitAll(void visitor(T&)) const {
-        T* stop = this->end();
-        for (T* curr = this->begin(); curr < stop; curr++) {
-            if (*curr) {
-                visitor(*curr);
-            }
-        }
     }
 
 #ifdef SK_DEBUG
@@ -353,3 +314,4 @@ private:
 };
 
 #endif
+

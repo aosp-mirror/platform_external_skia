@@ -13,6 +13,7 @@
 
 #include "GrPoint.h"
 #include "GrTexture.h"
+#include "GrTDArray.h"
 
 class GrGpu;
 class GrRectanizer;
@@ -79,3 +80,5 @@ private:
 };
 
 #endif
+
+

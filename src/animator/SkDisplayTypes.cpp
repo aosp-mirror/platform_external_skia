@@ -11,7 +11,7 @@
 #include "SkAnimateBase.h"
 
 bool SkDisplayDepend::canContainDependents() const {
-    return true;
+    return true; 
 }
 
 void SkDisplayDepend::dirty() {
@@ -81,7 +81,11 @@ SkDisplayFloat::SkDisplayFloat() : value(0) {
 #ifdef SK_DUMP_ENABLED
 void SkDisplayFloat::dump(SkAnimateMaker* maker) {
     dumpBase(maker);
+#ifdef SK_CAN_USE_FLOAT
     SkDebugf("value=\"%g\" />\n", SkScalarToFloat(value));
+#else
+    SkDebugf("value=\"%x\" />\n", value);
+#endif
 }
 #endif
 
@@ -118,7 +122,7 @@ SkDisplayString::SkDisplayString() {
 SkDisplayString::SkDisplayString(SkString& copyFrom) : value(copyFrom) {
 }
 
-void SkDisplayString::executeFunction(SkDisplayable* target, int index,
+void SkDisplayString::executeFunction(SkDisplayable* target, int index, 
         SkTDArray<SkScriptValue>& parameters, SkDisplayTypes type,
         SkScriptValue* scriptValue) {
     if (scriptValue == NULL)
@@ -150,7 +154,7 @@ const SkFunctionParamType* SkDisplayString::getFunctionsParameters() {
 }
 
 bool SkDisplayString::getProperty(int index, SkScriptValue* scriptValue) const {
-    switch (index) {
+    switch (index) { 
         case SK_PROPERTY(length):
             scriptValue->fType = SkType_Int;
             scriptValue->fOperand.fS32 = (int32_t) value.size();
@@ -201,7 +205,7 @@ SkDisplayArray::~SkDisplayArray() {
 }
 
 bool SkDisplayArray::getProperty(int index, SkScriptValue* value) const {
-    switch (index) {
+    switch (index) { 
         case SK_PROPERTY(length):
             value->fType = SkType_Int;
             value->fOperand.fS32 = values.count();
@@ -212,3 +216,6 @@ bool SkDisplayArray::getProperty(int index, SkScriptValue* value) const {
     }
     return true;
 }
+
+
+

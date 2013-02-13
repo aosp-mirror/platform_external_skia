@@ -27,15 +27,16 @@
 #if defined(SK_SCALAR_IS_FIXED) && defined(SK_SCALAR_IS_FLOAT)
     #error "cannot define both SK_SCALAR_IS_FIXED and SK_SCALAR_IS_FLOAT"
 #elif !defined(SK_SCALAR_IS_FIXED) && !defined(SK_SCALAR_IS_FLOAT)
-    #define SK_SCALAR_IS_FLOAT
+    #ifdef SK_CAN_USE_FLOAT
+        #define SK_SCALAR_IS_FLOAT
+    #else
+        #define SK_SCALAR_IS_FIXED
+    #endif
 #endif
 
-#if defined(SK_MSCALAR_IS_DOUBLE) && defined(SK_MSCALAR_IS_FLOAT)
-    #error "cannot define both SK_MSCALAR_IS_DOUBLE and SK_MSCALAR_IS_FLOAT"
-#elif !defined(SK_MSCALAR_IS_DOUBLE) && !defined(SK_MSCALAR_IS_FLOAT)
-    // default is double, as that is faster given our impl uses doubles
-    // for intermediate calculations.
-    #define SK_MSCALAR_IS_DOUBLE
+#if defined(SK_SCALAR_IS_FLOAT) && !defined(SK_CAN_USE_FLOAT)
+    #define SK_CAN_USE_FLOAT
+    // we do nothing in the else case: fixed-scalars can have floats or not
 #endif
 
 #if defined(SK_CPU_LENDIAN) && defined(SK_CPU_BENDIAN)
@@ -63,10 +64,6 @@
     #endif
 #endif
 
-#if !defined(SK_SUPPORT_GPU)
-    #define SK_SUPPORT_GPU 1
-#endif
-
 /**
  * The clang static analyzer likes to know that when the program is not
  * expected to continue (crash, assertion failure, etc). It will notice that
@@ -76,30 +73,23 @@
  */
 #if !defined(SkNO_RETURN_HINT)
     #if SK_HAS_COMPILER_FEATURE(attribute_analyzer_noreturn)
-        static inline void SkNO_RETURN_HINT() __attribute__((analyzer_noreturn));
-        static inline void SkNO_RETURN_HINT() {}
+        namespace {
+            inline void SkNO_RETURN_HINT() __attribute__((analyzer_noreturn));
+            void SkNO_RETURN_HINT() {}
+        }
     #else
         #define SkNO_RETURN_HINT() do {} while (false)
     #endif
 #endif
 
-#if defined(SK_ZLIB_INCLUDE) && defined(SK_SYSTEM_ZLIB)
-    #error "cannot define both SK_ZLIB_INCLUDE and SK_SYSTEM_ZLIB"
-#elif defined(SK_ZLIB_INCLUDE) || defined(SK_SYSTEM_ZLIB)
-    #define SK_HAS_ZLIB
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifndef SkNEW
-    #define SkNEW(type_name)                (new type_name)
-    #define SkNEW_ARGS(type_name, args)     (new type_name args)
-    #define SkNEW_ARRAY(type_name, count)   (new type_name[(count)])
-    #define SkNEW_PLACEMENT(buf, type_name) (new (buf) type_name)
-    #define SkNEW_PLACEMENT_ARGS(buf, type_name, args) \
-                                            (new (buf) type_name args)
-    #define SkDELETE(obj)                   (delete (obj))
-    #define SkDELETE_ARRAY(array)           (delete[] (array))
+    #define SkNEW(type_name)                new type_name
+    #define SkNEW_ARGS(type_name, args)     new type_name args
+    #define SkNEW_ARRAY(type_name, count)   new type_name[count]
+    #define SkDELETE(obj)                   delete obj
+    #define SkDELETE_ARRAY(array)           delete[] array
 #endif
 
 #ifndef SK_CRASH
@@ -108,17 +98,6 @@
 #else
     #define SK_CRASH() do { SkNO_RETURN_HINT(); } while (true)
 #endif
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
-// SK_ENABLE_INST_COUNT defaults to 1 in DEBUG and 0 in RELEASE
-#ifndef SK_ENABLE_INST_COUNT
-    #ifdef SK_DEBUG
-        #define SK_ENABLE_INST_COUNT 1
-    #else
-        #define SK_ENABLE_INST_COUNT 0
-    #endif
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -300,41 +279,15 @@
 //////////////////////////////////////////////////////////////////////
 
 #ifndef SK_OVERRIDE
-    #if defined(_MSC_VER)
-        #define SK_OVERRIDE override
-    #elif defined(__clang__) && !defined(SK_BUILD_FOR_IOS)
-        #if __has_feature(cxx_override_control)
-            // Some documentation suggests we should be using __attribute__((override)),
-            // but it doesn't work.
-            #define SK_OVERRIDE override
-        #elif defined(__has_extension)
-            #if __has_extension(cxx_override_control)
-                #define SK_OVERRIDE override
-            #endif
-        #endif
-    #else
-        // Linux GCC ignores "__attribute__((override))" and rejects "override".
-        #define SK_OVERRIDE
-    #endif
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-#ifndef SK_PRINTF_LIKE
-#if defined(__clang__) || defined(__GNUC__)
-#define SK_PRINTF_LIKE(A, B) __attribute__((format(printf, (A), (B))))
-#else
-#define SK_PRINTF_LIKE(A, B)
-#endif
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-#ifndef SK_SIZE_T_SPECIFIER
 #if defined(_MSC_VER)
-#define SK_SIZE_T_SPECIFIER "%Iu"
+#define SK_OVERRIDE override
+#elif defined(__clang__)
+// Some documentation suggests we should be using __attribute__((override)),
+// but it doesn't work.
+#define SK_OVERRIDE override
 #else
-#define SK_SIZE_T_SPECIFIER "%zu"
+// Linux GCC ignores "__attribute__((override))" and rejects "override".
+#define SK_OVERRIDE
 #endif
 #endif
 

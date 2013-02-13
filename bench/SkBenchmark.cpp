@@ -9,8 +9,6 @@
 #include "SkPaint.h"
 #include "SkParse.h"
 
-SK_DEFINE_INST_COUNT(SkBenchmark)
-
 template BenchRegistry* BenchRegistry::gHead;
 
 SkBenchmark::SkBenchmark(void* defineDict) {
@@ -19,7 +17,6 @@ SkBenchmark::SkBenchmark(void* defineDict) {
     fForceAA = true;
     fDither = SkTriState::kDefault;
     fHasStrokeWidth = false;
-    fIsRendering = true;
 }
 
 const char* SkBenchmark::getName() {
@@ -30,16 +27,8 @@ SkIPoint SkBenchmark::getSize() {
     return this->onGetSize();
 }
 
-void SkBenchmark::preDraw() {
-    this->onPreDraw();
-}
-
 void SkBenchmark::draw(SkCanvas* canvas) {
     this->onDraw(canvas);
-}
-
-void SkBenchmark::postDraw() {
-    this->onPostDraw();
 }
 
 void SkBenchmark::setupPaint(SkPaint* paint) {

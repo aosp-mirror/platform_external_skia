@@ -1,10 +1,13 @@
 {
+  'includes': [
+    'common.gypi',
+  ],
   'targets': [
     {
       'target_name': 'FileReaderApp',
       'type': 'executable',
       'mac_bundle' : 1,
-
+      
       'include_dirs' : [
         '../include/pipe',
         '../experimental/FileReaderApp',
@@ -18,8 +21,11 @@
         '../src/utils/mac/SkOSWindow_Mac.cpp',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
+        'core.gyp:core',
         'effects.gyp:effects',
+        'opts.gyp:opts',
+        'ports.gyp:ports',
+        'utils.gyp:utils',
         'views.gyp:views',
         'xml.gyp:xml',
       ],

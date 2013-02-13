@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -5,8 +6,9 @@
  * found in the LICENSE file.
  */
 
+
 #include "Sk64.h"
-#include "SkMathPriv.h"
+#include "SkMath.h"
 
 #define shift_left(hi, lo)          \
     hi = (hi << 1) | (lo >> 31);    \
@@ -358,3 +360,4 @@ SkFixed Sk64::getFixedDiv(const Sk64& denom) const
     }
     return SkApplySign(result, sign);
 }
+

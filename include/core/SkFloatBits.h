@@ -57,6 +57,8 @@ SK_API int32_t SkFloatBits_toIntRound(int32_t floatBits);
 SK_API int32_t SkFloatBits_toIntCeil(int32_t floatBits);
 
 
+#ifdef SK_CAN_USE_FLOAT
+
 union SkFloatIntUnion {
     float   fFloat;
     int32_t fSignBitInt;
@@ -125,6 +127,8 @@ static inline int32_t SkFloatToIntCeil(float x) {
     return SkFloatBits_toIntCeil(SkFloat2Bits(x));
 }
 
+#endif
+
 //  Scalar wrappers for float-bit routines
 
 #ifdef SK_SCALAR_IS_FLOAT
@@ -136,3 +140,4 @@ static inline int32_t SkFloatToIntCeil(float x) {
 #endif
 
 #endif
+

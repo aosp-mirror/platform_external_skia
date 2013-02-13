@@ -9,10 +9,9 @@
 #ifndef GrGLContextInfo_DEFINED
 #define GrGLContextInfo_DEFINED
 
-#include "gl/GrGLInterface.h"
 #include "GrGLCaps.h"
+#include "gl/GrGLInterface.h"
 #include "GrGLSL.h"
-#include "GrGLUtil.h"
 
 #include "SkString.h"
 
@@ -31,7 +30,7 @@ public:
 
     /**
      * Creates a GrGLContextInfo from a GrGLInterface and the currently
-     * bound OpenGL context accessible by the GrGLInterface.
+     * bound OpenGL context accesible by the GrGLInterface.
      */
     explicit GrGLContextInfo(const GrGLInterface* interface);
 
@@ -58,7 +57,6 @@ public:
     GrGLBinding binding() const { return fBindingInUse; }
     GrGLVersion version() const { return fGLVersion; }
     GrGLSLGeneration glslGeneration() const { return fGLSLGeneration; }
-    GrGLVendor vendor() const { return fVendor; }
     const GrGLCaps& caps() const { return fGLCaps; }
     GrGLCaps& caps() { return fGLCaps; }
 
@@ -80,7 +78,6 @@ private:
     GrGLBinding          fBindingInUse;
     GrGLVersion          fGLVersion;
     GrGLSLGeneration     fGLSLGeneration;
-    GrGLVendor           fVendor;
     SkString             fExtensionString;
     GrGLCaps             fGLCaps;
 };

@@ -22,3 +22,4 @@ protected:
 };
 
 #endif // SkDrawEmboss_DEFINED
+

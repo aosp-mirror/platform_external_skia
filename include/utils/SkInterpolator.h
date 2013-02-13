@@ -129,3 +129,4 @@ SkScalar SkUnitCubicInterp(SkScalar value, SkScalar bx, SkScalar by,
                            SkScalar cx, SkScalar cy);
 
 #endif
+

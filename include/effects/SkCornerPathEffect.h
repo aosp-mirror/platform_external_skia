@@ -1,9 +1,11 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 
 #ifndef SkCornerPathEffect_DEFINED
 #define SkCornerPathEffect_DEFINED
@@ -23,19 +25,28 @@ public:
     SkCornerPathEffect(SkScalar radius);
     virtual ~SkCornerPathEffect();
 
-    virtual bool filterPath(SkPath* dst, const SkPath& src,
-                            SkStrokeRec*, const SkRect*) const SK_OVERRIDE;
+    // overrides for SkPathEffect
+    //  This method is not exported to java.
+    virtual bool filterPath(SkPath* dst, const SkPath& src, SkScalar* width);
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkCornerPathEffect)
+    // overrides for SkFlattenable
+    //  This method is not exported to java.
+    virtual Factory getFactory();
+    //  This method is not exported to java.
+    virtual void flatten(SkFlattenableWriteBuffer&);
+
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer&);
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     SkCornerPathEffect(SkFlattenableReadBuffer&);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
 private:
     SkScalar    fRadius;
-
+    
     typedef SkPathEffect INHERITED;
 };
 
 #endif
+

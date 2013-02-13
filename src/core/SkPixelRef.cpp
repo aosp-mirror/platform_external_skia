@@ -6,10 +6,8 @@
  * found in the LICENSE file.
  */
 #include "SkPixelRef.h"
-#include "SkFlattenableBuffers.h"
+#include "SkFlattenable.h"
 #include "SkThread.h"
-
-SK_DEFINE_INST_COUNT(SkPixelRef)
 
 // must be a power-of-2. undef to just use 1 mutex
 #define PIXELREF_MUTEX_RING_COUNT       32
@@ -21,7 +19,7 @@ SK_DEFINE_INST_COUNT(SkPixelRef)
     SK_DECLARE_STATIC_MUTEX(gPixelRefMutex);
 #endif
 
-static SkBaseMutex* get_default_mutex() {
+SkBaseMutex* get_default_mutex() {
 #ifdef PIXELREF_MUTEX_RING_COUNT
     // atomic_inc might be overkill here. It may be fine if once in a while
     // we hit a race-condition and two subsequent calls get the same index...
@@ -34,8 +32,7 @@ static SkBaseMutex* get_default_mutex() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int32_t SkNextPixelRefGenerationID();
-
+extern int32_t SkNextPixelRefGenerationID();
 int32_t SkNextPixelRefGenerationID() {
     static int32_t  gPixelRefGenerationID;
     // do a loop in case our global wraps around, as we never want to
@@ -69,41 +66,27 @@ SkPixelRef::SkPixelRef(SkBaseMutex* mutex) : fPreLocked(false) {
     fPreLocked = false;
 }
 
-SkPixelRef::SkPixelRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
-        : INHERITED(buffer) {
+SkPixelRef::SkPixelRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex) {
     this->setMutex(mutex);
     fPixels = NULL;
     fColorTable = NULL; // we do not track ownership of this
     fLockCount = 0;
+    fGenerationID = 0;  // signal to rebuild
     fIsImmutable = buffer.readBool();
-    fGenerationID = buffer.readUInt();
     fPreLocked = false;
 }
 
 void SkPixelRef::setPreLocked(void* pixels, SkColorTable* ctable) {
-#ifndef SK_IGNORE_PIXELREF_SETPRELOCKED
     // only call me in your constructor, otherwise fLockCount tracking can get
     // out of sync.
     fPixels = pixels;
     fColorTable = ctable;
     fLockCount = SKPIXELREF_PRELOCKED_LOCKCOUNT;
     fPreLocked = true;
-#endif
 }
 
 void SkPixelRef::flatten(SkFlattenableWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
     buffer.writeBool(fIsImmutable);
-    // We write the gen ID into the picture for within-process recording. This
-    // is safe since the same genID will never refer to two different sets of
-    // pixels (barring overflow). However, each process has its own "namespace"
-    // of genIDs. So for cross-process recording we write a zero which will
-    // trigger assignment of a new genID in playback.
-    if (buffer.isCrossProcess()) {
-        buffer.writeUInt(0);
-    } else {
-        buffer.writeUInt(fGenerationID);
-    }
 }
 
 void SkPixelRef::lockPixels() {
@@ -120,7 +103,7 @@ void SkPixelRef::lockPixels() {
 
 void SkPixelRef::unlockPixels() {
     SkASSERT(!fPreLocked || SKPIXELREF_PRELOCKED_LOCKCOUNT == fLockCount);
-
+    
     if (!fPreLocked) {
         SkAutoMutexAcquire  ac(*fMutex);
 
@@ -170,7 +153,68 @@ bool SkPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
     return false;
 }
 
-SkData* SkPixelRef::onRefEncodedData() {
+///////////////////////////////////////////////////////////////////////////////
+
+#define MAX_PAIR_COUNT  16
+
+struct Pair {
+    const char*          fName;
+    SkPixelRef::Factory  fFactory;
+};
+
+static int gCount;
+static Pair gPairs[MAX_PAIR_COUNT];
+
+void SkPixelRef::Register(const char name[], Factory factory) {
+    SkASSERT(name);
+    SkASSERT(factory);
+
+    static bool gOnce;
+    if (!gOnce) {
+        gCount = 0;
+        gOnce = true;
+    }
+
+    SkASSERT(gCount < MAX_PAIR_COUNT);
+
+    gPairs[gCount].fName = name;
+    gPairs[gCount].fFactory = factory;
+    gCount += 1;
+}
+
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+static void report_no_entries(const char* functionName) {
+    if (!gCount) {
+        SkDebugf("%s has no registered name/factory pairs."
+                 " Call SkGraphics::Init() at process initialization time.",
+                 functionName);
+    }
+}
+#endif
+
+SkPixelRef::Factory SkPixelRef::NameToFactory(const char name[]) {
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+    report_no_entries(__FUNCTION__);
+#endif
+    const Pair* pairs = gPairs;
+    for (int i = gCount - 1; i >= 0; --i) {
+        if (strcmp(pairs[i].fName, name) == 0) {
+            return pairs[i].fFactory;
+        }
+    }
+    return NULL;
+}
+
+const char* SkPixelRef::FactoryToName(Factory fact) {
+#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS && defined(SK_DEBUG)
+    report_no_entries(__FUNCTION__);
+#endif
+    const Pair* pairs = gPairs;
+    for (int i = gCount - 1; i >= 0; --i) {
+        if (pairs[i].fFactory == fact) {
+            return pairs[i].fName;
+        }
+    }
     return NULL;
 }
 

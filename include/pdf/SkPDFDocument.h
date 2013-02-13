@@ -10,17 +10,15 @@
 #ifndef SkPDFDocument_DEFINED
 #define SkPDFDocument_DEFINED
 
-#include "SkAdvancedTypefaceMetrics.h"
+#include "SkPDFTypes.h"
 #include "SkRefCnt.h"
 #include "SkTDArray.h"
 #include "SkTScopedPtr.h"
 
 class SkPDFCatalog;
 class SkPDFDevice;
-class SkPDFDict;
 class SkPDFPage;
-class SkPDFObject;
-class SkWStream;
+class SkWSteam;
 
 /** \class SkPDFDocument
 
@@ -29,10 +27,10 @@ class SkWStream;
 class SkPDFDocument {
 public:
     enum Flags {
-        kNoCompression_Flags = 0x01,  //!< mask disable stream compression.
-        kNoLinks_Flags       = 0x02,  //!< do not honor link annotations.
+        kNoCompression_Flag = 0x01,  //!< mask disable stream compression.
+        kNoEmbedding_Flag   = 0x02,  //!< mask do not embed fonts.
 
-        kDraftMode_Flags     = 0x01,
+        kDraftMode_Flags    = 0x03,
     };
     /** Create a PDF document.
      */
@@ -64,10 +62,9 @@ public:
      */
     SK_API bool appendPage(SkPDFDevice* pdfDevice);
 
-    /** Get the count of unique font types used in the document.
+    /** Get the list of pages in this document.
      */
-    SK_API void getCountOfFontTypes(
-        int counts[SkAdvancedTypefaceMetrics::kNotEmbeddable_Font + 1]) const;
+    SK_API const SkTDArray<SkPDFPage*>& getPages();
 
 private:
     SkTScopedPtr<SkPDFCatalog> fCatalog;
@@ -75,12 +72,12 @@ private:
 
     SkTDArray<SkPDFPage*> fPages;
     SkTDArray<SkPDFDict*> fPageTree;
-    SkPDFDict* fDocCatalog;
+    SkRefPtr<SkPDFDict> fDocCatalog;
     SkTDArray<SkPDFObject*> fPageResources;
     SkTDArray<SkPDFObject*> fSubstitutes;
     int fSecondPageFirstResourceIndex;
 
-    SkPDFDict* fTrailerDict;
+    SkRefPtr<SkPDFDict> fTrailerDict;
 
     /** Output the PDF header to the passed stream.
      *  @param stream    The writable output stream to send the header to.

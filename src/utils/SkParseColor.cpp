@@ -537,3 +537,4 @@ void SkParse::TestColor() {
 //  SkASSERT(result == ((0xFF << 24) | (71 << 16) | (162 << 8) | (253 << 0)));
 }
 #endif
+

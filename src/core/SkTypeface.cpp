@@ -11,8 +11,6 @@
 #include "SkTypeface.h"
 #include "SkFontHost.h"
 
-SK_DEFINE_INST_COUNT(SkTypeface)
-
 //#define TRACE_LIFECYCLE
 
 #ifdef TRACE_LIFECYCLE
@@ -36,7 +34,7 @@ SkTypeface::~SkTypeface() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkTypeface* SkTypeface::GetDefaultTypeface() {
+static SkTypeface* get_default_typeface() {
     // we keep a reference to this guy for all time, since if we return its
     // fontID, the font cache may later on ask to resolve that back into a
     // typeface object.
@@ -44,14 +42,15 @@ SkTypeface* SkTypeface::GetDefaultTypeface() {
 
     if (NULL == gDefaultTypeface) {
         gDefaultTypeface =
-        SkFontHost::CreateTypeface(NULL, NULL, SkTypeface::kNormal);
+        SkFontHost::CreateTypeface(NULL, NULL, NULL, 0,
+                                   SkTypeface::kNormal);
     }
     return gDefaultTypeface;
 }
 
 uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
     if (NULL == face) {
-        face = GetDefaultTypeface();
+        face = get_default_typeface();
     }
     return face->uniqueID();
 }
@@ -63,11 +62,16 @@ bool SkTypeface::Equal(const SkTypeface* facea, const SkTypeface* faceb) {
 ///////////////////////////////////////////////////////////////////////////////
 
 SkTypeface* SkTypeface::CreateFromName(const char name[], Style style) {
-    return SkFontHost::CreateTypeface(NULL, name, style);
+    return SkFontHost::CreateTypeface(NULL, name, NULL, 0, style);
+}
+
+SkTypeface* SkTypeface::CreateForChars(const void* data, size_t bytelength,
+                                       Style s) {
+    return SkFontHost::CreateTypeface(NULL, NULL, data, bytelength, s);
 }
 
 SkTypeface* SkTypeface::CreateFromTypeface(const SkTypeface* family, Style s) {
-    return SkFontHost::CreateTypeface(family, NULL, s);
+    return SkFontHost::CreateTypeface(family, NULL, NULL, 0, s);
 }
 
 SkTypeface* SkTypeface::CreateFromStream(SkStream* stream) {
@@ -96,41 +100,4 @@ SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
                                                   perGlyphInfo,
                                                   glyphIDs,
                                                   glyphIDsCount);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-int SkTypeface::countTables() const {
-    return SkFontHost::CountTables(fUniqueID);
-}
-
-int SkTypeface::getTableTags(SkFontTableTag tags[]) const {
-    return SkFontHost::GetTableTags(fUniqueID, tags);
-}
-
-size_t SkTypeface::getTableSize(SkFontTableTag tag) const {
-    return SkFontHost::GetTableSize(fUniqueID, tag);
-}
-
-size_t SkTypeface::getTableData(SkFontTableTag tag, size_t offset, size_t length,
-                                void* data) const {
-    return SkFontHost::GetTableData(fUniqueID, tag, offset, length, data);
-}
-
-int SkTypeface::getUnitsPerEm() const {
-    int upem = 0;
-
-#ifdef SK_BUILD_FOR_ANDROID
-    upem = SkFontHost::GetUnitsPerEm(fUniqueID);
-#else
-    SkAdvancedTypefaceMetrics* metrics;
-    metrics = SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID,
-                                 SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo,
-                                 NULL, 0);
-    if (metrics) {
-        upem = metrics->fEmSize;
-        metrics->unref();
-    }
-#endif
-    return upem;
 }

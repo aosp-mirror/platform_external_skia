@@ -7,7 +7,6 @@
  */
 
 
-#include "SkData.h"
 #include "SkGeometry.h"
 #include "SkPaint.h"
 #include "SkPath.h"
@@ -99,23 +98,7 @@ void SkPDFUtils::AppendRectangle(const SkRect& rect, SkWStream* content) {
 }
 
 // static
-void SkPDFUtils::EmitPath(const SkPath& path, SkPaint::Style paintStyle,
-                          SkWStream* content) {
-    // Filling a path with no area results in a drawing in PDF renderers but
-    // Chrome expects to be able to draw some such entities with no visible
-    // result, so we detect those cases and discard the drawing for them.
-    // Specifically: moveTo(X), lineTo(Y) and moveTo(X), lineTo(X), lineTo(Y).
-    enum SkipFillState {
-        kEmpty_SkipFillState         = 0,
-        kSingleLine_SkipFillState    = 1,
-        kNonSingleLine_SkipFillState = 2,
-    };
-    SkipFillState fillState = kEmpty_SkipFillState;
-    if (paintStyle != SkPaint::kFill_Style) {
-        fillState = kNonSingleLine_SkipFillState;
-    }
-    SkPoint lastMovePt;
-    SkDynamicMemoryWStream currentSegment;
+void SkPDFUtils::EmitPath(const SkPath& path, SkWStream* content) {
     SkPoint args[4];
     SkPath::Iter iter(path, false);
     for (SkPath::Verb verb = iter.next(args);
@@ -124,51 +107,29 @@ void SkPDFUtils::EmitPath(const SkPath& path, SkPaint::Style paintStyle,
         // args gets all the points, even the implicit first point.
         switch (verb) {
             case SkPath::kMove_Verb:
-                MoveTo(args[0].fX, args[0].fY, &currentSegment);
-                lastMovePt = args[0];
-                fillState = kEmpty_SkipFillState;
+                MoveTo(args[0].fX, args[0].fY, content);
                 break;
             case SkPath::kLine_Verb:
-                AppendLine(args[1].fX, args[1].fY, &currentSegment);
-                if (fillState == kEmpty_SkipFillState) {
-                   if (args[0] != lastMovePt) {
-                       fillState = kSingleLine_SkipFillState;
-                   }
-                } else if (fillState == kSingleLine_SkipFillState) {
-                    fillState = kNonSingleLine_SkipFillState;
-                }
+                AppendLine(args[1].fX, args[1].fY, content);
                 break;
             case SkPath::kQuad_Verb: {
                 SkPoint cubic[4];
                 SkConvertQuadToCubic(args, cubic);
                 AppendCubic(cubic[1].fX, cubic[1].fY, cubic[2].fX, cubic[2].fY,
-                            cubic[3].fX, cubic[3].fY, &currentSegment);
-                fillState = kNonSingleLine_SkipFillState;
+                            cubic[3].fX, cubic[3].fY, content);
                 break;
             }
             case SkPath::kCubic_Verb:
                 AppendCubic(args[1].fX, args[1].fY, args[2].fX, args[2].fY,
-                            args[3].fX, args[3].fY, &currentSegment);
-                fillState = kNonSingleLine_SkipFillState;
+                            args[3].fX, args[3].fY, content);
                 break;
             case SkPath::kClose_Verb:
-                if (fillState != kSingleLine_SkipFillState) {
-                    ClosePath(&currentSegment);
-                    SkData* data = currentSegment.copyToData();
-                    content->write(data->data(), data->size());
-                    data->unref();
-                }
-                currentSegment.reset();
+                ClosePath(content);
                 break;
             default:
                 SkASSERT(false);
                 break;
         }
-    }
-    if (currentSegment.bytesWritten() > 0) {
-        SkData* data = currentSegment.copyToData();
-        content->write(data->data(), data->size());
-        data->unref();
     }
 }
 
