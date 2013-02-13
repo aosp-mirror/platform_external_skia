@@ -28,7 +28,6 @@
 
 #include "EmojiFactory.h"
 #include "EmojiFont.h"
-#include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkImageDecoder.h"
 #include "SkPaint.h"

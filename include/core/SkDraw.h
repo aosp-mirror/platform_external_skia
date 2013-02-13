@@ -76,9 +76,8 @@ public:
         solely to assist in computing the mask's bounds (if the mode requests that).
     */
     static bool DrawToMask(const SkPath& devPath, const SkIRect* clipBounds,
-                           const SkMaskFilter*, const SkMatrix* filterMatrix,
-                           SkMask* mask, SkMask::CreateMode mode,
-                           SkPaint::Style style);
+                           SkMaskFilter* filter, const SkMatrix* filterMatrix,
+                           SkMask* mask, SkMask::CreateMode mode);
 
     enum RectType {
         kHair_RectType,
@@ -104,17 +103,6 @@ private:
     void    drawDevMask(const SkMask& mask, const SkPaint&) const;
     void    drawBitmapAsMask(const SkBitmap&, const SkPaint&) const;
 
-    /**
-     *  Return the current clip bounds, in local coordinates, with slop to account
-     *  for antialiasing or hairlines (i.e. device-bounds outset by 1, and then
-     *  run through the inverse of the matrix).
-     *
-     *  If the matrix cannot be inverted, or the current clip is empty, return
-     *  false and ignore bounds parameter.
-     */
-    bool SK_WARN_UNUSED_RESULT
-    computeConservativeLocalClipBounds(SkRect* bounds) const;
-
 public:
     const SkBitmap* fBitmap;        // required
     const SkMatrix* fMatrix;        // required
@@ -126,6 +114,9 @@ public:
     SkBounder*      fBounder;       // optional
     SkDrawProcs*    fProcs;         // optional
 
+    const SkMatrix* fMVMatrix;      // optional
+    const SkMatrix* fExtMatrix;     // optional
+
 #ifdef SK_DEBUG
     void validate() const;
 #else
@@ -133,4 +124,34 @@ public:
 #endif
 };
 
+class SkGlyphCache;
+
+class SkTextToPathIter {
+public:
+    SkTextToPathIter(const char text[], size_t length, const SkPaint&,
+                     bool applyStrokeAndPathEffects, bool forceLinearTextOn);
+    ~SkTextToPathIter();
+
+    const SkPaint&  getPaint() const { return fPaint; }
+    SkScalar        getPathScale() const { return fScale; }
+
+    const SkPath*   next(SkScalar* xpos);   //!< returns nil when there are no more paths
+
+private:
+    SkGlyphCache*   fCache;
+    SkPaint         fPaint;
+    SkScalar        fScale;
+    SkFixed         fPrevAdvance;
+    const char*     fText;
+    const char*     fStop;
+    SkMeasureCacheProc fGlyphCacheProc;
+
+    const SkPath*   fPath;      // returned in next
+    SkScalar        fXPos;      // accumulated xpos, returned in next
+    SkAutoKern      fAutoKern;
+    int             fXYIndex;   // cache for horizontal -vs- vertical text
+};
+
 #endif
+
+

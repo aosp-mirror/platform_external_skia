@@ -8,12 +8,8 @@
 #include "gm.h"
 using namespace skiagm;
 
-SkString GM::gResourcePath;
-
 GM::GM() {
     fBGColor = SK_ColorWHITE;
-    fCanvasIsDeferred = false;
-    fHaveCalledOnceBeforeDraw = false;
 }
 GM::~GM() {}
 
@@ -23,18 +19,10 @@ void GM::draw(SkCanvas* canvas) {
 }
 
 void GM::drawContent(SkCanvas* canvas) {
-    if (!fHaveCalledOnceBeforeDraw) {
-        fHaveCalledOnceBeforeDraw = true;
-        this->onOnceBeforeDraw();
-    }
     this->onDraw(canvas);
 }
 
 void GM::drawBackground(SkCanvas* canvas) {
-    if (!fHaveCalledOnceBeforeDraw) {
-        fHaveCalledOnceBeforeDraw = true;
-        this->onOnceBeforeDraw();
-    }
     this->onDrawBackground(canvas);
 }
 
@@ -50,7 +38,7 @@ void GM::setBGColor(SkColor color) {
 }
 
 void GM::onDrawBackground(SkCanvas* canvas) {
-    canvas->drawColor(fBGColor, SkXfermode::kSrc_Mode);
+    canvas->drawColor(fBGColor);
 }
 
 void GM::drawSizeBounds(SkCanvas* canvas, SkColor color) {

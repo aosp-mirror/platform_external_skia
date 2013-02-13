@@ -5,31 +5,36 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkBlurImageFilter_DEFINED
 #define SkBlurImageFilter_DEFINED
 
-#include "SkSingleInputImageFilter.h"
-#include "SkSize.h"
+#include "SkImageFilter.h"
 
-class SK_API SkBlurImageFilter : public SkSingleInputImageFilter {
+class SK_API SkBlurImageFilter : public SkImageFilter {
 public:
-    SkBlurImageFilter(SkScalar sigmaX, SkScalar sigmaY, SkImageFilter* input = NULL);
+    SkBlurImageFilter(SkScalar sigmaX, SkScalar sigmaY);
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBlurImageFilter)
+    virtual bool asABlur(SkSize* sigma) const SK_OVERRIDE;
+
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
+        return SkNEW_ARGS(SkBlurImageFilter, (buffer));
+    }
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
 
 protected:
     explicit SkBlurImageFilter(SkFlattenableReadBuffer& buffer);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const SkMatrix&,
                                SkBitmap* result, SkIPoint* offset) SK_OVERRIDE;
-
-    bool canFilterImageGPU() const SK_OVERRIDE { return true; }
-    virtual bool filterImageGPU(Proxy* proxy, const SkBitmap& src, SkBitmap* result) SK_OVERRIDE;
+    virtual void flatten(SkFlattenableWriteBuffer& buffer) SK_OVERRIDE;
+    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; }
 
 private:
     SkSize   fSigma;
-    typedef SkSingleInputImageFilter INHERITED;
+    typedef SkImageFilter INHERITED;
 };
 
 #endif
+

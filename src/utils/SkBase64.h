@@ -38,7 +38,7 @@ private:
 
     size_t fLength;
     char* fData;
-    friend class SkImageBaseBitmap;
+    friend class SkImage;
 };
 
 #endif // SkBase64_DEFINED

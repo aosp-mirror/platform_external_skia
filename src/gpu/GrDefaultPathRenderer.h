@@ -12,46 +12,53 @@
 #include "SkTemplates.h"
 
 /**
- *  Subclass that renders the path using the stencil buffer to resolve fill rules
- * (e.g. winding, even-odd)
+ *  Subclass that renders the path using the stencil buffer to resolve fill
+ *  rules (e.g. winding, even-odd)
  */
 class GR_API GrDefaultPathRenderer : public GrPathRenderer {
 public:
-    GrDefaultPathRenderer(bool separateStencilSupport, bool stencilWrapOpsSupport);
+    GrDefaultPathRenderer(bool separateStencilSupport,
+                          bool stencilWrapOpsSupport);
 
-    virtual bool canDrawPath(const SkPath&,
-                             const SkStrokeRec&,
-                             const GrDrawTarget*,
-                             bool antiAlias) const SK_OVERRIDE;
+
+    virtual bool requiresStencilPass(const SkPath& path,
+                                     GrPathFill fill,
+                                     const GrDrawTarget* target) const SK_OVERRIDE;
+
+    virtual bool canDrawPath(const SkPath& path,
+                            GrPathFill fill,
+                            const GrDrawTarget* target,
+                            bool antiAlias) const SK_OVERRIDE;
+
+    virtual void drawPathToStencil(const SkPath& path,
+                                   GrPathFill fill,
+                                   GrDrawTarget* target) SK_OVERRIDE;
 
 private:
 
-    virtual StencilSupport onGetStencilSupport(const SkPath&,
-                                               const SkStrokeRec&,
-                                               const GrDrawTarget*) const SK_OVERRIDE;
-
-    virtual bool onDrawPath(const SkPath&,
-                            const SkStrokeRec&,
-                            GrDrawTarget*,
+    virtual bool onDrawPath(const SkPath& path,
+                            GrPathFill fill,
+                            const GrVec* translate,
+                            GrDrawTarget* target,
+                            GrDrawState::StageMask stageMask,
                             bool antiAlias) SK_OVERRIDE;
 
-    virtual void onStencilPath(const SkPath&,
-                               const SkStrokeRec&,
-                               GrDrawTarget*) SK_OVERRIDE;
-
-    bool internalDrawPath(const SkPath&,
-                          const SkStrokeRec&,
-                          GrDrawTarget*,
+    bool internalDrawPath(const SkPath& path,
+                          GrPathFill fill,
+                          const GrVec* translate,
+                          GrDrawTarget* target,
+                          GrDrawState::StageMask stageMask,
                           bool stencilOnly);
 
-    bool createGeom(const SkPath&,
-                    const SkStrokeRec&,
-                    SkScalar srcSpaceTol,
-                    GrDrawTarget*,
-                    GrPrimitiveType*,
+    bool createGeom(const SkPath& path,
+                    GrPathFill fill,
+                    const GrVec* translate,
+                    GrScalar srcSpaceTol,
+                    GrDrawTarget* target,
+                    GrDrawState::StageMask stages,
+                    GrPrimitiveType* primType,
                     int* vertexCnt,
-                    int* indexCnt,
-                    GrDrawTarget::AutoReleaseGeometry*);
+                    int* indexCnt);
 
     bool    fSeparateStencil;
     bool    fStencilWrapOps;

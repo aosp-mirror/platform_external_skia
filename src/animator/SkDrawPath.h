@@ -19,7 +19,7 @@ class SkDrawPath : public SkBoundable {
     DECLARE_DRAW_MEMBER_INFO(Path);
     SkDrawPath();
     virtual ~SkDrawPath();
-    virtual bool addChild(SkAnimateMaker& , SkDisplayable* child) SK_OVERRIDE;
+    virtual bool add(SkAnimateMaker& , SkDisplayable* child);
     bool childHasID() { return SkToBool(fChildHasID); }
     virtual bool childrenNeedDisposing() const;
     virtual void dirty();
@@ -51,7 +51,7 @@ private:
 
 class SkPolyline : public SkDrawPath {
     DECLARE_MEMBER_INFO(Polyline);
-    virtual bool addChild(SkAnimateMaker& , SkDisplayable*) SK_OVERRIDE;
+    virtual bool add(SkAnimateMaker& , SkDisplayable*) const;
     virtual void onEndElement(SkAnimateMaker& );
 protected:
     SkTDScalarArray points;

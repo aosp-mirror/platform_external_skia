@@ -9,7 +9,7 @@
 #include "SkImageRefPool.h"
 #include "SkThread.h"
 
-SK_DECLARE_STATIC_MUTEX(gGlobalPoolMutex);
+extern SkBaseMutex gImageRefMutex;
 
 /*
  *  This returns the lazily-allocated global pool. It must be called
@@ -27,16 +27,16 @@ static SkImageRefPool* GetGlobalPool() {
 SkImageRef_GlobalPool::SkImageRef_GlobalPool(SkStream* stream,
                                              SkBitmap::Config config,
                                              int sampleSize)
-        : SkImageRef(stream, config, sampleSize, &gGlobalPoolMutex) {
-    SkASSERT(&gGlobalPoolMutex == this->mutex());
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+        : SkImageRef(stream, config, sampleSize) {
+    this->mutex()->acquire();
     GetGlobalPool()->addToHead(this);
+    this->mutex()->release();
 }
 
 SkImageRef_GlobalPool::~SkImageRef_GlobalPool() {
-    SkASSERT(&gGlobalPoolMutex == this->mutex());
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    this->mutex()->acquire();
     GetGlobalPool()->detach(this);
+    this->mutex()->release();
 }
 
 /*  By design, onUnlockPixels() already is inside the mutex-lock,
@@ -56,45 +56,51 @@ bool SkImageRef_GlobalPool::onDecode(SkImageDecoder* codec, SkStream* stream,
     }
     return true;
 }
-
+    
 void SkImageRef_GlobalPool::onUnlockPixels() {
     this->INHERITED::onUnlockPixels();
-
+    
     // by design, onUnlockPixels() already is inside the mutex-lock
     GetGlobalPool()->canLosePixels(this);
 }
 
 SkImageRef_GlobalPool::SkImageRef_GlobalPool(SkFlattenableReadBuffer& buffer)
-        : INHERITED(buffer, &gGlobalPoolMutex) {
-    SkASSERT(&gGlobalPoolMutex == this->mutex());
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+        : INHERITED(buffer) {
+    this->mutex()->acquire();
     GetGlobalPool()->addToHead(this);
+    this->mutex()->release();
 }
+
+SkPixelRef* SkImageRef_GlobalPool::Create(SkFlattenableReadBuffer& buffer) {
+    return SkNEW_ARGS(SkImageRef_GlobalPool, (buffer));
+}
+
+SK_DEFINE_PIXEL_REF_REGISTRAR(SkImageRef_GlobalPool)
 
 ///////////////////////////////////////////////////////////////////////////////
 // global imagerefpool wrappers
 
 size_t SkImageRef_GlobalPool::GetRAMBudget() {
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    SkAutoMutexAcquire ac(gImageRefMutex);
     return GetGlobalPool()->getRAMBudget();
 }
 
 void SkImageRef_GlobalPool::SetRAMBudget(size_t size) {
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    SkAutoMutexAcquire ac(gImageRefMutex);
     GetGlobalPool()->setRAMBudget(size);
 }
 
 size_t SkImageRef_GlobalPool::GetRAMUsed() {
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    SkAutoMutexAcquire ac(gImageRefMutex);    
     return GetGlobalPool()->getRAMUsed();
 }
 
 void SkImageRef_GlobalPool::SetRAMUsed(size_t usage) {
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    SkAutoMutexAcquire ac(gImageRefMutex);
     GetGlobalPool()->setRAMUsed(usage);
 }
 
 void SkImageRef_GlobalPool::DumpPool() {
-    SkAutoMutexAcquire ac(gGlobalPoolMutex);
+    SkAutoMutexAcquire ac(gImageRefMutex);
     GetGlobalPool()->dump();
 }

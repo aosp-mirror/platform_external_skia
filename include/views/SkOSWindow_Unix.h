@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -5,14 +6,15 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkOSWindow_Unix_DEFINED
 #define SkOSWindow_Unix_DEFINED
 
-#include <GL/glx.h>
-#include <X11/Xlib.h>
-
 #include "SkWindow.h"
+#include <X11/Xlib.h>
+#include <GL/glx.h>
 
+class SkBitmap;
 class SkEvent;
 
 struct SkUnixWindow {
@@ -21,6 +23,7 @@ struct SkUnixWindow {
   size_t fOSWin;
   GC fGc;
   GLXContext fGLContext;
+  bool fGLCreated;
 };
 
 class SkOSWindow : public SkWindow {
@@ -33,44 +36,35 @@ public:
     void* getUnixWindow() const { return (void*)&fUnixWindow; }
     void loop();
     void post_linuxevent();
-
-    enum SkBackEndTypes {
-        kNone_BackEndType,
-        kNativeGL_BackEndType,
-    };
-
-    bool attach(SkBackEndTypes attachType, int msaaSampleCount);
-    void detach();
-    void present();
-
-    int getMSAASampleCount() const { return fMSAASampleCount; }
+    bool attachGL();
+    void detachGL();
+    void presentGL();
 
     //static bool PostEvent(SkEvent* evt, SkEventSinkID, SkMSec delay);
 
+    //static bool WndProc(SkUnixWindow* w,  XEvent &e);
+
 protected:
-    // Overridden from from SkWindow:
-    virtual bool onEvent(const SkEvent&) SK_OVERRIDE;
-    virtual void onHandleInval(const SkIRect&) SK_OVERRIDE;
-    virtual bool onHandleChar(SkUnichar) SK_OVERRIDE;
-    virtual bool onHandleKey(SkKey) SK_OVERRIDE;
-    virtual bool onHandleKeyUp(SkKey) SK_OVERRIDE;
-    virtual void onSetTitle(const char title[]) SK_OVERRIDE;
+    // overrides from SkWindow
+    virtual bool onEvent(const SkEvent&);
+    virtual void onHandleInval(const SkIRect&);
+    virtual bool onHandleChar(SkUnichar);
+    virtual bool onHandleKey(SkKey);
+    virtual bool onHandleKeyUp(SkKey);
+    virtual void onSetTitle(const char title[]);
 
 private:
-    void doPaint();
-    void mapWindowAndWait();
-
-    void closeWindow();
-    void initWindow(int newMSAASampleCount);
-
-    SkUnixWindow fUnixWindow;
+    SkUnixWindow  fUnixWindow;
+    bool fGLAttached;
 
     // Needed for GL
     XVisualInfo* fVi;
-    // we recreate the underlying xwindow if this changes
-    int fMSAASampleCount;
+
+    void    doPaint();
+    void    mapWindowAndWait();
 
     typedef SkWindow INHERITED;
 };
 
 #endif
+

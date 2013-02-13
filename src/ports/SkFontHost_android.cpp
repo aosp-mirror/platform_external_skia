@@ -1,13 +1,21 @@
-/*
- * Copyright 2006 The Android Open Source Project
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
+/* libs/graphics/ports/SkFontHost_android.cpp
+**
+** Copyright 2006, The Android Open Source Project
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**     http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+*/
 
 #include "SkFontHost.h"
-#include "SkFontDescriptor.h"
-#include "SkGlyphCache.h"
 #include "SkGraphics.h"
 #include "SkDescriptor.h"
 #include "SkMMapStream.h"
@@ -67,7 +75,8 @@ static bool getNameAndStyle(const char path[], SkString* name,
 
 static SkTypeface* deserializeLocked(SkStream* stream);
 static SkTypeface* createTypefaceLocked(const SkTypeface* familyFace,
-        const char familyName[], SkTypeface::Style style);
+        const char familyName[], const void* data, size_t bytelength,
+        SkTypeface::Style style);
 static SkStream* openStreamLocked(uint32_t fontID);
 static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int32_t* index);
 static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec);
@@ -901,7 +910,7 @@ static SkTypeface* deserializeLocked(SkStream* stream) {
                     for (int j = i; j >= 0; --j) {
                         if (gSystemFonts[j].fNames != NULL) {
                             return createTypefaceLocked(NULL,
-                                    gSystemFonts[j].fNames[0],
+                                    gSystemFonts[j].fNames[0], NULL, 0,
                                     (SkTypeface::Style)style);
                         }
                     }
@@ -916,13 +925,15 @@ static SkTypeface* deserializeLocked(SkStream* stream) {
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                                        const char familyName[],
+                                       const void* data, size_t bytelength,
                                        SkTypeface::Style style) {
     SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
-    return createTypefaceLocked(familyFace, familyName, style);
+    return createTypefaceLocked(familyFace, familyName, data, bytelength, style);
 }
 
 static SkTypeface* createTypefaceLocked(const SkTypeface* familyFace,
-        const char familyName[], SkTypeface::Style style) {
+        const char familyName[], const void* data, size_t bytelength,
+        SkTypeface::Style style) {
     loadSystemFontsLocked();
 
     // clip to legal style bits
@@ -986,12 +997,12 @@ static size_t getFileNameLocked(SkFontID fontID, char path[], size_t length, int
     }
 }
 
-SkFontID SkFontHost::NextLogicalFont(const SkScalerContextRec& rec) {
+SkFontID SkFontHost::NextLogicalFont(const SkScalerContext::Rec& rec) {
     SkAutoMutexAcquire  ac(gFamilyHeadAndNameListMutex);
     return nextLogicalFontLocked(rec);
 }
 
-static SkFontID nextLogicalFontLocked(const SkScalerContextRec& rec) {
+static SkFontID nextLogicalFontLocked(const SkScalerContext::Rec& rec) {
     loadSystemFontsLocked();
 
     const SkTypeface* origTypeface = findFromUniqueIDLocked(rec.fOrigFontID);
@@ -1095,7 +1106,7 @@ static SkFontID findFontIDForChar(SkUnichar uni, SkTypeface::Style style,
     paint.setTextEncoding(SkPaint::kUTF16_TextEncoding);
     paint.setFontVariant(fontVariant);
 
-    SkAutoGlyphCache autoCache(paint, NULL, NULL);
+    SkAutoGlyphCache autoCache(paint, NULL);
     SkGlyphCache*    cache = autoCache.getCache();
     SkFontID         fontID = 0;
 
@@ -1186,16 +1197,16 @@ struct TypefaceLookupStruct {
 SK_DECLARE_STATIC_MUTEX(gTypefaceTableMutex);  // This is the mutex for gTypefaceTable
 static SkTDArray<TypefaceLookupStruct> gTypefaceTable;  // This is protected by gTypefaceTableMutex
 
-static int typefaceLookupCompare(const TypefaceLookupStruct* first,
-        const TypefaceLookupStruct* second) {
-    if (first->script != second->script) {
-        return (first->script > second->script) ? 1 : -1;
+static int typefaceLookupCompare(const TypefaceLookupStruct& first,
+        const TypefaceLookupStruct& second) {
+    if (first.script != second.script) {
+        return (first.script > second.script) ? 1 : -1;
     }
-    if (first->style != second->style) {
-        return (first->style > second->style) ? 1 : -1;
+    if (first.style != second.style) {
+        return (first.style > second.style) ? 1 : -1;
     }
-    if (first->fontVariant != second->fontVariant) {
-        return (first->fontVariant > second->fontVariant) ? 1 : -1;
+    if (first.fontVariant != second.fontVariant) {
+        return (first.fontVariant > second.fontVariant) ? 1 : -1;
     }
     return 0;
 }

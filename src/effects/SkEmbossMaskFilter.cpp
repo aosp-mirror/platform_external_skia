@@ -11,7 +11,7 @@
 #include "SkBlurMaskFilter.h"
 #include "SkBlurMask.h"
 #include "SkEmbossMask.h"
-#include "SkFlattenableBuffers.h"
+#include "SkBuffer.h"
 
 static inline int pin2byte(int n) {
     if (n < 0) {
@@ -36,11 +36,11 @@ SkMaskFilter* SkBlurMaskFilter::CreateEmboss(const SkScalar direction[3],
     int sp = pin2byte(SkScalarToFixed(specular) >> 12);
 
     SkEmbossMaskFilter::Light   light;
-
+    
     memcpy(light.fDirection, direction, sizeof(light.fDirection));
     light.fAmbient = SkToU8(am);
     light.fSpecular = SkToU8(sp);
-
+    
     return SkNEW_ARGS(SkEmbossMaskFilter, (light, blurRadius));
 }
 
@@ -60,12 +60,12 @@ SkEmbossMaskFilter::SkEmbossMaskFilter(const Light& light, SkScalar blurRadius)
     normalize(fLight.fDirection);
 }
 
-SkMask::Format SkEmbossMaskFilter::getFormat() const {
+SkMask::Format SkEmbossMaskFilter::getFormat() {
     return SkMask::k3D_Format;
 }
 
 bool SkEmbossMaskFilter::filterMask(SkMask* dst, const SkMask& src,
-                            const SkMatrix& matrix, SkIPoint* margin) const {
+                                    const SkMatrix& matrix, SkIPoint* margin) {
     SkScalar radius = matrix.mapRadius(fBlurRadius);
 
     if (!SkBlurMask::Blur(dst, src, radius, SkBlurMask::kInner_Style,
@@ -115,19 +115,26 @@ bool SkEmbossMaskFilter::filterMask(SkMask* dst, const SkMask& src,
     return true;
 }
 
+SkFlattenable* SkEmbossMaskFilter::CreateProc(SkFlattenableReadBuffer& buffer) {
+    return SkNEW_ARGS(SkEmbossMaskFilter, (buffer));
+}
+
+SkFlattenable::Factory SkEmbossMaskFilter::getFactory() {
+    return CreateProc;
+}
+
 SkEmbossMaskFilter::SkEmbossMaskFilter(SkFlattenableReadBuffer& buffer)
         : SkMaskFilter(buffer) {
-    SkASSERT(buffer.getArrayCount() == sizeof(Light));
-    buffer.readByteArray(&fLight);
+    buffer.read(&fLight, sizeof(fLight));
     SkASSERT(fLight.fPad == 0); // for the font-cache lookup to be clean
     fBlurRadius = buffer.readScalar();
 }
 
-void SkEmbossMaskFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkEmbossMaskFilter::flatten(SkFlattenableWriteBuffer& buffer) {
     this->INHERITED::flatten(buffer);
 
-    Light tmpLight = fLight;
-    tmpLight.fPad = 0;    // for the font-cache lookup to be clean
-    buffer.writeByteArray(&tmpLight, sizeof(tmpLight));
+    fLight.fPad = 0;    // for the font-cache lookup to be clean
+    buffer.writeMul4(&fLight, sizeof(fLight));
     buffer.writeScalar(fBlurRadius);
 }
+

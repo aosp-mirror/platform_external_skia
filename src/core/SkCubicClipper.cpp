@@ -10,9 +10,7 @@
 #include "SkCubicClipper.h"
 #include "SkGeometry.h"
 
-SkCubicClipper::SkCubicClipper() {
-    fClip.setEmpty();
-}
+SkCubicClipper::SkCubicClipper() {}
 
 void SkCubicClipper::setClip(const SkIRect& clip) {
     // conver to scalars, since that's where we'll see the points
@@ -160,3 +158,4 @@ bool SkCubicClipper::clipCubic(const SkPoint srcPts[4], SkPoint dst[4]) {
     }
     return true;
 }
+

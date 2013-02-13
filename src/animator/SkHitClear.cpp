@@ -30,3 +30,4 @@ bool SkHitClear::enable(SkAnimateMaker& maker) {
 bool SkHitClear::hasEnable() const {
     return true;
 }
+

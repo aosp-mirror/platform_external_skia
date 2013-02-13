@@ -85,3 +85,4 @@ static void Tests(skiatest::Reporter* reporter) {
 
 #include "TestClassDef.h"
 DEFINE_TESTCLASS("Reader32", Reader32Class, Tests)
+

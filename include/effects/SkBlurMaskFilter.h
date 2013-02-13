@@ -1,9 +1,11 @@
+
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 
 #ifndef SkBlurMaskFilter_DEFINED
 #define SkBlurMaskFilter_DEFINED
@@ -39,7 +41,7 @@ public:
         @param flags    Flags to use - defaults to none
         @return The new blur maskfilter
     */
-    static SkMaskFilter* Create(SkScalar radius, BlurStyle style,
+    static SkMaskFilter* Create(SkScalar radius, BlurStyle style, 
                                 uint32_t flags = kNone_BlurFlag);
 
     /** Create an emboss maskfilter
@@ -53,9 +55,11 @@ public:
                                         SkScalar ambient, SkScalar specular,
                                         SkScalar blurRadius);
 
-    SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
+    SK_DECLARE_FLATTENABLE_REGISTRAR()
+
 private:
     SkBlurMaskFilter(); // can't be instantiated
 };
 
 #endif
+

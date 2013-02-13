@@ -13,16 +13,12 @@ namespace skiagm {
 class FillTypePerspGM : public GM {
     SkPath fPath;
 public:
-    FillTypePerspGM() {}
-
-    void makePath() {
-        if (fPath.isEmpty()) {
-            const SkScalar radius = SkIntToScalar(45);
-            fPath.addCircle(SkIntToScalar(50), SkIntToScalar(50), radius);
-            fPath.addCircle(SkIntToScalar(100), SkIntToScalar(100), radius);
-        }
+    FillTypePerspGM() {
+        const SkScalar radius = SkIntToScalar(45);
+        fPath.addCircle(SkIntToScalar(50), SkIntToScalar(50), radius);
+        fPath.addCircle(SkIntToScalar(100), SkIntToScalar(100), radius);
     }
-
+    
 protected:
     virtual SkString onShortName() {
         return SkString("filltypespersp");
@@ -75,8 +71,6 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-        this->makePath();
-
         // do perspective drawPaint as the background;
         SkPaint bkgnrd;
         SkPoint center = SkPoint::Make(SkIntToScalar(100),
@@ -120,7 +114,7 @@ protected:
         canvas->translate(SkIntToScalar(450), 0);
         showFour(canvas, scale, true);
     }
-
+    
 private:
     typedef GM INHERITED;
 };
@@ -131,3 +125,4 @@ static GM* MyFactory(void*) { return new FillTypePerspGM; }
 static GMRegistry reg(MyFactory);
 
 }
+

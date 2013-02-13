@@ -20,3 +20,4 @@ static inline SkScalar SkEvalCubicInterval(const SkPoint pts[2], SkScalar x) {
 }
 
 #endif
+

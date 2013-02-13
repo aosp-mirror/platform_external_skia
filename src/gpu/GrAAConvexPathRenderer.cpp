@@ -12,8 +12,8 @@
 #include "GrDrawState.h"
 #include "GrPathUtils.h"
 #include "SkString.h"
-#include "SkStrokeRec.h"
 #include "SkTrace.h"
+
 
 GrAAConvexPathRenderer::GrAAConvexPathRenderer() {
 }
@@ -22,11 +22,9 @@ namespace {
 
 struct Segment {
     enum {
-        // These enum values are assumed in member functions below.
-        kLine = 0,
-        kQuad = 1,
+        kLine,
+        kQuad
     } fType;
-
     // line uses one pt, quad uses 2 pts
     GrPoint fPts[2];
     // normal to edge ending at each pt
@@ -36,26 +34,24 @@ struct Segment {
     GrVec fMid;
 
     int countPoints() {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
-        return fType + 1;
+        return (kLine == fType) ? 1 : 2;
     }
     const SkPoint& endPt() const {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
-        return fPts[fType];
+        return (kLine == fType) ? fPts[0] : fPts[1];
     };
     const SkPoint& endNorm() const {
-        GR_STATIC_ASSERT(0 == kLine && 1 == kQuad);
-        return fNorms[fType];
+        return (kLine == fType) ? fNorms[0] : fNorms[1];
     };
 };
 
 typedef SkTArray<Segment, true> SegmentArray;
 
 void center_of_mass(const SegmentArray& segments, SkPoint* c) {
-    SkScalar area = 0;
-    SkPoint center = {0, 0};
+    GrScalar area = 0;
+    SkPoint center;
+    center.set(0, 0);
     int count = segments.count();
-    SkPoint p0 = {0, 0};
+    SkPoint p0;
     if (count > 2) {
         // We translate the polygon so that the first point is at the origin.
         // This avoids some precision issues with small area polygons far away
@@ -63,7 +59,7 @@ void center_of_mass(const SegmentArray& segments, SkPoint* c) {
         p0 = segments[0].endPt();
         SkPoint pi;
         SkPoint pj;
-        // the first and last iteration of the below loop would compute
+        // the first and last interation of the below loop would compute
         // zeros since the starting / ending point is (0,0). So instead we start
         // at i=1 and make the last iteration i=count-2.
         pj = segments[1].endPt() - p0;
@@ -71,7 +67,7 @@ void center_of_mass(const SegmentArray& segments, SkPoint* c) {
             pi = pj;
             const SkPoint pj = segments[i + 1].endPt() - p0;
 
-            SkScalar t = SkScalarMul(pi.fX, pj.fY) - SkScalarMul(pj.fX, pi.fY);
+            GrScalar t = GrMul(pi.fX, pj.fY) - GrMul(pj.fX, pi.fY);
             area += t;
             center.fX += (pi.fX + pj.fX) * t;
             center.fY += (pi.fY + pj.fY) * t;
@@ -93,9 +89,9 @@ void center_of_mass(const SegmentArray& segments, SkPoint* c) {
         *c = avg;
     } else {
         area *= 3;
-        area = SkScalarDiv(SK_Scalar1, area);
-        center.fX = SkScalarMul(center.fX, area);
-        center.fY = SkScalarMul(center.fY, area);
+        area = GrScalarDiv(GR_Scalar1, area);
+        center.fX = GrScalarMul(center.fX, area);
+        center.fY = GrScalarMul(center.fY, area);
         // undo the translate of p0 to the origin.
         *c = center + p0;
     }
@@ -168,7 +164,7 @@ struct DegenerateTestData {
     }           fStage;
     GrPoint     fFirstPoint;
     GrVec       fLineNormal;
-    SkScalar    fLineC;
+    GrScalar    fLineC;
 };
 
 void update_degenerate_test(DegenerateTestData* data, const GrPoint& pt) {
@@ -200,51 +196,29 @@ void update_degenerate_test(DegenerateTestData* data, const GrPoint& pt) {
     }
 }
 
-inline bool get_direction(const SkPath& path, const SkMatrix& m, SkPath::Direction* dir) {
-    if (!path.cheapComputeDirection(dir)) {
-        return false;
-    }
-    // check whether m reverses the orientation
-    GrAssert(!m.hasPerspective());
-    SkScalar det2x2 = SkScalarMul(m.get(SkMatrix::kMScaleX), m.get(SkMatrix::kMScaleY)) -
-                      SkScalarMul(m.get(SkMatrix::kMSkewX), m.get(SkMatrix::kMSkewY));
-    if (det2x2 < 0) {
-        *dir = SkPath::OppositeDirection(*dir);
-    }
-    return true;
-}
-
-bool get_segments(const SkPath& path,
-                  const SkMatrix& m,
-                  SegmentArray* segments,
-                  SkPoint* fanPt,
-                  int* vCount,
-                  int* iCount) {
+bool get_segments(const GrPath& path,
+                 SegmentArray* segments,
+                 SkPoint* fanPt,
+                 int* vCount,
+                 int* iCount) {
     SkPath::Iter iter(path, true);
-    // This renderer over-emphasizes very thin path regions. We use the distance
+    // This renderer overemphasises very thin path regions. We use the distance
     // to the path from the sample to compute coverage. Every pixel intersected
     // by the path will be hit and the maximum distance is sqrt(2)/2. We don't
-    // notice that the sample may be close to a very thin area of the path and
+    // notice that the sample may be close to a very thin area of the path and 
     // thus should be very light. This is particularly egregious for degenerate
     // line paths. We detect paths that are very close to a line (zero area) and
     // draw nothing.
     DegenerateTestData degenerateData;
-    SkPath::Direction dir;
-    // get_direction can fail for some degenerate paths.
-    if (!get_direction(path, m, &dir)) {
-        return false;
-    }
 
     for (;;) {
         GrPoint pts[4];
         GrPathCmd cmd = (GrPathCmd)iter.next(pts);
         switch (cmd) {
             case kMove_PathCmd:
-                m.mapPoints(pts, 1);
                 update_degenerate_test(&degenerateData, pts[0]);
                 break;
             case kLine_PathCmd: {
-                m.mapPoints(pts + 1, 1);
                 update_degenerate_test(&degenerateData, pts[1]);
                 segments->push_back();
                 segments->back().fType = Segment::kLine;
@@ -252,7 +226,6 @@ bool get_segments(const SkPath& path,
                 break;
             }
             case kQuadratic_PathCmd:
-                m.mapPoints(pts + 1, 2);
                 update_degenerate_test(&degenerateData, pts[1]);
                 update_degenerate_test(&degenerateData, pts[2]);
                 segments->push_back();
@@ -261,14 +234,11 @@ bool get_segments(const SkPath& path,
                 segments->back().fPts[1] = pts[2];
                 break;
             case kCubic_PathCmd: {
-                m.mapPoints(pts, 4);
                 update_degenerate_test(&degenerateData, pts[1]);
                 update_degenerate_test(&degenerateData, pts[2]);
                 update_degenerate_test(&degenerateData, pts[3]);
-                // unlike quads and lines, the pts[0] will also be read (in
-                // convertCubicToQuads).
                 SkSTArray<15, SkPoint, true> quads;
-                GrPathUtils::convertCubicToQuads(pts, SK_Scalar1, true, dir, &quads);
+                GrPathUtils::convertCubicToQuads(pts, SK_Scalar1, &quads);
                 int count = quads.count();
                 for (int q = 0; q < count; q += 3) {
                     segments->push_back();
@@ -282,6 +252,10 @@ bool get_segments(const SkPath& path,
                 if (degenerateData.isDegenerate()) {
                     return false;
                 } else {
+                    SkPath::Direction dir;
+                    GR_DEBUGCODE(bool succeeded = )
+                    path.cheapComputeDirection(&dir);
+                    GrAssert(succeeded);
                     compute_vectors(segments, fanPt, dir, vCount, iCount);
                     return true;
                 }
@@ -294,10 +268,10 @@ bool get_segments(const SkPath& path,
 struct QuadVertex {
     GrPoint  fPos;
     GrPoint  fUV;
-    SkScalar fD0;
-    SkScalar fD1;
+    GrScalar fD0;
+    GrScalar fD1;
 };
-
+    
 void create_vertices(const SegmentArray&  segments,
                      const SkPoint& fanPt,
                      QuadVertex*    verts,
@@ -310,7 +284,7 @@ void create_vertices(const SegmentArray&  segments,
         const Segment& sega = segments[a];
         int b = (a + 1) % count;
         const Segment& segb = segments[b];
-
+        
         // FIXME: These tris are inset in the 1 unit arc around the corner
         verts[v + 0].fPos = sega.endPt();
         verts[v + 1].fPos = verts[v + 0].fPos + sega.endNorm();
@@ -324,14 +298,14 @@ void create_vertices(const SegmentArray&  segments,
         verts[v + 1].fD0 = verts[v + 1].fD1 = -SK_Scalar1;
         verts[v + 2].fD0 = verts[v + 2].fD1 = -SK_Scalar1;
         verts[v + 3].fD0 = verts[v + 3].fD1 = -SK_Scalar1;
-
+        
         idxs[i + 0] = v + 0;
         idxs[i + 1] = v + 2;
         idxs[i + 2] = v + 1;
         idxs[i + 3] = v + 0;
         idxs[i + 4] = v + 3;
         idxs[i + 5] = v + 2;
-
+        
         v += 4;
         i += 6;
 
@@ -345,7 +319,7 @@ void create_vertices(const SegmentArray&  segments,
 
             // we draw the line edge as a degenerate quad (u is 0, v is the
             // signed distance to the edge)
-            SkScalar dist = fanPt.distanceToLineBetween(verts[v + 1].fPos,
+            GrScalar dist = fanPt.distanceToLineBetween(verts[v + 1].fPos,
                                                         verts[v + 2].fPos);
             verts[v + 0].fUV.set(0, dist);
             verts[v + 1].fUV.set(0, 0);
@@ -386,24 +360,28 @@ void create_vertices(const SegmentArray&  segments,
             verts[v + 4].fPos = qpts[2] + segb.fNorms[1];
             verts[v + 5].fPos = qpts[1] + midVec;
 
-            SkScalar c = segb.fNorms[0].dot(qpts[0]);
+            GrScalar c = segb.fNorms[0].dot(qpts[0]);
             verts[v + 0].fD0 =  -segb.fNorms[0].dot(fanPt) + c;
             verts[v + 1].fD0 =  0.f;
             verts[v + 2].fD0 =  -segb.fNorms[0].dot(qpts[2]) + c;
-            verts[v + 3].fD0 = -SK_ScalarMax/100;
-            verts[v + 4].fD0 = -SK_ScalarMax/100;
-            verts[v + 5].fD0 = -SK_ScalarMax/100;
+            verts[v + 3].fD0 = -GR_ScalarMax/100;
+            verts[v + 4].fD0 = -GR_ScalarMax/100;
+            verts[v + 5].fD0 = -GR_ScalarMax/100;
 
             c = segb.fNorms[1].dot(qpts[2]);
             verts[v + 0].fD1 =  -segb.fNorms[1].dot(fanPt) + c;
             verts[v + 1].fD1 =  -segb.fNorms[1].dot(qpts[0]) + c;
             verts[v + 2].fD1 =  0.f;
-            verts[v + 3].fD1 = -SK_ScalarMax/100;
-            verts[v + 4].fD1 = -SK_ScalarMax/100;
-            verts[v + 5].fD1 = -SK_ScalarMax/100;
+            verts[v + 3].fD1 = -GR_ScalarMax/100;
+            verts[v + 4].fD1 = -GR_ScalarMax/100;
+            verts[v + 5].fD1 = -GR_ScalarMax/100;
 
-            GrPathUtils::QuadUVMatrix toUV(qpts);
-            toUV.apply<6, sizeof(QuadVertex), sizeof(GrPoint)>(verts + v);
+            GrMatrix toUV;
+            GrPathUtils::quadDesignSpaceToUVCoordsMatrix(qpts, &toUV);
+            toUV.mapPointsWithStride(&verts[v].fUV,
+                                     &verts[v].fPos,
+                                     sizeof(QuadVertex),
+                                     6);
 
             idxs[i + 0] = v + 3;
             idxs[i + 1] = v + 1;
@@ -429,75 +407,83 @@ void create_vertices(const SegmentArray&  segments,
 }
 
 bool GrAAConvexPathRenderer::canDrawPath(const SkPath& path,
-                                         const SkStrokeRec& stroke,
+                                         GrPathFill fill,
                                          const GrDrawTarget* target,
                                          bool antiAlias) const {
-    return (target->getCaps().shaderDerivativeSupport() && antiAlias &&
-            stroke.isFillStyle() && !path.isInverseFillType() && path.isConvex());
+    if (!target->getCaps().fShaderDerivativeSupport || !antiAlias ||
+        kHairLine_PathFill == fill || GrIsFillInverted(fill) ||
+        !path.isConvex()) {
+        return false;
+    }  else {
+        return true;
+    }
 }
 
 bool GrAAConvexPathRenderer::onDrawPath(const SkPath& origPath,
-                                        const SkStrokeRec&,
+                                        GrPathFill fill,
+                                        const GrVec* translate,
                                         GrDrawTarget* target,
+                                        GrDrawState::StageMask stageMask,
                                         bool antiAlias) {
 
-    const SkPath* path = &origPath;
-    if (path->isEmpty()) {
+
+    if (origPath.isEmpty()) {
         return true;
     }
     GrDrawState* drawState = target->drawState();
 
-    GrDrawState::AutoDeviceCoordDraw adcd(drawState);
-    if (!adcd.succeeded()) {
-        return false;
+    GrDrawTarget::AutoStateRestore asr;
+    GrMatrix vm = drawState->getViewMatrix();
+    if (NULL != translate) {
+        vm.postTranslate(translate->fX, translate->fY);
     }
-    const SkMatrix* vm = &adcd.getOriginalMatrix();
+    asr.set(target);
+    GrMatrix ivm;
+    if (vm.invert(&ivm)) {
+        drawState->preConcatSamplerMatrices(stageMask, ivm);
+    }
+    drawState->setViewMatrix(GrMatrix::I());
+
+    SkPath path;
+    origPath.transform(vm, &path);
 
     GrVertexLayout layout = 0;
-    layout |= GrDrawState::kEdge_VertexLayoutBit;
-
-    // We use the fact that SkPath::transform path does subdivision based on
-    // perspective. Otherwise, we apply the view matrix when copying to the
-    // segment representation.
-    SkPath tmpPath;
-    if (vm->hasPerspective()) {
-        origPath.transform(*vm, &tmpPath);
-        path = &tmpPath;
-        vm = &SkMatrix::I();
+    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
+        if ((1 << s) & stageMask) {
+            layout |= GrDrawTarget::StagePosAsTexCoordVertexLayoutBit(s);
+        }
     }
+    layout |= GrDrawTarget::kEdge_VertexLayoutBit;
 
     QuadVertex *verts;
     uint16_t* idxs;
 
     int vCount;
     int iCount;
-    enum {
-        kPreallocSegmentCnt = 512 / sizeof(Segment),
-    };
-    SkSTArray<kPreallocSegmentCnt, Segment, true> segments;
+    SegmentArray segments;
     SkPoint fanPt;
-
-    if (!get_segments(*path, *vm, &segments, &fanPt, &vCount, &iCount)) {
+    if (!get_segments(path, &segments, &fanPt, &vCount, &iCount)) {
         return false;
     }
 
-    GrDrawTarget::AutoReleaseGeometry arg(target, layout, vCount, iCount);
-    if (!arg.succeeded()) {
+    if (!target->reserveVertexSpace(layout,
+                                    vCount,
+                                    reinterpret_cast<void**>(&verts))) {
         return false;
     }
-    verts = reinterpret_cast<QuadVertex*>(arg.vertices());
-    idxs = reinterpret_cast<uint16_t*>(arg.indices());
+    if (!target->reserveIndexSpace(iCount, reinterpret_cast<void**>(&idxs))) {
+        target->resetVertexSource();
+        return false;
+    }
 
     create_vertices(segments, fanPt, verts, idxs);
 
-    GrDrawState::VertexEdgeType oldEdgeType = drawState->getVertexEdgeType();
     drawState->setVertexEdgeType(GrDrawState::kQuad_EdgeType);
-    target->drawIndexed(kTriangles_GrPrimitiveType,
+    target->drawIndexed(kTriangles_PrimitiveType,
                         0,        // start vertex
                         0,        // start index
                         vCount,
                         iCount);
-    drawState->setVertexEdgeType(oldEdgeType);
-
     return true;
 }
+

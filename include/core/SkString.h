@@ -15,47 +15,9 @@
 /*  Some helper functions for C strings
 */
 
-static bool SkStrStartsWith(const char string[], const char prefixStr[]) {
-    SkASSERT(string);
-    SkASSERT(prefixStr);
-    return !strncmp(string, prefixStr, strlen(prefixStr));
-}
-static bool SkStrStartsWith(const char string[], const char prefixChar) {
-    SkASSERT(string);
-    return (prefixChar == *string);
-}
-
-bool SkStrEndsWith(const char string[], const char suffixStr[]);
-bool SkStrEndsWith(const char string[], const char suffixChar);
-
+bool SkStrStartsWith(const char string[], const char prefix[]);
+bool SkStrEndsWith(const char string[], const char suffix[]);
 int SkStrStartsWithOneOf(const char string[], const char prefixes[]);
-
-static int SkStrFind(const char string[], const char substring[]) {
-    const char *first = strstr(string, substring);
-    if (NULL == first) return -1;
-    return first - &(string[0]);
-}
-
-static bool SkStrContains(const char string[], const char substring[]) {
-    SkASSERT(string);
-    SkASSERT(substring);
-    return (-1 != SkStrFind(string, substring));
-}
-static bool SkStrContains(const char string[], const char subchar) {
-    SkASSERT(string);
-    char tmp[2];
-    tmp[0] = subchar;
-    tmp[1] = '\0';
-    return (-1 != SkStrFind(string, tmp));
-}
-
-static inline char *SkStrDup(const char string[]) {
-    char *ret = (char *) sk_malloc_throw(strlen(string)+1);
-    memcpy(ret,string,strlen(string));
-    return ret;
-}
-
-
 
 #define SkStrAppendS32_MaxSize  11
 char*   SkStrAppendS32(char buffer[], int32_t);
@@ -84,7 +46,9 @@ char*   SkStrAppendS64(char buffer[], int64_t, int minDigits);
     #define SkStrAppendScalar SkStrAppendFixed
 #endif
 
+#ifdef SK_CAN_USE_FLOAT
 char* SkStrAppendFloat(char buffer[], float);
+#endif
 char* SkStrAppendFixed(char buffer[], SkFixed);
 
 /** \class SkString
@@ -93,7 +57,7 @@ char* SkStrAppendFixed(char buffer[], SkFixed);
     counting to make string assignments and copies very fast
     with no extra RAM cost. Assumes UTF8 encoding.
 */
-class SK_API SkString {
+class SkString {
 public:
                 SkString();
     explicit    SkString(size_t len);
@@ -111,26 +75,11 @@ public:
     bool equals(const char text[]) const;
     bool equals(const char text[], size_t len) const;
 
-    bool startsWith(const char prefixStr[]) const {
-        return SkStrStartsWith(fRec->data(), prefixStr);
+    bool startsWith(const char prefix[]) const {
+        return SkStrStartsWith(fRec->data(), prefix);
     }
-    bool startsWith(const char prefixChar) const {
-        return SkStrStartsWith(fRec->data(), prefixChar);
-    }
-    bool endsWith(const char suffixStr[]) const {
-        return SkStrEndsWith(fRec->data(), suffixStr);
-    }
-    bool endsWith(const char suffixChar) const {
-        return SkStrEndsWith(fRec->data(), suffixChar);
-    }
-    bool contains(const char substring[]) const {
-        return SkStrContains(fRec->data(), substring);
-    }
-    bool contains(const char subchar) const {
-        return SkStrContains(fRec->data(), subchar);
-    }
-    int find(const char substring[]) const {
-        return SkStrFind(fRec->data(), substring);
+    bool endsWith(const char suffix[]) const {
+        return SkStrEndsWith(fRec->data(), suffix);
     }
 
     friend bool operator==(const SkString& a, const SkString& b) {
@@ -183,9 +132,9 @@ public:
     void prependHex(uint32_t value, int minDigits = 0) { this->insertHex(0, value, minDigits); }
     void prependScalar(SkScalar value) { this->insertScalar((size_t)-1, value); }
 
-    void printf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
-    void appendf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
-    void prependf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
+    void printf(const char format[], ...);
+    void appendf(const char format[], ...);
+    void prependf(const char format[], ...);
 
     void remove(size_t offset, size_t length);
 

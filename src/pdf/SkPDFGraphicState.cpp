@@ -16,7 +16,7 @@
 static const char* blend_mode_from_xfermode(SkXfermode::Mode mode) {
     switch (mode) {
         case SkXfermode::kSrcOver_Mode:    return "Normal";
-        case SkXfermode::kModulate_Mode:   return "Multiply";
+        case SkXfermode::kMultiply_Mode:   return "Multiply";
         case SkXfermode::kScreen_Mode:     return "Screen";
         case SkXfermode::kOverlay_Mode:    return "Overlay";
         case SkXfermode::kDarken_Mode:     return "Darken";
@@ -113,14 +113,16 @@ SkPDFObject* SkPDFGraphicState::GetInvertFunction() {
     if (!invertFunction) {
         // Acrobat crashes if we use a type 0 function, kpdf crashes if we use
         // a type 2 function, so we use a type 4 function.
-        SkAutoTUnref<SkPDFArray> domainAndRange(new SkPDFArray);
+        SkRefPtr<SkPDFArray> domainAndRange = new SkPDFArray;
+        domainAndRange->unref();  // SkRefPtr and new both took a reference.
         domainAndRange->reserve(2);
         domainAndRange->appendInt(0);
         domainAndRange->appendInt(1);
 
         static const char psInvert[] = "{1 exch sub}";
-        SkAutoTUnref<SkMemoryStream> psInvertStream(
-            new SkMemoryStream(&psInvert, strlen(psInvert), true));
+        SkRefPtr<SkMemoryStream> psInvertStream =
+            new SkMemoryStream(&psInvert, strlen(psInvert), true);
+        psInvertStream->unref();  // SkRefPtr and new both took a reference.
 
         invertFunction = new SkPDFStream(psInvertStream.get());
         invertFunction->insertInt("FunctionType", 4);
@@ -137,7 +139,8 @@ SkPDFGraphicState* SkPDFGraphicState::GetSMaskGraphicState(
     // enough that it's not worth canonicalizing.
     SkAutoMutexAcquire lock(CanonicalPaintsMutex());
 
-    SkAutoTUnref<SkPDFDict> sMaskDict(new SkPDFDict("Mask"));
+    SkRefPtr<SkPDFDict> sMaskDict = new SkPDFDict("Mask");
+    sMaskDict->unref();  // SkRefPtr and new both took a reference.
     sMaskDict->insertName("S", "Alpha");
     sMaskDict->insert("G", new SkPDFObjRef(sMask))->unref();
 
@@ -197,8 +200,9 @@ void SkPDFGraphicState::populateDict() {
         fPopulated = true;
         insertName("Type", "ExtGState");
 
-        SkAutoTUnref<SkPDFScalar> alpha(
-            new SkPDFScalar(SkScalarDiv(fPaint.getAlpha(), 0xFF)));
+        SkRefPtr<SkPDFScalar> alpha =
+            new SkPDFScalar(SkScalarDiv(fPaint.getAlpha(), 0xFF));
+        alpha->unref();  // SkRefPtr and new both took a reference.
         insert("CA", alpha.get());
         insert("ca", alpha.get());
 

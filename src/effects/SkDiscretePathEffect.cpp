@@ -8,7 +8,7 @@
 
 
 #include "SkDiscretePathEffect.h"
-#include "SkFlattenableBuffers.h"
+#include "SkBuffer.h"
 #include "SkPathMeasure.h"
 #include "SkRandom.h"
 
@@ -26,8 +26,8 @@ SkDiscretePathEffect::SkDiscretePathEffect(SkScalar segLength, SkScalar deviatio
 }
 
 bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                      SkStrokeRec* rec, const SkRect*) const {
-    bool doFill = rec->isFillStyle();
+                                      SkScalar* width) {
+    bool doFill = *width < 0;
 
     SkPathMeasure   meas(src, doFill);
     uint32_t        seed = SkScalarRound(meas.getLength());
@@ -50,17 +50,14 @@ bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
                 n -= 1;
                 distance += delta/2;
             }
-
-            if (meas.getPosTan(distance, &p, &v)) {
-                Perterb(&p, v, SkScalarMul(rand.nextSScalar1(), scale));
-                dst->moveTo(p);
-            }
+            meas.getPosTan(distance, &p, &v);
+            Perterb(&p, v, SkScalarMul(rand.nextSScalar1(), scale));
+            dst->moveTo(p);
             while (--n >= 0) {
                 distance += delta;
-                if (meas.getPosTan(distance, &p, &v)) {
-                    Perterb(&p, v, SkScalarMul(rand.nextSScalar1(), scale));
-                    dst->lineTo(p);
-                }
+                meas.getPosTan(distance, &p, &v);
+                Perterb(&p, v, SkScalarMul(rand.nextSScalar1(), scale));
+                dst->lineTo(p);
             }
             if (meas.isClosed()) {
                 dst->close();
@@ -70,8 +67,15 @@ bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
     return true;
 }
 
-void SkDiscretePathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
+SkFlattenable::Factory SkDiscretePathEffect::getFactory() {
+    return CreateProc;
+}
+
+SkFlattenable* SkDiscretePathEffect::CreateProc(SkFlattenableReadBuffer& buffer) {
+    return SkNEW_ARGS(SkDiscretePathEffect, (buffer));
+}
+
+void SkDiscretePathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
     buffer.writeScalar(fSegLength);
     buffer.writeScalar(fPerterb);
 }
@@ -80,3 +84,8 @@ SkDiscretePathEffect::SkDiscretePathEffect(SkFlattenableReadBuffer& buffer) {
     fSegLength = buffer.readScalar();
     fPerterb = buffer.readScalar();
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+SK_DEFINE_FLATTENABLE_REGISTRAR(SkDiscretePathEffect)
+

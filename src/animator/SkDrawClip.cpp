@@ -37,3 +37,4 @@ bool SkDrawClip::draw(SkAnimateMaker& maker ) {
     }
     return false;
 }
+

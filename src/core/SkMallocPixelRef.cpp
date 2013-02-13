@@ -7,28 +7,24 @@
  */
 #include "SkMallocPixelRef.h"
 #include "SkBitmap.h"
-#include "SkFlattenableBuffers.h"
+#include "SkFlattenable.h"
 
 SkMallocPixelRef::SkMallocPixelRef(void* storage, size_t size,
-                                   SkColorTable* ctable, bool ownPixels) {
+                                   SkColorTable* ctable) {
     if (NULL == storage) {
-        SkASSERT(ownPixels);
         storage = sk_malloc_throw(size);
     }
     fStorage = storage;
     fSize = size;
     fCTable = ctable;
     SkSafeRef(ctable);
-    fOwnPixels = ownPixels;
-
+    
     this->setPreLocked(fStorage, fCTable);
 }
 
 SkMallocPixelRef::~SkMallocPixelRef() {
     SkSafeUnref(fCTable);
-    if (fOwnPixels) {
-        sk_free(fStorage);
-    }
+    sk_free(fStorage);
 }
 
 void* SkMallocPixelRef::onLockPixels(SkColorTable** ct) {
@@ -43,24 +39,28 @@ void SkMallocPixelRef::onUnlockPixels() {
 void SkMallocPixelRef::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
-    buffer.writeByteArray(fStorage, fSize);
-    buffer.writeBool(fCTable != NULL);
+    buffer.write32(fSize);
+    buffer.writePad(fStorage, fSize);
     if (fCTable) {
-        buffer.writeFlattenable(fCTable);
+        buffer.writeBool(true);
+        fCTable->flatten(buffer);
+    } else {
+        buffer.writeBool(false);
     }
 }
 
 SkMallocPixelRef::SkMallocPixelRef(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer, NULL) {
-    fSize = buffer.getArrayCount();
+    fSize = buffer.readU32();
     fStorage = sk_malloc_throw(fSize);
-    buffer.readByteArray(fStorage);
+    buffer.read(fStorage, fSize);
     if (buffer.readBool()) {
-        fCTable = buffer.readFlattenableT<SkColorTable>();
+        fCTable = SkNEW_ARGS(SkColorTable, (buffer));
     } else {
         fCTable = NULL;
     }
-    fOwnPixels = true;
 
     this->setPreLocked(fStorage, fCTable);
 }
+
+SK_DEFINE_PIXEL_REF_REGISTRAR(SkMallocPixelRef)

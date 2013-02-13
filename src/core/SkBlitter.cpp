@@ -11,19 +11,13 @@
 #include "SkAntiRun.h"
 #include "SkColor.h"
 #include "SkColorFilter.h"
-#include "SkFilterShader.h"
-#include "SkFlattenableBuffers.h"
 #include "SkMask.h"
 #include "SkMaskFilter.h"
 #include "SkTemplatesPriv.h"
-#include "SkTLazy.h"
 #include "SkUtils.h"
 #include "SkXfermode.h"
-#include "SkString.h"
 
 SkBlitter::~SkBlitter() {}
-
-bool SkBlitter::isNullBlitter() const { return false; }
 
 const SkBitmap* SkBlitter::justAnOpaqueColor(uint32_t* value) {
     return NULL;
@@ -238,8 +232,6 @@ void SkNullBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {}
 const SkBitmap* SkNullBlitter::justAnOpaqueColor(uint32_t* value) {
     return NULL;
 }
-
-bool SkNullBlitter::isNullBlitter() const { return true; }
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -503,7 +495,7 @@ void SkRgnClipBlitter::blitAntiRect(int x, int y, int width, int height,
             fBlitter->blitRect(r.fLeft, r.fTop, r.width(), r.height());
         } else if (1 == r.width()) {
             if (r.fLeft == x) {
-                fBlitter->blitV(r.fLeft, r.fTop, r.height(),
+                fBlitter->blitV(r.fLeft, r.fTop, r.height(), 
                                 effectiveLeftAlpha);
             } else {
                 SkASSERT(r.fLeft == x + width + 1);
@@ -577,30 +569,16 @@ public:
     void setMask(const SkMask* mask) { fMask = mask; }
 
     virtual bool setContext(const SkBitmap& device, const SkPaint& paint,
-                            const SkMatrix& matrix) SK_OVERRIDE {
-        if (!this->INHERITED::setContext(device, paint, matrix)) {
-            return false;
-        }
+                            const SkMatrix& matrix) {
         if (fProxy) {
-            if (!fProxy->setContext(device, paint, matrix)) {
-                // must keep our set/end context calls balanced
-                this->INHERITED::endContext();
-                return false;
-            }
+            return fProxy->setContext(device, paint, matrix);
         } else {
             fPMColor = SkPreMultiplyColor(paint.getColor());
+            return this->INHERITED::setContext(device, paint, matrix);
         }
-        return true;
     }
 
-    virtual void endContext() SK_OVERRIDE {
-        if (fProxy) {
-            fProxy->endContext();
-        }
-        this->INHERITED::endContext();
-    }
-
-    virtual void shadeSpan(int x, int y, SkPMColor span[], int count) SK_OVERRIDE {
+    virtual void shadeSpan(int x, int y, SkPMColor span[], int count) {
         if (fProxy) {
             fProxy->shadeSpan(x, y, span, count);
         }
@@ -664,37 +642,43 @@ public:
         }
     }
 
-#ifdef SK_DEVELOPER
-    virtual void toString(SkString* str) const SK_OVERRIDE {
-        str->append("Sk3DShader: (");
-
-        if (NULL != fProxy) {
-            str->append("Proxy: ");
-            fProxy->toString(str);
+    virtual void beginSession() {
+        this->INHERITED::beginSession();
+        if (fProxy) {
+            fProxy->beginSession();
         }
-
-        this->INHERITED::toString(str);
-
-        str->append(")");
     }
-#endif
 
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(Sk3DShader)
+    virtual void endSession() {
+        if (fProxy) {
+            fProxy->endSession();
+        }
+        this->INHERITED::endSession();
+    }
 
 protected:
-    Sk3DShader(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
-        fProxy = buffer.readFlattenableT<SkShader>();
-        fPMColor = buffer.readColor();
+    Sk3DShader(SkFlattenableReadBuffer& buffer) :
+            INHERITED(buffer) {
+        fProxy = static_cast<SkShader*>(buffer.readFlattenable());
+        fPMColor = buffer.readU32();
         fMask = NULL;
     }
 
-    virtual void flatten(SkFlattenableWriteBuffer& buffer) const SK_OVERRIDE {
+    virtual void flatten(SkFlattenableWriteBuffer& buffer) {
         this->INHERITED::flatten(buffer);
         buffer.writeFlattenable(fProxy);
-        buffer.writeColor(fPMColor);
+        buffer.write32(fPMColor);
+    }
+
+    virtual Factory getFactory() {
+        return CreateProc;
     }
 
 private:
+    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
+        return SkNEW_ARGS(Sk3DShader, (buffer));
+    }
+
     SkShader*       fProxy;
     SkPMColor       fPMColor;
     const SkMask*   fMask;
@@ -862,26 +846,24 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
         return blitter;
     }
 
-    SkShader* shader = origPaint.getShader();
-    SkColorFilter* cf = origPaint.getColorFilter();
-    SkXfermode* mode = origPaint.getXfermode();
+    SkPaint paint(origPaint);
+    SkShader* shader = paint.getShader();
+    SkColorFilter* cf = paint.getColorFilter();
+    SkXfermode* mode = paint.getXfermode();
+
     Sk3DShader* shader3D = NULL;
-
-    SkTCopyOnFirstWrite<SkPaint> paint(origPaint);
-
-    if (origPaint.getMaskFilter() != NULL &&
-            origPaint.getMaskFilter()->getFormat() == SkMask::k3D_Format) {
+    if (paint.getMaskFilter() != NULL &&
+            paint.getMaskFilter()->getFormat() == SkMask::k3D_Format) {
         shader3D = SkNEW_ARGS(Sk3DShader, (shader));
-        // we know we haven't initialized lazyPaint yet, so just do it
-        paint.writable()->setShader(shader3D)->unref();
+        paint.setShader(shader3D)->unref();
         shader = shader3D;
     }
 
     if (NULL != mode) {
-        switch (interpret_xfermode(*paint, mode, device.config())) {
+        switch (interpret_xfermode(paint, mode, device.config())) {
             case kSrcOver_XferInterp:
                 mode = NULL;
-                paint.writable()->setXfermode(NULL);
+                paint.setXfermode(NULL);
                 break;
             case kSkipDrawing_XferInterp:
                 SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
@@ -891,30 +873,20 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
         }
     }
 
-    /*
-     *  If the xfermode is CLEAR, then we can completely ignore the installed
-     *  color/shader/colorfilter, and just pretend we're SRC + color==0. This
-     *  will fall into our optimizations for SRC mode.
-     */
-    if (SkXfermode::IsMode(mode, SkXfermode::kClear_Mode)) {
-        SkPaint* p = paint.writable();
-        shader = p->setShader(NULL);
-        cf = p->setColorFilter(NULL);
-        mode = p->setXfermodeMode(SkXfermode::kSrc_Mode);
-        p->setColor(0);
-    }
-
     if (NULL == shader) {
+#ifdef SK_IGNORE_CF_OPTIMIZATION
+        if (mode || cf) {
+#else
         if (mode) {
+#endif
             // xfermodes (and filters) require shaders for our current blitters
             shader = SkNEW(SkColorShader);
-            paint.writable()->setShader(shader)->unref();
+            paint.setShader(shader)->unref();
         } else if (cf) {
             // if no shader && no xfermode, we just apply the colorfilter to
             // our color and move on.
-            SkPaint* writablePaint = paint.writable();
-            writablePaint->setColor(cf->filterColor(paint->getColor()));
-            writablePaint->setColorFilter(NULL);
+            paint.setColor(cf->filterColor(paint.getColor()));
+            paint.setColorFilter(NULL);
             cf = NULL;
         }
     }
@@ -922,61 +894,52 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
     if (cf) {
         SkASSERT(shader);
         shader = SkNEW_ARGS(SkFilterShader, (shader, cf));
-        paint.writable()->setShader(shader)->unref();
+        paint.setShader(shader)->unref();
         // blitters should ignore the presence/absence of a filter, since
         // if there is one, the shader will take care of it.
     }
 
-    /*
-     *  We need to have balanced calls to the shader:
-     *      setContext
-     *      endContext
-     *  We make the first call here, in case it fails we can abort the draw.
-     *  The endContext() call is made by the blitter (assuming setContext did
-     *  not fail) in its destructor.
-     */
-    if (shader && !shader->setContext(device, *paint, matrix)) {
-        SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
-        return blitter;
+    if (shader && !shader->setContext(device, paint, matrix)) {
+        return SkNEW(SkNullBlitter);
     }
 
     switch (device.getConfig()) {
         case SkBitmap::kA1_Config:
             SK_PLACEMENT_NEW_ARGS(blitter, SkA1_Blitter,
-                                  storage, storageSize, (device, *paint));
+                                  storage, storageSize, (device, paint));
             break;
 
         case SkBitmap::kA8_Config:
             if (shader) {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkA8_Shader_Blitter,
-                                      storage, storageSize, (device, *paint));
+                                      storage, storageSize, (device, paint));
             } else {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkA8_Blitter,
-                                      storage, storageSize, (device, *paint));
+                                      storage, storageSize, (device, paint));
             }
             break;
 
         case SkBitmap::kARGB_4444_Config:
-            blitter = SkBlitter_ChooseD4444(device, *paint, storage, storageSize);
+            blitter = SkBlitter_ChooseD4444(device, paint, storage, storageSize);
             break;
 
         case SkBitmap::kRGB_565_Config:
-            blitter = SkBlitter_ChooseD565(device, *paint, storage, storageSize);
+            blitter = SkBlitter_ChooseD565(device, paint, storage, storageSize);
             break;
 
         case SkBitmap::kARGB_8888_Config:
             if (shader) {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkARGB32_Shader_Blitter,
-                                      storage, storageSize, (device, *paint));
-            } else if (paint->getColor() == SK_ColorBLACK) {
+                                      storage, storageSize, (device, paint));
+            } else if (paint.getColor() == SK_ColorBLACK) {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkARGB32_Black_Blitter,
-                                      storage, storageSize, (device, *paint));
-            } else if (paint->getAlpha() == 0xFF) {
+                                      storage, storageSize, (device, paint));
+            } else if (paint.getAlpha() == 0xFF) {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkARGB32_Opaque_Blitter,
-                                      storage, storageSize, (device, *paint));
+                                      storage, storageSize, (device, paint));
             } else {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkARGB32_Blitter,
-                                      storage, storageSize, (device, *paint));
+                                      storage, storageSize, (device, paint));
             }
             break;
 
@@ -1007,14 +970,14 @@ SkShaderBlitter::SkShaderBlitter(const SkBitmap& device, const SkPaint& paint)
         : INHERITED(device) {
     fShader = paint.getShader();
     SkASSERT(fShader);
-    SkASSERT(fShader->setContextHasBeenCalled());
 
     fShader->ref();
+    fShader->beginSession();
     fShaderFlags = fShader->getFlags();
 }
 
 SkShaderBlitter::~SkShaderBlitter() {
-    SkASSERT(fShader->setContextHasBeenCalled());
-    fShader->endContext();
+    fShader->endSession();
     fShader->unref();
 }
+

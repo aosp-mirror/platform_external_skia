@@ -16,18 +16,18 @@ static void test4(SkCanvas* canvas) {
     SkPoint pts[] = {
         {10, 160}, {610, 160},
         {610, 160}, {10, 160},
-
+        
         {610, 160}, {610, 160},
         {610, 199}, {610, 199},
-
+        
         {10, 198}, {610, 198},
         {610, 199}, {10, 199},
-
+        
         {10, 160}, {10, 160},
         {10, 199}, {10, 199}
     };
     char verbs[] = {
-        0, 1, 1, 1, 4,
+        0, 1, 1, 1, 4, 
         0, 1, 1, 1, 4,
         0, 1, 1, 1, 4,
         0, 1, 1, 1, 4
@@ -55,6 +55,18 @@ static void test4(SkCanvas* canvas) {
     SkRect clip = {0, 130, 772, 531};
     canvas->clipRect(clip);
     canvas->drawPath(path, paint);
+}
+
+static SkCanvas* create_canvas(int w, int h) {
+    SkBitmap bm;
+    bm.setConfig(SkBitmap::kARGB_8888_Config, w, h);
+    bm.allocPixels();
+    bm.eraseColor(0);
+    return new SkCanvas(bm);
+}
+
+static const SkBitmap& extract_bitmap(SkCanvas* canvas) {
+    return canvas->getDevice()->accessBitmap(false);
 }
 
 static const struct {
@@ -102,7 +114,7 @@ static SkScalar drawCell(SkCanvas* canvas, SkXfermode* mode,
                                    H / 4 + offset,
                                    W / 2, H / 2);
     canvas->drawRect(rect, paint);
-
+    
     return H;
 }
 
@@ -117,7 +129,7 @@ static SkShader* make_bg_shader() {
     SkShader* s = SkShader::CreateBitmapShader(bm,
                                                SkShader::kRepeat_TileMode,
                                                SkShader::kRepeat_TileMode);
-
+    
     SkMatrix m;
     m.setScale(SkIntToScalar(6), SkIntToScalar(6));
     s->setLocalMatrix(m);
@@ -125,7 +137,7 @@ static SkShader* make_bg_shader() {
 }
 
 namespace skiagm {
-
+    
     class AARectModesGM : public GM {
         SkPaint fBGPaint;
     public:
@@ -142,9 +154,7 @@ namespace skiagm {
         virtual SkISize onISize() { return make_isize(640, 480); }
 
         virtual void onDraw(SkCanvas* canvas) {
-            if (false) { // avoid bit rot, suppress warning
-                test4(canvas);
-            }
+//            test4(canvas);
             const SkRect bounds = SkRect::MakeWH(W, H);
             static const SkAlpha gAlphaValue[] = { 0xFF, 0x88, 0x88 };
 
@@ -160,7 +170,7 @@ namespace skiagm {
                         canvas->save();
                     }
                     SkXfermode* mode = SkXfermode::Create(gModes[i].fMode);
-
+                
                     canvas->drawRect(bounds, fBGPaint);
                     canvas->saveLayer(&bounds, NULL);
                     SkScalar dy = drawCell(canvas, mode,
@@ -177,6 +187,9 @@ namespace skiagm {
             }
         }
 
+        // disable pdf for now, since it crashes on mac
+        virtual uint32_t onGetFlags() const { return kSkipPDF_Flag; }
+
     private:
         typedef GM INHERITED;
     };
@@ -187,3 +200,4 @@ namespace skiagm {
     static GMRegistry reg(MyFactory);
 
 }
+

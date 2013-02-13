@@ -17,7 +17,6 @@
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkUtils.h"
-#include "transform_scanline.h"
 
 extern "C" {
 #include "png.h"
@@ -762,7 +761,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             for (int i = 0; i < number_passes; i++) {
                 png_configure_decoder(png_ptr, &actualTop, i);
                 for (int j = 0; j < rect.fTop - actualTop; j++) {
-                    uint8_t* bmRow = (uint8_t*)decodedBitmap->getPixels();
+                    uint8_t* bmRow = decodedBitmap->getAddr8(0, 0);
                     png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
                 }
                 uint8_t* row = base;
@@ -786,7 +785,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
             skip_src_rows(png_ptr, srcRow, sampler.srcY0());
 
             for (int i = 0; i < rect.fTop - actualTop; i++) {
-                uint8_t* bmRow = (uint8_t*)decodedBitmap->getPixels();
+                uint8_t* bmRow = decodedBitmap->getAddr8(0, 0);
                 png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
             }
             for (int y = 0; y < height; y++) {
@@ -825,6 +824,99 @@ static void sk_write_fn(png_structp png_ptr, png_bytep data, png_size_t len) {
     }
 }
 
+typedef void (*transform_scanline_proc)(const char* SK_RESTRICT src,
+                                        int width, char* SK_RESTRICT dst);
+
+static void transform_scanline_565(const char* SK_RESTRICT src, int width,
+                                   char* SK_RESTRICT dst) {
+    const uint16_t* SK_RESTRICT srcP = (const uint16_t*)src;    
+    for (int i = 0; i < width; i++) {
+        unsigned c = *srcP++;
+        *dst++ = SkPacked16ToR32(c);
+        *dst++ = SkPacked16ToG32(c);
+        *dst++ = SkPacked16ToB32(c);
+    }
+}
+
+static void transform_scanline_888(const char* SK_RESTRICT src, int width,
+                                   char* SK_RESTRICT dst) {
+    const SkPMColor* SK_RESTRICT srcP = (const SkPMColor*)src;    
+    for (int i = 0; i < width; i++) {
+        SkPMColor c = *srcP++;
+        *dst++ = SkGetPackedR32(c);
+        *dst++ = SkGetPackedG32(c);
+        *dst++ = SkGetPackedB32(c);
+    }
+}
+
+static void transform_scanline_444(const char* SK_RESTRICT src, int width,
+                                   char* SK_RESTRICT dst) {
+    const SkPMColor16* SK_RESTRICT srcP = (const SkPMColor16*)src;    
+    for (int i = 0; i < width; i++) {
+        SkPMColor16 c = *srcP++;
+        *dst++ = SkPacked4444ToR32(c);
+        *dst++ = SkPacked4444ToG32(c);
+        *dst++ = SkPacked4444ToB32(c);
+    }
+}
+
+static void transform_scanline_8888(const char* SK_RESTRICT src, int width,
+                                    char* SK_RESTRICT dst) {
+    const SkPMColor* SK_RESTRICT srcP = (const SkPMColor*)src;
+    const SkUnPreMultiply::Scale* SK_RESTRICT table = 
+                                              SkUnPreMultiply::GetScaleTable();
+
+    for (int i = 0; i < width; i++) {
+        SkPMColor c = *srcP++;
+        unsigned a = SkGetPackedA32(c);
+        unsigned r = SkGetPackedR32(c);
+        unsigned g = SkGetPackedG32(c);
+        unsigned b = SkGetPackedB32(c);
+
+        if (0 != a && 255 != a) {
+            SkUnPreMultiply::Scale scale = table[a];
+            r = SkUnPreMultiply::ApplyScale(scale, r);
+            g = SkUnPreMultiply::ApplyScale(scale, g);
+            b = SkUnPreMultiply::ApplyScale(scale, b);
+        }
+        *dst++ = r;
+        *dst++ = g;
+        *dst++ = b;
+        *dst++ = a;
+    }
+}
+
+static void transform_scanline_4444(const char* SK_RESTRICT src, int width,
+                                    char* SK_RESTRICT dst) {
+    const SkPMColor16* SK_RESTRICT srcP = (const SkPMColor16*)src;
+    const SkUnPreMultiply::Scale* SK_RESTRICT table = 
+                                              SkUnPreMultiply::GetScaleTable();
+
+    for (int i = 0; i < width; i++) {
+        SkPMColor16 c = *srcP++;
+        unsigned a = SkPacked4444ToA32(c);
+        unsigned r = SkPacked4444ToR32(c);
+        unsigned g = SkPacked4444ToG32(c);
+        unsigned b = SkPacked4444ToB32(c);
+
+        if (0 != a && 255 != a) {
+            SkUnPreMultiply::Scale scale = table[a];
+            r = SkUnPreMultiply::ApplyScale(scale, r);
+            g = SkUnPreMultiply::ApplyScale(scale, g);
+            b = SkUnPreMultiply::ApplyScale(scale, b);
+        }
+        *dst++ = r;
+        *dst++ = g;
+        *dst++ = b;
+        *dst++ = a;
+    }
+}
+
+static void transform_scanline_index8(const char* SK_RESTRICT src, int width,
+                                      char* SK_RESTRICT dst) {
+    memcpy(dst, src, width);
+}
+
 static transform_scanline_proc choose_proc(SkBitmap::Config config,
                                            bool hasAlpha) {
     // we don't care about search on alpha if we're kIndex8, since only the
@@ -843,7 +935,7 @@ static transform_scanline_proc choose_proc(SkBitmap::Config config,
         { SkBitmap::kARGB_8888_Config,  true,   transform_scanline_8888 },
         { SkBitmap::kARGB_4444_Config,  false,  transform_scanline_444 },
         { SkBitmap::kARGB_4444_Config,  true,   transform_scanline_4444 },
-        { SkBitmap::kIndex8_Config,     false,  transform_scanline_memcpy },
+        { SkBitmap::kIndex8_Config,     false,   transform_scanline_index8 },
     };
 
     for (int i = SK_ARRAY_COUNT(gMap) - 1; i >= 0; --i) {
@@ -1080,9 +1172,6 @@ bool SkPNGImageEncoder::doEncode(SkWStream* stream, const SkBitmap& bitmap,
     return true;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-DEFINE_DECODER_CREATOR(PNGImageDecoder);
-DEFINE_ENCODER_CREATOR(PNGImageEncoder);
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"

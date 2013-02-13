@@ -167,6 +167,7 @@ static void TestSk64(skiatest::Reporter* reporter) {
 
         REPORTER_ASSERT(reporter, check == w);
 
+#ifdef SK_CAN_USE_FLOAT
         wide.setMul(rand.nextS(), rand.nextS());
         wide.abs();
         denom = wide.getSqrt();
@@ -195,6 +196,7 @@ static void TestSk64(skiatest::Reporter* reporter) {
                      i, dnumer, ddenom, ddiv, dfixdiv, fixdiv);
         }
         REPORTER_ASSERT(reporter, SkAbs32(diff) <= 1);
+#endif
     }
 #endif
 }

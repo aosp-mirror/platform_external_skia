@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2008 The Android Open Source Project
  *
@@ -5,7 +6,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkMathPriv.h"
+
+#include "SkMath.h"
 #include "SkCordic.h"
 #include "SkFloatBits.h"
 #include "SkFloatingPoint.h"
@@ -15,13 +17,12 @@
 #ifdef SK_SCALAR_IS_FLOAT
     const uint32_t gIEEENotANumber = 0x7FFFFFFF;
     const uint32_t gIEEEInfinity = 0x7F800000;
-    const uint32_t gIEEENegativeInfinity = 0xFF800000;
 #endif
 
 #define sub_shift(zeros, x, n)  \
     zeros -= n;                 \
     x >>= n
-
+    
 int SkCLZ_portable(uint32_t x) {
     if (x == 0) {
         return 32;
@@ -230,7 +231,7 @@ SkFixed SkFixedFastInvert(SkFixed x) {
     int lz = SkCLZ(a);
     a = a << lz >> 16;
 
-    // compute 1/a approximation (0.5 <= a < 1.0)
+    // compute 1/a approximation (0.5 <= a < 1.0) 
     uint32_t r = 0x17400 - a;      // (2.90625 (~2.914) - 2*a) >> 1
 
     // Newton-Raphson iteration:
@@ -254,13 +255,13 @@ SkFixed SkFixedFastInvert(SkFixed x) {
     case n:                                             \
         if ((numer = (numer << 1) - denom) >= 0)        \
             result |= 1 << (n - 1); else numer += denom
-
+            
 int32_t SkDivBits(int32_t numer, int32_t denom, int shift_bias) {
     SkASSERT(denom != 0);
     if (numer == 0) {
         return 0;
     }
-
+        
     // make numer and denom positive, and sign hold the resulting sign
     int32_t sign = SkExtractSign(numer ^ denom);
     numer = SkAbs32(numer);
@@ -279,16 +280,16 @@ int32_t SkDivBits(int32_t numer, int32_t denom, int shift_bias) {
 
     denom <<= dbits;
     numer <<= nbits;
-
+    
     SkFixed result = 0;
-
+    
     // do the first one
     if ((numer -= denom) >= 0) {
         result = 1;
     } else {
         numer += denom;
     }
-
+    
     // Now fall into our switch statement if there are more bits to compute
     if (bits > 0) {
         // make room for the rest of the answer bits
@@ -325,7 +326,7 @@ SkFixed SkFixedMod(SkFixed numer, SkFixed denom) {
 
     numer = SkApplySign(numer, sn);
     denom = SkApplySign(denom, sd);
-
+    
     if (numer < denom) {
         return SkApplySign(numer, sn);
     } else if (numer == denom) {
@@ -388,7 +389,7 @@ int32_t SkCubeRootBits(int32_t value, int bits) {
 
 SkFixed SkFixedMean(SkFixed a, SkFixed b) {
     Sk64 tmp;
-
+    
     tmp.setMul(a, b);
     return tmp.getSqrt();
 }
@@ -534,3 +535,4 @@ SkFixed SkFixedACos(SkFixed x) { return SkCordicACos(x); }
 SkFixed SkFixedATan2(SkFixed y, SkFixed x) { return SkCordicATan2(y, x); }
 SkFixed SkFixedExp(SkFixed x) { return SkCordicExp(x); }
 SkFixed SkFixedLog(SkFixed x) { return SkCordicLog(x); }
+

@@ -86,3 +86,4 @@ void SkRefDict::removeAll() {
     }
     fImpl = NULL;
 }
+

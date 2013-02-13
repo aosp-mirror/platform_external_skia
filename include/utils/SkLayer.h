@@ -23,8 +23,6 @@ class SkCanvas;
 class SkLayer : public SkRefCnt {
 
 public:
-    SK_DECLARE_INST_COUNT(SkLayer)
-
     SkLayer();
     SkLayer(const SkLayer&);
     virtual ~SkLayer();

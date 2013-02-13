@@ -18,3 +18,5 @@ const SkMemberInfo SkDisplayScreenplay::fInfo[] = {
 #endif
 
 DEFINE_GET_MEMBER(SkDisplayScreenplay);
+
+

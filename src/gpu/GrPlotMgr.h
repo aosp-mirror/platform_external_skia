@@ -22,7 +22,7 @@ public:
         if (needed <= sizeof(fStorage)) {
             fBusy = fStorage;
         } else {
-            fBusy = SkNEW_ARRAY(char, needed);
+            fBusy = new char[needed];
         }
         this->reset();
     }
@@ -32,7 +32,7 @@ public:
             delete[] fBusy;
         }
     }
-
+    
     void reset() {
         Gr_bzero(fBusy, fDim.fX * fDim.fY);
     }
@@ -74,3 +74,4 @@ private:
 };
 
 #endif
+

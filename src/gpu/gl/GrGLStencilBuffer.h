@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -10,12 +11,12 @@
 #define GrGLStencilBuffer_DEFINED
 
 #include "gl/GrGLInterface.h"
-#include "GrStencilBuffer.h"
+#include "../GrStencilBuffer.h"
 
 class GrGLStencilBuffer : public GrStencilBuffer {
 public:
-    static const GrGLenum kUnknownInternalFormat = ~0U;
-    static const GrGLuint kUnknownBitCount = ~0U;
+    static const GrGLenum kUnknownInternalFormat = ~0;
+    static const GrGLuint kUnknownBitCount = ~0;
     struct Format {
         GrGLenum  fInternalFormat;
         GrGLuint  fStencilBits;
@@ -23,20 +24,18 @@ public:
         bool      fPacked;
     };
 
-    GrGLStencilBuffer(GrGpu* gpu,
-                      bool isWrapped,
-                      GrGLint rbid,
+    GrGLStencilBuffer(GrGpu* gpu, GrGLint rbid, 
                       int width, int height,
                       int sampleCnt,
-                      const Format& format)
-        : GrStencilBuffer(gpu, isWrapped, width, height, format.fStencilBits, sampleCnt)
+                      const Format& format) 
+        : GrStencilBuffer(gpu, width, height, format.fStencilBits, sampleCnt)
         , fFormat(format)
         , fRenderbufferID(rbid) {
     }
 
     virtual ~GrGLStencilBuffer();
 
-    virtual size_t sizeInBytes() const SK_OVERRIDE;
+    virtual size_t sizeInBytes() const;
 
     GrGLuint renderbufferID() const {
         return fRenderbufferID;
@@ -45,9 +44,9 @@ public:
     const Format& format() const { return fFormat; }
 
 protected:
-    // overrides of GrResource
-    virtual void onRelease() SK_OVERRIDE;
-    virtual void onAbandon() SK_OVERRIDE;
+    virtual void onRelease();
+
+    virtual void onAbandon();
 
 private:
     Format fFormat;

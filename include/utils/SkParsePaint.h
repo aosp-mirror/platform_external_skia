@@ -24,3 +24,4 @@
 void SkPaint_Inflate(SkPaint*, const SkDOM&, const SkDOM::Node*);
 
 #endif
+

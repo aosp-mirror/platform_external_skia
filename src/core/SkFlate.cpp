@@ -11,7 +11,7 @@
 #include "SkFlate.h"
 #include "SkStream.h"
 
-#ifndef SK_HAS_ZLIB
+#ifndef SK_ZLIB_INCLUDE
 bool SkFlate::HaveFlate() { return false; }
 bool SkFlate::Deflate(SkStream*, SkWStream*) { return false; }
 bool SkFlate::Deflate(const void*, size_t, SkWStream*) { return false; }
@@ -26,11 +26,7 @@ bool SkFlate::HaveFlate() {
 
 namespace {
 
-#ifdef SK_SYSTEM_ZLIB
-#include <zlib.h>
-#else
 #include SK_ZLIB_INCLUDE
-#endif
 
 // static
 const size_t kBufferSize = 1024;
@@ -138,3 +134,4 @@ bool SkFlate::Inflate(SkStream* src, SkWStream* dst) {
 }
 
 #endif
+

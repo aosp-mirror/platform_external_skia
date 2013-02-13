@@ -80,3 +80,4 @@ void SkXMLAnimatorWriter::UnitTest(SkCanvas* canvas)
 }
 
 #endif
+

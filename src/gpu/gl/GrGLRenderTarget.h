@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2011 Google Inc.
  *
@@ -11,7 +12,7 @@
 
 #include "GrGLIRect.h"
 #include "GrRenderTarget.h"
-#include "SkScalar.h"
+#include "GrScalar.h"
 
 class GrGpuGL;
 class GrGLTexture;
@@ -28,7 +29,7 @@ public:
         GrGLuint      fRTFBOID;
         GrGLuint      fTexFBOID;
         GrGLuint      fMSColorRenderbufferID;
-        bool          fIsWrapped;
+        bool          fOwnIDs;
         GrPixelConfig fConfig;
         int           fSampleCnt;
     };
@@ -50,19 +51,19 @@ public:
     void setViewport(const GrGLIRect& rect) { fViewport = rect; }
     const GrGLIRect& getViewport() const { return fViewport; }
 
-    // The following two functions return the same ID when a
-    // texture/render target is multisampled, and different IDs when
+    // The following two functions return the same ID when a 
+    // texture-rendertarget is multisampled, and different IDs when
     // it is.
     // FBO ID used to render into
     GrGLuint renderFBOID() const { return fRTFBOID; }
     // FBO ID that has texture ID attached.
     GrGLuint textureFBOID() const { return fTexFBOID; }
 
-    // override of GrRenderTarget
-    virtual GrBackendObject getRenderTargetHandle() const {
-        return this->renderFBOID();
+    // override of GrRenderTarget 
+    virtual intptr_t getRenderTargetHandle() const {
+        return this->renderFBOID(); 
     }
-    virtual GrBackendObject getRenderTargetResolvedHandle() const {
+    virtual intptr_t getRenderTargetResolvedHandle() const {
         return this->textureFBOID();
     }
     virtual ResolveType getResolveType() const {
@@ -80,8 +81,8 @@ public:
 
 protected:
     // override of GrResource
-    virtual void onAbandon() SK_OVERRIDE;
-    virtual void onRelease() SK_OVERRIDE;
+    virtual void onAbandon();
+    virtual void onRelease();
 
 private:
     GrGLuint      fRTFBOID;
@@ -89,7 +90,11 @@ private:
 
     GrGLuint      fMSColorRenderbufferID;
 
-    // when we switch to this render target we want to set the viewport to
+    // Should this object delete IDs when it is destroyed or does someone
+    // else own them.
+    bool        fOwnIDs;
+
+    // when we switch to this rendertarget we want to set the viewport to
     // only render to to content area (as opposed to the whole allocation) and
     // we want the rendering to be at top left (GL has origin in bottom left)
     GrGLIRect fViewport;

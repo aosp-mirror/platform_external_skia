@@ -32,14 +32,18 @@ const SkMemberInfo SkSet::fInfo[] = {
 DEFINE_GET_MEMBER(SkSet);
 
 SkSet::SkSet() {
-    dur = 1;
+    dur = 1; 
 }
 
 #ifdef SK_DUMP_ENABLED
 void SkSet::dump(SkAnimateMaker* maker) {
     INHERITED::dump(maker);
     if (dur != 1) {
+#ifdef SK_CAN_USE_FLOAT
         SkDebugf("dur=\"%g\" ", SkScalarToFloat(SkScalarDiv(dur,1000)));
+#else
+        SkDebugf("dur=\"%x\" ", SkScalarDiv(dur,1000));
+#endif
     }
     //don't want double />\n's
     SkDebugf("/>\n");
@@ -48,7 +52,7 @@ void SkSet::dump(SkAnimateMaker* maker) {
 #endif
 
 void SkSet::refresh(SkAnimateMaker& maker) {
-    fFieldInfo->setValue(maker, &fValues, 0, fFieldInfo->fCount, NULL,
+    fFieldInfo->setValue(maker, &fValues, 0, fFieldInfo->fCount, NULL, 
         fFieldInfo->getType(), to);
 }
 

@@ -37,7 +37,7 @@ public:
         kStart_Pack,
         kCenter_Pack,
         kEnd_Pack,
-
+        
         kPackCount
     };
     Pack    getPack() const { return (Pack)fPack; }
@@ -86,3 +86,4 @@ private:
 };
 
 #endif
+

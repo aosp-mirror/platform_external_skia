@@ -29,3 +29,4 @@ SK_API SkTypeface* SkCreateTypefaceFromLOGFONT(const LOGFONT&);
 SK_API void SkLOGFONTFromTypeface(const SkTypeface* typeface, LOGFONT* lf);
 
 #endif
+

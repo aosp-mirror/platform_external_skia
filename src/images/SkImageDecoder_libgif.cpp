@@ -99,11 +99,7 @@ static int DecodeCallBackProc(GifFileType* fileType, GifByteType* out,
 
 void CheckFreeExtension(SavedImage* Image) {
     if (Image->ExtensionBlocks) {
-#if GIFLIB_MAJOR < 5
         FreeExtension(Image);
-#else
-        GifFreeExtensions(&Image->ExtensionBlockCount, &Image->ExtensionBlocks);
-#endif
     }
 }
 
@@ -155,11 +151,7 @@ static bool error_return(GifFileType* gif, const SkBitmap& bm,
 }
 
 bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
-#if GIFLIB_MAJOR < 5
     GifFileType* gif = DGifOpen(sk_stream, DecodeCallBackProc);
-#else
-    GifFileType* gif = DGifOpen(sk_stream, DecodeCallBackProc, NULL);
-#endif
     if (NULL == gif) {
         return error_return(gif, *bm, "DGifOpen");
     }
@@ -174,9 +166,6 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
     int width, height;
     GifRecordType recType;
     GifByteType *extData;
-#if GIFLIB_MAJOR >= 5
-    int extFunction;
-#endif
     int transpIndex = -1;   // -1 means we don't have it (yet)
     
     do {
@@ -315,35 +304,21 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
             } break;
             
         case EXTENSION_RECORD_TYPE:
-#if GIFLIB_MAJOR < 5
             if (DGifGetExtension(gif, &temp_save.Function,
                                  &extData) == GIF_ERROR) {
-#else
-            if (DGifGetExtension(gif, &extFunction, &extData) == GIF_ERROR) {
-#endif
                 return error_return(gif, *bm, "DGifGetExtension");
             }
 
             while (extData != NULL) {
                 /* Create an extension block with our data */
-#if GIFLIB_MAJOR < 5
                 if (AddExtensionBlock(&temp_save, extData[0],
                                       &extData[1]) == GIF_ERROR) {
-#else
-                if (GifAddExtensionBlock(&gif->ExtensionBlockCount,
-                                         &gif->ExtensionBlocks,
-                                         extFunction,
-                                         extData[0],
-                                         &extData[1]) == GIF_ERROR) {
-#endif
                     return error_return(gif, *bm, "AddExtensionBlock");
                 }
                 if (DGifGetExtensionNext(gif, &extData) == GIF_ERROR) {
                     return error_return(gif, *bm, "DGifGetExtensionNext");
                 }
-#if GIFLIB_MAJOR < 5
                 temp_save.Function = 0;
-#endif
             }
             break;
             
@@ -360,12 +335,10 @@ DONE:
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-DEFINE_DECODER_CREATOR(GIFImageDecoder);
-///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"
 
-static SkImageDecoder* sk_libgif_dfactory(SkStream* stream) {
+static SkImageDecoder* Factory(SkStream* stream) {
     char buf[GIF_STAMP_LEN];
     if (stream->read(buf, GIF_STAMP_LEN) == GIF_STAMP_LEN) {
         if (memcmp(GIF_STAMP,   buf, GIF_STAMP_LEN) == 0 ||
@@ -377,4 +350,4 @@ static SkImageDecoder* sk_libgif_dfactory(SkStream* stream) {
     return NULL;
 }
 
-static SkTRegistry<SkImageDecoder*, SkStream*> gReg(sk_libgif_dfactory);
+static SkTRegistry<SkImageDecoder*, SkStream*> gReg(Factory);

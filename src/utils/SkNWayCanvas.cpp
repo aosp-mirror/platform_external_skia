@@ -7,14 +7,11 @@
  */
 #include "SkNWayCanvas.h"
 
-static SkBitmap make_noconfig_bm(int width, int height) {
+SkNWayCanvas::SkNWayCanvas(int width, int height) {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kNo_Config, width, height);
-    return bm;
+    this->setBitmapDevice(bm);
 }
-
-SkNWayCanvas::SkNWayCanvas(int width, int height)
-        : INHERITED(make_noconfig_bm(width, height)) {}
 
 SkNWayCanvas::~SkNWayCanvas() {
     this->removeAll();
@@ -144,14 +141,6 @@ bool SkNWayCanvas::clipRect(const SkRect& rect, SkRegion::Op op, bool doAA) {
     return this->INHERITED::clipRect(rect, op, doAA);
 }
 
-bool SkNWayCanvas::clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->clipRRect(rrect, op, doAA);
-    }
-    return this->INHERITED::clipRRect(rrect, op, doAA);
-}
-
 bool SkNWayCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     Iter iter(fList);
     while (iter.next()) {
@@ -183,24 +172,10 @@ void SkNWayCanvas::drawPoints(PointMode mode, size_t count, const SkPoint pts[],
     }
 }
 
-void SkNWayCanvas::drawOval(const SkRect& rect, const SkPaint& paint) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->drawOval(rect, paint);
-    }
-}
-
 void SkNWayCanvas::drawRect(const SkRect& rect, const SkPaint& paint) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawRect(rect, paint);
-    }
-}
-
-void SkNWayCanvas::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->drawRRect(rrect, paint);
     }
 }
 
@@ -219,11 +194,11 @@ void SkNWayCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
     }
 }
 
-void SkNWayCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
+void SkNWayCanvas::drawBitmapRect(const SkBitmap& bitmap, const SkIRect* src,
                                   const SkRect& dst, const SkPaint* paint) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->drawBitmapRectToRect(bitmap, src, dst, paint);
+        iter->drawBitmapRect(bitmap, src, dst, paint);
     }
 }
 
@@ -311,3 +286,5 @@ SkDrawFilter* SkNWayCanvas::setDrawFilter(SkDrawFilter* filter) {
     }
     return this->INHERITED::setDrawFilter(filter);
 }
+
+

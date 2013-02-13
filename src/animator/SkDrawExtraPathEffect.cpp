@@ -22,7 +22,7 @@ class SkDrawShapePathEffect : public SkDrawPathEffect {
     DECLARE_PRIVATE_MEMBER_INFO(DrawShapePathEffect);
     SkDrawShapePathEffect();
     virtual ~SkDrawShapePathEffect();
-    virtual bool addChild(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
+    virtual bool add(SkAnimateMaker& , SkDisplayable* );
     virtual SkPathEffect* getPathEffect();
 protected:
     SkDrawable* addPath;
@@ -60,7 +60,7 @@ class SkDrawComposePathEffect : public SkDrawPathEffect {
     DECLARE_EXTRAS_MEMBER_INFO(SkDrawComposePathEffect);
     SkDrawComposePathEffect(SkDisplayTypes );
     virtual ~SkDrawComposePathEffect();
-    virtual bool addChild(SkAnimateMaker& , SkDisplayable* ) SK_OVERRIDE;
+    virtual bool add(SkAnimateMaker& , SkDisplayable* );
     virtual SkPathEffect* getPathEffect();
     virtual bool isPaint() const;
 private:
@@ -91,10 +91,9 @@ public:
         fDraw(draw), fMaker(maker) {
     }
 
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
-
 protected:
-    virtual SkScalar begin(SkScalar contourLength) const {
+    virtual SkScalar begin(SkScalar contourLength)
+    {
         SkScriptValue value;
         SkAnimatorScript engine(*fMaker, NULL, SkType_Float);
         engine.propertyCallBack(GetContourLength, &contourLength);
@@ -103,7 +102,8 @@ protected:
         return value.fOperand.fScalar;
     }
 
-    virtual SkScalar next(SkPath* dst, SkScalar distance, SkPathMeasure&) const {
+    virtual SkScalar next(SkPath* dst, SkScalar distance, SkPathMeasure& )
+    {
         fMaker->setExtraPropertyCallBack(fDraw->fType, GetDistance, &distance);
         SkDrawPath* drawPath = NULL;
         if (fDraw->addPath->isPath()) {
@@ -138,6 +138,9 @@ protected:
     }
 
 private:
+    virtual void flatten(SkFlattenableWriteBuffer& ) {}
+    virtual Factory getFactory() { return NULL; }
+
     static bool GetContourLength(const char* token, size_t len, void* clen, SkScriptValue* value) {
         if (SK_LITERAL_STR_EQUAL("contourLength", token, len)) {
             value->fOperand.fScalar = *(SkScalar*) clen;
@@ -182,7 +185,7 @@ SkDrawShapePathEffect::~SkDrawShapePathEffect() {
     SkSafeUnref(fPathEffect);
 }
 
-bool SkDrawShapePathEffect::addChild(SkAnimateMaker& , SkDisplayable* child) {
+bool SkDrawShapePathEffect::add(SkAnimateMaker& , SkDisplayable* child) {
     path = (SkDrawPath*) child;
     return true;
 }
@@ -352,7 +355,7 @@ SkDrawComposePathEffect::~SkDrawComposePathEffect() {
     delete effect2;
 }
 
-bool SkDrawComposePathEffect::addChild(SkAnimateMaker& , SkDisplayable* child) {
+bool SkDrawComposePathEffect::add(SkAnimateMaker& , SkDisplayable* child) {
     if (effect1 == NULL)
         effect1 = (SkDrawPathEffect*) child;
     else

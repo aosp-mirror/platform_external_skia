@@ -8,19 +8,12 @@
 
 #include "Test.h"
 #include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkDevice.h"
-#include "SkMathPriv.h"
 #include "SkRegion.h"
-#if SK_SUPPORT_GPU
 #include "SkGpuDevice.h"
-#else
-class GrContext;
-#endif
 
 static const int DEV_W = 100, DEV_H = 100;
 static const SkIRect DEV_RECT = SkIRect::MakeWH(DEV_W, DEV_H);
-static const SkRect DEV_RECT_S = SkRect::MakeWH(DEV_W * SK_Scalar1,
+static const SkRect DEV_RECT_S = SkRect::MakeWH(DEV_W * SK_Scalar1, 
                                                 DEV_H * SK_Scalar1);
 static const U8CPU DEV_PAD = 0xee;
 
@@ -136,7 +129,7 @@ void fillCanvas(SkCanvas* canvas) {
     static SkBitmap bmp;
     if (bmp.isNull()) {
         bmp.setConfig(SkBitmap::kARGB_8888_Config, DEV_W, DEV_H);
-        SkDEBUGCODE(bool alloc = ) bmp.allocPixels();
+        bool alloc = bmp.allocPixels();
         SkASSERT(alloc);
         SkAutoLockPixels alp(bmp);
         intptr_t pixels = reinterpret_cast<intptr_t>(bmp.getPixels());
@@ -189,8 +182,7 @@ SkPMColor convertConfig8888ToPMColor(SkCanvas::Config8888 config8888,
             b = static_cast<U8CPU>(c[2]);
             break;
         default:
-            SkDEBUGFAIL("Unexpected Config8888");
-            return 0;
+            GrCrash("Unexpected Config8888");
     }
     if (*premul) {
         r = SkMulDiv255Ceiling(r, a);
@@ -241,6 +233,7 @@ bool checkWrite(skiatest::Reporter* reporter,
     intptr_t canvasPixels = reinterpret_cast<intptr_t>(devBmp.getPixels());
     size_t canvasRowBytes = devBmp.rowBytes();
     SkIRect writeRect = SkIRect::MakeXYWH(writeX, writeY, bitmap.width(), bitmap.height());
+    bool success = true;
     for (int cy = 0; cy < DEV_H; ++cy) {
         const SkPMColor* canvasRow = reinterpret_cast<const SkPMColor*>(canvasPixels);
         for (int cx = 0; cx < DEV_W; ++cx) {
@@ -254,14 +247,14 @@ bool checkWrite(skiatest::Reporter* reporter,
                 bool check;
                 REPORTER_ASSERT(reporter, check = checkPixel(bmpPMColor, canvasPixel, mul));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             } else {
                 bool check;
                 SkPMColor testColor = getCanvasColor(cx, cy);
                 REPORTER_ASSERT(reporter, check = (canvasPixel == testColor));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             }
         }
@@ -271,21 +264,19 @@ bool checkWrite(skiatest::Reporter* reporter,
                 bool check;
                 REPORTER_ASSERT(reporter, check = (pad[px] == static_cast<char>(DEV_PAD)));
                 if (!check) {
-                    return false;
+                    success = false;
                 }
             }
         }
         canvasPixels += canvasRowBytes;
     }
 
-    return true;
+    return success;
 }
 
 enum DevType {
     kRaster_DevType,
-#if SK_SUPPORT_GPU
     kGpu_DevType,
-#endif
 };
 
 struct CanvasConfig {
@@ -296,34 +287,34 @@ struct CanvasConfig {
 static const CanvasConfig gCanvasConfigs[] = {
     {kRaster_DevType, true},
     {kRaster_DevType, false},
-#if SK_SUPPORT_GPU && defined(SK_SCALAR_IS_FLOAT)
+#ifdef SK_SCALAR_IS_FLOAT
     {kGpu_DevType, true}, // row bytes has no meaning on gpu devices
 #endif
 };
 
-SkDevice* createDevice(const CanvasConfig& c, GrContext* grCtx) {
+bool setupCanvas(SkCanvas* canvas, const CanvasConfig& c, GrContext* grCtx) {
     switch (c.fDevType) {
         case kRaster_DevType: {
             SkBitmap bmp;
             size_t rowBytes = c.fTightRowBytes ? 0 : 4 * DEV_W + 100;
             bmp.setConfig(SkBitmap::kARGB_8888_Config, DEV_W, DEV_H, rowBytes);
             if (!bmp.allocPixels()) {
-                sk_throw();
-                return NULL;
+                return false;
             }
             // if rowBytes isn't tight then set the padding to a known value
             if (rowBytes) {
                 SkAutoLockPixels alp(bmp);
                 memset(bmp.getPixels(), DEV_PAD, bmp.getSafeSize());
             }
-            return new SkDevice(bmp);
-        }
-#if SK_SUPPORT_GPU
+            canvas->setDevice(new SkDevice(bmp))->unref();
+            } break;
         case kGpu_DevType:
-            return new SkGpuDevice(grCtx, SkBitmap::kARGB_8888_Config, DEV_W, DEV_H);
-#endif
+            canvas->setDevice(new SkGpuDevice(grCtx,
+                                              SkBitmap::kARGB_8888_Config,
+                                              DEV_W, DEV_H))->unref();
+            break;
     }
-    return NULL;
+    return true;
 }
 
 bool setupBitmap(SkBitmap* bitmap,
@@ -348,7 +339,7 @@ bool setupBitmap(SkBitmap* bitmap,
 
 void WritePixelsTest(skiatest::Reporter* reporter, GrContext* context) {
     SkCanvas canvas;
-
+    
     const SkIRect testRects[] = {
         // entire thing
         DEV_RECT,
@@ -397,10 +388,9 @@ void WritePixelsTest(skiatest::Reporter* reporter, GrContext* context) {
     };
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(gCanvasConfigs); ++i) {
-        SkAutoTUnref<SkDevice> device(createDevice(gCanvasConfigs[i], context));
-        SkCanvas canvas(device);
+        REPORTER_ASSERT(reporter, setupCanvas(&canvas, gCanvasConfigs[i], context));
 
-        static const SkCanvas::Config8888 gSrcConfigs[] = {
+        static const SkCanvas::Config8888 gReadConfigs[] = {
             SkCanvas::kNative_Premul_Config8888,
             SkCanvas::kNative_Unpremul_Config8888,
             SkCanvas::kBGRA_Premul_Config8888,
@@ -411,22 +401,13 @@ void WritePixelsTest(skiatest::Reporter* reporter, GrContext* context) {
         for (size_t r = 0; r < SK_ARRAY_COUNT(testRects); ++r) {
             const SkIRect& rect = testRects[r];
             for (int tightBmp = 0; tightBmp < 2; ++tightBmp) {
-                for (size_t c = 0; c < SK_ARRAY_COUNT(gSrcConfigs); ++c) {
+                for (size_t c = 0; c < SK_ARRAY_COUNT(gReadConfigs); ++c) {
                     fillCanvas(&canvas);
-                    SkCanvas::Config8888 config8888 = gSrcConfigs[c];
+                    SkCanvas::Config8888 config8888 = gReadConfigs[c];
                     SkBitmap bmp;
                     REPORTER_ASSERT(reporter, setupBitmap(&bmp, config8888, rect.width(), rect.height(), SkToBool(tightBmp)));
-                    uint32_t idBefore = canvas.getDevice()->accessBitmap(false).getGenerationID();
                     canvas.writePixels(bmp, rect.fLeft, rect.fTop, config8888);
-                    uint32_t idAfter = canvas.getDevice()->accessBitmap(false).getGenerationID();
                     REPORTER_ASSERT(reporter, checkWrite(reporter, &canvas, bmp, rect.fLeft, rect.fTop, config8888));
-
-                    // we should change the genID iff pixels were actually written.
-                    SkIRect canvasRect = SkIRect::MakeSize(canvas.getDeviceSize());
-                    SkIRect writeRect = SkIRect::MakeXYWH(rect.fLeft, rect.fTop,
-                                                          bmp.width(), bmp.height());
-                    bool intersects = SkIRect::Intersects(canvasRect, writeRect) ;
-                    REPORTER_ASSERT(reporter, intersects == (idBefore != idAfter));
                 }
             }
         }
@@ -434,7 +415,6 @@ void WritePixelsTest(skiatest::Reporter* reporter, GrContext* context) {
 }
 }
 
-#ifndef SK_BUILD_FOR_ANDROID
 #include "TestClassDef.h"
 DEFINE_GPUTESTCLASS("WritePixels", WritePixelsTestClass, WritePixelsTest)
-#endif
+
