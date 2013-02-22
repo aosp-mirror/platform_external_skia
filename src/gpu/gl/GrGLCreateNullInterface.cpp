@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -8,7 +7,10 @@
 
 
 #include "gl/GrGLInterface.h"
-#include "../GrTDArray.h"
+#include "GrGLDefines.h"
+#include "SkTDArray.h"
+
+namespace { // added to suppress 'no previous prototype' warning
 
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLActiveTexture(GrGLenum texture) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLAttachShader(GrGLuint program, GrGLuint shader) {}
@@ -47,7 +49,11 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLQueryCounter(GrGLuint id, GrGLenum target) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLReadBuffer(GrGLenum src) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLReadPixels(GrGLint x, GrGLint y, GrGLsizei width, GrGLsizei height, GrGLenum format, GrGLenum type, GrGLvoid* pixels) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLScissor(GrGLint x, GrGLint y, GrGLsizei width, GrGLsizei height) {}
+#if GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE
+GrGLvoid GR_GL_FUNCTION_TYPE nullGLShaderSource(GrGLuint shader, GrGLsizei count, const char* const * str, const GrGLint* length) {}
+#else
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLShaderSource(GrGLuint shader, GrGLsizei count, const char** str, const GrGLint* length) {}
+#endif
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLStencilFunc(GrGLenum func, GrGLint ref, GrGLuint mask) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLStencilFuncSeparate(GrGLenum face, GrGLenum func, GrGLint ref, GrGLuint mask) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLStencilMask(GrGLuint mask) {}
@@ -56,6 +62,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLStencilOp(GrGLenum fail, GrGLenum zfail, GrGL
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLStencilOpSeparate(GrGLenum face, GrGLenum fail, GrGLenum zfail, GrGLenum zpass) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLTexImage2D(GrGLenum target, GrGLint level, GrGLint internalformat, GrGLsizei width, GrGLsizei height, GrGLint border, GrGLenum format, GrGLenum type, const GrGLvoid* pixels) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLTexParameteri(GrGLenum target, GrGLenum pname, GrGLint param) {}
+GrGLvoid GR_GL_FUNCTION_TYPE nullGLTexParameteriv(GrGLenum target, GrGLenum pname, const GrGLint* params) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLTexStorage2D(GrGLenum target, GrGLsizei levels, GrGLenum internalformat, GrGLsizei width, GrGLsizei height) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLTexSubImage2D(GrGLenum target, GrGLint level, GrGLint xoffset, GrGLint yoffset, GrGLsizei width, GrGLsizei height, GrGLenum format, GrGLenum type, const GrGLvoid* pixels) {}
 GrGLvoid GR_GL_FUNCTION_TYPE nullGLUniform1f(GrGLint location, GrGLfloat v0) {}
@@ -125,7 +132,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLDeleteIds(GrGLsizei n, const GrGLuint* ids) {
 
 // In debug builds we do asserts that ensure we agree with GL about when a buffer
 // is mapped.
-static GrTDArray<GrGLuint> gMappedBuffers;
+static SkTDArray<GrGLuint> gMappedBuffers;
 static GrGLuint gCurrArrayBuffer;
 static GrGLuint gCurrElementArrayBuffer;
 
@@ -210,7 +217,7 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLGetBufferParameteriv(GrGLenum target, GrGLenu
                     break;
                 case GR_GL_ELEMENT_ARRAY_BUFFER:
                     buf = gCurrElementArrayBuffer;
-                    break;  
+                    break;
             }
             if (buf) {
                 for (int i = 0; i < gMappedBuffers.count(); ++i) {
@@ -273,9 +280,6 @@ GrGLvoid GR_GL_FUNCTION_TYPE nullGLGetIntegerv(GrGLenum pname, GrGLint* params) 
             break;
         case GR_GL_MAX_VERTEX_ATTRIBS:
             *params = 16;
-            break;
-        case GR_GL_MAX_TEXTURE_UNITS:
-            *params = 8;
             break;
         default:
             GrCrash("Unexpected pname to GetIntegerv");
@@ -360,6 +364,10 @@ const GrGLubyte* GR_GL_FUNCTION_TYPE nullGLGetString(GrGLenum name) {
             return (const GrGLubyte*)"4.0 Null GL";
         case GR_GL_SHADING_LANGUAGE_VERSION:
             return (const GrGLubyte*)"4.20.8 Null GLSL";
+        case GR_GL_VENDOR:
+            return (const GrGLubyte*)"Null Vendor";
+        case GR_GL_RENDERER:
+            return (const GrGLubyte*)"The Null (Non-)Renderer";
         default:
             GrCrash("Unexpected name to GetString");
             return NULL;
@@ -377,12 +385,14 @@ GrGLint GR_GL_FUNCTION_TYPE nullGLGetUniformLocation(GrGLuint program, const cha
     return ++gUniLocation;
 }
 
+} // end anonymous namespace
+
 const GrGLInterface* GrGLCreateNullInterface() {
-    // The gl functions are not context-specific so we create one global 
+    // The gl functions are not context-specific so we create one global
     // interface
     static SkAutoTUnref<GrGLInterface> glInterface;
     if (!glInterface.get()) {
-        GrGLInterface* interface = new GrGLInterface;
+        GrGLInterface* interface = SkNEW(GrGLInterface);
         glInterface.reset(interface);
         interface->fBindingsExported = kDesktop_GrGLBinding;
         interface->fActiveTexture = nullGLActiveTexture;
@@ -457,6 +467,7 @@ const GrGLInterface* GrGLCreateNullInterface() {
         interface->fStencilOpSeparate = nullGLStencilOpSeparate;
         interface->fTexImage2D = nullGLTexImage2D;
         interface->fTexParameteri = nullGLTexParameteri;
+        interface->fTexParameteriv = nullGLTexParameteriv;
         interface->fTexSubImage2D = nullGLTexSubImage2D;
         interface->fTexStorage2D = nullGLTexStorage2D;
         interface->fUniform1f = nullGLUniform1f;

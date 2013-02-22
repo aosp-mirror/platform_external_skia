@@ -16,13 +16,20 @@ public:
     SkOSWindow(void* hwnd);
     ~SkOSWindow();
     void*   getHWND() const { return fHWND; }
-    
-    virtual bool onDispatchClick(int x, int y, Click::State state, 
-                                 void* owner);
-    void    detachGL();
-    bool    attachGL();
-    void    presentGL();
-    
+
+    virtual bool onDispatchClick(int x, int y, Click::State state,
+                                 void* owner, unsigned modi);
+    enum SkBackEndTypes {
+        kNone_BackEndType,
+#if SK_SUPPORT_GPU
+        kNativeGL_BackEndType,
+#endif
+    };
+
+    void    detach();
+    bool    attach(SkBackEndTypes attachType, int msaaSampleCount);
+    void    present();
+
 protected:
     // overrides from SkEventSink
     virtual bool onEvent(const SkEvent& evt);
@@ -32,12 +39,14 @@ protected:
     virtual void onAddMenu(const SkOSMenu*);
     virtual void onUpdateMenu(const SkOSMenu*);
     virtual void onSetTitle(const char[]);
-    
+
 private:
     void*   fHWND;
     bool    fInvalEventIsPending;
     void*   fNotifier;
+#if SK_SUPPORT_GPU
     void*   fGLContext;
+#endif
     typedef SkWindow INHERITED;
 };
 

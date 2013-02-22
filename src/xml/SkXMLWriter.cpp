@@ -69,7 +69,7 @@ bool SkXMLWriter::doStart(const char name[], size_t length)
     return firstChild;
 }
 
-SkXMLWriter::Elem* SkXMLWriter::getEnd() 
+SkXMLWriter::Elem* SkXMLWriter::getEnd()
 {
     Elem* elem;
     fElems.pop(&elem);
@@ -331,4 +331,3 @@ void SkXMLStreamWriter::UnitTest()
 }
 
 #endif
-

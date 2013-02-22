@@ -12,6 +12,10 @@
 
 #include "SkWindow.h"
 
+#if SK_ANGLE
+#include "EGL/egl.h"
+#endif
+
 class SkOSWindow : public SkWindow {
 public:
     SkOSWindow(void* hwnd);
@@ -22,16 +26,20 @@ public:
     void    updateSize();
 
     static bool PostEvent(SkEvent* evt, SkEventSinkID, SkMSec delay);
-    
-    bool attachGL();
-    void detachGL();
-    void presentGL();
 
-    bool attachD3D9();
-    void detachD3D9();
-    void presentD3D9();
+    enum SkBackEndTypes {
+        kNone_BackEndType,
+#if SK_SUPPORT_GPU
+        kNativeGL_BackEndType,
+#if SK_ANGLE
+        kANGLE_BackEndType,
+#endif // SK_ANGLE
+#endif // SK_SUPPORT_GPU
+    };
 
-    void* d3d9Device() { return fD3D9Device; }
+    bool attach(SkBackEndTypes attachType, int msaaSampleCount);
+    void detach();
+    void present();
 
     bool wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     static bool QuitOnDeactivate(HWND hWnd);
@@ -53,20 +61,35 @@ protected:
 
 private:
     void*               fHWND;
-    
+
     void                doPaint(void* ctx);
 
+#if SK_SUPPORT_GPU
     void*               fHGLRC;
-
-    bool                fGLAttached;
-
-    void*               fD3D9Device;
-    bool                fD3D9Attached;
+#if SK_ANGLE
+    EGLDisplay          fDisplay;
+    EGLContext          fContext;
+    EGLSurface          fSurface;
+#endif // SK_ANGLE
+#endif // SK_SUPPORT_GPU
 
     HMENU               fMBar;
 
-    typedef SkWindow INHERITED; 
+    SkBackEndTypes      fAttached;
+
+#if SK_SUPPORT_GPU
+    bool attachGL(int msaaSampleCount);
+    void detachGL();
+    void presentGL();
+
+#if SK_ANGLE
+    bool attachANGLE(int msaaSampleCount);
+    void detachANGLE();
+    void presentANGLE();
+#endif // SK_ANGLE
+#endif // SK_SUPPORT_GPU
+
+    typedef SkWindow INHERITED;
 };
 
 #endif
-

@@ -10,8 +10,10 @@
 #ifndef SkPath_DEFINED
 #define SkPath_DEFINED
 
+#include "SkInstCnt.h"
 #include "SkMatrix.h"
 #include "SkTDArray.h"
+#include "SkRefCnt.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #define GEN_ID_INC              fGenerationID++
@@ -25,6 +27,12 @@ class SkReader32;
 class SkWriter32;
 class SkAutoPathBoundsUpdate;
 class SkString;
+class SkPathRef;
+class SkRRect;
+
+#ifndef SK_DEBUG_PATH_REF
+    #define SK_DEBUG_PATH_REF 0
+#endif
 
 /** \class SkPath
 
@@ -33,13 +41,15 @@ class SkString;
 */
 class SK_API SkPath {
 public:
+    SK_DECLARE_INST_COUNT_ROOT(SkPath);
+
     SkPath();
     SkPath(const SkPath&);
     ~SkPath();
 
     SkPath& operator=(const SkPath&);
 
-    friend bool operator==(const SkPath&, const SkPath&);
+    friend  SK_API bool operator==(const SkPath&, const SkPath&);
     friend bool operator!=(const SkPath& a, const SkPath& b) {
         return !(a == b);
     }
@@ -79,7 +89,7 @@ public:
     }
 
     /** Returns true if the filltype is one of the Inverse variants */
-    bool isInverseFillType() const { return (fFillType & 2) != 0; }
+    bool isInverseFillType() const { return IsInverseFillType((FillType)fFillType); }
 
     /**
      *  Toggle between inverse and normal filltypes. This reverse the return
@@ -97,15 +107,15 @@ public:
     };
 
     /**
-     *  Return the path's convexity, as stored in the path. If it is currently
-     *  unknown, and the computeIfUnknown bool is true, then this will first
-     *  call ComputeConvexity() and then return that (cached) value.
+     *  Return the path's convexity, as stored in the path. If it is currently unknown,
+     *  then this function will attempt to compute the convexity (and cache the result).
      */
     Convexity getConvexity() const {
-        if (kUnknown_Convexity == fConvexity) {
-            fConvexity = (uint8_t)ComputeConvexity(*this);
+        if (kUnknown_Convexity != fConvexity) {
+            return static_cast<Convexity>(fConvexity);
+        } else {
+            return this->internalGetConvexity();
         }
-        return (Convexity)fConvexity;
     }
 
     /**
@@ -118,28 +128,14 @@ public:
 
     /**
      *  Store a convexity setting in the path. There is no automatic check to
-     *  see if this value actually agress with the return value from
-     *  ComputeConvexity().
+     *  see if this value actually agrees with the return value that would be
+     *  computed by getConvexity().
      *
      *  Note: even if this is set to a "known" value, if the path is later
      *  changed (e.g. lineTo(), addRect(), etc.) then the cached value will be
      *  reset to kUnknown_Convexity.
      */
     void setConvexity(Convexity);
-
-    /**
-     *  Compute the convexity of the specified path. This does not look at the
-     *  value stored in the path, but computes it directly from the path's data.
-     *
-     *  This never returns kUnknown_Convexity.
-     *
-     *  If there is more than one contour, this returns kConcave_Convexity.
-     *  If the contour is degenerate (e.g. there are fewer than 3 non-degenerate
-     *  segments), then this returns kConvex_Convexity.
-     *  The contour is treated as if it were closed, even if there is no kClose
-     *  verb.
-     */
-    static Convexity ComputeConvexity(const SkPath&);
 
     /**
      *  DEPRECATED: use getConvexity()
@@ -161,12 +157,24 @@ public:
         this->setConvexity(isConvex ? kConvex_Convexity : kConcave_Convexity);
     }
 
+    /** Returns true if the path is an oval.
+     *
+     * @param rect      returns the bounding rect of this oval. It's a circle
+     *                  if the height and width are the same.
+     *
+     * @return true if this path is an oval.
+     *              Tracking whether a path is an oval is considered an
+     *              optimization for performance and so some paths that are in
+     *              fact ovals can report false.
+     */
+    bool isOval(SkRect* rect) const;
+
     /** Clear any lines and curves from the path, making it empty. This frees up
         internal storage associated with those segments.
         This does NOT change the fill-type setting nor isConvex
     */
     void reset();
-    
+
     /** Similar to reset(), in that all lines and curves are removed from the
         path. However, any internal storage for those lines/curves is retained,
         making reuse of the path potentially faster.
@@ -180,12 +188,23 @@ public:
     */
     bool isEmpty() const;
 
+    /**
+     *  Returns true if all of the points in this path are finite, meaning there
+     *  are no infinities and no NaNs.
+     */
+    bool isFinite() const {
+        if (fBoundsIsDirty) {
+            this->computeBounds();
+        }
+        return SkToBool(fIsFinite);
+    }
+
     /** Test a line for zero length
 
         @return true if the line is of zero length; otherwise false.
     */
     static bool IsLineDegenerate(const SkPoint& p1, const SkPoint& p2) {
-        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero);
+        return p1.equalsWithinTolerance(p2);
     }
 
     /** Test a quad for zero length
@@ -194,8 +213,8 @@ public:
     */
     static bool IsQuadDegenerate(const SkPoint& p1, const SkPoint& p2,
                                  const SkPoint& p3) {
-        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero) &&
-               p2.equalsWithinTolerance(p3, SK_ScalarNearlyZero);
+        return p1.equalsWithinTolerance(p2) &&
+               p2.equalsWithinTolerance(p3);
     }
 
     /** Test a cubic curve for zero length
@@ -204,26 +223,42 @@ public:
     */
     static bool IsCubicDegenerate(const SkPoint& p1, const SkPoint& p2,
                                   const SkPoint& p3, const SkPoint& p4) {
-        return p1.equalsWithinTolerance(p2, SK_ScalarNearlyZero) &&
-               p2.equalsWithinTolerance(p3, SK_ScalarNearlyZero) &&
-               p3.equalsWithinTolerance(p4, SK_ScalarNearlyZero);
+        return p1.equalsWithinTolerance(p2) &&
+               p2.equalsWithinTolerance(p3) &&
+               p3.equalsWithinTolerance(p4);
     }
+
+    /**
+     *  Returns true if the path specifies a single line (i.e. it contains just
+     *  a moveTo and a lineTo). If so, and line[] is not null, it sets the 2
+     *  points in line[] to the end-points of the line. If the path is not a
+     *  line, returns false and ignores line[].
+     */
+    bool isLine(SkPoint line[2]) const;
 
     /** Returns true if the path specifies a rectangle. If so, and if rect is
         not null, set rect to the bounds of the path. If the path does not
         specify a rectangle, return false and ignore rect.
-     
+
         @param rect If not null, returns the bounds of the path if it specifies
                     a rectangle
         @return true if the path specifies a rectangle
     */
     bool isRect(SkRect* rect) const;
 
+    /** Returns true if the path specifies a pair of nested rectangles. If so, and if
+        rect is not null, set rect[0] to the outer rectangle and rect[1] to the inner
+        rectangle. If the path does not specify a pair of nested rectangles, return
+        false and ignore rect.
+
+        @param rect If not null, returns the path as a pair of nested rectangles
+        @return true if the path describes a pair of nested rectangles
+    */
+    bool isNestedRects(SkRect rect[2]) const;
+
     /** Return the number of points in the path
      */
-    int countPoints() const {
-        return this->getPoints(NULL, 0);
-    }
+    int countPoints() const;
 
     /** Return the point at the specified index. If the index is out of range
          (i.e. is not 0 <= index < countPoints()) then the returned coordinates
@@ -232,12 +267,25 @@ public:
     SkPoint getPoint(int index) const;
 
     /** Returns the number of points in the path. Up to max points are copied.
-     
+
         @param points If not null, receives up to max points
         @param max The maximum number of points to copy into points
         @return the actual number of points in the path
     */
     int getPoints(SkPoint points[], int max) const;
+
+    /** Return the number of verbs in the path
+     */
+    int countVerbs() const;
+
+    /** Returns the number of verbs in the path. Up to max verbs are copied. The
+        verbs are copied as one byte per verb.
+
+        @param verbs If not null, receives up to max verbs
+        @param max The maximum number of verbs to copy into verbs
+        @return the actual number of verbs in the path
+    */
+    int getVerbs(uint8_t verbs[], int max) const;
 
     //! Swap contents of this and other. Guaranteed not to throw
     void swap(SkPath& other);
@@ -255,7 +303,7 @@ public:
     }
 
     /** Calling this will, if the internal cache of the bounds is out of date,
-        update it so that subsequent calls to getBounds will be instanteous.
+        update it so that subsequent calls to getBounds will be instantaneous.
         This also means that any copies or simple transformations of the path
         will inherit the cached bounds.
      */
@@ -264,25 +312,33 @@ public:
         this->getBounds();
     }
 
+    /**
+     * Does a conservative test to see whether a rectangle is inside a path. Currently it only
+     * will ever return true for single convex contour paths. The empty-status of the rect is not
+     * considered (e.g. a rect that is a point can be inside a path). Points or line segments where
+     * the rect edge touches the path border are not considered containment violations.
+     */
+    bool conservativelyContainsRect(const SkRect& rect) const;
+
     //  Construction methods
 
     /** Hint to the path to prepare for adding more points. This can allow the
         path to more efficiently grow its storage.
-    
+
         @param extraPtCount The number of extra points the path should
                             preallocate for.
     */
     void incReserve(unsigned extraPtCount);
 
     /** Set the beginning of the next contour to the point (x,y).
-     
+
         @param x    The x-coordinate of the start of a new contour
         @param y    The y-coordinate of the start of a new contour
     */
     void moveTo(SkScalar x, SkScalar y);
 
     /** Set the beginning of the next contour to the point
-     
+
         @param p    The start of a new contour
     */
     void moveTo(const SkPoint& p) {
@@ -292,7 +348,7 @@ public:
     /** Set the beginning of the next contour relative to the last point on the
         previous contour. If there is no previous contour, this is treated the
         same as moveTo().
-     
+
         @param dx   The amount to add to the x-coordinate of the end of the
                     previous contour, to specify the start of a new contour
         @param dy   The amount to add to the y-coordinate of the end of the
@@ -322,7 +378,7 @@ public:
     /** Same as lineTo, but the coordinates are considered relative to the last
         point on this contour. If there is no previous point, then a moveTo(0,0)
         is inserted automatically.
-     
+
         @param dx   The amount to add to the x-coordinate of the previous point
                     on this contour, to specify a line
         @param dy   The amount to add to the y-coordinate of the previous point
@@ -333,7 +389,7 @@ public:
     /** Add a quadratic bezier from the last point, approaching control point
         (x1,y1), and ending at (x2,y2). If no moveTo() call has been made for
         this contour, the first point is automatically set to (0,0).
-     
+
         @param x1   The x-coordinate of the control point on a quadratic curve
         @param y1   The y-coordinate of the control point on a quadratic curve
         @param x2   The x-coordinate of the end point on a quadratic curve
@@ -344,7 +400,7 @@ public:
     /** Add a quadratic bezier from the last point, approaching control point
         p1, and ending at p2. If no moveTo() call has been made for this
         contour, the first point is automatically set to (0,0).
-     
+
         @param p1   The control point on a quadratic curve
         @param p2   The end point on a quadratic curve
     */
@@ -370,7 +426,7 @@ public:
     /** Add a cubic bezier from the last point, approaching control points
         (x1,y1) and (x2,y2), and ending at (x3,y3). If no moveTo() call has been
         made for this contour, the first point is automatically set to (0,0).
-     
+
         @param x1   The x-coordinate of the 1st control point on a cubic curve
         @param y1   The y-coordinate of the 1st control point on a cubic curve
         @param x2   The x-coordinate of the 2nd control point on a cubic curve
@@ -384,7 +440,7 @@ public:
     /** Add a cubic bezier from the last point, approaching control points p1
         and p2, and ending at p3. If no moveTo() call has been made for this
         contour, the first point is automatically set to (0,0).
-     
+
         @param p1   The 1st control point on a cubic curve
         @param p2   The 2nd control point on a cubic curve
         @param p3   The end point on a cubic curve
@@ -396,7 +452,7 @@ public:
     /** Same as cubicTo, but the coordinates are considered relative to the
         current point on this contour. If there is no previous point, then a
         moveTo(0,0) is inserted automatically.
-     
+
         @param dx1   The amount to add to the x-coordinate of the last point on
                 this contour, to specify the 1st control point of a cubic curve
         @param dy1   The amount to add to the y-coordinate of the last point on
@@ -418,7 +474,7 @@ public:
         automatic lineTo() is added to connect the current contour to the start
         of the arc. However, if the path is empty, then we call moveTo() with
         the first point of the arc. The sweep angle is treated mod 360.
-     
+
         @param oval The bounding oval defining the shape and size of the arc
         @param startAngle Starting angle (in degrees) where the arc begins
         @param sweepAngle Sweep angle (in degrees) measured clockwise. This is
@@ -447,97 +503,192 @@ public:
     void close();
 
     enum Direction {
+        /** Direction either has not been or could not be computed */
+        kUnknown_Direction,
         /** clockwise direction for adding closed contours */
         kCW_Direction,
         /** counter-clockwise direction for adding closed contours */
-        kCCW_Direction
+        kCCW_Direction,
     };
+
+    /**
+     *  Return the opposite of the specified direction. kUnknown is its own
+     *  opposite.
+     */
+    static Direction OppositeDirection(Direction dir) {
+        static const Direction gOppositeDir[] = {
+            kUnknown_Direction, kCCW_Direction, kCW_Direction
+        };
+        return gOppositeDir[dir];
+    }
+
+    /**
+     *  Returns whether or not a fill type is inverted
+     *
+     *  kWinding_FillType        -> false
+     *  kEvenOdd_FillType        -> false
+     *  kInverseWinding_FillType -> true
+     *  kInverseEvenOdd_FillType -> true
+     */
+    static bool IsInverseFillType(FillType fill) {
+        SK_COMPILE_ASSERT(0 == kWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(1 == kEvenOdd_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(2 == kInverseWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(3 == kInverseEvenOdd_FillType, fill_type_mismatch);
+        return (fill & 2) != 0;
+    }
+
+    /**
+     *  Returns the equivalent non-inverted fill type to the given fill type
+     *
+     *  kWinding_FillType        -> kWinding_FillType
+     *  kEvenOdd_FillType        -> kEvenOdd_FillType
+     *  kInverseWinding_FillType -> kWinding_FillType
+     *  kInverseEvenOdd_FillType -> kEvenOdd_FillType
+     */
+    static FillType ConvertToNonInverseFillType(FillType fill) {
+        SK_COMPILE_ASSERT(0 == kWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(1 == kEvenOdd_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(2 == kInverseWinding_FillType, fill_type_mismatch);
+        SK_COMPILE_ASSERT(3 == kInverseEvenOdd_FillType, fill_type_mismatch);
+        return (FillType)(fill & 1);
+    }
 
     /**
      *  Tries to quickly compute the direction of the first non-degenerate
      *  contour. If it can be computed, return true and set dir to that
      *  direction. If it cannot be (quickly) determined, return false and ignore
-     *  the dir parameter.
+     *  the dir parameter. If the direction was determined, it is cached to make
+     *  subsequent calls return quickly.
      */
     bool cheapComputeDirection(Direction* dir) const;
 
     /**
      *  Returns true if the path's direction can be computed via
      *  cheapComputDirection() and if that computed direction matches the
-     *  specified direction.
+     *  specified direction. If dir is kUnknown, returns true if the direction
+     *  cannot be computed.
      */
     bool cheapIsDirection(Direction dir) const {
-        Direction computedDir;
-        return this->cheapComputeDirection(&computedDir) && computedDir == dir;
+        Direction computedDir = kUnknown_Direction;
+        (void)this->cheapComputeDirection(&computedDir);
+        return computedDir == dir;
     }
 
-    /** Add a closed rectangle contour to the path
-        @param rect The rectangle to add as a closed contour to the path
-        @param dir  The direction to wind the rectangle's contour
+    /** Returns true if the path specifies a rectangle. If so, and if isClosed is
+        not null, set isClosed to true if the path is closed. Also, if returning true
+        and direction is not null, return the rect direction. If the path does not
+        specify a rectangle, return false and ignore isClosed and direction.
+
+        @param isClosed If not null, set to true if the path is closed
+        @param direction If not null, set to the rectangle's direction
+        @return true if the path specifies a rectangle
     */
+    bool isRect(bool* isClosed, Direction* direction) const;
+
+    /**
+     *  Add a closed rectangle contour to the path
+     *  @param rect The rectangle to add as a closed contour to the path
+     *  @param dir  The direction to wind the rectangle's contour. Cannot be
+     *              kUnknown_Direction.
+     */
     void    addRect(const SkRect& rect, Direction dir = kCW_Direction);
 
-    /** Add a closed rectangle contour to the path
-
-        @param left     The left side of a rectangle to add as a closed contour
-                        to the path
-        @param top      The top of a rectangle to add as a closed contour to the
-                        path
-        @param right    The right side of a rectangle to add as a closed contour
-                        to the path
-        @param bottom   The bottom of a rectangle to add as a closed contour to
-                        the path
-        @param dir      The direction to wind the rectangle's contour
-    */
+    /**
+     *  Add a closed rectangle contour to the path
+     *
+     *  @param left     The left side of a rectangle to add as a closed contour
+     *                  to the path
+     *  @param top      The top of a rectangle to add as a closed contour to the
+     *                  path
+     *  @param right    The right side of a rectangle to add as a closed contour
+     *                  to the path
+     *  @param bottom   The bottom of a rectangle to add as a closed contour to
+     *                  the path
+     *  @param dir  The direction to wind the rectangle's contour. Cannot be
+     *              kUnknown_Direction.
+     */
     void addRect(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom,
                  Direction dir = kCW_Direction);
 
-    /** Add a closed oval contour to the path
-
-        @param oval The bounding oval to add as a closed contour to the path
-        @param dir  The direction to wind the oval's contour
-    */
+    /**
+     *  Add a closed oval contour to the path
+     *
+     *  @param oval The bounding oval to add as a closed contour to the path
+     *  @param dir  The direction to wind the oval's contour. Cannot be
+     *              kUnknown_Direction.
+     */
     void addOval(const SkRect& oval, Direction dir = kCW_Direction);
 
-    /** Add a closed circle contour to the path
-
-        @param x        The x-coordinate of the center of a circle to add as a
-                        closed contour to the path
-        @param y        The y-coordinate of the center of a circle to add as a
-                        closed contour to the path
-        @param radius   The radius of a circle to add as a closed contour to the
-                        path
-        @param dir      The direction to wind the circle's contour
-    */
+    /**
+     *  Add a closed circle contour to the path
+     *
+     *  @param x        The x-coordinate of the center of a circle to add as a
+     *                  closed contour to the path
+     *  @param y        The y-coordinate of the center of a circle to add as a
+     *                  closed contour to the path
+     *  @param radius   The radius of a circle to add as a closed contour to the
+     *                  path
+     *  @param dir  The direction to wind the circle's contour. Cannot be
+     *              kUnknown_Direction.
+     */
     void addCircle(SkScalar x, SkScalar y, SkScalar radius,
                    Direction dir = kCW_Direction);
 
     /** Add the specified arc to the path as a new contour.
-     
+
         @param oval The bounds of oval used to define the size of the arc
         @param startAngle Starting angle (in degrees) where the arc begins
         @param sweepAngle Sweep angle (in degrees) measured clockwise
     */
     void addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle);
 
-    /** Add a closed round-rectangle contour to the path
-        @param rect The bounds of a round-rectangle to add as a closed contour
-        @param rx   The x-radius of the rounded corners on the round-rectangle
-        @param ry   The y-radius of the rounded corners on the round-rectangle
-        @param dir  The direction to wind the round-rectangle's contour
-    */
+    /**
+     *  Add a closed round-rectangle contour to the path
+     *  @param rect The bounds of a round-rectangle to add as a closed contour
+     *  @param rx   The x-radius of the rounded corners on the round-rectangle
+     *  @param ry   The y-radius of the rounded corners on the round-rectangle
+     *  @param dir  The direction to wind the rectangle's contour. Cannot be
+     *              kUnknown_Direction.
+     */
     void    addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                          Direction dir = kCW_Direction);
 
-    /** Add a closed round-rectangle contour to the path. Each corner receives
-        two radius values [X, Y]. The corners are ordered top-left, top-right,
-        bottom-right, bottom-left.
-        @param rect The bounds of a round-rectangle to add as a closed contour
-        @param radii Array of 8 scalars, 4 [X,Y] pairs for each corner
-        @param dir  The direction to wind the round-rectangle's contour
-        */
+    /**
+     *  Add a closed round-rectangle contour to the path. Each corner receives
+     *  two radius values [X, Y]. The corners are ordered top-left, top-right,
+     *  bottom-right, bottom-left.
+     *  @param rect The bounds of a round-rectangle to add as a closed contour
+     *  @param radii Array of 8 scalars, 4 [X,Y] pairs for each corner
+     *  @param dir  The direction to wind the rectangle's contour. Cannot be
+     *              kUnknown_Direction.
+     * Note: The radii here now go through the same constraint handling as the
+     *       SkRRect radii (i.e., either radii at a corner being 0 implies a
+     *       sqaure corner and oversized radii are proportionally scaled down).
+     */
     void addRoundRect(const SkRect& rect, const SkScalar radii[],
                       Direction dir = kCW_Direction);
+
+    /**
+     *  Add an SkRRect contour to the path
+     *  @param rrect The rounded rect to add as a closed contour
+     *  @param dir   The winding direction for the new contour. Cannot be
+     *               kUnknown_Direction.
+     */
+    void addRRect(const SkRRect& rrect, Direction dir = kCW_Direction);
+
+    /**
+     *  Add a new contour made of just lines. This is just a fast version of
+     *  the following:
+     *      this->moveTo(pts[0]);
+     *      for (int i = 1; i < count; ++i) {
+     *          this->lineTo(pts[i]);
+     *      }
+     *      if (close) {
+     *          this->close();
+     *      }
+     */
+    void addPoly(const SkPoint pts[], int count, bool close);
 
     /** Add a copy of src to the path, offset by (dx,dy)
         @param src  The path to add as a new contour
@@ -565,17 +716,17 @@ public:
     void reverseAddPath(const SkPath& src);
 
     /** Offset the path by (dx,dy), returning true on success
-     
-        @param dx   The amount in the X direction to offset the entire path 
-        @param dy   The amount in the Y direction to offset the entire path 
+
+        @param dx   The amount in the X direction to offset the entire path
+        @param dy   The amount in the Y direction to offset the entire path
         @param dst  The translated path is written here
     */
     void offset(SkScalar dx, SkScalar dy, SkPath* dst) const;
 
     /** Offset the path by (dx,dy), returning true on success
-     
-        @param dx   The amount in the X direction to offset the entire path 
-        @param dy   The amount in the Y direction to offset the entire path 
+
+        @param dx   The amount in the X direction to offset the entire path
+        @param dy   The amount in the Y direction to offset the entire path
     */
     void offset(SkScalar dx, SkScalar dy) {
         this->offset(dx, dy, this);
@@ -583,7 +734,7 @@ public:
 
     /** Transform the points in this path by matrix, and write the answer into
         dst.
-     
+
         @param matrix   The matrix to apply to the path
         @param dst      The transformed path is written here
     */
@@ -600,14 +751,14 @@ public:
     /** Return the last point on the path. If no points have been added, (0,0)
         is returned. If there are no points, this returns false, otherwise it
         returns true.
-     
+
         @param lastPt   The last point on the path is returned here
     */
     bool getLastPt(SkPoint* lastPt) const;
 
     /** Set the last point on the path. If no points have been added,
         moveTo(x,y) is automatically called.
-     
+
         @param x    The new x-coordinate for the last point
         @param y    The new y-coordinate for the last point
     */
@@ -664,9 +815,16 @@ public:
             segments have been visited, return kDone_Verb.
 
             @param  pts The points representing the current verb and/or segment
+            @param doConsumeDegerates If true, first scan for segments that are
+                   deemed degenerate (too short) and skip those.
             @return The verb for the current segment
         */
-        Verb next(SkPoint pts[4]);
+        Verb next(SkPoint pts[4], bool doConsumeDegerates = true) {
+            if (doConsumeDegerates) {
+                this->consumeDegenerateSegments();
+            }
+            return this->doNext(pts);
+        }
 
         /** If next() returns kLine_Verb, then this query returns true if the
             line was the result of a close() command (i.e. the end point is the
@@ -694,9 +852,10 @@ public:
         SkBool8         fCloseLine;
         SkBool8         fSegmentState;
 
-        bool cons_moveTo(SkPoint pts[1]);
+        inline const SkPoint& cons_moveTo();
         Verb autoClose(SkPoint pts[2]);
         void consumeDegenerateSegments();
+        Verb doNext(SkPoint pts[4]);
     };
 
     /** Iterate through the verbs in the path, providing the associated points.
@@ -710,8 +869,9 @@ public:
 
         /** Return the next verb in this iteration of the path. When all
             segments have been visited, return kDone_Verb.
-         
+
             @param  pts The points representing the current verb and/or segment
+                        This must not be NULL.
             @return The verb for the current segment
         */
         Verb next(SkPoint pts[4]);
@@ -724,11 +884,25 @@ public:
         SkPoint         fLastPt;
     };
 
+    /**
+     *  Returns true if the point { x, y } is contained by the path, taking into
+     *  account the FillType.
+     */
+    bool contains(SkScalar x, SkScalar y) const;
+
     void dump(bool forceClose, const char title[] = NULL) const;
     void dump() const;
 
-    void flatten(SkWriter32&) const;
-    void unflatten(SkReader32&);
+    /**
+     *  Write the region to the buffer, and return the number of bytes written.
+     *  If buffer is NULL, it still returns the number of bytes.
+     */
+    uint32_t writeToMemory(void* buffer) const;
+    /**
+     *  Initialized the region from the buffer, returning the number
+     *  of bytes actually read.
+     */
+    uint32_t readFromMemory(const void* buffer);
 
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t getGenerationID() const;
@@ -739,14 +913,49 @@ public:
     SkDEBUGCODE(void validate() const;)
 
 private:
-    SkTDArray<SkPoint>  fPts;
-    SkTDArray<uint8_t>  fVerbs;
+    enum SerializationOffsets {
+        kDirection_SerializationShift = 26, // requires 2 bits
+        kIsFinite_SerializationShift = 25,  // requires 1 bit
+        kIsOval_SerializationShift = 24,    // requires 1 bit
+        kConvexity_SerializationShift = 16, // requires 2 bits
+        kFillType_SerializationShift = 8,   // requires 2 bits
+        kSegmentMask_SerializationShift = 0 // requires 3 bits
+    };
+
+#if SK_DEBUG_PATH_REF
+public:
+    /** Debugging wrapper for SkAutoTUnref<SkPathRef> used to track owners (SkPaths)
+        of SkPathRefs */
+    class PathRefDebugRef {
+    public:
+        PathRefDebugRef(SkPath* owner);
+        PathRefDebugRef(SkPathRef* pr, SkPath* owner);
+        ~PathRefDebugRef();
+        void reset(SkPathRef* ref);
+        void swap(PathRefDebugRef* other);
+        SkPathRef* get() const;
+        SkAutoTUnref<SkPathRef>::BlockRefType *operator->() const;
+        operator SkPathRef*();
+    private:
+        SkAutoTUnref<SkPathRef>   fPathRef;
+        SkPath*                   fOwner;
+    };
+
+private:
+    PathRefDebugRef     fPathRef;
+#else
+    SkAutoTUnref<SkPathRef> fPathRef;
+#endif
+
     mutable SkRect      fBounds;
     int                 fLastMoveToIndex;
     uint8_t             fFillType;
     uint8_t             fSegmentMask;
     mutable uint8_t     fBoundsIsDirty;
     mutable uint8_t     fConvexity;
+    mutable uint8_t     fDirection;
+    mutable SkBool8     fIsFinite;    // only meaningful if bounds are valid
+    mutable SkBool8     fIsOval;
 #ifdef SK_BUILD_FOR_ANDROID
     uint32_t            fGenerationID;
     const SkPath*       fSourcePath;
@@ -778,7 +987,17 @@ private:
     //
     inline void injectMoveToIfNeeded();
 
+    inline bool hasOnlyMoveTos() const;
+
+    Convexity internalGetConvexity() const;
+
+    bool isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts,
+                       bool* isClosed, Direction* direction) const;
+
     friend class SkAutoPathBoundsUpdate;
+    friend class SkAutoDisableOvalCheck;
+    friend class SkAutoDisableDirectionCheck;
+    friend class SkBench_AddPathTest; // perf test pathTo/reversePathTo
 };
 
 #endif

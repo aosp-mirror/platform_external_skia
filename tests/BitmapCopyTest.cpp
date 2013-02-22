@@ -80,7 +80,7 @@ static void init_src(const SkBitmap& bitmap, const SkColorTable* ct) {
     }
 }
 
-SkColorTable* init_ctable() {
+static SkColorTable* init_ctable() {
     static const SkColor colors[] = {
         SK_ColorBLACK, SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorWHITE
     };
@@ -102,7 +102,7 @@ struct Pair {
 
 // Utility function to read the value of a given pixel in bm. All
 // values converted to uint32_t for simplification of comparisons.
-uint32_t getPixel(int x, int y, const SkBitmap& bm) {
+static uint32_t getPixel(int x, int y, const SkBitmap& bm) {
     uint32_t val = 0;
     uint16_t val16;
     uint8_t val8, shift;
@@ -137,7 +137,7 @@ uint32_t getPixel(int x, int y, const SkBitmap& bm) {
 // Utility function to set value of any pixel in bm.
 // bm.getConfig() specifies what format 'val' must be
 // converted to, but at present uint32_t can handle all formats.
-void setPixel(int x, int y, uint32_t val, SkBitmap& bm) {
+static void setPixel(int x, int y, uint32_t val, SkBitmap& bm) {
     uint16_t val16;
     uint8_t val8, shift;
     SkAutoLockPixels lock(bm);
@@ -174,7 +174,7 @@ void setPixel(int x, int y, uint32_t val, SkBitmap& bm) {
 
 // Utility to return string containing name of each format, to
 // simplify diagnostic output.
-const char* getSkConfigName(const SkBitmap& bm) {
+static const char* getSkConfigName(const SkBitmap& bm) {
     switch (bm.getConfig()) {
         case SkBitmap::kNo_Config: return "SkBitmap::kNo_Config";
         case SkBitmap::kA1_Config: return "SkBitmap::kA1_Config";
@@ -211,17 +211,18 @@ struct Coordinates {
 // A function to verify that two bitmaps contain the same pixel values
 // at all coordinates indicated by coords. Simplifies verification of
 // copied bitmaps.
-void reportCopyVerification(const SkBitmap& bm1, const SkBitmap& bm2,
+static void reportCopyVerification(const SkBitmap& bm1, const SkBitmap& bm2,
                             Coordinates& coords,
                             const char* msg,
                             skiatest::Reporter* reporter){
     bool success = true;
 
     // Confirm all pixels in the list match.
-    for (int i = 0; i < coords.length; ++i)
+    for (int i = 0; i < coords.length; ++i) {
         success = success &&
                   (getPixel(coords[i]->fX, coords[i]->fY, bm1) ==
                    getPixel(coords[i]->fX, coords[i]->fY, bm2));
+    }
 
     if (!success) {
         SkString str;
@@ -232,7 +233,7 @@ void reportCopyVerification(const SkBitmap& bm1, const SkBitmap& bm2,
 }
 
 // Writes unique pixel values at locations specified by coords.
-void writeCoordPixels(SkBitmap& bm, const Coordinates& coords) {
+static void writeCoordPixels(SkBitmap& bm, const Coordinates& coords) {
     for (int i = 0; i < coords.length; ++i)
         setPixel(coords[i]->fX, coords[i]->fY, i, bm);
 }
@@ -305,6 +306,9 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                     REPORTER_ASSERT(reporter, srcP != dstP);
                     REPORTER_ASSERT(reporter, !memcmp(srcP, dstP,
                                                       src.getSize()));
+                    REPORTER_ASSERT(reporter, src.getGenerationID() == dst.getGenerationID());
+                } else {
+                    REPORTER_ASSERT(reporter, src.getGenerationID() != dst.getGenerationID());
                 }
                 // test extractSubset
                 {
@@ -312,10 +316,13 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                     SkBitmap subset;
                     SkIRect r;
                     r.set(1, 1, 2, 2);
+                    bitmap.setIsOpaque(true);
                     bitmap.setIsVolatile(true);
                     if (bitmap.extractSubset(&subset, r)) {
                         REPORTER_ASSERT(reporter, subset.width() == 1);
                         REPORTER_ASSERT(reporter, subset.height() == 1);
+                        REPORTER_ASSERT(reporter,
+                                        subset.isOpaque() == bitmap.isOpaque());
                         REPORTER_ASSERT(reporter,
                                         subset.isVolatile() == true);
 
@@ -333,8 +340,11 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                         REPORTER_ASSERT(reporter,
                                     (copy.getColorTable() != NULL) == hasCT);
                     }
+                    bitmap.setIsOpaque(false);
                     bitmap.setIsVolatile(false);
                     if (bitmap.extractSubset(&subset, r)) {
+                        REPORTER_ASSERT(reporter,
+                                        subset.isOpaque() == bitmap.isOpaque());
                         REPORTER_ASSERT(reporter,
                                         subset.isVolatile() == false);
                     }
@@ -474,7 +484,8 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                     // raw buffer pointer.
                     const uint32_t bufSize = subH *
                         SkBitmap::ComputeRowBytes(src.getConfig(), subW) * 2;
-                    uint8_t* buf = new uint8_t[bufSize];
+                    SkAutoMalloc autoBuf (bufSize);
+                    uint8_t* buf = static_cast<uint8_t*>(autoBuf.get());
 
                     SkBitmap bufBm; // Attach buf to this bitmap.
                     bool successExpected;
@@ -593,7 +604,6 @@ static void TestBitmapCopy(skiatest::Reporter* reporter) {
                         subset.copyPixelsFrom(buf, 1, subset.rowBytes()) ==
                             false);
 
-                    delete [] buf;
 #endif
                 }
             }

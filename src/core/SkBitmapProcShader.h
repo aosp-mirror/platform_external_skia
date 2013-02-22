@@ -19,29 +19,26 @@ public:
 
     // overrides from SkShader
     virtual bool isOpaque() const SK_OVERRIDE;
-    virtual bool setContext(const SkBitmap&, const SkPaint&, const SkMatrix&);
-    virtual uint32_t getFlags() { return fFlags; }
-    virtual void shadeSpan(int x, int y, SkPMColor dstC[], int count);
-    virtual void shadeSpan16(int x, int y, uint16_t dstC[], int count);
-    virtual void beginSession();
-    virtual void endSession();
-    virtual BitmapType asABitmap(SkBitmap*, SkMatrix*, TileMode*,
-                                 SkScalar* twoPointRadialParams) const;
+    virtual bool setContext(const SkBitmap&, const SkPaint&, const SkMatrix&) SK_OVERRIDE;
+    virtual void endContext() SK_OVERRIDE;
+    virtual uint32_t getFlags() SK_OVERRIDE { return fFlags; }
+    virtual void shadeSpan(int x, int y, SkPMColor dstC[], int count) SK_OVERRIDE;
+    virtual ShadeProc asAShadeProc(void** ctx) SK_OVERRIDE;
+    virtual void shadeSpan16(int x, int y, uint16_t dstC[], int count) SK_OVERRIDE;
+    virtual BitmapType asABitmap(SkBitmap*, SkMatrix*, TileMode*) const SK_OVERRIDE;
 
     static bool CanDo(const SkBitmap&, TileMode tx, TileMode ty);
 
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkBitmapProcShader, (buffer));
-    }
+    SK_DEVELOPER_TO_STRING()
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBitmapProcShader)
 
-    // override from flattenable
-    virtual bool toDumpString(SkString* str) const;
+#if SK_SUPPORT_GPU
+    GrEffectRef* asNewEffect(GrContext*, const SkPaint&) const SK_OVERRIDE;
+#endif
 
-    SK_DECLARE_FLATTENABLE_REGISTRAR()
 protected:
     SkBitmapProcShader(SkFlattenableReadBuffer& );
-    virtual void flatten(SkFlattenableWriteBuffer& );
-    virtual Factory getFactory() { return CreateProc; }
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
     SkBitmap          fRawBitmap;   // experimental for RLE encoding
     SkBitmapProcState fState;

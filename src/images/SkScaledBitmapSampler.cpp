@@ -295,10 +295,14 @@ static bool Sample_Index_DI(void* SK_RESTRICT dstRow,
 
 SkScaledBitmapSampler::SkScaledBitmapSampler(int width, int height,
                                              int sampleSize) {
+    fCTable = NULL;
+    fDstRow = NULL;
+    fRowProc = NULL;
+
     if (width <= 0 || height <= 0) {
         sk_throw();
     }
-    
+
     if (sampleSize <= 1) {
         fScaledWidth = width;
         fScaledHeight = height;
@@ -306,30 +310,27 @@ SkScaledBitmapSampler::SkScaledBitmapSampler(int width, int height,
         fDX = fDY = 1;
         return;
     }
-    
+
     int dx = SkMin32(sampleSize, width);
     int dy = SkMin32(sampleSize, height);
-    
+
     fScaledWidth = width / dx;
     fScaledHeight = height / dy;
-    
+
     SkASSERT(fScaledWidth > 0);
     SkASSERT(fScaledHeight > 0);
-    
+
     fX0 = dx >> 1;
     fY0 = dy >> 1;
-    
+
     SkASSERT(fX0 >= 0 && fX0 < width);
     SkASSERT(fY0 >= 0 && fY0 < height);
-    
+
     fDX = dx;
     fDY = dy;
-    
+
     SkASSERT(fDX > 0 && (fX0 + fDX * (fScaledWidth - 1)) < width);
     SkASSERT(fDY > 0 && (fY0 + fDY * (fScaledHeight - 1)) < height);
-    
-    fRowProc = NULL;
-    fCTable = NULL;
 }
 
 bool SkScaledBitmapSampler::begin(SkBitmap* dst, SrcConfig sc, bool dither,
@@ -412,7 +413,7 @@ bool SkScaledBitmapSampler::begin(SkBitmap* dst, SrcConfig sc, bool dither,
         default:
             return false;
     }
-    
+
     fRowProc = gProcs[index];
     fDstRow = (char*)dst->getPixels();
     fDstRowBytes = dst->rowBytes();

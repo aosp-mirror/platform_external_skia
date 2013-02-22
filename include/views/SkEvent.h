@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkEvent_DEFINED
 #define SkEvent_DEFINED
@@ -105,7 +103,7 @@ public:
         fTargetProc = proc;
         return this;
     }
-    
+
     /**
      *  Return the event's unnamed 32bit field. Default value is 0
      */
@@ -195,7 +193,7 @@ public:
     void post() {
         return this->postDelay(0);
     }
-    
+
     /**
      *  Post to the event queue using the event's targetID or target-proc and
      *  the specifed millisecond delay.
@@ -204,7 +202,7 @@ public:
      *  the event queue. It cannot be allocated on the stack or in a global.
      */
     void postDelay(SkMSec delay);
-    
+
     /**
      *  Post to the event queue using the event's targetID or target-proc.
      *  The event will be delivered no sooner than the specified millisecond
@@ -258,16 +256,8 @@ public:
     */
     static void SignalQueueTimer(SkMSec delay);
 
-#ifndef SK_USE_WXWIDGETS
-#ifdef SK_BUILD_FOR_WIN
+#if defined(SK_BUILD_FOR_WIN)
     static bool WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-#elif defined(SK_BUILD_FOR_UNIXx)
-  static uint32_t HandleTimer(uint32_t, void*);
-  static bool WndProc(Display*, Window, XEvent&);
-#endif
-#else
-    // Don't know yet what this will be
-    //static bool CustomEvent();
 #endif
 
 private:
@@ -292,4 +282,3 @@ private:
 };
 
 #endif
-

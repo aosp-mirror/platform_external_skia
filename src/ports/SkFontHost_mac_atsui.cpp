@@ -97,7 +97,7 @@ private:
     static OSStatus Close(void *cb);
 };
 
-void SkFontHost::FilterRec(SkScalerContext::Rec* rec) {
+void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
     // we only support 2 levels of hinting
     SkPaint::Hinting h = rec->getHinting();
     if (SkPaint::kSlight_Hinting == h) {
@@ -494,7 +494,6 @@ SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                             const char familyName[],
-                            const void* data, size_t bytelength,
                             SkTypeface::Style style) {
     // todo: we don't know how to respect style bits
     if (NULL == familyName && NULL != familyFace) {

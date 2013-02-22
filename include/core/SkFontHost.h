@@ -10,14 +10,13 @@
 #ifndef SkFontHost_DEFINED
 #define SkFontHost_DEFINED
 
-#include "SkScalerContext.h"
 #include "SkTypeface.h"
 
 class SkDescriptor;
+class SkScalerContext;
+struct SkScalerContextRec;
 class SkStream;
 class SkWStream;
-
-typedef uint32_t SkFontTableTag;
 
 /** \class SkFontHost
 
@@ -26,7 +25,7 @@ typedef uint32_t SkFontTableTag;
     platform-specific implementation that provides access to font files.
 
     One basic task is for each create (subclass of) SkTypeface, the FontHost is
-    resonsible for assigning a uniqueID. The ID should be unique for the
+    responsible for assigning a uniqueID. The ID should be unique for the
     underlying font file/data, not unique per typeface instance. Thus it is
     possible/common to request a typeface for the same font more than once
     (e.g. asking for the same font by name several times). The FontHost may
@@ -52,15 +51,13 @@ class SK_API SkFontHost {
 public:
     /** Return a new, closest matching typeface given either an existing family
         (specified by a typeface in that family) or by a familyName and a
-        requested style, or by a set of Unicode codepoitns to cover in a given
-        style.
+        requested style.
         1) If familyFace is null, use familyName.
         2) If familyName is null, use data (UTF-16 to cover).
         3) If all are null, return the default font that best matches style
      */
     static SkTypeface* CreateTypeface(const SkTypeface* familyFace,
                                       const char familyName[],
-                                      const void* data, size_t bytelength,
                                       SkTypeface::Style style);
 
     /** Return a new typeface given the data buffer. If the data does not
@@ -122,12 +119,17 @@ public:
     ///////////////////////////////////////////////////////////////////////////
 
     /** Write a unique identifier to the stream, so that the same typeface can
-        be retrieved with Deserialize().
+        be retrieved with Deserialize(). The standard format is to serialize
+        a SkFontDescriptor followed by a uint32_t length value. If the length
+        is non-zero then the following bytes (of that length) represent a
+        serialized copy of the font which can be recreated from a stream.
     */
     static void Serialize(const SkTypeface*, SkWStream*);
 
     /** Given a stream created by Serialize(), return a new typeface (like
-        CreateTypeface) or return NULL if no match is found.
+        CreateTypeface) which is either an exact match to the one serialized
+        or the best available typeface based on the data in the deserialized
+        SkFontDescriptor.
      */
     static SkTypeface* Deserialize(SkStream*);
 
@@ -159,7 +161,7 @@ public:
      * This Android-only version of NextLogicalFont allows us to pass in an
      * entire Rec structure so that a caller can change fallback behavior
      */
-    static SkFontID NextLogicalFont(const SkScalerContext::Rec& rec);
+    static SkFontID NextLogicalFont(const SkScalerContextRec& rec);
 #endif
 
 
@@ -174,8 +176,10 @@ public:
         the same output.
 
         A lazy (but valid) fonthost can do nothing in its FilterRec routine.
+
+        The provided typeface corresponds to the fFontID field.
      */
-    static void FilterRec(SkScalerContext::Rec* rec);
+    static void FilterRec(SkScalerContextRec* rec, SkTypeface* typeface);
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -235,28 +239,23 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /** DEPRECATED -- only called by SkFontHost_FreeType internally
-
-        Return NULL or a pointer to 256 bytes for the black (table[0]) and
-        white (table[1]) gamma tables.
-    */
-    static void GetGammaTables(const uint8_t* tables[2]);
-
-    ///////////////////////////////////////////////////////////////////////////
-
     /** LCDs either have their color elements arranged horizontally or
         vertically. When rendering subpixel glyphs we need to know which way
         round they are.
 
         Note, if you change this after startup, you'll need to flush the glyph
         cache because it'll have the wrong type of masks cached.
+
+        @deprecated use SkPixelGeometry instead.
     */
     enum LCDOrientation {
         kHorizontal_LCDOrientation = 0,    //!< this is the default
-        kVertical_LCDOrientation   = 1,
+        kVertical_LCDOrientation   = 1
     };
 
+    /** @deprecated set on Device creation. */
     static void SetSubpixelOrientation(LCDOrientation orientation);
+    /** @deprecated get from Device. */
     static LCDOrientation GetSubpixelOrientation();
 
     /** LCD color elements can vary in order. For subpixel text we need to know
@@ -268,14 +267,18 @@ public:
 
         kNONE_LCDOrder means that the subpixel elements are not spatially
         separated in any usable fashion.
+
+        @deprecated use SkPixelGeometry instead.
      */
     enum LCDOrder {
         kRGB_LCDOrder = 0,    //!< this is the default
         kBGR_LCDOrder = 1,
-        kNONE_LCDOrder = 2,
+        kNONE_LCDOrder = 2
     };
 
+    /** @deprecated set on Device creation. */
     static void SetSubpixelOrder(LCDOrder order);
+    /** @deprecated get from Device. */
     static LCDOrder GetSubpixelOrder();
 
 #ifdef SK_BUILD_FOR_ANDROID

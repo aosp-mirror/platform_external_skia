@@ -21,36 +21,29 @@ public:
         last owner of this pixelref is gone. If addr is NULL, sk_malloc_throw()
         is called to allocate it.
      */
-    SkMallocPixelRef(void* addr, size_t size, SkColorTable* ctable);
+    SkMallocPixelRef(void* addr, size_t size, SkColorTable* ctable, bool ownPixels = true);
     virtual ~SkMallocPixelRef();
-    
+
     //! Return the allocation size for the pixels
     size_t getSize() const { return fSize; }
     void* getAddr() const { return fStorage; }
 
-    // overrides from SkPixelRef
-    virtual void flatten(SkFlattenableWriteBuffer&) const;
-    virtual Factory getFactory() const {
-        return Create;
-    }
-    static SkPixelRef* Create(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkMallocPixelRef, (buffer));
-    }
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkMallocPixelRef)
 
-    SK_DECLARE_PIXEL_REF_REGISTRAR()
 protected:
     // overrides from SkPixelRef
     virtual void* onLockPixels(SkColorTable**);
     virtual void onUnlockPixels();
 
     SkMallocPixelRef(SkFlattenableReadBuffer& buffer);
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
     void*           fStorage;
 
 private:
-
     size_t          fSize;
     SkColorTable*   fCTable;
+    bool            fOwnPixels;
 
     typedef SkPixelRef INHERITED;
 };

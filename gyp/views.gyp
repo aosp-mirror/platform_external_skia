@@ -1,11 +1,16 @@
+# Views is the Skia windowing toolkit.
+# It provides:
+#  * A portable means of creating native windows.
+#  * Events.
+#  * Basic widgets and controls.
+
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'views',
+      'product_name': 'skia_views',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',
@@ -13,48 +18,40 @@
         '../include/xml',
         '../include/utils',
         '../include/images',
-        '../include/animator',
         '../include/effects',
+        '../include/views/unix',
+      ],
+      'dependencies': [
+        'angle.gyp:*',
       ],
       'sources': [
         '../include/views/SkApplication.h',
         '../include/views/SkBGViewArtist.h',
-        '../include/views/SkBorderView.h',
         '../include/views/SkEvent.h',
         '../include/views/SkEventSink.h',
-        '../include/views/SkImageView.h',
         '../include/views/SkKey.h',
         '../include/views/SkOSMenu.h',
         '../include/views/SkOSWindow_Mac.h',
+        '../include/views/SkOSWindow_NaCl.h',
         '../include/views/SkOSWindow_SDL.h',
         '../include/views/SkOSWindow_Unix.h',
         '../include/views/SkOSWindow_Win.h',
-        #'../include/views/SkOSWindow_wxwidgets.h',
-        '../include/views/SkProgressBarView.h',
-        '../include/views/SkScrollBarView.h',
         '../include/views/SkStackViewLayout.h',
         '../include/views/SkSystemEventTypes.h',
+        '../include/views/SkTextBox.h',
         '../include/views/SkTouchGesture.h',
         '../include/views/SkView.h',
         '../include/views/SkViewInflate.h',
         '../include/views/SkWidget.h',
-        '../include/views/SkWidgetViews.h',
         '../include/views/SkWindow.h',
 
         '../src/views/SkBGViewArtist.cpp',
-        '../src/views/SkBorderView.cpp',
         '../src/views/SkEvent.cpp',
         '../src/views/SkEventSink.cpp',
-        '../src/views/SkImageView.cpp',
-        '../src/views/SkListView.cpp',
-        '../src/views/SkListWidget.cpp',
         '../src/views/SkOSMenu.cpp',
         '../src/views/SkParsePaint.cpp',
-        '../src/views/SkProgressBarView.cpp',
         '../src/views/SkProgressView.cpp',
-        '../src/views/SkScrollBarView.cpp',
         '../src/views/SkStackViewLayout.cpp',
-        '../src/views/SkStaticTextView.cpp',
         '../src/views/SkTagList.cpp',
         '../src/views/SkTagList.h',
         '../src/views/SkTextBox.cpp',
@@ -63,14 +60,28 @@
         '../src/views/SkViewInflate.cpp',
         '../src/views/SkViewPriv.cpp',
         '../src/views/SkViewPriv.h',
-        '../src/views/SkWidget.cpp',
         '../src/views/SkWidgets.cpp',
-        '../src/views/SkWidgetViews.cpp',
         '../src/views/SkWindow.cpp',
+
+        # Mac
+        '../src/views/mac/SkOSWindow_Mac.mm',
+        '../src/views/mac/skia_mac.mm',
+
+        # SDL
+        '../src/views/SDL/SkOSWindow_SDL.cpp',
+
+        # *nix
+        '../src/views/unix/SkOSWindow_Unix.cpp',
+        '../src/views/unix/keysym2ucs.c',
+        '../src/views/unix/skia_unix.cpp',
+
+        # Windows
+        '../src/views/win/SkOSWindow_win.cpp',
+        '../src/views/win/skia_win.cpp',
+
       ],
       'sources!' : [
-        '../src/views/SkListView.cpp',   #depends on missing SkListSource implementation
-        '../src/views/SkListWidget.cpp', #depends on missing SkListSource implementation
+        '../src/views/SDL/SkOSWindow_SDL.cpp',
       ],
       'conditions': [
         [ 'skia_os == "mac"', {
@@ -80,25 +91,48 @@
               '$(SDKROOT)/System/Library/Frameworks/Foundation.framework',
             ],
           },
+        },{
+          'sources!': [
+            '../src/views/mac/SkOSWindow_Mac.mm',
+            '../src/views/mac/skia_mac.mm',
+          ],
         }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
-          'sources': [
-            '../unix_test_app/main.cpp',
+          'link_settings': {
+            'libraries': [
+              '-lGL',
+              '-lGLU',
+              '-lX11',
+            ],
+          },
+        },{
+          'sources!': [
+            '../src/views/unix/SkOSWindow_Unix.cpp',
+            '../src/views/unix/keysym2ucs.c',
+            '../src/views/unix/skia_unix.cpp',
           ],
         }],
-        [ 'skia_os == "android"', {
-          # Android does not support animator so we need to remove all files
-          # that have references to it.
-          'include_dirs!': [
-            '../include/animator',
-          ],
+        [ 'skia_os == "win"', {
+        },{
           'sources!': [
-            '../src/views/SkBorderView.cpp',
-            '../src/views/SkImageView.cpp',
-            '../src/views/SkProgressBarView.cpp',
-            '../src/views/SkScrollBarView.cpp',
-            '../src/views/SkStaticTextView.cpp',
-            '../src/views/SkWidgetViews.cpp',
+            '../src/views/win/SkOSWindow_win.cpp',
+            '../src/views/win/skia_win.cpp',
+          ],
+        }],
+        [ 'skia_os == "nacl"', {
+          'sources!': [
+            '../src/views/unix/SkOSWindow_Unix.cpp',
+            '../src/views/unix/keysym2ucs.c',
+            '../src/views/unix/skia_unix.cpp',
+          ],
+        }, {
+          'sources!': [
+            '../src/views/nacl/SkOSWindow_NaCl.cpp',
+          ],
+        }],
+        [ 'skia_gpu == 1', {
+          'include_dirs': [
+            '../include/gpu',
           ],
         }],
       ],

@@ -47,19 +47,19 @@ SkPost::~SkPost() {
         delete *part;
 }
 
-bool SkPost::add(SkAnimateMaker& , SkDisplayable* child) {
+bool SkPost::addChild(SkAnimateMaker& , SkDisplayable* child) {
     SkASSERT(child && child->isDataInput());
     SkDataInput* part = (SkDataInput*) child;
     *fParts.append() = part;
     return true;
 }
 
-bool SkPost::childrenNeedDisposing() const { 
-    return false; 
+bool SkPost::childrenNeedDisposing() const {
+    return false;
 }
 
-void SkPost::dirty() { 
-    fDirty = true; 
+void SkPost::dirty() {
+    fDirty = true;
 }
 
 #ifdef SK_DUMP_ENABLED
@@ -74,13 +74,9 @@ void SkPost::dump(SkAnimateMaker* maker) {
     else
         SkDebugf("type=\"%s\" ", eventType->c_str());
     delete eventType;
-    
+
     if (delay > 0) {
-#ifdef SK_CAN_USE_FLOAT
         SkDebugf("delay=\"%g\" ", SkScalarToFloat(SkScalarDiv(delay, 1000)));
-#else
-        SkDebugf("delay=\"%x\" ", SkScalarDiv(delay, 1000));
-#endif
     }
 //  if (initialized == false)
 //      SkDebugf("(uninitialized) ");
@@ -103,7 +99,7 @@ void SkPost::dump(SkAnimateMaker* maker) {
     SkDisplayList::fIndent += 4;
     //this seems to work, but kinda hacky
     //for some reason the last part is id, which i don't want
-    //and the parts seem to be in the reverse order from the one in which we find the 
+    //and the parts seem to be in the reverse order from the one in which we find the
     //data itself
     //SkDataInput** ptr = fParts.end();
     //SkDataInput* data;
@@ -131,11 +127,7 @@ void SkPost::dump(SkAnimateMaker* maker) {
             case SkMetaData::kScalar_Type: {
                 SkScalar scalar;
                 meta.findScalar(name, &scalar);
-#ifdef SK_CAN_USE_FLOAT
                 SkDebugf("float=\"%g\" ", SkScalarToFloat(scalar));
-#else
-                SkDebugf("float=\"%x\" ", scalar);
-#endif
                 } break;
             case SkMetaData::kString_Type:
                 SkDebugf("string=\"%s\" ", meta.findString(name));
@@ -219,7 +211,7 @@ bool SkPost::enable(SkAnimateMaker& maker ) {
     SkAnimator* anim = maker.getAnimator();
     if (targetID == 0) {
         isAnimatorEvent = fEvent.findString("id") != NULL;
-        if (isAnimatorEvent) 
+        if (isAnimatorEvent)
             targetID = anim->getSinkID();
         else if (maker.fHostEventSinkID)
             targetID = maker.fHostEventSinkID;
@@ -243,7 +235,7 @@ void SkPost::findSinkID() {
     const char* ch = sink.c_str();
     do {
         const char* end = strchr(ch, '.');
-        size_t len = end ? end - ch : strlen(ch);
+        size_t len = end ? (size_t) (end - ch) : strlen(ch);
         SkDisplayable* displayable = NULL;
         if (SK_LITERAL_STR_EQUAL("parent", ch, len)) {
             if (fTargetMaker->fParentMaker)
@@ -268,7 +260,7 @@ void SkPost::findSinkID() {
     SkAnimator* anim = fTargetMaker->getAnimator();
     fSinkID = anim->getSinkID();
 }
- 
+
 bool SkPost::hasEnable() const {
     return true;
 }
@@ -282,8 +274,8 @@ void SkPost::onEndElement(SkAnimateMaker& maker) {
     }
 }
 
-void SkPost::setChildHasID() { 
-    fChildHasID = true; 
+void SkPost::setChildHasID() {
+    fChildHasID = true;
 }
 
 bool SkPost::setProperty(int index, SkScriptValue& value) {
@@ -304,4 +296,3 @@ bool SkPost::setProperty(int index, SkScriptValue& value) {
     }
     return true;
 }
-

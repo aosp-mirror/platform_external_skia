@@ -3,7 +3,6 @@
 {
   'includes': [
     'apptype_console.gypi',
-    'common.gypi',
   ],
   'targets': [
     {
@@ -11,21 +10,82 @@
       'type': 'executable',
       'include_dirs' : [
         '../src/core',
-        '../src/gpu',
+        '../src/effects',
+        '../src/utils',
       ],
       'includes': [
         'bench.gypi'
       ],
       'dependencies': [
-        'core.gyp:core',
+        'skia_base_libs.gyp:skia_base_libs',
         'effects.gyp:effects',
-        'gpu.gyp:gr',
-        'gpu.gyp:skgr',
         'images.gyp:images',
-        'ports.gyp:ports',
-        'utils.gyp:utils',
+        'bench_timer',
+      ],
+      'conditions': [
+        ['skia_gpu == 1',
+          {
+            'include_dirs' : [
+              '../src/gpu',
+            ],
+          },
+        ],
       ],
     },
+    {
+      'target_name' : 'bench_timer',
+      'type': 'static_library',
+      'sources': [
+        '../bench/BenchTimer.h',
+        '../bench/BenchTimer.cpp',
+        '../bench/BenchSysTimer_mach.h',
+        '../bench/BenchSysTimer_mach.cpp',
+        '../bench/BenchSysTimer_posix.h',
+        '../bench/BenchSysTimer_posix.cpp',
+        '../bench/BenchSysTimer_windows.h',
+        '../bench/BenchSysTimer_windows.cpp',
+      ],
+        'include_dirs': [
+        '../src/core',
+        '../src/gpu',
+      ],
+      'dependencies': [
+        'skia_base_libs.gyp:skia_base_libs',
+      ],
+      'conditions': [
+        [ 'skia_os not in ["mac", "ios"]', {
+          'sources!': [
+            '../bench/BenchSysTimer_mach.h',
+            '../bench/BenchSysTimer_mach.cpp',
+          ],
+        }],
+        [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "android"]', {
+          'sources!': [
+            '../bench/BenchSysTimer_posix.h',
+            '../bench/BenchSysTimer_posix.cpp',
+          ],
+        }],
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+          'link_settings': {
+            'libraries': [
+              '-lrt',
+            ],
+          },
+        }],
+        [ 'skia_os != "win"', {
+          'sources!': [
+            '../bench/BenchSysTimer_windows.h',
+            '../bench/BenchSysTimer_windows.cpp',
+          ],
+        }],
+        ['skia_gpu == 1', {
+          'sources': [
+            '../bench/BenchGpuTimer_gl.h',
+            '../bench/BenchGpuTimer_gl.cpp',
+          ],
+        }],
+      ],
+    }
   ],
 }
 

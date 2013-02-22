@@ -12,10 +12,12 @@
 #include "SkTypeface.h"
 
 static SkShader* make_heatGradient(const SkPoint pts[2]) {
+#if 0 // UNUSED
     const SkColor colors[] = {
         SK_ColorBLACK, SK_ColorBLUE, SK_ColorCYAN, SK_ColorGREEN,
         SK_ColorYELLOW, SK_ColorRED, SK_ColorWHITE
     };
+#endif
     const SkColor bw[] = { SK_ColorBLACK, SK_ColorWHITE };
 
     return SkGradientShader::CreateLinear(pts, bw, NULL,
@@ -45,10 +47,10 @@ static CGContextRef makeCG(const SkBitmap& bm) {
     CGContextRef cg = CGBitmapContextCreate(bm.getPixels(), bm.width(), bm.height(),
                                             8, bm.rowBytes(), space, BITMAP_INFO_RGB);
     CFRelease(space);
-    
+
     CGContextSetAllowsFontSubpixelQuantization(cg, false);
     CGContextSetShouldSubpixelQuantizeFonts(cg, false);
-    
+
     return cg;
 }
 
@@ -66,10 +68,10 @@ static CGFontRef typefaceToCGFont(const SkTypeface* face) {
 static void cgSetPaintForText(CGContextRef cg, const SkPaint& paint) {
     SkColor c = paint.getColor();
     CGFloat rgba[] = {
-        SkColorGetB(c) / 255.0,
-        SkColorGetG(c) / 255.0,
-        SkColorGetR(c) / 255.0,
-        SkColorGetA(c) / 255.0,
+        SkColorGetB(c) / 255.0f,
+        SkColorGetG(c) / 255.0f,
+        SkColorGetR(c) / 255.0f,
+        SkColorGetA(c) / 255.0f,
     };
     CGContextSetRGBFillColor(cg, rgba[0], rgba[1], rgba[2], rgba[3]);
 
@@ -79,7 +81,7 @@ static void cgSetPaintForText(CGContextRef cg, const SkPaint& paint) {
 
     CGContextSetAllowsFontSubpixelPositioning(cg, paint.isSubpixelText());
     CGContextSetShouldSubpixelPositionFonts(cg, paint.isSubpixelText());
-    
+
     CGContextSetShouldAntialias(cg, paint.isAntiAlias());
     CGContextSetShouldSmoothFonts(cg, paint.isLCDRenderText());
 }
@@ -105,7 +107,7 @@ namespace skiagm {
    Each region should show as a blue center surrounded by a 2px green
    border, with no red.
 */
-    
+
 #define HEIGHT 480
 
 class GammaTextGM : public GM {
@@ -124,18 +126,18 @@ protected:
     }
 
     static void drawGrad(SkCanvas* canvas) {
-        SkPoint pts[] = { { 0, 0 }, { 0, HEIGHT } };
+        SkPoint pts[] = { { 0, 0 }, { 0, SkIntToScalar(HEIGHT) } };
 #if 0
         const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
         SkShader* s = SkGradientShader::CreateLinear(pts, colors, NULL, 2, SkShader::kClamp_TileMode);
 #else
         SkShader* s = make_heatGradient(pts);
 #endif
-        
+
         canvas->clear(SK_ColorRED);
         SkPaint paint;
         paint.setShader(s)->unref();
-        SkRect r = { 0, 0, 1024, HEIGHT };
+        SkRect r = { 0, 0, SkIntToScalar(1024), SkIntToScalar(HEIGHT) };
         canvas->drawRect(r, paint);
     }
 
@@ -143,7 +145,7 @@ protected:
 #ifdef SK_BUILD_FOR_MAC
         CGContextRef cg = makeCG(canvas->getDevice()->accessBitmap(false));
 #endif
-        
+
         drawGrad(canvas);
 
         const SkColor fg[] = {
@@ -152,7 +154,7 @@ protected:
             0xFFFF0000, 0xFF00FF00, 0xFF0000FF,
             0xFF000000,
         };
-        
+
         const char* text = "Hamburgefons";
         size_t len = strlen(text);
 
@@ -162,22 +164,30 @@ protected:
         paint.setAntiAlias(true);
         paint.setLCDRenderText(true);
 
-        SkScalar x = 10;
+        SkScalar x = SkIntToScalar(10);
         for (size_t i = 0; i < SK_ARRAY_COUNT(fg); ++i) {
             paint.setColor(fg[i]);
-            
-            SkScalar y = 40;
-            SkScalar stopy = HEIGHT;
+
+            SkScalar y = SkIntToScalar(40);
+            SkScalar stopy = SkIntToScalar(HEIGHT);
             while (y < stopy) {
-#if 1
-                canvas->drawText(text, len, x, y, paint);
-#else
-                cgDrawText(cg, text, len, x, HEIGHT - y, paint);
+                if (true) {
+                    canvas->drawText(text, len, x, y, paint);
+                }
+#ifdef SK_BUILD_FOR_MAC
+                else {
+                    cgDrawText(cg, text, len, SkScalarToFloat(x),
+                               static_cast<float>(HEIGHT) - SkScalarToFloat(y),
+                               paint);
+                }
 #endif
                 y += paint.getTextSize() * 2;
             }
             x += SkIntToScalar(1024) / SK_ARRAY_COUNT(fg);
         }
+#ifdef SK_BUILD_FOR_MAC
+        CGContextRelease(cg);
+#endif
     }
 
 private:

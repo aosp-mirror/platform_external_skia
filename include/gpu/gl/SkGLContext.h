@@ -18,6 +18,8 @@
 
 class SkGLContext : public SkRefCnt {
 public:
+    SK_DECLARE_INST_COUNT(SkGLContext)
+
     SkGLContext();
     virtual ~SkGLContext();
 
@@ -36,8 +38,8 @@ public:
 
 protected:
     /**
-     * Subclass implements this to make a GL context. The returned GrGLInterface 
-     * should be populated with functions compatible with the context. The 
+     * Subclass implements this to make a GL context. The returned GrGLInterface
+     * should be populated with functions compatible with the context. The
      * format and size of backbuffers does not matter since an FBO will be
      * created.
      */
@@ -51,7 +53,11 @@ protected:
 private:
     SkString fExtensionString;
     GrGLuint fFBO;
+    GrGLuint fColorBufferID;
+    GrGLuint fDepthStencilBufferID;
     const GrGLInterface* fGL;
+
+    typedef SkRefCnt INHERITED;
 };
 
 /**

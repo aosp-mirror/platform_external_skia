@@ -15,7 +15,7 @@ namespace skiagm {
 static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
     bm->setConfig(config, w, h);
     bm->allocPixels();
-    bm->eraseColor(0);
+    bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
     SkScalar    s = SkIntToScalar(SkMin32(w, h));
@@ -36,7 +36,7 @@ static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
     canvas.drawPaint(paint);
 }
 
-SkShader* MakeBitmapShader(SkShader::TileMode tx, SkShader::TileMode ty,
+static SkShader* MakeBitmapShader(SkShader::TileMode tx, SkShader::TileMode ty,
                            int w, int h) {
     static SkBitmap bmp;
     if (bmp.isNull()) {
@@ -109,7 +109,7 @@ static const GradMaker gGradMakers[] = {
 
 class ShaderTextGM : public GM {
 public:
-	ShaderTextGM() {
+    ShaderTextGM() {
         this->setBGColor(0xFFDDDDDD);
     }
 
@@ -119,7 +119,7 @@ protected:
         return SkString("shadertext");
     }
 
-	SkISize onISize() { return make_isize(1450, 500); }
+    SkISize onISize() { return make_isize(1450, 500); }
 
     virtual void onDraw(SkCanvas* canvas) {
         const char text[] = "Shaded Text";
@@ -174,8 +174,8 @@ protected:
 
         SkPath path;
         path.arcTo(SkRect::MakeXYWH(SkIntToScalar(-40), SkIntToScalar(15),
-                                    SkIntToScalar(300), SkIntToScalar(90)), 
-                                    SkIntToScalar(225), SkIntToScalar(90), 
+                                    SkIntToScalar(300), SkIntToScalar(90)),
+                                    SkIntToScalar(225), SkIntToScalar(90),
                                     false);
         path.close();
 
@@ -208,7 +208,8 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifndef SK_BUILD_FOR_ANDROID
 static GM* MyFactory(void*) { return new ShaderTextGM; }
 static GMRegistry reg(MyFactory);
-
+#endif
 }

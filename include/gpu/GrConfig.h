@@ -11,6 +11,8 @@
 #ifndef GrConfig_DEFINED
 #define GrConfig_DEFINED
 
+#include "SkTypes.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 // preconfig section:
 //
@@ -47,6 +49,9 @@
 #endif
 #if !defined(GR_QNX_BUILD)
     #define GR_QNX_BUILD        0
+#endif
+#if !defined(GR_CACHE_STATS)
+    #define GR_CACHE_STATS      0
 #endif
 
 /**
@@ -118,11 +123,15 @@ typedef unsigned __int64 uint64_t;
 #else
 /*
  *  Include stdint.h with defines that trigger declaration of C99 limit/const
- *  macros here before anyone else has a chance to include stdint.h without 
+ *  macros here before anyone else has a chance to include stdint.h without
  *  these.
  */
+#ifndef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS
+#endif
+#ifndef __STDC_CONSTANT_MACROS
 #define __STDC_CONSTANT_MACROS
+#endif
 #include <stdint.h>
 #endif
 
@@ -134,7 +143,7 @@ typedef unsigned __int64 uint64_t;
  *  GR_USER_CONFIG_FILE. It should be defined relative to GrConfig.h
  *
  *  e.g. it can specify GR_DEBUG/GR_RELEASE as it please, change the BUILD
- *  target, or supply its own defines for anything else (e.g. GR_SCALAR)
+ *  target, or supply its own defines for anything else (e.g. GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT)
  */
 #if !defined(GR_USER_CONFIG_FILE)
     #include "GrUserConfig.h"
@@ -182,7 +191,7 @@ typedef unsigned __int64 uint64_t;
 // debug -vs- release
 //
 
-extern GR_API void GrPrintf(const char format[], ...);
+#define GrPrintf SkDebugf
 
 /**
  *  GR_STRING makes a string of X where X is expanded before conversion to a string
@@ -306,13 +315,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #endif
 #endif
 
-#if !defined(GR_SCALAR_IS_FLOAT)
-    #define GR_SCALAR_IS_FLOAT   0
-#endif
-#if !defined(GR_SCALAR_IS_FIXED)
-    #define GR_SCALAR_IS_FIXED   0
-#endif
-
 #if !defined(GR_TEXT_SCALAR_TYPE_IS_USHORT)
     #define GR_TEXT_SCALAR_TYPE_IS_USHORT  0
 #endif
@@ -328,20 +330,20 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
 #endif
 
 /**
- *  GR_COLLECT_STATS controls whether the GrGpu class collects stats.
- *  If not already defined then collect in debug build but not release.
- */
-#if !defined(GR_COLLECT_STATS)
-    #define GR_COLLECT_STATS GR_DEBUG
-#endif
-
-/**
  *  GR_STATIC_RECT_VB controls whether rects are drawn by issuing a vertex
  *  for each corner or using a static vb that is positioned by modifying the
  *  view / texture matrix.
  */
 #if !defined(GR_STATIC_RECT_VB)
     #define GR_STATIC_RECT_VB 0
+#endif
+
+/**
+ *  GR_DISABLE_DRAW_BUFFERING prevents GrContext from queueing draws in a
+ *  GrInOrderDrawBuffer.
+ */
+#if !defined(GR_DISABLE_DRAW_BUFFERING)
+    #define GR_DISABLE_DRAW_BUFFERING 0
 #endif
 
 /**
@@ -364,6 +366,32 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #define GR_GEOM_BUFFER_LOCK_THRESHOLD (1 << 15)
 #endif
 
+/**
+ * GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT gives a threshold (in megabytes) for the
+ * maximum size of the texture cache in vram. The value is only a default and
+ * can be overridden at runtime.
+ */
+#if !defined(GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT)
+    #define GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT 96
+#endif
+
+/**
+ * GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE is for compatibility with the new version
+ * of the OpenGLES2.0 headers from Khronos.  glShaderSource now takes a const char * const *,
+ * instead of a const char **.
+ */
+#if !defined(GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE)
+    #define GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE 0
+#endif
+
+/**
+ * GR_STROKE_PATH_RENDERING controls whether or not the GrStrokePathRenderer can be selected
+ * as a path renderer. GrStrokePathRenderer is currently an experimental path renderer.
+ */
+#if !defined(GR_STROKE_PATH_RENDERING)
+    #define GR_STROKE_PATH_RENDERING                 0
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 // tail section:
 //
@@ -382,12 +410,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #error "More than one GR_BUILD defined"
 #endif
 
-
-#if !GR_SCALAR_IS_FLOAT && !GR_SCALAR_IS_FIXED
-    #undef  GR_SCALAR_IS_FLOAT
-    #define GR_SCALAR_IS_FLOAT              1
-    #pragma message GR_WARN("Scalar type not defined, defaulting to float")
-#endif
 
 #if !GR_TEXT_SCALAR_IS_FLOAT && \
     !GR_TEXT_SCALAR_IS_FIXED && \
@@ -419,4 +441,3 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
 #endif
 
 #endif
-

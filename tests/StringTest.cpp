@@ -28,7 +28,7 @@
         va_end(args);                               \
     } while (0)
 
-void printfAnalog(char* buffer, int size, const char format[], ...) {
+static void printfAnalog(char* buffer, int size, const char format[], ...) {
     ARGS_TO_BUFFER(format, buffer, size);
 }
 
@@ -55,6 +55,25 @@ static void TestString(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, a.equals("hello", 5));
     REPORTER_ASSERT(reporter, a.equals("hello"));
     REPORTER_ASSERT(reporter, !a.equals("help"));
+
+    REPORTER_ASSERT(reporter,  a.startsWith("hell"));
+    REPORTER_ASSERT(reporter,  a.startsWith('h'));
+    REPORTER_ASSERT(reporter, !a.startsWith( "ell"));
+    REPORTER_ASSERT(reporter, !a.startsWith( 'e'));
+    REPORTER_ASSERT(reporter,  a.startsWith(""));
+    REPORTER_ASSERT(reporter,  a.endsWith("llo"));
+    REPORTER_ASSERT(reporter,  a.endsWith('o'));
+    REPORTER_ASSERT(reporter, !a.endsWith("ll" ));
+    REPORTER_ASSERT(reporter, !a.endsWith('l'));
+    REPORTER_ASSERT(reporter,  a.endsWith(""));
+    REPORTER_ASSERT(reporter,  a.contains("he"));
+    REPORTER_ASSERT(reporter,  a.contains("ll"));
+    REPORTER_ASSERT(reporter,  a.contains("lo"));
+    REPORTER_ASSERT(reporter,  a.contains("hello"));
+    REPORTER_ASSERT(reporter, !a.contains("hellohello"));
+    REPORTER_ASSERT(reporter,  a.contains(""));
+    REPORTER_ASSERT(reporter,  a.contains('e'));
+    REPORTER_ASSERT(reporter, !a.contains('z'));
 
     SkString    e(a);
     SkString    f("hello");
@@ -135,7 +154,7 @@ static void TestString(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, buffer[18] == ' ');
     REPORTER_ASSERT(reporter, buffer[19] == 0);
     REPORTER_ASSERT(reporter, buffer[20] == 'a');
-    
+
 }
 
 #include "TestClassDef.h"

@@ -30,8 +30,7 @@ typedef int32_t             SkFixed;
 #define SK_FixedTanPIOver8  (0x6A0A)
 #define SK_FixedRoot2Over2  (0xB505)
 
-#ifdef SK_CAN_USE_FLOAT
-    #define SkFixedToFloat(x)   ((x) * 1.5258789e-5f)
+#define SkFixedToFloat(x)   ((x) * 1.5258789e-5f)
 #if 1
     #define SkFloatToFixed(x)   ((SkFixed)((x) * SK_Fixed1))
 #else
@@ -42,9 +41,19 @@ typedef int32_t             SkFixed;
     }
 #endif
 
-    #define SkFixedToDouble(x)  ((x) * 1.5258789e-5)
-    #define SkDoubleToFixed(x)  ((SkFixed)((x) * SK_Fixed1))
+#ifdef SK_DEBUG
+    static inline SkFixed SkFloatToFixed_Check(float x) {
+        int64_t n64 = (int64_t)(x * SK_Fixed1);
+        SkFixed n32 = (SkFixed)n64;
+        SkASSERT(n64 == n32);
+        return n32;
+    }
+#else
+    #define SkFloatToFixed_Check(x) SkFloatToFixed(x)
 #endif
+
+#define SkFixedToDouble(x)  ((x) * 1.5258789e-5)
+#define SkDoubleToFixed(x)  ((SkFixed)((x) * SK_Fixed1))
 
 /** 32 bit signed integer used to represent fractions values with 30 bits to the right of the decimal point
 */
@@ -53,10 +62,8 @@ typedef int32_t             SkFract;
 #define Sk_FracHalf         (1 << 29)
 #define SK_FractPIOver180   (0x11DF46A)
 
-#ifdef SK_CAN_USE_FLOAT
-    #define SkFractToFloat(x)   ((float)(x) * 0.00000000093132257f)
-    #define SkFloatToFract(x)   ((SkFract)((x) * SK_Fract1))
-#endif
+#define SkFractToFloat(x)   ((float)(x) * 0.00000000093132257f)
+#define SkFloatToFract(x)   ((SkFract)((x) * SK_Fract1))
 
 /** Converts an integer to a SkFixed, asserting that the result does not overflow
     a 32 bit signed integer
@@ -183,7 +190,7 @@ inline bool SkFixedNearlyZero(SkFixed x, SkFixed tolerance = SK_FixedNearlyZero)
     #define SkFixedSquare(a)    SkFixedSquare_longlong(a)
 #endif
 
-#if defined(__arm__) && !defined(__thumb__)
+#if defined(SK_CPU_ARM) && !defined(__thumb__)
     /* This guy does not handle NaN or other obscurities, but is faster than
        than (int)(x*65536) when we only have software floats
     */
@@ -262,6 +269,22 @@ inline bool SkFixedNearlyZero(SkFixed x, SkFixed tolerance = SK_FixedNearlyZero)
 #endif
 #ifndef SkFixedMulAdd
     #define SkFixedMulAdd(x, y, a)  (SkFixedMul(x, y) + (a))
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+typedef int64_t SkFixed48;
+
+#define SkIntToFixed48(x)       ((SkFixed48)(x) << 48)
+#define SkFixed48ToInt(x)       ((int)((x) >> 48))
+#define SkFixedToFixed48(x)     ((SkFixed48)(x) << 32)
+#define SkFixed48ToFixed(x)     ((SkFixed)((x) >> 32))
+#define SkFloatToFixed48(x)     ((SkFixed48)((x) * (65536.0f * 65536.0f * 65536.0f)))
+
+#ifdef SK_SCALAR_IS_FLOAT
+    #define SkScalarToFixed48(x)    SkFloatToFixed48(x)
+#else
+    #define SkScalarToFixed48(x)    SkFixedToFixed48(x)
 #endif
 
 #endif

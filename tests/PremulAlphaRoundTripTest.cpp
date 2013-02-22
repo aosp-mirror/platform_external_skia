@@ -9,7 +9,11 @@
 #include "Test.h"
 #include "SkCanvas.h"
 #include "SkConfig8888.h"
+#include "SkDevice.h"
+
+#if SK_SUPPORT_GPU
 #include "SkGpuDevice.h"
+#endif
 
 
 namespace {
@@ -44,23 +48,25 @@ static const SkCanvas::Config8888 gUnpremulConfigs[] = {
 
 void PremulAlphaRoundTripTest(skiatest::Reporter* reporter,
                               GrContext* context) {
-    SkCanvas canvas;
+    SkAutoTUnref<SkDevice> device;
     for (int dtype = 0; dtype < 2; ++dtype) {
         if (0 == dtype) {
-            canvas.setDevice(new SkDevice(SkBitmap::kARGB_8888_Config,
+            device.reset(new SkDevice(SkBitmap::kARGB_8888_Config,
                                           256,
                                           256,
-                                          false))->unref();
+                                          false));
         } else {
-#if SK_SCALAR_IS_FIXED
+#if !SK_SUPPORT_GPU || defined(SK_SCALAR_IS_FIXED)
             // GPU device known not to work in the fixed pt build.
             continue;
-#endif
-            canvas.setDevice(new SkGpuDevice(context,
+#else
+            device.reset(new SkGpuDevice(context,
                                              SkBitmap::kARGB_8888_Config,
                                              256,
-                                             256))->unref();
+                                             256));
+#endif
         }
+        SkCanvas canvas(device);
 
         SkBitmap readBmp1;
         readBmp1.setConfig(SkBitmap::kARGB_8888_Config, 256, 256);
@@ -90,10 +96,11 @@ void PremulAlphaRoundTripTest(skiatest::Reporter* reporter,
                 reinterpret_cast<uint32_t*>(readBmp1.getPixels());
             uint32_t* pixels2 =
                 reinterpret_cast<uint32_t*>(readBmp2.getPixels());
-            for (int y = 0; y < 256; ++y) {
-                for (int x = 0; x < 256; ++x) {
+            bool success = true;
+            for (int y = 0; y < 256 && success; ++y) {
+                for (int x = 0; x < 256 && success; ++x) {
                     int i = y * 256 + x;
-                    REPORTER_ASSERT(reporter, pixels1[i] == pixels2[i]);
+                    REPORTER_ASSERT(reporter, success = pixels1[i] == pixels2[i]);
                 }
             }
         }
@@ -103,4 +110,3 @@ void PremulAlphaRoundTripTest(skiatest::Reporter* reporter,
 
 #include "TestClassDef.h"
 DEFINE_GPUTESTCLASS("PremulAlphaRoundTripTest", PremulAlphaRoundTripTestClass, PremulAlphaRoundTripTest)
-

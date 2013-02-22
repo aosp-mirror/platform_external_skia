@@ -10,7 +10,6 @@
 #include "SkFontHost.h"
 #include "SkPaint.h"
 #include "SkRandom.h"
-#include "SkSfntUtils.h"
 #include "SkString.h"
 #include "SkTemplates.h"
 
@@ -50,6 +49,7 @@ class TextBench : public SkBenchmark {
 public:
     TextBench(void* param, const char text[], int ps,
               SkColor color, FontQuality fq, bool doPos = false) : INHERITED(param) {
+        fPos = NULL;
         fFQ = fq;
         fDoPos = doPos;
         fText.set(text);

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -9,6 +8,7 @@
 
 #include "GrGLCaps.h"
 #include "GrGLContextInfo.h"
+#include "SkTSearch.h"
 
 GrGLCaps::GrGLCaps() {
     this->reset();
@@ -19,7 +19,10 @@ void GrGLCaps::reset() {
     fStencilFormats.reset();
     fStencilVerifiedColorConfigs.reset();
     fMSFBOType = kNone_MSFBOType;
+    fMaxSampleCount = 0;
+    fCoverageAAType = kNone_CoverageAAType;
     fMaxFragmentUniformVectors = 0;
+    fMaxVertexAttributes = 0;
     fRGBA8RenderbufferSupport = false;
     fBGRAFormatSupport = false;
     fBGRAIsInternalFormat = false;
@@ -30,6 +33,10 @@ void GrGLCaps::reset() {
     fPackFlipYSupport = false;
     fTextureUsageSupport = false;
     fTexStorageSupport = false;
+    fTextureRedSupport = false;
+    fImagingSupport = false;
+    fTwoFormatLimit = false;
+    fFragCoordsConventionSupport = false;
 }
 
 GrGLCaps::GrGLCaps(const GrGLCaps& caps) {
@@ -41,7 +48,11 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fStencilFormats = caps.fStencilFormats;
     fStencilVerifiedColorConfigs = caps.fStencilVerifiedColorConfigs;
     fMaxFragmentUniformVectors = caps.fMaxFragmentUniformVectors;
+    fMaxVertexAttributes = caps.fMaxVertexAttributes;
     fMSFBOType = caps.fMSFBOType;
+    fMaxSampleCount = caps.fMaxSampleCount;
+    fCoverageAAType = caps.fCoverageAAType;
+    fMSAACoverageModes = caps.fMSAACoverageModes;
     fRGBA8RenderbufferSupport = caps.fRGBA8RenderbufferSupport;
     fBGRAFormatSupport = caps.fBGRAFormatSupport;
     fBGRAIsInternalFormat = caps.fBGRAIsInternalFormat;
@@ -52,6 +63,10 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fPackFlipYSupport = caps.fPackFlipYSupport;
     fTextureUsageSupport = caps.fTextureUsageSupport;
     fTexStorageSupport = caps.fTexStorageSupport;
+    fTextureRedSupport = caps.fTextureRedSupport;
+    fImagingSupport = caps.fImagingSupport;
+    fTwoFormatLimit = caps.fTwoFormatLimit;
+    fFragCoordsConventionSupport = caps.fFragCoordsConventionSupport;
 
     return *this;
 }
@@ -76,6 +91,7 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
         GR_GL_GetIntegerv(gli, GR_GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &max);
         fMaxFragmentUniformVectors = max / 4;
     }
+    GR_GL_GetIntegerv(gli, GR_GL_MAX_VERTEX_ATTRIBS, &fMaxVertexAttributes);
 
     if (kDesktop_GrGLBinding == binding) {
         fRGBA8RenderbufferSupport = true;
@@ -88,7 +104,6 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
         fBGRAFormatSupport = version >= GR_GL_VER(1,2) ||
                              ctxInfo.hasExtension("GL_EXT_bgra");
     } else {
-        bool hasBGRAExt = false;
         if (ctxInfo.hasExtension("GL_APPLE_texture_format_BGRA8888")) {
             fBGRAFormatSupport = true;
         } else if (ctxInfo.hasExtension("GL_EXT_texture_format_BGRA8888")) {
@@ -96,7 +111,7 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
             fBGRAIsInternalFormat = true;
         }
         GrAssert(fBGRAFormatSupport ||
-                 kSkia8888_PM_GrPixelConfig != kBGRA_8888_PM_GrPixelConfig);
+                 kSkia8888_GrPixelConfig != kBGRA_8888_GrPixelConfig);
     }
 
     if (kDesktop_GrGLBinding == binding) {
@@ -129,8 +144,76 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
                          ctxInfo.hasExtension("GL_ARB_texture_storage") ||
                          ctxInfo.hasExtension("GL_EXT_texture_storage");
 
+    // ARB_texture_rg is part of OpenGL 3.0
+    if (kDesktop_GrGLBinding == binding) {
+        fTextureRedSupport = version >= GR_GL_VER(3,0) ||
+                             ctxInfo.hasExtension("GL_ARB_texture_rg");
+    } else {
+        fTextureRedSupport = ctxInfo.hasExtension("GL_EXT_texture_rg");
+    }
+
+    fImagingSupport = kDesktop_GrGLBinding == binding &&
+                      ctxInfo.hasExtension("GL_ARB_imaging");
+
+    // ES 2 only guarantees RGBA/uchar + one other format/type combo for
+    // ReadPixels. The other format has to checked at run-time since it
+    // can change based on which render target is bound
+    fTwoFormatLimit = kES2_GrGLBinding == binding;
+
+    // Known issue on at least some Intel platforms:
+    // http://code.google.com/p/skia/issues/detail?id=946
+    if (kIntel_GrGLVendor != ctxInfo.vendor()) {
+        fFragCoordsConventionSupport = ctxInfo.glslGeneration() >= k150_GrGLSLGeneration ||
+                                       ctxInfo.hasExtension("GL_ARB_fragment_coord_conventions");
+    }
+
     this->initFSAASupport(ctxInfo);
     this->initStencilFormats(ctxInfo);
+}
+
+bool GrGLCaps::readPixelsSupported(const GrGLInterface* intf,
+                                   GrGLenum format,
+                                   GrGLenum type) const {
+    if (GR_GL_RGBA == format && GR_GL_UNSIGNED_BYTE == type) {
+        // ES 2 guarantees this format is supported
+        return true;
+    }
+
+    if (!fTwoFormatLimit) {
+        // not limited by ES 2's constraints
+        return true;
+    }
+
+    GrGLint otherFormat = GR_GL_RGBA;
+    GrGLint otherType = GR_GL_UNSIGNED_BYTE;
+
+    // The other supported format/type combo supported for ReadPixels
+    // can change based on which render target is bound
+    GR_GL_GetIntegerv(intf,
+                      GR_GL_IMPLEMENTATION_COLOR_READ_FORMAT,
+                      &otherFormat);
+
+    GR_GL_GetIntegerv(intf,
+                      GR_GL_IMPLEMENTATION_COLOR_READ_TYPE,
+                      &otherType);
+
+    return (GrGLenum)otherFormat == format && (GrGLenum)otherType == type;
+}
+
+namespace {
+int coverage_mode_compare(const GrGLCaps::MSAACoverageMode* left,
+                          const GrGLCaps::MSAACoverageMode* right) {
+    if (left->fCoverageSampleCnt < right->fCoverageSampleCnt) {
+        return -1;
+    } else if (right->fCoverageSampleCnt < left->fCoverageSampleCnt) {
+        return 1;
+    } else if (left->fColorSampleCnt < right->fColorSampleCnt) {
+        return -1;
+    } else if (right->fColorSampleCnt < left->fColorSampleCnt) {
+        return 1;
+    }
+    return 0;
+}
 }
 
 void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
@@ -142,8 +225,8 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
            // and fbo_blit extensions.
            fMSFBOType = kDesktopEXT_MSFBOType;
        } else if (ctxInfo.hasExtension("GL_APPLE_framebuffer_multisample")) {
-            fMSFBOType = kAppleES_MSFBOType;
-        }
+           fMSFBOType = kAppleES_MSFBOType;
+       }
     } else {
         if ((ctxInfo.version() >= GR_GL_VER(3,0)) ||
             ctxInfo.hasExtension("GL_ARB_framebuffer_object")) {
@@ -152,6 +235,55 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
                    ctxInfo.hasExtension("GL_EXT_framebuffer_blit")) {
             fMSFBOType = GrGLCaps::kDesktopEXT_MSFBOType;
         }
+        // TODO: We could populate fMSAACoverageModes using GetInternalformativ
+        // on GL 4.2+. It's format-specific, though. See also
+        // http://code.google.com/p/skia/issues/detail?id=470 about using actual
+        // rather than requested sample counts in cache key.
+        if (ctxInfo.hasExtension("GL_NV_framebuffer_multisample_coverage")) {
+            fCoverageAAType = kNVDesktop_CoverageAAType;
+            GrGLint count;
+            GR_GL_GetIntegerv(ctxInfo.interface(),
+                              GR_GL_MAX_MULTISAMPLE_COVERAGE_MODES,
+                              &count);
+            fMSAACoverageModes.setCount(count);
+            GR_GL_GetIntegerv(ctxInfo.interface(),
+                              GR_GL_MULTISAMPLE_COVERAGE_MODES,
+                              (int*)&fMSAACoverageModes[0]);
+            // The NV driver seems to return the modes already sorted but the
+            // spec doesn't require this. So we sort.
+            qsort(&fMSAACoverageModes[0],
+                    count,
+                    sizeof(MSAACoverageMode),
+                    SkCastForQSort(coverage_mode_compare));
+        }
+    }
+    if (kNone_MSFBOType != fMSFBOType) {
+        GR_GL_GetIntegerv(ctxInfo.interface(),
+                          GR_GL_MAX_SAMPLES,
+                          &fMaxSampleCount);
+    }
+}
+
+const GrGLCaps::MSAACoverageMode& GrGLCaps::getMSAACoverageMode(
+                                            int desiredSampleCount) const {
+    static const MSAACoverageMode kNoneMode = {0, 0};
+    if (0 == fMSAACoverageModes.count()) {
+        return kNoneMode;
+    } else {
+        GrAssert(kNone_CoverageAAType != fCoverageAAType);
+        int max = (fMSAACoverageModes.end() - 1)->fCoverageSampleCnt;
+        desiredSampleCount = GrMin(desiredSampleCount, max);
+        MSAACoverageMode desiredMode = {desiredSampleCount, 0};
+        int idx = SkTSearch<MSAACoverageMode>(&fMSAACoverageModes[0],
+                                              fMSAACoverageModes.count(),
+                                              desiredMode,
+                                              sizeof(MSAACoverageMode),
+                                              &coverage_mode_compare);
+        if (idx < 0) {
+            idx = ~idx;
+        }
+        GrAssert(idx >= 0 && idx < fMSAACoverageModes.count());
+        return fMSAACoverageModes[idx];
     }
 }
 
@@ -173,12 +305,12 @@ void GrGLCaps::initStencilFormats(const GrGLContextInfo& ctxInfo) {
         gS16   = {GR_GL_STENCIL_INDEX16,  16,               16,               false},
         gD24S8 = {GR_GL_DEPTH24_STENCIL8, 8,                32,               true },
         gS4    = {GR_GL_STENCIL_INDEX4,   4,                4,                false},
-        gS     = {GR_GL_STENCIL_INDEX,    kUnknownBitCount, kUnknownBitCount, false},
+    //  gS     = {GR_GL_STENCIL_INDEX,    kUnknownBitCount, kUnknownBitCount, false},
         gDS    = {GR_GL_DEPTH_STENCIL,    kUnknownBitCount, kUnknownBitCount, true };
 
     if (kDesktop_GrGLBinding == ctxInfo.binding()) {
         bool supportsPackedDS =
-            ctxInfo.version() >= GR_GL_VER(3,0) || 
+            ctxInfo.version() >= GR_GL_VER(3,0) ||
             ctxInfo.hasExtension("GL_EXT_packed_depth_stencil") ||
             ctxInfo.hasExtension("GL_ARB_framebuffer_object");
 
@@ -291,5 +423,6 @@ void GrGLCaps::print() const {
              (fPackRowLengthSupport ? "YES": "NO"));
     GrPrintf("Pack Flip Y support: %s\n",
              (fPackFlipYSupport ? "YES": "NO"));
+    GrPrintf("Two Format Limit: %s\n", (fTwoFormatLimit ? "YES": "NO"));
+    GrPrintf("Fragment coord conventions support: %s\n", (fFragCoordsConventionSupport ? "YES": "NO"));
 }
-

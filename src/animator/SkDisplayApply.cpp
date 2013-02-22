@@ -51,13 +51,13 @@ const SkMemberInfo SkApply::fInfo[] = {
     SK_MEMBER(transition, ApplyTransition)
 };
 
-#endif 
+#endif
 
 DEFINE_GET_MEMBER(SkApply);
 
 SkApply::SkApply() : begin(0), dontDraw(false), interval((SkMSec) -1), mode((Mode) -1), /*pickup(false), */
     restore(false), scope(NULL), steps(-1), transition((Transition) -1), fActive(NULL), /*fCurrentScope(NULL),*/
-    fLastTime(0), fAppended(false), fContainsScope(false), fDeleteScope(false), fEmbedded(false), 
+    fLastTime(0), fAppended(false), fContainsScope(false), fDeleteScope(false), fEmbedded(false),
     fEnabled(false), fEnabling(false) {
 }
 
@@ -105,7 +105,7 @@ void SkApply::append(SkApply* apply) {
 }
 
 void SkApply::applyValues(int animatorIndex, SkOperand* values, int count,
-     SkDisplayTypes valuesType, SkMSec time) 
+     SkDisplayTypes valuesType, SkMSec time)
 {
     SkAnimateBase* animator = fActive->fAnimators[animatorIndex];
     const SkMemberInfo * info = animator->fFieldInfo;
@@ -149,7 +149,7 @@ void SkApply::applyValues(int animatorIndex, SkOperand* values, int count,
             target->setReference(info, values->fDisplayable);
         else
             info->setValue(target, values, count);
-    } 
+    }
 }
 
 bool SkApply::contains(SkDisplayable* child) {
@@ -178,7 +178,7 @@ void SkApply::disable() {
     //!!! this is the right thing to do, but has bad side effects because of other problems
     // currently, if an apply is in a g and scopes a statement in another g, it ends up as members
     // of both containers. The disabling here incorrectly disables both instances
-    // maybe the fEnabled flag needs to be moved to the fActive data so that both 
+    // maybe the fEnabled flag needs to be moved to the fActive data so that both
     // instances are not affected.
 //  fEnabled = false;
 }
@@ -265,7 +265,7 @@ bool SkApply::enable(SkAnimateMaker& maker) {
     bool initialized = fActive != NULL;
     if (dynamicScope.size() > 0)
         enableDynamic(maker);
-    if (maker.fError.hasError()) 
+    if (maker.fError.hasError())
         return false;
     int animators = fAnimators.count();
     int index;
@@ -333,7 +333,7 @@ bool SkApply::enable(SkAnimateMaker& maker) {
     }
 #endif
 //  start here;
-    // now that one apply might embed another, only the parent apply should replace the scope 
+    // now that one apply might embed another, only the parent apply should replace the scope
     // or get appended to the display list
     // similarly, an apply added by an add immediate has already been located in the display list
     // and should not get moved or added again here
@@ -408,7 +408,7 @@ void SkApply::enableCreate(SkAnimateMaker& maker) {
             step = steps; // quit
             goto next; // resolveIDs failed
         }
-        if (newID.size() > 0) 
+        if (newID.size() > 0)
             maker.setID(copyScope, newID);
         if (copy->resolveIDs(maker, this, this)) { // fix up all fields, including target
             step = steps; // quit
@@ -471,7 +471,7 @@ void SkApply::endSave(int index) {
             info->setValue(target, fActive->fSaveRestore[activeIndex], count);
     } else {
         SkScriptValue scriptValue;
-        bool success = target->getProperty(info->propertyIndex(), &scriptValue);
+        SkDEBUGCODE(bool success = ) target->getProperty(info->propertyIndex(), &scriptValue);
         SkASSERT(success == true);
         last[0] = scriptValue.fOperand;
         scriptValue.fOperand = fActive->fSaveRestore[activeIndex][0];
@@ -517,7 +517,7 @@ bool SkApply::hasDelayedAnimator() const {
     SkAnimateBase** animEnd = fAnimators.end();
     for (SkAnimateBase** animPtr = fAnimators.begin(); animPtr < animEnd; animPtr++) {
         SkAnimateBase* animator = *animPtr;
-        if (animator->fDelayed) 
+        if (animator->fDelayed)
             return true;
     }
     return false;
@@ -548,7 +548,7 @@ bool SkApply::interpolate(SkAnimateMaker& maker, SkMSec rawTime) {
     SkMSec time = maker.getAppTime();
     if (lastTime == (SkMSec) -1)
         lastTime = rawTime - 1;
-    if (fActive != NULL && 
+    if (fActive != NULL &&
         strcmp(id, "a3") == 0 && rawTime > lastTime) {
         lastTime += 1000;
         SkString debugOut;
@@ -593,7 +593,7 @@ bool SkApply::interpolate(SkAnimateMaker& maker, SkMSec rawTime) {
         } else
             animate->fDelayed = false;
         SkMSec innerTime = fLastTime = state.getRelativeTime(time);
-        if (restore) 
+        if (restore)
             fActive->restoreInterpolatorValues(inner);
         if (animate->fReset) {
             if (transition != SkApply::kTransition_reverse) {
@@ -629,7 +629,7 @@ bool SkApply::interpolate(SkAnimateMaker& maker, SkMSec rawTime) {
                 fLastTime = animate->dur;
             SkTypedArray formulaValues;
             formulaValues.setCount(count);
-            bool success = animate->fFieldInfo->setValue(maker, &formulaValues, 0, 0, NULL, 
+            SkDEBUGCODE(bool success = ) animate->fFieldInfo->setValue(maker, &formulaValues, 0, 0, NULL,
                 animate->getValuesType(), animate->formula);
             SkASSERT(success);
             if (restore)
@@ -652,7 +652,7 @@ void SkApply::initialize() {
     scope->initialize();
 }
 
-void SkApply::onEndElement(SkAnimateMaker& maker) 
+void SkApply::onEndElement(SkAnimateMaker& maker)
 {
     SkDrawable* scopePtr = scope;
     while (scopePtr && scopePtr->isApply()) {
@@ -761,7 +761,7 @@ void SkApply::save(int index) {
             info->setValue(target, last.begin(), count);
     } else {
         SkScriptValue scriptValue;
-        bool success = target->getProperty(info->propertyIndex(), &scriptValue);
+        SkDEBUGCODE(bool success = ) target->getProperty(info->propertyIndex(), &scriptValue);
         SkASSERT(success == true);
         SkASSERT(scriptValue.fType == SkType_Float);
         fActive->fSaveRestore[activeIndex][0] = scriptValue.fOperand;
@@ -781,7 +781,7 @@ bool SkApply::setProperty(int index, SkScriptValue& scriptValue) {
             SkAnimateBase* animate = (SkAnimateBase*) scriptValue.fOperand.fDisplayable;
             SkASSERT(animate->isAnimate());
             *fAnimators.append() = animate;
-            return true; 
+            return true;
         }
         case SK_PROPERTY(steps):
             steps = scriptValue.fOperand.fS32;
@@ -792,8 +792,8 @@ bool SkApply::setProperty(int index, SkScriptValue& scriptValue) {
     return false;
 }
 
-void SkApply::setSteps(int _steps) { 
-    steps = _steps; 
+void SkApply::setSteps(int _steps) {
+    steps = _steps;
 }
 
 #ifdef SK_DEBUG
@@ -802,6 +802,3 @@ void SkApply::validate() {
         fActive->validate();
 }
 #endif
-
-
-

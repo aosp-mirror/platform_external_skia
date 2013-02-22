@@ -6,6 +6,7 @@
  * found in the LICENSE file.
  */
 #include "SkThread.h"
+#include "SkTLS.h"
 
 #include <pthread.h>
 #include <errno.h>
@@ -14,7 +15,7 @@
 
 /**
  We prefer the GCC intrinsic implementation of the atomic operations over the
- SkMutex-based implementation. The SkMutex version suffers from static 
+ SkMutex-based implementation. The SkMutex version suffers from static
  destructor ordering problems.
  Note clang also defines the GCC version macros and implements the intrinsics.
  TODO: Verify that gcc-style __sync_* intrinsics work on ARM
@@ -34,10 +35,36 @@ int32_t sk_atomic_inc(int32_t* addr)
     return __sync_fetch_and_add(addr, 1);
 }
 
+int32_t sk_atomic_add(int32_t* addr, int32_t inc)
+{
+    return __sync_fetch_and_add(addr, inc);
+}
+
 int32_t sk_atomic_dec(int32_t* addr)
 {
     return __sync_fetch_and_add(addr, -1);
 }
+void sk_membar_aquire__after_atomic_dec() { }
+
+int32_t sk_atomic_conditional_inc(int32_t* addr)
+{
+    int32_t value = *addr;
+
+    while (true) {
+        if (value == 0) {
+            return 0;
+        }
+
+        int32_t before = __sync_val_compare_and_swap(addr, value, value + 1);
+
+        if (before == value) {
+            return value;
+        } else {
+            value = before;
+        }
+    }
+}
+void sk_membar_aquire__after_atomic_conditional_inc() { }
 
 #else
 
@@ -52,6 +79,15 @@ int32_t sk_atomic_inc(int32_t* addr)
     return value;
 }
 
+int32_t sk_atomic_add(int32_t* addr, int32_t inc)
+{
+    SkAutoMutexAcquire ac(gAtomicMutex);
+
+    int32_t value = *addr;
+    *addr = value + inc;
+    return value;
+}
+
 int32_t sk_atomic_dec(int32_t* addr)
 {
     SkAutoMutexAcquire ac(gAtomicMutex);
@@ -60,6 +96,17 @@ int32_t sk_atomic_dec(int32_t* addr)
     *addr = value - 1;
     return value;
 }
+void sk_membar_aquire__after_atomic_dec() { }
+
+int32_t sk_atomic_conditional_inc(int32_t* addr)
+{
+    SkAutoMutexAcquire ac(gAtomicMutex);
+
+    int32_t value = *addr;
+    if (value != 0) ++*addr;
+    return value;
+}
+void sk_membar_aquire__after_atomic_conditional_inc() { }
 
 #endif
 
@@ -119,7 +166,7 @@ SkMutex::SkMutex() {
     status = pthread_mutexattr_init(&attr);
     print_pthread_error(status);
     SkASSERT(0 == status);
-    
+
     status = pthread_mutex_init((pthread_mutex_t*)fStorage, &attr);
     print_pthread_error(status);
     SkASSERT(0 == status);
@@ -149,3 +196,25 @@ void SkMutex::release() {
 }
 
 #endif // !SK_USE_POSIX_THREADS
+
+///////////////////////////////////////////////////////////////////////////////
+
+static pthread_key_t gSkTLSKey;
+static pthread_once_t gSkTLSKey_Once = PTHREAD_ONCE_INIT;
+
+static void sk_tls_make_key() {
+    (void)pthread_key_create(&gSkTLSKey, SkTLS::Destructor);
+}
+
+void* SkTLS::PlatformGetSpecific(bool forceCreateTheSlot) {
+    // should we use forceCreateTheSlot to potentially skip calling pthread_once
+    // and just return NULL if we've never been called with
+    // forceCreateTheSlot==true ?
+
+    (void)pthread_once(&gSkTLSKey_Once, sk_tls_make_key);
+    return pthread_getspecific(gSkTLSKey);
+}
+
+void SkTLS::PlatformSetSpecific(void* ptr) {
+    (void)pthread_setspecific(gSkTLSKey, ptr);
+}

@@ -14,6 +14,7 @@
 #include "SkDevice.h"
 #include "SkPaint.h"
 #include "SkPath.h"
+#include "SkRect.h"
 #include "SkRefCnt.h"
 #include "SkStream.h"
 #include "SkTScopedPtr.h"
@@ -100,6 +101,9 @@ public:
     virtual void drawDevice(const SkDraw&, SkDevice*, int x, int y,
                             const SkPaint&) SK_OVERRIDE;
 
+    virtual void onAttachToCanvas(SkCanvas* canvas) SK_OVERRIDE;
+    virtual void onDetachFromCanvas() SK_OVERRIDE;
+
     enum DrawingArea {
         kContent_DrawingArea,  // Drawing area for the page content.
         kMargin_DrawingArea,   // Drawing area for the margin content.
@@ -124,16 +128,25 @@ public:
 
     /** Get the list of resources (PDF objects) used on this page.
      *  @param resourceList A list to append the resources to.
+     *  @param recursive    If recursive is true, get the resources of the
+     *                      device's resources recursively. (Useful for adding
+     *                      objects to the catalog.)
      */
-    SK_API void getResources(SkTDArray<SkPDFObject*>* resourceList) const;
+    SK_API void getResources(SkTDArray<SkPDFObject*>* resourceList,
+                             bool recursive) const;
 
     /** Get the fonts used on this device.
      */
     SK_API const SkTDArray<SkPDFFont*>& getFontResources() const;
 
-    /** Returns the media box for this device.
+    /** Returns a copy of the media box for this device. The caller is required
+     *  to unref() this when it is finished.
      */
-    SK_API SkRefPtr<SkPDFArray> getMediaBox() const;
+    SK_API SkPDFArray* copyMediaBox() const;
+
+    /** Get the annotations from this page, or NULL if there are none.
+     */
+    SK_API SkPDFArray* getAnnotations() const { return fAnnotations; }
 
     /** Returns a SkStream with the page contents.  The caller is responsible
         for a reference to the returned value.
@@ -173,7 +186,8 @@ private:
     SkMatrix fInitialTransform;
     SkClipStack fExistingClipStack;
     SkRegion fExistingClipRegion;
-    SkRefPtr<SkPDFDict> fResourceDict;
+    SkPDFArray* fAnnotations;
+    SkPDFDict* fResourceDict;
 
     SkTDArray<SkPDFGraphicState*> fGraphicStateResources;
     SkTDArray<SkPDFObject*> fXObjectResources;
@@ -185,6 +199,8 @@ private:
     SkTScopedPtr<ContentEntry> fMarginContentEntries;
     ContentEntry* fLastMarginContentEntry;
     DrawingArea fDrawingArea;
+
+    const SkClipStack* fClipStack;
 
     // Accessor and setter functions based on the current DrawingArea.
     SkTScopedPtr<ContentEntry>* getContentEntries();
@@ -205,7 +221,7 @@ private:
 
     void init();
     void cleanUp(bool clearFontUsage);
-    void createFormXObjectFromDevice(SkRefPtr<SkPDFFormXObject>* xobject);
+    SkPDFFormXObject* createFormXObjectFromDevice();
 
     // Clear the passed clip from all existing content entries.
     void clearClipFromContent(const SkClipStack* clipStack,
@@ -224,7 +240,7 @@ private:
                                     const SkMatrix& matrix,
                                     const SkPaint& paint,
                                     bool hasText,
-                                    SkRefPtr<SkPDFFormXObject>* dst);
+                                    SkPDFFormXObject** dst);
     void finishContentEntry(SkXfermode::Mode xfermode,
                             SkPDFFormXObject* dst);
     bool isContentEmpty();
@@ -254,9 +270,10 @@ private:
      */
     void copyContentEntriesToData(ContentEntry* entry, SkWStream* data) const;
 
-    // Disable the default copy and assign implementation.
-    SkPDFDevice(const SkPDFDevice&);
-    void operator=(const SkPDFDevice&);
+    bool handleAnnotations(const SkRect& r, const SkMatrix& matrix,
+                           const SkPaint& paint);
+
+    typedef SkDevice INHERITED;
 };
 
 #endif

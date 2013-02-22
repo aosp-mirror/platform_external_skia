@@ -31,7 +31,7 @@ static void drawIntoBitmap(const SkBitmap& bm) {
     p.setColor(SK_ColorRED);
     canvas.drawCircle(SkIntToScalar(w)/2, SkIntToScalar(h)/2,
                       SkIntToScalar(SkMin32(w, h))*3/8, p);
-    
+
     SkRect r;
     r.set(0, 0, SkIntToScalar(w), SkIntToScalar(h));
     p.setStyle(SkPaint::kStroke_Style);
@@ -52,7 +52,7 @@ static uint8_t compute666Index(SkPMColor c) {
     int r = SkGetPackedR32(c);
     int g = SkGetPackedG32(c);
     int b = SkGetPackedB32(c);
-    
+
     return convByteTo6(r) * 36 + convByteTo6(g) * 6 + convByteTo6(b);
 }
 
@@ -74,7 +74,7 @@ static void convertToIndex666(const SkBitmap& src, SkBitmap* dst) {
     dst->setConfig(SkBitmap::kIndex8_Config, src.width(), src.height());
     dst->allocPixels(ctable);
     ctable->unref();
-    
+
     SkAutoLockPixels alps(src);
     SkAutoLockPixels alpd(*dst);
 
@@ -88,12 +88,12 @@ static void convertToIndex666(const SkBitmap& src, SkBitmap* dst) {
 }
 
 /*  Variants for bitmaps
- 
+
     - src depth (32 w+w/o alpha), 565, 4444, index, a8
     - paint options: filtering, dither, alpha
     - matrix options: translate, scale, rotate, persp
     - tiling: none, repeat, mirror, clamp
-    
+
  */
 
 class BitmapBench : public SkBenchmark {
@@ -106,7 +106,7 @@ class BitmapBench : public SkBenchmark {
     enum { N = SkBENCHLOOP(300) };
 public:
     BitmapBench(void* param, bool isOpaque, SkBitmap::Config c,
-                bool forceUpdate = false, bool bitmapVolatile = false, 
+                bool forceUpdate = false, bool bitmapVolatile = false,
                 int tx = -1, int ty = -1)
         : INHERITED(param), fIsOpaque(isOpaque), fForceUpdate(forceUpdate), fTileX(tx), fTileY(ty) {
         const int w = 128;
@@ -120,7 +120,7 @@ public:
         }
         bm.allocPixels();
         bm.eraseColor(isOpaque ? SK_ColorBLACK : 0);
-        
+
         drawIntoBitmap(bm);
 
         if (SkBitmap::kIndex8_Config == c) {
@@ -147,7 +147,7 @@ protected:
         }
         fName.appendf("_%s%s", gConfigName[fBitmap.config()],
                       fIsOpaque ? "" : "_A");
-        if (fForceUpdate) 
+        if (fForceUpdate)
             fName.append("_update");
         if (fBitmap.isVolatile())
             fName.append("_volatile");
@@ -165,7 +165,7 @@ protected:
         const SkBitmap& bitmap = fBitmap;
         const SkScalar x0 = SkIntToScalar(-bitmap.width() / 2);
         const SkScalar y0 = SkIntToScalar(-bitmap.height() / 2);
-        
+
         for (int i = 0; i < N; i++) {
             SkScalar x = x0 + rand.nextUScalar1() * dim.fX;
             SkScalar y = y0 + rand.nextUScalar1() * dim.fY;
@@ -181,6 +181,66 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
+/** Explicitly invoke some filter types to improve coverage of acceleration
+    procs. */
+
+class FilterBitmapBench : public BitmapBench {
+    bool        fScale;
+    bool        fRotate;
+    bool        fFilter;
+    SkString    fFullName;
+    enum { N = SkBENCHLOOP(300) };
+public:
+    FilterBitmapBench(void* param, bool isOpaque, SkBitmap::Config c,
+                bool forceUpdate = false, bool bitmapVolatile = false,
+                int tx = -1, int ty = -1, bool addScale = false,
+                bool addRotate = false, bool addFilter = false)
+        : INHERITED(param, isOpaque, c, forceUpdate, bitmapVolatile, tx, ty)
+        , fScale(addScale), fRotate(addRotate), fFilter(addFilter) {
+
+    }
+
+protected:
+    virtual const char* onGetName() {
+        fFullName.set(INHERITED::onGetName());
+        if (fScale)
+            fFullName.append("_scale");
+        if (fRotate)
+            fFullName.append("_rotate");
+        if (fFilter)
+            fFullName.append("_filter");
+
+        return fFullName.c_str();
+    }
+
+    virtual void onDraw(SkCanvas* canvas) {
+        SkISize dim = canvas->getDeviceSize();
+        if (fScale) {
+            const SkScalar x = SkIntToScalar(dim.fWidth) / 2;
+            const SkScalar y = SkIntToScalar(dim.fHeight) / 2;
+
+            canvas->translate(x, y);
+            // just enough so we can't take the sprite case
+            canvas->scale(SK_Scalar1 * 99/100, SK_Scalar1 * 99/100);
+            canvas->translate(-x, -y);
+        }
+        if (fRotate) {
+            const SkScalar x = SkIntToScalar(dim.fWidth) / 2;
+            const SkScalar y = SkIntToScalar(dim.fHeight) / 2;
+
+            canvas->translate(x, y);
+            canvas->rotate(SkIntToScalar(35));
+            canvas->translate(-x, -y);
+        }
+
+        this->setForceFilter(fFilter);
+        INHERITED::onDraw(canvas);
+    }
+
+private:
+    typedef BitmapBench INHERITED;
+};
+
 static SkBenchmark* Fact0(void* p) { return new BitmapBench(p, false, SkBitmap::kARGB_8888_Config); }
 static SkBenchmark* Fact1(void* p) { return new BitmapBench(p, true, SkBitmap::kARGB_8888_Config); }
 static SkBenchmark* Fact2(void* p) { return new BitmapBench(p, true, SkBitmap::kRGB_565_Config); }
@@ -191,6 +251,18 @@ static SkBenchmark* Fact6(void* p) { return new BitmapBench(p, true, SkBitmap::k
 static SkBenchmark* Fact7(void* p) { return new BitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, true); }
 static SkBenchmark* Fact8(void* p) { return new BitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, false); }
 
+// scale filter -> S32_opaque_D32_filter_DX_{SSE2,SSSE3} and Fact9 is also for S32_D16_filter_DX_SSE2
+static SkBenchmark* Fact9(void* p) { return new FilterBitmapBench(p, false, SkBitmap::kARGB_8888_Config, false, false, -1, -1, true, false, true); }
+static SkBenchmark* Fact10(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, false, false, -1, -1, true, false, true); }
+static SkBenchmark* Fact11(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, true, -1, -1, true, false, true); }
+static SkBenchmark* Fact12(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, false, -1, -1, true, false, true); }
+
+// scale rotate filter -> S32_opaque_D32_filter_DXDY_{SSE2,SSSE3}
+static SkBenchmark* Fact13(void* p) { return new FilterBitmapBench(p, false, SkBitmap::kARGB_8888_Config, false, false, -1, -1, true, true, true); }
+static SkBenchmark* Fact14(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, false, false, -1, -1, true, true, true); }
+static SkBenchmark* Fact15(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, true, -1, -1, true, true, true); }
+static SkBenchmark* Fact16(void* p) { return new FilterBitmapBench(p, true, SkBitmap::kARGB_8888_Config, true, false, -1, -1, true, true, true); }
+
 static BenchRegistry gReg0(Fact0);
 static BenchRegistry gReg1(Fact1);
 static BenchRegistry gReg2(Fact2);
@@ -200,3 +272,13 @@ static BenchRegistry gReg5(Fact5);
 static BenchRegistry gReg6(Fact6);
 static BenchRegistry gReg7(Fact7);
 static BenchRegistry gReg8(Fact8);
+
+static BenchRegistry gReg9(Fact9);
+static BenchRegistry gReg10(Fact10);
+static BenchRegistry gReg11(Fact11);
+static BenchRegistry gReg12(Fact12);
+
+static BenchRegistry gReg13(Fact13);
+static BenchRegistry gReg14(Fact14);
+static BenchRegistry gReg15(Fact15);
+static BenchRegistry gReg16(Fact16);

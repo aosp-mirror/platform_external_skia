@@ -30,13 +30,17 @@ SkBitmap::Config gConfigs[] = {
 static void draw_checks(SkCanvas* canvas, int width, int height) {
     SkPaint paint;
     paint.setColor(SK_ColorRED);
-    canvas->drawRectCoords(0, 0, width / 2, height / 2, paint);
+    canvas->drawRectCoords(SkIntToScalar(0), SkIntToScalar(0),
+        SkIntToScalar(width / 2), SkIntToScalar(height / 2), paint);
     paint.setColor(SK_ColorGREEN);
-    canvas->drawRectCoords(width / 2, 0, width, height / 2, paint);
+    canvas->drawRectCoords(SkIntToScalar(width / 2), SkIntToScalar(0),
+        SkIntToScalar(width), SkIntToScalar(height / 2), paint);
     paint.setColor(SK_ColorBLUE);
-    canvas->drawRectCoords(0, height / 2, width / 2, height, paint);
+    canvas->drawRectCoords(SkIntToScalar(0), SkIntToScalar(height / 2),
+        SkIntToScalar(width / 2), SkIntToScalar(height), paint);
     paint.setColor(SK_ColorYELLOW);
-    canvas->drawRectCoords(width / 2, height / 2, width, height, paint);
+    canvas->drawRectCoords(SkIntToScalar(width / 2), SkIntToScalar(height / 2),
+        SkIntToScalar(width), SkIntToScalar(height), paint);
 }
 
 class BitmapCopyGM : public GM {
@@ -107,7 +111,8 @@ protected:
         }
     }
 
-    virtual uint32_t onGetFlags() const { return kSkipPicture_Flag; }
+    virtual uint32_t onGetFlags() const { return kSkipPicture_Flag
+                                               | kSkipPipe_Flag; }
 
 private:
     typedef GM INHERITED;
@@ -115,7 +120,8 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
+#ifndef SK_BUILD_FOR_ANDROID
 static GM* MyFactory(void*) { return new BitmapCopyGM; }
 static GMRegistry reg(MyFactory);
-
+#endif
 }

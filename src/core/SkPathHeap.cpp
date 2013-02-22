@@ -8,8 +8,10 @@
 #include "SkPathHeap.h"
 #include "SkPath.h"
 #include "SkStream.h"
-#include "SkFlattenable.h"
+#include "SkFlattenableBuffers.h"
 #include <new>
+
+SK_DEFINE_INST_COUNT(SkPathHeap)
 
 #define kPathCount  64
 
@@ -18,7 +20,7 @@ SkPathHeap::SkPathHeap() : fHeap(kPathCount * sizeof(SkPath)) {
 
 SkPathHeap::SkPathHeap(SkFlattenableReadBuffer& buffer)
             : fHeap(kPathCount * sizeof(SkPath)) {
-    int count = buffer.readS32();
+    const int count = buffer.readInt();
 
     fPaths.setCount(count);
     SkPath** ptr = fPaths.begin();
@@ -26,7 +28,7 @@ SkPathHeap::SkPathHeap(SkFlattenableReadBuffer& buffer)
 
     for (int i = 0; i < count; i++) {
         new (p) SkPath;
-        p->unflatten(buffer);
+        buffer.readPath(p);
         *ptr++ = p; // record the pointer
         p++;        // move to the next storage location
     }
@@ -50,13 +52,12 @@ int SkPathHeap::append(const SkPath& path) {
 
 void SkPathHeap::flatten(SkFlattenableWriteBuffer& buffer) const {
     int count = fPaths.count();
-    
-    buffer.write32(count);
+
+    buffer.writeInt(count);
     SkPath** iter = fPaths.begin();
     SkPath** stop = fPaths.end();
     while (iter < stop) {
-        (*iter)->flatten(buffer);
+        buffer.writePath(**iter);
         iter++;
     }
 }
-

@@ -1,11 +1,10 @@
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'xml',
+      'product_name': 'skia_xml',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',
@@ -33,7 +32,7 @@
           '../src/xml/SkXMLPullParser.cpp', #if 0 around class decl in header
       ],
       'conditions': [
-        [ 'skia_os in ["win", "mac", "linux", "freebsd", "openbsd", "solaris", "android"]', {
+        [ 'skia_os in ["win", "mac", "linux", "freebsd", "openbsd", "solaris", "android", "ios", "nacl"]', {
           'sources!': [
             # no jsapi.h by default on system
             '../include/xml/SkJS.h',

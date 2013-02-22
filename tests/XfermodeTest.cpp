@@ -9,7 +9,7 @@
 #include "SkColor.h"
 #include "SkXfermode.h"
 
-SkPMColor bogusXfermodeProc(SkPMColor src, SkPMColor dst) {
+static SkPMColor bogusXfermodeProc(SkPMColor src, SkPMColor dst) {
     return 42;
 }
 
@@ -33,7 +33,7 @@ static void test_asMode(skiatest::Reporter* reporter) {
             REPORTER_ASSERT(reporter, reportedMode == mode);
             xfer->unref();
         } else {
-            REPORTER_ASSERT(reporter, SkXfermode::kSrcOver_Mode == mode); 
+            REPORTER_ASSERT(reporter, SkXfermode::kSrcOver_Mode == mode);
         }
     }
 
@@ -52,7 +52,7 @@ static void test_IsMode(skiatest::Reporter* reporter) {
 
     for (int i = 0; i <= SkXfermode::kLastMode; ++i) {
         SkXfermode::Mode mode = (SkXfermode::Mode)i;
-        
+
         SkXfermode* xfer = SkXfermode::Create(mode);
         REPORTER_ASSERT(reporter, SkXfermode::IsMode(xfer, mode));
         SkSafeUnref(xfer);

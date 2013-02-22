@@ -21,11 +21,13 @@
 #include "SkThread.h"
 #include "SkTypes.h"
 
-static void transformBBox(const SkMatrix& matrix, SkRect* bbox) {
+static bool transformBBox(const SkMatrix& matrix, SkRect* bbox) {
     SkMatrix inverse;
-    inverse.reset();
-    matrix.invert(&inverse);
+    if (!matrix.invert(&inverse)) {
+        return false;
+    }
     inverse.mapRect(bbox);
+    return true;
 }
 
 static void unitToPointsMatrix(const SkPoint pts[2], SkMatrix* matrix) {
@@ -72,8 +74,9 @@ static void interpolateColorCode(SkScalar range, SkScalar* curColor,
     }
 
     for (int i = 0; i < components; i++) {
-        // If the next components needs t, make a copy.
-        if (dupInput[i]) {
+        // If the next components needs t and this component will consume a
+        // copy, make another copy.
+        if (dupInput[i] && multiplier[i] != 0) {
             result->append("dup ");
         }
 
@@ -272,6 +275,118 @@ static SkString twoPointRadialCode(const SkShader::GradientInfo& info) {
     return function;
 }
 
+/* Conical gradient shader, based on the Canvas spec for radial gradients
+   See: http://www.w3.org/TR/2dcontext/#dom-context-2d-createradialgradient
+ */
+static SkString twoPointConicalCode(const SkShader::GradientInfo& info) {
+    SkScalar dx = info.fPoint[1].fX - info.fPoint[0].fX;
+    SkScalar dy = info.fPoint[1].fY - info.fPoint[0].fY;
+    SkScalar r0 = info.fRadius[0];
+    SkScalar dr = info.fRadius[1] - info.fRadius[0];
+    SkScalar a = SkScalarMul(dx, dx) + SkScalarMul(dy, dy) -
+                 SkScalarMul(dr, dr);
+
+    // First compute t, if the pixel falls outside the cone, then we'll end
+    // with 'false' on the stack, otherwise we'll push 'true' with t below it
+
+    // We start with a stack of (x y), copy it and then consume one copy in
+    // order to calculate b and the other to calculate c.
+    SkString function("{");
+    function.append("2 copy ");
+
+    // Calculate b and b^2; b = -2 * (y * dy + x * dx + r0 * dr).
+    function.appendScalar(dy);
+    function.append(" mul exch ");
+    function.appendScalar(dx);
+    function.append(" mul add ");
+    function.appendScalar(SkScalarMul(r0, dr));
+    function.append(" add -2 mul dup dup mul\n");
+
+    // c = x^2 + y^2 + radius0^2
+    function.append("4 2 roll dup mul exch dup mul add ");
+    function.appendScalar(SkScalarMul(r0, r0));
+    function.append(" sub dup 4 1 roll\n");
+
+    // Contents of the stack at this point: c, b, b^2, c
+
+    // if a = 0, then we collapse to a simpler linear case
+    if (a == 0) {
+
+        // t = -c/b
+        function.append("pop pop div neg dup ");
+
+        // compute radius(t)
+        function.appendScalar(dr);
+        function.append(" mul ");
+        function.appendScalar(r0);
+        function.append(" add\n");
+
+        // if r(t) < 0, then it's outside the cone
+        function.append("0 lt {pop false} {true} ifelse\n");
+
+    } else {
+
+        // quadratic case: the Canvas spec wants the largest
+        // root t for which radius(t) > 0
+
+        // compute the discriminant (b^2 - 4ac)
+        function.appendScalar(SkScalarMul(SkIntToScalar(4), a));
+        function.append(" mul sub dup\n");
+
+        // if d >= 0, proceed
+        function.append("0 ge {\n");
+
+        // an intermediate value we'll use to compute the roots:
+        // q = -0.5 * (b +/- sqrt(d))
+        function.append("sqrt exch dup 0 lt {exch -1 mul} if");
+        function.append(" add -0.5 mul dup\n");
+
+        // first root = q / a
+        function.appendScalar(a);
+        function.append(" div\n");
+
+        // second root = c / q
+        function.append("3 1 roll div\n");
+
+        // put the larger root on top of the stack
+        function.append("2 copy gt {exch} if\n");
+
+        // compute radius(t) for larger root
+        function.append("dup ");
+        function.appendScalar(dr);
+        function.append(" mul ");
+        function.appendScalar(r0);
+        function.append(" add\n");
+
+        // if r(t) > 0, we have our t, pop off the smaller root and we're done
+        function.append(" 0 gt {exch pop true}\n");
+
+        // otherwise, throw out the larger one and try the smaller root
+        function.append("{pop dup\n");
+        function.appendScalar(dr);
+        function.append(" mul ");
+        function.appendScalar(r0);
+        function.append(" add\n");
+
+        // if r(t) < 0, push false, otherwise the smaller root is our t
+        function.append("0 le {pop false} {true} ifelse\n");
+        function.append("} ifelse\n");
+
+        // d < 0, clear the stack and push false
+        function.append("} {pop pop pop false} ifelse\n");
+    }
+
+    // if the pixel is in the cone, proceed to compute a color
+    function.append("{");
+    tileModeCode(info.fTileMode, &function);
+    gradientFunctionCode(info, &function);
+
+    // otherwise, just write black
+    function.append("} {0 0 0} ifelse }");
+
+    return function;
+}
+
 static SkString sweepCode(const SkShader::GradientInfo& info) {
     SkString function("{exch atan 360 div\n");
     tileModeCode(info.fTileMode, &function);
@@ -301,14 +416,14 @@ public:
 class SkPDFFunctionShader : public SkPDFDict, public SkPDFShader {
 public:
     explicit SkPDFFunctionShader(SkPDFShader::State* state);
-    ~SkPDFFunctionShader() {
+    virtual ~SkPDFFunctionShader() {
         if (isValid()) {
             RemoveShader(this);
         }
         fResources.unrefAll();
     }
 
-    bool isValid() { return fResources.count() > 0; }
+    virtual bool isValid() { return fResources.count() > 0; }
 
     void getResources(SkTDArray<SkPDFObject*>* resourceList) {
         GetResourcesHelper(&fResources, resourceList);
@@ -326,10 +441,12 @@ private:
 class SkPDFImageShader : public SkPDFStream, public SkPDFShader {
 public:
     explicit SkPDFImageShader(SkPDFShader::State* state);
-    ~SkPDFImageShader() {
+    virtual ~SkPDFImageShader() {
         RemoveShader(this);
         fResources.unrefAll();
     }
+
+    virtual bool isValid() { return size() > 0; }
 
     void getResources(SkTDArray<SkPDFObject*>* resourceList) {
         GetResourcesHelper(&fResources, resourceList);
@@ -358,6 +475,14 @@ SkPDFObject* SkPDFShader::GetPDFShader(const SkShader& shader,
     SkPDFObject* result;
     SkAutoMutexAcquire lock(CanonicalShadersMutex());
     SkAutoTDelete<State> shaderState(new State(shader, matrix, surfaceBBox));
+    if (shaderState.get()->fType == SkShader::kNone_GradientType &&
+            shaderState.get()->fImage.isNull()) {
+        // TODO(vandebo) This drops SKComposeShader on the floor.  We could
+        // handle compose shader by pulling things up to a layer, drawing with
+        // the first shader, applying the xfer mode and drawing again with the
+        // second shader, then applying the layer to the original drawing.
+        return NULL;
+    }
 
     ShaderCanonicalEntry entry(NULL, shaderState.get());
     int index = CanonicalShaders().find(entry);
@@ -366,17 +491,23 @@ SkPDFObject* SkPDFShader::GetPDFShader(const SkShader& shader,
         result->ref();
         return result;
     }
+
+    bool valid = false;
     // The PDFShader takes ownership of the shaderSate.
     if (shaderState.get()->fType == SkShader::kNone_GradientType) {
-        result = new SkPDFImageShader(shaderState.detach());
+        SkPDFImageShader* imageShader =
+            new SkPDFImageShader(shaderState.detach());
+        valid = imageShader->isValid();
+        result = imageShader;
     } else {
         SkPDFFunctionShader* functionShader =
             new SkPDFFunctionShader(shaderState.detach());
-        if (!functionShader->isValid()) {
-            delete functionShader;
-            return NULL;
-        }
+        valid = functionShader->isValid();
         result = functionShader;
+    }
+    if (!valid) {
+        delete result;
+        return NULL;
     }
     entry.fPDFShader = result;
     CanonicalShaders().push(entry);
@@ -449,9 +580,15 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
             codeFunction = &twoPointRadialCode;
             break;
         }
+        case SkShader::kConical_GradientType: {
+            transformPoints[1] = transformPoints[0];
+            transformPoints[1].fX += SK_Scalar1;
+            codeFunction = &twoPointConicalCode;
+            break;
+        }
         case SkShader::kSweep_GradientType:
             transformPoints[1] = transformPoints[0];
-            transformPoints[1].fX += 1;
+            transformPoints[1].fX += SK_Scalar1;
             codeFunction = &sweepCode;
             break;
         case SkShader::kColor_GradientType:
@@ -471,10 +608,11 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
     finalMatrix.preConcat(fState.get()->fShaderTransform);
     SkRect bbox;
     bbox.set(fState.get()->fBBox);
-    transformBBox(finalMatrix, &bbox);
+    if (!transformBBox(finalMatrix, &bbox)) {
+        return;
+    }
 
-    SkRefPtr<SkPDFArray> domain = new SkPDFArray;
-    domain->unref();  // SkRefPtr and new both took a reference.
+    SkAutoTUnref<SkPDFArray> domain(new SkPDFArray);
     domain->reserve(4);
     domain->appendScalar(bbox.fLeft);
     domain->appendScalar(bbox.fRight);
@@ -488,7 +626,9 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
     if (fState.get()->fType == SkShader::kRadial2_GradientType) {
         SkShader::GradientInfo twoPointRadialInfo = *info;
         SkMatrix inverseMapperMatrix;
-        mapperMatrix.invert(&inverseMapperMatrix);
+        if (!mapperMatrix.invert(&inverseMapperMatrix)) {
+            return;
+        }
         inverseMapperMatrix.mapPoints(twoPointRadialInfo.fPoint, 2);
         twoPointRadialInfo.fRadius[0] =
             inverseMapperMatrix.mapRadius(info->fRadius[0]);
@@ -499,16 +639,14 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
         functionCode = codeFunction(*info);
     }
 
-    SkRefPtr<SkPDFStream> function = makePSFunction(functionCode, domain.get());
-    // Pass one reference to fResources, SkRefPtr and new both took a reference.
-    fResources.push(function.get());
-
-    SkRefPtr<SkPDFDict> pdfShader = new SkPDFDict;
-    pdfShader->unref();  // SkRefPtr and new both took a reference.
+    SkAutoTUnref<SkPDFDict> pdfShader(new SkPDFDict);
     pdfShader->insertInt("ShadingType", 1);
     pdfShader->insertName("ColorSpace", "DeviceRGB");
     pdfShader->insert("Domain", domain.get());
-    pdfShader->insert("Function", new SkPDFObjRef(function.get()))->unref();
+
+    SkPDFStream* function = makePSFunction(functionCode, domain.get());
+    pdfShader->insert("Function", new SkPDFObjRef(function))->unref();
+    fResources.push(function);  // Pass ownership to resource list.
 
     insertInt("PatternType", 2);
     insert("Matrix", SkPDFUtils::MatrixToArray(finalMatrix))->unref();
@@ -522,10 +660,12 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     finalMatrix.preConcat(fState.get()->fShaderTransform);
     SkRect surfaceBBox;
     surfaceBBox.set(fState.get()->fBBox);
-    transformBBox(finalMatrix, &surfaceBBox);
+    if (!transformBBox(finalMatrix, &surfaceBBox)) {
+        return;
+    }
 
     SkMatrix unflip;
-    unflip.setTranslate(0, SkScalarRound(surfaceBBox.height()));
+    unflip.setTranslate(0, SkScalarRoundToScalar(surfaceBBox.height()));
     unflip.preScale(SK_Scalar1, -SK_Scalar1);
     SkISize size = SkISize::Make(SkScalarRound(surfaceBBox.width()),
                                  SkScalarRound(surfaceBBox.height()));
@@ -535,8 +675,8 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     finalMatrix.preTranslate(surfaceBBox.fLeft, surfaceBBox.fTop);
 
     const SkBitmap* image = &fState.get()->fImage;
-    int width = image->width();
-    int height = image->height();
+    SkScalar width = SkIntToScalar(image->width());
+    SkScalar height = SkIntToScalar(image->height());
     SkShader::TileMode tileModes[2];
     tileModes[0] = fState.get()->fImageTileModes[0];
     tileModes[1] = fState.get()->fImageTileModes[1];
@@ -585,28 +725,29 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
 
         rect = SkRect::MakeLTRB(width, surfaceBBox.fTop, surfaceBBox.fRight, 0);
         if (!rect.isEmpty()) {
-            paint.setColor(image->getColor(width - 1, 0));
+            paint.setColor(image->getColor(image->width() - 1, 0));
             canvas.drawRect(rect, paint);
         }
 
         rect = SkRect::MakeLTRB(width, height, surfaceBBox.fRight,
                                 surfaceBBox.fBottom);
         if (!rect.isEmpty()) {
-            paint.setColor(image->getColor(width - 1, height - 1));
+            paint.setColor(image->getColor(image->width() - 1,
+                                           image->height() - 1));
             canvas.drawRect(rect, paint);
         }
 
         rect = SkRect::MakeLTRB(surfaceBBox.fLeft, height, 0,
                                 surfaceBBox.fBottom);
         if (!rect.isEmpty()) {
-            paint.setColor(image->getColor(0, height - 1));
+            paint.setColor(image->getColor(0, image->height() - 1));
             canvas.drawRect(rect, paint);
         }
     }
 
     // Then expand the left, right, top, then bottom.
     if (tileModes[0] == SkShader::kClamp_TileMode) {
-        SkIRect subset = SkIRect::MakeXYWH(0, 0, 1, height);
+        SkIRect subset = SkIRect::MakeXYWH(0, 0, 1, image->height());
         if (surfaceBBox.fLeft < 0) {
             SkBitmap left;
             SkAssertResult(image->extractSubset(&left, subset));
@@ -626,7 +767,7 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
 
         if (surfaceBBox.fRight > width) {
             SkBitmap right;
-            subset.offset(width - 1, 0);
+            subset.offset(image->width() - 1, 0);
             SkAssertResult(image->extractSubset(&right, subset));
 
             SkMatrix rightMatrix;
@@ -644,7 +785,7 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     }
 
     if (tileModes[1] == SkShader::kClamp_TileMode) {
-        SkIRect subset = SkIRect::MakeXYWH(0, 0, width, 1);
+        SkIRect subset = SkIRect::MakeXYWH(0, 0, image->width(), 1);
         if (surfaceBBox.fTop < 0) {
             SkBitmap top;
             SkAssertResult(image->extractSubset(&top, subset));
@@ -664,7 +805,7 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
 
         if (surfaceBBox.fBottom > height) {
             SkBitmap bottom;
-            subset.offset(0, height - 1);
+            subset.offset(0, image->height() - 1);
             SkAssertResult(image->extractSubset(&bottom, subset));
 
             SkMatrix bottomMatrix;
@@ -681,8 +822,7 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
         }
     }
 
-    SkRefPtr<SkPDFArray> patternBBoxArray = new SkPDFArray;
-    patternBBoxArray->unref();  // SkRefPtr and new both took a reference.
+    SkAutoTUnref<SkPDFArray> patternBBoxArray(new SkPDFArray);
     patternBBoxArray->reserve(4);
     patternBBoxArray->appendScalar(patternBBox.fLeft);
     patternBBoxArray->appendScalar(patternBBox.fTop);
@@ -690,11 +830,10 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     patternBBoxArray->appendScalar(patternBBox.fBottom);
 
     // Put the canvas into the pattern stream (fContent).
-    SkRefPtr<SkStream> content = pattern.content();
-    content->unref();  // SkRefPtr and content() both took a reference.
-    pattern.getResources(&fResources);
-
+    SkAutoTUnref<SkStream> content(pattern.content());
     setData(content.get());
+    pattern.getResources(&fResources, false);
+
     insertName("Type", "Pattern");
     insertInt("PatternType", 1);
     insertInt("PaintType", 1);
@@ -769,6 +908,7 @@ bool SkPDFShader::State::operator==(const SkPDFShader::State& b) const {
                 }
                 break;
             case SkShader::kRadial2_GradientType:
+            case SkShader::kConical_GradientType:
                 if (fInfo.fPoint[1] != b.fInfo.fPoint[1] ||
                         fInfo.fRadius[0] != b.fInfo.fRadius[0] ||
                         fInfo.fRadius[1] != b.fInfo.fRadius[1]) {
@@ -792,7 +932,7 @@ SkPDFShader::State::State(const SkShader& shader,
     fInfo.fColorCount = 0;
     fInfo.fColors = NULL;
     fInfo.fColorOffsets = NULL;
-    shader.getLocalMatrix(&fShaderTransform);
+    fShaderTransform = shader.getLocalMatrix();
     fImageTileModes[0] = fImageTileModes[1] = SkShader::kClamp_TileMode;
 
     fType = shader.asAGradient(&fInfo);
@@ -800,7 +940,7 @@ SkPDFShader::State::State(const SkShader& shader,
     if (fType == SkShader::kNone_GradientType) {
         SkShader::BitmapType bitmapType;
         SkMatrix matrix;
-        bitmapType = shader.asABitmap(&fImage, &matrix, fImageTileModes, NULL);
+        bitmapType = shader.asABitmap(&fImage, &matrix, fImageTileModes);
         if (bitmapType != SkShader::kDefault_BitmapType) {
             fImage.reset();
             return;

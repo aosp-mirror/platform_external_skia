@@ -17,8 +17,17 @@
     #define SNPRINTF    snprintf
 #endif
 
-SkPDFObject::SkPDFObject() {}
-SkPDFObject::~SkPDFObject() {}
+SK_DEFINE_INST_COUNT(SkPDFArray)
+SK_DEFINE_INST_COUNT(SkPDFBool)
+SK_DEFINE_INST_COUNT(SkPDFDict)
+SK_DEFINE_INST_COUNT(SkPDFInt)
+SK_DEFINE_INST_COUNT(SkPDFName)
+SK_DEFINE_INST_COUNT(SkPDFObject)
+SK_DEFINE_INST_COUNT(SkPDFObjRef)
+SK_DEFINE_INST_COUNT(SkPDFScalar)
+SK_DEFINE_INST_COUNT(SkPDFString)
+
+///////////////////////////////////////////////////////////////////////////////
 
 void SkPDFObject::emit(SkWStream* stream, SkPDFCatalog* catalog,
                        bool indirect) {
@@ -64,7 +73,10 @@ void SkPDFObject::GetResourcesHelper(SkTDArray<SkPDFObject*>* resources,
     }
 }
 
-SkPDFObjRef::SkPDFObjRef(SkPDFObject* obj) : fObj(obj) {}
+SkPDFObjRef::SkPDFObjRef(SkPDFObject* obj) : fObj(obj) {
+    SkSafeRef(obj);
+}
+
 SkPDFObjRef::~SkPDFObjRef() {}
 
 void SkPDFObjRef::emitObject(SkWStream* stream, SkPDFCatalog* catalog,
@@ -292,12 +304,15 @@ size_t SkPDFName::getOutputSize(SkPDFCatalog* catalog, bool indirect) {
 // static
 SkString SkPDFName::FormatName(const SkString& input) {
     SkASSERT(input.size() <= kMaxLen);
+    // TODO(vandebo) If more escaping is needed, improve the linear scan.
+    static const char escaped[] = "#/%()<>[]{}";
 
     SkString result("/");
     for (size_t i = 0; i < input.size(); i++) {
-        if (input[i] & 0x80 || input[i] < '!' || input[i] == '#') {
+        if (input[i] & 0x80 || input[i] < '!' || strchr(escaped, input[i])) {
             result.append("#");
-            result.appendHex(input[i], 2);
+            // Mask with 0xFF to avoid sign extension. i.e. #FFFFFF81
+            result.appendHex(input[i] & 0xFF, 2);
         } else {
             result.append(input.c_str() + i, 1);
         }

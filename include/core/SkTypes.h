@@ -112,16 +112,39 @@ inline void operator delete(void* p) {
     #define SkAssertResult(cond)        cond
 #endif
 
-namespace {
+#ifdef SK_DEVELOPER
+    #define SkDEVCODE(code)             code
+    // the 'toString' helper functions convert Sk* objects to human-readable
+    // form in developer mode
+    #define SK_DEVELOPER_TO_STRING()    virtual void toString(SkString* str) const SK_OVERRIDE;
+#else
+    #define SkDEVCODE(code)
+    #define SK_DEVELOPER_TO_STRING()
+#endif
 
 template <bool>
 struct SkCompileAssert {
 };
 
-}  // namespace
-
 #define SK_COMPILE_ASSERT(expr, msg) \
     typedef SkCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
+
+/*
+ *  Usage:  SK_MACRO_CONCAT(a, b)   to construct the symbol ab
+ *
+ *  SK_MACRO_CONCAT_IMPL_PRIV just exists to make this work. Do not use directly
+ *
+ */
+#define SK_MACRO_CONCAT(X, Y)           SK_MACRO_CONCAT_IMPL_PRIV(X, Y)
+#define SK_MACRO_CONCAT_IMPL_PRIV(X, Y)  X ## Y
+
+/*
+ *  Usage: SK_MACRO_APPEND_LINE(foo)    to make foo123, where 123 is the current
+ *                                      line number. Easy way to construct
+ *                                      unique names for local functions or
+ *                                      variables.
+ */
+#define SK_MACRO_APPEND_LINE(name)  SK_MACRO_CONCAT(name, __LINE__)
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -185,10 +208,10 @@ typedef uint8_t SkBool8;
 #define SK_MaxU16   0xFFFF
 #define SK_MinU16   0
 #define SK_MaxS32   0x7FFFFFFF
-#define SK_MinS32   0x80000001
+#define SK_MinS32   -SK_MaxS32
 #define SK_MaxU32   0xFFFFFFFF
 #define SK_MinU32   0
-#define SK_NaN32    0x80000000
+#define SK_NaN32    (1 << 31)
 
 /** Returns true if the value can be represented with signed 16bits
  */
@@ -204,21 +227,21 @@ static inline bool SkIsU16(long x) {
 
 //////////////////////////////////////////////////////////////////////////////
 #ifndef SK_OFFSETOF
-    #define SK_OFFSETOF(type, field)    ((char*)&(((type*)1)->field) - (char*)1)
+    #define SK_OFFSETOF(type, field)    (size_t)((char*)&(((type*)1)->field) - (char*)1)
 #endif
 
 /** Returns the number of entries in an array (not a pointer)
 */
 #define SK_ARRAY_COUNT(array)       (sizeof(array) / sizeof(array[0]))
 
-/** Returns x rounded up to a multiple of 2
-*/
 #define SkAlign2(x)     (((x) + 1) >> 1 << 1)
-/** Returns x rounded up to a multiple of 4
-*/
-#define SkAlign4(x)     (((x) + 3) >> 2 << 2)
+#define SkIsAlign2(x)   (0 == ((x) & 1))
 
-#define SkIsAlign4(x) (((x) & 3) == 0)
+#define SkAlign4(x)     (((x) + 3) >> 2 << 2)
+#define SkIsAlign4(x)   (0 == ((x) & 3))
+
+#define SkAlign8(x)     (((x) + 7) >> 3 << 3)
+#define SkIsAlign8(x)   (0 == ((x) & 7))
 
 typedef uint32_t SkFourByteTag;
 #define SkSetFourByteTag(a, b, c, d)    (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
@@ -268,6 +291,13 @@ static inline int32_t SkAbs32(int32_t value) {
     int32_t mask = value >> 31;
     return (value ^ mask) - mask;
 #endif
+}
+
+template <typename T> inline T SkTAbs(T value) {
+    if (value < 0) {
+        value = -value;
+    }
+    return value;
 }
 
 static inline int32_t SkMax32(int32_t a, int32_t b) {
@@ -432,13 +462,13 @@ public:
          *  malloc a new block of the smaller size.
          */
         kAlloc_OnShrink,
-        
+
         /**
          *  If the requested size is smaller than the current size, and the
          *  current block is dynamically allocated, just return the old
          *  block.
          */
-        kReuse_OnShrink,
+        kReuse_OnShrink
     };
 
     /**

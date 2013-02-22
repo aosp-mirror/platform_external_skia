@@ -8,13 +8,18 @@
 
 #include "Test.h"
 #include "SkCanvas.h"
+#include "SkColorPriv.h"
+#include "SkDevice.h"
+#include "SkMathPriv.h"
 #include "SkRegion.h"
+#if SK_SUPPORT_GPU
 #include "SkGpuDevice.h"
+#endif
 
 
 static const int DEV_W = 100, DEV_H = 100;
 static const SkIRect DEV_RECT = SkIRect::MakeWH(DEV_W, DEV_H);
-static const SkRect DEV_RECT_S = SkRect::MakeWH(DEV_W * SK_Scalar1, 
+static const SkRect DEV_RECT_S = SkRect::MakeWH(DEV_W * SK_Scalar1,
                                                 DEV_H * SK_Scalar1);
 
 namespace {
@@ -46,7 +51,7 @@ SkPMColor getCanvasColor(int x, int y) {
     }
     return SkPremultiplyARGBInline(a, r, g, b);
 }
-    
+
 SkPMColor getBitmapColor(int x, int y, int w, int h) {
     int n = y * w + x;
 
@@ -88,6 +93,9 @@ SkPMColor convertConfig8888ToPMColor(SkCanvas::Config8888 config8888,
             g = static_cast<U8CPU>(c[1]);
             b = static_cast<U8CPU>(c[2]);
             break;
+        default:
+            SkDEBUGFAIL("Unexpected Config8888");
+            return 0;
     }
     if (*premul) {
         r = SkMulDiv255Ceiling(r, a);
@@ -101,7 +109,7 @@ void fillCanvas(SkCanvas* canvas) {
     static SkBitmap bmp;
     if (bmp.isNull()) {
         bmp.setConfig(SkBitmap::kARGB_8888_Config, DEV_W, DEV_H);
-        bool alloc = bmp.allocPixels();
+        SkDEBUGCODE(bool alloc =) bmp.allocPixels();
         SkASSERT(alloc);
         SkAutoLockPixels alp(bmp);
         intptr_t pixels = reinterpret_cast<intptr_t>(bmp.getPixels());
@@ -120,7 +128,7 @@ void fillCanvas(SkCanvas* canvas) {
     canvas->drawBitmap(bmp, 0, 0, &paint);
     canvas->restore();
 }
-    
+
 void fillBitmap(SkBitmap* bitmap) {
     SkASSERT(bitmap->lockPixelsAreWritable());
     SkAutoLockPixels alp(*bitmap);
@@ -167,7 +175,7 @@ bool checkRead(skiatest::Reporter* reporter,
     SkASSERT(SkBitmap::kARGB_8888_Config == bitmap.config());
     SkASSERT(!bitmap.isNull());
     SkASSERT(checkCanvasPixels || checkBitmapPixels);
-    
+
     int bw = bitmap.width();
     int bh = bitmap.height();
 
@@ -176,14 +184,13 @@ bool checkRead(skiatest::Reporter* reporter,
     if (!clippedSrcRect.intersect(srcRect)) {
         clippedSrcRect.setEmpty();
     }
-    bool failed = false;
     SkAutoLockPixels alp(bitmap);
     intptr_t pixels = reinterpret_cast<intptr_t>(bitmap.getPixels());
     for (int by = 0; by < bh; ++by) {
         for (int bx = 0; bx < bw; ++bx) {
             int devx = bx + srcRect.fLeft;
             int devy = by + srcRect.fTop;
-            
+
             uint32_t pixel = *reinterpret_cast<SkPMColor*>(pixels + by * bitmap.rowBytes() + bx * bitmap.bytesPerPixel());
 
             if (clippedSrcRect.contains(devx, devy)) {
@@ -194,27 +201,27 @@ bool checkRead(skiatest::Reporter* reporter,
                     bool check;
                     REPORTER_ASSERT(reporter, check = checkPixel(pmPixel, canvasPixel, didPremul));
                     if (!check) {
-                        failed = true;
+                        return false;
                     }
                 }
             } else if (checkBitmapPixels) {
                 REPORTER_ASSERT(reporter, getBitmapColor(bx, by, bw, bh) == pixel);
                 if (getBitmapColor(bx, by, bw, bh) != pixel) {
-                    failed = true;
+                    return false;
                 }
             }
         }
     }
-    return !failed;
+    return true;
 }
 
 enum BitmapInit {
     kFirstBitmapInit = 0,
-    
+
     kNoPixels_BitmapInit = kFirstBitmapInit,
     kTight_BitmapInit,
     kRowBytes_BitmapInit,
-    
+
     kBitmapInitCnt
 };
 
@@ -248,8 +255,6 @@ void init_bitmap(SkBitmap* bitmap, const SkIRect& rect, BitmapInit init) {
 }
 
 void ReadPixelsTest(skiatest::Reporter* reporter, GrContext* context) {
-    SkCanvas canvas;
-    
     const SkIRect testRects[] = {
         // entire thing
         DEV_RECT,
@@ -298,22 +303,24 @@ void ReadPixelsTest(skiatest::Reporter* reporter, GrContext* context) {
     };
 
     for (int dtype = 0; dtype < 2; ++dtype) {
-
+        SkAutoTUnref<SkDevice> device;
         if (0 == dtype) {
-            canvas.setDevice(new SkDevice(SkBitmap::kARGB_8888_Config,
+            device.reset(new SkDevice(SkBitmap::kARGB_8888_Config,
                                           DEV_W,
                                           DEV_H,
-                                          false))->unref();
+                                          false));
         } else {
-#if SK_SCALAR_IS_FIXED
-            // GPU device known not to work in the fixed pt build.
+// GPU device known not to work in the fixed pt build.
+#if defined(SK_SCALAR_IS_FIXED) || !SK_SUPPORT_GPU
             continue;
-#endif
-            canvas.setDevice(new SkGpuDevice(context,
+#else
+            device.reset(new SkGpuDevice(context,
                                              SkBitmap::kARGB_8888_Config,
                                              DEV_W,
-                                             DEV_H))->unref();
+                                             DEV_H));
+#endif
         }
+        SkCanvas canvas(device);
         fillCanvas(&canvas);
 
         static const SkCanvas::Config8888 gReadConfigs[] = {
@@ -347,16 +354,19 @@ void ReadPixelsTest(skiatest::Reporter* reporter, GrContext* context) {
                     if (startsWithPixels) {
                         fillBitmap(&bmp);
                     }
-
+                    uint32_t idBefore = canvas.getDevice()->accessBitmap(false).getGenerationID();
                     bool success =
                         canvas.readPixels(&bmp, srcRect.fLeft,
                                           srcRect.fTop, config8888);
+                    uint32_t idAfter = canvas.getDevice()->accessBitmap(false).getGenerationID();
 
                     // we expect to succeed when the read isn't fully clipped
                     // out.
                     bool expectSuccess = SkIRect::Intersects(srcRect, DEV_RECT);
                     // determine whether we expected the read to succeed.
                     REPORTER_ASSERT(reporter, success == expectSuccess);
+                    // read pixels should never change the gen id
+                    REPORTER_ASSERT(reporter, idBefore == idAfter);
 
                     if (success || startsWithPixels) {
                         checkRead(reporter, bmp, srcRect.fLeft, srcRect.fTop,
@@ -388,4 +398,3 @@ void ReadPixelsTest(skiatest::Reporter* reporter, GrContext* context) {
 
 #include "TestClassDef.h"
 DEFINE_GPUTESTCLASS("ReadPixels", ReadPixelsTestClass, ReadPixelsTest)
-
