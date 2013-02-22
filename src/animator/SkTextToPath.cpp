@@ -42,7 +42,6 @@ void SkTextToPath::onEndElement(SkAnimateMaker& maker) {
     }
     SkPaint realPaint;
     paint->setupPaint(&realPaint);
-    realPaint.getTextPath(text->getText(), text->getSize(), text->x, 
+    realPaint.getTextPath(text->getText(), text->getSize(), text->x,
         text->y, &path->getPath());
 }
-

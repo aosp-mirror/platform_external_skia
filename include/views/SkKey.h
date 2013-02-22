@@ -13,9 +13,9 @@
 #include "SkTypes.h"
 
 enum SkKey {
-    //reordering these to match android.app.KeyEvent 
+    //reordering these to match android.app.KeyEvent
     kNONE_SkKey,    //corresponds to android's UNKNOWN
-    
+
     kLeftSoftKey_SkKey,
     kRightSoftKey_SkKey,
 
@@ -23,7 +23,7 @@ enum SkKey {
     kBack_SkKey,    //!< (CLR)
     kSend_SkKey,    //!< the green (talk) key
     kEnd_SkKey,     //!< the red key
-    
+
     k0_SkKey,
     k1_SkKey,
     k2_SkKey,
@@ -52,5 +52,11 @@ enum SkKey {
     kSkKeyCount
 };
 
-#endif
+enum SkModifierKeys {
+    kShift_SkModifierKey    = 1 << 0,
+    kControl_SkModifierKey  = 1 << 1,
+    kOption_SkModifierKey   = 1 << 2,   // same as ALT
+    kCommand_SkModifierKey  = 1 << 3,
+};
 
+#endif

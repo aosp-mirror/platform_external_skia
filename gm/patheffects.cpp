@@ -67,8 +67,8 @@ static void one_d_pe(SkPaint* paint) {
         path.lineTo(SkIntToScalar(gXY[i]), SkIntToScalar(gXY[i+1]));
     path.close();
     path.offset(SkIntToScalar(-6), 0);
-    scale(&path, 1.5);
-    
+    scale(&path, 1.5f);
+
     paint->setPathEffect(new SkPath1DPathEffect(path, SkIntToScalar(21), 0,
                                 SkPath1DPathEffect::kRotate_Style))->unref();
     compose_pe(paint);
@@ -92,7 +92,7 @@ static SkPathEffect* MakeTileEffect() {
 
     SkPath path;
     path.addCircle(0, 0, SkIntToScalar(5));
-    
+
     return new SkPath2DPathEffect(m, path);
 }
 
@@ -145,6 +145,16 @@ protected:
             gPE2[i](&paint);
             canvas->drawPath(path, paint);
             canvas->translate(0, 160);
+        }
+
+        SkIRect rect = SkIRect::MakeXYWH(20, 20, 60, 60);
+        for (i = 0; i < SK_ARRAY_COUNT(gPE); i++) {
+            SkPaint p;
+            p.setAntiAlias(true);
+            p.setStyle(SkPaint::kFill_Style);
+            gPE[i](&p);
+            canvas->drawIRect(rect, p);
+            canvas->translate(75, 0);
         }
     }
 

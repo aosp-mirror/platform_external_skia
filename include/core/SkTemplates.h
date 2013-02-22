@@ -11,12 +11,34 @@
 #define SkTemplates_DEFINED
 
 #include "SkTypes.h"
+#include <new>
 
 /** \file SkTemplates.h
 
     This file contains light-weight template classes for type-safe and exception-safe
     resource management.
 */
+
+/**
+ *  SkTIsConst<T>::value is true if the type T is const.
+ *  The type T is constrained not to be an array or reference type.
+ */
+template <typename T> struct SkTIsConst {
+    static T* t;
+    static uint16_t test(const volatile void*);
+    static uint32_t test(volatile void *);
+    static const bool value = (sizeof(uint16_t) == sizeof(test(t)));
+};
+
+///@{
+/** SkTConstType<T, CONST>::type will be 'const T' if CONST is true, 'T' otherwise. */
+template <typename T, bool CONST> struct SkTConstType {
+    typedef T type;
+};
+template <typename T> struct SkTConstType<T, true> {
+    typedef const T type;
+};
+///@}
 
 /** \class SkAutoTCallVProc
 
@@ -55,27 +77,43 @@ private:
 // See also SkTScopedPtr.
 template <typename T> class SkAutoTDelete : SkNoncopyable {
 public:
-    SkAutoTDelete(T* obj, bool deleteWhenDone = true) : fObj(obj) {
-        fDeleteWhenDone = deleteWhenDone;
-    }
-    ~SkAutoTDelete() { if (fDeleteWhenDone) delete fObj; }
+    SkAutoTDelete(T* obj) : fObj(obj) {}
+    ~SkAutoTDelete() { delete fObj; }
 
-    T*      get() const { return fObj; }
-    void    free() { delete fObj; fObj = NULL; }
-    T*      detach() { T* obj = fObj; fObj = NULL; return obj; }
+    T* get() const { return fObj; }
+    T& operator*() const { SkASSERT(fObj); return *fObj; }
+    T* operator->() const { SkASSERT(fObj); return fObj; }
+
+    /**
+     *  Delete the owned object, setting the internal pointer to NULL.
+     */
+    void free() {
+        delete fObj;
+        fObj = NULL;
+    }
+
+    /**
+     *  Transfer ownership of the object to the caller, setting the internal
+     *  pointer to NULL. Note that this differs from get(), which also returns
+     *  the pointer, but it does not transfer ownership.
+     */
+    T* detach() {
+        T* obj = fObj;
+        fObj = NULL;
+        return obj;
+    }
 
 private:
     T*  fObj;
-    bool fDeleteWhenDone;
 };
 
 template <typename T> class SkAutoTDeleteArray : SkNoncopyable {
 public:
     SkAutoTDeleteArray(T array[]) : fArray(array) {}
-    ~SkAutoTDeleteArray() { delete[] fArray; }
+    ~SkAutoTDeleteArray() { SkDELETE_ARRAY(fArray); }
 
     T*      get() const { return fArray; }
-    void    free() { delete[] fArray; fArray = NULL; }
+    void    free() { SkDELETE_ARRAY(fArray); fArray = NULL; }
     T*      detach() { T* array = fArray; fArray = NULL; return array; }
 
 private:
@@ -86,9 +124,26 @@ private:
  */
 template <typename T> class SkAutoTArray : SkNoncopyable {
 public:
+    SkAutoTArray() {
+        fArray = NULL;
+        SkDEBUGCODE(fCount = 0;)
+    }
     /** Allocate count number of T elements
      */
-    SkAutoTArray(size_t count) {
+    explicit SkAutoTArray(int count) {
+        SkASSERT(count >= 0);
+        fArray = NULL;
+        if (count) {
+            fArray = new T[count];
+        }
+        SkDEBUGCODE(fCount = count;)
+    }
+
+    /** Reallocates given a new count. Reallocation occurs even if new count equals old count.
+     */
+    void reset(int count) {
+        delete[] fArray;
+        SkASSERT(count >= 0);
         fArray = NULL;
         if (count) {
             fArray = new T[count];
@@ -103,17 +158,17 @@ public:
     /** Return the array of T elements. Will be NULL if count == 0
      */
     T* get() const { return fArray; }
-    
+
     /** Return the nth element in the array
      */
     T&  operator[](int index) const {
-        SkASSERT((unsigned)index < fCount);
+        SkASSERT((unsigned)index < (unsigned)fCount);
         return fArray[index];
     }
 
 private:
     T*  fArray;
-    SkDEBUGCODE(size_t fCount;)
+    SkDEBUGCODE(int fCount;)
 };
 
 /** Wraps SkAutoTArray, with room for up to N elements preallocated
@@ -132,7 +187,7 @@ public:
         }
         fCount = count;
     }
-    
+
     ~SkAutoSTArray() {
         if (fCount > N) {
             delete[] fArray;
@@ -144,22 +199,22 @@ public:
             }
         }
     }
-    
+
     /** Return the number of T elements in the array
      */
     size_t count() const { return fCount; }
-    
+
     /** Return the array of T elements. Will be NULL if count == 0
      */
     T* get() const { return fArray; }
-    
+
     /** Return the nth element in the array
      */
     T&  operator[](int index) const {
         SkASSERT((unsigned)index < fCount);
         return fArray[index];
     }
-    
+
 private:
     size_t  fCount;
     T*      fArray;
@@ -295,4 +350,3 @@ private:
 };
 
 #endif
-

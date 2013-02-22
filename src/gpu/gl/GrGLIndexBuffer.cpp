@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -16,10 +15,11 @@
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
 
 GrGLIndexBuffer::GrGLIndexBuffer(GrGpuGL* gpu,
+                                 bool isWrapped,
                                  GrGLuint id,
                                  size_t sizeInBytes,
                                  bool dynamic)
-    : INHERITED(gpu, sizeInBytes, dynamic)
+    : INHERITED(gpu, isWrapped, sizeInBytes, dynamic)
     , fBufferID(id)
     , fLockPtr(NULL) {
 
@@ -27,16 +27,20 @@ GrGLIndexBuffer::GrGLIndexBuffer(GrGpuGL* gpu,
 
 void GrGLIndexBuffer::onRelease() {
     // make sure we've not been abandoned
-    if (fBufferID) {
+    if (fBufferID && !this->isWrapped()) {
         GPUGL->notifyIndexBufferDelete(this);
         GL_CALL(DeleteBuffers(1, &fBufferID));
         fBufferID = 0;
     }
+
+    INHERITED::onRelease();
 }
 
 void GrGLIndexBuffer::onAbandon() {
     fBufferID = 0;
     fLockPtr = NULL;
+
+    INHERITED::onAbandon();
 }
 
 void GrGLIndexBuffer::bind() const {
@@ -51,7 +55,7 @@ GrGLuint GrGLIndexBuffer::bufferID() const {
 void* GrGLIndexBuffer::lock() {
     GrAssert(fBufferID);
     GrAssert(!isLocked());
-    if (this->getGpu()->getCaps().fBufferLockSupport) {
+    if (this->getGpu()->getCaps().bufferLockSupport()) {
         this->bind();
         // Let driver know it can discard the old data
         GL_CALL(BufferData(GR_GL_ELEMENT_ARRAY_BUFFER,
@@ -76,7 +80,7 @@ void* GrGLIndexBuffer::lockPtr() const {
 void GrGLIndexBuffer::unlock() {
     GrAssert(fBufferID);
     GrAssert(isLocked());
-    GrAssert(this->getGpu()->getCaps().fBufferLockSupport);
+    GrAssert(this->getGpu()->getCaps().bufferLockSupport());
 
     this->bind();
     GL_CALL(UnmapBuffer(GR_GL_ELEMENT_ARRAY_BUFFER));
@@ -84,7 +88,8 @@ void GrGLIndexBuffer::unlock() {
 }
 
 bool GrGLIndexBuffer::isLocked() const {
-#if GR_DEBUG
+    // this check causes a lot of noise in the gl log
+#if 0
     if (this->isValid() && this->getGpu()->getCaps().fBufferLockSupport) {
         this->bind();
         GrGLint mapped;
@@ -125,9 +130,8 @@ bool GrGLIndexBuffer::updateData(const void* src, size_t srcSizeInBytes) {
     // Note that we're cheating on the size here. Currently no methods
     // allow a partial update that preserves contents of non-updated
     // portions of the buffer (lock() does a glBufferData(..size, NULL..))
-    GL_CALL(BufferData(GR_GL_ELEMENT_ARRAY_BUFFER, 
+    GL_CALL(BufferData(GR_GL_ELEMENT_ARRAY_BUFFER,
                        srcSizeInBytes, src, usage));
 #endif
     return true;
 }
-

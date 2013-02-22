@@ -27,7 +27,7 @@ static void drawIntoBitmap(const SkBitmap& bm) {
     p.setColor(SK_ColorRED);
     canvas.drawCircle(SkIntToScalar(w)/2, SkIntToScalar(h)/2,
                       SkIntToScalar(SkMin32(w, h))*3/8, p);
-    
+
     SkRect r;
     r.set(0, 0, SkIntToScalar(w), SkIntToScalar(h));
     p.setStyle(SkPaint::kStroke_Style);
@@ -48,7 +48,7 @@ static uint8_t compute666Index(SkPMColor c) {
     int r = SkGetPackedR32(c);
     int g = SkGetPackedG32(c);
     int b = SkGetPackedB32(c);
-    
+
     return convByteTo6(r) * 36 + convByteTo6(g) * 6 + convByteTo6(b);
 }
 
@@ -70,7 +70,7 @@ static void convertToIndex666(const SkBitmap& src, SkBitmap* dst) {
     dst->setConfig(SkBitmap::kIndex8_Config, src.width(), src.height());
     dst->allocPixels(ctable);
     ctable->unref();
-    
+
     SkAutoLockPixels alps(src);
     SkAutoLockPixels alpd(*dst);
 
@@ -88,7 +88,7 @@ class RepeatTileBench : public SkBenchmark {
     SkString    fName;
     enum { N = SkBENCHLOOP(20) };
 public:
-    RepeatTileBench(void* param, SkBitmap::Config c) : INHERITED(param) {
+    RepeatTileBench(void* param, SkBitmap::Config c, bool isOpaque = false) : INHERITED(param) {
         const int w = 50;
         const int h = 50;
         SkBitmap bm;
@@ -99,8 +99,9 @@ public:
             bm.setConfig(c, w, h);
         }
         bm.allocPixels();
-        bm.eraseColor(0);
-        
+        bm.eraseColor(isOpaque ? SK_ColorWHITE : 0);
+        bm.setIsOpaque(isOpaque);
+
         drawIntoBitmap(bm);
 
         if (SkBitmap::kIndex8_Config == c) {
@@ -113,7 +114,7 @@ public:
                                                    SkShader::kRepeat_TileMode,
                                                    SkShader::kRepeat_TileMode);
         fPaint.setShader(s)->unref();
-        fName.printf("repeatTile_%s", gConfigName[bm.config()]);
+        fName.printf("repeatTile_%s_%c", gConfigName[bm.config()], isOpaque ? 'X' : 'A');
     }
 
 protected:
@@ -134,12 +135,8 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-static SkBenchmark* Fact0(void* p) { return new RepeatTileBench(p, SkBitmap::kARGB_8888_Config); }
-static SkBenchmark* Fact1(void* p) { return new RepeatTileBench(p, SkBitmap::kRGB_565_Config); }
-static SkBenchmark* Fact2(void* p) { return new RepeatTileBench(p, SkBitmap::kARGB_4444_Config); }
-static SkBenchmark* Fact3(void* p) { return new RepeatTileBench(p, SkBitmap::kIndex8_Config); }
-
-static BenchRegistry gReg0(Fact0);
-static BenchRegistry gReg1(Fact1);
-static BenchRegistry gReg2(Fact2);
-static BenchRegistry gReg3(Fact3);
+DEF_BENCH(return new RepeatTileBench(p, SkBitmap::kARGB_8888_Config, true))
+DEF_BENCH(return new RepeatTileBench(p, SkBitmap::kARGB_8888_Config, false))
+DEF_BENCH(return new RepeatTileBench(p, SkBitmap::kRGB_565_Config))
+DEF_BENCH(return new RepeatTileBench(p, SkBitmap::kARGB_4444_Config))
+DEF_BENCH(return new RepeatTileBench(p, SkBitmap::kIndex8_Config))

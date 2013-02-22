@@ -25,5 +25,4 @@ SkFixed SkCordicTan(SkFixed a);
     void SkCordic_UnitTest();
 #endif
 
-#endif // SkCordic 
-
+#endif // SkCordic

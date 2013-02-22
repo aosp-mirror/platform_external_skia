@@ -96,8 +96,6 @@ static void expand_bits_to_bytes(uint8_t dst[], const uint8_t src[], int bits)
     }
 }
 
-#define SkAlign8(x)     (((x) + 7) & ~7)
-
 bool SkWBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
                                   Mode mode)
 {
@@ -157,10 +155,12 @@ bool SkWBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+DEFINE_DECODER_CREATOR(WBMPImageDecoder);
+///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"
 
-static SkImageDecoder* Factory(SkStream* stream) {
+static SkImageDecoder* sk_wbmp_dfactory(SkStream* stream) {
     wbmp_head   head;
 
     if (head.init(stream)) {
@@ -169,5 +169,4 @@ static SkImageDecoder* Factory(SkStream* stream) {
     return NULL;
 }
 
-static SkTRegistry<SkImageDecoder*, SkStream*> gReg(Factory);
-
+static SkTRegistry<SkImageDecoder*, SkStream*> gReg(sk_wbmp_dfactory);

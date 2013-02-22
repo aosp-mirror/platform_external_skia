@@ -1,7 +1,4 @@
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'SimpleCocoaApp',
@@ -11,26 +8,24 @@
         '../experimental/SimpleCocoaApp/',
       ],
       'sources': [
-        '../src/utils/mac/SkEventNotifier.h',
-        '../src/utils/mac/SkEventNotifier.mm',
-        '../src/utils/mac/skia_mac.mm',
-        '../src/utils/mac/SkNSView.h',
-        '../src/utils/mac/SkNSView.mm',
-        '../src/utils/mac/SkOptionsTableView.h',
-        '../src/utils/mac/SkOptionsTableView.mm',
-        '../src/utils/mac/SkOSWindow_Mac.mm',
-        '../src/utils/mac/SkTextFieldCell.h',
-        '../src/utils/mac/SkTextFieldCell.m',
-        
+        '../src/views/mac/SkEventNotifier.h',
+        '../src/views/mac/SkEventNotifier.mm',
+        '../src/views/mac/skia_mac.mm',
+        '../src/views/mac/SkNSView.h',
+        '../src/views/mac/SkNSView.mm',
+        '../src/views/mac/SkOptionsTableView.h',
+        '../src/views/mac/SkOptionsTableView.mm',
+        '../src/views/mac/SkOSWindow_Mac.mm',
+        '../src/views/mac/SkTextFieldCell.h',
+        '../src/views/mac/SkTextFieldCell.m',
+
         '../experimental/SimpleCocoaApp/SimpleApp-Info.plist',
         '../experimental/SimpleCocoaApp/SimpleApp.h',
         '../experimental/SimpleCocoaApp/SimpleApp.mm',
-        
+
       ],
       'dependencies': [
-        'core.gyp:core',
-        'opts.gyp:opts',
-        'utils.gyp:utils',
+        'skia_base_libs.gyp:skia_base_libs',
         'views.gyp:views',
         'xml.gyp:xml',
       ],

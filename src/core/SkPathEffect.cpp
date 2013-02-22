@@ -6,10 +6,22 @@
  * found in the LICENSE file.
  */
 
-
 #include "SkPathEffect.h"
 #include "SkPath.h"
-#include "SkBuffer.h"
+#include "SkFlattenableBuffers.h"
+
+///////////////////////////////////////////////////////////////////////////////
+
+SK_DEFINE_INST_COUNT(SkPathEffect)
+
+void SkPathEffect::computeFastBounds(SkRect* dst, const SkRect& src) const {
+    *dst = src;
+}
+
+bool SkPathEffect::asPoints(PointData* results, const SkPath& src,
+                    const SkStrokeRec&, const SkMatrix&, const SkRect*) const {
+    return false;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -29,21 +41,22 @@ SkPairPathEffect::~SkPairPathEffect() {
 /*
     Format: [oe0-factory][pe1-factory][pe0-size][pe0-data][pe1-data]
 */
-void SkPairPathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkPairPathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
+    this->INHERITED::flatten(buffer);
     buffer.writeFlattenable(fPE0);
     buffer.writeFlattenable(fPE1);
 }
 
 SkPairPathEffect::SkPairPathEffect(SkFlattenableReadBuffer& buffer) {
-    fPE0 = (SkPathEffect*)buffer.readFlattenable();
-    fPE1 = (SkPathEffect*)buffer.readFlattenable();
+    fPE0 = buffer.readFlattenableT<SkPathEffect>();
+    fPE1 = buffer.readFlattenableT<SkPathEffect>();
     // either of these may fail, so we have to check for nulls later on
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkComposePathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                     SkScalar* width) {
+                             SkStrokeRec* rec, const SkRect* cullRect) const {
     // we may have failed to unflatten these, so we have to check
     if (!fPE0 || !fPE1) {
         return false;
@@ -52,91 +65,17 @@ bool SkComposePathEffect::filterPath(SkPath* dst, const SkPath& src,
     SkPath          tmp;
     const SkPath*   ptr = &src;
 
-    if (fPE1->filterPath(&tmp, src, width)) {
+    if (fPE1->filterPath(&tmp, src, rec, cullRect)) {
         ptr = &tmp;
     }
-    return fPE0->filterPath(dst, *ptr, width);
+    return fPE0->filterPath(dst, *ptr, rec, cullRect);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkSumPathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                 SkScalar* width) {
+                             SkStrokeRec* rec, const SkRect* cullRect) const {
     // use bit-or so that we always call both, even if the first one succeeds
-    return  fPE0->filterPath(dst, src, width) | fPE1->filterPath(dst, src, width);
+    return fPE0->filterPath(dst, src, rec, cullRect) |
+           fPE1->filterPath(dst, src, rec, cullRect);
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-#include "SkStroke.h"
-
-SkStrokePathEffect::SkStrokePathEffect(const SkPaint& paint)
-    : fWidth(paint.getStrokeWidth()), fMiter(paint.getStrokeMiter()),
-      fStyle(SkToU8(paint.getStyle())), fJoin(SkToU8(paint.getStrokeJoin())),
-      fCap(SkToU8(paint.getStrokeCap())) {
-}
-
-SkStrokePathEffect::SkStrokePathEffect(SkScalar width, SkPaint::Style style,
-                           SkPaint::Join join, SkPaint::Cap cap, SkScalar miter)
-        : fWidth(width), fMiter(miter), fStyle(SkToU8(style)),
-          fJoin(SkToU8(join)), fCap(SkToU8(cap)) {
-    if (miter < 0) {  // signal they want the default
-        fMiter = SkIntToScalar(4);
-    }
-}
-
-bool SkStrokePathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                    SkScalar* width) {
-    if (fWidth < 0 || fStyle == SkPaint::kFill_Style) {
-        return false;
-    }
-
-    if (fStyle == SkPaint::kStroke_Style && fWidth == 0) {  // hairline
-        *width = 0;
-        return true;
-    }
-
-    SkStroke    stroke;
-
-    stroke.setWidth(fWidth);
-    stroke.setMiterLimit(fMiter);
-    stroke.setJoin((SkPaint::Join)fJoin);
-    stroke.setCap((SkPaint::Cap)fCap);
-    stroke.setDoFill(fStyle == SkPaint::kStrokeAndFill_Style);
-
-    stroke.strokePath(src, dst);
-    return true;
-}
-
-SkFlattenable::Factory SkStrokePathEffect::getFactory() {
-    return CreateProc;
-}
-
-SkFlattenable* SkStrokePathEffect::CreateProc(SkFlattenableReadBuffer& buffer) {
-    return SkNEW_ARGS(SkStrokePathEffect, (buffer));
-}
-
-void SkStrokePathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
-    buffer.writeScalar(fWidth);
-    buffer.writeScalar(fMiter);
-    buffer.write8(fStyle);
-    buffer.write8(fJoin);
-    buffer.write8(fCap);
-}
-
-SkStrokePathEffect::SkStrokePathEffect(SkFlattenableReadBuffer& buffer) {
-    fWidth = buffer.readScalar();
-    fMiter = buffer.readScalar();
-    fStyle = buffer.readU8();
-    fJoin = buffer.readU8();
-    fCap = buffer.readU8();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkPathEffect)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkComposePathEffect)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkStrokePathEffect)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSumPathEffect)
-SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END
-

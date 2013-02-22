@@ -1,7 +1,4 @@
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     # Due to an unfortunate intersection of lameness between gcc and gyp,
     # we have to build the *_SSE2.cpp files in a separate target.  The
@@ -23,7 +20,9 @@
     # separately as well.
     {
       'target_name': 'opts',
+      'product_name': 'skia_opts',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',
@@ -31,11 +30,16 @@
         '../src/opts',
       ],
       'conditions': [
-        [ 'skia_target_arch != "arm"', {
+        [ 'skia_arch_type == "x86" and skia_os != "ios"', {
           'conditions': [
-            [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+            [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
               'cflags': [
                 '-msse2',
+              ],
+            }],
+            [ 'skia_os != "android"', {
+              'dependencies': [
+                'opts_ssse3',
               ],
             }],
           ],
@@ -43,31 +47,49 @@
             '../src/opts/opts_check_SSE2.cpp',
             '../src/opts/SkBitmapProcState_opts_SSE2.cpp',
             '../src/opts/SkBlitRow_opts_SSE2.cpp',
+            '../src/opts/SkBlitRect_opts_SSE2.cpp',
             '../src/opts/SkUtils_opts_SSE2.cpp',
           ],
-          'dependencies': [
-            'opts_ssse3',
-          ],
         }],
-        [ 'skia_target_arch == "arm" and armv7 == 1', {
+        [ 'skia_arch_type == "arm" and armv7 == 1', {
           # The assembly uses the frame pointer register (r7 in Thumb/r11 in
           # ARM), the compiler doesn't like that.
           'cflags!': [
             '-fno-omit-frame-pointer',
+            '-mapcs-frame',
+            '-mapcs',
           ],
           'cflags': [
             '-fomit-frame-pointer',
+            '-mno-apcs-frame',
           ],
+          'variables': {
+            'arm_neon_optional%': '<(arm_neon_optional>',
+          },
           'sources': [
             '../src/opts/opts_check_arm.cpp',
             '../src/opts/memset.arm.S',
-            '../src/opts/memset16_neon.S',
-            '../src/opts/memset32_neon.S',
             '../src/opts/SkBitmapProcState_opts_arm.cpp',
             '../src/opts/SkBlitRow_opts_arm.cpp',
+            '../src/opts/SkBlitRow_opts_arm.h',
+          ],
+          'conditions': [
+            [ 'arm_neon == 1 or arm_neon_optional == 1', {
+              'dependencies': [
+                'opts_neon',
+              ]
+            }],
+            [ 'skia_os == "ios"', {
+              'sources!': [
+                # these fail to compile under xcode for ios
+                '../src/opts/memset.arm.S',
+                '../src/opts/SkBitmapProcState_opts_arm.cpp',
+                '../src/opts/SkBlitRow_opts_arm.cpp',
+              ],
+            }],
           ],
         }],
-        [ 'skia_target_arch == "arm" and armv7 != 1', {
+        [ '(skia_arch_type == "arm" and armv7 == 0) or (skia_os == "ios")', {
           'sources': [
             '../src/opts/SkBitmapProcState_opts_none.cpp',
             '../src/opts/SkBlitRow_opts_none.cpp',
@@ -82,14 +104,16 @@
     # gcc to generate SSSE3 code.
     {
       'target_name': 'opts_ssse3',
+      'product_name': 'skia_opts_ssse3',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',
         '../src/core',
       ],
       'conditions': [
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
           'cflags': [
             '-mssse3',
           ],
@@ -102,11 +126,50 @@
             'OTHER_CFLAGS': ['-mssse3',],
           },
         }],
-        [ 'skia_target_arch != "arm"', {
+        [ 'skia_arch_type == "x86"', {
           'sources': [
             '../src/opts/SkBitmapProcState_opts_SSSE3.cpp',
           ],
         }],
+      ],
+    },
+    # NEON code must be compiled with -mfpu=neon which also affects scalar
+    # code. To support dynamic NEON code paths, we need to build all
+    # NEON-specific sources in a separate static library. The situation
+    # is very similar to the SSSE3 one.
+    {
+      'target_name': 'opts_neon',
+      'product_name': 'skia_opts_neon',
+      'type': 'static_library',
+      'standalone_static_library': 1,
+      'include_dirs': [
+        '../include/config',
+        '../include/core',
+        '../src/core',
+        '../src/opts',
+      ],
+      'cflags!': [
+        '-fno-omit-frame-pointer',
+        '-mfpu=vfp',  # remove them all, just in case.
+        '-mfpu=vfpv3',
+        '-mfpu=vfpv3-d16',
+      ],
+      'cflags': [
+        '-mfpu=neon',
+        '-fomit-frame-pointer',
+      ],
+      'ldflags': [
+        '-march=armv7-a',
+        '-Wl,--fix-cortex-a8',
+      ],
+      'sources': [
+        '../src/opts/memset16_neon.S',
+        '../src/opts/memset32_neon.S',
+        '../src/opts/SkBitmapProcState_arm_neon.cpp',
+        '../src/opts/SkBitmapProcState_matrixProcs_neon.cpp',
+        '../src/opts/SkBitmapProcState_matrix_clamp_neon.h',
+        '../src/opts/SkBitmapProcState_matrix_repeat_neon.h',
+        '../src/opts/SkBlitRow_opts_arm_neon.cpp',
       ],
     },
   ],

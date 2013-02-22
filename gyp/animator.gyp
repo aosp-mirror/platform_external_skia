@@ -1,11 +1,14 @@
+#Animator is basically Skia's (much saner) version of Flash.
+#On top of Views it provides a declarative UI model which can be updated
+#based on events which trigger changes or scripts.
+
 {
-  'includes': [
-    'common.gypi',
-  ],
   'targets': [
     {
       'target_name': 'animator',
+      'product_name': 'skia_animator',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'include_dirs': [
         '../include/config',
         '../include/core',

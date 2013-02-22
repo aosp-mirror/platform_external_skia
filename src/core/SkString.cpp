@@ -15,7 +15,7 @@
 #include <stdio.h>
 
 // number of bytes (on the stack) to receive the printf result
-static const size_t kBufferSize = 256;
+static const size_t kBufferSize = 512;
 
 #ifdef SK_BUILD_FOR_WIN
     #define VSNPRINTF(buffer, size, format, args) \
@@ -36,19 +36,23 @@ static const size_t kBufferSize = 256;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkStrStartsWith(const char string[], const char prefix[]) {
+bool SkStrEndsWith(const char string[], const char suffixStr[]) {
     SkASSERT(string);
-    SkASSERT(prefix);
-    return !strncmp(string, prefix, strlen(prefix));
+    SkASSERT(suffixStr);
+    size_t  strLen = strlen(string);
+    size_t  suffixLen = strlen(suffixStr);
+    return  strLen >= suffixLen &&
+            !strncmp(string + strLen - suffixLen, suffixStr, suffixLen);
 }
 
-bool SkStrEndsWith(const char string[], const char suffix[]) {
+bool SkStrEndsWith(const char string[], const char suffixChar) {
     SkASSERT(string);
-    SkASSERT(suffix);
     size_t  strLen = strlen(string);
-    size_t  suffixLen = strlen(suffix);
-    return  strLen >= suffixLen &&
-            !strncmp(string + strLen - suffixLen, suffix, suffixLen);
+    if (0 == strLen) {
+        return false;
+    } else {
+        return (suffixChar == string[strLen-1]);
+    }
 }
 
 int SkStrStartsWithOneOf(const char string[], const char prefixes[]) {
@@ -107,7 +111,7 @@ char* SkStrAppendS64(char string[], int64_t dec, int minDigits) {
     }
 
     do {
-        *--p = SkToU8('0' + dec % 10);
+        *--p = SkToU8('0' + (int32_t) (dec % 10));
         dec /= 10;
         minDigits--;
     } while (dec != 0);
@@ -129,7 +133,6 @@ char* SkStrAppendS64(char string[], int64_t dec, int minDigits) {
     return string;
 }
 
-#ifdef SK_CAN_USE_FLOAT
 char* SkStrAppendFloat(char string[], float value) {
     // since floats have at most 8 significant digits, we limit our %g to that.
     static const char gFormat[] = "%.8g";
@@ -140,7 +143,6 @@ char* SkStrAppendFloat(char string[], float value) {
     SkASSERT(len <= SkStrAppendScalar_MaxSize);
     return string + len;
 }
-#endif
 
 char* SkStrAppendFixed(char string[], SkFixed x) {
     SkDEBUGCODE(char* start = string;)
@@ -610,4 +612,3 @@ SkString SkStringPrintf(const char* format, ...) {
 
 #undef VSNPRINTF
 #undef SNPRINTF
-

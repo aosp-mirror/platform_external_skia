@@ -8,9 +8,11 @@
 
 
 #include "Sk1DPathEffect.h"
+#include "SkFlattenableBuffers.h"
 #include "SkPathMeasure.h"
 
-bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* width) {
+bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src,
+                                SkStrokeRec*, const SkRect*) const {
     SkPathMeasure   meas(src, false);
     do {
         SkScalar    length = meas.getLength();
@@ -28,12 +30,14 @@ bool Sk1DPathEffect::filterPath(SkPath* dst, const SkPath& src, SkScalar* width)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance, 
+SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance,
     SkScalar phase, Style style) : fPath(path)
 {
     if (advance <= 0 || path.isEmpty()) {
         SkDEBUGF(("SkPath1DPathEffect can't use advance <= 0\n"));
         fAdvance = 0;   // signals we can't draw anything
+        fInitialOffset = 0;
+        fStyle = kStyleCount;
     } else {
         // cleanup their phase parameter, inverting it so that it becomes an
         // offset along the path (to match the interpretation in PostScript)
@@ -56,7 +60,7 @@ SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance,
 
         fAdvance = advance;
         fInitialOffset = phase;
-        
+
         if ((unsigned)style >= kStyleCount) {
             SkDEBUGF(("SkPath1DPathEffect style enum out of range %d\n", style));
         }
@@ -65,34 +69,37 @@ SkPath1DPathEffect::SkPath1DPathEffect(const SkPath& path, SkScalar advance,
 }
 
 bool SkPath1DPathEffect::filterPath(SkPath* dst, const SkPath& src,
-                                    SkScalar* width) {
+                            SkStrokeRec* rec, const SkRect* cullRect) const {
     if (fAdvance > 0) {
-        *width = -1;
-        return this->INHERITED::filterPath(dst, src, width);
+        rec->setFillStyle();
+        return this->INHERITED::filterPath(dst, src, rec, cullRect);
     }
     return false;
 }
 
-static void morphpoints(SkPoint dst[], const SkPoint src[], int count,
+static bool morphpoints(SkPoint dst[], const SkPoint src[], int count,
                         SkPathMeasure& meas, SkScalar dist) {
     for (int i = 0; i < count; i++) {
         SkPoint pos;
         SkVector tangent;
-        
+
         SkScalar sx = src[i].fX;
         SkScalar sy = src[i].fY;
-        
-        meas.getPosTan(dist + sx, &pos, &tangent);
-        
+
+        if (!meas.getPosTan(dist + sx, &pos, &tangent)) {
+            return false;
+        }
+
         SkMatrix    matrix;
         SkPoint     pt;
-        
+
         pt.set(sx, sy);
         matrix.setSinCos(tangent.fY, tangent.fX, 0, 0);
         matrix.preTranslate(-sx, 0);
         matrix.postTranslate(pos.fX, pos.fY);
         matrix.mapPoints(&dst[i], &pt, 1);
     }
+    return true;
 }
 
 /*  TODO
@@ -110,8 +117,9 @@ static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas,
     while ((verb = iter.next(srcP)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
-                morphpoints(dstP, srcP, 1, meas, dist);
-                dst->moveTo(dstP[0]);
+                if (morphpoints(dstP, srcP, 1, meas, dist)) {
+                    dst->moveTo(dstP[0]);
+                }
                 break;
             case SkPath::kLine_Verb:
                 srcP[2] = srcP[1];
@@ -119,12 +127,14 @@ static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas,
                             SkScalarAve(srcP[0].fY, srcP[2].fY));
                 // fall through to quad
             case SkPath::kQuad_Verb:
-                morphpoints(dstP, &srcP[1], 2, meas, dist);
-                dst->quadTo(dstP[0], dstP[1]);
+                if (morphpoints(dstP, &srcP[1], 2, meas, dist)) {
+                    dst->quadTo(dstP[0], dstP[1]);
+                }
                 break;
             case SkPath::kCubic_Verb:
-                morphpoints(dstP, &srcP[1], 3, meas, dist);
-                dst->cubicTo(dstP[0], dstP[1], dstP[2]);
+                if (morphpoints(dstP, &srcP[1], 3, meas, dist)) {
+                    dst->cubicTo(dstP[0], dstP[1], dstP[2]);
+                }
                 break;
             case SkPath::kClose_Verb:
                 dst->close();
@@ -139,37 +149,45 @@ static void morphpath(SkPath* dst, const SkPath& src, SkPathMeasure& meas,
 SkPath1DPathEffect::SkPath1DPathEffect(SkFlattenableReadBuffer& buffer) {
     fAdvance = buffer.readScalar();
     if (fAdvance > 0) {
-        fPath.unflatten(buffer);
+        buffer.readPath(&fPath);
         fInitialOffset = buffer.readScalar();
-        fStyle = (Style) buffer.readU8();
+        fStyle = (Style) buffer.readUInt();
+    } else {
+        SkDEBUGF(("SkPath1DPathEffect can't use advance <= 0\n"));
+        // Make Coverity happy.
+        fInitialOffset = 0;
+        fStyle = kStyleCount;
     }
 }
 
-SkScalar SkPath1DPathEffect::begin(SkScalar contourLength) {
+SkScalar SkPath1DPathEffect::begin(SkScalar contourLength) const {
     return fInitialOffset;
 }
 
-void SkPath1DPathEffect::flatten(SkFlattenableWriteBuffer& buffer) {
+void SkPath1DPathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
+    this->INHERITED::flatten(buffer);
     buffer.writeScalar(fAdvance);
     if (fAdvance > 0) {
-        fPath.flatten(buffer);
+        buffer.writePath(fPath);
         buffer.writeScalar(fInitialOffset);
-        buffer.write8(fStyle);
+        buffer.writeUInt(fStyle);
     }
 }
 
 SkScalar SkPath1DPathEffect::next(SkPath* dst, SkScalar distance,
-                                  SkPathMeasure& meas) {
+                                  SkPathMeasure& meas) const {
     switch (fStyle) {
         case kTranslate_Style: {
             SkPoint pos;
-            meas.getPosTan(distance, &pos, NULL);
-            dst->addPath(fPath, pos.fX, pos.fY);
+            if (meas.getPosTan(distance, &pos, NULL)) {
+                dst->addPath(fPath, pos.fX, pos.fY);
+            }
         } break;
         case kRotate_Style: {
             SkMatrix matrix;
-            meas.getMatrix(distance, &matrix);
-            dst->addPath(fPath, matrix);
+            if (meas.getMatrix(distance, &matrix)) {
+                dst->addPath(fPath, matrix);
+            }
         } break;
         case kMorph_Style:
             morphpath(dst, fPath, meas, distance);
@@ -180,8 +198,3 @@ SkScalar SkPath1DPathEffect::next(SkPath* dst, SkScalar distance,
     }
     return fAdvance;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-SK_DEFINE_FLATTENABLE_REGISTRAR(SkPath1DPathEffect)
-

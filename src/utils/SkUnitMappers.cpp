@@ -6,6 +6,9 @@
  * found in the LICENSE file.
  */
 #include "SkUnitMappers.h"
+#include "SkFlattenableBuffers.h"
+
+SK_DEFINE_INST_COUNT(SkUnitMapper)
 
 SkDiscreteMapper::SkDiscreteMapper(int segments) {
     if (segments < 2) {
@@ -29,22 +32,14 @@ uint16_t SkDiscreteMapper::mapUnit16(uint16_t input) {
 
 SkDiscreteMapper::SkDiscreteMapper(SkFlattenableReadBuffer& rb)
         : SkUnitMapper(rb) {
-    fSegments = rb.readU32();
-    fScale = rb.readU32();
+    fSegments = rb.readInt();
+    fScale = rb.read32();
 }
 
-SkFlattenable::Factory SkDiscreteMapper::getFactory() {
-    return Create;
-}
-
-SkFlattenable* SkDiscreteMapper::Create(SkFlattenableReadBuffer& rb) {
-    return SkNEW_ARGS(SkDiscreteMapper, (rb));
-}
-
-void SkDiscreteMapper::flatten(SkFlattenableWriteBuffer& wb) {
+void SkDiscreteMapper::flatten(SkFlattenableWriteBuffer& wb) const {
     this->INHERITED::flatten(wb);
 
-    wb.write32(fSegments);
+    wb.writeInt(fSegments);
     wb.write32(fScale);
 }
 
@@ -64,12 +59,3 @@ uint16_t SkCosineMapper::mapUnit16(uint16_t input)
 
 SkCosineMapper::SkCosineMapper(SkFlattenableReadBuffer& rb)
     : SkUnitMapper(rb) {}
-
-SkFlattenable::Factory SkCosineMapper::getFactory() {
-    return Create;
-}
-
-SkFlattenable* SkCosineMapper::Create(SkFlattenableReadBuffer& rb) {
-    return SkNEW_ARGS(SkCosineMapper, (rb));
-}
-

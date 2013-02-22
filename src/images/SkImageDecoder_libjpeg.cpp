@@ -986,11 +986,14 @@ protected:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+DEFINE_DECODER_CREATOR(JPEGImageDecoder);
+DEFINE_ENCODER_CREATOR(JPEGImageEncoder);
+///////////////////////////////////////////////////////////////////////////////
 
 #include "SkTRegistry.h"
 
-static SkImageDecoder* DFactory(SkStream* stream) {
-    static const char gHeader[] = { 0xFF, 0xD8, 0xFF };
+static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
+    static const unsigned char gHeader[] = { 0xFF, 0xD8, 0xFF };
     static const size_t HEADER_SIZE = sizeof(gHeader);
 
     char buffer[HEADER_SIZE];
@@ -1005,9 +1008,10 @@ static SkImageDecoder* DFactory(SkStream* stream) {
     return SkNEW(SkJPEGImageDecoder);
 }
 
-static SkImageEncoder* EFactory(SkImageEncoder::Type t) {
+static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
     return (SkImageEncoder::kJPEG_Type == t) ? SkNEW(SkJPEGImageEncoder) : NULL;
 }
 
-static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(DFactory);
-static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(EFactory);
+
+static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libjpeg_dfactory);
+static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(sk_libjpeg_efactory);

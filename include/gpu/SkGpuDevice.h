@@ -29,14 +29,11 @@ class SK_API SkGpuDevice : public SkDevice {
 public:
     /**
      *  New device that will create an offscreen renderTarget based on the
-     *  config, width, height.
-     *
-     *  usage is a special flag that should only be set by SkCanvas
-     *  internally.
+     *  config, width, height, and sampleCount. The device's storage will not
+     *  count against the GrContext's texture cache budget. The device's pixels
+     *  will be uninitialized.
      */
-    SkGpuDevice(GrContext*, SkBitmap::Config,
-                int width, int height,
-                SkDevice::Usage usage = SkDevice::kGeneral_Usage);
+    SkGpuDevice(GrContext*, SkBitmap::Config, int width, int height, int sampleCount = 0);
 
     /**
      *  New device that will render to the specified renderTarget.
@@ -54,13 +51,6 @@ public:
 
     GrContext* context() const { return fContext; }
 
-    /**
-     *  Override from SkGpuDevice, so we can set our FBO to be the render target
-     *  The canvas parameter must be a SkGpuCanvas
-     */
-    virtual void gainFocus(SkCanvas*, const SkMatrix&, const SkRegion&,
-                           const SkClipStack& clipStack) SK_OVERRIDE;
-
     virtual SkGpuRenderTarget* accessRenderTarget() SK_OVERRIDE;
 
     // overrides from SkDevice
@@ -69,13 +59,12 @@ public:
     virtual void writePixels(const SkBitmap& bitmap, int x, int y,
                              SkCanvas::Config8888 config8888) SK_OVERRIDE;
 
-    virtual void setMatrixClip(const SkMatrix& matrix, const SkRegion& clip,
-                               const SkClipStack&) SK_OVERRIDE;
-
     virtual void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPoints(const SkDraw&, SkCanvas::PointMode mode, size_t count,
                             const SkPoint[], const SkPaint& paint) SK_OVERRIDE;
     virtual void drawRect(const SkDraw&, const SkRect& r,
+                          const SkPaint& paint) SK_OVERRIDE;
+    virtual void drawOval(const SkDraw&, const SkRect& oval,
                           const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPath(const SkDraw&, const SkPath& path,
                           const SkPaint& paint, const SkMatrix* prePathMatrix,
@@ -83,6 +72,9 @@ public:
     virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
                             const SkIRect* srcRectOrNull,
                             const SkMatrix&, const SkPaint&) SK_OVERRIDE;
+    virtual void drawBitmapRect(const SkDraw&, const SkBitmap&,
+                                const SkRect* srcOrNull, const SkRect& dst,
+                                const SkPaint& paint) SK_OVERRIDE;
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
                             int x, int y, const SkPaint& paint);
     virtual void drawText(const SkDraw&, const void* text, size_t len,
@@ -104,111 +96,90 @@ public:
 
     virtual void flush();
 
+    virtual void onAttachToCanvas(SkCanvas* canvas) SK_OVERRIDE;
+    virtual void onDetachFromCanvas() SK_OVERRIDE;
+
     /**
      * Make's this device's rendertarget current in the underlying 3D API.
      * Also implicitly flushes.
      */
     virtual void makeRenderTargetCurrent();
 
-    virtual bool filterImage(SkImageFilter*, const SkBitmap& src,
-                             const SkMatrix& ctm,
-                             SkBitmap* result, SkIPoint* offset) SK_OVERRIDE;
+    virtual bool canHandleImageFilter(SkImageFilter*) SK_OVERRIDE;
+    virtual bool filterImage(SkImageFilter*, const SkBitmap&, const SkMatrix&,
+                             SkBitmap*, SkIPoint*) SK_OVERRIDE;
+
+    class SkAutoCachedTexture; // used internally
 
 protected:
-    typedef GrContext::TextureCacheEntry TexCache;
-    enum TexType {
-        kBitmap_TexType,
-        kDeviceRenderTarget_TexType,
-        kSaveLayerDeviceRenderTarget_TexType
-    };
-    TexCache lockCachedTexture(const SkBitmap& bitmap,
-                               const GrSamplerState* sampler,
-                               TexType type = kBitmap_TexType);
-    bool isBitmapInTextureCache(const SkBitmap& bitmap,
-                                const GrSamplerState& sampler) const;
-    void unlockCachedTexture(TexCache);
-
-    class SkAutoCachedTexture {
-    public:
-        SkAutoCachedTexture();
-        SkAutoCachedTexture(SkGpuDevice* device,
-                            const SkBitmap& bitmap,
-                            const GrSamplerState* sampler,
-                            GrTexture** texture);
-        ~SkAutoCachedTexture();
-
-        GrTexture* set(SkGpuDevice*, const SkBitmap&, const GrSamplerState*);
-
-    private:
-        SkGpuDevice*    fDevice;
-        TexCache        fTex;
-    };
-    friend class SkAutoTexCache;
-
     // overrides from SkDevice
     virtual bool onReadPixels(const SkBitmap& bitmap,
                               int x, int y,
                               SkCanvas::Config8888 config8888) SK_OVERRIDE;
-
 
 private:
     GrContext*      fContext;
 
     GrSkDrawProcs*  fDrawProcs;
 
-    // state for our offscreen render-target
-    TexCache            fCache;
-    GrTexture*          fTexture;
+    GrClipData      fClipData;
+
+    // state for our render-target
     GrRenderTarget*     fRenderTarget;
     bool                fNeedClear;
-    bool                fNeedPrepareRenderTarget;
 
     // called from rt and tex cons
-    void initFromRenderTarget(GrContext*, GrRenderTarget*);
+    void initFromRenderTarget(GrContext*, GrRenderTarget*, bool cached);
 
-    // doesn't set the texture/sampler/matrix state
-    // caller needs to null out GrPaint's texture if
-    // non-textured drawing is desired.
-    // Set constantColor to true if a constant color
-    // will be used.  This is an optimization, and can
-    // always be set to false. constantColor should
-    // never be true if justAlpha is true.
-    bool skPaint2GrPaintNoShader(const SkPaint& skPaint,
-                                 bool justAlpha,
-                                 GrPaint* grPaint,
-                                 bool constantColor);
-
-    // uses the SkShader to setup paint, act used to
-    // hold lock on cached texture and free it when
-    // destroyed.
-    // If there is no shader, constantColor will
-    // be passed to skPaint2GrPaintNoShader.  Otherwise
-    // it is ignored.
-    bool skPaint2GrPaintShader(const SkPaint& skPaint,
-                               SkAutoCachedTexture* act,
-                               const SkMatrix& ctm,
-                               GrPaint* grPaint,
-                               bool constantColor);
+    // used by createCompatibleDevice
+    SkGpuDevice(GrContext*, GrTexture* texture, bool needClear);
 
     // override from SkDevice
     virtual SkDevice* onCreateCompatibleDevice(SkBitmap::Config config,
                                                int width, int height,
                                                bool isOpaque,
-                                               Usage usage);
+                                               Usage usage) SK_OVERRIDE;
 
     SkDrawProcs* initDrawForText(GrTextContext*);
     bool bindDeviceAsTexture(GrPaint* paint);
 
-    void prepareRenderTarget(const SkDraw&);
+    // sets the render target, clip, and matrix on GrContext. Use forceIdenity to override
+    // SkDraw's matrix and draw in device coords.
+    void prepareDraw(const SkDraw&, bool forceIdentity);
+
+    /**
+     * Implementation for both drawBitmap and drawBitmapRect.
+     */
+    void drawBitmapCommon(const SkDraw&,
+                          const SkBitmap& bitmap,
+                          const SkRect* srcRectPtr,
+                          const SkMatrix&,
+                          const SkPaint&);
+
+    /**
+     * Helper functions called by drawBitmapCommon. By the time these are called the SkDraw's
+     * matrix has already been set on GrContext
+     */
     bool shouldTileBitmap(const SkBitmap& bitmap,
-                          const GrSamplerState& sampler,
-                          const SkIRect* srcRectPtr,
-                          int* tileSize) const;
-    void internalDrawBitmap(const SkDraw&, const SkBitmap&,
-                            const SkIRect&, const SkMatrix&, GrPaint* grPaint);
+                          const GrTextureParams& sampler,
+                          const SkRect* srcRectPtr) const;
+    void internalDrawBitmap(const SkBitmap&,
+                            const SkRect&,
+                            const SkMatrix&,
+                            const GrTextureParams& params,
+                            GrPaint* grPaint);
+    void drawTiledBitmap(const SkBitmap& bitmap,
+                         const SkRect& srcRect,
+                         const SkMatrix& m,
+                         const GrTextureParams& params,
+                         GrPaint* grPaint);
+
+    /**
+     * Returns non-initialized instance.
+     */
+    GrTextContext* getTextContext();
 
     typedef SkDevice INHERITED;
 };
 
 #endif
-

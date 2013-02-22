@@ -21,6 +21,7 @@
 #include "SkPixelRef.h"
 #include "SkRandom.h"
 #include "SkRefCnt.h"
+#include "SkRTConf.h"
 #include "SkScalerContext.h"
 #include "SkShader.h"
 #include "SkStream.h"
@@ -52,10 +53,14 @@ void SkGraphics::GetVersion(int32_t* major, int32_t* minor, int32_t* patch) {
 #endif
 
 void SkGraphics::Init() {
-#if !SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
-    SkFlattenable::InitializeFlattenables();
-    SkPixelRef::InitializeFlattenables();
+#ifdef SK_DEVELOPER
+    skRTConfRegistry().possiblyDumpFile();
+    skRTConfRegistry().validate();
+    SkDebugf("Non-default runtime configuration options:\n");
+    skRTConfRegistry().printNonDefault( );
 #endif
+
+    SkFlattenable::InitializeFlattenables();
 #ifdef BUILD_EMBOSS_TABLE
     SkEmbossMask_BuildTable();
 #endif
@@ -119,60 +124,25 @@ void SkGraphics::Init() {
              GetFontCacheLimit() >> 10);
 
 #endif
+
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-#include "SkGlyphCache.h"
-#include "SkTypefaceCache.h"
 
 void SkGraphics::Term() {
     PurgeFontCache();
-}
-
-#ifndef SK_DEFAULT_FONT_CACHE_LIMIT
-    #define SK_DEFAULT_FONT_CACHE_LIMIT (2 * 1024 * 1024)
-#endif
-
-#define SK_MIN_FONT_CACHE_LIMIT    (256 * 1024)
-
-static size_t gFontCacheLimit = SK_DEFAULT_FONT_CACHE_LIMIT;
-
-size_t SkGraphics::GetFontCacheLimit() {
-    return gFontCacheLimit;
-}
-
-size_t SkGraphics::SetFontCacheLimit(size_t bytes) {
-    size_t prev = gFontCacheLimit;
-
-    if (bytes < SK_MIN_FONT_CACHE_LIMIT) {
-        bytes = SK_MIN_FONT_CACHE_LIMIT;
-    }
-    gFontCacheLimit = bytes;
-    
-    // trigger a purge if the new size is smaller that our currently used amount
-    if (bytes < SkGlyphCache::GetCacheUsed()) {
-        SkGlyphCache::SetCacheUsed(bytes);
-    }
-    return prev;
-}
-
-void SkGraphics::PurgeFontCache() {
-    SkGlyphCache::SetCacheUsed(0);
-    SkTypefaceCache::PurgeAll();
+    SkPaint::Term();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static const char kFontCacheLimitStr[] = "font-cache-limit";
-static const size_t kFontCacheLimitLen = sizeof(kFontCacheLimitStr) - 1; 
+static const size_t kFontCacheLimitLen = sizeof(kFontCacheLimitStr) - 1;
 
 static const struct {
     const char* fStr;
     size_t fLen;
     size_t (*fFunc)(size_t);
 } gFlags[] = {
-    {kFontCacheLimitStr, kFontCacheLimitLen, SkGraphics::SetFontCacheLimit}
+    { kFontCacheLimitStr, kFontCacheLimitLen, SkGraphics::SetFontCacheLimit }
 };
 
 /* flags are of the form param; or param=value; */

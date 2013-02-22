@@ -13,6 +13,8 @@
 #include "SkFlattenable.h"
 #include "SkColor.h"
 
+class SkString;
+
 /** \class SkXfermode
 
     SkXfermode is the base class for objects that are called to implement custom
@@ -23,16 +25,18 @@
 */
 class SK_API SkXfermode : public SkFlattenable {
 public:
+    SK_DECLARE_INST_COUNT(SkXfermode)
+
     SkXfermode() {}
 
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) const;
     virtual void xfer16(uint16_t dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) const;
     virtual void xfer4444(uint16_t dst[], const SkPMColor src[], int count,
-                          const SkAlpha aa[]);
+                          const SkAlpha aa[]) const;
     virtual void xferA8(SkAlpha dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]);
+                        const SkAlpha aa[]) const;
 
     /** Enum of possible coefficients to describe some xfermodes
      */
@@ -66,13 +70,13 @@ public:
         srcover     one             isa
         dstover     ida             one
      */
-    virtual bool asCoeff(Coeff* src, Coeff* dst);
+    virtual bool asCoeff(Coeff* src, Coeff* dst) const;
 
     /**
      *  The same as calling xfermode->asCoeff(..), except that this also checks
      *  if the xfermode is NULL, and if so, treats its as kSrcOver_Mode.
      */
-    static bool AsCoeff(SkXfermode*, Coeff* src, Coeff* dst);
+    static bool AsCoeff(const SkXfermode*, Coeff* src, Coeff* dst);
 
     /** List of predefined xfermodes.
         The algebra for the modes uses the following symbols:
@@ -99,11 +103,11 @@ public:
         // all remaining modes are defined in the SVG Compositing standard
         // http://www.w3.org/TR/2009/WD-SVGCompositing-20090430/
         kPlus_Mode,
-        kMultiply_Mode, 
-        
+        kModulate_Mode, // multiplies all components (= alpha and color)
+
         // all above modes can be expressed as pair of src/dst Coeffs
-        kCoeffModesCnt, 
-        
+        kCoeffModesCnt,
+
         kScreen_Mode = kCoeffModesCnt,
         kOverlay_Mode,
         kDarken_Mode,
@@ -123,13 +127,13 @@ public:
      *  returns true and sets (if not null) mode accordingly. Otherwise it
      *  returns false and ignores the mode parameter.
      */
-    virtual bool asMode(Mode* mode);
+    virtual bool asMode(Mode* mode) const;
 
     /**
      *  The same as calling xfermode->asMode(mode), except that this also checks
      *  if the xfermode is NULL, and if so, treats its as kSrcOver_Mode.
      */
-    static bool AsMode(SkXfermode*, Mode* mode);
+    static bool AsMode(const SkXfermode*, Mode* mode);
 
     /**
      *  Returns true if the xfermode claims to be the specified Mode. This works
@@ -141,7 +145,7 @@ public:
      *      ...
      *  }
      */
-    static bool IsMode(SkXfermode* xfer, Mode mode);
+    static bool IsMode(const SkXfermode* xfer, Mode mode);
 
     /** Return an SkXfermode object for the specified mode.
      */
@@ -168,11 +172,12 @@ public:
     static bool ModeAsCoeff(Mode mode, Coeff* src, Coeff* dst);
 
     // DEPRECATED: call AsMode(...)
-    static bool IsMode(SkXfermode* xfer, Mode* mode) {
+    static bool IsMode(const SkXfermode* xfer, Mode* mode) {
         return AsMode(xfer, mode);
     }
 
-    SK_DECLARE_FLATTENABLE_REGISTRAR()
+    SkDEVCODE(virtual void toString(SkString* str) const = 0;)
+    SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 protected:
     SkXfermode(SkFlattenableReadBuffer& rb) : SkFlattenable(rb) {}
 
@@ -184,7 +189,7 @@ protected:
         This method will not be called directly by the client, so it need not
         be implemented if your subclass has overridden xfer32/xfer16/xferA8
     */
-    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst);
+    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst) const;
 
 private:
     enum {
@@ -206,20 +211,20 @@ public:
 
     // overrides from SkXfermode
     virtual void xfer32(SkPMColor dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]) SK_OVERRIDE;
+                        const SkAlpha aa[]) const SK_OVERRIDE;
     virtual void xfer16(uint16_t dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]) SK_OVERRIDE;
+                        const SkAlpha aa[]) const SK_OVERRIDE;
     virtual void xfer4444(uint16_t dst[], const SkPMColor src[], int count,
-                          const SkAlpha aa[]) SK_OVERRIDE;
+                          const SkAlpha aa[]) const SK_OVERRIDE;
     virtual void xferA8(SkAlpha dst[], const SkPMColor src[], int count,
-                        const SkAlpha aa[]) SK_OVERRIDE;
+                        const SkAlpha aa[]) const SK_OVERRIDE;
 
-    // overrides from SkFlattenable
-    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; }
-    virtual void    flatten(SkFlattenableWriteBuffer&) SK_OVERRIDE;
+    SK_DEVELOPER_TO_STRING()
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkProcXfermode)
 
 protected:
     SkProcXfermode(SkFlattenableReadBuffer&);
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
     // allow subclasses to update this after we unflatten
     void setProc(SkXfermodeProc proc) {
@@ -228,9 +233,6 @@ protected:
 
 private:
     SkXfermodeProc  fProc;
-
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkProcXfermode, (buffer)); }
 
     typedef SkXfermode INHERITED;
 };

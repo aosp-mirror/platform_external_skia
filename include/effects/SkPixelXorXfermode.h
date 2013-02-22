@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2007 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkPixelXorXfermode_DEFINED
 #define SkPixelXorXfermode_DEFINED
@@ -17,30 +15,22 @@
     this proc *always* returns an opaque color (alpha == 255). Thus it is
     not really usefull for operating on blended colors.
 */
-class SkPixelXorXfermode : public SkXfermode {
+class SK_API SkPixelXorXfermode : public SkXfermode {
 public:
     SkPixelXorXfermode(SkColor opColor) : fOpColor(opColor) {}
 
-    // override from SkFlattenable
-    virtual Factory getFactory();
-    virtual void flatten(SkFlattenableWriteBuffer&);
-
-    static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) {
-        return SkNEW_ARGS(SkPixelXorXfermode, (buffer));
-    }
-
-    SK_DECLARE_FLATTENABLE_REGISTRAR()
+    SK_DEVELOPER_TO_STRING()
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkPixelXorXfermode)
 
 protected:
+    SkPixelXorXfermode(SkFlattenableReadBuffer& rb);
+    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+
     // override from SkXfermode
-    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst);
+    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst) const;
 
 private:
     SkColor fOpColor;
-
-    SkPixelXorXfermode(SkFlattenableReadBuffer& rb);
-    // our private factory
-    static SkFlattenable* Create(SkFlattenableReadBuffer&);
 
     typedef SkXfermode INHERITED;
 };

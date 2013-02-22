@@ -35,7 +35,7 @@ bool SkSaveLayer::draw(SkAnimateMaker& maker)
     if (!bounds) {
         return false;
     }
-    SkPaint* save = maker.fPaint;   
+    SkPaint* save = maker.fPaint;
     //paint is an SkDrawPaint
     if (paint)
     {
@@ -74,5 +74,3 @@ void SkSaveLayer::onEndElement(SkAnimateMaker& maker)
         maker.setErrorCode(SkDisplayXMLParserError::kSaveLayerNeedsBounds);
     INHERITED::onEndElement(maker);
 }
-
-

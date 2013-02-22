@@ -15,8 +15,8 @@ static void make_bm0(SkBitmap* bm) {
     int H = 120;
     bm->setConfig(SkBitmap::kARGB_8888_Config, W, H);
     bm->allocPixels();
-    bm->eraseColor(0);
-    
+    bm->eraseColor(SK_ColorTRANSPARENT);
+
     SkCanvas canvas(*bm);
     SkPaint paint;
     SkPoint pts[] = { {0, 0}, {SkIntToScalar(W), SkIntToScalar(H)} };
@@ -34,8 +34,8 @@ static void make_bm1(SkBitmap* bm) {
     int H = 120;
     bm->setConfig(SkBitmap::kARGB_8888_Config, W, H);
     bm->allocPixels();
-    bm->eraseColor(0);
-    
+    bm->eraseColor(SK_ColorTRANSPARENT);
+
     SkCanvas canvas(*bm);
     SkPaint paint;
     SkScalar cx = SkIntToScalar(W)/2;
@@ -66,7 +66,7 @@ static void make_table1(uint8_t table[]) {
 static void make_table2(uint8_t table[]) {
     for (int i = 0; i < 256; ++i) {
         float fi = i / 255.0f;
-        table[i] = sqrtf(fi) * 255;
+        table[i] = static_cast<uint8_t>(sqrtf(fi) * 255);
     }
 }
 
@@ -92,27 +92,27 @@ static SkColorFilter* make_cf3() {
 class TableColorFilterGM : public skiagm::GM {
 public:
     TableColorFilterGM() {}
-    
+
 protected:
     virtual SkString onShortName() {
         return SkString("tablecolorfilter");
     }
-    
+
     virtual SkISize onISize() {
-        return SkISize::Make(640, 480);
+        return SkISize::Make(700, 300);
     }
-    
+
     virtual void onDraw(SkCanvas* canvas) {
         canvas->drawColor(0xFFDDDDDD);
         canvas->translate(20, 20);
-        
+
         SkScalar x = 0, y = 0;
-        
+
         static void (*gMakers[])(SkBitmap*) = { make_bm0, make_bm1 };
         for (size_t maker = 0; maker < SK_ARRAY_COUNT(gMakers); ++maker) {
             SkBitmap bm;
             gMakers[maker](&bm);
-            
+
             SkPaint paint;
             x = 0;
             canvas->drawBitmap(bm, x, y, &paint);
@@ -124,11 +124,11 @@ protected:
             canvas->drawBitmap(bm, x, y, &paint);
             paint.setColorFilter(make_cf3())->unref();  x += bm.width() * 9 / 8;
             canvas->drawBitmap(bm, x, y, &paint);
-            
+
             y += bm.height() * 9 / 8;
         }
     }
-    
+
 private:
     typedef GM INHERITED;
 };

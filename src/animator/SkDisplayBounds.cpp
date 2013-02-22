@@ -36,11 +36,8 @@ bool SkDisplayBounds::draw(SkAnimateMaker& maker) {
         maker.fDisplayList.fHasUnion = true;
         if (rect.isEmpty())
             rect = fBounds;
-        else 
+        else
             rect.join(fBounds);
     }
     return result;
 }
-
-
-

@@ -6,9 +6,19 @@
  * found in the LICENSE file.
  */
 
+
+
 #include "Test.h"
+// This is a GPU-backend specific test
+#if SK_SUPPORT_GPU
+
+#if SK_ANGLE
+#include "gl/SkANGLEGLContext.h"
+#endif
 #include "gl/SkNativeGLContext.h"
+#if SK_MESA
 #include "gl/SkMesaGLContext.h"
+#endif
 
 static void GLInterfaceValidationTest(skiatest::Reporter* reporter) {
     typedef const GrGLInterface* (*interfaceFactory)();
@@ -16,10 +26,14 @@ static void GLInterfaceValidationTest(skiatest::Reporter* reporter) {
        interfaceFactory fFactory;
        const char* fName;
     } interfaceFactories[] = {
+#if SK_ANGLE
+        {GrGLCreateANGLEInterface, "ANGLE"},
+#endif
         {GrGLCreateNativeInterface, "Native"},
 #if SK_MESA
         {GrGLCreateMesaInterface, "Mesa"},
 #endif
+        {GrGLCreateDebugInterface, "Debug"},
         {GrGLCreateNullInterface, "Null"},
     };
 
@@ -68,3 +82,4 @@ DEFINE_TESTCLASS("GLInterfaceValidation",
                  GLInterfaceValidationTestClass,
                  GLInterfaceValidationTest)
 
+#endif

@@ -10,13 +10,14 @@
 #include "SkPDFCatalog.h"
 #include "SkPDFDevice.h"
 #include "SkPDFDocument.h"
-#include "SkPDFPage.h"
 #include "SkPDFFont.h"
+#include "SkPDFPage.h"
+#include "SkPDFTypes.h"
 #include "SkStream.h"
 
 // Add the resources, starting at firstIndex to the catalog, removing any dupes.
 // A hash table would be really nice here.
-void addResourcesToCatalog(int firstIndex, bool firstPage,
+static void addResourcesToCatalog(int firstIndex, bool firstPage,
                           SkTDArray<SkPDFObject*>* resourceList,
                           SkPDFCatalog* catalog) {
     for (int i = firstIndex; i < resourceList->count(); i++) {
@@ -56,11 +57,11 @@ static void perform_font_subsetting(SkPDFCatalog* catalog,
 
 SkPDFDocument::SkPDFDocument(Flags flags)
         : fXRefFileOffset(0),
-          fSecondPageFirstResourceIndex(0) {
+          fSecondPageFirstResourceIndex(0),
+          fTrailerDict(NULL) {
     fCatalog.reset(new SkPDFCatalog(flags));
-    fDocCatalog = new SkPDFDict("Catalog");
-    fDocCatalog->unref();  // SkRefPtr and new both took a reference.
-    fCatalog->addObject(fDocCatalog.get(), true);
+    fDocCatalog = SkNEW_ARGS(SkPDFDict, ("Catalog"));
+    fCatalog->addObject(fDocCatalog, true);
 }
 
 SkPDFDocument::~SkPDFDocument() {
@@ -74,6 +75,9 @@ SkPDFDocument::~SkPDFDocument() {
     fPageTree.safeUnrefAll();
     fPageResources.safeUnrefAll();
     fSubstitutes.safeUnrefAll();
+
+    fDocCatalog->unref();
+    SkSafeUnref(fTrailerDict);
 }
 
 bool SkPDFDocument::emitPDF(SkWStream* stream) {
@@ -94,13 +98,11 @@ bool SkPDFDocument::emitPDF(SkWStream* stream) {
         fDocCatalog->insert("Pages", new SkPDFObjRef(pageTreeRoot))->unref();
 
         /* TODO(vandebo): output intent
-        SkRefPtr<SkPDFDict> outputIntent = new SkPDFDict("OutputIntent");
-        outputIntent->unref();  // SkRefPtr and new both took a reference.
+        SkAutoTUnref<SkPDFDict> outputIntent = new SkPDFDict("OutputIntent");
         outputIntent->insert("S", new SkPDFName("GTS_PDFA1"))->unref();
         outputIntent->insert("OutputConditionIdentifier",
                              new SkPDFString("sRGB"))->unref();
-        SkRefPtr<SkPDFArray> intentArray = new SkPDFArray;
-        intentArray->unref();  // SkRefPtr and new both took a reference.
+        SkAutoTUnref<SkPDFArray> intentArray = new SkPDFArray;
         intentArray->append(outputIntent.get());
         fDocCatalog->insert("OutputIntent", intentArray.get());
         */
@@ -122,9 +124,10 @@ bool SkPDFDocument::emitPDF(SkWStream* stream) {
 
         // Figure out the size of things and inform the catalog of file offsets.
         off_t fileOffset = headerSize();
-        fileOffset += fCatalog->setFileOffset(fDocCatalog.get(), fileOffset);
+        fileOffset += fCatalog->setFileOffset(fDocCatalog, fileOffset);
         fileOffset += fCatalog->setFileOffset(fPages[0], fileOffset);
-        fileOffset += fPages[0]->getPageSize(fCatalog.get(), fileOffset);
+        fileOffset += fPages[0]->getPageSize(fCatalog.get(),
+                (size_t) fileOffset);
         for (int i = 0; i < fSecondPageFirstResourceIndex; i++) {
             fileOffset += fCatalog->setFileOffset(fPageResources[i],
                                                   fileOffset);
@@ -222,8 +225,23 @@ bool SkPDFDocument::appendPage(SkPDFDevice* pdfDevice) {
     return true;
 }
 
-const SkTDArray<SkPDFPage*>& SkPDFDocument::getPages() {
-    return fPages;
+void SkPDFDocument::getCountOfFontTypes(
+        int counts[SkAdvancedTypefaceMetrics::kNotEmbeddable_Font + 1]) const {
+    sk_bzero(counts, sizeof(int) *
+                     (SkAdvancedTypefaceMetrics::kNotEmbeddable_Font + 1));
+    SkTDArray<SkFontID> seenFonts;
+
+    for (int pageNumber = 0; pageNumber < fPages.count(); pageNumber++) {
+        const SkTDArray<SkPDFFont*>& fontResources =
+                fPages[pageNumber]->getFontResources();
+        for (int font = 0; font < fontResources.count(); font++) {
+            SkFontID fontID = fontResources[font]->typeface()->uniqueID();
+            if (seenFonts.find(fontID) == -1) {
+                counts[fontResources[font]->getType()]++;
+                seenFonts.push(fontID);
+            }
+        }
+    }
 }
 
 void SkPDFDocument::emitHeader(SkWStream* stream) {
@@ -241,15 +259,13 @@ size_t SkPDFDocument::headerSize() {
 }
 
 void SkPDFDocument::emitFooter(SkWStream* stream, int64_t objCount) {
-    if (fTrailerDict.get() == NULL) {
-        fTrailerDict = new SkPDFDict();
-        fTrailerDict->unref();  // SkRefPtr and new both took a reference.
+    if (NULL == fTrailerDict) {
+        fTrailerDict = SkNEW(SkPDFDict);
 
         // TODO(vandebo): Linearized format will take a Prev entry too.
         // TODO(vandebo): PDF/A requires an ID entry.
-        fTrailerDict->insertInt("Size", objCount);
-        fTrailerDict->insert("Root",
-                             new SkPDFObjRef(fDocCatalog.get()))->unref();
+        fTrailerDict->insertInt("Size", int(objCount));
+        fTrailerDict->insert("Root", new SkPDFObjRef(fDocCatalog))->unref();
     }
 
     stream->writeText("trailer\n");

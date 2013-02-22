@@ -10,18 +10,19 @@
 #ifndef GrStencilBuffer_DEFINED
 #define GrStencilBuffer_DEFINED
 
-#include "GrClip.h"
+#include "GrClipData.h"
 #include "GrResource.h"
 
 class GrRenderTarget;
 class GrResourceEntry;
+class GrResourceKey;
 
 class GrStencilBuffer : public GrResource {
 public:
+    SK_DECLARE_INST_COUNT(GrStencilBuffer);
+
     virtual ~GrStencilBuffer() {
-        // currently each rt that has attached this sb keeps a ref
         // TODO: allow SB to be purged and detach itself from rts
-        GrAssert(0 == fRTAttachmentCnt);
     }
 
     int width() const { return fWidth; }
@@ -30,75 +31,50 @@ public:
     int numSamples() const { return fSampleCnt; }
 
     // called to note the last clip drawn to this buffer.
-    void setLastClip(const GrClip& clip, int width, int height) {
-        fLastClip = clip;
-        fLastClipWidth = width;
-        fLastClipHeight = height;
-        GrAssert(width <= fWidth);
-        GrAssert(height <= fHeight);
+    void setLastClip(int32_t clipStackGenID,
+                     const SkIRect& clipSpaceRect,
+                     const SkIPoint clipSpaceToStencilOffset) {
+        fLastClipStackGenID = clipStackGenID;
+        fLastClipStackRect = clipSpaceRect;
+        fLastClipSpaceOffset = clipSpaceToStencilOffset;
     }
 
     // called to determine if we have to render the clip into SB.
-    bool mustRenderClip(const GrClip& clip, int width, int height) const {
-        // The clip is in device space. That is it doesn't scale to fit a
-        // smaller RT. It is just truncated on the right / bottom edges.
-        // Note that this assumes that the viewport origin never moves within
-        // the stencil buffer. This is valid today.
-        return width > fLastClipWidth ||
-               height > fLastClipHeight ||
-               clip != fLastClip;
+    bool mustRenderClip(int32_t clipStackGenID,
+                        const SkIRect& clipSpaceRect,
+                        const SkIPoint clipSpaceToStencilOffset) const {
+        return SkClipStack::kInvalidGenID == clipStackGenID ||
+               fLastClipStackGenID != clipStackGenID ||
+               fLastClipSpaceOffset != clipSpaceToStencilOffset ||
+               !fLastClipStackRect.contains(clipSpaceRect);
     }
 
-    const GrClip& getLastClip() const {
-        return fLastClip;
-    }
+    // Places the sb in the cache. The cache takes a ref of the stencil buffer.
+    void transferToCache();
 
-    // places the sb in the cache and locks it. Caller transfers
-    // a ref to the the cache which will unref when purged.
-    void transferToCacheAndLock();
-
-    void wasAttachedToRenderTarget(const GrRenderTarget* rt) {
-        ++fRTAttachmentCnt;
-    }
-
-    void wasDetachedFromRenderTarget(const GrRenderTarget* rt);
+    static GrResourceKey ComputeKey(int width, int height, int sampleCnt);
 
 protected:
-    GrStencilBuffer(GrGpu* gpu, int width, int height, int bits, int sampleCnt)
-        : GrResource(gpu)
+    GrStencilBuffer(GrGpu* gpu, bool isWrapped, int width, int height, int bits, int sampleCnt)
+        : GrResource(gpu, isWrapped)
         , fWidth(width)
         , fHeight(height)
         , fBits(bits)
         , fSampleCnt(sampleCnt)
-        , fLastClip()
-        , fLastClipWidth(-1)
-        , fLastClipHeight(-1)
-        , fCacheEntry(NULL)
-        , fRTAttachmentCnt(0) {
+        , fLastClipStackGenID(SkClipStack::kInvalidGenID) {
+        fLastClipStackRect.setEmpty();
     }
 
-    // GrResource overrides
-
-    // subclass override must call INHERITED::onRelease
-    virtual void onRelease();
-    // subclass override must call INHERITED::onAbandon
-    virtual void onAbandon();
-
 private:
-
-    void unlockInCache();
 
     int fWidth;
     int fHeight;
     int fBits;
     int fSampleCnt;
 
-    GrClip     fLastClip;
-    int        fLastClipWidth;
-    int        fLastClipHeight;
-
-    GrResourceEntry* fCacheEntry;
-    int              fRTAttachmentCnt;
+    int32_t     fLastClipStackGenID;
+    SkIRect     fLastClipStackRect;
+    SkIPoint    fLastClipSpaceOffset;
 
     typedef GrResource INHERITED;
 };

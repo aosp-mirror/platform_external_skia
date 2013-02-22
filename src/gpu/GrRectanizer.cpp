@@ -38,7 +38,7 @@ public:
     struct Row {
         GrIPoint16  fLoc;
         int         fRowHeight;
-        
+
         bool canAddWidth(int width, int containerWidth) const {
             return fLoc.fX + width <= containerWidth;
         }
@@ -48,7 +48,7 @@ public:
 
     static int HeightToRowIndex(int height) {
         GrAssert(height >= MIN_HEIGHT_POW2);
-        return 32 - Gr_clz(height - 1);
+        return 32 - SkCLZ(height - 1);
     }
 
     int fNextStripY;
@@ -117,7 +117,5 @@ bool GrRectanizerPow2::addRect(int width, int height, GrIPoint16* loc) {
 ///////////////////////////////////////////////////////////////////////////////
 
 GrRectanizer* GrRectanizer::Factory(int width, int height) {
-    return new GrRectanizerPow2(width, height);
+    return SkNEW_ARGS(GrRectanizerPow2, (width, height));
 }
-
-

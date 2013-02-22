@@ -18,7 +18,7 @@ public:
      *  the table is applied, and then the result is remultiplied.
      */
     static SkColorFilter* Create(const uint8_t table[256]);
-    
+
     /**
      *  Create a table colorfilter, with a different table for each
      *  component [A, R, G, B]. If a given table is NULL, then it is
@@ -29,6 +29,8 @@ public:
                                      const uint8_t tableR[256],
                                      const uint8_t tableG[256],
                                      const uint8_t tableB[256]);
+
+    SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
 };
 
 #endif

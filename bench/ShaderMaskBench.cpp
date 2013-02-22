@@ -11,7 +11,6 @@
 #include "SkFontHost.h"
 #include "SkPaint.h"
 #include "SkRandom.h"
-#include "SkSfntUtils.h"
 #include "SkString.h"
 #include "SkTemplates.h"
 
@@ -52,7 +51,7 @@ public:
 
 protected:
     virtual const char* onGetName() {
-        fName.printf("shadermask", SkScalarToFloat(fPaint.getTextSize()));
+        fName.printf("shadermask");
         fName.appendf("_%s", fontQualityName(fPaint));
         fName.appendf("_%02X", fPaint.getAlpha());
         return fName.c_str();
@@ -71,14 +70,14 @@ protected:
 
         const SkScalar x0 = SkIntToScalar(-10);
         const SkScalar y0 = SkIntToScalar(-10);
-        
+
         paint.setTextSize(SkIntToScalar(12));
         for (int i = 0; i < N; i++) {
             SkScalar x = x0 + rand.nextUScalar1() * dim.fX;
             SkScalar y = y0 + rand.nextUScalar1() * dim.fY;
             canvas->drawText(fText.c_str(), fText.size(), x, y, paint);
         }
-        
+
         paint.setTextSize(SkIntToScalar(48));
         for (int i = 0; i < N/4; i++) {
             SkScalar x = x0 + rand.nextUScalar1() * dim.fX;
@@ -106,4 +105,3 @@ static BenchRegistry gReg10(Fact10);
 static BenchRegistry gReg11(Fact11);
 static BenchRegistry gReg20(Fact20);
 static BenchRegistry gReg21(Fact21);
-

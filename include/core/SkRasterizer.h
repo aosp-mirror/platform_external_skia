@@ -18,23 +18,24 @@ class SkMatrix;
 class SkPath;
 struct SkIRect;
 
-class SkRasterizer : public SkFlattenable {
+class SK_API SkRasterizer : public SkFlattenable {
 public:
+    SK_DECLARE_INST_COUNT(SkRasterizer)
+
     SkRasterizer() {}
 
     /** Turn the path into a mask, respecting the specified local->device matrix.
     */
     bool rasterize(const SkPath& path, const SkMatrix& matrix,
                    const SkIRect* clipBounds, SkMaskFilter* filter,
-                   SkMask* mask, SkMask::CreateMode mode);
+                   SkMask* mask, SkMask::CreateMode mode) const;
 
-    virtual void flatten(SkFlattenableWriteBuffer& ) SK_OVERRIDE {}
 protected:
-    SkRasterizer(SkFlattenableReadBuffer&);
+    SkRasterizer(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {}
 
     virtual bool onRasterize(const SkPath& path, const SkMatrix& matrix,
                              const SkIRect* clipBounds,
-                             SkMask* mask, SkMask::CreateMode mode);
+                             SkMask* mask, SkMask::CreateMode mode) const;
 
 private:
     typedef SkFlattenable INHERITED;

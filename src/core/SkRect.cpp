@@ -61,8 +61,19 @@ void SkRect::toQuad(SkPoint quad[4]) const {
     #define SkFLOATCODE(code)
 #endif
 
-void SkRect::set(const SkPoint pts[], int count) {
+// For float compares (at least on x86, by removing the else from the min/max
+// computation, we get MAXSS and MINSS instructions, and no branches.
+// Fixed point has no such opportunity (afaik), so we leave the else in that case
+#ifdef SK_SCALAR_IS_FLOAT
+    #define MINMAX_ELSE
+#else
+    #define MINMAX_ELSE else
+#endif
+
+bool SkRect::setBoundsCheck(const SkPoint pts[], int count) {
     SkASSERT((pts && count > 0) || count == 0);
+
+    bool isFinite = true;
 
     if (count <= 0) {
         sk_bzero(this, sizeof(SkRect));
@@ -86,29 +97,37 @@ void SkRect::set(const SkPoint pts[], int count) {
                   Sk2sComplimentAsScalar(b));
 #else
         SkScalar    l, t, r, b;
-        SkFLOATCODE(int isNaN;)
 
         l = r = pts[0].fX;
         t = b = pts[0].fY;
-        SkFLOATCODE(isNaN = (l != l) | (t != t);)
+
+        // If all of the points are finite, accum should stay 0. If we encounter
+        // a NaN or infinity, then accum should become NaN.
+        SkFLOATCODE(float accum = 0;)
+        SkFLOATCODE(accum *= l; accum *= t;)
 
         for (int i = 1; i < count; i++) {
             SkScalar x = pts[i].fX;
             SkScalar y = pts[i].fY;
-            SkFLOATCODE(isNaN |= (x != x) | (y != y);)
 
-            if (x < l) l = x; else if (x > r) r = x;
-            if (y < t) t = y; else if (y > b) b = y;
+            SkFLOATCODE(accum *= x; accum *= y;)
+
+            if (x < l) l = x; MINMAX_ELSE if (x > r) r = x;
+            if (y < t) t = y; MINMAX_ELSE if (y > b) b = y;
         }
 
 #ifdef SK_SCALAR_IS_FLOAT
-        if (isNaN) {
+        SkASSERT(!accum || !SkScalarIsFinite(accum));
+        if (accum) {
             l = t = r = b = 0;
+            isFinite = false;
         }
 #endif
         this->set(l, t, r, b);
 #endif
     }
+
+    return isFinite;
 }
 
 bool SkRect::intersect(SkScalar left, SkScalar top, SkScalar right,
@@ -162,4 +181,3 @@ void SkRect::join(SkScalar left, SkScalar top, SkScalar right,
         if (bottom > fBottom) fBottom = bottom;
     }
 }
-
