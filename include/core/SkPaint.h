@@ -888,6 +888,7 @@ public:
     const void* findImage(const SkGlyph&, const SkMatrix*);
 
     uint32_t getGenerationID() const;
+    void setGenerationID(uint32_t generationID);
 
     /** Returns the base glyph count for the strike associated with this paint
     */

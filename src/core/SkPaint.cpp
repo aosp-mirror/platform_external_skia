@@ -175,6 +175,10 @@ void SkPaint::reset() {
 uint32_t SkPaint::getGenerationID() const {
     return fGenerationID;
 }
+
+void SkPaint::setGenerationID(uint32_t generationID) {
+    fGenerationID = generationID;
+}
 #endif
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -933,17 +937,26 @@ public:
         fTextSize = paint->getTextSize();
         fStyle = paint->getStyle();
         fPaint->setStyle(SkPaint::kFill_Style);
+#ifdef SK_BUILD_FOR_ANDROID
+        fGenerationID = fPaint->getGenerationID();
+#endif
     }
 
     ~SkAutoRestorePaintTextSizeAndFrame() {
         fPaint->setStyle(fStyle);
         fPaint->setTextSize(fTextSize);
+#ifdef SK_BUILD_FOR_ANDROID
+        fPaint->setGenerationID(fGenerationID);
+#endif
     }
 
 private:
     SkPaint*        fPaint;
     SkScalar        fTextSize;
     SkPaint::Style  fStyle;
+#ifdef SK_BUILD_FOR_ANDROID
+    uint32_t        fGenerationID;
+#endif
 };
 
 static void set_bounds(const SkGlyph& g, SkRect* bounds) {
