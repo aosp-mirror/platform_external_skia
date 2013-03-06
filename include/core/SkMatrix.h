@@ -504,6 +504,7 @@ public:
     };
     // return the number of bytes written, whether or not buffer is null
     uint32_t flatten(void* buffer) const;
+    uint32_t writeToMemory(void*) const { return 0; }
     // return the number of bytes read
     uint32_t unflatten(const void* buffer);
     

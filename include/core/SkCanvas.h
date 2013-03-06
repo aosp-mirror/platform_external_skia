@@ -405,6 +405,7 @@ public:
                      intersect with the canvas' clip
     */
     bool quickReject(const SkRect& rect, EdgeType et) const;
+    bool quickReject(const SkRect& rect) const { return false; }
 
     /** Return true if the specified path, after being transformed by the
         current matrix, would lie completely outside of the current clip. Call
@@ -418,6 +419,7 @@ public:
                      intersect with the canvas' clip
     */
     bool quickReject(const SkPath& path, EdgeType et) const;
+    bool quickReject(const SkPath& path) const { return false; }
 
     /** Return true if the horizontal band specified by top and bottom is
         completely clipped out. This is a conservative calculation, meaning
@@ -645,6 +647,8 @@ public:
     */
     virtual void drawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar top,
                             const SkPaint* paint = NULL);
+
+    virtual void drawBitmapRectToRect(const SkBitmap&, const SkRect*, const SkRect&, const SkPaint*) {}
 
     /** Draw the specified bitmap, with the specified matrix applied (before the
         canvas' matrix is applied).

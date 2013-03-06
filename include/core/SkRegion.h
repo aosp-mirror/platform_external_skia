@@ -352,6 +352,7 @@ public:
      *  If buffer is NULL, it still returns the number of bytes.
      */
     uint32_t flatten(void* buffer) const;
+    uint32_t writeToMemory(void* buffer) const { return 0; }
 
     /**
      *  Initialized the region from the buffer, returning the number
