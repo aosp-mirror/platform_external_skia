@@ -183,33 +183,27 @@ static bool webp_idecode(SkStream* stream, WebPDecoderConfig& config) {
         return false;
     }
 
-    uint32_t bytes_remaining = contentSize;
-    while (bytes_remaining > 0) {
-        const uint32_t bytes_to_read =
-            (bytes_remaining < WEBP_IDECODE_BUFFER_SZ) ?
-                bytes_remaining : WEBP_IDECODE_BUFFER_SZ;
-
+    bool success = true;
+    VP8StatusCode status = VP8_STATUS_SUSPENDED;
+    do {
+        const uint32_t bytes_to_read = WEBP_IDECODE_BUFFER_SZ;
         const size_t bytes_read = stream->read(input, bytes_to_read);
         if (bytes_read == 0) {
+            success = false;
             break;
         }
 
-        VP8StatusCode status = WebPIAppend(idec, input, bytes_read);
-        if (status == VP8_STATUS_OK || status == VP8_STATUS_SUSPENDED) {
-            bytes_remaining -= bytes_read;
-        } else {
+        status = WebPIAppend(idec, input, bytes_read);
+        if (VP8_STATUS_OK != status && VP8_STATUS_SUSPENDED != status) {
+            success = false;
             break;
         }
-    }
+    } while (VP8_STATUS_OK != status);
     srcStorage.free();
     WebPIDelete(idec);
     WebPFreeDecBuffer(&config.output);
 
-    if (bytes_remaining > 0) {
-        return false;
-    } else {
-        return true;
-    }
+    return success;
 }
 
 static bool webp_get_config_resize(WebPDecoderConfig& config,
