@@ -10,7 +10,24 @@
 #include <float.h> // for FLT_EPSILON
 #include <math.h> // for fabs, sqrt
 
-#include "SkTypes.h"
+#include "SkPoint.h"
+
+#define FORCE_RELEASE 1  // set force release to 1 for multiple thread -- no debugging
+#define ONE_OFF_DEBUG 0
+#define ONE_OFF_DEBUG_MATHEMATICA 0
+
+// FIXME: move these into SkTypes.h
+template <typename T> inline T SkTMax(T a, T b) {
+    if (a < b)
+        a = b;
+    return a;
+}
+
+template <typename T> inline T SkTMin(T a, T b) {
+    if (a > b)
+        a = b;
+    return a;
+}
 
 extern bool AlmostEqualUlps(float A, float B);
 inline bool AlmostEqualUlps(double A, double B) { return AlmostEqualUlps((float) A, (float) B); }
@@ -19,28 +36,34 @@ inline bool AlmostEqualUlps(double A, double B) { return AlmostEqualUlps((float)
 int UlpsDiff(float A, float B);
 
 // FLT_EPSILON == 1.19209290E-07 == 1 / (2 ^ 23)
+// DBL_EPSILON == 2.22045e-16
 const double FLT_EPSILON_CUBED = FLT_EPSILON * FLT_EPSILON * FLT_EPSILON;
+const double FLT_EPSILON_HALF = FLT_EPSILON / 2;
 const double FLT_EPSILON_SQUARED = FLT_EPSILON * FLT_EPSILON;
 const double FLT_EPSILON_SQRT = sqrt(FLT_EPSILON);
 const double FLT_EPSILON_INVERSE = 1 / FLT_EPSILON;
+const double DBL_EPSILON_ERR = DBL_EPSILON * 4; // tune -- allow a few bits of error
+const double ROUGH_EPSILON = FLT_EPSILON * 64;
+const double MORE_ROUGH_EPSILON = FLT_EPSILON * 256;
 
 inline bool approximately_zero(double x) {
-
     return fabs(x) < FLT_EPSILON;
 }
 
 inline bool precisely_zero(double x) {
-
-    return fabs(x) < DBL_EPSILON;
+    return fabs(x) < DBL_EPSILON_ERR;
 }
 
 inline bool approximately_zero(float x) {
-
     return fabs(x) < FLT_EPSILON;
 }
 
 inline bool approximately_zero_cubed(double x) {
     return fabs(x) < FLT_EPSILON_CUBED;
+}
+
+inline bool approximately_zero_half(double x) {
+    return fabs(x) < FLT_EPSILON_HALF;
 }
 
 inline bool approximately_zero_squared(double x) {
@@ -53,6 +76,11 @@ inline bool approximately_zero_sqrt(double x) {
 
 inline bool approximately_zero_inverse(double x) {
     return fabs(x) > FLT_EPSILON_INVERSE;
+}
+
+// FIXME: if called multiple times with the same denom, we want to pass 1/y instead
+inline bool approximately_zero_when_compared_to(double x, double y) {
+    return x == 0 || fabs(x / y) < FLT_EPSILON;
 }
 
 // Use this for comparing Ts in the range of 0 to 1. For general numbers (larger and smaller) use
@@ -79,16 +107,32 @@ inline bool approximately_equal(double x, double y) {
 #endif
 }
 
+inline bool precisely_equal(double x, double y) {
+    return precisely_zero(x - y);
+}
+
+inline bool approximately_equal_half(double x, double y) {
+    return approximately_zero_half(x - y);
+}
+
 inline bool approximately_equal_squared(double x, double y) {
     return approximately_equal(x, y);
 }
 
 inline bool approximately_greater(double x, double y) {
-    return approximately_equal(x, y) ? false : x > y;
+    return x - FLT_EPSILON >= y;
+}
+
+inline bool approximately_greater_or_equal(double x, double y) {
+    return x + FLT_EPSILON > y;
 }
 
 inline bool approximately_lesser(double x, double y) {
-    return approximately_equal(x, y) ? false : x < y;
+    return x + FLT_EPSILON <= y;
+}
+
+inline bool approximately_lesser_or_equal(double x, double y) {
+    return x - FLT_EPSILON < y;
 }
 
 inline double approximately_pin(double x) {
@@ -104,7 +148,7 @@ inline bool approximately_greater_than_one(double x) {
 }
 
 inline bool precisely_greater_than_one(double x) {
-    return x > 1 - DBL_EPSILON;
+    return x > 1 - DBL_EPSILON_ERR;
 }
 
 inline bool approximately_less_than_zero(double x) {
@@ -112,7 +156,7 @@ inline bool approximately_less_than_zero(double x) {
 }
 
 inline bool precisely_less_than_zero(double x) {
-    return x < DBL_EPSILON;
+    return x < DBL_EPSILON_ERR;
 }
 
 inline bool approximately_negative(double x) {
@@ -120,7 +164,7 @@ inline bool approximately_negative(double x) {
 }
 
 inline bool precisely_negative(double x) {
-    return x < DBL_EPSILON;
+    return x < DBL_EPSILON_ERR;
 }
 
 inline bool approximately_one_or_less(double x) {
@@ -140,7 +184,6 @@ inline bool approximately_zero_or_more(double x) {
 }
 
 inline bool approximately_between(double a, double b, double c) {
-    SkASSERT(a <= c);
     return a <= c ? approximately_negative(a - b) && approximately_negative(b - c)
             : approximately_negative(b - a) && approximately_negative(c - b);
 }
@@ -151,21 +194,28 @@ inline bool between(double a, double b, double c) {
     return (a - b) * (c - b) <= 0;
 }
 
-struct _Point {
+inline bool more_roughly_equal(double x, double y) {
+    return fabs(x - y) < MORE_ROUGH_EPSILON;
+}
+
+inline bool roughly_equal(double x, double y) {
+    return fabs(x - y) < ROUGH_EPSILON;
+}
+
+struct _Point;
+
+struct _Vector {
     double x;
     double y;
 
-    friend _Point operator-(const _Point& a, const _Point& b) {
-        _Point v = {a.x - b.x, a.y - b.y};
-        return v;
-    }
+    friend _Point operator+(const _Point& a, const _Vector& b);
 
-    void operator+=(const _Point& v) {
+    void operator+=(const _Vector& v) {
         x += v.x;
         y += v.y;
     }
 
-    void operator-=(const _Point& v) {
+    void operator-=(const _Vector& v) {
         x -= v.x;
         y -= v.y;
     }
@@ -180,6 +230,44 @@ struct _Point {
         y *= s;
     }
 
+    double cross(const _Vector& a) const {
+        return x * a.y - y * a.x;
+    }
+
+    double dot(const _Vector& a) const {
+        return x * a.x + y * a.y;
+    }
+
+    double length() const {
+        return sqrt(lengthSquared());
+    }
+
+    double lengthSquared() const {
+        return x * x + y * y;
+    }
+
+    SkVector asSkVector() const {
+        SkVector v = {SkDoubleToScalar(x), SkDoubleToScalar(y)};
+        return v;
+    }
+};
+
+struct _Point {
+    double x;
+    double y;
+
+    friend _Vector operator-(const _Point& a, const _Point& b);
+
+    void operator+=(const _Vector& v) {
+        x += v.x;
+        y += v.y;
+    }
+
+    void operator-=(const _Vector& v) {
+        x -= v.x;
+        y -= v.y;
+    }
+
     friend bool operator==(const _Point& a, const _Point& b) {
         return a.x == b.x && a.y == b.y;
     }
@@ -192,30 +280,64 @@ struct _Point {
     // return approximately_equal(a.y, y) && approximately_equal(a.x, x);
     // because that will not take the magnitude of the values
     bool approximatelyEqual(const _Point& a) const {
-        return AlmostEqualUlps((float) x, (float) a.x)
-                && AlmostEqualUlps((float) y, (float) a.y);
+        double denom = SkTMax(fabs(x), SkTMax(fabs(y), SkTMax(fabs(a.x), fabs(a.y))));
+        if (denom == 0) {
+            return true;
+        }
+        double inv = 1 / denom;
+        return approximately_equal(x * inv, a.x * inv) && approximately_equal(y * inv, a.y * inv);
     }
 
-    double cross(const _Point& a) const {
-        return x * a.y - y * a.x;
+    bool approximatelyEqual(const SkPoint& a) const {
+        double denom = SkTMax(fabs(x), SkTMax(fabs(y), SkTMax(fabs(a.fX), fabs(a.fY))));
+        if (denom == 0) {
+            return true;
+        }
+        double inv = 1 / denom;
+        return approximately_equal(x * inv, a.fX * inv) && approximately_equal(y * inv, a.fY * inv);
     }
 
-    double dot(const _Point& a) const {
-        return x * a.x + y * a.y;
+    bool approximatelyEqualHalf(const _Point& a) const {
+        double denom = SkTMax(fabs(x), SkTMax(fabs(y), SkTMax(fabs(a.x), fabs(a.y))));
+        if (denom == 0) {
+            return true;
+        }
+        double inv = 1 / denom;
+        return approximately_equal_half(x * inv, a.x * inv)
+                && approximately_equal_half(y * inv, a.y * inv);
     }
 
-    double length() const {
-        return sqrt(lengthSquared());
+    bool approximatelyZero() const {
+        return approximately_zero(x) && approximately_zero(y);
     }
 
-    double lengthSquared() const {
-        return x * x + y * y;
+    SkPoint asSkPoint() const {
+        SkPoint pt = {SkDoubleToScalar(x), SkDoubleToScalar(y)};
+        return pt;
     }
 
+    double distance(const _Point& a) const {
+        _Vector temp = *this - a;
+        return temp.length();
+    }
+
+    double distanceSquared(const _Point& a) const {
+        _Vector temp = *this - a;
+        return temp.lengthSquared();
+    }
+
+    double moreRoughlyEqual(const _Point& a) const {
+        return more_roughly_equal(a.y, y) && more_roughly_equal(a.x, x);
+    }
+
+    double roughlyEqual(const _Point& a) const {
+        return roughly_equal(a.y, y) && roughly_equal(a.x, x);
+    }
 };
 
 typedef _Point _Line[2];
 typedef _Point Quadratic[3];
+typedef _Point Triangle[3];
 typedef _Point Cubic[4];
 
 struct _Rect {
@@ -281,17 +403,16 @@ struct QuadraticPair {
     _Point pts[5];
 };
 
-// FIXME: move these into SkTypes.h
-template <typename T> inline T SkTMax(T a, T b) {
-    if (a < b)
-        a = b;
-    return a;
-}
+// FIXME: move these into SkFloatingPoint.h
+#include "SkFloatingPoint.h"
 
-template <typename T> inline T SkTMin(T a, T b) {
-    if (a > b)
-        a = b;
-    return a;
-}
+#define sk_double_isnan(a) sk_float_isnan(a)
+
+// FIXME: move these to debugging file
+#if SK_DEBUG
+void mathematica_ize(char* str, size_t bufferSize);
+bool valid_wind(int winding);
+void winding_printf(int winding);
+#endif
 
 #endif // __DataTypes_h__

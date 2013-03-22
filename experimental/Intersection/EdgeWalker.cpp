@@ -64,7 +64,7 @@ static int LineIntersect(const SkPoint a[2], const SkPoint b[2],
         Intersections& intersections) {
     const _Line aLine = {{a[0].fX, a[0].fY}, {a[1].fX, a[1].fY}};
     const _Line bLine = {{b[0].fX, b[0].fY}, {b[1].fX, b[1].fY}};
-    return intersect(aLine, bLine, intersections.fT[0], intersections.fT[1]);
+    return intersect(aLine, bLine, intersections);
 }
 
 static int QuadLineIntersect(const SkPoint a[3], const SkPoint b[2],
@@ -87,7 +87,7 @@ static int QuadIntersect(const SkPoint a[3], const SkPoint b[3],
         Intersections& intersections) {
     const Quadratic aQuad = {{a[0].fX, a[0].fY}, {a[1].fX, a[1].fY}, {a[2].fX, a[2].fY}};
     const Quadratic bQuad = {{b[0].fX, b[0].fY}, {b[1].fX, b[1].fY}, {b[2].fX, b[2].fY}};
-    intersect(aQuad, bQuad, intersections);
+    intersect2(aQuad, bQuad, intersections);
     return intersections.fUsed;
 }
 
@@ -234,7 +234,7 @@ static SkPath::Verb QuadReduceOrder(SkPoint a[4]) {
     const Quadratic aQuad =  {{a[0].fX, a[0].fY}, {a[1].fX, a[1].fY},
             {a[2].fX, a[2].fY}};
     Quadratic dst;
-    int order = reduceOrder(aQuad, dst);
+    int order = reduceOrder(aQuad, dst, kReduceOrder_TreatAsFill);
     for (int index = 0; index < order; ++index) {
         a[index].fX = SkDoubleToScalar(dst[index].x);
         a[index].fY = SkDoubleToScalar(dst[index].y);
@@ -250,7 +250,7 @@ static SkPath::Verb CubicReduceOrder(SkPoint a[4]) {
     const Cubic aCubic = {{a[0].fX, a[0].fY}, {a[1].fX, a[1].fY},
             {a[2].fX, a[2].fY}, {a[3].fX, a[3].fY}};
     Cubic dst;
-    int order = reduceOrder(aCubic, dst, kReduceOrder_QuadraticsAllowed);
+    int order = reduceOrder(aCubic, dst, kReduceOrder_QuadraticsAllowed, kReduceOrder_TreatAsFill);
     for (int index = 0; index < order; ++index) {
         a[index].fX = SkDoubleToScalar(dst[index].x);
         a[index].fY = SkDoubleToScalar(dst[index].y);

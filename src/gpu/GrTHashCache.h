@@ -20,7 +20,7 @@
 template <typename T> class GrTDefaultFindFunctor {
 public:
     // always accept the first element examined
-    bool operator()(const T* elem) const { return true; }
+    bool operator()(const T*) const { return true; }
 };
 
 /**
@@ -60,6 +60,7 @@ public:
 
     // testing
     const SkTDArray<T*>& getArray() const { return fSorted; }
+    SkTDArray<T*>& getArray() { return fSorted; }
 private:
     enum {
         kHashCount = 1 << kHashBits,

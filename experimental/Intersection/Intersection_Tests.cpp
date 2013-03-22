@@ -8,14 +8,28 @@
 #include "Intersection_Tests.h"
 
 void cubecode_test(int test);
+void parseSVG();
 
 #define TEST_QUADS_FIRST 0
 
 void Intersection_Tests() {
     int testsRun = 0;
-
+    QuadraticIntersection_IntersectionFinder();
+    QuadraticIntersection_OneOffTest();
+    CubicIntersection_IntersectionFinder();
+    CubicIntersection_NewOneOffTest();
+#if 0
+    CubicUtilities_Test();
+    CubicIntersection_SelfTest();
+#endif
     SimplifyNew_Test();
+    CubicsToQuadratics_OneOffTest();
     CubicIntersection_OneOffTest();
+//    CubicIntersection_OneOffTests();
+  #if 0
+    parseSVG();
+  #endif
+//    QuadraticIntersection_PointFinder();
     ShapeOps4x4CubicsThreaded_Test(testsRun);
     CubicToQuadratics_Test();
     QuadraticIntersection_Test();
@@ -56,7 +70,7 @@ void Intersection_Tests() {
     SimplifyRectangularPaths_Test();
     SimplifyQuadralateralPaths_Test();
 
-    ActiveEdge_Test();
+  //  ActiveEdge_Test();
 
     QuadraticCoincidence_Test();
     QuadraticIntersection_Test();

@@ -7,7 +7,7 @@
 
 
 #include "GrGLCaps.h"
-#include "GrGLContextInfo.h"
+#include "GrGLContext.h"
 #include "SkTSearch.h"
 
 GrGLCaps::GrGLCaps() {
@@ -19,7 +19,6 @@ void GrGLCaps::reset() {
     fStencilFormats.reset();
     fStencilVerifiedColorConfigs.reset();
     fMSFBOType = kNone_MSFBOType;
-    fMaxSampleCount = 0;
     fCoverageAAType = kNone_CoverageAAType;
     fMaxFragmentUniformVectors = 0;
     fMaxVertexAttributes = 0;
@@ -37,6 +36,9 @@ void GrGLCaps::reset() {
     fImagingSupport = false;
     fTwoFormatLimit = false;
     fFragCoordsConventionSupport = false;
+    fVertexArrayObjectSupport = false;
+    fUseNonVBOVertexAndIndexDynamicData = false;
+    fIsCoreProfile = false;
 }
 
 GrGLCaps::GrGLCaps(const GrGLCaps& caps) {
@@ -50,7 +52,6 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fMaxFragmentUniformVectors = caps.fMaxFragmentUniformVectors;
     fMaxVertexAttributes = caps.fMaxVertexAttributes;
     fMSFBOType = caps.fMSFBOType;
-    fMaxSampleCount = caps.fMaxSampleCount;
     fCoverageAAType = caps.fCoverageAAType;
     fMSAACoverageModes = caps.fMSAACoverageModes;
     fRGBA8RenderbufferSupport = caps.fRGBA8RenderbufferSupport;
@@ -67,18 +68,20 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fImagingSupport = caps.fImagingSupport;
     fTwoFormatLimit = caps.fTwoFormatLimit;
     fFragCoordsConventionSupport = caps.fFragCoordsConventionSupport;
+    fVertexArrayObjectSupport = caps.fVertexArrayObjectSupport;
+    fUseNonVBOVertexAndIndexDynamicData = caps.fUseNonVBOVertexAndIndexDynamicData;
+    fIsCoreProfile = caps.fIsCoreProfile;
 
     return *this;
 }
 
-void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
+void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
 
     this->reset();
     if (!ctxInfo.isInitialized()) {
         return;
     }
 
-    const GrGLInterface* gli = ctxInfo.interface();
     GrGLBinding binding = ctxInfo.binding();
     GrGLVersion version = ctxInfo.version();
 
@@ -167,7 +170,29 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo) {
                                        ctxInfo.hasExtension("GL_ARB_fragment_coord_conventions");
     }
 
-    this->initFSAASupport(ctxInfo);
+    // SGX and Mali GPUs that are based on a tiled-deferred architecture that have trouble with
+    // frequently changing VBOs. We've measured a performance increase using non-VBO vertex
+    // data for dynamic content on these GPUs. Perhaps we should read the renderer string and
+    // limit this decision to specific GPU families rather than basing it on the vendor alone.
+    if (!GR_GL_MUST_USE_VBO &&
+        (kARM_GrGLVendor == ctxInfo.vendor() || kImagination_GrGLVendor == ctxInfo.vendor())) {
+        fUseNonVBOVertexAndIndexDynamicData = true;
+    }
+
+    if (kDesktop_GrGLBinding == binding && version >= GR_GL_VER(3, 2)) {
+        GrGLint profileMask;
+        GR_GL_GetIntegerv(gli, GR_GL_CONTEXT_PROFILE_MASK, &profileMask);
+        fIsCoreProfile = SkToBool(profileMask & GR_GL_CONTEXT_CORE_PROFILE_BIT);
+    }
+
+    if (kDesktop_GrGLBinding == binding) {
+        fVertexArrayObjectSupport = version >= GR_GL_VER(3, 0) ||
+                                    ctxInfo.hasExtension("GL_ARB_vertex_array_object");
+    } else {
+        fVertexArrayObjectSupport = ctxInfo.hasExtension("GL_OES_vertex_array_object");
+    }
+
+    this->initFSAASupport(ctxInfo, gli);
     this->initStencilFormats(ctxInfo);
 }
 
@@ -216,7 +241,7 @@ int coverage_mode_compare(const GrGLCaps::MSAACoverageMode* left,
 }
 }
 
-void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
+void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
 
     fMSFBOType = kNone_MSFBOType;
     if (kDesktop_GrGLBinding != ctxInfo.binding()) {
@@ -226,6 +251,8 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
            fMSFBOType = kDesktopEXT_MSFBOType;
        } else if (ctxInfo.hasExtension("GL_APPLE_framebuffer_multisample")) {
            fMSFBOType = kAppleES_MSFBOType;
+       } else if (ctxInfo.hasExtension("GL_IMG_multisampled_render_to_texture")) {
+           fMSFBOType = kImaginationES_MSFBOType;
        }
     } else {
         if ((ctxInfo.version() >= GR_GL_VER(3,0)) ||
@@ -242,11 +269,11 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
         if (ctxInfo.hasExtension("GL_NV_framebuffer_multisample_coverage")) {
             fCoverageAAType = kNVDesktop_CoverageAAType;
             GrGLint count;
-            GR_GL_GetIntegerv(ctxInfo.interface(),
+            GR_GL_GetIntegerv(gli,
                               GR_GL_MAX_MULTISAMPLE_COVERAGE_MODES,
                               &count);
             fMSAACoverageModes.setCount(count);
-            GR_GL_GetIntegerv(ctxInfo.interface(),
+            GR_GL_GetIntegerv(gli,
                               GR_GL_MULTISAMPLE_COVERAGE_MODES,
                               (int*)&fMSAACoverageModes[0]);
             // The NV driver seems to return the modes already sorted but the
@@ -257,15 +284,9 @@ void GrGLCaps::initFSAASupport(const GrGLContextInfo& ctxInfo) {
                     SkCastForQSort(coverage_mode_compare));
         }
     }
-    if (kNone_MSFBOType != fMSFBOType) {
-        GR_GL_GetIntegerv(ctxInfo.interface(),
-                          GR_GL_MAX_SAMPLES,
-                          &fMaxSampleCount);
-    }
 }
 
-const GrGLCaps::MSAACoverageMode& GrGLCaps::getMSAACoverageMode(
-                                            int desiredSampleCount) const {
+const GrGLCaps::MSAACoverageMode& GrGLCaps::getMSAACoverageMode(int desiredSampleCount) const {
     static const MSAACoverageMode kNoneMode = {0, 0};
     if (0 == fMSAACoverageModes.count()) {
         return kNoneMode;
@@ -401,11 +422,13 @@ void GrGLCaps::print() const {
     GR_STATIC_ASSERT(1 == kDesktopARB_MSFBOType);
     GR_STATIC_ASSERT(2 == kDesktopEXT_MSFBOType);
     GR_STATIC_ASSERT(3 == kAppleES_MSFBOType);
+    GR_STATIC_ASSERT(4 == kImaginationES_MSFBOType);
     static const char* gMSFBOExtStr[] = {
         "None",
         "ARB",
         "EXT",
         "Apple",
+        "IMG",
     };
     GrPrintf("MSAA Type: %s\n", gMSFBOExtStr[fMSFBOType]);
     GrPrintf("Max FS Uniform Vectors: %d\n", fMaxFragmentUniformVectors);

@@ -12,11 +12,12 @@
         'utils.gyp:utils',
       ],
       'include_dirs': [
-        '../include/images',
         '../include/effects',
+        '../include/images',
         '../include/ports',
         '../include/xml',
         '../src/core',
+        '../src/lazy',
         '../src/utils',
       ],
       'sources': [
@@ -27,6 +28,7 @@
         '../src/ports/SkFontHost_win.cpp',
         '../src/ports/SkFontHost_win_dw.cpp',
         '../src/ports/SkGlobalInitialization_default.cpp',
+        '../src/ports/SkPurgeableMemoryBlock_none.cpp',
         '../src/ports/SkThread_win.cpp',
 
         '../src/ports/SkFontHost_tables.cpp',
@@ -46,14 +48,19 @@
           'link_settings': {
             'libraries': [
               '-lfreetype',
+              '-lfontconfig',
               '-ldl',
             ],
           },
           'sources': [
             '../src/ports/SkFontHost_FreeType.cpp',
             '../src/ports/SkFontHost_FreeType_common.cpp',
-            '../src/ports/SkFontHost_linux.cpp',
+            '../src/ports/SkFontHost_fontconfig.cpp',
+            '../src/ports/SkFontConfigInterface_direct.cpp',
             '../src/ports/SkThread_pthread.cpp',
+          ],
+          'sources!': [
+            '../src/ports/SkFontHost_tables.cpp',
           ],
         }],
         [ 'skia_os == "nacl"', {
@@ -90,14 +97,16 @@
             '../third_party/freetype/include/**',
           ],
           'sources': [
-            '../src/ports/SkFontHost_mac_coretext.cpp',
-            '../src/utils/mac/SkStream_mac.cpp',
+            '../src/ports/SkFontHost_mac.cpp',
 #            '../src/ports/SkFontHost_FreeType.cpp',
 #            '../src/ports/SkFontHost_FreeType_common.cpp',
 #            '../src/ports/SkFontHost_freetype_mac.cpp',
+            '../src/ports/SkPurgeableMemoryBlock_mac.cpp',
             '../src/ports/SkThread_pthread.cpp',
+            '../src/utils/mac/SkStream_mac.cpp',
           ],
           'sources!': [
+            '../src/ports/SkPurgeableMemoryBlock_none.cpp',
             '../src/ports/SkFontHost_tables.cpp',
           ],
         }],
@@ -107,11 +116,13 @@
             '../include/utils/mac',
           ],
           'sources': [
-            '../src/ports/SkFontHost_mac_coretext.cpp',
-            '../src/utils/mac/SkStream_mac.cpp',
+            '../src/ports/SkFontHost_mac.cpp',
+            '../src/ports/SkPurgeableMemoryBlock_mac.cpp',
             '../src/ports/SkThread_pthread.cpp',
+            '../src/utils/mac/SkStream_mac.cpp',
           ],
           'sources!': [
+            '../src/ports/SkPurgeableMemoryBlock_none.cpp',
             '../src/ports/SkFontHost_tables.cpp',
           ],
         }],
@@ -153,14 +164,16 @@
           ],
           'sources!': [
             '../src/ports/SkDebug_stdio.cpp',
+            '../src/ports/SkPurgeableMemoryBlock_none.cpp',
           ],
           'sources': [
+            '../src/ports/FontHostConfiguration_android.cpp',
             '../src/ports/SkDebug_android.cpp',
             '../src/ports/SkThread_pthread.cpp',
             '../src/ports/SkFontHost_android.cpp',
             '../src/ports/SkFontHost_FreeType.cpp',
             '../src/ports/SkFontHost_FreeType_common.cpp',
-            '../src/ports/FontHostConfiguration_android.cpp',
+            '../src/ports/SkPurgeableMemoryBlock_android.cpp',
           ],
           'dependencies': [
              'freetype.gyp:freetype',

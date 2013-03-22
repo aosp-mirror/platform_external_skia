@@ -7,6 +7,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'libjpeg.gyp:*',
+        'libwebp.gyp:libwebp',
         'utils.gyp:utils',
       ],
       'export_dependent_settings': [
@@ -16,9 +17,11 @@
         '../include/config',
         '../include/core',
         '../include/images',
+        '../include/lazy',
+        # for access to SkImagePriv.h
+        '../src/image/',
       ],
       'sources': [
-        '../include/images/SkBitmapFactory.h',
         '../include/images/SkImageDecoder.h',
         '../include/images/SkImageEncoder.h',
         '../include/images/SkImageRef.h',
@@ -29,15 +32,17 @@
 
         '../src/images/bmpdecoderhelper.cpp',
         '../src/images/bmpdecoderhelper.h',
-        '../src/images/SkBitmapFactory.cpp',
-        '../src/images/SkFDStream.cpp',
+
+        '../src/images/SkBitmapRegionDecoder.cpp',
+
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_Factory.cpp',
-        '../src/images/SkImageDecoder_libjpeg.cpp',
         '../src/images/SkImageDecoder_libbmp.cpp',
         '../src/images/SkImageDecoder_libgif.cpp',
         '../src/images/SkImageDecoder_libico.cpp',
+        '../src/images/SkImageDecoder_libjpeg.cpp',
         '../src/images/SkImageDecoder_libpng.cpp',
+        '../src/images/SkImageDecoder_libwebp.cpp',
         '../src/images/SkImageDecoder_wbmp.cpp',
         '../src/images/SkImageEncoder.cpp',
         '../src/images/SkImageEncoder_Factory.cpp',
@@ -106,6 +111,7 @@
             ],
             'libraries': [
               '-lpng',
+              '-lz',
             ],
           },
           # end libpng stuff
@@ -136,6 +142,7 @@
       'direct_dependent_settings': {
         'include_dirs': [
           '../include/images',
+          '../include/lazy',
         ],
       },
     },

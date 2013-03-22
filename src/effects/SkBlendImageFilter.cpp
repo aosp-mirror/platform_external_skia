@@ -19,34 +19,21 @@
 
 namespace {
 
-SkXfermode::Mode modeToXfermode(SkBlendImageFilter::Mode mode)
-{
+SkXfermode::Mode modeToXfermode(SkBlendImageFilter::Mode mode) {
     switch (mode) {
-      case SkBlendImageFilter::kNormal_Mode:
-        return SkXfermode::kSrcOver_Mode;
-      case SkBlendImageFilter::kMultiply_Mode:
-        return SkXfermode::kModulate_Mode;
-      case SkBlendImageFilter::kScreen_Mode:
-        return SkXfermode::kScreen_Mode;
-      case SkBlendImageFilter::kDarken_Mode:
-        return SkXfermode::kDarken_Mode;
-      case SkBlendImageFilter::kLighten_Mode:
-        return SkXfermode::kLighten_Mode;
+        case SkBlendImageFilter::kNormal_Mode:
+            return SkXfermode::kSrcOver_Mode;
+        case SkBlendImageFilter::kMultiply_Mode:
+            return SkXfermode::kMultiply_Mode;
+        case SkBlendImageFilter::kScreen_Mode:
+            return SkXfermode::kScreen_Mode;
+        case SkBlendImageFilter::kDarken_Mode:
+            return SkXfermode::kDarken_Mode;
+        case SkBlendImageFilter::kLighten_Mode:
+            return SkXfermode::kLighten_Mode;
     }
     SkASSERT(0);
     return SkXfermode::kSrcOver_Mode;
-}
-
-SkPMColor multiply_proc(SkPMColor src, SkPMColor dst) {
-    int omsa = 255 - SkGetPackedA32(src);
-    int sr = SkGetPackedR32(src), sg = SkGetPackedG32(src), sb = SkGetPackedB32(src);
-    int omda = 255 - SkGetPackedA32(dst);
-    int dr = SkGetPackedR32(dst), dg = SkGetPackedG32(dst), db = SkGetPackedB32(dst);
-    int a = 255 - SkMulDiv255Round(omsa, omda);
-    int r = SkMulDiv255Round(omsa, dr) + SkMulDiv255Round(omda, sr) + SkMulDiv255Round(sr, dr);
-    int g = SkMulDiv255Round(omsa, dg) + SkMulDiv255Round(omda, sg) + SkMulDiv255Round(sg, dg);
-    int b = SkMulDiv255Round(omsa, db) + SkMulDiv255Round(omda, sb) + SkMulDiv255Round(sb, db);
-    return SkPackARGB32(a, r, g, b);
 }
 
 };
@@ -97,14 +84,7 @@ bool SkBlendImageFilter::onFilterImage(Proxy* proxy,
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
     canvas.drawBitmap(background, 0, 0, &paint);
-    // FEBlend's multiply mode is (1 - Sa) * Da + (1 - Da) * Sc + Sc * Dc
-    // Skia's is just Sc * Dc.  So we use a custom proc to implement FEBlend's
-    // version.
-    if (fMode == SkBlendImageFilter::kMultiply_Mode) {
-        paint.setXfermode(new SkProcXfermode(multiply_proc))->unref();
-    } else {
-        paint.setXfermodeMode(modeToXfermode(fMode));
-    }
+    paint.setXfermodeMode(modeToXfermode(fMode));
     canvas.drawBitmap(foreground, 0, 0, &paint);
     return true;
 }
@@ -266,34 +246,39 @@ void GrGLBlendEffect::emitCode(GrGLShaderBuilder* builder,
     GrSLType bgCoordsType =  fBackgroundEffectMatrix.emitCode(
         builder, key, vertexCoords, &bgCoords, NULL, "BG");
 
-    SkString* code = &builder->fFSCode;
     const char* bgColor = "bgColor";
     const char* fgColor = "fgColor";
 
-    code->appendf("\t\tvec4 %s = ", fgColor);
-    builder->appendTextureLookup(code, samplers[0], fgCoords, fgCoordsType);
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\tvec4 %s = ", fgColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType,
+                                 samplers[0],
+                                 fgCoords,
+                                 fgCoordsType);
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\tvec4 %s = ", bgColor);
-    builder->appendTextureLookup(code, samplers[1], bgCoords, bgCoordsType);
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\tvec4 %s = ", bgColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType,
+                                 samplers[1],
+                                 bgCoords,
+                                 bgCoordsType);
+    builder->fsCodeAppendf(";\n");
 
-    code->appendf("\t\t%s.a = 1.0 - (1.0 - %s.a) * (1.0 - %s.b);\n", outputColor, bgColor, fgColor);
+    builder->fsCodeAppendf("\t\t%s.a = 1.0 - (1.0 - %s.a) * (1.0 - %s.b);\n", outputColor, bgColor, fgColor);
     switch (fMode) {
       case SkBlendImageFilter::kNormal_Mode:
-        code->appendf("\t\t%s.rgb = (1.0 - %s.a) * %s.rgb + %s.rgb;\n", outputColor, fgColor, bgColor, fgColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = (1.0 - %s.a) * %s.rgb + %s.rgb;\n", outputColor, fgColor, bgColor, fgColor);
         break;
       case SkBlendImageFilter::kMultiply_Mode:
-        code->appendf("\t\t%s.rgb = (1.0 - %s.a) * %s.rgb + (1.0 - %s.a) * %s.rgb + %s.rgb * %s.rgb;\n", outputColor, fgColor, bgColor, bgColor, fgColor, fgColor, bgColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = (1.0 - %s.a) * %s.rgb + (1.0 - %s.a) * %s.rgb + %s.rgb * %s.rgb;\n", outputColor, fgColor, bgColor, bgColor, fgColor, fgColor, bgColor);
         break;
       case SkBlendImageFilter::kScreen_Mode:
-        code->appendf("\t\t%s.rgb = %s.rgb + %s.rgb - %s.rgb * %s.rgb;\n", outputColor, bgColor, fgColor, fgColor, bgColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = %s.rgb + %s.rgb - %s.rgb * %s.rgb;\n", outputColor, bgColor, fgColor, fgColor, bgColor);
         break;
       case SkBlendImageFilter::kDarken_Mode:
-        code->appendf("\t\t%s.rgb = min((1.0 - %s.a) * %s.rgb + %s.rgb, (1.0 - %s.a) * %s.rgb + %s.rgb);\n", outputColor, fgColor, bgColor, fgColor, bgColor, fgColor, bgColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = min((1.0 - %s.a) * %s.rgb + %s.rgb, (1.0 - %s.a) * %s.rgb + %s.rgb);\n", outputColor, fgColor, bgColor, fgColor, bgColor, fgColor, bgColor);
         break;
       case SkBlendImageFilter::kLighten_Mode:
-        code->appendf("\t\t%s.rgb = max((1.0 - %s.a) * %s.rgb + %s.rgb, (1.0 - %s.a) * %s.rgb + %s.rgb);\n", outputColor, fgColor, bgColor, fgColor, bgColor, fgColor, bgColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = max((1.0 - %s.a) * %s.rgb + %s.rgb, (1.0 - %s.a) * %s.rgb + %s.rgb);\n", outputColor, fgColor, bgColor, fgColor, bgColor, fgColor, bgColor);
         break;
     }
 }

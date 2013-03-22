@@ -59,20 +59,34 @@ SkSettingsWidget::SkSettingsWidget() : QWidget()
 
     fRasterCheckBox.setChecked(true);
 
+    fOverdrawVizLabel.setText("     Overdraw Viz: ");
+    fOverdrawVizLabel.setMinimumWidth(178);
+    fOverdrawVizLabel.setMaximumWidth(178);
+
+#if SK_SUPPORT_GPU
     fGLLabel.setText("OpenGL: ");
     fGLLabel.setMinimumWidth(178);
     fGLLabel.setMaximumWidth(178);
+#endif
 
     fRasterLayout.addWidget(&fRasterLabel);
     fRasterLayout.addWidget(&fRasterCheckBox);
 
+    fOverdrawVizLayout.addWidget(&fOverdrawVizLabel);
+    fOverdrawVizLayout.addWidget(&fOverdrawVizCheckBox);
+
+#if SK_SUPPORT_GPU
     fGLLayout.addWidget(&fGLLabel);
     fGLLayout.addWidget(&fGLCheckBox);
+#endif
 
     fCanvasLayout.setSpacing(6);
     fCanvasLayout.setContentsMargins(11,11,11,11);
     fCanvasLayout.addLayout(&fRasterLayout);
+    fCanvasLayout.addLayout(&fOverdrawVizLayout);
+#if SK_SUPPORT_GPU
     fCanvasLayout.addLayout(&fGLLayout);
+#endif
 
     // Command Toggle
     fCommandToggle.setText("Command Scrolling Preferences");

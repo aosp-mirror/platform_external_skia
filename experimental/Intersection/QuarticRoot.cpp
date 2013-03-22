@@ -40,14 +40,58 @@ int reducedQuarticRoots(const double t4, const double t3, const double t2, const
     bzero(str, sizeof(str));
     sprintf(str, "Solve[%1.19g x^4 + %1.19g x^3 + %1.19g x^2 + %1.19g x + %1.19g == 0, x]",
         t4, t3, t2, t1, t0);
+    mathematica_ize(str, sizeof(str));
+#if ONE_OFF_DEBUG && ONE_OFF_DEBUG_MATHEMATICA
+    SkDebugf("%s\n", str);
 #endif
-    if (approximately_zero(t4)) {
-        if (approximately_zero(t3)) {
+#endif
+#if 0 && SK_DEBUG
+    bool t4Or = approximately_zero_when_compared_to(t4, t0) // 0 is one root
+            || approximately_zero_when_compared_to(t4, t1)
+            || approximately_zero_when_compared_to(t4, t2);
+    bool t4And = approximately_zero_when_compared_to(t4, t0) // 0 is one root
+            && approximately_zero_when_compared_to(t4, t1)
+            && approximately_zero_when_compared_to(t4, t2);
+    if (t4Or != t4And) {
+        SkDebugf("%s t4 or and\n", __FUNCTION__);
+    }
+    bool t3Or = approximately_zero_when_compared_to(t3, t0)
+            || approximately_zero_when_compared_to(t3, t1)
+            || approximately_zero_when_compared_to(t3, t2);
+    bool t3And = approximately_zero_when_compared_to(t3, t0)
+            && approximately_zero_when_compared_to(t3, t1)
+            && approximately_zero_when_compared_to(t3, t2);
+    if (t3Or != t3And) {
+        SkDebugf("%s t3 or and\n", __FUNCTION__);
+    }
+    bool t0Or = approximately_zero_when_compared_to(t0, t1) // 0 is one root
+            && approximately_zero_when_compared_to(t0, t2)
+            && approximately_zero_when_compared_to(t0, t3)
+            && approximately_zero_when_compared_to(t0, t4);
+    bool t0And = approximately_zero_when_compared_to(t0, t1) // 0 is one root
+            && approximately_zero_when_compared_to(t0, t2)
+            && approximately_zero_when_compared_to(t0, t3)
+            && approximately_zero_when_compared_to(t0, t4);
+    if (t0Or != t0And) {
+        SkDebugf("%s t0 or and\n", __FUNCTION__);
+    }
+#endif
+    if (approximately_zero_when_compared_to(t4, t0) // 0 is one root
+            && approximately_zero_when_compared_to(t4, t1)
+            && approximately_zero_when_compared_to(t4, t2)) {
+        if (approximately_zero_when_compared_to(t3, t0)
+            && approximately_zero_when_compared_to(t3, t1)
+            && approximately_zero_when_compared_to(t3, t2)) {
             return quadraticRootsReal(t2, t1, t0, roots);
         }
-        return cubicRootsReal(t3, t2, t1, t0, roots);
+        if (approximately_zero_when_compared_to(t4, t3)) {
+            return cubicRootsReal(t3, t2, t1, t0, roots);
+        }
     }
-    if (approximately_zero(t0)) { // 0 is one root
+    if ((approximately_zero_when_compared_to(t0, t1) || approximately_zero(t1))// 0 is one root
+      //      && approximately_zero_when_compared_to(t0, t2)
+            && approximately_zero_when_compared_to(t0, t3)
+            && approximately_zero_when_compared_to(t0, t4)) {
         int num = cubicRootsReal(t4, t3, t2, t1, roots);
         for (int i = 0; i < num; ++i) {
             if (approximately_zero(roots[i])) {
@@ -71,8 +115,8 @@ int reducedQuarticRoots(const double t4, const double t3, const double t2, const
     return -1;
 }
 
-int quarticRootsReal(const double A, const double B, const double C, const double D,
-        const double E, double s[4]) {
+int quarticRootsReal(int firstCubicRoot, const double A, const double B, const double C,
+        const double D, const double E, double s[4]) {
     double  u, v;
     /* normal form: x^4 + Ax^3 + Bx^2 + Cx + D = 0 */
     const double invA = 1 / A;
@@ -141,7 +185,7 @@ int quarticRootsReal(const double A, const double B, const double C, const doubl
         double z;
         num = 0;
         int num2 = 0;
-        for (index = 0; index < roots; ++index) {
+        for (index = firstCubicRoot; index < roots; ++index) {
             z = cubicRoots[index];
             /* ... to build two quadric equations */
             u = z * z - r;

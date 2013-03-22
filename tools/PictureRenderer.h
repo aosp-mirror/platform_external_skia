@@ -8,6 +8,7 @@
 #ifndef PictureRenderer_DEFINED
 #define PictureRenderer_DEFINED
 
+#include "SkCanvas.h"
 #include "SkCountdown.h"
 #include "SkDrawFilter.h"
 #include "SkMath.h"
@@ -19,6 +20,7 @@
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkThreadPool.h"
+#include "SkTileGridPicture.h"
 #include "SkTypes.h"
 
 #if SK_SUPPORT_GPU
@@ -28,7 +30,7 @@
 
 class SkBitmap;
 class SkCanvas;
-class SkGLContext;
+class SkGLContextHelper;
 class SkThread;
 
 namespace sk_tools {
@@ -39,9 +41,12 @@ class PictureRenderer : public SkRefCnt {
 
 public:
     enum SkDeviceTypes {
+#if SK_ANGLE
+        kAngle_DeviceType,
+#endif
         kBitmap_DeviceType,
 #if SK_SUPPORT_GPU
-        kGPU_DeviceType
+        kGPU_DeviceType,
 #endif
     };
 
@@ -117,8 +122,44 @@ public:
      */
     void resetState(bool callFinish);
 
-    void setDeviceType(SkDeviceTypes deviceType) {
+    /**
+     * Set the backend type. Returns true on success and false on failure.
+     */
+    bool setDeviceType(SkDeviceTypes deviceType) {
         fDeviceType = deviceType;
+#if SK_SUPPORT_GPU
+        // In case this function is called more than once
+        SkSafeUnref(fGrContext);
+        fGrContext = NULL;
+        // Set to Native so it will have an initial value.
+        GrContextFactory::GLContextType glContextType = GrContextFactory::kNative_GLContextType;
+#endif
+        switch(deviceType) {
+            case kBitmap_DeviceType:
+                return true;
+#if SK_SUPPORT_GPU
+            case kGPU_DeviceType:
+                // Already set to GrContextFactory::kNative_GLContextType, above.
+                break;
+#if SK_ANGLE
+            case kAngle_DeviceType:
+                glContextType = GrContextFactory::kANGLE_GLContextType;
+                break;
+#endif
+#endif
+            default:
+                // Invalid device type.
+                return false;
+        }
+#if SK_SUPPORT_GPU
+        fGrContext = fGrContextFactory.get(glContextType);
+        if (NULL == fGrContext) {
+            return false;
+        } else {
+            fGrContext->ref();
+            return true;
+        }
+#endif
     }
 
     void setDrawFilters(DrawFilterFlags const * const filters, const SkString& configName) {
@@ -130,9 +171,10 @@ public:
         fBBoxHierarchyType = bbhType;
     }
 
+    BBoxHierarchyType getBBoxHierarchyType() { return fBBoxHierarchyType; }
+
     void setGridSize(int width, int height) {
-        fGridWidth = width;
-        fGridHeight = height;
+        fGridInfo.fTileInterval.set(width, height);
     }
 
     bool isUsingBitmapDevice() {
@@ -157,8 +199,18 @@ public:
             config.append("_grid");
         }
 #if SK_SUPPORT_GPU
-        if (this->isUsingGpuDevice()) {
-            config.append("_gpu");
+        switch (fDeviceType) {
+            case kGPU_DeviceType:
+                config.append("_gpu");
+                break;
+#if SK_ANGLE
+            case kAngle_DeviceType:
+                config.append("_angle");
+                break;
+#endif
+            default:
+                // Assume that no extra info means bitmap.
+                break;
         }
 #endif
         config.append(fDrawFiltersConfig.c_str());
@@ -167,15 +219,34 @@ public:
 
 #if SK_SUPPORT_GPU
     bool isUsingGpuDevice() {
-        return kGPU_DeviceType == fDeviceType;
+        switch (fDeviceType) {
+            case kGPU_DeviceType:
+                // fall through
+#if SK_ANGLE
+            case kAngle_DeviceType:
+#endif
+                return true;
+            default:
+                return false;
+        }
     }
 
-    SkGLContext* getGLContext() {
-        if (this->isUsingGpuDevice()) {
-            return fGrContextFactory.getGLContext(GrContextFactory::kNative_GLContextType);
-        } else {
-            return NULL;
+    SkGLContextHelper* getGLContext() {
+        GrContextFactory::GLContextType glContextType
+                = GrContextFactory::kNull_GLContextType;
+        switch(fDeviceType) {
+            case kGPU_DeviceType:
+                glContextType = GrContextFactory::kNative_GLContextType;
+                break;
+#if SK_ANGLE
+            case kAngle_DeviceType:
+                glContextType = GrContextFactory::kANGLE_GLContextType;
+                break;
+#endif
+            default:
+                return NULL;
         }
+        return fGrContextFactory.getGLContext(glContextType);
     }
 
     GrContext* getGrContext() {
@@ -187,16 +258,23 @@ public:
         : fPicture(NULL)
         , fDeviceType(kBitmap_DeviceType)
         , fBBoxHierarchyType(kNone_BBoxHierarchyType)
-        , fGridWidth(0)
-        , fGridHeight(0)
-#if SK_SUPPORT_GPU
-        , fGrContext(fGrContextFactory.get(GrContextFactory::kNative_GLContextType))
-#endif
         , fScaleFactor(SK_Scalar1)
+#if SK_SUPPORT_GPU
+        , fGrContext(NULL)
+#endif
         {
+            fGridInfo.fMargin.setEmpty();
+            fGridInfo.fOffset.setZero();
+            fGridInfo.fTileInterval.set(1, 1);
             sk_bzero(fDrawFilters, sizeof(fDrawFilters));
             fViewport.set(0, 0);
         }
+
+#if SK_SUPPORT_GPU
+    virtual ~PictureRenderer() {
+        SkSafeUnref(fGrContext);
+    }
+#endif
 
 protected:
     SkAutoTUnref<SkCanvas> fCanvas;
@@ -205,12 +283,7 @@ protected:
     BBoxHierarchyType      fBBoxHierarchyType;
     DrawFilterFlags        fDrawFilters[SkDrawFilter::kTypeCount];
     SkString               fDrawFiltersConfig;
-    int                    fGridWidth, fGridHeight; // used when fBBoxHierarchyType is TileGrid
-
-#if SK_SUPPORT_GPU
-    GrContextFactory fGrContextFactory;
-    GrContext* fGrContext;
-#endif
+    SkTileGridPicture::TileGridInfo fGridInfo; // used when fBBoxHierarchyType is TileGrid
 
     void buildBBoxHierarchy();
 
@@ -239,6 +312,10 @@ protected:
 private:
     SkISize                fViewport;
     SkScalar               fScaleFactor;
+#if SK_SUPPORT_GPU
+    GrContextFactory       fGrContextFactory;
+    GrContext*             fGrContext;
+#endif
 
     virtual SkString getConfigNameInternal() = 0;
 
@@ -347,6 +424,8 @@ public:
 
     virtual TiledPictureRenderer* getTiledRenderer() SK_OVERRIDE { return this; }
 
+    virtual bool supportsTimingIndividualTiles() { return true; }
+
     /**
      * Report the number of tiles in the x and y directions. Must not be called before init.
      * @param x Output parameter identifying the number of tiles in the x direction.
@@ -418,6 +497,8 @@ public:
     virtual bool render(const SkString* path, SkBitmap** out = NULL) SK_OVERRIDE;
 
     virtual void end() SK_OVERRIDE;
+
+    virtual bool supportsTimingIndividualTiles() SK_OVERRIDE { return false; }
 
 private:
     virtual SkString getConfigNameInternal() SK_OVERRIDE;

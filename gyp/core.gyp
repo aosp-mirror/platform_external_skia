@@ -15,6 +15,7 @@
       'include_dirs': [
         '../include/config',
         '../include/core',
+        '../include/lazy',
         '../include/pipe',
         '../include/ports',
         '../include/utils',
@@ -28,10 +29,6 @@
       'msvs_disabled_warnings': [4244, 4267,4345, 4390, 4554, 4800],
       'conditions': [
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
-          'cflags': [
-            '-Wno-unused',
-            '-Wno-unused-function',
-          ],
           'link_settings': {
             'libraries': [
               '-lpthread',
@@ -77,14 +74,10 @@
           'include_dirs': [
             'config/win',
           ],
-          'sources!': [
-            '../include/core/SkMMapStream.h',
-            '../src/core/SkMMapStream.cpp',
-          ],
         }],
-        [ 'skia_os == "android"', {
+        [ 'skia_os in ("android", "nacl")', {
           'dependencies': [
-             'freetype.gyp:freetype',
+            'freetype.gyp:freetype',
           ],
         }],
         [ 'skia_os == "android" and skia_arch_type == "arm" and armv7 == 1', {
@@ -106,6 +99,7 @@
           'config',
           '../include/config',
           '../include/core',
+          '../include/lazy',
           '../include/pipe',
           'ext',
         ],

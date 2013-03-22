@@ -8,9 +8,11 @@
 
 bool implicitLine(const _Line& line, double& slope, double& axisIntercept);
 int reduceOrder(const _Line& line, _Line& reduced);
+double is_left(const _Line& line, const _Point& pt);
 void sub_divide(const _Line& src, double t1, double t2, _Line& dst);
 double t_at(const _Line&, const _Point& );
 void xy_at_t(const _Line& , double t, double& x, double& y);
+_Point xy_at_t(const _Line& , double t);
 
 enum x_at_flags {
     kFindTopMin = 1,

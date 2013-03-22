@@ -61,9 +61,13 @@ enum DrawType {
     SET_MATRIX,
     SKEW,
     TRANSLATE,
+    NOOP,
 
-    LAST_DRAWTYPE_ENUM = TRANSLATE
+    LAST_DRAWTYPE_ENUM = NOOP
 };
+
+// In the 'match' method, this constant will match any flavor of DRAW_BITMAP*
+static const int kDRAW_BITMAP_FLAVOR = LAST_DRAWTYPE_ENUM+1;
 
 enum DrawVertexFlags {
     DRAW_VERTICES_HAS_TEXS    = 0x01,
@@ -362,7 +366,7 @@ private:
 
     // marks fTopBot[] as unrecorded
     void setTopBotUnwritten() {
-        this->fTopBot[0] = this->fTopBot[1] = SK_ScalarNaN; // initial to sentinel values
+        this->fTopBot[0] = SK_ScalarNaN; // initial to sentinel values
     }
 
     // From here down is the data we look at in the search/sort. We always begin
@@ -402,17 +406,22 @@ public:
         // set to 1 since returning a zero from find() indicates failure
         fNextIndex = 1;
         sk_bzero(fHash, sizeof(fHash));
+        // index 0 is always empty since it is used as a signal that find failed
+        fIndexedData.push(NULL);
     }
 
     virtual ~SkFlatDictionary() {
         fController->unref();
     }
 
-    int count() const { return fData.count(); }
+    int count() const {
+        SkASSERT(fIndexedData.count() == fSortedData.count()+1);
+        return fSortedData.count();
+    }
 
     const SkFlatData*  operator[](int index) const {
-        SkASSERT(index >= 0 && index < fData.count());
-        return fData[index];
+        SkASSERT(index >= 0 && index < fSortedData.count());
+        return fSortedData[index];
     }
 
     /**
@@ -420,7 +429,10 @@ public:
      * memory that was allocated for each entry.
      */
     void reset() {
-        fData.reset();
+        fSortedData.reset();
+        fIndexedData.rewind();
+        // index 0 is always empty since it is used as a signal that find failed
+        fIndexedData.push(NULL);
         fNextIndex = 1;
         sk_bzero(fHash, sizeof(fHash));
     }
@@ -436,21 +448,24 @@ public:
                                      const SkFlatData* toReplace, bool* added,
                                      bool* replaced) {
         SkASSERT(added != NULL && replaced != NULL);
-        int oldCount = fData.count();
+        int oldCount = fSortedData.count();
         const SkFlatData* flat = this->findAndReturnFlat(element);
-        *added = fData.count() == oldCount + 1;
+        *added = fSortedData.count() == oldCount + 1;
         *replaced = false;
         if (*added && toReplace != NULL) {
             // First, find the index of the one to replace
-            int indexToReplace = fData.find(toReplace);
+            int indexToReplace = fSortedData.find(toReplace);
             if (indexToReplace >= 0) {
                 // findAndReturnFlat set the index to fNextIndex and increased
                 // fNextIndex by one. Reuse the index from the one being
                 // replaced and reset fNextIndex to the proper value.
+                int oldIndex = flat->index();
                 const_cast<SkFlatData*>(flat)->setIndex(toReplace->index());
+                fIndexedData[toReplace->index()] = flat;
                 fNextIndex--;
-                // Remove from the array.
-                fData.remove(indexToReplace);
+                // Remove from the arrays.
+                fSortedData.remove(indexToReplace);
+                fIndexedData.remove(oldIndex);
                 // Remove from the hash table.
                 int oldHash = ChecksumToHashIndex(toReplace->checksum());
                 if (fHash[oldHash] == toReplace) {
@@ -459,6 +474,7 @@ public:
                 // Delete the actual object.
                 fController->unalloc((void*)toReplace);
                 *replaced = true;
+                SkASSERT(fIndexedData.count() == fSortedData.count()+1);
             }
         }
         return flat;
@@ -470,7 +486,7 @@ public:
      * added.
      *
      * To make the Compare function fast, we write a sentinel value at the end
-     * of each block. The blocks in our fData[] all have a 0 sentinel. The
+     * of each block. The blocks in our fSortedData[] all have a 0 sentinel. The
      * newly created block we're comparing against has a -1 in the sentinel.
      *
      * This trick allows Compare to always loop until failure. If it fails on
@@ -485,13 +501,26 @@ public:
      *  if there no objects (instead of an empty array).
      */
     SkTRefArray<T>* unflattenToArray() const {
-        int count = fData.count();
+        int count = fSortedData.count();
         SkTRefArray<T>* array = NULL;
         if (count > 0) {
             array = SkTRefArray<T>::Create(count);
             this->unflattenIntoArray(&array->writableAt(0));
         }
         return array;
+    }
+
+    /**
+     * Unflatten the specific object at the given index
+     */
+    T* unflatten(int index) const {
+        SkASSERT(fIndexedData.count() == fSortedData.count()+1);
+        const SkFlatData* element = fIndexedData[index];
+        SkASSERT(index == element->index());
+
+        T* dst = new T;
+        this->unflatten(dst, element);
+        return dst;
     }
 
     const SkFlatData* findAndReturnFlat(const T& element) {
@@ -504,21 +533,23 @@ public:
             return candidate;
         }
 
-        int index = SkTSearch<SkFlatData>((const SkFlatData**) fData.begin(),
-                                          fData.count(), flat, sizeof(flat),
+        int index = SkTSearch<SkFlatData>((const SkFlatData**) fSortedData.begin(),
+                                          fSortedData.count(), flat, sizeof(flat),
                                           &SkFlatData::Compare);
         if (index >= 0) {
             fController->unalloc(flat);
-            fHash[hashIndex] = fData[index];
-            return fData[index];
+            fHash[hashIndex] = fSortedData[index];
+            return fSortedData[index];
         }
 
         index = ~index;
-        *fData.insert(index) = flat;
-        SkASSERT(fData.count() == fNextIndex);
+        *fSortedData.insert(index) = flat;
+        *fIndexedData.insert(flat->index()) = flat;
+        SkASSERT(fSortedData.count() == fNextIndex);
         fNextIndex++;
         flat->setSentinelInCache();
         fHash[hashIndex] = flat;
+        SkASSERT(fIndexedData.count() == fSortedData.count()+1);
         return flat;
     }
 
@@ -527,22 +558,35 @@ protected:
     void (*fUnflattenProc)(SkOrderedReadBuffer&, void*);
 
 private:
+    void unflatten(T* dst, const SkFlatData* element) const {
+        element->unflatten(dst, fUnflattenProc,
+                           fController->getBitmapHeap(),
+                           fController->getTypefacePlayback());
+    }
+
     void unflattenIntoArray(T* array) const {
-        const int count = fData.count();
-        const SkFlatData** iter = fData.begin();
+        const int count = fSortedData.count();
+        SkASSERT(fIndexedData.count() == fSortedData.count()+1);
+        const SkFlatData* const* iter = fSortedData.begin();
         for (int i = 0; i < count; ++i) {
             const SkFlatData* element = iter[i];
             int index = element->index() - 1;
             SkASSERT((unsigned)index < (unsigned)count);
-            element->unflatten(&array[index], fUnflattenProc,
-                               fController->getBitmapHeap(),
-                               fController->getTypefacePlayback());
+            unflatten(&array[index], element);
         }
     }
 
     SkFlatController * const     fController;
     int                          fNextIndex;
-    SkTDArray<const SkFlatData*> fData;
+
+    // SkFlatDictionary has two copies of the data one indexed by the
+    // SkFlatData's index and the other sorted. The sorted data is used
+    // for finding and uniquification while the indexed copy is used
+    // for standard array-style lookups based on the SkFlatData's index
+    // (as in 'unflatten').
+    SkTDArray<const SkFlatData*> fIndexedData;
+    // fSortedData is sorted by checksum/size/data.
+    SkTDArray<const SkFlatData*> fSortedData;
 
     enum {
         // Determined by trying diff values on picture-recording benchmarks

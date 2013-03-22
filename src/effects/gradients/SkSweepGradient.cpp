@@ -298,6 +298,7 @@ void SkSweepGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
     SkMatrix::MapXYProc proc = fDstToIndexProc;
     const SkMatrix&     matrix = fDstToIndex;
     const SkPMColor* SK_RESTRICT cache = this->getCache32();
+    int                 toggle = init_dither_toggle(x, y);
     SkPoint             srcPt;
 
     if (fDstToIndexClass != kPerspective_MatrixClass) {
@@ -319,15 +320,17 @@ void SkSweepGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
         }
 
         for (; count > 0; --count) {
-            *dstC++ = cache[SkATan2_255(fy, fx)];
+            *dstC++ = cache[toggle + SkATan2_255(fy, fx)];
             fx += dx;
             fy += dy;
+            toggle = next_dither_toggle(toggle);
         }
     } else {  // perspective case
         for (int stop = x + count; x < stop; x++) {
             proc(matrix, SkIntToScalar(x) + SK_ScalarHalf,
                          SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
-            *dstC++ = cache[SkATan2_255(srcPt.fY, srcPt.fX)];
+            *dstC++ = cache[toggle + SkATan2_255(srcPt.fY, srcPt.fX)];
+            toggle = next_dither_toggle(toggle);
         }
     }
 }
@@ -442,7 +445,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrSweepGradient);
 
-GrEffectRef* GrSweepGradient::TestCreate(SkRandom* random,
+GrEffectRef* GrSweepGradient::TestCreate(SkMWCRandom* random,
                                          GrContext* context,
                                          GrTexture**) {
     SkPoint center = {random->nextUScalar1(), random->nextUScalar1()};
@@ -461,7 +464,7 @@ GrEffectRef* GrSweepGradient::TestCreate(SkRandom* random,
 /////////////////////////////////////////////////////////////////////
 
 void GrGLSweepGradient::emitCode(GrGLShaderBuilder* builder,
-                                 const GrEffectStage& stage,
+                                 const GrEffectStage&,
                                  EffectKey key,
                                  const char* vertexCoords,
                                  const char* outputColor,

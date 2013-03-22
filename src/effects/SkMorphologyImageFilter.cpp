@@ -136,7 +136,7 @@ static void dilateY(const SkBitmap& src, SkBitmap* dst, int radiusY)
 bool SkErodeImageFilter::onFilterImage(Proxy* proxy,
                                        const SkBitmap& source, const SkMatrix& ctm,
                                        SkBitmap* dst, SkIPoint* offset) {
-    SkBitmap src = this->getInputResult(proxy, source, ctm, offset);
+    SkBitmap src = this->getInputResult(0, proxy, source, ctm, offset);
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -181,7 +181,7 @@ bool SkErodeImageFilter::onFilterImage(Proxy* proxy,
 bool SkDilateImageFilter::onFilterImage(Proxy* proxy,
                                         const SkBitmap& source, const SkMatrix& ctm,
                                         SkBitmap* dst, SkIPoint* offset) {
-    SkBitmap src = this->getInputResult(proxy, source, ctm, offset);
+    SkBitmap src = this->getInputResult(0, proxy, source, ctm, offset);
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -324,16 +324,14 @@ void GrGLMorphologyEffect::emitCode(GrGLShaderBuilder* builder,
     fImageIncrementUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                              kVec2f_GrSLType, "ImageIncrement");
 
-    SkString* code = &builder->fFSCode;
-
     const char* func;
     switch (fType) {
         case GrMorphologyEffect::kErode_MorphologyType:
-            code->appendf("\t\t%s = vec4(1, 1, 1, 1);\n", outputColor);
+            builder->fsCodeAppendf("\t\t%s = vec4(1, 1, 1, 1);\n", outputColor);
             func = "min";
             break;
         case GrMorphologyEffect::kDilate_MorphologyType:
-            code->appendf("\t\t%s = vec4(0, 0, 0, 0);\n", outputColor);
+            builder->fsCodeAppendf("\t\t%s = vec4(0, 0, 0, 0);\n", outputColor);
             func = "max";
             break;
         default:
@@ -343,14 +341,16 @@ void GrGLMorphologyEffect::emitCode(GrGLShaderBuilder* builder,
     }
     const char* imgInc = builder->getUniformCStr(fImageIncrementUni);
 
-    code->appendf("\t\tvec2 coord = %s - %d.0 * %s;\n", coords, fRadius, imgInc);
-    code->appendf("\t\tfor (int i = 0; i < %d; i++) {\n", this->width());
-    code->appendf("\t\t\t%s = %s(%s, ", outputColor, func, outputColor);
-    builder->appendTextureLookup(&builder->fFSCode, samplers[0], "coord");
-    code->appendf(");\n");
-    code->appendf("\t\t\tcoord += %s;\n", imgInc);
-    code->appendf("\t\t}\n");
-    GrGLSLMulVarBy4f(code, 2, outputColor, inputColor);
+    builder->fsCodeAppendf("\t\tvec2 coord = %s - %d.0 * %s;\n", coords, fRadius, imgInc);
+    builder->fsCodeAppendf("\t\tfor (int i = 0; i < %d; i++) {\n", this->width());
+    builder->fsCodeAppendf("\t\t\t%s = %s(%s, ", outputColor, func, outputColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "coord");
+    builder->fsCodeAppend(");\n");
+    builder->fsCodeAppendf("\t\t\tcoord += %s;\n", imgInc);
+    builder->fsCodeAppend("\t\t}\n");
+    SkString modulate;
+    GrGLSLMulVarBy4f(&modulate, 2, outputColor, inputColor);
+    builder->fsCodeAppend(modulate.c_str());
 }
 
 GrGLEffect::EffectKey GrGLMorphologyEffect::GenKey(const GrEffectStage& s, const GrGLCaps&) {
@@ -419,8 +419,8 @@ void GrMorphologyEffect::getConstantColorComponents(GrColor* color, uint32_t* va
 
 GR_DEFINE_EFFECT_TEST(GrMorphologyEffect);
 
-GrEffectRef* GrMorphologyEffect::TestCreate(SkRandom* random,
-                                            GrContext* context,
+GrEffectRef* GrMorphologyEffect::TestCreate(SkMWCRandom* random,
+                                            GrContext*,
                                             GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;

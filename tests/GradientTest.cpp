@@ -42,7 +42,7 @@ struct GradRec {
 };
 
 
-static void none_gradproc(skiatest::Reporter* reporter, const GradRec& rec) {
+static void none_gradproc(skiatest::Reporter* reporter, const GradRec&) {
     SkAutoTUnref<SkShader> s(new SkEmptyShader);
     REPORTER_ASSERT(reporter, SkShader::kNone_GradientType == s->asAGradient(NULL));
 }
@@ -52,6 +52,7 @@ static void color_gradproc(skiatest::Reporter* reporter, const GradRec& rec) {
     REPORTER_ASSERT(reporter, SkShader::kColor_GradientType == s->asAGradient(NULL));
 
     SkShader::GradientInfo info;
+    info.fColors = NULL;
     info.fColorCount = 0;
     s->asAGradient(&info);
     REPORTER_ASSERT(reporter, 1 == info.fColorCount);
@@ -128,7 +129,7 @@ static void conical_gradproc(skiatest::Reporter* reporter, const GradRec& rec) {
 }
 
 // Ensure that repeated color gradients behave like drawing a single color
-static void TestConstantGradient(skiatest::Reporter* reporter) {
+static void TestConstantGradient(skiatest::Reporter*) {
     const SkPoint pts[] = {
         { 0, 0 },
         { SkIntToScalar(10), 0 }

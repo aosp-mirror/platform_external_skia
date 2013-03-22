@@ -257,17 +257,11 @@ void SkPathStroker::quad_to(const SkPoint pts[3],
     } else {
         SkVector    normalB;
 
-#ifdef SK_IGNORE_QUAD_STROKE_FIX
-        SkVector unitB;
-        SkAssertResult(set_normal_unitnormal(pts[0], pts[2], fRadius,
-                                             &normalB, &unitB));
-#else
         normalB = pts[2] - pts[0];
         normalB.rotateCCW();
         SkScalar dot = SkPoint::DotProduct(unitNormalAB, *unitNormalBC);
         SkAssertResult(normalB.setLength(SkScalarDiv(fRadius,
                                      SkScalarSqrt((SK_Scalar1 + dot)/2))));
-#endif
 
         fOuter.quadTo(  pts[1].fX + normalB.fX, pts[1].fY + normalB.fY,
                         pts[2].fX + normalBC->fX, pts[2].fY + normalBC->fY);
@@ -309,13 +303,23 @@ DRAW_LINE:
     SkAssertResult(set_normal_unitnormal(cd, fRadius, normalCD, unitNormalCD));
     bool degenerateBC = !set_normal_unitnormal(pts[1], pts[2], fRadius,
                                                &normalBC, &unitNormalBC);
-
+#ifndef SK_IGNORE_CUBIC_STROKE_FIX
+    if (subDivide <= 0) {
+        if (degenerateBC) {
+            goto DRAW_LINE;
+        } else {
+            goto DRAW_CUBIC;
+        }
+    }
+#endif
     if (degenerateBC || normals_too_curvy(unitNormalAB, unitNormalBC) ||
              normals_too_curvy(unitNormalBC, *unitNormalCD)) {
+#ifdef SK_IGNORE_CUBIC_STROKE_FIX
         // subdivide if we can
         if (--subDivide < 0) {
             goto DRAW_LINE;
         }
+#endif
         SkPoint     tmp[7];
         SkVector    norm, unit, dummy, unitDummy;
 
@@ -326,33 +330,26 @@ DRAW_LINE:
         // normals for CD
         this->cubic_to(&tmp[3], norm, unit, &dummy, &unitDummy, subDivide);
     } else {
+#ifndef SK_IGNORE_CUBIC_STROKE_FIX
+    DRAW_CUBIC:
+#endif
         SkVector    normalB, normalC;
 
         // need normals to inset/outset the off-curve pts B and C
 
-        if (0) {    // this is normal to the line between our adjacent pts
-            normalB = pts[2] - pts[0];
-            normalB.rotateCCW();
-            SkAssertResult(normalB.setLength(fRadius));
+        SkVector    unitBC = pts[2] - pts[1];
+        unitBC.normalize();
+        unitBC.rotateCCW();
 
-            normalC = pts[3] - pts[1];
-            normalC.rotateCCW();
-            SkAssertResult(normalC.setLength(fRadius));
-        } else {    // miter-join
-            SkVector    unitBC = pts[2] - pts[1];
-            unitBC.normalize();
-            unitBC.rotateCCW();
+        normalB = unitNormalAB + unitBC;
+        normalC = *unitNormalCD + unitBC;
 
-            normalB = unitNormalAB + unitBC;
-            normalC = *unitNormalCD + unitBC;
-
-            SkScalar dot = SkPoint::DotProduct(unitNormalAB, unitBC);
-            SkAssertResult(normalB.setLength(SkScalarDiv(fRadius,
-                                        SkScalarSqrt((SK_Scalar1 + dot)/2))));
-            dot = SkPoint::DotProduct(*unitNormalCD, unitBC);
-            SkAssertResult(normalC.setLength(SkScalarDiv(fRadius,
-                                        SkScalarSqrt((SK_Scalar1 + dot)/2))));
-        }
+        SkScalar dot = SkPoint::DotProduct(unitNormalAB, unitBC);
+        SkAssertResult(normalB.setLength(SkScalarDiv(fRadius,
+                                    SkScalarSqrt((SK_Scalar1 + dot)/2))));
+        dot = SkPoint::DotProduct(*unitNormalCD, unitBC);
+        SkAssertResult(normalC.setLength(SkScalarDiv(fRadius,
+                                    SkScalarSqrt((SK_Scalar1 + dot)/2))));
 
         fOuter.cubicTo( pts[1].fX + normalB.fX, pts[1].fY + normalB.fY,
                         pts[2].fX + normalC.fX, pts[2].fY + normalC.fY,
@@ -451,12 +448,7 @@ void SkPathStroker::cubicTo(const SkPoint& pt1, const SkPoint& pt2,
         pts[2] = pt2;
         pts[3] = pt3;
 
-#if 1
         count = SkChopCubicAtMaxCurvature(pts, tmp, tValues);
-#else
-        count = 1;
-        memcpy(tmp, pts, 4 * sizeof(SkPoint));
-#endif
         n = normalAB;
         u = unitAB;
         for (i = 0; i < count; i++) {
@@ -469,31 +461,6 @@ void SkPathStroker::cubicTo(const SkPoint& pt1, const SkPoint& pt2,
             u = unitCD;
 
         }
-
-#if 0
-        /*
-         *  Why was this code here? It caused us to draw circles where we didn't
-         *  want them. See http://code.google.com/p/chromium/issues/detail?id=112145
-         *  and gm/dashcubics.cpp
-         *
-         *  Simply removing this code seemed to fix the problem (no more circles).
-         *  Wish I had a repro case earlier when I added this check/hack...
-         */
-        // check for too pinchy
-        for (i = 1; i < count; i++) {
-            SkPoint p;
-            SkVector    v, c;
-
-            SkEvalCubicAt(pts, tValues[i - 1], &p, &v, &c);
-
-            SkScalar    dot = SkPoint::DotProduct(c, c);
-            v.scale(SkScalarInvert(dot));
-
-            if (SkScalarNearlyZero(v.fX) && SkScalarNearlyZero(v.fY)) {
-                fExtra.addCircle(p.fX, p.fY, fRadius, SkPath::kCW_Direction);
-            }
-        }
-#endif
     }
 
     this->postJoinTo(pt3, normalCD, unitCD);

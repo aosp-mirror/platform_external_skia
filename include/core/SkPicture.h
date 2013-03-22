@@ -10,11 +10,10 @@
 #ifndef SkPicture_DEFINED
 #define SkPicture_DEFINED
 
+#include "SkBitmap.h"
 #include "SkRefCnt.h"
-#include "SkSerializationHelpers.h"
 
 class SkBBoxHierarchy;
-class SkBitmap;
 class SkCanvas;
 class SkPicturePlayback;
 class SkPictureRecord;
@@ -39,13 +38,37 @@ public:
         this call, those elements will not appear in this picture.
     */
     SkPicture(const SkPicture& src);
+
     /**
-     *  Recreate a picture that was serialized into a stream. *success is set to
-     *  true if the picture was deserialized successfully and false otherwise.
-     *  decoder is used to decode any SkBitmaps that were encoded into the stream.
+     *  Recreate a picture that was serialized into a stream.
+     *  On failure, silently creates an empty picture.
+     *  @param SkStream Serialized picture data.
      */
-    explicit SkPicture(SkStream*, bool* success = NULL,
-                       SkSerializationHelpers::DecodeBitmap decoder = NULL);
+    explicit SkPicture(SkStream*);
+
+    /**
+     *  Function signature defining a function that sets up an SkBitmap from encoded data. On
+     *  success, the SkBitmap should have its Config, width, height, rowBytes and pixelref set.
+     *  If the installed pixelref has decoded the data into pixels, then the src buffer need not be
+     *  copied. If the pixelref defers the actual decode until its lockPixels() is called, then it
+     *  must make a copy of the src buffer.
+     *  @param src Encoded data.
+     *  @param length Size of the encoded data, in bytes.
+     *  @param dst SkBitmap to install the pixel ref on.
+     *  @param bool Whether or not a pixel ref was successfully installed.
+     */
+    typedef bool (*InstallPixelRefProc)(const void* src, size_t length, SkBitmap* dst);
+
+    /**
+     *  Recreate a picture that was serialized into a stream.
+     *  @param SkStream Serialized picture data.
+     *  @param success Output parameter. If non-NULL, will be set to true if the picture was
+     *                 deserialized successfully and false otherwise.
+     *  @param proc Function pointer for installing pixelrefs on SkBitmaps representing the
+     *              encoded bitmap data from the stream.
+     */
+    SkPicture(SkStream*, bool* success, InstallPixelRefProc proc);
+
     virtual ~SkPicture();
 
     /**
@@ -137,10 +160,19 @@ public:
     int height() const { return fHeight; }
 
     /**
+     *  Function to encode an SkBitmap to an SkWStream. A function with this
+     *  signature can be passed to serialize() and SkOrderedWriteBuffer. The
+     *  function should return true if it succeeds. Otherwise it should return
+     *  false so that SkOrderedWriteBuffer can switch to another method of
+     *  storing SkBitmaps.
+     */
+    typedef bool (*EncodeBitmap)(SkWStream*, const SkBitmap&);
+
+    /**
      *  Serialize to a stream. If non NULL, encoder will be used to encode
      *  any bitmaps in the picture.
      */
-    void serialize(SkWStream*, SkSerializationHelpers::EncodeBitmap encoder = NULL) const;
+    void serialize(SkWStream*, EncodeBitmap encoder = NULL) const;
 
 #ifdef SK_BUILD_FOR_ANDROID
     /** Signals that the caller is prematurely done replaying the drawing
@@ -176,6 +208,7 @@ protected:
     virtual SkBBoxHierarchy* createBBoxHierarchy() const;
 
 private:
+    void initFromStream(SkStream*, bool* success, InstallPixelRefProc);
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;

@@ -13,13 +13,13 @@ struct State4;
 
 //extern int comparePaths(const SkPath& one, const SkPath& two);
 extern int comparePaths(const SkPath& one, const SkPath& two, SkBitmap& bitmap);
-extern int comparePaths(const SkPath& one, const SkPath& scaledOne, const SkPath& two,
-        const SkPath& scaledTwo, SkBitmap& bitmap,
-        const SkPath& a, const SkPath& b, const ShapeOp shapeOp);
 extern void comparePathsTiny(const SkPath& one, const SkPath& two);
 extern bool drawAsciiPaths(const SkPath& one, const SkPath& two,
         bool drawPaths);
-extern void showPath(const SkPath& path, const char* str = NULL);
+extern void showOp(const ShapeOp op);
+extern void showPath(const SkPath& path, const char* str);
+extern void showPath(const SkPath& path);
+extern void showPathData(const SkPath& path);
 extern bool testSimplify(const SkPath& path, bool fill, SkPath& out,
         SkBitmap& bitmap);
 extern bool testSimplifyx(SkPath& path, bool useXor, SkPath& out,

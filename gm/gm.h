@@ -17,16 +17,16 @@
 #include "SkTRegistry.h"
 
 #define DEF_GM(code) \
-    static skiagm::GM*          SK_MACRO_APPEND_LINE(F_)(void* p) { code; } \
+    static skiagm::GM*          SK_MACRO_APPEND_LINE(F_)(void*) { code; } \
     static skiagm::GMRegistry   SK_MACRO_APPEND_LINE(R_)(SK_MACRO_APPEND_LINE(F_));
 
 namespace skiagm {
 
-        static inline SkISize make_isize(int w, int h) {
-                SkISize sz;
-                sz.set(w, h);
-                return sz;
-        }
+    static inline SkISize make_isize(int w, int h) {
+        SkISize sz;
+        sz.set(w, h);
+        return sz;
+    }
 
     class GM {
     public:
@@ -40,6 +40,7 @@ namespace skiagm {
             kSkipTiled_Flag         = 1 << 3,
             kSkip565_Flag           = 1 << 4,
             kSkipScaledReplay_Flag  = 1 << 5,
+            kSkipGPU_Flag           = 1 << 6,
         };
 
         void draw(SkCanvas*);

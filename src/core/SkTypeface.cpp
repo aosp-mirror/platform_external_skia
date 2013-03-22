@@ -49,6 +49,10 @@ SkTypeface* SkTypeface::GetDefaultTypeface() {
     return gDefaultTypeface;
 }
 
+SkTypeface* SkTypeface::RefDefault() {
+    return SkRef(GetDefaultTypeface());
+}
+
 uint32_t SkTypeface::UniqueID(const SkTypeface* face) {
     if (NULL == face) {
         face = GetDefaultTypeface();
@@ -67,6 +71,10 @@ SkTypeface* SkTypeface::CreateFromName(const char name[], Style style) {
 }
 
 SkTypeface* SkTypeface::CreateFromTypeface(const SkTypeface* family, Style s) {
+    if (family && family->style() == s) {
+        family->ref();
+        return const_cast<SkTypeface*>(family);
+    }
     return SkFontHost::CreateTypeface(family, NULL, s);
 }
 
@@ -117,6 +125,15 @@ size_t SkTypeface::getTableData(SkFontTableTag tag, size_t offset, size_t length
     return SkFontHost::GetTableData(fUniqueID, tag, offset, length, data);
 }
 
+SkStream* SkTypeface::openStream(int* ttcIndex) const {
+    if (ttcIndex) {
+        int32_t ndx = 0;
+        (void)SkFontHost::GetFileName(fUniqueID, NULL, 0, &ndx);
+        *ttcIndex = (int)ndx;
+    }
+    return SkFontHost::OpenStream(fUniqueID);
+}
+
 int SkTypeface::getUnitsPerEm() const {
     int upem = 0;
 
@@ -133,4 +150,17 @@ int SkTypeface::getUnitsPerEm() const {
     }
 #endif
     return upem;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+#include "SkFontDescriptor.h"
+
+int SkTypeface::onGetUPEM() const { return 0; }
+int SkTypeface::onGetTableTags(SkFontTableTag tags[]) const { return 0; }
+size_t SkTypeface::onGetTableData(SkFontTableTag, size_t offset,
+                                  size_t length, void* data) const { return 0; }
+void SkTypeface::onGetFontDescriptor(SkFontDescriptor* desc) const {
+    desc->setStyle(this->style());
 }

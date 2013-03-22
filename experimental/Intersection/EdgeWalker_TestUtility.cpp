@@ -4,10 +4,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
+#include "DataTypes.h"
 #include "EdgeWalker_Test.h"
 #include "Intersection_Tests.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkMatrix.h"
 #include "SkPaint.h"
 #include "SkStream.h"
 
@@ -58,19 +61,18 @@ static void showPathContour(SkPath::Iter& iter) {
     while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
-                SkDebugf("path.moveTo(%1.9g, %1.9g);\n", pts[0].fX, pts[0].fY);
+                SkDebugf("path.moveTo(%1.9g,%1.9g);\n", pts[0].fX, pts[0].fY);
                 continue;
             case SkPath::kLine_Verb:
-                SkDebugf("path.lineTo(%1.9g, %1.9g);\n", pts[1].fX, pts[1].fY);
+                SkDebugf("path.lineTo(%1.9g,%1.9g);\n", pts[1].fX, pts[1].fY);
                 break;
             case SkPath::kQuad_Verb:
-                SkDebugf("path.quadTo(%1.9g, %1.9g, %1.9g, %1.9g);\n",
+                SkDebugf("path.quadTo(%1.9g,%1.9g, %1.9g,%1.9g);\n",
                     pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
                 break;
             case SkPath::kCubic_Verb:
-                SkDebugf("path.cubicTo(%1.9g, %1.9g, %1.9g, %1.9g);\n",
-                    pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY,
-                    pts[3].fX, pts[3].fY);
+                SkDebugf("path.cubicTo(%1.9g,%1.9g, %1.9g,%1.9g, %1.9g,%1.9g);\n",
+                    pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY, pts[3].fX, pts[3].fY);
                 break;
             case SkPath::kClose_Verb:
                 SkDebugf("path.close();\n");
@@ -84,6 +86,10 @@ static void showPathContour(SkPath::Iter& iter) {
 
 void showPath(const SkPath& path, const char* str) {
     SkDebugf("%s\n", !str ? "original:" : str);
+    showPath(path);
+}
+
+void showPath(const SkPath& path) {
     SkPath::Iter iter(path, true);
     int rectCount = path.isRectContours() ? path.rectContours(NULL, NULL) : 0;
     if (rectCount > 0) {
@@ -104,8 +110,64 @@ void showPath(const SkPath& path, const char* str) {
     showPathContour(iter);
 }
 
-    const int bitWidth = 64;
-    const int bitHeight = 64;
+void showPathData(const SkPath& path) {
+    SkPath::Iter iter(path, true);
+    uint8_t verb;
+    SkPoint pts[4];
+    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
+        switch (verb) {
+            case SkPath::kMove_Verb:
+                continue;
+            case SkPath::kLine_Verb:
+                SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY);
+                break;
+            case SkPath::kQuad_Verb:
+                SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
+                    pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
+                break;
+            case SkPath::kCubic_Verb:
+                SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
+                    pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY, pts[3].fX, pts[3].fY);
+                break;
+            case SkPath::kClose_Verb:
+                break;
+            default:
+                SkDEBUGFAIL("bad verb");
+                return;
+        }
+    }
+}
+
+void showOp(const ShapeOp op) {
+    switch (op) {
+        case kDifference_Op:
+            SkDebugf("op difference\n");
+            break;
+        case kIntersect_Op:
+            SkDebugf("op intersect\n");
+            break;
+        case kUnion_Op:
+            SkDebugf("op union\n");
+            break;
+        case kXor_Op:
+            SkDebugf("op xor\n");
+            break;
+        default:
+            SkASSERT(0);
+    }
+}
+
+static void showPath(const SkPath& path, const char* str, const SkMatrix& scale) {
+    SkPath scaled;
+    SkMatrix inverse;
+    bool success = scale.invert(&inverse);
+    if (!success) SkASSERT(0);
+    path.transform(inverse, &scaled);
+    showPath(scaled, str);
+}
+
+const int bitWidth = 64;
+const int bitHeight = 64;
 
 static void scaleMatrix(const SkPath& one, const SkPath& two, SkMatrix& scale) {
     SkRect larger = one.getBounds();
@@ -250,19 +312,22 @@ int comparePaths(const SkPath& one, const SkPath& two, SkBitmap& bitmap) {
 }
 
 static void showShapeOpPath(const SkPath& one, const SkPath& two, const SkPath& a, const SkPath& b,
-        const SkPath& scaledOne, const SkPath& scaledTwo, const ShapeOp shapeOp) {
+        const SkPath& scaledOne, const SkPath& scaledTwo, const ShapeOp shapeOp,
+        const SkMatrix& scale) {
     SkASSERT((unsigned) shapeOp < sizeof(opStrs) / sizeof(opStrs[0]));
     showPath(a, "minuend:");
     SkDebugf("op: %s\n", opStrs[shapeOp]);
     showPath(b, "subtrahend:");
-    showPath(one, "region:");
+    // the region often isn't very helpful since it approximates curves with a lot of line-tos
+    if (0) showPath(scaledOne, "region:", scale);
     showPath(two, "op result:");
     drawAsciiPaths(scaledOne, scaledTwo, true);
 }
 
-int comparePaths(const SkPath& one, const SkPath& scaledOne, const SkPath& two,
+static int comparePaths(const SkPath& one, const SkPath& scaledOne, const SkPath& two,
         const SkPath& scaledTwo,
-        SkBitmap& bitmap, const SkPath& a, const SkPath& b, const ShapeOp shapeOp) {
+        SkBitmap& bitmap, const SkPath& a, const SkPath& b, const ShapeOp shapeOp,
+        const SkMatrix& scale) {
     int errors2x2;
     int errors = pathsDrawTheSame(bitmap, scaledOne, scaledTwo, errors2x2);
     if (errors2x2 == 0) {
@@ -270,11 +335,11 @@ int comparePaths(const SkPath& one, const SkPath& scaledOne, const SkPath& two,
     }
     const int MAX_ERRORS = 8;
     if (errors2x2 == MAX_ERRORS || errors2x2 == MAX_ERRORS - 1) {
-        showShapeOpPath(one, two, a, b, scaledOne, scaledTwo, shapeOp);
+        showShapeOpPath(one, two, a, b, scaledOne, scaledTwo, shapeOp, scale);
     }
     if (errors2x2 > MAX_ERRORS && gComparePathsAssert) {
         SkDebugf("%s errors=%d\n", __FUNCTION__, errors);
-        showShapeOpPath(one, two, a, b, scaledOne, scaledTwo, shapeOp);
+        showShapeOpPath(one, two, a, b, scaledOne, scaledTwo, shapeOp, scale);
         SkASSERT(0);
     }
     return errors2x2 > MAX_ERRORS ? errors2x2 : 0;
@@ -305,7 +370,7 @@ void comparePathsTiny(const SkPath& one, const SkPath& two) {
     for (int y = 0; y < bitHeight; ++y) {
         uint8_t* addr1 = bits.getAddr1(0, y);
         uint8_t* addr2 = bits.getAddr1(bitWidth, y);
-        for (int x = 0; x < bits.rowBytes(); ++x) {
+        for (unsigned x = 0; x < bits.rowBytes(); ++x) {
             SkASSERT(addr1[x] == addr2[x]);
         }
     }
@@ -365,6 +430,11 @@ bool testSimplifyx(const SkPath& path) {
 }
 
 bool testShapeOp(const SkPath& a, const SkPath& b, const ShapeOp shapeOp) {
+#if FORCE_RELEASE == 0
+    showPathData(a);
+    showOp(shapeOp);
+    showPathData(b);
+#endif
     SkPath out;
     operate(a, b, shapeOp, out);
     SkPath pathOut, scaledPathOut;
@@ -391,7 +461,7 @@ bool testShapeOp(const SkPath& a, const SkPath& b, const ShapeOp shapeOp) {
     SkPath scaledOut;
     scaledOut.addPath(out, scale);
     scaledOut.setFillType(out.getFillType());
-    int result = comparePaths(pathOut, scaledPathOut, out, scaledOut, bitmap, a, b, shapeOp);
+    int result = comparePaths(pathOut, scaledPathOut, out, scaledOut, bitmap, a, b, shapeOp, scale);
     if (result && gPathStrAssert) {
         SkASSERT(0);
     }

@@ -107,7 +107,9 @@ int intersect() {
         double cubicT = rootVals[index];
         double lineT = findLineT(cubicT);
         if (pinTs(cubicT, lineT)) {
-            intersections.insert(cubicT, lineT);
+            _Point pt;
+            xy_at_t(line, lineT, pt.x, pt.y);
+            intersections.insert(cubicT, lineT, pt);
         }
     }
     return intersections.fUsed;
@@ -125,12 +127,12 @@ int horizontalIntersect(double axisIntercept, double left, double right, bool fl
     double rootVals[3];
     int roots = horizontalIntersect(axisIntercept, rootVals);
     for (int index = 0; index < roots; ++index) {
-        double x;
+        _Point pt;
         double cubicT = rootVals[index];
-        xy_at_t(cubic, cubicT, x, *(double*) NULL);
-        double lineT = (x - left) / (right - left);
+        xy_at_t(cubic, cubicT, pt.x, pt.y);
+        double lineT = (pt.x - left) / (right - left);
         if (pinTs(cubicT, lineT)) {
-            intersections.insert(cubicT, lineT);
+            intersections.insert(cubicT, lineT, pt);
         }
     }
     if (flipped) {
@@ -151,12 +153,12 @@ int verticalIntersect(double axisIntercept, double top, double bottom, bool flip
     double rootVals[3];
     int roots = verticalIntersect(axisIntercept, rootVals);
     for (int index = 0; index < roots; ++index) {
-        double y;
+        _Point pt;
         double cubicT = rootVals[index];
-        xy_at_t(cubic, cubicT, *(double*) NULL, y);
-        double lineT = (y - top) / (bottom - top);
+        xy_at_t(cubic, cubicT, pt.x, pt.y);
+        double lineT = (pt.y - top) / (bottom - top);
         if (pinTs(cubicT, lineT)) {
-            intersections.insert(cubicT, lineT);
+            intersections.insert(cubicT, lineT, pt);
         }
     }
     if (flipped) {
@@ -172,7 +174,7 @@ void addEndPoints()
     for (int cIndex = 0; cIndex < 4; cIndex += 3) {
         for (int lIndex = 0; lIndex < 2; lIndex++) {
             if (cubic[cIndex] == line[lIndex]) {
-                intersections.insert(cIndex >> 1, lIndex);
+                intersections.insert(cIndex >> 1, lIndex, line[lIndex]);
             }
         }
     }
@@ -185,10 +187,10 @@ void addHorizontalEndPoints(double left, double right, double y)
             continue;
         }
         if (cubic[cIndex].x == left) {
-            intersections.insert(cIndex >> 1, 0);
+            intersections.insert(cIndex >> 1, 0, cubic[cIndex]);
         }
         if (cubic[cIndex].x == right) {
-            intersections.insert(cIndex >> 1, 1);
+            intersections.insert(cIndex >> 1, 1, cubic[cIndex]);
         }
     }
 }
@@ -200,10 +202,10 @@ void addVerticalEndPoints(double top, double bottom, double x)
             continue;
         }
         if (cubic[cIndex].y == top) {
-            intersections.insert(cIndex >> 1, 0);
+            intersections.insert(cIndex >> 1, 0, cubic[cIndex]);
         }
         if (cubic[cIndex].y == bottom) {
-            intersections.insert(cIndex >> 1, 1);
+            intersections.insert(cIndex >> 1, 1, cubic[cIndex]);
         }
     }
 }
@@ -227,21 +229,21 @@ void flip() {
     }
 }
 
-bool pinTs(double& cubicT, double& lineT) {
+static bool pinTs(double& cubicT, double& lineT) {
     if (!approximately_one_or_less(lineT)) {
         return false;
     }
     if (!approximately_zero_or_more(lineT)) {
         return false;
     }
-    if (cubicT < 0) {
+    if (precisely_less_than_zero(cubicT)) {
         cubicT = 0;
-    } else if (cubicT > 1) {
+    } else if (precisely_greater_than_one(cubicT)) {
         cubicT = 1;
     }
-    if (lineT < 0) {
+    if (precisely_less_than_zero(lineT)) {
         lineT = 0;
-    } else if (lineT > 1) {
+    } else if (precisely_greater_than_one(lineT)) {
         lineT = 1;
     }
     return true;
@@ -286,4 +288,9 @@ int verticalIntersect(const Cubic& cubic, double top, double bottom, double x,
 int intersect(const Cubic& cubic, const _Line& line, Intersections& i) {
     LineCubicIntersections c(cubic, line, i);
     return c.intersect();
+}
+
+int intersectRay(const Cubic& cubic, const _Line& line, Intersections& i) {
+    LineCubicIntersections c(cubic, line, i);
+    return c.intersectRay(i.fT[0]);
 }

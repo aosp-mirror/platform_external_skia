@@ -14,6 +14,8 @@
 #include "SkPicture.h"
 #include "SkTArray.h"
 
+class SkString;
+
 class SkDebugger {
 public:
     SkDebugger();
@@ -98,6 +100,15 @@ public:
     int index() {
         return fIndex;
     }
+
+    void setOverdrawViz(bool overDrawViz) {
+        if (NULL != fDebugCanvas) {
+            fDebugCanvas->setOverdrawViz(overDrawViz);
+        }
+    }
+
+    void getOverviewText(const SkTDArray<double>* typeTimes, double totTime,
+                         SkString* overview, int numRuns);
 
 private:
     SkDebugCanvas* fDebugCanvas;

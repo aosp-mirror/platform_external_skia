@@ -11,6 +11,7 @@
 
 #include "SkBBoxHierarchy.h"
 #include "SkPictureStateTree.h"
+#include "SkTileGridPicture.h" // for TileGridInfo
 
 /**
  * Subclass of SkBBoxHierarchy that stores elements in buckets that correspond
@@ -26,7 +27,7 @@ class SkTileGrid : public SkBBoxHierarchy {
 public:
     typedef void* (*SkTileGridNextDatumFunctionPtr)(SkTDArray<void*>** tileData, SkTDArray<int>& tileIndices);
 
-    SkTileGrid(int tileWidth, int tileHeight, int xTileCount, int yTileCount,
+    SkTileGrid(int xTileCount, int yTileCount, const SkTileGridPicture::TileGridInfo& info,
         SkTileGridNextDatumFunctionPtr nextDatumFunction);
 
     virtual ~SkTileGrid();
@@ -54,6 +55,8 @@ public:
      */
     virtual int getCount() const SK_OVERRIDE;
 
+    virtual void rewindInserts() SK_OVERRIDE;
+
     // Used by search() and in SkTileGridHelper implementations
     enum {
         kTileFinished = -1,
@@ -61,7 +64,8 @@ public:
 private:
     SkTDArray<void*>& tile(int x, int y);
 
-    int fTileWidth, fTileHeight, fXTileCount, fYTileCount, fTileCount;
+    int fXTileCount, fYTileCount, fTileCount;
+    SkTileGridPicture::TileGridInfo fInfo;
     SkTDArray<void*>* fTileData;
     int fInsertionCount;
     SkIRect fGridBounds;
@@ -88,22 +92,20 @@ private:
  */
 template <typename T>
 void* SkTileGridNextDatum(SkTDArray<void*>** tileData, SkTDArray<int>& tileIndices) {
-    bool haveVal = false;
-    T* minVal;
+    T* minVal = NULL;
     int tileCount = tileIndices.count();
     // Find the next Datum
     for (int tile = 0; tile < tileCount; ++tile) {
         int pos = tileIndices[tile];
         if (pos != SkTileGrid::kTileFinished) {
             T* candidate = (T*)(*tileData[tile])[pos];
-            if (!haveVal || (*candidate) < (*minVal)) {
+            if (NULL == minVal || (*candidate) < (*minVal)) {
                 minVal = candidate;
-                haveVal = true;
             }
         }
     }
     // Increment indices past the next datum
-    if (haveVal) {
+    if (minVal != NULL) {
         for (int tile = 0; tile < tileCount; ++tile) {
             int pos = tileIndices[tile];
             if (pos != SkTileGrid::kTileFinished && (*tileData[tile])[pos] == minVal) {

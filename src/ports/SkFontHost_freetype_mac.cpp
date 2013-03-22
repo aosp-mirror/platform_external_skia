@@ -6,7 +6,6 @@
  */
 
 #include "SkFontHost.h"
-#include "SkMMapStream.h"
 #include "SkTypefaceCache.h"
 
 #define FONT_PATH   "/Library/Fonts/Skia.ttf"
@@ -26,7 +25,11 @@ public:
 };
 
 static FTMacTypeface* create_from_path(const char path[]) {
-    SkStream* stream = new SkMMAPStream(path);
+    SkStream* stream = SkStream::NewFromFile(path);
+    if (!stream) {
+        return NULL;
+    }
+
     size_t size = stream->getLength();
     SkASSERT(size);
     FTMacTypeface* tf = new FTMacTypeface(SkTypeface::kNormal,
@@ -93,8 +96,8 @@ SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
     return NULL;
 }
 
-SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
-    return 0;
+SkTypeface* SkFontHost::NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID) {
+    return NULL;
 }
 
 #include "SkTypeface_mac.h"

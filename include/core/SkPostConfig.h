@@ -157,10 +157,6 @@
         #define SK_B32_SHIFT 0
     #endif
 
-#elif defined(SK_BUILD_FOR_MAC)
-    #ifndef SK_DEBUGBREAK
-        #define SK_DEBUGBREAK(cond)     do { if (!(cond)) SK_CRASH(); } while (false)
-    #endif
 #else
     #ifdef SK_DEBUG
         #include <stdio.h>
@@ -189,6 +185,28 @@
         #define SK_B32_SHIFT    16
         #define SK_A32_SHIFT    24
     #endif
+#endif
+
+/**
+ * SK_PMCOLOR_BYTE_ORDER can be used to query the byte order of SkPMColor at compile time. The
+ * relationship between the byte order and shift values depends on machine endianness. If the shift
+ * order is R=0, G=8, B=16, A=24 then ((char*)&pmcolor)[0] will produce the R channel on a little
+ * endian machine and the A channel on a big endian machine. Thus, given those shifts values,
+ * SK_PMCOLOR_BYTE_ORDER(R,G,B,A) will be true on a little endian machine and
+ * SK_PMCOLOR_BYTE_ORDER(A,B,G,R) will be true on a big endian machine.
+ */
+#ifdef SK_CPU_BENDIAN
+    #define SK_PMCOLOR_BYTE_ORDER(C0, C1, C2, C3)     \
+        (SK_ ## C3 ## 32_SHIFT == 0  &&             \
+         SK_ ## C2 ## 32_SHIFT == 8  &&             \
+         SK_ ## C1 ## 32_SHIFT == 16 &&             \
+         SK_ ## C0 ## 32_SHIFT == 24)
+#else
+    #define SK_PMCOLOR_BYTE_ORDER(C0, C1, C2, C3)     \
+        (SK_ ## C0 ## 32_SHIFT == 0  &&             \
+         SK_ ## C1 ## 32_SHIFT == 8  &&             \
+         SK_ ## C2 ## 32_SHIFT == 16 &&             \
+         SK_ ## C3 ## 32_SHIFT == 24)
 #endif
 
 //  stdlib macros

@@ -21,7 +21,7 @@ SkTArray<GrEffectTestFactory*, true>* GrEffectTestFactory::GetFactories() {
 #endif
 
 namespace GrEffectUnitTest {
-const SkMatrix& TestMatrix(SkRandom* random) {
+const SkMatrix& TestMatrix(SkMWCRandom* random) {
     static SkMatrix gMatrices[5];
     static bool gOnce;
     if (!gOnce) {
@@ -88,6 +88,11 @@ const char* GrEffect::name() const {
 
 void GrEffect::addTextureAccess(const GrTextureAccess* access) {
     fTextureAccesses.push_back(access);
+}
+
+void GrEffect::addVertexAttrib(GrSLType type) {
+    GrAssert(fVertexAttribTypes.count() < kMaxVertexAttribs);
+    fVertexAttribTypes.push_back(type);
 }
 
 void* GrEffect::operator new(size_t size) {

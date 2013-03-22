@@ -173,7 +173,7 @@ void SkMatrixConvolutionImageFilter::filterBorderPixels(const SkBitmap& src, SkB
     }
 }
 
-// FIXME:  This should be refactored to SkSingleInputImageFilter for
+// FIXME:  This should be refactored to SkImageFilterUtils for
 // use by other filters.  For now, we assume the input is always
 // premultiplied and unpremultiply it
 static SkBitmap unpremultiplyBitmap(const SkBitmap& src)
@@ -203,7 +203,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
                                                    const SkMatrix& matrix,
                                                    SkBitmap* result,
                                                    SkIPoint* loc) {
-    SkBitmap src = this->getInputResult(proxy, source, matrix, loc);
+    SkBitmap src = this->getInputResult(0, proxy, source, matrix, loc);
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -365,7 +365,6 @@ static void appendTextureLookup(GrGLShaderBuilder* builder,
                                 const GrGLShaderBuilder::TextureSampler& sampler,
                                 const char* coord,
                                 SkMatrixConvolutionImageFilter::TileMode tileMode) {
-    SkString* code = &builder->fFSCode;
     SkString clampedCoord;
     switch (tileMode) {
         case SkMatrixConvolutionImageFilter::kClamp_TileMode:
@@ -377,10 +376,10 @@ static void appendTextureLookup(GrGLShaderBuilder* builder,
             coord = clampedCoord.c_str();
             break;
         case SkMatrixConvolutionImageFilter::kClampToBlack_TileMode:
-            code->appendf("clamp(%s, 0.0, 1.0) != %s ? vec4(0, 0, 0, 0) : ", coord, coord);
+            builder->fsCodeAppendf("clamp(%s, 0.0, 1.0) != %s ? vec4(0, 0, 0, 0) : ", coord, coord);
             break;
     }
-    builder->appendTextureLookup(code, sampler, coord);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, sampler, coord);
 }
 
 void GrGLMatrixConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
@@ -403,8 +402,6 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
     fBiasUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                    kFloat_GrSLType, "Bias");
 
-    SkString* code = &builder->fFSCode;
-
     const char* target = builder->getUniformCStr(fTargetUni);
     const char* imgInc = builder->getUniformCStr(fImageIncrementUni);
     const char* kernel = builder->getUniformCStr(fKernelUni);
@@ -413,31 +410,31 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
     int kWidth = fKernelSize.width();
     int kHeight = fKernelSize.height();
 
-    code->appendf("\t\tvec4 sum = vec4(0, 0, 0, 0);\n");
-    code->appendf("\t\tvec2 coord = %s - %s * %s;\n", coords, target, imgInc);
-    code->appendf("\t\tfor (int y = 0; y < %d; y++) {\n", kHeight);
-    code->appendf("\t\t\tfor (int x = 0; x < %d; x++) {\n", kWidth);
-    code->appendf("\t\t\t\tfloat k = %s[y * %d + x];\n", kernel, kWidth);
-    code->appendf("\t\t\t\tvec2 coord2 = coord + vec2(x, y) * %s;\n", imgInc);
-    code->appendf("\t\t\t\tvec4 c = ");
+    builder->fsCodeAppend("\t\tvec4 sum = vec4(0, 0, 0, 0);\n");
+    builder->fsCodeAppendf("\t\tvec2 coord = %s - %s * %s;\n", coords, target, imgInc);
+    builder->fsCodeAppendf("\t\tfor (int y = 0; y < %d; y++) {\n", kHeight);
+    builder->fsCodeAppendf("\t\t\tfor (int x = 0; x < %d; x++) {\n", kWidth);
+    builder->fsCodeAppendf("\t\t\t\tfloat k = %s[y * %d + x];\n", kernel, kWidth);
+    builder->fsCodeAppendf("\t\t\t\tvec2 coord2 = coord + vec2(x, y) * %s;\n", imgInc);
+    builder->fsCodeAppend("\t\t\t\tvec4 c = ");
     appendTextureLookup(builder, samplers[0], "coord2", fTileMode);
-    code->appendf(";\n");
+    builder->fsCodeAppend(";\n");
     if (!fConvolveAlpha) {
-        code->appendf("\t\t\t\tc.rgb /= c.a;\n");
+        builder->fsCodeAppend("\t\t\t\tc.rgb /= c.a;\n");
     }
-    code->appendf("\t\t\t\tsum += c * k;\n");
-    code->appendf("\t\t\t}\n");
-    code->appendf("\t\t}\n");
+    builder->fsCodeAppend("\t\t\t\tsum += c * k;\n");
+    builder->fsCodeAppend("\t\t\t}\n");
+    builder->fsCodeAppend("\t\t}\n");
     if (fConvolveAlpha) {
-        code->appendf("\t\t%s = sum * %s + %s;\n", outputColor, gain, bias);
-        code->appendf("\t\t%s.rgb = clamp(%s.rgb, 0.0, %s.a);\n", outputColor, outputColor, outputColor);
+        builder->fsCodeAppendf("\t\t%s = sum * %s + %s;\n", outputColor, gain, bias);
+        builder->fsCodeAppendf("\t\t%s.rgb = clamp(%s.rgb, 0.0, %s.a);\n", outputColor, outputColor, outputColor);
     } else {
-        code->appendf("\t\tvec4 c = ");
+        builder->fsCodeAppend("\t\tvec4 c = ");
         appendTextureLookup(builder, samplers[0], coords, fTileMode);
-        code->appendf(";\n");
-        code->appendf("\t\t%s.a = c.a;\n", outputColor);
-        code->appendf("\t\t%s.rgb = sum.rgb * %s + %s;\n", outputColor, gain, bias);
-        code->appendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+        builder->fsCodeAppend(";\n");
+        builder->fsCodeAppendf("\t\t%s.a = c.a;\n", outputColor);
+        builder->fsCodeAppendf("\t\t%s.rgb = sum.rgb * %s + %s;\n", outputColor, gain, bias);
+        builder->fsCodeAppendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
     }
 }
 
@@ -535,7 +532,7 @@ GR_DEFINE_EFFECT_TEST(GrMatrixConvolutionEffect);
 // Allows for a 5x5 kernel (or 25x1, for that matter).
 #define MAX_KERNEL_SIZE 25
 
-GrEffectRef* GrMatrixConvolutionEffect::TestCreate(SkRandom* random,
+GrEffectRef* GrMatrixConvolutionEffect::TestCreate(SkMWCRandom* random,
                                                    GrContext* context,
                                                    GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :

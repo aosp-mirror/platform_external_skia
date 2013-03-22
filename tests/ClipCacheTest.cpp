@@ -9,6 +9,7 @@
 #include "Test.h"
 // This is a GR test
 #if SK_SUPPORT_GPU
+#include "GrContextFactory.h"
 #include "SkGpuDevice.h"
 #include "../../src/gpu/GrClipMaskManager.h"
 
@@ -26,7 +27,7 @@ static GrTexture* createTexture(GrContext* context) {
 
     // let Skia know we will be using this texture as a render target
     desc.fFlags     = kRenderTarget_GrTextureFlagBit;
-    desc.fConfig    = kSkia8888_PM_GrPixelConfig;
+    desc.fConfig    = kSkia8888_GrPixelConfig;
     desc.fWidth     = X_SIZE;
     desc.fHeight    = Y_SIZE;
 
@@ -60,8 +61,11 @@ static void test_clip_bounds(skiatest::Reporter* reporter, GrContext* context) {
     GrAutoUnref au(texture);
 
     SkIRect intScreen = SkIRect::MakeWH(kXSize, kYSize);
-    SkRect screen = SkRect::MakeWH(SkIntToScalar(kXSize),
-                                   SkIntToScalar(kYSize));
+    SkRect screen;
+
+    screen = SkRect::MakeWH(SkIntToScalar(kXSize),
+                            SkIntToScalar(kYSize));
+
     SkRect clipRect(screen);
     clipRect.outset(10, 10);
 
@@ -143,7 +147,7 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
     desc.fFlags = kRenderTarget_GrTextureFlagBit;
     desc.fWidth = X_SIZE;
     desc.fHeight = Y_SIZE;
-    desc.fConfig = kSkia8888_PM_GrPixelConfig;
+    desc.fConfig = kSkia8888_GrPixelConfig;
 
     cache.acquireMask(clip1.getTopmostGenID(), desc, bound1);
 
@@ -216,10 +220,20 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-static void TestClipCache(skiatest::Reporter* reporter, GrContext* context) {
+static void TestClipCache(skiatest::Reporter* reporter, GrContextFactory* factory) {
+    for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
+        GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
+        if (!GrContextFactory::IsRenderingGLContext(glType)) {
+            continue;
+        }
+        GrContext* context = factory->get(glType);
+        if (NULL == context) {
+            continue;
+        }
 
-    test_cache(reporter, context);
-    test_clip_bounds(reporter, context);
+        test_cache(reporter, context);
+        test_clip_bounds(reporter, context);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,13 +26,18 @@ void tangent(const _Line& line, _Point& result);
 void tangent(const Quadratic& quad, double t, _Point& result);
 
 // main functions
-enum ReduceOrder_Flags {
+enum ReduceOrder_Quadratics {
     kReduceOrder_NoQuadraticsAllowed,
     kReduceOrder_QuadraticsAllowed
 };
-int reduceOrder(const Cubic& cubic, Cubic& reduction, ReduceOrder_Flags );
+enum ReduceOrder_Styles {
+    kReduceOrder_TreatAsStroke,
+    kReduceOrder_TreatAsFill
+};
+int reduceOrder(const Cubic& cubic, Cubic& reduction, ReduceOrder_Quadratics ,
+        ReduceOrder_Styles );
 int reduceOrder(const _Line& line, _Line& reduction);
-int reduceOrder(const Quadratic& quad, Quadratic& reduction);
+int reduceOrder(const Quadratic& quad, Quadratic& reduction, ReduceOrder_Styles );
 int horizontalIntersect(const Cubic& cubic, double y, double tRange[3]);
 int horizontalIntersect(const Cubic& cubic, double left, double right, double y,
         double tRange[3]);
@@ -46,10 +51,13 @@ int horizontalIntersect(const Quadratic& quad, double left, double right,
         double y, bool flipped, Intersections& );
 bool intersect(const Cubic& cubic1, const Cubic& cubic2, Intersections& );
 // the following flavor uses quadratic approximation instead of convex hulls
-bool intersect2(const Cubic& cubic1, const Cubic& cubic2, Intersections& );
-bool intersect(const Cubic& cubic, Intersections& i); // return true if cubic self-intersects
+//bool intersect2(const Cubic& cubic1, const Cubic& cubic2, Intersections& );
+// like '2', but iterates on centers instead of possible edges
+bool intersect3(const Cubic& cubic1, const Cubic& cubic2, Intersections& );
+int intersect(const Cubic& cubic, Intersections& i); // return true if cubic self-intersects
 int intersect(const Cubic& cubic, const Quadratic& quad, Intersections& );
 int intersect(const Cubic& cubic, const _Line& line, Intersections& );
+int intersectRay(const Cubic& quad, const _Line& line, Intersections& i);
 bool intersect(const Quadratic& q1, const Quadratic& q2, Intersections& );
 int intersect(const Quadratic& quad, const _Line& line, Intersections& );
 // the following flavor uses the implicit form instead of convex hulls

@@ -39,7 +39,7 @@ static void build_compressed_data(void* buffer, const SkBitmap& bitmap) {
     // always skip a full 256 number of entries, even if we memcpy'd fewer
     dst += kGrColorTableSize;
 
-    if (bitmap.width() == bitmap.rowBytes()) {
+    if ((unsigned)bitmap.width() == bitmap.rowBytes()) {
         memcpy(dst, bitmap.getPixels(), bitmap.getSize());
     } else {
         // need to trim off the extra bytes per row
@@ -215,7 +215,7 @@ GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config config) {
         case SkBitmap::kARGB_4444_Config:
             return kRGBA_4444_GrPixelConfig;
         case SkBitmap::kARGB_8888_Config:
-            return kSkia8888_PM_GrPixelConfig;
+            return kSkia8888_GrPixelConfig;
         default:
             // kNo_Config, kA1_Config missing, and kRLE_Index8_Config
             return kUnknown_GrPixelConfig;

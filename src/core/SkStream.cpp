@@ -13,6 +13,14 @@
 #include "SkString.h"
 #include "SkOSFile.h"
 
+#if SK_MMAP_SUPPORT
+    #include <unistd.h>
+    #include <sys/mman.h>
+    #include <fcntl.h>
+    #include <errno.h>
+    #include <unistd.h>
+#endif
+
 SK_DEFINE_INST_COUNT(SkStream)
 SK_DEFINE_INST_COUNT(SkWStream)
 SK_DEFINE_INST_COUNT(SkFILEStream)
@@ -221,40 +229,36 @@ bool SkWStream::writeData(const SkData* data) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkFILEStream::SkFILEStream(const char file[]) : fName(file)
-{
+SkFILEStream::SkFILEStream(const char file[]) : fName(file) {
     fFILE = file ? sk_fopen(fName.c_str(), kRead_SkFILE_Flag) : NULL;
 }
 
-SkFILEStream::~SkFILEStream()
-{
-    if (fFILE)
+SkFILEStream::~SkFILEStream() {
+    if (fFILE) {
         sk_fclose(fFILE);
+    }
 }
 
-void SkFILEStream::setPath(const char path[])
-{
+void SkFILEStream::setPath(const char path[]) {
     fName.set(path);
-    if (fFILE)
-    {
+    if (fFILE) {
         sk_fclose(fFILE);
         fFILE = NULL;
     }
-    if (path)
+    if (path) {
         fFILE = sk_fopen(fName.c_str(), kRead_SkFILE_Flag);
+    }
 }
 
-const char* SkFILEStream::getFileName()
-{
+const char* SkFILEStream::getFileName() {
     return fName.c_str();
 }
 
-bool SkFILEStream::rewind()
-{
-    if (fFILE)
-    {
-        if (sk_frewind(fFILE))
+bool SkFILEStream::rewind() {
+    if (fFILE) {
+        if (sk_frewind(fFILE)) {
             return true;
+        }
         // we hit an error
         sk_fclose(fFILE);
         fFILE = NULL;
@@ -262,14 +266,13 @@ bool SkFILEStream::rewind()
     return false;
 }
 
-size_t SkFILEStream::read(void* buffer, size_t size)
-{
-    if (fFILE)
-    {
-        if (buffer == NULL && size == 0)    // special signature, they want the total size
+size_t SkFILEStream::read(void* buffer, size_t size) {
+    if (fFILE) {
+        if (buffer == NULL && size == 0) {  // special signature, they want the total size
             return sk_fgetsize(fFILE);
-        else
+        } else {
             return sk_fread(buffer, size, fFILE);
+        }
     }
     return 0;
 }
@@ -788,4 +791,59 @@ bool SkDebugWStream::write(const void* buffer, size_t size)
     delete[] s;
 #endif
     return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+static bool mmap_filename(const char path[], void** addrPtr, size_t* sizePtr) {
+#if SK_MMAP_SUPPORT
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return false;
+    }
+
+    off_t offset = lseek(fd, 0, SEEK_END);    // find the file size
+    if (offset == -1) {
+        close(fd);
+        return false;
+    }
+    (void)lseek(fd, 0, SEEK_SET);   // restore file offset to beginning
+
+    // to avoid a 64bit->32bit warning, I explicitly create a size_t size
+    size_t size = static_cast<size_t>(offset);
+
+    void* addr = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+    close(fd);
+
+    if (MAP_FAILED == addr) {
+        return false;
+    }
+
+    *addrPtr = addr;
+    *sizePtr = size;
+    return true;
+#else
+    return false;
+#endif
+}
+
+SkStream* SkStream::NewFromFile(const char path[]) {
+    void* addr;
+    size_t size;
+    if (mmap_filename(path, &addr, &size)) {
+        SkAutoTUnref<SkData> data(SkData::NewFromMMap(addr, size));
+        if (data.get()) {
+            return SkNEW_ARGS(SkMemoryStream, (data.get()));
+        }
+    }
+
+    // If we get here, then our attempt at using mmap failed, so try normal
+    // file access.
+    SkFILEStream* stream = SkNEW_ARGS(SkFILEStream, (path));
+    if (!stream->isValid()) {
+        stream->unref();
+        stream = NULL;
+    }
+    return stream;
 }

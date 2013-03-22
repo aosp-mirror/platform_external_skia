@@ -140,12 +140,9 @@
           },
         },
         'cflags': [
-          # TODO(tony): Enable -Werror once all the strict-aliasing problems
-          # are fixed.
-          #'-Werror',
+          '-Werror',
           '-Wall',
           '-Wextra',
-          '-Wno-unused',
           # suppressions below here were added for clang
           '-Wno-unused-parameter',
           '-Wno-c++11-extensions'
@@ -195,6 +192,9 @@
 
     ['skia_os == "mac"',
       {
+        'variables': {
+          'mac_sdk%': '<!(python <(DEPTH)/tools/find_mac_sdk.py 10.6)',
+        },
         'defines': [
           'SK_BUILD_FOR_MAC',
         ],
@@ -228,7 +228,13 @@
         },
         'xcode_settings': {
           'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
-          'SDKROOT': '<(skia_osx_sdkroot)',
+          'conditions': [
+            ['skia_osx_sdkroot==""', {
+              'SDKROOT': 'macosx<(mac_sdk)',  # -isysroot
+            }, {
+              'SDKROOT': '<(skia_osx_sdkroot)',  # -isysroot
+            }],
+           ],
 # trying to get this to work, but it needs clang I think...
 #          'WARNING_CFLAGS': '-Wexit-time-destructors',
           'CLANG_WARN_CXX0X_EXTENSIONS': 'NO',
@@ -294,14 +300,13 @@
       {
         'defines': [
           'SK_BUILD_FOR_ANDROID',
-          'SK_BUILD_FOR_ANDROID_NDK',
         ],
         'configurations': {
           'Debug': {
             'cflags': ['-g']
           },
           'Release': {
-            'cflags': ['-O2'],
+            'cflags': ['-O3'],
             'defines': [ 'NDEBUG' ],
           },
         },
@@ -311,8 +316,10 @@
           '-llog',
         ],
         'cflags': [
+          '-Wall',
           '-fno-exceptions',
           '-fno-rtti',
+          '-fstrict-aliasing',
           '-fuse-ld=gold',
         ],
         'conditions': [

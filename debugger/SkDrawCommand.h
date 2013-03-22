@@ -73,10 +73,12 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    const SkPath* fPath;
+    SkPath fPath;
     SkRegion::Op fOp;
     bool fDoAA;
     SkBitmap fBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class ClipRegion : public SkDrawCommand {
@@ -92,6 +94,11 @@ class ClipRect : public SkDrawCommand {
 public:
     ClipRect(const SkRect& rect, SkRegion::Op op, bool doAA);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
+    const SkRect& rect() const { return *fRect; }
+    SkRegion::Op op() const { return fOp; }
+    bool doAA() const { return fDoAA; }
+
 private:
     const SkRect* fRect;
     SkRegion::Op fOp;
@@ -102,6 +109,11 @@ class ClipRRect : public SkDrawCommand {
 public:
     ClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
+    const SkRRect& rrect() const { return fRRect; }
+    SkRegion::Op op() const { return fOp; }
+    bool doAA() const { return fDoAA; }
+
 private:
     SkRRect fRRect;
     SkRegion::Op fOp;
@@ -160,7 +172,8 @@ private:
 class DrawBitmapRect : public SkDrawCommand {
 public:
     DrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
-            const SkRect& dst, const SkPaint* paint, SkBitmap& resizedBitmap);
+                   const SkRect& dst, const SkPaint* paint,
+                   SkBitmap& resizedBitmap);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 
@@ -173,13 +186,18 @@ public:
 
     void setPaint(const SkPaint& paint) { fPaint = paint; fPaintPtr = &fPaint; }
 
+    const SkRect* srcRect() const { return fSrc.isEmpty() ? NULL : &fSrc; }
+    const SkRect& dstRect() const { return fDst; }
+
 private:
-    const SkRect* fSrc;
+    SkRect  fSrc;
     SkPaint fPaint;
     SkPaint* fPaintPtr;
-    const SkBitmap* fBitmap;
-    const SkRect* fDst;
+    SkBitmap fBitmap;
+    SkRect  fDst;
     SkBitmap fResizedBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawData : public SkDrawCommand {
@@ -215,9 +233,11 @@ public:
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 
 private:
-    const SkPath* fPath;
-    const SkPaint* fPaint;
+    SkPath  fPath;
+    SkPaint fPaint;
     SkBitmap fBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPicture : public SkDrawCommand {
@@ -284,23 +304,30 @@ private:
 class DrawPosTextH : public SkDrawCommand {
 public:
     DrawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
-            SkScalar constY, const SkPaint& paint);
+                 SkScalar constY, const SkPaint& paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     const SkScalar* fXpos;
     const void* fText;
     size_t fByteLength;
     SkScalar fConstY;
-    const SkPaint* fPaint;
+    SkPaint fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawRectC : public SkDrawCommand {
 public:
     DrawRectC(const SkRect& rect, const SkPaint& paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
+    const SkRect& rect() const   { return fRect; }
+    const SkPaint& paint() const { return fPaint; }
 private:
-    const SkRect* fRect;
-    const SkPaint* fPaint;
+    SkRect  fRect;
+    SkPaint fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawRRect : public SkDrawCommand {
@@ -309,7 +336,7 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkRRect fRRect;
-    const SkPaint* fPaint;
+    SkPaint fPaint;
 };
 
 class DrawSprite : public SkDrawCommand {
@@ -381,6 +408,10 @@ class Scale : public SkDrawCommand {
 public:
     Scale(SkScalar sx, SkScalar sy);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
+    SkScalar x() const { return fSx; }
+    SkScalar y() const { return fSy; }
+
 private:
     SkScalar fSx;
     SkScalar fSy;
@@ -391,7 +422,7 @@ public:
     SetMatrix(const SkMatrix& matrix);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkMatrix* fMatrix;
+    SkMatrix fMatrix;
 };
 
 class Skew : public SkDrawCommand {
@@ -407,6 +438,10 @@ class Translate : public SkDrawCommand {
 public:
     Translate(SkScalar dx, SkScalar dy);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
+    SkScalar x() const { return fDx; }
+    SkScalar y() const { return fDy; }
+
 private:
     SkScalar fDx;
     SkScalar fDy;

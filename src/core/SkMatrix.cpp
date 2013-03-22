@@ -888,7 +888,6 @@ bool SkMatrix::invertNonIdentity(SkMatrix* inv) const {
 
     TypeMask mask = this->getType();
 
-#ifndef SK_IGNORE_FAST_SCALEMATRIX_INVERT
     if (0 == (mask & ~(kScale_Mask | kTranslate_Mask))) {
         bool invertible = true;
         if (inv) {
@@ -925,7 +924,6 @@ bool SkMatrix::invertNonIdentity(SkMatrix* inv) const {
         }
         return invertible;
     }
-#endif
 
     int         isPersp = mask & kPerspective_Mask;
     int         shift;
@@ -1810,7 +1808,7 @@ SkScalar SkMatrix::getMaxStretch() const {
     SkScalar largerRoot;
     SkScalar bSqd = SkScalarMul(b,b);
     // if upper left 2x2 is orthogonal save some math
-    if (bSqd <= SK_ScalarNearlyZero) {
+    if (bSqd <= SK_ScalarNearlyZero*SK_ScalarNearlyZero) {
         largerRoot = SkMaxScalar(a, c);
     } else {
         SkScalar aminusc = a - c;

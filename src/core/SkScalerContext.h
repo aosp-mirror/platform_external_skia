@@ -12,11 +12,7 @@
 #include "SkMaskGamma.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
-
-#ifdef SK_BUILD_FOR_ANDROID
-    //For SkFontID
-    #include "SkTypeface.h"
-#endif
+#include "SkTypeface.h"
 
 struct SkGlyph;
 class SkDescriptor;
@@ -149,8 +145,10 @@ public:
     };
 
 
-    SkScalerContext(const SkDescriptor* desc);
+    SkScalerContext(SkTypeface*, const SkDescriptor*);
     virtual ~SkScalerContext();
+
+    SkTypeface* getTypeface() const { return fTypeface.get(); }
 
     SkMask::Format getMaskFormat() const {
         return (SkMask::Format)fRec.fMaskFormat;
@@ -190,23 +188,13 @@ public:
 
     // This function must be public for SkTypeface_android.h, but should not be
     // called by other callers
-    SkFontID findTypefaceIdForChar(SkUnichar uni) {
-        SkScalerContext* ctx = this;
-        while (NULL != ctx) {
-            if (ctx->generateCharToGlyph(uni)) {
-                return ctx->fRec.fFontID;
-            }
-            ctx = ctx->getNextContext();
-        }
-        return 0;
-    }
+    SkFontID findTypefaceIdForChar(SkUnichar uni);
 #endif
 
     static inline void MakeRec(const SkPaint&, const SkDeviceProperties* deviceProperties,
                                const SkMatrix*, Rec* rec);
     static inline void PostMakeRec(const SkPaint&, Rec*);
 
-    static SkScalerContext* Create(const SkDescriptor*);
     static SkMaskGamma::PreBlend GetMaskPreBlend(const Rec& rec);
 
 protected:
@@ -227,6 +215,10 @@ protected:
     void forceGenerateImageFromPath() { fGenerateImageFromPath = true; }
 
 private:
+    // never null
+    SkAutoTUnref<SkTypeface> fTypeface;
+
+    // optional object, which may be null
     SkPathEffect*   fPathEffect;
     SkMaskFilter*   fMaskFilter;
     SkRasterizer*   fRasterizer;
@@ -244,6 +236,11 @@ private:
     // returns the right context from our link-list for this glyph. If no match
     // is found, just returns the original context (this)
     SkScalerContext* getGlyphContext(const SkGlyph& glyph);
+
+    // returns the right context from our link-list for this char. If no match
+    // is found it returns NULL. If a match is found then the glyphID param is
+    // set to the glyphID that maps to the provided char.
+    SkScalerContext* getContextFromChar(SkUnichar uni, uint16_t* glyphID);
 
     // link-list of context, to handle missing chars. null-terminated.
     SkScalerContext* fNextContext;

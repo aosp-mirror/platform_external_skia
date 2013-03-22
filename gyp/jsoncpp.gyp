@@ -61,6 +61,17 @@
             },
           },
         }],
+        [ 'skia_os == "android"', {
+          'cflags!': [
+            '-Wall',
+            '-Werror',
+          ],
+        }],
+        ['skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
+          'cflags!': [
+            '-Werror',
+          ],
+        }],
       ],
     },
   ],

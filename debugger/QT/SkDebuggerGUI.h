@@ -112,10 +112,12 @@ private slots:
      */
     void actionDelete();
 
+#if SK_SUPPORT_GPU
     /**
         Toggles the visibility of the GL canvas widget.
      */
     void actionGLWidget(bool isToggled);
+#endif
 
     /**
         Toggles the visibility of the inspector widget.
@@ -132,6 +134,11 @@ private slots:
         Toggles the visibility of the raster canvas widget.
      */
     void actionRasterWidget(bool isToggled);
+
+    /**
+        Toggles the the overdraw visualization on and off
+     */
+    void actionOverdrawVizWidget(bool isToggled);
 
     /**
         Rewinds from the current step back to the start of the commands.
@@ -316,7 +323,7 @@ private:
     /**
         Fills in the overview pane with text
      */
-    void setupOverviewText(const SkTDArray<double>* typeTimes, double totTime);
+    void setupOverviewText(const SkTDArray<double>* typeTimes, double totTime, int numRuns);
 
     /**
         Render the supplied picture several times tracking the time consumed

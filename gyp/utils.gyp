@@ -35,6 +35,7 @@
         '../include/utils/SkCamera.h',
         '../include/utils/SkCubicInterval.h',
         '../include/utils/SkCullPoints.h',
+        '../include/utils/SkDebugUtils.h',
         '../include/utils/SkDeferredCanvas.h',
         '../include/utils/SkDumpCanvas.h',
         '../include/utils/SkInterpolator.h',
@@ -195,11 +196,20 @@
           ],
           'sources!': [
             '../src/utils/SkThreadUtils_pthread_linux.cpp',
+            '../src/utils/SkCityHash.cpp',
+            '../src/utils/SkCityHash.h',
+          ],
+          'dependencies!': [
+            # CityHash is not supported on NaCl because the NaCl toolchain is
+            # missing byteswap.h which is needed by CityHash.
+            # TODO(borenet): Find a way to either provide this dependency or
+            # replace it.
+            'cityhash',
           ],
         }],
         [ 'skia_os == "android"', {
           'sources': [
-            '../src/utils/android/ashmem.c',
+            '../src/utils/android/ashmem.cpp',
           ],
         }],
       ],
@@ -241,6 +251,17 @@
               'WarnAsError': 'false',
             },
           },
+        }],
+        [ 'skia_os == "android"', {
+          'cflags!': [
+            '-Wall',
+            '-Werror',
+          ],
+        }],
+        ['skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
+          'cflags!': [
+            '-Werror',
+          ],
         }],
       ],
     },

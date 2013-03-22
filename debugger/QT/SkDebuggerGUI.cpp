@@ -87,8 +87,11 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     connect(&fActionClearDeletes, SIGNAL(triggered()), this, SLOT(actionClearDeletes()));
     connect(&fActionClose, SIGNAL(triggered()), this, SLOT(actionClose()));
     connect(fSettingsWidget.getVisibilityButton(), SIGNAL(toggled(bool)), this, SLOT(actionCommandFilter()));
+#if SK_SUPPORT_GPU
     connect(fSettingsWidget.getGLCheckBox(), SIGNAL(toggled(bool)), this, SLOT(actionGLWidget(bool)));
+#endif
     connect(fSettingsWidget.getRasterCheckBox(), SIGNAL(toggled(bool)), this, SLOT(actionRasterWidget(bool)));
+    connect(fSettingsWidget.getOverdrawVizCheckBox(), SIGNAL(toggled(bool)), this, SLOT(actionOverdrawVizWidget(bool)));
     connect(&fActionPause, SIGNAL(toggled(bool)), this, SLOT(pauseDrawing(bool)));
     connect(&fActionCreateBreakpoint, SIGNAL(activated()), this, SLOT(toggleBreakpoint()));
     connect(&fActionShowDeletes, SIGNAL(triggered()), this, SLOT(showDeletes()));
@@ -140,11 +143,10 @@ void SkDebuggerGUI::showDeletes() {
 // offsets to individual commands.
 class SkTimedPicturePlayback : public SkPicturePlayback {
 public:
-    SkTimedPicturePlayback(SkStream* stream, const SkPictInfo& info, bool* isValid,
-                           SkSerializationHelpers::DecodeBitmap decoder,
-                           const SkTDArray<size_t>& offsets,
+    SkTimedPicturePlayback(SkStream* stream, const SkPictInfo& info,
+                           SkPicture::InstallPixelRefProc proc, const SkTDArray<size_t>& offsets,
                            const SkTDArray<bool>& deletedCommands)
-        : INHERITED(stream, info, isValid, decoder)
+        : INHERITED(stream, info, proc)
         , fOffsets(offsets)
         , fSkipCommands(deletedCommands)
         , fTot(0.0)
@@ -248,9 +250,7 @@ private:
 // Wrap SkPicture to allow installation of an SkTimedPicturePlayback object
 class SkTimedPicture : public SkPicture {
 public:
-    explicit SkTimedPicture(SkStream* stream,
-                            bool* success,
-                            SkSerializationHelpers::DecodeBitmap decoder,
+    explicit SkTimedPicture(SkStream* stream, bool* success, SkPicture::InstallPixelRefProc proc,
                             const SkTDArray<size_t>& offsets,
                             const SkTDArray<bool>& deletedCommands) {
         if (success) {
@@ -270,14 +270,8 @@ public:
         }
 
         if (stream->readBool()) {
-            bool isValid = false;
             fPlayback = SkNEW_ARGS(SkTimedPicturePlayback,
-                                   (stream, info, &isValid, decoder, offsets, deletedCommands));
-            if (!isValid) {
-                SkDELETE(fPlayback);
-                fPlayback = NULL;
-                return;
-            }
+                                   (stream, info, proc, offsets, deletedCommands));
         }
 
         // do this at the end, so that they will be zero if we hit an error.
@@ -359,7 +353,7 @@ void SkDebuggerGUI::actionProfile() {
     }
 
     bool success = false;
-    SkTimedPicture picture(&inputStream, &success, &SkImageDecoder::DecodeStream,
+    SkTimedPicture picture(&inputStream, &success, &SkImageDecoder::DecodeMemory,
                            fOffsets, fSkipCommands);
     if (!success) {
         return;
@@ -410,7 +404,7 @@ void SkDebuggerGUI::actionProfile() {
         item->setData(Qt::UserRole + 4, 100.0*temp);
     }
 
-    setupOverviewText(picture.typeTimes(), picture.totTime());
+    setupOverviewText(picture.typeTimes(), picture.totTime(), kNumRepeats);
 }
 
 void SkDebuggerGUI::actionCancel() {
@@ -486,9 +480,11 @@ void SkDebuggerGUI::actionDelete() {
     }
 }
 
+#if SK_SUPPORT_GPU
 void SkDebuggerGUI::actionGLWidget(bool isToggled) {
     fCanvasWidget.setWidgetVisibility(SkCanvasWidget::kGPU_WidgetType, !isToggled);
 }
+#endif
 
 void SkDebuggerGUI::actionInspector() {
     if (fInspectorWidget.isHidden()) {
@@ -514,6 +510,11 @@ void SkDebuggerGUI::actionPlay() {
 
 void SkDebuggerGUI::actionRasterWidget(bool isToggled) {
     fCanvasWidget.setWidgetVisibility(SkCanvasWidget::kRaster_8888_WidgetType, !isToggled);
+}
+
+void SkDebuggerGUI::actionOverdrawVizWidget(bool isToggled) {
+    fDebugger.setOverdrawViz(isToggled);
+    fCanvasWidget.update();
 }
 
 void SkDebuggerGUI::actionRewind() {
@@ -579,7 +580,10 @@ void SkDebuggerGUI::saveToFile(const SkString& filename) {
 void SkDebuggerGUI::loadFile(QListWidgetItem *item) {
     if (fDirectoryWidgetActive) {
         fFileName = fPath.toAscii().data();
-        fFileName.append("/");
+        // don't add a '/' to files in the local directory
+        if (fFileName.size() > 0) {
+            fFileName.append("/");
+        }
         fFileName.append(item->text().toAscii().data());
         loadPicture(fFileName);
     }
@@ -914,9 +918,9 @@ void SkDebuggerGUI::setupDirectoryWidget(const QString& path) {
 // These are needed by the profiling system.
 class SkOffsetPicturePlayback : public SkPicturePlayback {
 public:
-    SkOffsetPicturePlayback(SkStream* stream, const SkPictInfo& info, bool* isValid,
-                            SkSerializationHelpers::DecodeBitmap decoder)
-        : INHERITED(stream, info, isValid, decoder) {
+    SkOffsetPicturePlayback(SkStream* stream, const SkPictInfo& info,
+                            SkPicture::InstallPixelRefProc proc)
+        : INHERITED(stream, info, proc) {
     }
 
     const SkTDArray<size_t>& offsets() const { return fOffsets; }
@@ -936,9 +940,7 @@ private:
 // Picture to wrap an SkOffsetPicturePlayback.
 class SkOffsetPicture : public SkPicture {
 public:
-    SkOffsetPicture(SkStream* stream,
-                    bool* success,
-                    SkSerializationHelpers::DecodeBitmap decoder) {
+    SkOffsetPicture(SkStream* stream, bool* success, SkPicture::InstallPixelRefProc proc) {
         if (success) {
             *success = false;
         }
@@ -956,13 +958,7 @@ public:
         }
 
         if (stream->readBool()) {
-            bool isValid = false;
-            fPlayback = SkNEW_ARGS(SkOffsetPicturePlayback, (stream, info, &isValid, decoder));
-            if (!isValid) {
-                SkDELETE(fPlayback);
-                fPlayback = NULL;
-                return;
-            }
+            fPlayback = SkNEW_ARGS(SkOffsetPicturePlayback, (stream, info, proc));
         }
 
         // do this at the end, so that they will be zero if we hit an error.
@@ -992,7 +988,17 @@ void SkDebuggerGUI::loadPicture(const SkString& fileName) {
     fFileName = fileName;
     fLoading = true;
     SkStream* stream = SkNEW_ARGS(SkFILEStream, (fileName.c_str()));
-    SkOffsetPicture* picture = SkNEW_ARGS(SkOffsetPicture, (stream, NULL, &SkImageDecoder::DecodeStream));
+
+    bool success = false;
+
+    SkOffsetPicture* picture = SkNEW_ARGS(SkOffsetPicture,
+                                          (stream, &success, &SkImageDecoder::DecodeMemory));
+
+    if (!success) {
+        QMessageBox::critical(this, "Error loading file", "Couldn't read file, sorry.");
+        SkSafeUnref(stream);
+        return;
+    }
 
     fCanvasWidget.resetWidgetTransform();
     fDebugger.loadPicture(picture);
@@ -1026,7 +1032,7 @@ void SkDebuggerGUI::loadPicture(const SkString& fileName) {
 
     setupListWidget(commands);
     setupComboBox(commands);
-    setupOverviewText(NULL, 0.0);
+    setupOverviewText(NULL, 0.0, 1);
     fInspectorWidget.setDisabled(false);
     fSettingsWidget.setDisabled(false);
     fMenuEdit.setDisabled(false);
@@ -1064,85 +1070,12 @@ void SkDebuggerGUI::setupListWidget(SkTArray<SkString>* command) {
     }
 }
 
-void SkDebuggerGUI::setupOverviewText(const SkTDArray<double>* typeTimes, double totTime) {
-
-    const SkTDArray<SkDrawCommand*>& commands = fDebugger.getDrawCommands();
-
-    SkTDArray<int> counts;
-    counts.setCount(LAST_DRAWTYPE_ENUM+1);
-    for (int i = 0; i < LAST_DRAWTYPE_ENUM+1; ++i) {
-        counts[i] = 0;
-    }
-
-    for (int i = 0; i < commands.count(); i++) {
-        counts[commands[i]->getType()]++;
-    }
-
-    QString overview;
-    int total = 0;
-#ifdef SK_DEBUG
-    double totPercent = 0, tempSum = 0;
-#endif
-    for (int i = 0; i < LAST_DRAWTYPE_ENUM+1; ++i) {
-        if (0 == counts[i]) {
-            // if there were no commands of this type then they should've consumed no time
-            SkASSERT(NULL == typeTimes || 0.0 == (*typeTimes)[i]);
-            continue;
-        }
-
-        overview.append(SkDrawCommand::GetCommandString((DrawType) i));
-        overview.append(": ");
-        overview.append(QString::number(counts[i]));
-        if (NULL != typeTimes) {
-            overview.append(" - ");
-            overview.append(QString::number((*typeTimes)[i], 'f', 1));
-            overview.append("ms");
-            overview.append(" - ");
-            double percent = 100.0*(*typeTimes)[i]/totTime;
-            overview.append(QString::number(percent, 'f', 1));
-            overview.append("%");
-#ifdef SK_DEBUG
-            totPercent += percent;
-            tempSum += (*typeTimes)[i];
-#endif
-        }
-        overview.append("<br/>");
-        total += counts[i];
-    }
-#ifdef SK_DEBUG
-    if (NULL != typeTimes) {
-        SkASSERT(SkScalarNearlyEqual(totPercent, 100.0));
-        SkASSERT(SkScalarNearlyEqual(tempSum, totTime));
-    }
-#endif
-
-    if (totTime > 0.0) {
-        overview.append("Total Time: ");
-        overview.append(QString::number(totTime, 'f', 2));
-        overview.append("ms");
-#ifdef SK_DEBUG
-        overview.append(" ");
-        overview.append(QString::number(totPercent));
-        overview.append("% ");
-#endif
-        overview.append("<br/>");
-    }
-
-    QString totalStr;
-    totalStr.append("Total Draw Commands: ");
-    totalStr.append(QString::number(total));
-    totalStr.append("<br/>");
-    overview.insert(0, totalStr);
-
-    overview.append("<br/>");
-    overview.append("SkPicture Width: ");
-    // NOTE(chudy): This is where we can pull out the SkPictures width.
-    overview.append(QString::number(fDebugger.pictureWidth()));
-    overview.append("px<br/>");
-    overview.append("SkPicture Height: ");
-    overview.append(QString::number(fDebugger.pictureHeight()));
-    overview.append("px");
-    fInspectorWidget.setText(overview, SkInspectorWidget::kOverview_TabType);
+void SkDebuggerGUI::setupOverviewText(const SkTDArray<double>* typeTimes,
+                                      double totTime,
+                                      int numRuns) {
+    SkString overview;
+    fDebugger.getOverviewText(typeTimes, totTime, &overview, numRuns);
+    fInspectorWidget.setText(overview.c_str(), SkInspectorWidget::kOverview_TabType);
 }
 
 void SkDebuggerGUI::setupComboBox(SkTArray<SkString>* command) {

@@ -10,6 +10,7 @@
       'include_dirs' : [
         '../src/core',
         '../src/effects',
+        '../src/lazy',
         '../src/pdf',
         '../src/pipe/utils',
         '../src/utils',
@@ -77,6 +78,7 @@
         '../tests/PointTest.cpp',
         '../tests/PremulAlphaRoundTripTest.cpp',
         '../tests/QuickRejectTest.cpp',
+        '../tests/RandomTest.cpp',
         '../tests/Reader32Test.cpp',
         '../tests/ReadPixelsTest.cpp',
         '../tests/ReadWriteAlphaTest.cpp',
@@ -87,6 +89,7 @@
         '../tests/RTreeTest.cpp',
         '../tests/SHA1Test.cpp',
         '../tests/ScalarTest.cpp',
+        '../tests/ShaderImageFilterTest.cpp',
         '../tests/ShaderOpacityTest.cpp',
         '../tests/Sk64Test.cpp',
         '../tests/skia_test.cpp',
@@ -100,6 +103,7 @@
         '../tests/TestSize.cpp',
         '../tests/TileGridTest.cpp',
         '../tests/TLSTest.cpp',
+        '../tests/TSetTest.cpp',
         '../tests/ToUnicode.cpp',
         '../tests/UnicodeTest.cpp',
         '../tests/UtilsTest.cpp',
@@ -124,6 +128,15 @@
         [ 'skia_gpu == 1', {
           'include_dirs': [
             '../src/gpu',
+          ],
+        }],
+        [ 'skia_os == "nacl"', {
+          # CityHash is not supported on NaCl because the NaCl toolchain is
+          # missing byteswap.h which is needed by CityHash.
+          # TODO(borenet): Find a way to either provide this dependency or
+          # replace it.
+          'sources!': [
+            '../tests/ChecksumTest.cpp',
           ],
         }],
       ],

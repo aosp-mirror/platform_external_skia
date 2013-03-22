@@ -19,12 +19,15 @@ class SkBMPImageDecoder : public SkImageDecoder {
 public:
     SkBMPImageDecoder() {}
 
-    virtual Format getFormat() const {
+    virtual Format getFormat() const SK_OVERRIDE {
         return kBMP_Format;
     }
 
 protected:
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode mode);
+    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode mode) SK_OVERRIDE;
+
+private:
+    typedef SkImageDecoder INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -68,7 +71,7 @@ public:
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
-    uint8_t* rgb() const { return fRGB.begin(); }
+    const uint8_t* rgb() const { return fRGB.begin(); }
 
 private:
     SkTDArray<uint8_t> fRGB;
@@ -115,11 +118,18 @@ bool SkBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     SkScaledBitmapSampler sampler(width, height, getSampleSize());
 
-    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-    bm->setIsOpaque(true);
     if (justBounds) {
+        bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+        bm->setIsOpaque(true);
         return true;
     }
+    // No Bitmap reuse supported for this format
+    if (!bm->isNull()) {
+        return false;
+    }
+
+    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bm->setIsOpaque(true);
 
     if (!this->allocPixelRef(bm, NULL)) {
         return false;

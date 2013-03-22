@@ -12,7 +12,6 @@
 #include "GrContext.h"
 #include "GrDrawTarget.h"
 #include "GrFontScaler.h"
-#include "GrGpuVertex.h"
 #include "GrIndexBuffer.h"
 #include "GrTextStrike.h"
 #include "GrTextStrike_impl.h"
@@ -20,6 +19,9 @@
 #include "SkStrokeRec.h"
 
 enum {
+    // glyph rendering shares this stage with edge rendering
+    // (kEdgeEffectStage in GrContext) && SW path rendering
+    // (kPathMaskStage in GrSWMaskHelper)
     kGlyphMaskStage = GrPaint::kTotalStages,
 };
 
@@ -93,10 +95,6 @@ GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(
 
     fVertices = NULL;
     fMaxVertices = 0;
-
-    fVertexLayout =
-        GrDrawState::kTextFormat_VertexLayoutBit |
-        GrDrawState::StageTexCoordVertexLayoutBit(kGlyphMaskStage, 0);
 }
 
 GrTextContext::~GrTextContext() {
@@ -108,14 +106,6 @@ GrTextContext::~GrTextContext() {
 
 void GrTextContext::flush() {
     this->flushGlyphs();
-}
-
-static inline void setRectFan(GrGpuTextVertex v[4], int l, int t, int r, int b,
-                              int stride) {
-    v[0 * stride].setI(l, t);
-    v[1 * stride].setI(l, b);
-    v[2 * stride].setI(r, b);
-    v[3 * stride].setI(r, t);
 }
 
 void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
@@ -186,7 +176,7 @@ void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
 HAS_ATLAS:
     GrAssert(glyph->fAtlas);
 
-    // now promote them to fixed
+    // now promote them to fixed (TODO: Rethink using fixed pt).
     width = SkIntToFixed(width);
     height = SkIntToFixed(height);
 
@@ -200,23 +190,35 @@ HAS_ATLAS:
     }
 
     if (NULL == fVertices) {
-        // If we need to reserve vertices allow the draw target to suggest
+        // position + texture coord
+        static const GrVertexAttrib kVertexAttribs[] = {
+            {kVec2f_GrVertexAttribType, 0},
+            {kVec2f_GrVertexAttribType, sizeof(GrPoint)}
+        };
+        static const GrAttribBindings kAttribBindings = GrDrawState::ExplicitTexCoordAttribBindingsBit(kGlyphMaskStage);
+
+       // If we need to reserve vertices allow the draw target to suggest
         // a number of verts to reserve and whether to perform a flush.
         fMaxVertices = kMinRequestedVerts;
-        bool flush = (NULL != fDrawTarget) &&
-                     fDrawTarget->geometryHints(GrDrawState::VertexSize(fVertexLayout),
-                                                &fMaxVertices,
-                                                NULL);
+        bool flush = false;
+        fDrawTarget = fContext->getTextTarget(fPaint);
+        if (NULL != fDrawTarget) {
+            fDrawTarget->drawState()->setVertexAttribs(kVertexAttribs, SK_ARRAY_COUNT(kVertexAttribs));
+            flush = fDrawTarget->geometryHints(&fMaxVertices, NULL);
+        }
         if (flush) {
             this->flushGlyphs();
             fContext->flush();
+            // flushGlyphs() will reset fDrawTarget to NULL.
+            fDrawTarget = fContext->getTextTarget(fPaint);
+            fDrawTarget->drawState()->setVertexAttribs(kVertexAttribs, SK_ARRAY_COUNT(kVertexAttribs));
         }
-        fDrawTarget = fContext->getTextTarget(fPaint);
+        fDrawTarget->drawState()->setAttribIndex(GrDrawState::kPosition_AttribIndex, 0);
+        fDrawTarget->drawState()->setAttribIndex(GrDrawState::kTexCoord_AttribIndex, 1);
+        fDrawTarget->drawState()->setAttribBindings(kAttribBindings);
         fMaxVertices = kDefaultRequestedVerts;
         // ignore return, no point in flushing again.
-        fDrawTarget->geometryHints(GrDrawState::VertexSize(fVertexLayout),
-                                   &fMaxVertices,
-                                   NULL);
+        fDrawTarget->geometryHints(&fMaxVertices, NULL);
 
         int maxQuadVertices = 4 * fContext->getQuadIndexBuffer()->maxQuads();
         if (fMaxVertices < kMinRequestedVerts) {
@@ -226,38 +228,26 @@ HAS_ATLAS:
             fMaxVertices = maxQuadVertices;
         }
         bool success = fDrawTarget->reserveVertexAndIndexSpace(
-                                                   fVertexLayout,
                                                    fMaxVertices,
                                                    0,
                                                    GrTCast<void**>(&fVertices),
                                                    NULL);
         GrAlwaysAssert(success);
+        GrAssert(2*sizeof(GrPoint) == fDrawTarget->getDrawState().getVertexSize());
     }
 
     GrFixed tx = SkIntToFixed(glyph->fAtlasLocation.fX);
     GrFixed ty = SkIntToFixed(glyph->fAtlasLocation.fY);
 
-#if GR_TEXT_SCALAR_IS_USHORT
-    int x = vx >> 16;
-    int y = vy >> 16;
-    int w = width >> 16;
-    int h = height >> 16;
-
-    setRectFan(&fVertices[2*fCurrVertex], x, y, x + w, y + h, 2);
-    setRectFan(&fVertices[2*fCurrVertex+1],
-               texture->normalizeFixedX(tx),
-               texture->normalizeFixedY(ty),
-               texture->normalizeFixedX(tx + width),
-               texture->normalizeFixedY(ty + height),
-               2);
-#else
-    fVertices[2*fCurrVertex].setXRectFan(vx, vy, vx + width, vy + height,
-                                        2 * sizeof(GrGpuTextVertex));
-    fVertices[2*fCurrVertex+1].setXRectFan(texture->normalizeFixedX(tx),
-                                          texture->normalizeFixedY(ty),
-                                          texture->normalizeFixedX(tx + width),
-                                          texture->normalizeFixedY(ty + height),
-                                          2 * sizeof(GrGpuTextVertex));
-#endif
+    fVertices[2*fCurrVertex].setRectFan(SkFixedToFloat(vx),
+                                        SkFixedToFloat(vy),
+                                        SkFixedToFloat(vx + width),
+                                        SkFixedToFloat(vy + height),
+                                        2 * sizeof(SkPoint));
+    fVertices[2*fCurrVertex+1].setRectFan(SkFixedToFloat(texture->normalizeFixedX(tx)),
+                                          SkFixedToFloat(texture->normalizeFixedY(ty)),
+                                          SkFixedToFloat(texture->normalizeFixedX(tx + width)),
+                                          SkFixedToFloat(texture->normalizeFixedY(ty + height)),
+                                          2 * sizeof(SkPoint));
     fCurrVertex += 4;
 }

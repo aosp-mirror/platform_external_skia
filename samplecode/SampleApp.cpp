@@ -188,8 +188,8 @@ public:
                 SkASSERT(false);
                 break;
         }
-
-        bool result = win->attach(fBackend, msaaSampleCount);
+        AttachmentInfo attachmentInfo;
+        bool result = win->attach(fBackend, msaaSampleCount, &attachmentInfo);
         if (!result) {
             SkDebugf("Failed to initialize GL");
             return;
@@ -276,7 +276,7 @@ public:
                 fCurContext->setRenderTarget(fCurRenderTarget);
                 const SkBitmap& bm = win->getBitmap();
                 fCurRenderTarget->writePixels(0, 0, bm.width(), bm.height(),
-                                             kSkia8888_PM_GrPixelConfig,
+                                             kSkia8888_GrPixelConfig,
                                              bm.getPixels(),
                                              bm.rowBytes());
             }
@@ -289,14 +289,16 @@ public:
     virtual void windowSizeChanged(SampleWindow* win) {
 #if SK_SUPPORT_GPU
         if (fCurContext) {
-            win->attach(fBackend, fMSAASampleCount);
+            AttachmentInfo attachmentInfo;
+            win->attach(fBackend, fMSAASampleCount, &attachmentInfo);
 
             GrBackendRenderTargetDesc desc;
             desc.fWidth = SkScalarRound(win->width());
             desc.fHeight = SkScalarRound(win->height());
-            desc.fConfig = kSkia8888_PM_GrPixelConfig;
-            GR_GL_GetIntegerv(fCurIntf, GR_GL_SAMPLES, &desc.fSampleCnt);
-            GR_GL_GetIntegerv(fCurIntf, GR_GL_STENCIL_BITS, &desc.fStencilBits);
+            desc.fConfig = kSkia8888_GrPixelConfig;
+            desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
+            desc.fSampleCnt = attachmentInfo.fSampleCount;
+            desc.fStencilBits = attachmentInfo.fStencilBits;
             GrGLint buffer;
             GR_GL_GetIntegerv(fCurIntf, GR_GL_FRAMEBUFFER_BINDING, &buffer);
             desc.fRenderTargetHandle = buffer;

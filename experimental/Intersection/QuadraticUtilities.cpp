@@ -4,23 +4,76 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "CubicUtilities.h"
+#include "Extrema.h"
 #include "QuadraticUtilities.h"
-#include <math.h>
+#include "TriangleUtilities.h"
+
+// from http://blog.gludion.com/2009/08/distance-to-quadratic-bezier-curve.html
+double nearestT(const Quadratic& quad, const _Point& pt) {
+    _Vector pos = quad[0] - pt;
+    // search points P of bezier curve with PM.(dP / dt) = 0
+    // a calculus leads to a 3d degree equation :
+    _Vector A = quad[1] - quad[0];
+    _Vector B = quad[2] - quad[1];
+    B -= A;
+    double a = B.dot(B);
+    double b = 3 * A.dot(B);
+    double c = 2 * A.dot(A) + pos.dot(B);
+    double d = pos.dot(A);
+    double ts[3];
+    int roots = cubicRootsValidT(a, b, c, d, ts);
+    double d0 = pt.distanceSquared(quad[0]);
+    double d2 = pt.distanceSquared(quad[2]);
+    double distMin = SkTMin(d0, d2);
+    int bestIndex = -1;
+    for (int index = 0; index < roots; ++index) {
+        _Point onQuad;
+        xy_at_t(quad, ts[index], onQuad.x, onQuad.y);
+        double dist = pt.distanceSquared(onQuad);
+        if (distMin > dist) {
+            distMin = dist;
+            bestIndex = index;
+        }
+    }
+    if (bestIndex >= 0) {
+        return ts[bestIndex];
+    }
+    return d0 < d2 ? 0 : 1;
+}
+
+bool point_in_hull(const Quadratic& quad, const _Point& pt) {
+    return pointInTriangle((const Triangle&) quad, pt);
+}
+
+_Point top(const Quadratic& quad, double startT, double endT) {
+    Quadratic sub;
+    sub_divide(quad, startT, endT, sub);
+    _Point topPt = sub[0];
+    if (topPt.y > sub[2].y || (topPt.y == sub[2].y && topPt.x > sub[2].x)) {
+        topPt = sub[2];
+    }
+    if (!between(sub[0].y, sub[1].y, sub[2].y)) {
+        double extremeT;
+        if (findExtrema(sub[0].y, sub[1].y, sub[2].y, &extremeT)) {
+            extremeT = startT + (endT - startT) * extremeT;
+            _Point test;
+            xy_at_t(quad, extremeT, test.x, test.y);
+            if (topPt.y > test.y || (topPt.y == test.y && topPt.x > test.x)) {
+                topPt = test;
+            }
+        }
+    }
+    return topPt;
+}
 
 /*
-
 Numeric Solutions (5.6) suggests to solve the quadratic by computing
-
        Q = -1/2(B + sgn(B)Sqrt(B^2 - 4 A C))
-
 and using the roots
-
       t1 = Q / A
       t2 = C / Q
-
 */
-
-
 int add_valid_ts(double s[], int realRoots, double* t) {
     int foundRoots = 0;
     for (int index = 0; index < realRoots; ++index) {
@@ -144,6 +197,16 @@ int quadraticRootsReal(const double A, const double B, const double C, double s[
 #endif
 }
 
+void toCubic(const Quadratic& quad, Cubic& cubic) {
+    cubic[0] = quad[0];
+    cubic[2] = quad[1];
+    cubic[3] = quad[2];
+    cubic[1].x = (cubic[0].x + cubic[2].x * 2) / 3;
+    cubic[1].y = (cubic[0].y + cubic[2].y * 2) / 3;
+    cubic[2].x = (cubic[3].x + cubic[2].x * 2) / 3;
+    cubic[2].y = (cubic[3].y + cubic[2].y * 2) / 3;
+}
+
 static double derivativeAtT(const double* quad, double t) {
     double a = t - 1;
     double b = 1 - 2 * t;
@@ -159,12 +222,13 @@ double dy_at_t(const Quadratic& quad, double t) {
     return derivativeAtT(&quad[0].y, t);
 }
 
-void dxdy_at_t(const Quadratic& quad, double t, _Point& dxy) {
+_Vector dxdy_at_t(const Quadratic& quad, double t) {
     double a = t - 1;
     double b = 1 - 2 * t;
     double c = t;
-    dxy.x = a * quad[0].x + b * quad[1].x + c * quad[2].x;
-    dxy.y = a * quad[0].y + b * quad[1].y + c * quad[2].y;
+    _Vector result = { a * quad[0].x + b * quad[1].x + c * quad[2].x,
+            a * quad[0].y + b * quad[1].y + c * quad[2].y };
+    return result;
 }
 
 void xy_at_t(const Quadratic& quad, double t, double& x, double& y) {
@@ -178,4 +242,14 @@ void xy_at_t(const Quadratic& quad, double t, double& x, double& y) {
     if (&y) {
         y = a * quad[0].y + b * quad[1].y + c * quad[2].y;
     }
+}
+
+_Point xy_at_t(const Quadratic& quad, double t) {
+    double one_t = 1 - t;
+    double a = one_t * one_t;
+    double b = 2 * one_t * t;
+    double c = t * t;
+    _Point result = { a * quad[0].x + b * quad[1].x + c * quad[2].x,
+            a * quad[0].y + b * quad[1].y + c * quad[2].y };
+    return result;
 }

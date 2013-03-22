@@ -11,15 +11,19 @@
 #include "Intersections.h"
 #include "TestUtilities.h"
 
+#define SHOW_ORIGINAL 1
+
 const int firstCubicIntersectionTest = 9;
 
-void CubicIntersection_Test() {
+static void standardTestCases() {
     for (size_t index = firstCubicIntersectionTest; index < tests_count; ++index) {
         const Cubic& cubic1 = tests[index][0];
         const Cubic& cubic2 = tests[index][1];
         Cubic reduce1, reduce2;
-        int order1 = reduceOrder(cubic1, reduce1, kReduceOrder_NoQuadraticsAllowed);
-        int order2 = reduceOrder(cubic2, reduce2, kReduceOrder_NoQuadraticsAllowed);
+        int order1 = reduceOrder(cubic1, reduce1, kReduceOrder_NoQuadraticsAllowed,
+            kReduceOrder_TreatAsFill);
+        int order2 = reduceOrder(cubic2, reduce2, kReduceOrder_NoQuadraticsAllowed,
+            kReduceOrder_TreatAsFill);
         if (order1 < 4) {
             printf("%s [%d] cubic1 order=%d\n", __FUNCTION__, (int) index, order1);
             continue;
@@ -57,52 +61,46 @@ void CubicIntersection_Test() {
     }
 }
 
-#define ONE_OFF_DEBUG 0
-
-static void oneOff(const Cubic& cubic1, const Cubic& cubic2) {
-    SkTDArray<Quadratic> quads1;
-    cubic_to_quadratics(cubic1, calcPrecision(cubic1), quads1);
-#if ONE_OFF_DEBUG
-    for (int index = 0; index < quads1.count(); ++index) {
-        const Quadratic& q = quads1[index];
-        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
-                 q[1].x, q[1].y,  q[2].x, q[2].y);
-    }
-    SkDebugf("\n");
-#endif
-    SkTDArray<Quadratic> quads2;
-    cubic_to_quadratics(cubic2, calcPrecision(cubic2), quads2);
-#if ONE_OFF_DEBUG
-    for (int index = 0; index < quads2.count(); ++index) {
-        const Quadratic& q = quads2[index];
-        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
-                 q[1].x, q[1].y,  q[2].x, q[2].y);
-    }
-    SkDebugf("\n");
-#endif
-    Intersections intersections2;
-    intersect2(cubic1, cubic2, intersections2);
-    for (int pt = 0; pt < intersections2.used(); ++pt) {
-        double tt1 = intersections2.fT[0][pt];
-        _Point xy1, xy2;
-        xy_at_t(cubic1, tt1, xy1.x, xy1.y);
-        int pt2 = intersections2.fFlip ? intersections2.used() - pt - 1 : pt;
-        double tt2 = intersections2.fT[1][pt2];
-        xy_at_t(cubic2, tt2, xy2.x, xy2.y);
-#if ONE_OFF_DEBUG
-        SkDebugf("%s t1=%1.9g (%1.9g, %1.9g) (%1.9g, %1.9g) t2=%1.9g\n", __FUNCTION__,
-            tt1, xy1.x, xy1.y, xy2.x, xy2.y, tt2);
-#endif
-        SkASSERT(xy1.approximatelyEqual(xy2));
-    }
-}
-
 static const Cubic testSet[] = {
-{{0, 1}, {0, 2}, {1, 0}, {1, 0}},
-{{0, 1}, {0, 1}, {1, 0}, {2, 0}},
+{{0,1}, {4,5}, {1,0}, {5,3}},
+{{0,1}, {3,5}, {1,0}, {5,4}},
+
+{{0, 1}, {1, 6}, {1, 0}, {1, 0}},
+{{0, 1}, {0, 1}, {1, 0}, {6, 1}},
+
+{{0,1}, {3,4}, {1,0}, {5,1}},
+{{0,1}, {1,5}, {1,0}, {4,3}},
+
+{{0,1}, {1,2}, {1,0}, {6,1}},
+{{0,1}, {1,6}, {1,0}, {2,1}},
+
+{{0,1}, {0,5}, {1,0}, {4,0}},
+{{0,1}, {0,4}, {1,0}, {5,0}},
+
+{{0,1}, {3,4}, {1,0}, {3,0}},
+{{0,1}, {0,3}, {1,0}, {4,3}},
+
+{{0, 0}, {1, 2}, {3, 4}, {4, 4}},
+{{0, 0}, {1, 2}, {3, 4}, {4, 4}},
+{{4, 4}, {3, 4}, {1, 2}, {0, 0}},
+
+{{0,1}, {2,3}, {1,0}, {1,0}},
+{{0,1}, {0,1}, {1,0}, {3,2}},
+
+{{0,2}, {0,1}, {1,0}, {1,0}},
+{{0,1}, {0,1}, {2,0}, {1,0}},
 
 {{0, 0}, {0, 1}, {1, 1}, {1, 0}},
 {{1, 0}, {0, 0}, {0, 1}, {1, 1}},
+
+{{0, 1}, {0, 2}, {1, 0}, {1, 0}},
+{{0, 1}, {0, 1}, {1, 0}, {2, 0}},
+
+{{0, 1}, {1, 6}, {1, 0}, {2, 0}},
+{{0, 1}, {0, 2}, {1, 0}, {6, 1}},
+
+{{0, 1}, {5, 6}, {1, 0}, {1, 0}},
+{{0, 1}, {0, 1}, {1, 0}, {6, 5}},
 
 {{95.837747722788592, 45.025976907939643}, {16.564570095652982, 0.72959763963222402}, {63.209855865319199, 68.047528419665767}, {57.640240647662544, 59.524565264361243}},
 {{51.593891741518817, 38.53849970667553}, {62.34752929878772, 74.924924725166022}, {74.810149322641152, 34.17966562983564}, {29.368398119401373, 94.66719277886078}},
@@ -137,23 +135,272 @@ static const Cubic testSet[] = {
 
 const size_t testSetCount = sizeof(testSet) / sizeof(testSet[0]);
 
+static const Cubic newTestSet[] = {
+{{1,3}, {5,6}, {5,3}, {5,4}},
+{{3,5}, {4,5}, {3,1}, {6,5}},
+
+{{0,5}, {0,5}, {5,4}, {6,4}},
+{{4,5}, {4,6}, {5,0}, {5,0}},
+
+{{0,4}, {1,3}, {5,4}, {4,2}},
+{{4,5}, {2,4}, {4,0}, {3,1}},
+
+{{0,2}, {1,5}, {3,2}, {4,1}},
+{{2,3}, {1,4}, {2,0}, {5,1}},
+
+{{0,2}, {2,3}, {5,1}, {3,2}},
+{{1,5}, {2,3}, {2,0}, {3,2}},
+
+{{2,6}, {4,5}, {1,0}, {6,1}},
+{{0,1}, {1,6}, {6,2}, {5,4}},
+
+{{0,1}, {1,2}, {6,5}, {5,4}},
+{{5,6}, {4,5}, {1,0}, {2,1}},
+
+{{2.5119999999999996, 1.5710000000000002}, {2.6399999999999983, 1.6599999999999997}, {2.8000000000000007, 1.8000000000000003}, {3, 2}},
+{{2.4181876227114887, 1.9849772580462195}, {2.8269904869227211, 2.009330650246834}, {3.2004679292461624, 1.9942047174679169}, {3.4986199496818058, 2.0035994597094731}},
+
+{{2,3}, {1,4}, {1,0}, {6,0}},
+{{0,1}, {0,6}, {3,2}, {4,1}},
+
+{{0,2}, {1,5}, {1,0}, {6,1}},
+{{0,1}, {1,6}, {2,0}, {5,1}},
+
+{{0,1}, {1,5}, {2,1}, {4,0}},
+{{1,2}, {0,4}, {1,0}, {5,1}},
+
+{{0,1}, {3,5}, {2,1}, {3,1}},
+{{1,2}, {1,3}, {1,0}, {5,3}},
+
+{{0,1}, {2,5}, {6,0}, {5,3}},
+{{0,6}, {3,5}, {1,0}, {5,2}},
+
+{{0,1}, {3,6}, {1,0}, {5,2}},
+{{0,1}, {2,5}, {1,0}, {6,3}},
+
+{{1,2},{5,6},{1,0},{1,0}},
+{{0,1},{0,1},{2,1},{6,5}},
+
+{{0,6},{1,2},{1,0},{1,0}},
+{{0,1},{0,1},{6,0},{2,1}},
+
+{{0,2},{0,1},{3,0},{1,0}},
+{{0,3},{0,1},{2,0},{1,0}},
+};
+
+const size_t newTestSetCount = sizeof(newTestSet) / sizeof(newTestSet[0]);
+
+#if 0
+static void oneOff(const Cubic& cubic1, const Cubic& cubic2) {
+    SkTDArray<Quadratic> quads1;
+    cubic_to_quadratics(cubic1, calcPrecision(cubic1), quads1);
+#if SHOW_ORIGINAL
+    SkDebugf("computed quadratics given\n");
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}, {%1.9g,%1.9g}},\n",
+        cubic1[0].x, cubic1[0].y, cubic1[1].x, cubic1[1].y,
+        cubic1[2].x, cubic1[2].y, cubic1[3].x, cubic1[3].y));
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}, {%1.9g,%1.9g}},\n",
+        cubic2[0].x, cubic2[0].y, cubic2[1].x, cubic2[1].y,
+        cubic2[2].x, cubic2[2].y, cubic2[3].x, cubic2[3].y));
+#endif
+#if ONE_OFF_DEBUG
+    SkDebugf("computed quadratics set 1\n");
+    for (int index = 0; index < quads1.count(); ++index) {
+        const Quadratic& q = quads1[index];
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
+                 q[1].x, q[1].y,  q[2].x, q[2].y);
+    }
+#endif
+    SkTDArray<Quadratic> quads2;
+    cubic_to_quadratics(cubic2, calcPrecision(cubic2), quads2);
+#if ONE_OFF_DEBUG
+    SkDebugf("computed quadratics set 2\n");
+    for (int index = 0; index < quads2.count(); ++index) {
+        const Quadratic& q = quads2[index];
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
+                 q[1].x, q[1].y,  q[2].x, q[2].y);
+    }
+#endif
+    Intersections intersections2, intersections3;
+    intersect2(cubic1, cubic2, intersections2);
+    intersect3(cubic1, cubic2, intersections3);
+    int pt1, pt2, pt3;
+    bool found;
+    double tt1, tt2, last = -1;
+    _Point xy1, xy2;
+    for (pt1 = 0; pt1 < intersections2.used(); ++pt1) {
+        tt1 = intersections2.fT[0][pt1];
+        SkASSERT(!approximately_equal(last, tt1));
+        last = tt1;
+        xy_at_t(cubic1, tt1, xy1.x, xy1.y);
+        pt2 = intersections2.fFlip ? intersections2.used() - pt1 - 1 : pt1;
+        tt2 = intersections2.fT[1][pt2];
+        xy_at_t(cubic2, tt2, xy2.x, xy2.y);
+#if ONE_OFF_DEBUG
+        SkDebugf("%s t1=%1.9g (%1.9g, %1.9g) (%1.9g, %1.9g) (%1.9g, %1.9g) t2=%1.9g\n",
+                __FUNCTION__, tt1, xy1.x, xy1.y, intersections2.fPt[pt1].x,
+                intersections2.fPt[pt1].y, xy2.x, xy2.y, tt2);
+#endif
+        SkASSERT(xy1.approximatelyEqual(xy2));
+#if SK_DEBUG
+        found = false;
+        for (pt3 = 0; pt3 < intersections3.used(); ++pt3) {
+            if (roughly_equal(tt1, intersections3.fT[0][pt3])) {
+                found = true;
+                break;
+            }
+        }
+        SkASSERT(found);
+#endif
+    }
+    last = -1;
+    for (pt3 = 0; pt3 < intersections3.used(); ++pt3) {
+        found = false;
+        double tt3 = intersections3.fT[0][pt3];
+        SkASSERT(!approximately_equal(last, tt3));
+        last = tt3;
+        for (pt1 = 0; pt1 < intersections2.used(); ++pt1) {
+            if (approximately_equal(tt3, intersections2.fT[0][pt1])) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            tt1 = intersections3.fT[0][pt3];
+            xy_at_t(cubic1, tt1, xy1.x, xy1.y);
+            pt2 = intersections3.fFlip ? intersections3.used() - pt3 - 1 : pt3;
+            tt2 = intersections3.fT[1][pt2];
+            xy_at_t(cubic2, tt2, xy2.x, xy2.y);
+    #if ONE_OFF_DEBUG
+            SkDebugf("%s t1=%1.9g (%1.9g, %1.9g) (%1.9g, %1.9g) (%1.9g, %1.9g) t2=%1.9g\n",
+                    __FUNCTION__, tt1, xy1.x, xy1.y, intersections3.fPt[pt1].x,
+                    intersections3.fPt[pt1].y, xy2.x, xy2.y, tt2);
+    #endif
+            SkASSERT(xy1.approximatelyEqual(xy2));
+            SkDebugf("%s missing in intersect2\n", __FUNCTION__);
+        }
+    }
+}
+#endif
+
+static void oneOff3(const Cubic& cubic1, const Cubic& cubic2) {
+#if ONE_OFF_DEBUG
+    SkDebugf("computed quadratics given\n");
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
+        cubic1[0].x, cubic1[0].y, cubic1[1].x, cubic1[1].y,
+        cubic1[2].x, cubic1[2].y, cubic1[3].x, cubic1[3].y);
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
+        cubic2[0].x, cubic2[0].y, cubic2[1].x, cubic2[1].y,
+        cubic2[2].x, cubic2[2].y, cubic2[3].x, cubic2[3].y);
+#endif
+    SkTDArray<Quadratic> quads1;
+    cubic_to_quadratics(cubic1, calcPrecision(cubic1), quads1);
+#if ONE_OFF_DEBUG
+    SkDebugf("computed quadratics set 1\n");
+    for (int index = 0; index < quads1.count(); ++index) {
+        const Quadratic& q = quads1[index];
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
+                 q[1].x, q[1].y,  q[2].x, q[2].y);
+    }
+#endif
+    SkTDArray<Quadratic> quads2;
+    cubic_to_quadratics(cubic2, calcPrecision(cubic2), quads2);
+#if ONE_OFF_DEBUG
+    SkDebugf("computed quadratics set 2\n");
+    for (int index = 0; index < quads2.count(); ++index) {
+        const Quadratic& q = quads2[index];
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].x, q[0].y,
+                 q[1].x, q[1].y,  q[2].x, q[2].y);
+    }
+#endif
+    Intersections intersections3;
+    intersect3(cubic1, cubic2, intersections3);
+    int pt2, pt3;
+    double tt1, tt2, last = -1;
+    _Point xy1, xy2;
+    for (pt3 = 0; pt3 < intersections3.used(); ++pt3) {
+        double tt3 = intersections3.fT[0][pt3];
+     //   SkASSERT(!approximately_equal(last, tt3));
+        last = tt3;
+        tt1 = intersections3.fT[0][pt3];
+        xy_at_t(cubic1, tt1, xy1.x, xy1.y);
+        pt2 = intersections3.fFlip ? intersections3.used() - pt3 - 1 : pt3;
+        tt2 = intersections3.fT[1][pt2];
+        xy_at_t(cubic2, tt2, xy2.x, xy2.y);
+#if ONE_OFF_DEBUG
+        SkDebugf("%s t1=%1.9g (%1.9g, %1.9g) (%1.9g, %1.9g) (%1.9g, %1.9g) t2=%1.9g\n",
+                __FUNCTION__, tt1, xy1.x, xy1.y, intersections3.fPt[pt3].x,
+                intersections3.fPt[pt3].y, xy2.x, xy2.y, tt2);
+#endif
+        SkASSERT(xy1.approximatelyEqual(xy2));
+    }
+}
+
+#if 0
+static int fails[][2] = {   {0, 23}, // fails in intersect2 recursing
+                            {2, 7},  // answers differ, but neither is correct ('3' is closer)
+                            {3, 26}, // fails in intersect2 recursing
+                            {4, 9},  // fails in intersect2 recursing
+                            {4, 10}, // fails in intersect2 recursing
+                            {10, 17}, // fails in intersect2 recursing
+                            {12, 14}, // loops indefinitely
+                            {12, 21}, // fails in intersect2 recursing
+                            {13, 21}, // fails in intersect2 recursing
+                            {14, 21}, // fails in intersect2 recursing
+                            {17, 25}, // fails in intersect2 recursing
+                            {23, 25}, // fails in intersect2 recursing
+};
+
+static int failCount = sizeof(fails) / sizeof(fails[0]);
+#endif
+
+static void oneOff(int outer, int inner) {
+    const Cubic& cubic1 = testSet[outer];
+    const Cubic& cubic2 = testSet[inner];
+#if 0
+    bool failing = false;
+    for (int i = 0; i < failCount; ++i) {
+        if ((fails[i][0] == outer && fails[i][1] == inner)
+                || (fails[i][1] == outer && fails[i][0] == inner)) {
+            failing = true;
+            break;
+        }
+    }
+    if (!failing) {
+        oneOff(cubic1, cubic2);
+    } else {
+#endif
+        oneOff3(cubic1, cubic2);
+//    }
+}
+
 void CubicIntersection_OneOffTest() {
+    oneOff(12, 14);
+}
+
+static void newOneOff(int outer, int inner) {
+    const Cubic& cubic1 = newTestSet[outer];
+    const Cubic& cubic2 = newTestSet[inner];
+    oneOff3(cubic1, cubic2);
+}
+
+void CubicIntersection_NewOneOffTest() {
+    newOneOff(0, 1);
+}
+
+static void oneOffTests() {
     for (size_t outer = 0; outer < testSetCount - 1; ++outer) {
-#if ONE_OFF_DEBUG
-        SkDebugf("%s quads1[%d]\n", __FUNCTION__, outer);
-#endif
-        const Cubic& cubic1 = testSet[outer];
         for (size_t inner = outer + 1; inner < testSetCount; ++inner) {
-#if ONE_OFF_DEBUG
-        SkDebugf("%s quads2[%d]\n", __FUNCTION__, inner);
-#endif
-            const Cubic& cubic2 = testSet[inner];
-            oneOff(cubic1, cubic2);
+            oneOff(outer, inner);
         }
     }
 }
 
-#define DEBUG_CRASH 1
+void CubicIntersection_OneOffTests() {
+    oneOffTests();
+}
+
+#define DEBUG_CRASH 0
 
 class CubicChopper {
 public:
@@ -171,7 +418,7 @@ bool intersect(double minT1, double maxT1, double minT2, double maxT2) {
     sub_divide(cubic1, minT1, maxT1, sub1);
     sub_divide(cubic2, minT2, maxT2, sub2);
     Intersections i;
-    intersect2(sub1, sub2, i);
+    intersect3(sub1, sub2, i);
     if (i.used() == 0) {
         return false;
     }
@@ -248,16 +495,20 @@ void CubicIntersection_RandTestOld() {
         if (test == -1) {
             SkDebugf("ready...\n");
         }
-        bool newIntersects = intersect2(cubic1, cubic2, i2);
+        bool newIntersects = intersect3(cubic1, cubic2, i2);
         if (!boundsIntersect && (oldIntersects || newIntersects)) {
+    #if DEBUG_CRASH
             SkDebugf("%s %d unexpected intersection boundsIntersect=%d oldIntersects=%d"
                     " newIntersects=%d\n%s %s\n", __FUNCTION__, test, boundsIntersect,
                     oldIntersects, newIntersects, __FUNCTION__, str);
+    #endif
             SkASSERT(0);
         }
         if (oldIntersects && !newIntersects) {
+    #if DEBUG_CRASH
             SkDebugf("%s %d missing intersection oldIntersects=%d newIntersects=%d\n%s %s\n",
                     __FUNCTION__, test, oldIntersects, newIntersects, __FUNCTION__, str);
+    #endif
             SkASSERT(0);
         }
         if (!oldIntersects && !newIntersects) {
@@ -292,14 +543,18 @@ void CubicIntersection_RandTestOld() {
                 calc1, delta1, factor1, calc2, delta2, factor2);
         if (factor1 < largestFactor) {
             SkDebugf("WE HAVE A WINNER! %1.9g\n", factor1);
+    #if DEBUG_CRASH
             SkDebugf("%s\n", str);
-            oneOff(cubic1, cubic2);
+    #endif
+            oneOff3(cubic1, cubic2);
             largestFactor = factor1;
         }
         if (factor2 < largestFactor) {
             SkDebugf("WE HAVE A WINNER! %1.9g\n", factor2);
+    #if DEBUG_CRASH
             SkDebugf("%s\n", str);
-            oneOff(cubic1, cubic2);
+    #endif
+            oneOff3(cubic1, cubic2);
             largestFactor = factor2;
         }
     }
@@ -334,11 +589,13 @@ void CubicIntersection_RandTest() {
             SkDebugf("ready...\n");
         }
         Intersections intersections2;
-        bool newIntersects = intersect2(cubic1, cubic2, intersections2);
+        bool newIntersects = intersect3(cubic1, cubic2, intersections2);
         if (!boundsIntersect && newIntersects) {
+    #if DEBUG_CRASH
             SkDebugf("%s %d unexpected intersection boundsIntersect=%d "
                     " newIntersects=%d\n%s %s\n", __FUNCTION__, test, boundsIntersect,
                     newIntersects, __FUNCTION__, str);
+    #endif
             SkASSERT(0);
         }
         for (int pt = 0; pt < intersections2.used(); ++pt) {
@@ -357,47 +614,161 @@ void CubicIntersection_RandTest() {
     }
 }
 
-static Cubic deltaTestSet[] = {
-  {{1, 4}, {1, 4.*2/3}, {1, 4.*1/3}, {1, 0}},
-  {{0, 3}, {1, 2}, {2, 1}, {3, 0}},
-  {{1, 4}, {1, 4.*2/3}, {1, 4.*1/3}, {1, 0}},
-  {{3.5, 1}, {2.5, 2}, {1.5, 3}, {0.5, 4}}
-};
-
-size_t deltaTestSetLen = sizeof(deltaTestSet) / sizeof(deltaTestSet[0]);
-
-static double deltaTestSetT[] = {
-    3./8,
-    5./12,
-    6./8,
-    9./12
-};
-
-size_t deltaTestSetTLen = sizeof(deltaTestSetT) / sizeof(deltaTestSetT[0]);
-
-static double expectedT[] = {
-    0.5,
-    1./3,
-    1./8,
-    5./6
-};
-
-size_t expectedTLen = sizeof(expectedT) / sizeof(expectedT[0]);
-
-// FIXME: this test no longer valid -- does not take minimum scale contribution into account
-void CubicIntersection_ComputeDeltaTest() {
-    SkASSERT(deltaTestSetLen == deltaTestSetTLen);
-    SkASSERT(expectedTLen == deltaTestSetTLen);
-    for (size_t index = 0; index < deltaTestSetLen; index += 2) {
-        const Cubic& c1 = deltaTestSet[index];
-        const Cubic& c2 = deltaTestSet[index + 1];
-        double t1 = deltaTestSetT[index];
-        double t2 = deltaTestSetT[index + 1];
-        double d1, d2;
-        computeDelta(c1, t1, 1, c2, t2, 1, d1, d2);
-        SkASSERT(approximately_equal(t1 + d1, expectedT[index])
-            || approximately_equal(t1 - d1, expectedT[index]));
-        SkASSERT(approximately_equal(t2 + d2, expectedT[index + 1])
-            || approximately_equal(t2 - d2, expectedT[index + 1]));
+static void intersectionFinder(int index0, int index1, double t1Seed, double t2Seed,
+        double t1Step, double t2Step) {
+    const Cubic& cubic1 = newTestSet[index0];
+    const Cubic& cubic2 = newTestSet[index1];
+    _Point t1[3], t2[3];
+    bool toggle = true;
+    do {
+        xy_at_t(cubic1, t1Seed - t1Step, t1[0].x, t1[0].y);
+        xy_at_t(cubic1, t1Seed,          t1[1].x, t1[1].y);
+        xy_at_t(cubic1, t1Seed + t1Step, t1[2].x, t1[2].y);
+        xy_at_t(cubic2, t2Seed - t2Step, t2[0].x, t2[0].y);
+        xy_at_t(cubic2, t2Seed,          t2[1].x, t2[1].y);
+        xy_at_t(cubic2, t2Seed + t2Step, t2[2].x, t2[2].y);
+        double dist[3][3];
+        dist[1][1] = t1[1].distance(t2[1]);
+        int best_i = 1, best_j = 1;
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                if (i == 1 && j == 1) {
+                    continue;
+                }
+                dist[i][j] = t1[i].distance(t2[j]);
+                if (dist[best_i][best_j] > dist[i][j]) {
+                    best_i = i;
+                    best_j = j;
+                }
+            }
+        }
+        if (best_i == 0) {
+            t1Seed -= t1Step;
+        } else if (best_i == 2) {
+            t1Seed += t1Step;
+        }
+        if (best_j == 0) {
+            t2Seed -= t2Step;
+        } else if (best_j == 2) {
+            t2Seed += t2Step;
+        }
+        if (best_i == 1 && best_j == 1) {
+            if ((toggle ^= true)) {
+                t1Step /= 2;
+            } else {
+                t2Step /= 2;
+            }
+        }
+    } while (!t1[1].approximatelyEqual(t2[1]));
+    t1Step = t2Step = 0.1;
+    double t10 = t1Seed - t1Step * 2;
+    double t12 = t1Seed + t1Step * 2;
+    double t20 = t2Seed - t2Step * 2;
+    double t22 = t2Seed + t2Step * 2;
+    _Point test;
+    while (!approximately_zero(t1Step)) {
+        xy_at_t(cubic1, t10, test.x, test.y);
+        t10 += t1[1].approximatelyEqual(test) ? -t1Step : t1Step;
+        t1Step /= 2;
     }
+    t1Step = 0.1;
+    while (!approximately_zero(t1Step)) {
+        xy_at_t(cubic1, t12, test.x, test.y);
+        t12 -= t1[1].approximatelyEqual(test) ? -t1Step : t1Step;
+        t1Step /= 2;
+    }
+    while (!approximately_zero(t2Step)) {
+        xy_at_t(cubic2, t20, test.x, test.y);
+        t20 += t2[1].approximatelyEqual(test) ? -t2Step : t2Step;
+        t2Step /= 2;
+    }
+    t2Step = 0.1;
+    while (!approximately_zero(t2Step)) {
+        xy_at_t(cubic2, t22, test.x, test.y);
+        t22 -= t2[1].approximatelyEqual(test) ? -t2Step : t2Step;
+        t2Step /= 2;
+    }
+#if ONE_OFF_DEBUG
+    SkDebugf("%s t1=(%1.9g<%1.9g<%1.9g) t2=(%1.9g<%1.9g<%1.9g)\n", __FUNCTION__,
+        t10, t1Seed, t12, t20, t2Seed, t22);
+    _Point p10 = xy_at_t(cubic1, t10);
+    _Point p1Seed = xy_at_t(cubic1, t1Seed);
+    _Point p12 = xy_at_t(cubic1, t12);
+    SkDebugf("%s p1=(%1.9g,%1.9g)<(%1.9g,%1.9g)<(%1.9g,%1.9g)\n", __FUNCTION__,
+        p10.x, p10.y, p1Seed.x, p1Seed.y, p12.x, p12.y);
+    _Point p20 = xy_at_t(cubic2, t20);
+    _Point p2Seed = xy_at_t(cubic2, t2Seed);
+    _Point p22 = xy_at_t(cubic2, t22);
+    SkDebugf("%s p2=(%1.9g,%1.9g)<(%1.9g,%1.9g)<(%1.9g,%1.9g)\n", __FUNCTION__,
+        p20.x, p20.y, p2Seed.x, p2Seed.y, p22.x, p22.y);
+#endif
+}
+
+void CubicIntersection_IntersectionFinder() {
+
+ //   double t1Seed = 0.87;
+ //   double t2Seed = 0.87;
+    double t1Step = 0.000001;
+    double t2Step = 0.000001;
+    intersectionFinder(0, 1, 0.855895664, 0.864850875, t1Step, t2Step);
+    intersectionFinder(0, 1, 0.865207906, 0.865207887, t1Step, t2Step);
+    intersectionFinder(0, 1, 0.865213351, 0.865208087, t1Step, t2Step);
+}
+
+static void coincidentTest() {
+#if 0
+    Cubic cubic1 = {{0, 1}, {0, 2}, {1, 0}, {1, 0}};
+    Cubic cubic2 = {{0, 1}, {0, 2}, {1, 0}, {6, 1}};
+#endif
+}
+
+void CubicIntersection_SelfTest() {
+    const Cubic selfSet[] = {
+        {{0,2}, {2,3}, {5,1}, {3,2}},
+        {{0,2}, {3,5}, {5,0}, {4,2}},
+        {{3.34,8.98}, {1.95,10.27}, {3.76,7.65}, {4.96,10.64}},
+        {{3.13,2.74}, {1.08,4.62}, {3.71,0.94}, {2.01,3.81}},
+        {{6.71,3.14}, {7.99,2.75}, {8.27,1.96}, {6.35,3.57}},
+        {{12.81,7.27}, {7.22,6.98}, {12.49,8.97}, {11.42,6.18}},
+    };
+    size_t selfSetCount = sizeof(selfSet) / sizeof(selfSet[0]);
+    for (size_t index = 0; index < selfSetCount; ++index) {
+        const Cubic& cubic = selfSet[index];
+    #if ONE_OFF_DEBUG
+        int idx2;
+        double max[3];
+        int ts = find_cubic_max_curvature(cubic, max);
+        for (idx2 = 0; idx2 < ts; ++idx2) {
+            SkDebugf("%s max[%d]=%1.9g (%1.9g, %1.9g)\n", __FUNCTION__, idx2,
+                    max[idx2], xy_at_t(cubic, max[idx2]).x, xy_at_t(cubic, max[idx2]).y);
+        }
+        SkTDArray<double> ts1;
+        SkTDArray<Quadratic> quads1;
+        cubic_to_quadratics(cubic, calcPrecision(cubic), ts1);
+        for (idx2 = 0; idx2 < ts1.count(); ++idx2) {
+            SkDebugf("%s t[%d]=%1.9g\n", __FUNCTION__, idx2, ts1[idx2]);
+        }
+        cubic_to_quadratics(cubic, calcPrecision(cubic), quads1);
+        for (idx2 = 0; idx2 < quads1.count(); ++idx2) {
+            const Quadratic& q = quads1[idx2];
+            SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
+                    q[0].x, q[0].y,  q[1].x, q[1].y,  q[2].x, q[2].y);
+        }
+        SkDebugf("\n");
+    #endif
+        Intersections i;
+        SkDEBUGCODE(int result = ) intersect(cubic, i);
+        SkASSERT(result == 1);
+        SkASSERT(i.used() == 1);
+        SkASSERT(!approximately_equal(i.fT[0][0], i.fT[1][0]));
+        _Point pt1 = xy_at_t(cubic, i.fT[0][0]);
+        _Point pt2 = xy_at_t(cubic, i.fT[1][0]);
+        SkASSERT(pt1.approximatelyEqual(pt2));
+    }
+}
+
+void CubicIntersection_Test() {
+    oneOffTests();
+    coincidentTest();
+    standardTestCases();
 }

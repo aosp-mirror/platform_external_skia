@@ -8,75 +8,109 @@
 #include "DataTypes.h"
 #include "Intersections.h"
 
-void Intersections::addCoincident(double s1, double e1, double s2, double e2) {
-    SkASSERT((fCoincidentUsed & 1) != 1);
-    for (int index = 0; index < fCoincidentUsed; index += 2) {
-        double cs1 = fCoincidentT[fSwap][index];
-        double ce1 = fCoincidentT[fSwap][index + 1];
-        bool s1in = approximately_between(cs1, s1, ce1);
-        bool e1in = approximately_between(cs1, e1, ce1);
-        double cs2 = fCoincidentT[fSwap ^ 1][index];
-        double ce2 = fCoincidentT[fSwap ^ 1][index + 1];
-        bool s2in = approximately_between(cs2, s2, ce2);
-        bool e2in = approximately_between(cs2, e2, ce2);
+void Intersections::insertCoincidentPair(double s1, double e1, double s2, double e2,
+        const _Point& startPt, const _Point& endPt) {
+    if (fSwap) {
+        remove(s2, e2, startPt, endPt);
+    } else {
+        remove(s1, e1, startPt, endPt);
+    }
+    SkASSERT(coincidentUsed() == fUsed);
+    SkASSERT((coincidentUsed() & 1) != 1);
+    int i1 = 0;
+    int i2 = 0;
+    do {
+        while (i1 < fUsed && !(fIsCoincident[fSwap] & (1 << i1))) {
+            ++i1;
+        }
+        if (i1 == fUsed) {
+            break;
+        }
+        SkASSERT(i1 < fUsed);
+        int iEnd1 = i1 + 1;
+        while (!(fIsCoincident[fSwap] & (1 << iEnd1))) {
+            ++iEnd1;
+        }
+        SkASSERT(iEnd1 < fUsed);
+        double cs1 = fT[fSwap][i1];
+        double ce1 = fT[fSwap][iEnd1];
+        bool s1in = between(cs1, s1, ce1) || startPt.approximatelyEqual(fPt[i1])
+                || startPt.approximatelyEqual(fPt[iEnd1]);
+        bool e1in = between(cs1, e1, ce1) || endPt.approximatelyEqual(fPt[i1])
+                || endPt.approximatelyEqual(fPt[iEnd1]);
+        while (i2 < fUsed && !(fIsCoincident[fSwap ^ 1] & (1 << i2))) {
+            ++i2;
+        }
+        int iEnd2 = i2 + 1;
+        while (!(fIsCoincident[fSwap ^ 1] & (1 << iEnd2))) {
+            ++iEnd2;
+        }
+        SkASSERT(iEnd2 < fUsed);
+        double cs2 = fT[fSwap ^ 1][i2];
+        double ce2 = fT[fSwap ^ 1][iEnd2];
+        bool s2in = between(cs2, s2, ce2) || startPt.approximatelyEqual(fPt[i2])
+                || startPt.approximatelyEqual(fPt[iEnd2]);
+        bool e2in = between(cs2, e2, ce2) || endPt.approximatelyEqual(fPt[i2])
+                || endPt.approximatelyEqual(fPt[iEnd2]);
         if ((s1in | e1in) & (s2in | e2in)) {
-            double lesser1 = SkTMin(cs1, ce1);
-            index += cs1 > ce1;
-            if (s1in < lesser1) {
-                fCoincidentT[fSwap][index] = s1in;
-            } else if (e1in < lesser1) {
-                fCoincidentT[fSwap][index] = e1in;
+            if (s1 < cs1) {
+                fT[fSwap][i1] = s1;
+                fPt[i1] = startPt;
+            } else if (e1 < cs1) {
+                fT[fSwap][i1] = e1;
+                fPt[i1] = endPt;
             }
-            index ^= 1;
-            double greater1 = fCoincidentT[fSwap][index];
-            if (s1in > greater1) {
-                fCoincidentT[fSwap][index] = s1in;
-            } else if (e1in > greater1) {
-                fCoincidentT[fSwap][index] = e1in;
+            if (s1 > ce1) {
+                fT[fSwap][iEnd1] = s1;
+                fPt[iEnd1] = startPt;
+            } else if (e1 > ce1) {
+                fT[fSwap][iEnd1] = e1;
+                fPt[iEnd1] = endPt;
             }
-            index &= ~1;
-            double lesser2 = SkTMin(cs2, ce2);
-            index += cs2 > ce2;
-            if (s2in < lesser2) {
-                fCoincidentT[fSwap ^ 1][index] = s2in;
-            } else if (e2in < lesser2) {
-                fCoincidentT[fSwap ^ 1][index] = e2in;
+            if (s2 > e2) {
+                SkTSwap(cs2, ce2);
+                SkTSwap(i2, iEnd2);
             }
-            index ^= 1;
-            double greater2 = fCoincidentT[fSwap ^ 1][index];
-            if (s2in > greater2) {
-                fCoincidentT[fSwap ^ 1][index] = s2in;
-            } else if (e2in > greater2) {
-                fCoincidentT[fSwap ^ 1][index] = e2in;
+            if (s2 < cs2) {
+                fT[fSwap ^ 1][i2] = s2;
+            } else if (e2 < cs2) {
+                fT[fSwap ^ 1][i2] = e2;
+            }
+            if (s2 > ce2) {
+                fT[fSwap ^ 1][iEnd2] = s2;
+            } else if (e2 > ce2) {
+                fT[fSwap ^ 1][iEnd2] = e2;
             }
             return;
         }
-    }
-    SkASSERT(fCoincidentUsed < 9);
-    fCoincidentT[fSwap][fCoincidentUsed] = s1;
-    fCoincidentT[fSwap ^ 1][fCoincidentUsed] = s2;
-    ++fCoincidentUsed;
-    fCoincidentT[fSwap][fCoincidentUsed] = e1;
-    fCoincidentT[fSwap ^ 1][fCoincidentUsed] = e2;
-    ++fCoincidentUsed;
+    } while (true);
+    SkASSERT(fUsed < 9);
+    insertCoincident(s1, s2, startPt);
+    insertCoincident(e1, e2, endPt);
 }
 
-void Intersections::cleanUp() {
-    SkASSERT(fCoincidentUsed);
-    SkASSERT(fUsed);
-    // find any entries in fT that could be part of the coincident range
-
-}
-
-// FIXME: this doesn't respect swap, but add coincident does -- seems inconsistent
-void Intersections::insert(double one, double two) {
-    SkASSERT(fUsed <= 1 || fT[0][0] < fT[0][1]);
+int Intersections::insert(double one, double two, const _Point& pt) {
+    SkASSERT(fUsed <= 1 || fT[0][0] <= fT[0][1]);
     int index;
     for (index = 0; index < fUsed; ++index) {
-        if (approximately_equal(fT[0][index], one)
-                && approximately_equal(fT[1][index], two)) {
-            return;
+        double oldOne = fT[0][index];
+        double oldTwo = fT[1][index];
+        if (roughly_equal(oldOne, one) && roughly_equal(oldTwo, two)) {
+            if ((precisely_zero(one) && !precisely_zero(oldOne))
+                    || (precisely_equal(one, 1) && !precisely_equal(oldOne, 1))
+                    || (precisely_zero(two) && !precisely_zero(oldTwo))
+                    || (precisely_equal(two, 1) && !precisely_equal(oldTwo, 1))) {
+                fT[0][index] = one;
+                fT[1][index] = two;
+                fPt[index] = pt;
+            }
+            return -1;
         }
+    #if ONE_OFF_DEBUG
+        if (pt.roughlyEqual(fPt[index])) {
+            SkDebugf("%s t=%1.9g pts roughly equal\n", __FUNCTION__, one);
+        }
+    #endif
         if (fT[0][index] > one) {
             break;
         }
@@ -84,33 +118,41 @@ void Intersections::insert(double one, double two) {
     SkASSERT(fUsed < 9);
     int remaining = fUsed - index;
     if (remaining > 0) {
+        memmove(&fPt[index + 1], &fPt[index], sizeof(fPt[0]) * remaining);
         memmove(&fT[0][index + 1], &fT[0][index], sizeof(fT[0][0]) * remaining);
         memmove(&fT[1][index + 1], &fT[1][index], sizeof(fT[1][0]) * remaining);
+        fIsCoincident[0] += fIsCoincident[0] & ~((1 << index) - 1);
+        fIsCoincident[1] += fIsCoincident[1] & ~((1 << index) - 1);
     }
+    fPt[index] = pt;
     fT[0][index] = one;
     fT[1][index] = two;
     ++fUsed;
+    return index;
 }
 
-// FIXME: all callers should be moved to regular insert. Failures are likely
-// if two separate callers differ on whether ts are equal or not
-void Intersections::insertOne(double t, int side) {
-    int used = side ? fUsed2 : fUsed;
-    SkASSERT(used <= 1 || fT[side][0] < fT[side][1]);
-    int index;
-    for (index = 0; index < used; ++index) {
-        if (approximately_equal(fT[side][index], t)) {
-            return;
-        }
-        if (fT[side][index] > t) {
-            break;
+void Intersections::remove(double one, double two, const _Point& startPt, const _Point& endPt) {
+    for (int index = fUsed - 1; index >= 0; --index) {
+        if (!(fIsCoincident[0] & (1 << index)) && (between(one, fT[fSwap][index], two)
+                || startPt.approximatelyEqual(fPt[index])
+                || endPt.approximatelyEqual(fPt[index]))) {
+            SkASSERT(fUsed > 0);
+            removeOne(index);
         }
     }
-    SkASSERT(used < 9);
-    int remaining = used - index;
-    if (remaining > 0) {
-        memmove(&fT[side][index + 1], &fT[side][index], sizeof(fT[side][0]) * remaining);
+}
+
+void Intersections::removeOne(int index) {
+    int remaining = --fUsed - index;
+    if (remaining <= 0) {
+        return;
     }
-    fT[side][index] = t;
-    side ? ++fUsed2 : ++fUsed;
+    memmove(&fPt[index], &fPt[index + 1], sizeof(fPt[0]) * remaining);
+    memmove(&fT[0][index], &fT[0][index + 1], sizeof(fT[0][0]) * remaining);
+    memmove(&fT[1][index], &fT[1][index + 1], sizeof(fT[1][0]) * remaining);
+    SkASSERT(fIsCoincident[0] == 0);
+    int coBit = fIsCoincident[0] & (1 << index);
+    fIsCoincident[0] -= ((fIsCoincident[0] >> 1) & ~((1 << index) - 1)) + coBit;
+    SkASSERT(!(coBit ^ (fIsCoincident[1] & (1 << index))));
+    fIsCoincident[1] -= ((fIsCoincident[1] >> 1) & ~((1 << index) - 1)) + coBit;
 }

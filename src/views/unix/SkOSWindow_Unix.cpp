@@ -32,12 +32,12 @@ const int HEIGHT = 500;
 const long EVENT_MASK = StructureNotifyMask|ButtonPressMask|ButtonReleaseMask
         |ExposureMask|PointerMotionMask|KeyPressMask|KeyReleaseMask;
 
-SkOSWindow::SkOSWindow(void* unused)
+SkOSWindow::SkOSWindow(void*)
     : fVi(NULL)
     , fMSAASampleCount(0) {
     fUnixWindow.fDisplay = NULL;
     fUnixWindow.fGLContext = NULL;
-    this->initWindow(0);
+    this->initWindow(0, NULL);
     this->resize(WIDTH, HEIGHT);
 }
 
@@ -59,12 +59,21 @@ void SkOSWindow::closeWindow() {
     }
 }
 
-void SkOSWindow::initWindow(int requestedMSAASampleCount) {
+void SkOSWindow::initWindow(int requestedMSAASampleCount, AttachmentInfo* info) {
     if (fMSAASampleCount != requestedMSAASampleCount) {
         this->closeWindow();
     }
     // presence of fDisplay means we already have a window
     if (NULL != fUnixWindow.fDisplay) {
+        if (NULL != info) {
+            if (NULL != fVi) {
+                glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
+                glXGetConfig(fUnixWindow.fDisplay, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
+            } else {
+                info->fSampleCount = 0;
+                info->fStencilBits = 0;
+            }
+        }
         return;
     }
     fUnixWindow.fDisplay = XOpenDisplay(NULL);
@@ -101,6 +110,10 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount) {
     }
 
     if (fVi) {
+        if (NULL != info) {
+            glXGetConfig(dsp, fVi, GLX_SAMPLES_ARB, &info->fSampleCount);
+            glXGetConfig(dsp, fVi, GLX_STENCIL_SIZE, &info->fStencilBits);
+        }
         Colormap colorMap = XCreateColormap(dsp,
                                             RootWindow(dsp, fVi->screen),
                                             fVi->visual,
@@ -119,6 +132,10 @@ void SkOSWindow::initWindow(int requestedMSAASampleCount) {
                                          CWEventMask | CWColormap,
                                          &swa);
     } else {
+        if (NULL != info) {
+            info->fSampleCount = 0;
+            info->fStencilBits = 0;
+        }
         // Create a simple window instead.  We will not be able to show GL
         fUnixWindow.fWin = XCreateSimpleWindow(dsp,
                                                DefaultRootWindow(dsp),
@@ -138,7 +155,6 @@ void SkOSWindow::post_linuxevent() {
     if (NULL == fUnixWindow.fDisplay) {
         return;
     }
-    long event_mask = NoEventMask;
     XClientMessageEvent event;
     event.type = ClientMessage;
     Atom myAtom(0);
@@ -250,8 +266,9 @@ void SkOSWindow::mapWindowAndWait() {
 
 }
 
-bool SkOSWindow::attach(SkBackEndTypes /* attachType */, int msaaSampleCount) {
-    this->initWindow(msaaSampleCount);
+bool SkOSWindow::attach(SkBackEndTypes, int msaaSampleCount, AttachmentInfo* info) {
+    this->initWindow(msaaSampleCount, info);
+
     if (NULL == fUnixWindow.fDisplay) {
         return false;
     }
@@ -363,10 +380,10 @@ bool SkOSWindow::onHandleChar(SkUnichar) {
     return false;
 }
 
-bool SkOSWindow::onHandleKey(SkKey key) {
+bool SkOSWindow::onHandleKey(SkKey) {
     return false;
 }
 
-bool SkOSWindow::onHandleKeyUp(SkKey key) {
+bool SkOSWindow::onHandleKeyUp(SkKey) {
     return false;
 }
