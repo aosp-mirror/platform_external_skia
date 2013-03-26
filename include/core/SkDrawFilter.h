@@ -37,7 +37,7 @@ public:
      *  Called with the paint that will be used to draw the specified type.
      *  The implementation may modify the paint as they wish.
      */
-    virtual void filter(SkPaint*, Type) = 0;
+    virtual bool filter(SkPaint*, Type) = 0;
 };
 
 #endif
