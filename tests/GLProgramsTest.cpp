@@ -15,6 +15,7 @@
 #include "gl/GrGpuGL.h"
 #include "GrBackendEffectFactory.h"
 #include "GrContextFactory.h"
+#include "GrDrawEffect.h"
 #include "effects/GrConfigConversionEffect.h"
 
 #include "SkRandom.h"
@@ -57,16 +58,18 @@ void GrGLProgram::Desc::setRandom(SkMWCRandom* random,
         fDualSrcOutput = kNone_DualSrcOutput;
     }
 
-    bool useOnce = false;
+    // use separate tex coords?
+    if (random->nextBool()) {
+        fAttribBindings |= GrDrawState::kLocalCoords_AttribBindingsBit;
+    }
+
     for (int s = 0; s < GrDrawState::kNumStages; ++s) {
         if (NULL != stages[s].getEffect()) {
             const GrBackendEffectFactory& factory = (*stages[s].getEffect())->getFactory();
-            fEffectKeys[s] = factory.glEffectKey(stages[s], gpu->glCaps());
-            // use separate tex coords?
-            if (!useOnce && random->nextBool()) {
-                fAttribBindings |= GrDrawState::ExplicitTexCoordAttribBindingsBit(s);
-                useOnce = true;
-            }
+            bool explicitLocalCoords = (fAttribBindings &
+                                        GrDrawState::kLocalCoords_AttribBindingsBit);
+            GrDrawEffect drawEffect(stages[s], explicitLocalCoords);
+            fEffectKeys[s] = factory.glEffectKey(drawEffect, gpu->glCaps());
         }
     }
 
@@ -85,8 +88,8 @@ void GrGLProgram::Desc::setRandom(SkMWCRandom* random,
         fEdgeAttributeIndex = attributeIndex;
         ++attributeIndex;
     }
-    if (GrDrawState::AttributesBindExplicitTexCoords(fAttribBindings)) {
-        fTexCoordAttributeIndex = attributeIndex;
+    if (fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit) {
+        fLocalCoordsAttributeIndex = attributeIndex;
         ++attributeIndex;
     }
 }
@@ -131,7 +134,16 @@ bool GrGpuGL::programUnitTest(int maxStages) {
                                                                                 &random,
                                                                                 this->getContext(),
                                                                                 dummyTextures));
-                for (int i = 0; i < effect.get()->get()->numVertexAttribs(); ++i) {
+                int numAttribs = (*effect)->numVertexAttribs();
+
+                // If adding this effect would cause to exceed the max attrib count then generate a
+                // new random effect. The explanation for why this check is correct is a bit
+                // convoluted and this code will be removed soon.
+                if (currAttribIndex + numAttribs > GrDrawState::kCoverageOverrideAttribIndexValue) {
+                    --s;
+                    continue;
+                }
+                for (int i = 0; i < numAttribs; ++i) {
                     attribIndices[i] = currAttribIndex++;
                 }
                 stages[s].setEffect(effect.get(), attribIndices[0], attribIndices[1]);

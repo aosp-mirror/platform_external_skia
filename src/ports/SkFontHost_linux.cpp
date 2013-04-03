@@ -8,6 +8,7 @@
 
 
 #include "SkFontHost.h"
+#include "SkFontHost_FreeType_common.h"
 #include "SkFontDescriptor.h"
 #include "SkDescriptor.h"
 #include "SkOSFile.h"
@@ -228,10 +229,10 @@ static void remove_from_names(FamilyRec* emptyFamily) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class FamilyTypeface : public SkTypeface {
+class FamilyTypeface : public SkTypeface_FreeType {
 public:
     FamilyTypeface(Style style, bool sysFont, FamilyRec* family, bool isFixedWidth)
-    : SkTypeface(style, sk_atomic_inc(&gUniqueFontID) + 1, isFixedWidth) {
+    : INHERITED(style, sk_atomic_inc(&gUniqueFontID) + 1, isFixedWidth) {
         fIsSysFont = sysFont;
 
         SkAutoMutexAcquire  ac(gFamilyMutex);
@@ -257,15 +258,14 @@ public:
 
     bool isSysFont() const { return fIsSysFont; }
     FamilyRec* getFamily() const { return fFamilyRec; }
-    // openStream returns a SkStream that has been ref-ed
-    virtual SkStream* openStream() = 0;
+
     virtual const char* getUniqueString() const = 0;
 
 private:
     FamilyRec*  fFamilyRec; // we don't own this, just point to it
     bool        fIsSysFont;
 
-    typedef SkTypeface INHERITED;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -278,9 +278,10 @@ class EmptyTypeface : public FamilyTypeface {
 public:
     EmptyTypeface() : INHERITED(SkTypeface::kNormal, true, NULL, false) {}
 
-    // overrides
-    virtual SkStream* openStream() SK_OVERRIDE { return NULL; }
     virtual const char* getUniqueString() SK_OVERRIDE const { return NULL; }
+
+protected:
+    virtual SkStream* onOpenStream(int*) const SK_OVERRIDE { return NULL; }
 
 private:
     typedef FamilyTypeface INHERITED;
@@ -298,12 +299,14 @@ public:
         fStream->unref();
     }
 
-    virtual SkStream* openStream() SK_OVERRIDE {
-      // openStream returns a refed stream.
-      fStream->ref();
-      return fStream;
-    }
     virtual const char* getUniqueString() const SK_OVERRIDE { return NULL; }
+
+protected:
+    virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+        *ttcIndex = 0;
+        fStream->ref();
+        return fStream;
+    }
 
 private:
     SkStream* fStream;
@@ -319,16 +322,18 @@ public:
         fPath.set(path);
     }
 
-    virtual SkStream* openStream() SK_OVERRIDE {
-        return SkStream::NewFromFile(fPath.c_str());
-    }
-
     virtual const char* getUniqueString() const SK_OVERRIDE {
         const char* str = strrchr(fPath.c_str(), '/');
         if (str) {
             str += 1;   // skip the '/'
         }
         return str;
+    }
+
+protected:
+    virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+        *ttcIndex = 0;
+        return SkStream::NewFromFile(fPath.c_str());
     }
 
 private:
@@ -464,7 +469,7 @@ void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
     const bool isCustomFont = !((FamilyTypeface*)face)->isSysFont();
     if (isCustomFont) {
         // store the entire font in the fontData
-        SkStream* fontStream = ((FamilyTypeface*)face)->openStream();
+        SkStream* fontStream = face->openStream(NULL);
         const uint32_t length = fontStream->getLength();
 
         stream->writePackedUInt(length);
@@ -526,23 +531,6 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
 
     SkSafeRef(tf);
     return tf;
-}
-
-SkStream* SkFontHost::OpenStream(uint32_t fontID) {
-    FamilyTypeface* tf = (FamilyTypeface*)find_from_uniqueID(fontID);
-    SkStream* stream = tf ? tf->openStream() : NULL;
-
-    if (stream && stream->getLength() == 0) {
-        stream->unref();
-        stream = NULL;
-    }
-    return stream;
-}
-
-size_t SkFontHost::GetFileName(SkFontID fontID, char path[], size_t length,
-                               int32_t* index) {
-//    SkDebugf("SkFontHost::GetFileName unimplemented\n");
-    return 0;
 }
 
 SkTypeface* SkFontHost::NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID) {

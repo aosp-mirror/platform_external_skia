@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#ifndef SK_FLAGS_H
-#define SK_FLAGS_H
+#ifndef SK_COMMAND_LINE_FLAGS_H
+#define SK_COMMAND_LINE_FLAGS_H
 
 #include "SkString.h"
 #include "SkTDArray.h"
 
 /**
- *  Including this file (and compiling SkFlags.cpp) provides command line
+ *  Including this file (and compiling SkCommandLineFlags.cpp) provides command line
  *  parsing. In order to use it, use the following macros in global
  *  namespace:
  *
@@ -21,8 +21,8 @@
  *  DEFINE_int32(name, defaultValue, helpString);
  *  DEFINE_double(name, defaultValue, helpString);
  *
- *  Then, in main, call SkFlags::SetUsage() to describe usage and call
- *  SkFlags::ParseCommandLine() to parse the flags. Henceforth, each flag can
+ *  Then, in main, call SkCommandLineFlags::SetUsage() to describe usage and call
+ *  SkCommandLineFlags::Parse() to parse the flags. Henceforth, each flag can
  *  be referenced using
  *
  *  FLAGS_name
@@ -37,8 +37,13 @@
  *
  *  which will initially be set to false, and can be set to true by using the
  *  flag "--boolean" on the commandline. "--noboolean" will set FLAGS_boolean
- *  to false. (Single dashes are also permitted for this and other flags.) The
- *  helpString will be printed if the help flag (-h or -help) is used.
+ *  to false. FLAGS_boolean can also be set using "--boolean=true" or
+ *  "--boolean true" (where "true" can be replaced by "false", "TRUE", "FALSE",
+ *  "1" or "0").
+ *
+ *  Single dashes are also permitted for this and other flags.
+ *
+ *  The helpString will be printed if the help flag (-h or -help) is used.
  *
  *  Similarly, the line
  *
@@ -80,8 +85,8 @@
  *
  *  Inspired by gflags (https://code.google.com/p/gflags/). Is not quite as
  *  robust as gflags, but suits our purposes. For example, allows creating
- *  a flag -h or -help which will never be used, since SkFlags handles it.
- *  SkFlags will also allow creating --flag and --noflag. Uses the same input
+ *  a flag -h or -help which will never be used, since SkCommandLineFlags handles it.
+ *  SkCommandLineFlags will also allow creating --flag and --noflag. Uses the same input
  *  format as gflags and creates similarly named variables (i.e. FLAGS_name).
  *  Strings are handled differently (resulting variable will be an array of
  *  strings) so that a flag can be followed by multiple parameters.
@@ -90,12 +95,12 @@
 
 class SkFlagInfo;
 
-class SkFlags {
+class SkCommandLineFlags {
 
 public:
     /**
      *  Call to set the help message to be displayed. Should be called before
-     *  ParseCommandLine.
+     *  Parse.
      */
     static void SetUsage(const char* usage);
 
@@ -103,7 +108,7 @@ public:
      *  Call at the beginning of main to parse flags created by DEFINE_x, above.
      *  Must only be called once.
      */
-    static void ParseCommandLine(int argc, char** argv);
+    static void Parse(int argc, char** argv);
 
 private:
     static SkFlagInfo* gHead;
@@ -227,38 +232,19 @@ public:
     }
 
     /**
-     *  Returns true if the string matches this flag. For a bool, also sets the
-     *  value, since a bool is specified as true or false by --name or --noname.
+     *  Returns true if the string matches this flag.
+     *  For a boolean flag, also sets the value, since a boolean flag can be set in a number of ways
+     *  without looking at the following string:
+     *      --name
+     *      --noname
+     *      --name=true
+     *      --name=false
+     *      --name=1
+     *      --name=0
+     *      --name=TRUE
+     *      --name=FALSE
      */
-    bool match(const char* string) {
-        if (SkStrStartsWith(string, '-') && strlen(string) > 1) {
-            string++;
-            // Allow one or two dashes
-            if (SkStrStartsWith(string, '-') && strlen(string) > 1) {
-                string++;
-            }
-            if (kBool_FlagType == fFlagType) {
-                // In this case, go ahead and set the value.
-                if (fName.equals(string) || fShortName.equals(string)) {
-                    *fBoolValue = true;
-                    return true;
-                }
-                if (SkStrStartsWith(string, "no") && strlen(string) > 2) {
-                    string += 2;
-                    if (fName.equals(string) || fShortName.equals(string)) {
-                        *fBoolValue = false;
-                        return true;
-                    }
-                    return false;
-                }
-            }
-            return fName.equals(string) || fShortName.equals(string);
-        } else {
-            // Has no dash
-            return false;
-        }
-        return false;
-    }
+    bool match(const char* string);
 
     FlagTypes getFlagType() const { return fFlagType; }
 
@@ -294,9 +280,19 @@ public:
         }
     }
 
+    void setBool(bool value) {
+        if (kBool_FlagType == fFlagType) {
+            *fBoolValue = value;
+        } else {
+            SkASSERT(!"Can only call setBool on kBool_FlagType");
+        }
+    }
+
     SkFlagInfo* next() { return fNext; }
 
     const SkString& name() const { return fName; }
+
+    const SkString& shortName() const { return fShortName; }
 
     const SkString& help() const { return fHelpString; }
 
@@ -348,8 +344,8 @@ private:
         , fDoubleValue(NULL)
         , fDefaultDouble(0)
         , fStrings(NULL) {
-        fNext = SkFlags::gHead;
-        SkFlags::gHead = this;
+        fNext = SkCommandLineFlags::gHead;
+        SkCommandLineFlags::gHead = this;
     }
     // Name of the flag, without initial dashes
     SkString             fName;
@@ -369,4 +365,4 @@ private:
     // In order to keep a linked list.
     SkFlagInfo*          fNext;
 };
-#endif // SK_FLAGS_H
+#endif // SK_COMMAND_LINE_FLAGS_H

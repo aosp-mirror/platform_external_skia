@@ -97,59 +97,43 @@ SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
-        SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
-        const uint32_t* glyphIDs,
-        uint32_t glyphIDsCount) const {
-    return SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID,
-                                                  perGlyphInfo,
-                                                  glyphIDs,
-                                                  glyphIDsCount);
+                                SkAdvancedTypefaceMetrics::PerGlyphInfo info,
+                                const uint32_t* glyphIDs,
+                                uint32_t glyphIDsCount) const {
+    return this->onGetAdvancedTypefaceMetrics(info, glyphIDs, glyphIDsCount);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 int SkTypeface::countTables() const {
-    return SkFontHost::CountTables(fUniqueID);
+    return this->onGetTableTags(NULL);
 }
 
 int SkTypeface::getTableTags(SkFontTableTag tags[]) const {
-    return SkFontHost::GetTableTags(fUniqueID, tags);
+    return this->onGetTableTags(tags);
 }
 
 size_t SkTypeface::getTableSize(SkFontTableTag tag) const {
-    return SkFontHost::GetTableSize(fUniqueID, tag);
+    return this->onGetTableData(tag, 0, ~0U, NULL);
 }
 
 size_t SkTypeface::getTableData(SkFontTableTag tag, size_t offset, size_t length,
                                 void* data) const {
-    return SkFontHost::GetTableData(fUniqueID, tag, offset, length, data);
+    return this->onGetTableData(tag, offset, length, data);
 }
 
 SkStream* SkTypeface::openStream(int* ttcIndex) const {
-    if (ttcIndex) {
-        int32_t ndx = 0;
-        (void)SkFontHost::GetFileName(fUniqueID, NULL, 0, &ndx);
-        *ttcIndex = (int)ndx;
+    int ttcIndexStorage;
+    if (NULL == ttcIndex) {
+        // So our subclasses don't need to check for null param
+        ttcIndex = &ttcIndexStorage;
     }
-    return SkFontHost::OpenStream(fUniqueID);
+    return this->onOpenStream(ttcIndex);
 }
 
 int SkTypeface::getUnitsPerEm() const {
-    int upem = 0;
-
-#ifdef SK_BUILD_FOR_ANDROID
-    upem = SkFontHost::GetUnitsPerEm(fUniqueID);
-#else
-    SkAdvancedTypefaceMetrics* metrics;
-    metrics = SkFontHost::GetAdvancedTypefaceMetrics(fUniqueID,
-                                 SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo,
-                                 NULL, 0);
-    if (metrics) {
-        upem = metrics->fEmSize;
-        metrics->unref();
-    }
-#endif
-    return upem;
+    // should we try to cache this in the base-class?
+    return this->onGetUPEM();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -157,10 +141,38 @@ int SkTypeface::getUnitsPerEm() const {
 
 #include "SkFontDescriptor.h"
 
-int SkTypeface::onGetUPEM() const { return 0; }
-int SkTypeface::onGetTableTags(SkFontTableTag tags[]) const { return 0; }
-size_t SkTypeface::onGetTableData(SkFontTableTag, size_t offset,
-                                  size_t length, void* data) const { return 0; }
+int SkTypeface::onGetUPEM() const {
+    int upem = 0;
+
+    SkAdvancedTypefaceMetrics* metrics;
+    metrics = this->getAdvancedTypefaceMetrics(
+                             SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo,
+                             NULL, 0);
+    if (metrics) {
+        upem = metrics->fEmSize;
+        metrics->unref();
+    }
+    return upem;
+}
+
 void SkTypeface::onGetFontDescriptor(SkFontDescriptor* desc) const {
     desc->setStyle(this->style());
+}
+
+#include "SkFontStream.h"
+#include "SkStream.h"
+
+int SkTypeface::onGetTableTags(SkFontTableTag tags[]) const {
+    int ttcIndex;
+    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
+    return stream.get() ? SkFontStream::GetTableTags(stream, ttcIndex, tags) : 0;
+}
+
+size_t SkTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
+                                  size_t length, void* data) const {
+    int ttcIndex;
+    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
+    return stream.get()
+        ? SkFontStream::GetTableData(stream, ttcIndex, tag, offset, length, data)
+        : 0;
 }

@@ -91,16 +91,6 @@ public:
     /** @deprecated get from Device. */
     static LCDOrder GetSubpixelOrder();
 
-#ifdef SK_BUILD_FOR_ANDROID
-    /**
-     * Return the number of font units per em.
-     *
-     * @param fontID the font to query.
-     * @return the number of font units per em or 0 on error.
-     */
-    static uint32_t GetUnitsPerEm(SkFontID fontID);
-#endif
-
     /** If Skia is running in a constrained environment and the typeface
      implementation is handle based, the typeface data may become
      unavailable asynchronously. If a font host or scaler context method is
@@ -128,47 +118,8 @@ public:
      */
     static SkTypeface* NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID);
 
-
-    ///// public HACK FOR FREETYPE -- will be fixed
-
-    /** Return a new stream to read the font data, or null if the uniqueID does
-     not match an existing typeface. .The caller must call stream->unref()
-     when it is finished reading the data.
-     */
-    static SkStream* OpenStream(SkFontID uniqueID);
-
-    /** Some fonts are stored in files. If that is true for the fontID, then
-     this returns the byte length of the full file path. If path is not null,
-     then the full path is copied into path (allocated by the caller), up to
-     length bytes. If index is not null, then it is set to the truetype
-     collection index for this font, or 0 if the font is not in a collection.
-
-     Note: GetFileName does not assume that path is a null-terminated string,
-     so when it succeeds, it only copies the bytes of the file name and
-     nothing else (i.e. it copies exactly the number of bytes returned by the
-     function. If the caller wants to treat path[] as a C string, it must be
-     sure that it is allocated at least 1 byte larger than the returned size,
-     and it must copy in the terminating 0.
-
-     If the fontID does not correspond to a file, then the function returns
-     0, and the path and index parameters are ignored.
-
-     @param fontID   The font whose file name is being queried
-     @param path     Either NULL, or storage for receiving up to length bytes
-     of the font's file name. Allocated by the caller.
-     @param length   The maximum space allocated in path (by the caller).
-     Ignored if path is NULL.
-     @param index    Either NULL, or receives the TTC index for this font.
-     If the font is not a TTC, then will be set to 0.
-     @return The byte length of th font's file name, or 0 if the font is not
-     baked by a file.
-     */
-    static size_t GetFileName(SkFontID fontID, char path[], size_t length,
-                              int32_t* index);
-
-    // END_HACK for freetype
-
 private:
+
     /** Return a new, closest matching typeface given either an existing family
         (specified by a typeface in that family) or by a familyName and a
         requested style.
@@ -215,62 +166,6 @@ private:
         SkFontDescriptor.
      */
     static SkTypeface* Deserialize(SkStream*);
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    /** Retrieve detailed typeface metrics.  Used by the PDF backend.
-        @param perGlyphInfo Indicate what glyph specific information (advances,
-                            names, etc.) should be populated.
-        @return The returned object has already been referenced.  NULL is
-                returned if the font is not found.
-        @param glyphIDs  For per-glyph info, specify subset of the font by
-                         giving glyph ids.  Each integer represents a glyph
-                         id.  Passing NULL means all glyphs in the font.
-        @param glyphIDsCount Number of elements in subsetGlyphIds. Ignored if
-                             glyphIDs is NULL.
-     */
-    static SkAdvancedTypefaceMetrics* GetAdvancedTypefaceMetrics(
-            SkFontID fontID,
-            SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
-            const uint32_t* glyphIDs,
-            uint32_t glyphIDsCount);
-
-    /** Return the number of tables in the font
-     */
-    static int CountTables(SkFontID);
-
-    /** Copy into tags[] (allocated by the caller) the list of table tags in
-        the font, and return the number. This will be the same as CountTables()
-        or 0 if an error occured.
-     */
-    static int GetTableTags(SkFontID, SkFontTableTag[]);
-
-    /** Given a table tag, return the size of its contents, or 0 if not present
-     */
-    static size_t GetTableSize(SkFontID, SkFontTableTag);
-
-    /** Copy the contents of a table into data (allocated by the caller). Note
-        that the contents of the table will be in their native endian order
-        (which for most truetype tables is big endian). If the table tag is
-        not found, or there is an error copying the data, then 0 is returned.
-        If this happens, it is possible that some or all of the memory pointed
-        to by data may have been written to, even though an error has occured.
-
-        @param fontID the font to copy the table from
-        @param tag  The table tag whose contents are to be copied
-        @param offset The offset in bytes into the table's contents where the
-                copy should start from.
-        @param length The number of bytes, starting at offset, of table data
-                to copy.
-        @param data storage address where the table contents are copied to
-        @return the number of bytes actually copied into data. If offset+length
-                exceeds the table's size, then only the bytes up to the table's
-                size are actually copied, and this is the value returned. If
-                offset > the table's size, or tag is not a valid table,
-                then 0 is returned.
-     */
-    static size_t GetTableData(SkFontID fontID, SkFontTableTag tag,
-                               size_t offset, size_t length, void* data);
 
     ///////////////////////////////////////////////////////////////////////////
 

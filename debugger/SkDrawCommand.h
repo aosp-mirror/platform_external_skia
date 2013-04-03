@@ -57,6 +57,9 @@ public:
     Restore();
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual void trackSaveState(int* state) SK_OVERRIDE;
+
+private:
+    typedef SkDrawCommand INHERITED;
 };
 
 class Clear : public SkDrawCommand {
@@ -65,6 +68,8 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkColor fColor;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class ClipPath : public SkDrawCommand {
@@ -73,10 +78,10 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    SkPath fPath;
+    SkPath       fPath;
     SkRegion::Op fOp;
-    bool fDoAA;
-    SkBitmap fBitmap;
+    bool         fDoAA;
+    SkBitmap     fBitmap;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -86,8 +91,10 @@ public:
     ClipRegion(const SkRegion& region, SkRegion::Op op);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkRegion* fRegion;
+    SkRegion     fRegion;
     SkRegion::Op fOp;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class ClipRect : public SkDrawCommand {
@@ -95,14 +102,16 @@ public:
     ClipRect(const SkRect& rect, SkRegion::Op op, bool doAA);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 
-    const SkRect& rect() const { return *fRect; }
+    const SkRect& rect() const { return fRect; }
     SkRegion::Op op() const { return fOp; }
     bool doAA() const { return fDoAA; }
 
 private:
-    const SkRect* fRect;
+    SkRect       fRect;
     SkRegion::Op fOp;
-    bool fDoAA;
+    bool         fDoAA;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class ClipRRect : public SkDrawCommand {
@@ -115,9 +124,11 @@ public:
     bool doAA() const { return fDoAA; }
 
 private:
-    SkRRect fRRect;
+    SkRRect      fRRect;
     SkRegion::Op fOp;
-    bool fDoAA;
+    bool         fDoAA;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Concat : public SkDrawCommand {
@@ -125,48 +136,60 @@ public:
     Concat(const SkMatrix& matrix);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkMatrix* fMatrix;
+    SkMatrix fMatrix;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawBitmap : public SkDrawCommand {
 public:
     DrawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar top,
-            const SkPaint* paint, SkBitmap& resizedBitmap);
+               const SkPaint* paint, SkBitmap& resizedBitmap);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    const SkPaint* fPaint;
-    const SkBitmap* fBitmap;
+    SkBitmap fBitmap;
     SkScalar fLeft;
     SkScalar fTop;
+    SkPaint  fPaint;
+    SkPaint* fPaintPtr;
     SkBitmap fResizedBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawBitmapMatrix : public SkDrawCommand {
 public:
     DrawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& matrix,
-            const SkPaint* paint, SkBitmap& resizedBitmap);
+                     const SkPaint* paint, SkBitmap& resizedBitmap);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    const SkPaint* fPaint;
-    const SkBitmap* fBitmap;
-    const SkMatrix* fMatrix;
+    SkBitmap fBitmap;
+    SkMatrix fMatrix;
+    SkPaint  fPaint;
+    SkPaint* fPaintPtr;
     SkBitmap fResizedBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawBitmapNine : public SkDrawCommand {
 public:
     DrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
-            const SkRect& dst, const SkPaint* paint, SkBitmap& resizedBitmap);
+                   const SkRect& dst, const SkPaint* paint,
+                   SkBitmap& resizedBitmap);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    const SkBitmap* fBitmap;
-    const SkIRect* fCenter;
-    const SkRect* fDst;
-    const SkPaint* fPaint;
+    SkBitmap fBitmap;
+    SkIRect  fCenter;
+    SkRect   fDst;
+    SkPaint  fPaint;
+    SkPaint* fPaintPtr;
     SkBitmap fResizedBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawBitmapRect : public SkDrawCommand {
@@ -190,11 +213,11 @@ public:
     const SkRect& dstRect() const { return fDst; }
 
 private:
-    SkRect  fSrc;
-    SkPaint fPaint;
-    SkPaint* fPaintPtr;
     SkBitmap fBitmap;
-    SkRect  fDst;
+    SkRect   fSrc;
+    SkRect   fDst;
+    SkPaint  fPaint;
+    SkPaint* fPaintPtr;
     SkBitmap fResizedBitmap;
 
     typedef SkDrawCommand INHERITED;
@@ -214,8 +237,10 @@ public:
     DrawOval(const SkRect& oval, const SkPaint& paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkRect* fOval;
-    const SkPaint* fPaint;
+    SkRect  fOval;
+    SkPaint fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPaint : public SkDrawCommand {
@@ -223,7 +248,9 @@ public:
     DrawPaint(const SkPaint& paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkPaint* fPaint;
+    SkPaint fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPath : public SkDrawCommand {
@@ -251,13 +278,17 @@ private:
 class DrawPoints : public SkDrawCommand {
 public:
     DrawPoints(SkCanvas::PointMode mode, size_t count, const SkPoint pts[],
-            const SkPaint& paint);
+               const SkPaint& paint);
+    virtual ~DrawPoints() { delete [] fPts; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+
 private:
-    const SkPoint* fPts;
     SkCanvas::PointMode fMode;
-    size_t fCount;
-    const SkPaint* fPaint;
+    size_t              fCount;
+    SkPoint*            fPts;
+    SkPaint             fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 /* TODO(chudy): DrawText is a predefined macro and was breaking something
@@ -279,19 +310,20 @@ private:
 class DrawPosText : public SkDrawCommand {
 public:
     DrawPosText(const void* text, size_t byteLength, const SkPoint pos[],
-            const SkPaint& paint);
+                const SkPaint& paint);
+    virtual ~DrawPosText() { delete [] fPos; delete [] fText; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkPoint* fPos;
-    const void* fText;
+    SkPoint* fPos;
+    char* fText;
     size_t fByteLength;
-    const SkPaint* fPaint;
+    SkPaint fPaint;
 };
 
 class DrawTextOnPath : public SkDrawCommand {
 public:
     DrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
-            const SkMatrix* matrix, const SkPaint& paint);
+                   const SkMatrix* matrix, const SkPaint& paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     const SkMatrix* fMatrix;
@@ -305,10 +337,11 @@ class DrawPosTextH : public SkDrawCommand {
 public:
     DrawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
                  SkScalar constY, const SkPaint& paint);
+    virtual ~DrawPosTextH() { delete [] fXpos; delete [] fText; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkScalar* fXpos;
-    const void* fText;
+    SkScalar* fXpos;
+    char* fText;
     size_t fByteLength;
     SkScalar fConstY;
     SkPaint fPaint;
@@ -387,21 +420,26 @@ public:
     virtual void trackSaveState(int* state) SK_OVERRIDE;
 private:
     SkCanvas::SaveFlags fFlags;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class SaveLayer : public SkDrawCommand {
 public:
     SaveLayer(const SkRect* bounds, const SkPaint* paint,
-            SkCanvas::SaveFlags flags);
+              SkCanvas::SaveFlags flags);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual void trackSaveState(int* state) SK_OVERRIDE;
 
-    const SkPaint* paint() const { return fPaint; }
+    const SkPaint* paint() const { return fPaintPtr; }
 
 private:
-    const SkRect* fBounds;
-    const SkPaint* fPaint;
+    SkRect              fBounds;
+    SkPaint             fPaint;
+    SkPaint*            fPaintPtr;
     SkCanvas::SaveFlags fFlags;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Scale : public SkDrawCommand {

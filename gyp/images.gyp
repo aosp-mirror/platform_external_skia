@@ -26,7 +26,7 @@
         '../include/images/SkImageEncoder.h',
         '../include/images/SkImageRef.h',
         '../include/images/SkImageRef_GlobalPool.h',
-        '../include/images/SkJpegUtility.h',
+        '../src/images/SkJpegUtility.h',
         '../include/images/SkMovie.h',
         '../include/images/SkPageFlipper.h',
 
@@ -123,9 +123,6 @@
           'dependencies': [
              'android_deps.gyp:gif',
              'android_deps.gyp:png',
-          ],
-          'defines': [
-            'SK_ENABLE_LIBPNG',
           ],
         },{ #else if skia_os != android
           'sources!': [
