@@ -45,8 +45,10 @@ protected:
         bool fDualSourceBlendingSupport : 1;
         bool fBufferLockSupport         : 1;
         bool fPathStencilingSupport     : 1;
+
         int fMaxRenderTargetSize;
         int fMaxTextureSize;
+        int fMaxSampleCount;
     };
 
     class DrawInfo;
@@ -81,6 +83,8 @@ public:
 
         int maxRenderTargetSize() const { return fInternals.fMaxRenderTargetSize; }
         int maxTextureSize() const { return fInternals.fMaxTextureSize; }
+        // Will be 0 if MSAA is not supported
+        int maxSampleCount() const { return fInternals.fMaxSampleCount; }
     private:
         CapsInternals fInternals;
         friend class GrDrawTarget; // to set values of fInternals
@@ -88,7 +92,9 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    GrDrawTarget();
+    // The context may not be fully constructed and should not be used during GrDrawTarget
+    // construction.
+    GrDrawTarget(GrContext* context);
     virtual ~GrDrawTarget();
 
     /**
@@ -145,27 +151,15 @@ public:
      *    1. The caller intends to somehow specify coverage. This can be
      *       specified either by enabling a coverage stage on the GrDrawState or
      *       via the vertex layout.
-     *    2. Other than enabling coverage stages, the current configuration of
-     *       the target's GrDrawState is as it will be at draw time.
-     *    3. If a vertex source has not yet been specified then all stages with
-     *       non-NULL textures will be referenced by the vertex layout.
+     *    2. Other than enabling coverage stages or enabling coverage in the
+     *       layout, the current configuration of the target's GrDrawState is as
+     *       it will be at draw time.
      */
     bool canApplyCoverage() const;
 
     /**
-     * Determines whether incorporating partial pixel coverage into the constant
-     * color specified by setColor or per-vertex colors will give the right
-     * blending result. If a vertex source has not yet been specified then
-     * the function assumes that all stages with non-NULL textures will be
-     * referenced by the vertex layout.
-     */
-    bool canTweakAlphaForCoverage() const;
-
-    /**
-     * Given the current draw state and hw support, will HW AA lines be used
-     * (if line primitive type is drawn)? If a vertex source has not yet been
-     * specified then  the function assumes that all stages with non-NULL
-     * textures will be referenced by the vertex layout.
+     * Given the current draw state and hw support, will HW AA lines be used (if
+     * a line primitive type is drawn)?
      */
     bool willUseHWAALines() const;
 
@@ -211,6 +205,8 @@ public:
      *    GrDrawTarget subclass. For deferred subclasses the caller has to
      *    guarantee that the data is still available in the buffers at playback.
      *    (TODO: Make this more automatic as we have done for read/write pixels)
+     *
+     * The size of each vertex is determined by querying the current GrDrawState.
      */
 
     /**
@@ -232,17 +228,15 @@ public:
      * popGeomtrySource is called. At that point logically a snapshot of the
      * data is made and the pointers are invalid.
      *
-     * @param vertexLayout the format of vertices (ignored if vertexCount == 0).
      * @param vertexCount  the number of vertices to reserve space for. Can be
-     *                     0.
+     *                     0. Vertex size is queried from the current GrDrawState.
      * @param indexCount   the number of indices to reserve space for. Can be 0.
      * @param vertices     will point to reserved vertex space if vertexCount is
      *                     non-zero. Illegal to pass NULL if vertexCount > 0.
      * @param indices      will point to reserved index space if indexCount is
      *                     non-zero. Illegal to pass NULL if indexCount > 0.
      */
-     bool reserveVertexAndIndexSpace(GrVertexLayout vertexLayout,
-                                     int vertexCount,
+     bool reserveVertexAndIndexSpace(int vertexCount,
                                      int indexCount,
                                      void** vertices,
                                      void** indices);
@@ -255,9 +249,9 @@ public:
      * Also may hint whether the draw target should be flushed first. This is
      * useful for deferred targets.
      *
-     * @param vertexSize   size of vertices caller would like to reserve
      * @param vertexCount  in: hint about how many vertices the caller would
-     *                     like to allocate.
+     *                     like to allocate. Vertex size is queried from the
+     *                     current GrDrawState.
      *                     out: a hint about the number of vertices that can be
      *                     allocated cheaply. Negative means no hint.
      *                     Ignored if NULL.
@@ -269,27 +263,24 @@ public:
      *
      * @return  true if target should be flushed based on the input values.
      */
-    virtual bool geometryHints(size_t vertexSize,
-                               int* vertexCount,
+    virtual bool geometryHints(int* vertexCount,
                                int* indexCount) const;
 
     /**
      * Sets source of vertex data for the next draw. Array must contain
      * the vertex data when this is called.
      *
-     * @param array         cpu array containing vertex data.
-     * @param size          size of the vertex data.
-     * @param vertexCount   the number of vertices in the array.
+     * @param vertexArray   cpu array containing vertex data.
+     * @param vertexCount   the number of vertices in the array. Vertex size is
+     *                      queried from the current GrDrawState.
      */
-    void setVertexSourceToArray(GrVertexLayout vertexLayout,
-                                const void* vertexArray,
-                                int vertexCount);
+    void setVertexSourceToArray(const void* vertexArray, int vertexCount);
 
     /**
      * Sets source of index data for the next indexed draw. Array must contain
      * the indices when this is called.
      *
-     * @param array         cpu array containing index data.
+     * @param indexArray    cpu array containing index data.
      * @param indexCount    the number of indices in the array.
      */
     void setIndexSourceToArray(const void* indexArray, int indexCount);
@@ -299,11 +290,10 @@ public:
      * in the buffer until drawIndexed, drawNonIndexed, or drawIndexedInstances.
      *
      * @param buffer        vertex buffer containing vertex data. Must be
-     *                      unlocked before draw call.
-     * @param vertexLayout  layout of the vertex data in the buffer.
+     *                      unlocked before draw call. Vertex size is queried
+     *                      from current GrDrawState.
      */
-    void setVertexSourceToBuffer(GrVertexLayout vertexLayout,
-                                 const GrVertexBuffer* buffer);
+    void setVertexSourceToBuffer(const GrVertexBuffer* buffer);
 
     /**
      * Sets source of index data for the next indexed draw. Data does not have
@@ -398,8 +388,8 @@ public:
     /**
      * Helper function for drawing rects. This does not use the current index
      * and vertex sources. After returning, the vertex and index sources may
-     * have changed. They should be reestablished before the next drawIndexed
-     * or drawNonIndexed. This cannot be called between reserving and releasing
+     * have changed. They should be reestablished before the next draw call.
+     * This cannot be called between reserving and releasing
      * geometry.
      *
      * A subclass may override this to perform more optimal rect rendering. Its
@@ -407,26 +397,22 @@ public:
      * (e.g. drawNonIndexed, drawIndexedInstances, ...). The base class draws a two
      * triangle fan using drawNonIndexed from reserved vertex space.
      *
-     * @param rect      the rect to draw
-     * @param matrix    optional matrix applied to rect (before viewMatrix)
-     * @param srcRects  specifies rects for stages enabled by stageEnableMask.
-     *                  if stageEnableMask bit i is 1, srcRects is not NULL,
-     *                  and srcRects[i] is not NULL, then srcRects[i] will be
-     *                  used as coordinates for stage i. Otherwise, if stage i
-     *                  is enabled then rect is used as the coordinates.
-     * @param srcMatrices   optional matrices applied to srcRects. If
-     *                      srcRect[i] is non-NULL and srcMatrices[i] is
-     *                      non-NULL then srcRect[i] will be transformed by
-     *                      srcMatrix[i]. srcMatrices can be NULL when no
-     *                      srcMatrices are desired.
+     * @param rect        the rect to draw
+     * @param matrix      optional matrix applied to rect (before viewMatrix)
+     * @param localRect   optional rect that specifies local coords to map onto
+     *                    rect. If NULL then rect serves as the local coords.
+     * @param localMatrix optional matrix applied to localRect. If
+     *                    srcRect is non-NULL and srcMatrix is non-NULL
+     *                    then srcRect will be transformed by srcMatrix.
+     *                    srcMatrix can be NULL when no srcMatrix is desired.
      */
     virtual void drawRect(const GrRect& rect,
                           const SkMatrix* matrix,
-                          const GrRect* srcRects[],
-                          const SkMatrix* srcMatrices[]);
+                          const GrRect* localRect,
+                          const SkMatrix* localMatrix);
+
     /**
-     * Helper for drawRect when the caller doesn't need separate src rects or
-     * matrices.
+     * Helper for drawRect when the caller doesn't need separate local rects or matrices.
      */
     void drawSimpleRect(const GrRect& rect, const SkMatrix* matrix = NULL) {
         drawRect(rect, matrix, NULL, NULL);
@@ -557,13 +543,11 @@ public:
     class AutoReleaseGeometry : ::GrNoncopyable {
     public:
         AutoReleaseGeometry(GrDrawTarget*  target,
-                            GrVertexLayout vertexLayout,
                             int            vertexCount,
                             int            indexCount);
         AutoReleaseGeometry();
         ~AutoReleaseGeometry();
         bool set(GrDrawTarget*  target,
-                 GrVertexLayout vertexLayout,
                  int            vertexCount,
                  int            indexCount);
         bool succeeded() const { return NULL != fTarget; }
@@ -604,69 +588,23 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////
 
-    class AutoGeometryPush : ::GrNoncopyable {
+    class AutoGeometryAndStatePush : ::GrNoncopyable {
     public:
-        AutoGeometryPush(GrDrawTarget* target) {
+        AutoGeometryAndStatePush(GrDrawTarget* target, ASRInit init)
+            : fState(target, init) {
             GrAssert(NULL != target);
             fTarget = target;
             target->pushGeometrySource();
         }
-        ~AutoGeometryPush() {
+        ~AutoGeometryAndStatePush() {
             fTarget->popGeometrySource();
         }
     private:
-        GrDrawTarget* fTarget;
+        GrDrawTarget*    fTarget;
+        AutoStateRestore fState;
     };
 
 protected:
-
-    /**
-     * Optimizations for blending / coverage to be applied based on the current
-     * state.
-     * Subclasses that actually draw (as opposed to those that just buffer for
-     * playback) must implement the flags that replace the output color.
-     */
-    enum BlendOptFlags {
-        /**
-         * No optimization
-         */
-        kNone_BlendOpt = 0,
-        /**
-         * Don't draw at all
-         */
-        kSkipDraw_BlendOptFlag = 0x2,
-        /**
-         * Emit the src color, disable HW blending (replace dst with src)
-         */
-        kDisableBlend_BlendOptFlag = 0x4,
-        /**
-         * The coverage value does not have to be computed separately from
-         * alpha, the the output color can be the modulation of the two.
-         */
-        kCoverageAsAlpha_BlendOptFlag = 0x1,
-        /**
-         * Instead of emitting a src color, emit coverage in the alpha channel
-         * and r,g,b are "don't cares".
-         */
-        kEmitCoverage_BlendOptFlag = 0x10,
-        /**
-         * Emit transparent black instead of the src color, no need to compute
-         * coverage.
-         */
-        kEmitTransBlack_BlendOptFlag = 0x8,
-    };
-    GR_DECL_BITFIELD_OPS_FRIENDS(BlendOptFlags);
-
-    /**
-     * Determines what optimizations can be applied based on the blend. The coefficients may have
-     * to be tweaked in order for the optimization to work. srcCoeff and dstCoeff are optional
-     * params that receive the tweaked coefficients. Normally the function looks at the current
-     * state to see if coverage is enabled. By setting forceCoverage the caller can speculatively
-     * determine the blend optimizations that would be used if there was partial pixel coverage.
-     */
-    BlendOptFlags getBlendOpts(bool forceCoverage = false,
-                               GrBlendCoeff* srcCoeff = NULL,
-                               GrBlendCoeff* dstCoeff = NULL) const;
 
     enum GeometrySrcType {
         kNone_GeometrySrcType,     //<! src has not been specified
@@ -692,7 +630,7 @@ protected:
             int                     fIndexCount;
         };
 
-        GrVertexLayout          fVertexLayout;
+        size_t                  fVertexSize;
     };
 
     int indexCountInCurrentSource() const {
@@ -711,6 +649,9 @@ protected:
         }
     }
 
+    GrContext* getContext() { return fContext; }
+    const GrContext* getContext() const { return fContext; }
+
     // allows derived class to set the caps
     CapsInternals* capsInternals() { return &fCaps.fInternals; }
 
@@ -725,11 +666,11 @@ protected:
 
     // accessors for derived classes
     const GeometrySrcState& getGeomSrc() const { return fGeoSrcStateStack.back(); }
-    // it is preferable to call this rather than getGeomSrc()->fVertexLayout because of the assert.
-    GrVertexLayout getVertexLayout() const {
+    // it is preferable to call this rather than getGeomSrc()->fVertexSize because of the assert.
+    size_t getVertexSize() const {
         // the vertex layout is only valid if a vertex source has been specified.
         GrAssert(this->getGeomSrc().fVertexSrc != kNone_GeometrySrcType);
-        return this->getGeomSrc().fVertexLayout;
+        return this->getGeomSrc().fVertexSize;
     }
 
     Caps fCaps;
@@ -794,7 +735,7 @@ protected:
 private:
     // A subclass can optionally overload this function to be notified before
     // vertex and index space is reserved.
-    virtual void willReserveVertexAndIndexSpace(size_t vertexSize, int vertexCount, int indexCount) {}
+    virtual void willReserveVertexAndIndexSpace(int vertexCount, int indexCount) {}
 
     // implemented by subclass to allocate space for reserved geom
     virtual bool onReserveVertexSpace(size_t vertexSize, int vertexCount, void** vertices) = 0;
@@ -816,7 +757,7 @@ private:
     virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill) = 0;
 
     // helpers for reserving vertex and index space.
-    bool reserveVertexSpace(GrVertexLayout vertexLayout,
+    bool reserveVertexSpace(size_t vertexSize,
                             int vertexCount,
                             void** vertices);
     bool reserveIndexSpace(int indexCount, void** indices);
@@ -837,10 +778,10 @@ private:
     const GrClipData*                                               fClip;
     GrDrawState*                                                    fDrawState;
     GrDrawState                                                     fDefaultDrawState;
+    // The context owns us, not vice-versa, so this ptr is not ref'ed by DrawTarget.
+    GrContext*                                                      fContext;
 
     typedef GrRefCnt INHERITED;
 };
-
-GR_MAKE_BITFIELD_OPS(GrDrawTarget::BlendOptFlags);
 
 #endif

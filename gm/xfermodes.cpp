@@ -113,6 +113,11 @@ protected:
             { SkXfermode::kSoftLight_Mode,    "SoftLight"     },
             { SkXfermode::kDifference_Mode,   "Difference"    },
             { SkXfermode::kExclusion_Mode,    "Exclusion"     },
+            { SkXfermode::kMultiply_Mode,     "Multiply"      },
+            { SkXfermode::kHue_Mode,          "Hue"           },
+            { SkXfermode::kSaturation_Mode,   "Saturation"    },
+            { SkXfermode::kColor_Mode,        "Color"         },
+            { SkXfermode::kLuminosity_Mode,   "Luminosity"    },
         };
 
         const SkScalar w = SkIntToScalar(W);

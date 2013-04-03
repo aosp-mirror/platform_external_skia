@@ -21,7 +21,6 @@
 #include "SkRegion.h"
 #include "SkRRect.h"
 #include "SkPictureFlat.h"
-#include "SkSerializationHelpers.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
 #include "SkThread.h"
@@ -63,14 +62,13 @@ public:
     SkPicturePlayback();
     SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInfo* deepCopyInfo = NULL);
     explicit SkPicturePlayback(const SkPictureRecord& record, bool deepCopy = false);
-    SkPicturePlayback(SkStream*, const SkPictInfo&, bool* isValid,
-                      SkSerializationHelpers::DecodeBitmap decoder);
+    SkPicturePlayback(SkStream*, const SkPictInfo&, SkPicture::InstallPixelRefProc);
 
     virtual ~SkPicturePlayback();
 
     void draw(SkCanvas& canvas);
 
-    void serialize(SkWStream*, SkSerializationHelpers::EncodeBitmap) const;
+    void serialize(SkWStream*, SkPicture::EncodeBitmap) const;
 
     void dumpSize() const;
 
@@ -98,7 +96,9 @@ private:
     const SkBitmap& getBitmap(SkReader32& reader) {
         const int index = reader.readInt();
         if (SkBitmapHeap::INVALID_SLOT == index) {
+#ifdef SK_DEBUG
             SkDebugf("An invalid bitmap was recorded!\n");
+#endif
             return fBadBitmap;
         }
         return (*fBitmaps)[index];
@@ -191,9 +191,9 @@ public:
 #endif
 
 private:    // these help us with reading/writing
-    bool parseStreamTag(SkStream*, const SkPictInfo&, uint32_t tag, size_t size,
-                        SkSerializationHelpers::DecodeBitmap decoder);
-    bool parseBufferTag(SkOrderedReadBuffer&, uint32_t tag, size_t size);
+    void parseStreamTag(SkStream*, const SkPictInfo&, uint32_t tag, size_t size,
+                        SkPicture::InstallPixelRefProc);
+    void parseBufferTag(SkOrderedReadBuffer&, uint32_t tag, size_t size);
     void flattenToBuffer(SkOrderedWriteBuffer&) const;
 
 private:

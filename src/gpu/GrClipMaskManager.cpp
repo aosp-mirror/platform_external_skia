@@ -40,6 +40,9 @@ void setup_drawstate_aaclip(GrGpu* gpu,
     static const int kMaskStage = GrPaint::kTotalStages+1;
 
     SkMatrix mat;
+    // We want to use device coords to compute the texture coordinates. We set our matrix to be
+    // equal to the view matrix followed by an offset to the devBound, and then a scaling matrix to
+    // normalized coords. We apply this matrix to the vertex positions rather than local coords.
     mat.setIDiv(result->width(), result->height());
     mat.preTranslate(SkIntToScalar(-devBound.fLeft),
                      SkIntToScalar(-devBound.fTop));
@@ -51,7 +54,9 @@ void setup_drawstate_aaclip(GrGpu* gpu,
                          GrTextureDomainEffect::Create(result,
                                       mat,
                                       GrTextureDomainEffect::MakeTexelDomain(result, domainTexels),
-                                      GrTextureDomainEffect::kDecal_WrapMode))->unref();
+                                      GrTextureDomainEffect::kDecal_WrapMode,
+                                      false,
+                                      GrEffect::kPosition_CoordsType))->unref();
 }
 
 bool path_needs_SW_renderer(GrContext* context,
@@ -354,7 +359,8 @@ void GrClipMaskManager::mergeMask(GrTexture* dstMask,
         GrTextureDomainEffect::Create(srcMask,
                                       sampleM,
                                       GrTextureDomainEffect::MakeTexelDomain(srcMask, srcBound),
-                                      GrTextureDomainEffect::kDecal_WrapMode))->unref();
+                                      GrTextureDomainEffect::kDecal_WrapMode,
+                                      false))->unref();
     fGpu->drawSimpleRect(SkRect::MakeFromIRect(dstBound), NULL);
 
     drawState->disableStage(0);
@@ -397,7 +403,11 @@ bool GrClipMaskManager::getMaskTexture(int32_t clipStackGenID,
         desc.fFlags = kRenderTarget_GrTextureFlagBit;
         desc.fWidth = clipSpaceIBounds.width();
         desc.fHeight = clipSpaceIBounds.height();
-        desc.fConfig = kAlpha_8_GrPixelConfig;
+        desc.fConfig = kRGBA_8888_GrPixelConfig;
+        if (this->getContext()->isConfigRenderable(kAlpha_8_GrPixelConfig)) {
+            // We would always like A8 but it isn't supported on all platforms
+            desc.fConfig = kAlpha_8_GrPixelConfig;
+        }
 
         fAACache.acquireMask(clipStackGenID, desc, clipSpaceIBounds);
     }
@@ -425,10 +435,8 @@ GrTexture* GrClipMaskManager::createAlphaClipMask(int32_t clipStackGenID,
         return NULL;
     }
 
-    GrDrawTarget::AutoStateRestore asr(fGpu, GrDrawTarget::kReset_ASRInit);
+    GrDrawTarget::AutoGeometryAndStatePush agasp(fGpu, GrDrawTarget::kReset_ASRInit);
     GrDrawState* drawState = fGpu->drawState();
-
-    GrDrawTarget::AutoGeometryPush agp(fGpu);
 
     // The top-left of the mask corresponds to the top-left corner of the bounds.
     SkVector clipToMaskOffset = {
@@ -579,10 +587,9 @@ bool GrClipMaskManager::createStencilClipMask(InitialState initialState,
 
         stencilBuffer->setLastClip(genID, clipSpaceIBounds, clipSpaceToStencilOffset);
 
-        GrDrawTarget::AutoStateRestore asr(fGpu, GrDrawTarget::kReset_ASRInit);
+        GrDrawTarget::AutoGeometryAndStatePush agasp(fGpu, GrDrawTarget::kReset_ASRInit);
         drawState = fGpu->drawState();
         drawState->setRenderTarget(rt);
-        GrDrawTarget::AutoGeometryPush agp(fGpu);
 
         // We set the current clip to the bounds so that our recursive draws are scissored to them.
         SkIRect stencilSpaceIBounds(clipSpaceIBounds);
@@ -993,4 +1000,9 @@ GrTexture* GrClipMaskManager::createSoftwareClipMask(int32_t clipStackGenID,
 ////////////////////////////////////////////////////////////////////////////////
 void GrClipMaskManager::releaseResources() {
     fAACache.releaseResources();
+}
+
+void GrClipMaskManager::setGpu(GrGpu* gpu) {
+    fGpu = gpu;
+    fAACache.setContext(gpu->getContext());
 }

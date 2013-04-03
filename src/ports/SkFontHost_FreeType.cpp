@@ -159,7 +159,7 @@ static bool is_lcd_supported() {
 
 class SkScalerContext_FreeType : public SkScalerContext_FreeType_Base {
 public:
-    SkScalerContext_FreeType(const SkDescriptor* desc);
+    SkScalerContext_FreeType(SkTypeface*, const SkDescriptor* desc);
     virtual ~SkScalerContext_FreeType();
 
     bool success() const {
@@ -244,7 +244,7 @@ extern "C" {
         return count;
     }
 
-    static void sk_stream_close( FT_Stream stream) {}
+    static void sk_stream_close(FT_Stream) {}
 }
 
 SkFaceRec::SkFaceRec(SkStream* strm, uint32_t fontID)
@@ -260,7 +260,8 @@ SkFaceRec::SkFaceRec(SkStream* strm, uint32_t fontID)
 
 // Will return 0 on failure
 // Caller must lock gFTMutex before calling this function.
-static SkFaceRec* ref_ft_face(uint32_t fontID) {
+static SkFaceRec* ref_ft_face(const SkTypeface* typeface) {
+    const SkFontID fontID = typeface->uniqueID();
     SkFaceRec* rec = gFaceRecHead;
     while (rec) {
         if (rec->fFontID == fontID) {
@@ -271,10 +272,10 @@ static SkFaceRec* ref_ft_face(uint32_t fontID) {
         rec = rec->fNext;
     }
 
-    SkStream* strm = SkFontHost::OpenStream(fontID);
+    int face_index;
+    SkStream* strm = typeface->openStream(&face_index);
     if (NULL == strm) {
-        SkDEBUGF(("SkFontHost::OpenStream failed opening %x\n", fontID));
-        return 0;
+        return NULL;
     }
 
     // this passes ownership of strm to the rec
@@ -295,15 +296,11 @@ static SkFaceRec* ref_ft_face(uint32_t fontID) {
         args.stream = &rec->fFTStream;
     }
 
-    int face_index;
-    int length = SkFontHost::GetFileName(fontID, NULL, 0, &face_index);
-    FT_Error err = FT_Open_Face(gFTLibrary, &args, length ? face_index : 0,
-                                &rec->fFace);
-
+    FT_Error err = FT_Open_Face(gFTLibrary, &args, face_index, &rec->fFace);
     if (err) {    // bad filename, try the default font
         fprintf(stderr, "ERROR: unable to open font '%x'\n", fontID);
         SkDELETE(rec);
-        return 0;
+        return NULL;
     } else {
         SkASSERT(rec->fFace);
         //fprintf(stderr, "Opened font '%s'\n", filename.c_str());
@@ -447,12 +444,10 @@ static void populate_glyph_to_unicode(FT_Face& face,
     }
 }
 
-// static
-SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
-        uint32_t fontID,
+SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
         SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
         const uint32_t* glyphIDs,
-        uint32_t glyphIDsCount) {
+        uint32_t glyphIDsCount) const {
 #if defined(SK_BUILD_FOR_MAC)
     return NULL;
 #else
@@ -464,7 +459,7 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         libInit = gFTLibrary;
     }
     SkAutoTCallIProc<struct FT_LibraryRec_, FT_Done_FreeType> ftLib(libInit);
-    SkFaceRec* rec = ref_ft_face(fontID);
+    SkFaceRec* rec = ref_ft_face(this);
     if (NULL == rec)
         return NULL;
     FT_Face face = rec->fFace;
@@ -499,9 +494,6 @@ SkAdvancedTypefaceMetrics* SkFontHost::GetAdvancedTypefaceMetrics(
         info->fStyle |= SkAdvancedTypefaceMetrics::kFixedPitch_Style;
     if (face->style_flags & FT_STYLE_FLAG_ITALIC)
         info->fStyle |= SkAdvancedTypefaceMetrics::kItalic_Style;
-    // We should set either Symbolic or Nonsymbolic; Nonsymbolic if the font's
-    // character set is a subset of 'Adobe standard Latin.'
-    info->fStyle |= SkAdvancedTypefaceMetrics::kSymbolic_Style;
 
     PS_FontInfoRec ps_info;
     TT_Postscript* tt_info;
@@ -653,7 +645,19 @@ static bool isAxisAligned(const SkScalerContext::Rec& rec) {
             bothZero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
 }
 
-void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
+SkScalerContext* SkTypeface_FreeType::onCreateScalerContext(
+                                               const SkDescriptor* desc) const {
+    SkScalerContext_FreeType* c = SkNEW_ARGS(SkScalerContext_FreeType,
+                                        (const_cast<SkTypeface_FreeType*>(this),
+                                         desc));
+    if (!c->success()) {
+        SkDELETE(c);
+        c = NULL;
+    }
+    return c;
+}
+
+void SkTypeface_FreeType::onFilterRec(SkScalerContextRec* rec) const {
     //BOGUS: http://code.google.com/p/chromium/issues/detail?id=121119
     //Cap the requested size as larger sizes give bogus values.
     //Remove when http://code.google.com/p/skia/issues/detail?id=554 is fixed.
@@ -691,8 +695,7 @@ void SkFontHost::FilterRec(SkScalerContext::Rec* rec, SkTypeface*) {
 #endif
 }
 
-#ifdef SK_BUILD_FOR_ANDROID
-uint32_t SkFontHost::GetUnitsPerEm(SkFontID fontID) {
+int SkTypeface_FreeType::onGetUPEM() const {
     SkAutoMutexAcquire ac(gFTMutex);
     FT_Library libInit = NULL;
     if (gFTCount == 0) {
@@ -701,20 +704,20 @@ uint32_t SkFontHost::GetUnitsPerEm(SkFontID fontID) {
         libInit = gFTLibrary;
     }
     SkAutoTCallIProc<struct FT_LibraryRec_, FT_Done_FreeType> ftLib(libInit);
-    SkFaceRec *rec = ref_ft_face(fontID);
-    uint16_t unitsPerEm = 0;
+    SkFaceRec *rec = ref_ft_face(this);
+    int unitsPerEm = 0;
 
     if (rec != NULL && rec->fFace != NULL) {
         unitsPerEm = rec->fFace->units_per_EM;
         unref_ft_face(rec->fFace);
     }
 
-    return (uint32_t)unitsPerEm;
+    return unitsPerEm;
 }
-#endif
 
-SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
-        : SkScalerContext_FreeType_Base(desc) {
+SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
+                                                   const SkDescriptor* desc)
+        : SkScalerContext_FreeType_Base(typeface, desc) {
     SkAutoMutexAcquire  ac(gFTMutex);
 
     if (gFTCount == 0) {
@@ -727,7 +730,7 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(const SkDescriptor* desc)
     // load the font file
     fFTSize = NULL;
     fFace = NULL;
-    fFaceRec = ref_ft_face(fRec.fFontID);
+    fFaceRec = ref_ft_face(typeface);
     if (NULL == fFaceRec) {
         return;
     }
@@ -1188,7 +1191,7 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
         return;
     }
 
-    generateGlyphPath(fFace, glyph, path);
+    generateGlyphPath(fFace, path);
 
     // The path's origin from FreeType is always the horizontal layout origin.
     // Offset the path so that it is relative to the vertical origin if needed.
@@ -1303,17 +1306,6 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
-SkScalerContext* SkFontHost::CreateScalerContext(const SkDescriptor* desc) {
-    SkScalerContext_FreeType* c = SkNEW_ARGS(SkScalerContext_FreeType, (desc));
-    if (!c->success()) {
-        SkDELETE(c);
-        c = NULL;
-    }
-    return c;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 /*  Export this so that other parts of our FonttHost port can make use of our
     ability to extract the name+style from a stream, using FreeType's api.
 */
@@ -1336,7 +1328,7 @@ bool find_name_and_attributes(SkStream* stream, SkString* name,
         args.memory_size = stream->getLength();
     } else {
         memset(&streamRec, 0, sizeof(streamRec));
-        streamRec.size = stream->read(NULL, 0);
+        streamRec.size = stream->getLength();
         streamRec.descriptor.pointer = stream;
         streamRec.read  = sk_stream_read;
         streamRec.close = sk_stream_close;

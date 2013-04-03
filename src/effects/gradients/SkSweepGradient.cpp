@@ -298,6 +298,7 @@ void SkSweepGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
     SkMatrix::MapXYProc proc = fDstToIndexProc;
     const SkMatrix&     matrix = fDstToIndex;
     const SkPMColor* SK_RESTRICT cache = this->getCache32();
+    int                 toggle = init_dither_toggle(x, y);
     SkPoint             srcPt;
 
     if (fDstToIndexClass != kPerspective_MatrixClass) {
@@ -319,15 +320,17 @@ void SkSweepGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
         }
 
         for (; count > 0; --count) {
-            *dstC++ = cache[SkATan2_255(fy, fx)];
+            *dstC++ = cache[toggle + SkATan2_255(fy, fx)];
             fx += dx;
             fy += dy;
+            toggle = next_dither_toggle(toggle);
         }
     } else {  // perspective case
         for (int stop = x + count; x < stop; x++) {
             proc(matrix, SkIntToScalar(x) + SK_ScalarHalf,
                          SkIntToScalar(y) + SK_ScalarHalf, &srcPt);
-            *dstC++ = cache[SkATan2_255(srcPt.fY, srcPt.fX)];
+            *dstC++ = cache[toggle + SkATan2_255(srcPt.fY, srcPt.fX)];
+            toggle = next_dither_toggle(toggle);
         }
     }
 }
@@ -388,19 +391,18 @@ class GrGLSweepGradient : public GrGLGradientEffect {
 public:
 
     GrGLSweepGradient(const GrBackendEffectFactory& factory,
-                      const GrEffectRef&) : INHERITED (factory) { }
+                      const GrDrawEffect&) : INHERITED (factory) { }
     virtual ~GrGLSweepGradient() { }
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static EffectKey GenKey(const GrEffectStage& stage, const GrGLCaps&) {
-        return GenMatrixKey(stage);
+    static EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
+        return GenMatrixKey(drawEffect);
     }
 
 private:
@@ -442,7 +444,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrSweepGradient);
 
-GrEffectRef* GrSweepGradient::TestCreate(SkRandom* random,
+GrEffectRef* GrSweepGradient::TestCreate(SkMWCRandom* random,
                                          GrContext* context,
                                          GrTexture**) {
     SkPoint center = {random->nextUScalar1(), random->nextUScalar1()};
@@ -461,15 +463,14 @@ GrEffectRef* GrSweepGradient::TestCreate(SkRandom* random,
 /////////////////////////////////////////////////////////////////////
 
 void GrGLSweepGradient::emitCode(GrGLShaderBuilder* builder,
-                                 const GrEffectStage& stage,
+                                 const GrDrawEffect&,
                                  EffectKey key,
-                                 const char* vertexCoords,
                                  const char* outputColor,
                                  const char* inputColor,
                                  const TextureSamplerArray& samplers) {
     this->emitYCoordUniform(builder);
     const char* coords;
-    this->setupMatrix(builder, key, vertexCoords, &coords);
+    this->setupMatrix(builder, key, &coords);
     SkString t;
     t.printf("atan(- %s.y, - %s.x) * 0.1591549430918 + 0.5", coords, coords);
     this->emitColorLookup(builder, t.c_str(), outputColor, inputColor, samplers[0]);

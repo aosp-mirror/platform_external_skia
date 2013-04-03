@@ -13,10 +13,12 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SRC_FILES += \
   AAClipBench.cpp \
+  BicubicBench.cpp \
   BitmapBench.cpp \
   BitmapRectBench.cpp \
   BlurBench.cpp \
   BlurRectBench.cpp \
+  ChartBench.cpp \
   ChromeBench.cpp \
   DashBench.cpp \
   DecodeBench.cpp \
@@ -47,6 +49,7 @@ LOCAL_SRC_FILES += \
   ScalarBench.cpp \
   ShaderMaskBench.cpp \
   SortBench.cpp \
+  StrokeBench.cpp \
   TableBench.cpp \
   TextBench.cpp \
   TileBench.cpp \

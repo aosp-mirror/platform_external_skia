@@ -6,7 +6,6 @@ LOCAL_SRC_FILES:= \
   AAClipTest.cpp \
   AtomicTest.cpp \
   BitmapCopyTest.cpp \
-  BitmapFactoryTest.cpp \
   BitmapGetColorTest.cpp \
   BitmapHeapTest.cpp \
   BitmapTransformerTest.cpp \
@@ -59,6 +58,7 @@ LOCAL_SRC_FILES:= \
   PointTest.cpp \
   PremulAlphaRoundTripTest.cpp \
   QuickRejectTest.cpp \
+  RandomTest.cpp \
   Reader32Test.cpp \
   ReadPixelsTest.cpp \
   ReadWriteAlphaTest.cpp \
@@ -69,6 +69,7 @@ LOCAL_SRC_FILES:= \
   RTreeTest.cpp \
   SHA1Test.cpp \
   ScalarTest.cpp \
+  ShaderImageFilterTest.cpp \
   ShaderOpacityTest.cpp \
   Sk64Test.cpp \
   skia_test.cpp \
@@ -81,6 +82,7 @@ LOCAL_SRC_FILES:= \
   TestSize.cpp \
   TileGridTest.cpp \
   TLSTest.cpp \
+  TSetTest.cpp \
   UnicodeTest.cpp \
   UtilsTest.cpp \
   WArrayTest.cpp \
@@ -95,6 +97,7 @@ LOCAL_SRC_FILES += \
 # TODO: tests that currently are causing build problems
 #LOCAL_SRC_FILES += \
 #  AnnotationTest.cpp \
+#  BitmapFactoryTest.cpp \
 #  CanvasTest.cpp \
 #  ChecksumTest.cpp \
 #  PDFPrimitivesTest.cpp \
@@ -110,12 +113,15 @@ LOCAL_C_INCLUDES := \
    external/skia/include/effects \
    external/skia/include/gpu \
    external/skia/include/images \
+   external/skia/include/lazy \
    external/skia/include/pipe \
    external/skia/include/ports \
    external/skia/include/utils \
    external/skia/src/core \
    external/skia/src/effects \
    external/skia/src/gpu \
+   external/skia/src/lazy \
+   external/skia/src/pdf \
    external/skia/src/pipe/utils \
    external/skia/src/utils
 

@@ -8,12 +8,17 @@
 #include "SkCanvas.h"
 #include "SkDevice.h"
 #include "SkGraphics.h"
+#include "SkImageDecoder.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "SkTArray.h"
 #include "PdfRenderer.h"
 #include "picture_utils.h"
+
+#ifdef SK_USE_CDB
+#include "win_dbghelp.h"
+#endif
 
 /**
  * render_pdfs
@@ -129,7 +134,7 @@ static bool render_pdf(const SkString& inputPath, const SkString& outputDir,
 
     bool success = false;
     SkAutoTUnref<SkPicture>
-        picture(SkNEW_ARGS(SkPicture, (&inputStream, &success)));
+        picture(SkNEW_ARGS(SkPicture, (&inputStream, &success, &SkImageDecoder::DecodeMemory)));
 
     if (!success) {
         SkDebugf("Could not read an SkPicture from %s\n", inputPath.c_str());
@@ -206,9 +211,8 @@ static void parse_commandline(int argc, char* const argv[],
     }
 }
 
-int tool_main(int argc, char** argv);
-int tool_main(int argc, char** argv) {
-
+int tool_main_core(int argc, char** argv);
+int tool_main_core(int argc, char** argv) {
     SkAutoGraphics ag;
     SkTArray<SkString> inputs;
 
@@ -228,6 +232,24 @@ int tool_main(int argc, char** argv) {
         SkDebugf("Failed to render %i PDFs.\n", failures);
         return 1;
     }
+
+    return 0;
+}
+
+int tool_main(int argc, char** argv);
+int tool_main(int argc, char** argv) {
+#ifdef SK_USE_CDB
+    setUpDebuggingFromArgs(argv[0]);
+    __try {
+#endif
+      return tool_main_core(argc, argv);
+#ifdef SK_USE_CDB
+    }
+    __except(GenerateDumpAndPrintCallstack(GetExceptionInformation()))
+    {
+        return -1;
+    }
+#endif
     return 0;
 }
 

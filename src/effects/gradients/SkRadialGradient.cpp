@@ -335,8 +335,7 @@ void shadeSpan_radial_clamp(SkScalar sfx, SkScalar sdx,
         if (count) {
             UNPINNED_RADIAL_STEP;
         }
-    }
-    else  {
+    } else  {
         // Specializing for dy == 0 gains us 25% on Skia benchmarks
         if (dy == 0) {
             unsigned yy = SkPin32(fy, -0xFFFF >> 1, 0xFFFF >> 1);
@@ -425,11 +424,7 @@ void SkRadialGradient::shadeSpan(int x, int y,
     SkMatrix::MapXYProc dstProc = fDstToIndexProc;
     TileProc            proc = fTileProc;
     const SkPMColor* SK_RESTRICT cache = this->getCache32();
-#ifdef USE_DITHER_32BIT_GRADIENT
     int toggle = init_dither_toggle(x, y);
-#else
-    int toggle = 0;
-#endif
 
     if (fDstToIndexClass != kPerspective_MatrixClass) {
         dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
@@ -479,19 +474,18 @@ class GrGLRadialGradient : public GrGLGradientEffect {
 public:
 
     GrGLRadialGradient(const GrBackendEffectFactory& factory,
-                       const GrEffectRef&) : INHERITED (factory) { }
+                       const GrDrawEffect&) : INHERITED (factory) { }
     virtual ~GrGLRadialGradient() { }
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static EffectKey GenKey(const GrEffectStage& stage, const GrGLCaps&) {
-        return GenMatrixKey(stage);
+    static EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
+        return GenMatrixKey(drawEffect);
     }
 
 private:
@@ -538,7 +532,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrRadialGradient);
 
-GrEffectRef* GrRadialGradient::TestCreate(SkRandom* random,
+GrEffectRef* GrRadialGradient::TestCreate(SkMWCRandom* random,
                                           GrContext* context,
                                           GrTexture**) {
     SkPoint center = {random->nextUScalar1(), random->nextUScalar1()};
@@ -559,15 +553,14 @@ GrEffectRef* GrRadialGradient::TestCreate(SkRandom* random,
 /////////////////////////////////////////////////////////////////////
 
 void GrGLRadialGradient::emitCode(GrGLShaderBuilder* builder,
-                                  const GrEffectStage& stage,
+                                  const GrDrawEffect&,
                                   EffectKey key,
-                                  const char* vertexCoords,
                                   const char* outputColor,
                                   const char* inputColor,
                                   const TextureSamplerArray& samplers) {
     this->emitYCoordUniform(builder);
     const char* coords;
-    this->setupMatrix(builder, key, vertexCoords, &coords);
+    this->setupMatrix(builder, key, &coords);
     SkString t("length(");
     t.append(coords);
     t.append(")");

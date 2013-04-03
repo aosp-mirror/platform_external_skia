@@ -12,6 +12,8 @@
 
 #include "SkScalar.h"
 
+#include <stdarg.h>
+
 /*  Some helper functions for C strings
 */
 
@@ -33,7 +35,7 @@ int SkStrStartsWithOneOf(const char string[], const char prefixes[]);
 static int SkStrFind(const char string[], const char substring[]) {
     const char *first = strstr(string, substring);
     if (NULL == first) return -1;
-    return first - &(string[0]);
+    return SkToS32(first - &string[0]);
 }
 
 static bool SkStrContains(const char string[], const char substring[]) {
@@ -51,7 +53,7 @@ static bool SkStrContains(const char string[], const char subchar) {
 
 static inline char *SkStrDup(const char string[]) {
     char *ret = (char *) sk_malloc_throw(strlen(string)+1);
-    memcpy(ret,string,strlen(string));
+    memcpy(ret,string,strlen(string)+1);
     return ret;
 }
 
@@ -185,6 +187,7 @@ public:
 
     void printf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
     void appendf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
+    void appendf(const char format[], va_list);
     void prependf(const char format[], ...) SK_PRINTF_LIKE(2, 3);
 
     void remove(size_t offset, size_t length);
@@ -243,5 +246,11 @@ private:
 
 /// Creates a new string and writes into it using a printf()-style format.
 SkString SkStringPrintf(const char* format, ...);
+
+// Specialized to take advantage of SkString's fast swap path. The unspecialized function is
+// declared in SkTypes.h and called by SkTSort.
+template <> inline void SkTSwap(SkString& a, SkString& b) {
+    a.swap(b);
+}
 
 #endif

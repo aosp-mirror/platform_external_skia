@@ -14,11 +14,13 @@
  */
 
 #include "gm.h"
+#include "gm_error.h"
 #include "gm_expectations.h"
 #include "system_preferences.h"
 #include "SkBitmap.h"
 #include "SkBitmapChecksummer.h"
 #include "SkColorPriv.h"
+#include "SkCommandLineFlags.h"
 #include "SkData.h"
 #include "SkDeferredCanvas.h"
 #include "SkDevice.h"
@@ -51,13 +53,15 @@
 #include "GrRenderTarget.h"
 #include "SkGpuDevice.h"
 typedef GrContextFactory::GLContextType GLContextType;
+#define DEFAULT_CACHE_VALUE -1
+static int gGpuCacheSizeBytes;
+static int gGpuCacheSizeCount;
 #else
+class GrContextFactory;
 class GrContext;
 class GrRenderTarget;
 typedef int GLContextType;
 #endif
-
-static bool gForceBWtext;
 
 extern bool gSkSuppressFontCachePurgeSpew;
 
@@ -79,31 +83,6 @@ extern bool gSkSuppressFontCachePurgeSpew;
 #else
     #define CAN_IMAGE_PDF   0
 #endif
-
-// TODO(epoger): We created this ErrorBitfield so that we could record
-// multiple error types for the same comparison. But in practice, we
-// process its final value in switch() statements, which inherently
-// assume that only one error type will be set.
-// I think we should probably change this to be an enum, and thus
-// constrain ourselves to a single error type per comparison.
-typedef int ErrorBitfield;
-const static ErrorBitfield ERROR_NONE                    = 0x00;
-const static ErrorBitfield ERROR_NO_GPU_CONTEXT          = 0x01;
-const static ErrorBitfield ERROR_IMAGE_MISMATCH          = 0x02;
-// const static ErrorBitfield ERROR_DIMENSION_MISMATCH      = 0x04; DEPRECATED in https://codereview.appspot.com/7064047
-const static ErrorBitfield ERROR_READING_REFERENCE_IMAGE = 0x08;
-const static ErrorBitfield ERROR_WRITING_REFERENCE_IMAGE = 0x10;
-
-const static char kJsonKey_ActualResults[]   = "actual-results";
-const static char kJsonKey_ActualResults_Failed[]        = "failed";
-const static char kJsonKey_ActualResults_FailureIgnored[]= "failure-ignored";
-const static char kJsonKey_ActualResults_NoComparison[]  = "no-comparison";
-const static char kJsonKey_ActualResults_Succeeded[]     = "succeeded";
-const static char kJsonKey_ActualResults_AnyStatus_Checksum[]    = "checksum";
-
-const static char kJsonKey_ExpectedResults[] = "expected-results";
-const static char kJsonKey_ExpectedResults_Checksums[]     = "checksums";
-const static char kJsonKey_ExpectedResults_IgnoreFailure[] = "ignore-failure";
 
 using namespace skiagm;
 
@@ -177,6 +156,7 @@ struct ConfigData {
     int                             fSampleCnt;     // GPU backend only
     ConfigFlags                     fFlags;
     const char*                     fName;
+    bool                            fRunByDefault;
 };
 
 class BWTextDrawFilter : public SkDrawFilter {
@@ -208,6 +188,7 @@ public:
         // Set default values of member variables, which tool_main()
         // may override.
         fUseFileHierarchy = false;
+        fIgnorableErrorCombination.add(kMissingExpectations_ErrorType);
         fMismatchPath = NULL;
     }
 
@@ -237,8 +218,8 @@ public:
             // nothing to do here; 565 bitmaps are inherently opaque
             break;
         default:
-            fprintf(stderr, "unsupported bitmap config %d\n", config);
-            SkDEBUGFAIL("unsupported bitmap config");
+            gm_fprintf(stderr, "unsupported bitmap config %d\n", config);
+            DEBUGFAIL_SEE_STDERR;
         }
     }
 
@@ -261,36 +242,33 @@ public:
                                           SkImageEncoder::kPNG_Type, 100);
     }
 
-    // Records an error in fFailedTests, if we want to record errors
-    // of this type.
-    void RecordError(ErrorBitfield errorType, const SkString& name,
+    /**
+     * Records the errors encountered in fFailedTests, except for any error
+     * types we want to ignore.
+     */
+    void RecordError(const ErrorCombination& errorCombination, const SkString& name,
                      const char renderModeDescriptor []) {
-        bool isPixelError;
-        switch (errorType) {
-        case ERROR_NONE:
+        // The common case: no error means nothing to record.
+        if (errorCombination.isEmpty()) {
             return;
-        case ERROR_READING_REFERENCE_IMAGE:
-            return;
-        case ERROR_IMAGE_MISMATCH:
-            isPixelError = true;
-            break;
-        default:
-            isPixelError = false;
-            break;
         }
 
-        FailRec& rec = fFailedTests.push_back(make_name(
-            name.c_str(), renderModeDescriptor));
-        rec.fIsPixelError = isPixelError;
+        // If only certain error type(s) were reported, we know we can ignore them.
+        if (errorCombination.minus(fIgnorableErrorCombination).isEmpty()) {
+            return;
+        }
+
+        FailRec& rec = fFailedTests.push_back(make_name(name.c_str(), renderModeDescriptor));
+        rec.fIsPixelError = errorCombination.includes(kImageMismatch_ErrorType);
     }
 
     // List contents of fFailedTests via SkDebug.
     void ListErrors() {
         for (int i = 0; i < fFailedTests.count(); ++i) {
             if (fFailedTests[i].fIsPixelError) {
-                SkDebugf("\t\t%s pixel_error\n", fFailedTests[i].fName.c_str());
+                gm_fprintf(stderr, "\t\t%s pixel_error\n", fFailedTests[i].fName.c_str());
             } else {
-                SkDebugf("\t\t%s\n", fFailedTests[i].fName.c_str());
+                gm_fprintf(stderr, "\t\t%s\n", fFailedTests[i].fName.c_str());
             }
         }
     }
@@ -380,11 +358,7 @@ public:
         force_all_opaque(*bitmap);
     }
 
-    static void installFilter(SkCanvas* canvas) {
-        if (gForceBWtext) {
-            canvas->setDrawFilter(new BWTextDrawFilter)->unref();
-        }
-    }
+    static void installFilter(SkCanvas* canvas);
 
     static void invokeGM(GM* gm, SkCanvas* canvas, bool isPDF, bool isDeferred) {
         SkAutoCanvasRestore acr(canvas, true);
@@ -398,11 +372,11 @@ public:
         canvas->setDrawFilter(NULL);
     }
 
-    static ErrorBitfield generate_image(GM* gm, const ConfigData& gRec,
-                                        GrContext* context,
-                                        GrRenderTarget* rt,
-                                        SkBitmap* bitmap,
-                                        bool deferred) {
+    static ErrorCombination generate_image(GM* gm, const ConfigData& gRec,
+                                           GrContext* context,
+                                           GrRenderTarget* rt,
+                                           SkBitmap* bitmap,
+                                           bool deferred) {
         SkISize size (gm->getISize());
         setup_bitmap(gRec, size, bitmap);
 
@@ -421,7 +395,7 @@ public:
 #if SK_SUPPORT_GPU
         else {  // GPU
             if (NULL == context) {
-                return ERROR_NO_GPU_CONTEXT;
+                return ErrorCombination(kNoGpuContext_ErrorType);
             }
             SkAutoTUnref<SkDevice> device(new SkGpuDevice(context, rt));
             if (deferred) {
@@ -439,7 +413,7 @@ public:
         }
 #endif
         complete_bitmap(bitmap);
-        return ERROR_NONE;
+        return kEmpty_ErrorCombination;
     }
 
     static void generate_image_from_picture(GM* gm, const ConfigData& gRec,
@@ -508,10 +482,9 @@ public:
 #endif
     }
 
-    ErrorBitfield write_reference_image(
-      const ConfigData& gRec, const char writePath [],
-      const char renderModeDescriptor [], const SkString& name,
-        SkBitmap& bitmap, SkDynamicMemoryWStream* document) {
+    ErrorCombination write_reference_image(const ConfigData& gRec, const char writePath [],
+                                           const char renderModeDescriptor [], const SkString& name,
+                                           SkBitmap& bitmap, SkDynamicMemoryWStream* document) {
         SkString path;
         bool success = false;
         if (gRec.fBackend == kRaster_Backend ||
@@ -533,12 +506,12 @@ public:
             success = write_document(path, *document);
         }
         if (success) {
-            return ERROR_NONE;
+            return kEmpty_ErrorCombination;
         } else {
-            fprintf(stderr, "FAILED to write %s\n", path.c_str());
-            RecordError(ERROR_WRITING_REFERENCE_IMAGE, name,
-                        renderModeDescriptor);
-            return ERROR_WRITING_REFERENCE_IMAGE;
+            gm_fprintf(stderr, "FAILED to write %s\n", path.c_str());
+            ErrorCombination errors(kWritingReferenceImage_ErrorType);
+            RecordError(errors, name, renderModeDescriptor);
+            return errors;
         }
     }
 
@@ -553,15 +526,16 @@ public:
         const int width = actualBitmap.width();
         const int height = actualBitmap.height();
         if ((expectedWidth != width) || (expectedHeight != height)) {
-            SkDebugf("---- %s: dimension mismatch -- expected [%d %d], actual [%d %d]\n",
-                     testName, expectedWidth, expectedHeight, width, height);
+            gm_fprintf(stderr, "---- %s: dimension mismatch --"
+                       " expected [%d %d], actual [%d %d]\n",
+                       testName, expectedWidth, expectedHeight, width, height);
             return;
         }
 
         if ((SkBitmap::kARGB_8888_Config != expectedBitmap.config()) ||
             (SkBitmap::kARGB_8888_Config != actualBitmap.config())) {
-            SkDebugf("---- %s: not computing max per-channel pixel mismatch because non-8888\n",
-                     testName);
+            gm_fprintf(stderr, "---- %s: not computing max per-channel"
+                       " pixel mismatch because non-8888\n", testName);
             return;
         }
 
@@ -592,14 +566,14 @@ public:
                 }
             }
         }
-        SkDebugf("---- %s: %d (of %d) differing pixels, max per-channel mismatch"
-                 " R=%d G=%d B=%d A=%d\n",
-                 testName, differingPixels, width*height, errR, errG, errB, errA);
+        gm_fprintf(stderr, "---- %s: %d (of %d) differing pixels,"
+                   " max per-channel mismatch R=%d G=%d B=%d A=%d\n",
+                   testName, differingPixels, width*height, errR, errG, errB, errA);
     }
 
     /**
-     * Compares actual checksum to expectations.
-     * Returns ERROR_NONE if they match, or some particular error code otherwise
+     * Compares actual checksum to expectations, returning the set of errors
+     * (if any) that we saw along the way.
      *
      * If fMismatchPath has been set, and there are pixel diffs, then the
      * actual bitmap will be written out to a file within fMismatchPath.
@@ -616,23 +590,21 @@ public:
      * in-memory comparisons (Rtree vs regular, etc.) are not written to the
      * JSON summary.  We may wish to change that.
      */
-    ErrorBitfield compare_to_expectations(Expectations expectations,
-                                          const SkBitmap& actualBitmap,
-                                          const SkString& baseNameString,
-                                          const char renderModeDescriptor[],
-                                          bool addToJsonSummary=false) {
-        ErrorBitfield retval;
+    ErrorCombination compare_to_expectations(Expectations expectations,
+                                             const SkBitmap& actualBitmap,
+                                             const SkString& baseNameString,
+                                             const char renderModeDescriptor[],
+                                             bool addToJsonSummary=false) {
+        ErrorCombination errors;
         Checksum actualChecksum = SkBitmapChecksummer::Compute64(actualBitmap);
         SkString completeNameString = baseNameString;
         completeNameString.append(renderModeDescriptor);
         const char* completeName = completeNameString.c_str();
 
         if (expectations.empty()) {
-            retval = ERROR_READING_REFERENCE_IMAGE;
-        } else if (expectations.match(actualChecksum)) {
-            retval = ERROR_NONE;
-        } else {
-            retval = ERROR_IMAGE_MISMATCH;
+            errors.add(kMissingExpectations_ErrorType);
+        } else if (!expectations.match(actualChecksum)) {
+            errors.add(kImageMismatch_ErrorType);
 
             // Write out the "actuals" for any mismatches, if we have
             // been directed to do so.
@@ -650,16 +622,15 @@ public:
                 report_bitmap_diffs(*expectedBitmapPtr, actualBitmap, completeName);
             }
         }
-        RecordError(retval, baseNameString, renderModeDescriptor);
+        RecordError(errors, baseNameString, renderModeDescriptor);
 
         if (addToJsonSummary) {
-            add_actual_results_to_json_summary(completeName, actualChecksum,
-                                               retval,
+            add_actual_results_to_json_summary(completeName, actualChecksum, errors,
                                                expectations.ignoreFailure());
             add_expected_results_to_json_summary(completeName, expectations);
         }
 
-        return retval;
+        return errors;
     }
 
     /**
@@ -668,12 +639,12 @@ public:
      */
     void add_actual_results_to_json_summary(const char testName[],
                                             Checksum actualChecksum,
-                                            ErrorBitfield result,
+                                            ErrorCombination result,
                                             bool ignoreFailure) {
         Json::Value actualResults;
         actualResults[kJsonKey_ActualResults_AnyStatus_Checksum] =
             asJsonValue(actualChecksum);
-        if (ERROR_NONE == result) {
+        if (result.isEmpty()) {
             this->fJsonActualResults_Succeeded[testName] = actualResults;
         } else {
             if (ignoreFailure) {
@@ -681,13 +652,12 @@ public:
                 // actual results against expectations in a JSON file
                 // (where we can set ignore-failure to either true or
                 // false), add test cases that exercise ignored
-                // failures (both for ERROR_READING_REFERENCE_IMAGE
-                // and ERROR_IMAGE_MISMATCH).
+                // failures (both for kMissingExpectations_ErrorType
+                // and kImageMismatch_ErrorType).
                 this->fJsonActualResults_FailureIgnored[testName] =
                     actualResults;
             } else {
-                switch(result) {
-                case ERROR_READING_REFERENCE_IMAGE:
+                if (result.includes(kMissingExpectations_ErrorType)) {
                     // TODO: What about the case where there IS an
                     // expected image checksum, but that gm test
                     // doesn't actually run?  For now, those cases
@@ -701,15 +671,9 @@ public:
                     // is given but the test is never run).
                     this->fJsonActualResults_NoComparison[testName] =
                         actualResults;
-                    break;
-                case ERROR_IMAGE_MISMATCH:
+                }
+                if (result.includes(kImageMismatch_ErrorType)) {
                     this->fJsonActualResults_Failed[testName] = actualResults;
-                    break;
-                default:
-                    fprintf(stderr, "encountered unexpected result %d\n",
-                            result);
-                    SkDEBUGFAIL("encountered unexpected result");
-                    break;
                 }
             }
         }
@@ -741,15 +705,14 @@ public:
      * @param actualBitmap bitmap generated by this run
      * @param pdf
      */
-    ErrorBitfield compare_test_results_to_stored_expectations(
+    ErrorCombination compare_test_results_to_stored_expectations(
         GM* gm, const ConfigData& gRec, const char writePath[],
         SkBitmap& actualBitmap, SkDynamicMemoryWStream* pdf) {
 
         SkString name = make_name(gm->shortName(), gRec.fName);
-        ErrorBitfield retval = ERROR_NONE;
+        ErrorCombination errors;
 
-        ExpectationsSource *expectationsSource =
-            this->fExpectationsSource.get();
+        ExpectationsSource *expectationsSource = this->fExpectationsSource.get();
         if (expectationsSource && (gRec.fFlags & kRead_ConfigFlag)) {
             /*
              * Get the expected results for this test, as one or more allowed
@@ -765,15 +728,15 @@ public:
              * See comments above complete_bitmap() for more detail.
              */
             Expectations expectations = expectationsSource->get(name.c_str());
-            retval |= compare_to_expectations(expectations, actualBitmap,
-                                              name, "", true);
+            errors.add(compare_to_expectations(expectations, actualBitmap,
+                                               name, "", true));
         } else {
             // If we are running without expectations, we still want to
             // record the actual results.
             Checksum actualChecksum =
                 SkBitmapChecksummer::Compute64(actualBitmap);
             add_actual_results_to_json_summary(name.c_str(), actualChecksum,
-                                               ERROR_READING_REFERENCE_IMAGE,
+                                               ErrorCombination(kMissingExpectations_ErrorType),
                                                false);
         }
 
@@ -782,11 +745,11 @@ public:
         // we don't want to write out the actual bitmaps for all
         // renderModes of all tests!  That would be a lot of files.
         if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
-            retval |= write_reference_image(gRec, writePath, "",
-                                            name, actualBitmap, pdf);
+            errors.add(write_reference_image(gRec, writePath, "",
+                                             name, actualBitmap, pdf));
         }
 
-        return retval;
+        return errors;
     }
 
     /**
@@ -798,7 +761,7 @@ public:
      * @param actualBitmap actual bitmap generated by this run
      * @param referenceBitmap bitmap we expected to be generated
      */
-    ErrorBitfield compare_test_results_to_reference_bitmap(
+    ErrorCombination compare_test_results_to_reference_bitmap(
         GM* gm, const ConfigData& gRec, const char renderModeDescriptor [],
         SkBitmap& actualBitmap, const SkBitmap* referenceBitmap) {
 
@@ -817,7 +780,11 @@ public:
         int height = SkScalarCeilToInt(SkScalarMul(SkIntToScalar(gm->getISize().height()), scale));
 
         if (kTileGrid_BbhType == bbhType) {
-            pict = new SkTileGridPicture(16, 16, width, height);
+            SkTileGridPicture::TileGridInfo info;
+            info.fMargin.setEmpty();
+            info.fOffset.setZero();
+            info.fTileInterval.set(16, 16);
+            pict = new SkTileGridPicture(width, height, info);
         } else {
             pict = new SkPicture;
         }
@@ -843,7 +810,7 @@ public:
         SkDynamicMemoryWStream storage;
         src.serialize(&storage);
 
-        int streamSize = storage.getOffset();
+        size_t streamSize = storage.getOffset();
         SkAutoMalloc dstStorage(streamSize);
         void* dst = dstStorage.get();
         //char* dst = new char [streamSize];
@@ -856,20 +823,19 @@ public:
 
     // Test: draw into a bitmap or pdf.
     // Depending on flags, possibly compare to an expected image.
-    ErrorBitfield test_drawing(GM* gm,
-                               const ConfigData& gRec,
-                               const char writePath [],
-                               GrContext* context,
-                               GrRenderTarget* rt,
-                               SkBitmap* bitmap) {
+    ErrorCombination test_drawing(GM* gm,
+                                  const ConfigData& gRec,
+                                  const char writePath [],
+                                  GrContext* context,
+                                  GrRenderTarget* rt,
+                                  SkBitmap* bitmap) {
         SkDynamicMemoryWStream document;
 
         if (gRec.fBackend == kRaster_Backend ||
             gRec.fBackend == kGPU_Backend) {
             // Early exit if we can't generate the image.
-            ErrorBitfield errors = generate_image(gm, gRec, context, rt, bitmap,
-                                                  false);
-            if (ERROR_NONE != errors) {
+            ErrorCombination errors = generate_image(gm, gRec, context, rt, bitmap, false);
+            if (!errors.isEmpty()) {
                 // TODO: Add a test to exercise what the stdout and
                 // JSON look like if we get an "early error" while
                 // trying to generate the image.
@@ -889,11 +855,11 @@ public:
             gm, gRec, writePath, *bitmap, &document);
     }
 
-    ErrorBitfield test_deferred_drawing(GM* gm,
-                                        const ConfigData& gRec,
-                                        const SkBitmap& referenceBitmap,
-                                        GrContext* context,
-                                        GrRenderTarget* rt) {
+    ErrorCombination test_deferred_drawing(GM* gm,
+                                           const ConfigData& gRec,
+                                           const SkBitmap& referenceBitmap,
+                                           GrContext* context,
+                                           GrRenderTarget* rt) {
         SkDynamicMemoryWStream document;
 
         if (gRec.fBackend == kRaster_Backend ||
@@ -901,24 +867,37 @@ public:
             SkBitmap bitmap;
             // Early exit if we can't generate the image, but this is
             // expected in some cases, so don't report a test failure.
-            if (!generate_image(gm, gRec, context, rt, &bitmap, true)) {
-                return ERROR_NONE;
+            ErrorCombination errors = generate_image(gm, gRec, context, rt, &bitmap, true);
+            // TODO(epoger): This logic is the opposite of what is
+            // described above... if we succeeded in generating the
+            // -deferred image, we exit early!  We should fix this
+            // ASAP, because it is hiding -deferred errors... but for
+            // now, I'm leaving the logic as it is so that the
+            // refactoring change
+            // https://codereview.chromium.org/12992003/ is unblocked.
+            //
+            // Filed as https://code.google.com/p/skia/issues/detail?id=1180
+            // ('image-surface gm test is failing in "deferred" mode,
+            // and gm is not reporting the failure')
+            if (errors.isEmpty()) {
+                return kEmpty_ErrorCombination;
             }
             return compare_test_results_to_reference_bitmap(
                 gm, gRec, "-deferred", bitmap, &referenceBitmap);
         }
-        return ERROR_NONE;
+        return kEmpty_ErrorCombination;
     }
 
-    ErrorBitfield test_pipe_playback(GM* gm,
-                                     const ConfigData& gRec,
-                                     const SkBitmap& referenceBitmap) {
-        ErrorBitfield errors = ERROR_NONE;
+    ErrorCombination test_pipe_playback(GM* gm,
+                                        const ConfigData& gRec,
+                                        const SkBitmap& referenceBitmap) {
+        ErrorCombination errors;
         for (size_t i = 0; i < SK_ARRAY_COUNT(gPipeWritingFlagCombos); ++i) {
             SkBitmap bitmap;
             SkISize size = gm->getISize();
             setup_bitmap(gRec, size, &bitmap);
             SkCanvas canvas(bitmap);
+            installFilter(&canvas);
             PipeController pipeController(&canvas);
             SkGPipeWriter writer;
             SkCanvas* pipeCanvas = writer.startRecording(
@@ -928,23 +907,24 @@ public:
             writer.endRecording();
             SkString string("-pipe");
             string.append(gPipeWritingFlagCombos[i].name);
-            errors |= compare_test_results_to_reference_bitmap(
-                gm, gRec, string.c_str(), bitmap, &referenceBitmap);
-            if (errors != ERROR_NONE) {
+            errors.add(compare_test_results_to_reference_bitmap(
+                gm, gRec, string.c_str(), bitmap, &referenceBitmap));
+            if (!errors.isEmpty()) {
                 break;
             }
         }
         return errors;
     }
 
-    ErrorBitfield test_tiled_pipe_playback(
-      GM* gm, const ConfigData& gRec, const SkBitmap& referenceBitmap) {
-        ErrorBitfield errors = ERROR_NONE;
+    ErrorCombination test_tiled_pipe_playback(GM* gm, const ConfigData& gRec,
+                                              const SkBitmap& referenceBitmap) {
+        ErrorCombination errors;
         for (size_t i = 0; i < SK_ARRAY_COUNT(gPipeWritingFlagCombos); ++i) {
             SkBitmap bitmap;
             SkISize size = gm->getISize();
             setup_bitmap(gRec, size, &bitmap);
             SkCanvas canvas(bitmap);
+            installFilter(&canvas);
             TiledPipeController pipeController(bitmap);
             SkGPipeWriter writer;
             SkCanvas* pipeCanvas = writer.startRecording(
@@ -954,9 +934,9 @@ public:
             writer.endRecording();
             SkString string("-tiled pipe");
             string.append(gPipeWritingFlagCombos[i].name);
-            errors |= compare_test_results_to_reference_bitmap(
-                gm, gRec, string.c_str(), bitmap, &referenceBitmap);
-            if (errors != ERROR_NONE) {
+            errors.add(compare_test_results_to_reference_bitmap(
+                gm, gRec, string.c_str(), bitmap, &referenceBitmap));
+            if (!errors.isEmpty()) {
                 break;
             }
         }
@@ -969,6 +949,7 @@ public:
     //
 
     bool fUseFileHierarchy;
+    ErrorCombination fIgnorableErrorCombination;
 
     const char* fMismatchPath;
 
@@ -1000,90 +981,105 @@ static const ConfigFlags kPDFConfigFlags = CAN_IMAGE_PDF ? kRW_ConfigFlag :
                                                            kWrite_ConfigFlag;
 
 static const ConfigData gRec[] = {
-    { SkBitmap::kARGB_8888_Config, kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "8888" },
+    { SkBitmap::kARGB_8888_Config, kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "8888",         true },
 #if 0   // stop testing this (for now at least) since we want to remove support for it (soon please!!!)
-    { SkBitmap::kARGB_4444_Config, kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "4444" },
+    { SkBitmap::kARGB_4444_Config, kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "4444",         true },
 #endif
-    { SkBitmap::kRGB_565_Config,   kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "565" },
-#if defined(SK_SCALAR_IS_FLOAT) && SK_SUPPORT_GPU
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kNative_GLContextType,  0, kRW_ConfigFlag,    "gpu" },
-#ifndef SK_BUILD_FOR_ANDROID
-    // currently we don't want to run MSAA tests on Android
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kNative_GLContextType, 16, kRW_ConfigFlag,    "msaa16" },
-#endif
+    { SkBitmap::kRGB_565_Config,   kRaster_Backend, kDontCare_GLContextType,                  0, kRW_ConfigFlag,    "565",          true },
+#if SK_SUPPORT_GPU
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kNative_GLContextType,  0, kRW_ConfigFlag,    "gpu",          true },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kNative_GLContextType, 16, kRW_ConfigFlag,    "msaa16",       true },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kNative_GLContextType,  4, kRW_ConfigFlag,    "msaa4",        false},
     /* The debug context does not generate images */
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kDebug_GLContextType,   0, kNone_ConfigFlag,  "debug" },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kDebug_GLContextType,   0, kNone_ConfigFlag,  "gpudebug",     GR_DEBUG},
 #if SK_ANGLE
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kANGLE_GLContextType,   0, kRW_ConfigFlag,    "angle" },
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kANGLE_GLContextType,  16, kRW_ConfigFlag,    "anglemsaa16" },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kANGLE_GLContextType,   0, kRW_ConfigFlag,    "angle",        true },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kANGLE_GLContextType,  16, kRW_ConfigFlag,    "anglemsaa16",  true },
 #endif // SK_ANGLE
 #ifdef SK_MESA
-    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kMESA_GLContextType,    0, kRW_ConfigFlag,    "mesa" },
+    { SkBitmap::kARGB_8888_Config, kGPU_Backend,    GrContextFactory::kMESA_GLContextType,    0, kRW_ConfigFlag,    "mesa",         true },
 #endif // SK_MESA
-#endif // defined(SK_SCALAR_IS_FLOAT) && SK_SUPPORT_GPU
+#endif // SK_SUPPORT_GPU
 #ifdef SK_SUPPORT_XPS
     /* At present we have no way of comparing XPS files (either natively or by converting to PNG). */
-    { SkBitmap::kARGB_8888_Config, kXPS_Backend,    kDontCare_GLContextType,                  0, kWrite_ConfigFlag, "xps" },
+    { SkBitmap::kARGB_8888_Config, kXPS_Backend,    kDontCare_GLContextType,                  0, kWrite_ConfigFlag, "xps",          true },
 #endif // SK_SUPPORT_XPS
 #ifdef SK_SUPPORT_PDF
-    { SkBitmap::kARGB_8888_Config, kPDF_Backend,    kDontCare_GLContextType,                  0, kPDFConfigFlags,   "pdf" },
+    { SkBitmap::kARGB_8888_Config, kPDF_Backend,    kDontCare_GLContextType,                  0, kPDFConfigFlags,   "pdf",          true },
 #endif // SK_SUPPORT_PDF
 };
 
-static void usage(const char * argv0) {
-    SkDebugf("%s\n", argv0);
-    SkDebugf("    [--config ");
+static SkString configUsage() {
+    SkString result;
+    result.appendf("Space delimited list of which configs to run. Possible options: [");
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
         if (i > 0) {
-            SkDebugf("|");
+            result.append("|");
         }
-        SkDebugf(gRec[i].fName);
+        result.appendf("%s", gRec[i].fName);
     }
-    SkDebugf("]:\n        run these configurations\n");
-    SkDebugf(
-// Alphabetized ignoring "no" prefix ("readPath", "noreplay", "resourcePath").
-// It would probably be better if we allowed both yes-and-no settings for each
-// one, e.g.:
-// [--replay|--noreplay]: whether to exercise SkPicture replay; default is yes
-"    [--nodeferred]: skip the deferred rendering test pass\n"
-"    [--disable-missing-warning]: don't print a message to stderr if\n"
-"        unable to read a reference image for any tests (NOT default behavior)\n"
-"    [--enable-missing-warning]: print message to stderr (but don't fail) if\n"
-"        unable to read a reference image for any tests (default behavior)\n"
-"    [--exclude-config]: disable this config (may be used multiple times)\n"
-"    [--forceBWtext]: disable text anti-aliasing\n"
-"    [--help|-h]: show this help message\n"
-"    [--hierarchy|--nohierarchy]: whether to use multilevel directory structure\n"
-"        when reading/writing files; default is no\n"
-"    [--match <substring>]: only run tests whose name includes this substring\n"
-"    [--mismatchPath <path>]: write images for tests that failed due to\n"
-"        pixel mismatched into this directory"
-"    [--modulo <remainder> <divisor>]: only run tests for which \n"
-"        testIndex %% divisor == remainder\n"
-"    [--nopdf]: skip the pdf rendering test pass\n"
-"    [--nopipe]: Skip SkGPipe replay\n"
-"    [--readPath|-r <path>]: read reference images from this dir, and report\n"
-"        any differences between those and the newly generated ones\n"
-"    [--noreplay]: do not exercise SkPicture replay\n"
-"    [--resourcePath|-i <path>]: directory that stores image resources\n"
-"    [--nortree]: Do not exercise the R-Tree variant of SkPicture\n"
-"    [--noserialize]: do not exercise SkPicture serialization & deserialization\n"
-"    [--notexturecache]: disable the gpu texture cache\n"
-"    [--tiledPipe]: Exercise tiled SkGPipe replay\n"
-"    [--notileGrid]: Do not exercise the tile grid variant of SkPicture\n"
-"    [--tileGridReplayScales <scales>]: Comma separated list of floating-point scale\n"
-"        factors to be used for tileGrid playback testing. Default value: 1.0\n"
-"    [--writeJsonSummary <path>]: write a JSON-formatted result summary to this file\n"
-"    [--verbose] print diagnostics (e.g. list each config to be tested)\n"
-"    [--writePath|-w <path>]: write rendered images into this directory\n"
-"    [--writePicturePath|-wp <path>]: write .skp files into this directory\n"
-             );
+    result.append("]\n");
+    result.appendf("The default value is: \"");
+    for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
+        if (gRec[i].fRunByDefault) {
+            if (i > 0) {
+                result.append(" ");
+            }
+            result.appendf("%s", gRec[i].fName);
+        }
+    }
+    result.appendf("\"");
+
+    return result;
 }
+
+// Macro magic to convert a numeric preprocessor token into a string.
+// Adapted from http://stackoverflow.com/questions/240353/convert-a-preprocessor-token-to-a-string
+// This should probably be moved into one of our common headers...
+#define TOSTRING_INTERNAL(x) #x
+#define TOSTRING(x) TOSTRING_INTERNAL(x)
+
+// Alphabetized ignoring "no" prefix ("readPath", "noreplay", "resourcePath").
+DEFINE_string(config, "", configUsage().c_str());
+DEFINE_bool(deferred, true, "Exercise the deferred rendering test pass.");
+DEFINE_bool(enableMissingWarning, true, "Print message to stderr (but don't fail) if "
+            "unable to read a reference image for any tests.");
+DEFINE_string(excludeConfig, "", "Space delimited list of configs to skip.");
+DEFINE_bool(forceBWtext, false, "Disable text anti-aliasing.");
+#if SK_SUPPORT_GPU
+DEFINE_string(gpuCacheSize, "", "<bytes> <count>: Limit the gpu cache to byte size or "
+              "object count. " TOSTRING(DEFAULT_CACHE_VALUE) " for either value means "
+              "use the default. 0 for either disables the cache.");
+#endif
+DEFINE_bool(hierarchy, false, "Whether to use multilevel directory structure "
+            "when reading/writing files.");
+DEFINE_string(match, "",  "Only run tests whose name includes this substring/these substrings "
+              "(more than one can be supplied, separated by spaces).");
+DEFINE_string(mismatchPath, "", "Write images for tests that failed due to "
+              "pixel mismatches into this directory.");
+DEFINE_string(modulo, "", "[--modulo <remainder> <divisor>]: only run tests for which "
+              "testIndex %% divisor == remainder.");
+DEFINE_bool(pdf, true, "Exercise the pdf rendering test pass.");
+DEFINE_bool(pipe, true, "Exercise the SkGPipe replay test pass.");
+DEFINE_string2(readPath, r, "", "Read reference images from this dir, and report "
+               "any differences between those and the newly generated ones.");
+DEFINE_bool(replay, true, "Exercise the SkPicture replay test pass.");
+DEFINE_string2(resourcePath, i, "", "Directory that stores image resources.");
+DEFINE_bool(rtree, true, "Exercise the R-Tree variant of SkPicture test pass.");
+DEFINE_bool(serialize, true, "Exercise the SkPicture serialization & deserialization test pass.");
+DEFINE_bool(tiledPipe, false, "Exercise tiled SkGPipe replay.");
+DEFINE_bool(tileGrid, true, "Exercise the tile grid variant of SkPicture.");
+DEFINE_string(tileGridReplayScales, "", "Space separated list of floating-point scale "
+              "factors to be used for tileGrid playback testing. Default value: 1.0");
+DEFINE_string(writeJsonSummaryPath, "", "Write a JSON-formatted result summary to this file.");
+DEFINE_bool2(verbose, v, false, "Print diagnostics (e.g. list each config to be tested).");
+DEFINE_string2(writePath, w, "",  "Write rendered images into this directory.");
+DEFINE_string2(writePicturePath, wp, "", "Write .skp files into this directory.");
 
 static int findConfig(const char config[]) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
         if (!strcmp(config, gRec[i].fName)) {
-            return i;
+            return (int) i;
         }
     }
     return -1;
@@ -1140,6 +1136,7 @@ private:
     GrContext* fOld;
 };
 #else
+GrContext* GetGr();
 GrContext* GetGr() { return NULL; }
 #endif
 }
@@ -1149,6 +1146,217 @@ template <typename T> void appendUnique(SkTDArray<T>* array, const T& value) {
     if (index < 0) {
         *array->append() = value;
     }
+}
+
+/**
+ * Run this test in a number of different configs (8888, 565, PDF,
+ * etc.), confirming that the resulting bitmaps match expectations
+ * (which may be different for each config).
+ *
+ * Returns all errors encountered while doing so.
+ */
+ErrorCombination run_multiple_configs(GMMain &gmmain, GM *gm, const SkTDArray<size_t> &configs,
+                                      GrContextFactory *grFactory);
+ErrorCombination run_multiple_configs(GMMain &gmmain, GM *gm, const SkTDArray<size_t> &configs,
+                                      GrContextFactory *grFactory) {
+    ErrorCombination errorsForAllConfigs;
+    uint32_t gmFlags = gm->getFlags();
+
+    for (int i = 0; i < configs.count(); i++) {
+        ConfigData config = gRec[configs[i]];
+
+        // Skip any tests that we don't even need to try.
+        if ((kPDF_Backend == config.fBackend) &&
+            (!FLAGS_pdf|| (gmFlags & GM::kSkipPDF_Flag))) {
+                continue;
+            }
+        if ((gmFlags & GM::kSkip565_Flag) &&
+            (kRaster_Backend == config.fBackend) &&
+            (SkBitmap::kRGB_565_Config == config.fConfig)) {
+            continue;
+        }
+        if ((gmFlags & GM::kSkipGPU_Flag) &&
+            kGPU_Backend == config.fBackend) {
+            continue;
+        }
+
+        // Now we know that we want to run this test and record its
+        // success or failure.
+        ErrorCombination errorsForThisConfig;
+        GrRenderTarget* renderTarget = NULL;
+#if SK_SUPPORT_GPU
+        SkAutoTUnref<GrRenderTarget> rt;
+        AutoResetGr autogr;
+        if ((errorsForThisConfig.isEmpty()) && (kGPU_Backend == config.fBackend)) {
+            GrContext* gr = grFactory->get(config.fGLContextType);
+            bool grSuccess = false;
+            if (gr) {
+                // create a render target to back the device
+                GrTextureDesc desc;
+                desc.fConfig = kSkia8888_GrPixelConfig;
+                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fWidth = gm->getISize().width();
+                desc.fHeight = gm->getISize().height();
+                desc.fSampleCnt = config.fSampleCnt;
+                GrTexture* tex = gr->createUncachedTexture(desc, NULL, 0);
+                if (tex) {
+                    rt.reset(tex->asRenderTarget());
+                    rt.get()->ref();
+                    tex->unref();
+                    autogr.set(gr);
+                    renderTarget = rt.get();
+                    grSuccess = NULL != renderTarget;
+                }
+                // Set the user specified cache limits if non-default.
+                size_t bytes;
+                int count;
+                gr->getTextureCacheLimits(&count, &bytes);
+                if (DEFAULT_CACHE_VALUE != gGpuCacheSizeBytes) {
+                    bytes = static_cast<size_t>(gGpuCacheSizeBytes);
+                }
+                if (DEFAULT_CACHE_VALUE != gGpuCacheSizeCount) {
+                    count = gGpuCacheSizeCount;
+                }
+                gr->setTextureCacheLimits(count, bytes);
+            }
+            if (!grSuccess) {
+                errorsForThisConfig.add(kNoGpuContext_ErrorType);
+            }
+        }
+#endif
+
+        SkBitmap comparisonBitmap;
+
+        const char* writePath;
+        if (FLAGS_writePath.count() == 1) {
+            writePath = FLAGS_writePath[0];
+        } else {
+            writePath = NULL;
+        }
+        if (errorsForThisConfig.isEmpty()) {
+            errorsForThisConfig.add(gmmain.test_drawing(gm, config, writePath, GetGr(),
+                                                        renderTarget, &comparisonBitmap));
+        }
+
+        if (FLAGS_deferred && errorsForThisConfig.isEmpty() &&
+            (kGPU_Backend == config.fBackend || kRaster_Backend == config.fBackend)) {
+            errorsForThisConfig.add(gmmain.test_deferred_drawing(gm, config, comparisonBitmap,
+                                                                 GetGr(), renderTarget));
+        }
+
+        errorsForAllConfigs.add(errorsForThisConfig);
+    }
+    return errorsForAllConfigs;
+}
+
+/**
+ * Run this test in a number of different drawing modes (pipe,
+ * deferred, tiled, etc.), confirming that the resulting bitmaps all
+ * *exactly* match comparisonBitmap.
+ *
+ * Returns all errors encountered while doing so.
+ */
+ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &compareConfig,
+                                    const SkBitmap &comparisonBitmap,
+                                    const SkTDArray<SkScalar> &tileGridReplayScales);
+ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &compareConfig,
+                                    const SkBitmap &comparisonBitmap,
+                                    const SkTDArray<SkScalar> &tileGridReplayScales) {
+    ErrorCombination errorsForAllModes;
+    uint32_t gmFlags = gm->getFlags();
+
+    // run the picture centric GM steps
+    if (!(gmFlags & GM::kSkipPicture_Flag)) {
+
+        ErrorCombination pictErrors;
+
+        //SkAutoTUnref<SkPicture> pict(generate_new_picture(gm));
+        SkPicture* pict = gmmain.generate_new_picture(gm, kNone_BbhType, 0);
+        SkAutoUnref aur(pict);
+
+        if (FLAGS_replay) {
+            SkBitmap bitmap;
+            gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);
+            pictErrors.add(gmmain.compare_test_results_to_reference_bitmap(
+                gm, compareConfig, "-replay", bitmap, &comparisonBitmap));
+        }
+
+        if ((pictErrors.isEmpty()) && FLAGS_serialize) {
+            SkPicture* repict = gmmain.stream_to_new_picture(*pict);
+            SkAutoUnref aurr(repict);
+
+            SkBitmap bitmap;
+            gmmain.generate_image_from_picture(gm, compareConfig, repict, &bitmap);
+            pictErrors.add(gmmain.compare_test_results_to_reference_bitmap(
+                gm, compareConfig, "-serialize", bitmap, &comparisonBitmap));
+        }
+
+        if (FLAGS_writePicturePath.count() == 1) {
+            const char* pictureSuffix = "skp";
+            SkString path = make_filename(FLAGS_writePicturePath[0], "",
+                                          gm->shortName(), pictureSuffix);
+            SkFILEWStream stream(path.c_str());
+            pict->serialize(&stream);
+        }
+
+        errorsForAllModes.add(pictErrors);
+    }
+
+    // TODO: add a test in which the RTree rendering results in a
+    // different bitmap than the standard rendering.  It should
+    // show up as failed in the JSON summary, and should be listed
+    // in the stdout also.
+    if (!(gmFlags & GM::kSkipPicture_Flag) && FLAGS_rtree) {
+        SkPicture* pict = gmmain.generate_new_picture(
+            gm, kRTree_BbhType, SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkAutoUnref aur(pict);
+        SkBitmap bitmap;
+        gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);
+        errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
+            gm, compareConfig, "-rtree", bitmap, &comparisonBitmap));
+    }
+
+    if (!(gmFlags & GM::kSkipPicture_Flag) && FLAGS_tileGrid) {
+        for(int scaleIndex = 0; scaleIndex < tileGridReplayScales.count(); ++scaleIndex) {
+            SkScalar replayScale = tileGridReplayScales[scaleIndex];
+            if ((gmFlags & GM::kSkipScaledReplay_Flag) && replayScale != 1) {
+                continue;
+            }
+            // We record with the reciprocal scale to obtain a replay
+            // result that can be validated against comparisonBitmap.
+            SkScalar recordScale = SkScalarInvert(replayScale);
+            SkPicture* pict = gmmain.generate_new_picture(
+                gm, kTileGrid_BbhType, SkPicture::kUsePathBoundsForClip_RecordingFlag, recordScale);
+            SkAutoUnref aur(pict);
+            SkBitmap bitmap;
+            gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap, replayScale);
+            SkString suffix("-tilegrid");
+            if (SK_Scalar1 != replayScale) {
+                suffix += "-scale-";
+                suffix.appendScalar(replayScale);
+            }
+            errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
+                gm, compareConfig, suffix.c_str(), bitmap, &comparisonBitmap));
+        }
+    }
+
+    // run the pipe centric GM steps
+    if (!(gmFlags & GM::kSkipPipe_Flag)) {
+
+        ErrorCombination pipeErrors;
+
+        if (FLAGS_pipe) {
+            pipeErrors.add(gmmain.test_pipe_playback(gm, compareConfig, comparisonBitmap));
+        }
+
+        if ((pipeErrors.isEmpty()) &&
+            FLAGS_tiledPipe && !(gmFlags & GM::kSkipTiled_Flag)) {
+            pipeErrors.add(gmmain.test_tiled_pipe_playback(gm, compareConfig, comparisonBitmap));
+        }
+
+        errorsForAllModes.add(pipeErrors);
+    }
+    return errorsForAllModes;
 }
 
 int tool_main(int argc, char** argv);
@@ -1165,199 +1373,90 @@ int tool_main(int argc, char** argv) {
     setSystemPreferences();
     GMMain gmmain;
 
-    const char* writeJsonSummaryPath = NULL;// if non-null, where we write the JSON summary
-    const char* writePath = NULL;   // if non-null, where we write the originals
-    const char* writePicturePath = NULL;    // if non-null, where we write serialized pictures
-    const char* readPath = NULL;    // if non-null, were we read from to compare
-    const char* resourcePath = NULL;// if non-null, where we read from for image resources
-
-    // if true, emit a message when we can't find a reference image to compare
-    bool notifyMissingReadReference = true;
-
-    SkTDArray<const char*> fMatches;
-
-    bool doPDF = true;
-    bool doReplay = true;
-    bool doPipe = true;
-    bool doTiledPipe = false;
-    bool doSerialize = true;
-    bool doDeferred = true;
-    bool doRTree = true;
-    bool doTileGrid = true;
-    bool doVerbose = false;
-    bool disableTextureCache = false;
     SkTDArray<size_t> configs;
     SkTDArray<size_t> excludeConfigs;
-    SkTDArray<SkScalar> tileGridReplayScales;
-    *tileGridReplayScales.append() = SK_Scalar1; // By default only test at scale 1.0
     bool userConfig = false;
+
+    SkString usage;
+    usage.printf("Run the golden master tests.\n");
+    SkCommandLineFlags::SetUsage(usage.c_str());
+    SkCommandLineFlags::Parse(argc, argv);
+
+    gmmain.fUseFileHierarchy = FLAGS_hierarchy;
+    if (FLAGS_mismatchPath.count() == 1) {
+        gmmain.fMismatchPath = FLAGS_mismatchPath[0];
+    }
+
+    for (int i = 0; i < FLAGS_config.count(); i++) {
+        int index = findConfig(FLAGS_config[i]);
+        if (index >= 0) {
+            appendUnique<size_t>(&configs, index);
+            userConfig = true;
+        } else {
+            gm_fprintf(stderr, "unrecognized config %s\n", FLAGS_config[i]);
+            return -1;
+        }
+    }
+
+    for (int i = 0; i < FLAGS_excludeConfig.count(); i++) {
+        int index = findConfig(FLAGS_excludeConfig[i]);
+        if (index >= 0) {
+            *excludeConfigs.append() = index;
+        } else {
+            gm_fprintf(stderr, "unrecognized excludeConfig %s\n", FLAGS_excludeConfig[i]);
+            return -1;
+        }
+    }
 
     int moduloRemainder = -1;
     int moduloDivisor = -1;
 
-    const char* const commandName = argv[0];
-    char* const* stop = argv + argc;
-    for (++argv; argv < stop; ++argv) {
-        if (strcmp(*argv, "--config") == 0) {
-            argv++;
-            if (argv < stop) {
-                int index = findConfig(*argv);
-                if (index >= 0) {
-                    appendUnique<size_t>(&configs, index);
-                    userConfig = true;
-                } else {
-                    SkString str;
-                    str.printf("unrecognized config %s\n", *argv);
-                    SkDebugf(str.c_str());
-                    usage(commandName);
-                    return -1;
-                }
-            } else {
-                SkDebugf("missing arg for --config\n");
-                usage(commandName);
-                return -1;
-            }
-        } else if (strcmp(*argv, "--exclude-config") == 0) {
-            argv++;
-            if (argv < stop) {
-                int index = findConfig(*argv);
-                if (index >= 0) {
-                    *excludeConfigs.append() = index;
-                } else {
-                    SkString str;
-                    str.printf("unrecognized exclude-config %s\n", *argv);
-                    SkDebugf(str.c_str());
-                    usage(commandName);
-                    return -1;
-                }
-            } else {
-                SkDebugf("missing arg for --exclude-config\n");
-                usage(commandName);
-                return -1;
-            }
-        } else if (strcmp(*argv, "--nodeferred") == 0) {
-            doDeferred = false;
-        } else if (strcmp(*argv, "--disable-missing-warning") == 0) {
-            notifyMissingReadReference = false;
-        } else if (strcmp(*argv, "--mismatchPath") == 0) {
-            argv++;
-            if (argv < stop && **argv) {
-                gmmain.fMismatchPath = *argv;
-            }
-        } else if (strcmp(*argv, "--nortree") == 0) {
-            doRTree = false;
-        } else if (strcmp(*argv, "--notileGrid") == 0) {
-            doTileGrid = false;
-        } else if (strcmp(*argv, "--tileGridReplayScales") == 0) {
-            tileGridReplayScales.reset();
-            ++argv;
-            if (argv < stop) {
-                char* token = strtok(*argv, ",");
-                while (NULL != token) {
-                    double val = atof(token);
-                    if (0 < val) {
-                        *tileGridReplayScales.append() = SkDoubleToScalar(val);
-                    }
-                    token = strtok(NULL, ",");
-                }
-            }
-            if (0 == tileGridReplayScales.count()) {
-                // Should have at least one scale
-                usage(commandName);
-                return -1;
-            }
-        } else if (strcmp(*argv, "--enable-missing-warning") == 0) {
-            notifyMissingReadReference = true;
-        } else if (strcmp(*argv, "--forceBWtext") == 0) {
-            gForceBWtext = true;
-        } else if (strcmp(*argv, "--help") == 0 || strcmp(*argv, "-h") == 0) {
-            usage(commandName);
-            return -1;
-        } else if (strcmp(*argv, "--hierarchy") == 0) {
-            gmmain.fUseFileHierarchy = true;
-        } else if (strcmp(*argv, "--nohierarchy") == 0) {
-            gmmain.fUseFileHierarchy = false;
-        } else if (strcmp(*argv, "--match") == 0) {
-            ++argv;
-            if (argv < stop && **argv) {
-                // just record the ptr, no need for a deep copy
-                *fMatches.append() = *argv;
-            }
-        } else if (strcmp(*argv, "--modulo") == 0) {
-            ++argv;
-            if (argv >= stop) {
-                continue;
-            }
-            moduloRemainder = atoi(*argv);
-
-            ++argv;
-            if (argv >= stop) {
-                continue;
-            }
-            moduloDivisor = atoi(*argv);
-            if (moduloRemainder < 0 || moduloDivisor <= 0 || moduloRemainder >= moduloDivisor) {
-                SkDebugf("invalid modulo values.");
-                return -1;
-            }
-        } else if (strcmp(*argv, "--nopdf") == 0) {
-            doPDF = false;
-        } else if (strcmp(*argv, "--nopipe") == 0) {
-            doPipe = false;
-        } else if ((0 == strcmp(*argv, "--readPath")) ||
-                   (0 == strcmp(*argv, "-r"))) {
-            argv++;
-            if (argv < stop && **argv) {
-                readPath = *argv;
-            }
-        } else if (strcmp(*argv, "--noreplay") == 0) {
-            doReplay = false;
-        } else if ((0 == strcmp(*argv, "--resourcePath")) ||
-                   (0 == strcmp(*argv, "-i"))) {
-            argv++;
-            if (argv < stop && **argv) {
-                resourcePath = *argv;
-            }
-        } else if (strcmp(*argv, "--serialize") == 0) {
-            doSerialize = true;
-        } else if (strcmp(*argv, "--noserialize") == 0) {
-            doSerialize = false;
-        } else if (strcmp(*argv, "--notexturecache") == 0) {
-            disableTextureCache = true;
-        } else if (strcmp(*argv, "--tiledPipe") == 0) {
-            doTiledPipe = true;
-        } else if (!strcmp(*argv, "--verbose") || !strcmp(*argv, "-v")) {
-            doVerbose = true;
-        } else if ((0 == strcmp(*argv, "--writePath")) ||
-            (0 == strcmp(*argv, "-w"))) {
-            argv++;
-            if (argv < stop && **argv) {
-                writePath = *argv;
-            }
-        } else if (0 == strcmp(*argv, "--writeJsonSummary")) {
-            argv++;
-            if (argv < stop && **argv) {
-                writeJsonSummaryPath = *argv;
-            }
-        } else if ((0 == strcmp(*argv, "--writePicturePath")) ||
-                   (0 == strcmp(*argv, "-wp"))) {
-            argv++;
-            if (argv < stop && **argv) {
-                writePicturePath = *argv;
-            }
-        } else {
-            usage(commandName);
+    if (FLAGS_modulo.count() == 2) {
+        moduloRemainder = atoi(FLAGS_modulo[0]);
+        moduloDivisor = atoi(FLAGS_modulo[1]);
+        if (moduloRemainder < 0 || moduloDivisor <= 0 || moduloRemainder >= moduloDivisor) {
+            gm_fprintf(stderr, "invalid modulo values.");
             return -1;
         }
     }
-    if (argv != stop) {
-        usage(commandName);
-        return -1;
+
+#if SK_SUPPORT_GPU
+    if (FLAGS_gpuCacheSize.count() > 0) {
+        if (FLAGS_gpuCacheSize.count() != 2) {
+            gm_fprintf(stderr, "--gpuCacheSize requires two arguments\n");
+            return -1;
+        }
+        gGpuCacheSizeBytes = atoi(FLAGS_gpuCacheSize[0]);
+        gGpuCacheSizeCount = atoi(FLAGS_gpuCacheSize[1]);
+    } else {
+        gGpuCacheSizeBytes = DEFAULT_CACHE_VALUE;
+        gGpuCacheSizeCount = DEFAULT_CACHE_VALUE;
+    }
+#endif
+
+    SkTDArray<SkScalar> tileGridReplayScales;
+    *tileGridReplayScales.append() = SK_Scalar1; // By default only test at scale 1.0
+    if (FLAGS_tileGridReplayScales.count() > 0) {
+        tileGridReplayScales.reset();
+        for (int i = 0; i < FLAGS_tileGridReplayScales.count(); i++) {
+            double val = atof(FLAGS_tileGridReplayScales[i]);
+            if (0 < val) {
+                *tileGridReplayScales.append() = SkDoubleToScalar(val);
+            }
+        }
+        if (0 == tileGridReplayScales.count()) {
+            // Should have at least one scale
+            gm_fprintf(stderr, "--tileGridReplayScales requires at least one scale.\n");
+            return -1;
+        }
     }
 
     if (!userConfig) {
-        // if no config is specified by user, we add them all.
+        // if no config is specified by user, add the defaults
         for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
-            *configs.append() = i;
+            if (gRec[i].fRunByDefault) {
+                *configs.append() = i;
+            }
         }
     }
     // now remove any explicitly excluded configs
@@ -1370,42 +1469,68 @@ int tool_main(int argc, char** argv) {
         }
     }
 
-    if (doVerbose) {
+#if SK_SUPPORT_GPU
+    GrContextFactory* grFactory = new GrContextFactory;
+    for (int i = 0; i < configs.count(); ++i) {
+        size_t index = configs[i];
+        if (kGPU_Backend == gRec[index].fBackend) {
+            GrContext* ctx = grFactory->get(gRec[index].fGLContextType);
+            if (NULL == ctx) {
+                SkDebugf("GrContext could not be created for config %s. Config will be skipped.",
+                         gRec[index].fName);
+                configs.remove(i);
+                --i;
+            }
+            if (gRec[index].fSampleCnt > ctx->getMaxSampleCount()) {
+                SkDebugf("Sample count (%d) of config %s is not supported. Config will be skipped.",
+                         gRec[index].fSampleCnt, gRec[index].fName);
+                configs.remove(i);
+                --i;
+            }
+        }
+    }
+#else
+    GrContextFactory* grFactory = NULL;
+#endif
+
+    if (FLAGS_verbose) {
         SkString str;
-        str.printf("gm: %d configs:", configs.count());
+        str.printf("%d configs:", configs.count());
         for (int i = 0; i < configs.count(); ++i) {
             str.appendf(" %s", gRec[configs[i]].fName);
         }
-        SkDebugf("%s\n", str.c_str());
+        gm_fprintf(stderr, "%s\n", str.c_str());
     }
 
-    GM::SetResourcePath(resourcePath);
+    if (FLAGS_resourcePath.count() == 1) {
+        GM::SetResourcePath(FLAGS_resourcePath[0]);
+    }
 
-    if (readPath) {
+    if (FLAGS_readPath.count() == 1) {
+        const char* readPath = FLAGS_readPath[0];
         if (!sk_exists(readPath)) {
-            fprintf(stderr, "readPath %s does not exist!\n", readPath);
+            gm_fprintf(stderr, "readPath %s does not exist!\n", readPath);
             return -1;
         }
         if (sk_isdir(readPath)) {
-            fprintf(stderr, "reading from %s\n", readPath);
+            gm_fprintf(stdout, "reading from %s\n", readPath);
             gmmain.fExpectationsSource.reset(SkNEW_ARGS(
                 IndividualImageExpectationsSource,
-                (readPath, notifyMissingReadReference)));
+                (readPath, FLAGS_enableMissingWarning)));
         } else {
-            fprintf(stderr, "reading expectations from JSON summary file %s ",
-                    readPath);
-            fprintf(stderr, "BUT WE DON'T KNOW HOW TO DO THIS YET!\n");
-            return -1;
+            gm_fprintf(stdout, "reading expectations from JSON summary file %s\n", readPath);
+            gmmain.fExpectationsSource.reset(SkNEW_ARGS(
+                JsonExpectationsSource, (readPath)));
         }
     }
-    if (writePath) {
-        fprintf(stderr, "writing to %s\n", writePath);
+    if (FLAGS_writePath.count() == 1) {
+        gm_fprintf(stderr, "writing to %s\n", FLAGS_writePath[0]);
     }
-    if (writePicturePath) {
-        fprintf(stderr, "writing pictures to %s\n", writePicturePath);
+    if (FLAGS_writePicturePath.count() == 1) {
+        gm_fprintf(stderr, "writing pictures to %s\n", FLAGS_writePicturePath[0]);
     }
-    if (resourcePath) {
-        fprintf(stderr, "reading resources from %s\n", resourcePath);
+    if (FLAGS_resourcePath.count() == 1) {
+        gm_fprintf(stderr, "reading resources from %s\n", FLAGS_resourcePath[0]);
     }
 
     if (moduloDivisor <= 0) {
@@ -1421,26 +1546,19 @@ int tool_main(int argc, char** argv) {
     int testsFailed = 0;
     int testsMissingReferenceImages = 0;
 
-#if SK_SUPPORT_GPU
-    GrContextFactory* grFactory = new GrContextFactory;
-    if (disableTextureCache) {
-        skiagm::GetGr()->setTextureCacheLimits(0, 0);
-    }
-#endif
-
     int gmIndex = -1;
     SkString moduloStr;
 
     // If we will be writing out files, prepare subdirectories.
-    if (writePath) {
-        if (!sk_mkdir(writePath)) {
+    if (FLAGS_writePath.count() == 1) {
+        if (!sk_mkdir(FLAGS_writePath[0])) {
             return -1;
         }
         if (gmmain.fUseFileHierarchy) {
             for (int i = 0; i < configs.count(); i++) {
                 ConfigData config = gRec[configs[i]];
                 SkString subdir;
-                subdir.appendf("%s%c%s", writePath, SkPATH_SEPARATOR,
+                subdir.appendf("%s%c%s", FLAGS_writePath[0], SkPATH_SEPARATOR,
                                config.fName);
                 if (!sk_mkdir(subdir.c_str())) {
                     return -1;
@@ -1462,196 +1580,28 @@ int tool_main(int argc, char** argv) {
         }
 
         const char* shortName = gm->shortName();
-        if (skip_name(fMatches, shortName)) {
+        if (skip_name(FLAGS_match, shortName)) {
             SkDELETE(gm);
             continue;
         }
 
         SkISize size = gm->getISize();
-        SkDebugf("%sdrawing... %s [%d %d]\n", moduloStr.c_str(), shortName,
-                 size.width(), size.height());
+        gm_fprintf(stdout, "%sdrawing... %s [%d %d]\n", moduloStr.c_str(), shortName,
+                   size.width(), size.height());
 
-        ErrorBitfield testErrors = ERROR_NONE;
-        uint32_t gmFlags = gm->getFlags();
-
-        for (int i = 0; i < configs.count(); i++) {
-            ConfigData config = gRec[configs[i]];
-
-            // Skip any tests that we don't even need to try.
-            if ((kPDF_Backend == config.fBackend) &&
-                (!doPDF || (gmFlags & GM::kSkipPDF_Flag)))
-                {
-                    continue;
-                }
-            if ((gmFlags & GM::kSkip565_Flag) &&
-                (kRaster_Backend == config.fBackend) &&
-                (SkBitmap::kRGB_565_Config == config.fConfig)) {
-                continue;
-            }
-
-            // Now we know that we want to run this test and record its
-            // success or failure.
-            ErrorBitfield renderErrors = ERROR_NONE;
-            GrRenderTarget* renderTarget = NULL;
-#if SK_SUPPORT_GPU
-            SkAutoTUnref<GrRenderTarget> rt;
-            AutoResetGr autogr;
-            if ((ERROR_NONE == renderErrors) &&
-                kGPU_Backend == config.fBackend) {
-                GrContext* gr = grFactory->get(config.fGLContextType);
-                bool grSuccess = false;
-                if (gr) {
-                    // create a render target to back the device
-                    GrTextureDesc desc;
-                    desc.fConfig = kSkia8888_PM_GrPixelConfig;
-                    desc.fFlags = kRenderTarget_GrTextureFlagBit;
-                    desc.fWidth = gm->getISize().width();
-                    desc.fHeight = gm->getISize().height();
-                    desc.fSampleCnt = config.fSampleCnt;
-                    GrTexture* tex = gr->createUncachedTexture(desc, NULL, 0);
-                    if (tex) {
-                        rt.reset(tex->asRenderTarget());
-                        rt.get()->ref();
-                        tex->unref();
-                        autogr.set(gr);
-                        renderTarget = rt.get();
-                        grSuccess = NULL != renderTarget;
-                    }
-                }
-                if (!grSuccess) {
-                    renderErrors |= ERROR_NO_GPU_CONTEXT;
-                }
-            }
-#endif
-
-            SkBitmap comparisonBitmap;
-
-            if (ERROR_NONE == renderErrors) {
-                renderErrors |= gmmain.test_drawing(gm, config, writePath,
-                                                    GetGr(),
-                                                    renderTarget,
-                                                    &comparisonBitmap);
-            }
-
-            if (doDeferred && !renderErrors &&
-                (kGPU_Backend == config.fBackend ||
-                 kRaster_Backend == config.fBackend)) {
-                renderErrors |= gmmain.test_deferred_drawing(gm, config,
-                                                             comparisonBitmap,
-                                                             GetGr(),
-                                                             renderTarget);
-            }
-
-            testErrors |= renderErrors;
-        }
+        ErrorCombination testErrors;
+        testErrors.add(run_multiple_configs(gmmain, gm, configs, grFactory));
 
         SkBitmap comparisonBitmap;
         const ConfigData compareConfig =
-            { SkBitmap::kARGB_8888_Config, kRaster_Backend, kDontCare_GLContextType, 0, kRW_ConfigFlag, "comparison" };
-        testErrors |= gmmain.generate_image(gm, compareConfig, NULL, NULL, &comparisonBitmap, false);
+            { SkBitmap::kARGB_8888_Config, kRaster_Backend, kDontCare_GLContextType, 0, kRW_ConfigFlag, "comparison", false };
+        testErrors.add(gmmain.generate_image(
+            gm, compareConfig, NULL, NULL, &comparisonBitmap, false));
 
-        // run the picture centric GM steps
-        if (!(gmFlags & GM::kSkipPicture_Flag)) {
-
-            ErrorBitfield pictErrors = ERROR_NONE;
-
-            //SkAutoTUnref<SkPicture> pict(generate_new_picture(gm));
-            SkPicture* pict = gmmain.generate_new_picture(gm, kNone_BbhType, 0);
-            SkAutoUnref aur(pict);
-
-            if ((ERROR_NONE == testErrors) && doReplay) {
-                SkBitmap bitmap;
-                gmmain.generate_image_from_picture(gm, compareConfig, pict,
-                                                   &bitmap);
-                pictErrors |= gmmain.compare_test_results_to_reference_bitmap(
-                    gm, compareConfig, "-replay", bitmap, &comparisonBitmap);
-            }
-
-            if ((ERROR_NONE == testErrors) &&
-                (ERROR_NONE == pictErrors) &&
-                doSerialize) {
-                SkPicture* repict = gmmain.stream_to_new_picture(*pict);
-                SkAutoUnref aurr(repict);
-
-                SkBitmap bitmap;
-                gmmain.generate_image_from_picture(gm, compareConfig, repict,
-                                                   &bitmap);
-                pictErrors |= gmmain.compare_test_results_to_reference_bitmap(
-                    gm, compareConfig, "-serialize", bitmap, &comparisonBitmap);
-            }
-
-            if (writePicturePath) {
-                const char* pictureSuffix = "skp";
-                SkString path = make_filename(writePicturePath, "",
-                                              gm->shortName(),
-                                              pictureSuffix);
-                SkFILEWStream stream(path.c_str());
-                pict->serialize(&stream);
-            }
-
-            testErrors |= pictErrors;
-        }
-
-        // TODO: add a test in which the RTree rendering results in a
-        // different bitmap than the standard rendering.  It should
-        // show up as failed in the JSON summary, and should be listed
-        // in the stdout also.
-        if (!(gmFlags & GM::kSkipPicture_Flag) && doRTree) {
-            SkPicture* pict = gmmain.generate_new_picture(
-                gm, kRTree_BbhType, SkPicture::kUsePathBoundsForClip_RecordingFlag);
-            SkAutoUnref aur(pict);
-            SkBitmap bitmap;
-            gmmain.generate_image_from_picture(gm, compareConfig, pict,
-                                               &bitmap);
-            testErrors |= gmmain.compare_test_results_to_reference_bitmap(
-                gm, compareConfig, "-rtree", bitmap, &comparisonBitmap);
-        }
-
-        if (!(gmFlags & GM::kSkipPicture_Flag) && doTileGrid) {
-            for(int scaleIndex = 0; scaleIndex < tileGridReplayScales.count(); ++scaleIndex) {
-                SkScalar replayScale = tileGridReplayScales[scaleIndex];
-                if ((gmFlags & GM::kSkipScaledReplay_Flag) && replayScale != 1)
-                    continue;
-                // We record with the reciprocal scale to obtain a replay
-                // result that can be validated against comparisonBitmap.
-                SkScalar recordScale = SkScalarInvert(replayScale);
-                SkPicture* pict = gmmain.generate_new_picture(
-                    gm, kTileGrid_BbhType, SkPicture::kUsePathBoundsForClip_RecordingFlag,
-                    recordScale);
-                SkAutoUnref aur(pict);
-                SkBitmap bitmap;
-                gmmain.generate_image_from_picture(gm, compareConfig, pict,
-                                                   &bitmap, replayScale);
-                SkString suffix("-tilegrid");
-                if (SK_Scalar1 != replayScale) {
-                    suffix += "-scale-";
-                    suffix.appendScalar(replayScale);
-                }
-                testErrors |= gmmain.compare_test_results_to_reference_bitmap(
-                    gm, compareConfig, suffix.c_str(), bitmap,
-                    &comparisonBitmap);
-            }
-        }
-
-        // run the pipe centric GM steps
-        if (!(gmFlags & GM::kSkipPipe_Flag)) {
-
-            ErrorBitfield pipeErrors = ERROR_NONE;
-
-            if ((ERROR_NONE == testErrors) && doPipe) {
-                pipeErrors |= gmmain.test_pipe_playback(gm, compareConfig,
-                                                        comparisonBitmap);
-            }
-
-            if ((ERROR_NONE == testErrors) &&
-                (ERROR_NONE == pipeErrors) &&
-                doTiledPipe && !(gmFlags & GM::kSkipTiled_Flag)) {
-                pipeErrors |= gmmain.test_tiled_pipe_playback(gm, compareConfig,
-                                                              comparisonBitmap);
-            }
-
-            testErrors |= pipeErrors;
-        }
+        // TODO(epoger): only run this if gmmain.generate_image() succeeded?
+        // Otherwise, what are we comparing against?
+        testErrors.add(run_multiple_modes(gmmain, gm, compareConfig, comparisonBitmap,
+                                          tileGridReplayScales));
 
         // Update overall results.
         // We only tabulate the particular error types that we currently
@@ -1659,9 +1609,10 @@ int tool_main(int argc, char** argv) {
         // want to also tabulate other error types, we can do so.
         testsRun++;
         if (!gmmain.fExpectationsSource.get() ||
-            (ERROR_READING_REFERENCE_IMAGE & testErrors)) {
+            (testErrors.includes(kMissingExpectations_ErrorType))) {
             testsMissingReferenceImages++;
-        } else if (ERROR_NONE == testErrors) {
+        }
+        if (testErrors.minus(gmmain.fIgnorableErrorCombination).isEmpty()) {
             testsPassed++;
         } else {
             testsFailed++;
@@ -1669,11 +1620,11 @@ int tool_main(int argc, char** argv) {
 
         SkDELETE(gm);
     }
-    SkDebugf("Ran %d tests: %d passed, %d failed, %d missing reference images\n",
-             testsRun, testsPassed, testsFailed, testsMissingReferenceImages);
+    gm_fprintf(stdout, "Ran %d tests: %d passed, %d failed, %d missing reference images\n",
+               testsRun, testsPassed, testsFailed, testsMissingReferenceImages);
     gmmain.ListErrors();
 
-    if (NULL != writeJsonSummaryPath) {
+    if (FLAGS_writeJsonSummaryPath.count() == 1) {
         Json::Value actualResults;
         actualResults[kJsonKey_ActualResults_Failed] =
             gmmain.fJsonActualResults_Failed;
@@ -1687,7 +1638,7 @@ int tool_main(int argc, char** argv) {
         root[kJsonKey_ActualResults] = actualResults;
         root[kJsonKey_ExpectedResults] = gmmain.fJsonExpectedResults;
         std::string jsonStdString = root.toStyledString();
-        SkFILEWStream stream(writeJsonSummaryPath);
+        SkFILEWStream stream(FLAGS_writeJsonSummaryPath[0]);
         stream.write(jsonStdString.c_str(), jsonStdString.length());
     }
 
@@ -1700,7 +1651,7 @@ int tool_main(int argc, char** argv) {
         if (kGPU_Backend == config.fBackend) {
             GrContext* gr = grFactory->get(config.fGLContextType);
 
-            SkDebugf("config: %s %x\n", config.fName, gr);
+            gm_fprintf(stdout, "config: %s %x\n", config.fName, gr);
             gr->printCacheStats();
         }
     }
@@ -1711,6 +1662,12 @@ int tool_main(int argc, char** argv) {
     SkGraphics::Term();
 
     return (0 == testsFailed) ? 0 : -1;
+}
+
+void GMMain::installFilter(SkCanvas* canvas) {
+    if (FLAGS_forceBWtext) {
+        canvas->setDrawFilter(SkNEW(BWTextDrawFilter))->unref();
+    }
 }
 
 #if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)

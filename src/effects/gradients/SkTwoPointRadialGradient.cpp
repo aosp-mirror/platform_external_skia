@@ -384,19 +384,18 @@ class GrGLRadial2Gradient : public GrGLGradientEffect {
 
 public:
 
-    GrGLRadial2Gradient(const GrBackendEffectFactory& factory, const GrEffectRef&);
+    GrGLRadial2Gradient(const GrBackendEffectFactory& factory, const GrDrawEffect&);
     virtual ~GrGLRadial2Gradient() { }
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
+    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
 
-    static EffectKey GenKey(const GrEffectStage&, const GrGLCaps& caps);
+    static EffectKey GenKey(const GrDrawEffect&, const GrGLCaps& caps);
 
 protected:
 
@@ -487,7 +486,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrRadial2Gradient);
 
-GrEffectRef* GrRadial2Gradient::TestCreate(SkRandom* random,
+GrEffectRef* GrRadial2Gradient::TestCreate(SkMWCRandom* random,
                                            GrContext* context,
                                            GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
@@ -516,7 +515,7 @@ GrEffectRef* GrRadial2Gradient::TestCreate(SkRandom* random,
 /////////////////////////////////////////////////////////////////////
 
 GrGLRadial2Gradient::GrGLRadial2Gradient(const GrBackendEffectFactory& factory,
-                                         const GrEffectRef& baseData)
+                                         const GrDrawEffect& drawEffect)
     : INHERITED(factory)
     , fVSParamUni(kInvalidUniformHandle)
     , fFSParamUni(kInvalidUniformHandle)
@@ -526,14 +525,13 @@ GrGLRadial2Gradient::GrGLRadial2Gradient(const GrBackendEffectFactory& factory,
     , fCachedRadius(-SK_ScalarMax)
     , fCachedPosRoot(0) {
 
-    const GrRadial2Gradient& data = CastEffect<GrRadial2Gradient>(baseData);
+    const GrRadial2Gradient& data = drawEffect.castEffect<GrRadial2Gradient>();
     fIsDegenerate = data.isDegenerate();
 }
 
 void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
-                                   const GrEffectStage& stage,
+                                   const GrDrawEffect& drawEffect,
                                    EffectKey key,
-                                   const char* vertexCoords,
                                    const char* outputColor,
                                    const char* inputColor,
                                    const TextureSamplerArray& samplers) {
@@ -542,7 +540,7 @@ void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
     const char* fsCoords;
     const char* vsCoordsVarying;
     GrSLType coordsVaryingType;
-    this->setupMatrix(builder, key, vertexCoords, &fsCoords, &vsCoordsVarying, &coordsVaryingType);
+    this->setupMatrix(builder, key, &fsCoords, &vsCoordsVarying, &coordsVaryingType);
 
     // 2 copies of uniform array, 1 for each of vertex & fragment shader,
     // to work around Xoom bug. Doesn't seem to cause performance decrease
@@ -560,7 +558,6 @@ void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
 
     // VS
     {
-        SkString* code = &builder->fVSCode;
         SkString p2;
         SkString p3;
         builder->getUniformVariable(fVSParamUni).appendArrayAccess(2, &p2);
@@ -570,15 +567,14 @@ void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
         // part of the quadratic as a varying.
         if (kVec2f_GrSLType == coordsVaryingType) {
             // r2Var = 2 * (r2Parm[2] * varCoord.x - r2Param[3])
-            code->appendf("\t%s = 2.0 *(%s * %s.x - %s);\n",
-                          fVSVaryingName, p2.c_str(),
-                          vsCoordsVarying, p3.c_str());
+            builder->vsCodeAppendf("\t%s = 2.0 *(%s * %s.x - %s);\n",
+                                   fVSVaryingName, p2.c_str(),
+                                   vsCoordsVarying, p3.c_str());
         }
     }
 
     // FS
     {
-        SkString* code = &builder->fFSCode;
         SkString cName("c");
         SkString ac4Name("ac4");
         SkString rootName("root");
@@ -603,31 +599,31 @@ void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
             bVar = fFSVaryingName;
         } else {
             bVar = "b";
-            code->appendf("\tfloat %s = 2.0 * (%s * %s.x - %s);\n",
-                          bVar.c_str(), p2.c_str(), fsCoords, p3.c_str());
+            builder->fsCodeAppendf("\tfloat %s = 2.0 * (%s * %s.x - %s);\n",
+                                   bVar.c_str(), p2.c_str(), fsCoords, p3.c_str());
         }
 
         // c = (x^2)+(y^2) - params[4]
-        code->appendf("\tfloat %s = dot(%s, %s) - %s;\n",
-                      cName.c_str(),
-                      fsCoords,
-                      fsCoords,
-                      p4.c_str());
+        builder->fsCodeAppendf("\tfloat %s = dot(%s, %s) - %s;\n",
+                               cName.c_str(),
+                               fsCoords,
+                               fsCoords,
+                               p4.c_str());
 
         // If we aren't degenerate, emit some extra code, and accept a slightly
         // more complex coord.
         if (!fIsDegenerate) {
 
             // ac4 = 4.0 * params[0] * c
-            code->appendf("\tfloat %s = %s * 4.0 * %s;\n",
-                          ac4Name.c_str(), p0.c_str(),
-                          cName.c_str());
+            builder->fsCodeAppendf("\tfloat %s = %s * 4.0 * %s;\n",
+                                   ac4Name.c_str(), p0.c_str(),
+                                   cName.c_str());
 
             // root = sqrt(b^2-4ac)
             // (abs to avoid exception due to fp precision)
-            code->appendf("\tfloat %s = sqrt(abs(%s*%s - %s));\n",
-                          rootName.c_str(), bVar.c_str(), bVar.c_str(),
-                          ac4Name.c_str());
+            builder->fsCodeAppendf("\tfloat %s = sqrt(abs(%s*%s - %s));\n",
+                                   rootName.c_str(), bVar.c_str(), bVar.c_str(),
+                                   ac4Name.c_str());
 
             // t is: (-b + params[5] * sqrt(b^2-4ac)) * params[1]
             t.printf("(-%s + %s * %s) * %s", bVar.c_str(), p5.c_str(),
@@ -641,9 +637,10 @@ void GrGLRadial2Gradient::emitCode(GrGLShaderBuilder* builder,
     }
 }
 
-void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman, const GrEffectStage& stage) {
-    INHERITED::setData(uman, stage);
-    const GrRadial2Gradient& data = GetEffectFromStage<GrRadial2Gradient>(stage);
+void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman,
+                                  const GrDrawEffect& drawEffect) {
+    INHERITED::setData(uman, drawEffect);
+    const GrRadial2Gradient& data = drawEffect.castEffect<GrRadial2Gradient>();
     GrAssert(data.isDegenerate() == fIsDegenerate);
     SkScalar centerX1 = data.center();
     SkScalar radius0 = data.radius();
@@ -675,13 +672,14 @@ void GrGLRadial2Gradient::setData(const GrGLUniformManager& uman, const GrEffect
     }
 }
 
-GrGLEffect::EffectKey GrGLRadial2Gradient::GenKey(const GrEffectStage& s, const GrGLCaps&) {
+GrGLEffect::EffectKey GrGLRadial2Gradient::GenKey(const GrDrawEffect& drawEffect,
+                                                  const GrGLCaps&) {
     enum {
         kIsDegenerate = 1 << kMatrixKeyBitCnt,
     };
 
-    EffectKey key = GenMatrixKey(s);
-    if (GetEffectFromStage<GrRadial2Gradient>(s).isDegenerate()) {
+    EffectKey key = GenMatrixKey(drawEffect);
+    if (drawEffect.castEffect<GrRadial2Gradient>().isDegenerate()) {
         key |= kIsDegenerate;
     }
     return key;

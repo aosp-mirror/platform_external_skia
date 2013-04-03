@@ -119,7 +119,7 @@ static void build_path_simple_170666(SkPath& path) {
 // This used to assert in the SK_DEBUG build, as the clip step would fail with
 // too-few interations in our cubic-line intersection code. That code now runs
 // 24 interations (instead of 16).
-static void test_crbug_170666(skiatest::Reporter* reporter) {
+static void test_crbug_170666() {
     SkPath path;
     SkPaint paint;
     paint.setAntiAlias(true);
@@ -175,7 +175,7 @@ static void build_big_path(SkPath* path, bool reducedCase) {
     }
 }
 
-static void test_clipped_cubic(skiatest::Reporter* reporter) {
+static void test_clipped_cubic() {
     SkAutoTUnref<SkSurface> surface(new_surface(640, 480));
 
     // This path used to assert, because our cubic-chopping code incorrectly
@@ -197,7 +197,7 @@ static void test_clipped_cubic(skiatest::Reporter* reporter) {
 // which triggered an assert, from a tricky cubic. This test replicates that
 // example, so we can ensure that we handle it (in SkEdge.cpp), and don't
 // assert in the SK_DEBUG build.
-static void test_tricky_cubic(skiatest::Reporter* reporter) {
+static void test_tricky_cubic() {
     const SkPoint pts[] = {
         { SkDoubleToScalar(18.8943768),    SkDoubleToScalar(129.121277) },
         { SkDoubleToScalar(18.8937435),    SkDoubleToScalar(129.121689) },
@@ -290,7 +290,7 @@ static void make_arb_round_rect(SkPath* path, const SkRect& r,
 // Note: PathBench::ArbRoundRectBench performs almost exactly
 // the same test (but with drawing)
 static void test_arb_round_rect_is_convex(skiatest::Reporter* reporter) {
-    SkRandom rand;
+    SkMWCRandom rand;
     SkRect r;
 
     for (int i = 0; i < 5000; ++i) {
@@ -308,9 +308,7 @@ static void test_arb_round_rect_is_convex(skiatest::Reporter* reporter) {
 
         make_arb_round_rect(&temp, r, r.width() / 10, r.height() / 15);
 
-#ifndef SK_IGNORE_CONVEX_QUAD_OPT
         REPORTER_ASSERT(reporter, temp.isConvex());
-#endif
     }
 }
 
@@ -319,7 +317,7 @@ static void test_arb_round_rect_is_convex(skiatest::Reporter* reporter) {
 // Note: PathBench::ArbRoundRectBench performs almost exactly
 // the same test (but with drawing)
 static void test_arb_zero_rad_round_rect_is_rect(skiatest::Reporter* reporter) {
-    SkRandom rand;
+    SkMWCRandom rand;
     SkRect r;
 
     for (int i = 0; i < 5000; ++i) {
@@ -337,11 +335,9 @@ static void test_arb_zero_rad_round_rect_is_rect(skiatest::Reporter* reporter) {
 
         make_arb_round_rect(&temp, r, 0, 0);
 
-#ifndef SK_IGNORE_CONVEX_QUAD_OPT
         SkRect result;
         REPORTER_ASSERT(reporter, temp.isRect(&result));
         REPORTER_ASSERT(reporter, r == result);
-#endif
     }
 }
 
@@ -415,7 +411,7 @@ static void test_isfinite(skiatest::Reporter* reporter) {
 //  only have (at most) 1 close
 //
 static void test_poly(skiatest::Reporter* reporter, const SkPath& path,
-                      const SkPoint srcPts[], int count, bool expectClose) {
+                      const SkPoint srcPts[], bool expectClose) {
     SkPath::RawIter iter(path);
     SkPoint         pts[4];
 
@@ -456,7 +452,7 @@ DONE:
 
 static void test_addPoly(skiatest::Reporter* reporter) {
     SkPoint pts[32];
-    SkRandom rand;
+    SkMWCRandom rand;
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(pts); ++i) {
         pts[i].fX = rand.nextSScalar1();
@@ -467,7 +463,7 @@ static void test_addPoly(skiatest::Reporter* reporter) {
         for (size_t count = 1; count <= SK_ARRAY_COUNT(pts); ++count) {
             SkPath path;
             path.addPoly(pts, count, SkToBool(doClose));
-            test_poly(reporter, path, pts, count, SkToBool(doClose));
+            test_poly(reporter, path, pts, SkToBool(doClose));
         }
     }
 }
@@ -1866,7 +1862,7 @@ static void test_raw_iter(skiatest::Reporter* reporter) {
     }
 
     // Max of 10 segments, max 3 points per segment
-    SkRandom rand(9876543);
+    SkMWCRandom rand(9876543);
     SkPoint          expectedPts[31]; // May have leading moveTo
     SkPath::Verb     expectedVerbs[22]; // May have leading moveTo
     SkPath::Verb     nextVerb;
@@ -2351,12 +2347,12 @@ static void TestPath(skiatest::Reporter* reporter) {
     test_addPoly(reporter);
     test_isfinite(reporter);
     test_isfinite_after_transform(reporter);
-    test_tricky_cubic(reporter);
     test_arb_round_rect_is_convex(reporter);
     test_arb_zero_rad_round_rect_is_rect(reporter);
     test_addrect_isfinite(reporter);
-    test_clipped_cubic(reporter);
-    test_crbug_170666(reporter);
+    test_tricky_cubic();
+    test_clipped_cubic();
+    test_crbug_170666();
 }
 
 #include "TestClassDef.h"

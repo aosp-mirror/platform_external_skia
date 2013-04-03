@@ -192,10 +192,6 @@ public:
 public:
     class NotificationClient {
     public:
-        /**
-         * All classes with virtual methods should have a virtual destructor
-         * to avoid compiler warnings.
-         */
         virtual ~NotificationClient() {}
 
         /**
@@ -224,9 +220,6 @@ public:
          *  or completely overwritten by the command currently being recorded.
          */
         virtual void skippedPendingDrawCommands() {}
-
-    private:
-        typedef SkRefCnt INHERITED;
     };
 
 protected:

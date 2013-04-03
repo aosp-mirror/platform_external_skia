@@ -62,6 +62,10 @@ public:
          * GL_APPLE_framebuffer_multisample ES extension
          */
         kAppleES_MSFBOType,
+        /**
+         * GL_IMG_multisampled_render_to_texture
+         */
+        kImaginationES_MSFBOType,
     };
 
     enum CoverageAAType {
@@ -95,7 +99,7 @@ public:
      * Initializes the GrGLCaps to the set of features supported in the current
      * OpenGL context accessible via ctxInfo.
      */
-    void init(const GrGLContextInfo& ctxInfo);
+    void init(const GrGLContextInfo& ctxInfo, const GrGLInterface* interface);
 
     /**
      * Call to note that a color config has been verified as a valid color
@@ -136,11 +140,6 @@ public:
      * Reports the type of MSAA FBO support.
      */
     MSFBOType msFBOType() const { return fMSFBOType; }
-
-    /**
-     * Reports the maximum number of samples supported.
-     */
-    int maxSampleCount() const { return fMaxSampleCount; }
 
     /**
      * Reports the type of coverage sample AA support.
@@ -219,10 +218,20 @@ public:
     /// Is GL_ARB_fragment_coord_conventions supported?
     bool fragCoordConventionsSupport() const { return fFragCoordsConventionSupport; }
 
-    // Does ReadPixels support the provided format/type combo?
+    /// Is there support for Vertex Array Objects?
+    bool vertexArrayObjectSupport() const { return fVertexArrayObjectSupport; }
+
+    /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
+    bool useNonVBOVertexAndIndexDynamicData() const {
+        return fUseNonVBOVertexAndIndexDynamicData;
+    }
+
+    /// Does ReadPixels support the provided format/type combo?
     bool readPixelsSupported(const GrGLInterface* intf,
                              GrGLenum format,
                              GrGLenum type) const;
+
+    bool isCoreProfile() const { return fIsCoreProfile; }
 
 private:
     /**
@@ -262,7 +271,7 @@ private:
         }
     };
 
-    void initFSAASupport(const GrGLContextInfo& ctxInfo);
+    void initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli);
     void initStencilFormats(const GrGLContextInfo& ctxInfo);
 
     // tracks configs that have been verified to pass the FBO completeness when
@@ -279,7 +288,6 @@ private:
     int fMaxVertexAttributes;
 
     MSFBOType fMSFBOType;
-    int fMaxSampleCount;
     CoverageAAType fCoverageAAType;
     SkTDArray<MSAACoverageMode> fMSAACoverageModes;
 
@@ -297,6 +305,9 @@ private:
     bool fImagingSupport  : 1;
     bool fTwoFormatLimit : 1;
     bool fFragCoordsConventionSupport : 1;
+    bool fVertexArrayObjectSupport : 1;
+    bool fUseNonVBOVertexAndIndexDynamicData : 1;
+    bool fIsCoreProfile : 1;
 };
 
 #endif

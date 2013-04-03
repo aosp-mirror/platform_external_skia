@@ -294,8 +294,9 @@ public:
         kFill_Style,            //!< fill the geometry
         kStroke_Style,          //!< stroke the geometry
         kStrokeAndFill_Style,   //!< fill and stroke the geometry
-
-        kStyleCount
+    };
+    enum {
+        kStyleCount = kStrokeAndFill_Style + 1
     };
 
     /** Return the paint's style, used for controlling how primitives'
@@ -959,6 +960,8 @@ public:
     const SkRect& doComputeFastBounds(const SkRect& orig, SkRect* storage,
                                       Style) const;
 
+    SkDEVCODE(void toString(SkString*) const;)
+
 private:
     SkTypeface*     fTypeface;
     SkScalar        fTextSize;
@@ -1009,7 +1012,7 @@ private:
     SkGlyphCache* detachCache(const SkDeviceProperties* deviceProperties, const SkMatrix*) const;
 
     void descriptorProc(const SkDeviceProperties* deviceProperties, const SkMatrix* deviceMatrix,
-                        void (*proc)(const SkDescriptor*, void*),
+                        void (*proc)(SkTypeface*, const SkDescriptor*, void*),
                         void* context, bool ignoreGamma = false) const;
 
     static void Term();

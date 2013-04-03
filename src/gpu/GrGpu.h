@@ -47,23 +47,18 @@ public:
 
     /**
      * Create an instance of GrGpu that matches the specified backend. If the requested backend is
-     * not supported (at compile-time or run-time) this returns NULL.
+     * not supported (at compile-time or run-time) this returns NULL. The context will not be
+     * fully constructed and should not be used by GrGpu until after this function returns.
      */
-    static GrGpu* Create(GrBackend, GrBackendContext);
+    static GrGpu* Create(GrBackend, GrBackendContext, GrContext* context);
 
     ////////////////////////////////////////////////////////////////////////////
 
-    GrGpu();
+    GrGpu(GrContext* context);
     virtual ~GrGpu();
 
-    // The GrContext sets itself as the owner of this Gpu object
-    void setContext(GrContext* context) {
-        GrAssert(NULL == fContext);
-        fContext = context;
-        fClipMaskManager.setContext(context);
-    }
-    GrContext* getContext() { return fContext; }
-    const GrContext* getContext() const { return fContext; }
+    GrContext* getContext() { return this->INHERITED::getContext(); }
+    const GrContext* getContext() const { return this->INHERITED::getContext(); }
 
     /**
      * The GrGpu object normally assumes that no outsider is setting state
@@ -165,23 +160,17 @@ public:
     void forceRenderTargetFlush();
 
     /**
-     * readPixels with some configs may be slow. Given a desired config this
-     * function returns a fast-path config. The returned config must have the
-     * same components and component sizes. The caller is free to ignore the
-     * result and call readPixels with the original config.
+     * Gets a preferred 8888 config to use for writing / reading pixel data. The returned config
+     * must have at least as many bits per channel as the config param.
      */
-    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config)
-                                                                        const {
-        return config;
-    }
+    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config) const { return config; }
+    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig config) const { return config; }
 
     /**
-     * Same as above but applies to writeTexturePixels
+     * Called before uploading writing pixels to a GrTexture when the src pixel config doesn't
+     * match the texture's config.
      */
-    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig config)
-                                                                        const {
-        return config;
-    }
+    virtual bool canWriteTexturePixels(const GrTexture*, GrPixelConfig srcConfig) const = 0;
 
     /**
      * OpenGL's readPixels returns the result bottom-to-top while the skia
@@ -234,8 +223,7 @@ public:
      */
     bool readPixels(GrRenderTarget* renderTarget,
                     int left, int top, int width, int height,
-                    GrPixelConfig config, void* buffer, size_t rowBytes,
-                    bool invertY);
+                    GrPixelConfig config, void* buffer, size_t rowBytes);
 
     /**
      * Updates the pixels in a rectangle of a texture.
@@ -249,7 +237,7 @@ public:
      * @param rowBytes      number of bytes between consecutive rows. Zero
      *                      means rows are tightly packed.
      */
-    void writeTexturePixels(GrTexture* texture,
+    bool writeTexturePixels(GrTexture* texture,
                             int left, int top, int width, int height,
                             GrPixelConfig config, const void* buffer,
                             size_t rowBytes);
@@ -423,7 +411,7 @@ protected:
 
 private:
     // GrDrawTarget overrides
-    virtual bool onReserveVertexSpace(size_t vSize, int vertexCount, void** vertices) SK_OVERRIDE;
+    virtual bool onReserveVertexSpace(size_t vertexSize, int vertexCount, void** vertices) SK_OVERRIDE;
     virtual bool onReserveIndexSpace(int indexCount, void** indices) SK_OVERRIDE;
     virtual void releaseReservedVertexSpace() SK_OVERRIDE;
     virtual void releaseReservedIndexSpace() SK_OVERRIDE;
@@ -473,11 +461,10 @@ private:
                               int left, int top, int width, int height,
                               GrPixelConfig,
                               void* buffer,
-                              size_t rowBytes,
-                              bool invertY) = 0;
+                              size_t rowBytes) = 0;
 
     // overridden by backend-specific derived class to perform the texture update
-    virtual void onWriteTexturePixels(GrTexture* texture,
+    virtual bool onWriteTexturePixels(GrTexture* texture,
                                       int left, int top, int width, int height,
                                       GrPixelConfig config, const void* buffer,
                                       size_t rowBytes) = 0;
@@ -535,7 +522,6 @@ private:
     };
     typedef SkTInternalLList<GrResource> ResourceList;
     SkSTArray<kPreallocGeomPoolStateStackCnt, GeometryPoolState, true>  fGeomPoolStateStack;
-    GrContext*                                                          fContext; // not reffed
     ResetTimestamp                                                      fResetTimestamp;
     GrVertexBufferAllocPool*                                            fVertexPool;
     GrIndexBufferAllocPool*                                             fIndexPool;

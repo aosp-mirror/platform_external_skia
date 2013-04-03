@@ -256,75 +256,72 @@ private:
 
 class GLColorTableEffect : public GrGLEffect {
 public:
-    GLColorTableEffect(const GrBackendEffectFactory&, const GrEffectRef&);
+    GLColorTableEffect(const GrBackendEffectFactory&, const GrDrawEffect&);
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE {}
+    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE {}
 
-    static EffectKey GenKey(const GrEffectStage&, const GrGLCaps&);
+    static EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
 
 private:
 
     typedef GrGLEffect INHERITED;
 };
 
-GLColorTableEffect::GLColorTableEffect(const GrBackendEffectFactory& factory, const GrEffectRef&)
+GLColorTableEffect::GLColorTableEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&)
     : INHERITED(factory) {
  }
 
 void GLColorTableEffect::emitCode(GrGLShaderBuilder* builder,
-                                  const GrEffectStage&,
+                                  const GrDrawEffect&,
                                   EffectKey,
-                                  const char* vertexCoords,
                                   const char* outputColor,
                                   const char* inputColor,
                                   const TextureSamplerArray& samplers) {
 
     static const float kColorScaleFactor = 255.0f / 256.0f;
     static const float kColorOffsetFactor = 1.0f / 512.0f;
-    SkString* code = &builder->fFSCode;
     if (NULL == inputColor) {
         // the input color is solid white (all ones).
         static const float kMaxValue = kColorScaleFactor + kColorOffsetFactor;
-        code->appendf("\t\tvec4 coord = vec4(%f, %f, %f, %f);\n",
-                      kMaxValue, kMaxValue, kMaxValue, kMaxValue);
+        builder->fsCodeAppendf("\t\tvec4 coord = vec4(%f, %f, %f, %f);\n",
+                               kMaxValue, kMaxValue, kMaxValue, kMaxValue);
 
     } else {
-        code->appendf("\t\tfloat nonZeroAlpha = max(%s.a, .0001);\n", inputColor);
-        code->appendf("\t\tvec4 coord = vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha);\n", inputColor);
-        code->appendf("\t\tcoord = coord * %f + vec4(%f, %f, %f, %f);\n",
-                      kColorScaleFactor,
-                      kColorOffsetFactor, kColorOffsetFactor,
-                      kColorOffsetFactor, kColorOffsetFactor);
+        builder->fsCodeAppendf("\t\tfloat nonZeroAlpha = max(%s.a, .0001);\n", inputColor);
+        builder->fsCodeAppendf("\t\tvec4 coord = vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha);\n", inputColor);
+        builder->fsCodeAppendf("\t\tcoord = coord * %f + vec4(%f, %f, %f, %f);\n",
+                              kColorScaleFactor,
+                              kColorOffsetFactor, kColorOffsetFactor,
+                              kColorOffsetFactor, kColorOffsetFactor);
     }
 
-    code->appendf("\t\t%s.a = ", outputColor);
-    builder->appendTextureLookup(code, samplers[0], "vec2(coord.a, 0.125)");
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\t%s.a = ", outputColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "vec2(coord.a, 0.125)");
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\t%s.r = ", outputColor);
-    builder->appendTextureLookup(code, samplers[0], "vec2(coord.r, 0.375)");
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\t%s.r = ", outputColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "vec2(coord.r, 0.375)");
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\t%s.g = ", outputColor);
-    builder->appendTextureLookup(code, samplers[0], "vec2(coord.g, 0.625)");
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\t%s.g = ", outputColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "vec2(coord.g, 0.625)");
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\t%s.b = ", outputColor);
-    builder->appendTextureLookup(code, samplers[0], "vec2(coord.b, 0.875)");
-    code->append(";\n");
+    builder->fsCodeAppendf("\t\t%s.b = ", outputColor);
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "vec2(coord.b, 0.875)");
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+    builder->fsCodeAppendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
 }
 
-GrGLEffect::EffectKey GLColorTableEffect::GenKey(const GrEffectStage&, const GrGLCaps&) {
+GrGLEffect::EffectKey GLColorTableEffect::GenKey(const GrDrawEffect&, const GrGLCaps&) {
     return 0;
 }
 
@@ -369,7 +366,7 @@ void ColorTableEffect::getConstantColorComponents(GrColor* color, uint32_t* vali
 
 GR_DEFINE_EFFECT_TEST(ColorTableEffect);
 
-GrEffectRef* ColorTableEffect::TestCreate(SkRandom* random,
+GrEffectRef* ColorTableEffect::TestCreate(SkMWCRandom* random,
                                           GrContext* context,
                                           GrTexture* textures[]) {
     static unsigned kAllFlags = SkTable_ColorFilter::kR_Flag | SkTable_ColorFilter::kG_Flag |

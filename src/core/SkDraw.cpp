@@ -354,7 +354,7 @@ static void bw_pt_rect_16_hair_proc(const PtProcRec& rec,
     SkASSERT(bitmap);
 
     uint16_t* addr = bitmap->getAddr16(0, 0);
-    int rb = bitmap->rowBytes();
+    size_t    rb = bitmap->rowBytes();
 
     for (int i = 0; i < count; i++) {
         int x = SkScalarFloorToInt(devPts[i].fX);
@@ -375,7 +375,7 @@ static void bw_pt_rect_32_hair_proc(const PtProcRec& rec,
     SkASSERT(bitmap);
 
     SkPMColor* addr = bitmap->getAddr32(0, 0);
-    int rb = bitmap->rowBytes();
+    size_t     rb = bitmap->rowBytes();
 
     for (int i = 0; i < count; i++) {
         int x = SkScalarFloorToInt(devPts[i].fX);
@@ -1140,28 +1140,9 @@ void SkDraw::drawPath(const SkPath& origSrcPath, const SkPaint& origPaint,
     go ahead and treat it as if it were, so that subsequent code can go fast.
  */
 static bool just_translate(const SkMatrix& matrix, const SkBitmap& bitmap) {
-#ifdef SK_IGNORE_TRANS_CLAMP_FIX
-    SkMatrix::TypeMask mask = matrix.getType();
-
-    if (mask & (SkMatrix::kAffine_Mask | SkMatrix::kPerspective_Mask)) {
-        return false;
-    }
-    if (mask & SkMatrix::kScale_Mask) {
-        SkScalar sx = matrix[SkMatrix::kMScaleX];
-        SkScalar sy = matrix[SkMatrix::kMScaleY];
-        int w = bitmap.width();
-        int h = bitmap.height();
-        int sw = SkScalarRound(SkScalarMul(sx, SkIntToScalar(w)));
-        int sh = SkScalarRound(SkScalarMul(sy, SkIntToScalar(h)));
-        return sw == w && sh == h;
-    }
-    // if we got here, we're either kTranslate_Mask or identity
-    return true;
-#else
     unsigned bits = 0;  // TODO: find a way to allow the caller to tell us to
                         // respect filtering.
     return SkTreatAsSprite(matrix, bitmap.width(), bitmap.height(), bits);
-#endif
 }
 
 void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap,
@@ -1180,7 +1161,7 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap,
         SkMask  mask;
         mask.fBounds.set(ix, iy, ix + bitmap.width(), iy + bitmap.height());
         mask.fFormat = SkMask::kA8_Format;
-        mask.fRowBytes = bitmap.rowBytes();
+        mask.fRowBytes = SkToU32(bitmap.rowBytes());
         mask.fImage = bitmap.getAddr8(0, 0);
 
         this->drawDevMask(mask, paint);
@@ -1625,6 +1606,12 @@ SkDraw1Glyph::Proc SkDraw1Glyph::init(const SkDraw* draw, SkBlitter* blitter,
     fBlitter = blitter;
     fCache = cache;
 
+    if (cache->isSubpixel()) {
+        fHalfSampleX = fHalfSampleY = (SK_FixedHalf >> SkGlyph::kSubBits);
+    } else {
+        fHalfSampleX = fHalfSampleY = SK_FixedHalf;
+    }
+
     if (hasCustomD1GProc(*draw)) {
         // todo: fix this assumption about clips w/ custom
         fClip = draw->fClip;
@@ -1681,15 +1668,13 @@ void SkDraw::drawText(const char text[], size_t byteLength,
 
     SkDrawCacheProc glyphCacheProc = paint.getDrawCacheProc();
 
-    const SkMatrix* matrix = fMatrix;
-
-    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, matrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, fMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     // transform our starting point
     {
         SkPoint loc;
-        matrix->mapXY(x, y, &loc);
+        fMatrix->mapXY(x, y, &loc);
         x = loc.fX;
         y = loc.fY;
     }
@@ -1711,33 +1696,13 @@ void SkDraw::drawText(const char text[], size_t byteLength,
         y -= stopY;
     }
 
-    SkFixed fx = SkScalarToFixed(x);
-    SkFixed fy = SkScalarToFixed(y);
     const char* stop = text + byteLength;
-
-    SkFixed fxMask = ~0;
-    SkFixed fyMask = ~0;
-    if (cache->isSubpixel()) {
-        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(*matrix);
-        if (kX_SkAxisAlignment == baseline) {
-            fyMask = 0;
-        } else if (kY_SkAxisAlignment == baseline) {
-            fxMask = 0;
-        }
-
-    // apply bias here to avoid adding 1/2 the sampling frequency in the loop
-        fx += SK_FixedHalf >> SkGlyph::kSubBits;
-        fy += SK_FixedHalf >> SkGlyph::kSubBits;
-    } else {
-        fx += SK_FixedHalf;
-        fy += SK_FixedHalf;
-    }
 
     SkAAClipBlitter     aaBlitter;
     SkAutoBlitterChoose blitterChooser;
     SkBlitter*          blitter = NULL;
     if (needsRasterTextBlit(*this)) {
-        blitterChooser.choose(*fBitmap, *matrix, paint);
+        blitterChooser.choose(*fBitmap, *fMatrix, paint);
         blitter = blitterChooser.get();
         if (fRC->isAA()) {
             aaBlitter.init(blitter, &fRC->aaRgn());
@@ -1748,6 +1713,22 @@ void SkDraw::drawText(const char text[], size_t byteLength,
     SkAutoKern          autokern;
     SkDraw1Glyph        d1g;
     SkDraw1Glyph::Proc  proc = d1g.init(this, blitter, cache);
+
+    SkFixed fxMask = ~0;
+    SkFixed fyMask = ~0;
+    if (cache->isSubpixel()) {
+        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(*fMatrix);
+        if (kX_SkAxisAlignment == baseline) {
+            fyMask = 0;
+            d1g.fHalfSampleY = SK_FixedHalf;
+        } else if (kY_SkAxisAlignment == baseline) {
+            fxMask = 0;
+            d1g.fHalfSampleX = SK_FixedHalf;
+        }
+    }
+
+    SkFixed fx = SkScalarToFixed(x) + d1g.fHalfSampleX;
+    SkFixed fy = SkScalarToFixed(y) + d1g.fHalfSampleY;
 
     while (text < stop) {
         const SkGlyph& glyph = glyphCacheProc(cache, &text, fx & fxMask, fy & fyMask);
@@ -1874,17 +1855,15 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
         return;
     }
 
-    const SkMatrix* matrix = fMatrix;
-
     SkDrawCacheProc     glyphCacheProc = paint.getDrawCacheProc();
-    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, matrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, fMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     SkAAClipBlitterWrapper wrapper;
     SkAutoBlitterChoose blitterChooser;
     SkBlitter* blitter = NULL;
     if (needsRasterTextBlit(*this)) {
-        blitterChooser.choose(*fBitmap, *matrix, paint);
+        blitterChooser.choose(*fBitmap, *fMatrix, paint);
         blitter = blitterChooser.get();
         if (fRC->isAA()) {
             wrapper.init(*fRC, blitter);
@@ -1896,29 +1875,33 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
     AlignProc          alignProc = pick_align_proc(paint.getTextAlign());
     SkDraw1Glyph       d1g;
     SkDraw1Glyph::Proc proc = d1g.init(this, blitter, cache);
-    TextMapState       tms(*matrix, constY);
+    TextMapState       tms(*fMatrix, constY);
     TextMapState::Proc tmsProc = tms.pickProc(scalarsPerPosition);
 
     if (cache->isSubpixel()) {
         // maybe we should skip the rounding if linearText is set
-        SkAxisAlignment roundBaseline = SkComputeAxisAlignmentForHText(*matrix);
+        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(*fMatrix);
+
+        SkFixed fxMask = ~0;
+        SkFixed fyMask = ~0;
+        if (kX_SkAxisAlignment == baseline) {
+            fyMask = 0;
+#ifndef SK_IGNORE_SUBPIXEL_AXIS_ALIGN_FIX
+            d1g.fHalfSampleY = SK_FixedHalf;
+#endif
+        } else if (kY_SkAxisAlignment == baseline) {
+            fxMask = 0;
+#ifndef SK_IGNORE_SUBPIXEL_AXIS_ALIGN_FIX
+            d1g.fHalfSampleX = SK_FixedHalf;
+#endif
+        }
 
         if (SkPaint::kLeft_Align == paint.getTextAlign()) {
             while (text < stop) {
-
                 tmsProc(tms, pos);
 
-                SkFixed fx = SkScalarToFixed(tms.fLoc.fX) + (SK_FixedHalf >> SkGlyph::kSubBits);
-                SkFixed fy = SkScalarToFixed(tms.fLoc.fY) + (SK_FixedHalf >> SkGlyph::kSubBits);
-
-                SkFixed fxMask = ~0;
-                SkFixed fyMask = ~0;
-
-                if (kX_SkAxisAlignment == roundBaseline) {
-                    fyMask = 0;
-                } else if (kY_SkAxisAlignment == roundBaseline) {
-                    fxMask = 0;
-                }
+                SkFixed fx = SkScalarToFixed(tms.fLoc.fX) + d1g.fHalfSampleX;
+                SkFixed fy = SkScalarToFixed(tms.fLoc.fY) + d1g.fHalfSampleY;
 
                 const SkGlyph& glyph = glyphCacheProc(cache, &text,
                                                       fx & fxMask, fy & fyMask);
@@ -1931,38 +1914,28 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
         } else {
             while (text < stop) {
                 const char* currentText = text;
-                const SkGlyph* glyph = &glyphCacheProc(cache, &text, 0, 0);
+                const SkGlyph& metricGlyph = glyphCacheProc(cache, &text, 0, 0);
 
-                if (glyph->fWidth) {
-                    SkDEBUGCODE(SkFixed prevAdvX = glyph->fAdvanceX;)
-                    SkDEBUGCODE(SkFixed prevAdvY = glyph->fAdvanceY;)
+                if (metricGlyph.fWidth) {
+                    SkDEBUGCODE(SkFixed prevAdvX = metricGlyph.fAdvanceX;)
+                    SkDEBUGCODE(SkFixed prevAdvY = metricGlyph.fAdvanceY;)
 
-                    SkFixed fx, fy;
-                    SkFixed fxMask = ~0;
-                    SkFixed fyMask = ~0;
                     tmsProc(tms, pos);
+                    SkIPoint fixedLoc;
+                    alignProc(tms.fLoc, metricGlyph, &fixedLoc);
 
-                    {
-                        SkIPoint fixedLoc;
-                        alignProc(tms.fLoc, *glyph, &fixedLoc);
-                        fx = fixedLoc.fX + (SK_FixedHalf >> SkGlyph::kSubBits);
-                        fy = fixedLoc.fY + (SK_FixedHalf >> SkGlyph::kSubBits);
-
-                        if (kX_SkAxisAlignment == roundBaseline) {
-                            fyMask = 0;
-                        } else if (kY_SkAxisAlignment == roundBaseline) {
-                            fxMask = 0;
-                        }
-                    }
+                    SkFixed fx = fixedLoc.fX + d1g.fHalfSampleX;
+                    SkFixed fy = fixedLoc.fY + d1g.fHalfSampleY;
 
                     // have to call again, now that we've been "aligned"
-                    glyph = &glyphCacheProc(cache, &currentText,
-                                            fx & fxMask, fy & fyMask);
-                    // the assumption is that the advance hasn't changed
-                    SkASSERT(prevAdvX == glyph->fAdvanceX);
-                    SkASSERT(prevAdvY == glyph->fAdvanceY);
+                    const SkGlyph& glyph = glyphCacheProc(cache, &currentText,
+                                                          fx & fxMask, fy & fyMask);
+                    // the assumption is that the metrics haven't changed
+                    SkASSERT(prevAdvX == glyph.fAdvanceX);
+                    SkASSERT(prevAdvY == glyph.fAdvanceY);
+                    SkASSERT(glyph.fWidth);
 
-                    proc(d1g, fx, fy, *glyph);
+                    proc(d1g, fx, fy, glyph);
                 }
                 pos += scalarsPerPosition;
             }
@@ -1977,8 +1950,8 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
                     tmsProc(tms, pos);
 
                     proc(d1g,
-                         SkScalarToFixed(tms.fLoc.fX) + SK_FixedHalf,
-                         SkScalarToFixed(tms.fLoc.fY) + SK_FixedHalf,
+                         SkScalarToFixed(tms.fLoc.fX) + SK_FixedHalf, //d1g.fHalfSampleX,
+                         SkScalarToFixed(tms.fLoc.fY) + SK_FixedHalf, //d1g.fHalfSampleY,
                          glyph);
                 }
                 pos += scalarsPerPosition;
@@ -1995,8 +1968,8 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
                     alignProc(tms.fLoc, glyph, &fixedLoc);
 
                     proc(d1g,
-                         fixedLoc.fX + SK_FixedHalf,
-                         fixedLoc.fY + SK_FixedHalf,
+                         fixedLoc.fX + SK_FixedHalf, //d1g.fHalfSampleX,
+                         fixedLoc.fY + SK_FixedHalf, //d1g.fHalfSampleY,
                          glyph);
                 }
                 pos += scalarsPerPosition;
@@ -2531,14 +2504,23 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
             savedLocalM = shader->getLocalMatrix();
         }
 
+        // setContext has already been called and verified to return true
+        // by the constructor of SkAutoBlitterChoose
+        bool prevContextSuccess = true;
         while (vertProc(&state)) {
             if (NULL != textures) {
                 if (texture_to_matrix(state, vertices, textures, &tempM)) {
                     tempM.postConcat(savedLocalM);
                     shader->setLocalMatrix(tempM);
-                    // need to recal setContext since we changed the local matrix
-                    shader->endContext();
-                    if (!shader->setContext(*fBitmap, p, *fMatrix)) {
+                    // Need to recall setContext since we changed the local matrix.
+                    // However, we also need to balance the calls this with a
+                    // call to endContext which requires tracking the result of
+                    // the previous call to setContext.
+                    if (prevContextSuccess) {
+                        shader->endContext();
+                    }
+                    prevContextSuccess = shader->setContext(*fBitmap, p, *fMatrix);
+                    if (!prevContextSuccess) {
                         continue;
                     }
                 }
@@ -2555,9 +2537,17 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
             };
             SkScan::FillTriangle(tmp, *fRC, blitter.get());
         }
+
         // now restore the shader's original local matrix
         if (NULL != shader) {
             shader->setLocalMatrix(savedLocalM);
+        }
+
+        // If the final call to setContext fails we must make it suceed so that the
+        // call to endContext in the destructor for SkAutoBlitterChoose is balanced.
+        if (!prevContextSuccess) {
+            prevContextSuccess = shader->setContext(*fBitmap, paint, SkMatrix::I());
+            SkASSERT(prevContextSuccess);
         }
     } else {
         // no colors[] and no texture

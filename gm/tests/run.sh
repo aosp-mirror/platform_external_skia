@@ -5,9 +5,10 @@
 # These tests are run by the Skia_PerCommit_House_Keeping bot at every commit,
 # so make sure that they still pass when you make changes to gm!
 #
-# TODO: currently, this only passes on Linux (which is the platform that
-# the housekeeper bot runs on, e.g.
-# http://70.32.156.51:10117/builders/Skia_PerCommit_House_Keeping/builds/1417/steps/RunGmSelfTests/logs/stdio )
+# To generate new baselines when gm behavior changes, run gm/tests/rebaseline.sh
+#
+# TODO: because this is written as a shell script (instead of, say, Python)
+# it only runs on Linux and Mac.
 # See https://code.google.com/p/skia/issues/detail?id=677
 # ('make tools/tests/run.sh work cross-platform')
 # Ideally, these tests should pass on all development platforms...
@@ -22,7 +23,7 @@ GM_BINARY=out/Debug/gm
 
 OUTPUT_ACTUAL_SUBDIR=output-actual
 OUTPUT_EXPECTED_SUBDIR=output-expected
-CONFIGS="--config 8888 --config 565"
+CONFIGS="--config 8888 565"
 
 # Compare contents of all files within directories $1 and $2,
 # EXCEPT for any dotfiles.
@@ -59,9 +60,9 @@ function gm_test {
 
   rm -rf $ACTUAL_OUTPUT_DIR
   mkdir -p $ACTUAL_OUTPUT_DIR
-  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummary $JSON_SUMMARY_FILE"
+  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE"
   echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
-  $COMMAND &>$ACTUAL_OUTPUT_DIR/stdout
+  $COMMAND >$ACTUAL_OUTPUT_DIR/stdout 2>$ACTUAL_OUTPUT_DIR/stderr
   echo $? >$ACTUAL_OUTPUT_DIR/return_value
 
   # Only compare selected lines in the stdout, to ignore any spurious lines
@@ -69,24 +70,16 @@ function gm_test {
   #
   # TODO(epoger): This is still hacky... we need to rewrite this script in
   # Python soon, and make stuff like this more maintainable.
-  grep --regexp=^reading --regexp=^writing --regexp=^drawing \
-    --regexp=^FAILED --regexp=^Ran $ACTUAL_OUTPUT_DIR/stdout \
-    >$ACTUAL_OUTPUT_DIR/stdout-tmp
+  grep ^GM: $ACTUAL_OUTPUT_DIR/stdout >$ACTUAL_OUTPUT_DIR/stdout-tmp
   mv $ACTUAL_OUTPUT_DIR/stdout-tmp $ACTUAL_OUTPUT_DIR/stdout
-
-  # Replace particular checksums in json summary with a placeholder, so
-  # we don't need to rebaseline these json files when our drawing routines
-  # change.
-  sed -e 's/"checksum" : [0-9]*/"checksum" : FAKE/g' \
-    --in-place $JSON_SUMMARY_FILE
-  sed -e 's/"checksums" : \[ [0-9]* \]/"checksums" : [ FAKE ]/g' \
-    --in-place $JSON_SUMMARY_FILE
+  grep ^GM: $ACTUAL_OUTPUT_DIR/stderr >$ACTUAL_OUTPUT_DIR/stderr-tmp
+  mv $ACTUAL_OUTPUT_DIR/stderr-tmp $ACTUAL_OUTPUT_DIR/stderr
 
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
 
-# Create input dir (at path $1) with images that match or mismatch
-# as appropriate.
+# Create input dir (at path $1) with expectations (both image and json)
+# that gm will match or mismatch as appropriate.
 #
 # We used to check these files into SVN, but then we needed to rebasline them
 # when our drawing changed at all... so, as proposed in
@@ -98,29 +91,42 @@ function create_inputs_dir {
     exit 1
   fi
   INPUTS_DIR="$1"
-  mkdir -p $INPUTS_DIR
+  IMAGES_DIR=$INPUTS_DIR/images
+  JSON_DIR=$INPUTS_DIR/json
+  mkdir -p $IMAGES_DIR $JSON_DIR
 
-  mkdir -p $INPUTS_DIR/identical-bytes
-  $GM_BINARY --hierarchy --match dashing2 $CONFIGS \
-    -w $INPUTS_DIR/identical-bytes
+  mkdir -p $IMAGES_DIR/identical-bytes
+  # Run GM to write out the images actually generated.
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
+    -w $IMAGES_DIR/identical-bytes
+  # Run GM again to read in those images and write them out as a JSON summary.
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
+    -r $IMAGES_DIR/identical-bytes \
+    --writeJsonSummaryPath $JSON_DIR/identical-bytes.json
 
-  mkdir -p $INPUTS_DIR/identical-pixels
-  $GM_BINARY --hierarchy --match dashing2 $CONFIGS \
-    -w $INPUTS_DIR/identical-pixels
+  mkdir -p $IMAGES_DIR/identical-pixels
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
+    -w $IMAGES_DIR/identical-pixels
   echo "more bytes that do not change the image pixels" \
-    >> $INPUTS_DIR/identical-pixels/8888/dashing2.png
+    >> $IMAGES_DIR/identical-pixels/8888/selftest1.png
   echo "more bytes that do not change the image pixels" \
-    >> $INPUTS_DIR/identical-pixels/565/dashing2.png
+    >> $IMAGES_DIR/identical-pixels/565/selftest1.png
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
+    -r $IMAGES_DIR/identical-pixels \
+    --writeJsonSummaryPath $JSON_DIR/identical-pixels.json
 
-  mkdir -p $INPUTS_DIR/different-pixels
-  $GM_BINARY --hierarchy --match dashing3 $CONFIGS \
-    -w $INPUTS_DIR/different-pixels
-  mv $INPUTS_DIR/different-pixels/8888/dashing3.png \
-    $INPUTS_DIR/different-pixels/8888/dashing2.png
-  mv $INPUTS_DIR/different-pixels/565/dashing3.png \
-    $INPUTS_DIR/different-pixels/565/dashing2.png
+  mkdir -p $IMAGES_DIR/different-pixels
+  $GM_BINARY --hierarchy --match selftest2 $CONFIGS \
+    -w $IMAGES_DIR/different-pixels
+  mv $IMAGES_DIR/different-pixels/8888/selftest2.png \
+    $IMAGES_DIR/different-pixels/8888/selftest1.png
+  mv $IMAGES_DIR/different-pixels/565/selftest2.png \
+    $IMAGES_DIR/different-pixels/565/selftest1.png
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
+    -r $IMAGES_DIR/different-pixels \
+    --writeJsonSummaryPath $JSON_DIR/different-pixels.json
 
-  mkdir -p $INPUTS_DIR/empty-dir
+  mkdir -p $IMAGES_DIR/empty-dir
 }
 
 GM_TESTDIR=gm/tests
@@ -131,32 +137,23 @@ GM_TEMPFILES=$GM_TESTDIR/tempfiles
 create_inputs_dir $GM_INPUTS
 
 # Compare generated image against an input image file with identical bytes.
-gm_test "--hierarchy --match dashing2 $CONFIGS -r $GM_INPUTS/identical-bytes" "$GM_OUTPUTS/compared-against-identical-bytes"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-bytes" "$GM_OUTPUTS/compared-against-identical-bytes-images"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-bytes.json" "$GM_OUTPUTS/compared-against-identical-bytes-json"
 
 # Compare generated image against an input image file with identical pixels but different PNG encoding.
-gm_test "--hierarchy --match dashing2 $CONFIGS -r $GM_INPUTS/identical-pixels" "$GM_OUTPUTS/compared-against-identical-pixels"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-pixels" "$GM_OUTPUTS/compared-against-identical-pixels-images"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/compared-against-identical-pixels-json"
 
 # Compare generated image against an input image file with different pixels.
-gm_test "--hierarchy --match dashing2 $CONFIGS -r $GM_INPUTS/different-pixels" "$GM_OUTPUTS/compared-against-different-pixels"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/different-pixels" "$GM_OUTPUTS/compared-against-different-pixels-images"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/compared-against-different-pixels-json"
 
 # Compare generated image against an empty "expected image" dir.
-gm_test "--hierarchy --match dashing2 $CONFIGS -r $GM_INPUTS/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
 
 # If run without "-r", the JSON's "actual-results" section should contain
 # actual checksums marked as "failure-ignored", but the "expected-results"
 # section should be empty.
-gm_test "--hierarchy --match dashing2 $CONFIGS" "$GM_OUTPUTS/no-readpath"
-
-# Run a test which generates partially transparent images, write out those
-# images, and read them back in.
-#
-# This test would have caught
-# http://code.google.com/p/skia/issues/detail?id=1079 ('gm generating
-# spurious pixel_error messages as of r7258').
-IMAGEDIR=$GM_TEMPFILES/aaclip-images
-rm -rf $IMAGEDIR
-mkdir -p $IMAGEDIR
-gm_test "--match simpleaaclip_path $CONFIGS -w $IMAGEDIR" "$GM_OUTPUTS/aaclip-write"
-gm_test "--match simpleaaclip_path $CONFIGS -r $IMAGEDIR" "$GM_OUTPUTS/aaclip-readback"
+gm_test "--hierarchy --match selftest1 $CONFIGS" "$GM_OUTPUTS/no-readpath"
 
 echo "All tests passed."

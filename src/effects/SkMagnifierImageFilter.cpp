@@ -92,22 +92,20 @@ typedef GrGLUniformManager::UniformHandle UniformHandle;
 
 class GrGLMagnifierEffect : public GrGLEffect {
 public:
-    GrGLMagnifierEffect(const GrBackendEffectFactory& factory, const GrEffectRef& effect);
+    GrGLMagnifierEffect(const GrBackendEffectFactory&, const GrDrawEffect&);
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager& uman, const GrEffectStage& stage) SK_OVERRIDE;
+    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
 
-    static inline EffectKey GenKey(const GrEffectStage&, const GrGLCaps&);
+    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
 
 private:
-
     UniformHandle       fOffsetVar;
     UniformHandle       fZoomVar;
     UniformHandle       fInsetVar;
@@ -117,22 +115,23 @@ private:
     typedef GrGLEffect INHERITED;
 };
 
-GrGLMagnifierEffect::GrGLMagnifierEffect(const GrBackendEffectFactory& factory, const GrEffectRef&)
+GrGLMagnifierEffect::GrGLMagnifierEffect(const GrBackendEffectFactory& factory,
+                                         const GrDrawEffect& drawEffect)
     : INHERITED(factory)
     , fOffsetVar(GrGLUniformManager::kInvalidUniformHandle)
     , fZoomVar(GrGLUniformManager::kInvalidUniformHandle)
-    , fInsetVar(GrGLUniformManager::kInvalidUniformHandle) {
+    , fInsetVar(GrGLUniformManager::kInvalidUniformHandle)
+    , fEffectMatrix(drawEffect.castEffect<GrMagnifierEffect>().coordsType()) {
 }
 
 void GrGLMagnifierEffect::emitCode(GrGLShaderBuilder* builder,
-                                   const GrEffectStage&,
+                                   const GrDrawEffect&,
                                    EffectKey key,
-                                   const char* vertexCoords,
                                    const char* outputColor,
                                    const char* inputColor,
                                    const TextureSamplerArray& samplers) {
     const char* coords;
-    fEffectMatrix.emitCodeMakeFSCoords2D(builder, key, vertexCoords, &coords);
+    fEffectMatrix.emitCodeMakeFSCoords2D(builder, key, &coords);
     fOffsetVar = builder->addUniform(
         GrGLShaderBuilder::kFragment_ShaderType |
         GrGLShaderBuilder::kVertex_ShaderType,
@@ -146,51 +145,53 @@ void GrGLMagnifierEffect::emitCode(GrGLShaderBuilder* builder,
         GrGLShaderBuilder::kVertex_ShaderType,
         kVec2f_GrSLType, "uInset");
 
-    SkString* code = &builder->fFSCode;
+    builder->fsCodeAppendf("\t\tvec2 coord = %s;\n", coords);
+    builder->fsCodeAppendf("\t\tvec2 zoom_coord = %s + %s / %s;\n",
+                           builder->getUniformCStr(fOffsetVar),
+                            coords,
+                           builder->getUniformCStr(fZoomVar));
 
-    code->appendf("\t\tvec2 coord = %s;\n", coords);
-    code->appendf("\t\tvec2 zoom_coord = %s + %s / %s;\n",
-                  builder->getUniformCStr(fOffsetVar),
-                  coords,
-                  builder->getUniformCStr(fZoomVar));
+    builder->fsCodeAppend("\t\tvec2 delta = min(coord, vec2(1.0, 1.0) - coord);\n");
 
-    code->appendf("\t\tvec2 delta = min(coord, vec2(1.0, 1.0) - coord);\n");
+    builder->fsCodeAppendf("\t\tdelta = delta / %s;\n", builder->getUniformCStr(fInsetVar));
 
-    code->appendf("\t\tdelta = delta / %s;\n", builder->getUniformCStr(fInsetVar));
+    builder->fsCodeAppend("\t\tfloat weight = 0.0;\n");
+    builder->fsCodeAppend("\t\tif (delta.s < 2.0 && delta.t < 2.0) {\n");
+    builder->fsCodeAppend("\t\t\tdelta = vec2(2.0, 2.0) - delta;\n");
+    builder->fsCodeAppend("\t\t\tfloat dist = length(delta);\n");
+    builder->fsCodeAppend("\t\t\tdist = max(2.0 - dist, 0.0);\n");
+    builder->fsCodeAppend("\t\t\tweight = min(dist * dist, 1.0);\n");
+    builder->fsCodeAppend("\t\t} else {\n");
+    builder->fsCodeAppend("\t\t\tvec2 delta_squared = delta * delta;\n");
+    builder->fsCodeAppend("\t\t\tweight = min(min(delta_squared.s, delta_squared.y), 1.0);\n");
+    builder->fsCodeAppend("\t\t}\n");
 
-    code->appendf("\t\tfloat weight = 0.0;\n");
-    code->appendf("\t\tif (delta.s < 2.0 && delta.t < 2.0) {\n");
-    code->appendf("\t\t\tdelta = vec2(2.0, 2.0) - delta;\n");
-    code->appendf("\t\t\tfloat dist = length(delta);\n");
-    code->appendf("\t\t\tdist = max(2.0 - dist, 0.0);\n");
-    code->appendf("\t\t\tweight = min(dist * dist, 1.0);\n");
-    code->appendf("\t\t} else {\n");
-    code->appendf("\t\t\tvec2 delta_squared = delta * delta;\n");
-    code->appendf("\t\t\tweight = min(min(delta_squared.s, delta_squared.y), 1.0);\n");
-    code->appendf("\t\t}\n");
+    builder->fsCodeAppend("\t\tvec2 mix_coord = mix(coord, zoom_coord, weight);\n");
+    builder->fsCodeAppend("\t\tvec4 output_color = ");
+    builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType, samplers[0], "mix_coord");
+    builder->fsCodeAppend(";\n");
 
-    code->appendf("\t\tvec2 mix_coord = mix(coord, zoom_coord, weight);\n");
-    code->appendf("\t\tvec4 output_color = ");
-    builder->appendTextureLookup(code, samplers[0], "mix_coord");
-    code->append(";\n");
-
-    code->appendf("\t\t%s = output_color;", outputColor);
-    GrGLSLMulVarBy4f(code, 2, outputColor, inputColor);
+    builder->fsCodeAppendf("\t\t%s = output_color;", outputColor);
+    SkString modulate;
+    GrGLSLMulVarBy4f(&modulate, 2, outputColor, inputColor);
+    builder->fsCodeAppend(modulate.c_str());
 }
 
 void GrGLMagnifierEffect::setData(const GrGLUniformManager& uman,
-                                  const GrEffectStage& stage) {
-    const GrMagnifierEffect& zoom = GetEffectFromStage<GrMagnifierEffect>(stage);
+                                  const GrDrawEffect& drawEffect) {
+    const GrMagnifierEffect& zoom = drawEffect.castEffect<GrMagnifierEffect>();
     uman.set2f(fOffsetVar, zoom.x_offset(), zoom.y_offset());
     uman.set2f(fZoomVar, zoom.x_zoom(), zoom.y_zoom());
     uman.set2f(fInsetVar, zoom.x_inset(), zoom.y_inset());
-    fEffectMatrix.setData(uman, zoom.getMatrix(), stage.getCoordChangeMatrix(), zoom.texture(0));
+    fEffectMatrix.setData(uman, zoom.getMatrix(), drawEffect, zoom.texture(0));
 }
 
-GrGLEffect::EffectKey GrGLMagnifierEffect::GenKey(const GrEffectStage& stage, const GrGLCaps&) {
-    const GrMagnifierEffect& zoom = GetEffectFromStage<GrMagnifierEffect>(stage);
+GrGLEffect::EffectKey GrGLMagnifierEffect::GenKey(const GrDrawEffect& drawEffect,
+                                                  const GrGLCaps&) {
+    const GrMagnifierEffect& zoom = drawEffect.castEffect<GrMagnifierEffect>();
     return GrGLEffectMatrix::GenKey(zoom.getMatrix(),
-                                    stage.getCoordChangeMatrix(),
+                                    drawEffect,
+                                    zoom.coordsType(),
                                     zoom.texture(0));
 }
 
@@ -198,7 +199,7 @@ GrGLEffect::EffectKey GrGLMagnifierEffect::GenKey(const GrEffectStage& stage, co
 
 GR_DEFINE_EFFECT_TEST(GrMagnifierEffect);
 
-GrEffectRef* GrMagnifierEffect::TestCreate(SkRandom* random,
+GrEffectRef* GrMagnifierEffect::TestCreate(SkMWCRandom* random,
                                            GrContext* context,
                                            GrTexture** textures) {
     const int kMaxWidth = 200;

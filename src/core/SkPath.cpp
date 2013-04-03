@@ -250,7 +250,6 @@ SkPath::SkPath(const SkPath& src)
     fLastMoveToIndex = src.fLastMoveToIndex;
     fIsOval         = src.fIsOval;
 #ifdef SK_BUILD_FOR_ANDROID
-    // the assignment operator above increments the ID so correct for that here
     fGenerationID = src.fGenerationID;
     fSourcePath = NULL;
 #endif
@@ -1639,7 +1638,6 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             }
         }
 
-        // swap() will increment the gen id if needed
         dst->swap(tmp);
         SkPathRef::Editor ed(&dst->fPathRef);
         matrix.mapPoints(ed.points(), ed.pathRef()->countPoints());
@@ -1682,9 +1680,11 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             dst->fConvexity = fConvexity;
         }
 
+#ifdef SK_BUILD_FOR_ANDROID
         if (!matrix.isIdentity()) {
             GEN_ID_PTR_INC(dst);
         }
+#endif
 
         if (kUnknown_Direction == fDirection) {
             dst->fDirection = kUnknown_Direction;

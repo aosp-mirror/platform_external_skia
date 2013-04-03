@@ -94,7 +94,7 @@ bool SkLinearGradient::setContext(const SkBitmap& device, const SkPaint& paint,
 
     unsigned mask = SkMatrix::kTranslate_Mask | SkMatrix::kScale_Mask;
     if ((fDstToIndex.getType() & ~mask) == 0) {
-        fFlags |= SkShader::kConstInY32_Flag;
+        // when we dither, we are (usually) not const-in-Y
         if ((fFlags & SkShader::kHasSpan16_Flag) && !paint.isDither()) {
             // only claim this if we do have a 16bit mode (i.e. none of our
             // colors have alpha), and if we are not dithering (which obviously
@@ -133,7 +133,7 @@ void shadeSpan_linear_vertical_lerp(TileProc proc, SkFixed dx, SkFixed fx,
     unsigned fullIndex = proc(fx);
     unsigned fi = fullIndex >> SkGradientShaderBase::kCache32Shift;
     unsigned remainder = fullIndex & ((1 << SkGradientShaderBase::kCache32Shift) - 1);
-    
+
     int index0 = fi + toggle;
     int index1 = index0;
     if (fi < SkGradientShaderBase::kCache32Count - 1) {
@@ -219,11 +219,7 @@ void SkLinearGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
     SkMatrix::MapXYProc dstProc = fDstToIndexProc;
     TileProc            proc = fTileProc;
     const SkPMColor* SK_RESTRICT cache = this->getCache32();
-#ifdef USE_DITHER_32BIT_GRADIENT
     int                 toggle = init_dither_toggle(x, y);
-#else
-    int toggle = 0;
-#endif
 
     if (fDstToIndexClass != kPerspective_MatrixClass) {
         dstProc(fDstToIndex, SkIntToScalar(x) + SK_ScalarHalf,
@@ -240,7 +236,7 @@ void SkLinearGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
         }
 
         LinearShadeProc shadeProc = shadeSpan_linear_repeat;
-        if (SkFixedNearlyZero(dx, (SK_Fixed1 >> 14))) {
+        if (SkFixedNearlyZero(dx)) {
             shadeProc = shadeSpan_linear_vertical_lerp;
         } else if (SkShader::kClamp_TileMode == fTileMode) {
             shadeProc = shadeSpan_linear_clamp;
@@ -328,7 +324,6 @@ void shadeSpan16_linear_vertical(TileProc proc, SkFixed dx, SkFixed fx,
     SkASSERT(fi < SkGradientShaderBase::kCache16Count);
     dither_memset16(dstC, cache[toggle + fi],
         cache[next_dither_toggle16(toggle) + fi], count);
-
 }
 
 void shadeSpan16_linear_clamp(TileProc proc, SkFixed dx, SkFixed fx,
@@ -458,21 +453,20 @@ void SkLinearGradient::shadeSpan16(int x, int y,
 class GrGLLinearGradient : public GrGLGradientEffect {
 public:
 
-    GrGLLinearGradient(const GrBackendEffectFactory& factory, const GrEffectRef&)
+    GrGLLinearGradient(const GrBackendEffectFactory& factory, const GrDrawEffect&)
                        : INHERITED (factory) { }
 
     virtual ~GrGLLinearGradient() { }
 
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static EffectKey GenKey(const GrEffectStage& stage, const GrGLCaps&) {
-        return GenMatrixKey(stage);
+    static EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
+        return GenMatrixKey(drawEffect);
     }
 
 private:
@@ -517,7 +511,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrLinearGradient);
 
-GrEffectRef* GrLinearGradient::TestCreate(SkRandom* random,
+GrEffectRef* GrLinearGradient::TestCreate(SkMWCRandom* random,
                                           GrContext* context,
                                           GrTexture**) {
     SkPoint points[] = {{random->nextUScalar1(), random->nextUScalar1()},
@@ -538,15 +532,14 @@ GrEffectRef* GrLinearGradient::TestCreate(SkRandom* random,
 /////////////////////////////////////////////////////////////////////
 
 void GrGLLinearGradient::emitCode(GrGLShaderBuilder* builder,
-                                  const GrEffectStage& stage,
+                                  const GrDrawEffect&,
                                   EffectKey key,
-                                  const char* vertexCoords,
                                   const char* outputColor,
                                   const char* inputColor,
                                   const TextureSamplerArray& samplers) {
     this->emitYCoordUniform(builder);
     const char* coords;
-    this->setupMatrix(builder, key, vertexCoords, &coords);
+    this->setupMatrix(builder, key, &coords);
     SkString t;
     t.append(coords);
     t.append(".x");

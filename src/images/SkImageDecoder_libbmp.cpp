@@ -68,7 +68,7 @@ public:
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
-    uint8_t* rgb() const { return fRGB.begin(); }
+    uint8_t* rgb() const { return (uint8_t*)fRGB.begin(); }
 
 private:
     SkTDArray<uint8_t> fRGB;

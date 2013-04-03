@@ -13,16 +13,44 @@ ALGORITHM_MEDIAN = 'med'
 ALGORITHM_MINIMUM = 'min'
 ALGORITHM_25TH_PERCENTILE = '25th'
 
+# Regular expressions used throughout
+PER_SETTING_RE = '([^\s=]+)(?:=(\S+))?'
+SETTINGS_RE = 'skia bench:((?:\s+' + PER_SETTING_RE + ')*)'
+BENCH_RE = 'running bench (?:\[\d+ \d+\] )?\s*(\S+)'
+TIME_RE = '(?:(\w*)msecs = )?\s*((?:\d+\.\d+)(?:,\d+\.\d+)*)'
+# non-per-tile benches have configs that don't end with ']' or '>'
+CONFIG_RE = '(\S+[^\]>]): ((?:' + TIME_RE + '\s+)+)'
+# per-tile bench lines are in the following format. Note that there are
+# non-averaged bench numbers in separate lines, which we ignore now due to
+# their inaccuracy.
+TILE_RE = ('  tile_(\S+): tile \[\d+,\d+\] out of \[\d+,\d+\] <averaged>:'
+           ' ((?:' + TIME_RE + '\s+)+)')
+# for extracting tile layout
+TILE_LAYOUT_RE = ' out of \[(\d+),(\d+)\] <averaged>: '
+
+PER_SETTING_RE_COMPILED = re.compile(PER_SETTING_RE)
+SETTINGS_RE_COMPILED = re.compile(SETTINGS_RE)
+BENCH_RE_COMPILED = re.compile(BENCH_RE)
+TIME_RE_COMPILED = re.compile(TIME_RE)
+CONFIG_RE_COMPILED = re.compile(CONFIG_RE)
+TILE_RE_COMPILED = re.compile(TILE_RE)
+TILE_LAYOUT_RE_COMPILED = re.compile(TILE_LAYOUT_RE)
+
 class BenchDataPoint:
     """A single data point produced by bench.
 
-    (str, str, str, float, {str:str})"""
-    def __init__(self, bench, config, time_type, time, settings):
+    (str, str, str, float, {str:str}, str, [floats])"""
+    def __init__(self, bench, config, time_type, time, settings,
+                 tile_layout='', per_tile_values=[]):
         self.bench = bench
         self.config = config
         self.time_type = time_type
         self.time = time
         self.settings = settings
+        # how tiles cover the whole picture. '5x3' means 5 columns and 3 rows.
+        self.tile_layout = tile_layout
+        # list of per_tile bench values, if applicable
+        self.per_tile_values = per_tile_values
 
     def __repr__(self):
         return "BenchDataPoint(%s, %s, %s, %s, %s)" % (
@@ -80,28 +108,38 @@ class _ListAlgorithm(object):
     def compute(self):
         return self._rep
 
-def _ParseAndStoreTimes(config_re, time_re, line, bench, dic,
-                        representation=None):
-    """Parses given bench time line with regex and adds data to the given dic.
-    config_re: regular expression for parsing the config line.
-    time_re: regular expression for parsing bench time.
+def _ParseAndStoreTimes(config_re_compiled, is_per_tile, line, bench,
+                        value_dic, layout_dic, representation=None):
+    """Parses given bench time line with regex and adds data to value_dic.
+
+    config_re_compiled: precompiled regular expression for parsing the config
+        line.
+    is_per_tile: boolean indicating whether this is a per-tile bench.
+        If so, we add tile layout into layout_dic as well.
     line: input string line to parse.
     bench: name of bench for the time values.
-    dic: dictionary to store bench values. See bench_dic in parse() below.
+    value_dic: dictionary to store bench values. See bench_dic in parse() below.
+    layout_dic: dictionary to store tile layouts. See parse() for descriptions.
     representation: should match one of the ALGORITHM_XXX types."""
 
-    for config in re.finditer(config_re, line):
+    for config in config_re_compiled.finditer(line):
         current_config = config.group(1)
-        if config_re.startswith('  tile_'):  # per-tile bench, add name prefix
+        tile_layout = ''
+        if is_per_tile:  # per-tile bench, add name prefix
             current_config = 'tile_' + current_config
+            layouts = TILE_LAYOUT_RE_COMPILED.search(line)
+            if layouts and len(layouts.groups()) == 2:
+              tile_layout = '%sx%s' % layouts.groups()
         times = config.group(2)
-        for new_time in re.finditer(time_re, times):
+        for new_time in TIME_RE_COMPILED.finditer(times):
             current_time_type = new_time.group(1)
             iters = [float(i) for i in
                      new_time.group(2).strip().split(',')]
-            dic.setdefault(bench, {}).setdefault(current_config, {}).setdefault(
-                current_time_type, []).append(_ListAlgorithm(
-                    iters, representation).compute())
+            value_dic.setdefault(bench, {}).setdefault(
+                current_config, {}).setdefault(current_time_type, []).append(
+                    _ListAlgorithm(iters, representation).compute())
+            layout_dic.setdefault(bench, {}).setdefault(
+                current_config, {}).setdefault(current_time_type, tile_layout)
 
 def parse(settings, lines, representation=None):
     """Parses bench output into a useful data structure.
@@ -112,51 +150,54 @@ def parse(settings, lines, representation=None):
     benches = []
     current_bench = None
     bench_dic = {}  # [bench][config][time_type] -> [list of bench values]
-    setting_re = '([^\s=]+)(?:=(\S+))?'
-    settings_re = 'skia bench:((?:\s+' + setting_re + ')*)'
-    bench_re = 'running bench (?:\[\d+ \d+\] )?\s*(\S+)'
-    time_re = '(?:(\w*)msecs = )?\s*((?:\d+\.\d+)(?:,\d+\.\d+)*)'
-    # non-per-tile benches have configs that don't end with ']'
-    config_re = '(\S+[^\]]): ((?:' + time_re + '\s+)+)'
-    # per-tile bench lines are in the following format. Note that there are
-    # non-averaged bench numbers in separate lines, which we ignore now due to
-    # their inaccuracy.
-    tile_re = ('  tile_(\S+): tile \[\d+,\d+\] out of \[\d+,\d+\] <averaged>:'
-               ' ((?:' + time_re + '\s+)+)')
+    # [bench][config][time_type] -> tile_layout
+    layout_dic = {}
 
     for line in lines:
 
         # see if this line is a settings line
-        settingsMatch = re.search(settings_re, line)
+        settingsMatch = SETTINGS_RE_COMPILED.search(line)
         if (settingsMatch):
             settings = dict(settings)
-            for settingMatch in re.finditer(setting_re, settingsMatch.group(1)):
+            for settingMatch in PER_SETTING_RE_COMPILED.finditer(settingsMatch.group(1)):
                 if (settingMatch.group(2)):
                     settings[settingMatch.group(1)] = settingMatch.group(2)
                 else:
                     settings[settingMatch.group(1)] = True
 
         # see if this line starts a new bench
-        new_bench = re.search(bench_re, line)
+        new_bench = BENCH_RE_COMPILED.search(line)
         if new_bench:
             current_bench = new_bench.group(1)
 
         # add configs on this line to the bench_dic
         if current_bench:
-            for regex in [config_re, tile_re]:
-                 _ParseAndStoreTimes(regex, time_re, line, current_bench,
-                                     bench_dic, representation)
+            if line.startswith('  tile_') :
+                _ParseAndStoreTimes(TILE_RE_COMPILED, True, line, current_bench,
+                                    bench_dic, layout_dic, representation)
+            else:
+                _ParseAndStoreTimes(CONFIG_RE_COMPILED, False, line,
+                                    current_bench,
+                                    bench_dic, layout_dic, representation)
 
     # append benches to list, use the total time as final bench value.
     for bench in bench_dic:
         for config in bench_dic[bench]:
             for time_type in bench_dic[bench][config]:
+                tile_layout = ''
+                per_tile_values = []
+                if len(bench_dic[bench][config][time_type]) > 1:
+                    # per-tile values, extract tile_layout
+                    per_tile_values = bench_dic[bench][config][time_type]
+                    tile_layout = layout_dic[bench][config][time_type]
                 benches.append(BenchDataPoint(
                     bench,
                     config,
                     time_type,
                     sum(bench_dic[bench][config][time_type]),
-                    settings))
+                    settings,
+                    tile_layout,
+                    per_tile_values))
 
     return benches
 

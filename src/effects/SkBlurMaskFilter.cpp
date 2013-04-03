@@ -10,6 +10,10 @@
 #include "SkBlurMask.h"
 #include "SkFlattenableBuffers.h"
 #include "SkMaskFilter.h"
+#include "SkBounder.h"
+#include "SkRasterClip.h"
+#include "SkRTConf.h"
+#include "SkStringUtils.h"
 
 class SkBlurMaskFilterImpl : public SkMaskFilter {
 public:
@@ -20,15 +24,20 @@ public:
     virtual SkMask::Format getFormat() const SK_OVERRIDE;
     virtual bool filterMask(SkMask* dst, const SkMask& src, const SkMatrix&,
                             SkIPoint* margin) const SK_OVERRIDE;
+
     virtual BlurType asABlur(BlurInfo*) const SK_OVERRIDE;
     virtual void computeFastBounds(const SkRect&, SkRect*) const SK_OVERRIDE;
 
+    SkDEVCODE(virtual void toString(SkString* str) const SK_OVERRIDE;)
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBlurMaskFilterImpl)
 
 protected:
     virtual FilterReturn filterRectsToNine(const SkRect[], int count, const SkMatrix&,
                                            const SkIRect& clipBounds,
                                            NinePatch*) const SK_OVERRIDE;
+
+    bool filterRectMask(SkMask* dstM, const SkRect& r, const SkMatrix& matrix,
+                        SkIPoint* margin, SkMask::CreateMode createMode) const;
 
 private:
     SkScalar                    fRadius;
@@ -106,6 +115,26 @@ bool SkBlurMaskFilterImpl::filterMask(SkMask* dst, const SkMask& src,
 #endif
 }
 
+bool SkBlurMaskFilterImpl::filterRectMask(SkMask* dst, const SkRect& r,
+                                          const SkMatrix& matrix,
+                                          SkIPoint* margin, SkMask::CreateMode createMode) const{
+    SkScalar radius;
+    if (fBlurFlags & SkBlurMaskFilter::kIgnoreTransform_BlurFlag) {
+        radius = fRadius;
+    } else {
+        radius = matrix.mapRadius(fRadius);
+    }
+
+    // To avoid unseemly allocation requests (esp. for finite platforms like
+    // handset) we limit the radius so something manageable. (as opposed to
+    // a request like 10,000)
+    static const SkScalar MAX_RADIUS = SkIntToScalar(128);
+    radius = SkMinScalar(radius, MAX_RADIUS);
+
+    return SkBlurMask::BlurRect(dst, r, radius, (SkBlurMask::Style)fBlurStyle,
+                                margin, createMode);
+}
+
 #include "SkCanvas.h"
 
 static bool drawRectsIntoMask(const SkRect rects[], int count, SkMask* mask) {
@@ -150,6 +179,12 @@ static bool rect_exceeds(const SkRect& r, SkScalar v) {
            r.width() > v || r.height() > v;
 }
 
+#ifdef SK_IGNORE_FAST_RECT_BLUR
+SK_CONF_DECLARE( bool, c_analyticBlurNinepatch, "mask.filter.analyticNinePatch", false, "Use the faster analytic blur approach for ninepatch rects" );
+#else
+SK_CONF_DECLARE( bool, c_analyticBlurNinepatch, "mask.filter.analyticNinePatch", true, "Use the faster analytic blur approach for ninepatch rects" );
+#endif
+
 SkMaskFilter::FilterReturn
 SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
                                         const SkMatrix& matrix,
@@ -177,7 +212,18 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
     srcM.fImage = NULL;
     srcM.fFormat = SkMask::kA8_Format;
     srcM.fRowBytes = 0;
-    if (!this->filterMask(&dstM, srcM, matrix, &margin)) {
+
+    bool filterResult = false;
+    if (count == 1 && c_analyticBlurNinepatch) {
+        // special case for fast rect blur
+        // don't actually do the blur the first time, just compute the correct size
+        filterResult = this->filterRectMask(&dstM, rects[0], matrix, &margin,
+                                            SkMask::kJustComputeBounds_CreateMode);
+    } else {
+        filterResult = this->filterMask(&dstM, srcM, matrix, &margin);
+    }
+
+    if (!filterResult) {
         return kFalse_FilterReturn;
     }
 
@@ -235,14 +281,21 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
         SkASSERT(!smallR[1].isEmpty());
     }
 
-    if (!drawRectsIntoMask(smallR, count, &srcM)) {
-        return kFalse_FilterReturn;
-    }
+    if (count > 1 || !c_analyticBlurNinepatch) {
+        if (!drawRectsIntoMask(smallR, count, &srcM)) {
+            return kFalse_FilterReturn;
+        }
 
-    SkAutoMaskFreeImage amf(srcM.fImage);
+        SkAutoMaskFreeImage amf(srcM.fImage);
 
-    if (!this->filterMask(&patch->fMask, srcM, matrix, &margin)) {
-        return kFalse_FilterReturn;
+        if (!this->filterMask(&patch->fMask, srcM, matrix, &margin)) {
+            return kFalse_FilterReturn;
+        }
+    } else {
+        if (!this->filterRectMask(&patch->fMask, smallR[0], matrix, &margin,
+                                  SkMask::kComputeBoundsAndRenderImage_CreateMode)) {
+            return kFalse_FilterReturn;
+        }
     }
     patch->fMask.fBounds.offsetTo(0, 0);
     patch->fOuterRect = dstM.fBounds;
@@ -287,6 +340,35 @@ SkMaskFilter::BlurType SkBlurMaskFilterImpl::asABlur(BlurInfo* info) const {
     }
     return gBlurStyle2BlurType[fBlurStyle];
 }
+
+#ifdef SK_DEVELOPER
+void SkBlurMaskFilterImpl::toString(SkString* str) const {
+    str->append("SkBlurMaskFilterImpl: (");
+
+    str->append("radius: ");
+    str->appendScalar(fRadius);
+    str->append(" ");
+
+    static const char* gStyleName[SkBlurMaskFilter::kBlurStyleCount] = {
+        "normal", "solid", "outer", "inner"
+    };
+
+    str->appendf("style: %s ", gStyleName[fBlurStyle]);
+    str->append("flags: (");
+    if (fBlurFlags) {
+        bool needSeparator = false;
+        SkAddFlagToString(str,
+                          SkToBool(fBlurFlags & SkBlurMaskFilter::kIgnoreTransform_BlurFlag),
+                          "IgnoreXform", &needSeparator);
+        SkAddFlagToString(str,
+                          SkToBool(fBlurFlags & SkBlurMaskFilter::kHighQuality_BlurFlag),
+                          "HighQuality", &needSeparator);
+    } else {
+        str->append("None");
+    }
+    str->append("))");
+}
+#endif
 
 SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkBlurMaskFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurMaskFilterImpl)

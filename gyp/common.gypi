@@ -72,6 +72,13 @@
           ],
         },
       }],
+      [ 'skia_win_debuggers_path and skia_os == "win"',
+        {
+          'defines': [
+            'SK_USE_CDB',
+          ],
+        },
+      ],
     ],
     'configurations': {
       'Debug': {

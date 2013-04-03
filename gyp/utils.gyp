@@ -6,7 +6,7 @@
       'type': 'static_library',
       'standalone_static_library': 1,
       'dependencies': [
-        'cityhash',
+        'cityhash.gyp:cityhash',
       ],
       'include_dirs': [
         '../include/config',
@@ -35,6 +35,7 @@
         '../include/utils/SkCamera.h',
         '../include/utils/SkCubicInterval.h',
         '../include/utils/SkCullPoints.h',
+        '../include/utils/SkDebugUtils.h',
         '../include/utils/SkDeferredCanvas.h',
         '../include/utils/SkDumpCanvas.h',
         '../include/utils/SkInterpolator.h',
@@ -195,11 +196,20 @@
           ],
           'sources!': [
             '../src/utils/SkThreadUtils_pthread_linux.cpp',
+            '../src/utils/SkCityHash.cpp',
+            '../src/utils/SkCityHash.h',
+          ],
+          'dependencies!': [
+            # CityHash is not supported on NaCl because the NaCl toolchain is
+            # missing byteswap.h which is needed by CityHash.
+            # TODO(borenet): Find a way to either provide this dependency or
+            # replace it.
+            'cityhash.gyp:cityhash',
           ],
         }],
         [ 'skia_os == "android"', {
           'sources': [
-            '../src/utils/android/ashmem.c',
+            '../src/utils/android/ashmem.cpp',
           ],
         }],
       ],
@@ -208,41 +218,6 @@
           '../include/utils',
         ],
       },
-    },
-    {
-      'target_name': 'cityhash',
-      'type': 'static_library',
-      'standalone_static_library': 1,
-      'include_dirs': [
-        '../include/config',
-        '../include/core',
-        '../src/utils/cityhash',
-        '../third_party/externals/cityhash/src',
-      ],
-      'sources': [
-        '../third_party/externals/cityhash/src/city.cc',
-      ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          '../third_party/externals/cityhash/src',
-        ],
-      },
-      'conditions': [
-        [ 'skia_os == "mac"', {
-          'xcode_settings': {
-            'OTHER_CPLUSPLUSFLAGS!': [
-              '-Werror',
-            ]
-          },
-        }],
-        [ 'skia_os == "win"', {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'WarnAsError': 'false',
-            },
-          },
-        }],
-      ],
     },
   ],
 }

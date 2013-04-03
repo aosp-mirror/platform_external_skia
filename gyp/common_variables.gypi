@@ -87,12 +87,20 @@
       'skia_angle%': 0,
       'skia_directwrite%': 0,
       'skia_gpu%': 1,
-      'skia_osx_sdkroot%': 'macosx',
+      'skia_osx_sdkroot%': '',
       'skia_profile_enabled%': 0,
-      # Note: This is currently only turned on for linux and android.
-      # TODO: Turn on for Win and Mac as well.
-      'skia_warnings_as_errors%': 0,
+      'skia_win_debuggers_path%': '',
     },
+
+    'conditions': [
+      [ 'skia_os == "win" and skia_arch_width == 32 or '
+        'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android"] or '
+        'skia_os == "mac" and skia_arch_width == 32', {
+        'skia_warnings_as_errors%': 1,
+      }, {
+        'skia_warnings_as_errors%': 0,
+      }],
+    ],
 
     # Re-define all variables defined within the level-2 'variables' dict,
     # so that siblings of the level-1 'variables' dict can see them.
@@ -113,9 +121,9 @@
     'skia_gpu%': '<(skia_gpu)',
     'skia_osx_sdkroot%': '<(skia_osx_sdkroot)',
     'skia_profile_enabled%': '<(skia_profile_enabled)',
-    'skia_warnings_as_errors%': '<(skia_warnings_as_errors)',
     'skia_static_initializers%': '<(skia_static_initializers)',
     'ios_sdk_version%': '6.0',
+    'skia_win_debuggers_path%': '<(skia_win_debuggers_path)',
 
     # These are referenced by our .gypi files that list files (e.g. core.gypi)
     #

@@ -315,20 +315,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #endif
 #endif
 
-#if !defined(GR_TEXT_SCALAR_TYPE_IS_USHORT)
-    #define GR_TEXT_SCALAR_TYPE_IS_USHORT  0
-#endif
-#if !defined(GR_TEXT_SCALAR_TYPE_IS_FLOAT)
-    #define GR_TEXT_SCALAR_TYPE_IS_FLOAT   0
-#endif
-#if !defined(GR_TEXT_SCALAR_TYPE_IS_FIXED)
-    #define GR_TEXT_SCALAR_TYPE_IS_FIXED   0
-#endif
-
-#ifndef GR_DUMP_TEXTURE_UPLOAD
-    #define GR_DUMP_TEXTURE_UPLOAD  0
-#endif
-
 /**
  *  GR_STATIC_RECT_VB controls whether rects are drawn by issuing a vertex
  *  for each corner or using a static vb that is positioned by modifying the
@@ -336,24 +322,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
  */
 #if !defined(GR_STATIC_RECT_VB)
     #define GR_STATIC_RECT_VB 0
-#endif
-
-/**
- *  GR_DISABLE_DRAW_BUFFERING prevents GrContext from queueing draws in a
- *  GrInOrderDrawBuffer.
- */
-#if !defined(GR_DISABLE_DRAW_BUFFERING)
-    #define GR_DISABLE_DRAW_BUFFERING 0
-#endif
-
-/**
- *  GR_AGGRESSIVE_SHADER_OPTS controls how aggressively shaders are optimized
- *  for special cases. On systems where program changes are expensive this
- *  may not be advantageous. Consecutive draws may no longer use the same
- *  program.
- */
-#if !defined(GR_AGGRESSIVE_SHADER_OPTS)
-    #define GR_AGGRESSIVE_SHADER_OPTS 1
 #endif
 
 /**
@@ -373,15 +341,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
  */
 #if !defined(GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT)
     #define GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT 96
-#endif
-
-/**
- * GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE is for compatibility with the new version
- * of the OpenGLES2.0 headers from Khronos.  glShaderSource now takes a const char * const *,
- * instead of a const char **.
- */
-#if !defined(GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE)
-    #define GR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE 0
 #endif
 
 /**
@@ -408,15 +367,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
     #error "Missing a GR_BUILD define"
 #elif 1 != GR_BUILD_SUM
     #error "More than one GR_BUILD defined"
-#endif
-
-
-#if !GR_TEXT_SCALAR_IS_FLOAT && \
-    !GR_TEXT_SCALAR_IS_FIXED && \
-    !GR_TEXT_SCALAR_IS_USHORT
-    #undef  GR_TEXT_SCALAR_IS_FLOAT
-    #define GR_TEXT_SCALAR_IS_FLOAT         1
-    #pragma message GR_WARN("Text scalar type not defined, defaulting to float")
 #endif
 
 #if 0

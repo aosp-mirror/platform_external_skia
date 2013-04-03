@@ -14,6 +14,7 @@
 #include "GrRefCnt.h"
 #include "GrTexture.h"
 #include "GrTextureAccess.h"
+#include "GrTypesPriv.h"
 
 class GrBackendEffectFactory;
 class GrContext;
@@ -68,6 +69,20 @@ private:
 class GrEffect : private GrRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrEffect)
+
+    /**
+     * The types of vertex coordinates available to an effect in the vertex shader. Effects can
+     * require their own vertex attribute but these coordinates are made available by the framework
+     * in all programs. kCustom_CoordsType is provided to signify that an alternative set of coords
+     * is used (usually an explicit vertex attribute) but its meaning is determined by the effect
+     * subclass.
+     */
+    enum CoordsType {
+        kLocal_CoordsType,
+        kPosition_CoordsType,
+
+        kCustom_CoordsType,
+    };
 
     virtual ~GrEffect();
 
@@ -136,6 +151,14 @@ public:
     /** Shortcut for textureAccess(index).texture(); */
     GrTexture* texture(int index) const { return this->textureAccess(index).getTexture(); }
 
+
+    int numVertexAttribs() const { return fVertexAttribTypes.count(); }
+
+    GrSLType vertexAttribType(int index) const { return fVertexAttribTypes[index]; }
+
+    static const int kMaxVertexAttribs = 2;
+
+
     /** Useful for effects that want to insert a texture matrix that is implied by the texture
         dimensions */
     static inline SkMatrix MakeDivByTextureWHMatrix(const GrTexture* texture) {
@@ -168,11 +191,18 @@ public:
 
 protected:
     /**
-     * Subclasses call this from their constructor to register GrTextureAcceses. The effect subclass
-     * manages the lifetime of the accesses (this function only stores a pointer). This must only be
-     * called from the constructor because GrEffects are supposed to be immutable.
+     * Subclasses call this from their constructor to register GrTextureAccesses. The effect
+     * subclass manages the lifetime of the accesses (this function only stores a pointer). This
+     * must only be called from the constructor because GrEffects are immutable.
      */
     void addTextureAccess(const GrTextureAccess* textureAccess);
+
+    /**
+     * Subclasses call this from their constructor to register vertex attributes (at most
+     * kMaxVertexAttribs). This must only be called from the constructor because GrEffects are
+     * immutable.
+     */
+    void addVertexAttrib(GrSLType type);
 
     GrEffect() : fEffectRef(NULL) {};
 
@@ -246,8 +276,9 @@ private:
                                 // from deferred state, to call isEqual on naked GrEffects, and
                                 // to inc/dec deferred ref counts.
 
-    SkSTArray<4, const GrTextureAccess*, true>  fTextureAccesses;
-    GrEffectRef*                                fEffectRef;
+    SkSTArray<4, const GrTextureAccess*, true>   fTextureAccesses;
+    SkSTArray<kMaxVertexAttribs, GrSLType, true> fVertexAttribTypes;
+    GrEffectRef*                                 fEffectRef;
 
     typedef GrRefCnt INHERITED;
 };

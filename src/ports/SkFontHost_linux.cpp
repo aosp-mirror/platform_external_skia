@@ -8,9 +8,9 @@
 
 
 #include "SkFontHost.h"
+#include "SkFontHost_FreeType_common.h"
 #include "SkFontDescriptor.h"
 #include "SkDescriptor.h"
-#include "SkMMapStream.h"
 #include "SkOSFile.h"
 #include "SkPaint.h"
 #include "SkString.h"
@@ -229,10 +229,10 @@ static void remove_from_names(FamilyRec* emptyFamily) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class FamilyTypeface : public SkTypeface {
+class FamilyTypeface : public SkTypeface_FreeType {
 public:
     FamilyTypeface(Style style, bool sysFont, FamilyRec* family, bool isFixedWidth)
-    : SkTypeface(style, sk_atomic_inc(&gUniqueFontID) + 1, isFixedWidth) {
+    : INHERITED(style, sk_atomic_inc(&gUniqueFontID) + 1, isFixedWidth) {
         fIsSysFont = sysFont;
 
         SkAutoMutexAcquire  ac(gFamilyMutex);
@@ -258,15 +258,14 @@ public:
 
     bool isSysFont() const { return fIsSysFont; }
     FamilyRec* getFamily() const { return fFamilyRec; }
-    // openStream returns a SkStream that has been ref-ed
-    virtual SkStream* openStream() = 0;
+
     virtual const char* getUniqueString() const = 0;
 
 private:
     FamilyRec*  fFamilyRec; // we don't own this, just point to it
     bool        fIsSysFont;
 
-    typedef SkTypeface INHERITED;
+    typedef SkTypeface_FreeType INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -279,9 +278,10 @@ class EmptyTypeface : public FamilyTypeface {
 public:
     EmptyTypeface() : INHERITED(SkTypeface::kNormal, true, NULL, false) {}
 
-    // overrides
-    virtual SkStream* openStream() { return NULL; }
-    virtual const char* getUniqueString() const { return NULL; }
+    virtual const char* getUniqueString() SK_OVERRIDE const { return NULL; }
+
+protected:
+    virtual SkStream* onOpenStream(int*) const SK_OVERRIDE { return NULL; }
 
 private:
     typedef FamilyTypeface INHERITED;
@@ -299,14 +299,14 @@ public:
         fStream->unref();
     }
 
-    // overrides
-    virtual SkStream* openStream()
-    {
-      // openStream returns a refed stream.
-      fStream->ref();
-      return fStream;
+    virtual const char* getUniqueString() const SK_OVERRIDE { return NULL; }
+
+protected:
+    virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+        *ttcIndex = 0;
+        fStream->ref();
+        return fStream;
     }
-    virtual const char* getUniqueString() const { return NULL; }
 
 private:
     SkStream* fStream;
@@ -322,30 +322,18 @@ public:
         fPath.set(path);
     }
 
-    // overrides
-    virtual SkStream* openStream()
-    {
-        SkStream* stream = SkNEW_ARGS(SkMMAPStream, (fPath.c_str()));
-
-        // check for failure
-        if (stream->getLength() <= 0) {
-            SkDELETE(stream);
-            // maybe MMAP isn't supported. try FILE
-            stream = SkNEW_ARGS(SkFILEStream, (fPath.c_str()));
-            if (stream->getLength() <= 0) {
-                SkDELETE(stream);
-                stream = NULL;
-            }
-        }
-        return stream;
-    }
-
-    virtual const char* getUniqueString() const {
+    virtual const char* getUniqueString() const SK_OVERRIDE {
         const char* str = strrchr(fPath.c_str(), '/');
         if (str) {
             str += 1;   // skip the '/'
         }
         return str;
+    }
+
+protected:
+    virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+        *ttcIndex = 0;
+        return SkStream::NewFromFile(fPath.c_str());
     }
 
 private:
@@ -359,19 +347,13 @@ private:
 
 static bool get_name_and_style(const char path[], SkString* name,
                                SkTypeface::Style* style, bool* isFixedWidth) {
-    SkMMAPStream stream(path);
-    if (stream.getLength() > 0) {
-        return find_name_and_attributes(&stream, name, style, isFixedWidth);
+    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
+    if (stream.get()) {
+        return find_name_and_attributes(stream, name, style, isFixedWidth);
+    } else {
+        SkDebugf("---- failed to open <%s> as a font\n", path);
+        return false;
     }
-    else {
-        SkFILEStream stream(path);
-        if (stream.getLength() > 0) {
-            return find_name_and_attributes(&stream, name, style, isFixedWidth);
-        }
-    }
-
-    SkDebugf("---- failed to open <%s> as a font\n", path);
-    return false;
 }
 
 // these globals are assigned (once) by load_system_fonts()
@@ -487,7 +469,7 @@ void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
     const bool isCustomFont = !((FamilyTypeface*)face)->isSysFont();
     if (isCustomFont) {
         // store the entire font in the fontData
-        SkStream* fontStream = ((FamilyTypeface*)face)->openStream();
+        SkStream* fontStream = face->openStream(NULL);
         const uint32_t length = fontStream->getLength();
 
         stream->writePackedUInt(length);
@@ -551,25 +533,8 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
     return tf;
 }
 
-SkStream* SkFontHost::OpenStream(uint32_t fontID) {
-    FamilyTypeface* tf = (FamilyTypeface*)find_from_uniqueID(fontID);
-    SkStream* stream = tf ? tf->openStream() : NULL;
-
-    if (stream && stream->getLength() == 0) {
-        stream->unref();
-        stream = NULL;
-    }
-    return stream;
-}
-
-size_t SkFontHost::GetFileName(SkFontID fontID, char path[], size_t length,
-                               int32_t* index) {
-//    SkDebugf("SkFontHost::GetFileName unimplemented\n");
-    return 0;
-}
-
-SkFontID SkFontHost::NextLogicalFont(SkFontID currFontID, SkFontID origFontID) {
-    return 0;
+SkTypeface* SkFontHost::NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID) {
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -590,12 +555,6 @@ SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
 }
 
 SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    SkTypeface* face = NULL;
-    SkFILEStream* stream = SkNEW_ARGS(SkFILEStream, (path));
-
-    if (stream->isValid()) {
-        face = CreateTypefaceFromStream(stream);
-    }
-    stream->unref();
-    return face;
+    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
+    return stream.get() ? CreateTypefaceFromStream(stream) : NULL;
 }

@@ -34,9 +34,9 @@ PictureBenchmark::~PictureBenchmark() {
     SkSafeUnref(fRenderer);
 }
 
-BenchTimer* PictureBenchmark::setupTimer() {
+BenchTimer* PictureBenchmark::setupTimer(bool useGLTimer) {
 #if SK_SUPPORT_GPU
-    if (fRenderer != NULL && fRenderer->isUsingGpuDevice()) {
+    if (useGLTimer && fRenderer != NULL && fRenderer->isUsingGpuDevice()) {
         return SkNEW_ARGS(BenchTimer, (fRenderer->getGLContext()));
     }
 #endif
@@ -79,8 +79,8 @@ void PictureBenchmark::run(SkPicture* pict) {
 
     if (fTimeIndividualTiles) {
         TiledPictureRenderer* tiledRenderer = fRenderer->getTiledRenderer();
-        SkASSERT(tiledRenderer);
-        if (NULL == tiledRenderer) {
+        SkASSERT(tiledRenderer && tiledRenderer->supportsTimingIndividualTiles());
+        if (NULL == tiledRenderer || !tiledRenderer->supportsTimingIndividualTiles()) {
             return;
         }
         int xTiles, yTiles;
@@ -96,7 +96,7 @@ void PictureBenchmark::run(SkPicture* pict) {
         while (tiledRenderer->nextTile(x, y)) {
             // There are two timers, which will behave slightly differently:
             // 1) longRunningTimer, along with perTileTimerData, will time how long it takes to draw
-            // one tile fRepeats times, and take the average. As such, it will not respect the
+            // one tile fRepeats times, and take the average. As such, it will not respect thea
             // logPerIter or printMin options, since it does not know the time per iteration. It
             // will also be unable to call flush() for each tile.
             // The goal of this timer is to make up for a system timer that is not precise enough to
@@ -104,10 +104,15 @@ void PictureBenchmark::run(SkPicture* pict) {
             //
             // 2) perTileTimer, along with perTileTimerData, will record each run separately, and
             // then take the average. As such, it supports logPerIter and printMin options.
+            //
+            // Although "legal", having two gpu timers running at the same time
+            // seems to cause problems (i.e., INVALID_OPERATIONs) on several
+            // platforms. To work around this, we disable the gpu timer on the
+            // long running timer.
             SkAutoTDelete<BenchTimer> longRunningTimer(this->setupTimer());
             TimerData longRunningTimerData(tiledRenderer->getPerIterTimeFormat(),
                                            tiledRenderer->getNormalTimeFormat());
-            SkAutoTDelete<BenchTimer> perTileTimer(this->setupTimer());
+            SkAutoTDelete<BenchTimer> perTileTimer(this->setupTimer(false));
             TimerData perTileTimerData(tiledRenderer->getPerIterTimeFormat(),
                                        tiledRenderer->getNormalTimeFormat());
             longRunningTimer->start();
@@ -132,7 +137,14 @@ void PictureBenchmark::run(SkPicture* pict) {
                                                          fShowTruncatedCpuTime,
                                                          usingGpu && fShowGpuTime);
             result.append("\n");
+
+// TODO(borenet): Turn off per-iteration tile time reporting for now.  Avoiding logging the time
+// for every iteration for each tile cuts down on data file size by a significant amount. Re-enable
+// this once we're loading the bench data directly into a data store and are no longer generating
+// SVG graphs.
+#if 0
             this->logProgress(result.c_str());
+#endif
 
             configName.append(" <averaged>");
             SkString longRunningResult = longRunningTimerData.getResult(false, false, fRepeats,

@@ -95,7 +95,7 @@ static inline bool S32A_D565_Blend_2(SkPMColor sc, uint16_t dc, U8CPU alpha) {
     return false;
 }
 
-static inline void test_565blend(skiatest::Reporter* reporter) {
+static inline void test_565blend() {
     int total_failures = 0;
     for (int global_alpha = 0; global_alpha <= 255; ++global_alpha) {
         int failures = 0;
@@ -146,7 +146,7 @@ static inline void test_premul(skiatest::Reporter* reporter) {
 */
 /*
 static void test_interp(skiatest::Reporter* reporter) {
-    SkRandom r;
+    SkMWCRandom r;
 
     U8CPU a0 = 0;
     U8CPU a255 = 255;
@@ -163,7 +163,7 @@ static void test_interp(skiatest::Reporter* reporter) {
 */
 
 static inline void test_fast_interp(skiatest::Reporter* reporter) {
-    SkRandom r;
+    SkMWCRandom r;
 
     U8CPU a0 = 0;
     U8CPU a255 = 255;
@@ -182,7 +182,7 @@ static void TestColor(skiatest::Reporter* reporter) {
     test_premul(reporter);
     //test_interp(reporter);
     test_fast_interp(reporter);
-//    test_565blend(reporter);
+//    test_565blend();
 }
 
 #include "TestClassDef.h"

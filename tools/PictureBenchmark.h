@@ -39,17 +39,11 @@ public:
      * drawn fRepeats times. Requires the PictureRenderer set by setRenderer to be a
      * TiledPictureRenderer.
      */
-    void setTimeIndividualTiles(bool indiv) { fTimeIndividualTiles = true; }
+    void setTimeIndividualTiles(bool indiv) { fTimeIndividualTiles = indiv; }
 
     bool timeIndividualTiles() { return fTimeIndividualTiles; }
 
     PictureRenderer* setRenderer(PictureRenderer*);
-
-    void setDeviceType(PictureRenderer::SkDeviceTypes deviceType) {
-        if (fRenderer != NULL) {
-            fRenderer->setDeviceType(deviceType);
-        }
-    }
 
     void setLogPerIter(bool log) { fLogPerIter = log; }
 
@@ -80,7 +74,7 @@ private:
 
     void logProgress(const char msg[]);
 
-    BenchTimer* setupTimer();
+    BenchTimer* setupTimer(bool useGLTimer = true);
 };
 
 }

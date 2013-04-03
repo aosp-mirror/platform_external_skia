@@ -52,6 +52,10 @@ ifeq ($(ARCH_ARM_HAVE_NEON),true)
 	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
 endif
 
+# When built as part of the system image we can enable certian non-NDK compliant
+# optimizations.
+LOCAL_CFLAGS += -DSK_BUILD_FOR_ANDROID_FRAMEWORK
+
 # using freetype's embolden allows us to adjust fake bold settings at
 # draw-time, at which point we know which SkTypeface is being drawn
 LOCAL_CFLAGS += -DSK_USE_FREETYPE_EMBOLDEN
@@ -63,7 +67,7 @@ LOCAL_CFLAGS += -DSK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400
 LOCAL_CFLAGS += -DSK_CAN_USE_DLOPEN=0
 
 # Android's gl2.h provides the new glShaderSource signature
-LOCAL_CFLAGS += -DGR_USE_NEW_GL_SHADER_SOURCE_SIGNATURE=1
+LOCAL_CFLAGS += -DGR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE=1
 
 # used for testing
 #LOCAL_CFLAGS += -g -O0
@@ -122,12 +126,14 @@ LOCAL_SRC_FILES:= \
 	src/core/SkEdgeBuilder.cpp \
 	src/core/SkEdgeClipper.cpp \
 	src/core/SkEdge.cpp \
+	src/core/SkFDStream.cpp \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableBuffers.cpp \
 	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkFontDescriptor.cpp \
+	src/core/SkFontStream.cpp \
 	src/core/SkFontHost.cpp \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlyphCache.cpp \
@@ -143,7 +149,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
 	src/core/SkMetaData.cpp \
-	src/core/SkMMapStream.cpp \
 	src/core/SkOrderedReadBuffer.cpp \
 	src/core/SkOrderedWriteBuffer.cpp \
 	src/core/SkPackBits.cpp \
@@ -233,7 +238,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
-	src/effects/SkSingleInputImageFilter.cpp \
+	src/effects/SkRectShaderImageFilter.cpp \
 	src/effects/SkStippleMaskFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
@@ -257,9 +262,7 @@ LOCAL_SRC_FILES:= \
 	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/images/bmpdecoderhelper.cpp \
-	src/images/SkBitmapFactory.cpp \
 	src/images/SkBitmapRegionDecoder.cpp \
-	src/images/SkFDStream.cpp \
 	src/images/SkFlipPixelRef.cpp \
 	src/images/SkImages.cpp \
 	src/images/SkImageDecoder.cpp \
@@ -289,13 +292,13 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
-	src/ports/SkFontHost_sandbox_none.cpp	\
 	src/ports/SkFontHost_android.cpp \
-	src/ports/SkFontHost_tables.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkPurgeableMemoryBlock_android.cpp \
 	src/ports/SkThread_pthread.cpp \
 	src/ports/SkTime_Unix.cpp \
+	src/utils/android/ashmem.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapTransformer.cpp \
 	src/utils/SkBitSet.cpp \
@@ -322,8 +325,13 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
-	src/utils/SkUnitMappers.cpp
-
+	src/utils/SkUnitMappers.cpp \
+	src/lazy/SkBitmapFactory.cpp \
+	src/lazy/SkLazyPixelRef.cpp \
+	src/lazy/SkLruImageCache.cpp \
+	src/lazy/SkPurgeableMemoryBlock_common.cpp \
+	src/lazy/SkPurgeableImageCache.cpp \
+	
 #	src/utils/SkBitmapChecksummer.cpp \
 #	src/utils/SkCityHash.cpp \
 
@@ -334,7 +342,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/SkGrFontScaler.cpp \
 	src/gpu/SkGrPixelRef.cpp \
 	src/gpu/SkGrTexturePixelRef.cpp \
-	src/gpu/gl/SkGLContext.cpp \
+	src/gpu/gl/SkGLContextHelper.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/android/SkNativeGLContext_android.cpp
@@ -363,6 +371,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrMemory.cpp \
 	src/gpu/GrMemoryPool.cpp \
+	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPath.cpp \
 	src/gpu/GrPathRendererChain.cpp \
 	src/gpu/GrPathRenderer.cpp \
@@ -383,20 +392,25 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/gr_unittests.cpp \
-	src/gpu/effects/GrTextureStripAtlas.cpp \
+	src/gpu/effects/GrCircleEdgeEffect.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
+	src/gpu/effects/GrEllipseEdgeEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomainEffect.cpp \
+	src/gpu/effects/GrTextureStripAtlas.cpp \
+	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
-	src/gpu/gl/GrGLContextInfo.cpp \
+	src/gpu/gl/GrGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
 	src/gpu/gl/GrGLEffect.cpp \
+	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLEffectMatrix.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
+	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
@@ -406,6 +420,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLUniformManager.cpp \
+	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGpuGL.cpp \
 	src/gpu/gl/GrGpuGL_program.cpp \
@@ -474,6 +489,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/include/lazy \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
@@ -481,6 +497,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/src/image \
+	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/utils \
 	external/freetype/include \
 	external/zlib \

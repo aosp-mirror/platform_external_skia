@@ -128,8 +128,11 @@ int32_t SkPDFCatalog::emitXrefTable(SkWStream* stream, bool firstPage) {
         first++;
     }
     for (int i = first; i <= last; i++) {
+        // For 32 bits platforms, the maximum offset has to fit within off_t
+        // which is a 32 bits signed integer on these platforms.
+        SkDEBUGCODE(static const off_t kMaxOff = SK_MaxS32;)
         SkASSERT(fCatalog[i].fFileOffset > 0);
-        SkASSERT(fCatalog[i].fFileOffset <= 9999999999LL);
+        SkASSERT(fCatalog[i].fFileOffset < kMaxOff);
         stream->writeBigDecAsText(fCatalog[i].fFileOffset, 10);
         stream->writeText(" 00000 n \n");
     }

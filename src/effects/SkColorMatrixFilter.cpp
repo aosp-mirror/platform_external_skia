@@ -386,18 +386,17 @@ public:
     class GLEffect : public GrGLEffect {
     public:
         // this class always generates the same code.
-        static EffectKey GenKey(const GrEffectStage&, const GrGLCaps&) { return 0; }
+        static EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&) { return 0; }
 
         GLEffect(const GrBackendEffectFactory& factory,
-                 const GrEffectRef& effect)
+                 const GrDrawEffect&)
         : INHERITED(factory)
         , fMatrixHandle(GrGLUniformManager::kInvalidUniformHandle)
         , fVectorHandle(GrGLUniformManager::kInvalidUniformHandle) {}
 
         virtual void emitCode(GrGLShaderBuilder* builder,
-                              const GrEffectStage&,
+                              const GrDrawEffect&,
                               EffectKey,
-                              const char* vertexCoords,
                               const char* outputColor,
                               const char* inputColor,
                               const TextureSamplerArray&) SK_OVERRIDE {
@@ -414,18 +413,18 @@ public:
             }
             // The max() is to guard against 0 / 0 during unpremul when the incoming color is
             // transparent black.
-            builder->fFSCode.appendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n", inputColor);
-            builder->fFSCode.appendf("\t%s = %s * vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha) + %s;\n",
-                                     outputColor,
-                                     builder->getUniformCStr(fMatrixHandle),
-                                     inputColor,
-                                     builder->getUniformCStr(fVectorHandle));
-            builder->fFSCode.appendf("\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+            builder->fsCodeAppendf("\tfloat nonZeroAlpha = max(%s.a, 0.00001);\n", inputColor);
+            builder->fsCodeAppendf("\t%s = %s * vec4(%s.rgb / nonZeroAlpha, nonZeroAlpha) + %s;\n",
+                                   outputColor,
+                                   builder->getUniformCStr(fMatrixHandle),
+                                   inputColor,
+                                   builder->getUniformCStr(fVectorHandle));
+            builder->fsCodeAppendf("\t%s.rgb *= %s.a;\n", outputColor, outputColor);
         }
 
         virtual void setData(const GrGLUniformManager& uniManager,
-                             const GrEffectStage& stage) SK_OVERRIDE {
-            const ColorMatrixEffect& cme = GetEffectFromStage<ColorMatrixEffect>(stage);
+                             const GrDrawEffect& drawEffect) SK_OVERRIDE {
+            const ColorMatrixEffect& cme = drawEffect.castEffect<ColorMatrixEffect>();
             const float* m = cme.fMatrix.fMat;
             // The GL matrix is transposed from SkColorMatrix.
             GrGLfloat mt[]  = {
@@ -462,7 +461,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(ColorMatrixEffect);
 
-GrEffectRef* ColorMatrixEffect::TestCreate(SkRandom* random,
+GrEffectRef* ColorMatrixEffect::TestCreate(SkMWCRandom* random,
                                            GrContext*,
                                            GrTexture* dummyTextures[2]) {
     SkColorMatrix colorMatrix;

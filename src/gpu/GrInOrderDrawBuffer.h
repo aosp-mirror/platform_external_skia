@@ -40,15 +40,13 @@ public:
     /**
      * Creates a GrInOrderDrawBuffer
      *
-     * @param gpu        the gpu object where this will be played back
-     *                   (possible indirectly). GrResources used with the draw
-     *                   buffer are created by this gpu object.
+     * @param gpu        the gpu object that this draw buffer flushes to.
      * @param vertexPool pool where vertices for queued draws will be saved when
      *                   the vertex source is either reserved or array.
      * @param indexPool  pool where indices for queued draws will be saved when
      *                   the index source is either reserved or array.
      */
-    GrInOrderDrawBuffer(const GrGpu* gpu,
+    GrInOrderDrawBuffer(GrGpu* gpu,
                         GrVertexBufferAllocPool* vertexPool,
                         GrIndexBufferAllocPool* indexPool);
 
@@ -61,37 +59,27 @@ public:
     void reset();
 
     /**
-     * This plays the queued up draws to another target. It also resets this object (i.e. flushing
+     * This plays the queued up draws to its GrGpu target. It also resets this object (i.e. flushing
      * is destructive). This buffer must not have an active reserved vertex or index source. Any
      * reserved geometry on the target will be finalized because it's geometry source will be pushed
      * before flushing and popped afterwards.
      *
      * @return false if the playback trivially drew nothing because nothing was recorded.
-     *
-     * @param target    the target to receive the playback
      */
-    bool flushTo(GrDrawTarget* target);
+    bool flush();
 
-    /**
-     * This function allows the draw buffer to automatically flush itself to another target. This
-     * means the buffer may internally call this->flushTo(target) when it is safe to do so.
-     *
-     * When the auto flush target is set to NULL (as it initially is) the draw buffer will never
-     * automatically flush itself.
-     */
-    void setAutoFlushTarget(GrDrawTarget* target);
+    bool isFlushing() const { return fFlushing; }
 
     // overrides from GrDrawTarget
-    virtual bool geometryHints(size_t vertexSize,
-                               int* vertexCount,
+    virtual bool geometryHints(int* vertexCount,
                                int* indexCount) const SK_OVERRIDE;
     virtual void clear(const GrIRect* rect,
                        GrColor color,
                        GrRenderTarget* renderTarget = NULL) SK_OVERRIDE;
     virtual void drawRect(const GrRect& rect,
                           const SkMatrix* matrix,
-                          const GrRect* srcRects[],
-                          const SkMatrix* srcMatrices[]) SK_OVERRIDE;
+                          const GrRect* localRect,
+                          const SkMatrix* localMatrix) SK_OVERRIDE;
 
 protected:
     virtual void clipWillBeSet(const GrClipData* newClip) SK_OVERRIDE;
@@ -108,7 +96,6 @@ private:
     class DrawRecord : public DrawInfo {
     public:
         DrawRecord(const DrawInfo& info) : DrawInfo(info) {}
-        GrVertexLayout          fVertexLayout;
         const GrVertexBuffer*   fVertexBuffer;
         const GrIndexBuffer*    fIndexBuffer;
     };
@@ -148,8 +135,7 @@ private:
     virtual void releaseIndexArray() SK_OVERRIDE;
     virtual void geometrySourceWillPush() SK_OVERRIDE;
     virtual void geometrySourceWillPop(const GeometrySrcState& restoredState) SK_OVERRIDE;
-    virtual void willReserveVertexAndIndexSpace(size_t vertexSize,
-                                                int vertexCount,
+    virtual void willReserveVertexAndIndexSpace(int vertexCount,
                                                 int indexCount) SK_OVERRIDE;
     bool quickInsideClip(const SkRect& devBounds);
 
@@ -179,8 +165,6 @@ private:
         kGeoPoolStatePreAllocCnt = 4,
     };
 
-    SkAutoTUnref<const GrGpu> fGpu;
-
     SkSTArray<kCmdPreallocCnt, uint8_t, true>                          fCmds;
     GrSTAllocator<kDrawPreallocCnt, DrawRecord>                        fDraws;
     GrSTAllocator<kStatePreallocCnt, StencilPath>                      fStencilPaths;
@@ -190,7 +174,7 @@ private:
     GrSTAllocator<kClipPreallocCnt, SkClipStack>        fClips;
     GrSTAllocator<kClipPreallocCnt, SkIPoint>           fClipOrigins;
 
-    GrDrawTarget*                   fAutoFlushTarget;
+    GrDrawTarget*                   fDstGpu;
 
     bool                            fClipSet;
 

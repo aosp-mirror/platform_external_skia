@@ -66,11 +66,14 @@ inline SkPMColor cubicBlend(const SkScalar c[16], SkScalar t, SkPMColor c0, SkPM
     cc[1] = c[4]  + SkScalarMul(c[5], t) + SkScalarMul(c[6], t2) + SkScalarMul(c[7], t3);
     cc[2] = c[8]  + SkScalarMul(c[9], t) + SkScalarMul(c[10], t2) + SkScalarMul(c[11], t3);
     cc[3] = c[12] + SkScalarMul(c[13], t) + SkScalarMul(c[14], t2) + SkScalarMul(c[15], t3);
-    SkScalar a = SkScalarMul(cc[0], SkGetPackedA32(c0)) + SkScalarMul(cc[1], SkGetPackedA32(c1)) + SkScalarMul(cc[2], SkGetPackedA32(c2)) + SkScalarMul(cc[3], SkGetPackedA32(c3));
+    SkScalar a = SkScalarClampMax(SkScalarMul(cc[0], SkGetPackedA32(c0)) + SkScalarMul(cc[1], SkGetPackedA32(c1)) + SkScalarMul(cc[2], SkGetPackedA32(c2)) + SkScalarMul(cc[3], SkGetPackedA32(c3)), 255);
     SkScalar r = SkScalarMul(cc[0], SkGetPackedR32(c0)) + SkScalarMul(cc[1], SkGetPackedR32(c1)) + SkScalarMul(cc[2], SkGetPackedR32(c2)) + SkScalarMul(cc[3], SkGetPackedR32(c3));
     SkScalar g = SkScalarMul(cc[0], SkGetPackedG32(c0)) + SkScalarMul(cc[1], SkGetPackedG32(c1)) + SkScalarMul(cc[2], SkGetPackedG32(c2)) + SkScalarMul(cc[3], SkGetPackedG32(c3));
     SkScalar b = SkScalarMul(cc[0], SkGetPackedB32(c0)) + SkScalarMul(cc[1], SkGetPackedB32(c1)) + SkScalarMul(cc[2], SkGetPackedB32(c2)) + SkScalarMul(cc[3], SkGetPackedB32(c3));
-    return SkPackARGB32(SkScalarRoundToInt(SkScalarClampMax(a, 255)), SkScalarRoundToInt(SkScalarClampMax(r, 255)), SkScalarRoundToInt(SkScalarClampMax(g, 255)), SkScalarRoundToInt(SkScalarClampMax(b, 255)));
+    return SkPackARGB32(SkScalarRoundToInt(a),
+                        SkScalarRoundToInt(SkScalarClampMax(r, a)),
+                        SkScalarRoundToInt(SkScalarClampMax(g, a)),
+                        SkScalarRoundToInt(SkScalarClampMax(b, a)));
 }
 
 bool SkBicubicImageFilter::onFilterImage(Proxy* proxy,
@@ -78,7 +81,7 @@ bool SkBicubicImageFilter::onFilterImage(Proxy* proxy,
                                          const SkMatrix& matrix,
                                          SkBitmap* result,
                                          SkIPoint* loc) {
-    SkBitmap src = this->getInputResult(proxy, source, matrix, loc);
+    SkBitmap src = this->getInputResult(0, proxy, source, matrix, loc);
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -182,18 +185,17 @@ private:
 class GrGLBicubicEffect : public GrGLEffect {
 public:
     GrGLBicubicEffect(const GrBackendEffectFactory& factory,
-                      const GrEffectRef& effect);
+                      const GrDrawEffect&);
     virtual void emitCode(GrGLShaderBuilder*,
-                          const GrEffectStage&,
+                          const GrDrawEffect&,
                           EffectKey,
-                          const char* vertexCoords,
                           const char* outputColor,
                           const char* inputColor,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static inline EffectKey GenKey(const GrEffectStage&, const GrGLCaps&);
+    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
 
-    virtual void setData(const GrGLUniformManager&, const GrEffectStage&) SK_OVERRIDE;
+    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
 
 private:
     typedef GrGLUniformManager::UniformHandle        UniformHandle;
@@ -207,26 +209,25 @@ private:
 };
 
 GrGLBicubicEffect::GrGLBicubicEffect(const GrBackendEffectFactory& factory,
-                                     const GrEffectRef& effect)
+                                     const GrDrawEffect& drawEffect)
     : INHERITED(factory)
     , fCoefficientsUni(GrGLUniformManager::kInvalidUniformHandle)
-    , fImageIncrementUni(GrGLUniformManager::kInvalidUniformHandle) {
+    , fImageIncrementUni(GrGLUniformManager::kInvalidUniformHandle)
+    , fEffectMatrix(drawEffect.castEffect<GrBicubicEffect>().coordsType()) {
 }
 
 void GrGLBicubicEffect::emitCode(GrGLShaderBuilder* builder,
-                                 const GrEffectStage&,
+                                 const GrDrawEffect&,
                                  EffectKey key,
-                                 const char* vertexCoords,
                                  const char* outputColor,
                                  const char* inputColor,
                                  const TextureSamplerArray& samplers) {
     const char* coords;
-    fEffectMatrix.emitCodeMakeFSCoords2D(builder, key, vertexCoords, &coords);
+    fEffectMatrix.emitCodeMakeFSCoords2D(builder, key, &coords);
     fCoefficientsUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                            kMat44f_GrSLType, "Coefficients");
     fImageIncrementUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                              kVec2f_GrSLType, "ImageIncrement");
-    SkString* code = &builder->fFSCode;
 
     const char* imgInc = builder->getUniformCStr(fImageIncrementUni);
     const char* coeff = builder->getUniformCStr(fCoefficientsUni);
@@ -250,32 +251,35 @@ void GrGLBicubicEffect::emitCode(GrGLShaderBuilder* builder,
                           "\tvec4 c = coefficients * ts;\n"
                           "\treturn c.x * c0 + c.y * c1 + c.z * c2 + c.w * c3;\n",
                           &cubicBlendName);
-    code->appendf("\tvec2 coord = %s - %s * vec2(0.5, 0.5);\n", coords, imgInc);
-    code->appendf("\tvec2 f = fract(coord / %s);\n", imgInc);
+    builder->fsCodeAppendf("\tvec2 coord = %s - %s * vec2(0.5, 0.5);\n", coords, imgInc);
+    builder->fsCodeAppendf("\tvec2 f = fract(coord / %s);\n", imgInc);
     for (int y = 0; y < 4; ++y) {
         for (int x = 0; x < 4; ++x) {
             SkString coord;
             coord.printf("coord + %s * vec2(%d, %d)", imgInc, x - 1, y - 1);
-            code->appendf("\tvec4 s%d%d = ", x, y);
-            builder->appendTextureLookup(&builder->fFSCode, samplers[0], coord.c_str());
-            code->appendf(";\n");
+            builder->fsCodeAppendf("\tvec4 s%d%d = ", x, y);
+            builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType,
+                                         samplers[0],
+                                         coord.c_str());
+            builder->fsCodeAppend(";\n");
         }
-        code->appendf("\tvec4 s%d = %s(%s, f.x, s0%d, s1%d, s2%d, s3%d);\n", y, cubicBlendName.c_str(), coeff, y, y, y, y);
+        builder->fsCodeAppendf("\tvec4 s%d = %s(%s, f.x, s0%d, s1%d, s2%d, s3%d);\n", y, cubicBlendName.c_str(), coeff, y, y, y, y);
     }
-    code->appendf("\t%s = %s(%s, f.y, s0, s1, s2, s3);\n", outputColor, cubicBlendName.c_str(), coeff);
+    builder->fsCodeAppendf("\t%s = %s(%s, f.y, s0, s1, s2, s3);\n", outputColor, cubicBlendName.c_str(), coeff);
 }
 
-GrGLEffect::EffectKey GrGLBicubicEffect::GenKey(const GrEffectStage& s, const GrGLCaps&) {
-    const GrBicubicEffect& m = GetEffectFromStage<GrBicubicEffect>(s);
-    EffectKey matrixKey = GrGLEffectMatrix::GenKey(m.getMatrix(),
-                                                   s.getCoordChangeMatrix(),
-                                                   m.texture(0));
+GrGLEffect::EffectKey GrGLBicubicEffect::GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
+    const GrBicubicEffect& bicubic = drawEffect.castEffect<GrBicubicEffect>();
+    EffectKey matrixKey = GrGLEffectMatrix::GenKey(bicubic.getMatrix(),
+                                                   drawEffect,
+                                                   bicubic.coordsType(),
+                                                   bicubic.texture(0));
     return matrixKey;
 }
 
 void GrGLBicubicEffect::setData(const GrGLUniformManager& uman,
-                                const GrEffectStage& stage) {
-    const GrBicubicEffect& effect = GetEffectFromStage<GrBicubicEffect>(stage);
+                                const GrDrawEffect& drawEffect) {
+    const GrBicubicEffect& effect = drawEffect.castEffect<GrBicubicEffect>();
     GrTexture& texture = *effect.texture(0);
     float imageIncrement[2];
     imageIncrement[0] = 1.0f / texture.width();
@@ -284,7 +288,7 @@ void GrGLBicubicEffect::setData(const GrGLUniformManager& uman,
     uman.setMatrix4f(fCoefficientsUni, effect.coefficients());
     fEffectMatrix.setData(uman,
                           effect.getMatrix(),
-                          stage.getCoordChangeMatrix(),
+                          drawEffect,
                           effect.texture(0));
 }
 
@@ -320,7 +324,7 @@ void GrBicubicEffect::getConstantColorComponents(GrColor* color, uint32_t* valid
 
 GR_DEFINE_EFFECT_TEST(GrBicubicEffect);
 
-GrEffectRef* GrBicubicEffect::TestCreate(SkRandom* random,
+GrEffectRef* GrBicubicEffect::TestCreate(SkMWCRandom* random,
                                          GrContext* context,
                                          GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :

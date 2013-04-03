@@ -51,7 +51,7 @@ static void CheckObjectOutput(skiatest::Reporter* reporter, SkPDFObject* obj,
                               bool indirect, bool compression) {
     SkPDFDocument::Flags docFlags = (SkPDFDocument::Flags) 0;
     if (!compression) {
-        docFlags = SkTBitOr(docFlags, SkPDFDocument::kNoCompression_Flags);
+        docFlags = SkTBitOr(docFlags, SkPDFDocument::kFavorSpeedOverSize_Flags);
     }
     SkPDFCatalog catalog(docFlags);
     size_t directSize = obj->getOutputSize(&catalog, false);
@@ -223,9 +223,9 @@ static void TestSubstitute(skiatest::Reporter* reporter) {
 // http://code.google.com/p/skia/issues/detail?id=1083.
 // SKP files might have invalid glyph ids. This test ensures they are ignored,
 // and there is no assert on input data in Debug mode.
-static void test_issue1083(skiatest::Reporter* reporter) {
+static void test_issue1083() {
     SkISize pageSize = SkISize::Make(100, 100);
-    SkPDFDevice* dev = new SkPDFDevice(pageSize, pageSize, SkMatrix::I());
+    SkAutoTUnref<SkPDFDevice> dev(new SkPDFDevice(pageSize, pageSize, SkMatrix::I()));
 
     SkCanvas c(dev);
     SkPaint paint;
@@ -323,7 +323,7 @@ static void TestPDFPrimitives(skiatest::Reporter* reporter) {
 
     TestSubstitute(reporter);
 
-    test_issue1083(reporter);
+    test_issue1083();
 }
 
 #include "TestClassDef.h"

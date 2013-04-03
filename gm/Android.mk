@@ -59,6 +59,7 @@ LOCAL_SRC_FILES += \
   image.cpp \
   imagefiltersbase.cpp \
   imagefiltersgraph.cpp \
+  internal_links.cpp \
   lcdtext.cpp \
   linepaths.cpp \
   matrixconvolution.cpp \
@@ -73,14 +74,17 @@ LOCAL_SRC_FILES += \
   points.cpp \
   poly2poly.cpp \
   quadpaths.cpp \
+  rects.cpp \
   rrect.cpp \
   rrects.cpp \
   samplerstress.cpp \
   shaderbounds.cpp \
+  selftest.cpp \
   shadertext.cpp \
   shadertext2.cpp \
   shadertext3.cpp \
   shadows.cpp \
+  shallowgradient.cpp \
   simpleaaclip.cpp \
   spritebitmap.cpp \
   srcmode.cpp \

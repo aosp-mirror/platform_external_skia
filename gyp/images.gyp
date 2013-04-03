@@ -7,6 +7,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'libjpeg.gyp:*',
+        'libwebp.gyp:libwebp',
         'utils.gyp:utils',
       ],
       'export_dependent_settings': [
@@ -16,24 +17,24 @@
         '../include/config',
         '../include/core',
         '../include/images',
+        '../include/lazy',
+        # for access to SkImagePriv.h
+        '../src/image/',
       ],
       'sources': [
-        '../include/images/SkBitmapFactory.h',
         '../include/images/SkImageDecoder.h',
         '../include/images/SkImageEncoder.h',
         '../include/images/SkImageRef.h',
         '../include/images/SkImageRef_GlobalPool.h',
-        '../include/images/SkJpegUtility.h',
+        '../src/images/SkJpegUtility.h',
         '../include/images/SkMovie.h',
         '../include/images/SkPageFlipper.h',
 
         '../src/images/bmpdecoderhelper.cpp',
         '../src/images/bmpdecoderhelper.h',
+
         '../src/images/SkBitmapRegionDecoder.cpp',
-        '../src/images/SkBitmap_RLEPixels.h',
-        '../src/images/SkCreateRLEPixelRef.cpp',
-        '../src/images/SkBitmapFactory.cpp',
-        '../src/images/SkFDStream.cpp',
+
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_Factory.cpp',
         '../src/images/SkImageDecoder_libbmp.cpp',
@@ -41,6 +42,7 @@
         '../src/images/SkImageDecoder_libico.cpp',
         '../src/images/SkImageDecoder_libjpeg.cpp',
         '../src/images/SkImageDecoder_libpng.cpp',
+        '../src/images/SkImageDecoder_libwebp.cpp',
         '../src/images/SkImageDecoder_wbmp.cpp',
         '../src/images/SkImageEncoder.cpp',
         '../src/images/SkImageEncoder_Factory.cpp',
@@ -109,6 +111,7 @@
             ],
             'libraries': [
               '-lpng',
+              '-lz',
             ],
           },
           # end libpng stuff
@@ -120,9 +123,6 @@
           'dependencies': [
              'android_deps.gyp:gif',
              'android_deps.gyp:png',
-          ],
-          'defines': [
-            'SK_ENABLE_LIBPNG',
           ],
         },{ #else if skia_os != android
           'sources!': [
@@ -139,6 +139,7 @@
       'direct_dependent_settings': {
         'include_dirs': [
           '../include/images',
+          '../include/lazy',
         ],
       },
     },

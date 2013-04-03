@@ -12,11 +12,10 @@
 #include "SkMaskGamma.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
+#include "SkTypeface.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
     #include "SkLanguage.h"
-    //For SkFontID
-    #include "SkTypeface.h"
 #endif
 
 struct SkGlyph;
@@ -154,8 +153,10 @@ public:
     };
 
 
-    SkScalerContext(const SkDescriptor* desc);
+    SkScalerContext(SkTypeface*, const SkDescriptor*);
     virtual ~SkScalerContext();
+
+    SkTypeface* getTypeface() const { return fTypeface.get(); }
 
     SkMask::Format getMaskFormat() const {
         return (SkMask::Format)fRec.fMaskFormat;
@@ -202,7 +203,6 @@ public:
                                const SkMatrix*, Rec* rec);
     static inline void PostMakeRec(const SkPaint&, Rec*);
 
-    static SkScalerContext* Create(const SkDescriptor*);
     static SkMaskGamma::PreBlend GetMaskPreBlend(const Rec& rec);
 
 protected:
@@ -223,8 +223,10 @@ protected:
     void forceGenerateImageFromPath() { fGenerateImageFromPath = true; }
 
 private:
-    SkScalerContext* getContextFromChar(SkUnichar uni, unsigned& glyphID);
+    // never null
+    SkAutoTUnref<SkTypeface> fTypeface;
 
+    // optional object, which may be null
     SkPathEffect*   fPathEffect;
     SkMaskFilter*   fMaskFilter;
     SkRasterizer*   fRasterizer;
@@ -242,6 +244,11 @@ private:
     // returns the right context from our link-list for this glyph. If no match
     // is found, just returns the original context (this)
     SkScalerContext* getGlyphContext(const SkGlyph& glyph);
+
+    // returns the right context from our link-list for this char. If no match
+    // is found it returns NULL. If a match is found then the glyphID param is
+    // set to the glyphID that maps to the provided char.
+    SkScalerContext* getContextFromChar(SkUnichar uni, uint16_t* glyphID);
 
     // link-list of context, to handle missing chars. null-terminated.
     SkScalerContext* fNextContext;

@@ -12,6 +12,7 @@
 #include "SkDevice.h"
 #include "SkGPipe.h"
 #if SK_SUPPORT_GPU
+#include "gl/GrGLDefines.h"
 #include "SkGpuDevice.h"
 #endif
 #include "SkGraphics.h"
@@ -106,13 +107,38 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
         }
         break;
 #if SK_SUPPORT_GPU
+#if SK_ANGLE
+        case kAngle_DeviceType:
+            // fall through
+#endif
         case kGPU_DeviceType: {
-            SkAutoTUnref<SkGpuDevice> device(SkNEW_ARGS(SkGpuDevice,
-                                                    (fGrContext, SkBitmap::kARGB_8888_Config,
-                                                    width, height)));
+            SkAutoTUnref<GrRenderTarget> rt;
+            bool grSuccess = false;
+            if (fGrContext) {
+                // create a render target to back the device
+                GrTextureDesc desc;
+                desc.fConfig = kSkia8888_GrPixelConfig;
+                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fWidth = width;
+                desc.fHeight = height;
+                desc.fSampleCnt = 0;
+                GrTexture* tex = fGrContext->createUncachedTexture(desc, NULL, 0);
+                if (tex) {
+                    rt.reset(tex->asRenderTarget());
+                    rt.get()->ref();
+                    tex->unref();
+                    grSuccess = NULL != rt.get();
+                }
+            }
+            if (!grSuccess) {
+                SkASSERT(0);
+                return NULL;
+            }
+
+            SkAutoTUnref<SkGpuDevice> device(SkNEW_ARGS(SkGpuDevice, (fGrContext, rt)));
             canvas = SkNEW_ARGS(SkCanvas, (device.get()));
+            break;
         }
-        break;
 #endif
         default:
             SkASSERT(0);
@@ -139,7 +165,7 @@ void PictureRenderer::end() {
 
 int PictureRenderer::getViewWidth() {
     SkASSERT(fPicture != NULL);
-    int width = fPicture->width();
+    int width = SkScalarCeilToInt(fPicture->width() * fScaleFactor);
     if (fViewport.width() > 0) {
         width = SkMin32(width, fViewport.width());
     }
@@ -148,7 +174,7 @@ int PictureRenderer::getViewWidth() {
 
 int PictureRenderer::getViewHeight() {
     SkASSERT(fPicture != NULL);
-    int height = fPicture->height();
+    int height = SkScalarCeilToInt(fPicture->height() * fScaleFactor);
     if (fViewport.height() > 0) {
         height = SkMin32(height, fViewport.height());
     }
@@ -174,19 +200,15 @@ void PictureRenderer::buildBBoxHierarchy() {
 
 void PictureRenderer::resetState(bool callFinish) {
 #if SK_SUPPORT_GPU
-    if (this->isUsingGpuDevice()) {
-        SkGLContext* glContext = fGrContextFactory.getGLContext(
-            GrContextFactory::kNative_GLContextType);
+    SkGLContextHelper* glContext = this->getGLContext();
+    if (NULL == glContext) {
+        SkASSERT(kBitmap_DeviceType == fDeviceType);
+        return;
+    }
 
-        SkASSERT(glContext != NULL);
-        if (NULL == glContext) {
-            return;
-        }
-
-        fGrContext->flush();
-        if (callFinish) {
-            SK_GL(*glContext, Finish());
-        }
+    fGrContext->flush();
+    if (callFinish) {
+        SK_GL(*glContext, Finish());
     }
 #endif
 }
@@ -778,8 +800,8 @@ SkPicture* PictureRenderer::createPicture() {
         case kRTree_BBoxHierarchyType:
             return SkNEW(RTreePicture);
         case kTileGrid_BBoxHierarchyType:
-            return SkNEW_ARGS(SkTileGridPicture, (fGridWidth, fGridHeight, fPicture->width(),
-                fPicture->height()));
+            return SkNEW_ARGS(SkTileGridPicture, (fPicture->width(),
+                fPicture->height(), fGridInfo));
     }
     SkASSERT(0); // invalid bbhType
     return NULL;

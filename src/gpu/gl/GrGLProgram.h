@@ -11,7 +11,7 @@
 
 #include "GrDrawState.h"
 #include "GrGLEffect.h"
-#include "GrGLContextInfo.h"
+#include "GrGLContext.h"
 #include "GrGLSL.h"
 #include "GrGLTexture.h"
 #include "GrGLUniformManager.h"
@@ -22,6 +22,7 @@
 class GrBinHashKeyBuilder;
 class GrGLEffect;
 class GrGLShaderBuilder;
+class SkMWCRandom;
 
 // optionally compile the experimental GS code. Set to GR_DEBUG
 // so that debug build bots will execute the code.
@@ -40,9 +41,21 @@ class GrGLProgram : public GrRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrGLProgram)
 
-    struct Desc;
+    class Desc;
 
-    static GrGLProgram* Create(const GrGLContextInfo& gl,
+    /**
+     * Builds a program descriptor from a GrDrawState. Whether the primitive type is points, the
+     * output of GrDrawState::getBlendOpts, and the caps of the GrGpuGL are also inputs.
+     */
+    static void BuildDesc(const GrDrawState&,
+                          bool isPoints,
+                          GrDrawState::BlendOptFlags,
+                          GrBlendCoeff srcCoeff,
+                          GrBlendCoeff dstCoeff,
+                          const GrGpuGL* gpu,
+                          Desc* outDesc);
+
+    static GrGLProgram* Create(const GrGLContext& gl,
                                const Desc& desc,
                                const GrEffectStage* stages[]);
 
@@ -61,24 +74,59 @@ public:
     const Desc& getDesc() { return fDesc; }
 
     /**
-     * Attribute indices. These should not overlap.
+     * Gets the GL program ID for this program.
      */
-    static int PositionAttributeIdx() { return 0; }
-    static int ColorAttributeIdx() { return 1; }
-    static int CoverageAttributeIdx() { return 2; }
-    static int EdgeAttributeIdx() { return 3; }
-    static int TexCoordAttributeIdx(int tcIdx) { return 4 + tcIdx; }
+    GrGLuint programID() const { return fProgramID; }
+
+    /**
+     * Some GL state that is relevant to programs is not stored per-program. In particular vertex
+     * attributes are global state. This struct is read and updated by GrGLProgram::setData to
+     * allow us to avoid setting this state redundantly.
+     */
+    struct SharedGLState {
+        GrColor fConstAttribColor;
+        GrColor fConstAttribCoverage;
+
+        SharedGLState() { this->invalidate(); }
+        void invalidate() {
+            fConstAttribColor = GrColor_ILLEGAL;
+            fConstAttribCoverage = GrColor_ILLEGAL;
+        }
+    };
+
+    /**
+     * The GrDrawState's view matrix along with the aspects of the render target determine the
+     * matrix sent to GL. The size of the render target affects the GL matrix because we must
+     * convert from Skia device coords to GL's normalized coords. Also the origin of the render
+     * target may require us to perform a mirror-flip.
+     */
+    struct MatrixState {
+        SkMatrix        fViewMatrix;
+        SkISize         fRenderTargetSize;
+        GrSurfaceOrigin fRenderTargetOrigin;
+
+        MatrixState() { this->invalidate(); }
+        void invalidate() {
+            fViewMatrix = SkMatrix::InvalidMatrix();
+            fRenderTargetSize.fWidth = -1;
+            fRenderTargetSize.fHeight = -1;
+            fRenderTargetOrigin = (GrSurfaceOrigin) -1;
+        }
+    };
 
     /**
      * This function uploads uniforms and calls each GrGLEffect's setData. It is called before a
      * draw occurs using the program after the program has already been bound. It also uses the
      * GrGpuGL object to bind the textures required by the GrGLEffects.
+     *
+     * The color and coverage params override the GrDrawState's getColor() and getCoverage() values.
      */
-    void setData(GrGpuGL*);
+    void setData(GrGpuGL*, GrColor color, GrColor coverage, SharedGLState*);
 
     // Parameters that affect code generation
     // This structs should be kept compact; it is input to an expensive hash key generator.
-    struct Desc {
+    class Desc {
+    public:
         Desc() {
             // since we use this as part of a key we can't have any uninitialized
             // padding
@@ -90,6 +138,12 @@ public:
             return reinterpret_cast<const uint32_t*>(this);
         }
 
+        // For unit testing.
+        void setRandom(SkMWCRandom*,
+                       const GrGpuGL* gpu,
+                       const GrEffectStage stages[GrDrawState::kNumStages]);
+
+    private:
         // Specifies where the initial color comes from before the stages are applied.
         enum ColorInput {
             kSolidWhite_ColorInput,
@@ -117,7 +171,7 @@ public:
         bool                        fDiscardIfOutsideEdge;
 
         // stripped of bits that don't affect program generation
-        GrVertexLayout              fVertexLayout;
+        GrAttribBindings            fAttribBindings;
 
         /** Non-zero if this stage has an effect */
         GrGLEffect::EffectKey       fEffectKeys[GrDrawState::kNumStages];
@@ -133,9 +187,26 @@ public:
         int8_t                      fFirstCoverageStage;
         SkBool8                     fEmitsPointSize;
         uint8_t                     fColorFilterXfermode;   // casts to enum SkXfermode::Mode
+
+        int8_t                      fPositionAttributeIndex;
+        int8_t                      fColorAttributeIndex;
+        int8_t                      fCoverageAttributeIndex;
+        int8_t                      fEdgeAttributeIndex;
+        int8_t                      fLocalCoordsAttributeIndex;
+
+        friend class GrGLProgram;
     };
+
+    // Layout information for OpenGL vertex attributes
+    struct AttribLayout {
+        GrGLint     fCount;
+        GrGLenum    fType;
+        GrGLboolean fNormalized;
+    };
+    static const AttribLayout kAttribLayouts[kGrVertexAttribTypeCount];
+
 private:
-    GrGLProgram(const GrGLContextInfo& gl,
+    GrGLProgram(const GrGLContext& gl,
                 const Desc& desc,
                 const GrEffectStage* stages[]);
 
@@ -161,7 +232,6 @@ private:
 
     // Creates a GL program ID, binds shader attributes to GL vertex attrs, and links the program
     bool bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& builder,
-                                          SkString texCoordAttrNames[GrDrawState::kMaxTexCoords],
                                           bool bindColorOut,
                                           bool bindDualSrcOut);
 
@@ -171,6 +241,17 @@ private:
     bool compileShaders(const GrGLShaderBuilder& builder);
 
     const char* adjustInColor(const SkString& inColor) const;
+
+    // Helper for setData(). Makes GL calls to specify the initial color when there is not
+    // per-vertex colors.
+    void setColor(const GrDrawState&, GrColor color, SharedGLState*);
+
+    // Helper for setData(). Makes GL calls to specify the initial coverage when there is not
+    // per-vertex coverages.
+    void setCoverage(const GrDrawState&, GrColor coverage, SharedGLState*);
+
+    // Helper for setData() that sets the view matrix and loads the render target height uniform
+    void setMatrixAndRenderTargetHeight(const GrDrawState&);
 
     typedef SkSTArray<4, UniformHandle, true> SamplerUniSArray;
 
@@ -199,26 +280,20 @@ private:
     GrGLuint                    fGShaderID;
     GrGLuint                    fFShaderID;
     GrGLuint                    fProgramID;
-    // The matrix sent to GL is determined by both the client's matrix and
-    // the size of the viewport.
-    SkMatrix                    fViewMatrix;
-    SkISize                     fViewportSize;
 
     // these reflect the current values of uniforms (GL uniform values travel with program)
+    MatrixState                 fMatrixState;
     GrColor                     fColor;
     GrColor                     fCoverage;
     GrColor                     fColorFilterColor;
-    int                         fRTHeight;
 
     GrGLEffect*                 fEffects[GrDrawState::kNumStages];
 
     Desc                        fDesc;
-    const GrGLContextInfo&      fContextInfo;
+    const GrGLContext&          fContext;
 
     GrGLUniformManager          fUniformManager;
     UniformHandles              fUniformHandles;
-
-    friend class GrGpuGL; // TODO: remove this by adding getters and moving functionality.
 
     typedef GrRefCnt INHERITED;
 };

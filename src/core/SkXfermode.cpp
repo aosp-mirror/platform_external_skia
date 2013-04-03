@@ -191,10 +191,28 @@ static SkPMColor modulate_modeproc(SkPMColor src, SkPMColor dst) {
     return SkPackARGB32(a, r, g, b);
 }
 
-// kScreen_Mode
 static inline int srcover_byte(int a, int b) {
     return a + b - SkAlphaMulAlpha(a, b);
 }
+
+// kMultiply_Mode
+// B(Cb, Cs) = Cb x Cs
+// multiply uses its own version of blendfunc_byte because sa and da are not needed
+static int blendfunc_multiply_byte(int sc, int dc, int sa, int da) {
+    return clamp_div255round(sc * (255 - da)  + dc * (255 - sa)  + sc * dc);
+}
+
+static SkPMColor multiply_modeproc(SkPMColor src, SkPMColor dst) {
+    int sa = SkGetPackedA32(src);
+    int da = SkGetPackedA32(dst);
+    int a = srcover_byte(sa, da);
+    int r = blendfunc_multiply_byte(SkGetPackedR32(src), SkGetPackedR32(dst), sa, da);
+    int g = blendfunc_multiply_byte(SkGetPackedG32(src), SkGetPackedG32(dst), sa, da);
+    int b = blendfunc_multiply_byte(SkGetPackedB32(src), SkGetPackedB32(dst), sa, da);
+    return SkPackARGB32(a, r, g, b);
+}
+
+// kScreen_Mode
 static SkPMColor screen_modeproc(SkPMColor src, SkPMColor dst) {
     int a = srcover_byte(SkGetPackedA32(src), SkGetPackedA32(dst));
     int r = srcover_byte(SkGetPackedR32(src), SkGetPackedR32(dst));
@@ -272,57 +290,41 @@ static SkPMColor lighten_modeproc(SkPMColor src, SkPMColor dst) {
 static inline int colordodge_byte(int sc, int dc, int sa, int da) {
     int diff = sa - sc;
     int rc;
-    if (0 == diff) {
+    if (0 == dc) {
+        return SkAlphaMulAlpha(sc, 255 - da);
+    } else if (0 == diff) {
         rc = sa * da + sc * (255 - da) + dc * (255 - sa);
-        rc = SkDiv255Round(rc);
     } else {
-        int tmp = (dc * sa << 15) / (da * diff);
-        rc = SkDiv255Round(sa * da) * tmp >> 15;
-        // don't clamp here, since we'll do it in our modeproc
+        diff = dc * sa / diff;
+        rc = sa * ((da < diff) ? da : diff) + sc * (255 - da) + dc * (255 - sa);
     }
-    return rc;
+    return clamp_div255round(rc);
 }
 static SkPMColor colordodge_modeproc(SkPMColor src, SkPMColor dst) {
-    // added to avoid div-by-zero in colordodge_byte
-    if (0 == dst) {
-        return src;
-    }
-
     int sa = SkGetPackedA32(src);
     int da = SkGetPackedA32(dst);
     int a = srcover_byte(sa, da);
     int r = colordodge_byte(SkGetPackedR32(src), SkGetPackedR32(dst), sa, da);
     int g = colordodge_byte(SkGetPackedG32(src), SkGetPackedG32(dst), sa, da);
     int b = colordodge_byte(SkGetPackedB32(src), SkGetPackedB32(dst), sa, da);
-    r = clamp_max(r, a);
-    g = clamp_max(g, a);
-    b = clamp_max(b, a);
     return SkPackARGB32(a, r, g, b);
 }
 
 // kColorBurn_Mode
 static inline int colorburn_byte(int sc, int dc, int sa, int da) {
     int rc;
-    if (dc == da && 0 == sc) {
-        rc = sa * da + dc * (255 - sa);
+    if (dc == da) {
+        rc = sa * da + sc * (255 - da) + dc * (255 - sa);
     } else if (0 == sc) {
         return SkAlphaMulAlpha(dc, 255 - sa);
     } else {
-        int tmp = (sa * (da - dc) * 256) / (sc * da);
-        if (tmp > 256) {
-            tmp = 256;
-        }
-        int tmp2 = sa * da;
-        rc = tmp2 - (tmp2 * tmp >> 8) + sc * (255 - da) + dc * (255 - sa);
+        int tmp = (da - dc) * sa / sc;
+        rc = sa * (da - ((da < tmp) ? da : tmp))
+            + sc * (255 - da) + dc * (255 - sa);
     }
-    return SkDiv255Round(rc);
+    return clamp_div255round(rc);
 }
 static SkPMColor colorburn_modeproc(SkPMColor src, SkPMColor dst) {
-    // added to avoid div-by-zero in colorburn_byte
-    if (0 == dst) {
-        return src;
-    }
-
     int sa = SkGetPackedA32(src);
     int da = SkGetPackedA32(dst);
     int a = srcover_byte(sa, da);
@@ -413,6 +415,220 @@ static SkPMColor exclusion_modeproc(SkPMColor src, SkPMColor dst) {
     return SkPackARGB32(a, r, g, b);
 }
 
+// The CSS compositing spec introduces the following formulas:
+// (See https://dvcs.w3.org/hg/FXTF/rawfile/tip/compositing/index.html#blendingnonseparable)
+// SkComputeLuminance is similar to this formula but it uses the new definition from Rec. 709
+// while PDF and CG uses the one from Rec. Rec. 601
+// See http://www.glennchan.info/articles/technical/hd-versus-sd-color-space/hd-versus-sd-color-space.htm
+static inline int Lum(int r, int g, int b)
+{
+    return SkDiv255Round(r * 77 + g * 150 + b * 28);
+}
+
+static inline int min2(int a, int b) { return a < b ? a : b; }
+static inline int max2(int a, int b) { return a > b ? a : b; }
+#define minimum(a, b, c) min2(min2(a, b), c)
+#define maximum(a, b, c) max2(max2(a, b), c)
+
+static inline int Sat(int r, int g, int b) {
+    return maximum(r, g, b) - minimum(r, g, b);
+}
+
+static inline void setSaturationComponents(int* Cmin, int* Cmid, int* Cmax, int s) {
+    if(*Cmax > *Cmin) {
+        *Cmid =  SkMulDiv(*Cmid - *Cmin, s, *Cmax - *Cmin);
+        *Cmax = s;
+    } else {
+        *Cmax = 0;
+        *Cmid = 0;
+    }
+
+    *Cmin = 0;
+}
+
+static inline void SetSat(int* r, int* g, int* b, int s) {
+    if(*r <= *g) {
+        if(*g <= *b) {
+            setSaturationComponents(r, g, b, s);
+        } else if(*r <= *b) {
+            setSaturationComponents(r, b, g, s);
+        } else {
+            setSaturationComponents(b, r, g, s);
+        }
+    } else if(*r <= *b) {
+        setSaturationComponents(g, r, b, s);
+    } else if(*g <= *b) {
+        setSaturationComponents(g, b, r, s);
+    } else {
+        setSaturationComponents(b, g, r, s);
+    }
+}
+
+static inline void clipColor(int* r, int* g, int* b, int a) {
+    int L = Lum(*r, *g, *b);
+    int n = minimum(*r, *g, *b);
+    int x = maximum(*r, *g, *b);
+    if(n < 0) {
+       *r = L + SkMulDiv(*r - L, L, L - n);
+       *g = L + SkMulDiv(*g - L, L, L - n);
+       *b = L + SkMulDiv(*b - L, L, L - n);
+    }
+
+    if (x > a) {
+       *r = L + SkMulDiv(*r - L, a - L, x - L);
+       *g = L + SkMulDiv(*g - L, a - L, x - L);
+       *b = L + SkMulDiv(*b - L, a - L, x - L);
+    }
+}
+
+static inline void SetLum(int* r, int* g, int* b, int a, int l) {
+  int d = l - Lum(*r, *g, *b);
+  *r +=  d;
+  *g +=  d;
+  *b +=  d;
+
+  clipColor(r, g, b, a);
+}
+
+// non-separable blend modes are done in non-premultiplied alpha
+#define  blendfunc_nonsep_byte(sc, dc, sa, da, blendval) \
+  clamp_div255round(sc * (255 - da) +  dc * (255 - sa) + blendval)
+
+// kHue_Mode
+// B(Cb, Cs) = SetLum(SetSat(Cs, Sat(Cb)), Lum(Cb))
+// Create a color with the hue of the source color and the saturation and luminosity of the backdrop color.
+static SkPMColor hue_modeproc(SkPMColor src, SkPMColor dst) {
+    int sr = SkGetPackedR32(src);
+    int sg = SkGetPackedG32(src);
+    int sb = SkGetPackedB32(src);
+    int sa = SkGetPackedA32(src);
+
+    int dr = SkGetPackedR32(dst);
+    int dg = SkGetPackedG32(dst);
+    int db = SkGetPackedB32(dst);
+    int da = SkGetPackedA32(dst);
+    int Sr, Sg, Sb;
+
+    if(sa && da) {
+        Sr = sr * sa;
+        Sg = sg * sa;
+        Sb = sb * sa;
+        SetSat(&Sr, &Sg, &Sb, Sat(dr, dg, db) * sa);
+        SetLum(&Sr, &Sg, &Sb, sa * da, Lum(dr, dg, db) * sa);
+    } else {
+        Sr = 0;
+        Sg = 0;
+        Sb = 0;
+    }
+
+    int a = srcover_byte(sa, da);
+    int r = blendfunc_nonsep_byte(sr, dr, sa, da, Sr);
+    int g = blendfunc_nonsep_byte(sg, dg, sa, da, Sg);
+    int b = blendfunc_nonsep_byte(sb, db, sa, da, Sb);
+    return SkPackARGB32(a, r, g, b);
+}
+
+// kSaturation_Mode
+// B(Cb, Cs) = SetLum(SetSat(Cb, Sat(Cs)), Lum(Cb))
+// Create a color with the saturation of the source color and the hue and luminosity of the backdrop color.
+static SkPMColor saturation_modeproc(SkPMColor src, SkPMColor dst) {
+    int sr = SkGetPackedR32(src);
+    int sg = SkGetPackedG32(src);
+    int sb = SkGetPackedB32(src);
+    int sa = SkGetPackedA32(src);
+
+    int dr = SkGetPackedR32(dst);
+    int dg = SkGetPackedG32(dst);
+    int db = SkGetPackedB32(dst);
+    int da = SkGetPackedA32(dst);
+    int Dr, Dg, Db;
+
+    if(sa && da) {
+        Dr = dr * sa;
+        Dg = dg * sa;
+        Db = db * sa;
+        SetSat(&Dr, &Dg, &Db, Sat(sr, sg, sb) * da);
+        SetLum(&Dr, &Dg, &Db, sa * da, Lum(dr, dg, db) * sa);
+    } else {
+        Dr = 0;
+        Dg = 0;
+        Db = 0;
+    }
+
+    int a = srcover_byte(sa, da);
+    int r = blendfunc_nonsep_byte(sr, dr, sa, da, Dr);
+    int g = blendfunc_nonsep_byte(sg, dg, sa, da, Dg);
+    int b = blendfunc_nonsep_byte(sb, db, sa, da, Db);
+    return SkPackARGB32(a, r, g, b);
+}
+
+// kColor_Mode
+// B(Cb, Cs) = SetLum(Cs, Lum(Cb))
+// Create a color with the hue and saturation of the source color and the luminosity of the backdrop color.
+static SkPMColor color_modeproc(SkPMColor src, SkPMColor dst) {
+    int sr = SkGetPackedR32(src);
+    int sg = SkGetPackedG32(src);
+    int sb = SkGetPackedB32(src);
+    int sa = SkGetPackedA32(src);
+
+    int dr = SkGetPackedR32(dst);
+    int dg = SkGetPackedG32(dst);
+    int db = SkGetPackedB32(dst);
+    int da = SkGetPackedA32(dst);
+    int Sr, Sg, Sb;
+
+    if(sa && da) {
+        Sr = sr * da;
+        Sg = sg * da;
+        Sb = sb * da;
+        SetLum(&Sr, &Sg, &Sb, sa * da, Lum(dr, dg, db) * sa);
+    } else {
+        Sr = 0;
+        Sg = 0;
+        Sb = 0;
+    }
+
+    int a = srcover_byte(sa, da);
+    int r = blendfunc_nonsep_byte(sr, dr, sa, da, Sr);
+    int g = blendfunc_nonsep_byte(sg, dg, sa, da, Sg);
+    int b = blendfunc_nonsep_byte(sb, db, sa, da, Sb);
+    return SkPackARGB32(a, r, g, b);
+}
+
+// kLuminosity_Mode
+// B(Cb, Cs) = SetLum(Cb, Lum(Cs))
+// Create a color with the luminosity of the source color and the hue and saturation of the backdrop color.
+static SkPMColor luminosity_modeproc(SkPMColor src, SkPMColor dst) {
+    int sr = SkGetPackedR32(src);
+    int sg = SkGetPackedG32(src);
+    int sb = SkGetPackedB32(src);
+    int sa = SkGetPackedA32(src);
+
+    int dr = SkGetPackedR32(dst);
+    int dg = SkGetPackedG32(dst);
+    int db = SkGetPackedB32(dst);
+    int da = SkGetPackedA32(dst);
+    int Dr, Dg, Db;
+
+    if(sa && da) {
+        Dr = dr * sa;
+        Dg = dg * sa;
+        Db = db * sa;
+        SetLum(&Dr, &Dg, &Db, sa * da, Lum(sr, sg, sb) * da);
+    } else {
+        Dr = 0;
+        Dg = 0;
+        Db = 0;
+    }
+
+    int a = srcover_byte(sa, da);
+    int r = blendfunc_nonsep_byte(sr, dr, sa, da, Dr);
+    int g = blendfunc_nonsep_byte(sg, dg, sa, da, Dg);
+    int b = blendfunc_nonsep_byte(sb, db, sa, da, Db);
+    return SkPackARGB32(a, r, g, b);
+}
+
+
 struct ProcCoeff {
     SkXfermodeProc      fProc;
     SkXfermode::Coeff   fSC;
@@ -447,6 +663,11 @@ static const ProcCoeff gProcCoeffs[] = {
     { softlight_modeproc,   CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
     { difference_modeproc,  CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
     { exclusion_modeproc,   CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
+    { multiply_modeproc,    CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
+    { hue_modeproc,         CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
+    { saturation_modeproc,  CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
+    { color_modeproc,       CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
+    { luminosity_modeproc,  CANNOT_USE_COEFF,       CANNOT_USE_COEFF },
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1245,6 +1466,11 @@ static const Proc16Rec gModeProcs16[] = {
     { NULL,                 NULL,                   NULL            }, // softlight
     { NULL,                 NULL,                   NULL            }, // difference
     { NULL,                 NULL,                   NULL            }, // exclusion
+    { NULL,                 NULL,                   NULL            }, // multiply
+    { NULL,                 NULL,                   NULL            }, // hue
+    { NULL,                 NULL,                   NULL            }, // saturation
+    { NULL,                 NULL,                   NULL            }, // color
+    { NULL,                 NULL,                   NULL            }, // luminosity
 };
 
 SkXfermodeProc16 SkXfermode::GetProc16(Mode mode, SkColor srcColor) {

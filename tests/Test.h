@@ -12,8 +12,7 @@
 #include "SkString.h"
 #include "SkTRegistry.h"
 
-class GrContext;
-class SkGLContext;
+class GrContextFactory;
 
 namespace skiatest {
 
@@ -89,6 +88,10 @@ namespace skiatest {
         const char* getName();
         bool run(); // returns true on success
 
+        static const SkString& GetTmpDir();
+
+        static const SkString& GetResourcePath();
+
     protected:
         virtual void onGetName(SkString*) = 0;
         virtual void onRun(Reporter*) = 0;
@@ -100,13 +103,9 @@ namespace skiatest {
 
     class GpuTest : public Test{
     public:
-        GpuTest() : Test() {
-            fContext = GetContext();
-        }
-        static GrContext* GetContext();
-        static void DestroyContext();
-    protected:
-        GrContext* fContext;
+        GpuTest() : Test() {}
+        static GrContextFactory* GetGrContextFactory();
+        static void DestroyContexts();
     private:
     };
 

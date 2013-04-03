@@ -3,8 +3,6 @@
 # To build on Linux:
 #  ./gyp_skia tools.gyp && make tools
 #
-# Building on other platforms not tested yet.
-#
 {
   'includes': [
     'apptype_console.gypi',
@@ -70,6 +68,7 @@
       'dependencies': [
         'skia_base_libs.gyp:skia_base_libs',
         'effects.gyp:effects',
+        'flags.gyp:flags',
         'images.gyp:images',
       ],
     },
@@ -98,6 +97,8 @@
         'skia_base_libs.gyp:skia_base_libs',
         'tools.gyp:picture_renderer',
         'tools.gyp:picture_utils',
+        'ports.gyp:ports',
+        'flags.gyp:flags',
       ],
     },
     {
@@ -113,6 +114,7 @@
       ],
       'include_dirs': [
         '../bench',
+        '../src/lazy/',
       ],
       'dependencies': [
         'skia_base_libs.gyp:skia_base_libs',
@@ -120,6 +122,8 @@
         'tools.gyp:picture_utils',
         'tools.gyp:picture_renderer',
         'bench.gyp:bench_timer',
+        'ports.gyp:ports',
+        'flags.gyp:flags',
       ],
     },
     {
@@ -128,6 +132,8 @@
       'sources': [
         '../tools/PictureRenderer.h',
         '../tools/PictureRenderer.cpp',
+        '../tools/PictureRenderingFlags.h',
+        '../tools/PictureRenderingFlags.cpp',
         '../tools/CopyTilesRenderer.h',
         '../tools/CopyTilesRenderer.cpp',
         '../src/pipe/utils/SamplePipeControllers.h',
@@ -143,6 +149,16 @@
         'effects.gyp:effects',
         'images.gyp:images',
         'tools.gyp:picture_utils',
+        'flags.gyp:flags',
+      ],
+      'conditions': [
+        ['skia_gpu == 1',
+          {
+            'include_dirs' : [
+              '../src/gpu',
+            ],
+          },
+        ],
       ],
       'export_dependent_settings': [
         'images.gyp:images',
@@ -167,6 +183,41 @@
         'pdf.gyp:pdf',
         'ports.gyp:ports',
         'tools.gyp:picture_utils',
+      ],
+      'conditions': [
+        ['skia_win_debuggers_path and skia_os == "win"',
+          {
+            'dependencies': [
+              'tools.gyp:win_dbghelp',
+            ],
+          },
+        ],
+        # VS static libraries don't have a linker option. We must set a global
+        # project linker option, or add it to each executable.
+        ['skia_win_debuggers_path and skia_os == "win" and '
+         'skia_arch_width == 64',
+          {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  '<(skia_win_debuggers_path)/x64/DbgHelp.lib',
+                ],
+              },
+            },
+          },
+        ],
+        ['skia_win_debuggers_path and skia_os == "win" and '
+         'skia_arch_width == 32',
+          {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  '<(skia_win_debuggers_path)/DbgHelp.lib',
+                ],
+              },
+            },
+          },
+        ],
       ],
     },
     {
@@ -217,6 +268,25 @@
         'tools.gyp:picture_utils',
       ],
     },
+  ],
+  'conditions': [
+    ['skia_win_debuggers_path and skia_os == "win"',
+      {
+        'targets': [
+          {
+            'target_name': 'win_dbghelp',
+            'type': 'static_library',
+            'defines': [
+              'SK_CDB_PATH="<(skia_win_debuggers_path)"',
+            ],
+            'sources': [
+              '../tools/win_dbghelp.h',
+              '../tools/win_dbghelp.cpp',
+            ],
+          },
+        ],
+      },
+    ],
   ],
 }
 

@@ -14,7 +14,10 @@
 #include "gl/GrGLSL.h"
 #include "gl/GrGLUniformManager.h"
 
+#include <stdarg.h>
+
 class GrGLContextInfo;
+class GrEffectStage;
 
 /**
   Contains all the incremental state of a shader as it is being built,as well as helpers to
@@ -78,7 +81,35 @@ public:
         kFragment_ShaderType = 0x4,
     };
 
-    GrGLShaderBuilder(const GrGLContextInfo&, GrGLUniformManager&);
+    GrGLShaderBuilder(const GrGLContextInfo&, GrGLUniformManager&, bool explicitLocalCoords);
+
+    /**
+     * Called by GrGLEffects to add code to one of the shaders.
+     */
+    void vsCodeAppendf(const char format[], ...) SK_PRINTF_LIKE(2, 3) {
+        va_list args;
+        va_start(args, format);
+        this->codeAppendf(kVertex_ShaderType, format, args);
+        va_end(args);
+    }
+
+    void gsCodeAppendf(const char format[], ...) SK_PRINTF_LIKE(2, 3) {
+        va_list args;
+        va_start(args, format);
+        this->codeAppendf(kGeometry_ShaderType, format, args);
+        va_end(args);
+    }
+
+    void fsCodeAppendf(const char format[], ...) SK_PRINTF_LIKE(2, 3) {
+        va_list args;
+        va_start(args, format);
+        this->codeAppendf(kFragment_ShaderType, format, args);
+        va_end(args);
+    }
+
+    void vsCodeAppend(const char* str) { this->codeAppend(kVertex_ShaderType, str); }
+    void gsCodeAppend(const char* str) { this->codeAppend(kGeometry_ShaderType, str); }
+    void fsCodeAppend(const char* str) { this->codeAppend(kFragment_ShaderType, str); }
 
     /** Appends a 2D texture sample with projection if necessary. coordType must either be Vec2f or
         Vec3f. The latter is interpreted as projective texture coords. The vec length and swizzle
@@ -88,15 +119,23 @@ public:
                              const char* coordName,
                              GrSLType coordType = kVec2f_GrSLType) const;
 
+    /** Version of above that appends the result to the shader code rather than an SkString.
+        Currently the shader type must be kFragment */
+    void appendTextureLookup(ShaderType,
+                             const TextureSampler&,
+                             const char* coordName,
+                             GrSLType coordType = kVec2f_GrSLType);
+
+
     /** Does the work of appendTextureLookup and modulates the result by modulation. The result is
         always a vec4. modulation and the swizzle specified by TextureSampler must both be vec4 or
         float. If modulation is "" or NULL it this function acts as though appendTextureLookup were
         called. */
-    void appendTextureLookupAndModulate(SkString* out,
+    void appendTextureLookupAndModulate(ShaderType,
                                         const char* modulation,
                                         const TextureSampler&,
                                         const char* coordName,
-                                        GrSLType coordType = kVec2f_GrSLType) const;
+                                        GrSLType coordType = kVec2f_GrSLType);
 
     /** Emits a helper function outside of main(). Currently ShaderType must be
         kFragment_ShaderType. */
@@ -146,7 +185,11 @@ public:
         return this->getUniformVariable(u).c_str();
     }
 
-    /** Add a varying variable to the current program to pass values between vertex and fragment
+   /** Add a vertex attribute to the current program that is passed in from the vertex data.
+       Returns false if the attribute was already there, true otherwise. */
+    bool addAttribute(GrSLType type, const char* name);
+
+   /** Add a varying variable to the current program to pass values between vertex and fragment
         shaders. If the last two parameters are non-NULL, they are filled in with the name
         generated. */
     void addVarying(GrSLType type,
@@ -162,6 +205,16 @@ public:
         pre-matrix position and is commonly used by effects to compute texture coords via a matrix.
       */
     const GrGLShaderVar& positionAttribute() const { return *fPositionVar; }
+
+    /** Returns a vertex attribute that represents the local coords in the VS. This may be the same
+        as positionAttribute() or it may not be. It depends upon whether the rendering code
+        specified explicit local coords or not in the GrDrawState. */
+    const GrGLShaderVar& localCoordsAttribute() const { return *fLocalCoordsVar; }
+
+    /**
+     * Are explicit local coordinates provided as input to the vertex shader.
+     */
+    bool hasExplicitLocalCoords() const { return (fLocalCoordsVar != fPositionVar); }
 
     /**
      * Interfaces used by GrGLProgram.
@@ -181,13 +234,30 @@ public:
                                 GrBackendEffectFactory::EffectKey key,
                                 const char* fsInColor, // NULL means no incoming color
                                 const char* fsOutColor,
-                                const char* vsInCoord,
                                 SkTArray<GrGLUniformManager::UniformHandle, true>* samplerHandles);
     GrGLUniformManager::UniformHandle getRTHeightUniform() const { return fRTHeightUniform; }
+
+    struct AttributePair {
+        void set(int index, const SkString& name) {
+            fIndex = index; fName = name;
+        }
+        int      fIndex;
+        SkString fName;
+    };
+    const SkSTArray<10, AttributePair, true>& getEffectAttributes() const {
+        return fEffectAttributes;
+    }
+    const SkString* getEffectAttributeName(int attributeIndex) const;
+
     // TODO: Make this do all the compiling, linking, etc.
     void finished(GrGLuint programID);
 
+    const GrGLContextInfo& ctxInfo() const { return fCtxInfo; }
+
 private:
+    void codeAppendf(ShaderType type, const char format[], va_list args);
+    void codeAppend(ShaderType type, const char* str);
+
     typedef GrTAllocator<GrGLShaderVar> VarArray;
 
     void appendDecls(const VarArray&, SkString*) const;
@@ -207,9 +277,6 @@ public:
     VarArray    fFSInputs;
     SkString    fGSHeader; // layout qualifiers specific to GS
     VarArray    fFSOutputs;
-    SkString    fVSCode;
-    SkString    fGSCode;
-    SkString    fFSCode;
     bool        fUsesGS;
 
 private:
@@ -217,16 +284,24 @@ private:
         kNonStageIdx = -1,
     };
 
-    const GrGLContextInfo&              fContext;
+    const GrGLContextInfo&              fCtxInfo;
     GrGLUniformManager&                 fUniformManager;
     int                                 fCurrentStageIdx;
     SkString                            fFSFunctions;
     SkString                            fFSHeader;
 
+    SkString                            fFSCode;
+    SkString                            fVSCode;
+    SkString                            fGSCode;
+
     bool                                fSetupFragPosition;
     GrGLUniformManager::UniformHandle   fRTHeightUniform;
 
+    SkSTArray<10, AttributePair, true>  fEffectAttributes;
+
     GrGLShaderVar*                      fPositionVar;
+    GrGLShaderVar*                      fLocalCoordsVar;
+
 };
 
 #endif

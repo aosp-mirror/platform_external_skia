@@ -82,7 +82,11 @@ void GrDrawTarget::DrawInfo::adjustStartIndex(int indexOffset) {
 #define DEBUG_INVAL_BUFFER 0xdeadcafe
 #define DEBUG_INVAL_START_IDX -1
 
-GrDrawTarget::GrDrawTarget() : fClip(NULL) {
+GrDrawTarget::GrDrawTarget(GrContext* context)
+    : fClip(NULL)
+    , fContext(context) {
+    GrAssert(NULL != context);
+
     fDrawState = &fDefaultDrawState;
     // We assume that fDrawState always owns a ref to the object it points at.
     fDefaultDrawState.ref();
@@ -136,7 +140,7 @@ void GrDrawTarget::setDrawState(GrDrawState*  drawState) {
     }
 }
 
-bool GrDrawTarget::reserveVertexSpace(GrVertexLayout vertexLayout,
+bool GrDrawTarget::reserveVertexSpace(size_t vertexSize,
                                       int vertexCount,
                                       void** vertices) {
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
@@ -146,14 +150,14 @@ bool GrDrawTarget::reserveVertexSpace(GrVertexLayout vertexLayout,
         this->releasePreviousVertexSource();
         geoSrc.fVertexSrc = kNone_GeometrySrcType;
 
-        acquired = this->onReserveVertexSpace(GrDrawState::VertexSize(vertexLayout),
+        acquired = this->onReserveVertexSpace(vertexSize,
                                               vertexCount,
                                               vertices);
     }
     if (acquired) {
         geoSrc.fVertexSrc = kReserved_GeometrySrcType;
         geoSrc.fVertexCount = vertexCount;
-        geoSrc.fVertexLayout = vertexLayout;
+        geoSrc.fVertexSize = vertexSize;
     } else if (NULL != vertices) {
         *vertices = NULL;
     }
@@ -181,14 +185,14 @@ bool GrDrawTarget::reserveIndexSpace(int indexCount,
 
 }
 
-bool GrDrawTarget::reserveVertexAndIndexSpace(GrVertexLayout vertexLayout,
-                                              int vertexCount,
+bool GrDrawTarget::reserveVertexAndIndexSpace(int vertexCount,
                                               int indexCount,
                                               void** vertices,
                                               void** indices) {
-    this->willReserveVertexAndIndexSpace(GrDrawState::VertexSize(vertexLayout), vertexCount, indexCount);
+    size_t vertexSize = this->drawState()->getVertexSize();
+    this->willReserveVertexAndIndexSpace(vertexCount, indexCount);
     if (vertexCount) {
-        if (!this->reserveVertexSpace(vertexLayout, vertexCount, vertices)) {
+        if (!this->reserveVertexSpace(vertexSize, vertexCount, vertices)) {
             if (indexCount) {
                 this->resetIndexSource();
             }
@@ -206,8 +210,7 @@ bool GrDrawTarget::reserveVertexAndIndexSpace(GrVertexLayout vertexLayout,
     return true;
 }
 
-bool GrDrawTarget::geometryHints(size_t vertexSize,
-                                 int32_t* vertexCount,
+bool GrDrawTarget::geometryHints(int32_t* vertexCount,
                                  int32_t* indexCount) const {
     if (NULL != vertexCount) {
         *vertexCount = -1;
@@ -264,13 +267,12 @@ void GrDrawTarget::releasePreviousIndexSource() {
     }
 }
 
-void GrDrawTarget::setVertexSourceToArray(GrVertexLayout vertexLayout,
-                                          const void* vertexArray,
+void GrDrawTarget::setVertexSourceToArray(const void* vertexArray,
                                           int vertexCount) {
     this->releasePreviousVertexSource();
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     geoSrc.fVertexSrc = kArray_GeometrySrcType;
-    geoSrc.fVertexLayout = vertexLayout;
+    geoSrc.fVertexSize = this->drawState()->getVertexSize();
     geoSrc.fVertexCount = vertexCount;
     this->onSetVertexSourceToArray(vertexArray, vertexCount);
 }
@@ -284,14 +286,13 @@ void GrDrawTarget::setIndexSourceToArray(const void* indexArray,
     this->onSetIndexSourceToArray(indexArray, indexCount);
 }
 
-void GrDrawTarget::setVertexSourceToBuffer(GrVertexLayout vertexLayout,
-                                           const GrVertexBuffer* buffer) {
+void GrDrawTarget::setVertexSourceToBuffer(const GrVertexBuffer* buffer) {
     this->releasePreviousVertexSource();
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     geoSrc.fVertexSrc    = kBuffer_GeometrySrcType;
     geoSrc.fVertexBuffer = buffer;
     buffer->ref();
-    geoSrc.fVertexLayout = vertexLayout;
+    geoSrc.fVertexSize = this->drawState()->getVertexSize();
 }
 
 void GrDrawTarget::setIndexSourceToBuffer(const GrIndexBuffer* buffer) {
@@ -355,7 +356,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
             maxValidVertex = geoSrc.fVertexCount;
             break;
         case kBuffer_GeometrySrcType:
-            maxValidVertex = geoSrc.fVertexBuffer->sizeInBytes() / GrDrawState::VertexSize(geoSrc.fVertexLayout);
+            maxValidVertex = geoSrc.fVertexBuffer->sizeInBytes() / geoSrc.fVertexSize;
             break;
     }
     if (maxVertex > maxValidVertex) {
@@ -391,6 +392,8 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
             }
         }
     }
+
+    GrAssert(drawState.validateVertexAttribs());
 #endif
     if (NULL == drawState.getRenderTarget()) {
         return false;
@@ -457,168 +460,24 @@ void GrDrawTarget::stencilPath(const GrPath* path, const SkStrokeRec& stroke, Sk
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Some blend modes allow folding a partial coverage value into the color's
-// alpha channel, while others will blend incorrectly.
-bool GrDrawTarget::canTweakAlphaForCoverage() const {
-    /**
-     * The fractional coverage is f
-     * The src and dst coeffs are Cs and Cd
-     * The dst and src colors are S and D
-     * We want the blend to compute: f*Cs*S + (f*Cd + (1-f))D
-     * By tweaking the source color's alpha we're replacing S with S'=fS. It's
-     * obvious that that first term will always be ok. The second term can be
-     * rearranged as [1-(1-Cd)f]D. By substituting in the various possibilities
-     * for Cd we find that only 1, ISA, and ISC produce the correct depth
-     * coefficient in terms of S' and D.
-     */
-    GrBlendCoeff dstCoeff = this->getDrawState().getDstBlendCoeff();
-    return kOne_GrBlendCoeff == dstCoeff ||
-           kISA_GrBlendCoeff == dstCoeff ||
-           kISC_GrBlendCoeff == dstCoeff ||
-           this->getDrawState().isCoverageDrawing();
-}
-
-namespace {
-GrVertexLayout default_blend_opts_vertex_layout() {
-    GrVertexLayout layout = 0;
-    return layout;
-}
-}
-
-GrDrawTarget::BlendOptFlags
-GrDrawTarget::getBlendOpts(bool forceCoverage,
-                           GrBlendCoeff* srcCoeff,
-                           GrBlendCoeff* dstCoeff) const {
-
-    GrVertexLayout layout;
-    if (kNone_GeometrySrcType == this->getGeomSrc().fVertexSrc) {
-        layout = default_blend_opts_vertex_layout();
-    } else {
-        layout = this->getVertexLayout();
-    }
-
-    const GrDrawState& drawState = this->getDrawState();
-
-    GrBlendCoeff bogusSrcCoeff, bogusDstCoeff;
-    if (NULL == srcCoeff) {
-        srcCoeff = &bogusSrcCoeff;
-    }
-    *srcCoeff = drawState.getSrcBlendCoeff();
-
-    if (NULL == dstCoeff) {
-        dstCoeff = &bogusDstCoeff;
-    }
-    *dstCoeff = drawState.getDstBlendCoeff();
-
-    if (drawState.isColorWriteDisabled()) {
-        *srcCoeff = kZero_GrBlendCoeff;
-        *dstCoeff = kOne_GrBlendCoeff;
-    }
-
-    bool srcAIsOne = drawState.srcAlphaWillBeOne(layout);
-    bool dstCoeffIsOne = kOne_GrBlendCoeff == *dstCoeff ||
-                         (kSA_GrBlendCoeff == *dstCoeff && srcAIsOne);
-    bool dstCoeffIsZero = kZero_GrBlendCoeff == *dstCoeff ||
-                         (kISA_GrBlendCoeff == *dstCoeff && srcAIsOne);
-
-    bool covIsZero = !drawState.isCoverageDrawing() &&
-                     !(layout & GrDrawState::kCoverage_VertexLayoutBit) &&
-                     0 == drawState.getCoverage();
-    // When coeffs are (0,1) there is no reason to draw at all, unless
-    // stenciling is enabled. Having color writes disabled is effectively
-    // (0,1). The same applies when coverage is known to be 0.
-    if ((kZero_GrBlendCoeff == *srcCoeff && dstCoeffIsOne) || covIsZero) {
-        if (drawState.getStencil().doesWrite()) {
-            return kDisableBlend_BlendOptFlag |
-                   kEmitTransBlack_BlendOptFlag;
-        } else {
-            return kSkipDraw_BlendOptFlag;
-        }
-    }
-
-    // check for coverage due to constant coverage, per-vertex coverage,
-    // edge aa or coverage stage
-    bool hasCoverage = forceCoverage ||
-                       0xffffffff != drawState.getCoverage() ||
-                       (layout & GrDrawState::kCoverage_VertexLayoutBit) ||
-                       (layout & GrDrawState::kEdge_VertexLayoutBit);
-    for (int s = drawState.getFirstCoverageStage();
-         !hasCoverage && s < GrDrawState::kNumStages;
-         ++s) {
-        if (drawState.isStageEnabled(s)) {
-            hasCoverage = true;
-        }
-    }
-
-    // if we don't have coverage we can check whether the dst
-    // has to read at all. If not, we'll disable blending.
-    if (!hasCoverage) {
-        if (dstCoeffIsZero) {
-            if (kOne_GrBlendCoeff == *srcCoeff) {
-                // if there is no coverage and coeffs are (1,0) then we
-                // won't need to read the dst at all, it gets replaced by src
-                return kDisableBlend_BlendOptFlag;
-            } else if (kZero_GrBlendCoeff == *srcCoeff) {
-                // if the op is "clear" then we don't need to emit a color
-                // or blend, just write transparent black into the dst.
-                *srcCoeff = kOne_GrBlendCoeff;
-                *dstCoeff = kZero_GrBlendCoeff;
-                return kDisableBlend_BlendOptFlag | kEmitTransBlack_BlendOptFlag;
-            }
-        }
-    } else if (drawState.isCoverageDrawing()) {
-        // we have coverage but we aren't distinguishing it from alpha by request.
-        return kCoverageAsAlpha_BlendOptFlag;
-    } else {
-        // check whether coverage can be safely rolled into alpha
-        // of if we can skip color computation and just emit coverage
-        if (this->canTweakAlphaForCoverage()) {
-            return kCoverageAsAlpha_BlendOptFlag;
-        }
-        if (dstCoeffIsZero) {
-            if (kZero_GrBlendCoeff == *srcCoeff) {
-                // the source color is not included in the blend
-                // the dst coeff is effectively zero so blend works out to:
-                // (c)(0)D + (1-c)D = (1-c)D.
-                *dstCoeff = kISA_GrBlendCoeff;
-                return  kEmitCoverage_BlendOptFlag;
-            } else if (srcAIsOne) {
-                // the dst coeff is effectively zero so blend works out to:
-                // cS + (c)(0)D + (1-c)D = cS + (1-c)D.
-                // If Sa is 1 then we can replace Sa with c
-                // and set dst coeff to 1-Sa.
-                *dstCoeff = kISA_GrBlendCoeff;
-                return  kCoverageAsAlpha_BlendOptFlag;
-            }
-        } else if (dstCoeffIsOne) {
-            // the dst coeff is effectively one so blend works out to:
-            // cS + (c)(1)D + (1-c)D = cS + D.
-            *dstCoeff = kOne_GrBlendCoeff;
-            return  kCoverageAsAlpha_BlendOptFlag;
-        }
-    }
-    return kNone_BlendOpt;
-}
-
 bool GrDrawTarget::willUseHWAALines() const {
-    // there is a conflict between using smooth lines and our use of
-    // premultiplied alpha. Smooth lines tweak the incoming alpha value
-    // but not in a premul-alpha way. So we only use them when our alpha
-    // is 0xff and tweaking the color for partial coverage is OK
+    // There is a conflict between using smooth lines and our use of premultiplied alpha. Smooth
+    // lines tweak the incoming alpha value but not in a premul-alpha way. So we only use them when
+    // our alpha is 0xff and tweaking the color for partial coverage is OK
     if (!fCaps.hwAALineSupport() ||
         !this->getDrawState().isHWAntialiasState()) {
         return false;
     }
-    BlendOptFlags opts = this->getBlendOpts();
-    return (kDisableBlend_BlendOptFlag & opts) &&
-           (kCoverageAsAlpha_BlendOptFlag & opts);
+    GrDrawState::BlendOptFlags opts = this->getDrawState().getBlendOpts();
+    return (GrDrawState::kDisableBlend_BlendOptFlag & opts) &&
+           (GrDrawState::kCoverageAsAlpha_BlendOptFlag & opts);
 }
 
 bool GrDrawTarget::canApplyCoverage() const {
     // we can correctly apply coverage if a) we have dual source blending
     // or b) one of our blend optimizations applies.
     return this->getCaps().dualSourceBlendingSupport() ||
-           kNone_BlendOpt != this->getBlendOpts(true);
+           GrDrawState::kNone_BlendOpt != this->getDrawState().getBlendOpts(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -670,50 +529,47 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
 
 void GrDrawTarget::drawRect(const GrRect& rect,
                             const SkMatrix* matrix,
-                            const GrRect* srcRects[],
-                            const SkMatrix* srcMatrices[]) {
-    GrVertexLayout layout = 0;
-    uint32_t explicitCoordMask = 0;
+                            const GrRect* localRect,
+                            const SkMatrix* localMatrix) {
+    GrAttribBindings bindings = 0;
+    // position + (optional) texture coord
+    static const GrVertexAttrib kAttribs[] = {
+        {kVec2f_GrVertexAttribType, 0},
+        {kVec2f_GrVertexAttribType, sizeof(GrPoint)}
+    };
+    int attribCount = 1;
 
-    if (NULL != srcRects) {
-        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            int numTC = 0;
-            if (NULL != srcRects[s]) {
-                layout |= GrDrawState::StageTexCoordVertexLayoutBit(s, numTC);
-                explicitCoordMask |= (1 << s);
-                ++numTC;
-            }
-        }
+    if (NULL != localRect) {
+        bindings |= GrDrawState::kLocalCoords_AttribBindingsBit;
+        attribCount = 2;
+        this->drawState()->setAttribIndex(GrDrawState::kLocalCoords_AttribIndex, 1);
     }
 
     GrDrawState::AutoViewMatrixRestore avmr;
     if (NULL != matrix) {
-        avmr.set(this->drawState(), *matrix, explicitCoordMask);
+        avmr.set(this->drawState(), *matrix);
     }
 
-    AutoReleaseGeometry geo(this, layout, 4, 0);
+    this->drawState()->setVertexAttribs(kAttribs, attribCount);
+    this->drawState()->setAttribIndex(GrDrawState::kPosition_AttribIndex, 0);
+    this->drawState()->setAttribBindings(bindings);
+    AutoReleaseGeometry geo(this, 4, 0);
     if (!geo.succeeded()) {
         GrPrintf("Failed to get space for vertices!\n");
         return;
     }
 
-    int stageOffsets[GrDrawState::kNumStages];
-    int vsize = GrDrawState::VertexSizeAndOffsetsByStage(layout, stageOffsets,  NULL, NULL, NULL);
+    size_t vsize = this->drawState()->getVertexSize();
     geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vsize);
-
-    for (int i = 0; i < GrDrawState::kNumStages; ++i) {
-        if (explicitCoordMask & (1 << i)) {
-            GrAssert(0 != stageOffsets[i]);
-            GrPoint* coords = GrTCast<GrPoint*>(GrTCast<intptr_t>(geo.vertices()) +
-                                                stageOffsets[i]);
-            coords->setRectFan(srcRects[i]->fLeft, srcRects[i]->fTop,
-                               srcRects[i]->fRight, srcRects[i]->fBottom,
-                               vsize);
-            if (NULL != srcMatrices && NULL != srcMatrices[i]) {
-                srcMatrices[i]->mapPointsWithStride(coords, vsize, 4);
-            }
-        } else {
-            GrAssert(0 == stageOffsets[i]);
+    if (NULL != localRect) {
+        GrAssert(attribCount == 2);
+        GrPoint* coords = GrTCast<GrPoint*>(GrTCast<intptr_t>(geo.vertices()) +
+                                            kAttribs[1].fOffset);
+        coords->setRectFan(localRect->fLeft, localRect->fTop,
+                           localRect->fRight, localRect->fBottom,
+                           vsize);
+        if (NULL != localMatrix) {
+            localMatrix->mapPointsWithStride(coords, vsize, 4);
         }
     }
 
@@ -763,11 +619,10 @@ void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init) {
 
 GrDrawTarget::AutoReleaseGeometry::AutoReleaseGeometry(
                                          GrDrawTarget*  target,
-                                         GrVertexLayout vertexLayout,
                                          int vertexCount,
                                          int indexCount) {
     fTarget = NULL;
-    this->set(target, vertexLayout, vertexCount, indexCount);
+    this->set(target, vertexCount, indexCount);
 }
 
 GrDrawTarget::AutoReleaseGeometry::AutoReleaseGeometry() {
@@ -779,7 +634,6 @@ GrDrawTarget::AutoReleaseGeometry::~AutoReleaseGeometry() {
 }
 
 bool GrDrawTarget::AutoReleaseGeometry::set(GrDrawTarget*  target,
-                                            GrVertexLayout vertexLayout,
                                             int vertexCount,
                                             int indexCount) {
     this->reset();
@@ -787,8 +641,7 @@ bool GrDrawTarget::AutoReleaseGeometry::set(GrDrawTarget*  target,
     bool success = true;
     if (NULL != fTarget) {
         fTarget = target;
-        success = target->reserveVertexAndIndexSpace(vertexLayout,
-                                                     vertexCount,
+        success = target->reserveVertexAndIndexSpace(vertexCount,
                                                      indexCount,
                                                      &fVertices,
                                                      &fIndices);
