@@ -331,7 +331,7 @@ LOCAL_SRC_FILES:= \
 	src/lazy/SkLruImageCache.cpp \
 	src/lazy/SkPurgeableMemoryBlock_common.cpp \
 	src/lazy/SkPurgeableImageCache.cpp \
-	
+
 #	src/utils/SkBitmapChecksummer.cpp \
 #	src/utils/SkCityHash.cpp \
 
@@ -509,7 +509,7 @@ LOCAL_C_INCLUDES := \
 	frameworks/opt/emoji \
 	external/expat/lib
 
-LOCAL_EXPORT_C_INCLUDES := \
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
