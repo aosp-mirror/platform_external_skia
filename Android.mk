@@ -451,6 +451,7 @@ LOCAL_SRC_FILES += \
 	emoji/EmojiFont.cpp
 
 LOCAL_SHARED_LIBRARIES := \
+	liblog \
 	libcutils \
 	libemoji \
 	libjpeg \
