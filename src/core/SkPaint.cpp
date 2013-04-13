@@ -929,12 +929,12 @@ class SkAutoRestorePaintTextSizeAndFrame {
 public:
     SkAutoRestorePaintTextSizeAndFrame(const SkPaint* paint)
             : fPaint((SkPaint*)paint) {
-        fTextSize = paint->getTextSize();
-        fStyle = paint->getStyle();
-        fPaint->setStyle(SkPaint::kFill_Style);
 #ifdef SK_BUILD_FOR_ANDROID
         fGenerationID = fPaint->getGenerationID();
 #endif
+        fTextSize = paint->getTextSize();
+        fStyle = paint->getStyle();
+        fPaint->setStyle(SkPaint::kFill_Style);
     }
 
     ~SkAutoRestorePaintTextSizeAndFrame() {
