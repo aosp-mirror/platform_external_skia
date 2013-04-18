@@ -189,6 +189,29 @@ static bool return_false(const jpeg_decompress_struct& cinfo,
     return false;   // must always return false
 }
 
+// Convert a scanline of CMYK samples to RGBX in place. Note that this
+// method moves the "scanline" pointer in its processing
+static void convert_CMYK_to_RGB(uint8_t* scanline, unsigned int width) {
+    // At this point we've received CMYK pixels from libjpeg. We
+    // perform a crude conversion to RGB (based on the formulae
+    // from easyrgb.com):
+    //  CMYK -> CMY
+    //    C = ( C * (1 - K) + K )      // for each CMY component
+    //  CMY -> RGB
+    //    R = ( 1 - C ) * 255          // for each RGB component
+    // Unfortunately we are seeing inverted CMYK so all the original terms
+    // are 1-. This yields:
+    //  CMYK -> CMY
+    //    C = ( (1-C) * (1 - (1-K) + (1-K) ) -> C = 1 - C*K
+    // The conversion from CMY->RGB remains the same
+    for (unsigned int x = 0; x < width; ++x, scanline += 4) {
+        scanline[0] = SkMulDiv255Round(scanline[0], scanline[3]);
+        scanline[1] = SkMulDiv255Round(scanline[1], scanline[3]);
+        scanline[2] = SkMulDiv255Round(scanline[2], scanline[3]);
+        scanline[3] = 255;
+    }
+}
+
 bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 #ifdef TIME_DECODE
     AutoTimeMillis atm("JPEG Decode");
@@ -249,7 +272,14 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     cinfo.do_block_smoothing = 0;
 
     /* default format is RGB */
-    cinfo.out_color_space = JCS_RGB;
+    if (cinfo.jpeg_color_space == JCS_CMYK) {
+        // libjpeg cannot convert from CMYK to RGB - here we set up
+        // so libjpeg will give us CMYK samples back and we will
+        // later manually convert them to RGB
+        cinfo.out_color_space = JCS_CMYK;
+    } else {
+        cinfo.out_color_space = JCS_RGB;
+    }
 
     SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, false);
     // only these make sense for jpegs
@@ -261,9 +291,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
 #ifdef ANDROID_RGB
     cinfo.dither_mode = JDITHER_NONE;
-    if (config == SkBitmap::kARGB_8888_Config) {
+    if (SkBitmap::kARGB_8888_Config == config && JCS_CMYK != cinfo.out_color_space) {
         cinfo.out_color_space = JCS_RGBA_8888;
-    } else if (config == SkBitmap::kRGB_565_Config) {
+    } else if (SkBitmap::kRGB_565_Config == config && JCS_CMYK != cinfo.out_color_space) {
         cinfo.out_color_space = JCS_RGB_565;
         if (this->getDitherImage()) {
             cinfo.dither_mode = JDITHER_ORDERED;
@@ -368,7 +398,10 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     
     // check for supported formats
     SkScaledBitmapSampler::SrcConfig sc;
-    if (3 == cinfo.out_color_components && JCS_RGB == cinfo.out_color_space) {
+    if (JCS_CMYK == cinfo.out_color_space) {
+        // In this case we will manually convert the CMYK values to RGB
+        sc = SkScaledBitmapSampler::kRGBX;
+    } else if (3 == cinfo.out_color_components && JCS_RGB == cinfo.out_color_space) {
         sc = SkScaledBitmapSampler::kRGB;
 #ifdef ANDROID_RGB
     } else if (JCS_RGBA_8888 == cinfo.out_color_space) {
@@ -416,6 +449,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         return return_false(cinfo, *bm, "sampler.begin");
     }
 
+    // The CMYK work-around relies on 4 components per pixel here
     uint8_t* srcRow = (uint8_t*)srcStorage.reset(cinfo.output_width * 4);
 
     //  Possibly skip initial rows [sampler.srcY0]
@@ -433,7 +467,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         if (this->shouldCancelDecode()) {
             return return_false(cinfo, *bm, "shouldCancelDecode");
         }
-        
+
+        if (JCS_CMYK == cinfo.out_color_space) {
+            convert_CMYK_to_RGB(srcRow, cinfo.output_width);
+        }
+
         sampler.next(srcRow);
         if (bm->height() - 1 == y) {
             // we're done
