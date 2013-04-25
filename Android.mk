@@ -460,15 +460,9 @@ LOCAL_SRC_FILES += \
 	src/opts/SkUtils_opts_none.cpp
 endif
 
-
-# these are for emoji support, needed by webkit
-LOCAL_SRC_FILES += \
-	emoji/EmojiFont.cpp
-
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
-	libemoji \
 	libjpeg \
 	libutils \
 	libz \
@@ -507,7 +501,6 @@ LOCAL_C_INCLUDES := \
 	external/jpeg \
 	external/webp/include \
 	frameworks/base/opengl/include \
-	frameworks/opt/emoji \
 	external/expat/lib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
