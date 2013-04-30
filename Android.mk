@@ -502,6 +502,10 @@ LOCAL_EXPORT_C_INCLUDES := \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils
 
+# Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
+# Revert to -D_FORTIFY_SOURCE=1
+LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
+
 LOCAL_LDLIBS += -lpthread
 
 LOCAL_MODULE:= libskia
