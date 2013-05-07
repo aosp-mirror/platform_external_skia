@@ -261,9 +261,11 @@ LOCAL_SRC_FILES:= \
 	src/image/SkImage.cpp \
 	src/image/SkImagePriv.cpp \
 	src/image/SkImage_Codec.cpp \
+	src/image/SkImage_Gpu.cpp \
 	src/image/SkImage_Picture.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
+	src/image/SkSurface_Gpu.cpp \
 	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/images/bmpdecoderhelper.cpp \
@@ -348,6 +350,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkMeshUtils.cpp \
 	src/utils/SkNinePatch.cpp \
 	src/utils/SkNWayCanvas.cpp \
+	src/utils/SkNullCanvas.cpp \
 	src/utils/SkOSFile.cpp \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
