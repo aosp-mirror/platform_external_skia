@@ -113,6 +113,39 @@ public:
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
         }
+        // Out of bounds queries, snap to border tiles
+        {
+            SkDevice device(store);
+            MockCanvas mockCanvas(&device);
+            mockCanvas.translate(SkFloatToScalar(2.0f), SkFloatToScalar(0.0f));
+            picture.draw(&mockCanvas);
+            REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
+            REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
+        }
+        {
+            SkDevice device(store);
+            MockCanvas mockCanvas(&device);
+            mockCanvas.translate(SkFloatToScalar(0.0f), SkFloatToScalar(2.0f));
+            picture.draw(&mockCanvas);
+            REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
+            REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
+        }
+        {
+            SkDevice device(store);
+            MockCanvas mockCanvas(&device);
+            mockCanvas.translate(SkFloatToScalar(-22.0f), SkFloatToScalar(-16.0f));
+            picture.draw(&mockCanvas);
+            REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
+            REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
+        }
+        {
+            SkDevice device(store);
+            MockCanvas mockCanvas(&device);
+            mockCanvas.translate(SkFloatToScalar(-16.0f), SkFloatToScalar(-22.0f));
+            picture.draw(&mockCanvas);
+            REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
+            REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
+        }
     }
 
     static void TestOverlapOffsetQueryAlignment(skiatest::Reporter* reporter) {
@@ -145,6 +178,9 @@ public:
         SkBitmap moreThanATileBitmap;
         moreThanATileBitmap.setConfig(SkBitmap::kARGB_8888_Config, 11, 11);
         moreThanATileBitmap.allocPixels();
+        SkBitmap tinyBitmap;
+        tinyBitmap.setConfig(SkBitmap::kARGB_8888_Config, 2, 2);
+        tinyBitmap.allocPixels();
         // Test parts of top-left tile
         {
             // The offset should cancel the top and left borders of the top left tile
@@ -193,6 +229,20 @@ public:
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
             REPORTER_ASSERT(reporter, rect3 == mockCanvas.fRects[1]);
         }
+        {
+            // Regression test for crbug.com/234688
+            // Once the 2x2 device region is inset by margin, it yields an empty
+            // adjusted region, sitting right on top of the tile boundary.
+            SkDevice device(tinyBitmap);
+            MockCanvas mockCanvas(&device);
+            mockCanvas.translate(SkFloatToScalar(-8.0f), SkFloatToScalar(-8.0f));
+            picture.draw(&mockCanvas);
+            // This test passes by not asserting. We do not validate the rects recorded
+            // because the result is numerically unstable (floating point equality).
+            // The content of any one of the four tiles of the tilegrid would be a valid
+            // result since any bbox that covers the center point of the canvas will be
+            // recorded in all four tiles.
+        }
     }
 
     static void Test(skiatest::Reporter* reporter) {
@@ -215,7 +265,6 @@ public:
         verifyTileHits(reporter, SkIRect::MakeXYWH(9, 9, 1, 1),  kAll_Tile, 1);
         verifyTileHits(reporter, SkIRect::MakeXYWH(10, 10, 1, 1),  kBottomRight_Tile, 1);
         verifyTileHits(reporter, SkIRect::MakeXYWH(17, 17, 1, 1),  kBottomRight_Tile, 1);
-        verifyTileHits(reporter, SkIRect::MakeXYWH(18, 18, 1, 1),  0, 1);
 
         // BBoxes that overlap tiles
         verifyTileHits(reporter, SkIRect::MakeXYWH(5, 5, 10, 1),  kTopLeft_Tile | kTopRight_Tile);

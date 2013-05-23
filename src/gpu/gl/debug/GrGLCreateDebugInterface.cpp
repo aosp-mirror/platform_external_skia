@@ -202,7 +202,9 @@ GrGLvoid GR_GL_FUNCTION_TYPE debugGLReadPixels(GrGLint x,
  GrGLvoid GR_GL_FUNCTION_TYPE debugGLBindFramebuffer(GrGLenum target,
                                                      GrGLuint frameBufferID) {
 
-     GrAlwaysAssert(GR_GL_FRAMEBUFFER == target);
+     GrAlwaysAssert(GR_GL_FRAMEBUFFER == target ||
+                    GR_GL_READ_FRAMEBUFFER == target ||
+                    GR_GL_DRAW_FRAMEBUFFER);
 
      // a frameBufferID of 0 is acceptable - it binds to the default
      // frame buffer
@@ -797,6 +799,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fColorMask = noOpGLColorMask;
     interface->fCompileShader = noOpGLCompileShader;
     interface->fCompressedTexImage2D = noOpGLCompressedTexImage2D;
+    interface->fCopyTexSubImage2D = noOpGLCopyTexSubImage2D;
     interface->fCreateProgram = debugGLCreateProgram;
     interface->fCreateShader = debugGLCreateShader;
     interface->fCullFace = noOpGLCullFace;
@@ -858,6 +861,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fTexParameteriv = noOpGLTexParameteriv;
     interface->fTexSubImage2D = noOpGLTexSubImage2D;
     interface->fTexStorage2D = noOpGLTexStorage2D;
+    interface->fDiscardFramebuffer = noOpGLDiscardFramebuffer;
     interface->fUniform1f = noOpGLUniform1f;
     interface->fUniform1i = noOpGLUniform1i;
     interface->fUniform1fv = noOpGLUniform1fv;

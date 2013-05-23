@@ -9,20 +9,69 @@
  * Error codes used by gmmain.cpp.
  */
 
+#ifndef gm_error_DEFINED
+#define gm_error_DEFINED
+
+#include "gm.h"
+
 namespace skiagm {
 
     /**
      * The complete list of error types we might encounter in GM.
      */
     enum ErrorType {
-#if SK_SUPPORT_GPU
+        // Even though kNoGpuContext_ErrorType only occurs when SK_SUPPORT_GPU
+        // is turned on, we always include this type in our enum so that
+        // reports will be consistent whether SK_SUPPORT_GPU is turned on
+        // or off (as long as the number of these errors is 0).
         kNoGpuContext_ErrorType,
-#endif
-        kImageMismatch_ErrorType,
+
+        kIntentionallySkipped_ErrorType,
+        kRenderModeMismatch_ErrorType,
+        kExpectationsMismatch_ErrorType,
         kMissingExpectations_ErrorType,
         kWritingReferenceImage_ErrorType,
         kLast_ErrorType = kWritingReferenceImage_ErrorType
     };
+
+    /**
+     * Returns the name of the given ErrorType.
+     */
+    static const char *getErrorTypeName(ErrorType type) {
+        switch(type) {
+        case kNoGpuContext_ErrorType:
+            return "NoGpuContext";
+        case kIntentionallySkipped_ErrorType:
+            return "IntentionallySkipped";
+        case kRenderModeMismatch_ErrorType:
+            return "RenderModeMismatch";
+        case kExpectationsMismatch_ErrorType:
+            return "ExpectationsMismatch";
+        case kMissingExpectations_ErrorType:
+            return "MissingExpectations";
+        case kWritingReferenceImage_ErrorType:
+            return "WritingReferenceImage";
+        }
+        // control should never reach here
+        SkDEBUGFAIL("getErrorTypeName() called with unknown type");
+        return "Unknown";
+    }
+
+    /**
+     * Fills in "type" with the ErrorType associated with name "name".
+     * Returns true if we found one, false if it is an unknown type name.
+     */
+    static bool getErrorTypeByName(const char name[], ErrorType *type) {
+        for (int typeInt = 0; typeInt <= kLast_ErrorType; typeInt++) {
+            ErrorType thisType = static_cast<ErrorType>(typeInt);
+            const char *thisTypeName = getErrorTypeName(thisType);
+            if (0 == strcmp(thisTypeName, name)) {
+                *type = thisType;
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * A combination of 0 or more ErrorTypes.
@@ -61,6 +110,26 @@ namespace skiagm {
         }
 
         /**
+         * Returns a string representation of all ErrorTypes in this
+         * ErrorCombination.
+         *
+         * @param separator text with which to separate ErrorType names
+         */
+        SkString asString(const char separator[]) const {
+            SkString s;
+            for (int typeInt = 0; typeInt <= kLast_ErrorType; typeInt++) {
+                ErrorType type = static_cast<ErrorType>(typeInt);
+                if (this->includes(type)) {
+                    if (!s.isEmpty()) {
+                        s.append(separator);
+                    }
+                    s.append(getErrorTypeName(type));
+                }
+            }
+            return s;
+        }
+
+        /**
          * Returns a new ErrorCombination, which includes the union of all
          * ErrorTypes in two ErrorCombination objects (this and other).
          */
@@ -87,3 +156,5 @@ namespace skiagm {
     // No errors at all.
     const static ErrorCombination kEmpty_ErrorCombination;
 }
+
+#endif // ifndef gm_error_DEFINED

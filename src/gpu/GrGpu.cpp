@@ -11,6 +11,7 @@
 
 #include "GrBufferAllocPool.h"
 #include "GrContext.h"
+#include "GrDrawTargetCaps.h"
 #include "GrIndexBuffer.h"
 #include "GrStencilBuffer.h"
 #include "GrVertexBuffer.h"
@@ -33,7 +34,6 @@ GrGpu::GrGpu(GrContext* context)
     , fIndexPool(NULL)
     , fVertexPoolUseCnt(0)
     , fIndexPoolUseCnt(0)
-    , fUnitSquareVertexBuffer(NULL)
     , fQuadIndexBuffer(NULL)
     , fContextIsDirty(true) {
 
@@ -48,7 +48,7 @@ GrGpu::GrGpu(GrContext* context)
     poolState.fPoolStartIndex = DEBUG_INVAL_START_IDX;
 #endif
 
-    for (int i = 0; i < kGrPixelConfigCount; ++i) {
+    for (int i = 0; i < kGrPixelConfigCnt; ++i) {
         fConfigRenderSupport[i] = false;
     };
 }
@@ -66,10 +66,7 @@ void GrGpu::abandonResources() {
     }
 
     GrAssert(NULL == fQuadIndexBuffer || !fQuadIndexBuffer->isValid());
-    GrAssert(NULL == fUnitSquareVertexBuffer ||
-             !fUnitSquareVertexBuffer->isValid());
     GrSafeSetNull(fQuadIndexBuffer);
-    GrSafeSetNull(fUnitSquareVertexBuffer);
     delete fVertexPool;
     fVertexPool = NULL;
     delete fIndexPool;
@@ -85,10 +82,7 @@ void GrGpu::releaseResources() {
     }
 
     GrAssert(NULL == fQuadIndexBuffer || !fQuadIndexBuffer->isValid());
-    GrAssert(NULL == fUnitSquareVertexBuffer ||
-             !fUnitSquareVertexBuffer->isValid());
     GrSafeSetNull(fQuadIndexBuffer);
-    GrSafeSetNull(fUnitSquareVertexBuffer);
     delete fVertexPool;
     fVertexPool = NULL;
     delete fIndexPool;
@@ -204,7 +198,7 @@ GrIndexBuffer* GrGpu::createIndexBuffer(uint32_t size, bool dynamic) {
 }
 
 GrPath* GrGpu::createPath(const SkPath& path) {
-    GrAssert(fCaps.pathStencilingSupport());
+    GrAssert(this->caps()->pathStencilingSupport());
     this->handleDirtyContext();
     return this->onCreatePath(path);
 }
@@ -296,46 +290,15 @@ const GrIndexBuffer* GrGpu::getQuadIndexBuffer() const {
     return fQuadIndexBuffer;
 }
 
-const GrVertexBuffer* GrGpu::getUnitSquareVertexBuffer() const {
-    if (NULL == fUnitSquareVertexBuffer) {
-
-        static const GrPoint DATA[] = {
-            { 0,            0 },
-            { SK_Scalar1,   0 },
-            { SK_Scalar1,   SK_Scalar1 },
-            { 0,            SK_Scalar1 }
-#if 0
-            GrPoint(0,         0),
-            GrPoint(SK_Scalar1,0),
-            GrPoint(SK_Scalar1,SK_Scalar1),
-            GrPoint(0,         SK_Scalar1)
-#endif
-        };
-        static const size_t SIZE = sizeof(DATA);
-
-        GrGpu* me = const_cast<GrGpu*>(this);
-        fUnitSquareVertexBuffer = me->createVertexBuffer(SIZE, false);
-        if (NULL != fUnitSquareVertexBuffer) {
-            if (!fUnitSquareVertexBuffer->updateData(DATA, SIZE)) {
-                fUnitSquareVertexBuffer->unref();
-                fUnitSquareVertexBuffer = NULL;
-                GrCrash("Can't get vertices into buffer!");
-            }
-        }
-    }
-
-    return fUnitSquareVertexBuffer;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrGpu::setupClipAndFlushState(DrawType type) {
+bool GrGpu::setupClipAndFlushState(DrawType type, const GrDeviceCoordTexture* dstCopy) {
 
     if (!fClipMaskManager.setupClipping(this->getClip())) {
         return false;
     }
 
-    if (!this->flushGraphicsState(type)) {
+    if (!this->flushGraphicsState(type, dstCopy)) {
         return false;
     }
 
@@ -373,7 +336,8 @@ void GrGpu::geometrySourceWillPop(const GeometrySrcState& restoredState) {
 
 void GrGpu::onDraw(const DrawInfo& info) {
     this->handleDirtyContext();
-    if (!this->setupClipAndFlushState(PrimTypeToDrawType(info.primitiveType()))) {
+    if (!this->setupClipAndFlushState(PrimTypeToDrawType(info.primitiveType()),
+                                      info.getDstCopy())) {
         return;
     }
     this->onGpuDraw(info);
@@ -386,7 +350,7 @@ void GrGpu::onStencilPath(const GrPath* path, const SkStrokeRec&, SkPath::FillTy
     GrAutoTRestore<GrStencilSettings> asr(this->drawState()->stencil());
 
     this->setStencilPathSettings(*path, fill, this->drawState()->stencil());
-    if (!this->setupClipAndFlushState(kStencilPath_DrawType)) {
+    if (!this->setupClipAndFlushState(kStencilPath_DrawType, NULL)) {
         return;
     }
 

@@ -23,6 +23,23 @@ extern "C" {
 #include "png.h"
 }
 
+/* These were dropped in libpng >= 1.4 */
+#ifndef png_infopp_NULL
+#define png_infopp_NULL NULL
+#endif
+
+#ifndef png_bytepp_NULL
+#define png_bytepp_NULL NULL
+#endif
+
+#ifndef int_p_NULL
+#define int_p_NULL NULL
+#endif
+
+#ifndef png_flush_ptr_NULL
+#define png_flush_ptr_NULL NULL
+#endif
+
 class SkPNGImageIndex {
 public:
     SkPNGImageIndex(png_structp png_ptr, png_infop info_ptr) {
@@ -47,6 +64,7 @@ public:
     virtual Format getFormat() const SK_OVERRIDE {
         return kPNG_Format;
     }
+
     virtual ~SkPNGImageDecoder() {
         SkDELETE(fImageIndex);
     }
@@ -54,7 +72,7 @@ public:
 protected:
 #ifdef SK_BUILD_FOR_ANDROID
     virtual bool onBuildTileIndex(SkStream *stream, int *width, int *height) SK_OVERRIDE;
-    virtual bool onDecodeRegion(SkBitmap* bitmap, const SkIRect& region) SK_OVERRIDE;
+    virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& region) SK_OVERRIDE;
 #endif
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
 
@@ -89,7 +107,7 @@ private:
 };
 
 static void sk_read_fn(png_structp png_ptr, png_bytep data, png_size_t length) {
-    SkStream* sk_stream = (SkStream*) png_ptr->io_ptr;
+    SkStream* sk_stream = (SkStream*) png_get_io_ptr(png_ptr);
     size_t bytes = sk_stream->read(data, length);
     if (bytes != length) {
         png_error(png_ptr, "Read Error!");
@@ -98,7 +116,7 @@ static void sk_read_fn(png_structp png_ptr, png_bytep data, png_size_t length) {
 
 #ifdef SK_BUILD_FOR_ANDROID
 static void sk_seek_fn(png_structp png_ptr, png_uint_32 offset) {
-    SkStream* sk_stream = (SkStream*) png_ptr->io_ptr;
+    SkStream* sk_stream = (SkStream*) png_get_io_ptr(png_ptr);
     sk_stream->rewind();
     (void)sk_stream->skip(offset);
 }
@@ -239,7 +257,7 @@ bool SkPNGImageDecoder::onDecodeInit(SkStream* sk_stream, png_structp *png_ptrp,
     }
     /* Expand grayscale images to the full 8 bits from 1, 2, or 4 bits/pixel */
     if (colorType == PNG_COLOR_TYPE_GRAY && bitDepth < 8) {
-        png_set_gray_1_2_4_to_8(png_ptr);
+        png_set_expand_gray_1_2_4_to_8(png_ptr);
     }
 
     /* Make a grayscale image into RGB. */
@@ -436,16 +454,16 @@ bool SkPNGImageDecoder::getBitmapConfig(png_structp png_ptr, png_infop info_ptr,
 
     // check for sBIT chunk data, in case we should disable dithering because
     // our data is not truely 8bits per component
-    if (*doDitherp) {
+    png_color_8p sig_bit;
+    if (*doDitherp && png_get_sBIT(png_ptr, info_ptr, &sig_bit)) {
 #if 0
-        SkDebugf("----- sBIT %d %d %d %d\n", info_ptr->sig_bit.red,
-                 info_ptr->sig_bit.green, info_ptr->sig_bit.blue,
-                 info_ptr->sig_bit.alpha);
+        SkDebugf("----- sBIT %d %d %d %d\n", sig_bit->red, sig_bit->green,
+                 sig_bit->blue, sig_bit->alpha);
 #endif
         // 0 seems to indicate no information available
-        if (pos_le(info_ptr->sig_bit.red, SK_R16_BITS) &&
-            pos_le(info_ptr->sig_bit.green, SK_G16_BITS) &&
-            pos_le(info_ptr->sig_bit.blue, SK_B16_BITS)) {
+        if (pos_le(sig_bit->red, SK_R16_BITS) &&
+            pos_le(sig_bit->green, SK_G16_BITS) &&
+            pos_le(sig_bit->blue, SK_B16_BITS)) {
             *doDitherp = false;
         }
     }
@@ -624,7 +642,11 @@ bool SkPNGImageDecoder::onBuildTileIndex(SkStream* sk_stream, int *width, int *h
     return true;
 }
 
-bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
+bool SkPNGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
+    if (NULL == fImageIndex) {
+        return false;
+    }
+
     png_structp png_ptr = fImageIndex->png_ptr;
     png_infop info_ptr = fImageIndex->info_ptr;
     if (setjmp(png_jmpbuf(png_ptr))) {
@@ -639,7 +661,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
     SkIRect rect = SkIRect::MakeWH(origWidth, origHeight);
 
     if (!rect.intersect(region)) {
-        // If the requested region is entirely outsides the image, just
+        // If the requested region is entirely outside the image, just
         // returns false
         return false;
     }
@@ -708,7 +730,14 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
     * and update info structure.  REQUIRED if you are expecting libpng to
     * update the palette for you (ie you selected such a transform above).
     */
+
+    // Direct access to png_ptr fields is deprecated in libpng > 1.2.
+#if defined(PNG_1_0_X) || defined (PNG_1_2_X)
     png_ptr->pass = 0;
+#else
+    // FIXME: This sets pass as desired, but also sets iwidth. Is that ok?
+    png_set_interlaced_pass(png_ptr, 0);
+#endif
     png_read_update_info(png_ptr, info_ptr);
 
     int actualTop = rect.fTop;
@@ -720,7 +749,8 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
                 uint8_t* bmRow = decodedBitmap.getAddr8(0, 0);
                 png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
             }
-            for (png_uint_32 y = 0; y < origHeight; y++) {
+            png_uint_32 bitmapHeight = (png_uint_32) decodedBitmap.height();
+            for (png_uint_32 y = 0; y < bitmapHeight; y++) {
                 uint8_t* bmRow = decodedBitmap.getAddr8(0, y);
                 png_read_rows(png_ptr, &bmRow, png_bytepp_NULL, 1);
             }
@@ -801,12 +831,10 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
 
     if (swapOnly) {
         bm->swap(decodedBitmap);
-    } else {
-        cropBitmap(bm, &decodedBitmap, sampleSize, region.x(), region.y(),
-                   region.width(), region.height(), 0, rect.y());
+        return true;
     }
-
-    return true;
+    return this->cropBitmap(bm, &decodedBitmap, sampleSize, region.x(), region.y(),
+                            region.width(), region.height(), 0, rect.y());
 }
 #endif
 
@@ -816,7 +844,7 @@ bool SkPNGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
 #include "SkUnPreMultiply.h"
 
 static void sk_write_fn(png_structp png_ptr, png_bytep data, png_size_t len) {
-    SkWStream* sk_stream = (SkWStream*)png_ptr->io_ptr;
+    SkWStream* sk_stream = (SkWStream*)png_get_io_ptr(png_ptr);
     if (!sk_stream->write(data, len)) {
         png_error(png_ptr, "sk_write_fn Error!");
     }
@@ -1086,13 +1114,27 @@ DEFINE_ENCODER_CREATOR(PNGImageEncoder);
 
 #include "SkTRegistry.h"
 
-SkImageDecoder* sk_libpng_dfactory(SkStream* stream) {
+static bool is_png(SkStream* stream) {
     char buf[PNG_BYTES_TO_CHECK];
     if (stream->read(buf, PNG_BYTES_TO_CHECK) == PNG_BYTES_TO_CHECK &&
         !png_sig_cmp((png_bytep) buf, (png_size_t)0, PNG_BYTES_TO_CHECK)) {
+        return true;
+    }
+    return false;
+}
+
+SkImageDecoder* sk_libpng_dfactory(SkStream* stream) {
+    if (is_png(stream)) {
         return SkNEW(SkPNGImageDecoder);
     }
     return NULL;
+}
+
+static SkImageDecoder::Format get_format_png(SkStream* stream) {
+    if (is_png(stream)) {
+        return SkImageDecoder::kPNG_Format;
+    }
+    return SkImageDecoder::kUnknown_Format;
 }
 
 SkImageEncoder* sk_libpng_efactory(SkImageEncoder::Type t) {
@@ -1100,4 +1142,5 @@ SkImageEncoder* sk_libpng_efactory(SkImageEncoder::Type t) {
 }
 
 static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(sk_libpng_efactory);
+static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_png);
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libpng_dfactory);

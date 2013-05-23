@@ -118,7 +118,7 @@ public:
 protected:
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     virtual bool onBuildTileIndex(SkStream *stream, int *width, int *height) SK_OVERRIDE;
-    virtual bool onDecodeRegion(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
+    virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
 #endif
     virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
 
@@ -268,11 +268,15 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     */
     int sampleSize = this->getSampleSize();
 
+#ifdef DCT_IFAST_SUPPORTED
     if (this->getPreferQualityOverSpeed()) {
         cinfo.dct_method = JDCT_ISLOW;
     } else {
         cinfo.dct_method = JDCT_IFAST;
     }
+#else
+    cinfo.dct_method = JDCT_ISLOW;
+#endif
 
     cinfo.scale_num = 1;
     cinfo.scale_denom = sampleSize;
@@ -552,7 +556,7 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream, int *width, int *hei
     return true;
 }
 
-bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, const SkIRect& region) {
+bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
     if (NULL == fImageIndex) {
         return false;
     }
@@ -961,7 +965,9 @@ protected:
 
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
+#ifdef DCT_IFAST_SUPPORTED
         cinfo.dct_method = JDCT_IFAST;
+#endif
 
         jpeg_start_compress(&cinfo, TRUE);
 
@@ -992,9 +998,7 @@ DEFINE_DECODER_CREATOR(JPEGImageDecoder);
 DEFINE_ENCODER_CREATOR(JPEGImageEncoder);
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkTRegistry.h"
-
-static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
+static bool is_jpeg(SkStream* stream) {
     static const unsigned char gHeader[] = { 0xFF, 0xD8, 0xFF };
     static const size_t HEADER_SIZE = sizeof(gHeader);
 
@@ -1002,12 +1006,28 @@ static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
     size_t len = stream->read(buffer, HEADER_SIZE);
 
     if (len != HEADER_SIZE) {
-        return NULL;   // can't read enough
+        return false;   // can't read enough
     }
     if (memcmp(buffer, gHeader, HEADER_SIZE)) {
-        return NULL;
+        return false;
     }
-    return SkNEW(SkJPEGImageDecoder);
+    return true;
+}
+
+#include "SkTRegistry.h"
+
+static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
+    if (is_jpeg(stream)) {
+        return SkNEW(SkJPEGImageDecoder);
+    }
+    return NULL;
+}
+
+static SkImageDecoder::Format get_format_jpeg(SkStream* stream) {
+    if (is_jpeg(stream)) {
+        return SkImageDecoder::kJPEG_Format;
+    }
+    return SkImageDecoder::kUnknown_Format;
 }
 
 static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
@@ -1016,4 +1036,5 @@ static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
 
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libjpeg_dfactory);
+static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_jpeg);
 static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(sk_libjpeg_efactory);

@@ -29,6 +29,7 @@
 #include "SkTextFormatParams.h"
 #include "SkTemplates.h"
 #include "SkTypefacePriv.h"
+#include "SkTSet.h"
 
 // Utility functions
 
@@ -590,7 +591,8 @@ SkPDFDevice::SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
       fContentSize(contentSize),
       fLastContentEntry(NULL),
       fLastMarginContentEntry(NULL),
-      fClipStack(NULL) {
+      fClipStack(NULL),
+      fEncoder(NULL) {
     // Skia generally uses the top left as the origin but PDF natively has the
     // origin at the bottom left. This matrix corrects for that.  But that only
     // needs to be done once, we don't do it when layering.
@@ -783,8 +785,11 @@ void SkPDFDevice::drawPoints(const SkDraw& d, SkCanvas::PointMode mode,
     }
 }
 
-void SkPDFDevice::drawRect(const SkDraw& d, const SkRect& r,
+void SkPDFDevice::drawRect(const SkDraw& d, const SkRect& rect,
                            const SkPaint& paint) {
+    SkRect r = rect;
+    r.sort();
+
     if (paint.getPathEffect()) {
         if (d.fClip->isEmpty()) {
             return;
@@ -1191,39 +1196,57 @@ SkPDFDict* SkPDFDevice::getResourceDict() {
     return fResourceDict;
 }
 
-void SkPDFDevice::getResources(SkTDArray<SkPDFObject*>* resourceList,
+void SkPDFDevice::getResources(const SkTSet<SkPDFObject*>& knownResourceObjects,
+                               SkTSet<SkPDFObject*>* newResourceObjects,
                                bool recursive) const {
-    resourceList->setReserve(resourceList->count() +
-                             fGraphicStateResources.count() +
-                             fXObjectResources.count() +
-                             fFontResources.count() +
-                             fShaderResources.count());
+    // TODO: reserve not correct if we need to recursively explore.
+    newResourceObjects->setReserve(newResourceObjects->count() +
+                                   fGraphicStateResources.count() +
+                                   fXObjectResources.count() +
+                                   fFontResources.count() +
+                                   fShaderResources.count());
     for (int i = 0; i < fGraphicStateResources.count(); i++) {
-        resourceList->push(fGraphicStateResources[i]);
-        fGraphicStateResources[i]->ref();
-        if (recursive) {
-            fGraphicStateResources[i]->getResources(resourceList);
+        if (!knownResourceObjects.contains(fGraphicStateResources[i]) &&
+                !newResourceObjects->contains(fGraphicStateResources[i])) {
+            newResourceObjects->add(fGraphicStateResources[i]);
+            fGraphicStateResources[i]->ref();
+            if (recursive) {
+                fGraphicStateResources[i]->getResources(knownResourceObjects,
+                                                        newResourceObjects);
+            }
         }
     }
     for (int i = 0; i < fXObjectResources.count(); i++) {
-        resourceList->push(fXObjectResources[i]);
-        fXObjectResources[i]->ref();
-        if (recursive) {
-            fXObjectResources[i]->getResources(resourceList);
+        if (!knownResourceObjects.contains(fXObjectResources[i]) &&
+                !newResourceObjects->contains(fXObjectResources[i])) {
+            newResourceObjects->add(fXObjectResources[i]);
+            fXObjectResources[i]->ref();
+            if (recursive) {
+                fXObjectResources[i]->getResources(knownResourceObjects,
+                                                   newResourceObjects);
+            }
         }
     }
     for (int i = 0; i < fFontResources.count(); i++) {
-        resourceList->push(fFontResources[i]);
-        fFontResources[i]->ref();
-        if (recursive) {
-            fFontResources[i]->getResources(resourceList);
+        if (!knownResourceObjects.contains(fFontResources[i]) &&
+                !newResourceObjects->contains(fFontResources[i])) {
+            newResourceObjects->add(fFontResources[i]);
+            fFontResources[i]->ref();
+            if (recursive) {
+                fFontResources[i]->getResources(knownResourceObjects,
+                                                newResourceObjects);
+            }
         }
     }
     for (int i = 0; i < fShaderResources.count(); i++) {
-        resourceList->push(fShaderResources[i]);
-        fShaderResources[i]->ref();
-        if (recursive) {
-            fShaderResources[i]->getResources(resourceList);
+        if (!knownResourceObjects.contains(fShaderResources[i]) &&
+                !newResourceObjects->contains(fShaderResources[i])) {
+            newResourceObjects->add(fShaderResources[i]);
+            fShaderResources[i]->ref();
+            if (recursive) {
+                fShaderResources[i]->getResources(knownResourceObjects,
+                                                  newResourceObjects);
+            }
         }
     }
 }
@@ -1803,7 +1826,7 @@ void SkPDFDevice::internalDrawBitmap(const SkMatrix& matrix,
         return;
     }
 
-    SkPDFImage* image = SkPDFImage::CreateImage(bitmap, subset);
+    SkPDFImage* image = SkPDFImage::CreateImage(bitmap, subset, fEncoder);
     if (!image) {
         return;
     }

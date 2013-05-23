@@ -99,8 +99,21 @@ static uint8_t glyphbuf[BUFFERSIZE];
  *  and since we have a cache of LOGFONTs for our tyepfaces, we always set the
  *  lfHeight to a canonical size, and then we use the 2x2 matrix to achieve the
  *  actual requested size.
+ *
+ *  Not critical to match the font's upem, but we want it big enough to avoid
+ *  precision loss for GDI calls that return ints (e.g. GetOutlineFontMetrics).
  */
-static const int gCanonicalTextSize = 64;
+static const int gCanonicalTextSize = 2048;
+
+static void tchar_to_skstring(const TCHAR t[], SkString* s) {
+#ifdef UNICODE
+    size_t sSize = WideCharToMultiByte(CP_UTF8, 0, t, -1, NULL, 0, NULL, NULL);
+    s->resize(sSize);
+    WideCharToMultiByte(CP_UTF8, 0, t, -1, s->writable_str(), sSize, NULL, NULL);
+#else
+    s->set(t);
+#endif
+}
 
 static void make_canonical(LOGFONT* lf) {
     lf->lfHeight = -gCanonicalTextSize;
@@ -189,10 +202,17 @@ public:
             ::DeleteObject(font);
         }
 
+        // The fixed pitch bit is set if the font is *not* fixed pitch.
+        this->setIsFixedPitch((textMetric.tmPitchAndFamily & TMPF_FIXED_PITCH) == 0);
+
         // Used a logfont on a memory context, should never get a device font.
         // Therefore all TMPF_DEVICE will be PostScript (cubic) fonts.
         fCanBeLCD = !((textMetric.tmPitchAndFamily & TMPF_VECTOR) &&
                       (textMetric.tmPitchAndFamily & TMPF_DEVICE));
+    }
+
+    void getFamilyName(SkString* name) const {
+        tchar_to_skstring(fLogFont.lfFaceName, name);
     }
 
     LOGFONT fLogFont;
@@ -216,6 +236,7 @@ protected:
     virtual SkAdvancedTypefaceMetrics* onGetAdvancedTypefaceMetrics(
                                 SkAdvancedTypefaceMetrics::PerGlyphInfo,
                                 const uint32_t*, uint32_t) const SK_OVERRIDE;
+    virtual void onGetFontDescriptor(SkFontDescriptor*, bool*) const SK_OVERRIDE;
 };
 
 class FontMemResourceTypeface : public LogFontTypeface {
@@ -298,13 +319,6 @@ void SkLOGFONTFromTypeface(const SkTypeface* face, LOGFONT* lf) {
     } else {
         *lf = static_cast<const LogFontTypeface*>(face)->fLogFont;
     }
-}
-
-SkTypeface* SkFontHost::NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID) {
-  // Zero means that we don't have any fallback fonts for this fontID.
-  // This function is implemented on Android, but doesn't have much
-  // meaning here.
-  return NULL;
 }
 
 static void GetLogFontByID(SkFontID fontID, LOGFONT* lf) {
@@ -824,10 +838,16 @@ void SkScalerContext_Windows::generateMetrics(SkGlyph* glyph) {
 }
 
 void SkScalerContext_Windows::generateFontMetrics(SkPaint::FontMetrics* mx, SkPaint::FontMetrics* my) {
-// Note: This code was borrowed from generateLineHeight, which has a note
-// stating that it may be incorrect.
-    if (!(mx || my))
+    if (!(mx || my)) {
       return;
+    }
+
+    if (mx) {
+        sk_bzero(mx, sizeof(*mx));
+    }
+    if (my) {
+        sk_bzero(my, sizeof(*my));
+    }
 
     SkASSERT(fDDC);
 
@@ -837,8 +857,7 @@ void SkScalerContext_Windows::generateFontMetrics(SkPaint::FontMetrics* mx, SkPa
             mx->fAscent = SkIntToScalar(-fTM.tmAscent);
             mx->fDescent = -SkIntToScalar(fTM.tmDescent);
             mx->fBottom = SkIntToScalar(fTM.tmDescent);
-            mx->fLeading = SkIntToScalar(fTM.tmInternalLeading
-                                         + fTM.tmExternalLeading);
+            mx->fLeading = SkIntToScalar(fTM.tmExternalLeading);
         }
 
         if (my) {
@@ -846,8 +865,8 @@ void SkScalerContext_Windows::generateFontMetrics(SkPaint::FontMetrics* mx, SkPa
             my->fAscent = SkIntToScalar(-fTM.tmAscent);
             my->fDescent = SkIntToScalar(-fTM.tmDescent);
             my->fBottom = SkIntToScalar(fTM.tmDescent);
-            my->fLeading = SkIntToScalar(fTM.tmInternalLeading
-                                         + fTM.tmExternalLeading);
+            my->fLeading = SkIntToScalar(fTM.tmExternalLeading);
+            my->fAvgCharWidth = SkIntToScalar(fTM.tmAveCharWidth);
         }
         return;
     }
@@ -864,21 +883,21 @@ void SkScalerContext_Windows::generateFontMetrics(SkPaint::FontMetrics* mx, SkPa
     }
 
     if (mx) {
-        mx->fTop = -fScale * otm.otmTextMetrics.tmAscent;
+        mx->fTop = -fScale * otm.otmrcFontBox.left;
         mx->fAscent = -fScale * otm.otmAscent;
         mx->fDescent = -fScale * otm.otmDescent;
-        mx->fBottom = fScale * otm.otmTextMetrics.tmDescent;
-        mx->fLeading = fScale * (otm.otmTextMetrics.tmInternalLeading
-                                 + otm.otmTextMetrics.tmExternalLeading);
+        mx->fBottom = fScale * otm.otmrcFontBox.right;
+        mx->fLeading = fScale * otm.otmLineGap;
     }
 
     if (my) {
-        my->fTop = -fScale * otm.otmTextMetrics.tmAscent;
+        my->fTop = -fScale * otm.otmrcFontBox.top;
         my->fAscent = -fScale * otm.otmAscent;
         my->fDescent = -fScale * otm.otmDescent;
-        my->fBottom = fScale * otm.otmTextMetrics.tmDescent;
-        my->fLeading = fScale * (otm.otmTextMetrics.tmInternalLeading
-                                 + otm.otmTextMetrics.tmExternalLeading);
+        my->fBottom = -fScale * otm.otmrcFontBox.bottom;
+        my->fLeading = fScale * otm.otmLineGap;
+        my->fAvgCharWidth = fScale * otm.otmTextMetrics.tmAveCharWidth;
+        my->fXHeight = fScale * otm.otmsXHeight;
     }
 }
 
@@ -1248,50 +1267,38 @@ void SkScalerContext_Windows::generatePath(const SkGlyph& glyph, SkPath* path) {
     }
 }
 
-static void logfont_for_name(const char* familyName, LOGFONT& lf) {
-        memset(&lf, 0, sizeof(LOGFONT));
+static void logfont_for_name(const char* familyName, LOGFONT* lf) {
+    sk_bzero(lf, sizeof(LOGFONT));
 #ifdef UNICODE
-        // Get the buffer size needed first.
-        size_t str_len = ::MultiByteToWideChar(CP_UTF8, 0, familyName,
-                                                -1, NULL, 0);
-        // Allocate a buffer (str_len already has terminating null
-        // accounted for).
-        wchar_t *wideFamilyName = new wchar_t[str_len];
-        // Now actually convert the string.
-        ::MultiByteToWideChar(CP_UTF8, 0, familyName, -1,
-                                wideFamilyName, str_len);
-        ::wcsncpy(lf.lfFaceName, wideFamilyName, LF_FACESIZE - 1);
-        delete [] wideFamilyName;
-        lf.lfFaceName[LF_FACESIZE-1] = L'\0';
+    // Get the buffer size needed first.
+    size_t str_len = ::MultiByteToWideChar(CP_UTF8, 0, familyName,
+                                            -1, NULL, 0);
+    // Allocate a buffer (str_len already has terminating null
+    // accounted for).
+    wchar_t *wideFamilyName = new wchar_t[str_len];
+    // Now actually convert the string.
+    ::MultiByteToWideChar(CP_UTF8, 0, familyName, -1,
+                            wideFamilyName, str_len);
+    ::wcsncpy(lf->lfFaceName, wideFamilyName, LF_FACESIZE - 1);
+    delete [] wideFamilyName;
+    lf->lfFaceName[LF_FACESIZE-1] = L'\0';
 #else
-        ::strncpy(lf.lfFaceName, familyName, LF_FACESIZE - 1);
-        lf.lfFaceName[LF_FACESIZE - 1] = '\0';
+    ::strncpy(lf->lfFaceName, familyName, LF_FACESIZE - 1);
+    lf->lfFaceName[LF_FACESIZE - 1] = '\0';
 #endif
 }
 
-static void tchar_to_skstring(const TCHAR* t, SkString* s) {
-#ifdef UNICODE
-    size_t sSize = WideCharToMultiByte(CP_UTF8, 0, t, -1, NULL, 0, NULL, NULL);
-    s->resize(sSize);
-    WideCharToMultiByte(CP_UTF8, 0, t, -1, s->writable_str(), sSize, NULL, NULL);
-#else
-    s->set(t);
-#endif
-}
-
-void SkFontHost::Serialize(const SkTypeface* rawFace, SkWStream* stream) {
-    const LogFontTypeface* face = static_cast<const LogFontTypeface*>(rawFace);
-    SkFontDescriptor descriptor(face->style());
-
+void LogFontTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
+                                          bool* isLocalStream) const {
     // Get the actual name of the typeface. The logfont may not know this.
-    HFONT font = CreateFontIndirect(&face->fLogFont);
+    HFONT font = CreateFontIndirect(&fLogFont);
 
     HDC deviceContext = ::CreateCompatibleDC(NULL);
     HFONT savefont = (HFONT)SelectObject(deviceContext, font);
 
     int fontNameLen; //length of fontName in TCHARS.
     if (0 == (fontNameLen = GetTextFace(deviceContext, 0, NULL))) {
-        LogFontTypeface::EnsureAccessible(rawFace);
+        call_ensure_accessible(fLogFont);
         if (0 == (fontNameLen = GetTextFace(deviceContext, 0, NULL))) {
             fontNameLen = 0;
         }
@@ -1299,7 +1306,7 @@ void SkFontHost::Serialize(const SkTypeface* rawFace, SkWStream* stream) {
 
     SkAutoSTArray<LF_FULLFACESIZE, TCHAR> fontName(fontNameLen+1);
     if (0 == GetTextFace(deviceContext, fontNameLen, fontName.get())) {
-        LogFontTypeface::EnsureAccessible(rawFace);
+        call_ensure_accessible(fLogFont);
         if (0 == GetTextFace(deviceContext, fontNameLen, fontName.get())) {
             fontName[0] = 0;
         }
@@ -1315,39 +1322,9 @@ void SkFontHost::Serialize(const SkTypeface* rawFace, SkWStream* stream) {
 
     SkString familyName;
     tchar_to_skstring(fontName.get(), &familyName);
-    descriptor.setFamilyName(familyName.c_str());
-    //TODO: FileName and PostScriptName currently unsupported.
 
-    descriptor.serialize(stream);
-
-    if (face->fSerializeAsStream) {
-        // store the entire font in the fontData
-        SkAutoTUnref<SkStream> fontStream(face->openStream(NULL));
-        if (fontStream.get()) {
-            const uint32_t length = fontStream->getLength();
-            stream->writePackedUInt(length);
-            stream->writeStream(fontStream, length);
-        } else {
-            stream->writePackedUInt(0);
-        }
-    } else {
-        stream->writePackedUInt(0);
-    }
-}
-
-SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
-    SkFontDescriptor descriptor(stream);
-
-    const uint32_t customFontDataLength = stream->readPackedUInt();
-    if (customFontDataLength > 0) {
-        // generate a new stream to store the custom typeface
-        SkAutoTUnref<SkMemoryStream> fontStream(SkNEW_ARGS(SkMemoryStream, (customFontDataLength - 1)));
-        stream->read((void*)fontStream->getMemoryBase(), customFontDataLength - 1);
-
-        return CreateTypefaceFromStream(fontStream.get());
-    }
-
-    return SkFontHost::CreateTypeface(NULL, descriptor.getFamilyName(), descriptor.getStyle());
+    desc->setFamilyName(familyName.c_str());
+    *isLocalStream = this->fSerializeAsStream;
 }
 
 static bool getWidthAdvance(HDC hdc, int gId, int16_t* advance) {
@@ -1421,7 +1398,7 @@ SkAdvancedTypefaceMetrics* LogFontTypeface::onGetAdvancedTypefaceMetrics(
         info->fStemV = 0;
         info->fCapHeight = 0;
         info->fBBox = SkIRect::MakeEmpty();
-        return info;
+        goto ReturnInfo;
     }
 
     // If this bit is clear the font is a fixed pitch font.
@@ -1488,6 +1465,7 @@ SkAdvancedTypefaceMetrics* LogFontTypeface::onGetAdvancedTypefaceMetrics(
     }
 
 Error:
+ReturnInfo:
     SelectObject(hdc, savefont);
     DeleteObject(designFont);
     DeleteObject(font);
@@ -1564,7 +1542,7 @@ static HANDLE activate_font(SkData* fontData) {
     return fontHandle;
 }
 
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
+static SkTypeface* create_from_stream(SkStream* stream) {
     // Create a unique and unpredictable font name.
     // Avoids collisions and access from CSS.
     char familyName[BASE64_GUID_ID_LEN];
@@ -1587,9 +1565,13 @@ SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
 
     // Create the typeface.
     LOGFONT lf;
-    logfont_for_name(familyName, lf);
+    logfont_for_name(familyName, &lf);
 
     return SkCreateFontMemResourceTypefaceFromLOGFONT(lf, fontReference);
+}
+
+SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
+    return create_from_stream(stream);
 }
 
 SkStream* LogFontTypeface::onOpenStream(int* ttcIndex) const {
@@ -1653,7 +1635,7 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
         LogFontTypeface* face = (LogFontTypeface*)familyFace;
         lf = face->fLogFont;
     } else {
-        logfont_for_name(familyName, lf);
+        logfont_for_name(familyName, &lf);
     }
     setStyle(&lf, style);
     return SkCreateTypefaceFromLOGFONT(lf);
@@ -1665,6 +1647,13 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
 }
 
 void LogFontTypeface::onFilterRec(SkScalerContextRec* rec) const {
+    if (rec->fFlags & SkScalerContext::kLCD_BGROrder_Flag ||
+        rec->fFlags & SkScalerContext::kLCD_Vertical_Flag)
+    {
+        rec->fMaskFormat = SkMask::kA8_Format;
+        rec->fFlags |= SkScalerContext::kGenA8FromLCD_Flag;
+    }
+
     unsigned flagsWeDontSupport = SkScalerContext::kDevKernText_Flag |
                                   SkScalerContext::kAutohinting_Flag |
                                   SkScalerContext::kEmbeddedBitmapText_Flag |
@@ -1708,4 +1697,179 @@ void LogFontTypeface::onFilterRec(SkScalerContextRec* rec) const {
         rec->fMaskFormat = SkMask::kA8_Format;
         rec->fFlags &= ~SkScalerContext::kGenA8FromLCD_Flag;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+#include "SkFontMgr.h"
+#include "SkDataTable.h"
+
+static bool valid_logfont_for_enum(const LOGFONT& lf, DWORD fontType) {
+    return TRUETYPE_FONTTYPE == fontType
+        && lf.lfFaceName[0]
+        && lf.lfFaceName[0] != '@'
+        && OUT_STROKE_PRECIS == lf.lfOutPrecision
+        // without the chraset check, we got LOTS of dups of the same font
+        // is there a better check (other than searching the array for
+        // the same name?
+        && 0 == lf.lfCharSet
+        ;
+}
+
+static int CALLBACK enum_fonts_proc(const LOGFONT* lf, const TEXTMETRIC*,
+                                    DWORD fontType, LPARAM builderParam) {
+    if (valid_logfont_for_enum(*lf, fontType)) {
+        SkTDArray<ENUMLOGFONTEX>* array = (SkTDArray<ENUMLOGFONTEX>*)builderParam;
+        *array->append() = *(ENUMLOGFONTEX*)lf;
+    }
+    return 1; // non-zero means continue
+}
+
+static SkFontStyle compute_fontstyle(const LOGFONT& lf) {
+    return SkFontStyle(lf.lfWeight, SkFontStyle::kNormal_Width,
+                       lf.lfItalic ? SkFontStyle::kItalic_Slant
+                                   : SkFontStyle::kUpright_Slant);
+}
+
+class SkFontStyleSetGDI : public SkFontStyleSet {
+public:
+    SkFontStyleSetGDI(const TCHAR familyName[]) {
+        HDC hdc = ::CreateCompatibleDC(NULL);
+        ::EnumFonts(hdc, familyName, enum_fonts_proc, (LPARAM)&fArray);
+        ::DeleteDC(hdc);
+    }
+
+    virtual int count() SK_OVERRIDE {
+        return fArray.count();
+    }
+
+    virtual void getStyle(int index, SkFontStyle* fs, SkString* styleName) SK_OVERRIDE {
+        if (fs) {
+            *fs = compute_fontstyle(fArray[index].elfLogFont);
+        }
+        if (styleName) {
+            const ENUMLOGFONTEX& ref = fArray[index];
+            // For some reason, ENUMLOGFONTEX and LOGFONT disagree on their type in the
+            // non-unicode version.
+            //      ENUMLOGFONTEX uses BYTE
+            //      LOGFONT uses CHAR
+            // Here we assert they that the style name is logically the same (size) as
+            // a TCHAR, so we can use the same converter function.
+            SkASSERT(sizeof(TCHAR) == sizeof(ref.elfStyle[0]));
+            tchar_to_skstring((const TCHAR*)ref.elfStyle, styleName);
+        }
+    }
+
+    virtual SkTypeface* createTypeface(int index) SK_OVERRIDE {
+        return SkCreateTypefaceFromLOGFONT(fArray[index].elfLogFont);
+    }
+
+    virtual SkTypeface* matchStyle(const SkFontStyle& pattern) SK_OVERRIDE {
+        // todo:
+        return SkCreateTypefaceFromLOGFONT(fArray[0].elfLogFont);
+    }
+
+private:
+    SkTDArray<ENUMLOGFONTEX> fArray;
+};
+
+static int CALLBACK enum_family_proc(const LOGFONT* lf, const TEXTMETRIC* tm,
+                                     DWORD fontType, LPARAM builderParam) {
+    if (valid_logfont_for_enum(*lf, fontType)) {
+        SkTDArray<ENUMLOGFONTEX>* array = (SkTDArray<ENUMLOGFONTEX>*)builderParam;
+        *array->append() = *(ENUMLOGFONTEX*)lf;
+#if 0
+        SkString str;
+        tchar_to_skstring(lf->lfFaceName, &str);
+        SkDebugf("fam:%s height:%d width:%d esc:%d orien:%d weight:%d ital:%d char:%d clip:%d qual:%d pitch:%d\n",
+                 str.c_str(), lf->lfHeight, lf->lfWidth, lf->lfEscapement, lf->lfOrientation,
+                 lf->lfWeight, lf->lfItalic, lf->lfCharSet, lf->lfClipPrecision, lf->lfQuality,
+                 lf->lfPitchAndFamily);
+#endif
+    }
+    return 1; // non-zero means continue
+}
+
+class SkFontMgrGDI : public SkFontMgr {
+    void init() {
+        if (!fLogFontArray.isEmpty()) {
+            return;
+        }
+
+        LOGFONT lf;
+        sk_bzero(&lf, sizeof(lf));
+        lf.lfCharSet = DEFAULT_CHARSET;
+
+        HDC hdc = ::CreateCompatibleDC(NULL);
+        ::EnumFontFamiliesEx(hdc, &lf, enum_family_proc, (LPARAM)&fLogFontArray, 0);
+        ::DeleteDC(hdc);
+    }
+
+public:
+    SkFontMgrGDI() {}
+
+protected:
+    virtual int onCountFamilies() SK_OVERRIDE {
+        this->init();
+        return fLogFontArray.count();
+    }
+
+    virtual void onGetFamilyName(int index, SkString* familyName) SK_OVERRIDE {
+        this->init();
+        SkASSERT((unsigned)index < (unsigned)fLogFontArray.count());
+        tchar_to_skstring(fLogFontArray[index].elfLogFont.lfFaceName, familyName);
+    }
+
+    virtual SkFontStyleSet* onCreateStyleSet(int index) SK_OVERRIDE {
+        this->init();
+        SkASSERT((unsigned)index < (unsigned)fLogFontArray.count());
+        return SkNEW_ARGS(SkFontStyleSetGDI, (fLogFontArray[index].elfLogFont.lfFaceName));
+    }
+
+    virtual SkFontStyleSet* onMatchFamily(const char familyName[]) SK_OVERRIDE {
+        if (NULL == familyName) {
+            familyName = "";    // do we need this check???
+        }
+        LOGFONT lf;
+        logfont_for_name(familyName, &lf);
+        return SkNEW_ARGS(SkFontStyleSetGDI, (lf.lfFaceName));
+    }
+
+    virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
+                                           const SkFontStyle& fontstyle) SK_OVERRIDE {
+        // could be in base impl
+        SkAutoTUnref<SkFontStyleSet> sset(this->matchFamily(familyName));
+        return sset->matchStyle(fontstyle);
+    }
+
+    virtual SkTypeface* onMatchFaceStyle(const SkTypeface* familyMember,
+                                         const SkFontStyle& fontstyle) SK_OVERRIDE {
+        // could be in base impl
+        SkString familyName;
+        ((LogFontTypeface*)familyMember)->getFamilyName(&familyName);
+        return this->matchFamilyStyle(familyName.c_str(), fontstyle);
+    }
+
+    virtual SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) SK_OVERRIDE {
+        return create_from_stream(stream);
+    }
+
+    virtual SkTypeface* onCreateFromData(SkData* data, int ttcIndex) SK_OVERRIDE {
+        // could be in base impl
+        SkAutoTUnref<SkStream> stream(SkNEW_ARGS(SkMemoryStream, (data)));
+        return this->createFromStream(stream);
+    }
+
+    virtual SkTypeface* onCreateFromFile(const char path[], int ttcIndex) SK_OVERRIDE {
+        // could be in base impl
+        SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
+        return this->createFromStream(stream);
+    }
+
+private:
+    SkTDArray<ENUMLOGFONTEX> fLogFontArray;
+};
+
+SkFontMgr* SkFontMgr::Factory() {
+    return SkNEW(SkFontMgrGDI);
 }

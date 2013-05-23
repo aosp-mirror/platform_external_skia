@@ -11,52 +11,17 @@
 #include "GrBackendEffectFactory.h"
 #include "GrColor.h"
 #include "GrEffectStage.h"
+#include "GrPaint.h"
 #include "GrRefCnt.h"
 #include "GrRenderTarget.h"
 #include "GrStencil.h"
 #include "GrTemplates.h"
 #include "GrTexture.h"
+#include "GrTypesPriv.h"
 #include "effects/GrSimpleTextureEffect.h"
 
 #include "SkMatrix.h"
 #include "SkXfermode.h"
-
-class GrPaint;
-
-/**
- * Types used to describe format of vertices in arrays
-  */
-enum GrVertexAttribType {
-    kFloat_GrVertexAttribType = 0,
-    kVec2f_GrVertexAttribType,
-    kVec3f_GrVertexAttribType,
-    kVec4f_GrVertexAttribType,
-    kVec4ub_GrVertexAttribType,   // vector of 4 unsigned bytes, e.g. colors
-
-    kLast_GrVertexAttribType = kVec4ub_GrVertexAttribType
-};
-static const int kGrVertexAttribTypeCount = kLast_GrVertexAttribType + 1;
-
-struct GrVertexAttrib {
-    inline void set(GrVertexAttribType type, size_t offset) {
-        fType = type; fOffset = offset;
-    }
-    bool operator==(const GrVertexAttrib& other) const {
-        return fType == other.fType && fOffset == other.fOffset;
-    };
-    bool operator!=(const GrVertexAttrib& other) const { return !(*this == other); }
-
-    GrVertexAttribType fType;
-    size_t             fOffset;
-};
-
-template <int N>
-class GrVertexAttribArray : public SkSTArray<N, GrVertexAttrib, true> {};
-
-/**
- * Type used to describe how attributes bind to program usage
- */
-typedef int GrAttribBindings;
 
 class GrDrawState : public GrRefCnt {
 public:
@@ -75,27 +40,23 @@ public:
      * coverage rather than as input to the src/dst color blend step.
      *
      * The input color to the first enabled color-stage is either the constant color or interpolated
-     * per-vertex colors, depending upon GrAttribBindings. The input to the first coverage stage is
-     * either a constant coverage (usually full-coverage), interpolated per-vertex coverage, or
-     * edge-AA computed coverage. (This latter is going away as soon as it can be rewritten as a
-     * GrEffect).
+     * per-vertex colors. The input to the first coverage stage is either a constant coverage
+     * (usually full-coverage) or interpolated per-vertex coverage.
      *
      * See the documentation of kCoverageDrawing_StateBit for information about disabling the
      * the color / coverage distinction.
      *
      * Stages 0 through GrPaint::kTotalStages-1 are reserved for stages copied from the client's
-     * GrPaint. Stages GrPaint::kTotalStages through kNumStages-2 are earmarked for use by
-     * GrTextContext and GrPathRenderer-derived classes. kNumStages-1 is earmarked for clipping
-     * by GrClipMaskManager.
+     * GrPaint. Stage GrPaint::kTotalStages is earmarked for use by GrTextContext, GrPathRenderer-
+     * derived classes, and the rect/oval helper classes. GrPaint::kTotalStages+1 is earmarked for
+     * clipping by GrClipMaskManager. TODO: replace fixed size array of stages with variable size
+     * arrays of color and coverage stages.
      */
     enum {
-        kNumStages = 5,
+        kNumStages = GrPaint::kTotalStages + 2,
     };
 
     GrDrawState() {
-#if GR_DEBUG
-        VertexAttributesUnitTest();
-#endif
         this->reset();
     }
 
@@ -125,7 +86,6 @@ public:
         fCommon.fDstBlend = kZero_GrBlendCoeff;
         fCommon.fBlendConstant = 0x0;
         fCommon.fFlagBits = 0x0;
-        fCommon.fVertexEdgeType = kHairLine_EdgeType;
         fCommon.fStencilSettings.setDisabled();
         fCommon.fFirstCoverageStage = kNumStages;
         fCommon.fCoverage = 0xffffffff;
@@ -147,53 +107,96 @@ public:
     ////
 
     enum {
-        kVertexAttribCnt = 6,
+        kMaxVertexAttribCnt = kLast_GrVertexAttribBinding + 4,
     };
 
    /**
-     * The format of vertices is represented as an array of vertex attribute
-     * pair, with each pair representing the type of the attribute and the
-     * offset in the vertex structure (see GrVertexAttrib, above).
+     * The format of vertices is represented as an array of GrVertexAttribs, with each representing
+     * the type of the attribute, its offset, and semantic binding (see GrVertexAttrib in
+     * GrTypesPriv.h).
      *
-     * This will only set up the vertex geometry. To bind the attributes in
-     * the shaders, attribute indices and attribute bindings need to be set
-     * as well.
+     * The mapping of attributes with kEffect bindings to GrEffect inputs is specified when
+     * setEffect is called.
      */
 
     /**
-     *  Sets vertex attributes for next draw.
-     *
-     *  @param attribs    the array of vertex attributes to set.
-     *  @param count      the number of attributes being set.
-     *                    limited to a count of kVertexAttribCnt.
+     *  Sets vertex attributes for next draw. The object driving the templatization
+     *  should be a global GrVertexAttrib array that is never changed.
      */
-    void setVertexAttribs(const GrVertexAttrib attribs[], int count);
+    template <const GrVertexAttrib A[]> void setVertexAttribs(int count) {
+        this->setVertexAttribs(A, count);
+    }
 
-    const GrVertexAttrib* getVertexAttribs() const { return fVertexAttribs.begin(); }
-    int getVertexAttribCount() const { return fVertexAttribs.count(); }
+    const GrVertexAttrib* getVertexAttribs() const { return fCommon.fVAPtr; }
+    int getVertexAttribCount() const { return fCommon.fVACount; }
 
     size_t getVertexSize() const;
 
     /**
-     *  Sets default vertex attributes for next draw.
-     *
-     *  This will also set default vertex attribute indices and bindings
+     *  Sets default vertex attributes for next draw. The default is a single attribute:
+     *  {kVec2f_GrVertexAttribType, 0, kPosition_GrVertexAttribType}
      */
     void setDefaultVertexAttribs();
 
+    /**
+     * Getters for index into getVertexAttribs() for particular bindings. -1 is returned if the
+     * binding does not appear in the current attribs. These bindings should appear only once in
+     * the attrib array.
+     */
+
+    int positionAttributeIndex() const {
+        return fCommon.fFixedFunctionVertexAttribIndices[kPosition_GrVertexAttribBinding];
+    }
+    int localCoordAttributeIndex() const {
+        return fCommon.fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
+    }
+    int colorVertexAttributeIndex() const {
+        return fCommon.fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
+    }
+    int coverageVertexAttributeIndex() const {
+        return fCommon.fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
+    }
+
+    bool hasLocalCoordAttribute() const {
+        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
+    }
+    bool hasColorVertexAttribute() const {
+        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
+    }
+    bool hasCoverageVertexAttribute() const {
+        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
+    }
+
     bool validateVertexAttribs() const;
 
-    ////////////////////////////////////////////////////////////////////////////
-    // Helpers for picking apart vertex attributes
+    /**
+     * Helper to save/restore vertex attribs
+     */
+     class AutoVertexAttribRestore {
+     public:
+         AutoVertexAttribRestore(GrDrawState* drawState) {
+             GrAssert(NULL != drawState);
+             fDrawState = drawState;
+             fVAPtr = drawState->fCommon.fVAPtr;
+             fVACount = drawState->fCommon.fVACount;
+             fDrawState->setDefaultVertexAttribs();
+         }
 
-    // helper array to let us check the expected so we know what bound attrib indices
-    // we care about
-    static const size_t kVertexAttribSizes[kGrVertexAttribTypeCount];
+         ~AutoVertexAttribRestore(){
+             fDrawState->fCommon.fVAPtr = fVAPtr;
+             fDrawState->fCommon.fVACount = fVACount;
+         }
+
+     private:
+         GrDrawState*          fDrawState;
+         const GrVertexAttrib* fVAPtr;
+         int                   fVACount;
+     };
 
     /**
-     * Accessing positions, texture coords, or colors, of a vertex within an
-     * array is a hassle involving casts and simple math. These helpers exist
-     * to keep GrDrawTarget clients' code a bit nicer looking.
+     * Accessing positions, local coords, or colors, of a vertex within an array is a hassle
+     * involving casts and simple math. These helpers exist to keep GrDrawTarget clients' code a bit
+     * nicer looking.
      */
 
     /**
@@ -250,115 +253,15 @@ public:
 
     /// @}
 
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Attribute Bindings
-    ////
-
-    /**
-     * The vertex data used by the current program is represented as a bitfield
-     * of flags. Programs always use positions and may also use texture
-     * coordinates, per-vertex colors, per-vertex coverage and edge data. The
-     * local coords accessible by effects may either come from positions or
-     * be specified explicitly.
-     */
-
-    /**
-     * Additional Bits that can be specified in GrAttribBindings.
-     */
-    enum AttribBindingsBits {
-        /** explicit local coords are provided (instead of using pre-view-matrix positions) */
-        kLocalCoords_AttribBindingsBit        = 0x1,
-        /* program uses colors (GrColor) */
-        kColor_AttribBindingsBit              = 0x2,
-        /* program uses coverage (GrColor)
-         */
-        kCoverage_AttribBindingsBit           = 0x4,
-        /* program uses edge data. Distance to the edge is used to
-         * compute a coverage. See GrDrawState::setVertexEdgeType().
-         */
-        kEdge_AttribBindingsBit               = 0x8,
-        // for below assert
-        kDummyAttribBindingsBit,
-        kHighAttribBindingsBit = kDummyAttribBindingsBit - 1
-    };
-    // make sure we haven't exceeded the number of bits in GrAttribBindings.
-    GR_STATIC_ASSERT(kHighAttribBindingsBit < ((uint64_t)1 << 8*sizeof(GrAttribBindings)));
-
-    enum AttribBindings {
-        kDefault_AttribBindings = 0
-    };
-
-    /**
-     *  Sets attribute bindings for next draw.
-     *
-     *  @param bindings    the attribute bindings to set.
-     */
-    void setAttribBindings(GrAttribBindings bindings) { fCommon.fAttribBindings = bindings; }
-
-    GrAttribBindings getAttribBindings() const { return fCommon.fAttribBindings; }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Helpers for picking apart attribute bindings
-
     /**
      * Determines whether src alpha is guaranteed to be one for all src pixels
      */
-    bool srcAlphaWillBeOne(GrAttribBindings) const;
+    bool srcAlphaWillBeOne() const;
 
     /**
      * Determines whether the output coverage is guaranteed to be one for all pixels hit by a draw.
      */
-    bool hasSolidCoverage(GrAttribBindings) const;
-
-    static void VertexAttributesUnitTest();
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Vertex Attribute Indices
-    ////
-
-    /**
-     * Vertex attribute indices map the data set in the vertex attribute array
-     * to the bindings specified in the attribute bindings. Each binding type
-     * has an associated index in the attribute array. This index is used to
-     * look up the vertex attribute data from the array, and potentially as the
-     * attribute index if we're binding attributes in GL.
-     *
-     * Indices which do not have active attribute bindings will be ignored.
-     */
-
-    enum AttribIndex {
-        kPosition_AttribIndex = 0,
-        kColor_AttribIndex,
-        kCoverage_AttribIndex,
-        kEdge_AttribIndex,
-        kLocalCoords_AttribIndex,
-
-        kLast_AttribIndex = kLocalCoords_AttribIndex
-    };
-    static const int kAttribIndexCount = kLast_AttribIndex + 1;
-
-    // these are used when vertex color and coverage isn't set
-    enum {
-        kColorOverrideAttribIndexValue = GrDrawState::kVertexAttribCnt,
-        kCoverageOverrideAttribIndexValue = GrDrawState::kVertexAttribCnt+1,
-    };
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Helpers to set attribute indices. These should match the index in the
-    // current attribute index array.
-
-    /**
-     *  Sets index for next draw. This is used to look up the offset
-     *  from the current vertex attribute array and to bind the attributes.
-     *
-     *  @param index      the attribute index we're setting
-     *  @param value      the value of the index
-     */
-    void setAttribIndex(AttribIndex index, int value) { fAttribIndices[index] = value; }
-
-    int getAttribIndex(AttribIndex index) const       { return fAttribIndices[index]; }
+    bool hasSolidCoverage() const;
 
     /// @}
 
@@ -544,6 +447,11 @@ public:
             }
         }
     }
+
+    /**
+     * Checks whether any of the effects will read the dst pixel color.
+     */
+    bool willEffectReadDstColor() const;
 
     /// @}
 
@@ -947,52 +855,6 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    // @name Edge AA
-    // Edge equations can be specified to perform anti-aliasing. Because the
-    // edges are specified as per-vertex data, vertices that are shared by
-    // multiple edges must be split.
-    //
-    ////
-
-    /**
-     * When specifying edges as vertex data this enum specifies what type of
-     * edges are in use. The edges are always 4 SkScalars in memory, even when
-     * the edge type requires fewer than 4.
-     *
-     * TODO: Fix the fact that HairLine and Circle edge types use y-down coords.
-     *       (either adjust in VS or use origin_upper_left in GLSL)
-     */
-    enum VertexEdgeType {
-        /* 1-pixel wide line
-           2D implicit line eq (a*x + b*y +c = 0). 4th component unused */
-        kHairLine_EdgeType,
-        /* Quadratic specified by u^2-v canonical coords (only 2
-           components used). Coverage based on signed distance with negative
-           being inside, positive outside. Edge specified in window space
-           (y-down) */
-        kQuad_EdgeType,
-        /* Same as above but for hairline quadratics. Uses unsigned distance.
-           Coverage is min(0, 1-distance). */
-        kHairQuad_EdgeType,
-
-        kVertexEdgeTypeCnt
-    };
-
-    /**
-     * Determines the interpretation per-vertex edge data when the
-     * kEdge_AttribBindingsBit is set (see GrDrawTarget). When per-vertex edges
-     * are not specified the value of this setting has no effect.
-     */
-    void setVertexEdgeType(VertexEdgeType type) {
-        GrAssert(type >=0 && type < kVertexEdgeTypeCnt);
-        fCommon.fVertexEdgeType = type;
-    }
-
-    VertexEdgeType getVertexEdgeType() const { return fCommon.fVertexEdgeType; }
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
     /// @name State Flags
     ////
 
@@ -1139,15 +1001,6 @@ public:
         if (fRenderTarget.get() != s.fRenderTarget.get() || fCommon != s.fCommon) {
             return false;
         }
-        if (fVertexAttribs != s.fVertexAttribs) {
-            return false;
-        }
-        for (int i = 0; i < kAttribIndexCount; ++i) {
-            if ((i == kPosition_AttribIndex || s.fCommon.fAttribBindings & (1 << i)) &&
-                fAttribIndices[i] != s.fAttribIndices[i]) {
-                return false;
-            }
-        }
         for (int i = 0; i < kNumStages; i++) {
             bool enabled = this->isStageEnabled(i);
             if (enabled != s.isStageEnabled(i)) {
@@ -1164,10 +1017,6 @@ public:
     GrDrawState& operator= (const GrDrawState& s) {
         this->setRenderTarget(s.fRenderTarget.get());
         fCommon = s.fCommon;
-        fVertexAttribs = s.fVertexAttribs;
-        for (int i = 0; i < kAttribIndexCount; i++) {
-            fAttribIndices[i] = s.fAttribIndices[i];
-        }
         for (int i = 0; i < kNumStages; i++) {
             if (s.isStageEnabled(i)) {
                 this->fStages[i] = s.fStages[i];
@@ -1181,35 +1030,44 @@ private:
     /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
     struct CommonState {
         // These fields are roughly sorted by decreasing likelihood of being different in op==
-        GrColor                         fColor;
-        GrAttribBindings                fAttribBindings;
-        SkMatrix                        fViewMatrix;
-        GrBlendCoeff                    fSrcBlend;
-        GrBlendCoeff                    fDstBlend;
-        GrColor                         fBlendConstant;
-        uint32_t                        fFlagBits;
-        VertexEdgeType                  fVertexEdgeType;
-        GrStencilSettings               fStencilSettings;
-        int                             fFirstCoverageStage;
-        GrColor                         fCoverage;
-        SkXfermode::Mode                fColorFilterMode;
-        GrColor                         fColorFilterColor;
-        DrawFace                        fDrawFace;
+        GrColor               fColor;
+        SkMatrix              fViewMatrix;
+        GrBlendCoeff          fSrcBlend;
+        GrBlendCoeff          fDstBlend;
+        GrColor               fBlendConstant;
+        uint32_t              fFlagBits;
+        const GrVertexAttrib* fVAPtr;
+        int                   fVACount;
+        GrStencilSettings     fStencilSettings;
+        int                   fFirstCoverageStage;
+        GrColor               fCoverage;
+        SkXfermode::Mode      fColorFilterMode;
+        GrColor               fColorFilterColor;
+        DrawFace              fDrawFace;
+
+        // This is simply a different representation of info in fVertexAttribs and thus does
+        // not need to be compared in op==.
+        int fFixedFunctionVertexAttribIndices[kGrFixedFunctionVertexAttribBindingCnt];
+
         bool operator== (const CommonState& other) const {
-            return fColor == other.fColor &&
-                   fAttribBindings == other.fAttribBindings &&
-                   fViewMatrix.cheapEqualTo(other.fViewMatrix) &&
-                   fSrcBlend == other.fSrcBlend &&
-                   fDstBlend == other.fDstBlend &&
-                   fBlendConstant == other.fBlendConstant &&
-                   fFlagBits == other.fFlagBits &&
-                   fVertexEdgeType == other.fVertexEdgeType &&
-                   fStencilSettings == other.fStencilSettings &&
-                   fFirstCoverageStage == other.fFirstCoverageStage &&
-                   fCoverage == other.fCoverage &&
-                   fColorFilterMode == other.fColorFilterMode &&
-                   fColorFilterColor == other.fColorFilterColor &&
-                   fDrawFace == other.fDrawFace;
+            bool result = fColor == other.fColor &&
+                          fViewMatrix.cheapEqualTo(other.fViewMatrix) &&
+                          fSrcBlend == other.fSrcBlend &&
+                          fDstBlend == other.fDstBlend &&
+                          fBlendConstant == other.fBlendConstant &&
+                          fFlagBits == other.fFlagBits &&
+                          fVACount == other.fVACount &&
+                          !memcmp(fVAPtr, other.fVAPtr, fVACount * sizeof(GrVertexAttrib)) &&
+                          fStencilSettings == other.fStencilSettings &&
+                          fFirstCoverageStage == other.fFirstCoverageStage &&
+                          fCoverage == other.fCoverage &&
+                          fColorFilterMode == other.fColorFilterMode &&
+                          fColorFilterColor == other.fColorFilterColor &&
+                          fDrawFace == other.fDrawFace;
+            GrAssert(!result || 0 == memcmp(fFixedFunctionVertexAttribIndices,
+                                            other.fFixedFunctionVertexAttribIndices,
+                                            sizeof(fFixedFunctionVertexAttribIndices)));
+            return result;
         }
         bool operator!= (const CommonState& other) const { return !(*this == other); }
     };
@@ -1242,10 +1100,6 @@ public:
             // TODO: Here we will copy the GrRenderTarget pointer without taking a ref.
             fRenderTarget = drawState.fRenderTarget.get();
             SkSafeRef(fRenderTarget);
-            fVertexAttribs = drawState.fVertexAttribs;
-            for (int i = 0; i < kAttribIndexCount; i++) {
-                fAttribIndices[i] = drawState.fAttribIndices[i];
-            }
             // Here we ref the effects directly rather than the effect-refs. TODO: When the effect-
             // ref gets fully unref'ed it will cause the underlying effect to unref its resources
             // and recycle them to the cache (if no one else is holding a ref to the resources).
@@ -1259,10 +1113,6 @@ public:
             GrAssert(fInitialized);
             drawState->fCommon = fCommon;
             drawState->setRenderTarget(fRenderTarget);
-            drawState->fVertexAttribs = fVertexAttribs;
-            for (int i = 0; i < kAttribIndexCount; i++) {
-                drawState->fAttribIndices[i] = fAttribIndices[i];
-            }
             for (int i = 0; i < kNumStages; ++i) {
                 fStages[i].restoreTo(&drawState->fStages[i]);
             }
@@ -1270,16 +1120,6 @@ public:
 
         bool isEqual(const GrDrawState& state) const {
             if (fRenderTarget != state.fRenderTarget.get() || fCommon != state.fCommon) {
-                return false;
-            }
-            for (int i = 0; i < kAttribIndexCount; ++i) {
-                if ((i == kPosition_AttribIndex ||
-                     state.fCommon.fAttribBindings & kAttribIndexMasks[i]) &&
-                    fAttribIndices[i] != state.fAttribIndices[i]) {
-                    return false;
-                }
-            }
-            if (fVertexAttribs != state.fVertexAttribs) {
                 return false;
             }
             for (int i = 0; i < kNumStages; ++i) {
@@ -1293,23 +1133,24 @@ public:
     private:
         GrRenderTarget*                       fRenderTarget;
         CommonState                           fCommon;
-        int                                   fAttribIndices[kAttribIndexCount];
-        GrVertexAttribArray<kVertexAttribCnt> fVertexAttribs;
         GrEffectStage::DeferredStage          fStages[kNumStages];
 
         GR_DEBUGCODE(bool fInitialized;)
     };
 
 private:
-    // helper array to let us check the current bindings so we know what bound attrib indices
-    // we care about
-    static const GrAttribBindings kAttribIndexMasks[kAttribIndexCount];
 
     SkAutoTUnref<GrRenderTarget>           fRenderTarget;
     CommonState                            fCommon;
-    int                                    fAttribIndices[kAttribIndexCount];
-    GrVertexAttribArray<kVertexAttribCnt>  fVertexAttribs;
     GrEffectStage                          fStages[kNumStages];
+
+    /**
+     *  Sets vertex attributes for next draw.
+     *
+     *  @param attribs    the array of vertex attributes to set.
+     *  @param count      the number of attributes being set, limited to kMaxVertexAttribCnt.
+     */
+    void setVertexAttribs(const GrVertexAttrib attribs[], int count);
 
     typedef GrRefCnt INHERITED;
 };

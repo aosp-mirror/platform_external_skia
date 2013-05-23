@@ -15,7 +15,6 @@
 #include "SkString.h"
 #include "SkTArray.h"
 
-
 enum Flags {
     kStroke_Flag = 1 << 0,
     kBig_Flag    = 1 << 1
@@ -864,6 +863,166 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
+#include "SkGeometry.h"
+
+class ConicBench_Chop5 : public SkBenchmark {
+    enum {
+        N = 100000
+    };
+    SkConic fRQ;
+public:
+    ConicBench_Chop5(void* param) : INHERITED(param) {
+        fRQ.fPts[0].set(0, 0);
+        fRQ.fPts[1].set(100, 0);
+        fRQ.fPts[2].set(100, 100);
+        fRQ.fW = SkScalarCos(SK_ScalarPI/4);
+    }
+
+private:
+    virtual const char* onGetName() SK_OVERRIDE {
+        return "ratquad-chop-0.5";
+    }
+
+    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+        SkConic dst[2];
+        for (int i = 0; i < N; ++i) {
+            fRQ.chopAt(0.5f, dst);
+        }
+    }
+
+    typedef SkBenchmark INHERITED;
+};
+
+class ConicBench_ChopHalf : public SkBenchmark {
+    enum {
+        N = 100000
+    };
+    SkConic fRQ;
+public:
+    ConicBench_ChopHalf(void* param) : INHERITED(param) {
+        fRQ.fPts[0].set(0, 0);
+        fRQ.fPts[1].set(100, 0);
+        fRQ.fPts[2].set(100, 100);
+        fRQ.fW = SkScalarCos(SK_ScalarPI/4);
+    }
+
+private:
+    virtual const char* onGetName() SK_OVERRIDE {
+        return "ratquad-chop-half";
+    }
+
+    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+        SkConic dst[2];
+        for (int i = 0; i < N; ++i) {
+            fRQ.chop(dst);
+        }
+    }
+
+    typedef SkBenchmark INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+static void rand_conic(SkConic* conic, SkRandom& rand) {
+    for (int i = 0; i < 3; ++i) {
+        conic->fPts[i].set(rand.nextUScalar1() * 100, rand.nextUScalar1() * 100);
+    }
+    if (rand.nextUScalar1() > 0.5f) {
+        conic->fW = rand.nextUScalar1();
+    } else {
+        conic->fW = 1 + rand.nextUScalar1() * 4;
+    }
+}
+
+class ConicBench : public SkBenchmark {
+public:
+    ConicBench(void* param) : INHERITED(param) {
+        SkRandom rand;
+        for (int i = 0; i < CONICS; ++i) {
+            rand_conic(&fConics[i], rand);
+        }
+        fIsRendering = false;
+    }
+
+protected:
+    enum {
+        N = 20000,
+        CONICS = 100
+    };
+    SkConic fConics[CONICS];
+
+private:
+    typedef SkBenchmark INHERITED;
+};
+
+class ConicBench_ComputeError : public ConicBench {
+public:
+    ConicBench_ComputeError(void* param) : INHERITED(param) {}
+
+protected:
+    virtual const char* onGetName() SK_OVERRIDE {
+        return "conic-compute-error";
+    }
+
+    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+        SkVector err;
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < CONICS; ++j) {
+                fConics[j].computeAsQuadError(&err);
+            }
+        }
+    }
+
+private:
+    typedef ConicBench INHERITED;
+};
+
+class ConicBench_asQuadTol : public ConicBench {
+public:
+    ConicBench_asQuadTol(void* param) : INHERITED(param) {}
+
+protected:
+    virtual const char* onGetName() SK_OVERRIDE {
+        return "conic-asQuadTol";
+    }
+
+    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < CONICS; ++j) {
+                fConics[j].asQuadTol(SK_ScalarHalf);
+            }
+        }
+    }
+
+private:
+    typedef ConicBench INHERITED;
+};
+
+class ConicBench_quadPow2 : public ConicBench {
+public:
+    ConicBench_quadPow2(void* param) : INHERITED(param) {}
+
+protected:
+    virtual const char* onGetName() SK_OVERRIDE {
+        return "conic-quadPow2";
+    }
+
+    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < CONICS; ++j) {
+                fConics[j].computeQuadPOW2(SK_ScalarHalf);
+            }
+        }
+    }
+
+private:
+    typedef ConicBench INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 const SkRect ConservativelyContainsBench::kBounds = SkRect::MakeWH(SkIntToScalar(100), SkIntToScalar(100));
 const SkSize ConservativelyContainsBench::kQueryMin = SkSize::Make(SkIntToScalar(1), SkIntToScalar(1));
 const SkSize ConservativelyContainsBench::kQueryMax = SkSize::Make(SkIntToScalar(40), SkIntToScalar(40));
@@ -918,3 +1077,9 @@ DEF_BENCH( return new ArbRoundRectBench(p, true); )
 DEF_BENCH( return new ConservativelyContainsBench(p, ConservativelyContainsBench::kRect_Type); )
 DEF_BENCH( return new ConservativelyContainsBench(p, ConservativelyContainsBench::kRoundRect_Type); )
 DEF_BENCH( return new ConservativelyContainsBench(p, ConservativelyContainsBench::kOval_Type); )
+
+DEF_BENCH( return new ConicBench_Chop5(p) )
+DEF_BENCH( return new ConicBench_ChopHalf(p) )
+DEF_BENCH( return new ConicBench_ComputeError(p) )
+DEF_BENCH( return new ConicBench_asQuadTol(p) )
+DEF_BENCH( return new ConicBench_quadPow2(p) )

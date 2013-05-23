@@ -7,11 +7,7 @@
  */
 #include "Test.h"
 
-#include "SkBitmap.h"
-#include "SkBitmapChecksummer.h"
 #include "SkChecksum.h"
-#include "SkCityHash.h"
-#include "SkColor.h"
 
 // Word size that is large enough to hold results of any checksum type.
 typedef uint64_t checksum_result;
@@ -28,9 +24,7 @@ namespace skiatest {
         }
     private:
         enum Algorithm {
-            kSkChecksum,
-            kSkCityHash32,
-            kSkCityHash64
+            kSkChecksum
         };
 
         // Call Compute(data, size) on the appropriate checksum algorithm,
@@ -44,10 +38,6 @@ namespace skiatest {
                 REPORTER_ASSERT_MESSAGE(fReporter, SkIsAlign4(size),
                                         "test data size is not 32-bit aligned");
                 return SkChecksum::Compute(reinterpret_cast<const uint32_t *>(data), size);
-            case kSkCityHash32:
-                return SkCityHash::Compute32(data, size);
-            case kSkCityHash64:
-                return SkCityHash::Compute64(data, size);
             default:
                 SkString message("fWhichAlgorithm has unknown value ");
                 message.appendf("%d", fWhichAlgorithm);
@@ -107,44 +97,15 @@ namespace skiatest {
             return result;
         }
 
-        // Fill in bitmap with test data.
-        void CreateTestBitmap(SkBitmap &bitmap, SkBitmap::Config config, int width, int height,
-                              SkColor color) {
-            bitmap.setConfig(config, width, height);
-            REPORTER_ASSERT(fReporter, bitmap.allocPixels());
-            bitmap.setIsOpaque(true);
-            bitmap.eraseColor(color);
-        }
-
         void RunTest() {
             // Test self-consistency of checksum algorithms.
             fWhichAlgorithm = kSkChecksum;
-            TestChecksumSelfConsistency(128);
-            fWhichAlgorithm = kSkCityHash32;
-            TestChecksumSelfConsistency(128);
-            fWhichAlgorithm = kSkCityHash64;
             TestChecksumSelfConsistency(128);
 
             // Test checksum results that should be consistent across
             // versions and platforms.
             fWhichAlgorithm = kSkChecksum;
             REPORTER_ASSERT(fReporter, ComputeChecksum(NULL, 0) == 0);
-            fWhichAlgorithm = kSkCityHash32;
-            REPORTER_ASSERT(fReporter, ComputeChecksum(NULL, 0) == 0xdc56d17a);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(4)   == 0x616e1132);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(8)   == 0xeb0fd2d6);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(128) == 0x5321e430);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(132) == 0x924a10e4);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(256) == 0xd4de9dc9);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(260) == 0xecf0325d);
-            fWhichAlgorithm = kSkCityHash64;
-            REPORTER_ASSERT(fReporter, ComputeChecksum(NULL, 0) == 0x9ae16a3b2f90404fULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(4)   == 0x82bffd898958e540ULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(8)   == 0xad5a13e1e8e93b98ULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(128) == 0x10b153630af1f395ULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(132) == 0x7db71dc4adcc6647ULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(256) == 0xeee763519b91b010ULL);
-            REPORTER_ASSERT(fReporter, GetTestDataChecksum(260) == 0x2fe19e0b2239bc23ULL);
 
             // TODO: note the weakness exposed by these collisions...
             // We need to improve the SkChecksum algorithm.
@@ -156,25 +117,6 @@ namespace skiatest {
                 GetTestDataChecksum(128) == GetTestDataChecksum(256));
             REPORTER_ASSERT(fReporter,
                 GetTestDataChecksum(132) == GetTestDataChecksum(260));
-
-            // Test SkBitmapChecksummer
-            SkBitmap bitmap;
-            // initial test case
-            CreateTestBitmap(bitmap, SkBitmap::kARGB_8888_Config, 333, 555, SK_ColorBLUE);
-            REPORTER_ASSERT(fReporter,
-                            SkBitmapChecksummer::Compute64(bitmap) == 0x18f9df68b1b02f38ULL);
-            // same pixel data but different dimensions should yield a different checksum
-            CreateTestBitmap(bitmap, SkBitmap::kARGB_8888_Config, 555, 333, SK_ColorBLUE);
-            REPORTER_ASSERT(fReporter,
-                            SkBitmapChecksummer::Compute64(bitmap) == 0x6b0298183f786c8eULL);
-            // same dimensions but different color should yield a different checksum
-            CreateTestBitmap(bitmap, SkBitmap::kARGB_8888_Config, 555, 333, SK_ColorGREEN);
-            REPORTER_ASSERT(fReporter,
-                            SkBitmapChecksummer::Compute64(bitmap) == 0xc6b4b3f6fadaaf37ULL);
-            // same pixel colors in a different config should yield the same checksum
-            CreateTestBitmap(bitmap, SkBitmap::kARGB_4444_Config, 555, 333, SK_ColorGREEN);
-            REPORTER_ASSERT(fReporter,
-                            SkBitmapChecksummer::Compute64(bitmap) == 0xc6b4b3f6fadaaf37ULL);
         }
 
         Reporter* fReporter;

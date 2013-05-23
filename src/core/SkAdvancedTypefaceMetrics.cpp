@@ -17,8 +17,9 @@ SK_DEFINE_INST_COUNT(SkAdvancedTypefaceMetrics)
 #endif
 
 #if defined(SK_BUILD_FOR_UNIX) || defined(SK_BUILD_FOR_ANDROID)
-#include <ft2build.h>
-#include FT_FREETYPE_H
+// forward declare structs needed for getAdvanceData() template for freetype
+struct FT_FaceRec;
+typedef struct FT_FaceRec_* FT_Face;
 #endif
 
 #ifdef SK_BUILD_FOR_MAC

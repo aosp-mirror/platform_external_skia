@@ -21,6 +21,11 @@ public:
     virtual ~SkImage_Gpu();
 
     virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*) SK_OVERRIDE;
+    virtual GrTexture* onGetTexture() SK_OVERRIDE;
+    virtual bool getROPixels(SkBitmap*) const SK_OVERRIDE {
+        // TODO
+        return false;
+    }
 
     GrTexture* getTexture() { return fTexture; }
 
@@ -44,7 +49,7 @@ SkImage_Gpu::SkImage_Gpu(GrTexture* texture)
     SkASSERT(NULL != fTexture);
     fTexture->ref();
     fBitmap.setConfig(SkBitmap::kARGB_8888_Config, fTexture->width(), fTexture->height());
-    fBitmap.setPixelRef(new SkGrPixelRef(fTexture))->unref();
+    fBitmap.setPixelRef(SkNEW_ARGS(SkGrPixelRef, (fTexture)))->unref();
 }
 
 SkImage_Gpu::~SkImage_Gpu() {
@@ -54,6 +59,10 @@ SkImage_Gpu::~SkImage_Gpu() {
 void SkImage_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
                          const SkPaint* paint) {
     canvas->drawBitmap(fBitmap, x, y, paint);
+}
+
+GrTexture* SkImage_Gpu::onGetTexture() {
+    return fTexture;
 }
 
 void SkImage_Gpu::setTexture(GrTexture* texture) {

@@ -11,6 +11,7 @@
 
 #include "GrRect.h"
 #include "GrRefCnt.h"
+#include "SkMatrix.h"
 
 class GrGpu;
 class GrDrawTarget;
@@ -35,20 +36,43 @@ public:
     }
 
     // TODO: potentialy fuse the fill & stroke methods and differentiate
-    // btween them by passing in strokeWidth (<0 means fill).
+    // between them by passing in strokeWidth (<0 means fill).
 
-    // TODO: Remove the useVertexCoverage boolean. Just use it all the time
-    // since we now have a coverage vertex attribute
     void fillAARect(GrGpu* gpu,
                     GrDrawTarget* target,
+                    const GrRect& rect,
+                    const SkMatrix& combinedMatrix,
                     const GrRect& devRect,
-                    bool useVertexCoverage);
+                    bool useVertexCoverage) {
+#ifdef SHADER_AA_FILL_RECT
+        if (combinedMatrix.rectStaysRect()) {
+            this->shaderFillAlignedAARect(gpu, target,
+                                          rect, combinedMatrix);
+        } else {
+            this->shaderFillAARect(gpu, target,
+                                   rect, combinedMatrix);
+        }
+#else
+        this->geometryFillAARect(gpu, target,
+                                 rect, combinedMatrix,
+                                 devRect, useVertexCoverage);
+#endif
+    }
 
     void strokeAARect(GrGpu* gpu,
                       GrDrawTarget* target,
+                      const GrRect& rect,
+                      const SkMatrix& combinedMatrix,
                       const GrRect& devRect,
-                      const GrVec& devStrokeSize,
+                      SkScalar width,
                       bool useVertexCoverage);
+
+    // First rect is outer; second rect is inner
+    void fillAANestedRects(GrGpu* gpu,
+                           GrDrawTarget* target,
+                           const SkRect rects[2],
+                           const SkMatrix& combinedMatrix,
+                           bool useVertexCoverage);
 
 private:
     GrIndexBuffer*              fAAFillRectIndexBuffer;
@@ -58,6 +82,31 @@ private:
 
     static int aaStrokeRectIndexCount();
     GrIndexBuffer* aaStrokeRectIndexBuffer(GrGpu* gpu);
+
+    // TODO: Remove the useVertexCoverage boolean. Just use it all the time
+    // since we now have a coverage vertex attribute
+    void geometryFillAARect(GrGpu* gpu,
+                            GrDrawTarget* target,
+                            const GrRect& rect,
+                            const SkMatrix& combinedMatrix,
+                            const GrRect& devRect,
+                            bool useVertexCoverage);
+
+    void shaderFillAARect(GrGpu* gpu,
+                          GrDrawTarget* target,
+                          const GrRect& rect,
+                          const SkMatrix& combinedMatrix);
+
+    void shaderFillAlignedAARect(GrGpu* gpu,
+                                 GrDrawTarget* target,
+                                 const GrRect& rect,
+                                 const SkMatrix& combinedMatrix);
+
+    void geometryStrokeAARect(GrGpu* gpu,
+                              GrDrawTarget* target,
+                              const SkRect& devOutside,
+                              const SkRect& devInside,
+                              bool useVertexCoverage);
 
     typedef GrRefCnt INHERITED;
 };

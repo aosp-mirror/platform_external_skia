@@ -280,10 +280,13 @@ typedef unsigned __int64 uint64_t;
 #define GrAlwaysAssert(COND) GR_ALWAYSASSERT(COND)
 
 /**
- * Crash from unrecoverable condition, optionally with a message.
+ * Crash from unrecoverable condition, optionally with a message. The debug variants only
+ * crash in a debug build. The message versions print the message regardless of release vs debug.
  */
 inline void GrCrash() { GrAlwaysAssert(false); }
 inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
+inline void GrDebugCrash() { GrAssert(false); }
+inline void GrDebugCrash(const char* msg) { GrPrintf(msg); GrAssert(false); }
 
 /**
  *  GR_DEBUGCODE compiles the code X in debug builds only
@@ -313,15 +316,6 @@ inline void GrCrash(const char* msg) { GrPrintf(msg); GrAlwaysAssert(false); }
             enum {GR_CONCAT(X,__LINE__) = \
             sizeof(GR_STATIC_ASSERT_FAILURE<CONDITION>)}
     #endif
-#endif
-
-/**
- *  GR_STATIC_RECT_VB controls whether rects are drawn by issuing a vertex
- *  for each corner or using a static vb that is positioned by modifying the
- *  view / texture matrix.
- */
-#if !defined(GR_STATIC_RECT_VB)
-    #define GR_STATIC_RECT_VB 0
 #endif
 
 /**

@@ -253,10 +253,10 @@ void SkPicture::endRecording() {
     SkASSERT(NULL == fRecord);
 }
 
-void SkPicture::draw(SkCanvas* surface) {
+void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
     this->endRecording();
     if (fPlayback) {
-        fPlayback->draw(*surface);
+        fPlayback->draw(*surface, callback);
     }
 }
 
@@ -300,6 +300,34 @@ void SkPicture::initFromStream(SkStream* stream, bool* success, InstallPixelRefP
         *success = true;
     }
 }
+
+#define PREVENT_CHROME_BREAKAGE
+#ifdef PREVENT_CHROME_BREAKAGE
+// This block of code is to allow chromium to build until https://codereview.chromium.org/15496006/
+// is submitted. Then it will be reverted.
+#include "SkThread.h"
+
+static SkPicture::OldEncodeBitmap gOldEncodeBitmapFunction;
+
+SK_DECLARE_STATIC_MUTEX(gEncodeFunctionMutex);
+
+static SkData* encode_from_old_encoder(size_t* pixelRefOffset, const SkBitmap& bm) {
+    SkASSERT(gOldEncodeBitmapFunction != NULL);
+    SkDynamicMemoryWStream stream;
+    if (!gOldEncodeBitmapFunction(&stream, bm)) {
+        return NULL;
+    }
+    return stream.copyToData();
+}
+
+void SkPicture::serialize(SkWStream* stream, OldEncodeBitmap oldEncoder) const {
+    SkAutoMutexAcquire ac(gEncodeFunctionMutex);
+    gOldEncodeBitmapFunction = oldEncoder;
+    this->serialize(stream, &encode_from_old_encoder);
+    gOldEncodeBitmapFunction = NULL;
+}
+
+#endif // PREVENT_CHROME_BREAKAGE
 
 void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     SkPicturePlayback* playback = fPlayback;

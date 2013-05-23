@@ -10,6 +10,7 @@
 
 #include "GrAllocator.h"
 #include "GrBackendEffectFactory.h"
+#include "GrColor.h"
 #include "GrEffect.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLUniformManager.h"
@@ -18,6 +19,7 @@
 
 class GrGLContextInfo;
 class GrEffectStage;
+class GrGLProgramDesc;
 
 /**
   Contains all the incremental state of a shader as it is being built,as well as helpers to
@@ -31,46 +33,67 @@ public:
     class TextureSampler {
     public:
         TextureSampler()
-            : fTextureAccess(NULL)
-            , fSamplerUniform(GrGLUniformManager::kInvalidUniformHandle) {}
+            : fConfigComponentMask(0)
+            , fSamplerUniform(GrGLUniformManager::kInvalidUniformHandle) {
+            // we will memcpy the first 4 bytes from passed in swizzle. This ensures the string is
+            // terminated.
+            fSwizzle[4] = '\0';
+        }
 
         TextureSampler(const TextureSampler& other) { *this = other; }
 
         TextureSampler& operator= (const TextureSampler& other) {
-            GrAssert(NULL == fTextureAccess);
+            GrAssert(0 == fConfigComponentMask);
             GrAssert(GrGLUniformManager::kInvalidUniformHandle == fSamplerUniform);
 
-            fTextureAccess = other.fTextureAccess;
+            fConfigComponentMask = other.fConfigComponentMask;
             fSamplerUniform = other.fSamplerUniform;
             return *this;
         }
 
-        const GrTextureAccess* textureAccess() const { return fTextureAccess; }
+        // bitfield of GrColorComponentFlags present in the texture's config.
+        uint32_t configComponentMask() const { return fConfigComponentMask; }
+
+        const char* swizzle() const { return fSwizzle; }
+
+        bool isInitialized() const { return 0 != fConfigComponentMask; }
 
     private:
         // The idx param is used to ensure multiple samplers within a single effect have unique
-        // uniform names.
-        void init(GrGLShaderBuilder* builder, const GrTextureAccess* access, int idx) {
-            GrAssert(NULL == fTextureAccess);
+        // uniform names. swizzle is a four char max string made up of chars 'r', 'g', 'b', and 'a'.
+        void init(GrGLShaderBuilder* builder,
+                  uint32_t configComponentMask,
+                  const char* swizzle,
+                  int idx) {
+            GrAssert(!this->isInitialized());
+            GrAssert(0 != configComponentMask);
             GrAssert(GrGLUniformManager::kInvalidUniformHandle == fSamplerUniform);
 
             GrAssert(NULL != builder);
-            GrAssert(NULL != access);
             SkString name;
-            name.printf("Sampler%d_", idx);
+            name.printf("Sampler%d", idx);
             fSamplerUniform = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                                   kSampler2D_GrSLType,
                                                   name.c_str());
             GrAssert(GrGLUniformManager::kInvalidUniformHandle != fSamplerUniform);
 
-            fTextureAccess = access;
+            fConfigComponentMask = configComponentMask;
+            memcpy(fSwizzle, swizzle, 4);
         }
 
-        const GrTextureAccess*            fTextureAccess;
+        void init(GrGLShaderBuilder* builder, const GrTextureAccess* access, int idx) {
+            GrAssert(NULL != access);
+            this->init(builder,
+                       GrPixelConfigComponentMask(access->getTexture()->config()),
+                       access->getSwizzle(),
+                       idx);
+        }
+
+        uint32_t                          fConfigComponentMask;
+        char                              fSwizzle[5];
         GrGLUniformManager::UniformHandle fSamplerUniform;
 
-        friend class GrGLShaderBuilder; // to access fSamplerUniform
-        friend class GrGLProgram;       // to construct these and access fSamplerUniform.
+        friend class GrGLShaderBuilder; // to call init().
     };
 
     typedef SkTArray<TextureSampler> TextureSamplerArray;
@@ -81,7 +104,23 @@ public:
         kFragment_ShaderType = 0x4,
     };
 
-    GrGLShaderBuilder(const GrGLContextInfo&, GrGLUniformManager&, bool explicitLocalCoords);
+    GrGLShaderBuilder(const GrGLContextInfo&, GrGLUniformManager&, const GrGLProgramDesc&);
+
+    /**
+     * Use of these features may require a GLSL extension to be enabled. Shaders may not compile
+     * if code is added that uses one of these features without calling enableFeature()
+     */
+    enum GLSLFeature {
+        kStandardDerivatives_GLSLFeature = 0,
+
+        kLastGLSLFeature = kStandardDerivatives_GLSLFeature
+    };
+
+    /**
+     * If the feature is supported then true is returned and any necessary #extension declarations
+     * are added to the shaders. If the feature is not supported then false will be returned.
+     */
+    bool enableFeature(GLSLFeature);
 
     /**
      * Called by GrGLEffects to add code to one of the shaders.
@@ -153,6 +192,19 @@ public:
     static GrBackendEffectFactory::EffectKey KeyForTextureAccess(const GrTextureAccess&,
                                                                  const GrGLCaps&);
 
+    typedef uint8_t DstReadKey;
+    typedef uint8_t FragPosKey;
+
+    /**  Returns a key for adding code to read the copy-of-dst color in service of effects that
+         require reading the dst. It must not return 0 because 0 indicates that there is no dst
+         copy read at all (in which case this function should not be called). */
+    static DstReadKey KeyForDstRead(const GrTexture* dstCopy, const GrGLCaps&);
+
+    /** Returns a key for reading the fragment location. This should only be called if there is an
+        effect that will requires the fragment position. If the fragment position is not required,
+        the key is 0. */
+    static FragPosKey KeyForFragmentPosition(const GrRenderTarget* dst, const GrGLCaps&);
+
     /** If texture swizzling is available using tex parameters then it is preferred over mangling
         the generated shader code. This potentially allows greater reuse of cached shaders. */
     static const GrGLenum* GetTexParamSwizzle(GrPixelConfig config, const GrGLCaps& caps);
@@ -211,6 +263,10 @@ public:
         specified explicit local coords or not in the GrDrawState. */
     const GrGLShaderVar& localCoordsAttribute() const { return *fLocalCoordsVar; }
 
+    /** Returns the color of the destination pixel. This may be NULL if no effect advertised
+        that it will read the destination. */
+    const char* dstColor();
+
     /**
      * Are explicit local coordinates provided as input to the vertex shader.
      */
@@ -225,17 +281,35 @@ public:
     /** Called after building is complete to get the final shader string. */
     void getShader(ShaderType, SkString*) const;
 
-    void setCurrentStage(int stageIdx) { fCurrentStageIdx = stageIdx; }
-    void setNonStage() { fCurrentStageIdx = kNonStageIdx; }
-    // TODO: move remainder of shader code generation to this class and call this privately
-    // Handles of sampler uniforms generated for the effect are appended to samplerHandles.
-    GrGLEffect* createAndEmitGLEffect(
-                                const GrEffectStage& stage,
-                                GrBackendEffectFactory::EffectKey key,
-                                const char* fsInColor, // NULL means no incoming color
-                                const char* fsOutColor,
-                                SkTArray<GrGLUniformManager::UniformHandle, true>* samplerHandles);
+    /**
+     * Adds code for effects. effectStages contains the effects to add. effectKeys[i] is the key
+     * generated from effectStages[i]. An entry in effectStages can be NULL, in which case it is
+     * skipped. Moreover, if the corresponding key is GrGLEffect::NoEffectKey then it is skipped.
+     * inOutFSColor specifies the input color to the first stage and is updated to be the
+     * output color of the last stage. fsInOutColorKnownValue specifies whether the input color
+     * has a known constant value and is updated to refer to the status of the output color.
+     * The handles to texture samplers for effectStage[i] are added to effectSamplerHandles[i]. The
+     * glEffects array is updated to contain the GrGLEffect generated for each entry in
+     * effectStages.
+     */
+    void emitEffects(const GrEffectStage* effectStages[],
+                     const GrBackendEffectFactory::EffectKey effectKeys[],
+                     int effectCnt,
+                     SkString*  inOutFSColor,
+                     GrSLConstantVec* fsInOutColorKnownValue,
+                     SkTArray<GrGLUniformManager::UniformHandle, true>* effectSamplerHandles[],
+                     GrGLEffect* glEffects[]);
+
     GrGLUniformManager::UniformHandle getRTHeightUniform() const { return fRTHeightUniform; }
+    GrGLUniformManager::UniformHandle getDstCopyTopLeftUniform() const {
+        return fDstCopyTopLeftUniform;
+    }
+    GrGLUniformManager::UniformHandle getDstCopyScaleUniform() const {
+        return fDstCopyScaleUniform;
+    }
+    GrGLUniformManager::UniformHandle getDstCopySamplerUniform() const {
+        return fDstCopySampler.fSamplerUniform;
+    }
 
     struct AttributePair {
         void set(int index, const SkString& name) {
@@ -244,7 +318,7 @@ public:
         int      fIndex;
         SkString fName;
     };
-    const SkSTArray<10, AttributePair, true>& getEffectAttributes() const {
+    const SkTArray<AttributePair, true>& getEffectAttributes() const {
         return fEffectAttributes;
     }
     const SkString* getEffectAttributeName(int attributeIndex) const;
@@ -269,7 +343,6 @@ private:
     // TODO: Everything below here private.
 public:
 
-    SkString    fHeader; // VS+FS, GLSL version, etc
     VarArray    fVSAttrs;
     VarArray    fVSOutputs;
     VarArray    fGSInputs;
@@ -277,25 +350,112 @@ public:
     VarArray    fFSInputs;
     SkString    fGSHeader; // layout qualifiers specific to GS
     VarArray    fFSOutputs;
-    bool        fUsesGS;
 
 private:
+    class CodeStage : GrNoncopyable {
+    public:
+        CodeStage() : fNextIndex(0), fCurrentIndex(-1), fEffectStage(NULL) {}
+
+        bool inStageCode() const {
+            this->validate();
+            return NULL != fEffectStage;
+        }
+
+        const GrEffectStage* effectStage() const {
+            this->validate();
+            return fEffectStage;
+        }
+
+        int stageIndex() const {
+            this->validate();
+            return fCurrentIndex;
+        }
+
+        class AutoStageRestore : GrNoncopyable {
+        public:
+            AutoStageRestore(CodeStage* codeStage, const GrEffectStage* newStage) {
+                GrAssert(NULL != codeStage);
+                fSavedIndex = codeStage->fCurrentIndex;
+                fSavedEffectStage = codeStage->fEffectStage;
+
+                if (NULL == newStage) {
+                    codeStage->fCurrentIndex = -1;
+                } else {
+                    codeStage->fCurrentIndex = codeStage->fNextIndex++;
+                }
+                codeStage->fEffectStage = newStage;
+
+                fCodeStage = codeStage;
+            }
+            ~AutoStageRestore() {
+                fCodeStage->fCurrentIndex = fSavedIndex;
+                fCodeStage->fEffectStage = fSavedEffectStage;
+            }
+        private:
+            CodeStage*              fCodeStage;
+            int                     fSavedIndex;
+            const GrEffectStage*    fSavedEffectStage;
+        };
+    private:
+        void validate() const { GrAssert((NULL == fEffectStage) == (-1 == fCurrentIndex)); }
+        int                     fNextIndex;
+        int                     fCurrentIndex;
+        const GrEffectStage*    fEffectStage;
+    } fCodeStage;
+
+    /**
+     * Features that should only be enabled by GrGLShaderBuilder itself.
+     */
+    enum GLSLPrivateFeature {
+        kFragCoordConventions_GLSLPrivateFeature = kLastGLSLFeature + 1,
+        kEXTShaderFramebufferFetch_GLSLPrivateFeature,
+        kNVShaderFramebufferFetch_GLSLPrivateFeature,
+    };
+    bool enablePrivateFeature(GLSLPrivateFeature);
+
+    // If we ever have VS/GS features we can expand this to take a bitmask of ShaderType and track
+    // the enables separately for each shader.
+    void addFSFeature(uint32_t featureBit, const char* extensionName);
+
+    // Generates a name for a variable. The generated string will be name prefixed by the prefix
+    // char (unless the prefix is '\0'). It also mangles the name to be stage-specific if we're
+    // generating stage code.
+    void nameVariable(SkString* out, char prefix, const char* name);
+
+    // Interpretation of DstReadKey when generating code
     enum {
-        kNonStageIdx = -1,
+        kNoDstRead_DstReadKey         = 0,
+        kYesDstRead_DstReadKeyBit     = 0x1, // Set if we do a dst-copy-read.
+        kUseAlphaConfig_DstReadKeyBit = 0x2, // Set if dst-copy config is alpha only.
+        kTopLeftOrigin_DstReadKeyBit  = 0x4, // Set if dst-copy origin is top-left.
+    };
+
+    enum {
+        kNoFragPosRead_FragPosKey           = 0,  // The fragment positition will not be needed.
+        kTopLeftFragPosRead_FragPosKey      = 0x1,// Read frag pos relative to top-left.
+        kBottomLeftFragPosRead_FragPosKey   = 0x2,// Read frag pos relative to bottom-left.
     };
 
     const GrGLContextInfo&              fCtxInfo;
     GrGLUniformManager&                 fUniformManager;
-    int                                 fCurrentStageIdx;
+    uint32_t                            fFSFeaturesAddedMask;
     SkString                            fFSFunctions;
-    SkString                            fFSHeader;
+    SkString                            fFSExtensions;
+
+    bool                                fUsesGS;
 
     SkString                            fFSCode;
     SkString                            fVSCode;
     SkString                            fGSCode;
 
     bool                                fSetupFragPosition;
+    TextureSampler                      fDstCopySampler;
+
     GrGLUniformManager::UniformHandle   fRTHeightUniform;
+    GrGLUniformManager::UniformHandle   fDstCopyTopLeftUniform;
+    GrGLUniformManager::UniformHandle   fDstCopyScaleUniform;
+
+    bool                                fTopLeftFragPosRead;
 
     SkSTArray<10, AttributePair, true>  fEffectAttributes;
 

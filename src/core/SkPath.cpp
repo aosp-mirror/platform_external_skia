@@ -7,9 +7,10 @@
  */
 
 
-#include "SkPath.h"
 #include "SkBuffer.h"
+#include "SkErrorInternals.h"
 #include "SkMath.h"
+#include "SkPath.h"
 #include "SkPathRef.h"
 #include "SkRRect.h"
 #include "SkThread.h"
@@ -599,23 +600,28 @@ bool SkPath::isRect(bool* isClosed, Direction* direction) const {
     return isRectContour(false, &currVerb, &pts, isClosed, direction);
 }
 
-bool SkPath::isNestedRects(SkRect rects[2]) const {
+bool SkPath::isNestedRects(SkRect rects[2], Direction dirs[2]) const {
     SkDEBUGCODE(this->validate();)
     int currVerb = 0;
     const SkPoint* pts = fPathRef->points();
     const SkPoint* first = pts;
-    if (!isRectContour(true, &currVerb, &pts, NULL, NULL)) {
+    Direction testDirs[2];
+    if (!isRectContour(true, &currVerb, &pts, NULL, &testDirs[0])) {
         return false;
     }
     const SkPoint* last = pts;
     SkRect testRects[2];
-    if (isRectContour(false, &currVerb, &pts, NULL, NULL)) {
-        testRects[0].set(first, last - first);
-        testRects[1].set(last, pts - last);
+    if (isRectContour(false, &currVerb, &pts, NULL, &testDirs[1])) {
+        testRects[0].set(first, SkToS32(last - first));
+        testRects[1].set(last, SkToS32(pts - last));
         if (testRects[0].contains(testRects[1])) {
             if (rects) {
                 rects[0] = testRects[0];
                 rects[1] = testRects[1];
+            }
+            if (dirs) {
+                dirs[0] = testDirs[0];
+                dirs[1] = testDirs[1];
             }
             return true;
         }
@@ -623,6 +629,10 @@ bool SkPath::isNestedRects(SkRect rects[2]) const {
             if (rects) {
                 rects[0] = testRects[1];
                 rects[1] = testRects[0];
+            }
+            if (dirs) {
+                dirs[0] = testDirs[1];
+                dirs[1] = testDirs[0];
             }
             return true;
         }
@@ -1034,6 +1044,14 @@ bool SkPath::hasOnlyMoveTos() const {
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                           Direction dir) {
     assert_known_direction(dir);
+
+    if (rx < 0 || ry < 0) {
+        SkErrorInternals::SetError( kInvalidArgument_SkError,
+                                    "I got %f and %f as radii to SkPath::AddRoundRect, "
+                                    "but negative radii are not allowed.",
+                                    SkScalarToDouble(rx), SkScalarToDouble(ry) );
+        return;
+    }
 
     SkScalar    w = rect.width();
     SkScalar    halfW = SkScalarHalf(w);
@@ -2075,7 +2093,7 @@ uint32_t SkPath::writeToMemory(void* storage) const {
     buffer.write(&bounds, sizeof(bounds));
 
     buffer.padToAlign4();
-    return buffer.pos();
+    return SkToU32(buffer.pos());
 }
 
 uint32_t SkPath::readFromMemory(const void* storage) {
@@ -2107,7 +2125,7 @@ uint32_t SkPath::readFromMemory(const void* storage) {
     GEN_ID_INC;
 
     SkDEBUGCODE(this->validate();)
-    return buffer.pos();
+    return SkToU32(buffer.pos());
 }
 
 ///////////////////////////////////////////////////////////////////////////////

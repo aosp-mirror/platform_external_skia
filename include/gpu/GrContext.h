@@ -410,6 +410,17 @@ public:
                         const SkMatrix* localMatrix = NULL);
 
     /**
+     *  Draw a roundrect using a paint.
+     *
+     *  @param paint        describes how to color pixels.
+     *  @param rrect        the roundrect to draw
+     *  @param stroke       the stroke information (width, join, cap)
+     */
+    void drawRRect(const GrPaint& paint,
+                   const SkRRect& rrect,
+                   const SkStrokeRec& stroke);
+
+    /**
      * Draws a path.
      *
      * @param paint         describes how to color pixels.
@@ -891,7 +902,7 @@ private:
     /// draw state is left unmodified.
     GrDrawTarget* prepareToDraw(const GrPaint*, BufferedDraw);
 
-    void internalDrawPath(GrDrawTarget* target, const GrPaint& paint, const SkPath& path,
+    void internalDrawPath(GrDrawTarget* target, bool useAA, const SkPath& path,
                           const SkStrokeRec& stroke);
 
     GrTexture* createResizedTexture(const GrTextureDesc& desc,
@@ -967,6 +978,9 @@ public:
      * returned texture.
      */
     GrTexture* detach() {
+        if (NULL == fTexture) {
+            return NULL;
+        }
         GrTexture* texture = fTexture;
         fTexture = NULL;
 

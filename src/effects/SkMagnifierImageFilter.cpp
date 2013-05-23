@@ -201,6 +201,7 @@ GR_DEFINE_EFFECT_TEST(GrMagnifierEffect);
 
 GrEffectRef* GrMagnifierEffect::TestCreate(SkMWCRandom* random,
                                            GrContext* context,
+                                           const GrDrawTargetCaps&,
                                            GrTexture** textures) {
     const int kMaxWidth = 200;
     const int kMaxHeight = 200;
@@ -211,7 +212,7 @@ GrEffectRef* GrMagnifierEffect::TestCreate(SkMWCRandom* random,
     uint32_t y = random->nextULessThan(kMaxHeight - height);
     SkScalar inset = SkIntToScalar(random->nextULessThan(kMaxInset));
 
-    SkAutoTUnref<SkImageFilter> filter(
+    SkAutoTUnref<SkMagnifierImageFilter> filter(
             new SkMagnifierImageFilter(
                 SkRect::MakeXYWH(SkIntToScalar(x), SkIntToScalar(y),
                                  SkIntToScalar(width), SkIntToScalar(height)),
@@ -262,22 +263,20 @@ SkMagnifierImageFilter::SkMagnifierImageFilter(SkRect srcRect, SkScalar inset)
     SkASSERT(srcRect.x() >= 0 && srcRect.y() >= 0 && inset >= 0);
 }
 
-bool SkMagnifierImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* texture) const {
 #if SK_SUPPORT_GPU
+bool SkMagnifierImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* texture) const {
     if (effect) {
-      *effect = GrMagnifierEffect::Create(texture,
-                                          fSrcRect.x() / texture->width(),
-                                          fSrcRect.y() / texture->height(),
-                                          texture->width() / fSrcRect.width(),
-                                          texture->height() / fSrcRect.height(),
-                                          fInset / texture->width(),
-                                          fInset / texture->height());
+        *effect = GrMagnifierEffect::Create(texture,
+                                            fSrcRect.x() / texture->width(),
+                                            fSrcRect.y() / texture->height(),
+                                            texture->width() / fSrcRect.width(),
+                                            texture->height() / fSrcRect.height(),
+                                            fInset / texture->width(),
+                                            fInset / texture->height());
     }
     return true;
-#else
-    return false;
-#endif
 }
+#endif
 
 void SkMagnifierImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);

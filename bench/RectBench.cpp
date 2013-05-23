@@ -109,7 +109,7 @@ private:
 
 class OvalBench : public RectBench {
 public:
-    OvalBench(void* param, int shift) : RectBench(param, shift) {}
+    OvalBench(void* param, int shift, int stroke = 0) : RectBench(param, shift, stroke) {}
 protected:
     virtual void drawThisRect(SkCanvas* c, const SkRect& r, const SkPaint& p) {
         c->drawOval(r, p);
@@ -119,7 +119,7 @@ protected:
 
 class RRectBench : public RectBench {
 public:
-    RRectBench(void* param, int shift) : RectBench(param, shift) {}
+    RRectBench(void* param, int shift, int stroke = 0) : RectBench(param, shift, stroke) {}
 protected:
     virtual void drawThisRect(SkCanvas* c, const SkRect& r, const SkPaint& p) {
         c->drawRoundRect(r, r.width() / 4, r.height() / 4, p);
@@ -169,30 +169,48 @@ public:
         H = 480,
     };
 
-    AARectBench(void* param) : INHERITED(param) {}
+    AARectBench(void* param, bool rotate) : INHERITED(param), fRotate(rotate) {}
 
 protected:
 
-    virtual const char* onGetName() { return "aarects"; }
+    virtual const char* onGetName() {
+        if (fRotate) {
+            return "aarects_rotated";
+        }
+        return "aarects";
+    }
 
     virtual void onDraw(SkCanvas* canvas) {
+        static const SkScalar kHalfRectSize = SkFloatToScalar(0.75f);
+
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setAntiAlias(true);
         paint.setColor(SK_ColorBLACK);
-        SkRect r;
+        SkRect r = { -kHalfRectSize, -kHalfRectSize, kHalfRectSize, kHalfRectSize };
+        int rot = 0;
 
         // Draw small aa rects in a grid across the screen
-        for (SkScalar y = SK_ScalarHalf; y < H; y += SkIntToScalar(2)) {
-            for (SkScalar x = SK_ScalarHalf; x < W; x += SkIntToScalar(2)) {
-                r.set(x, y,
-                      x+SkFloatToScalar(1.5f), y+SkFloatToScalar(1.5f));
+        for (SkScalar y = kHalfRectSize+SK_Scalar1; y < H; y += 2*kHalfRectSize+2) {
+            for (SkScalar x = kHalfRectSize+SK_Scalar1; x < W; x += 2*kHalfRectSize+2) {
+                canvas->save();
+                canvas->translate(x, y);
+
+                if (fRotate) {
+                    SkMatrix rotate;
+                    rotate.setRotate(SkIntToScalar(rot));
+                    canvas->concat(rotate);
+                    rot += 10;
+                }
+
                 canvas->drawRect(r, paint);
+                canvas->restore();
             }
         }
 
     }
 private:
+    bool fRotate;
     typedef SkBenchmark INHERITED;
 };
 
@@ -281,14 +299,20 @@ DEF_BENCH( return SkNEW_ARGS(RectBench, (p, 3)); )
 DEF_BENCH( return SkNEW_ARGS(RectBench, (p, 3, 4)); )
 DEF_BENCH( return SkNEW_ARGS(OvalBench, (p, 1)); )
 DEF_BENCH( return SkNEW_ARGS(OvalBench, (p, 3)); )
+DEF_BENCH( return SkNEW_ARGS(OvalBench, (p, 1, 4)); )
+DEF_BENCH( return SkNEW_ARGS(OvalBench, (p, 3, 4)); )
 DEF_BENCH( return SkNEW_ARGS(RRectBench, (p, 1)); )
+DEF_BENCH( return SkNEW_ARGS(RRectBench, (p, 1, 4)); )
 DEF_BENCH( return SkNEW_ARGS(RRectBench, (p, 3)); )
+DEF_BENCH( return SkNEW_ARGS(RRectBench, (p, 3, 4)); )
 DEF_BENCH( return SkNEW_ARGS(PointsBench, (p, SkCanvas::kPoints_PointMode, "points")); )
 DEF_BENCH( return SkNEW_ARGS(PointsBench, (p, SkCanvas::kLines_PointMode, "lines")); )
 DEF_BENCH( return SkNEW_ARGS(PointsBench, (p, SkCanvas::kPolygon_PointMode, "polygon")); )
 
 DEF_BENCH( return SkNEW_ARGS(SrcModeRectBench, (p)); )
-DEF_BENCH( return SkNEW_ARGS(AARectBench, (p)); )
+
+DEF_BENCH( return SkNEW_ARGS(AARectBench, (p, false)); )
+DEF_BENCH( return SkNEW_ARGS(AARectBench, (p, true)); )
 
 /* init the blitmask bench
  */

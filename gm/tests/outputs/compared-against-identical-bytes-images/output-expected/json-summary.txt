@@ -4,21 +4,21 @@
       "failure-ignored" : null,
       "no-comparison" : null,
       "succeeded" : {
-         "565/selftest1" : {
-            "checksum" : 9512553915271796906
+         "565/selftest1.png" : {
+            "bitmap-64bitMD5" : 12927999507540085554
          },
-         "8888/selftest1" : {
-            "checksum" : 14022967492765711532
+         "8888/selftest1.png" : {
+            "bitmap-64bitMD5" : 1209453360120438698
          }
       }
    },
    "expected-results" : {
-      "565/selftest1" : {
-         "checksums" : [ 9512553915271796906 ],
+      "565/selftest1.png" : {
+         "allowed-bitmap-64bitMD5s" : [ 12927999507540085554 ],
          "ignore-failure" : false
       },
-      "8888/selftest1" : {
-         "checksums" : [ 14022967492765711532 ],
+      "8888/selftest1.png" : {
+         "allowed-bitmap-64bitMD5s" : [ 1209453360120438698 ],
          "ignore-failure" : false
       }
    }

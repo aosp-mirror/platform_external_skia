@@ -17,25 +17,27 @@ import os, subprocess, sys, tempfile
 
 pairs = [ 
    ['base-shuttle-win7-intel-float',
-    'Skia_Shuttle_Win7_Intel_Float_Release_32'],
+    'Test-Win7-ShuttleA-HD2000-x86-Release'],
    ['base-shuttle-win7-intel-angle',
-    'Skia_Shuttle_Win7_Intel_Float_ANGLE_Release_32'],
+    'Test-Win7-ShuttleA-HD2000-x86-Release-ANGLE'],
    ['base-shuttle-win7-intel-directwrite',
-    'Skia_Shuttle_Win7_Intel_Float_DirectWrite_Release_32'],
+    'Test-Win7-ShuttleA-HD2000-x86-Release-DirectWrite'],
    ['base-shuttle_ubuntu12_ati5770',
-    'Skia_Shuttle_Ubuntu12_ATI5770_Float_Release_64'],
+    'Test-Ubuntu12-ShuttleA-ATI5770-x86_64-Release'],
    ['base-macmini',
-    'Skia_Mac_Float_Release_32'],
+    'Test-Mac10.6-MacMini4.1-GeForce320M-x86-Release'],
    ['base-macmini-lion-float',
-    'Skia_MacMiniLion_Float_Release_32'],
+    'Test-Mac10.7-MacMini4.1-GeForce320M-x86-Release'],
    ['base-android-galaxy-nexus',
-    'Skia_GalaxyNexus_4-1_Float_Release_32'],
+    'Test-Android-GalaxyNexus-SGX540-Arm7-Debug'],
    ['base-android-nexus-7',
-    'Skia_Nexus7_4-1_Float_Release_32'],
+    'Test-Android-Nexus7-Tegra3-Arm7-Release'],
    ['base-android-nexus-s',
-    'Skia_NexusS_4-1_Float_Release_32'],
+    'Test-Android-NexusS-SGX540-Arm7-Release'],
    ['base-android-xoom',
-    'Skia_Xoom_4-1_Float_Release_32'],
+    'Test-Android-Xoom-Tegra2-Arm7-Release'],
+   ['base-android-nexus-10',
+    'Test-Android-Nexus10-MaliT604-Arm7-Release'],
 ]
 
 if len(sys.argv) < 2:
@@ -49,9 +51,9 @@ is_git_checkout = os.path.exists('.git') or os.path.exists(os.path.join('..', '.
 for testname in sys.argv[1:]:
     for pair in pairs:
         if (pair[0] == 'base-shuttle-win7-intel-angle'):
-            testtypes = [ 'angle' ]
+            testtypes = [ 'angle', 'anglemsaa16' ]
         else:
-            testtypes = [ '565', '8888', 'gpu', 'pdf', 'mesa' ]
+            testtypes = [ '565', '8888', 'gpu', 'pdf', 'mesa', 'msaa16', 'msaa4' ]
         print pair[0] + ':'
         for testtype in testtypes:
             infilename = testname + '_' + testtype + '.png'

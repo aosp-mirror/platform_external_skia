@@ -40,12 +40,27 @@ int32_t SkSqrtBits(int32_t value, int bitBias);
 //! Returns the number of leading zero bits (0...32)
 int SkCLZ_portable(uint32_t);
 
-#if defined(SK_CPU_ARM)
-    #define SkCLZ(x)    __builtin_clz(x)
-#endif
-
 #ifndef SkCLZ
-    #define SkCLZ(x)    SkCLZ_portable(x)
+    #if defined(_MSC_VER) && _MSC_VER >= 1400
+        #include <intrin.h>
+
+        static inline int SkCLZ(uint32_t mask) {
+            if (mask) {
+                DWORD index;
+                _BitScanReverse(&index, mask);
+                return index ^ 0x1F;
+            } else {
+                return 32;
+            }
+        }
+    #elif defined(SK_CPU_ARM) || defined(__GNUC__) || defined(__clang__)
+        static inline int SkCLZ(uint32_t mask) {
+            // __builtin_clz(0) is undefined, so we have to detect that case.
+            return mask ? __builtin_clz(mask) : 32;
+        }
+    #else
+        #define SkCLZ(x)    SkCLZ_portable(x)
+    #endif
 #endif
 
 /**
@@ -139,7 +154,7 @@ static inline bool SkIsPow2(int value) {
  *  Return a*b/((1 << shift) - 1), rounding any fractional bits.
  *  Only valid if a and b are unsigned and <= 32767 and shift is > 0 and <= 8
  */
-static inline unsigned SkMul16ShiftRound(unsigned a, unsigned b, int shift) {
+static inline unsigned SkMul16ShiftRound(U16CPU a, U16CPU b, int shift) {
     SkASSERT(a <= 32767);
     SkASSERT(b <= 32767);
     SkASSERT(shift > 0 && shift <= 8);
@@ -148,12 +163,12 @@ static inline unsigned SkMul16ShiftRound(unsigned a, unsigned b, int shift) {
 }
 
 /**
- *  Return a*b/255, rounding any fractional bits. Only valid if both
- *  a and b are 0..255
+ *  Return a*b/255, rounding any fractional bits.
+ *  Only valid if a and b are unsigned and <= 32767.
  */
-static inline U8CPU SkMulDiv255Round(U8CPU a, U8CPU b) {
-    SkASSERT((uint8_t)a == a);
-    SkASSERT((uint8_t)b == b);
+static inline U8CPU SkMulDiv255Round(U16CPU a, U16CPU b) {
+    SkASSERT(a <= 32767);
+    SkASSERT(b <= 32767);
     unsigned prod = SkMulS16(a, b) + 128;
     return (prod + (prod >> 8)) >> 8;
 }

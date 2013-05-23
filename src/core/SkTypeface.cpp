@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 The Android Open Source Project
  *
@@ -6,10 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #include "SkAdvancedTypefaceMetrics.h"
-#include "SkTypeface.h"
+#include "SkFontDescriptor.h"
 #include "SkFontHost.h"
+#include "SkFontStream.h"
+#include "SkStream.h"
+#include "SkTypeface.h"
 
 SK_DEFINE_INST_COUNT(SkTypeface)
 
@@ -19,8 +20,8 @@ SK_DEFINE_INST_COUNT(SkTypeface)
     static int32_t gTypefaceCounter;
 #endif
 
-SkTypeface::SkTypeface(Style style, SkFontID fontID, bool isFixedWidth)
-    : fUniqueID(fontID), fStyle(style), fIsFixedWidth(isFixedWidth) {
+SkTypeface::SkTypeface(Style style, SkFontID fontID, bool isFixedPitch)
+    : fUniqueID(fontID), fStyle(style), fIsFixedPitch(isFixedPitch) {
 #ifdef TRACE_LIFECYCLE
     SkDebugf("SkTypeface: create  %p fontID %d total %d\n",
              this, fontID, ++gTypefaceCounter);
@@ -88,19 +89,51 @@ SkTypeface* SkTypeface::CreateFromFile(const char path[]) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkTypeface::serialize(SkWStream* stream) const {
-    SkFontHost::Serialize(this, stream);
+void SkTypeface::serialize(SkWStream* wstream) const {
+    bool isLocal = false;
+    SkFontDescriptor desc(this->style());
+    this->onGetFontDescriptor(&desc, &isLocal);
+
+    desc.serialize(wstream);
+    if (isLocal) {
+        int ttcIndex;   // TODO: write this to the stream?
+        SkAutoTUnref<SkStream> rstream(this->openStream(&ttcIndex));
+        if (rstream.get()) {
+            size_t length = rstream->getLength();
+            wstream->writePackedUInt(length);
+            wstream->writeStream(rstream, length);
+        } else {
+            wstream->writePackedUInt(0);
+        }
+    } else {
+        wstream->writePackedUInt(0);
+    }
 }
 
 SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
-    return SkFontHost::Deserialize(stream);
-}
+    SkFontDescriptor desc(stream);
+    size_t length = stream->readPackedUInt();
+    if (length > 0) {
+        void* addr = sk_malloc_flags(length, 0);
+        if (addr) {
+            SkAutoTUnref<SkMemoryStream> localStream(SkNEW(SkMemoryStream));
+            localStream->setMemoryOwned(addr, length);
 
-SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
-                                SkAdvancedTypefaceMetrics::PerGlyphInfo info,
-                                const uint32_t* glyphIDs,
-                                uint32_t glyphIDsCount) const {
-    return this->onGetAdvancedTypefaceMetrics(info, glyphIDs, glyphIDsCount);
+            if (stream->read(addr, length) == length) {
+                return SkTypeface::CreateFromStream(localStream.get());
+            } else {
+                // Failed to read the full font data, so fall through and try to create from name.
+                // If this is because of EOF, all subsequent reads from the stream will be EOF.
+                // If this is because of a stream error, the stream is in an error state,
+                // do not attempt to skip any remaining bytes.
+            }
+        } else {
+            // failed to allocate, so just skip and create-from-name
+            stream->skip(length);
+        }
+    }
+
+    return SkTypeface::CreateFromName(desc.getFamilyName(), desc.getStyle());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -136,10 +169,15 @@ int SkTypeface::getUnitsPerEm() const {
     return this->onGetUPEM();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
+SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
+                                SkAdvancedTypefaceMetrics::PerGlyphInfo info,
+                                const uint32_t* glyphIDs,
+                                uint32_t glyphIDsCount) const {
+    return this->onGetAdvancedTypefaceMetrics(info, glyphIDs, glyphIDsCount);
+}
 
-#include "SkFontDescriptor.h"
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 int SkTypeface::onGetUPEM() const {
     int upem = 0;
@@ -154,13 +192,6 @@ int SkTypeface::onGetUPEM() const {
     }
     return upem;
 }
-
-void SkTypeface::onGetFontDescriptor(SkFontDescriptor* desc) const {
-    desc->setStyle(this->style());
-}
-
-#include "SkFontStream.h"
-#include "SkStream.h"
 
 int SkTypeface::onGetTableTags(SkFontTableTag tags[]) const {
     int ttcIndex;

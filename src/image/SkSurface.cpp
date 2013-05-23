@@ -13,12 +13,6 @@ SK_DEFINE_INST_COUNT(SkSurface)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkSurface_Base::installIntoCanvasForDirtyNotification() {
-    if (fCachedCanvas) {
-        fCachedCanvas->setSurfaceBase(this);
-    }
-}
-
 SkSurface_Base::SkSurface_Base(int width, int height) : INHERITED(width, height) {
     fCachedCanvas = NULL;
     fCachedImage = NULL;
@@ -36,44 +30,28 @@ SkSurface_Base::~SkSurface_Base() {
 
 void SkSurface_Base::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
                             const SkPaint* paint) {
-    SkImage* image = this->newImageShapshot();
+    SkImage* image = this->newImageSnapshot();
     if (image) {
         image->draw(canvas, x, y, paint);
         image->unref();
     }
 }
 
-SkCanvas* SkSurface_Base::getCachedCanvas() {
-    if (NULL == fCachedCanvas) {
-        fCachedCanvas = this->onNewCanvas();
-        this->installIntoCanvasForDirtyNotification();
-    }
-    return fCachedCanvas;
-}
-
-SkImage* SkSurface_Base::getCachedImage() {
-    if (NULL == fCachedImage) {
-        fCachedImage = this->onNewImageShapshot();
-        this->installIntoCanvasForDirtyNotification();
-    }
-    return fCachedImage;
-}
-
-void SkSurface_Base::aboutToDraw(SkCanvas* canvas) {
+void SkSurface_Base::aboutToDraw(ContentChangeMode mode) {
     this->dirtyGenerationID();
 
-    if (canvas) {
-        SkASSERT(canvas == fCachedCanvas);
-        SkASSERT(canvas->getSurfaceBase() == this);
-        canvas->setSurfaceBase(NULL);
+    if (NULL != fCachedCanvas) {
+        SkASSERT(fCachedCanvas->getSurfaceBase() == this || \
+                 NULL == fCachedCanvas->getSurfaceBase());
+        fCachedCanvas->setSurfaceBase(NULL);
     }
 
-    if (fCachedImage) {
+    if (NULL != fCachedImage) {
         // the surface may need to fork its backend, if its sharing it with
         // the cached image. Note: we only call if there is an outstanding owner
         // on the image (besides us).
         if (fCachedImage->getRefCnt() > 1) {
-            this->onCopyOnWrite(fCachedImage, canvas);
+            this->onCopyOnWrite(mode);
         }
 
         // regardless of copy-on-write, we must drop our cached image now, so
@@ -109,15 +87,15 @@ uint32_t SkSurface::generationID() {
     return fGenerationID;
 }
 
-void SkSurface::notifyContentChanged() {
-    asSB(this)->aboutToDraw(NULL);
+void SkSurface::notifyContentWillChange(ContentChangeMode mode) {
+    asSB(this)->aboutToDraw(mode);
 }
 
 SkCanvas* SkSurface::getCanvas() {
     return asSB(this)->getCachedCanvas();
 }
 
-SkImage* SkSurface::newImageShapshot() {
+SkImage* SkSurface::newImageSnapshot() {
     SkImage* image = asSB(this)->getCachedImage();
     SkSafeRef(image);   // the caller will call unref() to balance this
     return image;

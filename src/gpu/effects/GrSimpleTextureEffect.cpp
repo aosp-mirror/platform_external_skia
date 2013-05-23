@@ -41,7 +41,7 @@ public:
             builder->addVarying(kVec2f_GrSLType, "textureCoords", &vsVaryingName, &fsCoordName);
             const char* attrName =
                 builder->getEffectAttributeName(drawEffect.getVertexAttribIndices()[0])->c_str();
-            builder->vsCodeAppendf("\t%s = %s;", vsVaryingName, attrName);
+            builder->vsCodeAppendf("\t%s = %s;\n", vsVaryingName, attrName);
         } else {
             fsCoordSLType = fEffectMatrix.get()->emitCode(builder, key, &fsCoordName);
         }
@@ -97,6 +97,7 @@ GR_DEFINE_EFFECT_TEST(GrSimpleTextureEffect);
 
 GrEffectRef* GrSimpleTextureEffect::TestCreate(SkMWCRandom* random,
                                                GrContext*,
+                                               const GrDrawTargetCaps&,
                                                GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;

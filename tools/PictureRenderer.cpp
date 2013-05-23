@@ -9,6 +9,7 @@
 #include "picture_utils.h"
 #include "SamplePipeControllers.h"
 #include "SkCanvas.h"
+#include "SkData.h"
 #include "SkDevice.h"
 #include "SkGPipe.h"
 #if SK_SUPPORT_GPU
@@ -20,6 +21,8 @@
 #include "SkMaskFilter.h"
 #include "SkMatrix.h"
 #include "SkPicture.h"
+#include "SkPictureUtils.h"
+#include "SkPixelRef.h"
 #include "SkRTree.h"
 #include "SkScalar.h"
 #include "SkStream.h"
@@ -29,8 +32,6 @@
 #include "SkTDArray.h"
 #include "SkThreadUtils.h"
 #include "SkTypes.h"
-#include "SkData.h"
-#include "SkPictureUtils.h"
 
 namespace sk_tools {
 
@@ -112,8 +113,7 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
             // fall through
 #endif
         case kGPU_DeviceType: {
-            SkAutoTUnref<GrRenderTarget> rt;
-            bool grSuccess = false;
+            SkAutoTUnref<GrSurface> target;
             if (fGrContext) {
                 // create a render target to back the device
                 GrTextureDesc desc;
@@ -121,21 +121,15 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
                 desc.fFlags = kRenderTarget_GrTextureFlagBit;
                 desc.fWidth = width;
                 desc.fHeight = height;
-                desc.fSampleCnt = 0;
-                GrTexture* tex = fGrContext->createUncachedTexture(desc, NULL, 0);
-                if (tex) {
-                    rt.reset(tex->asRenderTarget());
-                    rt.get()->ref();
-                    tex->unref();
-                    grSuccess = NULL != rt.get();
-                }
+                desc.fSampleCnt = fSampleCount;
+                target.reset(fGrContext->createUncachedTexture(desc, NULL, 0));
             }
-            if (!grSuccess) {
+            if (NULL == target.get()) {
                 SkASSERT(0);
                 return NULL;
             }
 
-            SkAutoTUnref<SkGpuDevice> device(SkNEW_ARGS(SkGpuDevice, (fGrContext, rt)));
+            SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(target));
             canvas = SkNEW_ARGS(SkCanvas, (device.get()));
             break;
         }
@@ -264,8 +258,17 @@ SkCanvas* RecordPictureRenderer::setupCanvas(int width, int height) {
     return NULL;
 }
 
-static bool PNGEncodeBitmapToStream(SkWStream* wStream, const SkBitmap& bm) {
-    return SkImageEncoder::EncodeStream(wStream, bm, SkImageEncoder::kPNG_Type, 100);
+static SkData* encode_bitmap_to_data(size_t* offset, const SkBitmap& bm) {
+    SkPixelRef* pr = bm.pixelRef();
+    if (pr != NULL) {
+        SkData* data = pr->refEncodedData();
+        if (data != NULL) {
+            *offset = bm.pixelRefOffset();
+            return data;
+        }
+    }
+    *offset = 0;
+    return SkImageEncoder::EncodeData(bm, SkImageEncoder::kPNG_Type, 100);
 }
 
 bool RecordPictureRenderer::render(const SkString* path, SkBitmap** out) {
@@ -281,7 +284,7 @@ bool RecordPictureRenderer::render(const SkString* path, SkBitmap** out) {
         // ".skp" was removed from 'path' before being passed in here.
         skpPath.append(".skp");
         SkFILEWStream stream(skpPath.c_str());
-        replayer->serialize(&stream, &PNGEncodeBitmapToStream);
+        replayer->serialize(&stream, &encode_bitmap_to_data);
         return true;
     }
     return false;

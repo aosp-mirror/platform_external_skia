@@ -200,6 +200,8 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 
+    const SkBitmap& bitmap() const { return fBitmap; }
+
     // The non-const 'paint' method allows modification of this object's
     // SkPaint. For this reason the ctor and setPaint method make a local copy.
     // The 'fPaintPtr' member acts a signal that the local SkPaint is valid
@@ -211,6 +213,9 @@ public:
 
     const SkRect* srcRect() const { return fSrc.isEmpty() ? NULL : &fSrc; }
     const SkRect& dstRect() const { return fDst; }
+
+    void setSrcRect(const SkRect& src) { fSrc = src; }
+    void setDstRect(const SkRect& dst) { fDst = dst; }
 
 private:
     SkBitmap fBitmap;
@@ -226,10 +231,13 @@ private:
 class DrawData : public SkDrawCommand {
 public:
     DrawData(const void* data, size_t length);
+    virtual ~DrawData() { delete [] fData; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const void* fData;
+    char*  fData;
     size_t fLength;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawOval : public SkDrawCommand {
@@ -260,8 +268,8 @@ public:
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 
 private:
-    SkPath  fPath;
-    SkPaint fPaint;
+    SkPath   fPath;
+    SkPaint  fPaint;
     SkBitmap fBitmap;
 
     typedef SkDrawCommand INHERITED;
@@ -272,7 +280,9 @@ public:
     DrawPicture(SkPicture& picture);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    SkPicture* fPicture;
+    SkPicture fPicture;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPoints : public SkDrawCommand {
@@ -297,14 +307,17 @@ private:
 class DrawTextC : public SkDrawCommand {
 public:
     DrawTextC(const void* text, size_t byteLength, SkScalar x, SkScalar y,
-            const SkPaint& paint);
+              const SkPaint& paint);
+    virtual ~DrawTextC() { delete [] fText; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const void* fText;
-    size_t fByteLength;
+    char*    fText;
+    size_t   fByteLength;
     SkScalar fX;
     SkScalar fY;
-    const SkPaint* fPaint;
+    SkPaint  fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPosText : public SkDrawCommand {
@@ -314,23 +327,28 @@ public:
     virtual ~DrawPosText() { delete [] fPos; delete [] fText; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
+    char*    fText;
+    size_t   fByteLength;
     SkPoint* fPos;
-    char* fText;
-    size_t fByteLength;
-    SkPaint fPaint;
+    SkPaint  fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawTextOnPath : public SkDrawCommand {
 public:
     DrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                    const SkMatrix* matrix, const SkPaint& paint);
+    virtual ~DrawTextOnPath() { delete [] fText; }
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
-    const SkMatrix* fMatrix;
-    const void* fText;
-    size_t fByteLength;
-    const SkPath* fPath;
-    const SkPaint* fPaint;
+    char*    fText;
+    size_t   fByteLength;
+    SkPath   fPath;
+    SkMatrix fMatrix;
+    SkPaint  fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawPosTextH : public SkDrawCommand {
@@ -341,10 +359,10 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkScalar* fXpos;
-    char* fText;
-    size_t fByteLength;
-    SkScalar fConstY;
-    SkPaint fPaint;
+    char*     fText;
+    size_t    fByteLength;
+    SkScalar  fConstY;
+    SkPaint   fPaint;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -370,6 +388,8 @@ public:
 private:
     SkRRect fRRect;
     SkPaint fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawSprite : public SkDrawCommand {
@@ -379,30 +399,37 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual const SkBitmap* getBitmap() const SK_OVERRIDE;
 private:
-    const SkPaint* fPaint;
-    int fLeft;
-    int fTop;
-    const SkBitmap* fBitmap;
+    SkBitmap fBitmap;
+    int      fLeft;
+    int      fTop;
+    SkPaint  fPaint;
+    SkPaint* fPaintPtr;
     SkBitmap fResizedBitmap;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class DrawVertices : public SkDrawCommand {
 public:
     DrawVertices(SkCanvas::VertexMode vmode, int vertexCount,
-            const SkPoint vertices[], const SkPoint texs[], const SkColor colors[],
-            SkXfermode* xfermode, const uint16_t indices[], int indexCount,
-            const SkPaint& paint);
+                const SkPoint vertices[], const SkPoint texs[],
+                const SkColor colors[], SkXfermode* xfermode,
+                const uint16_t indices[], int indexCount,
+                const SkPaint& paint);
+    virtual ~DrawVertices();
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkCanvas::VertexMode fVmode;
-    int fVertexCount;
-    int fIndexCount;
-    const SkPoint* fVertices;
-    const SkPoint* fTexs;
-    const SkColor* fColors;
-    const uint16_t* fIndices;
+    int         fVertexCount;
+    SkPoint*    fVertices;
+    SkPoint*    fTexs;
+    SkColor*    fColors;
     SkXfermode* fXfermode;
-    const SkPaint* fPaint;
+    uint16_t*   fIndices;
+    int         fIndexCount;
+    SkPaint     fPaint;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Rotate : public SkDrawCommand {
@@ -411,6 +438,8 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkScalar fDegrees;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Save : public SkDrawCommand {
@@ -453,6 +482,8 @@ public:
 private:
     SkScalar fSx;
     SkScalar fSy;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class SetMatrix : public SkDrawCommand {
@@ -461,6 +492,8 @@ public:
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
 private:
     SkMatrix fMatrix;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Skew : public SkDrawCommand {
@@ -470,6 +503,8 @@ public:
 private:
     SkScalar fSx;
     SkScalar fSy;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 class Translate : public SkDrawCommand {
@@ -483,6 +518,8 @@ public:
 private:
     SkScalar fDx;
     SkScalar fDy;
+
+    typedef SkDrawCommand INHERITED;
 };
 
 #endif

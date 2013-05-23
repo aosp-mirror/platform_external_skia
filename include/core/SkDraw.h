@@ -10,21 +10,20 @@
 #ifndef SkDraw_DEFINED
 #define SkDraw_DEFINED
 
-#include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkMask.h"
-#include "SkMatrix.h"
 #include "SkPaint.h"
-#include "SkRect.h"
-#include "SkAutoKern.h"
 
+class SkBitmap;
 class SkBounder;
 class SkClipStack;
 class SkDevice;
+class SkMatrix;
 class SkPath;
 class SkRegion;
 class SkRasterClip;
 struct SkDrawProcs;
+struct SkRect;
 
 class SkDraw {
 public:

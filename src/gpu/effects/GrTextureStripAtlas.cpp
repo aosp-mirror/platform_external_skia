@@ -229,7 +229,8 @@ void GrTextureStripAtlas::initLRU() {
         fRows[i].fPrev = NULL;
         this->appendLRU(fRows + i);
     }
-    GrAssert(NULL == fLRUFront->fPrev && NULL == fLRUBack->fNext);
+    GrAssert(NULL == fLRUFront || NULL == fLRUFront->fPrev);
+    GrAssert(NULL == fLRUBack || NULL == fLRUBack->fNext);
 }
 
 void GrTextureStripAtlas::appendLRU(AtlasRow* row) {
@@ -272,10 +273,11 @@ void GrTextureStripAtlas::removeFromLRU(AtlasRow* row) {
 int GrTextureStripAtlas::searchByKey(uint32_t key) {
     AtlasRow target;
     target.fKey = key;
-    return SkTSearch<AtlasRow, GrTextureStripAtlas::compareKeys>((const AtlasRow**)fKeyTable.begin(),
-                                                                 fKeyTable.count(),
-                                                                 &target,
-                                                                 sizeof(AtlasRow*));
+    return SkTSearch<const AtlasRow,
+                     GrTextureStripAtlas::KeyLess>((const AtlasRow**)fKeyTable.begin(),
+                                                   fKeyTable.count(),
+                                                   &target,
+                                                   sizeof(AtlasRow*));
 }
 
 #ifdef SK_DEBUG

@@ -60,9 +60,10 @@ public:
     */
     bool isItalic() const { return (fStyle & kItalic) != 0; }
 
-    /** Returns true if the typeface is fixed-width
+    /** Returns true if the typeface claims to be fixed-pitch.
+     *  This is a style bit, advance widths may vary even if this returns true.
      */
-    bool isFixedWidth() const { return fIsFixedWidth; }
+    bool isFixedPitch() const { return fIsFixedPitch; }
 
     /** Return a 32bit value for this typeface, unique for the underlying font
         data. Will never return 0.
@@ -205,8 +206,11 @@ public:
 protected:
     /** uniqueID must be unique and non-zero
     */
-    SkTypeface(Style style, SkFontID uniqueID, bool isFixedWidth = false);
+    SkTypeface(Style style, SkFontID uniqueID, bool isFixedPitch = false);
     virtual ~SkTypeface();
+
+    /** Sets the fixedPitch bit. If used, must be called in the constructor. */
+    void setIsFixedPitch(bool isFixedPitch) { fIsFixedPitch = isFixedPitch; }
 
     friend class SkScalerContext;
     static SkTypeface* GetDefaultTypeface();
@@ -218,18 +222,18 @@ protected:
                         const uint32_t* glyphIDs,
                         uint32_t glyphIDsCount) const = 0;
     virtual SkStream* onOpenStream(int* ttcIndex) const = 0;
+    virtual void onGetFontDescriptor(SkFontDescriptor*, bool* isLocal) const = 0;
 
     virtual int onGetUPEM() const;
 
     virtual int onGetTableTags(SkFontTableTag tags[]) const;
     virtual size_t onGetTableData(SkFontTableTag, size_t offset,
                                   size_t length, void* data) const;
-    virtual void onGetFontDescriptor(SkFontDescriptor*) const;
 
 private:
     SkFontID    fUniqueID;
     Style       fStyle;
-    bool        fIsFixedWidth;
+    bool        fIsFixedPitch;
 
     friend class SkPaint;
     friend class SkGlyphCache;  // GetDefaultTypeface

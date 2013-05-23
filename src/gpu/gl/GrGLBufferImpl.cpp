@@ -74,7 +74,7 @@ void* GrGLBufferImpl::lock(GrGpuGL* gpu) {
     GrAssert(!this->isLocked());
     if (0 == fDesc.fID) {
         fLockPtr = fCPUData;
-    } else if (gpu->getCaps().bufferLockSupport()) {
+    } else if (gpu->caps()->bufferLockSupport()) {
         this->bind(gpu);
         // Let driver know it can discard the old data
         GL_CALL(gpu, BufferData(fBufferType,
@@ -92,7 +92,7 @@ void GrGLBufferImpl::unlock(GrGpuGL* gpu) {
     VALIDATE();
     GrAssert(this->isLocked());
     if (0 != fDesc.fID) {
-        GrAssert(gpu->getCaps().bufferLockSupport());
+        GrAssert(gpu->caps()->bufferLockSupport());
         this->bind(gpu);
         GL_CALL(gpu, UnmapBuffer(fBufferType));
     }
@@ -158,7 +158,8 @@ bool GrGLBufferImpl::updateData(GrGpuGL* gpu, const void* src, size_t srcSizeInB
 
 void GrGLBufferImpl::validate() const {
     GrAssert(GR_GL_ARRAY_BUFFER == fBufferType || GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
-    GrAssert((0 == fDesc.fID) == (NULL != fCPUData));
+    // The following assert isn't valid when the buffer has been abandoned:
+    // GrAssert((0 == fDesc.fID) == (NULL != fCPUData));
     GrAssert(0 != fDesc.fID || !fDesc.fIsWrapped);
     GrAssert(NULL == fCPUData || NULL == fLockPtr || fCPUData == fLockPtr);
 }

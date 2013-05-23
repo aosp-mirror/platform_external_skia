@@ -9,6 +9,7 @@
 
 #include "GrInOrderDrawBuffer.h"
 #include "GrBufferAllocPool.h"
+#include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 #include "GrIndexBuffer.h"
 #include "GrPath.h"
@@ -29,7 +30,7 @@ GrInOrderDrawBuffer::GrInOrderDrawBuffer(GrGpu* gpu,
     , fFlushing(false) {
 
     fDstGpu->ref();
-    fCaps = fDstGpu->getCaps();
+    fCaps.reset(SkRef(fDstGpu->caps()));
 
     GrAssert(NULL != vertexPool);
     GrAssert(NULL != indexPool);
@@ -72,26 +73,26 @@ void get_vertex_bounds(const void* vertices,
 }
 }
 
-void GrInOrderDrawBuffer::drawRect(const GrRect& rect,
-                                   const SkMatrix* matrix,
-                                   const GrRect* localRect,
-                                   const SkMatrix* localMatrix) {
 
-    GrAttribBindings bindings = GrDrawState::kDefault_AttribBindings;
-    GrDrawState::AutoColorRestore acr;
+namespace {
 
-    GrDrawState* drawState = this->drawState();
+extern const GrVertexAttrib kRectPosColorUVAttribs[] = {
+    {kVec2f_GrVertexAttribType,  0,               kPosition_GrVertexAttribBinding},
+    {kVec4ub_GrVertexAttribType, sizeof(GrPoint), kColor_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType,  sizeof(GrPoint)+sizeof(GrColor),
+                                                  kLocalCoord_GrVertexAttribBinding},
+};
 
-    GrColor color = drawState->getColor();
-    GrVertexAttribArray<3> attribs;
-    size_t currentOffset = 0;
-    int colorOffset = -1, localOffset = -1;
+extern const GrVertexAttrib kRectPosUVAttribs[] = {
+    {kVec2f_GrVertexAttribType,  0,              kPosition_GrVertexAttribBinding},
+    {kVec2f_GrVertexAttribType, sizeof(GrPoint), kLocalCoord_GrVertexAttribBinding},
+};
 
-    // set position attrib
-    drawState->setAttribIndex(GrDrawState::kPosition_AttribIndex, attribs.count());
-    GrVertexAttrib currAttrib = {kVec2f_GrVertexAttribType, currentOffset};
-    attribs.push_back(currAttrib);
-    currentOffset += sizeof(GrPoint);
+static void set_vertex_attributes(GrDrawState* drawState,
+                                  bool hasColor, bool hasUVs,
+                                  int* colorOffset, int* localOffset) {
+    *colorOffset = -1;
+    *localOffset = -1;
 
     // Using per-vertex colors allows batching across colors. (A lot of rects in a row differing
     // only in color is a common occurrence in tables). However, having per-vertex colors disables
@@ -99,32 +100,47 @@ void GrInOrderDrawBuffer::drawRect(const GrRect& rect,
     // optimizations help determine whether coverage and color can be blended correctly when
     // dual-source blending isn't available. This comes into play when there is coverage. If colors
     // were a stage it could take a hint that every vertex's color will be opaque.
-    if (this->getCaps().dualSourceBlendingSupport() ||
-        drawState->hasSolidCoverage(drawState->getAttribBindings())) {
-        bindings |= GrDrawState::kColor_AttribBindingsBit;
-        drawState->setAttribIndex(GrDrawState::kColor_AttribIndex, attribs.count());
-        currAttrib.set(kVec4ub_GrVertexAttribType, currentOffset);
-        attribs.push_back(currAttrib);
-        colorOffset = currentOffset;
-        currentOffset += sizeof(GrColor);
+    if (hasColor && hasUVs) {
+        *colorOffset = sizeof(GrPoint);
+        *localOffset = sizeof(GrPoint) + sizeof(GrColor);
+        drawState->setVertexAttribs<kRectPosColorUVAttribs>(3);
+    } else if (hasColor) {
+        *colorOffset = sizeof(GrPoint);
+        drawState->setVertexAttribs<kRectPosColorUVAttribs>(2);
+    } else if (hasUVs) {
+        *localOffset = sizeof(GrPoint);
+        drawState->setVertexAttribs<kRectPosUVAttribs>(2);
+    } else {
+        drawState->setVertexAttribs<kRectPosUVAttribs>(1);
+    }
+}
+
+};
+
+void GrInOrderDrawBuffer::onDrawRect(const GrRect& rect,
+                                     const SkMatrix* matrix,
+                                     const GrRect* localRect,
+                                     const SkMatrix* localMatrix) {
+    GrDrawState::AutoColorRestore acr;
+
+    GrDrawState* drawState = this->drawState();
+
+    GrColor color = drawState->getColor();
+
+    int colorOffset, localOffset;
+    set_vertex_attributes(drawState,
+                   this->caps()->dualSourceBlendingSupport() || drawState->hasSolidCoverage(),
+                   NULL != localRect,
+                   &colorOffset, &localOffset);
+    if (colorOffset >= 0) {
         // We set the draw state's color to white here. This is done so that any batching performed
         // in our subclass's onDraw() won't get a false from GrDrawState::op== due to a color
         // mismatch. TODO: Once vertex layout is owned by GrDrawState it should skip comparing the
-        // constant color in its op== when the kColor layout bit is set and then we can remove this.
+        // constant color in its op== when the kColor layout bit is set and then we can remove
+        // this.
         acr.set(drawState, 0xFFFFFFFF);
     }
 
-    if (NULL != localRect) {
-        bindings |= GrDrawState::kLocalCoords_AttribBindingsBit;
-        drawState->setAttribIndex(GrDrawState::kLocalCoords_AttribIndex, attribs.count());
-        currAttrib.set(kVec2f_GrVertexAttribType, currentOffset);
-        attribs.push_back(currAttrib);
-        localOffset = currentOffset;
-        currentOffset += sizeof(GrPoint);
-    }
-
-    drawState->setVertexAttribs(attribs.begin(), attribs.count());
-    drawState->setAttribBindings(bindings);
     AutoReleaseGeometry geo(this, 4, 0);
     if (!geo.succeeded()) {
         GrPrintf("Failed to get space for vertices!\n");
@@ -148,7 +164,6 @@ void GrInOrderDrawBuffer::drawRect(const GrRect& rect,
     }
 
     size_t vsize = drawState->getVertexSize();
-    GrAssert(vsize == currentOffset);
 
     geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vsize);
     combinedMatrix.mapPointsWithStride(geo.positions(), vsize, 4);
@@ -426,6 +441,7 @@ void GrInOrderDrawBuffer::reset() {
     fIndexPool.reset();
     fClips.reset();
     fClipOrigins.reset();
+    fCopySurfaces.reset();
     fClipSet = true;
 }
 
@@ -460,6 +476,7 @@ bool GrInOrderDrawBuffer::flush() {
     int currClear       = 0;
     int currDraw        = 0;
     int currStencilPath = 0;
+    int currCopySurface = 0;
 
     for (int c = 0; c < numCmds; ++c) {
         switch (fCmds[c]) {
@@ -496,6 +513,13 @@ bool GrInOrderDrawBuffer::flush() {
                                fClears[currClear].fRenderTarget);
                 ++currClear;
                 break;
+            case kCopySurface_Cmd:
+                fDstGpu->copySurface(fCopySurfaces[currCopySurface].fDst.get(),
+                                     fCopySurfaces[currCopySurface].fSrc.get(),
+                                     fCopySurfaces[currCopySurface].fSrcRect,
+                                     fCopySurfaces[currCopySurface].fDstPoint);
+                ++currCopySurface;
+                break;
         }
     }
     // we should have consumed all the states, clips, etc.
@@ -504,11 +528,39 @@ bool GrInOrderDrawBuffer::flush() {
     GrAssert(fClipOrigins.count() == currClip);
     GrAssert(fClears.count() == currClear);
     GrAssert(fDraws.count()  == currDraw);
+    GrAssert(fCopySurfaces.count() == currCopySurface);
 
     fDstGpu->setDrawState(prevDrawState);
     prevDrawState->unref();
     this->reset();
     return true;
+}
+
+bool GrInOrderDrawBuffer::onCopySurface(GrSurface* dst,
+                                        GrSurface* src,
+                                        const SkIRect& srcRect,
+                                        const SkIPoint& dstPoint) {
+    if (fDstGpu->canCopySurface(dst, src, srcRect, dstPoint)) {
+        CopySurface* cs = this->recordCopySurface();
+        cs->fDst.reset(SkRef(dst));
+        cs->fSrc.reset(SkRef(src));
+        cs->fSrcRect = srcRect;
+        cs->fDstPoint = dstPoint;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool GrInOrderDrawBuffer::onCanCopySurface(GrSurface* dst,
+                                           GrSurface* src,
+                                           const SkIRect& srcRect,
+                                           const SkIPoint& dstPoint) {
+    return fDstGpu->canCopySurface(dst, src, srcRect, dstPoint);
+}
+
+void GrInOrderDrawBuffer::initCopySurfaceDstDesc(const GrSurface* src, GrTextureDesc* desc) {
+    fDstGpu->initCopySurfaceDstDesc(src, desc);
 }
 
 void GrInOrderDrawBuffer::willReserveVertexAndIndexSpace(
@@ -759,6 +811,12 @@ GrInOrderDrawBuffer::Clear* GrInOrderDrawBuffer::recordClear() {
     fCmds.push_back(kClear_Cmd);
     return &fClears.push_back();
 }
+
+GrInOrderDrawBuffer::CopySurface* GrInOrderDrawBuffer::recordCopySurface() {
+    fCmds.push_back(kCopySurface_Cmd);
+    return &fCopySurfaces.push_back();
+}
+
 
 void GrInOrderDrawBuffer::clipWillBeSet(const GrClipData* newClipData) {
     INHERITED::clipWillBeSet(newClipData);

@@ -31,6 +31,42 @@ static SkSurface* new_surface(int w, int h) {
     return SkSurface::NewRaster(info);
 }
 
+// This used to assert in the debug build, as the edges did not all line-up.
+static void test_bad_cubic_crbug234190() {
+    SkPath path;
+    path.moveTo(13.8509f, 3.16858f);
+    path.cubicTo(-2.35893e+08f, -4.21044e+08f,
+                 -2.38991e+08f, -4.26573e+08f,
+                 -2.41016e+08f, -4.30188e+08f);
+
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    SkAutoTUnref<SkSurface> surface(new_surface(84, 88));
+    surface->getCanvas()->drawPath(path, paint);
+}
+
+static void test_bad_cubic_crbug229478() {
+    const SkPoint pts[] = {
+        { 4595.91064f,    -11596.9873f },
+        { 4597.2168f,    -11595.9414f },
+        { 4598.52344f,    -11594.8955f },
+        { 4599.83008f,    -11593.8496f },
+    };
+
+    SkPath path;
+    path.moveTo(pts[0]);
+    path.cubicTo(pts[1], pts[2], pts[3]);
+
+    SkPaint paint;
+    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStrokeWidth(20);
+
+    SkPath dst;
+    // Before the fix, this would infinite-recurse, and run out of stack
+    // because we would keep trying to subdivide a degenerate cubic segment.
+    paint.getFillPath(path, &dst, NULL);
+}
+
 static void build_path_170666(SkPath& path) {
     path.moveTo(17.9459f, 21.6344f);
     path.lineTo(139.545f, -47.8105f);
@@ -343,12 +379,13 @@ static void test_arb_zero_rad_round_rect_is_rect(skiatest::Reporter* reporter) {
 
 static void test_rect_isfinite(skiatest::Reporter* reporter) {
     const SkScalar inf = SK_ScalarInfinity;
+    const SkScalar negInf = SK_ScalarNegativeInfinity;
     const SkScalar nan = SK_ScalarNaN;
 
     SkRect r;
     r.setEmpty();
     REPORTER_ASSERT(reporter, r.isFinite());
-    r.set(0, 0, inf, -inf);
+    r.set(0, 0, inf, negInf);
     REPORTER_ASSERT(reporter, !r.isFinite());
     r.set(0, 0, nan, 0);
     REPORTER_ASSERT(reporter, !r.isFinite());
@@ -1285,22 +1322,22 @@ static void test_isRect(skiatest::Reporter* reporter) {
 
 static void test_isNestedRects(skiatest::Reporter* reporter) {
     // passing tests (all moveTo / lineTo...
-    SkPoint r1[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    SkPoint r1[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}}; // CW
     SkPoint r2[] = {{1, 0}, {1, 1}, {0, 1}, {0, 0}};
     SkPoint r3[] = {{1, 1}, {0, 1}, {0, 0}, {1, 0}};
     SkPoint r4[] = {{0, 1}, {0, 0}, {1, 0}, {1, 1}};
-    SkPoint r5[] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}};
+    SkPoint r5[] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}}; // CCW
     SkPoint r6[] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
     SkPoint r7[] = {{1, 1}, {1, 0}, {0, 0}, {0, 1}};
     SkPoint r8[] = {{1, 0}, {0, 0}, {0, 1}, {1, 1}};
     SkPoint r9[] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
-    SkPoint ra[] = {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f},
+    SkPoint ra[] = {{0, 0}, {0, .5f}, {0, 1}, {.5f, 1}, {1, 1}, {1, .5f}, // CCW
         {1, 0}, {.5f, 0}};
-    SkPoint rb[] = {{0, 0}, {.5f, 0}, {1, 0}, {1, .5f}, {1, 1}, {.5f, 1},
+    SkPoint rb[] = {{0, 0}, {.5f, 0}, {1, 0}, {1, .5f}, {1, 1}, {.5f, 1}, // CW
         {0, 1}, {0, .5f}};
-    SkPoint rc[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}};
-    SkPoint rd[] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}, {0, 0}};
-    SkPoint re[] = {{0, 0}, {1, 0}, {1, 0}, {1, 1}, {0, 1}};
+    SkPoint rc[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}}; // CW
+    SkPoint rd[] = {{0, 0}, {0, 1}, {1, 1}, {1, 0}, {0, 0}}; // CCW
+    SkPoint re[] = {{0, 0}, {1, 0}, {1, 0}, {1, 1}, {0, 1}}; // CW
 
     // failing tests
     SkPoint f1[] = {{0, 0}, {1, 0}, {1, 1}}; // too few points
@@ -1329,6 +1366,18 @@ static void test_isNestedRects(skiatest::Reporter* reporter) {
         f1, f2, f3, f4, f5, f6, f7, f8,
         c1, c2
     };
+    SkPath::Direction dirs[] = {
+        SkPath::kCW_Direction, SkPath::kCW_Direction, SkPath::kCW_Direction,
+        SkPath::kCW_Direction, SkPath::kCCW_Direction, SkPath::kCCW_Direction,
+        SkPath::kCCW_Direction, SkPath::kCCW_Direction, SkPath::kCCW_Direction,
+        SkPath::kCCW_Direction, SkPath::kCW_Direction, SkPath::kCW_Direction,
+        SkPath::kCCW_Direction, SkPath::kCW_Direction, SkPath::kUnknown_Direction,
+        SkPath::kUnknown_Direction, SkPath::kUnknown_Direction, SkPath::kUnknown_Direction,
+        SkPath::kUnknown_Direction, SkPath::kUnknown_Direction, SkPath::kUnknown_Direction,
+        SkPath::kUnknown_Direction, SkPath::kUnknown_Direction, SkPath::kUnknown_Direction,
+    };
+    SkASSERT(SK_ARRAY_COUNT(tests) == SK_ARRAY_COUNT(dirs));
+
     const SkPoint* lastPass = re;
     const SkPoint* lastClose = f8;
     const size_t testCount = sizeof(tests) / sizeof(tests[0]);
@@ -1354,13 +1403,22 @@ static void test_isNestedRects(skiatest::Reporter* reporter) {
             REPORTER_ASSERT(reporter, fail ^ path.isNestedRects(0));
             if (!fail) {
                 SkRect expected[2], computed[2];
+                SkPath::Direction expectedDirs[2], computedDirs[2];
                 SkRect testBounds;
                 testBounds.set(tests[testIndex], testLen[testIndex] / sizeof(SkPoint));
                 expected[0] = SkRect::MakeLTRB(-1, -1, 2, 2);
                 expected[1] = testBounds;
-                REPORTER_ASSERT(reporter, path.isNestedRects(computed));
+                if (rectFirst) {
+                    expectedDirs[0] = SkPath::kCW_Direction;
+                } else {
+                    expectedDirs[0] = SkPath::kCCW_Direction;
+                }
+                expectedDirs[1] = dirs[testIndex];
+                REPORTER_ASSERT(reporter, path.isNestedRects(computed, computedDirs));
                 REPORTER_ASSERT(reporter, expected[0] == computed[0]);
                 REPORTER_ASSERT(reporter, expected[1] == computed[1]);
+                REPORTER_ASSERT(reporter, expectedDirs[0] == computedDirs[0]);
+                REPORTER_ASSERT(reporter, expectedDirs[1] == computedDirs[1]);
             }
             if (tests[testIndex] == lastPass) {
                 fail = true;
@@ -2353,6 +2411,8 @@ static void TestPath(skiatest::Reporter* reporter) {
     test_tricky_cubic();
     test_clipped_cubic();
     test_crbug_170666();
+    test_bad_cubic_crbug229478();
+    test_bad_cubic_crbug234190();
 }
 
 #include "TestClassDef.h"

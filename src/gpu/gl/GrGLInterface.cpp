@@ -59,6 +59,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
         NULL == fClearStencil ||
         NULL == fColorMask ||
         NULL == fCompileShader ||
+        NULL == fCopyTexSubImage2D ||
         NULL == fCreateProgram ||
         NULL == fCreateShader ||
         NULL == fCullFace ||
@@ -292,6 +293,15 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
         }
     }
 
+    if (extensions.has("GL_EXT_discard_framebuffer")) {
+// FIXME: Remove this once Chromium is updated to provide this function
+#if 0
+        if (NULL == fDiscardFramebuffer) {
+            return false;
+        }
+#endif
+    }
+
     // FBO MSAA
     if (kDesktop_GrGLBinding == binding) {
         // GL 3.0 and the ARB extension have multisample + blit
@@ -323,7 +333,8 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
                 return false;
             }
         }
-        if (extensions.has("GL_IMG_multisampled_render_to_texture")) {
+        if (extensions.has("GL_IMG_multisampled_render_to_texture") ||
+            extensions.has("GL_EXT_multisampled_render_to_texture")) {
             if (NULL == fRenderbufferStorageMultisample ||
                 NULL == fFramebufferTexture2DMultisample) {
                 return false;

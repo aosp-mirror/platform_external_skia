@@ -11,14 +11,20 @@
 #include "SkTypes.h"
 
 class SkBitmap;
+class SkData;
 class SkWStream;
 
 class SkImageEncoder {
 public:
     enum Type {
+        kUnknown_Type,
+        kBMP_Type,
+        kGIF_Type,
+        kICO_Type,
         kJPEG_Type,
         kPNG_Type,
-        kWEBP_Type
+        kWBMP_Type,
+        kWEBP_Type,
     };
     static SkImageEncoder* Create(Type);
 
@@ -30,25 +36,28 @@ public:
     };
 
     /**
+     *  Encode bitmap 'bm', returning the results in an SkData, at quality level
+     *  'quality' (which can be in range 0-100). If the bitmap cannot be
+     *  encoded, return null. On success, the caller is responsible for
+     *  calling unref() on the data when they are finished.
+     */
+    SkData* encodeData(const SkBitmap&, int quality);
+
+    /**
      * Encode bitmap 'bm' in the desired format, writing results to
      * file 'file', at quality level 'quality' (which can be in range
-     * 0-100).
-     *
-     * Calls the particular implementation's onEncode() method to
-     * actually do the encoding.
+     * 0-100). Returns false on failure.
      */
     bool encodeFile(const char file[], const SkBitmap& bm, int quality);
 
     /**
      * Encode bitmap 'bm' in the desired format, writing results to
      * stream 'stream', at quality level 'quality' (which can be in
-     * range 0-100).
-     *
-     * Calls the particular implementation's onEncode() method to
-     * actually do the encoding.
+     * range 0-100). Returns false on failure.
      */
     bool encodeStream(SkWStream* stream, const SkBitmap& bm, int quality);
 
+    static SkData* EncodeData(const SkBitmap&, Type, int quality);
     static bool EncodeFile(const char file[], const SkBitmap&, Type,
                            int quality);
     static bool EncodeStream(SkWStream*, const SkBitmap&, Type,
@@ -79,6 +88,11 @@ protected:
 
 // All the encoders known by Skia. Note that, depending on the compiler settings,
 // not all of these will be available
+/** An ARGBImageEncoder will always write out
+ *  bitmap.width() * bitmap.height() * 4
+ *  bytes.
+ */
+DECLARE_ENCODER_CREATOR(ARGBImageEncoder);
 DECLARE_ENCODER_CREATOR(JPEGImageEncoder);
 DECLARE_ENCODER_CREATOR(PNGImageEncoder);
 DECLARE_ENCODER_CREATOR(WEBPImageEncoder);

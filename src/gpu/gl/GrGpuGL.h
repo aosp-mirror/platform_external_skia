@@ -55,9 +55,11 @@ public:
                                     size_t rowBytes) const SK_OVERRIDE;
     virtual bool fullReadPixelsIsFasterThanPartial() const SK_OVERRIDE;
 
+    virtual void initCopySurfaceDstDesc(const GrSurface* src, GrTextureDesc* desc) SK_OVERRIDE;
+
     virtual void abandonResources() SK_OVERRIDE;
 
-    const GrGLCaps& glCaps() const { return fGLContext.info().caps(); }
+    const GrGLCaps& glCaps() const { return *fGLContext.info().caps(); }
 
     // These functions should be used to bind GL objects. They track the GL state and skip redundant
     // bindings. Making the equivalent glBind calls directly will confuse the state tracking.
@@ -84,6 +86,17 @@ public:
     }
     void notifyTextureDelete(GrGLTexture* texture);
     void notifyRenderTargetDelete(GrRenderTarget* renderTarget);
+
+protected:
+    virtual bool onCopySurface(GrSurface* dst,
+                               GrSurface* src,
+                               const SkIRect& srcRect,
+                               const SkIPoint& dstPoint) SK_OVERRIDE;
+
+    virtual bool onCanCopySurface(GrSurface* dst,
+                                  GrSurface* src,
+                                  const SkIRect& srcRect,
+                                  const SkIPoint& dstPoint) SK_OVERRIDE;
 
 private:
     // GrGpu overrides
@@ -135,7 +148,7 @@ private:
     virtual void clearStencil() SK_OVERRIDE;
     virtual void clearStencilClip(const GrIRect& rect,
                                   bool insideClip) SK_OVERRIDE;
-    virtual bool flushGraphicsState(DrawType) SK_OVERRIDE;
+    virtual bool flushGraphicsState(DrawType, const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -163,10 +176,10 @@ private:
         ~ProgramCache();
 
         void abandon();
-        GrGLProgram* getProgram(const GrGLProgram::Desc& desc, const GrEffectStage* stages[]);
+        GrGLProgram* getProgram(const GrGLProgramDesc& desc, const GrEffectStage* stages[]);
     private:
         enum {
-            kKeySize = sizeof(GrGLProgram::Desc),
+            kKeySize = sizeof(GrGLProgramDesc),
             // We may actually have kMaxEntries+1 shaders in the GL context because we create a new
             // shader before evicting from the cache.
             kMaxEntries = 32
@@ -217,9 +230,6 @@ private:
     // flushes the scissor. see the note on flushBoundTextureAndParams about
     // flushing the scissor after that function is called.
     void flushScissor();
-
-    // Inits GrDrawTarget::Caps, subclass may enable additional caps.
-    void initCaps();
 
     void initFSAASupport();
 
@@ -430,8 +440,6 @@ private:
     // we record what stencil format worked last time to hopefully exit early
     // from our loop that tries stencil formats and calls check fb status.
     int fLastSuccessfulStencilFmtIdx;
-
-    bool fPrintedCaps;
 
     typedef GrGpu INHERITED;
 };

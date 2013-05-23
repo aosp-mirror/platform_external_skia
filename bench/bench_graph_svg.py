@@ -20,19 +20,8 @@ MIN_REASONABLE_TIME = 0
 MAX_REASONABLE_TIME = 99999
 
 # Constants for prefixes in output title used in buildbot.
-TITLE_PREAMBLE = 'Bench_Performance_for_Skia_'
+TITLE_PREAMBLE = 'Bench_Performance_for_'
 TITLE_PREAMBLE_LENGTH = len(TITLE_PREAMBLE)
-
-# Number of data points to send to appengine at once.
-DATA_POINT_BATCHSIZE = 25
-
-def grouper(n, iterable):
-    """Groups list into list of lists for a given size. See itertools doc:
-      http://docs.python.org/2/library/itertools.html#module-itertools
-    """
-    args = [iter(iterable)] * n
-    return [[n for n in t if n] for t in itertools.izip_longest(*args)]
-
 
 def usage():
     """Prints simple usage information."""
@@ -413,7 +402,7 @@ def main():
           newest_revision: the latest revision that this script reads
           bot: the bot platform the bench is run on
         """
-        data = []
+        config_data_dic = {}
         for label in line_data_dict.iterkeys():
             if not label.bench.endswith('.skp') or label.time_type:
                 # filter out non-picture and non-walltime benches
@@ -424,23 +413,28 @@ def main():
             # data point we have for each line.
             if rev != newest_revision:
                 continue
-            data.append({'master': 'Skia', 'bot': bot,
-                         'test': config + '/' + label.bench.replace('.skp', ''),
-                         'revision': rev, 'value': val, 'error': 0})
-        for curr_data in grouper(DATA_POINT_BATCHSIZE, data):
-            req = urllib2.Request(appengine_url,
-                urllib.urlencode({'data': json.dumps(curr_data)}))
-            try:
-              urllib2.urlopen(req)
-            except urllib2.HTTPError, e:
-                sys.stderr.write("HTTPError for JSON data %s: %s\n" % (
-                    data, e))
-            except urllib2.URLError, e:
-                sys.stderr.write("URLError for JSON data %s: %s\n" % (
-                    data, e))
-            except httplib.HTTPException, e:
-                sys.stderr.write("HTTPException for JSON data %s: %s\n" % (
-                    data, e))
+            if config not in config_data_dic:
+                config_data_dic[config] = []
+            config_data_dic[config].append(label.bench.replace('.skp', '') +
+                ':%.2f' % val)
+        for config in config_data_dic:
+            if config_data_dic[config]:
+                data = {'master': 'Skia', 'bot': bot, 'test': config,
+                        'revision': newest_revision,
+                        'benches': ','.join(config_data_dic[config])}
+                req = urllib2.Request(appengine_url,
+                    urllib.urlencode({'data': json.dumps(data)}))
+                try:
+                    urllib2.urlopen(req)
+                except urllib2.HTTPError, e:
+                    sys.stderr.write("HTTPError for JSON data %s: %s\n" % (
+                        data, e))
+                except urllib2.URLError, e:
+                    sys.stderr.write("URLError for JSON data %s: %s\n" % (
+                        data, e))
+                except httplib.HTTPException, e:
+                    sys.stderr.write("HTTPException for JSON data %s: %s\n" % (
+                        data, e))
 
     try:
         for option, value in opts:
@@ -495,7 +489,7 @@ def main():
         time_to_ignore = None
 
     # The title flag (-l) provided in buildbot slave is in the format
-    # Bench_Performance_for_Skia_<platform>, and we want to extract <platform>
+    # Bench_Performance_for_<platform>, and we want to extract <platform>
     # for use in platform_and_alg to track matching benches later. If title flag
     # is not in this format, there may be no matching benches in the file
     # provided by the expectation_file flag (-e).

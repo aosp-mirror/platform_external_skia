@@ -33,6 +33,7 @@ const GrGLInterface* GrGLCreateNativeInterface() {
         interface->fColorMask = glColorMask;
         interface->fCompileShader = glCompileShader;
         interface->fCompressedTexImage2D = glCompressedTexImage2D;
+        interface->fCopyTexSubImage2D = glCopyTexSubImage2D;
         interface->fCreateProgram = glCreateProgram;
         interface->fCreateShader = glCreateShader;
         interface->fCullFace = glCullFace;
@@ -83,6 +84,9 @@ const GrGLInterface* GrGLCreateNativeInterface() {
         interface->fTexStorage2D = glTexStorage2D;
 #elif GL_EXT_texture_storage
         interface->fTexStorage2D = glTexStorage2DEXT;
+#endif
+#if GL_EXT_discard_framebuffer
+        interface->fDiscardFramebuffer = glDiscardFramebufferEXT;
 #endif
         interface->fTexParameteri = glTexParameteri;
         interface->fTexParameteriv = glTexParameteriv;

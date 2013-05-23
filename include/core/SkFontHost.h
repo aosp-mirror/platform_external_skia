@@ -91,35 +91,7 @@ public:
     /** @deprecated get from Device. */
     static LCDOrder GetSubpixelOrder();
 
-    /** If Skia is running in a constrained environment and the typeface
-     implementation is handle based, the typeface data may become
-     unavailable asynchronously. If a font host or scaler context method is
-     unable to access font data, it may call this function as a request to
-     make the handle contained in the typeface useable.
-     */
-    static void EnsureTypefaceAccessible(const SkTypeface& typeface);
-
-    /**
-     *  DEPRECATED -- will be DESTROYED
-     *
-     *  Given a "current" fontID, return a ref to the next logical typeface
-     *  when searching fonts for a given unicode value. Typically the caller
-     *  will query a given font, and if a unicode value is not supported, they
-     *  will call this, and if 0 is not returned, will search that font, and so
-     *  on. This process must be finite, and when the fonthost sees a
-     *  font with no logical successor, it must return NULL.
-     *
-     *  The original fontID is also provided. This is the initial font that was
-     *  stored in the typeface of the caller. It is provided as an aid to choose
-     *  the best next logical font. e.g. If the original font was bold or serif,
-     *  but the 2nd in the logical chain was plain, then a subsequent call to
-     *  get the 3rd can still inspect the original, and try to match its
-     *  stylistic attributes.
-     */
-    static SkTypeface* NextLogicalTypeface(SkFontID currFontID, SkFontID origFontID);
-
 private:
-
     /** Return a new, closest matching typeface given either an existing family
         (specified by a typeface in that family) or by a familyName and a
         requested style.
@@ -152,23 +124,7 @@ private:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /** Write a unique identifier to the stream, so that the same typeface can
-        be retrieved with Deserialize(). The standard format is to serialize
-        a SkFontDescriptor followed by a uint32_t length value. If the length
-        is non-zero then the following bytes (of that length) represent a
-        serialized copy of the font which can be recreated from a stream.
-    */
-    static void Serialize(const SkTypeface*, SkWStream*);
-
-    /** Given a stream created by Serialize(), return a new typeface (like
-        CreateTypeface) which is either an exact match to the one serialized
-        or the best available typeface based on the data in the deserialized
-        SkFontDescriptor.
-     */
-    static SkTypeface* Deserialize(SkStream*);
-
-    ///////////////////////////////////////////////////////////////////////////
-
+    friend class SkScalerContext;
     friend class SkTypeface;
 };
 
