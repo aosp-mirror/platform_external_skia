@@ -78,8 +78,7 @@ public:
      *
      * If kRenderTarget_TextureFlag is specified the GrRenderTarget is
      * accessible via GrTexture::asRenderTarget(). The texture will hold a ref
-     * on the render target until its releaseRenderTarget() is called or it is
-     * destroyed.
+     * on the render target until the texture is destroyed.
      *
      * @param desc        describes the texture to be created.
      * @param srcData     texel data to load texture. Begins with full-size
@@ -141,13 +140,6 @@ public:
     const GrIndexBuffer* getQuadIndexBuffer() const;
 
     /**
-     * Returns a vertex buffer with four position-only vertices [(0,0), (1,0),
-     * (1,1), (0,1)].
-     * @ return unit square vertex buffer
-     */
-    const GrVertexBuffer* getUnitSquareVertexBuffer() const;
-
-    /**
      * Resolves MSAA.
      */
     void resolveRenderTarget(GrRenderTarget* target);
@@ -160,11 +152,18 @@ public:
     void forceRenderTargetFlush();
 
     /**
-     * Gets a preferred 8888 config to use for writing / reading pixel data. The returned config
-     * must have at least as many bits per channel as the config param.
+     * Gets a preferred 8888 config to use for writing/reading pixel data to/from a surface with
+     * config surfaceConfig. The returned config must have at least as many bits per channel as the
+     * readConfig or writeConfig param.
      */
-    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config) const { return config; }
-    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig config) const { return config; }
+    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig readConfig,
+                                                    GrPixelConfig surfaceConfig) const {
+        return readConfig;
+    }
+    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig writeConfig,
+                                                     GrPixelConfig surfaceConfig) const {
+        return writeConfig;
+    }
 
     /**
      * Called before uploading writing pixels to a GrTexture when the src pixel config doesn't
@@ -299,7 +298,7 @@ public:
      * Can the provided configuration act as a color render target?
      */
     bool isConfigRenderable(GrPixelConfig config) const {
-        GrAssert(kGrPixelConfigCount > config);
+        GrAssert(kGrPixelConfigCnt > config);
         return fConfigRenderSupport[config];
     }
 
@@ -366,7 +365,7 @@ protected:
     }
 
     // prepares clip flushes gpu state before a draw
-    bool setupClipAndFlushState(DrawType);
+    bool setupClipAndFlushState(DrawType, const GrDeviceCoordTexture* dstCopy);
 
     // Functions used to map clip-respecting stencil tests into normal
     // stencil funcs supported by GPUs.
@@ -403,7 +402,7 @@ protected:
 
     // Derived classes need access to this so they can fill it out in their
     // constructors
-    bool    fConfigRenderSupport[kGrPixelConfigCount];
+    bool    fConfigRenderSupport[kGrPixelConfigCnt];
 
     // Helpers for setting up geometry state
     void finalizeReservedVertices();
@@ -482,9 +481,9 @@ private:
 
     // The GrGpu typically records the clients requested state and then flushes
     // deltas from previous state at draw time. This function does the
-    // backend-specific flush of the state
+    // backend-specific flush of the state.
     // returns false if current state is unsupported.
-    virtual bool flushGraphicsState(DrawType) = 0;
+    virtual bool flushGraphicsState(DrawType, const GrDeviceCoordTexture* dstCopy) = 0;
 
     // clears the entire stencil buffer to 0
     virtual void clearStencil() = 0;
@@ -529,9 +528,10 @@ private:
     int                                                                 fVertexPoolUseCnt;
     int                                                                 fIndexPoolUseCnt;
     // these are mutable so they can be created on-demand
-    mutable GrVertexBuffer*                                             fUnitSquareVertexBuffer;
     mutable GrIndexBuffer*                                              fQuadIndexBuffer;
     bool                                                                fContextIsDirty;
+    // Used to abandon/release all resources created by this GrGpu. TODO: Move this
+    // functionality to GrResourceCache.
     ResourceList                                                        fResourceList;
 
     typedef GrDrawTarget INHERITED;

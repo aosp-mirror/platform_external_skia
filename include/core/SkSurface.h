@@ -24,7 +24,7 @@ class GrRenderTarget;
  *  To draw into a canvas, first create the appropriate type of Surface, and
  *  then request the canvas from the surface.
  */
-class SkSurface : public SkRefCnt {
+class SK_API SkSurface : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkSurface)
 
@@ -79,10 +79,26 @@ public:
     uint32_t generationID();
 
     /**
-     *  Call this if the contents have changed. This will (lazily) force a new
+     *  Modes that can be passed to notifyContentWillChange
+     */
+    enum ContentChangeMode {
+        /**
+         *  Use this mode if it is known that the upcoming content changes will
+         *  clear or overwrite prior contents, thus making them discardable.
+         */
+        kDiscard_ContentChangeMode,
+        /**
+         *  Use this mode if prior surface contents need to be preserved or
+         *  if in doubt.
+         */
+        kRetain_ContentChangeMode,
+    };
+
+    /**
+     *  Call this if the contents are about to change. This will (lazily) force a new
      *  value to be returned from generationID() when it is called next.
      */
-    void notifyContentChanged();
+    void notifyContentWillChange(ContentChangeMode mode);
 
     /**
      *  Return a canvas that will draw into this surface. This will always
@@ -112,7 +128,7 @@ public:
      *  point. Subsequent changes to the surface (by drawing into its canvas)
      *  will not be reflected in this image.
      */
-    SkImage* newImageShapshot();
+    SkImage* newImageSnapshot();
 
     /**
      *  Thought the caller could get a snapshot image explicitly, and draw that,

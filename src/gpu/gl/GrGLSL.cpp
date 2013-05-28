@@ -9,8 +9,7 @@
 #include "GrGLShaderVar.h"
 #include "SkString.h"
 
-GrGLSLGeneration GrGetGLSLGeneration(GrGLBinding binding,
-                                   const GrGLInterface* gl) {
+GrGLSLGeneration GrGetGLSLGeneration(GrGLBinding binding, const GrGLInterface* gl) {
     GrGLSLVersion ver = GrGLGetGLSLVersion(gl);
     switch (binding) {
         case kDesktop_GrGLBinding:
@@ -34,8 +33,7 @@ GrGLSLGeneration GrGetGLSLGeneration(GrGLBinding binding,
     }
 }
 
-const char* GrGetGLSLVersionDecl(GrGLBinding binding,
-                                   GrGLSLGeneration gen) {
+const char* GrGetGLSLVersionDecl(GrGLBinding binding, GrGLSLGeneration gen) {
     switch (gen) {
         case k110_GrGLSLGeneration:
             if (kES2_GrGLBinding == binding) {
@@ -61,23 +59,12 @@ const char* GrGetGLSLVersionDecl(GrGLBinding binding,
     }
 }
 
-bool GrGLSLSetupFSColorOuput(GrGLSLGeneration gen,
-                             const char* nameIfDeclared,
-                             GrGLShaderVar* var) {
+bool GrGLSLSetupFSColorOuput(GrGLSLGeneration gen, const char* nameIfDeclared, GrGLShaderVar* var) {
     bool declaredOutput = k110_GrGLSLGeneration != gen;
     var->set(kVec4f_GrSLType,
              GrGLShaderVar::kOut_TypeModifier,
              declaredOutput ? nameIfDeclared : "gl_FragColor");
     return declaredOutput;
-}
-
-GrSLType GrSLFloatVectorType (int count) {
-    GR_STATIC_ASSERT(kFloat_GrSLType == 1);
-    GR_STATIC_ASSERT(kVec2f_GrSLType == 2);
-    GR_STATIC_ASSERT(kVec3f_GrSLType == 3);
-    GR_STATIC_ASSERT(kVec4f_GrSLType == 4);
-    GrAssert(count > 0 && count <= 4);
-    return (GrSLType)(count);
 }
 
 const char* GrGLSLVectorHomogCoord(int count) {
@@ -100,63 +87,15 @@ const char* GrGLSLVectorNonhomogCoords(GrSLType type) {
     return GrGLSLVectorNonhomogCoords(GrSLTypeToVecLength(type));
 }
 
-GrSLConstantVec GrGLSLModulate4f(SkString* outAppend,
-                                 const char* in0,
-                                 const char* in1,
-                                 GrSLConstantVec default0,
-                                 GrSLConstantVec default1) {
-    GrAssert(NULL != outAppend);
-
-    bool has0 = NULL != in0 && '\0' != *in0;
-    bool has1 = NULL != in1 && '\0' != *in1;
-
-    GrAssert(has0 || kNone_GrSLConstantVec != default0);
-    GrAssert(has1 || kNone_GrSLConstantVec != default1);
-
-    if (!has0 && !has1) {
-        GrAssert(kZeros_GrSLConstantVec == default0 || kOnes_GrSLConstantVec == default0);
-        GrAssert(kZeros_GrSLConstantVec == default1 || kOnes_GrSLConstantVec == default1);
-        if (kZeros_GrSLConstantVec == default0 || kZeros_GrSLConstantVec == default1) {
-            outAppend->append(GrGLSLZerosVecf(4));
-            return kZeros_GrSLConstantVec;
-        } else {
-            // both inputs are ones vectors
-            outAppend->append(GrGLSLOnesVecf(4));
-            return kOnes_GrSLConstantVec;
-        }
-    } else if (!has0) {
-        GrAssert(kZeros_GrSLConstantVec == default0 || kOnes_GrSLConstantVec == default0);
-        if (kZeros_GrSLConstantVec == default0) {
-            outAppend->append(GrGLSLZerosVecf(4));
-            return kZeros_GrSLConstantVec;
-        } else {
-            outAppend->appendf("vec4(%s)", in1);
-            return kNone_GrSLConstantVec;
-        }
-    } else if (!has1) {
-        GrAssert(kZeros_GrSLConstantVec == default1 || kOnes_GrSLConstantVec == default1);
-        if (kZeros_GrSLConstantVec == default1) {
-            outAppend->append(GrGLSLZerosVecf(4));
-            return kZeros_GrSLConstantVec;
-        } else {
-            outAppend->appendf("vec4(%s)", in0);
-            return kNone_GrSLConstantVec;
-        }
-    } else {
-        outAppend->appendf("vec4(%s * %s)", in0, in1);
-        return kNone_GrSLConstantVec;
-    }
-}
-
 namespace {
-void append_tabs(SkString* outAppend, int tabCnt) {
-    static const char kTabs[] = "\t\t\t\t\t\t\t\t";
-    while (tabCnt) {
-        int cnt = GrMin((int)GR_ARRAY_COUNT(kTabs), tabCnt);
-        outAppend->append(kTabs, cnt);
-        tabCnt -= cnt;
+    void append_tabs(SkString* outAppend, int tabCnt) {
+        static const char kTabs[] = "\t\t\t\t\t\t\t\t";
+        while (tabCnt) {
+            int cnt = GrMin((int)GR_ARRAY_COUNT(kTabs), tabCnt);
+            outAppend->append(kTabs, cnt);
+            tabCnt -= cnt;
+        }
     }
-}
 }
 
 GrSLConstantVec GrGLSLMulVarBy4f(SkString* outAppend,
@@ -185,31 +124,24 @@ GrSLConstantVec GrGLSLMulVarBy4f(SkString* outAppend,
     return kNone_GrSLConstantVec;
 }
 
-GrSLConstantVec GrGLSLAdd4f(SkString* outAppend,
-                            const char* in0,
-                            const char* in1,
-                            GrSLConstantVec default0,
-                            GrSLConstantVec default1) {
-    GrAssert(NULL != outAppend);
-
-    bool has0 = NULL != in0 && '\0' != *in0;
-    bool has1 = NULL != in1 && '\0' != *in1;
-
-    if (!has0 && !has1) {
-        GrAssert(kZeros_GrSLConstantVec == default0);
-        GrAssert(kZeros_GrSLConstantVec == default1);
-        outAppend->append(GrGLSLZerosVecf(4));
-        return kZeros_GrSLConstantVec;
-    } else if (!has0) {
-        GrAssert(kZeros_GrSLConstantVec == default0);
-        outAppend->appendf("vec4(%s)", in1);
-        return kNone_GrSLConstantVec;
-    } else if (!has1) {
-        GrAssert(kZeros_GrSLConstantVec == default1);
-        outAppend->appendf("vec4(%s)", in0);
-        return kNone_GrSLConstantVec;
+GrSLConstantVec GrGLSLGetComponent4f(SkString* outAppend,
+                                     const char* expr,
+                                     GrColorComponentFlags component,
+                                     GrSLConstantVec defaultExpr,
+                                     bool omitIfConst) {
+    if (NULL == expr || '\0' == *expr) {
+        GrAssert(defaultExpr != kNone_GrSLConstantVec);
+        if (!omitIfConst) {
+            if (kOnes_GrSLConstantVec == defaultExpr) {
+                outAppend->append("1.0");
+            } else {
+                GrAssert(kZeros_GrSLConstantVec == defaultExpr);
+                outAppend->append("0.0");
+            }
+        }
+        return defaultExpr;
     } else {
-        outAppend->appendf("(vec4(%s) + vec4(%s))", in0, in1);
+        outAppend->appendf("(%s).%c", expr, GrColorComponentFlagToChar(component));
         return kNone_GrSLConstantVec;
     }
 }

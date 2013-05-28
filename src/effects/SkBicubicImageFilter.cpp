@@ -81,7 +81,11 @@ bool SkBicubicImageFilter::onFilterImage(Proxy* proxy,
                                          const SkMatrix& matrix,
                                          SkBitmap* result,
                                          SkIPoint* loc) {
-    SkBitmap src = this->getInputResult(0, proxy, source, matrix, loc);
+    SkBitmap src = source;
+    if (getInput(0) && !getInput(0)->filterImage(proxy, source, matrix, &src, loc)) {
+        return false;
+    }
+
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -326,6 +330,7 @@ GR_DEFINE_EFFECT_TEST(GrBicubicEffect);
 
 GrEffectRef* GrBicubicEffect::TestCreate(SkMWCRandom* random,
                                          GrContext* context,
+                                         const GrDrawTargetCaps&,
                                          GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;

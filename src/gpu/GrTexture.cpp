@@ -10,11 +10,18 @@
 #include "GrTexture.h"
 
 #include "GrContext.h"
+#include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 #include "GrRenderTarget.h"
 #include "GrResourceCache.h"
 
 SK_DEFINE_INST_COUNT(GrTexture)
+
+GrTexture::~GrTexture() {
+    if (NULL != fRenderTarget.get()) {
+        fRenderTarget.get()->owningTextureDestroyed();
+    }
+}
 
 /**
  * This method allows us to interrupt the normal deletion process and place
@@ -66,33 +73,15 @@ void GrTexture::writePixels(int left, int top, int width, int height,
                                 pixelOpsFlags);
 }
 
-void GrTexture::releaseRenderTarget() {
-    if (NULL != fRenderTarget) {
-        GrAssert(fRenderTarget->asTexture() == this);
-        GrAssert(fDesc.fFlags & kRenderTarget_GrTextureFlagBit);
-
-        fRenderTarget->onTextureReleaseRenderTarget();
-        fRenderTarget->unref();
-        fRenderTarget = NULL;
-
-        fDesc.fFlags = fDesc.fFlags &
-            ~(kRenderTarget_GrTextureFlagBit|kNoStencil_GrTextureFlagBit);
-        fDesc.fSampleCnt = 0;
-    }
-}
-
 void GrTexture::onRelease() {
     GrAssert(!this->isSetFlag((GrTextureFlags) kReturnToCache_FlagBit));
-    this->releaseRenderTarget();
-
     INHERITED::onRelease();
 }
 
 void GrTexture::onAbandon() {
-    if (NULL != fRenderTarget) {
+    if (NULL != fRenderTarget.get()) {
         fRenderTarget->abandon();
     }
-
     INHERITED::onAbandon();
 }
 
@@ -136,7 +125,7 @@ GrResourceKey::ResourceFlags get_texture_flags(const GrGpu* gpu,
                                                const GrTextureDesc& desc) {
     GrResourceKey::ResourceFlags flags = 0;
     bool tiled = NULL != params && params->isTiled();
-    if (tiled && !gpu->getCaps().npotTextureTileSupport()) {
+    if (tiled && !gpu->caps()->npotTextureTileSupport()) {
         if (!GrIsPow2(desc.fWidth) || !GrIsPow2(desc.fHeight)) {
             flags |= kStretchToPOT_TextureFlag;
             if (params->isBilerp()) {

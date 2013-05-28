@@ -115,7 +115,8 @@
 // SK_ENABLE_INST_COUNT defaults to 1 in DEBUG and 0 in RELEASE
 #ifndef SK_ENABLE_INST_COUNT
     #ifdef SK_DEBUG
-        #define SK_ENABLE_INST_COUNT 1
+        // FIXME: fails if multiple threads run at once (see skbug.com/1219 )
+        #define SK_ENABLE_INST_COUNT 0
     #else
         #define SK_ENABLE_INST_COUNT 0
     #endif
@@ -321,6 +322,11 @@
     #if defined(_MSC_VER)
         #define SK_OVERRIDE override
     #elif defined(__clang__) && !defined(SK_BUILD_FOR_IOS)
+        // Clang defaults to C++03 and warns about using override. Squelch that. Intentionally no
+        // push/pop here so all users of SK_OVERRIDE ignore the warning too. This is like passing
+        // -Wno-c++11-extensions, except that GCC won't die (because it won't see this pragma).
+        #pragma clang diagnostic ignored "-Wc++11-extensions"
+
         #if __has_feature(cxx_override_control)
             // Some documentation suggests we should be using __attribute__((override)),
             // but it doesn't work.

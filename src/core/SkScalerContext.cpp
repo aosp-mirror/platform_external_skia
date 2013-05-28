@@ -22,6 +22,9 @@
 #include "SkStroke.h"
 #include "SkThread.h"
 
+#ifdef SK_BUILD_FOR_ANDROID
+    #include "SkTypeface_android.h"
+#endif
 
 #define ComputeBWRowBytes(width)        (((unsigned)(width) + 7) >> 3)
 
@@ -107,6 +110,15 @@ SkScalerContext::SkScalerContext(SkTypeface* typeface, const SkDescriptor* desc)
              desc->findEntry(kPathEffect_SkDescriptorTag, NULL),
         desc->findEntry(kMaskFilter_SkDescriptorTag, NULL));
 #endif
+#ifdef SK_BUILD_FOR_ANDROID
+    uint32_t len;
+    const void* data = desc->findEntry(kAndroidOpts_SkDescriptorTag, &len);
+    if (data) {
+        SkOrderedReadBuffer buffer(data, len);
+        fPaintOptionsAndroid.unflatten(buffer);
+        SkASSERT(buffer.offset() == buffer.size());
+    }
+#endif
 }
 
 SkScalerContext::~SkScalerContext() {
@@ -119,13 +131,11 @@ SkScalerContext::~SkScalerContext() {
 
 // Return the context associated with the next logical typeface, or NULL if
 // there are no more entries in the fallback chain.
-static SkScalerContext* allocNextContext(const SkScalerContext::Rec& rec) {
+SkScalerContext* SkScalerContext::allocNextContext() const {
 #ifdef SK_BUILD_FOR_ANDROID
-    // On Android, pass entire rec structure so that clients can change fallback behavior
-    SkTypeface* newFace = SkFontHost::NextLogicalTypeface(rec);
-#else
-    SkTypeface* newFace = SkFontHost::NextLogicalTypeface(rec.fFontID, rec.fOrigFontID);
-#endif
+    SkTypeface* newFace = SkAndroidNextLogicalTypeface(fRec.fFontID,
+                                                       fRec.fOrigFontID,
+                                                       fPaintOptionsAndroid);
     if (0 == newFace) {
         return NULL;
     }
@@ -133,17 +143,20 @@ static SkScalerContext* allocNextContext(const SkScalerContext::Rec& rec) {
     SkAutoTUnref<SkTypeface> aur(newFace);
     uint32_t newFontID = newFace->uniqueID();
 
-    SkAutoDescriptor    ad(sizeof(rec) + SkDescriptor::ComputeOverhead(1));
+    SkAutoDescriptor    ad(sizeof(fRec) + SkDescriptor::ComputeOverhead(1));
     SkDescriptor*       desc = ad.getDesc();
 
     desc->init();
     SkScalerContext::Rec* newRec =
     (SkScalerContext::Rec*)desc->addEntry(kRec_SkDescriptorTag,
-                                          sizeof(rec), &rec);
+                                          sizeof(fRec), &fRec);
     newRec->fFontID = newFontID;
     desc->computeChecksum();
 
     return newFace->createScalerContext(desc);
+#else
+    return NULL;
+#endif
 }
 
 /*  Return the next context, creating it if its not already created, but return
@@ -154,7 +167,7 @@ SkScalerContext* SkScalerContext::getNextContext() {
     // if next is null, then either it isn't cached yet, or we're at the
     // end of our possible chain
     if (NULL == next) {
-        next = allocNextContext(fRec);
+        next = this->allocNextContext();
         if (NULL == next) {
             return NULL;
         }
@@ -332,6 +345,12 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
 
     if (SkMask::kARGB32_Format != glyph->fMaskFormat) {
         glyph->fMaskFormat = fRec.fMaskFormat;
+    }
+
+    // If we are going to create the mask, then we cannot keep the color
+    if ((fGenerateImageFromPath || fMaskFilter) &&
+            SkMask::kARGB32_Format == glyph->fMaskFormat) {
+        glyph->fMaskFormat = SkMask::kA8_Format;
     }
 
     if (fMaskFilter) {
@@ -512,9 +531,39 @@ static void generateMask(const SkMask& mask, const SkPath& path,
     }
 }
 
+static void extract_alpha(const SkMask& dst,
+                          const SkPMColor* srcRow, size_t srcRB) {
+    int width = dst.fBounds.width();
+    int height = dst.fBounds.height();
+    int dstRB = dst.fRowBytes;
+    uint8_t* dstRow = dst.fImage;
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            dstRow[x] = SkGetPackedA32(srcRow[x]);
+        }
+        // zero any padding on each row
+        for (int x = width; x < dstRB; ++x) {
+            dstRow[x] = 0;
+        }
+        dstRow += dstRB;
+        srcRow = (const SkPMColor*)((const char*)srcRow + srcRB);
+    }
+}
+
 void SkScalerContext::getImage(const SkGlyph& origGlyph) {
     const SkGlyph*  glyph = &origGlyph;
     SkGlyph         tmpGlyph;
+
+    // in case we need to call generateImage on a mask-format that is different
+    // (i.e. larger) than what our caller allocated by looking at origGlyph.
+    SkAutoMalloc tmpGlyphImageStorage;
+
+    // If we are going to draw-from-path, then we cannot generate color, since
+    // the path only makes a mask. This case should have been caught up in
+    // generateMetrics().
+    SkASSERT(!fGenerateImageFromPath ||
+             SkMask::kARGB32_Format != origGlyph.fMaskFormat);
 
     if (fMaskFilter) {   // restore the prefilter bounds
         tmpGlyph.init(origGlyph.fID);
@@ -525,11 +574,16 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
         this->getMetrics(&tmpGlyph);
         fMaskFilter = mf;               // restore
 
-        tmpGlyph.fImage = origGlyph.fImage;
-
         // we need the prefilter bounds to be <= filter bounds
         SkASSERT(tmpGlyph.fWidth <= origGlyph.fWidth);
         SkASSERT(tmpGlyph.fHeight <= origGlyph.fHeight);
+
+        if (tmpGlyph.fMaskFormat == origGlyph.fMaskFormat) {
+            tmpGlyph.fImage = origGlyph.fImage;
+        } else {
+            tmpGlyphImageStorage.reset(tmpGlyph.computeImageSize());
+            tmpGlyph.fImage = tmpGlyphImageStorage.get();
+        }
         glyph = &tmpGlyph;
     }
 
@@ -554,6 +608,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
                 applyLUTToA8Mask(mask, fPreBlend.fG);
             }
         } else {
+            SkASSERT(SkMask::kARGB32_Format != mask.fFormat);
             generateMask(mask, devPath, fPreBlend);
         }
     } else {
@@ -566,7 +621,21 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
 
         // the src glyph image shouldn't be 3D
         SkASSERT(SkMask::k3D_Format != glyph->fMaskFormat);
+
+        SkAutoSMalloc<32*32> a8storage;
         glyph->toMask(&srcM);
+        if (SkMask::kARGB32_Format == srcM.fFormat) {
+            // now we need to extract the alpha-channel from the glyph's image
+            // and copy it into a temp buffer, and then point srcM at that temp.
+            srcM.fFormat = SkMask::kA8_Format;
+            srcM.fRowBytes = SkAlign4(srcM.fBounds.width());
+            size_t size = srcM.computeImageSize();
+            a8storage.reset(size);
+            srcM.fImage = (uint8_t*)a8storage.get();
+            extract_alpha(srcM,
+                          (const SkPMColor*)glyph->fImage, glyph->rowBytes());
+        }
+
         fRec.getMatrixFrom2x2(&matrix);
 
         if (fMaskFilter->filterMask(&dstM, srcM, matrix, NULL)) {
@@ -604,8 +673,16 @@ void SkScalerContext::getPath(const SkGlyph& glyph, SkPath* path) {
     this->internalGetPath(glyph, NULL, path, NULL);
 }
 
-void SkScalerContext::getFontMetrics(SkPaint::FontMetrics* mx,
-                                     SkPaint::FontMetrics* my) {
+void SkScalerContext::getFontMetrics(SkPaint::FontMetrics* fm) {
+    // All of this complexity should go away when we change generateFontMetrics
+    // to just take one parameter (since it knows if it is vertical or not)
+    SkPaint::FontMetrics* mx = NULL;
+    SkPaint::FontMetrics* my = NULL;
+    if (fRec.fFlags & kVertical_Flag) {
+        mx = fm;
+    } else {
+        my = fm;
+    }
     this->generateFontMetrics(mx, my);
 }
 

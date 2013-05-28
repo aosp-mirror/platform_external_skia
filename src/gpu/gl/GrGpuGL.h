@@ -44,8 +44,10 @@ public:
     bool programUnitTest(int maxStages);
 
     // GrGpu overrides
-    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig config) const SK_OVERRIDE;
-    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig config) const SK_OVERRIDE;
+    virtual GrPixelConfig preferredReadPixelsConfig(GrPixelConfig readConfig,
+                                                    GrPixelConfig surfaceConfig) const SK_OVERRIDE;
+    virtual GrPixelConfig preferredWritePixelsConfig(GrPixelConfig writeConfig,
+                                                     GrPixelConfig surfaceConfig) const SK_OVERRIDE;
     virtual bool canWriteTexturePixels(const GrTexture*, GrPixelConfig srcConfig) const SK_OVERRIDE;
     virtual bool readPixelsWillPayForYFlip(
                                     GrRenderTarget* renderTarget,
@@ -55,9 +57,11 @@ public:
                                     size_t rowBytes) const SK_OVERRIDE;
     virtual bool fullReadPixelsIsFasterThanPartial() const SK_OVERRIDE;
 
+    virtual void initCopySurfaceDstDesc(const GrSurface* src, GrTextureDesc* desc) SK_OVERRIDE;
+
     virtual void abandonResources() SK_OVERRIDE;
 
-    const GrGLCaps& glCaps() const { return fGLContext.info().caps(); }
+    const GrGLCaps& glCaps() const { return *fGLContext.info().caps(); }
 
     // These functions should be used to bind GL objects. They track the GL state and skip redundant
     // bindings. Making the equivalent glBind calls directly will confuse the state tracking.
@@ -84,6 +88,17 @@ public:
     }
     void notifyTextureDelete(GrGLTexture* texture);
     void notifyRenderTargetDelete(GrRenderTarget* renderTarget);
+
+protected:
+    virtual bool onCopySurface(GrSurface* dst,
+                               GrSurface* src,
+                               const SkIRect& srcRect,
+                               const SkIPoint& dstPoint) SK_OVERRIDE;
+
+    virtual bool onCanCopySurface(GrSurface* dst,
+                                  GrSurface* src,
+                                  const SkIRect& srcRect,
+                                  const SkIPoint& dstPoint) SK_OVERRIDE;
 
 private:
     // GrGpu overrides
@@ -135,7 +150,7 @@ private:
     virtual void clearStencil() SK_OVERRIDE;
     virtual void clearStencilClip(const GrIRect& rect,
                                   bool insideClip) SK_OVERRIDE;
-    virtual bool flushGraphicsState(DrawType) SK_OVERRIDE;
+    virtual bool flushGraphicsState(DrawType, const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -163,48 +178,37 @@ private:
         ~ProgramCache();
 
         void abandon();
-        GrGLProgram* getProgram(const GrGLProgram::Desc& desc, const GrEffectStage* stages[]);
+        GrGLProgram* getProgram(const GrGLProgramDesc& desc, const GrEffectStage* stages[]);
+
     private:
         enum {
-            kKeySize = sizeof(GrGLProgram::Desc),
             // We may actually have kMaxEntries+1 shaders in the GL context because we create a new
             // shader before evicting from the cache.
-            kMaxEntries = 32
+            kMaxEntries = 32,
+            kHashBits = 6,
         };
 
-        class Entry;
-        // The value of the hash key is based on the ProgramDesc.
-        typedef GrTBinHashKey<Entry, kKeySize> ProgramHashKey;
+        struct Entry;
 
-        class Entry : public ::GrNoncopyable {
-        public:
-            Entry() : fProgram(NULL), fLRUStamp(0) {}
-            Entry& operator = (const Entry& entry) {
-                GrSafeRef(entry.fProgram.get());
-                fProgram.reset(entry.fProgram.get());
-                fKey = entry.fKey;
-                fLRUStamp = entry.fLRUStamp;
-                return *this;
-            }
-            int compare(const ProgramHashKey& key) const {
-                return fKey.compare(key);
-            }
+        struct ProgDescLess;
 
-        public:
-            SkAutoTUnref<GrGLProgram>   fProgram;
-            ProgramHashKey              fKey;
-            unsigned int                fLRUStamp; // Move outside entry?
-        };
+        // binary search for entry matching desc. returns index into fEntries that matches desc or ~
+        // of the index of where it should be inserted.
+        int search(const GrGLProgramDesc& desc) const;
 
-        GrTHashTable<Entry, ProgramHashKey, 8> fHashCache;
+        // sorted array of all the entries
+        Entry*                      fEntries[kMaxEntries];
+        // hash table based on lowest kHashBits bits of the program key. Used to avoid binary
+        // searching fEntries.
+        Entry*                      fHashTable[1 << kHashBits];
 
-        Entry                       fEntries[kMaxEntries];
         int                         fCount;
         unsigned int                fCurrLRUStamp;
         const GrGLContext&          fGL;
 #ifdef PROGRAM_CACHE_STATS
         int                         fTotalRequests;
         int                         fCacheMisses;
+        int                         fHashMisses; // cache hit but hash table missed
 #endif
     };
 
@@ -217,9 +221,6 @@ private:
     // flushes the scissor. see the note on flushBoundTextureAndParams about
     // flushing the scissor after that function is called.
     void flushScissor();
-
-    // Inits GrDrawTarget::Caps, subclass may enable additional caps.
-    void initCaps();
 
     void initFSAASupport();
 
@@ -430,8 +431,6 @@ private:
     // we record what stencil format worked last time to hopefully exit early
     // from our loop that tries stencil formats and calls check fb status.
     int fLastSuccessfulStencilFmtIdx;
-
-    bool fPrintedCaps;
 
     typedef GrGpu INHERITED;
 };

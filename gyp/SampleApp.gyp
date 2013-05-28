@@ -5,6 +5,7 @@
       'type': 'executable',
       'mac_bundle' : 1,
       'include_dirs' : [
+        '../debugger',
         '../src/core',
         '../src/effects', #needed for BlurMask.h
         '../gm',       # needed to pull gm.h
@@ -15,6 +16,13 @@
         'gmslides.gypi',
       ],
       'sources': [
+        '../debugger/SkDrawCommand.h',
+        '../debugger/SkDrawCommand.cpp',
+        '../debugger/SkDebugCanvas.h',
+        '../debugger/SkDebugCanvas.cpp',
+        '../debugger/SkObjectParser.h',
+        '../debugger/SkObjectParser.cpp',
+
         '../gm/gm.cpp',
         '../gm/gm.h',
 
@@ -68,6 +76,7 @@
         '../samplecode/SampleLayers.cpp',
         '../samplecode/SampleLCD.cpp',
         '../samplecode/SampleLines.cpp',
+        '../samplecode/SampleLua.cpp',
         '../samplecode/SampleManyRects.cpp',
         '../samplecode/SampleMeasure.cpp',
         '../samplecode/SampleMipMap.cpp',
@@ -121,6 +130,10 @@
         # TiledPipeController
         '../src/pipe/utils/SamplePipeControllers.h',
         '../src/pipe/utils/SamplePipeControllers.cpp',
+
+        # Lua
+        '../src/utils/SkLuaCanvas.cpp',
+        '../src/utils/SkLua.cpp',
       ],
       'sources!': [
         '../samplecode/SampleSkLayer.cpp', #relies on SkMatrix44 which doesn't compile
@@ -138,6 +151,7 @@
         'experimental.gyp:experimental',
         'pdf.gyp:pdf',
         'views_animated.gyp:views_animated',
+        'lua.gyp:lua',
       ],
       'conditions' : [
        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {

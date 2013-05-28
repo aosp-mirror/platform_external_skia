@@ -29,18 +29,9 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(char const*) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkFontHost::Serialize(const SkTypeface* face, SkWStream* stream) {
-    SkDEBUGFAIL("SkFontHost::Serialize unimplemented");
-}
+#include "SkFontMgr.h"
 
-SkTypeface* SkFontHost::Deserialize(SkStream* stream) {
-    SkDEBUGFAIL("SkFontHost::Deserialize unimplemented");
-    return NULL;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-SkTypeface* SkFontHost::NextLogicalTypeface(SkFontID currFontID,
-                                            SkFontID origFontID) {
+SkFontMgr* SkFontMgr::Factory() {
+    // todo
     return NULL;
 }

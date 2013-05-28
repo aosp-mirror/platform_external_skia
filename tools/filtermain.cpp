@@ -21,7 +21,7 @@
 static void usage() {
     SkDebugf("Usage: filter -i inFile [-o outFile] [--input-dir path] [--output-dir path]\n");
     SkDebugf("                        [-h|--help]\n\n");
-    SkDebugf("    -i inFile  : file to file.\n");
+    SkDebugf("    -i inFile  : file to filter.\n");
     SkDebugf("    -o outFile : result of filtering.\n");
     SkDebugf("    --input-dir : process all files in dir with .skp extension.\n");
     SkDebugf("    --output-dir : results of filtering the input dir.\n");
@@ -40,63 +40,70 @@ static bool is_simple(const SkPaint& p) {
            NULL == p.getImageFilter();
 }
 
+
 // Check for:
 //    SAVE_LAYER
 //        DRAW_BITMAP_RECT_TO_RECT
 //    RESTORE
 // where the saveLayer's color can be moved into the drawBitmapRect
-static bool check_0(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SAVE_LAYER != commands[curCommand]->getType() ||
-        commands.count() <= curCommand+2 ||
-        DRAW_BITMAP_RECT_TO_RECT != commands[curCommand+1]->getType() ||
-        RESTORE != commands[curCommand+2]->getType())
+static bool check_0(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE_LAYER != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+2 ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+2)->getType()) {
         return false;
+    }
 
-    SaveLayer* saveLayer = (SaveLayer*) commands[curCommand];
-    DrawBitmapRect* dbmr = (DrawBitmapRect*) commands[curCommand+1];
+    SaveLayer* saveLayer = (SaveLayer*) canvas->getDrawCommandAt(curCommand);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+1);
 
     const SkPaint* saveLayerPaint = saveLayer->paint();
     SkPaint* dbmrPaint = dbmr->paint();
 
     // For this optimization we only fold the saveLayer and drawBitmapRect
-    // together if the saveLayer's draw is simple (i.e., no fancy effects) and
-    // and the only difference in the colors is that the saveLayer's can have
-    // an alpha while the drawBitmapRect's is opaque.
-    // TODO: it should be possible to fold them together even if they both
-    // have different non-255 alphas but this is low priority since we have
-    // never seen that case
-    // If either operation lacks a paint then the collapse is trivial
+    // together if the saveLayer's draw is simple (i.e., no fancy effects)
+    // and the only difference in the colors is their alpha value
     SkColor layerColor = saveLayerPaint->getColor() | 0xFF000000; // force opaque
+    SkColor dbmrColor = dbmrPaint->getColor() | 0xFF000000;       // force opaque
 
+    // If either operation lacks a paint then the collapse is trivial
     return NULL == saveLayerPaint ||
            NULL == dbmrPaint ||
-           (is_simple(*saveLayerPaint) && dbmrPaint->getColor() == layerColor);
+           (is_simple(*saveLayerPaint) && dbmrColor == layerColor);
 }
 
 // Fold the saveLayer's alpha into the drawBitmapRect and remove the saveLayer
 // and restore
-static void apply_0(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    SaveLayer* saveLayer = (SaveLayer*) commands[curCommand];
-    DrawBitmapRect* dbmr = (DrawBitmapRect*) commands[curCommand+1];
-    Restore* restore = (Restore*) commands[curCommand+2];
-
+static void apply_0(SkDebugCanvas* canvas, int curCommand) {
+    SaveLayer* saveLayer = (SaveLayer*) canvas->getDrawCommandAt(curCommand);
     const SkPaint* saveLayerPaint = saveLayer->paint();
-    SkPaint* dbmrPaint = dbmr->paint();
 
-    if (NULL == saveLayerPaint) {
-        saveLayer->setVisible(false);
-        restore->setVisible(false);
-    } else if (NULL == dbmrPaint) {
-        saveLayer->setVisible(false);
-        dbmr->setPaint(*saveLayerPaint);
-        restore->setVisible(false);
-    } else {
-        saveLayer->setVisible(false);
-        SkColor newColor = SkColorSetA(dbmrPaint->getColor(),
-                                       SkColorGetA(saveLayerPaint->getColor()));
-        dbmrPaint->setColor(newColor);
-        restore->setVisible(false);
+    // if (NULL == saveLayerPaint) the dbmr's paint doesn't need to be changed
+    if (NULL != saveLayerPaint) {
+        DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+1);
+        SkPaint* dbmrPaint = dbmr->paint();
+
+        if (NULL == dbmrPaint) {
+            // if the DBMR doesn't have a paint just use the saveLayer's
+            dbmr->setPaint(*saveLayerPaint);
+        } else if (NULL != saveLayerPaint) {
+            // Both paints are present so their alphas need to be combined
+            SkColor color = saveLayerPaint->getColor();
+            int a0 = SkColorGetA(color);
+
+            color = dbmrPaint->getColor();
+            int a1 = SkColorGetA(color);
+
+            int newA = SkMulDiv255Round(a0, a1);
+            SkASSERT(newA <= 0xFF);
+
+            SkColor newColor = SkColorSetA(color, newA);
+            dbmrPaint->setColor(newColor);
+        }
     }
+
+    canvas->deleteDrawCommandAt(curCommand+2);  // restore
+    canvas->deleteDrawCommandAt(curCommand);    // saveLayer
 }
 
 // Check for:
@@ -107,18 +114,19 @@ static void apply_0(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 //        RESTORE
 //    RESTORE
 // where the saveLayer's color can be moved into the drawBitmapRect
-static bool check_1(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SAVE_LAYER != commands[curCommand]->getType() ||
-        commands.count() <= curCommand+5 ||
-        SAVE != commands[curCommand+1]->getType() ||
-        CLIP_RECT != commands[curCommand+2]->getType() ||
-        DRAW_BITMAP_RECT_TO_RECT != commands[curCommand+3]->getType() ||
-        RESTORE != commands[curCommand+4]->getType() ||
-        RESTORE != commands[curCommand+5]->getType())
+static bool check_1(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE_LAYER != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+5 ||
+        SAVE != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+3)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+4)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+5)->getType()) {
         return false;
+    }
 
-    SaveLayer* saveLayer = (SaveLayer*) commands[curCommand];
-    DrawBitmapRect* dbmr = (DrawBitmapRect*) commands[curCommand+3];
+    SaveLayer* saveLayer = (SaveLayer*) canvas->getDrawCommandAt(curCommand);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+3);
 
     const SkPaint* saveLayerPaint = saveLayer->paint();
     SkPaint* dbmrPaint = dbmr->paint();
@@ -140,28 +148,26 @@ static bool check_1(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 
 // Fold the saveLayer's alpha into the drawBitmapRect and remove the saveLayer
 // and restore
-static void apply_1(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    SaveLayer* saveLayer = (SaveLayer*) commands[curCommand];
-    DrawBitmapRect* dbmr = (DrawBitmapRect*) commands[curCommand+3];
-    Restore* restore = (Restore*) commands[curCommand+5];
-
+static void apply_1(SkDebugCanvas* canvas, int curCommand) {
+    SaveLayer* saveLayer = (SaveLayer*) canvas->getDrawCommandAt(curCommand);
     const SkPaint* saveLayerPaint = saveLayer->paint();
-    SkPaint* dbmrPaint = dbmr->paint();
 
-    if (NULL == saveLayerPaint) {
-        saveLayer->setVisible(false);
-        restore->setVisible(false);
-    } else if (NULL == dbmrPaint) {
-        saveLayer->setVisible(false);
-        dbmr->setPaint(*saveLayerPaint);
-        restore->setVisible(false);
-    } else {
-        saveLayer->setVisible(false);
-        SkColor newColor = SkColorSetA(dbmrPaint->getColor(),
-                                       SkColorGetA(saveLayerPaint->getColor()));
-        dbmrPaint->setColor(newColor);
-        restore->setVisible(false);
+    // if (NULL == saveLayerPaint) the dbmr's paint doesn't need to be changed
+    if (NULL != saveLayerPaint) {
+        DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+3);
+        SkPaint* dbmrPaint = dbmr->paint();
+
+        if (NULL == dbmrPaint) {
+            dbmr->setPaint(*saveLayerPaint);
+        } else {
+            SkColor newColor = SkColorSetA(dbmrPaint->getColor(),
+                                           SkColorGetA(saveLayerPaint->getColor()));
+            dbmrPaint->setColor(newColor);
+        }
     }
+
+    canvas->deleteDrawCommandAt(curCommand+5);    // restore
+    canvas->deleteDrawCommandAt(curCommand);      // saveLayer
 }
 
 // Check for:
@@ -170,16 +176,17 @@ static void apply_1(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 //        DRAW_RECT
 //    RESTORE
 // where the rect is entirely within the clip and the clip is an intersect
-static bool check_2(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SAVE != commands[curCommand]->getType() ||
-        commands.count() <= curCommand+4 ||
-        CLIP_RECT != commands[curCommand+1]->getType() ||
-        DRAW_RECT != commands[curCommand+2]->getType() ||
-        RESTORE != commands[curCommand+3]->getType())
+static bool check_2(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+4 ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        DRAW_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+3)->getType()) {
         return false;
+    }
 
-    ClipRect* cr = (ClipRect*) commands[curCommand+1];
-    DrawRectC* dr = (DrawRectC*) commands[curCommand+2];
+    ClipRect* cr = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawRectC* dr = (DrawRectC*) canvas->getDrawCommandAt(curCommand+2);
 
     if (SkRegion::kIntersect_Op != cr->op()) {
         return false;
@@ -189,15 +196,11 @@ static bool check_2(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 }
 
 // Remove everything but the drawRect
-static void apply_2(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    Save* save = (Save*) commands[curCommand];
-    ClipRect* cr = (ClipRect*) commands[curCommand+1];
-    Restore* restore = (Restore*) commands[curCommand+3];
-
-    save->setVisible(false);
-    cr->setVisible(false);
-    // leave the drawRect alone
-    restore->setVisible(false);
+static void apply_2(SkDebugCanvas* canvas, int curCommand) {
+    canvas->deleteDrawCommandAt(curCommand+3);   // restore
+    // drawRect
+    canvas->deleteDrawCommandAt(curCommand+1);   // clipRect
+    canvas->deleteDrawCommandAt(curCommand);     // save
 }
 
 // Check for:
@@ -206,16 +209,17 @@ static void apply_2(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 //        DRAW_RECT
 //    RESTORE
 // where the rect entirely encloses the clip
-static bool check_3(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SAVE != commands[curCommand]->getType() ||
-        commands.count() <= curCommand+4 ||
-        CLIP_RRECT != commands[curCommand+1]->getType() ||
-        DRAW_RECT != commands[curCommand+2]->getType() ||
-        RESTORE != commands[curCommand+3]->getType())
+static bool check_3(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+4 ||
+        CLIP_RRECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        DRAW_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+3)->getType()) {
         return false;
+    }
 
-    ClipRRect* crr = (ClipRRect*) commands[curCommand+1];
-    DrawRectC* dr  = (DrawRectC*) commands[curCommand+2];
+    ClipRRect* crr = (ClipRRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawRectC* dr  = (DrawRectC*) canvas->getDrawCommandAt(curCommand+2);
 
     if (SkRegion::kIntersect_Op != crr->op()) {
         return false;
@@ -226,22 +230,21 @@ static bool check_3(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 
 // Replace everything with a drawRRect with the paint from the drawRect
 // and the AA settings from the clipRRect
-static void apply_3(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    Save* save = (Save*) commands[curCommand];
-    ClipRRect* crr = (ClipRRect*) commands[curCommand+1];
-    DrawRectC* dr = (DrawRectC*) commands[curCommand+2];
-    Restore* restore = (Restore*) commands[curCommand+3];
+static void apply_3(SkDebugCanvas* canvas, int curCommand) {
 
-    save->setVisible(false);
-    crr->setVisible(false);
-    dr->setVisible(false);
-    restore->setVisible(false);
+    canvas->deleteDrawCommandAt(curCommand+3);    // restore
+
+    ClipRRect* crr = (ClipRRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawRectC* dr  = (DrawRectC*) canvas->getDrawCommandAt(curCommand+2);
 
     // TODO: could skip paint re-creation if the AA settings already match
     SkPaint newPaint = dr->paint();
     newPaint.setAntiAlias(crr->doAA());
     DrawRRect* drr = new DrawRRect(crr->rrect(), newPaint);
-    commands[curCommand+2] = drr;
+    canvas->setDrawCommandAt(curCommand+2, drr);
+
+    canvas->deleteDrawCommandAt(curCommand+1);    // clipRRect
+    canvas->deleteDrawCommandAt(curCommand);      // save
 }
 
 // Check for:
@@ -250,16 +253,17 @@ static void apply_3(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 //        DRAW_BITMAP_RECT_TO_RECT
 //    RESTORE
 // where the rect and drawBitmapRect dst exactly match
-static bool check_4(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SAVE != commands[curCommand]->getType() ||
-        commands.count() <= curCommand+4 ||
-        CLIP_RECT != commands[curCommand+1]->getType() ||
-        DRAW_BITMAP_RECT_TO_RECT != commands[curCommand+2]->getType() ||
-        RESTORE != commands[curCommand+3]->getType())
+static bool check_4(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+4 ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+3)->getType()) {
         return false;
+    }
 
-    ClipRect* cr = (ClipRect*) commands[curCommand+1];
-    DrawBitmapRect* dbmr  = (DrawBitmapRect*) commands[curCommand+2];
+    ClipRect* cr = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawBitmapRect* dbmr  = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+2);
 
     if (SkRegion::kIntersect_Op != cr->op()) {
         return false;
@@ -269,60 +273,339 @@ static bool check_4(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
 }
 
 // Remove everything but the drawBitmapRect
-static void apply_4(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    Save* save = (Save*) commands[curCommand];
-    ClipRect* cr = (ClipRect*) commands[curCommand+1];
-    Restore* restore = (Restore*) commands[curCommand+3];
-
-    save->setVisible(false);
-    cr->setVisible(false);
-    // leave drawBitmapRect alone
-    restore->setVisible(false);
+static void apply_4(SkDebugCanvas* canvas, int curCommand) {
+    canvas->deleteDrawCommandAt(curCommand+3);    // restore
+    // drawBitmapRectToRect
+    canvas->deleteDrawCommandAt(curCommand+1);    // clipRect
+    canvas->deleteDrawCommandAt(curCommand);      // save
 }
 
 // Check for:
 //    TRANSLATE
 // where the translate is zero
-static bool check_5(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (TRANSLATE != commands[curCommand]->getType()) {
+static bool check_5(SkDebugCanvas* canvas, int curCommand) {
+    if (TRANSLATE != canvas->getDrawCommandAt(curCommand)->getType()) {
         return false;
     }
 
-    Translate* t = (Translate*) commands[curCommand];
+    Translate* t = (Translate*) canvas->getDrawCommandAt(curCommand);
 
     return 0 == t->x() && 0 == t->y();
 }
 
 // Just remove the translate
-static void apply_5(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    Translate* t = (Translate*) commands[curCommand];
-
-    t->setVisible(false);
+static void apply_5(SkDebugCanvas* canvas, int curCommand) {
+    canvas->deleteDrawCommandAt(curCommand);    // translate
 }
 
 // Check for:
 //    SCALE
 // where the scale is 1,1
-static bool check_6(const SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    if (SCALE != commands[curCommand]->getType()) {
+static bool check_6(SkDebugCanvas* canvas, int curCommand) {
+    if (SCALE != canvas->getDrawCommandAt(curCommand)->getType()) {
         return false;
     }
 
-    Scale* s = (Scale*) commands[curCommand];
+    Scale* s = (Scale*) canvas->getDrawCommandAt(curCommand);
 
     return SK_Scalar1 == s->x() && SK_Scalar1 == s->y();
 }
 
 // Just remove the scale
-static void apply_6(SkTDArray<SkDrawCommand*>& commands, int curCommand) {
-    Scale* s = (Scale*) commands[curCommand];
-
-    s->setVisible(false);
+static void apply_6(SkDebugCanvas* canvas, int curCommand) {
+    canvas->deleteDrawCommandAt(curCommand);   // scale
 }
 
+// Check for:
+//  SAVE
+//      CLIP_RECT
+//      SAVE_LAYER
+//          SAVE
+//              CLIP_RECT
+//              SAVE_LAYER
+//                  SAVE
+//                      CLIP_RECT
+//                      DRAWBITMAPRECTTORECT
+//                  RESTORE
+//              RESTORE
+//          RESTORE
+//      RESTORE
+//  RESTORE
+// where:
+//      all the clipRect's are BW, nested, intersections
+//      the drawBitmapRectToRect is a 1-1 copy from src to dest
+//      the last (smallest) clip rect is a subset of the drawBitmapRectToRect's dest rect
+//      all the saveLayer's paints can be rolled into the drawBitmapRectToRect's paint
+// This pattern is used by Google spreadsheet when drawing the toolbar buttons
+static bool check_7(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+13 ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        SAVE_LAYER != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        SAVE != canvas->getDrawCommandAt(curCommand+3)->getType() ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+4)->getType() ||
+        SAVE_LAYER != canvas->getDrawCommandAt(curCommand+5)->getType() ||
+        SAVE != canvas->getDrawCommandAt(curCommand+6)->getType() ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+7)->getType() ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+8)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+9)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+10)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+11)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+12)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+13)->getType()) {
+        return false;
+    }
 
-typedef bool (*PFCheck)(const SkTDArray<SkDrawCommand*>& commands, int curCommand);
-typedef void (*PFApply)(SkTDArray<SkDrawCommand*>& commands, int curCommand);
+    ClipRect* clip0 = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    SaveLayer* saveLayer0 = (SaveLayer*) canvas->getDrawCommandAt(curCommand+2);
+    ClipRect* clip1 = (ClipRect*) canvas->getDrawCommandAt(curCommand+4);
+    SaveLayer* saveLayer1 = (SaveLayer*) canvas->getDrawCommandAt(curCommand+5);
+    ClipRect* clip2 = (ClipRect*) canvas->getDrawCommandAt(curCommand+7);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+8);
+
+    if (clip0->doAA() || clip1->doAA() || clip2->doAA()) {
+        return false;
+    }
+
+    if (SkRegion::kIntersect_Op != clip0->op() ||
+        SkRegion::kIntersect_Op != clip1->op() ||
+        SkRegion::kIntersect_Op != clip2->op()) {
+        return false;
+    }
+
+    if (!clip0->rect().contains(clip1->rect()) ||
+        !clip1->rect().contains(clip2->rect())) {
+        return false;
+    }
+
+    // The src->dest mapping needs to be 1-to-1
+    if (NULL == dbmr->srcRect()) {
+        if (dbmr->bitmap().width() != dbmr->dstRect().width() ||
+            dbmr->bitmap().height() != dbmr->dstRect().height()) {
+            return false;
+        }
+    } else {
+        if (dbmr->srcRect()->width() != dbmr->dstRect().width() ||
+            dbmr->srcRect()->height() != dbmr->dstRect().height()) {
+            return false;
+        }
+    }
+
+    if (!dbmr->dstRect().contains(clip2->rect())) {
+        return false;
+    }
+
+    const SkPaint* saveLayerPaint0 = saveLayer0->paint();
+    const SkPaint* saveLayerPaint1 = saveLayer1->paint();
+
+    if ((NULL != saveLayerPaint0 && !is_simple(*saveLayerPaint0)) ||
+        (NULL != saveLayerPaint1 && !is_simple(*saveLayerPaint1))) {
+        return false;
+    }
+
+    SkPaint* dbmrPaint = dbmr->paint();
+
+    if (NULL == dbmrPaint) {
+        return true;
+    }
+
+    if (NULL != saveLayerPaint0) {
+        SkColor layerColor0 = saveLayerPaint0->getColor() | 0xFF000000; // force opaque
+        if (dbmrPaint->getColor() != layerColor0) {
+            return false;
+        }
+    }
+
+    if (NULL != saveLayerPaint1) {
+        SkColor layerColor1 = saveLayerPaint1->getColor() | 0xFF000000; // force opaque
+        if (dbmrPaint->getColor() != layerColor1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Reduce to a single drawBitmapRectToRect call by folding the clipRect's into
+// the src and dst Rects and the saveLayer paints into the drawBitmapRectToRect's
+// paint.
+static void apply_7(SkDebugCanvas* canvas, int curCommand) {
+    SaveLayer* saveLayer0 = (SaveLayer*) canvas->getDrawCommandAt(curCommand+2);
+    SaveLayer* saveLayer1 = (SaveLayer*) canvas->getDrawCommandAt(curCommand+5);
+    ClipRect* clip2 = (ClipRect*) canvas->getDrawCommandAt(curCommand+7);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+8);
+
+    SkScalar newSrcLeft = dbmr->srcRect()->fLeft + clip2->rect().fLeft - dbmr->dstRect().fLeft;
+    SkScalar newSrcTop = dbmr->srcRect()->fTop + clip2->rect().fTop - dbmr->dstRect().fTop;
+
+    SkRect newSrc = SkRect::MakeXYWH(newSrcLeft, newSrcTop,
+                                     clip2->rect().width(), clip2->rect().height());
+
+    dbmr->setSrcRect(newSrc);
+    dbmr->setDstRect(clip2->rect());
+
+    SkColor color = 0xFF000000;
+    int a0, a1;
+
+    const SkPaint* saveLayerPaint0 = saveLayer0->paint();
+    if (NULL != saveLayerPaint0) {
+        color = saveLayerPaint0->getColor();
+        a0 = SkColorGetA(color);
+    } else {
+        a0 = 0xFF;
+    }
+
+    const SkPaint* saveLayerPaint1 = saveLayer1->paint();
+    if (NULL != saveLayerPaint1) {
+        color = saveLayerPaint1->getColor();
+        a1 = SkColorGetA(color);
+    } else {
+        a1 = 0xFF;
+    }
+
+    int newA = SkMulDiv255Round(a0, a1);
+    SkASSERT(newA <= 0xFF);
+
+    SkPaint* dbmrPaint = dbmr->paint();
+
+    if (NULL != dbmrPaint) {
+        SkColor newColor = SkColorSetA(dbmrPaint->getColor(), newA);
+        dbmrPaint->setColor(newColor);
+    } else {
+        SkColor newColor = SkColorSetA(color, newA);
+
+        SkPaint newPaint;
+        newPaint.setColor(newColor);
+        dbmr->setPaint(newPaint);
+    }
+
+    // remove everything except the drawbitmaprect
+    canvas->deleteDrawCommandAt(curCommand+13);   // restore
+    canvas->deleteDrawCommandAt(curCommand+12);   // restore
+    canvas->deleteDrawCommandAt(curCommand+11);   // restore
+    canvas->deleteDrawCommandAt(curCommand+10);   // restore
+    canvas->deleteDrawCommandAt(curCommand+9);    // restore
+    canvas->deleteDrawCommandAt(curCommand+7);    // clipRect
+    canvas->deleteDrawCommandAt(curCommand+6);    // save
+    canvas->deleteDrawCommandAt(curCommand+5);    // saveLayer
+    canvas->deleteDrawCommandAt(curCommand+4);    // clipRect
+    canvas->deleteDrawCommandAt(curCommand+3);    // save
+    canvas->deleteDrawCommandAt(curCommand+2);    // saveLayer
+    canvas->deleteDrawCommandAt(curCommand+1);    // clipRect
+    canvas->deleteDrawCommandAt(curCommand);      // save
+}
+
+// Check for:
+//    SAVE
+//       CLIP_RECT
+//       DRAWBITMAPRECTTORECT
+//    RESTORE
+// where:
+//      the drawBitmapRectToRect is a 1-1 copy from src to dest
+//      the clip rect is BW and a subset of the drawBitmapRectToRect's dest rect
+static bool check_8(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+4 ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+3)->getType()) {
+        return false;
+    }
+
+    ClipRect* clip = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+2);
+
+    if (clip->doAA() || SkRegion::kIntersect_Op != clip->op()) {
+        return false;
+    }
+
+    // The src->dest mapping needs to be 1-to-1
+    if (NULL == dbmr->srcRect()) {
+        if (dbmr->bitmap().width() != dbmr->dstRect().width() ||
+            dbmr->bitmap().height() != dbmr->dstRect().height()) {
+            return false;
+        }
+    } else {
+        if (dbmr->srcRect()->width() != dbmr->dstRect().width() ||
+            dbmr->srcRect()->height() != dbmr->dstRect().height()) {
+            return false;
+        }
+    }
+
+    if (!dbmr->dstRect().contains(clip->rect())) {
+        return false;
+    }
+
+    return true;
+}
+
+// Fold the clipRect into the drawBitmapRectToRect's src and dest rects
+static void apply_8(SkDebugCanvas* canvas, int curCommand) {
+    ClipRect* clip = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+2);
+
+    SkScalar newSrcLeft, newSrcTop;
+
+    if (NULL != dbmr->srcRect()) {
+        newSrcLeft = dbmr->srcRect()->fLeft + clip->rect().fLeft - dbmr->dstRect().fLeft;
+        newSrcTop  = dbmr->srcRect()->fTop + clip->rect().fTop - dbmr->dstRect().fTop;
+    } else {
+        newSrcLeft = clip->rect().fLeft - dbmr->dstRect().fLeft;
+        newSrcTop  = clip->rect().fTop - dbmr->dstRect().fTop;
+    }
+
+    SkRect newSrc = SkRect::MakeXYWH(newSrcLeft, newSrcTop,
+                                     clip->rect().width(), clip->rect().height());
+
+    dbmr->setSrcRect(newSrc);
+    dbmr->setDstRect(clip->rect());
+
+    // remove everything except the drawbitmaprect
+    canvas->deleteDrawCommandAt(curCommand+3);
+    canvas->deleteDrawCommandAt(curCommand+1);
+    canvas->deleteDrawCommandAt(curCommand);
+}
+
+// Check for:
+//  SAVE
+//    CLIP_RECT
+//    DRAWBITMAPRECTTORECT
+//  RESTORE
+// where:
+//      clipRect is BW and encloses the DBMR2R's dest rect
+static bool check_9(SkDebugCanvas* canvas, int curCommand) {
+    if (SAVE != canvas->getDrawCommandAt(curCommand)->getType() ||
+        canvas->getSize() <= curCommand+4 ||
+        CLIP_RECT != canvas->getDrawCommandAt(curCommand+1)->getType() ||
+        DRAW_BITMAP_RECT_TO_RECT != canvas->getDrawCommandAt(curCommand+2)->getType() ||
+        RESTORE != canvas->getDrawCommandAt(curCommand+3)->getType()) {
+        return false;
+    }
+
+    ClipRect* clip = (ClipRect*) canvas->getDrawCommandAt(curCommand+1);
+    DrawBitmapRect* dbmr = (DrawBitmapRect*) canvas->getDrawCommandAt(curCommand+2);
+
+    if (clip->doAA() || SkRegion::kIntersect_Op != clip->op()) {
+        return false;
+    }
+
+    if (!clip->rect().contains(dbmr->dstRect())) {
+        return false;
+    }
+
+    return true;
+}
+
+// remove everything except the drawbitmaprect
+static void apply_9(SkDebugCanvas* canvas, int curCommand) {
+    canvas->deleteDrawCommandAt(curCommand+3);   // restore
+    // drawBitmapRectToRect
+    canvas->deleteDrawCommandAt(curCommand+1);   // clipRect
+    canvas->deleteDrawCommandAt(curCommand);     // save
+}
+
+typedef bool (*PFCheck)(SkDebugCanvas* canvas, int curCommand);
+typedef void (*PFApply)(SkDebugCanvas* canvas, int curCommand);
 
 struct OptTableEntry {
     PFCheck fCheck;
@@ -336,17 +619,21 @@ struct OptTableEntry {
     { check_4, apply_4, 0 },
     { check_5, apply_5, 0 },
     { check_6, apply_6, 0 },
+    { check_7, apply_7, 0 },
+    { check_8, apply_8, 0 },
+    { check_9, apply_9, 0 },
 };
 
+
 static int filter_picture(const SkString& inFile, const SkString& outFile) {
-    SkPicture* inPicture = NULL;
+    SkAutoTDelete<SkPicture> inPicture;
 
     SkFILEStream inStream(inFile.c_str());
     if (inStream.isValid()) {
-        inPicture = SkNEW_ARGS(SkPicture, (&inStream, NULL, &SkImageDecoder::DecodeMemory));
+        inPicture.reset(SkNEW_ARGS(SkPicture, (&inStream, NULL, &SkImageDecoder::DecodeMemory)));
     }
 
-    if (NULL == inPicture) {
+    if (NULL == inPicture.get()) {
         SkDebugf("Could not read file %s\n", inFile.c_str());
         return -1;
     }
@@ -359,24 +646,39 @@ static int filter_picture(const SkString& inFile, const SkString& outFile) {
     debugCanvas.setBounds(inPicture->width(), inPicture->height());
     inPicture->draw(&debugCanvas);
 
-    SkTDArray<SkDrawCommand*>& commands = debugCanvas.getDrawCommands();
-
-    // hide the initial save and restore since replaying the commands will
+    // delete the initial save and restore since replaying the commands will
     // re-add them
-    if (commands.count() > 0) {
-        commands[0]->setVisible(false);
-        commands[commands.count()-1]->setVisible(false);
+    if (debugCanvas.getSize() > 1) {
+        debugCanvas.deleteDrawCommandAt(0);
+        debugCanvas.deleteDrawCommandAt(debugCanvas.getSize()-1);
     }
 
-    for (int i = 0; i < commands.count(); ++i) {
-        for (size_t opt = 0; opt < SK_ARRAY_COUNT(gOptTable); ++opt) {
-            if ((*gOptTable[opt].fCheck)(commands, i)) {
-                (*gOptTable[opt].fApply)(commands, i);
-                ++gOptTable[opt].fNumTimesApplied;
-                ++localCount[opt];
+    bool changed = true;
+    int numBefore = debugCanvas.getSize();
+
+    while (changed) {
+        changed = false;
+        for (int i = 0; i < debugCanvas.getSize(); ++i) {
+            for (size_t opt = 0; opt < SK_ARRAY_COUNT(gOptTable); ++opt) {
+                if ((*gOptTable[opt].fCheck)(&debugCanvas, i)) {
+                    (*gOptTable[opt].fApply)(&debugCanvas, i);
+
+                    ++gOptTable[opt].fNumTimesApplied;
+                    ++localCount[opt];
+
+                    if (debugCanvas.getSize() == i) {
+                        // the optimization removed all the remaining operations
+                        break;
+                    }
+
+                    opt = 0;          // try all the opts all over again
+                    changed = true;
+                }
             }
         }
     }
+
+    int numAfter = debugCanvas.getSize();
 
     if (!outFile.isEmpty()) {
         SkPicture outPicture;
@@ -401,7 +703,8 @@ static int filter_picture(const SkString& inFile, const SkString& outFile) {
     if (!someOptFired) {
         SkDebugf("No opts fired\n");
     } else {
-        SkDebugf("\n");
+        SkDebugf("\t before: %d after: %d delta: %d\n",
+                 numBefore, numAfter, numBefore-numAfter);
     }
 
     return 0;
@@ -412,6 +715,10 @@ static int filter_picture(const SkString& inFile, const SkString& outFile) {
 int tool_main(int argc, char** argv); // suppress a warning on mac
 
 int tool_main(int argc, char** argv) {
+#if SK_ENABLE_INST_COUNT
+    gPrintInstCount = true;
+#endif
+
     SkGraphics::Init();
 
     if (argc < 3) {

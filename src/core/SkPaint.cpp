@@ -39,7 +39,6 @@
 //#define SK_REPORT_API_RANGE_CHECK
 
 #ifdef SK_BUILD_FOR_ANDROID
-#include "SkLanguage.h"
 #define GEN_ID_INC                  fGenerationID++
 #define GEN_ID_INC_EVAL(expression) if (expression) { fGenerationID++; }
 #else
@@ -84,8 +83,7 @@ SkPaint::SkPaint() {
     fHinting    = SkPaintDefaults_Hinting;
     fPrivFlags  = 0;
 #ifdef SK_BUILD_FOR_ANDROID
-    fLanguage = SkLanguage();
-    fFontVariant = kDefault_Variant;
+    new (&fPaintOptionsAndroid) SkPaintOptionsAndroid;
     fGenerationID = 0;
 #endif
 }
@@ -103,6 +101,10 @@ SkPaint::SkPaint(const SkPaint& src) {
     SkSafeRef(fLooper);
     SkSafeRef(fImageFilter);
     SkSafeRef(fAnnotation);
+
+#ifdef SK_BUILD_FOR_ANDROID
+    new (&fPaintOptionsAndroid) SkPaintOptionsAndroid(src.fPaintOptionsAndroid);
+#endif
 }
 
 SkPaint::~SkPaint() {
@@ -144,11 +146,15 @@ SkPaint& SkPaint::operator=(const SkPaint& src) {
     SkSafeUnref(fAnnotation);
 
 #ifdef SK_BUILD_FOR_ANDROID
+    fPaintOptionsAndroid.~SkPaintOptionsAndroid();
+
     uint32_t oldGenerationID = fGenerationID;
 #endif
     memcpy(this, &src, sizeof(src));
 #ifdef SK_BUILD_FOR_ANDROID
     fGenerationID = oldGenerationID + 1;
+
+    new (&fPaintOptionsAndroid) SkPaintOptionsAndroid(src.fPaintOptionsAndroid);
 #endif
 
     return *this;
@@ -183,13 +189,18 @@ uint32_t SkPaint::getGenerationID() const {
 void SkPaint::setGenerationID(uint32_t generationID) {
     fGenerationID = generationID;
 }
-#endif
 
-#ifdef SK_BUILD_FOR_ANDROID
 unsigned SkPaint::getBaseGlyphCount(SkUnichar text) const {
     SkAutoGlyphCache autoCache(*this, NULL, NULL);
     SkGlyphCache* cache = autoCache.getCache();
     return cache->getBaseGlyphCount(text);
+}
+
+void SkPaint::setPaintOptionsAndroid(const SkPaintOptionsAndroid& options) {
+    if (options != fPaintOptionsAndroid) {
+        fPaintOptionsAndroid = options;
+        GEN_ID_INC;
+    }
 }
 #endif
 
@@ -375,27 +386,6 @@ void SkPaint::setTextEncoding(TextEncoding encoding) {
 #endif
     }
 }
-
-#ifdef SK_BUILD_FOR_ANDROID
-void SkPaint::setLanguage(const SkLanguage& language) {
-    if(fLanguage != language) {
-        fLanguage = language;
-        GEN_ID_INC;
-    }
-}
-
-void SkPaint::setFontVariant(FontVariant fontVariant) {
-    if ((unsigned)fontVariant <= kLast_Variant) {
-        GEN_ID_INC_EVAL((unsigned)fontVariant != fFontVariant);
-        fFontVariant = fontVariant;
-    } else {
-#ifdef SK_REPORT_API_RANGE_CHECK
-        SkDebugf("SkPaint::setFontVariant(%d) out of range\n", fontVariant);
-#endif
-    }
-}
-
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1227,7 +1217,7 @@ size_t SkPaint::breakText(const void* textD, size_t length, SkScalar maxWidth,
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool FontMetricsCacheProc(const SkGlyphCache* cache, void* context) {
-    *(SkPaint::FontMetrics*)context = cache->getFontMetricsY();
+    *(SkPaint::FontMetrics*)context = cache->getFontMetrics();
     return false;   // don't detach the cache
 }
 
@@ -1252,11 +1242,6 @@ SkScalar SkPaint::getFontMetrics(FontMetrics* metrics, SkScalar zoom) const {
         zoomPtr = &zoomMatrix;
     }
 
-#if 0
-    SkAutoGlyphCache    autoCache(*this, zoomPtr);
-    SkGlyphCache*       cache = autoCache.getCache();
-    const FontMetrics&  my = cache->getFontMetricsY();
-#endif
     FontMetrics storage;
     if (NULL == metrics) {
         metrics = &storage;
@@ -1270,6 +1255,10 @@ SkScalar SkPaint::getFontMetrics(FontMetrics* metrics, SkScalar zoom) const {
         metrics->fDescent = SkScalarMul(metrics->fDescent, scale);
         metrics->fBottom = SkScalarMul(metrics->fBottom, scale);
         metrics->fLeading = SkScalarMul(metrics->fLeading, scale);
+        metrics->fAvgCharWidth = SkScalarMul(metrics->fAvgCharWidth, scale);
+        metrics->fXMin = SkScalarMul(metrics->fXMin, scale);
+        metrics->fXMax = SkScalarMul(metrics->fXMax, scale);
+        metrics->fXHeight = SkScalarMul(metrics->fXHeight, scale);
     }
     return metrics->fDescent - metrics->fAscent + metrics->fLeading;
 }
@@ -1686,11 +1675,6 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
 #endif
 
     rec->fReservedAlign = 0;
-    
-#ifdef SK_BUILD_FOR_ANDROID
-    rec->fLanguage = paint.getLanguage();
-    rec->fFontVariant = paint.getFontVariant();
-#endif //SK_BUILD_FOR_ANDROID
 
     /*  Allow the fonthost to modify our rec before we use it as a key into the
         cache. This way if we're asking for something that they will ignore,
@@ -1847,6 +1831,13 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
         rec.fMaskFormat = SkMask::kA8_Format;   // force antialiasing when we do the scan conversion
     }
 
+#ifdef SK_BUILD_FOR_ANDROID
+    SkOrderedWriteBuffer androidBuffer(128);
+    fPaintOptionsAndroid.flatten(androidBuffer);
+    descSize += androidBuffer.size();
+    entryCount += 1;
+#endif
+
     ///////////////////////////////////////////////////////////////////////////
     // Now that we're done tweaking the rec, call the PostMakeRec cleanup
     SkScalerContext::PostMakeRec(*this, &rec);
@@ -1858,6 +1849,10 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
 
     desc->init();
     desc->addEntry(kRec_SkDescriptorTag, sizeof(rec), &rec);
+
+#ifdef SK_BUILD_FOR_ANDROID
+    add_flattenable(desc, kAndroidOpts_SkDescriptorTag, &androidBuffer);
+#endif
 
     if (pe) {
         add_flattenable(desc, kPathEffect_SkDescriptorTag, &peBuffer);
@@ -1892,6 +1887,11 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
         desc2->init();
         desc1->addEntry(kRec_SkDescriptorTag, sizeof(rec), &rec);
         desc2->addEntry(kRec_SkDescriptorTag, sizeof(rec), &rec);
+
+#ifdef SK_BUILD_FOR_ANDROID
+        add_flattenable(desc1, kAndroidOpts_SkDescriptorTag, &androidBuffer);
+        add_flattenable(desc2, kAndroidOpts_SkDescriptorTag, &androidBuffer);
+#endif
 
         if (pe) {
             add_flattenable(desc1, kPathEffect_SkDescriptorTag, &peBuffer);
@@ -2323,27 +2323,28 @@ void SkPaint::toString(SkString* str) const {
     SkShader* shader = this->getShader();
     if (NULL != shader) {
         str->append("<dt>Shader:</dt><dd>");
-        SkDEVCODE(shader->toString(str);)
+        shader->toString(str);
         str->append("</dd>");
     }
 
     SkXfermode* xfer = this->getXfermode();
     if (NULL != xfer) {
         str->append("<dt>Xfermode:</dt><dd>");
-        SkDEVCODE(xfer->toString(str);)
+        xfer->toString(str);
         str->append("</dd>");
     }
 
     SkMaskFilter* maskFilter = this->getMaskFilter();
     if (NULL != maskFilter) {
         str->append("<dt>MaskFilter:</dt><dd>");
-        SkDEVCODE(maskFilter->toString(str);)
+        maskFilter->toString(str);
         str->append("</dd>");
     }
 
     SkColorFilter* colorFilter = this->getColorFilter();
     if (NULL != colorFilter) {
         str->append("<dt>ColorFilter:</dt><dd>");
+        colorFilter->toString(str);
         str->append("</dd>");
     }
 
@@ -2356,7 +2357,7 @@ void SkPaint::toString(SkString* str) const {
     SkDrawLooper* looper = this->getLooper();
     if (NULL != looper) {
         str->append("<dt>DrawLooper:</dt><dd>");
-        SkDEVCODE(looper->toString(str);)
+        looper->toString(str);
         str->append("</dd>");
     }
 
@@ -2565,52 +2566,4 @@ bool SkPaint::nothingToDraw() const {
         }
     }
     return false;
-}
-
-
-//////////// Move these to their own file soon.
-
-SK_DEFINE_INST_COUNT(SkDrawLooper)
-
-bool SkDrawLooper::canComputeFastBounds(const SkPaint& paint) {
-    SkCanvas canvas;
-
-    this->init(&canvas);
-    for (;;) {
-        SkPaint p(paint);
-        if (this->next(&canvas, &p)) {
-            p.setLooper(NULL);
-            if (!p.canComputeFastBounds()) {
-                return false;
-            }
-        } else {
-            break;
-        }
-    }
-    return true;
-}
-
-void SkDrawLooper::computeFastBounds(const SkPaint& paint, const SkRect& src,
-                                     SkRect* dst) {
-    SkCanvas canvas;
-
-    this->init(&canvas);
-    for (bool firstTime = true;; firstTime = false) {
-        SkPaint p(paint);
-        if (this->next(&canvas, &p)) {
-            SkRect r(src);
-
-            p.setLooper(NULL);
-            p.computeFastBounds(r, &r);
-            canvas.getTotalMatrix().mapRect(&r);
-
-            if (firstTime) {
-                *dst = r;
-            } else {
-                dst->join(r);
-            }
-        } else {
-            break;
-        }
-    }
 }

@@ -26,7 +26,10 @@ public:
     /**
      * Default constructor
      */
-    GrGLContextInfo() { this->reset(); }
+    GrGLContextInfo() {
+        fGLCaps.reset(SkNEW(GrGLCaps));
+        this->reset();
+    }
 
     /**
      * Copies a GrGLContextInfo
@@ -44,12 +47,12 @@ public:
     GrGLVersion version() const { return fGLVersion; }
     GrGLSLGeneration glslGeneration() const { return fGLSLGeneration; }
     GrGLVendor vendor() const { return fVendor; }
-    const GrGLCaps& caps() const { return fGLCaps; }
-    GrGLCaps& caps() { return fGLCaps; }
+    const GrGLCaps* caps() const { return fGLCaps.get(); }
+    GrGLCaps* caps() { return fGLCaps; }
+    const GrGLExtensions& extensions() const { return fExtensions; }
 
     /**
-     * Checks for extension support using a cached copy of the GL_EXTENSIONS
-     * string.
+     * Shortcut for extensions().has(ext);
      */
     bool hasExtension(const char* ext) const {
         if (!this->isInitialized()) {
@@ -65,12 +68,12 @@ public:
 
 private:
 
-    GrGLBinding          fBindingInUse;
-    GrGLVersion          fGLVersion;
-    GrGLSLGeneration     fGLSLGeneration;
-    GrGLVendor           fVendor;
-    GrGLExtensions       fExtensions;
-    GrGLCaps             fGLCaps;
+    GrGLBinding             fBindingInUse;
+    GrGLVersion             fGLVersion;
+    GrGLSLGeneration        fGLSLGeneration;
+    GrGLVendor              fVendor;
+    GrGLExtensions          fExtensions;
+    SkAutoTUnref<GrGLCaps>  fGLCaps;
 };
 
 /**

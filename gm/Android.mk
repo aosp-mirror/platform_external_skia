@@ -19,6 +19,7 @@ LOCAL_SRC_FILES += \
   bitmapmatrix.cpp \
   bitmapfilters.cpp \
   bitmaprect.cpp \
+  bitmaprecttest.cpp \
   bitmapscroll.cpp \
   blend.cpp \
   blurs.cpp \
@@ -35,6 +36,7 @@ LOCAL_SRC_FILES += \
   degeneratesegments.cpp \
   dashcubics.cpp \
   dashing.cpp \
+  deviceproperties.cpp \
   distantclip.cpp \
   displacement.cpp \
   drawbitmaprect.cpp \
@@ -45,6 +47,7 @@ LOCAL_SRC_FILES += \
   factory.cpp \
   filltypes.cpp \
   filltypespersp.cpp \
+  fontmgr.cpp \
   fontscaler.cpp \
   gammatext.cpp \
   getpostextpath.cpp \
@@ -63,20 +66,27 @@ LOCAL_SRC_FILES += \
   lcdtext.cpp \
   linepaths.cpp \
   matrixconvolution.cpp \
+  mixedxfermodes.cpp \
   modecolorfilters.cpp \
   morphology.cpp \
   ninepatchstretch.cpp \
   nocolorbleed.cpp \
+  optimizations.cpp \
+  ovals.cpp \
   patheffects.cpp \
   pathfill.cpp \
   pathinterior.cpp \
+  pathopsinverse.cpp \
+  pathopsskpclip.cpp \
   pathreverse.cpp \
+  perlinnoise.cpp \
   points.cpp \
   poly2poly.cpp \
   quadpaths.cpp \
   rects.cpp \
   rrect.cpp \
   rrects.cpp \
+  roundrects.cpp \
   samplerstress.cpp \
   shaderbounds.cpp \
   selftest.cpp \
@@ -95,6 +105,7 @@ LOCAL_SRC_FILES += \
   texteffects.cpp \
   testimagefilters.cpp \
   texdata.cpp \
+  thinrects.cpp \
   tilemodes.cpp \
   tinybitmap.cpp \
   twopointradial.cpp \
@@ -102,7 +113,8 @@ LOCAL_SRC_FILES += \
   verttext.cpp \
   verttext2.cpp \
   verylargebitmap.cpp \
-  xfermodes.cpp
+  xfermodes.cpp \
+  xfermodes2.cpp
 
 LOCAL_SHARED_LIBRARIES := \
   libcutils \

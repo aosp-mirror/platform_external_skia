@@ -126,6 +126,7 @@ void GrGLTextureDomainEffect::setData(const GrGLUniformManager& uman,
     }
     if (0 != memcmp(values, fPrevDomain, 4 * sizeof(GrGLfloat))) {
         uman.set4fv(fNameUni, 0, 1, values);
+        memcpy(fPrevDomain, values, 4 * sizeof(GrGLfloat));
     }
     fEffectMatrix.setData(uman,
                           texDom.getMatrix(),
@@ -221,6 +222,7 @@ GR_DEFINE_EFFECT_TEST(GrTextureDomainEffect);
 
 GrEffectRef* GrTextureDomainEffect::TestCreate(SkMWCRandom* random,
                                                GrContext*,
+                                               const GrDrawTargetCaps&,
                                                GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;

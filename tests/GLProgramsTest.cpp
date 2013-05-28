@@ -18,80 +18,102 @@
 #include "GrDrawEffect.h"
 #include "effects/GrConfigConversionEffect.h"
 
+#include "SkChecksum.h"
 #include "SkRandom.h"
 #include "Test.h"
 
-void GrGLProgram::Desc::setRandom(SkMWCRandom* random,
-                                  const GrGpuGL* gpu,
-                                  const GrEffectStage stages[GrDrawState::kNumStages]) {
-    fAttribBindings = 0;
-    fEmitsPointSize = random->nextBool();
-    fColorInput = random->nextULessThan(kColorInputCnt);
-    fCoverageInput = random->nextULessThan(kColorInputCnt);
+void GrGLProgramDesc::setRandom(SkMWCRandom* random,
+                                const GrGpuGL* gpu,
+                                const GrRenderTarget* dstRenderTarget,
+                                const GrTexture* dstCopyTexture,
+                                const GrEffectStage* stages[],
+                                int numColorStages,
+                                int numCoverageStages,
+                                int currAttribIndex) {
+    int numEffects = numColorStages + numCoverageStages;
+    size_t keyLength = KeyLength(numEffects);
+    fKey.reset(keyLength);
+    *this->atOffset<uint32_t, kLengthOffset>() = static_cast<uint32_t>(keyLength);
+    memset(this->header(), 0, kHeaderSize);
 
-    fColorFilterXfermode = random->nextULessThan(SkXfermode::kCoeffModesCnt);
+    KeyHeader* header = this->header();
+    header->fEmitsPointSize = random->nextBool();
 
-    fFirstCoverageStage = random->nextULessThan(GrDrawState::kNumStages);
+    header->fPositionAttributeIndex = 0;
 
-    fAttribBindings |= random->nextBool() ? GrDrawState::kCoverage_AttribBindingsBit : 0;
+    // if the effects have used up all off the available attributes,
+    // don't try to use color or coverage attributes as input
+    do {
+        header->fColorInput = random->nextULessThan(kColorInputCnt);
+    } while (GrDrawState::kMaxVertexAttribCnt <= currAttribIndex &&
+             kAttribute_ColorInput == header->fColorInput);
+    header->fColorAttributeIndex = (header->fColorInput == kAttribute_ColorInput) ?
+                                        currAttribIndex++ :
+                                        -1;
+
+    do {
+        header->fCoverageInput = random->nextULessThan(kColorInputCnt);
+    } while (GrDrawState::kMaxVertexAttribCnt <= currAttribIndex  &&
+             kAttribute_ColorInput == header->fCoverageInput);
+    header->fCoverageAttributeIndex = (header->fCoverageInput == kAttribute_ColorInput) ?
+                                        currAttribIndex++ :
+                                        -1;
+
+    header->fColorFilterXfermode = random->nextULessThan(SkXfermode::kLastCoeffMode + 1);
 
 #if GR_GL_EXPERIMENTAL_GS
-    fExperimentalGS = gpu->getCaps().geometryShaderSupport() && random->nextBool();
+    header->fExperimentalGS = gpu->caps()->geometryShaderSupport() && random->nextBool();
 #endif
 
-    bool edgeAA = random->nextBool();
-    if (edgeAA) {
-        fAttribBindings |= GrDrawState::kEdge_AttribBindingsBit;
-        if (gpu->getCaps().shaderDerivativeSupport()) {
-            fVertexEdgeType = (GrDrawState::VertexEdgeType)
-                              random->nextULessThan(GrDrawState::kVertexEdgeTypeCnt);
-            fDiscardIfOutsideEdge = random->nextBool();
-        } else {
-            fVertexEdgeType = GrDrawState::kHairLine_EdgeType;
-            fDiscardIfOutsideEdge = false;
+    header->fDiscardIfZeroCoverage = random->nextBool();
+
+    bool useLocalCoords = random->nextBool() && currAttribIndex < GrDrawState::kMaxVertexAttribCnt;
+    header->fLocalCoordAttributeIndex = useLocalCoords ? currAttribIndex++ : -1;
+
+    header->fColorEffectCnt = numColorStages;
+    header->fCoverageEffectCnt = numCoverageStages;
+
+    bool dstRead = false;
+    bool fragPos = false;
+    int numStages = numColorStages + numCoverageStages;
+    for (int s = 0; s < numStages; ++s) {
+        const GrBackendEffectFactory& factory = (*stages[s]->getEffect())->getFactory();
+        GrDrawEffect drawEffect(*stages[s], useLocalCoords);
+        this->effectKeys()[s] = factory.glEffectKey(drawEffect, gpu->glCaps());
+        if ((*stages[s]->getEffect())->willReadDstColor()) {
+            dstRead = true;
+        }
+        if ((*stages[s]->getEffect())->willReadFragmentPosition()) {
+            fragPos = true;
         }
     }
 
-    if (gpu->getCaps().dualSourceBlendingSupport()) {
-        fDualSrcOutput = random->nextULessThan(kDualSrcOutputCnt);
+    if (dstRead) {
+        header->fDstReadKey = GrGLShaderBuilder::KeyForDstRead(dstCopyTexture, gpu->glCaps());
     } else {
-        fDualSrcOutput = kNone_DualSrcOutput;
+        header->fDstReadKey = 0;
+    }
+    if (fragPos) {
+        header->fFragPosKey = GrGLShaderBuilder::KeyForFragmentPosition(dstRenderTarget,
+                                                                         gpu->glCaps());
+    } else {
+        header->fFragPosKey = 0;
     }
 
-    // use separate tex coords?
-    if (random->nextBool()) {
-        fAttribBindings |= GrDrawState::kLocalCoords_AttribBindingsBit;
-    }
+    CoverageOutput coverageOutput;
+    bool illegalCoverageOutput;
+    do {
+        coverageOutput = static_cast<CoverageOutput>(random->nextULessThan(kCoverageOutputCnt));
+        illegalCoverageOutput = (!gpu->caps()->dualSourceBlendingSupport() &&
+                                 CoverageOutputUsesSecondaryOutput(coverageOutput)) ||
+                                (!dstRead && kCombineWithDst_CoverageOutput == coverageOutput);
+    } while (illegalCoverageOutput);
 
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        if (NULL != stages[s].getEffect()) {
-            const GrBackendEffectFactory& factory = (*stages[s].getEffect())->getFactory();
-            bool explicitLocalCoords = (fAttribBindings &
-                                        GrDrawState::kLocalCoords_AttribBindingsBit);
-            GrDrawEffect drawEffect(stages[s], explicitLocalCoords);
-            fEffectKeys[s] = factory.glEffectKey(drawEffect, gpu->glCaps());
-        }
-    }
+    header->fCoverageOutput = coverageOutput;
 
-    int attributeIndex = 0;
-    fPositionAttributeIndex = attributeIndex;
-    ++attributeIndex;
-    if (fColorInput || (fAttribBindings & GrDrawState::kColor_AttribBindingsBit)) {
-        fColorAttributeIndex = attributeIndex;
-        ++attributeIndex;
-    }
-    if (fCoverageInput || (fAttribBindings & GrDrawState::kCoverage_AttribBindingsBit)) {
-        fCoverageAttributeIndex = attributeIndex;
-        ++attributeIndex;
-    }
-    if (fAttribBindings & GrDrawState::kEdge_AttribBindingsBit) {
-        fEdgeAttributeIndex = attributeIndex;
-        ++attributeIndex;
-    }
-    if (fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit) {
-        fLocalCoordsAttributeIndex = attributeIndex;
-        ++attributeIndex;
-    }
+    *this->checksum() = 0;
+    *this->checksum() = SkChecksum::Compute(reinterpret_cast<uint32_t*>(fKey.get()), keyLength);
+    fInitialized = true;
 }
 
 bool GrGpuGL::programUnitTest(int maxStages) {
@@ -99,10 +121,12 @@ bool GrGpuGL::programUnitTest(int maxStages) {
     maxStages = GrMin(maxStages, (int)GrDrawState::kNumStages);
 
     GrTextureDesc dummyDesc;
+    dummyDesc.fFlags = kRenderTarget_GrTextureFlagBit;
     dummyDesc.fConfig = kSkia8888_GrPixelConfig;
     dummyDesc.fWidth = 34;
     dummyDesc.fHeight = 18;
     SkAutoTUnref<GrTexture> dummyTexture1(this->createTexture(dummyDesc, NULL, 0));
+    dummyDesc.fFlags = kNone_GrTextureFlags;
     dummyDesc.fConfig = kAlpha_8_GrPixelConfig;
     dummyDesc.fWidth = 16;
     dummyDesc.fHeight = 22;
@@ -121,43 +145,55 @@ bool GrGpuGL::programUnitTest(int maxStages) {
         }
 #endif
 
-        GrGLProgram::Desc pdesc;
-        GrEffectStage stages[GrDrawState::kNumStages];
+        GrGLProgramDesc pdesc;
 
-        int currAttribIndex = GrDrawState::kAttribIndexCount;
+        int currAttribIndex = 1;  // we need to always leave room for position
         int attribIndices[2];
-        for (int s = 0; s < maxStages; ++s) {
-            // enable the stage?
-            if (random.nextBool()) {
-                GrTexture* dummyTextures[] = {dummyTexture1.get(), dummyTexture2.get()};
-                SkAutoTUnref<const GrEffectRef> effect(GrEffectTestFactory::CreateStage(
-                                                                                &random,
-                                                                                this->getContext(),
-                                                                                dummyTextures));
-                int numAttribs = (*effect)->numVertexAttribs();
+        GrTexture* dummyTextures[] = {dummyTexture1.get(), dummyTexture2.get()};
 
-                // If adding this effect would cause to exceed the max attrib count then generate a
-                // new random effect. The explanation for why this check is correct is a bit
-                // convoluted and this code will be removed soon.
-                if (currAttribIndex + numAttribs > GrDrawState::kCoverageOverrideAttribIndexValue) {
-                    --s;
-                    continue;
-                }
-                for (int i = 0; i < numAttribs; ++i) {
-                    attribIndices[i] = currAttribIndex++;
-                }
-                stages[s].setEffect(effect.get(), attribIndices[0], attribIndices[1]);
+        int numStages = random.nextULessThan(maxStages + 1);
+        int numColorStages = random.nextULessThan(numStages + 1);
+        int numCoverageStages = numStages - numColorStages;
+
+        SkAutoSTMalloc<8, const GrEffectStage*> stages(numStages);
+
+        for (int s = 0; s < numStages; ++s) {
+            SkAutoTUnref<const GrEffectRef> effect(GrEffectTestFactory::CreateStage(
+                                                                            &random,
+                                                                            this->getContext(),
+                                                                            *this->caps(),
+                                                                            dummyTextures));
+            int numAttribs = (*effect)->numVertexAttribs();
+
+            // If adding this effect would exceed the max attrib count then generate a
+            // new random effect.
+            if (currAttribIndex + numAttribs > GrDrawState::kMaxVertexAttribCnt) {
+                --s;
+                continue;
             }
+            for (int i = 0; i < numAttribs; ++i) {
+                attribIndices[i] = currAttribIndex++;
+            }
+            GrEffectStage* stage = SkNEW(GrEffectStage);
+            stage->setEffect(effect.get(), attribIndices[0], attribIndices[1]);
+            stages[s] = stage;
         }
-        pdesc.setRandom(&random, this, stages);
+        const GrTexture* dstTexture = random.nextBool() ? dummyTextures[0] : dummyTextures[1];
+        pdesc.setRandom(&random,
+                        this,
+                        dummyTextures[0]->asRenderTarget(),
+                        dstTexture,
+                        stages.get(),
+                        numColorStages,
+                        numCoverageStages,
+                        currAttribIndex);
 
-        const GrEffectStage* stagePtrs[GrDrawState::kNumStages];
-        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            stagePtrs[s] = &stages[s];
-        }
         SkAutoTUnref<GrGLProgram> program(GrGLProgram::Create(this->glContext(),
                                                               pdesc,
-                                                              stagePtrs));
+                                                              stages.get()));
+        for (int s = 0; s < numStages; ++s) {
+            SkDELETE(stages[s]);
+        }
         if (NULL == program.get()) {
             return false;
         }

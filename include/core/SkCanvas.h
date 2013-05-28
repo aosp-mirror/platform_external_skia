@@ -388,6 +388,13 @@ public:
         fAllowSoftClip = allow;
     }
 
+    /** EXPERIMENTAL -- only used for testing
+        Set to simplify clip stack using path ops.
+     */
+    void setAllowSimplifyClip(bool allow) {
+        fAllowSimplifyClip = allow;
+    }
+
     /** Modify the current clip with the specified region. Note that unlike
         clipRect() and clipPath() which transform their arguments by the current
         matrix, clipRegion() assumes its argument is already in device
@@ -1035,6 +1042,7 @@ private:
         fSurfaceBase = sb;
     }
     friend class SkSurface_Base;
+    friend class SkSurface_Gpu;
 
     bool fDeviceCMDirty;            // cleared by updateDeviceCMCache()
     void updateDeviceCMCache();
@@ -1075,6 +1083,7 @@ private:
     mutable SkRectCompareType fLocalBoundsCompareType;
     mutable bool              fLocalBoundsCompareTypeDirty;
     bool fAllowSoftClip;
+    bool fAllowSimplifyClip;
 
     const SkRectCompareType& getLocalClipBoundsCompareType() const {
         if (fLocalBoundsCompareTypeDirty) {
@@ -1084,6 +1093,7 @@ private:
         return fLocalBoundsCompareType;
     }
     void computeLocalClipBoundsCompareType() const;
+
 
     class AutoValidateClip : ::SkNoncopyable {
     public:

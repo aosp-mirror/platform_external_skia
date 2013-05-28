@@ -10,6 +10,7 @@
 #include "SkColorPriv.h"
 #include "SkFlattenableBuffers.h"
 #include "SkUnPreMultiply.h"
+#include "SkString.h"
 
 static int32_t rowmul4(const int32_t array[], unsigned r, unsigned g,
                           unsigned b, unsigned a) {
@@ -344,11 +345,11 @@ public:
         // The matrix is defined such the 4th row determines the output alpha. The first four
         // columns of that row multiply the input r, g, b, and a, respectively, and the last column
         // is the "translation".
-        static const ValidComponentFlags kRGBAFlags[] = {
-            kR_ValidComponentFlag,
-            kG_ValidComponentFlag,
-            kB_ValidComponentFlag,
-            kA_ValidComponentFlag
+        static const uint32_t kRGBAFlags[] = {
+            kR_GrColorComponentFlag,
+            kG_GrColorComponentFlag,
+            kB_GrColorComponentFlag,
+            kA_GrColorComponentFlag
         };
         static const int kShifts[] = {
             GrColor_SHIFT_R, GrColor_SHIFT_G, GrColor_SHIFT_B, GrColor_SHIFT_A,
@@ -373,7 +374,7 @@ public:
             }
         }
         outputA += fMatrix.fMat[kAlphaRowTranslateIdx];
-        *validFlags = kA_ValidComponentFlag;
+        *validFlags = kA_GrColorComponentFlag;
         // We pin the color to [0,1]. This would happen to the *final* color output from the frag
         // shader but currently the effect does not pin its own output. So in the case of over/
         // underflow this may deviate from the actual result. Maybe the effect should pin its
@@ -463,6 +464,7 @@ GR_DEFINE_EFFECT_TEST(ColorMatrixEffect);
 
 GrEffectRef* ColorMatrixEffect::TestCreate(SkMWCRandom* random,
                                            GrContext*,
+                                           const GrDrawTargetCaps&,
                                            GrTexture* dummyTextures[2]) {
     SkColorMatrix colorMatrix;
     for (size_t i = 0; i < SK_ARRAY_COUNT(colorMatrix.fMat); ++i) {
@@ -475,4 +477,19 @@ GrEffectRef* SkColorMatrixFilter::asNewEffect(GrContext*) const {
     return ColorMatrixEffect::Create(fMatrix);
 }
 
+#endif
+
+#ifdef SK_DEVELOPER
+void SkColorMatrixFilter::toString(SkString* str) const {
+    str->append("SkColorMatrixFilter: ");
+
+    str->append("matrix: (");
+    for (int i = 0; i < 20; ++i) {
+        str->appendScalar(fMatrix.fMat[i]);
+        if (i < 19) {
+            str->append(", ");
+        }
+    }
+    str->append(")");
+}
 #endif

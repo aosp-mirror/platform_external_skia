@@ -37,11 +37,11 @@ LOCAL_ARM_MODE := arm
 # need a flag to tell the C side when we're on devices with large memory
 # budgets (i.e. larger than the low-end devices that initially shipped)
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
-    LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+	LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
 endif
 
 ifeq ($(TARGET_ARCH),x86)
-    LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+	LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
 endif
 
 ifneq ($(ARCH_ARM_HAVE_VFP),true)
@@ -55,6 +55,8 @@ endif
 # When built as part of the system image we can enable certian non-NDK compliant
 # optimizations.
 LOCAL_CFLAGS += -DSK_BUILD_FOR_ANDROID_FRAMEWORK
+
+LOCAL_CFLAGS += -DSK_SUPPORT_GPU
 
 # using freetype's embolden allows us to adjust fake bold settings at
 # draw-time, at which point we know which SkTypeface is being drawn
@@ -76,8 +78,6 @@ ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
 endif
 
-
-
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
 	src/core/SkAnnotation.cpp \
@@ -89,10 +89,10 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBBoxHierarchyRecord.cpp \
 	src/core/SkBitmap.cpp \
 	src/core/SkBitmapHeap.cpp \
+	src/core/SkBitmapProcBicubic.cpp \
 	src/core/SkBitmapProcShader.cpp \
 	src/core/SkBitmapProcState.cpp \
 	src/core/SkBitmapProcState_matrixProcs.cpp \
-	src/core/SkBitmapSampler.cpp \
 	src/core/SkBitmap_scroll.cpp \
 	src/core/SkBlitMask_D32.cpp \
 	src/core/SkBlitRow_D16.cpp \
@@ -117,15 +117,18 @@ LOCAL_SRC_FILES:= \
 	src/core/SkCordic.cpp \
 	src/core/SkCubicClipper.cpp \
 	src/core/SkData.cpp \
+	src/core/SkDataTable.cpp \
 	src/core/SkDebug.cpp \
 	src/core/SkDeque.cpp \
 	src/core/SkDevice.cpp \
 	src/core/SkDeviceProfile.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
+	src/core/SkDrawLooper.cpp \
 	src/core/SkEdgeBuilder.cpp \
 	src/core/SkEdgeClipper.cpp \
 	src/core/SkEdge.cpp \
+	src/core/SkError.cpp \
 	src/core/SkFDStream.cpp \
 	src/core/SkFilterProc.cpp \
 	src/core/SkFlattenable.cpp \
@@ -140,7 +143,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkGraphics.cpp \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
-	src/core/SkLanguage.cpp \
+	src/core/SkImageFilterUtils.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
@@ -153,6 +156,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkOrderedWriteBuffer.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
+	src/core/SkPaintOptionsAndroid.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
@@ -225,10 +229,10 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkDisplacementMapEffect.cpp \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
-	src/effects/SkImageFilterUtils.cpp \
 	src/effects/SkKernel33MaskFilter.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
+	src/effects/SkLerpXfermode.cpp \
 	src/effects/SkLightingImageFilter.cpp \
 	src/effects/SkMagnifierImageFilter.cpp \
 	src/effects/SkMatrixConvolutionImageFilter.cpp \
@@ -236,6 +240,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkMorphologyImageFilter.cpp \
 	src/effects/SkOffsetImageFilter.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
+	src/effects/SkPerlinNoiseShader.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
@@ -285,14 +290,43 @@ LOCAL_SRC_FILES:= \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
+	src/pathops/SkAddIntersections.cpp \
+	src/pathops/SkDCubicIntersection.cpp \
+	src/pathops/SkDCubicLineIntersection.cpp \
+	src/pathops/SkDCubicToQuads.cpp \
+	src/pathops/SkDLineIntersection.cpp \
+	src/pathops/SkDQuadImplicit.cpp \
+	src/pathops/SkDQuadIntersection.cpp \
+	src/pathops/SkDQuadLineIntersection.cpp \
+	src/pathops/SkIntersections.cpp \
+	src/pathops/SkOpAngle.cpp \
+	src/pathops/SkOpContour.cpp \
+	src/pathops/SkOpEdgeBuilder.cpp \
+	src/pathops/SkOpSegment.cpp \
+	src/pathops/SkPathOpsBounds.cpp \
+	src/pathops/SkPathOpsCommon.cpp \
+	src/pathops/SkPathOpsCubic.cpp \
+	src/pathops/SkPathOpsDebug.cpp \
+	src/pathops/SkPathOpsLine.cpp \
+	src/pathops/SkPathOpsOp.cpp \
+	src/pathops/SkPathOpsPoint.cpp \
+	src/pathops/SkPathOpsQuad.cpp \
+	src/pathops/SkPathOpsRect.cpp \
+	src/pathops/SkPathOpsSimplify.cpp \
+	src/pathops/SkPathOpsTriangle.cpp \
+	src/pathops/SkPathOpsTypes.cpp \
+	src/pathops/SkPathWriter.cpp \
+	src/pathops/SkQuarticRoot.cpp \
+	src/pathops/SkReduceOrder.cpp \
 	src/pipe/SkGPipeRead.cpp \
 	src/pipe/SkGPipeWrite.cpp \
-	src/ports/FontHostConfiguration_android.cpp \
 	src/ports/SkDebug_android.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
+	src/ports/SkFontConfigInterface_android.cpp \
+	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
-	src/ports/SkFontHost_android.cpp \
+	src/ports/SkFontHost_fontconfig.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_stdio.cpp \
 	src/ports/SkPurgeableMemoryBlock_android.cpp \
@@ -300,7 +334,6 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkTime_Unix.cpp \
 	src/utils/android/ashmem.cpp \
 	src/utils/SkBase64.cpp \
-	src/utils/SkBitmapTransformer.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
 	src/utils/SkCamera.cpp \
@@ -332,8 +365,7 @@ LOCAL_SRC_FILES:= \
 	src/lazy/SkPurgeableMemoryBlock_common.cpp \
 	src/lazy/SkPurgeableImageCache.cpp \
 
-#	src/utils/SkBitmapChecksummer.cpp \
-#	src/utils/SkCityHash.cpp \
+#	src/utils/SkBitmapHasher.cpp \
 
 # maps to the 'skgr' gyp target
 LOCAL_SRC_FILES += \
@@ -392,10 +424,8 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/gr_unittests.cpp \
-	src/gpu/effects/GrCircleEdgeEffect.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
-	src/gpu/effects/GrEllipseEdgeEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomainEffect.cpp \
@@ -413,6 +443,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
+	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLShaderBuilder.cpp \
 	src/gpu/gl/GrGLSL.cpp \
@@ -441,13 +472,13 @@ ifeq ($(ARCH_ARM_HAVE_NEON),true)
 LOCAL_SRC_FILES += \
 	src/opts/memset16_neon.S \
 	src/opts/memset32_neon.S \
-    src/opts/SkBitmapProcState_arm_neon.cpp \
-    src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
-    src/opts/SkBlitRow_opts_arm_neon.cpp
+	src/opts/SkBitmapProcState_arm_neon.cpp \
+	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBlitRow_opts_arm_neon.cpp
 endif
 
 LOCAL_SRC_FILES += \
-    src/core/SkUtilsArm.cpp \
+	src/core/SkUtilsArm.cpp \
 	src/opts/opts_check_arm.cpp \
 	src/opts/memset.arm.S \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
@@ -485,6 +516,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/lazy \
+	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
@@ -504,13 +536,15 @@ LOCAL_C_INCLUDES := \
 	external/expat/lib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/include/utils
+	$(LOCAL_PATH)/include/utils \
+	$(LOCAL_PATH)/include/lazy
 
 # Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
 # Revert to -D_FORTIFY_SOURCE=1
@@ -534,6 +568,9 @@ include $(BASE_PATH)/bench/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk
+
+# pathOps unit-tests
+# TODO include those sources!
 
 #############################################################
 # Build the legacy skia library for playback of saved webpages

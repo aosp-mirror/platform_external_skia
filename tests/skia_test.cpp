@@ -1,13 +1,19 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
+#include "SkCommandLineFlags.h"
 #include "SkGraphics.h"
-#include "Test.h"
 #include "SkOSFile.h"
+#include "SkRunnable.h"
+#include "SkTArray.h"
+#include "SkTemplates.h"
+#include "SkThreadPool.h"
+#include "SkTime.h"
+#include "Test.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
@@ -22,6 +28,10 @@ class Iter {
 public:
     Iter(Reporter* r) : fReporter(r) {
         r->ref();
+        this->reset();
+    }
+
+    void reset() {
         fReg = TestRegistry::Head();
     }
 
@@ -40,16 +50,6 @@ public:
         return NULL;
     }
 
-    static int Count() {
-        const TestRegistry* reg = TestRegistry::Head();
-        int count = 0;
-        while (reg) {
-            count += 1;
-            reg = reg->next();
-        }
-        return count;
-    }
-
 private:
     Reporter* fReporter;
     const TestRegistry* fReg;
@@ -61,26 +61,55 @@ static const char* result2string(Reporter::Result result) {
 
 class DebugfReporter : public Reporter {
 public:
-    DebugfReporter() : fIndex(0), fTotal(0) {}
+    DebugfReporter(bool allowExtendedTest, bool allowThreaded)
+        : fNextIndex(0)
+        , fPending(0)
+        , fTotal(0)
+        , fAllowExtendedTest(allowExtendedTest)
+        , fAllowThreaded(allowThreaded) {
+    }
 
-    void setIndexOfTotal(int index, int total) {
-        fIndex = index;
+    void setTotal(int total) {
         fTotal = total;
     }
+
+    virtual bool allowExtendedTest() const SK_OVERRIDE {
+        return fAllowExtendedTest;
+    }
+
+    virtual bool allowThreaded() const SK_OVERRIDE {
+        return fAllowThreaded;
+    }
+
 protected:
     virtual void onStart(Test* test) {
-        SkDebugf("[%d/%d] %s...\n", fIndex+1, fTotal, test->getName());
+        const int index = sk_atomic_inc(&fNextIndex);
+        sk_atomic_inc(&fPending);
+        SkDebugf("[%3d/%3d] (%d) %s\n", index+1, fTotal, fPending, test->getName());
     }
     virtual void onReport(const char desc[], Reporter::Result result) {
         SkDebugf("\t%s: %s\n", result2string(result), desc);
     }
-    virtual void onEnd(Test*) {
-        if (!this->getCurrSuccess()) {
-            SkDebugf("---- FAILED\n");
+
+    virtual void onEnd(Test* test) {
+        if (!test->passed()) {
+            SkDebugf("---- %s FAILED\n", test->getName());
+        }
+
+        sk_atomic_dec(&fPending);
+        if (fNextIndex == fTotal) {
+            // Just waiting on straggler tests.  Shame them by printing their name and runtime.
+            SkDebugf("          (%d) %5.1fs %s\n",
+                     fPending, test->elapsedMs() / 1e3, test->getName());
         }
     }
+
 private:
-    int fIndex, fTotal;
+    int32_t fNextIndex;
+    int32_t fPending;
+    int fTotal;
+    bool fAllowExtendedTest;
+    bool fAllowThreaded;
 };
 
 static const char* make_canonical_dir_path(const char* path, SkString* storage) {
@@ -111,46 +140,104 @@ const SkString& Test::GetResourcePath() {
     return gResourcePath;
 }
 
+DEFINE_string2(match, m, NULL, "[~][^]substring[$] [...] of test name to run.\n" \
+                               "Multiple matches may be separated by spaces.\n" \
+                               "~ causes a matching test to always be skipped\n" \
+                               "^ requires the start of the test to match\n" \
+                               "$ requires the end of the test to match\n" \
+                               "^ and $ requires an exact match\n" \
+                               "If a test does not match any list entry,\n" \
+                               "it is skipped unless some list entry starts with ~");
+DEFINE_string2(tmpDir, t, NULL, "tmp directory for tests to use.");
+DEFINE_string2(resourcePath, i, NULL, "directory for test resources.");
+DEFINE_bool2(extendedTest, x, false, "run extended tests for pathOps.");
+DEFINE_bool2(threaded, z, false, "allow tests to use multiple threads internally.");
+DEFINE_bool2(verbose, v, false, "enable verbose output.");
+DEFINE_int32(threads, SkThreadPool::kThreadPerCore,
+             "Run threadsafe tests on a threadpool with this many threads.");
+
+// Deletes self when run.
+class SkTestRunnable : public SkRunnable {
+public:
+  // Takes ownership of test.
+  SkTestRunnable(Test* test, int32_t* failCount) : fTest(test), fFailCount(failCount) {}
+
+  virtual void run() {
+      fTest->run();
+      if(!fTest->passed()) {
+          sk_atomic_inc(fFailCount);
+      }
+      SkDELETE(this);
+  }
+
+private:
+    SkAutoTDelete<Test> fTest;
+    int32_t* fFailCount;
+};
+
+/* Takes a list of the form [~][^]match[$]
+   ~ causes a matching test to always be skipped
+   ^ requires the start of the test to match
+   $ requires the end of the test to match
+   ^ and $ requires an exact match
+   If a test does not match any list entry, it is skipped unless some list entry starts with ~
+ */
+static bool shouldSkip(const char* testName) {
+    int count = FLAGS_match.count();
+    size_t testLen = strlen(testName);
+    bool anyExclude = count == 0;
+    for (int index = 0; index < count; ++index) {
+        const char* matchName = FLAGS_match[index];
+        size_t matchLen = strlen(matchName);
+        bool matchExclude, matchStart, matchEnd;
+        if ((matchExclude = matchName[0] == '~')) {
+            anyExclude = true;
+            matchName++;
+            matchLen--;
+        }
+        if ((matchStart = matchName[0] == '^')) {
+            matchName++;
+            matchLen--;
+        }
+        if ((matchEnd = matchName[matchLen - 1] == '$')) {
+            matchLen--;
+        }
+        if (matchStart ? (!matchEnd || matchLen == testLen)
+                && strncmp(testName, matchName, matchLen) == 0
+                : matchEnd ? matchLen <= testLen
+                && strncmp(testName + testLen - matchLen, matchName, matchLen) == 0
+                : strstr(testName, matchName) != 0) {
+            return matchExclude;
+        }
+    }
+    return !anyExclude;
+}
+
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
+    SkCommandLineFlags::SetUsage("");
+    SkCommandLineFlags::Parse(argc, argv);
+
+    if (!FLAGS_tmpDir.isEmpty()) {
+        make_canonical_dir_path(FLAGS_tmpDir[0], &gTmpDir);
+    }
+    if (!FLAGS_resourcePath.isEmpty()) {
+        make_canonical_dir_path(FLAGS_resourcePath[0], &gResourcePath);
+    }
+
 #if SK_ENABLE_INST_COUNT
     gPrintInstCount = true;
 #endif
+
     SkGraphics::Init();
-
-    const char* matchStr = NULL;
-
-    char* const* stop = argv + argc;
-    for (++argv; argv < stop; ++argv) {
-        if (strcmp(*argv, "--match") == 0) {
-            ++argv;
-            if (argv < stop && **argv) {
-                matchStr = *argv;
-            } else {
-                SkDebugf("no following argument to --match\n");
-                return -1;
-            }
-        } else if (0 == strcmp(*argv, "--tmpDir")) {
-            ++argv;
-            if (argv < stop && **argv) {
-                make_canonical_dir_path(*argv, &gTmpDir);
-            } else {
-                SkDebugf("no following argument to --tmpDir\n");
-                return -1;
-            }
-        } else if ((0 == strcmp(*argv, "--resourcePath")) ||
-                   (0 == strcmp(*argv, "-i"))) {
-            argv++;
-            if (argv < stop && **argv) {
-                make_canonical_dir_path(*argv, &gResourcePath);
-            }
-        }
-    }
 
     {
         SkString header("Skia UnitTests:");
-        if (matchStr) {
-            header.appendf(" --match %s", matchStr);
+        if (!FLAGS_match.isEmpty()) {
+            header.appendf(" --match");
+            for (int index = 0; index < FLAGS_match.count(); ++index) {
+                header.appendf(" %s", FLAGS_match[index]);
+            }
         }
         if (!gTmpDir.isEmpty()) {
             header.appendf(" --tmpDir %s", gTmpDir.c_str());
@@ -171,30 +258,54 @@ int tool_main(int argc, char** argv) {
         SkDebugf("%s\n", header.c_str());
     }
 
-    DebugfReporter reporter;
+    DebugfReporter reporter(FLAGS_extendedTest, FLAGS_threaded);
     Iter iter(&reporter);
-    Test* test;
 
-    const int count = Iter::Count();
-    int index = 0;
-    int failCount = 0;
-    int skipCount = 0;
+    // Count tests first.
+    int total = 0;
+    int toRun = 0;
+    Test* test;
     while ((test = iter.next()) != NULL) {
-        reporter.setIndexOfTotal(index, count);
-        if (NULL != matchStr && !strstr(test->getName(), matchStr)) {
-            ++skipCount;
-        } else {
-            if (!test->run()) {
-                ++failCount;
-            }
+        SkAutoTDelete<Test> owned(test);
+        if(!shouldSkip(test->getName())) {
+            toRun++;
         }
-        SkDELETE(test);
-        index += 1;
+        total++;
+    }
+    reporter.setTotal(toRun);
+
+    // Now run them.
+    iter.reset();
+    int32_t failCount = 0;
+    int skipCount = 0;
+
+    SkAutoTDelete<SkThreadPool> threadpool(SkNEW_ARGS(SkThreadPool, (FLAGS_threads)));
+    SkTArray<Test*> unsafeTests;  // Always passes ownership to an SkTestRunnable
+    for (int i = 0; i < total; i++) {
+        SkAutoTDelete<Test> test(iter.next());
+        if (shouldSkip(test->getName())) {
+            ++skipCount;
+        } else if (!test->isThreadsafe()) {
+            unsafeTests.push_back() = test.detach();
+        } else {
+            threadpool->add(SkNEW_ARGS(SkTestRunnable, (test.detach(), &failCount)));
+        }
     }
 
-    SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
-             count, failCount, skipCount);
+    // Run the tests that aren't threadsafe.
+    for (int i = 0; i < unsafeTests.count(); i++) {
+        SkNEW_ARGS(SkTestRunnable, (unsafeTests[i], &failCount))->run();
+    }
 
+    // Blocks until threaded tests finish.
+    threadpool.free();
+
+    SkDebugf("Finished %d tests, %d failures, %d skipped.\n",
+             toRun, failCount, skipCount);
+    const int testCount = reporter.countTests();
+    if (FLAGS_verbose && testCount > 0) {
+        SkDebugf("Ran %d Internal tests.\n", testCount);
+    }
 #if SK_SUPPORT_GPU
 
 #if GR_CACHE_STATS

@@ -12,6 +12,8 @@
 #include "SkPixelRef.h"
 
 class DeferredDevice;
+class SkImage;
+class SkSurface;
 
 /** \class SkDeferredCanvas
     Subclass of SkCanvas that encapsulates an SkPicture or SkGPipe for deferred
@@ -33,6 +35,12 @@ public:
     */
     explicit SkDeferredCanvas(SkDevice* device);
 
+    /** Construct a canvas with the specified surface to draw into.
+        This constructor must be used for newImageSnapshot to work.
+        @param surface Specifies a surface for the canvas to draw into.
+    */
+    explicit SkDeferredCanvas(SkSurface* surface);
+
     virtual ~SkDeferredCanvas();
 
     /**
@@ -44,6 +52,16 @@ public:
      *  @return The device argument, for convenience.
      */
     virtual SkDevice* setDevice(SkDevice* device);
+
+    /**
+     *  Specify the surface to be used by this canvas. Calling setSurface will
+     *  release the previously set surface or device. Takes a reference on the
+     *  surface.
+     *
+     *  @param surface The surface that the canvas will raw into
+     *  @return The surface argument, for convenience.
+     */
+    SkSurface* setSurface(SkSurface* surface);
 
     /**
      *  Specify a NotificationClient to be used by this canvas. Calling
@@ -91,6 +109,15 @@ public:
      *  not yet been played back.
      */
     bool hasPendingCommands() const;
+
+    /**
+     *  Flushes pending draw commands, if any, and returns an image of the
+     *  current state of the surface pixels up to this point. Subsequent
+     *  changes to the surface (by drawing into its canvas) will not be
+     *  reflected in this image.  Will return NULL if the deferred canvas
+     *  was not constructed from an SkSurface.
+     */
+    SkImage* newImageSnapshot();
 
     /**
      *  Specify the maximum number of bytes to be allocated for the purpose

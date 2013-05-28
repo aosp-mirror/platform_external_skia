@@ -27,10 +27,15 @@ class SkString;
  * GrEffectRef ref count reaches zero the scratch GrResources owned by the effect can be recycled
  * in service of later draws. However, the deferred draw queue may still own direct references to
  * the underlying GrEffect.
+ *
+ * GrEffectRefs created by new are placed in a per-thread managed pool. The pool is destroyed when
+ * the thread ends. Therefore, all dynamically allocated GrEffectRefs must be unreffed before thread
+ * termination.
  */
 class GrEffectRef : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrEffectRef);
+    virtual ~GrEffectRef();
 
     GrEffect* get() { return fEffect; }
     const GrEffect* get() const { return fEffect; }
@@ -41,12 +46,17 @@ public:
     void* operator new(size_t size);
     void operator delete(void* target);
 
+    void* operator new(size_t size, void* placement) {
+        return ::operator new(size, placement);
+    }
+    void operator delete(void* target, void* placement) {
+        ::operator delete(target, placement);
+    }
+
 private:
     friend class GrEffect; // to construct these
 
     explicit GrEffectRef(GrEffect* effect);
-
-    virtual ~GrEffectRef();
 
     GrEffect* fEffect;
 
@@ -63,8 +73,12 @@ private:
     There is no public way to wrap a GrEffect in a GrEffectRef. Thus, a factory should be a static
     member function of a GrEffect subclass.
 
-    Because almost no code should ever handle a GrEffect outside of a GrEffectRef, we privately
-    inherit from GrRefCnt to help prevent accidental direct ref'ing/unref'ing of effects.
+    Because almost no code should ever handle a GrEffect directly outside of a GrEffectRef, we
+    privately inherit from GrRefCnt to help prevent accidental direct ref'ing/unref'ing of effects.
+
+    Dynamically allocated GrEffects and their corresponding GrEffectRefs are managed by a per-thread
+    memory pool. The ref count of an effect must reach 0 before the thread terminates and the pool
+    is destroyed. To create a static effect use the macro GR_CREATE_STATIC_EFFECT declared below.
   */
 class GrEffect : private GrRefCnt {
 public:
@@ -87,24 +101,11 @@ public:
     virtual ~GrEffect();
 
     /**
-     * Flags for getConstantColorComponents. They are defined so that the bit order reflects the
-     * GrColor shift order.
-     */
-    enum ValidComponentFlags {
-        kR_ValidComponentFlag = 1 << (GrColor_SHIFT_R / 8),
-        kG_ValidComponentFlag = 1 << (GrColor_SHIFT_G / 8),
-        kB_ValidComponentFlag = 1 << (GrColor_SHIFT_B / 8),
-        kA_ValidComponentFlag = 1 << (GrColor_SHIFT_A / 8),
-
-        kAll_ValidComponentFlags = (kR_ValidComponentFlag | kG_ValidComponentFlag |
-                                    kB_ValidComponentFlag | kA_ValidComponentFlag)
-    };
-
-    /**
      * This function is used to perform optimizations. When called the color and validFlags params
-     * indicate whether the input components to this effect in the FS will have known values. The
-     * function updates both params to indicate known values of its output. A component of the color
-     * param only has meaning if the corresponding bit in validFlags is set.
+     * indicate whether the input components to this effect in the FS will have known values.
+     * validFlags is a bitfield of GrColorComponentFlags. The function updates both params to
+     * indicate known values of its output. A component of the color param only has meaning if the
+     * corresponding bit in validFlags is set.
      */
     virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const = 0;
 
@@ -151,13 +152,17 @@ public:
     /** Shortcut for textureAccess(index).texture(); */
     GrTexture* texture(int index) const { return this->textureAccess(index).getTexture(); }
 
+    /** Will this effect read the destination pixel value? */
+    bool willReadDstColor() const { return fWillReadDstColor; }
+
+    /** Will this effect read the fragment position? */
+    bool willReadFragmentPosition() const { return fWillReadFragmentPosition; }
 
     int numVertexAttribs() const { return fVertexAttribTypes.count(); }
 
     GrSLType vertexAttribType(int index) const { return fVertexAttribTypes[index]; }
 
     static const int kMaxVertexAttribs = 2;
-
 
     /** Useful for effects that want to insert a texture matrix that is implied by the texture
         dimensions */
@@ -170,6 +175,13 @@ public:
 
     void* operator new(size_t size);
     void operator delete(void* target);
+
+    void* operator new(size_t size, void* placement) {
+        return ::operator new(size, placement);
+    }
+    void operator delete(void* target, void* placement) {
+        ::operator delete(target, placement);
+    }
 
     /** These functions are used when recording effects into a deferred drawing queue. The inc call
         keeps the effect alive outside of GrEffectRef while allowing any resources owned by the
@@ -204,7 +216,7 @@ protected:
      */
     void addVertexAttrib(GrSLType type);
 
-    GrEffect() : fEffectRef(NULL) {};
+    GrEffect() : fWillReadDstColor(false), fWillReadFragmentPosition(false), fEffectRef(NULL) {}
 
     /** This should be called by GrEffect subclass factories. See the comment on AutoEffectUnref for
         an example factory function. */
@@ -220,6 +232,14 @@ protected:
     static const GrEffectRef* CreateEffectRef(const GrEffect* effect) {
         return CreateEffectRef(const_cast<GrEffect*>(effect));
     }
+
+    /** Used by GR_CREATE_STATIC_EFFECT below */
+    static GrEffectRef* CreateStaticEffectRef(void* refStorage, GrEffect* effect) {
+        GrAssert(NULL == effect->fEffectRef);
+        effect->fEffectRef = SkNEW_PLACEMENT_ARGS(refStorage, GrEffectRef, (effect));
+        return effect->fEffectRef;
+    }
+
 
     /** Helper used in subclass factory functions to unref the effect after it has been wrapped in a
         GrEffectRef. E.g.:
@@ -246,6 +266,20 @@ protected:
     static const T& CastEffect(const GrEffect& effectRef) {
         return *static_cast<const T*>(&effectRef);
     }
+
+    /**
+     * If the effect subclass will read the destination pixel value then it must call this function
+     * from its constructor. Otherwise, when its generated backend-specific effect class attempts
+     * to generate code that reads the destination pixel it will fail.
+     */
+    void setWillReadDstColor() { fWillReadDstColor = true; }
+
+    /**
+     * If the effect will generate a backend-specific effect that will read the fragment position
+     * in the FS then it must call this method from its constructor. Otherwise, the request to
+     * access the fragment position will be denied.
+     */
+    void setWillReadFragmentPosition() { fWillReadFragmentPosition = true; }
 
 private:
     bool isEqual(const GrEffect& other) const {
@@ -278,6 +312,8 @@ private:
 
     SkSTArray<4, const GrTextureAccess*, true>   fTextureAccesses;
     SkSTArray<kMaxVertexAttribs, GrSLType, true> fVertexAttribTypes;
+    bool                                         fWillReadDstColor;
+    bool                                         fWillReadFragmentPosition;
     GrEffectRef*                                 fEffectRef;
 
     typedef GrRefCnt INHERITED;
@@ -288,5 +324,22 @@ inline GrEffectRef::GrEffectRef(GrEffect* effect) {
     effect->ref();
     fEffect = effect;
 }
+
+/**
+ * This creates an effect outside of the effect memory pool. The effect's destructor will be called
+ * at global destruction time. NAME will be the name of the created GrEffectRef.
+ */
+#define GR_CREATE_STATIC_EFFECT(NAME, EFFECT_CLASS, ARGS)                                         \
+enum {                                                                                            \
+    k_##NAME##_EffectRefOffset = GR_CT_ALIGN_UP(sizeof(EFFECT_CLASS), 8),                         \
+    k_##NAME##_StorageSize = k_##NAME##_EffectRefOffset + sizeof(GrEffectRef)                     \
+};                                                                                                \
+static SkAlignedSStorage<k_##NAME##_StorageSize> g_##NAME##_Storage;                              \
+static void* NAME##_RefLocation = (char*)g_##NAME##_Storage.get() + k_##NAME##_EffectRefOffset;   \
+static GrEffect* NAME##_Effect SkNEW_PLACEMENT_ARGS(g_##NAME##_Storage.get(), EFFECT_CLASS, ARGS);\
+static SkAutoTDestroy<GrEffect> NAME##_ad(NAME##_Effect);                                         \
+static GrEffectRef* NAME(GrEffect::CreateStaticEffectRef(NAME##_RefLocation, NAME##_Effect));     \
+static SkAutoTDestroy<GrEffectRef> NAME##_Ref_ad(NAME)
+
 
 #endif

@@ -66,8 +66,8 @@ protected:
                               int count) = 0;
 
     virtual void performTest(float* SK_RESTRICT dst,
-                              const float* SK_RESTRICT src,
-                              int count) SK_OVERRIDE {
+                             const float* SK_RESTRICT src,
+                             int count) SK_OVERRIDE {
         uint32_t* d = SkTCast<uint32_t*>(dst);
         const uint32_t* s = SkTCast<const uint32_t*>(src);
         this->performITest(d, s, count);
@@ -371,38 +371,135 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
+class CLZBench : public SkBenchmark {
+    enum {
+        ARRAY = SkBENCHLOOP(1000),
+        LOOP = SkBENCHLOOP(5000),
+    };
+    uint32_t fData[ARRAY];
+    bool fUsePortable;
+
+public:
+    CLZBench(void* param, bool usePortable)
+        : INHERITED(param)
+        , fUsePortable(usePortable) {
+
+        SkRandom rand;
+        for (int i = 0; i < ARRAY; ++i) {
+            fData[i] = rand.nextU();
+        }
+
+        if (fUsePortable) {
+            fName = "clz_portable";
+        } else {
+            fName = "clz_intrinsic";
+        }
+        fIsRendering = false;
+    }
+
+    // just so the compiler doesn't remove our loops
+    virtual void process(int) {}
+
+protected:
+    virtual void onDraw(SkCanvas*) {
+        int accum = 0;
+
+        if (fUsePortable) {
+            for (int j = 0; j < LOOP; ++j) {
+                for (int i = 0; i < ARRAY; ++i) {
+                    accum += SkCLZ_portable(fData[i]);
+                }
+                this->process(accum);
+            }
+        } else {
+            for (int j = 0; j < LOOP; ++j) {
+                for (int i = 0; i < ARRAY; ++i) {
+                    accum += SkCLZ(fData[i]);
+                }
+                this->process(accum);
+            }
+        }
+    }
+
+    virtual const char* onGetName() {
+        return fName;
+    }
+
+private:
+    const char* fName;
+
+    typedef SkBenchmark INHERITED;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* M0(void* p) { return new NoOpMathBench(p); }
-static SkBenchmark* M1(void* p) { return new SlowISqrtMathBench(p); }
-static SkBenchmark* M2(void* p) { return new FastISqrtMathBench(p); }
-static SkBenchmark* M3(void* p) { return new QMul64Bench(p); }
-static SkBenchmark* M4(void* p) { return new QMul32Bench(p); }
+class NormalizeBench : public SkBenchmark {
+    enum {
+        ARRAY = SkBENCHLOOP(1000),
+        LOOP = SkBENCHLOOP(1000),
+    };
+    SkVector fVec[ARRAY];
+    bool fUsePortable;
 
-static SkBenchmark* M5neg1(void* p) { return new IsFiniteBench(p, -1); }
-static SkBenchmark* M50(void* p) { return new IsFiniteBench(p, 0); }
-static SkBenchmark* M51(void* p) { return new IsFiniteBench(p, 1); }
-static SkBenchmark* M52(void* p) { return new IsFiniteBench(p, 2); }
-static SkBenchmark* M53(void* p) { return new IsFiniteBench(p, 3); }
-static SkBenchmark* M54(void* p) { return new IsFiniteBench(p, 4); }
-static SkBenchmark* M55(void* p) { return new IsFiniteBench(p, 5); }
+public:
+    NormalizeBench(void* param, bool usePortable)
+    : INHERITED(param)
+    , fUsePortable(usePortable) {
 
-static SkBenchmark* F0(void* p) { return new FloorBench(p, false); }
-static SkBenchmark* F1(void* p) { return new FloorBench(p, true); }
+        SkRandom rand;
+        for (int i = 0; i < ARRAY; ++i) {
+            fVec[i].set(rand.nextSScalar1(), rand.nextSScalar1());
+        }
 
-static BenchRegistry gReg0(M0);
-static BenchRegistry gReg1(M1);
-static BenchRegistry gReg2(M2);
-static BenchRegistry gReg3(M3);
-static BenchRegistry gReg4(M4);
+        fName = "point_normalize";
+        fIsRendering = false;
+    }
 
-static BenchRegistry gReg5neg1(M5neg1);
-static BenchRegistry gReg50(M50);
-static BenchRegistry gReg51(M51);
-static BenchRegistry gReg52(M52);
-static BenchRegistry gReg53(M53);
-static BenchRegistry gReg54(M54);
-static BenchRegistry gReg55(M55);
+    // just so the compiler doesn't remove our loops
+    virtual void process(int) {}
 
-static BenchRegistry gRF0(F0);
-static BenchRegistry gRF1(F1);
+protected:
+    virtual void onDraw(SkCanvas*) {
+        int accum = 0;
+
+        for (int j = 0; j < LOOP; ++j) {
+            for (int i = 0; i < ARRAY; ++i) {
+                accum += fVec[i].normalize();
+            }
+            this->process(accum);
+        }
+    }
+
+    virtual const char* onGetName() {
+        return fName;
+    }
+
+private:
+    const char* fName;
+
+    typedef SkBenchmark INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+DEF_BENCH( return new NoOpMathBench(p); )
+DEF_BENCH( return new SlowISqrtMathBench(p); )
+DEF_BENCH( return new FastISqrtMathBench(p); )
+DEF_BENCH( return new QMul64Bench(p); )
+DEF_BENCH( return new QMul32Bench(p); )
+
+DEF_BENCH( return new IsFiniteBench(p, -1); )
+DEF_BENCH( return new IsFiniteBench(p, 0); )
+DEF_BENCH( return new IsFiniteBench(p, 1); )
+DEF_BENCH( return new IsFiniteBench(p, 2); )
+DEF_BENCH( return new IsFiniteBench(p, 3); )
+DEF_BENCH( return new IsFiniteBench(p, 4); )
+DEF_BENCH( return new IsFiniteBench(p, 5); )
+
+DEF_BENCH( return new FloorBench(p, false); )
+DEF_BENCH( return new FloorBench(p, true); )
+
+DEF_BENCH( return new CLZBench(p, false); )
+DEF_BENCH( return new CLZBench(p, true); )
+
+DEF_BENCH( return new NormalizeBench(p, false); )

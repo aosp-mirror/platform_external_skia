@@ -13,7 +13,7 @@
 #include "GrGLEffect.h"
 #include "GrGpuGL.h"
 #include "GrGLShaderVar.h"
-#include "GrBackendEffectFactory.h"
+#include "GrGLSL.h"
 #include "SkTrace.h"
 #include "SkXfermode.h"
 
@@ -36,210 +36,8 @@ inline const char* declared_color_output_name() { return "fsColorOut"; }
 inline const char* dual_source_output_name() { return "dualSourceOut"; }
 }
 
-const GrGLProgram::AttribLayout GrGLProgram::kAttribLayouts[kGrVertexAttribTypeCount] = {
-    {1, GR_GL_FLOAT, false},         // kFloat_GrVertexAttribType
-    {2, GR_GL_FLOAT, false},         // kVec2f_GrVertexAttribType
-    {3, GR_GL_FLOAT, false},         // kVec3f_GrVertexAttribType
-    {4, GR_GL_FLOAT, false},         // kVec4f_GrVertexAttribType
-    {4, GR_GL_UNSIGNED_BYTE, true},  // kVec4ub_GrVertexAttribType
-};
-
-void GrGLProgram::BuildDesc(const GrDrawState& drawState,
-                            bool isPoints,
-                            GrDrawState::BlendOptFlags blendOpts,
-                            GrBlendCoeff srcCoeff,
-                            GrBlendCoeff dstCoeff,
-                            const GrGpuGL* gpu,
-                            Desc* desc) {
-
-    // This should already have been caught
-    GrAssert(!(GrDrawState::kSkipDraw_BlendOptFlag & blendOpts));
-
-    bool skipCoverage = SkToBool(blendOpts & GrDrawState::kEmitTransBlack_BlendOptFlag);
-
-    bool skipColor = SkToBool(blendOpts & (GrDrawState::kEmitTransBlack_BlendOptFlag |
-                                           GrDrawState::kEmitCoverage_BlendOptFlag));
-
-    // The descriptor is used as a cache key. Thus when a field of the
-    // descriptor will not affect program generation (because of the attribute
-    // bindings in use or other descriptor field settings) it should be set
-    // to a canonical value to avoid duplicate programs with different keys.
-
-    // Must initialize all fields or cache will have false negatives!
-    desc->fAttribBindings = drawState.getAttribBindings();
-
-    desc->fEmitsPointSize = isPoints;
-
-    bool requiresAttributeColors =
-        !skipColor && SkToBool(desc->fAttribBindings & GrDrawState::kColor_AttribBindingsBit);
-    bool requiresAttributeCoverage =
-        !skipCoverage && SkToBool(desc->fAttribBindings & GrDrawState::kCoverage_AttribBindingsBit);
-
-    // fColorInput/fCoverageInput records how colors are specified for the program So we strip the
-    // bits from the bindings to avoid false negatives when searching for an existing program in the
-    // cache.
-    desc->fAttribBindings &=
-        ~(GrDrawState::kColor_AttribBindingsBit | GrDrawState::kCoverage_AttribBindingsBit);
-
-    desc->fColorFilterXfermode = skipColor ?
-                                SkXfermode::kDst_Mode :
-                                drawState.getColorFilterMode();
-
-    // no reason to do edge aa or look at per-vertex coverage if coverage is ignored
-    if (skipCoverage) {
-        desc->fAttribBindings &= ~(GrDrawState::kEdge_AttribBindingsBit |
-                                   GrDrawState::kCoverage_AttribBindingsBit);
-    }
-
-    bool colorIsTransBlack = SkToBool(blendOpts & GrDrawState::kEmitTransBlack_BlendOptFlag);
-    bool colorIsSolidWhite = (blendOpts & GrDrawState::kEmitCoverage_BlendOptFlag) ||
-                             (!requiresAttributeColors && 0xffffffff == drawState.getColor());
-    if (colorIsTransBlack) {
-        desc->fColorInput = Desc::kTransBlack_ColorInput;
-    } else if (colorIsSolidWhite) {
-        desc->fColorInput = Desc::kSolidWhite_ColorInput;
-    } else if (GR_GL_NO_CONSTANT_ATTRIBUTES && !requiresAttributeColors) {
-        desc->fColorInput = Desc::kUniform_ColorInput;
-    } else {
-        desc->fColorInput = Desc::kAttribute_ColorInput;
-    }
-
-    bool covIsSolidWhite = !requiresAttributeCoverage && 0xffffffff == drawState.getCoverage();
-
-    if (skipCoverage) {
-        desc->fCoverageInput = Desc::kTransBlack_ColorInput;
-    } else if (covIsSolidWhite) {
-        desc->fCoverageInput = Desc::kSolidWhite_ColorInput;
-    } else if (GR_GL_NO_CONSTANT_ATTRIBUTES && !requiresAttributeCoverage) {
-        desc->fCoverageInput = Desc::kUniform_ColorInput;
-    } else {
-        desc->fCoverageInput = Desc::kAttribute_ColorInput;
-    }
-
-    int lastEnabledStage = -1;
-
-    if (!skipCoverage && (desc->fAttribBindings & GrDrawState::kEdge_AttribBindingsBit)) {
-        desc->fVertexEdgeType = drawState.getVertexEdgeType();
-        desc->fDiscardIfOutsideEdge = drawState.getStencil().doesWrite();
-    } else {
-        // Use canonical values when edge-aa is not enabled to avoid program cache misses.
-        desc->fVertexEdgeType = GrDrawState::kHairLine_EdgeType;
-        desc->fDiscardIfOutsideEdge = false;
-    }
-
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-
-        bool skip = s < drawState.getFirstCoverageStage() ? skipColor : skipCoverage;
-        if (!skip && drawState.isStageEnabled(s)) {
-            lastEnabledStage = s;
-            const GrEffectRef& effect = *drawState.getStage(s).getEffect();
-            const GrBackendEffectFactory& factory = effect->getFactory();
-            bool explicitLocalCoords = (drawState.getAttribBindings() &
-                                        GrDrawState::kLocalCoords_AttribBindingsBit);
-            GrDrawEffect drawEffect(drawState.getStage(s), explicitLocalCoords);
-            desc->fEffectKeys[s] = factory.glEffectKey(drawEffect, gpu->glCaps());
-        } else {
-            desc->fEffectKeys[s] = 0;
-        }
-    }
-
-    desc->fDualSrcOutput = Desc::kNone_DualSrcOutput;
-
-    // Currently the experimental GS will only work with triangle prims (and it doesn't do anything
-    // other than pass through values from the VS to the FS anyway).
-#if GR_GL_EXPERIMENTAL_GS
-#if 0
-    desc->fExperimentalGS = gpu->getCaps().geometryShaderSupport();
-#else
-    desc->fExperimentalGS = false;
-#endif
-#endif
-
-    // We want to avoid generating programs with different "first cov stage" values when they would
-    // compute the same result. We set field in the desc to kNumStages when either there are no
-    // coverage stages or the distinction between coverage and color is immaterial.
-    int firstCoverageStage = GrDrawState::kNumStages;
-    desc->fFirstCoverageStage = GrDrawState::kNumStages;
-    bool hasCoverage = drawState.getFirstCoverageStage() <= lastEnabledStage;
-    if (hasCoverage) {
-        firstCoverageStage = drawState.getFirstCoverageStage();
-    }
-
-    // other coverage inputs
-    if (!hasCoverage) {
-        hasCoverage = requiresAttributeCoverage ||
-                      (desc->fAttribBindings & GrDrawState::kEdge_AttribBindingsBit);
-    }
-
-    if (hasCoverage) {
-        // color filter is applied between color/coverage computation
-        if (SkXfermode::kDst_Mode != desc->fColorFilterXfermode) {
-            desc->fFirstCoverageStage = firstCoverageStage;
-        }
-
-        if (gpu->getCaps().dualSourceBlendingSupport() &&
-            !(blendOpts & (GrDrawState::kEmitCoverage_BlendOptFlag |
-                           GrDrawState::kCoverageAsAlpha_BlendOptFlag))) {
-            if (kZero_GrBlendCoeff == dstCoeff) {
-                // write the coverage value to second color
-                desc->fDualSrcOutput =  Desc::kCoverage_DualSrcOutput;
-                desc->fFirstCoverageStage = firstCoverageStage;
-            } else if (kSA_GrBlendCoeff == dstCoeff) {
-                // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially covered.
-                desc->fDualSrcOutput = Desc::kCoverageISA_DualSrcOutput;
-                desc->fFirstCoverageStage = firstCoverageStage;
-            } else if (kSC_GrBlendCoeff == dstCoeff) {
-                // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially covered.
-                desc->fDualSrcOutput = Desc::kCoverageISC_DualSrcOutput;
-                desc->fFirstCoverageStage = firstCoverageStage;
-            }
-        }
-    }
-
-    desc->fPositionAttributeIndex = drawState.getAttribIndex(GrDrawState::kPosition_AttribIndex);
-    if (requiresAttributeColors) {
-        desc->fColorAttributeIndex = drawState.getAttribIndex(GrDrawState::kColor_AttribIndex);
-    } else {
-        desc->fColorAttributeIndex = GrDrawState::kColorOverrideAttribIndexValue;
-    }
-    if (requiresAttributeCoverage) {
-        desc->fCoverageAttributeIndex = drawState.getAttribIndex(GrDrawState::kCoverage_AttribIndex);
-    } else {
-        desc->fCoverageAttributeIndex = GrDrawState::kCoverageOverrideAttribIndexValue;
-    }
-    if (desc->fAttribBindings & GrDrawState::kEdge_AttribBindingsBit) {
-        desc->fEdgeAttributeIndex = drawState.getAttribIndex(GrDrawState::kEdge_AttribIndex);
-    }
-    if (desc->fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit) {
-        desc->fLocalCoordsAttributeIndex = drawState.getAttribIndex(GrDrawState::kLocalCoords_AttribIndex);
-    }
-
-#if GR_DEBUG
-    // verify valid vertex attribute state
-    const GrVertexAttrib* vertexAttribs = drawState.getVertexAttribs();
-    GrAssert(desc->fPositionAttributeIndex < GrDrawState::kVertexAttribCnt);
-    GrAssert(kAttribLayouts[vertexAttribs[desc->fPositionAttributeIndex].fType].fCount == 2);
-    if (requiresAttributeColors) {
-        GrAssert(desc->fColorAttributeIndex < GrDrawState::kVertexAttribCnt);
-        GrAssert(kAttribLayouts[vertexAttribs[desc->fColorAttributeIndex].fType].fCount == 4);
-    }
-    if (requiresAttributeCoverage) {
-        GrAssert(desc->fCoverageAttributeIndex < GrDrawState::kVertexAttribCnt);
-        GrAssert(kAttribLayouts[vertexAttribs[desc->fCoverageAttributeIndex].fType].fCount == 4);
-    }
-    if (desc->fAttribBindings & GrDrawState::kEdge_AttribBindingsBit) {
-        GrAssert(desc->fEdgeAttributeIndex < GrDrawState::kVertexAttribCnt);
-        GrAssert(kAttribLayouts[vertexAttribs[desc->fEdgeAttributeIndex].fType].fCount == 4);
-    }
-    if (desc->fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit) {
-        GrAssert(desc->fLocalCoordsAttributeIndex < GrDrawState::kVertexAttribCnt);
-        GrAssert(kAttribLayouts[vertexAttribs[desc->fLocalCoordsAttributeIndex].fType].fCount == 2);
-    }
-#endif
-}
-
 GrGLProgram* GrGLProgram::Create(const GrGLContext& gl,
-                                 const Desc& desc,
+                                 const GrGLProgramDesc& desc,
                                  const GrEffectStage* stages[]) {
     GrGLProgram* program = SkNEW_ARGS(GrGLProgram, (gl, desc, stages));
     if (!program->succeeded()) {
@@ -250,7 +48,7 @@ GrGLProgram* GrGLProgram::Create(const GrGLContext& gl,
 }
 
 GrGLProgram::GrGLProgram(const GrGLContext& gl,
-                         const Desc& desc,
+                         const GrGLProgramDesc& desc,
                          const GrEffectStage* stages[])
 : fContext(gl)
 , fUniformManager(gl) {
@@ -298,25 +96,28 @@ void GrGLProgram::abandon() {
 
 void GrGLProgram::overrideBlend(GrBlendCoeff* srcCoeff,
                                 GrBlendCoeff* dstCoeff) const {
-    switch (fDesc.fDualSrcOutput) {
-        case Desc::kNone_DualSrcOutput:
+    switch (fDesc.getHeader().fCoverageOutput) {
+        case GrGLProgramDesc::kModulate_CoverageOutput:
             break;
-        // the prog will write a coverage value to the secondary
+        // The prog will write a coverage value to the secondary
         // output and the dst is blended by one minus that value.
-        case Desc::kCoverage_DualSrcOutput:
-        case Desc::kCoverageISA_DualSrcOutput:
-        case Desc::kCoverageISC_DualSrcOutput:
-        *dstCoeff = (GrBlendCoeff)GrGpu::kIS2C_GrBlendCoeff;
-        break;
+        case GrGLProgramDesc::kSecondaryCoverage_CoverageOutput:
+        case GrGLProgramDesc::kSecondaryCoverageISA_CoverageOutput:
+        case GrGLProgramDesc::kSecondaryCoverageISC_CoverageOutput:
+            *dstCoeff = (GrBlendCoeff)GrGpu::kIS2C_GrBlendCoeff;
+            break;
+        case GrGLProgramDesc::kCombineWithDst_CoverageOutput:
+            // We should only have set this if the blend was specified as (1, 0)
+            GrAssert(kOne_GrBlendCoeff == *srcCoeff && kZero_GrBlendCoeff == *dstCoeff);
+            break;
         default:
-            GrCrash("Unexpected dual source blend output");
+            GrCrash("Unexpected coverage output");
             break;
     }
 }
 
 namespace {
-
-// given two blend coeffecients determine whether the src
+// given two blend coefficients determine whether the src
 // and/or dst computation can be omitted.
 inline void need_blend_inputs(SkXfermode::Coeff srcCoeff,
                               SkXfermode::Coeff dstCoeff,
@@ -414,139 +215,80 @@ void add_color_filter(GrGLShaderBuilder* builder,
     blend_term_string(&constStr, uniformCoeff, filterColor, inColor, filterColor);
 
     SkString sum;
-    GrGLSLAdd4f(&sum, colorStr.c_str(), constStr.c_str());
+    GrGLSLAddf<4>(&sum, colorStr.c_str(), constStr.c_str());
     builder->fsCodeAppendf("\t%s = %s;\n", outputVar, sum.c_str());
 }
 }
 
-bool GrGLProgram::genEdgeCoverage(SkString* coverageVar,
-                                  GrGLShaderBuilder* builder) const {
-    if (fDesc.fAttribBindings & GrDrawState::kEdge_AttribBindingsBit) {
-        const char *vsName, *fsName;
-        builder->addVarying(kVec4f_GrSLType, "Edge", &vsName, &fsName);
-        builder->addAttribute(kVec4f_GrSLType, EDGE_ATTR_NAME);
-        builder->vsCodeAppendf("\t%s = " EDGE_ATTR_NAME ";\n", vsName);
-        switch (fDesc.fVertexEdgeType) {
-        case GrDrawState::kHairLine_EdgeType:
-            builder->fsCodeAppendf("\tfloat edgeAlpha = abs(dot(vec3(%s.xy,1), %s.xyz));\n",
-                                   builder->fragmentPosition(), fsName);
-            builder->fsCodeAppendf("\tedgeAlpha = max(1.0 - edgeAlpha, 0.0);\n");
-            break;
-        case GrDrawState::kQuad_EdgeType:
-            builder->fsCodeAppendf("\tfloat edgeAlpha;\n");
-            // keep the derivative instructions outside the conditional
-            builder->fsCodeAppendf("\tvec2 duvdx = dFdx(%s.xy);\n", fsName);
-            builder->fsCodeAppendf("\tvec2 duvdy = dFdy(%s.xy);\n", fsName);
-            builder->fsCodeAppendf("\tif (%s.z > 0.0 && %s.w > 0.0) {\n", fsName, fsName);
-            // today we know z and w are in device space. We could use derivatives
-            builder->fsCodeAppendf("\t\tedgeAlpha = min(min(%s.z, %s.w) + 0.5, 1.0);\n", fsName,
-                                   fsName);
-            builder->fsCodeAppendf ("\t} else {\n");
-            builder->fsCodeAppendf("\t\tvec2 gF = vec2(2.0*%s.x*duvdx.x - duvdx.y,\n"
-                                   "\t\t               2.0*%s.x*duvdy.x - duvdy.y);\n",
-                                    fsName, fsName);
-            builder->fsCodeAppendf("\t\tedgeAlpha = (%s.x*%s.x - %s.y);\n", fsName, fsName, fsName);
-            builder->fsCodeAppendf("\t\tedgeAlpha = clamp(0.5 - edgeAlpha / length(gF), 0.0, 1.0);\n"
-                                   "\t}\n");
-            if (kES2_GrGLBinding == fContext.info().binding()) {
-                builder->fHeader.append("#extension GL_OES_standard_derivatives: enable\n");
-            }
-            break;
-        case GrDrawState::kHairQuad_EdgeType:
-            builder->fsCodeAppendf("\tvec2 duvdx = dFdx(%s.xy);\n", fsName);
-            builder->fsCodeAppendf("\tvec2 duvdy = dFdy(%s.xy);\n", fsName);
-            builder->fsCodeAppendf("\tvec2 gF = vec2(2.0*%s.x*duvdx.x - duvdx.y,\n"
-                                   "\t               2.0*%s.x*duvdy.x - duvdy.y);\n",
-                                   fsName, fsName);
-            builder->fsCodeAppendf("\tfloat edgeAlpha = (%s.x*%s.x - %s.y);\n", fsName, fsName,
-                                   fsName);
-            builder->fsCodeAppend("\tedgeAlpha = sqrt(edgeAlpha*edgeAlpha / dot(gF, gF));\n");
-            builder->fsCodeAppend("\tedgeAlpha = max(1.0 - edgeAlpha, 0.0);\n");
-            if (kES2_GrGLBinding == fContext.info().binding()) {
-                builder->fHeader.printf("#extension GL_OES_standard_derivatives: enable\n");
-            }
-            break;
-        default:
-            GrCrash("Unknown Edge Type!");
-            break;
-        }
-        if (fDesc.fDiscardIfOutsideEdge) {
-            builder->fsCodeAppend("\tif (edgeAlpha <= 0.0) {\n\t\tdiscard;\n\t}\n");
-        }
-        *coverageVar = "edgeAlpha";
-        return true;
-    } else {
-        coverageVar->reset();
-        return false;
-    }
-}
-
-void GrGLProgram::genInputColor(GrGLShaderBuilder* builder, SkString* inColor) {
-    switch (fDesc.fColorInput) {
-        case GrGLProgram::Desc::kAttribute_ColorInput: {
+GrSLConstantVec GrGLProgram::genInputColor(GrGLShaderBuilder* builder, SkString* inColor) {
+    switch (fDesc.getHeader().fColorInput) {
+        case GrGLProgramDesc::kAttribute_ColorInput: {
             builder->addAttribute(kVec4f_GrSLType, COL_ATTR_NAME);
             const char *vsName, *fsName;
             builder->addVarying(kVec4f_GrSLType, "Color", &vsName, &fsName);
             builder->vsCodeAppendf("\t%s = " COL_ATTR_NAME ";\n", vsName);
             *inColor = fsName;
-            } break;
-        case GrGLProgram::Desc::kUniform_ColorInput: {
+            return kNone_GrSLConstantVec;
+        }
+        case GrGLProgramDesc::kUniform_ColorInput: {
             const char* name;
             fUniformHandles.fColorUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
                                                             kVec4f_GrSLType, "Color", &name);
             *inColor = name;
-            break;
+            return kNone_GrSLConstantVec;
         }
-        case GrGLProgram::Desc::kTransBlack_ColorInput:
-            GrAssert(!"needComputedColor should be false.");
-            break;
-        case GrGLProgram::Desc::kSolidWhite_ColorInput:
-            break;
+        case GrGLProgramDesc::kTransBlack_ColorInput:
+            inColor->reset();
+            return kZeros_GrSLConstantVec;
+        case GrGLProgramDesc::kSolidWhite_ColorInput:
+            inColor->reset();
+            return kOnes_GrSLConstantVec;
         default:
             GrCrash("Unknown color type.");
-            break;
+            return kNone_GrSLConstantVec;
     }
 }
 
-void GrGLProgram::genUniformCoverage(GrGLShaderBuilder* builder, SkString* inOutCoverage) {
-    const char* covUniName;
-    fUniformHandles.fCoverageUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
-                                                       kVec4f_GrSLType, "Coverage", &covUniName);
-    if (inOutCoverage->size()) {
-        builder->fsCodeAppendf("\tvec4 uniCoverage = %s * %s;\n",
-                               covUniName, inOutCoverage->c_str());
-        *inOutCoverage = "uniCoverage";
-    } else {
-        *inOutCoverage = covUniName;
+GrSLConstantVec GrGLProgram::genInputCoverage(GrGLShaderBuilder* builder, SkString* inCoverage) {
+    switch (fDesc.getHeader().fCoverageInput) {
+        case GrGLProgramDesc::kAttribute_ColorInput: {
+            builder->addAttribute(kVec4f_GrSLType, COV_ATTR_NAME);
+            const char *vsName, *fsName;
+            builder->addVarying(kVec4f_GrSLType, "Coverage", &vsName, &fsName);
+            builder->vsCodeAppendf("\t%s = " COV_ATTR_NAME ";\n", vsName);
+            *inCoverage = fsName;
+            return kNone_GrSLConstantVec;
+        }
+        case GrGLProgramDesc::kUniform_ColorInput: {
+            const char* name;
+            fUniformHandles.fCoverageUni =
+                builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
+                                    kVec4f_GrSLType, "Coverage", &name);
+            *inCoverage = name;
+            return kNone_GrSLConstantVec;
+        }
+        case GrGLProgramDesc::kTransBlack_ColorInput:
+            inCoverage->reset();
+            return kZeros_GrSLConstantVec;
+        case GrGLProgramDesc::kSolidWhite_ColorInput:
+            inCoverage->reset();
+            return kOnes_GrSLConstantVec;
+        default:
+            GrCrash("Unknown color type.");
+            return kNone_GrSLConstantVec;
     }
-}
-
-namespace {
-void gen_attribute_coverage(GrGLShaderBuilder* builder,
-                            SkString* inOutCoverage) {
-    builder->addAttribute(kVec4f_GrSLType, COV_ATTR_NAME);
-    const char *vsName, *fsName;
-    builder->addVarying(kVec4f_GrSLType, "Coverage", &vsName, &fsName);
-    builder->vsCodeAppendf("\t%s = " COV_ATTR_NAME ";\n", vsName);
-    if (inOutCoverage->size()) {
-        builder->fsCodeAppendf("\tvec4 attrCoverage = %s * %s;\n", fsName, inOutCoverage->c_str());
-        *inOutCoverage = "attrCoverage";
-    } else {
-        *inOutCoverage = fsName;
-    }
-}
 }
 
 void GrGLProgram::genGeometryShader(GrGLShaderBuilder* builder) const {
 #if GR_GL_EXPERIMENTAL_GS
     // TODO: The builder should add all this glue code.
-    if (fDesc.fExperimentalGS) {
+    if (fDesc.getHeader().fExperimentalGS) {
         GrAssert(fContext.info().glslGeneration() >= k150_GrGLSLGeneration);
         builder->fGSHeader.append("layout(triangles) in;\n"
                                    "layout(triangle_strip, max_vertices = 6) out;\n");
         builder->gsCodeAppend("\tfor (int i = 0; i < 3; ++i) {\n"
                               "\t\tgl_Position = gl_in[i].gl_Position;\n");
-        if (fDesc.fEmitsPointSize) {
+        if (fDesc.getHeader().fEmitsPointSize) {
             builder->gsCodeAppend("\t\tgl_PointSize = 1.0;\n");
         }
         GrAssert(builder->fGSInputs.count() == builder->fGSOutputs.count());
@@ -567,7 +309,7 @@ const char* GrGLProgram::adjustInColor(const SkString& inColor) const {
     if (inColor.size()) {
           return inColor.c_str();
     } else {
-        if (Desc::kSolidWhite_ColorInput == fDesc.fColorInput) {
+        if (GrGLProgramDesc::kSolidWhite_ColorInput == fDesc.getHeader().fColorInput) {
             return GrGLSLOnesVecf(4);
         } else {
             return GrGLSLZerosVecf(4);
@@ -637,6 +379,20 @@ GrGLuint compile_shader(const GrGLContext& gl, GrGLenum type, const SkString& sh
     return compile_shader(gl, type, 1, &str, &length);
 }
 
+void expand_known_value4f(SkString* string, GrSLConstantVec vec) {
+    GrAssert(string->isEmpty() == (vec != kNone_GrSLConstantVec));
+    switch (vec) {
+        case kNone_GrSLConstantVec:
+            break;
+        case kZeros_GrSLConstantVec:
+            *string = GrGLSLZerosVecf(4);
+            break;
+        case kOnes_GrSLConstantVec:
+            *string = GrGLSLOnesVecf(4);
+            break;
+    }
+}
+
 }
 
 // compiles all the shaders from builder and stores the shader IDs
@@ -654,7 +410,9 @@ bool GrGLProgram::compileShaders(const GrGLShaderBuilder& builder) {
         return false;
     }
 
-    if (builder.fUsesGS) {
+    fGShaderID = 0;
+#if GR_GL_EXPERIMENTAL_GS
+    if (fDesc.getHeader().fExperimentalGS) {
         builder.getShader(GrGLShaderBuilder::kGeometry_ShaderType, &shader);
         if (c_PrintShaders) {
             GrPrintf(shader.c_str());
@@ -663,9 +421,8 @@ bool GrGLProgram::compileShaders(const GrGLShaderBuilder& builder) {
         if (!(fGShaderID = compile_shader(fContext, GR_GL_GEOMETRY_SHADER, shader))) {
             return false;
         }
-    } else {
-        fGShaderID = 0;
     }
+#endif
 
     builder.getShader(GrGLShaderBuilder::kFragment_ShaderType, &shader);
     if (c_PrintShaders) {
@@ -682,59 +439,13 @@ bool GrGLProgram::compileShaders(const GrGLShaderBuilder& builder) {
 bool GrGLProgram::genProgram(const GrEffectStage* stages[]) {
     GrAssert(0 == fProgramID);
 
-    const GrAttribBindings& attribBindings = fDesc.fAttribBindings;
-    bool hasExplicitLocalCoords =
-        SkToBool(attribBindings & GrDrawState::kLocalCoords_AttribBindingsBit);
-    GrGLShaderBuilder builder(fContext.info(), fUniformManager, hasExplicitLocalCoords);
+    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
 
-#if GR_GL_EXPERIMENTAL_GS
-    builder.fUsesGS = fDesc.fExperimentalGS;
-#endif
-
-    SkXfermode::Coeff colorCoeff, uniformCoeff;
-    // The rest of transfer mode color filters have not been implemented
-    if (fDesc.fColorFilterXfermode < SkXfermode::kCoeffModesCnt) {
-        GR_DEBUGCODE(bool success =)
-            SkXfermode::ModeAsCoeff(static_cast<SkXfermode::Mode>
-                                    (fDesc.fColorFilterXfermode),
-                                    &uniformCoeff, &colorCoeff);
-        GR_DEBUGASSERT(success);
-    } else {
-        colorCoeff = SkXfermode::kOne_Coeff;
-        uniformCoeff = SkXfermode::kZero_Coeff;
-    }
-
-    // no need to do the color filter if coverage is 0. The output color is scaled by the coverage.
-    // All the dual source outputs are scaled by the coverage as well.
-    if (Desc::kTransBlack_ColorInput == fDesc.fCoverageInput) {
-        colorCoeff = SkXfermode::kZero_Coeff;
-        uniformCoeff = SkXfermode::kZero_Coeff;
-    }
-
-    // If we know the final color is going to be all zeros then we can
-    // simplify the color filter coefficients. needComputedColor will then
-    // come out false below.
-    if (Desc::kTransBlack_ColorInput == fDesc.fColorInput) {
-        colorCoeff = SkXfermode::kZero_Coeff;
-        if (SkXfermode::kDC_Coeff == uniformCoeff ||
-            SkXfermode::kDA_Coeff == uniformCoeff) {
-            uniformCoeff = SkXfermode::kZero_Coeff;
-        } else if (SkXfermode::kIDC_Coeff == uniformCoeff ||
-                   SkXfermode::kIDA_Coeff == uniformCoeff) {
-            uniformCoeff = SkXfermode::kOne_Coeff;
-        }
-    }
-
-    bool needColorFilterUniform;
-    bool needComputedColor;
-    need_blend_inputs(uniformCoeff, colorCoeff,
-                      &needColorFilterUniform, &needComputedColor);
+    GrGLShaderBuilder builder(fContext.info(), fUniformManager, fDesc);
 
     // the dual source output has no canonical var name, have to
     // declare an output, which is incompatible with gl_FragColor/gl_FragData.
     bool dualSourceOutputWritten = false;
-    builder.fHeader.append(GrGetGLSLVersionDecl(fContext.info().binding(),
-                                                fContext.info().glslGeneration()));
 
     GrGLShaderVar colorOutput;
     bool isColorDeclared = GrGLSLSetupFSColorOuput(fContext.info().glslGeneration(),
@@ -755,180 +466,177 @@ bool GrGLProgram::genProgram(const GrEffectStage* stages[]) {
 
     // incoming color to current stage being processed.
     SkString inColor;
-
-    if (needComputedColor) {
-        this->genInputColor(&builder, &inColor);
-    }
+    GrSLConstantVec knownColorValue = this->genInputColor(&builder, &inColor);
 
     // we output point size in the GS if present
-    if (fDesc.fEmitsPointSize && !builder.fUsesGS){
+    if (header.fEmitsPointSize
+#if GR_GL_EXPERIMENTAL_GS
+        && !header.fExperimentalGS
+#endif
+        ) {
         builder.vsCodeAppend("\tgl_PointSize = 1.0;\n");
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // compute the final color
+    // Get the coeffs for the Mode-based color filter, determine if color is needed.
+    SkXfermode::Coeff colorCoeff;
+    SkXfermode::Coeff filterColorCoeff;
+    SkAssertResult(
+        SkXfermode::ModeAsCoeff(static_cast<SkXfermode::Mode>(header.fColorFilterXfermode),
+                                &filterColorCoeff,
+                                &colorCoeff));
+    bool needColor, needFilterColor;
+    need_blend_inputs(filterColorCoeff, colorCoeff, &needFilterColor, &needColor);
 
-    // if we have color stages string them together, feeding the output color
-    // of each to the next and generating code for each stage.
-    if (needComputedColor) {
-        SkString outColor;
-        for (int s = 0; s < fDesc.fFirstCoverageStage; ++s) {
-            if (GrGLEffect::kNoEffectKey != fDesc.fEffectKeys[s]) {
-                // create var to hold stage result
-                outColor = "color";
-                outColor.appendS32(s);
-                builder.fsCodeAppendf("\tvec4 %s;\n", outColor.c_str());
+    // used in order for builder to return the per-stage uniform handles.
+    SkTArray<GrGLUniformManager::UniformHandle, true>* stageUniformArrays[GrDrawState::kNumStages];
 
-                builder.setCurrentStage(s);
-                fEffects[s] = builder.createAndEmitGLEffect(*stages[s],
-                                                            fDesc.fEffectKeys[s],
-                                                            inColor.size() ? inColor.c_str() : NULL,
-                                                            outColor.c_str(),
-                                                            &fUniformHandles.fSamplerUnis[s]);
-                builder.setNonStage();
-                inColor = outColor;
-            }
+    if (needColor) {
+        for (int s = 0; s < fDesc.numColorEffects(); ++s) {
+            stageUniformArrays[s] = &fUniformHandles.fEffectSamplerUnis[s];
         }
+
+        builder.emitEffects(stages,
+                            fDesc.effectKeys(),
+                            fDesc.numColorEffects(),
+                            &inColor,
+                            &knownColorValue,
+                            stageUniformArrays,
+                            fEffects);
     }
 
-    // if have all ones or zeros for the "dst" input to the color filter then we
-    // may be able to make additional optimizations.
-    if (needColorFilterUniform && needComputedColor && !inColor.size()) {
-        GrAssert(Desc::kSolidWhite_ColorInput == fDesc.fColorInput);
-        bool uniformCoeffIsZero = SkXfermode::kIDC_Coeff == uniformCoeff ||
-                                  SkXfermode::kIDA_Coeff == uniformCoeff;
-        if (uniformCoeffIsZero) {
-            uniformCoeff = SkXfermode::kZero_Coeff;
-            bool bogus;
-            need_blend_inputs(SkXfermode::kZero_Coeff, colorCoeff,
-                              &needColorFilterUniform, &bogus);
-        }
-    }
-    const char* colorFilterColorUniName = NULL;
-    if (needColorFilterUniform) {
-        fUniformHandles.fColorFilterUni = builder.addUniform(
-                                                        GrGLShaderBuilder::kFragment_ShaderType,
-                                                        kVec4f_GrSLType, "FilterColor",
-                                                        &colorFilterColorUniName);
-    }
-    bool wroteFragColorZero = false;
-    if (SkXfermode::kZero_Coeff == uniformCoeff &&
-        SkXfermode::kZero_Coeff == colorCoeff) {
-        builder.fsCodeAppendf("\t%s = %s;\n", colorOutput.getName().c_str(), GrGLSLZerosVecf(4));
-        wroteFragColorZero = true;
-    } else if (SkXfermode::kDst_Mode != fDesc.fColorFilterXfermode) {
+    // Insert the color filter. This will soon be replaced by a color effect.
+    if (SkXfermode::kDst_Mode != header.fColorFilterXfermode) {
+        const char* colorFilterColorUniName = NULL;
+        fUniformHandles.fColorFilterUni = builder.addUniform(GrGLShaderBuilder::kFragment_ShaderType,
+                                                             kVec4f_GrSLType, "FilterColor",
+                                                             &colorFilterColorUniName);
+
         builder.fsCodeAppend("\tvec4 filteredColor;\n");
-        const char* color = adjustInColor(inColor);
-        add_color_filter(&builder, "filteredColor", uniformCoeff,
+        const char* color;
+        // add_color_filter requires a real input string.
+        if (knownColorValue == kOnes_GrSLConstantVec) {
+            color = GrGLSLOnesVecf(4);
+        } else if (knownColorValue == kZeros_GrSLConstantVec) {
+            color = GrGLSLZerosVecf(4);
+        } else {
+            color = inColor.c_str();
+        }
+        add_color_filter(&builder, "filteredColor", filterColorCoeff,
                          colorCoeff, colorFilterColorUniName, color);
         inColor = "filteredColor";
     }
 
     ///////////////////////////////////////////////////////////////////////////
-    // compute the partial coverage (coverage stages and edge aa)
-
+    // compute the partial coverage
     SkString inCoverage;
-    bool coverageIsZero = Desc::kTransBlack_ColorInput == fDesc.fCoverageInput;
-    // we don't need to compute coverage at all if we know the final shader
-    // output will be zero and we don't have a dual src blend output.
-    if (!wroteFragColorZero || Desc::kNone_DualSrcOutput != fDesc.fDualSrcOutput) {
+    GrSLConstantVec knownCoverageValue = this->genInputCoverage(&builder, &inCoverage);
 
-        if (!coverageIsZero) {
-            bool inCoverageIsScalar  = this->genEdgeCoverage(&inCoverage, &builder);
+    for (int s = 0; s < fDesc.numCoverageEffects(); ++s) {
+        stageUniformArrays[s] = &fUniformHandles.fEffectSamplerUnis[s + fDesc.numColorEffects()];
+    }
 
-            switch (fDesc.fCoverageInput) {
-                case Desc::kSolidWhite_ColorInput:
-                    // empty string implies solid white
-                    break;
-                case Desc::kAttribute_ColorInput:
-                    gen_attribute_coverage(&builder, &inCoverage);
-                    inCoverageIsScalar = false;
-                    break;
-                case Desc::kUniform_ColorInput:
-                    this->genUniformCoverage(&builder, &inCoverage);
-                    inCoverageIsScalar = false;
-                    break;
-                default:
-                    GrCrash("Unexpected input coverage.");
-            }
+    builder.emitEffects(stages + fDesc.numColorEffects(),
+                        fDesc.getEffectKeys() + fDesc.numColorEffects(),
+                        fDesc.numCoverageEffects(),
+                        &inCoverage,
+                        &knownCoverageValue,
+                        stageUniformArrays,
+                        fEffects + fDesc.numColorEffects());
 
-            SkString outCoverage;
-            const int& startStage = fDesc.fFirstCoverageStage;
-            for (int s = startStage; s < GrDrawState::kNumStages; ++s) {
-                if (fDesc.fEffectKeys[s]) {
-                    // create var to hold stage output
-                    outCoverage = "coverage";
-                    outCoverage.appendS32(s);
-                    builder.fsCodeAppendf("\tvec4 %s;\n", outCoverage.c_str());
-
-                    // stages don't know how to deal with a scalar input. (Maybe they should. We
-                    // could pass a GrGLShaderVar)
-                    if (inCoverageIsScalar) {
-                        builder.fsCodeAppendf("\tvec4 %s4 = vec4(%s);\n",
-                                              inCoverage.c_str(), inCoverage.c_str());
-                        inCoverage.append("4");
-                    }
-                    builder.setCurrentStage(s);
-                    fEffects[s] = builder.createAndEmitGLEffect(
-                                                    *stages[s],
-                                                    fDesc.fEffectKeys[s],
-                                                    inCoverage.size() ? inCoverage.c_str() : NULL,
-                                                    outCoverage.c_str(),
-                                                    &fUniformHandles.fSamplerUnis[s]);
-                    builder.setNonStage();
-                    inCoverage = outCoverage;
-                }
-            }
-
-            // discard if coverage is zero
-            if (fDesc.fDiscardIfOutsideEdge && !outCoverage.isEmpty()) {
-                builder.fsCodeAppendf(
-                    "\tif (all(lessThanEqual(%s, vec4(0.0)))) {\n\t\tdiscard;\n\t}\n",
-                    outCoverage.c_str());
-            }
+    // discard if coverage is zero
+    if (header.fDiscardIfZeroCoverage && kOnes_GrSLConstantVec != knownCoverageValue) {
+        if (kZeros_GrSLConstantVec == knownCoverageValue) {
+            // This is unfortunate.
+            builder.fsCodeAppend("\tdiscard;\n");
+        } else {
+            builder.fsCodeAppendf("\tif (all(lessThanEqual(%s, vec4(0.0)))) {\n\t\tdiscard;\n\t}\n",
+                                  inCoverage.c_str());
         }
+    }
 
-        if (Desc::kNone_DualSrcOutput != fDesc.fDualSrcOutput) {
-            builder.fFSOutputs.push_back().set(kVec4f_GrSLType,
-                                               GrGLShaderVar::kOut_TypeModifier,
-                                               dual_source_output_name());
-            bool outputIsZero = coverageIsZero;
-            SkString coeff;
-            if (!outputIsZero &&
-                Desc::kCoverage_DualSrcOutput != fDesc.fDualSrcOutput && !wroteFragColorZero) {
-                if (!inColor.size()) {
-                    outputIsZero = true;
-                } else {
-                    if (Desc::kCoverageISA_DualSrcOutput == fDesc.fDualSrcOutput) {
-                        coeff.printf("(1 - %s.a)", inColor.c_str());
-                    } else {
-                        coeff.printf("(vec4(1,1,1,1) - %s)", inColor.c_str());
-                    }
-                }
-            }
-            if (outputIsZero) {
-                builder.fsCodeAppendf("\t%s = %s;\n", dual_source_output_name(), GrGLSLZerosVecf(4));
-            } else {
-                SkString modulate;
-                GrGLSLModulate4f(&modulate, coeff.c_str(), inCoverage.c_str());
-                builder.fsCodeAppendf("\t%s = %s;\n", dual_source_output_name(), modulate.c_str());
-            }
-            dualSourceOutputWritten = true;
+    GrGLProgramDesc::CoverageOutput coverageOutput =
+        static_cast<GrGLProgramDesc::CoverageOutput>(header.fCoverageOutput);
+    if (GrGLProgramDesc::CoverageOutputUsesSecondaryOutput(coverageOutput)) {
+        builder.fFSOutputs.push_back().set(kVec4f_GrSLType,
+                                           GrGLShaderVar::kOut_TypeModifier,
+                                           dual_source_output_name());
+        // default coeff to ones for kCoverage_DualSrcOutput
+        SkString coeff;
+        GrSLConstantVec knownCoeffValue = kOnes_GrSLConstantVec;
+        if (GrGLProgramDesc::kSecondaryCoverageISA_CoverageOutput == header.fCoverageOutput) {
+            // Get (1-A) into coeff
+            SkString inColorAlpha;
+            GrGLSLGetComponent4f(&inColorAlpha,
+                                    inColor.c_str(),
+                                    kA_GrColorComponentFlag,
+                                    knownColorValue,
+                                    true);
+            knownCoeffValue = GrGLSLSubtractf<1>(&coeff,
+                                                 NULL,
+                                                 inColorAlpha.c_str(),
+                                                 kOnes_GrSLConstantVec,
+                                                 knownColorValue,
+                                                 true);
+        } else if (GrGLProgramDesc::kSecondaryCoverageISC_CoverageOutput == coverageOutput) {
+            // Get (1-RGBA) into coeff
+            knownCoeffValue = GrGLSLSubtractf<4>(&coeff,
+                                                 NULL,
+                                                 inColor.c_str(),
+                                                 kOnes_GrSLConstantVec,
+                                                 knownColorValue,
+                                                 true);
         }
+        // Get coeff * coverage into modulate and then write that to the dual source output.
+        SkString modulate;
+        GrGLSLModulatef<4>(&modulate,
+                           coeff.c_str(),
+                           inCoverage.c_str(),
+                           knownCoeffValue,
+                           knownCoverageValue,
+                           false);
+        builder.fsCodeAppendf("\t%s = %s;\n", dual_source_output_name(), modulate.c_str());
+        dualSourceOutputWritten = true;
     }
 
     ///////////////////////////////////////////////////////////////////////////
     // combine color and coverage as frag color
 
-    if (!wroteFragColorZero) {
-        if (coverageIsZero) {
-            builder.fsCodeAppendf("\t%s = %s;\n", colorOutput.getName().c_str(), GrGLSLZerosVecf(4));
-        } else {
-            SkString modulate;
-            GrGLSLModulate4f(&modulate, inColor.c_str(), inCoverage.c_str());
-            builder.fsCodeAppendf("\t%s = %s;\n", colorOutput.getName().c_str(), modulate.c_str());
-        }
+    // Get "color * coverage" into fragColor
+    SkString fragColor;
+    GrSLConstantVec knownFragColorValue = GrGLSLModulatef<4>(&fragColor,
+                                                             inColor.c_str(),
+                                                             inCoverage.c_str(),
+                                                             knownColorValue,
+                                                             knownCoverageValue,
+                                                             true);
+    // Now tack on "+(1-coverage)dst onto the frag color if we were asked to do so.
+    if (GrGLProgramDesc::kCombineWithDst_CoverageOutput == coverageOutput) {
+        SkString dstCoeff;
+        GrSLConstantVec knownDstCoeffValue = GrGLSLSubtractf<4>(&dstCoeff,
+                                                                NULL,
+                                                                inCoverage.c_str(),
+                                                                kOnes_GrSLConstantVec,
+                                                                knownCoverageValue,
+                                                                true);
+        SkString dstContribution;
+        GrSLConstantVec knownDstContributionValue = GrGLSLModulatef<4>(&dstContribution,
+                                                                       dstCoeff.c_str(),
+                                                                       builder.dstColor(),
+                                                                       knownDstCoeffValue,
+                                                                       kNone_GrSLConstantVec,
+                                                                       true);
+        SkString oldFragColor = fragColor;
+        fragColor.reset();
+        GrGLSLAddf<4>(&fragColor,
+                      oldFragColor.c_str(),
+                      dstContribution.c_str(),
+                      knownFragColorValue,
+                      knownDstContributionValue,
+                      false);
+    } else {
+        expand_known_value4f(&fragColor, knownFragColorValue);
     }
+    builder.fsCodeAppendf("\t%s = %s;\n", colorOutput.getName().c_str(), fragColor.c_str());
 
     ///////////////////////////////////////////////////////////////////////////
     // insert GS
@@ -950,8 +658,12 @@ bool GrGLProgram::genProgram(const GrEffectStage* stages[]) {
     }
 
     builder.finished(fProgramID);
-    this->initSamplerUniforms();
     fUniformHandles.fRTHeightUni = builder.getRTHeightUniform();
+    fUniformHandles.fDstCopyTopLeftUni = builder.getDstCopyTopLeftUniform();
+    fUniformHandles.fDstCopyScaleUni = builder.getDstCopyScaleUniform();
+    fUniformHandles.fDstCopySamplerUni = builder.getDstCopySamplerUniform();
+    // This must be called after we set fDstCopySamplerUni above.
+    this->initSamplerUniforms();
 
     return true;
 }
@@ -977,20 +689,22 @@ bool GrGLProgram::bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& buil
         GL_CALL(BindFragDataLocationIndexed(fProgramID, 0, 1, dual_source_output_name()));
     }
 
+    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
+
     // Bind the attrib locations to same values for all shaders
     GL_CALL(BindAttribLocation(fProgramID,
-                               fDesc.fPositionAttributeIndex,
+                               header.fPositionAttributeIndex,
                                builder.positionAttribute().c_str()));
-    GL_CALL(BindAttribLocation(fProgramID, fDesc.fColorAttributeIndex, COL_ATTR_NAME));
-    GL_CALL(BindAttribLocation(fProgramID, fDesc.fCoverageAttributeIndex, COV_ATTR_NAME));
-
-    if (fDesc.fAttribBindings & GrDrawState::kEdge_AttribBindingsBit) {
-        GL_CALL(BindAttribLocation(fProgramID, fDesc.fEdgeAttributeIndex, EDGE_ATTR_NAME));
-    }
-    if (fDesc.fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit) {
+    if (-1 != header.fLocalCoordAttributeIndex) {
         GL_CALL(BindAttribLocation(fProgramID,
-                                   fDesc.fLocalCoordsAttributeIndex,
+                                   header.fLocalCoordAttributeIndex,
                                    builder.localCoordsAttribute().c_str()));
+    }
+    if (-1 != header.fColorAttributeIndex) {
+        GL_CALL(BindAttribLocation(fProgramID, header.fColorAttributeIndex, COL_ATTR_NAME));
+    }
+    if (-1 != header.fCoverageAttributeIndex) {
+        GL_CALL(BindAttribLocation(fProgramID, header.fCoverageAttributeIndex, COV_ATTR_NAME));
     }
 
     const GrGLShaderBuilder::AttributePair* attribEnd = builder.getEffectAttributes().end();
@@ -1028,13 +742,18 @@ bool GrGLProgram::bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& buil
 
 void GrGLProgram::initSamplerUniforms() {
     GL_CALL(UseProgram(fProgramID));
-    // We simply bind the uniforms to successive texture units beginning at 0. setData() assumes this
-    // behavior.
+    // We simply bind the uniforms to successive texture units beginning at 0. setData() assumes
+    // this behavior.
     GrGLint texUnitIdx = 0;
+    if (GrGLUniformManager::kInvalidUniformHandle != fUniformHandles.fDstCopySamplerUni) {
+        fUniformManager.setSampler(fUniformHandles.fDstCopySamplerUni, texUnitIdx);
+        ++texUnitIdx;
+    }
+
     for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        int numSamplers = fUniformHandles.fSamplerUnis[s].count();
+        int numSamplers = fUniformHandles.fEffectSamplerUnis[s].count();
         for (int u = 0; u < numSamplers; ++u) {
-            UniformHandle handle = fUniformHandles.fSamplerUnis[s][u];
+            UniformHandle handle = fUniformHandles.fEffectSamplerUnis[s][u];
             if (GrGLUniformManager::kInvalidUniformHandle != handle) {
                 fUniformManager.setSampler(handle, texUnitIdx);
                 ++texUnitIdx;
@@ -1046,10 +765,24 @@ void GrGLProgram::initSamplerUniforms() {
 ///////////////////////////////////////////////////////////////////////////////
 
 void GrGLProgram::setData(GrGpuGL* gpu,
-                          GrColor color,
-                          GrColor coverage,
+                          GrDrawState::BlendOptFlags blendOpts,
+                          const GrEffectStage* stages[],
+                          const GrDeviceCoordTexture* dstCopy,
                           SharedGLState* sharedState) {
     const GrDrawState& drawState = gpu->getDrawState();
+
+    GrColor color;
+    GrColor coverage;
+    if (blendOpts & GrDrawState::kEmitTransBlack_BlendOptFlag) {
+        color = 0;
+        coverage = 0;
+    } else if (blendOpts & GrDrawState::kEmitCoverage_BlendOptFlag) {
+        color = 0xffffffff;
+        coverage = drawState.getCoverage();
+    } else {
+        color = drawState.getColor();
+        coverage = drawState.getCoverage();
+    }
 
     this->setColor(drawState, color, sharedState);
     this->setCoverage(drawState, coverage, sharedState);
@@ -1065,20 +798,47 @@ void GrGLProgram::setData(GrGpuGL* gpu,
     }
 
     GrGLint texUnitIdx = 0;
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        if (NULL != fEffects[s]) {
-            const GrEffectStage& stage = drawState.getStage(s);
-            GrAssert(NULL != stage.getEffect());
+    if (NULL != dstCopy) {
+        if (GrGLUniformManager::kInvalidUniformHandle != fUniformHandles.fDstCopyTopLeftUni) {
+            GrAssert(GrGLUniformManager::kInvalidUniformHandle != fUniformHandles.fDstCopyScaleUni);
+            GrAssert(GrGLUniformManager::kInvalidUniformHandle !=
+                     fUniformHandles.fDstCopySamplerUni);
+            fUniformManager.set2f(fUniformHandles.fDstCopyTopLeftUni,
+                                  static_cast<GrGLfloat>(dstCopy->offset().fX),
+                                  static_cast<GrGLfloat>(dstCopy->offset().fY));
+            fUniformManager.set2f(fUniformHandles.fDstCopyScaleUni,
+                                  1.f / dstCopy->texture()->width(),
+                                  1.f / dstCopy->texture()->height());
+            GrGLTexture* texture = static_cast<GrGLTexture*>(dstCopy->texture());
+            static GrTextureParams kParams; // the default is clamp, nearest filtering.
+            gpu->bindTexture(texUnitIdx, kParams, texture);
+            ++texUnitIdx;
+        } else {
+            GrAssert(GrGLUniformManager::kInvalidUniformHandle ==
+                    fUniformHandles.fDstCopyScaleUni);
+            GrAssert(GrGLUniformManager::kInvalidUniformHandle ==
+                    fUniformHandles.fDstCopySamplerUni);
+        }
+    } else {
+        GrAssert(GrGLUniformManager::kInvalidUniformHandle == fUniformHandles.fDstCopyTopLeftUni);
+        GrAssert(GrGLUniformManager::kInvalidUniformHandle == fUniformHandles.fDstCopyScaleUni);
+        GrAssert(GrGLUniformManager::kInvalidUniformHandle == fUniformHandles.fDstCopySamplerUni);
+    }
 
-            bool explicitLocalCoords =
-                (fDesc.fAttribBindings & GrDrawState::kLocalCoords_AttribBindingsBit);
-            GrDrawEffect drawEffect(stage, explicitLocalCoords);
-            fEffects[s]->setData(fUniformManager, drawEffect);
-            int numSamplers = fUniformHandles.fSamplerUnis[s].count();
+    int numEffects = fDesc.numTotalEffects();
+    for (int e = 0; e < numEffects; ++e) {
+        GrAssert(NULL != stages[e]);
+        // We may have omitted the GrGLEffect because of the color filter logic in genProgram.
+        // This can be removed when the color filter is an effect.
+        if (NULL != fEffects[e]) {
+            bool explicitLocalCoords = -1 != fDesc.getHeader().fLocalCoordAttributeIndex;
+            GrDrawEffect drawEffect(*stages[e], explicitLocalCoords);
+            fEffects[e]->setData(fUniformManager, drawEffect);
+            int numSamplers = fUniformHandles.fEffectSamplerUnis[e].count();
             for (int u = 0; u < numSamplers; ++u) {
-                UniformHandle handle = fUniformHandles.fSamplerUnis[s][u];
+                UniformHandle handle = fUniformHandles.fEffectSamplerUnis[e][u];
                 if (GrGLUniformManager::kInvalidUniformHandle != handle) {
-                    const GrTextureAccess& access = (*stage.getEffect())->textureAccess(u);
+                    const GrTextureAccess& access = (*stages[e]->getEffect())->textureAccess(u);
                     GrGLTexture* texture = static_cast<GrGLTexture*>(access.getTexture());
                     gpu->bindTexture(texUnitIdx, access.getParams(), texture);
                     ++texUnitIdx;
@@ -1091,18 +851,22 @@ void GrGLProgram::setData(GrGpuGL* gpu,
 void GrGLProgram::setColor(const GrDrawState& drawState,
                            GrColor color,
                            SharedGLState* sharedState) {
-    if (!(drawState.getAttribBindings() & GrDrawState::kColor_AttribBindingsBit)) {
-        switch (fDesc.fColorInput) {
-            case GrGLProgram::Desc::kAttribute_ColorInput:
-                if (sharedState->fConstAttribColor != color) {
+    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
+    if (!drawState.hasColorVertexAttribute()) {
+        switch (header.fColorInput) {
+            case GrGLProgramDesc::kAttribute_ColorInput:
+                GrAssert(-1 != header.fColorAttributeIndex);
+                if (sharedState->fConstAttribColor != color ||
+                    sharedState->fConstAttribColorIndex != header.fColorAttributeIndex) {
                     // OpenGL ES only supports the float varieties of glVertexAttrib
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(color, c);
-                    GL_CALL(VertexAttrib4fv(fDesc.fColorAttributeIndex, c));
+                    GL_CALL(VertexAttrib4fv(header.fColorAttributeIndex, c));
                     sharedState->fConstAttribColor = color;
+                    sharedState->fConstAttribColorIndex = header.fColorAttributeIndex;
                 }
                 break;
-            case GrGLProgram::Desc::kUniform_ColorInput:
+            case GrGLProgramDesc::kUniform_ColorInput:
                 if (fColor != color) {
                     // OpenGL ES doesn't support unsigned byte varieties of glUniform
                     GrGLfloat c[4];
@@ -1112,31 +876,38 @@ void GrGLProgram::setColor(const GrDrawState& drawState,
                     fUniformManager.set4fv(fUniformHandles.fColorUni, 0, 1, c);
                     fColor = color;
                 }
+                sharedState->fConstAttribColorIndex = -1;
                 break;
-            case GrGLProgram::Desc::kSolidWhite_ColorInput:
-            case GrGLProgram::Desc::kTransBlack_ColorInput:
+            case GrGLProgramDesc::kSolidWhite_ColorInput:
+            case GrGLProgramDesc::kTransBlack_ColorInput:
+                sharedState->fConstAttribColorIndex = -1;
                 break;
             default:
                 GrCrash("Unknown color type.");
         }
+    } else {
+        sharedState->fConstAttribColorIndex = -1;
     }
 }
 
 void GrGLProgram::setCoverage(const GrDrawState& drawState,
                               GrColor coverage,
                               SharedGLState* sharedState) {
-    if (!(drawState.getAttribBindings() & GrDrawState::kCoverage_AttribBindingsBit)) {
-        switch (fDesc.fCoverageInput) {
-            case Desc::kAttribute_ColorInput:
-                if (sharedState->fConstAttribCoverage != coverage) {
+    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
+    if (!drawState.hasCoverageVertexAttribute()) {
+        switch (header.fCoverageInput) {
+            case GrGLProgramDesc::kAttribute_ColorInput:
+                if (sharedState->fConstAttribCoverage != coverage ||
+                    sharedState->fConstAttribCoverageIndex != header.fCoverageAttributeIndex) {
                     // OpenGL ES only supports the float varieties of  glVertexAttrib
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(coverage, c);
-                    GL_CALL(VertexAttrib4fv(fDesc.fCoverageAttributeIndex, c));
+                    GL_CALL(VertexAttrib4fv(header.fCoverageAttributeIndex, c));
                     sharedState->fConstAttribCoverage = coverage;
+                    sharedState->fConstAttribCoverageIndex = header.fCoverageAttributeIndex;
                 }
                 break;
-            case Desc::kUniform_ColorInput:
+            case GrGLProgramDesc::kUniform_ColorInput:
                 if (fCoverage != coverage) {
                     // OpenGL ES doesn't support unsigned byte varieties of glUniform
                     GrGLfloat c[4];
@@ -1146,13 +917,17 @@ void GrGLProgram::setCoverage(const GrDrawState& drawState,
                     fUniformManager.set4fv(fUniformHandles.fCoverageUni, 0, 1, c);
                     fCoverage = coverage;
                 }
+                sharedState->fConstAttribCoverageIndex = -1;
                 break;
-            case Desc::kSolidWhite_ColorInput:
-            case Desc::kTransBlack_ColorInput:
+            case GrGLProgramDesc::kSolidWhite_ColorInput:
+            case GrGLProgramDesc::kTransBlack_ColorInput:
+                sharedState->fConstAttribCoverageIndex = -1;
                 break;
             default:
                 GrCrash("Unknown coverage type.");
         }
+    } else {
+        sharedState->fConstAttribCoverageIndex = -1;
     }
 }
 

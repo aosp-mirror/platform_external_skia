@@ -15,7 +15,7 @@
 #include "SkDrawLooper.h"
 #include "SkXfermode.h"
 #ifdef SK_BUILD_FOR_ANDROID
-#include "SkLanguage.h"
+#include "SkPaintOptionsAndroid.h"
 #endif
 
 class SkAnnotation;
@@ -108,11 +108,12 @@ public:
         kAutoHinting_Flag     = 0x800,  //!< mask to force Freetype's autohinter
         kVerticalText_Flag    = 0x1000,
         kGenA8FromLCD_Flag    = 0x2000, // hack for GDI -- do not use if you can help it
+        kBicubicFilterBitmap_Flag = 0x4000, // temporary flag
 
         // when adding extra flags, note that the fFlags member is specified
         // with a bit-width and you'll have to expand it.
 
-        kAllFlags = 0x3FFF
+        kAllFlags = 0x7FFF
     };
 
     /** Return the paint's flags. Use the Flag enum to test flag values.
@@ -641,37 +642,6 @@ public:
     */
     void    setTextAlign(Align align);
 
-#ifdef SK_BUILD_FOR_ANDROID
-    /** Return the paint's language value used for drawing text.
-        @return the paint's language value used for drawing text.
-    */
-    const SkLanguage& getLanguage() const { return fLanguage; }
-
-    /** Set the paint's language value used for drawing text.
-        @param language set the paint's language value for drawing text.
-    */
-    void setLanguage(const SkLanguage& language);
-
-
-    enum FontVariant {
-       kDefault_Variant, // Currently setting yourself to Default gives you Compact Variant
-       kCompact_Variant,
-       kElegant_Variant,
-       kLast_Variant = kElegant_Variant,
-    };
-
-    /** Return the font variant
-        @return the font variant used by this paint object
-    */
-    FontVariant getFontVariant() const { return fFontVariant; }
-
-
-    /** Set the font variant
-      @param fontVariant set the paint's font variant for choosing fonts
-    */
-    void setFontVariant(FontVariant fontVariant);
-#endif
-
     /** Return the paint's text size.
         @return the paint's text size.
     */
@@ -894,6 +864,11 @@ public:
     /** Returns the base glyph count for the strike associated with this paint
     */
     unsigned getBaseGlyphCount(SkUnichar text) const;
+
+    const SkPaintOptionsAndroid& getPaintOptionsAndroid() const {
+        return fPaintOptionsAndroid;
+    }
+    void setPaintOptionsAndroid(const SkPaintOptionsAndroid& options);
 #endif
 
     // returns true if the paint's settings (e.g. xfermode + alpha) resolve to
@@ -997,10 +972,6 @@ private:
     enum PrivFlags {
         kNoDrawAnnotation_PrivFlag  = 1 << 0,
     };
-#ifdef SK_BUILD_FOR_ANDROID
-    SkLanguage      fLanguage;
-    FontVariant     fFontVariant;
-#endif
 
     SkDrawCacheProc    getDrawCacheProc() const;
     SkMeasureCacheProc getMeasureCacheProc(TextBufferDirection dir,
@@ -1028,6 +999,8 @@ private:
     friend class SkTextToPathIter;
 
 #ifdef SK_BUILD_FOR_ANDROID
+    SkPaintOptionsAndroid fPaintOptionsAndroid;
+
     // In order for the == operator to work properly this must be the last field
     // in the struct so that we can do a memcmp to this field's offset.
     uint32_t        fGenerationID;

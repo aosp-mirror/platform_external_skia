@@ -15,7 +15,7 @@
 #include "SkTypeface.h"
 
 #ifdef SK_BUILD_FOR_ANDROID
-    #include "SkLanguage.h"
+    #include "SkPaintOptionsAndroid.h"
 #endif
 
 struct SkGlyph;
@@ -36,10 +36,6 @@ struct SkScalerContextRec {
     SkScalar    fFrameWidth, fMiterLimit;
 #ifdef SK_SUPPORT_HINTING_SCALE_FACTOR
     SkScalar    fHintingScaleFactor;
-#endif
-#ifdef SK_BUILD_FOR_ANDROID
-    SkLanguage fLanguage;
-    SkPaint::FontVariant fFontVariant;
 #endif
 
     //These describe the parameters to create (uniquely identify) the pre-blend.
@@ -188,8 +184,7 @@ public:
     void        getMetrics(SkGlyph*);
     void        getImage(const SkGlyph&);
     void        getPath(const SkGlyph&, SkPath*);
-    void        getFontMetrics(SkPaint::FontMetrics* mX,
-                               SkPaint::FontMetrics* mY);
+    void        getFontMetrics(SkPaint::FontMetrics*);
 
 #ifdef SK_BUILD_FOR_ANDROID
     unsigned getBaseGlyphCount(SkUnichar charCode);
@@ -226,6 +221,10 @@ private:
     // never null
     SkAutoTUnref<SkTypeface> fTypeface;
 
+#ifdef SK_BUILD_FOR_ANDROID
+    SkPaintOptionsAndroid fPaintOptionsAndroid;
+#endif
+
     // optional object, which may be null
     SkPathEffect*   fPathEffect;
     SkMaskFilter*   fMaskFilter;
@@ -237,6 +236,10 @@ private:
 
     void internalGetPath(const SkGlyph& glyph, SkPath* fillPath,
                          SkPath* devPath, SkMatrix* fillToDevMatrix);
+
+    // Return the context associated with the next logical typeface, or NULL if
+    // there are no more entries in the fallback chain.
+    SkScalerContext* allocNextContext() const;
 
     // return the next context, treating fNextContext as a cache of the answer
     SkScalerContext* getNextContext();
@@ -267,6 +270,9 @@ private:
 #define kPathEffect_SkDescriptorTag     SkSetFourByteTag('p', 't', 'h', 'e')
 #define kMaskFilter_SkDescriptorTag     SkSetFourByteTag('m', 's', 'k', 'f')
 #define kRasterizer_SkDescriptorTag     SkSetFourByteTag('r', 'a', 's', 't')
+#ifdef SK_BUILD_FOR_ANDROID
+#define kAndroidOpts_SkDescriptorTag    SkSetFourByteTag('a', 'n', 'd', 'r')
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

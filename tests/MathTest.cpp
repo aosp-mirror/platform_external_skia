@@ -13,6 +13,26 @@
 #include "SkRandom.h"
 #include "SkColorPriv.h"
 
+static void test_clz(skiatest::Reporter* reporter) {
+    REPORTER_ASSERT(reporter, 32 == SkCLZ(0));
+    REPORTER_ASSERT(reporter, 31 == SkCLZ(1));
+    REPORTER_ASSERT(reporter, 1 == SkCLZ(1 << 30));
+    REPORTER_ASSERT(reporter, 0 == SkCLZ(~0U));
+
+    SkRandom rand;
+    for (int i = 0; i < 1000; ++i) {
+        uint32_t mask = rand.nextU();
+        // need to get some zeros for testing, but in some obscure way so the
+        // compiler won't "see" that, and work-around calling the functions.
+        mask >>= (mask & 31);
+        int intri = SkCLZ(mask);
+        int porta = SkCLZ_portable(mask);
+        REPORTER_ASSERT(reporter, intri == porta);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 static float sk_fsel(float pred, float result_ge, float result_lt) {
     return pred >= 0 ? result_ge : result_lt;
 }
@@ -47,6 +67,32 @@ static void test_floor(skiatest::Reporter* reporter) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+// test that SkMul16ShiftRound and SkMulDiv255Round return the same result
+static void test_muldivround(skiatest::Reporter* reporter) {
+#if 0
+    // this "complete" test is too slow, so we test a random sampling of it
+
+    for (int a = 0; a <= 32767; ++a) {
+        for (int b = 0; b <= 32767; ++b) {
+            unsigned prod0 = SkMul16ShiftRound(a, b, 8);
+            unsigned prod1 = SkMulDiv255Round(a, b);
+            SkASSERT(prod0 == prod1);
+        }
+    }
+#endif
+
+    SkRandom rand;
+    for (int i = 0; i < 10000; ++i) {
+        unsigned a = rand.nextU() & 0x7FFF;
+        unsigned b = rand.nextU() & 0x7FFF;
+
+        unsigned prod0 = SkMul16ShiftRound(a, b, 8);
+        unsigned prod1 = SkMulDiv255Round(a, b);
+
+        REPORTER_ASSERT(reporter, prod0 == prod1);
+    }
+}
 
 static float float_blend(int src, int dst, float unit) {
     return dst + (src - dst) * unit;
@@ -595,7 +641,53 @@ static void TestMath(skiatest::Reporter* reporter) {
 
     // disable for now
     if (false) test_blend31();  // avoid bit rot, suppress warning
+
+    test_muldivround(reporter);
+    test_clz(reporter);
 }
 
 #include "TestClassDef.h"
 DEFINE_TESTCLASS("Math", MathTestClass, TestMath)
+
+///////////////////////////////////////////////////////////////////////////////
+
+#include "SkEndian.h"
+
+template <typename T> struct PairRec {
+    T   fYin;
+    T   fYang;
+};
+
+static void TestEndian(skiatest::Reporter* reporter) {
+    static const PairRec<uint16_t> g16[] = {
+        { 0x0,      0x0     },
+        { 0xFFFF,   0xFFFF  },
+        { 0x1122,   0x2211  },
+    };
+    static const PairRec<uint32_t> g32[] = {
+        { 0x0,          0x0         },
+        { 0xFFFFFFFF,   0xFFFFFFFF  },
+        { 0x11223344,   0x44332211  },
+    };
+    static const PairRec<uint64_t> g64[] = {
+        { 0x0,      0x0                             },
+        { 0xFFFFFFFFFFFFFFFFULL,  0xFFFFFFFFFFFFFFFFULL  },
+        { 0x1122334455667788ULL,  0x8877665544332211ULL  },
+    };
+
+    REPORTER_ASSERT(reporter, 0x1122 == SkTEndianSwap16<0x2211>::value);
+    REPORTER_ASSERT(reporter, 0x11223344 == SkTEndianSwap32<0x44332211>::value);
+    REPORTER_ASSERT(reporter, 0x1122334455667788ULL == SkTEndianSwap64<0x8877665544332211ULL>::value);
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(g16); ++i) {
+        REPORTER_ASSERT(reporter, g16[i].fYang == SkEndianSwap16(g16[i].fYin));
+    }
+    for (size_t i = 0; i < SK_ARRAY_COUNT(g32); ++i) {
+        REPORTER_ASSERT(reporter, g32[i].fYang == SkEndianSwap32(g32[i].fYin));
+    }
+    for (size_t i = 0; i < SK_ARRAY_COUNT(g64); ++i) {
+        REPORTER_ASSERT(reporter, g64[i].fYang == SkEndianSwap64(g64[i].fYin));
+    }
+}
+
+DEFINE_TESTCLASS("Endian", EndianTestClass, TestEndian)

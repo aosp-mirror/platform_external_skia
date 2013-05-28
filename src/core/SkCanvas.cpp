@@ -15,6 +15,7 @@
 #include "SkDrawFilter.h"
 #include "SkDrawLooper.h"
 #include "SkMetaData.h"
+#include "SkPathOps.h"
 #include "SkPicture.h"
 #include "SkRasterClip.h"
 #include "SkRRect.h"
@@ -122,7 +123,7 @@ typedef SkTLazy<SkPaint> SkLazyPaint;
 
 void SkCanvas::predrawNotify() {
     if (fSurfaceBase) {
-        fSurfaceBase->aboutToDraw(this);
+        fSurfaceBase->aboutToDraw(SkSurface::kRetain_ContentChangeMode);
     }
 }
 
@@ -508,6 +509,7 @@ SkDevice* SkCanvas::init(SkDevice* device) {
     fLocalBoundsCompareType.setEmpty();
     fLocalBoundsCompareTypeDirty = true;
     fAllowSoftClip = true;
+    fAllowSimplifyClip = false;
     fDeviceCMDirty = false;
     fSaveLayerCount = 0;
     fMetaData = NULL;
@@ -1241,6 +1243,39 @@ bool SkCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     // if we called path.swap() we could avoid a deep copy of this path
     fClipStack.clipDevPath(devPath, op, doAA);
 
+    if (fAllowSimplifyClip) {
+        devPath.reset();
+        devPath.setFillType(SkPath::kInverseEvenOdd_FillType);
+        const SkClipStack* clipStack = getClipStack();
+        SkClipStack::Iter iter(*clipStack, SkClipStack::Iter::kBottom_IterStart);
+        const SkClipStack::Element* element;
+        while ((element = iter.next())) {
+            SkClipStack::Element::Type type = element->getType();
+            if (type == SkClipStack::Element::kEmpty_Type) {
+                continue;
+            }
+            SkPath operand;
+            if (type == SkClipStack::Element::kRect_Type) {
+                operand.addRect(element->getRect());
+            } else if (type == SkClipStack::Element::kPath_Type) {
+                operand = element->getPath();
+            } else {
+                SkDEBUGFAIL("Unexpected type.");
+            }
+            SkRegion::Op elementOp = element->getOp();
+            if (elementOp == SkRegion::kReplace_Op) {
+                devPath = operand;
+            } else {
+                Op(devPath, operand, (SkPathOp) elementOp, &devPath);
+            }
+            // if the prev and curr clips disagree about aa -vs- not, favor the aa request.
+            // perhaps we need an API change to avoid this sort of mixed-signals about
+            // clipping.
+            doAA |= element->isAA();
+        }
+        op = SkRegion::kReplace_Op;
+    }
+
     return clipPathHelper(this, fMCRec->fRasterClip, devPath, op, doAA);
 }
 
@@ -1475,7 +1510,7 @@ SkDevice* SkCanvas::createCompatibleDevice(SkBitmap::Config config,
 
 void SkCanvas::clear(SkColor color) {
     SkDrawIter  iter(this);
-
+    this->predrawNotify();
     while (iter.next()) {
         iter.fDevice->clear(color);
     }
@@ -1581,12 +1616,20 @@ void SkCanvas::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
     if (rrect.isRect()) {
         // call the non-virtual version
         this->SkCanvas::drawRect(rrect.getBounds(), paint);
-    } else {
-        SkPath  path;
-        path.addRRect(rrect);
+        return;
+    } else if (rrect.isOval()) {
         // call the non-virtual version
-        this->SkCanvas::drawPath(path, paint);
+        this->SkCanvas::drawOval(rrect.getBounds(), paint);
+        return;
     }
+
+    LOOPER_BEGIN(paint, SkDrawFilter::kRRect_Type)
+
+    while (iter.next()) {
+        iter.fDevice->drawRRect(iter, rrect, looper.paint());
+    }
+
+    LOOPER_END
 }
 
 

@@ -782,14 +782,6 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
     }
 }
 
-static inline SkPoint* as_lefttop(SkRect* r) {
-    return (SkPoint*)(void*)r;
-}
-
-static inline SkPoint* as_rightbottom(SkRect* r) {
-    return ((SkPoint*)(void*)r) + 1;
-}
-
 static bool easy_rect_join(const SkPaint& paint, const SkMatrix& matrix,
                            SkPoint* strokeSize) {
     if (SkPaint::kMiter_Join != paint.getStrokeJoin() ||
@@ -834,11 +826,11 @@ SkDraw::RectType SkDraw::ComputeRectType(const SkPaint& paint,
 }
 
 static const SkPoint* rect_points(const SkRect& r) {
-    return (const SkPoint*)(void*)&r;
+    return SkTCast<const SkPoint*>(&r);
 }
 
 static SkPoint* rect_points(SkRect& r) {
-    return (SkPoint*)(void*)&r;
+    return SkTCast<SkPoint*>(&r);
 }
 
 void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
@@ -1497,7 +1489,7 @@ static void D1G_NoBounder_RectClip(const SkDraw1Glyph& state,
     mask.fRowBytes = glyph.rowBytes();
     mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
     mask.fImage = aa;
-    state.fBlitter->blitMask(mask, *bounds);
+    state.blitMask(mask, *bounds);
 }
 
 static void D1G_NoBounder_RgnClip(const SkDraw1Glyph& state,
@@ -1531,7 +1523,7 @@ static void D1G_NoBounder_RgnClip(const SkDraw1Glyph& state,
         mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
         mask.fImage = (uint8_t*)aa;
         do {
-            state.fBlitter->blitMask(mask, cr);
+            state.blitMask(mask, cr);
             clipper.next();
         } while (!clipper.done());
     }
@@ -1571,7 +1563,7 @@ static void D1G_Bounder(const SkDraw1Glyph& state,
             mask.fFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
             mask.fImage = (uint8_t*)aa;
             do {
-                state.fBlitter->blitMask(mask, cr);
+                state.blitMask(mask, cr);
                 clipper.next();
             } while (!clipper.done());
         }
@@ -1600,11 +1592,12 @@ static bool needsRasterTextBlit(const SkDraw& draw) {
 }
 
 SkDraw1Glyph::Proc SkDraw1Glyph::init(const SkDraw* draw, SkBlitter* blitter,
-                                      SkGlyphCache* cache) {
+                                      SkGlyphCache* cache, const SkPaint& pnt) {
     fDraw = draw;
     fBounder = draw->fBounder;
     fBlitter = blitter;
     fCache = cache;
+    fPaint = &pnt;
 
     if (cache->isSubpixel()) {
         fHalfSampleX = fHalfSampleY = (SK_FixedHalf >> SkGlyph::kSubBits);
@@ -1642,6 +1635,17 @@ SkDraw1Glyph::Proc SkDraw1Glyph::init(const SkDraw* draw, SkBlitter* blitter,
             return D1G_Bounder_AAClip;
         }
     }
+}
+
+void SkDraw1Glyph::blitMaskAsSprite(const SkMask& mask) const {
+    SkASSERT(SkMask::kARGB32_Format == mask.fFormat);
+
+    SkBitmap bm;
+    bm.setConfig(SkBitmap::kARGB_8888_Config,
+                 mask.fBounds.width(), mask.fBounds.height(), mask.fRowBytes);
+    bm.setPixels((SkPMColor*)mask.fImage);
+
+    fDraw->drawSprite(bm, mask.fBounds.x(), mask.fBounds.y(), *fPaint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1712,7 +1716,7 @@ void SkDraw::drawText(const char text[], size_t byteLength,
 
     SkAutoKern          autokern;
     SkDraw1Glyph        d1g;
-    SkDraw1Glyph::Proc  proc = d1g.init(this, blitter, cache);
+    SkDraw1Glyph::Proc  proc = d1g.init(this, blitter, cache, paint);
 
     SkFixed fxMask = ~0;
     SkFixed fyMask = ~0;
@@ -1874,7 +1878,7 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
     const char*        stop = text + byteLength;
     AlignProc          alignProc = pick_align_proc(paint.getTextAlign());
     SkDraw1Glyph       d1g;
-    SkDraw1Glyph::Proc proc = d1g.init(this, blitter, cache);
+    SkDraw1Glyph::Proc proc = d1g.init(this, blitter, cache, paint);
     TextMapState       tms(*fMatrix, constY);
     TextMapState::Proc tmsProc = tms.pickProc(scalarsPerPosition);
 

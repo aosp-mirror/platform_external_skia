@@ -25,6 +25,8 @@ OUTPUT_ACTUAL_SUBDIR=output-actual
 OUTPUT_EXPECTED_SUBDIR=output-expected
 CONFIGS="--config 8888 565"
 
+ENCOUNTERED_ANY_ERRORS=0
+
 # Compare contents of all files within directories $1 and $2,
 # EXCEPT for any dotfiles.
 # If there are any differences, a description is written to stdout and
@@ -38,7 +40,29 @@ function compare_directories {
   diff -r --exclude=.* $1 $2
   if [ $? != 0 ]; then
     echo "failed in: compare_directories $1 $2"
-    exit 1
+    ENCOUNTERED_ANY_ERRORS=1
+  fi
+}
+
+# Run a command, and validate that it succeeds (returns 0).
+function assert_passes {
+  COMMAND="$1"
+  OUTPUT=$($COMMAND 2>&1)
+  if [ $? != 0 ]; then
+    echo "This command was supposed to pass, but failed: [$COMMAND]"
+    echo $OUTPUT
+    ENCOUNTERED_ANY_ERRORS=1
+  fi
+}
+
+# Run a command, and validate that it fails (returns nonzero).
+function assert_fails {
+  COMMAND="$1"
+  OUTPUT=$($COMMAND 2>&1)
+  if [ $? == 0 ]; then
+    echo "This command was supposed to fail, but passed: [$COMMAND]"
+    echo $OUTPUT
+    ENCOUNTERED_ANY_ERRORS=1
   fi
 }
 
@@ -60,7 +84,9 @@ function gm_test {
 
   rm -rf $ACTUAL_OUTPUT_DIR
   mkdir -p $ACTUAL_OUTPUT_DIR
-  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE"
+
+  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE --writePath $ACTUAL_OUTPUT_DIR/writePath --mismatchPath $ACTUAL_OUTPUT_DIR/mismatchPath"
+
   echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
   $COMMAND >$ACTUAL_OUTPUT_DIR/stdout 2>$ACTUAL_OUTPUT_DIR/stderr
   echo $? >$ACTUAL_OUTPUT_DIR/return_value
@@ -75,13 +101,26 @@ function gm_test {
   grep ^GM: $ACTUAL_OUTPUT_DIR/stderr >$ACTUAL_OUTPUT_DIR/stderr-tmp
   mv $ACTUAL_OUTPUT_DIR/stderr-tmp $ACTUAL_OUTPUT_DIR/stderr
 
+  # Replace image file contents with just the filename, for two reasons:
+  # 1. Image file encoding may vary by platform
+  # 2. https://code.google.com/p/chromium/issues/detail?id=169600
+  #    ('gcl/upload.py fail to upload binary files to rietveld')
+  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name *.png); do
+    echo "[contents of $IMAGEFILE]" >$IMAGEFILE
+  done
+  if [ -d $ACTUAL_OUTPUT_DIR/mismatchPath ]; then
+    for MISMATCHDIR in $(find $ACTUAL_OUTPUT_DIR/mismatchPath -mindepth 1 -type d); do
+      echo "Created additional file to make sure directory isn't empty, because self-test cannot handle empty directories." >$MISMATCHDIR/bogusfile
+    done
+  fi
+
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
 
 # Create input dir (at path $1) with expectations (both image and json)
 # that gm will match or mismatch as appropriate.
 #
-# We used to check these files into SVN, but then we needed to rebasline them
+# We used to check these files into SVN, but then we needed to rebaseline them
 # when our drawing changed at all... so, as proposed in
 # http://code.google.com/p/skia/issues/detail?id=1068 , we generate them
 # new each time.
@@ -95,36 +134,39 @@ function create_inputs_dir {
   JSON_DIR=$INPUTS_DIR/json
   mkdir -p $IMAGES_DIR $JSON_DIR
 
-  mkdir -p $IMAGES_DIR/identical-bytes
+  THIS_IMAGE_DIR=$IMAGES_DIR/identical-bytes
+  mkdir -p $THIS_IMAGE_DIR
   # Run GM to write out the images actually generated.
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
-    -w $IMAGES_DIR/identical-bytes
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -w $THIS_IMAGE_DIR
   # Run GM again to read in those images and write them out as a JSON summary.
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
-    -r $IMAGES_DIR/identical-bytes \
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
     --writeJsonSummaryPath $JSON_DIR/identical-bytes.json
 
-  mkdir -p $IMAGES_DIR/identical-pixels
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
-    -w $IMAGES_DIR/identical-pixels
+  THIS_IMAGE_DIR=$IMAGES_DIR/identical-pixels
+  mkdir -p $THIS_IMAGE_DIR
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -w $THIS_IMAGE_DIR
   echo "more bytes that do not change the image pixels" \
-    >> $IMAGES_DIR/identical-pixels/8888/selftest1.png
+    >> $THIS_IMAGE_DIR/8888/selftest1.png
   echo "more bytes that do not change the image pixels" \
-    >> $IMAGES_DIR/identical-pixels/565/selftest1.png
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
-    -r $IMAGES_DIR/identical-pixels \
+    >> $THIS_IMAGE_DIR/565/selftest1.png
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
     --writeJsonSummaryPath $JSON_DIR/identical-pixels.json
 
-  mkdir -p $IMAGES_DIR/different-pixels
-  $GM_BINARY --hierarchy --match selftest2 $CONFIGS \
-    -w $IMAGES_DIR/different-pixels
-  mv $IMAGES_DIR/different-pixels/8888/selftest2.png \
-    $IMAGES_DIR/different-pixels/8888/selftest1.png
-  mv $IMAGES_DIR/different-pixels/565/selftest2.png \
-    $IMAGES_DIR/different-pixels/565/selftest1.png
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS \
-    -r $IMAGES_DIR/different-pixels \
+  THIS_IMAGE_DIR=$IMAGES_DIR/different-pixels
+  mkdir -p $THIS_IMAGE_DIR
+  $GM_BINARY --hierarchy --match selftest2 $CONFIGS -w $THIS_IMAGE_DIR
+  mv $THIS_IMAGE_DIR/8888/selftest2.png $THIS_IMAGE_DIR/8888/selftest1.png
+  mv $THIS_IMAGE_DIR/565/selftest2.png  $THIS_IMAGE_DIR/565/selftest1.png
+  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
     --writeJsonSummaryPath $JSON_DIR/different-pixels.json
+
+  THIS_IMAGE_DIR=$IMAGES_DIR/different-pixels-no-hierarchy
+  mkdir -p $THIS_IMAGE_DIR
+  $GM_BINARY --match selftest2 $CONFIGS -w $THIS_IMAGE_DIR
+  mv $THIS_IMAGE_DIR/selftest2_8888.png $THIS_IMAGE_DIR/selftest1_8888.png
+  mv $THIS_IMAGE_DIR/selftest2_565.png  $THIS_IMAGE_DIR/selftest1_565.png
+  $GM_BINARY --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
+    --writeJsonSummaryPath $JSON_DIR/different-pixels-no-hierarchy.json
 
   mkdir -p $IMAGES_DIR/empty-dir
 }
@@ -137,23 +179,56 @@ GM_TEMPFILES=$GM_TESTDIR/tempfiles
 create_inputs_dir $GM_INPUTS
 
 # Compare generated image against an input image file with identical bytes.
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-bytes" "$GM_OUTPUTS/compared-against-identical-bytes-images"
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-bytes.json" "$GM_OUTPUTS/compared-against-identical-bytes-json"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-bytes" "$GM_OUTPUTS/compared-against-identical-bytes-images"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-bytes.json" "$GM_OUTPUTS/compared-against-identical-bytes-json"
 
 # Compare generated image against an input image file with identical pixels but different PNG encoding.
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-pixels" "$GM_OUTPUTS/compared-against-identical-pixels-images"
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/compared-against-identical-pixels-json"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/identical-pixels" "$GM_OUTPUTS/compared-against-identical-pixels-images"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/compared-against-identical-pixels-json"
 
 # Compare generated image against an input image file with different pixels.
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/different-pixels" "$GM_OUTPUTS/compared-against-different-pixels-images"
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/compared-against-different-pixels-json"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/different-pixels" "$GM_OUTPUTS/compared-against-different-pixels-images"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/compared-against-different-pixels-json"
 
 # Compare generated image against an empty "expected image" dir.
-gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
+
+# Compare generated image against a nonexistent "expected image" dir.
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r ../path/to/nowhere" "$GM_OUTPUTS/compared-against-nonexistent-dir"
+
+# Compare generated image against an empty "expected image" dir, but NOT in verbose mode.
+gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/nonverbose"
 
 # If run without "-r", the JSON's "actual-results" section should contain
 # actual checksums marked as "failure-ignored", but the "expected-results"
 # section should be empty.
-gm_test "--hierarchy --match selftest1 $CONFIGS" "$GM_OUTPUTS/no-readpath"
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS" "$GM_OUTPUTS/no-readpath"
 
-echo "All tests passed."
+# Test what happens if a subset of the renderModes fail (e.g. pipe)
+gm_test "--simulatePipePlaybackFailure --verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/pipe-playback-failure"
+
+# Confirm that IntentionallySkipped tests are recorded as such.
+gm_test "--verbose --hierarchy --match selftest1 selftest2 $CONFIGS" "$GM_OUTPUTS/intentionally-skipped-tests"
+
+# Ignore some error types (including ExpectationsMismatch)
+gm_test "--ignoreErrorTypes ExpectationsMismatch NoGpuContext --verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/ignore-expectations-mismatch"
+
+# Test non-hierarchical mode.
+gm_test "--verbose --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels-no-hierarchy.json" "$GM_OUTPUTS/no-hierarchy"
+
+# Exercise display_json_results.py
+PASSING_CASES="compared-against-identical-bytes-json compared-against-identical-pixels-json"
+FAILING_CASES="compared-against-different-pixels-json"
+for CASE in $PASSING_CASES; do
+  assert_passes "python gm/display_json_results.py $GM_OUTPUTS/$CASE/$OUTPUT_EXPECTED_SUBDIR/json-summary.txt"
+done
+for CASE in $FAILING_CASES; do
+  assert_fails "python gm/display_json_results.py $GM_OUTPUTS/$CASE/$OUTPUT_EXPECTED_SUBDIR/json-summary.txt"
+done
+
+if [ $ENCOUNTERED_ANY_ERRORS == 0 ]; then
+  echo "All tests passed."
+  exit 0
+else
+  exit 1
+fi

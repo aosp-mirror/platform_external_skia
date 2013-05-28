@@ -264,7 +264,9 @@ public:
                                  SkScalar kd, SkImageFilter* input);
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDiffuseLightingImageFilter)
 
+#if SK_SUPPORT_GPU
     virtual bool asNewEffect(GrEffectRef** effect, GrTexture*) const SK_OVERRIDE;
+#endif
     SkScalar kd() const { return fKD; }
 
 protected:
@@ -284,7 +286,10 @@ public:
     SkSpecularLightingImageFilter(SkLight* light, SkScalar surfaceScale, SkScalar ks, SkScalar shininess, SkImageFilter* input);
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkSpecularLightingImageFilter)
 
+#if SK_SUPPORT_GPU
     virtual bool asNewEffect(GrEffectRef** effect, GrTexture*) const SK_OVERRIDE;
+#endif
+
     SkScalar ks() const { return fKS; }
     SkScalar shininess() const { return fShininess; }
 
@@ -442,6 +447,7 @@ public:
     virtual ~GrGLDistantLight() {}
     virtual void setData(const GrGLUniformManager&, const SkLight* light) const SK_OVERRIDE;
     virtual void emitSurfaceToLight(GrGLShaderBuilder*, const char* z) SK_OVERRIDE;
+
 private:
     typedef GrGLLight INHERITED;
     UniformHandle fDirectionUni;
@@ -454,6 +460,7 @@ public:
     virtual ~GrGLPointLight() {}
     virtual void setData(const GrGLUniformManager&, const SkLight* light) const SK_OVERRIDE;
     virtual void emitSurfaceToLight(GrGLShaderBuilder*, const char* z) SK_OVERRIDE;
+
 private:
     typedef GrGLLight INHERITED;
     SkPoint3 fLocation;
@@ -468,6 +475,7 @@ public:
     virtual void setData(const GrGLUniformManager&, const SkLight* light) const SK_OVERRIDE;
     virtual void emitSurfaceToLight(GrGLShaderBuilder*, const char* z) SK_OVERRIDE;
     virtual void emitLightColor(GrGLShaderBuilder*, const char *surfaceToLight) SK_OVERRIDE;
+
 private:
     typedef GrGLLight INHERITED;
 
@@ -504,6 +512,8 @@ public:
     virtual bool isEqual(const SkLight& other) const {
         return fColor == other.fColor;
     }
+    // Called to know whether the generated GrGLLight will require access to the fragment position.
+    virtual bool requiresFragmentPosition() const = 0;
 
 protected:
     SkLight(SkColor color)
@@ -548,6 +558,8 @@ public:
         return NULL;
 #endif
     }
+    virtual bool requiresFragmentPosition() const SK_OVERRIDE { return false; }
+
     virtual bool isEqual(const SkLight& other) const SK_OVERRIDE {
         if (other.type() != kDistant_LightType) {
             return false;
@@ -599,6 +611,7 @@ public:
         return NULL;
 #endif
     }
+    virtual bool requiresFragmentPosition() const SK_OVERRIDE { return true; }
     virtual bool isEqual(const SkLight& other) const SK_OVERRIDE {
         if (other.type() != kPoint_LightType) {
             return false;
@@ -669,6 +682,7 @@ public:
         return NULL;
 #endif
     }
+    virtual bool requiresFragmentPosition() const SK_OVERRIDE { return true; }
     virtual LightType type() const { return kSpot_LightType; }
     const SkPoint3& location() const { return fLocation; }
     const SkPoint3& target() const { return fTarget; }
@@ -859,19 +873,15 @@ bool SkDiffuseLightingImageFilter::onFilterImage(Proxy*,
     return true;
 }
 
-bool SkDiffuseLightingImageFilter::asNewEffect(GrEffectRef** effect,
-                                               GrTexture* texture) const {
 #if SK_SUPPORT_GPU
+bool SkDiffuseLightingImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* texture) const {
     if (effect) {
         SkScalar scale = SkScalarMul(surfaceScale(), SkIntToScalar(255));
         *effect = GrDiffuseLightingEffect::Create(texture, light(), scale, kd());
     }
     return true;
-#else
-    SkDEBUGFAIL("Should not call in GPU-less build");
-    return false;
-#endif
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -928,19 +938,15 @@ bool SkSpecularLightingImageFilter::onFilterImage(Proxy*,
     return true;
 }
 
-bool SkSpecularLightingImageFilter::asNewEffect(GrEffectRef** effect,
-                                                GrTexture* texture) const {
 #if SK_SUPPORT_GPU
+bool SkSpecularLightingImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* texture) const {
     if (effect) {
         SkScalar scale = SkScalarMul(surfaceScale(), SkIntToScalar(255));
         *effect = GrSpecularLightingEffect::Create(texture, light(), scale, ks(), shininess());
     }
     return true;
-#else
-    SkDEBUGFAIL("Should not call in GPU-less build");
-    return false;
-#endif
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1047,6 +1053,9 @@ GrLightingEffect::GrLightingEffect(GrTexture* texture, const SkLight* light, SkS
     , fLight(light)
     , fSurfaceScale(surfaceScale) {
     fLight->ref();
+    if (light->requiresFragmentPosition()) {
+        this->setWillReadFragmentPosition();
+    }
 }
 
 GrLightingEffect::~GrLightingEffect() {
@@ -1080,6 +1089,7 @@ GR_DEFINE_EFFECT_TEST(GrDiffuseLightingEffect);
 
 GrEffectRef* GrDiffuseLightingEffect::TestCreate(SkMWCRandom* random,
                                                  GrContext* context,
+                                                 const GrDrawTargetCaps&,
                                                  GrTexture* textures[]) {
     SkScalar surfaceScale = random->nextSScalar1();
     SkScalar kd = random->nextUScalar1();
@@ -1296,6 +1306,7 @@ GR_DEFINE_EFFECT_TEST(GrSpecularLightingEffect);
 
 GrEffectRef* GrSpecularLightingEffect::TestCreate(SkMWCRandom* random,
                                                   GrContext* context,
+                                                  const GrDrawTargetCaps&,
                                                   GrTexture* textures[]) {
     SkScalar surfaceScale = random->nextSScalar1();
     SkScalar ks = random->nextUScalar1();

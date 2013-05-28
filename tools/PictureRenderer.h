@@ -59,10 +59,10 @@ public:
     // this uses SkPaint::Flags as a base and adds additional flags
     enum DrawFilterFlags {
         kNone_DrawFilterFlag = 0,
-        kBlur_DrawFilterFlag = 0x4000, // toggles between blur and no blur
-        kHinting_DrawFilterFlag = 0x8000, // toggles between no hinting and normal hinting
-        kSlightHinting_DrawFilterFlag = 0x10000, // toggles between slight and normal hinting
-        kAAClip_DrawFilterFlag = 0x20000, // toggles between soft and hard clip
+        kBlur_DrawFilterFlag = 0x8000, // toggles between blur and no blur
+        kHinting_DrawFilterFlag = 0x10000, // toggles between no hinting and normal hinting
+        kSlightHinting_DrawFilterFlag = 0x20000, // toggles between slight and normal hinting
+        kAAClip_DrawFilterFlag = 0x40000, // toggles between soft and hard clip
     };
 
     SK_COMPILE_ASSERT(!(kBlur_DrawFilterFlag & SkPaint::kAllFlags), blur_flag_must_be_greater);
@@ -162,6 +162,12 @@ public:
 #endif
     }
 
+#if SK_SUPPORT_GPU
+    void setSampleCount(int sampleCount) {
+        fSampleCount = sampleCount;
+    }
+#endif
+
     void setDrawFilters(DrawFilterFlags const * const filters, const SkString& configName) {
         memcpy(fDrawFilters, filters, sizeof(fDrawFilters));
         fDrawFiltersConfig = configName;
@@ -201,7 +207,11 @@ public:
 #if SK_SUPPORT_GPU
         switch (fDeviceType) {
             case kGPU_DeviceType:
-                config.append("_gpu");
+                if (fSampleCount) {
+                    config.appendf("_msaa%d", fSampleCount);
+                } else {
+                    config.append("_gpu");
+                }
                 break;
 #if SK_ANGLE
             case kAngle_DeviceType:
@@ -261,6 +271,7 @@ public:
         , fScaleFactor(SK_Scalar1)
 #if SK_SUPPORT_GPU
         , fGrContext(NULL)
+        , fSampleCount(0)
 #endif
         {
             fGridInfo.fMargin.setEmpty();
@@ -315,6 +326,7 @@ private:
 #if SK_SUPPORT_GPU
     GrContextFactory       fGrContextFactory;
     GrContext*             fGrContext;
+    int                    fSampleCount;
 #endif
 
     virtual SkString getConfigNameInternal() = 0;

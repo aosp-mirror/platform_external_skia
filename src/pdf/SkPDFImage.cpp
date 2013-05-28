@@ -249,7 +249,8 @@ SkPDFArray* makeIndexedColorSpace(SkColorTable* table) {
 
 // static
 SkPDFImage* SkPDFImage::CreateImage(const SkBitmap& bitmap,
-                                    const SkIRect& srcRect) {
+                                    const SkIRect& srcRect,
+                                    EncodeToDCTStream encoder) {
     if (bitmap.getConfig() == SkBitmap::kNo_Config) {
         return NULL;
     }
@@ -265,10 +266,12 @@ SkPDFImage* SkPDFImage::CreateImage(const SkBitmap& bitmap,
     }
 
     SkPDFImage* image =
-        new SkPDFImage(imageData, bitmap, srcRect, false);
+        SkNEW_ARGS(SkPDFImage, (imageData, bitmap, srcRect, false, encoder));
 
     if (alphaData != NULL) {
-        image->addSMask(new SkPDFImage(alphaData, bitmap, srcRect, true))->unref();
+        // Don't try to use DCT compression with alpha because alpha is small
+        // anyway and it could lead to artifacts.
+        image->addSMask(SkNEW_ARGS(SkPDFImage, (alphaData, bitmap, srcRect, true, NULL)))->unref();
     }
     return image;
 }
@@ -284,13 +287,17 @@ SkPDFImage* SkPDFImage::addSMask(SkPDFImage* mask) {
     return mask;
 }
 
-void SkPDFImage::getResources(SkTDArray<SkPDFObject*>* resourceList) {
-    GetResourcesHelper(&fResources, resourceList);
+void SkPDFImage::getResources(const SkTSet<SkPDFObject*>& knownResourceObjects,
+                              SkTSet<SkPDFObject*>* newResourceObjects) {
+    GetResourcesHelper(&fResources, knownResourceObjects, newResourceObjects);
 }
 
-SkPDFImage::SkPDFImage(SkStream* imageData, const SkBitmap& bitmap,
-                       const SkIRect& srcRect, bool doingAlpha) {
-    this->setData(imageData);
+SkPDFImage::SkPDFImage(SkStream* imageData,
+                       const SkBitmap& bitmap,
+                       const SkIRect& srcRect,
+                       bool doingAlpha,
+                       EncodeToDCTStream encoder)
+        : SkPDFImageStream(imageData, bitmap, srcRect, encoder) {
     SkBitmap::Config config = bitmap.getConfig();
     bool alphaOnly = (config == SkBitmap::kA1_Config ||
                       config == SkBitmap::kA8_Config);
@@ -314,6 +321,7 @@ SkPDFImage::SkPDFImage(SkStream* imageData, const SkBitmap& bitmap,
         insertName("ColorSpace", "DeviceGray");
     } else if (config == SkBitmap::kIndex8_Config ||
         config == SkBitmap::kRLE_Index8_Config) {
+        SkAutoLockPixels alp(bitmap);
         insert("ColorSpace",
                makeIndexedColorSpace(bitmap.getColorTable()))->unref();
     } else {

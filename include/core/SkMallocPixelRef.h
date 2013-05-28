@@ -38,9 +38,8 @@ protected:
     SkMallocPixelRef(SkFlattenableReadBuffer& buffer);
     virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
 
-    void*           fStorage;
-
 private:
+    void*           fStorage;
     size_t          fSize;
     SkColorTable*   fCTable;
     bool            fOwnPixels;

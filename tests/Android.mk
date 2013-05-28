@@ -8,7 +8,6 @@ LOCAL_SRC_FILES:= \
   BitmapCopyTest.cpp \
   BitmapGetColorTest.cpp \
   BitmapHeapTest.cpp \
-  BitmapTransformerTest.cpp \
   BitSetTest.cpp \
   BlitRowTest.cpp \
   BlurTest.cpp \
@@ -20,12 +19,12 @@ LOCAL_SRC_FILES:= \
   ColorFilterTest.cpp \
   ColorTest.cpp \
   DataRefTest.cpp \
-  DeferredCanvasTest.cpp \
   DequeTest.cpp \
   DrawBitmapRectTest.cpp \
   DrawPathTest.cpp \
   DrawTextTest.cpp \
   EmptyPathTest.cpp \
+  ErrorTest.cpp \
   FillPathTest.cpp \
   FlatDataTest.cpp \
   FlateTest.cpp \
@@ -38,6 +37,7 @@ LOCAL_SRC_FILES:= \
   GrContextFactoryTest.cpp \
   GradientTest.cpp \
   GrMemoryPoolTest.cpp \
+  GrSurfaceTest.cpp \
   HashCacheTest.cpp \
   InfRectTest.cpp \
   LListTest.cpp \
@@ -53,7 +53,6 @@ LOCAL_SRC_FILES:= \
   PathCoverageTest.cpp \
   PathMeasureTest.cpp \
   PathTest.cpp \
-  PictureTest.cpp \
   PipeTest.cpp \
   PointTest.cpp \
   PremulAlphaRoundTripTest.cpp \
@@ -90,6 +89,12 @@ LOCAL_SRC_FILES:= \
   Writer32Test.cpp \
   XfermodeTest.cpp
 
+LOCAL_SRC_FILES += \
+  ../src/utils/SkCondVar.cpp \
+	../src/utils/SkCountdown.cpp \
+	../src/utils/SkThreadPool.cpp \
+  ../tools/flags/SkCommandLineFlags.cpp
+
 # Needed for PipeTest
 LOCAL_SRC_FILES += \
   ../src/pipe/utils/SamplePipeControllers.cpp
@@ -97,33 +102,32 @@ LOCAL_SRC_FILES += \
 # TODO: tests that currently are causing build problems
 #LOCAL_SRC_FILES += \
 #  AnnotationTest.cpp \
+#  ARGBImageEncoderTest.cpp \
 #  BitmapFactoryTest.cpp \
+#  BitmapHasherTest.cpp \
 #  CanvasTest.cpp \
 #  ChecksumTest.cpp \
+#  DeferredCanvasTest.cpp \
+#  FontMgrTest.cpp \
+#  FontNamesTest.cpp \
 #  PDFPrimitivesTest.cpp \
+#  PictureTest.cpp \
 #  PictureUtilsTest.cpp \
+#  SurfaceTest.cpp \
 #  ToUnicode.cpp
 
 LOCAL_MODULE:= skia_test
 
 LOCAL_C_INCLUDES := \
    external/freetype/include \
-   external/skia/include/core \
-   external/skia/include/config \
-   external/skia/include/effects \
-   external/skia/include/gpu \
-   external/skia/include/images \
-   external/skia/include/lazy \
-   external/skia/include/pipe \
-   external/skia/include/ports \
-   external/skia/include/utils \
    external/skia/src/core \
    external/skia/src/effects \
    external/skia/src/gpu \
    external/skia/src/lazy \
    external/skia/src/pdf \
    external/skia/src/pipe/utils \
-   external/skia/src/utils
+   external/skia/src/utils \
+   external/skia/tools/flags
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL
 

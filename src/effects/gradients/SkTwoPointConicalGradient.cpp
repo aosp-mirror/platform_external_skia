@@ -175,12 +175,10 @@ void SkTwoPointConicalGradient::init() {
 /////////////////////////////////////////////////////////////////////
 
 SkTwoPointConicalGradient::SkTwoPointConicalGradient(
-    const SkPoint& start, SkScalar startRadius,
-    const SkPoint& end, SkScalar endRadius,
-    const SkColor colors[], const SkScalar pos[],
-    int colorCount, SkShader::TileMode mode,
-    SkUnitMapper* mapper)
-    : SkGradientShaderBase(colors, pos, colorCount, mode, mapper),
+        const SkPoint& start, SkScalar startRadius,
+        const SkPoint& end, SkScalar endRadius,
+        const Descriptor& desc)
+    : SkGradientShaderBase(desc),
     fCenter1(start),
     fCenter2(end),
     fRadius1(startRadius),
@@ -446,6 +444,7 @@ GR_DEFINE_EFFECT_TEST(GrConical2Gradient);
 
 GrEffectRef* GrConical2Gradient::TestCreate(SkMWCRandom* random,
                                             GrContext* context,
+                                            const GrDrawTargetCaps&,
                                             GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1();

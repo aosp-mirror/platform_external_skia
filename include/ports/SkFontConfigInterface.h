@@ -8,7 +8,10 @@
 #ifndef SkFontConfigInterface_DEFINED
 #define SkFontConfigInterface_DEFINED
 
+#include "SkDataTable.h"
+#include "SkFontStyle.h"
 #include "SkRefCnt.h"
+#include "SkTArray.h"
 #include "SkTypeface.h"
 
 /**
@@ -46,10 +49,21 @@ public:
                    fTTCIndex == other.fTTCIndex &&
                    fString == other.fString;
         }
+        bool operator!=(const FontIdentity& other) const {
+            return !(*this == other);
+        }
 
         uint32_t    fID;
         int32_t     fTTCIndex;
         SkString    fString;
+        SkFontStyle fStyle;
+
+        // If buffer is NULL, just return the number of bytes that would have
+        // been written. Will pad contents to a multiple of 4.
+        size_t writeToMemory(void* buffer = NULL) const;
+
+        // Recreate from a flattened buffer, returning the number of bytes read.
+        size_t readFromMemory(const void* buffer, size_t length);
     };
 
     /**
@@ -81,6 +95,15 @@ public:
      *  libfontconfig. This does not affect the refcnt of the returned instance.
      */
     static SkFontConfigInterface* GetSingletonDirectInterface();
+
+    // New APIS, which have default impls for now (which do nothing)
+
+    virtual SkDataTable* getFamilyNames() { return SkDataTable::NewEmpty(); }
+    virtual bool matchFamilySet(const char inFamilyName[],
+                                SkString* outFamilyName,
+                                SkTArray<FontIdentity>*) {
+        return false;
+    }
 };
 
 #endif

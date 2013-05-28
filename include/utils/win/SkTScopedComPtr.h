@@ -19,6 +19,18 @@ private:
     virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
 };
 
+template<typename T> T* SkRefComPtr(T* ptr) {
+    ptr->AddRef();
+    return ptr;
+}
+
+template<typename T> T* SkSafeRefComPtr(T* ptr) {
+    if (ptr) {
+        ptr->AddRef();
+    }
+    return ptr;
+}
+
 template<typename T>
 class SkTScopedComPtr : SkNoncopyable {
 private:

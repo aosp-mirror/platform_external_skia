@@ -170,10 +170,8 @@ void shadeSpan_twopoint_repeat(SkScalar fx, SkScalar dx,
 SkTwoPointRadialGradient::SkTwoPointRadialGradient(
     const SkPoint& start, SkScalar startRadius,
     const SkPoint& end, SkScalar endRadius,
-    const SkColor colors[], const SkScalar pos[],
-    int colorCount, SkShader::TileMode mode,
-    SkUnitMapper* mapper)
-    : SkGradientShaderBase(colors, pos, colorCount, mode, mapper),
+    const Descriptor& desc)
+    : SkGradientShaderBase(desc),
       fCenter1(start),
       fCenter2(end),
       fRadius1(startRadius),
@@ -488,6 +486,7 @@ GR_DEFINE_EFFECT_TEST(GrRadial2Gradient);
 
 GrEffectRef* GrRadial2Gradient::TestCreate(SkMWCRandom* random,
                                            GrContext* context,
+                                           const GrDrawTargetCaps&,
                                            GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1();

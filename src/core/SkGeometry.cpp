@@ -1380,3 +1380,285 @@ int SkBuildQuadArc(const SkVector& uStart, const SkVector& uStop,
     matrix.mapPoints(quadPoints, pointCount);
     return pointCount;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+// F = (A (1 - t)^2 + C t^2 + 2 B (1 - t) t w)
+//     ------------------------------------------
+//         ((1 - t)^2 + t^2 + 2 (1 - t) t w)
+//
+//   = {t^2 (P0 + P2 - 2 P1 w), t (-2 P0 + 2 P1 w), P0}
+//     ------------------------------------------------
+//             {t^2 (2 - 2 w), t (-2 + 2 w), 1}
+//
+
+// Take the parametric specification for the conic (either X or Y) and return
+// in coeff[] the coefficients for the simple quadratic polynomial
+//    coeff[0] for t^2
+//    coeff[1] for t
+//    coeff[2] for constant term
+//
+static SkScalar conic_eval_pos(const SkScalar src[], SkScalar w, SkScalar t) {
+    SkASSERT(src);
+    SkASSERT(t >= 0 && t <= SK_Scalar1);
+
+    SkScalar    src2w = SkScalarMul(src[2], w);
+    SkScalar    C = src[0];
+    SkScalar    A = src[4] - 2 * src2w + C;
+    SkScalar    B = 2 * (src2w - C);
+    SkScalar numer = SkScalarMulAdd(SkScalarMulAdd(A, t, B), t, C);
+
+    B = 2 * (w - SK_Scalar1);
+    C = SK_Scalar1;
+    A = -B;
+    SkScalar denom = SkScalarMulAdd(SkScalarMulAdd(A, t, B), t, C);
+
+    return SkScalarDiv(numer, denom);
+}
+
+// F' = 2 (C t (1 + t (-1 + w)) - A (-1 + t) (t (-1 + w) - w) + B (1 - 2 t) w)
+//
+//  t^2 : (2 P0 - 2 P2 - 2 P0 w + 2 P2 w)
+//  t^1 : (-2 P0 + 2 P2 + 4 P0 w - 4 P1 w)
+//  t^0 : -2 P0 w + 2 P1 w
+//
+//  We disregard magnitude, so we can freely ignore the denominator of F', and
+//  divide the numerator by 2
+//
+//    coeff[0] for t^2
+//    coeff[1] for t^1
+//    coeff[2] for t^0
+//
+static void conic_deriv_coeff(const SkScalar src[], SkScalar w, SkScalar coeff[3]) {
+    const SkScalar P20 = src[4] - src[0];
+    const SkScalar P10 = src[2] - src[0];
+    const SkScalar wP10 = w * P10;
+    coeff[0] = w * P20 - P20;
+    coeff[1] = P20 - 2 * wP10;
+    coeff[2] = wP10;
+}
+
+static SkScalar conic_eval_tan(const SkScalar coord[], SkScalar w, SkScalar t) {
+    SkScalar coeff[3];
+    conic_deriv_coeff(coord, w, coeff);
+    return t * (t * coeff[0] + coeff[1]) + coeff[2];
+}
+
+static bool conic_find_extrema(const SkScalar src[], SkScalar w, SkScalar* t) {
+    SkScalar coeff[3];
+    conic_deriv_coeff(src, w, coeff);
+
+    SkScalar tValues[2];
+    int roots = SkFindUnitQuadRoots(coeff[0], coeff[1], coeff[2], tValues);
+    SkASSERT(0 == roots || 1 == roots);
+
+    if (1 == roots) {
+        *t = tValues[0];
+        return true;
+    }
+    return false;
+}
+
+struct SkP3D {
+    SkScalar fX, fY, fZ;
+
+    void set(SkScalar x, SkScalar y, SkScalar z) {
+        fX = x; fY = y; fZ = z;
+    }
+
+    void projectDown(SkPoint* dst) const {
+        dst->set(fX / fZ, fY / fZ);
+    }
+};
+
+// we just return the middle 3 points, since the first and last are dups of src
+//
+static void p3d_interp(const SkScalar src[3], SkScalar dst[3], SkScalar t) {
+    SkScalar ab = SkScalarInterp(src[0], src[3], t);
+    SkScalar bc = SkScalarInterp(src[3], src[6], t);
+    dst[0] = ab;
+    dst[3] = SkScalarInterp(ab, bc, t);
+    dst[6] = bc;
+}
+
+static void ratquad_mapTo3D(const SkPoint src[3], SkScalar w, SkP3D dst[]) {
+    dst[0].set(src[0].fX * 1, src[0].fY * 1, 1);
+    dst[1].set(src[1].fX * w, src[1].fY * w, w);
+    dst[2].set(src[2].fX * 1, src[2].fY * 1, 1);
+}
+
+void SkConic::evalAt(SkScalar t, SkPoint* pt, SkVector* tangent) const {
+    SkASSERT(t >= 0 && t <= SK_Scalar1);
+
+    if (pt) {
+        pt->set(conic_eval_pos(&fPts[0].fX, fW, t),
+                conic_eval_pos(&fPts[0].fY, fW, t));
+    }
+    if (tangent) {
+        tangent->set(conic_eval_tan(&fPts[0].fX, fW, t),
+                     conic_eval_tan(&fPts[0].fY, fW, t));
+    }
+}
+
+void SkConic::chopAt(SkScalar t, SkConic dst[2]) const {
+    SkP3D tmp[3], tmp2[3];
+
+    ratquad_mapTo3D(fPts, fW, tmp);
+
+    p3d_interp(&tmp[0].fX, &tmp2[0].fX, t);
+    p3d_interp(&tmp[0].fY, &tmp2[0].fY, t);
+    p3d_interp(&tmp[0].fZ, &tmp2[0].fZ, t);
+
+    dst[0].fPts[0] = fPts[0];
+    tmp2[0].projectDown(&dst[0].fPts[1]);
+    tmp2[1].projectDown(&dst[0].fPts[2]); dst[1].fPts[0] = dst[0].fPts[2];
+    tmp2[2].projectDown(&dst[1].fPts[1]);
+    dst[1].fPts[2] = fPts[2];
+
+    // to put in "standard form", where w0 and w2 are both 1, we compute the
+    // new w1 as sqrt(w1*w1/w0*w2)
+    // or
+    // w1 /= sqrt(w0*w2)
+    //
+    // However, in our case, we know that for dst[0], w0 == 1, and for dst[1], w2 == 1
+    //
+    SkScalar root = SkScalarSqrt(tmp2[1].fZ);
+    dst[0].fW = tmp2[0].fZ / root;
+    dst[1].fW = tmp2[2].fZ / root;
+}
+
+static SkScalar subdivide_w_value(SkScalar w) {
+    return SkScalarSqrt(SK_ScalarHalf + w * SK_ScalarHalf);
+}
+
+void SkConic::chop(SkConic dst[2]) const {
+    SkScalar scale = SkScalarInvert(SK_Scalar1 + fW);
+    SkScalar p1x = fW * fPts[1].fX;
+    SkScalar p1y = fW * fPts[1].fY;
+    SkScalar mx = (fPts[0].fX + 2 * p1x + fPts[2].fX) * scale * SK_ScalarHalf;
+    SkScalar my = (fPts[0].fY + 2 * p1y + fPts[2].fY) * scale * SK_ScalarHalf;
+
+    dst[0].fPts[0] = fPts[0];
+    dst[0].fPts[1].set((fPts[0].fX + p1x) * scale,
+                       (fPts[0].fY + p1y) * scale);
+    dst[0].fPts[2].set(mx, my);
+
+    dst[1].fPts[0].set(mx, my);
+    dst[1].fPts[1].set((p1x + fPts[2].fX) * scale,
+                       (p1y + fPts[2].fY) * scale);
+    dst[1].fPts[2] = fPts[2];
+
+    dst[0].fW = dst[1].fW = subdivide_w_value(fW);
+}
+
+/*
+ *  "High order approximation of conic sections by quadratic splines"
+ *      by Michael Floater, 1993
+ */
+#define AS_QUAD_ERROR_SETUP                                         \
+    SkScalar a = fW - 1;                                            \
+    SkScalar k = a / (4 * (2 + a));                                 \
+    SkScalar x = k * (fPts[0].fX - 2 * fPts[1].fX + fPts[2].fX);    \
+    SkScalar y = k * (fPts[0].fY - 2 * fPts[1].fY + fPts[2].fY);
+
+void SkConic::computeAsQuadError(SkVector* err) const {
+    AS_QUAD_ERROR_SETUP
+    err->set(x, y);
+}
+
+bool SkConic::asQuadTol(SkScalar tol) const {
+    AS_QUAD_ERROR_SETUP
+    return (x * x + y * y) <= tol * tol;
+}
+
+int SkConic::computeQuadPOW2(SkScalar tol) const {
+    AS_QUAD_ERROR_SETUP
+    SkScalar error = SkScalarSqrt(x * x + y * y) - tol;
+
+    if (error <= 0) {
+        return 0;
+    }
+    uint32_t ierr = (uint32_t)error;
+    return (34 - SkCLZ(ierr)) >> 1;
+}
+
+static SkPoint* subdivide(const SkConic& src, SkPoint pts[], int level) {
+    SkASSERT(level >= 0);
+
+    if (0 == level) {
+        memcpy(pts, &src.fPts[1], 2 * sizeof(SkPoint));
+        return pts + 2;
+    } else {
+        SkConic dst[2];
+        src.chop(dst);
+        --level;
+        pts = subdivide(dst[0], pts, level);
+        return subdivide(dst[1], pts, level);
+    }
+}
+
+int SkConic::chopIntoQuadsPOW2(SkPoint pts[], int pow2) const {
+    SkASSERT(pow2 >= 0);
+    *pts = fPts[0];
+    SkDEBUGCODE(SkPoint* endPts =) subdivide(*this, pts + 1, pow2);
+    SkASSERT(endPts - pts == (2 * (1 << pow2) + 1));
+    return 1 << pow2;
+}
+
+bool SkConic::findXExtrema(SkScalar* t) const {
+    return conic_find_extrema(&fPts[0].fX, fW, t);
+}
+
+bool SkConic::findYExtrema(SkScalar* t) const {
+    return conic_find_extrema(&fPts[0].fY, fW, t);
+}
+
+bool SkConic::chopAtXExtrema(SkConic dst[2]) const {
+    SkScalar t;
+    if (this->findXExtrema(&t)) {
+        this->chopAt(t, dst);
+        // now clean-up the middle, since we know t was meant to be at
+        // an X-extrema
+        SkScalar value = dst[0].fPts[2].fX;
+        dst[0].fPts[1].fX = value;
+        dst[1].fPts[0].fX = value;
+        dst[1].fPts[1].fX = value;
+        return true;
+    }
+    return false;
+}
+
+bool SkConic::chopAtYExtrema(SkConic dst[2]) const {
+    SkScalar t;
+    if (this->findYExtrema(&t)) {
+        this->chopAt(t, dst);
+        // now clean-up the middle, since we know t was meant to be at
+        // an Y-extrema
+        SkScalar value = dst[0].fPts[2].fY;
+        dst[0].fPts[1].fY = value;
+        dst[1].fPts[0].fY = value;
+        dst[1].fPts[1].fY = value;
+        return true;
+    }
+    return false;
+}
+
+void SkConic::computeTightBounds(SkRect* bounds) const {
+    SkPoint pts[4];
+    pts[0] = fPts[0];
+    pts[1] = fPts[2];
+    int count = 2;
+
+    SkScalar t;
+    if (this->findXExtrema(&t)) {
+        this->evalAt(t, &pts[count++]);
+    }
+    if (this->findYExtrema(&t)) {
+        this->evalAt(t, &pts[count++]);
+    }
+    bounds->set(pts, count);
+}
+
+void SkConic::computeFastBounds(SkRect* bounds) const {
+    bounds->set(fPts, 3);
+}

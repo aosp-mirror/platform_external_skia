@@ -203,7 +203,11 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
                                                    const SkMatrix& matrix,
                                                    SkBitmap* result,
                                                    SkIPoint* loc) {
-    SkBitmap src = this->getInputResult(0, proxy, source, matrix, loc);
+    SkBitmap src = source;
+    if (getInput(0) && !getInput(0)->filterImage(proxy, source, matrix, &src, loc)) {
+        return false;
+    }
+
     if (src.config() != SkBitmap::kARGB_8888_Config) {
         return false;
     }
@@ -533,6 +537,7 @@ GR_DEFINE_EFFECT_TEST(GrMatrixConvolutionEffect);
 
 GrEffectRef* GrMatrixConvolutionEffect::TestCreate(SkMWCRandom* random,
                                                    GrContext* context,
+                                                   const GrDrawTargetCaps&,
                                                    GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;
@@ -561,18 +566,19 @@ GrEffectRef* GrMatrixConvolutionEffect::TestCreate(SkMWCRandom* random,
 
 bool SkMatrixConvolutionImageFilter::asNewEffect(GrEffectRef** effect,
                                                  GrTexture* texture) const {
-    bool ok = fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE;
-    if (ok && effect) {
-        *effect = GrMatrixConvolutionEffect::Create(texture,
-                                                    fKernelSize,
-                                                    fKernel,
-                                                    fGain,
-                                                    fBias,
-                                                     fTarget,
-                                                     fTileMode,
-                                                     fConvolveAlpha);
+    if (!effect) {
+        return fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE;
     }
-    return ok;
+    SkASSERT(fKernelSize.width() * fKernelSize.height() <= MAX_KERNEL_SIZE);
+    *effect = GrMatrixConvolutionEffect::Create(texture,
+                                                fKernelSize,
+                                                fKernel,
+                                                fGain,
+                                                fBias,
+                                                fTarget,
+                                                fTileMode,
+                                                fConvolveAlpha);
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

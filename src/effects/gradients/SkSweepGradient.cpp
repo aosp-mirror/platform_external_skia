@@ -8,12 +8,15 @@
 
 #include "SkSweepGradient.h"
 
-SkSweepGradient::SkSweepGradient(SkScalar cx, SkScalar cy, const SkColor colors[],
-               const SkScalar pos[], int count, SkUnitMapper* mapper)
-: SkGradientShaderBase(colors, pos, count, SkShader::kClamp_TileMode, mapper),
-  fCenter(SkPoint::Make(cx, cy))
+SkSweepGradient::SkSweepGradient(SkScalar cx, SkScalar cy,
+                                 const Descriptor& desc)
+    : SkGradientShaderBase(desc)
+    , fCenter(SkPoint::Make(cx, cy))
 {
     fPtsToUnit.setTranslate(-cx, -cy);
+
+    // overwrite the tilemode to a canonical value (since sweep ignores it)
+    fTileMode = SkShader::kClamp_TileMode;
 }
 
 SkShader::BitmapType SkSweepGradient::asABitmap(SkBitmap* bitmap,
@@ -446,6 +449,7 @@ GR_DEFINE_EFFECT_TEST(GrSweepGradient);
 
 GrEffectRef* GrSweepGradient::TestCreate(SkMWCRandom* random,
                                          GrContext* context,
+                                         const GrDrawTargetCaps&,
                                          GrTexture**) {
     SkPoint center = {random->nextUScalar1(), random->nextUScalar1()};
 
