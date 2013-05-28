@@ -10,6 +10,7 @@
 #include "SkColorPriv.h"
 #include "SkFlattenableBuffers.h"
 #include "SkUnPreMultiply.h"
+#include "SkString.h"
 
 static int32_t rowmul4(const int32_t array[], unsigned r, unsigned g,
                           unsigned b, unsigned a) {
@@ -476,4 +477,19 @@ GrEffectRef* SkColorMatrixFilter::asNewEffect(GrContext*) const {
     return ColorMatrixEffect::Create(fMatrix);
 }
 
+#endif
+
+#ifdef SK_DEVELOPER
+void SkColorMatrixFilter::toString(SkString* str) const {
+    str->append("SkColorMatrixFilter: ");
+
+    str->append("matrix: (");
+    for (int i = 0; i < 20; ++i) {
+        str->appendScalar(fMatrix.fMat[i]);
+        if (i < 19) {
+            str->append(", ");
+        }
+    }
+    str->append(")");
+}
 #endif

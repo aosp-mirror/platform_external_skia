@@ -101,6 +101,10 @@ SkPaint::SkPaint(const SkPaint& src) {
     SkSafeRef(fLooper);
     SkSafeRef(fImageFilter);
     SkSafeRef(fAnnotation);
+
+#ifdef SK_BUILD_FOR_ANDROID
+    new (&fPaintOptionsAndroid) SkPaintOptionsAndroid(src.fPaintOptionsAndroid);
+#endif
 }
 
 SkPaint::~SkPaint() {
@@ -915,12 +919,12 @@ class SkAutoRestorePaintTextSizeAndFrame {
 public:
     SkAutoRestorePaintTextSizeAndFrame(const SkPaint* paint)
             : fPaint((SkPaint*)paint) {
-        fTextSize = paint->getTextSize();
-        fStyle = paint->getStyle();
-        fPaint->setStyle(SkPaint::kFill_Style);
 #ifdef SK_BUILD_FOR_ANDROID
         fGenerationID = fPaint->getGenerationID();
 #endif
+        fTextSize = paint->getTextSize();
+        fStyle = paint->getStyle();
+        fPaint->setStyle(SkPaint::kFill_Style);
     }
 
     ~SkAutoRestorePaintTextSizeAndFrame() {
@@ -2308,27 +2312,28 @@ void SkPaint::toString(SkString* str) const {
     SkShader* shader = this->getShader();
     if (NULL != shader) {
         str->append("<dt>Shader:</dt><dd>");
-        SkDEVCODE(shader->toString(str);)
+        shader->toString(str);
         str->append("</dd>");
     }
 
     SkXfermode* xfer = this->getXfermode();
     if (NULL != xfer) {
         str->append("<dt>Xfermode:</dt><dd>");
-        SkDEVCODE(xfer->toString(str);)
+        xfer->toString(str);
         str->append("</dd>");
     }
 
     SkMaskFilter* maskFilter = this->getMaskFilter();
     if (NULL != maskFilter) {
         str->append("<dt>MaskFilter:</dt><dd>");
-        SkDEVCODE(maskFilter->toString(str);)
+        maskFilter->toString(str);
         str->append("</dd>");
     }
 
     SkColorFilter* colorFilter = this->getColorFilter();
     if (NULL != colorFilter) {
         str->append("<dt>ColorFilter:</dt><dd>");
+        colorFilter->toString(str);
         str->append("</dd>");
     }
 
@@ -2341,7 +2346,7 @@ void SkPaint::toString(SkString* str) const {
     SkDrawLooper* looper = this->getLooper();
     if (NULL != looper) {
         str->append("<dt>DrawLooper:</dt><dd>");
-        SkDEVCODE(looper->toString(str);)
+        looper->toString(str);
         str->append("</dd>");
     }
 
@@ -2550,52 +2555,4 @@ bool SkPaint::nothingToDraw() const {
         }
     }
     return false;
-}
-
-
-//////////// Move these to their own file soon.
-
-SK_DEFINE_INST_COUNT(SkDrawLooper)
-
-bool SkDrawLooper::canComputeFastBounds(const SkPaint& paint) {
-    SkCanvas canvas;
-
-    this->init(&canvas);
-    for (;;) {
-        SkPaint p(paint);
-        if (this->next(&canvas, &p)) {
-            p.setLooper(NULL);
-            if (!p.canComputeFastBounds()) {
-                return false;
-            }
-        } else {
-            break;
-        }
-    }
-    return true;
-}
-
-void SkDrawLooper::computeFastBounds(const SkPaint& paint, const SkRect& src,
-                                     SkRect* dst) {
-    SkCanvas canvas;
-
-    this->init(&canvas);
-    for (bool firstTime = true;; firstTime = false) {
-        SkPaint p(paint);
-        if (this->next(&canvas, &p)) {
-            SkRect r(src);
-
-            p.setLooper(NULL);
-            p.computeFastBounds(r, &r);
-            canvas.getTotalMatrix().mapRect(&r);
-
-            if (firstTime) {
-                *dst = r;
-            } else {
-                dst->join(r);
-            }
-        } else {
-            break;
-        }
-    }
 }

@@ -189,21 +189,6 @@ public:
      */
     void serialize(SkWStream*, EncodeBitmap encoder = NULL) const;
 
-    /**
-     *  @Deprecated
-     *  Old version of EncodeBitmap, here to prevent chrome tree from going
-     *  red. Will be removed once chrome is switched to the new version.
-     */
-    typedef bool (*OldEncodeBitmap)(SkWStream*, const SkBitmap&);
-
-    /**
-     *  @Deprecated
-     *  Old version of serialize, taking the old version of EncodeBitmap,
-     *  to keep the chrome build green. Will be removed once chrome is
-     *  switched to the new version.
-     */
-    void serialize(SkWStream*, OldEncodeBitmap) const;
-
 #ifdef SK_BUILD_FOR_ANDROID
     /** Signals that the caller is prematurely done replaying the drawing
         commands. This can be called from a canvas virtual while the picture
@@ -277,7 +262,7 @@ private:
  *  calls to save(), restore will automatically be called to return the state
  *  to the same level it was before the drawPicture call was made.
  */
-class SkDrawPictureCallback {
+class SK_API SkDrawPictureCallback {
 public:
     SkDrawPictureCallback() {}
     virtual ~SkDrawPictureCallback() {}

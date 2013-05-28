@@ -304,6 +304,11 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
 
     // see if our platform has any accelerated overrides
     this->platformProcs();
+
+    if (NULL == fShaderProc32) {
+        fShaderProc32 = this->chooseBicubicFilterProc(paint);
+    }
+
     return true;
 }
 
