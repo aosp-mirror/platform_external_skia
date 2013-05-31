@@ -187,6 +187,13 @@ unsigned SkPaint::getBaseGlyphCount(SkUnichar text) const {
     SkGlyphCache* cache = autoCache.getCache();
     return cache->getBaseGlyphCount(text);
 }
+
+void SkPaint::setPaintOptionsAndroid(const SkPaintOptionsAndroid& options) {
+    if (options != fPaintOptionsAndroid) {
+        fPaintOptionsAndroid = options;
+        GEN_ID_INC;
+    }
+}
 #endif
 
 void SkPaint::setHinting(Hinting hintingLevel) {
