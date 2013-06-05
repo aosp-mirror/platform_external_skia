@@ -30,4 +30,8 @@ SK_API SkTypeface* SkCreateTypefaceForScriptNG(hb_script_t script, SkTypeface::S
 SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style style,
         SkPaint::FontVariant fontVariant = SkPaint::kDefault_Variant);
 
+SK_API SkTypeface* SkCreateTypefaceForScript(HB_Script script, SkTypeface::Style style,
+			        SkPaintOptionsAndroid::FontVariant fontVariant) {
+    return SkCreateTypefaceForScript(script, style, (SkPaint::FontVariant)fontVariant);
+}
 #endif
