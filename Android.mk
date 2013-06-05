@@ -134,6 +134,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkGraphics.cpp \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
+	src/core/SkLanguage.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
@@ -147,7 +148,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkOrderedWriteBuffer.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
-	src/core/SkPaintOptionsAndroid.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
