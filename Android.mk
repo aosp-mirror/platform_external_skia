@@ -335,6 +335,19 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkThread_pthread.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/utils/android/ashmem.cpp \
+	src/pdf/SkPDFCatalog.cpp \
+	src/pdf/SkPDFDevice.cpp \
+	src/pdf/SkPDFDocument.cpp \
+	src/pdf/SkPDFFont.cpp \
+	src/pdf/SkPDFFormXObject.cpp \
+	src/pdf/SkPDFGraphicState.cpp \
+	src/pdf/SkPDFImage.cpp \
+	src/pdf/SkPDFImageStream.cpp \
+	src/pdf/SkPDFPage.cpp \
+	src/pdf/SkPDFShader.cpp \
+	src/pdf/SkPDFStream.cpp \
+	src/pdf/SkPDFTypes.cpp \
+	src/pdf/SkPDFUtils.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
@@ -520,6 +533,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/lazy \
 	$(LOCAL_PATH)/include/pathops \
+	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
@@ -544,6 +558,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
