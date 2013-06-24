@@ -78,6 +78,14 @@ ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
 endif
 
+# IMPORTANT: The build order of the SkImageDecoder_*.cpp files
+# defines the order image decoders are tested when decoding a
+# stream. The last decoder is the first one tested, so the .cpp
+# files should be in listed in order from the least likely to be
+# used, to the most likely (jpeg and png should be the last two
+# for instance.)
+# START IMAGE DECODERS
+
 LOCAL_SRC_FILES:= \
 	src/core/Sk64.cpp \
 	src/core/SkAnnotation.cpp \
@@ -275,12 +283,12 @@ LOCAL_SRC_FILES:= \
 	src/images/SkImageDecoder.cpp \
 	src/images/SkImageDecoder_Factory.cpp \
 	src/images/SkImageDecoder_libbmp.cpp \
-	src/images/SkImageDecoder_libgif.cpp \
+	src/images/SkImageDecoder_wbmp.cpp \
 	src/images/SkImageDecoder_libico.cpp \
+    src/images/SkImageDecoder_libwebp.cpp \
+	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libjpeg.cpp \
 	src/images/SkImageDecoder_libpng.cpp \
-	src/images/SkImageDecoder_libwebp.cpp \
-	src/images/SkImageDecoder_wbmp.cpp \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkImageRef.cpp \
