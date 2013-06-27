@@ -124,6 +124,7 @@ static void copyLine(uint32_t* dst, const unsigned char* src, const ColorMapObje
     }
 }
 
+#if GIFLIB_MAJOR < 5
 static void copyInterlaceGroup(SkBitmap* bm, const unsigned char*& src,
                                const ColorMapObject* cmap, int transparent, int copyWidth,
                                int copyHeight, const GifImageDesc& imageDesc, int rowStep,
@@ -170,6 +171,7 @@ static void blitInterlace(SkBitmap* bm, const SavedImage* frame, const ColorMapO
 
     copyInterlaceGroup(bm, src, cmap, transparent, copyWidth, copyHeight, frame->ImageDesc, 2, 1);
 }
+#endif
 
 static void blitNormal(SkBitmap* bm, const SavedImage* frame, const ColorMapObject* cmap,
                        int transparent)
@@ -245,11 +247,15 @@ static void drawFrame(SkBitmap* bm, const SavedImage* frame, const ColorMapObjec
         return;
     }
 
+#if GIFLIB_MAJOR < 5
+    // before GIFLIB 5, de-interlacing wasn't done by library at load time
     if (frame->ImageDesc.Interlace) {
         blitInterlace(bm, frame, cmap, transparent);
-    } else {
-        blitNormal(bm, frame, cmap, transparent);
+        return;
     }
+#endif
+
+    blitNormal(bm, frame, cmap, transparent);
 }
 
 static bool checkIfWillBeCleared(const SavedImage* frame)
