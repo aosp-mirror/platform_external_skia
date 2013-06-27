@@ -597,8 +597,3 @@ include $(BASE_PATH)/tests/Android.mk
 
 # pathOps unit-tests
 # TODO include those sources!
-
-#############################################################
-# Build the legacy skia library for playback of saved webpages
-#
-include $(BASE_PATH)/legacy/Android.mk
