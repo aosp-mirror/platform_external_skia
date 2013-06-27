@@ -519,6 +519,7 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
 	libjpeg \
+	libpng \
 	libutils \
 	libz \
 	libexpat \
@@ -528,7 +529,6 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_STATIC_LIBRARIES := \
 	libft2 \
-	libpng \
 	libgif \
 	libwebp-decode \
 	libwebp-encode
