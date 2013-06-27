@@ -518,6 +518,7 @@ endif
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
+	libft2 \
 	libjpeg \
 	libpng \
 	libutils \
@@ -528,7 +529,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2
 
 LOCAL_STATIC_LIBRARIES := \
-	libft2 \
 	libgif \
 	libwebp-decode \
 	libwebp-encode
