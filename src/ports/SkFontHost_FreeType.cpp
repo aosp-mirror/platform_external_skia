@@ -730,6 +730,51 @@ int SkTypeface_FreeType::onGetUPEM() const {
     return face ? face->units_per_EM : 0;
 }
 
+static bool chooseBitmapStrike(FT_Face face, SkFixed scaleX, SkFixed scaleY) {
+    // early out if face is bad
+    if (face == NULL) {
+        SkDEBUGF(("chooseBitmapStrike aborted due to NULL face"));
+        return false;
+    }
+    // determine target ppemY, default to ppemX if necessary
+    FT_Pos targetPPEM = scaleY ? SkFixedToFDot6(scaleY) : SkFixedToFDot6(scaleX);
+    // find a bitmap strike equal to or just larger than the requested size
+    FT_Int chosenStrikeIndex = -1;
+    FT_Pos chosenPPEM = 0;
+    for (FT_Int strikeIndex = 0; strikeIndex < face->num_fixed_sizes; ++strikeIndex) {
+        FT_Pos thisPPEM = face->available_sizes[strikeIndex].y_ppem;
+        if (thisPPEM == targetPPEM) {
+            // exact match - our search stops here
+            chosenPPEM = thisPPEM;
+            chosenStrikeIndex = strikeIndex;
+            break;
+        } else if (chosenPPEM < targetPPEM) {
+            // attempt to increase chosenPPEM
+            if (thisPPEM > chosenPPEM) {
+                chosenPPEM = thisPPEM;
+                chosenStrikeIndex = strikeIndex;
+            }
+        } else {
+            // attempt to decrease chosenPPEM, but not below targetPPEM
+            if (thisPPEM < chosenPPEM && thisPPEM > targetPPEM) {
+                chosenPPEM = thisPPEM;
+                chosenStrikeIndex = strikeIndex;
+            }
+        }
+    }
+    if (chosenStrikeIndex == -1) {
+        // no usable strike found, abort abort
+        return false;
+    }
+    // use the chosen strike
+    FT_Error err = FT_Select_Size(face, chosenStrikeIndex);
+    if (err != 0) {
+        SkDEBUGF(("FT_Select_Size(%08x, %d) returned 0x%x\n", face, chosenStrikeIndex, err));
+        return false;
+    }
+    return true;
+}
+
 SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
                                                    const SkDescriptor* desc)
         : SkScalerContext_FreeType_Base(typeface, desc) {
@@ -898,27 +943,30 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
 
         err = FT_New_Size(fFace, &fFTSize);
         if (err != 0) {
-            SkDEBUGF(("SkScalerContext_FreeType::FT_New_Size(%x): FT_Set_Char_Size(0x%x, 0x%x) returned 0x%x\n",
-                        fFaceRec->fFontID, fScaleX, fScaleY, err));
+            SkDEBUGF(("FT_New_Size(%08x) returned 0x%x\n", fFace, err));
             fFace = NULL;
             return;
         }
 
         err = FT_Activate_Size(fFTSize);
         if (err != 0) {
-            SkDEBUGF(("SkScalerContext_FreeType::FT_Activate_Size(%x, 0x%x, 0x%x) returned 0x%x\n",
-                        fFaceRec->fFontID, fScaleX, fScaleY, err));
+            SkDEBUGF(("FT_Activate_Size(%08x, 0x%x, 0x%x) returned 0x%x\n", fFace, fScaleX, fScaleY, err));
             fFTSize = NULL;
         }
 
         err = FT_Set_Char_Size( fFace,
                                 SkFixedToFDot6(fScaleX), SkFixedToFDot6(fScaleY),
                                 72, 72);
+        // default to choosing a bitmap strike if FT_Set_Char_Size fails
         if (err != 0) {
-            SkDEBUGF(("SkScalerContext_FreeType::FT_Set_Char_Size(%x, 0x%x, 0x%x) returned 0x%x\n",
-                        fFaceRec->fFontID, fScaleX, fScaleY, err));
-            fFace = NULL;
-            return;
+            if ((fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag) == 0 ||
+                !chooseBitmapStrike(fFace, fScaleX, fScaleY)) {
+                // unable to FT_Set_Char_Size() *or* chooseBitmapStrike()
+                SkDEBUGF(("FT_Set_CharSize(%08x, 0x%x, 0x%x) returned 0x%x\n", fFace, fScaleX,
+                         fScaleY, err));
+                fFace = NULL;
+                return;
+            }
         }
 
         FT_Set_Transform( fFace, &fMatrix22, NULL);
