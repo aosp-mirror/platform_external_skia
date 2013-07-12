@@ -243,6 +243,28 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(FT_Face face, const SkGly
                     copyFT2LCD16<false>(glyph, face->glyph->bitmap, doBGR, doVert,
                                         fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
                 }
+#ifdef FT_LOAD_COLOR
+            } else if (face->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA &&
+                       glyph.fMaskFormat == SkMask::kARGB32_Format) {
+                for (int y = 0; y < face->glyph->bitmap.rows; ++y) {
+                    const uint8_t* src_row = src;
+                    uint8_t* dst_row = dst;
+
+                    for (int x = 0; x < face->glyph->bitmap.width; ++x) {
+                        uint8_t blue = *src_row++;
+                        uint8_t green = *src_row++;
+                        uint8_t red = *src_row++;
+                        uint8_t alpha = *src_row++;
+                        *dst_row++ = red;
+                        *dst_row++ = green;
+                        *dst_row++ = blue;
+                        *dst_row++ = alpha;
+                    }
+
+                    src += face->glyph->bitmap.pitch;
+                    dst += glyph.rowBytes();
+                }
+#endif
             } else {
                 SkDEBUGFAIL("unknown glyph bitmap transform needed");
             }

@@ -932,6 +932,10 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
             loadFlags |= FT_LOAD_VERTICAL_LAYOUT;
         }
 
+#ifdef FT_LOAD_COLOR
+        loadFlags |= FT_LOAD_COLOR;
+#endif
+
         fLoadGlyphFlags = loadFlags;
         fDoLinearMetrics = linearMetrics;
     }
@@ -1180,6 +1184,12 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
             fFace->glyph->bitmap_left += SkFDot6Floor(vector.x);
             fFace->glyph->bitmap_top  += SkFDot6Floor(vector.y);
         }
+
+#ifdef FT_LOAD_COLOR
+        if (fFace->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA) {
+            glyph->fMaskFormat = SkMask::kARGB32_Format;
+        }
+#endif
 
         glyph->fWidth   = SkToU16(fFace->glyph->bitmap.width);
         glyph->fHeight  = SkToU16(fFace->glyph->bitmap.rows);
