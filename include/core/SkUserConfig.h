@@ -45,7 +45,11 @@
 
 // do this build check for other tools that still read this header
 #ifdef ANDROID
-    #include <utils/misc.h>
+#if defined(HAVE_ENDIAN_H)
+#include <endian.h>
+#else
+#error "Need endian.h"
+#endif
 #endif
 
 #define SK_USE_POSIX_THREADS
