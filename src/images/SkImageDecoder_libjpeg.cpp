@@ -199,7 +199,7 @@ static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
 static bool return_false(const jpeg_decompress_struct& cinfo,
                          const SkBitmap& bm, const char msg[]) {
 #ifdef SK_DEBUG
-    SkDebugf("libjpeg error %d <%s> from %s [%d %d]", cinfo.err->msg_code,
+    SkDebugf("libjpeg error %d <%s> from %s [%d %d]\n", cinfo.err->msg_code,
              cinfo.err->jpeg_message_table[cinfo.err->msg_code], msg,
              bm.width(), bm.height());
 #endif
@@ -289,21 +289,33 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     /* this gives another few percents */
     cinfo.do_block_smoothing = 0;
 
+    SrcDepth srcDepth = k32Bit_SrcDepth;
     /* default format is RGB */
     if (cinfo.jpeg_color_space == JCS_CMYK) {
         // libjpeg cannot convert from CMYK to RGB - here we set up
         // so libjpeg will give us CMYK samples back and we will
         // later manually convert them to RGB
         cinfo.out_color_space = JCS_CMYK;
+    } else if (cinfo.jpeg_color_space == JCS_GRAYSCALE) {
+        cinfo.out_color_space = JCS_GRAYSCALE;
+        srcDepth = k8BitGray_SrcDepth;
     } else {
         cinfo.out_color_space = JCS_RGB;
     }
 
-    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, false);
+    SkBitmap::Config config = this->getPrefConfig(srcDepth, false);
     // only these make sense for jpegs
-    if (config != SkBitmap::kARGB_8888_Config &&
-        config != SkBitmap::kARGB_4444_Config &&
-        config != SkBitmap::kRGB_565_Config) {
+    if (SkBitmap::kA8_Config == config) {
+        if (cinfo.jpeg_color_space != JCS_GRAYSCALE) {
+            // Converting from a non grayscale image to A8 is
+            // not currently supported.
+            config = SkBitmap::kARGB_8888_Config;
+            // Change the output from jpeg back to RGB.
+            cinfo.out_color_space = JCS_RGB;
+        }
+    } else if (config != SkBitmap::kARGB_8888_Config &&
+               config != SkBitmap::kARGB_4444_Config &&
+               config != SkBitmap::kRGB_565_Config) {
         config = SkBitmap::kARGB_8888_Config;
     }
 
@@ -321,7 +333,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     if (1 == sampleSize && SkImageDecoder::kDecodeBounds_Mode == mode) {
         bm->setConfig(config, cinfo.image_width, cinfo.image_height);
-        bm->setIsOpaque(true);
+        bm->setIsOpaque(config != SkBitmap::kA8_Config);
         return true;
     }
 
@@ -343,7 +355,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             SkScaledBitmapSampler smpl(cinfo.output_width, cinfo.output_height,
                                        recompute_sampleSize(sampleSize, cinfo));
             bm->setConfig(config, smpl.scaledWidth(), smpl.scaledHeight());
-            bm->setIsOpaque(true);
+            bm->setIsOpaque(config != SkBitmap::kA8_Config);
             return true;
         } else {
             return return_false(cinfo, *bm, "start_decompress");
@@ -357,29 +369,13 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     }
 
     SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height, sampleSize);
-
-    bm->lockPixels();
-    JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
-    bm->unlockPixels();
-    bool reuseBitmap = (rowptr != NULL);
-
-    if (reuseBitmap) {
-        if (sampler.scaledWidth() != bm->width() ||
-            sampler.scaledHeight() != bm->height()) {
-            // Dimensions must match
-            return false;
-        } else if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-            return true;
-        }
-    } else {
-        bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-        bm->setIsOpaque(true);
-        if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-            return true;
-        }
-        if (!this->allocPixelRef(bm, NULL)) {
-            return return_false(cinfo, *bm, "allocPixelRef");
-        }
+    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bm->setIsOpaque(config != SkBitmap::kA8_Config);
+    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+        return true;
+    }
+    if (!this->allocPixelRef(bm, NULL)) {
+        return return_false(cinfo, *bm, "allocPixelRef");
     }
 
     SkAutoLockPixels alp(*bm);
@@ -394,7 +390,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         (config == SkBitmap::kRGB_565_Config &&
                 cinfo.out_color_space == JCS_RGB_565)))
     {
-        rowptr = (JSAMPLE*)bm->getPixels();
+        JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
         INT32 const bpr =  bm->rowBytes();
 
         while (cinfo.output_scanline < cinfo.output_height) {
@@ -408,9 +404,6 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
                 return return_false(cinfo, *bm, "shouldCancelDecode");
             }
             rowptr += bpr;
-        }
-        if (reuseBitmap) {
-            bm->notifyPixelsChanged();
         }
         jpeg_finish_decompress(&cinfo);
         return true;
@@ -480,9 +473,6 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     if (!skip_src_rows(&cinfo, srcRow,
                        cinfo.output_height - cinfo.output_scanline)) {
         return return_false(cinfo, *bm, "skip rows");
-    }
-    if (reuseBitmap) {
-        bm->notifyPixelsChanged();
     }
     jpeg_finish_decompress(&cinfo);
 
@@ -927,11 +917,6 @@ protected:
         SkAutoTime atm("JPEG Encode");
 #endif
 
-        const WriteScanline writer = ChooseWriter(bm);
-        if (NULL == writer) {
-            return false;
-        }
-
         SkAutoLockPixels alp(bm);
         if (NULL == bm.getPixels()) {
             return false;
@@ -950,8 +935,14 @@ protected:
         if (setjmp(sk_err.fJmpBuf)) {
             return false;
         }
-        jpeg_create_compress(&cinfo);
 
+        // Keep after setjmp or mark volatile.
+        const WriteScanline writer = ChooseWriter(bm);
+        if (NULL == writer) {
+            return false;
+        }
+
+        jpeg_create_compress(&cinfo);
         cinfo.dest = &sk_wstream;
         cinfo.image_width = bm.width();
         cinfo.image_height = bm.height();

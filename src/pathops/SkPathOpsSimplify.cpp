@@ -9,7 +9,7 @@
 #include "SkPathOpsCommon.h"
 #include "SkPathWriter.h"
 
-static bool bridgeWinding(SkTDArray<SkOpContour*>& contourList, SkPathWriter* simple) {
+static bool bridgeWinding(SkTArray<SkOpContour*, true>& contourList, SkPathWriter* simple) {
     bool firstContour = true;
     bool unsortable = false;
     bool topUnsortable = false;
@@ -94,7 +94,7 @@ static bool bridgeWinding(SkTDArray<SkOpContour*>& contourList, SkPathWriter* si
 }
 
 // returns true if all edges were processed
-static bool bridgeXor(SkTDArray<SkOpContour*>& contourList, SkPathWriter* simple) {
+static bool bridgeXor(SkTArray<SkOpContour*, true>& contourList, SkPathWriter* simple) {
     SkOpSegment* current;
     int start, end;
     bool unsortable = false;
@@ -161,11 +161,11 @@ bool Simplify(const SkPath& path, SkPath* result) {
     if (!builder.finish()) {
         return false;
     }
-    SkTDArray<SkOpContour*> contourList;
+    SkTArray<SkOpContour*, true> contourList;
     MakeContourList(contours, contourList, false, false);
     SkOpContour** currentPtr = contourList.begin();
-    result->setFillType(fillType);
     result->reset();
+    result->setFillType(fillType);
     if (!currentPtr) {
         return true;
     }
@@ -185,6 +185,7 @@ bool Simplify(const SkPath& path, SkPath* result) {
     // eat through coincident edges
     CoincidenceCheck(&contourList, 0);
     FixOtherTIndex(&contourList);
+    CheckEnds(&contourList);
     SortSegments(&contourList);
 #if DEBUG_ACTIVE_SPANS || DEBUG_ACTIVE_SPANS_FIRST_ONLY
     DebugShowActiveSpans(contourList);

@@ -1542,21 +1542,6 @@ void SkXPSDevice::convertToPpm(const SkMaskFilter* filter,
                                SkMatrix* matrix,
                                SkVector* ppuScale,
                                const SkIRect& clip, SkIRect* clipIRect) {
-    //TODO: currently ignoring the ppm if blur ignoring transform.
-    if (filter) {
-        SkMaskFilter::BlurInfo blurInfo;
-        SkMaskFilter::BlurType blurType = filter->asABlur(&blurInfo);
-
-        if (SkMaskFilter::kNone_BlurType != blurType
-            && blurInfo.fIgnoreTransform) {
-
-            ppuScale->fX = SK_Scalar1;
-            ppuScale->fY = SK_Scalar1;
-            *clipIRect = clip;
-            return;
-        }
-    }
-
     //This action is in unit space, but the ppm is specified in physical space.
     ppuScale->fX = SkScalarDiv(this->fCurrentPixelsPerMeter.fX,
                                this->fCurrentUnitsPerMeter.fX);
@@ -1964,25 +1949,13 @@ HRESULT SkXPSDevice::clipToPath(IXpsOMVisual* xpsVisual,
 }
 
 void SkXPSDevice::drawBitmap(const SkDraw& d, const SkBitmap& bitmap,
-                             const SkIRect* srcRectOrNull,
                              const SkMatrix& matrix, const SkPaint& paint) {
     if (d.fClip->isEmpty()) {
         return;
     }
 
     SkIRect srcRect;
-    SkBitmap tmp;
-    const SkBitmap* bitmapPtr = &bitmap;
-    if (NULL == srcRectOrNull) {
-        srcRect.set(0, 0, bitmap.width(), bitmap.height());
-        bitmapPtr = &bitmap;
-    } else {
-        srcRect = *srcRectOrNull;
-        if (!bitmap.extractSubset(&tmp, srcRect)) {
-            return; // extraction failed
-        }
-        bitmapPtr = &tmp;
-    }
+    srcRect.set(0, 0, bitmap.width(), bitmap.height());
 
     //Create the new shaded path.
     SkTScopedComPtr<IXpsOMPath> shadedPath;
@@ -2022,7 +1995,7 @@ void SkXPSDevice::drawBitmap(const SkDraw& d, const SkBitmap& bitmap,
             SkShader::kClamp_TileMode,
         };
         SkTScopedComPtr<IXpsOMTileBrush> xpsImageBrush;
-        HRV(this->createXpsImageBrush(*bitmapPtr,
+        HRV(this->createXpsImageBrush(bitmap,
                                       transform,
                                       xy,
                                       paint.getAlpha(),
@@ -2260,7 +2233,7 @@ static void text_draw_init(const SkPaint& paint,
                            SkBitSet& glyphsUsed,
                            SkDraw& myDraw, SkXPSDrawProcs& procs) {
     procs.fD1GProc = xps_draw_1_glyph;
-    int numGlyphGuess;
+    size_t numGlyphGuess;
     switch (paint.getTextEncoding()) {
         case SkPaint::kUTF8_TextEncoding:
             numGlyphGuess = SkUTF8_CountUnichars(

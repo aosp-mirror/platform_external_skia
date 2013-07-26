@@ -158,6 +158,11 @@ protected:
     void registerPictFileSamples(char** argv, int argc);
     void registerPictFileSample(char** argv, int argc);
 
+#ifdef SAMPLE_PDF_FILE_VIEWER
+    void registerPdfFileViewerSamples(char** argv, int argc);
+#endif  // SAMPLE_PDF_FILE_VIEWER
+
+
 private:
     class DefaultDeviceManager;
 
@@ -181,9 +186,9 @@ private:
     bool fNClip;
     bool fAnimating;
     bool fRotate;
+    SkScalar fRotateAnimTime;
     bool fPerspAnim;
     SkScalar fPerspAnimTime;
-    bool fScale;
     bool fRequestGrabImage;
     bool fMeasureFPS;
     SkMSec fMeasureFPS_Time;
@@ -208,7 +213,8 @@ private:
     SkOSMenu::TriState fLCDState;
     SkOSMenu::TriState fAAState;
     SkOSMenu::TriState fFilterState;
-    SkOSMenu::TriState fHintingState;
+    SkOSMenu::TriState fSubpixelState;
+    int fHintingState;
     SkOSMenu::TriState fTilingState;
     unsigned   fFlipAxis;
 

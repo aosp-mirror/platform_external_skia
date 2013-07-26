@@ -23,8 +23,7 @@ class SkMatrix;
 class SkMetaData;
 class SkRegion;
 
-// This is an opaque class, not interpreted by skia
-class SkGpuRenderTarget;
+class GrRenderTarget;
 
 class SK_API SkDevice : public SkRefCnt {
 public:
@@ -160,7 +159,7 @@ public:
     /**
      * Return the device's associated gpu render target, or NULL.
      */
-    virtual SkGpuRenderTarget* accessRenderTarget() { return NULL; }
+    virtual GrRenderTarget* accessRenderTarget() { return NULL; }
 
 
     /**
@@ -278,7 +277,6 @@ protected:
                           const SkMatrix* prePathMatrix = NULL,
                           bool pathIsMutable = false);
     virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkIRect* srcRectOrNull,
                             const SkMatrix& matrix, const SkPaint& paint);
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
                             int x, int y, const SkPaint& paint);

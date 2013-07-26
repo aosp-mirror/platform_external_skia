@@ -38,7 +38,8 @@ public:
 
     static GrGLProgram* Create(const GrGLContext& gl,
                                const GrGLProgramDesc& desc,
-                               const GrEffectStage* stages[]);
+                               const GrEffectStage* colorStages[],
+                               const GrEffectStage* coverageStages[]);
 
     virtual ~GrGLProgram();
 
@@ -103,61 +104,20 @@ public:
     /**
      * This function uploads uniforms and calls each GrGLEffect's setData. It is called before a
      * draw occurs using the program after the program has already been bound. It also uses the
-     * GrGpuGL object to bind the textures required by the GrGLEffects.
+     * GrGpuGL object to bind the textures required by the GrGLEffects. The color and coverage
+     * stages come from GrGLProgramDesc::Build().
      */
     void setData(GrGpuGL*,
                  GrDrawState::BlendOptFlags,
-                 const GrEffectStage* stages[],       // output of GrGLProgramDesc:Build()
+                 const GrEffectStage* colorStages[],
+                 const GrEffectStage* coverageStages[],
                  const GrDeviceCoordTexture* dstCopy, // can be NULL
                  SharedGLState*);
 
 private:
-    GrGLProgram(const GrGLContext& gl,
-                const GrGLProgramDesc& desc,
-                const GrEffectStage* stages[]);
-
-    bool succeeded() const { return 0 != fProgramID; }
-
-    /**
-     * This is the heavy initialization routine for building a GLProgram. stages is all the enabled
-     * color stages followed by all the enabled coverage stages as output by
-     * GrGLProgramDesc::Build()
-     */
-    bool genProgram(const GrEffectStage* stages[]);
-
-    GrSLConstantVec genInputColor(GrGLShaderBuilder* builder, SkString* inColor);
-
-    GrSLConstantVec genInputCoverage(GrGLShaderBuilder* builder, SkString* inCoverage);
-
-    void genGeometryShader(GrGLShaderBuilder* segments) const;
-
     typedef GrGLUniformManager::UniformHandle UniformHandle;
 
-    // Creates a GL program ID, binds shader attributes to GL vertex attrs, and links the program
-    bool bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& builder,
-                                          bool bindColorOut,
-                                          bool bindDualSrcOut);
-
-    // Sets the texture units for samplers
-    void initSamplerUniforms();
-
-    bool compileShaders(const GrGLShaderBuilder& builder);
-
-    const char* adjustInColor(const SkString& inColor) const;
-
-    // Helper for setData(). Makes GL calls to specify the initial color when there is not
-    // per-vertex colors.
-    void setColor(const GrDrawState&, GrColor color, SharedGLState*);
-
-    // Helper for setData(). Makes GL calls to specify the initial coverage when there is not
-    // per-vertex coverages.
-    void setCoverage(const GrDrawState&, GrColor coverage, SharedGLState*);
-
-    // Helper for setData() that sets the view matrix and loads the render target height uniform
-    void setMatrixAndRenderTargetHeight(const GrDrawState&);
-
-    typedef SkSTArray<4, UniformHandle, true> SamplerUniSArray;
-
+    // handles for uniforms (aside from per-effect samplers)
     struct UniformHandles {
         UniformHandle       fViewMatrixUni;
         UniformHandle       fColorUni;
@@ -173,9 +133,6 @@ private:
         UniformHandle       fDstCopyScaleUni;
         UniformHandle       fDstCopySamplerUni;
 
-        // An array of sampler uniform handles for each effect.
-        SamplerUniSArray    fEffectSamplerUnis[GrDrawState::kNumStages];
-
         UniformHandles() {
             fViewMatrixUni = GrGLUniformManager::kInvalidUniformHandle;
             fColorUni = GrGLUniformManager::kInvalidUniformHandle;
@@ -188,6 +145,63 @@ private:
         }
     };
 
+    typedef SkSTArray<4, UniformHandle, true> SamplerUniSArray;
+    typedef SkSTArray<4, int, true> TextureUnitSArray;
+
+    struct EffectAndSamplers {
+        EffectAndSamplers() : fGLEffect(NULL) {}
+        ~EffectAndSamplers() { delete fGLEffect; }
+        GrGLEffect*         fGLEffect;
+        SamplerUniSArray    fSamplerUnis;  // sampler uni handles for effect's GrTextureAccess
+        TextureUnitSArray   fTextureUnits; // texture unit used for each entry of fSamplerUnis
+    };
+
+    GrGLProgram(const GrGLContext& gl,
+                const GrGLProgramDesc& desc,
+                const GrEffectStage* colorStages[],
+                const GrEffectStage* coverageStages[]);
+
+    bool succeeded() const { return 0 != fProgramID; }
+
+    /**
+     * This is the heavy initialization routine for building a GLProgram. colorStages and
+     * coverageStages correspond to the output of GrGLProgramDesc::Build().
+     */
+    bool genProgram(const GrEffectStage* colorStages[], const GrEffectStage* coverageStages[]);
+
+    GrSLConstantVec genInputColor(GrGLShaderBuilder* builder, SkString* inColor);
+
+    GrSLConstantVec genInputCoverage(GrGLShaderBuilder* builder, SkString* inCoverage);
+
+    void genGeometryShader(GrGLShaderBuilder* segments) const;
+
+    // Creates a GL program ID, binds shader attributes to GL vertex attrs, and links the program
+    bool bindOutputsAttribsAndLinkProgram(const GrGLShaderBuilder& builder,
+                                          bool bindColorOut,
+                                          bool bindDualSrcOut);
+
+    // Sets the texture units for samplers
+    void initSamplerUniforms();
+    void initEffectSamplerUniforms(EffectAndSamplers* effect, int* texUnitIdx);
+
+    bool compileShaders(const GrGLShaderBuilder& builder);
+
+    const char* adjustInColor(const SkString& inColor) const;
+
+    // Helper for setData().
+    void setEffectData(GrGpuGL* gpu, const GrEffectStage& stage, const EffectAndSamplers& effect);
+
+    // Helper for setData(). Makes GL calls to specify the initial color when there is not
+    // per-vertex colors.
+    void setColor(const GrDrawState&, GrColor color, SharedGLState*);
+
+    // Helper for setData(). Makes GL calls to specify the initial coverage when there is not
+    // per-vertex coverages.
+    void setCoverage(const GrDrawState&, GrColor coverage, SharedGLState*);
+
+    // Helper for setData() that sets the view matrix and loads the render target height uniform
+    void setMatrixAndRenderTargetHeight(const GrDrawState&);
+
     // GL IDs
     GrGLuint                    fVShaderID;
     GrGLuint                    fGShaderID;
@@ -199,8 +213,10 @@ private:
     GrColor                     fColor;
     GrColor                     fCoverage;
     GrColor                     fColorFilterColor;
+    int                         fDstCopyTexUnit;
 
-    GrGLEffect*                 fEffects[GrDrawState::kNumStages];
+    SkTArray<EffectAndSamplers> fColorEffects;
+    SkTArray<EffectAndSamplers> fCoverageEffects;
 
     GrGLProgramDesc             fDesc;
     const GrGLContext&          fContext;

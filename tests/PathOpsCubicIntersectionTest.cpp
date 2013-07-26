@@ -52,9 +52,9 @@ static void standardTestCases(skiatest::Reporter* reporter) {
         }
         for (int pt = 0; pt < tIntersections.used(); ++pt) {
             double tt1 = tIntersections[0][pt];
-            SkDPoint xy1 = cubic1.xyAtT(tt1);
+            SkDPoint xy1 = cubic1.ptAtT(tt1);
             double tt2 = tIntersections[1][pt];
-            SkDPoint xy2 = cubic2.xyAtT(tt2);
+            SkDPoint xy2 = cubic2.ptAtT(tt2);
             if (!xy1.approximatelyEqual(xy2)) {
                 SkDebugf("%s [%d,%d] x!= t1=%g (%g,%g) t2=%g (%g,%g)\n",
                     __FUNCTION__, (int)index, pt, tt1, xy1.fX, xy1.fY, tt2, xy2.fX, xy2.fY);
@@ -163,6 +163,58 @@ static const SkDCubic testSet[] = {
 const size_t testSetCount = SK_ARRAY_COUNT(testSet);
 
 static const SkDCubic newTestSet[] = {
+{{{3, 4}, {1, 5}, {4, 3}, {6, 4}}},
+{{{3, 4}, {4, 6}, {4, 3}, {5, 1}}},
+
+{{{130.04275512695312, 11417.413085937500 },
+    {130.23312377929687, 11418.319335937500 },
+    {131.03707885742187, 11419.000000000000 },
+    {132.00000000000000, 11419.000000000000 }}},
+
+{{{132.00000000000000, 11419.000000000000 },
+    {130.89543151855469, 11419.000000000000 },
+    {130.00000000000000, 11418.104492187500 },
+    {130.00000000000000, 11417.000000000000 }}},
+
+{{{1.0516976506771041, 2.9684399028541346 },
+    {1.0604363140895228, 2.9633503074444141 },
+    {1.0692548215065762, 2.9580354426587459 },
+    {1.0781560339512140, 2.9525043684031349 }}},
+
+{{{1.0523038101345104, 2.9523755204833737 },
+    {1.0607035288264237, 2.9580853881628375 },
+    {1.0690530472271964, 2.9633896794787749 },
+    {1.0773566568712512, 2.9682969775000219 }}},
+
+{{{1.0386522625066592, 2.9759024812329078 },
+    {1.0559713690392631, 2.9661782500838885 },
+    {1.0736041309019990, 2.9555348259177858 },
+    {1.0915734362784633, 2.9440446879826569 }}},
+
+{{{1.0396670794879301, 2.9435062123457261 },
+    {1.0565690546812769, 2.9557413250983462 },
+    {1.0732616463413533, 2.9663369676594282 },
+    {1.0897791867435489, 2.9753618045797472 }}},
+
+{{{0.8685656183311091, 3.0409266475785208 },
+    {0.99189542936395292, 3.0212163698184424 },
+    {1.1302108367493320, 2.9265646471747306 },
+    {1.2952305904872474, 2.7940808546473788 }}},
+
+{{{0.85437872843682727, 2.7536036928549055 },
+    {1.0045584590592620, 2.9493041024831705 },
+    {1.1336998329885613, 3.0248027987251747 },
+    {1.2593809752247314, 3.0152560315809107 }}},
+
+{{{0, 1}, {1, 6}, {1, 0}, {6, 2}}},
+{{{0, 1}, {2, 6}, {1, 0}, {6, 1}}},
+
+{{{134,11414}, {131.990234375,11414}, {130.32666015625,11415.482421875}, {130.04275512695312,11417.4130859375}}},
+{{{132,11419}, {130.89543151855469,11419}, {130,11418.1044921875}, {130,11417}}},
+
+{{{132,11419}, {130.89543151855469,11419}, {130,11418.1044921875}, {130,11417}}},
+{{{130.04275512695312,11417.4130859375}, {130.23312377929687,11418.3193359375}, {131.03707885742187,11419}, {132,11419}}},
+
 {{{0, 1}, {2, 3}, {5, 1}, {4, 3}}},
 {{{1, 5}, {3, 4}, {1, 0}, {3, 2}}},
 
@@ -229,32 +281,34 @@ static const SkDCubic newTestSet[] = {
 const size_t newTestSetCount = SK_ARRAY_COUNT(newTestSet);
 
 static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const SkDCubic& cubic2) {
+    SkASSERT(ValidCubic(cubic1));
+    SkASSERT(ValidCubic(cubic2));
 #if ONE_OFF_DEBUG
     SkDebugf("computed quadratics given\n");
-    SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n",
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
         cubic1[0].fX, cubic1[0].fY, cubic1[1].fX, cubic1[1].fY,
         cubic1[2].fX, cubic1[2].fY, cubic1[3].fX, cubic1[3].fY);
-    SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n",
+    SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
         cubic2[0].fX, cubic2[0].fY, cubic2[1].fX, cubic2[1].fY,
         cubic2[2].fX, cubic2[2].fY, cubic2[3].fX, cubic2[3].fY);
 #endif
-    SkTDArray<SkDQuad> quads1;
+    SkTArray<SkDQuad, true> quads1;
     CubicToQuads(cubic1, cubic1.calcPrecision(), quads1);
 #if ONE_OFF_DEBUG
     SkDebugf("computed quadratics set 1\n");
     for (int index = 0; index < quads1.count(); ++index) {
         const SkDQuad& q = quads1[index];
-        SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n", q[0].fX, q[0].fY,
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].fX, q[0].fY,
                  q[1].fX, q[1].fY,  q[2].fX, q[2].fY);
     }
 #endif
-    SkTDArray<SkDQuad> quads2;
+    SkTArray<SkDQuad, true> quads2;
     CubicToQuads(cubic2, cubic2.calcPrecision(), quads2);
 #if ONE_OFF_DEBUG
     SkDebugf("computed quadratics set 2\n");
     for (int index = 0; index < quads2.count(); ++index) {
         const SkDQuad& q = quads2[index];
-        SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n", q[0].fX, q[0].fY,
+        SkDebugf("  {{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", q[0].fX, q[0].fY,
                  q[1].fX, q[1].fY,  q[2].fX, q[2].fY);
     }
 #endif
@@ -264,15 +318,18 @@ static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const S
     SkDPoint xy1, xy2;
     for (int pt3 = 0; pt3 < intersections.used(); ++pt3) {
         tt1 = intersections[0][pt3];
-        xy1 = cubic1.xyAtT(tt1);
+        xy1 = cubic1.ptAtT(tt1);
         tt2 = intersections[1][pt3];
-        xy2 = cubic2.xyAtT(tt2);
+        xy2 = cubic2.ptAtT(tt2);
+        const SkDPoint& iPt = intersections.pt(pt3);
 #if ONE_OFF_DEBUG
         SkDebugf("%s t1=%1.9g (%1.9g, %1.9g) (%1.9g, %1.9g) (%1.9g, %1.9g) t2=%1.9g\n",
-                __FUNCTION__, tt1, xy1.fX, xy1.fY, intersections.pt(pt3).fX,
-                intersections.pt(pt3).fY, xy2.fX, xy2.fY, tt2);
+                __FUNCTION__, tt1, xy1.fX, xy1.fY, iPt.fX,
+                iPt.fY, xy2.fX, xy2.fY, tt2);
 #endif
-        REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
+       REPORTER_ASSERT(reporter, xy1.approximatelyEqual(iPt));
+       REPORTER_ASSERT(reporter, xy2.approximatelyEqual(iPt));
+       REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
     }
 }
 
@@ -288,11 +345,6 @@ static void newOneOff(skiatest::Reporter* reporter, int outer, int inner) {
     oneOff(reporter, cubic1, cubic2);
 }
 
-static void oneOffTest(skiatest::Reporter* reporter) {
-    newOneOff(reporter, 0, 1);
-    oneOff(reporter, 14, 16);
-}
-
 static void oneOffTests(skiatest::Reporter* reporter) {
     for (size_t outer = 0; outer < testSetCount - 1; ++outer) {
         for (size_t inner = outer + 1; inner < testSetCount; ++inner) {
@@ -301,7 +353,7 @@ static void oneOffTests(skiatest::Reporter* reporter) {
     }
     for (size_t outer = 0; outer < newTestSetCount - 1; ++outer) {
         for (size_t inner = outer + 1; inner < newTestSetCount; ++inner) {
-            oneOff(reporter, outer, inner);
+            newOneOff(reporter, outer, inner);
         }
     }
 }
@@ -352,9 +404,9 @@ static void CubicIntersection_RandTest(skiatest::Reporter* reporter) {
         }
         for (int pt = 0; pt < intersections2.used(); ++pt) {
             double tt1 = intersections2[0][pt];
-            SkDPoint xy1 = cubic1.xyAtT(tt1);
+            SkDPoint xy1 = cubic1.ptAtT(tt1);
             double tt2 = intersections2[1][pt];
-            SkDPoint xy2 = cubic2.xyAtT(tt2);
+            SkDPoint xy2 = cubic2.ptAtT(tt2);
             REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
         }
     }
@@ -367,12 +419,12 @@ static void intersectionFinder(int index0, int index1, double t1Seed, double t2S
     SkDPoint t1[3], t2[3];
     bool toggle = true;
     do {
-        t1[0] = cubic1.xyAtT(t1Seed - t1Step);
-        t1[1] = cubic1.xyAtT(t1Seed);
-        t1[2] = cubic1.xyAtT(t1Seed + t1Step);
-        t2[0] = cubic2.xyAtT(t2Seed - t2Step);
-        t2[1] = cubic2.xyAtT(t2Seed);
-        t2[2] = cubic2.xyAtT(t2Seed + t2Step);
+        t1[0] = cubic1.ptAtT(t1Seed - t1Step);
+        t1[1] = cubic1.ptAtT(t1Seed);
+        t1[2] = cubic1.ptAtT(t1Seed + t1Step);
+        t2[0] = cubic2.ptAtT(t2Seed - t2Step);
+        t2[1] = cubic2.ptAtT(t2Seed);
+        t2[2] = cubic2.ptAtT(t2Seed + t2Step);
         double dist[3][3];
         dist[1][1] = t1[1].distance(t2[1]);
         int best_i = 1, best_j = 1;
@@ -413,38 +465,38 @@ static void intersectionFinder(int index0, int index1, double t1Seed, double t2S
     double t22 = t2Seed + t2Step * 2;
     SkDPoint test;
     while (!approximately_zero(t1Step)) {
-        test = cubic1.xyAtT(t10);
+        test = cubic1.ptAtT(t10);
         t10 += t1[1].approximatelyEqual(test) ? -t1Step : t1Step;
         t1Step /= 2;
     }
     t1Step = 0.1;
     while (!approximately_zero(t1Step)) {
-        test = cubic1.xyAtT(t12);
+        test = cubic1.ptAtT(t12);
         t12 -= t1[1].approximatelyEqual(test) ? -t1Step : t1Step;
         t1Step /= 2;
     }
     while (!approximately_zero(t2Step)) {
-        test = cubic2.xyAtT(t20);
+        test = cubic2.ptAtT(t20);
         t20 += t2[1].approximatelyEqual(test) ? -t2Step : t2Step;
         t2Step /= 2;
     }
     t2Step = 0.1;
     while (!approximately_zero(t2Step)) {
-        test = cubic2.xyAtT(t22);
+        test = cubic2.ptAtT(t22);
         t22 -= t2[1].approximatelyEqual(test) ? -t2Step : t2Step;
         t2Step /= 2;
     }
 #if ONE_OFF_DEBUG
     SkDebugf("%s t1=(%1.9g<%1.9g<%1.9g) t2=(%1.9g<%1.9g<%1.9g)\n", __FUNCTION__,
         t10, t1Seed, t12, t20, t2Seed, t22);
-    SkDPoint p10 = cubic1.xyAtT(t10);
-    SkDPoint p1Seed = cubic1.xyAtT(t1Seed);
-    SkDPoint p12 = cubic1.xyAtT(t12);
+    SkDPoint p10 = cubic1.ptAtT(t10);
+    SkDPoint p1Seed = cubic1.ptAtT(t1Seed);
+    SkDPoint p12 = cubic1.ptAtT(t12);
     SkDebugf("%s p1=(%1.9g,%1.9g)<(%1.9g,%1.9g)<(%1.9g,%1.9g)\n", __FUNCTION__,
         p10.fX, p10.fY, p1Seed.fX, p1Seed.fY, p12.fX, p12.fY);
-    SkDPoint p20 = cubic2.xyAtT(t20);
-    SkDPoint p2Seed = cubic2.xyAtT(t2Seed);
-    SkDPoint p22 = cubic2.xyAtT(t22);
+    SkDPoint p20 = cubic2.ptAtT(t20);
+    SkDPoint p2Seed = cubic2.ptAtT(t2Seed);
+    SkDPoint p22 = cubic2.ptAtT(t22);
     SkDebugf("%s p2=(%1.9g,%1.9g)<(%1.9g,%1.9g)<(%1.9g,%1.9g)\n", __FUNCTION__,
         p20.fX, p20.fY, p2Seed.fX, p2Seed.fY, p22.fX, p22.fY);
 #endif
@@ -460,54 +512,68 @@ static void CubicIntersection_IntersectionFinder() {
     intersectionFinder(0, 1, 0.865213351, 0.865208087, t1Step, t2Step);
 }
 
+static const SkDCubic selfSet[] = {
+    {{{2, 3}, {0, 4}, {3, 2}, {5, 3}}},
+    {{{3, 6}, {2, 3}, {4, 0}, {3, 2}}},
+    {{{0, 2}, {2, 3}, {5, 1}, {3, 2}}},
+    {{{0, 2}, {3, 5}, {5, 0}, {4, 2}}},
+    {{{3.34, 8.98}, {1.95, 10.27}, {3.76, 7.65}, {4.96, 10.64}}},
+    {{{3.13, 2.74}, {1.08, 4.62}, {3.71, 0.94}, {2.01, 3.81}}},
+    {{{6.71, 3.14}, {7.99, 2.75}, {8.27, 1.96}, {6.35, 3.57}}},
+    {{{12.81, 7.27}, {7.22, 6.98}, {12.49, 8.97}, {11.42, 6.18}}},
+};
+size_t selfSetCount = SK_ARRAY_COUNT(selfSet);
+
+static void selfOneOff(skiatest::Reporter* reporter, int index) {
+    const SkDCubic& cubic = selfSet[index];
+#if ONE_OFF_DEBUG
+    int idx2;
+    double max[3];
+    int ts = cubic.findMaxCurvature(max);
+    for (idx2 = 0; idx2 < ts; ++idx2) {
+        SkDebugf("%s max[%d]=%1.9g (%1.9g, %1.9g)\n", __FUNCTION__, idx2,
+                max[idx2], cubic.ptAtT(max[idx2]).fX, cubic.ptAtT(max[idx2]).fY);
+    }
+    SkTArray<double, true> ts1;
+    SkTArray<SkDQuad, true> quads1;
+    cubic.toQuadraticTs(cubic.calcPrecision(), &ts1);
+    for (idx2 = 0; idx2 < ts1.count(); ++idx2) {
+        SkDebugf("%s t[%d]=%1.9g\n", __FUNCTION__, idx2, ts1[idx2]);
+    }
+    CubicToQuads(cubic, cubic.calcPrecision(), quads1);
+    for (idx2 = 0; idx2 < quads1.count(); ++idx2) {
+        const SkDQuad& q = quads1[idx2];
+        SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n",
+                q[0].fX, q[0].fY,  q[1].fX, q[1].fY,  q[2].fX, q[2].fY);
+    }
+    SkDebugf("\n");
+#endif
+    SkIntersections i;
+    int result = i.intersect(cubic);
+    REPORTER_ASSERT(reporter, result == 1);
+    REPORTER_ASSERT(reporter, i.used() == 1);
+    REPORTER_ASSERT(reporter, !approximately_equal(i[0][0], i[1][0]));
+    SkDPoint pt1 = cubic.ptAtT(i[0][0]);
+    SkDPoint pt2 = cubic.ptAtT(i[1][0]);
+    REPORTER_ASSERT(reporter, pt1.approximatelyEqual(pt2));
+}
+
 static void cubicIntersectionSelfTest(skiatest::Reporter* reporter) {
-    const SkDCubic selfSet[] = {
-        {{{0, 2}, {2, 3}, {5, 1}, {3, 2}}},
-        {{{0, 2}, {3, 5}, {5, 0}, {4, 2}}},
-        {{{3.34, 8.98}, {1.95, 10.27}, {3.76, 7.65}, {4.96, 10.64}}},
-        {{{3.13, 2.74}, {1.08, 4.62}, {3.71, 0.94}, {2.01, 3.81}}},
-        {{{6.71, 3.14}, {7.99, 2.75}, {8.27, 1.96}, {6.35, 3.57}}},
-        {{{12.81, 7.27}, {7.22, 6.98}, {12.49, 8.97}, {11.42, 6.18}}},
-    };
-    size_t selfSetCount = SK_ARRAY_COUNT(selfSet);
-    size_t firstFail = 1;
+    size_t firstFail = 0;
     for (size_t index = firstFail; index < selfSetCount; ++index) {
-        const SkDCubic& cubic = selfSet[index];
-    #if ONE_OFF_DEBUG
-        int idx2;
-        double max[3];
-        int ts = cubic.findMaxCurvature(max);
-        for (idx2 = 0; idx2 < ts; ++idx2) {
-            SkDebugf("%s max[%d]=%1.9g (%1.9g, %1.9g)\n", __FUNCTION__, idx2,
-                    max[idx2], cubic.xyAtT(max[idx2]).fX, cubic.xyAtT(max[idx2]).fY);
-        }
-        SkTDArray<double> ts1;
-        SkTDArray<SkDQuad> quads1;
-        cubic.toQuadraticTs(cubic.calcPrecision(), &ts1);
-        for (idx2 = 0; idx2 < ts1.count(); ++idx2) {
-            SkDebugf("%s t[%d]=%1.9g\n", __FUNCTION__, idx2, ts1[idx2]);
-        }
-        CubicToQuads(cubic, cubic.calcPrecision(), quads1);
-        for (idx2 = 0; idx2 < quads1.count(); ++idx2) {
-            const SkDQuad& q = quads1[idx2];
-            SkDebugf("  {{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}},\n",
-                    q[0].fX, q[0].fY,  q[1].fX, q[1].fY,  q[2].fX, q[2].fY);
-        }
-        SkDebugf("\n");
-    #endif
-        SkIntersections i;
-        int result = i.intersect(cubic);
-        REPORTER_ASSERT(reporter, result == 1);
-        REPORTER_ASSERT(reporter, i.used() == 1);
-        REPORTER_ASSERT(reporter, !approximately_equal(i[0][0], i[1][0]));
-        SkDPoint pt1 = cubic.xyAtT(i[0][0]);
-        SkDPoint pt2 = cubic.xyAtT(i[1][0]);
-        REPORTER_ASSERT(reporter, pt1.approximatelyEqual(pt2));
+        selfOneOff(reporter, index);
     }
 }
 
+static void PathOpsCubicIntersectionOneOffTest(skiatest::Reporter* reporter) {
+    newOneOff(reporter, 0, 1);
+}
+
+static void PathOpsCubicSelfOneOffTest(skiatest::Reporter* reporter) {
+    selfOneOff(reporter, 0);
+}
+
 static void PathOpsCubicIntersectionTest(skiatest::Reporter* reporter) {
-    oneOffTest(reporter);
     oneOffTests(reporter);
     cubicIntersectionSelfTest(reporter);
     standardTestCases(reporter);
@@ -517,3 +583,7 @@ static void PathOpsCubicIntersectionTest(skiatest::Reporter* reporter) {
 
 #include "TestClassDef.h"
 DEFINE_TESTCLASS_SHORT(PathOpsCubicIntersectionTest)
+
+DEFINE_TESTCLASS_SHORT(PathOpsCubicIntersectionOneOffTest)
+
+DEFINE_TESTCLASS_SHORT(PathOpsCubicSelfOneOffTest)

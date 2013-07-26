@@ -7,8 +7,18 @@
 
 #include "SkArithmeticMode.h"
 #include "SkColorPriv.h"
+#include "SkFlattenableBuffers.h"
 #include "SkString.h"
 #include "SkUnPreMultiply.h"
+#if SK_SUPPORT_GPU
+#include "GrContext.h"
+#include "gl/GrGLEffect.h"
+#include "gl/GrGLEffectMatrix.h"
+#include "GrTBackendEffectFactory.h"
+#include "SkImageFilterUtils.h"
+#endif
+
+static const bool gUseUnpremul = false;
 
 class SkArithmeticMode_scalar : public SkXfermode {
 public:
@@ -23,9 +33,27 @@ public:
                         const SkAlpha aa[]) const SK_OVERRIDE;
 
     SK_DEVELOPER_TO_STRING()
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkArithmeticMode_scalar)
+
+#if SK_SUPPORT_GPU
+    virtual bool asNewEffectOrCoeff(GrContext*, GrEffectRef** effect, Coeff*, Coeff*, GrTexture* background) const SK_OVERRIDE;
+#endif
 
 private:
+    SkArithmeticMode_scalar(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+        fK[0] = buffer.readScalar();
+        fK[1] = buffer.readScalar();
+        fK[2] = buffer.readScalar();
+        fK[3] = buffer.readScalar();
+    }
+
+    virtual void flatten(SkFlattenableWriteBuffer& buffer) const SK_OVERRIDE {
+        INHERITED::flatten(buffer);
+        buffer.writeScalar(fK[0]);
+        buffer.writeScalar(fK[1]);
+        buffer.writeScalar(fK[2]);
+        buffer.writeScalar(fK[3]);
+    }
     SkScalar fK[4];
 
     typedef SkXfermode INHERITED;
@@ -69,44 +97,55 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
         if ((NULL == aaCoverage) || aaCoverage[i]) {
             SkPMColor sc = src[i];
             SkPMColor dc = dst[i];
-            int sa = SkGetPackedA32(sc);
-            int da = SkGetPackedA32(dc);
-
-            int srcNeedsUnpremul = needsUnpremul(sa);
-            int dstNeedsUnpremul = needsUnpremul(sa);
 
             int a, r, g, b;
 
-            if (!srcNeedsUnpremul && !dstNeedsUnpremul) {
-                a = arith(k1, k2, k3, k4, sa, sa);
-                r = arith(k1, k2, k3, k4, SkGetPackedR32(sc), SkGetPackedR32(dc));
-                g = arith(k1, k2, k3, k4, SkGetPackedG32(sc), SkGetPackedG32(dc));
-                b = arith(k1, k2, k3, k4, SkGetPackedB32(sc), SkGetPackedB32(dc));
+            if (gUseUnpremul) {
+                int sa = SkGetPackedA32(sc);
+                int da = SkGetPackedA32(dc);
+
+                int srcNeedsUnpremul = needsUnpremul(sa);
+                int dstNeedsUnpremul = needsUnpremul(da);
+
+                if (!srcNeedsUnpremul && !dstNeedsUnpremul) {
+                    a = arith(k1, k2, k3, k4, sa, da);
+                    r = arith(k1, k2, k3, k4, SkGetPackedR32(sc), SkGetPackedR32(dc));
+                    g = arith(k1, k2, k3, k4, SkGetPackedG32(sc), SkGetPackedG32(dc));
+                    b = arith(k1, k2, k3, k4, SkGetPackedB32(sc), SkGetPackedB32(dc));
+                } else {
+                    int sr = SkGetPackedR32(sc);
+                    int sg = SkGetPackedG32(sc);
+                    int sb = SkGetPackedB32(sc);
+                    if (srcNeedsUnpremul) {
+                        SkUnPreMultiply::Scale scale = SkUnPreMultiply::GetScale(sa);
+                        sr = SkUnPreMultiply::ApplyScale(scale, sr);
+                        sg = SkUnPreMultiply::ApplyScale(scale, sg);
+                        sb = SkUnPreMultiply::ApplyScale(scale, sb);
+                    }
+
+                    int dr = SkGetPackedR32(dc);
+                    int dg = SkGetPackedG32(dc);
+                    int db = SkGetPackedB32(dc);
+                    if (dstNeedsUnpremul) {
+                        SkUnPreMultiply::Scale scale = SkUnPreMultiply::GetScale(da);
+                        dr = SkUnPreMultiply::ApplyScale(scale, dr);
+                        dg = SkUnPreMultiply::ApplyScale(scale, dg);
+                        db = SkUnPreMultiply::ApplyScale(scale, db);
+                    }
+
+                    a = arith(k1, k2, k3, k4, sa, da);
+                    r = arith(k1, k2, k3, k4, sr, dr);
+                    g = arith(k1, k2, k3, k4, sg, dg);
+                    b = arith(k1, k2, k3, k4, sb, db);
+                }
             } else {
-                int sr = SkGetPackedR32(sc);
-                int sg = SkGetPackedG32(sc);
-                int sb = SkGetPackedB32(sc);
-                if (srcNeedsUnpremul) {
-                    SkUnPreMultiply::Scale scale = SkUnPreMultiply::GetScale(sa);
-                    sr = SkUnPreMultiply::ApplyScale(scale, sr);
-                    sg = SkUnPreMultiply::ApplyScale(scale, sg);
-                    sb = SkUnPreMultiply::ApplyScale(scale, sb);
-                }
-
-                int dr = SkGetPackedR32(dc);
-                int dg = SkGetPackedG32(dc);
-                int db = SkGetPackedB32(dc);
-                if (dstNeedsUnpremul) {
-                    SkUnPreMultiply::Scale scale = SkUnPreMultiply::GetScale(da);
-                    dr = SkUnPreMultiply::ApplyScale(scale, dr);
-                    dg = SkUnPreMultiply::ApplyScale(scale, dg);
-                    db = SkUnPreMultiply::ApplyScale(scale, db);
-                }
-
-                a = arith(k1, k2, k3, k4, sa, sa);
-                r = arith(k1, k2, k3, k4, sr, dr);
-                g = arith(k1, k2, k3, k4, sg, dg);
-                b = arith(k1, k2, k3, k4, sb, db);
+                a = arith(k1, k2, k3, k4, SkGetPackedA32(sc), SkGetPackedA32(dc));
+                r = arith(k1, k2, k3, k4, SkGetPackedR32(sc), SkGetPackedR32(dc));
+                r = SkMin32(r, a);
+                g = arith(k1, k2, k3, k4, SkGetPackedG32(sc), SkGetPackedG32(dc));
+                g = SkMin32(g, a);
+                b = arith(k1, k2, k3, k4, SkGetPackedB32(sc), SkGetPackedB32(dc));
+                b = SkMin32(b, a);
             }
 
             // apply antialias coverage if necessary
@@ -119,7 +158,7 @@ void SkArithmeticMode_scalar::xfer32(SkPMColor dst[], const SkPMColor src[],
             }
 
             // turn the result back into premul
-            if (0xFF != a) {
+            if (gUseUnpremul && (0xFF != a)) {
                 int scale = a + (a >> 7);
                 r = SkAlphaMul(r, scale);
                 g = SkAlphaMul(g, scale);
@@ -191,3 +230,226 @@ SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
     }
     return SkNEW_ARGS(SkArithmeticMode_scalar, (k1, k2, k3, k4));
 }
+
+
+//////////////////////////////////////////////////////////////////////////////
+
+#if SK_SUPPORT_GPU
+
+class GrGLArithmeticEffect : public GrGLEffect {
+public:
+    GrGLArithmeticEffect(const GrBackendEffectFactory&, const GrDrawEffect&);
+    virtual ~GrGLArithmeticEffect();
+
+    virtual void emitCode(GrGLShaderBuilder*,
+                          const GrDrawEffect&,
+                          EffectKey,
+                          const char* outputColor,
+                          const char* inputColor,
+                          const TextureSamplerArray&) SK_OVERRIDE;
+
+    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
+
+    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
+
+private:
+    static const GrEffect::CoordsType kCoordsType = GrEffect::kLocal_CoordsType;
+    GrGLEffectMatrix fBackgroundEffectMatrix;
+    GrGLUniformManager::UniformHandle fKUni;
+
+    typedef GrGLEffect INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class GrArithmeticEffect : public GrEffect {
+public:
+    static GrEffectRef* Create(float k1, float k2, float k3, float k4, GrTexture* background) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrArithmeticEffect, (k1, k2, k3, k4, background)));
+        return CreateEffectRef(effect);
+    }
+
+    virtual ~GrArithmeticEffect();
+
+    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+
+    typedef GrGLArithmeticEffect GLEffect;
+    static const char* Name() { return "Arithmetic"; }
+    GrTexture* backgroundTexture() const { return fBackgroundAccess.getTexture(); }
+
+    virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
+
+    float k1() const { return fK1; }
+    float k2() const { return fK2; }
+    float k3() const { return fK3; }
+    float k4() const { return fK4; }
+
+private:
+    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
+
+    GrArithmeticEffect(float k1, float k2, float k3, float k4, GrTexture* background);
+    float                       fK1, fK2, fK3, fK4;
+    GrTextureAccess             fBackgroundAccess;
+
+    GR_DECLARE_EFFECT_TEST;
+    typedef GrEffect INHERITED;
+
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+GrArithmeticEffect::GrArithmeticEffect(float k1, float k2, float k3, float k4,
+                                       GrTexture* background)
+  : fK1(k1), fK2(k2), fK3(k3), fK4(k4) {
+    if (background) {
+        fBackgroundAccess.reset(background);
+        this->addTextureAccess(&fBackgroundAccess);
+    } else {
+        this->setWillReadDstColor();
+    }
+}
+
+GrArithmeticEffect::~GrArithmeticEffect() {
+}
+
+bool GrArithmeticEffect::onIsEqual(const GrEffect& sBase) const {
+    const GrArithmeticEffect& s = CastEffect<GrArithmeticEffect>(sBase);
+    return fK1 == s.fK1 &&
+           fK2 == s.fK2 &&
+           fK3 == s.fK3 &&
+           fK4 == s.fK4 &&
+           backgroundTexture() == s.backgroundTexture();
+}
+
+const GrBackendEffectFactory& GrArithmeticEffect::getFactory() const {
+    return GrTBackendEffectFactory<GrArithmeticEffect>::getInstance();
+}
+
+void GrArithmeticEffect::getConstantColorComponents(GrColor* color, uint32_t* validFlags) const {
+    // TODO: optimize this
+    *validFlags = 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+GrGLArithmeticEffect::GrGLArithmeticEffect(const GrBackendEffectFactory& factory,
+                                           const GrDrawEffect& drawEffect)
+   : INHERITED(factory)
+   , fBackgroundEffectMatrix(kCoordsType) {
+}
+
+GrGLArithmeticEffect::~GrGLArithmeticEffect() {
+}
+
+void GrGLArithmeticEffect::emitCode(GrGLShaderBuilder* builder,
+                                    const GrDrawEffect& drawEffect,
+                                    EffectKey key,
+                                    const char* outputColor,
+                                    const char* inputColor,
+                                    const TextureSamplerArray& samplers) {
+
+    GrTexture* backgroundTex = drawEffect.castEffect<GrArithmeticEffect>().backgroundTexture();
+    const char* dstColor;
+    if (backgroundTex) {
+        const char* bgCoords;
+        GrSLType bgCoordsType = fBackgroundEffectMatrix.emitCode(builder, key, &bgCoords, NULL, "BG");
+        builder->fsCodeAppend("\t\tvec4 bgColor = ");
+        builder->appendTextureLookup(GrGLShaderBuilder::kFragment_ShaderType,
+                                     samplers[0],
+                                     bgCoords,
+                                     bgCoordsType);
+        builder->fsCodeAppendf(";\n");
+        dstColor = "bgColor";
+    } else {
+        dstColor = builder->dstColor();
+    }
+
+    GrAssert(NULL != dstColor);
+    fKUni = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
+                                kVec4f_GrSLType, "k");
+    const char* kUni = builder->getUniformCStr(fKUni);
+
+    // We don't try to optimize for this case at all
+    if (NULL == inputColor) {
+        builder->fsCodeAppendf("\t\tconst vec4 src = %s;\n", GrGLSLOnesVecf(4));
+    } else {
+        builder->fsCodeAppendf("\t\tvec4 src = %s;\n", inputColor);
+        if (gUseUnpremul) {
+            builder->fsCodeAppendf("\t\tsrc.rgb = clamp(src.rgb / src.a, 0.0, 1.0);\n");
+        }
+    }
+
+    builder->fsCodeAppendf("\t\tvec4 dst = %s;\n", dstColor);
+    if (gUseUnpremul) {
+        builder->fsCodeAppendf("\t\tdst.rgb = clamp(dst.rgb / dst.a, 0.0, 1.0);\n");
+    }
+
+    builder->fsCodeAppendf("\t\t%s = %s.x * src * dst + %s.y * src + %s.z * dst + %s.w;\n", outputColor, kUni, kUni, kUni, kUni);
+    builder->fsCodeAppendf("\t\t%s = clamp(%s, 0.0, 1.0);\n", outputColor, outputColor);
+    if (gUseUnpremul) {
+        builder->fsCodeAppendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+    } else {
+        builder->fsCodeAppendf("\t\t%s.rgb = min(%s.rgb, %s.a);\n", outputColor, outputColor, outputColor);
+    }
+}
+
+void GrGLArithmeticEffect::setData(const GrGLUniformManager& uman, const GrDrawEffect& drawEffect) {
+    const GrArithmeticEffect& arith = drawEffect.castEffect<GrArithmeticEffect>();
+    uman.set4f(fKUni, arith.k1(), arith.k2(), arith.k3(), arith.k4());
+    GrTexture* bgTex = arith.backgroundTexture();
+    if (bgTex) {
+        fBackgroundEffectMatrix.setData(uman,
+                                        GrEffect::MakeDivByTextureWHMatrix(bgTex),
+                                        drawEffect,
+                                        bgTex);
+    }
+}
+
+GrGLEffect::EffectKey GrGLArithmeticEffect::GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
+    const GrArithmeticEffect& effect = drawEffect.castEffect<GrArithmeticEffect>();
+    GrTexture* bgTex = effect.backgroundTexture();
+    EffectKey bgKey = 0;
+    if (bgTex) {
+        bgKey = GrGLEffectMatrix::GenKey(GrEffect::MakeDivByTextureWHMatrix(bgTex),
+                                         drawEffect,
+                                         GrGLArithmeticEffect::kCoordsType,
+                                         bgTex);
+    }
+    return bgKey;
+}
+
+GrEffectRef* GrArithmeticEffect::TestCreate(SkMWCRandom* rand,
+                                            GrContext*,
+                                            const GrDrawTargetCaps&,
+                                            GrTexture*[]) {
+    float k1 = rand->nextF();
+    float k2 = rand->nextF();
+    float k3 = rand->nextF();
+    float k4 = rand->nextF();
+
+    static AutoEffectUnref gEffect(SkNEW_ARGS(GrArithmeticEffect, (k1, k2, k3, k4, NULL)));
+    return CreateEffectRef(gEffect);
+}
+
+GR_DEFINE_EFFECT_TEST(GrArithmeticEffect);
+
+bool SkArithmeticMode_scalar::asNewEffectOrCoeff(GrContext*,
+                                                 GrEffectRef** effect,
+                                                 Coeff*,
+                                                 Coeff*,
+                                                 GrTexture* background) const {
+    if (effect) {
+        *effect = GrArithmeticEffect::Create(SkScalarToFloat(fK[0]),
+                                             SkScalarToFloat(fK[1]),
+                                             SkScalarToFloat(fK[2]),
+                                             SkScalarToFloat(fK[3]),
+                                             background);
+    }
+    return true;
+}
+
+#endif
+
+SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_START(SkArithmeticMode)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkArithmeticMode_scalar)
+SK_DEFINE_FLATTENABLE_REGISTRAR_GROUP_END

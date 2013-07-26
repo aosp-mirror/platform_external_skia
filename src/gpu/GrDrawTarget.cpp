@@ -387,14 +387,21 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
     }
 
     GrAssert(NULL != drawState.getRenderTarget());
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        if (drawState.isStageEnabled(s)) {
-            const GrEffectRef& effect = *drawState.getStage(s).getEffect();
-            int numTextures = effect->numTextures();
-            for (int t = 0; t < numTextures; ++t) {
-                GrTexture* texture = effect->texture(t);
-                GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
-            }
+
+    for (int s = 0; s < drawState.numColorStages(); ++s) {
+        const GrEffectRef& effect = *drawState.getColorStage(s).getEffect();
+        int numTextures = effect->numTextures();
+        for (int t = 0; t < numTextures; ++t) {
+            GrTexture* texture = effect->texture(t);
+            GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
+        }
+    }
+    for (int s = 0; s < drawState.numCoverageStages(); ++s) {
+        const GrEffectRef& effect = *drawState.getCoverageStage(s).getEffect();
+        int numTextures = effect->numTextures();
+        for (int t = 0; t < numTextures; ++t) {
+            GrTexture* texture = effect->texture(t);
+            GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
         }
     }
 
@@ -413,7 +420,7 @@ bool GrDrawTarget::setupDstReadIfNecessary(DrawInfo* info) {
     GrRenderTarget* rt = this->drawState()->getRenderTarget();
 
     const GrClipData* clip = this->getClip();
-    GrIRect copyRect;
+    SkIRect copyRect;
     clip->getConservativeBounds(this->getDrawState().getRenderTarget(), &copyRect);
     SkIRect drawIBounds;
     if (info->getDevIBounds(&drawIBounds)) {
@@ -608,9 +615,9 @@ void set_vertex_attributes(GrDrawState* drawState, bool hasUVs) {
 
 };
 
-void GrDrawTarget::onDrawRect(const GrRect& rect,
+void GrDrawTarget::onDrawRect(const SkRect& rect,
                               const SkMatrix* matrix,
-                              const GrRect* localRect,
+                              const SkRect* localRect,
                               const SkMatrix* localMatrix) {
 
     GrDrawState::AutoViewMatrixRestore avmr;
@@ -657,9 +664,10 @@ GrDrawTarget::AutoStateRestore::AutoStateRestore() {
 }
 
 GrDrawTarget::AutoStateRestore::AutoStateRestore(GrDrawTarget* target,
-                                                 ASRInit init) {
+                                                 ASRInit init,
+                                                 const SkMatrix* vm) {
     fDrawTarget = NULL;
-    this->set(target, init);
+    this->set(target, init, vm);
 }
 
 GrDrawTarget::AutoStateRestore::~AutoStateRestore() {
@@ -669,7 +677,31 @@ GrDrawTarget::AutoStateRestore::~AutoStateRestore() {
     }
 }
 
-void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init) {
+void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init, const SkMatrix* vm) {
+    GrAssert(NULL == fDrawTarget);
+    fDrawTarget = target;
+    fSavedState = target->drawState();
+    GrAssert(fSavedState);
+    fSavedState->ref();
+    if (kReset_ASRInit == init) {
+        if (NULL == vm) {
+            // calls the default cons
+            fTempState.init();
+        } else {
+            SkNEW_IN_TLAZY(&fTempState, GrDrawState, (*vm));
+        }
+    } else {
+        GrAssert(kPreserve_ASRInit == init);
+        if (NULL == vm) {
+            fTempState.set(*fSavedState);
+        } else {
+            SkNEW_IN_TLAZY(&fTempState, GrDrawState, (*fSavedState, *vm));
+        }
+    }
+    target->setDrawState(fTempState.get());
+}
+
+bool GrDrawTarget::AutoStateRestore::setIdentity(GrDrawTarget* target, ASRInit init) {
     GrAssert(NULL == fDrawTarget);
     fDrawTarget = target;
     fSavedState = target->drawState();
@@ -682,8 +714,17 @@ void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init) {
         GrAssert(kPreserve_ASRInit == init);
         // calls the copy cons
         fTempState.set(*fSavedState);
+        if (!fTempState.get()->setIdentityViewMatrix()) {
+            // let go of any resources held by the temp
+            fTempState.get()->reset();
+            fDrawTarget = NULL;
+            fSavedState->unref();
+            fSavedState = NULL;
+            return false;
+        }
     }
     target->setDrawState(fTempState.get());
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -878,7 +919,7 @@ bool GrDrawTarget::onCopySurface(GrSurface* dst,
     matrix.setTranslate(SkIntToScalar(srcRect.fLeft - dstPoint.fX),
                         SkIntToScalar(srcRect.fTop - dstPoint.fY));
     matrix.postIDiv(tex->width(), tex->height());
-    this->drawState()->createTextureEffect(0, tex, matrix);
+    this->drawState()->addColorTextureEffect(tex, matrix);
     SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX,
                                         dstPoint.fY,
                                         srcRect.width(),
@@ -909,6 +950,8 @@ void GrDrawTargetCaps::reset() {
     fDualSourceBlendingSupport = false;
     fBufferLockSupport = false;
     fPathStencilingSupport = false;
+    fDstReadInShaderSupport = false;
+    fReuseScratchTextures = true;
 
     fMaxRenderTargetSize = 0;
     fMaxTextureSize = 0;
@@ -926,6 +969,8 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     fDualSourceBlendingSupport = other.fDualSourceBlendingSupport;
     fBufferLockSupport = other.fBufferLockSupport;
     fPathStencilingSupport = other.fPathStencilingSupport;
+    fDstReadInShaderSupport = other.fDstReadInShaderSupport;
+    fReuseScratchTextures = other.fReuseScratchTextures;
 
     fMaxRenderTargetSize = other.fMaxRenderTargetSize;
     fMaxTextureSize = other.fMaxTextureSize;
@@ -947,6 +992,7 @@ void GrDrawTargetCaps::print() const {
     GrPrintf("Buffer Lock Support         : %s\n", gNY[fBufferLockSupport]);
     GrPrintf("Path Stenciling Support     : %s\n", gNY[fPathStencilingSupport]);
     GrPrintf("Dst Read In Shader Support  : %s\n", gNY[fDstReadInShaderSupport]);
+    GrPrintf("Reuse Scratch Textures      : %s\n", gNY[fReuseScratchTextures]);
     GrPrintf("Max Texture Size            : %d\n", fMaxTextureSize);
     GrPrintf("Max Render Target Size      : %d\n", fMaxRenderTargetSize);
     GrPrintf("Max Sample Count            : %d\n", fMaxSampleCount);

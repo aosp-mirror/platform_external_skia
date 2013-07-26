@@ -65,20 +65,21 @@ exportVar ANDROID_TOOLCHAIN ${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}/bin
 
 # if the toolchain doesn't exist on your machine then we need to fetch it
 if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
-  # gsutil must be installed on your system and in your PATH
-  gsutil version &> /dev/null
-  if [[ "$?" != "0" ]]; then
-    echo "ERROR: Unable to find gsutil. Please install it before proceeding."
-    exit 1
-  fi
   # create the toolchain directory if needed
   if [ ! -d "$TOOLCHAIN_DIR" ]; then
     mkdir $TOOLCHAIN_DIR
   fi
-  # enter the toolchain directory then download, unpack, and remove the tarball 
+  # enter the toolchain directory then download, unpack, and remove the tarball
   pushd $TOOLCHAIN_DIR
   TARBALL=ndk-r$NDK_REV-v$API_LEVEL.tgz
-  gsutil cp gs://chromium-skia-gm/android-toolchains/$TARBALL $TARBALL
+
+  echo "Downloading $TARBALL ..."
+  ${SCRIPT_DIR}/download_toolchains.py http://chromium-skia-gm.commondatastorage.googleapis.com/android-toolchains/$TARBALL $TOOLCHAIN_DIR/$TARBALL
+  if [[ "$?" != "0" ]]; then
+    echo "ERROR: Unable to download toolchain $TARBALL."
+    exit 1
+  fi
+
   echo "Untarring $TOOLCHAIN_TYPE from $TARBALL."
   tar -xzf $TARBALL $TOOLCHAIN_TYPE
   echo "Removing $TARBALL"
@@ -117,6 +118,9 @@ exportVar RANLIB "$ANDROID_TOOLCHAIN_PREFIX-ranlib"
 exportVar OBJCOPY "$ANDROID_TOOLCHAIN_PREFIX-objcopy"
 exportVar STRIP "$ANDROID_TOOLCHAIN_PREFIX-strip"
 
+# Use the "android" flavor of the Makefile generator for both Linux and OS X.
+exportVar GYP_GENERATORS "make-android"
+
 # Helper function to configure the GYP defines to the appropriate values
 # based on the target device.
 setup_device() {
@@ -125,6 +129,7 @@ setup_device() {
   DEFINES="${DEFINES} skia_os=android"
   DEFINES="${DEFINES} android_base=${SCRIPT_DIR}/.."
   DEFINES="${DEFINES} android_toolchain=${TOOLCHAIN_TYPE}"
+  DEFINES="${DEFINES} skia_shared_lib=1"
 
   # Setup the build variation depending on the target device
   TARGET_DEVICE="$1"
@@ -139,14 +144,28 @@ setup_device() {
         DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
         DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
         ;;
+    nexus_s_thumb)
+        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
+        DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
+        ;;
     nexus_4 | nexus_7 | nexus_10)
         DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
+        ;;
+    nexus_4_thumb | nexus_7_thumb | nexus_10_thumb)
+        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
         ;;
     xoom)
         DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=1 arm_thumb=0"
         ;;
+    xoom_thumb)
+        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=1 arm_thumb=1"
+        ;;
     galaxy_nexus)
         DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
+        DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+        ;;
+    galaxy_nexus_thumb)
+        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
         DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
         ;;
     razr_i)
@@ -182,19 +201,36 @@ setup_device() {
   exportVar SKIA_OUT "out/config/android-${TARGET_DEVICE}"
 }
 
-# Run the setup device command initially as a convenience for the user
-#setup_device
-#echo "** The device has been setup for you by default. If you would like to **"
-#echo "** use a different device then run the setup_device function with the **"
-#echo "** appropriate input.                                                 **"
+# adb_pull_if_needed(android_src, host_dst)
+adb_pull_if_needed() {
 
-# Use the "android" flavor of the Makefile generator for both Linux and OS X.
-exportVar GYP_GENERATORS "make-android"
+  # get adb location
+  source $SCRIPT_DIR/utils/setup_adb.sh
 
-# Helper function so that when we run "make" to build for clank it exports
-# the toolchain variables to make.
-#make_android() {
-#  CC="$CROSS_CC" CXX="$CROSS_CXX" LINK="$CROSS_LINK" \
-#  AR="$CROSS_AR" RANLIB="$CROSS_RANLIB" \
-#    command make $*
-#}
+  # read input params
+  ANDROID_SRC="$1"
+  HOST_DST="$2"
+
+  if [ -d $HOST_DST ];
+  then
+    HOST_DST="${HOST_DST}/$(basename ${ANDROID_SRC})"
+  fi
+
+  echo "HOST: $HOST_DST"
+
+  if [ -f $HOST_DST ];
+  then
+    #get the MD5 for dst and src
+    ANDROID_MD5=`$ADB shell md5 $ANDROID_SRC`
+    HOST_MD5=`md5sum $HOST_DST`
+
+    if [ "${ANDROID_MD5:0:32}" != "${HOST_MD5:0:32}" ];
+    then
+      $ADB pull $ANDROID_SRC $HOST_DST
+#   else
+#      echo "md5 match of android [$ANDROID_SRC] and host [$HOST_DST]"
+    fi
+  else
+    $ADB pull $ANDROID_SRC $HOST_DST
+  fi
+}

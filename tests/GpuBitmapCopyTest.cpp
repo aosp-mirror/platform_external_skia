@@ -25,7 +25,7 @@ static const char* boolStr(bool value) {
 
 // these are in the same order as the SkBitmap::Config enum
 static const char* gConfigName[] = {
-    "None", "4444", "8888"
+    "None", "8888"
 };
 
 struct Pair {
@@ -118,9 +118,8 @@ static void TestGpuBitmapCopy(skiatest::Reporter* reporter, GrContextFactory* fa
             return;
         }
         static const Pair gPairs[] = {
-            { SkBitmap::kNo_Config,         "000"  },
-            { SkBitmap::kARGB_4444_Config,  "011"  },
-            { SkBitmap::kARGB_8888_Config,  "011"  },
+            { SkBitmap::kNo_Config,         "00"  },
+            { SkBitmap::kARGB_8888_Config,  "01"  },
         };
 
         const int W = 20;

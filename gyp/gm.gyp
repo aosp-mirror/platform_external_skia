@@ -8,7 +8,6 @@
       'target_name': 'gm_expectations',
       'type': 'static_library',
       'include_dirs' : [
-        '../include/core/',
         '../src/utils/',
       ],
       'sources': [
@@ -16,11 +15,8 @@
         '../gm/gm_expectations.cpp',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
-        'core.gyp:core',
-        'images.gyp:images',
+        'skia_lib.gyp:skia_lib',
         'jsoncpp.gyp:jsoncpp',
-        'utils.gyp:utils',
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -32,39 +28,36 @@
       'target_name': 'gm',
       'type': 'executable',
       'include_dirs' : [
-        '../debugger',
         '../src/core',
         '../src/effects',
         '../src/pipe/utils/',
         '../src/utils/',
+        '../src/utils/debugger',
       ],
       'includes': [
         'gmslides.gypi',
       ],
       'sources': [
-        '../debugger/SkDrawCommand.h',
-        '../debugger/SkDrawCommand.cpp',
-        '../debugger/SkDebugCanvas.h',
-        '../debugger/SkDebugCanvas.cpp',
-        '../debugger/SkObjectParser.h',
-        '../debugger/SkObjectParser.cpp',
-
         '../gm/gm.cpp',
         '../gm/gmmain.cpp',
         '../gm/system_preferences_default.cpp',
 
         '../src/pipe/utils/SamplePipeControllers.h',
         '../src/pipe/utils/SamplePipeControllers.cpp',
+
+        '../src/utils/debugger/SkDrawCommand.h',
+        '../src/utils/debugger/SkDrawCommand.cpp',
+        '../src/utils/debugger/SkDebugCanvas.h',
+        '../src/utils/debugger/SkDebugCanvas.cpp',
+        '../src/utils/debugger/SkObjectParser.h',
+        '../src/utils/debugger/SkObjectParser.cpp',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
-        'effects.gyp:effects',
+        'skia_lib.gyp:skia_lib',
         'flags.gyp:flags',
         'gm.gyp:gm_expectations',
-        'images.gyp:images',
         'jsoncpp.gyp:jsoncpp',
         'pdf.gyp:pdf',
-        'utils.gyp:utils',
       ],
       'conditions': [
         ['skia_os == "mac"', {

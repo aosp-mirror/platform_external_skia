@@ -63,17 +63,13 @@ public:
      * is destructive). This buffer must not have an active reserved vertex or index source. Any
      * reserved geometry on the target will be finalized because it's geometry source will be pushed
      * before flushing and popped afterwards.
-     *
-     * @return false if the playback trivially drew nothing because nothing was recorded.
      */
-    bool flush();
-
-    bool isFlushing() const { return fFlushing; }
+    void flush();
 
     // overrides from GrDrawTarget
     virtual bool geometryHints(int* vertexCount,
                                int* indexCount) const SK_OVERRIDE;
-    virtual void clear(const GrIRect* rect,
+    virtual void clear(const SkIRect* rect,
                        GrColor color,
                        GrRenderTarget* renderTarget = NULL) SK_OVERRIDE;
 
@@ -112,7 +108,7 @@ private:
         Clear() : fRenderTarget(NULL) {}
         ~Clear() { GrSafeUnref(fRenderTarget); }
 
-        GrIRect         fRect;
+        SkIRect         fRect;
         GrColor         fColor;
         GrRenderTarget* fRenderTarget;
     };
@@ -126,9 +122,9 @@ private:
 
     // overrides from GrDrawTarget
     virtual void onDraw(const DrawInfo&) SK_OVERRIDE;
-    virtual void onDrawRect(const GrRect& rect,
+    virtual void onDrawRect(const SkRect& rect,
                             const SkMatrix* matrix,
-                            const GrRect* localRect,
+                            const SkRect* localRect,
                             const SkMatrix* localMatrix) SK_OVERRIDE;
     virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType) SK_OVERRIDE;
     virtual bool onReserveVertexSpace(size_t vertexSize,

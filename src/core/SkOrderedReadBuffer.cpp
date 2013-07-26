@@ -23,6 +23,9 @@ SkOrderedReadBuffer::SkOrderedReadBuffer() : INHERITED() {
     fFactoryArray = NULL;
     fFactoryCount = 0;
     fBitmapDecoder = NULL;
+#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
+    fDecodedBitmapIndex = -1;
+#endif // DEBUG_NON_DETERMINISTIC_ASSERT
 }
 
 SkOrderedReadBuffer::SkOrderedReadBuffer(const void* data, size_t size) : INHERITED()  {
@@ -37,6 +40,9 @@ SkOrderedReadBuffer::SkOrderedReadBuffer(const void* data, size_t size) : INHERI
     fFactoryArray = NULL;
     fFactoryCount = 0;
     fBitmapDecoder = NULL;
+#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
+    fDecodedBitmapIndex = -1;
+#endif // DEBUG_NON_DETERMINISTIC_ASSERT
 }
 
 SkOrderedReadBuffer::SkOrderedReadBuffer(SkStream* stream) {
@@ -53,6 +59,9 @@ SkOrderedReadBuffer::SkOrderedReadBuffer(SkStream* stream) {
     fFactoryArray = NULL;
     fFactoryCount = 0;
     fBitmapDecoder = NULL;
+#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
+    fDecodedBitmapIndex = -1;
+#endif // DEBUG_NON_DETERMINISTIC_ASSERT
 }
 
 SkOrderedReadBuffer::~SkOrderedReadBuffer() {
@@ -192,10 +201,28 @@ void SkOrderedReadBuffer::readBitmap(SkBitmap* bitmap) {
         // The writer stored false, meaning the SkBitmap was not stored in an SkBitmapHeap.
         const size_t length = this->readUInt();
         if (length > 0) {
-            // A non-zero size means the SkBitmap was encoded.
+#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
+            fDecodedBitmapIndex++;
+#endif // DEBUG_NON_DETERMINISTIC_ASSERT
+            // A non-zero size means the SkBitmap was encoded. Read the data and pixel
+            // offset.
             const void* data = this->skip(length);
+            const int32_t xOffset = fReader.readS32();
+            const int32_t yOffset = fReader.readS32();
             if (fBitmapDecoder != NULL && fBitmapDecoder(data, length, bitmap)) {
                 if (bitmap->width() == width && bitmap->height() == height) {
+#ifdef DEBUG_NON_DETERMINISTIC_ASSERT
+                    if (0 != xOffset || 0 != yOffset) {
+                        SkDebugf("SkOrderedReadBuffer::readBitmap: heights match,"
+                                 " but offset is not zero. \nInfo about the bitmap:"
+                                 "\n\tIndex: %d\n\tDimensions: [%d %d]\n\tEncoded"
+                                 " data size: %d\n\tOffset: (%d, %d)\n",
+                                 fDecodedBitmapIndex, width, height, length, xOffset,
+                                 yOffset);
+                    }
+#endif // DEBUG_NON_DETERMINISTIC_ASSERT
+                    // If the width and height match, there should be no offset.
+                    SkASSERT(0 == xOffset && 0 == yOffset);
                     return;
                 }
 
@@ -204,16 +231,8 @@ void SkOrderedReadBuffer::readBitmap(SkBitmap* bitmap) {
                 // the encoded width and height.
                 SkASSERT(width <= bitmap->width() && height <= bitmap->height());
 
-                // FIXME: Once the writer is changed to record the (x,y) offset,
-                // they will be used to store the correct portion of the picture.
                 SkBitmap subsetBm;
-#ifdef BUMP_PICTURE_VERSION
-                int32_t x = fReader.readS32();
-                int32_t y = fReader.readS32();
-                SkIRect subset = SkIRect::MakeXYWH(x, y, width, height);
-#else
-                SkIRect subset = SkIRect::MakeWH(width, height);
-#endif
+                SkIRect subset = SkIRect::MakeXYWH(xOffset, yOffset, width, height);
                 if (bitmap->extractSubset(&subsetBm, subset)) {
                     bitmap->swap(subsetBm);
                     return;

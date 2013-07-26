@@ -107,6 +107,7 @@ public:
 private:
     void addFallbackFont(FontRecID fontRecID);
     SkTypeface* getTypefaceForFontRec(FontRecID fontRecID);
+    FallbackFontList* getCurrentLocaleFallbackFontList();
     FallbackFontList* findFallbackFontList(const SkLanguage& lang, bool isOriginal = true);
 
     SkTArray<FontRec> fFonts;
@@ -118,6 +119,10 @@ private:
     SkTDict<FallbackFontList*> fFallbackFontDict;
     SkTDict<FallbackFontList*> fFallbackFontAliasDict;
     FallbackFontList fDefaultFallbackList;
+
+    // fallback info for current locale
+    SkString fCachedLocale;
+    FallbackFontList* fLocaleFallbackFontList;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -193,7 +198,8 @@ SkFontConfigInterfaceAndroid::SkFontConfigInterfaceAndroid(SkTDArray<FontFamily*
         fFamilyNameDict(1024),
         fDefaultFamilyRecID(INVALID_FAMILY_REC_ID),
         fFallbackFontDict(128),
-        fFallbackFontAliasDict(128) {
+        fFallbackFontAliasDict(128),
+        fLocaleFallbackFontList(NULL) {
 
     for (int i = 0; i < fontFamilies.count(); ++i) {
         FontFamily* family = fontFamilies[i];
@@ -489,8 +495,9 @@ SkTypeface* SkFontConfigInterfaceAndroid::getTypefaceForFontRec(FontRecID fontRe
 }
 
 bool SkFontConfigInterfaceAndroid::getFallbackFamilyNameForChar(SkUnichar uni, SkString* name) {
-    for (int i = 0; i < fDefaultFallbackList.count(); i++) {
-        FontRecID fontRecID = fDefaultFallbackList[i];
+    FallbackFontList* fallbackFontList = this->getCurrentLocaleFallbackFontList();
+    for (int i = 0; i < fallbackFontList->count(); i++) {
+        FontRecID fontRecID = fallbackFontList->getAt(i);
         SkTypeface* face = this->getTypefaceForFontRec(fontRecID);
 
         SkPaint paint;
@@ -533,6 +540,15 @@ SkTypeface* SkFontConfigInterfaceAndroid::getTypefaceForChar(SkUnichar uni,
     return NULL;
 }
 
+FallbackFontList* SkFontConfigInterfaceAndroid::getCurrentLocaleFallbackFontList() {
+    SkString locale = SkFontConfigParser::GetLocale();
+    if (NULL == fLocaleFallbackFontList || locale != fCachedLocale) {
+        fCachedLocale = locale;
+        fLocaleFallbackFontList = this->findFallbackFontList(locale);
+    }
+    return fLocaleFallbackFontList;
+}
+
 FallbackFontList* SkFontConfigInterfaceAndroid::findFallbackFontList(const SkLanguage& lang,
                                                                      bool isOriginal) {
     const SkString& langTag = lang.getTag();
@@ -569,18 +585,24 @@ SkTypeface* SkFontConfigInterfaceAndroid::nextLogicalTypeface(SkFontID currFontI
         return NULL;
     }
 
-    const SkTypeface* currTypeface = SkTypefaceCache::FindByID(currFontID);
-    SkASSERT(currTypeface != 0);
-
     FallbackFontList* currentFallbackList = findFallbackFontList(opts.getLanguage());
     SkASSERT(currentFallbackList);
 
     // we must convert currTypeface into a FontRecID
-    FontRecID currFontRecID = ((FontConfigTypeface*)currTypeface)->getIdentity().fID;
-    SkASSERT(INVALID_FONT_REC_ID != currFontRecID);
+    FontRecID currFontRecID = INVALID_FONT_REC_ID;
+    const SkTypeface* currTypeface = SkTypefaceCache::FindByID(currFontID);
+    // non-system fonts are not in the font cache so if we are asked to fallback
+    // for a non-system font we will start at the front of the chain.
+    if (NULL != currTypeface && currFontID == origFontID) {
+        currFontRecID = ((FontConfigTypeface*)currTypeface)->getIdentity().fID;
+        SkASSERT(INVALID_FONT_REC_ID != currFontRecID);
+    }
 
-    // TODO lookup the index next font in the chain
+    // lookup the index next font in the chain
     int currFallbackFontIndex = currentFallbackList->find(currFontRecID);
+    // We add 1 to the returned index for 2 reasons: (1) if find succeeds it moves
+    // our index to the next entry in the list; (2) if find() fails it returns
+    // -1 and incrementing it will set our starting index to 0 (the head of the list)
     int nextFallbackFontIndex = currFallbackFontIndex + 1;
 
     if(nextFallbackFontIndex >= currentFallbackList->count()) {

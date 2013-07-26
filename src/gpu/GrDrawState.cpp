@@ -8,34 +8,53 @@
 #include "GrDrawState.h"
 #include "GrPaint.h"
 
-void GrDrawState::setFromPaint(const GrPaint& paint) {
-    for (int i = 0; i < GrPaint::kMaxColorStages; ++i) {
-        int s = i + GrPaint::kFirstColorStage;
-        if (paint.isColorStageEnabled(i)) {
-            fStages[s] = paint.getColorStage(i);
-        } else {
-            fStages[s].setEffect(NULL);
+bool GrDrawState::setIdentityViewMatrix()  {
+    if (fColorStages.count() || fCoverageStages.count()) {
+        SkMatrix invVM;
+        if (!fCommon.fViewMatrix.invert(&invVM)) {
+            // sad trombone sound
+            return false;
+        }
+        for (int s = 0; s < fColorStages.count(); ++s) {
+            fColorStages[s].localCoordChange(invVM);
+        }
+        for (int s = 0; s < fCoverageStages.count(); ++s) {
+            fCoverageStages[s].localCoordChange(invVM);
         }
     }
+    fCommon.fViewMatrix.reset();
+    return true;
+}
 
-    this->setFirstCoverageStage(GrPaint::kFirstCoverageStage);
+void GrDrawState::setFromPaint(const GrPaint& paint, const SkMatrix& vm, GrRenderTarget* rt) {
+    GrAssert(0 == fBlockEffectRemovalCnt || 0 == this->numTotalStages());
 
-    for (int i = 0; i < GrPaint::kMaxCoverageStages; ++i) {
-        int s = i + GrPaint::kFirstCoverageStage;
-        if (paint.isCoverageStageEnabled(i)) {
-            fStages[s] = paint.getCoverageStage(i);
-        } else {
-            fStages[s].setEffect(NULL);
-        }
+    fColorStages.reset();
+    fCoverageStages.reset();
+
+    for (int i = 0; i < paint.numColorStages(); ++i) {
+        fColorStages.push_back(paint.getColorStage(i));
     }
 
-    // disable all stages not accessible via the paint
-    for (int s = GrPaint::kTotalStages; s < GrDrawState::kNumStages; ++s) {
-        this->disableStage(s);
+    for (int i = 0; i < paint.numCoverageStages(); ++i) {
+        fCoverageStages.push_back(paint.getCoverageStage(i));
     }
+
+    this->setRenderTarget(rt);
+
+    fCommon.fViewMatrix = vm;
+
+    // These have no equivalent in GrPaint, set them to defaults
+    fCommon.fBlendConstant = 0x0;
+    fCommon.fCoverage = 0xffffffff;
+    fCommon.fDrawFace = kBoth_DrawFace;
+    fCommon.fStencilSettings.setDisabled();
+    this->resetStateFlags();
+
+    // Enable the clip bit
+    this->enableState(GrDrawState::kClip_StateBit);
 
     this->setColor(paint.getColor());
-
     this->setState(GrDrawState::kDither_StateBit, paint.isDither());
     this->setState(GrDrawState::kHWAntialias_StateBit, paint.isAntiAlias());
 
@@ -130,33 +149,34 @@ bool GrDrawState::validateVertexAttribs() const {
     for (int i = 0; i < kMaxVertexAttribCnt; ++i) {
         slTypes[i] = static_cast<GrSLType>(-1);
     }
-    for (int s = 0; s < kNumStages; ++s) {
-        if (this->isStageEnabled(s)) {
-            const GrEffectStage& stage = fStages[s];
-            const GrEffectRef* effect = stage.getEffect();
-            // make sure that any attribute indices have the correct binding type, that the attrib
-            // type and effect's shader lang type are compatible, and that attributes shared by
-            // multiple effects use the same shader lang type.
-            const int* attributeIndices = stage.getVertexAttribIndices();
-            int numAttributes = stage.getVertexAttribIndexCount();
-            for (int i = 0; i < numAttributes; ++i) {
-                int attribIndex = attributeIndices[i];
-                if (attribIndex >= fCommon.fVACount ||
-                    kEffect_GrVertexAttribBinding != fCommon.fVAPtr[attribIndex].fBinding) {
-                    return false;
-                }
-
-                GrSLType effectSLType = (*effect)->vertexAttribType(i);
-                GrVertexAttribType attribType = fCommon.fVAPtr[attribIndex].fType;
-                int slVecCount = GrSLTypeVectorCount(effectSLType);
-                int attribVecCount = GrVertexAttribTypeVectorCount(attribType);
-                if (slVecCount != attribVecCount ||
-                    (static_cast<GrSLType>(-1) != slTypes[attribIndex] &&
-                     slTypes[attribIndex] != effectSLType)) {
-                    return false;
-                }
-                slTypes[attribIndex] = effectSLType;
+    int totalStages = fColorStages.count() + fCoverageStages.count();
+    for (int s = 0; s < totalStages; ++s) {
+        int covIdx = s - fColorStages.count();
+        const GrEffectStage& stage = covIdx < 0 ? fColorStages[s] : fCoverageStages[covIdx];
+        const GrEffectRef* effect = stage.getEffect();
+        GrAssert(NULL != effect);
+        // make sure that any attribute indices have the correct binding type, that the attrib
+        // type and effect's shader lang type are compatible, and that attributes shared by
+        // multiple effects use the same shader lang type.
+        const int* attributeIndices = stage.getVertexAttribIndices();
+        int numAttributes = stage.getVertexAttribIndexCount();
+        for (int i = 0; i < numAttributes; ++i) {
+            int attribIndex = attributeIndices[i];
+            if (attribIndex >= fCommon.fVACount ||
+                kEffect_GrVertexAttribBinding != fCommon.fVAPtr[attribIndex].fBinding) {
+                return false;
             }
+
+            GrSLType effectSLType = (*effect)->vertexAttribType(i);
+            GrVertexAttribType attribType = fCommon.fVAPtr[attribIndex].fType;
+            int slVecCount = GrSLTypeVectorCount(effectSLType);
+            int attribVecCount = GrVertexAttribTypeVectorCount(attribType);
+            if (slVecCount != attribVecCount ||
+                (static_cast<GrSLType>(-1) != slTypes[attribIndex] &&
+                    slTypes[attribIndex] != effectSLType)) {
+                return false;
+            }
+            slTypes[attribIndex] = effectSLType;
         }
     }
 
@@ -164,9 +184,15 @@ bool GrDrawState::validateVertexAttribs() const {
 }
 
 bool GrDrawState::willEffectReadDstColor() const {
-    int startStage = this->isColorWriteDisabled() ? this->getFirstCoverageStage() : 0;
-    for (int s = startStage; s < kNumStages; ++s) {
-        if (this->isStageEnabled(s) && (*this->getStage(s).getEffect())->willReadDstColor()) {
+    if (!this->isColorWriteDisabled()) {
+        for (int s = 0; s < fColorStages.count(); ++s) {
+            if ((*fColorStages[s].getEffect())->willReadDstColor()) {
+                return true;
+            }
+        }
+    }
+    for (int s = 0; s < fCoverageStages.count(); ++s) {
+        if ((*fCoverageStages[s].getEffect())->willReadDstColor()) {
             return true;
         }
     }
@@ -188,12 +214,9 @@ bool GrDrawState::srcAlphaWillBeOne() const {
     }
 
     // Run through the color stages
-    int stageCnt = getFirstCoverageStage();
-    for (int s = 0; s < stageCnt; ++s) {
-        const GrEffectRef* effect = this->getStage(s).getEffect();
-        if (NULL != effect) {
-            (*effect)->getConstantColorComponents(&color, &validComponentFlags);
-        }
+    for (int s = 0; s < fColorStages.count(); ++s) {
+        const GrEffectRef* effect = fColorStages[s].getEffect();
+        (*effect)->getConstantColorComponents(&color, &validComponentFlags);
     }
 
     // Check if the color filter could introduce an alpha.
@@ -215,11 +238,9 @@ bool GrDrawState::srcAlphaWillBeOne() const {
                 color |= (SkMulDiv255Round(a, b) << (c * 8));
             }
         }
-        for (int s = this->getFirstCoverageStage(); s < GrDrawState::kNumStages; ++s) {
-            const GrEffectRef* effect = this->getStage(s).getEffect();
-            if (NULL != effect) {
-                (*effect)->getConstantColorComponents(&color, &validComponentFlags);
-            }
+        for (int s = 0; s < fCoverageStages.count(); ++s) {
+            const GrEffectRef* effect = fCoverageStages[s].getEffect();
+            (*effect)->getConstantColorComponents(&color, &validComponentFlags);
         }
     }
     return (kA_GrColorComponentFlag & validComponentFlags) && 0xff == GrColorUnpackA(color);
@@ -242,13 +263,11 @@ bool GrDrawState::hasSolidCoverage() const {
     }
 
     // Run through the coverage stages and see if the coverage will be all ones at the end.
-    for (int s = this->getFirstCoverageStage(); s < GrDrawState::kNumStages; ++s) {
-        const GrEffectRef* effect = this->getStage(s).getEffect();
-        if (NULL != effect) {
-            (*effect)->getConstantColorComponents(&coverage, &validComponentFlags);
-        }
+    for (int s = 0; s < fCoverageStages.count(); ++s) {
+        const GrEffectRef* effect = fCoverageStages[s].getEffect();
+        (*effect)->getConstantColorComponents(&coverage, &validComponentFlags);
     }
-    return (kRGBA_GrColorComponentFlags == validComponentFlags)  && (0xffffffff == coverage);
+    return (kRGBA_GrColorComponentFlags == validComponentFlags) && (0xffffffff == coverage);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -317,12 +336,8 @@ GrDrawState::BlendOptFlags GrDrawState::getBlendOpts(bool forceCoverage,
     // check for coverage due to constant coverage, per-vertex coverage, or coverage stage
     bool hasCoverage = forceCoverage ||
                        0xffffffff != this->getCoverage() ||
-                       this->hasCoverageVertexAttribute();
-    for (int s = this->getFirstCoverageStage(); !hasCoverage && s < GrDrawState::kNumStages; ++s) {
-        if (this->isStageEnabled(s)) {
-            hasCoverage = true;
-        }
-    }
+                       this->hasCoverageVertexAttribute() ||
+                       fCoverageStages.count() > 0;
 
     // if we don't have coverage we can check whether the dst
     // has to read at all. If not, we'll disable blending.
@@ -385,81 +400,85 @@ GrDrawState::BlendOptFlags GrDrawState::getBlendOpts(bool forceCoverage,
 
 void GrDrawState::AutoViewMatrixRestore::restore() {
     if (NULL != fDrawState) {
-        fDrawState->setViewMatrix(fViewMatrix);
-        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            if (fRestoreMask & (1 << s)) {
-                fDrawState->fStages[s].restoreCoordChange(fSavedCoordChanges[s]);
-            }
+        GR_DEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+        fDrawState->fCommon.fViewMatrix = fViewMatrix;
+        GrAssert(fDrawState->numColorStages() >= fNumColorStages);
+        int numCoverageStages = fSavedCoordChanges.count() - fNumColorStages;
+        GrAssert(fDrawState->numCoverageStages() >= numCoverageStages);
+
+        int i = 0;
+        for (int s = 0; s < fNumColorStages; ++s, ++i) {
+            fDrawState->fColorStages[s].restoreCoordChange(fSavedCoordChanges[i]);
         }
+        for (int s = 0; s < numCoverageStages; ++s, ++i) {
+            fDrawState->fCoverageStages[s].restoreCoordChange(fSavedCoordChanges[i]);
+        }
+        fDrawState = NULL;
     }
-    fDrawState = NULL;
 }
 
 void GrDrawState::AutoViewMatrixRestore::set(GrDrawState* drawState,
                                              const SkMatrix& preconcatMatrix) {
     this->restore();
 
-    fDrawState = drawState;
-    if (NULL == drawState) {
+    GrAssert(NULL == fDrawState);
+    if (NULL == drawState || preconcatMatrix.isIdentity()) {
         return;
     }
+    fDrawState = drawState;
 
-    fRestoreMask = 0;
     fViewMatrix = drawState->getViewMatrix();
-    drawState->preConcatViewMatrix(preconcatMatrix);
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        if (drawState->isStageEnabled(s)) {
-            fRestoreMask |= (1 << s);
-            fDrawState->fStages[s].saveCoordChange(&fSavedCoordChanges[s]);
-            drawState->fStages[s].localCoordChange(preconcatMatrix);
-        }
-    }
+    drawState->fCommon.fViewMatrix.preConcat(preconcatMatrix);
+
+    this->doEffectCoordChanges(preconcatMatrix);
+    GR_DEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void GrDrawState::AutoDeviceCoordDraw::restore() {
-    if (NULL != fDrawState) {
-        fDrawState->setViewMatrix(fViewMatrix);
-        for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-            if (fRestoreMask & (1 << s)) {
-                fDrawState->fStages[s].restoreCoordChange(fSavedCoordChanges[s]);
-            }
-        }
-    }
-    fDrawState = NULL;
-}
-
-bool GrDrawState::AutoDeviceCoordDraw::set(GrDrawState* drawState) {
-    GrAssert(NULL != drawState);
-
+bool GrDrawState::AutoViewMatrixRestore::setIdentity(GrDrawState* drawState) {
     this->restore();
 
-    fDrawState = drawState;
-    if (NULL == fDrawState) {
+    if (NULL == drawState) {
         return false;
     }
 
-    fViewMatrix = drawState->getViewMatrix();
-    fRestoreMask = 0;
-    SkMatrix invVM;
-    bool inverted = false;
-
-    for (int s = 0; s < GrDrawState::kNumStages; ++s) {
-        if (drawState->isStageEnabled(s)) {
-            if (!inverted && !fViewMatrix.invert(&invVM)) {
-                // sad trombone sound
-                fDrawState = NULL;
-                return false;
-            } else {
-                inverted = true;
-            }
-            fRestoreMask |= (1 << s);
-            GrEffectStage* stage = drawState->fStages + s;
-            stage->saveCoordChange(&fSavedCoordChanges[s]);
-            stage->localCoordChange(invVM);
-        }
+    if (drawState->getViewMatrix().isIdentity()) {
+        return true;
     }
-    drawState->viewMatrix()->reset();
-    return true;
+
+    fViewMatrix = drawState->getViewMatrix();
+    if (0 == drawState->numTotalStages()) {
+        drawState->fCommon.fViewMatrix.reset();
+        fDrawState = drawState;
+        fNumColorStages = 0;
+        fSavedCoordChanges.reset(0);
+        GR_DEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+        return true;
+    } else {
+        SkMatrix inv;
+        if (!fViewMatrix.invert(&inv)) {
+            return false;
+        }
+        drawState->fCommon.fViewMatrix.reset();
+        fDrawState = drawState;
+        this->doEffectCoordChanges(inv);
+        GR_DEBUGCODE(++fDrawState->fBlockEffectRemovalCnt;)
+        return true;
+    }
+}
+
+void GrDrawState::AutoViewMatrixRestore::doEffectCoordChanges(const SkMatrix& coordChangeMatrix) {
+    fSavedCoordChanges.reset(fDrawState->numTotalStages());
+    int i = 0;
+
+    fNumColorStages = fDrawState->numColorStages();
+    for (int s = 0; s < fNumColorStages; ++s, ++i) {
+        fDrawState->fColorStages[s].saveCoordChange(&fSavedCoordChanges[i]);
+        fDrawState->fColorStages[s].localCoordChange(coordChangeMatrix);
+    }
+
+    int numCoverageStages = fDrawState->numCoverageStages();
+    for (int s = 0; s < numCoverageStages; ++s, ++i) {
+        fDrawState->fCoverageStages[s].saveCoordChange(&fSavedCoordChanges[i]);
+        fDrawState->fCoverageStages[s].localCoordChange(coordChangeMatrix);
+    }
 }

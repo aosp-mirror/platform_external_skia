@@ -15,6 +15,7 @@
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkStream.h"
+#include "SkTSort.h"
 #include "SkTime.h"
 #include "SkWindow.h"
 
@@ -54,6 +55,19 @@ public:
     }
 };
 
+#ifdef SAMPLE_PDF_FILE_VIEWER
+extern SampleView* CreateSamplePdfFileViewer(const char filename[]);
+
+class PdfFileViewerFactory : public SkViewFactory {
+    SkString fFilename;
+public:
+    PdfFileViewerFactory(const SkString& filename) : fFilename(filename) {}
+    virtual SkView* operator() () const SK_OVERRIDE {
+        return CreateSamplePdfFileViewer(fFilename.c_str());
+    }
+};
+#endif  // SAMPLE_PDF_FILE_VIEWER
+
 #define PIPE_FILEx
 #ifdef  PIPE_FILE
 #define FILE_PATH "/path/to/drawing.data"
@@ -74,7 +88,7 @@ SkTCPServer gServer;
 #endif
 
 #define ANIMATING_EVENTTYPE "nextSample"
-#define ANIMATING_DELAY     750
+#define ANIMATING_DELAY     250
 
 #ifdef SK_DEBUG
     #define FPS_REPEAT_MULTIPLIER   1
@@ -463,11 +477,25 @@ enum FlipAxisEnum {
 
 #include "SkDrawFilter.h"
 
+struct HintingState {
+    SkPaint::Hinting hinting;
+    const char* name;
+    const char* label;
+};
+static HintingState gHintingStates[] = {
+    {SkPaint::kNo_Hinting, "Mixed", NULL },
+    {SkPaint::kNo_Hinting, "None", "H0 " },
+    {SkPaint::kSlight_Hinting, "Slight", "Hs " },
+    {SkPaint::kNormal_Hinting, "Normal", "Hn " },
+    {SkPaint::kFull_Hinting, "Full", "Hf " },
+};
+
 class FlagsDrawFilter : public SkDrawFilter {
 public:
     FlagsDrawFilter(SkOSMenu::TriState lcd, SkOSMenu::TriState aa, SkOSMenu::TriState filter,
-                    SkOSMenu::TriState hinting) :
-        fLCDState(lcd), fAAState(aa), fFilterState(filter), fHintingState(hinting) {}
+                    SkOSMenu::TriState subpixel, int hinting)
+        : fLCDState(lcd), fAAState(aa), fFilterState(filter), fSubpixelState(subpixel)
+        , fHintingState(hinting) {}
 
     virtual bool filter(SkPaint* paint, Type t) {
         if (kText_Type == t && SkOSMenu::kMixedState != fLCDState) {
@@ -479,10 +507,11 @@ public:
         if (SkOSMenu::kMixedState != fFilterState) {
             paint->setFilterBitmap(SkOSMenu::kOnState == fFilterState);
         }
-        if (SkOSMenu::kMixedState != fHintingState) {
-            paint->setHinting(SkOSMenu::kOnState == fHintingState ?
-                              SkPaint::kNormal_Hinting :
-                              SkPaint::kSlight_Hinting);
+        if (SkOSMenu::kMixedState != fSubpixelState) {
+            paint->setSubpixelText(SkOSMenu::kOnState == fSubpixelState);
+        }
+        if (0 != fHintingState && fHintingState < (int)SK_ARRAY_COUNT(gHintingStates)) {
+            paint->setHinting(gHintingStates[fHintingState].hinting);
         }
         return true;
     }
@@ -491,7 +520,8 @@ private:
     SkOSMenu::TriState  fLCDState;
     SkOSMenu::TriState  fAAState;
     SkOSMenu::TriState  fFilterState;
-    SkOSMenu::TriState  fHintingState;
+    SkOSMenu::TriState  fSubpixelState;
+    int fHintingState;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -674,20 +704,42 @@ static inline SampleWindow::DeviceType cycle_devicetype(SampleWindow::DeviceType
 }
 
 static void usage(const char * argv0) {
-    SkDebugf("%s [--slide sampleName] [-i resourcePath] [--msaa sampleCount] [--pictureDir dirPath] [--picture path]\n", argv0);
+    SkDebugf("%s [--slide sampleName] [-i resourcePath] [--msaa sampleCount] [--pictureDir dirPath] [--picture path] [--sort]\n", argv0);
+#ifdef SAMPLE_PDF_FILE_VIEWER
+    SkDebugf("                [--pdfDir pdfPath]\n");
+    SkDebugf("    pdfPath: path to directory pdf files are read from\n");
+#endif  // SAMPLE_PDF_FILE_VIEWER
     SkDebugf("    sampleName: sample at which to start.\n");
     SkDebugf("    resourcePath: directory that stores image resources.\n");
     SkDebugf("    msaa: request multisampling with the given sample count.\n");
     SkDebugf("    dirPath: path to directory skia pictures are read from\n");
     SkDebugf("    path: path to skia picture\n");
+    SkDebugf("    --sort: sort samples by title, this would help to compare pdf rendering (P:foo.pdf) with skp rendering (P:foo.pdf)\n");
+}
+
+static SkString getSampleTitle(const SkViewFactory* sampleFactory) {
+    SkView* view = (*sampleFactory)();
+    SkString title;
+    SampleCode::RequestTitle(view, &title);
+    view->unref();
+    return title;
+}
+
+static bool compareSampleTitle(const SkViewFactory* first, const SkViewFactory* second) {
+    return strcmp(getSampleTitle(first).c_str(), getSampleTitle(second).c_str()) < 0;
 }
 
 SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* devManager)
     : INHERITED(hwnd)
     , fDevManager(NULL) {
 
+    fCurrIndex = -1;
+
     this->registerPictFileSamples(argv, argc);
     this->registerPictFileSample(argv, argc);
+#ifdef SAMPLE_PDF_FILE_VIEWER
+    this->registerPdfFileViewerSamples(argv, argc);
+#endif  // SAMPLE_PDF_FILE_VIEWER
     SkGMRegistyToSampleRegistry();
     {
         const SkViewRegister* reg = SkViewRegister::Head();
@@ -697,8 +749,21 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
         }
     }
 
+    bool sort = false;
+    for (int i = 0; i < argc; ++i) {
+        if (!strcmp(argv[i], "--sort")) {
+            sort = true;
+            break;
+        }
+    }
+
+    if (sort) {
+        // Sort samples, so foo.skp and foo.pdf are consecutive and we can quickly spot where
+        // skp -> pdf -> png fails.
+        SkTQSort(fSamples.begin(), fSamples.end() ? fSamples.end() - 1 : NULL, compareSampleTitle);
+    }
+
     const char* resourcePath = NULL;
-    fCurrIndex = -1;
     fMSAASampleCount = 0;
 
     const char* const commandName = argv[0];
@@ -765,9 +830,9 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fNClip = false;
     fAnimating = false;
     fRotate = false;
+    fRotateAnimTime = 0;
     fPerspAnim = false;
     fPerspAnimTime = 0;
-    fScale = false;
     fRequestGrabImage = false;
     fPipeState = SkOSMenu::kOffState;
     fTilingState = SkOSMenu::kOffState;
@@ -776,7 +841,8 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fLCDState = SkOSMenu::kMixedState;
     fAAState = SkOSMenu::kMixedState;
     fFilterState = SkOSMenu::kMixedState;
-    fHintingState = SkOSMenu::kMixedState;
+    fSubpixelState = SkOSMenu::kMixedState;
+    fHintingState = 0;
     fFlipAxis = 0;
     fScrollTestX = fScrollTestY = 0;
 
@@ -814,7 +880,15 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fAppMenu->assignKeyEquivalentToItem(itemID, 'l');
     itemID = fAppMenu->appendTriState("Filter", "Filter", sinkID, fFilterState);
     fAppMenu->assignKeyEquivalentToItem(itemID, 'n');
-    itemID = fAppMenu->appendTriState("Hinting", "Hinting", sinkID, fHintingState);
+    itemID = fAppMenu->appendTriState("Subpixel", "Subpixel", sinkID, fSubpixelState);
+    fAppMenu->assignKeyEquivalentToItem(itemID, 's');
+    itemID = fAppMenu->appendList("Hinting", "Hinting", sinkID, fHintingState,
+                                  gHintingStates[0].name,
+                                  gHintingStates[1].name,
+                                  gHintingStates[2].name,
+                                  gHintingStates[3].name,
+                                  gHintingStates[4].name,
+                                  NULL);
     fAppMenu->assignKeyEquivalentToItem(itemID, 'h');
 
     fUsePipeMenuItemID = fAppMenu->appendTriState("Pipe", "Pipe" , sinkID,
@@ -916,6 +990,7 @@ void SampleWindow::registerPictFileSample(char** argv, int argc) {
     }
     if (pict) {
         SkString path(pict);
+        fCurrIndex = fSamples.count();
         *fSamples.append() = new PictFileFactory(path);
     }
 }
@@ -942,6 +1017,32 @@ void SampleWindow::registerPictFileSamples(char** argv, int argc) {
         }
     }
 }
+
+#ifdef SAMPLE_PDF_FILE_VIEWER
+void SampleWindow::registerPdfFileViewerSamples(char** argv, int argc) {
+    const char* pdfDir = NULL;
+
+    for (int i = 0; i < argc; ++i) {
+        if (!strcmp(argv[i], "--pdfDir")) {
+            i += 1;
+            if (i < argc) {
+                pdfDir = argv[i];
+                break;
+            }
+        }
+    }
+    if (pdfDir) {
+        SkOSFile::Iter iter(pdfDir, "pdf");
+        SkString filename;
+        while (iter.next(&filename)) {
+            SkString path;
+            make_filepath(&path, pdfDir, filename);
+            *fSamples.append() = new PdfFileViewerFactory(path);
+        }
+    }
+}
+#endif  // SAMPLE_PDF_FILE_VIEWER
+
 
 int SampleWindow::findByTitle(const char title[]) {
     int i, count = fSamples.count();
@@ -1353,8 +1454,10 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
 
             SkAutoDataUnref data(ostream.copyToData());
             SkMemoryStream istream(data->data(), data->size());
-            SkPicture pict(&istream);
-            orig->drawPicture(pict);
+            SkAutoTUnref<SkPicture> pict(SkPicture::CreateFromStream(&istream));
+            if (pict.get() != NULL) {
+                orig->drawPicture(*pict.get());
+            }
         } else {
             fPicture->draw(orig);
             fPicture->unref();
@@ -1382,21 +1485,16 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
 }
 
 void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
-    if (fScale) {
-        SkScalar scale = SK_Scalar1 * 7 / 10;
-        SkScalar cx = this->width() / 2;
-        SkScalar cy = this->height() / 2;
-        canvas->translate(cx, cy);
-        canvas->scale(scale, scale);
-        canvas->translate(-cx, -cy);
-    }
     if (fRotate) {
+        fRotateAnimTime += SampleCode::GetAnimSecondsDelta();
+
         SkScalar cx = this->width() / 2;
         SkScalar cy = this->height() / 2;
         canvas->translate(cx, cy);
-        canvas->rotate(SkIntToScalar(30));
+        canvas->rotate(fRotateAnimTime * 10);
         canvas->translate(-cx, -cy);
     }
+
     if (fPerspAnim) {
         fPerspAnimTime += SampleCode::GetAnimSecondsDelta();
 
@@ -1423,7 +1521,7 @@ void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
     } else {
         (void)SampleView::SetRepeatDraw(child, 1);
     }
-    if (fPerspAnim) {
+    if (fPerspAnim || fRotate) {
         this->inval(NULL);
     }
 }
@@ -1516,11 +1614,7 @@ bool SampleWindow::goToSample(int i) {
 }
 
 SkString SampleWindow::getSampleTitle(int i) {
-    SkView* view = (*fSamples[i])();
-    SkString title;
-    SampleCode::RequestTitle(view, &title);
-    view->unref();
-    return title;
+    return ::getSampleTitle(fSamples[i]);
 }
 
 int SampleWindow::sampleCount() {
@@ -1534,8 +1628,8 @@ void SampleWindow::showOverview() {
 }
 
 void SampleWindow::installDrawFilter(SkCanvas* canvas) {
-    canvas->setDrawFilter(new FlagsDrawFilter(fLCDState, fAAState,
-                                              fFilterState, fHintingState))->unref();
+    canvas->setDrawFilter(new FlagsDrawFilter(fLCDState, fAAState, fFilterState, fSubpixelState,
+                                              fHintingState))->unref();
 }
 
 void SampleWindow::postAnimatingEvent() {
@@ -1601,7 +1695,8 @@ bool SampleWindow::onEvent(const SkEvent& evt) {
     if (SkOSMenu::FindTriState(evt, "AA", &fAAState) ||
         SkOSMenu::FindTriState(evt, "LCD", &fLCDState) ||
         SkOSMenu::FindTriState(evt, "Filter", &fFilterState) ||
-        SkOSMenu::FindTriState(evt, "Hinting", &fHintingState) ||
+        SkOSMenu::FindTriState(evt, "Subpixel", &fSubpixelState) ||
+        SkOSMenu::FindListIndex(evt, "Hinting", &fHintingState) ||
         SkOSMenu::FindSwitchState(evt, "Clip", &fUseClip) ||
         SkOSMenu::FindSwitchState(evt, "Zoomer", &fShowZoomer) ||
         SkOSMenu::FindSwitchState(evt, "Magnify", &fMagnify) ||
@@ -1745,6 +1840,7 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
             break;
         case 'r':
             fRotate = !fRotate;
+            fRotateAnimTime = 0;
             this->inval(NULL);
             this->updateTitle();
             return true;
@@ -1771,11 +1867,6 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
             }
             return true;
 #endif
-        case 's':
-            fScale = !fScale;
-            this->inval(NULL);
-            this->updateTitle();
-            return true;
         default:
             break;
     }
@@ -2030,9 +2121,6 @@ void SampleWindow::updateTitle() {
     if (fAnimating) {
         title.prepend("<A> ");
     }
-    if (fScale) {
-        title.prepend("<S> ");
-    }
     if (fRotate) {
         title.prepend("<R> ");
     }
@@ -2045,9 +2133,11 @@ void SampleWindow::updateTitle() {
 
     title.prepend(trystate_str(fLCDState, "LCD ", "lcd "));
     title.prepend(trystate_str(fAAState, "AA ", "aa "));
-    title.prepend(trystate_str(fFilterState, "H ", "h "));
+    title.prepend(trystate_str(fFilterState, "N ", "n "));
+    title.prepend(trystate_str(fSubpixelState, "S ", "s "));
     title.prepend(fFlipAxis & kFlipAxis_X ? "X " : NULL);
     title.prepend(fFlipAxis & kFlipAxis_Y ? "Y " : NULL);
+    title.prepend(gHintingStates[fHintingState].label);
 
     if (fZoomLevel) {
         title.prependf("{%.2f} ", SkScalarToFloat(fZoomLevel));

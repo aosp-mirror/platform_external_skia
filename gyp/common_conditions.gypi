@@ -17,6 +17,17 @@
         ],
       },
     ],
+    [ 'skia_opencl == 1',
+      {
+        'defines': [
+          'SK_SUPPORT_OPENCL=1',
+        ],
+      }, {
+        'defines': [
+          'SK_SUPPORT_OPENCL=0',
+        ],
+      },
+    ],
     [ 'skia_os == "win"',
       {
         'defines': [
@@ -38,6 +49,21 @@
             'AdditionalDependencies': [
               'OpenGL32.lib',
               'usp10.lib',
+
+              # Prior to gyp r1584, the following were included automatically.
+              'kernel32.lib',
+              'gdi32.lib',
+              'winspool.lib',
+              'comdlg32.lib',
+              'advapi32.lib',
+              'shell32.lib',
+              'ole32.lib',
+              'oleaut32.lib',
+              'user32.lib',
+              'uuid.lib',
+              'odbc32.lib',
+              'odbccp32.lib',
+              'DelayImp.lib',
             ],
           },
         },
@@ -61,7 +87,7 @@
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'DebugInformationFormat': '3',      # programDatabase (/Zi)
-                'Optimization': '3',                # full (/Ox)
+                'Optimization': '<(skia_release_optimization_level)',
                 'WholeProgramOptimization': 'true', #/GL
                # Changing the floating point model requires rebaseling gm images
                #'FloatingPointModel': '2',          # fast (/fp:fast)
@@ -98,11 +124,74 @@
               },
             },
           }],
+          [ 'skia_win_exceptions', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'AdditionalOptions': [
+                  '/EHsc',
+                ],
+              },
+            },
+          }],
         ],
       },
     ],
 
-    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]',
+    # The following section is common to linux + derivatives and android
+    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos", "android"]',
+      {
+        'conditions': [
+          [ 'skia_warnings_as_errors', {
+            'cflags': [
+              '-Werror',
+            ],
+          }],
+          [ 'skia_arch_type == "arm" and arm_thumb == 1', {
+            'cflags': [
+              '-mthumb',
+            ],
+          }],
+          [ 'skia_arch_type == "arm" and armv7 == 1', {
+            'variables': {
+              'arm_neon_optional%': 0,
+            },
+            'defines': [
+              '__ARM_ARCH__=7',
+            ],
+            'cflags': [
+              '-march=armv7-a',
+            ],
+            'conditions': [
+              [ 'arm_neon == 1', {
+                'defines': [
+                  '__ARM_HAVE_NEON',
+                ],
+                'cflags': [
+                  '-mfpu=neon',
+                ],
+                'ldflags': [
+                  '-march=armv7-a',
+                  '-Wl,--fix-cortex-a8',
+                ],
+              }],
+              [ 'arm_neon_optional == 1', {
+                'defines': [
+                  '__ARM_HAVE_OPTIONAL_NEON_SUPPORT',
+                ],
+              }],
+              [ 'skia_os != "chromeos"', {
+                'cflags': [
+                  '-mfloat-abi=softfp',
+                ],
+              }],
+            ],
+          }],
+        ],
+      },
+    ],
+
+
+    [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]',
       {
         'defines': [
           'SK_SAMPLES_FOR_X',
@@ -113,7 +202,10 @@
             'cflags': ['-g']
           },
           'Release': {
-            'cflags': ['-O3 -g'],
+            'cflags': [
+              '-O<(skia_release_optimization_level)',
+              '-g',
+            ],
             'defines': [ 'NDEBUG' ],
           },
         },
@@ -125,25 +217,15 @@
           '-Wno-c++11-extensions'
         ],
         'conditions' : [
-          [ 'skia_warnings_as_errors', {
+          [ 'skia_shared_lib', {
             'cflags': [
-              '-Werror',
+              '-fPIC',
             ],
-          }],
-          [ 'skia_arch_width == 64', {
-            'cflags': [
-              '-m64',
-            ],
-            'ldflags': [
-              '-m64',
-            ],
-          }],
-          [ 'skia_arch_width == 32', {
-            'cflags': [
-              '-m32',
-            ],
-            'ldflags': [
-              '-m32',
+            'defines': [
+              'GR_DLL=1',
+              'GR_IMPLEMENTATION=1',
+              'SKIA_DLL',
+              'SKIA_IMPLEMENTATION=1',
             ],
           }],
           [ 'skia_os == "nacl"', {
@@ -158,9 +240,39 @@
                 '-pthread',
               ],
             },
-          }, { # skia_os != "nacl"
-            'include_dirs' : [
-              '/usr/include/freetype2',
+          }],
+          [ 'skia_os == "chromeos"', {
+            'ldflags': [
+              '-lstdc++',
+              '-lm',
+            ],
+          }, {
+            'conditions': [
+              [ 'skia_arch_width == 64 and skia_arch_type == "x86"', {
+                'cflags': [
+                  '-m64',
+                ],
+                'ldflags': [
+                  '-m64',
+                ],
+              }],
+              [ 'skia_arch_width == 32 and skia_arch_type == "x86"', {
+                'cflags': [
+                  '-m32',
+                ],
+                'ldflags': [
+                  '-m32',
+                ],
+              }],
+            ],
+          }],
+          [ 'skia_asan_build', {
+            'cflags': [
+              '-fsanitize=address',
+              '-fno-omit-frame-pointer',
+            ],
+            'ldflags': [
+              '-fsanitize=address',
             ],
           }],
         ],
@@ -190,6 +302,17 @@
             'xcode_settings': {
               'OTHER_CPLUSPLUSFLAGS': [
                 '-Werror',
+                '-Wall',
+                '-Wextra',
+                '-Wno-unused-parameter',
+              ],
+            },
+          }],
+# This old compiler is really bad at figuring out when things are uninitialized, so ignore it.
+          [ '<(mac_sdk)==10.6', {
+            'xcode_settings': {
+              'OTHER_CPLUSPLUSFLAGS': [
+                '-Wno-uninitialized',
               ],
             },
           }],
@@ -202,7 +325,7 @@
           },
           'Release': {
             'xcode_settings': {
-              'GCC_OPTIMIZATION_LEVEL': '3',
+              'GCC_OPTIMIZATION_LEVEL': '<(skia_release_optimization_level)',
             },
             'defines': [ 'NDEBUG' ],
           },
@@ -268,7 +391,7 @@
           },
           'Release': {
             'xcode_settings': {
-              'GCC_OPTIMIZATION_LEVEL': '3',
+              'GCC_OPTIMIZATION_LEVEL': '<(skia_release_optimization_level)',
             },
             'defines': [ 'NDEBUG' ],
           },
@@ -318,50 +441,20 @@
           '-fno-rtti',
         ],
         'conditions': [
-          [ 'skia_warnings_as_errors', {
+          [ 'skia_shared_lib', {
             'cflags': [
-              '-Werror',
+              '-fPIC',
+            ],
+            'defines': [
+              'GR_DLL=1',
+              'GR_IMPLEMENTATION=1',
+              'SKIA_DLL',
+              'SKIA_IMPLEMENTATION=1',
             ],
           }],
           [ 'skia_profile_enabled == 1', {
             'cflags': ['-g', '-fno-omit-frame-pointer', '-marm', '-mapcs'],
           }],
-          [ 'skia_arch_type == "arm" and arm_thumb == 1', {
-            'cflags': [
-              '-mthumb',
-            ],
-          }],
-          [ 'skia_arch_type == "arm" and armv7 == 1', {
-            'variables': {
-              'arm_neon_optional%': 0,
-            },
-            'defines': [
-              '__ARM_ARCH__=7',
-            ],
-            'cflags': [
-              '-march=armv7-a',
-              '-mfloat-abi=softfp',
-            ],
-            'conditions': [
-              [ 'arm_neon == 1', {
-                'defines': [
-                  '__ARM_HAVE_NEON',
-                ],
-                'cflags': [
-                  '-mfpu=neon',
-                ],
-                'ldflags': [
-                  '-march=armv7-a',
-                  '-Wl,--fix-cortex-a8',
-                ],
-              }],
-              [ 'arm_neon_optional == 1', {
-                'defines': [
-                  '__ARM_HAVE_OPTIONAL_NEON_SUPPORT',
-                ],
-              }],
-            ],
-         }],
         ],
       },
     ],

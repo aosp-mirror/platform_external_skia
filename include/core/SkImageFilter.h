@@ -9,13 +9,13 @@
 #define SkImageFilter_DEFINED
 
 #include "SkFlattenable.h"
+#include "SkRect.h"
 
 class SkBitmap;
 class SkColorFilter;
 class SkDevice;
 class SkMatrix;
 struct SkIPoint;
-struct SkIRect;
 class SkShader;
 class GrEffectRef;
 class GrTexture;
@@ -109,10 +109,11 @@ public:
      *  textures.  For single-pass effects, use asNewEffect().  src is the
      *  source image for processing, as a texture-backed bitmap.  result is
      *  the destination bitmap, which should contain a texture-backed pixelref
-     *  on success.  The default implementation does single-pass processing
-     *  using asNewEffect().
+     *  on success.  offset is the amount to translate the resulting image
+     *  relative to the src when it is drawn. The default implementation does
+     *  single-pass processing using asNewEffect().
      */
-    virtual bool filterImageGPU(Proxy*, const SkBitmap& src, SkBitmap* result);
+    virtual bool filterImageGPU(Proxy*, const SkBitmap& src, SkBitmap* result, SkIPoint* offset);
 
     /**
      *  Returns whether this image filter is a color filter and puts the color filter into the
@@ -138,14 +139,25 @@ public:
         return fInputs[i];
     }
 
+    /**
+     *  Returns the crop rectangle of this filter. This is set at construction
+     *  time, and determines which pixels from the input image will
+     *  be processed. The size of this rectangle should be used as the size
+     *  of the destination image. The origin of this rect should be used to
+     *  offset access to the input images, and should also be added to the
+     *  "offset" parameter in onFilterImage and filterImageGPU(). (The latter
+     *  ensures that the resulting buffer is drawn in the correct location.)
+     */
+    const SkIRect& cropRect() const { return fCropRect; }
+
 protected:
-    SkImageFilter(int inputCount, SkImageFilter** inputs);
+    SkImageFilter(int inputCount, SkImageFilter** inputs, const SkIRect* cropRect = NULL);
 
     // Convenience constructor for 1-input filters.
-    explicit SkImageFilter(SkImageFilter* input);
+    explicit SkImageFilter(SkImageFilter* input, const SkIRect* cropRect = NULL);
 
     // Convenience constructor for 2-input filters.
-    SkImageFilter(SkImageFilter* input1, SkImageFilter* input2);
+    SkImageFilter(SkImageFilter* input1, SkImageFilter* input2, const SkIRect* cropRect = NULL);
 
     virtual ~SkImageFilter();
 
@@ -159,10 +171,15 @@ protected:
     // Default impl copies src into dst and returns true
     virtual bool onFilterBounds(const SkIRect&, const SkMatrix&, SkIRect*);
 
+    // Sets rect to the intersection of rect and the crop rect. If there
+    // is no overlap, returns false and leaves rect unchanged.
+    bool applyCropRect(SkIRect* rect) const;
+
 private:
     typedef SkFlattenable INHERITED;
     int fInputCount;
     SkImageFilter** fInputs;
+    SkIRect fCropRect;
 };
 
 #endif

@@ -122,10 +122,12 @@
  */
 //#define SK_DEFAULT_FONT_CACHE_LIMIT   (1024 * 1024)
 
-/* If defined, use CoreText instead of ATSUI on OS X.
-*/
-//#define SK_USE_MAC_CORE_TEXT
-
+/*
+ *  To specify the default size of the image cache, undefine this and set it to
+ *  the desired value (in bytes). SkGraphics.h as a runtime API to set this
+ *  value as well. If this is undefined, a built-in value will be used.
+ */
+//#define SK_DEFAULT_IMAGE_CACHE_LIMIT (1024 * 1024)
 
 /*  If zlib is available and you want to support the flate compression
     algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
@@ -143,17 +145,6 @@
 /*  Define this to provide font subsetter in PDF generation.
  */
 //#define SK_SFNTLY_SUBSETTER "sfntly/subsetter/font_subsetter.h"
-
-/*  Define this to remove dimension checks on bitmaps. Not all blits will be
-    correct yet, so this is mostly for debugging the implementation.
- */
-#define SK_ALLOW_OVER_32K_BITMAPS
-
-/**
- *  To revert to int-only srcrect behavior in drawBitmapRect(ToRect),
- *  define this symbol.
- */
-//#define SK_SUPPORT_INT_SRCRECT_DRAWBITMAPRECT
 
 /*  Define this to set the upper limit for text to support LCD. Values that
     are very large increase the cost in the font cache and draw slower, without

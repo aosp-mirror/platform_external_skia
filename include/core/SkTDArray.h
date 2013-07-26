@@ -69,6 +69,9 @@ public:
                 (a.fCount == 0 ||
                  !memcmp(a.fArray, b.fArray, a.fCount * sizeof(T)));
     }
+    friend bool operator!=(const SkTDArray<T>& a, const SkTDArray<T>& b) {
+        return !(a == b);
+    }
 
     void swap(SkTDArray<T>& other) {
         SkTSwap(fArray, other.fArray);
@@ -265,7 +268,7 @@ public:
     }
 
     void copy(T* dst) const {
-        this->copyRange(0, fCount, dst);
+        this->copyRange(dst, 0, fCount);
     }
 
     // routines to treat the array like a stack

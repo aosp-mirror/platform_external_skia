@@ -40,13 +40,31 @@ SkImageDecoder::SkImageDecoder()
     , fDefaultPref(SkBitmap::kNo_Config)
     , fDitherImage(true)
     , fUsePrefTable(false)
-    , fPreferQualityOverSpeed(false) {
+    , fPreferQualityOverSpeed(false)
+    , fRequireUnpremultipliedColors(false) {
 }
 
 SkImageDecoder::~SkImageDecoder() {
     SkSafeUnref(fPeeker);
     SkSafeUnref(fChooser);
     SkSafeUnref(fAllocator);
+}
+
+void SkImageDecoder::copyFieldsToOther(SkImageDecoder* other) {
+    if (NULL == other) {
+        return;
+    }
+    other->setPeeker(fPeeker);
+    other->setChooser(fChooser);
+    other->setAllocator(fAllocator);
+    other->setSampleSize(fSampleSize);
+    if (fUsePrefTable) {
+        other->setPrefConfigTable(fPrefTable);
+    } else {
+        other->fDefaultPref = fDefaultPref;
+    }
+    other->setPreferQualityOverSpeed(fPreferQualityOverSpeed);
+    other->setRequireUnpremultipliedColors(fRequireUnpremultipliedColors);
 }
 
 SkImageDecoder::Format SkImageDecoder::getFormat() const {
@@ -127,31 +145,37 @@ void SkImageDecoder::setPrefConfigTable(const SkBitmap::Config pref[6]) {
         fUsePrefTable = false;
     } else {
         fUsePrefTable = true;
-        memcpy(fPrefTable, pref, sizeof(fPrefTable));
+        fPrefTable.fPrefFor_8Index_NoAlpha_src = pref[0];
+        fPrefTable.fPrefFor_8Index_YesAlpha_src = pref[1];
+        fPrefTable.fPrefFor_8Gray_src = SkBitmap::kNo_Config;
+        fPrefTable.fPrefFor_8bpc_NoAlpha_src = pref[4];
+        fPrefTable.fPrefFor_8bpc_YesAlpha_src = pref[5];
     }
+}
+
+void SkImageDecoder::setPrefConfigTable(const PrefConfigTable& prefTable) {
+    fUsePrefTable = true;
+    fPrefTable = prefTable;
 }
 
 SkBitmap::Config SkImageDecoder::getPrefConfig(SrcDepth srcDepth,
                                                bool srcHasAlpha) const {
-    SkBitmap::Config config;
+    SkBitmap::Config config = SkBitmap::kNo_Config;
 
     if (fUsePrefTable) {
-        int index = 0;
         switch (srcDepth) {
             case kIndex_SrcDepth:
-                index = 0;
+                config = srcHasAlpha ? fPrefTable.fPrefFor_8Index_YesAlpha_src
+                                     : fPrefTable.fPrefFor_8Index_NoAlpha_src;
                 break;
-            case k16Bit_SrcDepth:
-                index = 2;
+            case k8BitGray_SrcDepth:
+                config = fPrefTable.fPrefFor_8Gray_src;
                 break;
             case k32Bit_SrcDepth:
-                index = 4;
+                config = srcHasAlpha ? fPrefTable.fPrefFor_8bpc_YesAlpha_src
+                                     : fPrefTable.fPrefFor_8bpc_NoAlpha_src;
                 break;
         }
-        if (srcHasAlpha) {
-            index += 1;
-        }
-        config = fPrefTable[index];
     } else {
         config = fDefaultPref;
     }
@@ -163,18 +187,11 @@ SkBitmap::Config SkImageDecoder::getPrefConfig(SrcDepth srcDepth,
 }
 
 bool SkImageDecoder::decode(SkStream* stream, SkBitmap* bm,
-                            SkBitmap::Config pref, Mode mode, bool reuseBitmap) {
+                            SkBitmap::Config pref, Mode mode) {
     // we reset this to false before calling onDecode
     fShouldCancelDecode = false;
     // assign this, for use by getPrefConfig(), in case fUsePrefTable is false
     fDefaultPref = pref;
-
-    if (reuseBitmap) {
-        SkAutoLockPixels alp(*bm);
-        if (NULL != bm->getPixels()) {
-            return this->onDecode(stream, bm, mode);
-        }
-    }
 
     // pass a temporary bitmap, so that if we return false, we are assured of
     // leaving the caller's bitmap untouched.
@@ -449,28 +466,4 @@ bool SkImageDecoder::DecodeStream(SkStream* stream, SkBitmap* bm,
         delete codec;
     }
     return success;
-}
-
-/**
- *  This function leaks, but that is okay because it is not intended
- *  to be called. It is only here so that the linker will include the
- *  decoders.
- *  Make sure to keep it in sync with images.gyp, so only the encoders
- *  which are created on a platform are linked.
- */
-void force_linking();
-void force_linking() {
-    SkASSERT(false);
-    CreateJPEGImageDecoder();
-    CreateWEBPImageDecoder();
-    CreateBMPImageDecoder();
-    CreateICOImageDecoder();
-    CreateWBMPImageDecoder();
-    // Only link GIF and PNG on platforms that build them. See images.gyp
-#if !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_WIN) && !defined(SK_BUILD_FOR_NACL)
-    CreateGIFImageDecoder();
-#endif
-#if !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_WIN)
-    CreatePNGImageDecoder();
-#endif
 }

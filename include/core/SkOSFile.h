@@ -48,8 +48,34 @@ char*   sk_fgets(char* str, int size, SkFILE* f);
 
 void    sk_fflush(SkFILE*);
 
-int     sk_fseek(SkFILE*, size_t, int);
+bool    sk_fseek(SkFILE*, size_t);
+bool    sk_fmove(SkFILE*, long);
 size_t  sk_ftell(SkFILE*);
+
+/** Maps a file into memory. Returns the address and length on success, NULL otherwise.
+ *  The mapping is read only.
+ *  When finished with the mapping, free the returned pointer with sk_fmunmap.
+ */
+void*   sk_fmmap(SkFILE* f, size_t* length);
+
+/** Maps a file descriptor into memory. Returns the address and length on success, NULL otherwise.
+ *  The mapping is read only.
+ *  When finished with the mapping, free the returned pointer with sk_fmunmap.
+ */
+void*   sk_fdmmap(int fd, size_t* length);
+
+/** Unmaps a file previously mapped by sk_fmmap or sk_fdmmap.
+ *  The length parameter must be the same as returned from sk_fmmap.
+ */
+void    sk_fmunmap(const void* addr, size_t length);
+
+/** Returns true if the two point at the exact same filesystem object. */
+bool    sk_fidentical(SkFILE* a, SkFILE* b);
+
+/** Returns the underlying file descriptor for the given file.
+ *  The return value will be < 0 on failure.
+ */
+int     sk_fileno(SkFILE* f);
 
 // Returns true if something (file, directory, ???) exists at this path.
 bool    sk_exists(const char *path);
@@ -105,4 +131,29 @@ private:
     uint16_t*   fStr;
 };
 
+/**
+ *  Functions for modifying SkStrings which represent paths on the filesystem.
+ */
+class SkOSPath {
+public:
+    /**
+     * Assembles rootPath and relativePath into a single path, like this:
+     * rootPath/relativePath.
+     * It is okay to call with a NULL rootPath and/or relativePath. A path
+     * separator will still be inserted.
+     *
+     * Uses SkPATH_SEPARATOR, to work on all platforms.
+     */
+    static SkString SkPathJoin(const char *rootPath, const char *relativePath);
+
+    /**
+     *  Return the name of the file, ignoring the directory structure.
+     *  Behaves like python's os.path.basename. If the fullPath is
+     *  /dir/subdir/, an empty string is returned.
+     *  @param fullPath Full path to the file.
+     *  @return SkString The basename of the file - anything beyond the
+     *      final slash, or the full name if there is no slash.
+     */
+    static SkString SkBasename(const char* fullPath);
+};
 #endif

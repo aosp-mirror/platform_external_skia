@@ -29,8 +29,8 @@ static SkBitmap make_src() {
     SkPaint paint;
     SkPoint pts[] = { {0, 0}, {SkIntToScalar(WW), SkIntToScalar(HH)} };
     SkColor colors[] = {
-        SK_ColorBLACK, SK_ColorGREEN, SK_ColorCYAN,
-        SK_ColorRED, SK_ColorMAGENTA, SK_ColorWHITE
+        SK_ColorTRANSPARENT, SK_ColorGREEN, SK_ColorCYAN,
+        SK_ColorRED, SK_ColorMAGENTA, SK_ColorWHITE,
     };
     SkShader* s = SkGradientShader::CreateLinear(pts, colors, NULL, SK_ARRAY_COUNT(colors),
                                                  SkShader::kClamp_TileMode);
@@ -51,18 +51,6 @@ static SkBitmap make_dst() {
                                                  SkShader::kClamp_TileMode);
     paint.setShader(s)->unref();
     canvas.drawPaint(paint);
-    return bm;
-}
-
-static SkBitmap make_arith(const SkBitmap& src, const SkBitmap& dst,
-                           const SkScalar k[]) {
-    SkBitmap bm = make_bm();
-    SkCanvas canvas(bm);
-    SkPaint paint;
-    canvas.drawBitmap(dst, 0, 0, NULL);
-    SkXfermode* xfer = SkArithmeticMode::Create(k[0], k[1], k[2], k[3]);
-    paint.setXfermode(xfer)->unref();
-    canvas.drawBitmap(src, 0, 0, &paint);
     return bm;
 }
 
@@ -116,12 +104,18 @@ protected:
         SkScalar gap = SkIntToScalar(src.width() + 20);
         while (k < stop) {
             SkScalar x = 0;
-            SkBitmap res = make_arith(src, dst, k);
             canvas->drawBitmap(src, x, y, NULL);
             x += gap;
             canvas->drawBitmap(dst, x, y, NULL);
             x += gap;
-            canvas->drawBitmap(res, x, y, NULL);
+            SkRect rect = SkRect::MakeXYWH(x, y, SkIntToScalar(WW), SkIntToScalar(HH));
+            canvas->saveLayer(&rect, NULL);
+            canvas->drawBitmap(dst, x, y, NULL);
+            SkXfermode* xfer = SkArithmeticMode::Create(k[0], k[1], k[2], k[3]);
+            SkPaint paint;
+            paint.setXfermode(xfer)->unref();
+            canvas->drawBitmap(src, x, y, &paint);
+            canvas->restore();
             x += gap;
             show_k_text(canvas, x, y, k);
             k += 4;

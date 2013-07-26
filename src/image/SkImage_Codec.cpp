@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
+#include "SkImageDecoder.h"
 #include "SkImage_Base.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "../images/SkImageDecoder.h"
 
 class SkImage_Codec : public SkImage_Base {
 public:
@@ -19,6 +19,7 @@ public:
     virtual ~SkImage_Codec();
 
     virtual void onDraw(SkCanvas*, SkScalar, SkScalar, const SkPaint*) SK_OVERRIDE;
+    virtual void onDrawRectToRect(SkCanvas*, const SkRect*, const SkRect&, const SkPaint*) SK_OVERRIDE;
 
 private:
     SkData*     fEncodedData;
@@ -48,6 +49,17 @@ void SkImage_Codec::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPai
     canvas->drawBitmap(fBitmap, x, y, paint);
 }
 
+void SkImage_Codec::onDrawRectToRect(SkCanvas* canvas, const SkRect* src,
+                                     const SkRect& dst, const SkPaint* paint) {
+    if (!fBitmap.pixelRef()) {
+        if (!SkImageDecoder::DecodeMemory(fEncodedData->bytes(), fEncodedData->size(),
+                                          &fBitmap)) {
+            return;
+        }
+    }
+    canvas->drawBitmapRectToRect(fBitmap, src, dst, paint);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 SkImage* SkImage::NewEncodedData(SkData* data) {
@@ -63,41 +75,4 @@ SkImage* SkImage::NewEncodedData(SkData* data) {
     }
 
     return SkNEW_ARGS(SkImage_Codec, (data, bitmap.width(), bitmap.height()));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-// FIXME: Temporarily move this here so chromium can still build until we truly
-// fix the core/images dependency issue (https://code.google.com/p/skia/issues/detail?id=1275)
-#include "SkImage.h"
-#include "../images/SkImageEncoder.h"
-
-static const SkImage_Base* asIB(const SkImage* image) {
-    return static_cast<const SkImage_Base*>(image);
-}
-
-static const struct {
-    SkImageEncoder::Type    fIE;
-    SkImage::EncodeType     fET;
-} gTable[] = {
-    { SkImageEncoder::kBMP_Type,    SkImage::kBMP_EncodeType  },
-    { SkImageEncoder::kGIF_Type,    SkImage::kGIF_EncodeType  },
-    { SkImageEncoder::kICO_Type,    SkImage::kICO_EncodeType  },
-    { SkImageEncoder::kJPEG_Type,   SkImage::kJPEG_EncodeType },
-    { SkImageEncoder::kPNG_Type,    SkImage::kPNG_EncodeType  },
-    { SkImageEncoder::kWBMP_Type,   SkImage::kWBMP_EncodeType },
-    { SkImageEncoder::kWEBP_Type,   SkImage::kWEBP_EncodeType },
-};
-
-SkData* SkImage::encode(EncodeType et, int quality) const {
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gTable); ++i) {
-        if (gTable[i].fET == et) {
-            SkBitmap bm;
-            if (asIB(this)->getROPixels(&bm)) {
-                return SkImageEncoder::EncodeData(bm, gTable[i].fIE, quality);
-            }
-            break;
-        }
-    }
-    return NULL;
 }

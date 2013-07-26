@@ -11,7 +11,7 @@
 
 #include "SkCanvas.h"
 
-class SkNWayCanvas : public SkCanvas {
+class SK_API SkNWayCanvas : public SkCanvas {
 public:
     SkNWayCanvas(int width, int height);
     virtual ~SkNWayCanvas();
@@ -73,6 +73,10 @@ public:
 
     virtual SkBounder* setBounder(SkBounder*) SK_OVERRIDE;
     virtual SkDrawFilter* setDrawFilter(SkDrawFilter*) SK_OVERRIDE;
+
+    virtual void beginCommentGroup(const char* description) SK_OVERRIDE;
+    virtual void addComment(const char* kywd, const char* value) SK_OVERRIDE;
+    virtual void endCommentGroup() SK_OVERRIDE;
 
 private:
     SkTDArray<SkCanvas*> fList;

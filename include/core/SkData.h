@@ -91,12 +91,28 @@ public:
     static SkData* NewFromMalloc(const void* data, size_t length);
 
     /**
+     *  Create a new dataref the file with the specified path.
+     *  If the file cannot be opened, this returns NULL.
+     */
+    static SkData* NewFromFileName(const char path[]);
+
+    /**
      *  Create a new dataref from a SkFILE.
      *  This does not take ownership of the SkFILE, nor close it.
+     *  The caller is free to close the SkFILE at its convenience.
      *  The SkFILE must be open for reading only.
      *  Returns NULL on failure.
      */
     static SkData* NewFromFILE(SkFILE* f);
+
+    /**
+     *  Create a new dataref from a file descriptor.
+     *  This does not take ownership of the file descriptor, nor close it.
+     *  The caller is free to close the file descriptor at its convenience.
+     *  The file descriptor must be open for reading only.
+     *  Returns NULL on failure.
+     */
+    static SkData* NewFromFD(int fd);
 
     /**
      *  Create a new dataref using a subset of the data in the specified

@@ -43,11 +43,14 @@ VALID_TARGETS := \
                  gm \
                  most \
                  pathops_unittest \
+                 pdfviewer \
                  SampleApp \
+                 skhello \
                  SkiaAndroidApp \
-                 skia_base_libs \
+                 skia_lib \
                  tests \
-                 tools
+                 tools \
+                 skpdiff
 
 # Default target.  This must be listed before all other targets.
 .PHONY: default

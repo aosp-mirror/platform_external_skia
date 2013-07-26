@@ -11,14 +11,13 @@
 
 #define DEBUGFAIL_SEE_STDERR SkDEBUGFAIL("see stderr for message")
 
-// These constants must be kept in sync with the JSONKEY_ constants in
-// display_json_results.py !
+// See gm_json.py for descriptions of each of these JSON keys.
+// These constants must be kept in sync with the ones in that Python file!
 const static char kJsonKey_ActualResults[]   = "actual-results";
 const static char kJsonKey_ActualResults_Failed[]        = "failed";
 const static char kJsonKey_ActualResults_FailureIgnored[]= "failure-ignored";
 const static char kJsonKey_ActualResults_NoComparison[]  = "no-comparison";
 const static char kJsonKey_ActualResults_Succeeded[]     = "succeeded";
-
 const static char kJsonKey_ExpectedResults[] = "expected-results";
 const static char kJsonKey_ExpectedResults_AllowedDigests[] = "allowed-digests";
 const static char kJsonKey_ExpectedResults_IgnoreFailure[]  = "ignore-failure";
@@ -28,6 +27,7 @@ const static char kJsonKey_Hashtype_Bitmap_64bitMD5[]  = "bitmap-64bitMD5";
 
 
 namespace skiagm {
+    SK_DEFINE_INST_COUNT(ExpectationsSource)
 
     void gm_fprintf(FILE *stream, const char format[], ...) {
         va_list args;
@@ -35,15 +35,6 @@ namespace skiagm {
         fprintf(stream, "GM: ");
         vfprintf(stream, format, args);
         va_end(args);
-    }
-
-    SkString SkPathJoin(const char *rootPath, const char *relativePath) {
-        SkString result(rootPath);
-        if (!result.endsWith(SkPATH_SEPARATOR)) {
-            result.appendUnichar(SkPATH_SEPARATOR);
-        }
-        result.append(relativePath);
-        return result;
     }
 
     Json::Value CreateJsonTree(Json::Value expectedResults,
@@ -116,6 +107,20 @@ namespace skiagm {
             jsonTypeValuePair.append(Json::Value("INVALID"));
         }
         return jsonTypeValuePair;
+    }
+
+    SkString GmResultDigest::getHashType() const {
+        // TODO(epoger): The current implementation assumes that the
+        // result digest is always of type kJsonKey_Hashtype_Bitmap_64bitMD5
+        return SkString(kJsonKey_Hashtype_Bitmap_64bitMD5);
+    }
+
+    SkString GmResultDigest::getDigestValue() const {
+        // TODO(epoger): The current implementation assumes that the
+        // result digest is always of type kJsonKey_Hashtype_Bitmap_64bitMD5
+        SkString retval;
+        retval.appendU64(fHashDigest);
+        return retval;
     }
 
 
@@ -194,7 +199,7 @@ namespace skiagm {
     // IndividualImageExpectationsSource class...
 
     Expectations IndividualImageExpectationsSource::get(const char *testName) {
-        SkString path = SkPathJoin(fRootDir.c_str(), testName);
+        SkString path = SkOSPath::SkPathJoin(fRootDir.c_str(), testName);
         SkBitmap referenceBitmap;
         bool decodedReferenceBitmap =
             SkImageDecoder::DecodeFile(path.c_str(), &referenceBitmap,

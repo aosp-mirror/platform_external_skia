@@ -32,16 +32,6 @@ namespace skiagm {
 
     void gm_fprintf(FILE *stream, const char format[], ...);
 
-    /**
-     * Assembles rootPath and relativePath into a single path, like this:
-     * rootPath/relativePath
-     *
-     * Uses SkPATH_SEPARATOR, to work on all platforms.
-     *
-     * TODO(epoger): This should probably move into SkOSFile.h
-     */
-    SkString SkPathJoin(const char *rootPath, const char *relativePath);
-
     Json::Value CreateJsonTree(Json::Value expectedResults,
                                Json::Value actualResultsFailed,
                                Json::Value actualResultsFailureIgnored,
@@ -86,9 +76,30 @@ namespace skiagm {
          */
         Json::Value asJsonTypeValuePair() const;
 
+        /**
+         * Returns the hashtype, such as "bitmap-64bitMD5", as an SkString.
+         */
+        SkString getHashType() const;
+
+        /**
+         * Returns the hash digest value, such as "12345", as an SkString.
+         */
+        SkString getDigestValue() const;
+
     private:
         bool fIsValid; // always check this first--if it's false, other fields are meaningless
         uint64_t fHashDigest;
+    };
+
+    /**
+     * Encapsulates an SkBitmap and its GmResultDigest, guaranteed to keep them in sync.
+     */
+    class BitmapAndDigest {
+    public:
+        BitmapAndDigest(const SkBitmap &bitmap) : fBitmap(bitmap), fDigest(bitmap) {}
+
+        const SkBitmap fBitmap;
+        const GmResultDigest fDigest;
     };
 
     /**
@@ -161,7 +172,12 @@ namespace skiagm {
      */
     class ExpectationsSource : public SkRefCnt {
     public:
+        SK_DECLARE_INST_COUNT(ExpectationsSource)
+
         virtual Expectations get(const char *testName) = 0;
+
+    private:
+        typedef SkRefCnt INHERITED;
     };
 
     /**

@@ -6,12 +6,15 @@
  */
 
 #include "SkDebuggerGUI.h"
+#include "SkForceLinking.h"
 #include "SkGraphics.h"
 #include "SkImageDecoder.h"
 #include <QListWidgetItem>
 #include "PictureRenderer.h"
 #include "SkPictureRecord.h"
 #include "SkPicturePlayback.h"
+
+__SK_FORCE_IMAGE_DECODER_LINKING;
 
 #if defined(SK_BUILD_FOR_WIN32)
     #include "BenchSysTimer_windows.h"
@@ -41,6 +44,7 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     , fActionDirectory(this)
     , fActionGoToLine(this)
     , fActionInspector(this)
+    , fActionSettings(this)
     , fActionPlay(this)
     , fActionPause(this)
     , fActionRewind(this)
@@ -79,7 +83,7 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     connect(&fActionStepForward, SIGNAL(triggered()), this, SLOT(actionStepForward()));
     connect(&fActionBreakpoint, SIGNAL(triggered()), this, SLOT(actionBreakpoints()));
     connect(&fActionInspector, SIGNAL(triggered()), this, SLOT(actionInspector()));
-    connect(&fActionInspector, SIGNAL(triggered()), this, SLOT(actionSettings()));
+    connect(&fActionSettings, SIGNAL(triggered()), this, SLOT(actionSettings()));
     connect(&fFilter, SIGNAL(activated(QString)), this, SLOT(toggleFilter(QString)));
     connect(&fActionProfile, SIGNAL(triggered()), this, SLOT(actionProfile()));
     connect(&fActionCancel, SIGNAL(triggered()), this, SLOT(actionCancel()));
@@ -234,35 +238,24 @@ private:
 // Wrap SkPicture to allow installation of an SkTimedPicturePlayback object
 class SkTimedPicture : public SkPicture {
 public:
-    explicit SkTimedPicture(SkStream* stream, bool* success, SkPicture::InstallPixelRefProc proc,
-                            const SkTDArray<bool>& deletedCommands) {
-        if (success) {
-            *success = false;
-        }
-        fRecord = NULL;
-        fPlayback = NULL;
-        fWidth = fHeight = 0;
-
+    static SkTimedPicture* CreateTimedPicture(SkStream* stream,
+                                              SkPicture::InstallPixelRefProc proc,
+                                              const SkTDArray<bool>& deletedCommands) {
         SkPictInfo info;
-
-        if (!stream->read(&info, sizeof(info))) {
-            return;
-        }
-        if (SkPicture::PICTURE_VERSION != info.fVersion) {
-            return;
+        if (!StreamIsSKP(stream, &info)) {
+            return NULL;
         }
 
+        SkTimedPicturePlayback* playback;
+        // Check to see if there is a playback to recreate.
         if (stream->readBool()) {
-            fPlayback = SkNEW_ARGS(SkTimedPicturePlayback,
-                                   (stream, info, proc, deletedCommands));
+            playback = SkNEW_ARGS(SkTimedPicturePlayback,
+                                  (stream, info, proc, deletedCommands));
+        } else {
+            playback = NULL;
         }
 
-        // do this at the end, so that they will be zero if we hit an error.
-        fWidth = info.fWidth;
-        fHeight = info.fHeight;
-        if (success) {
-            *success = true;
-        }
+        return SkNEW_ARGS(SkTimedPicture, (playback, info.fWidth, info.fHeight));
     }
 
     void resetTimes() { ((SkTimedPicturePlayback*) fPlayback)->resetTimes(); }
@@ -279,6 +272,9 @@ public:
 private:
     // disallow default ctor b.c. we don't have a good way to setup the fPlayback ptr
     SkTimedPicture();
+    // Private ctor only used by CreateTimedPicture, which has created the playback.
+    SkTimedPicture(SkTimedPicturePlayback* playback, int width, int height)
+        : INHERITED(playback, width, height) {}
     // disallow the copy ctor - enabling would require copying code from SkPicture
     SkTimedPicture(const SkTimedPicture& src);
 
@@ -335,10 +331,9 @@ void SkDebuggerGUI::actionProfile() {
         return;
     }
 
-    bool success = false;
-    SkTimedPicture picture(&inputStream, &success, &SkImageDecoder::DecodeMemory,
-                           fSkipCommands);
-    if (!success) {
+    SkAutoTUnref<SkTimedPicture> picture(SkTimedPicture::CreateTimedPicture(&inputStream,
+                                         &SkImageDecoder::DecodeMemory, fSkipCommands));
+    if (NULL == picture.get()) {
         return;
     }
 
@@ -374,20 +369,20 @@ void SkDebuggerGUI::actionProfile() {
 
     static const int kNumRepeats = 10;
 
-    run(&picture, renderer, kNumRepeats);
+    run(picture.get(), renderer, kNumRepeats);
 
-    SkASSERT(picture.count() == fListWidget.count());
+    SkASSERT(picture->count() == fListWidget.count());
 
     // extract the individual command times from the SkTimedPlaybackPicture
-    for (int i = 0; i < picture.count(); ++i) {
-        double temp = picture.time(i);
+    for (int i = 0; i < picture->count(); ++i) {
+        double temp = picture->time(i);
 
         QListWidgetItem* item = fListWidget.item(i);
 
         item->setData(Qt::UserRole + 4, 100.0*temp);
     }
 
-    setupOverviewText(picture.typeTimes(), picture.totTime(), kNumRepeats);
+    setupOverviewText(picture->typeTimes(), picture->totTime(), kNumRepeats);
 }
 
 void SkDebuggerGUI::actionCancel() {
@@ -712,6 +707,13 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
     fActionInspector.setIcon(inspector);
     fActionInspector.setText("Inspector");
 
+    QIcon settings;
+    settings.addFile(QString::fromUtf8(":/inspector.png"),
+            QSize(), QIcon::Normal, QIcon::Off);
+    fActionSettings.setShortcut(QKeySequence(tr("Ctrl+G")));
+    fActionSettings.setIcon(settings);
+    fActionSettings.setText("Settings");
+
     QIcon play;
     play.addFile(QString::fromUtf8(":/play.png"), QSize(),
             QIcon::Normal, QIcon::Off);
@@ -825,6 +827,7 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
     fToolBar.addAction(&fActionPlay);
     fToolBar.addSeparator();
     fToolBar.addAction(&fActionInspector);
+    fToolBar.addAction(&fActionSettings);
     fToolBar.addSeparator();
     fToolBar.addAction(&fActionProfile);
 
@@ -869,6 +872,7 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
 
     fMenuWindows.setTitle("Window");
     fMenuWindows.addAction(&fActionInspector);
+    fMenuWindows.addAction(&fActionSettings);
     fMenuWindows.addAction(&fActionDirectory);
 
     fActionGoToLine.setText("Go to Line...");
@@ -902,12 +906,9 @@ void SkDebuggerGUI::loadPicture(const SkString& fileName) {
     fLoading = true;
     SkStream* stream = SkNEW_ARGS(SkFILEStream, (fileName.c_str()));
 
-    bool success = false;
+    SkPicture* picture = SkPicture::CreateFromStream(stream);
 
-    SkPicture* picture = SkNEW_ARGS(SkPicture,
-                                    (stream, &success, &SkImageDecoder::DecodeMemory));
-
-    if (!success) {
+    if (NULL == picture) {
         QMessageBox::critical(this, "Error loading file", "Couldn't read file, sorry.");
         SkSafeUnref(stream);
         return;
@@ -959,14 +960,16 @@ void SkDebuggerGUI::setupListWidget(SkTArray<SkString>* command) {
         item->setData(Qt::DisplayRole, (*command)[i].c_str());
         item->setData(Qt::UserRole + 1, counter++);
 
-        if (0 == strcmp("Restore", (*command)[i].c_str())) {
+        if (0 == strcmp("Restore", (*command)[i].c_str()) ||
+            0 == strcmp("EndCommentGroup", (*command)[i].c_str())) {
             indent -= 10;
         }
 
         item->setData(Qt::UserRole + 3, indent);
 
         if (0 == strcmp("Save", (*command)[i].c_str()) ||
-            0 == strcmp("Save Layer", (*command)[i].c_str())) {
+            0 == strcmp("Save Layer", (*command)[i].c_str()) ||
+            0 == strcmp("BeginCommentGroup", (*command)[i].c_str())) {
             indent += 10;
         }
 

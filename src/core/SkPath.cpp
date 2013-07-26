@@ -15,60 +15,6 @@
 #include "SkRRect.h"
 #include "SkThread.h"
 
-////////////////////////////////////////////////////////////////////////////
-
-#if SK_DEBUG_PATH_REF
-
-SkPath::PathRefDebugRef::PathRefDebugRef(SkPath* owner) : fOwner(owner) {}
-
-SkPath::PathRefDebugRef::PathRefDebugRef(SkPathRef* pr, SkPath* owner)
-: fPathRef(pr)
-, fOwner(owner) {
-    pr->addOwner(owner);
-}
-
-SkPath::PathRefDebugRef::~PathRefDebugRef() {
-    fPathRef->removeOwner(fOwner);
-}
-
-void SkPath::PathRefDebugRef::reset(SkPathRef* ref) {
-    bool diff = (ref != fPathRef.get());
-    if (diff && NULL != fPathRef.get()) {
-        fPathRef.get()->removeOwner(fOwner);
-    }
-    fPathRef.reset(ref);
-    if (diff && NULL != fPathRef.get()) {
-        fPathRef.get()->addOwner(fOwner);
-    }
-}
-
-void SkPath::PathRefDebugRef::swap(SkPath::PathRefDebugRef* other) {
-    if (other->fPathRef.get() != fPathRef.get()) {
-        other->fPathRef->removeOwner(other->fOwner);
-        other->fPathRef->addOwner(fOwner);
-
-        fPathRef->removeOwner(fOwner);
-        fPathRef->addOwner(other->fOwner);
-    }
-
-    fPathRef.swap(&other->fPathRef);
-}
-
-SkPathRef* SkPath::PathRefDebugRef::get() const { return fPathRef.get(); }
-
-SkAutoTUnref<SkPathRef>::BlockRefType *SkPath::PathRefDebugRef::operator->() const {
-    return fPathRef.operator->();
-}
-
-SkPath::PathRefDebugRef::operator SkPathRef*() {
-    return fPathRef.operator SkPathRef *();
-}
-
-#endif
-
-////////////////////////////////////////////////////////////////////////////
-
-
 SK_DEFINE_INST_COUNT(SkPath);
 
 // This value is just made-up for now. When count is 4, calling memset was much
@@ -214,71 +160,70 @@ static bool compute_pt_bounds(SkRect* bounds, const SkPathRef& ref) {
 #define INITIAL_LASTMOVETOINDEX_VALUE   ~0
 
 SkPath::SkPath()
-#if SK_DEBUG_PATH_REF
-    : fPathRef(SkPathRef::CreateEmpty(), this)
-#else
     : fPathRef(SkPathRef::CreateEmpty())
+#ifdef SK_BUILD_FOR_ANDROID
+    , fGenerationID(0)
 #endif
-    , fFillType(kWinding_FillType)
-    , fBoundsIsDirty(true) {
+{
+    this->resetFields();
+}
+
+void SkPath::resetFields() {
+    //fPathRef is assumed to have been emptied by the caller.
+    fLastMoveToIndex = INITIAL_LASTMOVETOINDEX_VALUE;
+    fFillType = kWinding_FillType;
+    fSegmentMask = 0;
+    fBoundsIsDirty = true;
     fConvexity = kUnknown_Convexity;
     fDirection = kUnknown_Direction;
-    fSegmentMask = 0;
-    fLastMoveToIndex = INITIAL_LASTMOVETOINDEX_VALUE;
+    fIsFinite = false;
     fIsOval = false;
-    fIsFinite = false;  // gets computed when we know our bounds
 #ifdef SK_BUILD_FOR_ANDROID
-    fGenerationID = 0;
+    GEN_ID_INC;
     fSourcePath = NULL;
 #endif
 }
 
-SkPath::SkPath(const SkPath& src)
-#if SK_DEBUG_PATH_REF
-    : fPathRef(this)
+SkPath::SkPath(const SkPath& that)
+    : fPathRef(SkRef(that.fPathRef.get()))
+#ifdef SK_BUILD_FOR_ANDROID
+    , fGenerationID(0)
 #endif
 {
-    SkDEBUGCODE(src.validate();)
-    src.fPathRef.get()->ref();
-    fPathRef.reset(src.fPathRef.get());
-    fBounds         = src.fBounds;
-    fFillType       = src.fFillType;
-    fBoundsIsDirty  = src.fBoundsIsDirty;
-    fConvexity      = src.fConvexity;
-    fDirection      = src.fDirection;
-    fIsFinite       = src.fIsFinite;
-    fSegmentMask    = src.fSegmentMask;
-    fLastMoveToIndex = src.fLastMoveToIndex;
-    fIsOval         = src.fIsOval;
-#ifdef SK_BUILD_FOR_ANDROID
-    fGenerationID = src.fGenerationID;
-    fSourcePath = NULL;
-#endif
+    this->copyFields(that);
+    SkDEBUGCODE(that.validate();)
 }
 
 SkPath::~SkPath() {
     SkDEBUGCODE(this->validate();)
 }
 
-SkPath& SkPath::operator=(const SkPath& src) {
-    SkDEBUGCODE(src.validate();)
+SkPath& SkPath::operator=(const SkPath& that) {
+    SkDEBUGCODE(that.validate();)
 
-    if (this != &src) {
-        src.fPathRef.get()->ref();
-        fPathRef.reset(src.fPathRef.get());
-        fBounds         = src.fBounds;
-        fFillType       = src.fFillType;
-        fBoundsIsDirty  = src.fBoundsIsDirty;
-        fConvexity      = src.fConvexity;
-        fDirection      = src.fDirection;
-        fIsFinite       = src.fIsFinite;
-        fSegmentMask    = src.fSegmentMask;
-        fLastMoveToIndex = src.fLastMoveToIndex;
-        fIsOval         = src.fIsOval;
-        GEN_ID_INC;
+    if (this != &that) {
+        fPathRef.reset(SkRef(that.fPathRef.get()));
+        this->copyFields(that);
     }
     SkDEBUGCODE(this->validate();)
     return *this;
+}
+
+void SkPath::copyFields(const SkPath& that) {
+    //fPathRef is assumed to have been set by the caller.
+    fBounds          = that.fBounds;
+    fLastMoveToIndex = that.fLastMoveToIndex;
+    fFillType        = that.fFillType;
+    fSegmentMask     = that.fSegmentMask;
+    fBoundsIsDirty   = that.fBoundsIsDirty;
+    fConvexity       = that.fConvexity;
+    fDirection       = that.fDirection;
+    fIsFinite        = that.fIsFinite;
+    fIsOval          = that.fIsOval;
+#ifdef SK_BUILD_FOR_ANDROID
+    GEN_ID_INC;
+    fSourcePath      = NULL;
+#endif
 }
 
 SK_API bool operator==(const SkPath& a, const SkPath& b) {
@@ -294,21 +239,22 @@ SK_API bool operator==(const SkPath& a, const SkPath& b) {
          *a.fPathRef.get() == *b.fPathRef.get());
 }
 
-void SkPath::swap(SkPath& other) {
-    SkASSERT(&other != NULL);
+void SkPath::swap(SkPath& that) {
+    SkASSERT(&that != NULL);
 
-    if (this != &other) {
-        SkTSwap<SkRect>(fBounds, other.fBounds);
-        fPathRef.swap(&other.fPathRef);
-        SkTSwap<uint8_t>(fFillType, other.fFillType);
-        SkTSwap<uint8_t>(fBoundsIsDirty, other.fBoundsIsDirty);
-        SkTSwap<uint8_t>(fConvexity, other.fConvexity);
-        SkTSwap<uint8_t>(fDirection, other.fDirection);
-        SkTSwap<uint8_t>(fSegmentMask, other.fSegmentMask);
-        SkTSwap<int>(fLastMoveToIndex, other.fLastMoveToIndex);
-        SkTSwap<SkBool8>(fIsOval, other.fIsOval);
-        SkTSwap<SkBool8>(fIsFinite, other.fIsFinite);
+    if (this != &that) {
+        fPathRef.swap(&that.fPathRef);
+        SkTSwap<SkRect>(fBounds, that.fBounds);
+        SkTSwap<int>(fLastMoveToIndex, that.fLastMoveToIndex);
+        SkTSwap<uint8_t>(fFillType, that.fFillType);
+        SkTSwap<uint8_t>(fSegmentMask, that.fSegmentMask);
+        SkTSwap<uint8_t>(fBoundsIsDirty, that.fBoundsIsDirty);
+        SkTSwap<uint8_t>(fConvexity, that.fConvexity);
+        SkTSwap<uint8_t>(fDirection, that.fDirection);
+        SkTSwap<SkBool8>(fIsFinite, that.fIsFinite);
+        SkTSwap<SkBool8>(fIsOval, that.fIsOval);
         GEN_ID_INC;
+        GEN_ID_PTR_INC(&that);
     }
 }
 
@@ -369,6 +315,7 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
                 SkASSERT(moveCnt);
                 break;
             case kQuad_Verb:
+            case kConic_Verb:
                 SkASSERT(moveCnt);
                 nextPt = 2;
                 break;
@@ -410,25 +357,14 @@ void SkPath::reset() {
     SkDEBUGCODE(this->validate();)
 
     fPathRef.reset(SkPathRef::CreateEmpty());
-    GEN_ID_INC;
-    fBoundsIsDirty = true;
-    fConvexity = kUnknown_Convexity;
-    fDirection = kUnknown_Direction;
-    fSegmentMask = 0;
-    fLastMoveToIndex = INITIAL_LASTMOVETOINDEX_VALUE;
-    fIsOval = false;
+    this->resetFields();
 }
 
 void SkPath::rewind() {
     SkDEBUGCODE(this->validate();)
 
     SkPathRef::Rewind(&fPathRef);
-    GEN_ID_INC;
-    fConvexity = kUnknown_Convexity;
-    fBoundsIsDirty = true;
-    fSegmentMask = 0;
-    fLastMoveToIndex = INITIAL_LASTMOVETOINDEX_VALUE;
-    fIsOval = false;
+    this->resetFields();
 }
 
 bool SkPath::isEmpty() const {
@@ -558,11 +494,15 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 break;
             }
             case kQuad_Verb:
+            case kConic_Verb:
             case kCubic_Verb:
                 return false; // quadratic, cubic not allowed
             case kMove_Verb:
                 last = *pts++;
                 closedOrMoved = true;
+                break;
+            default:
+                SkASSERT(!"unexpected verb");
                 break;
         }
         *currVerb += 1;
@@ -824,6 +764,39 @@ void SkPath::rQuadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     this->quadTo(pt.fX + x1, pt.fY + y1, pt.fX + x2, pt.fY + y2);
 }
 
+void SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
+                     SkScalar w) {
+    // check for <= 0 or NaN with this test
+    if (!(w > 0)) {
+        this->lineTo(x2, y2);
+    } else if (!SkScalarIsFinite(w)) {
+        this->lineTo(x1, y1);
+        this->lineTo(x2, y2);
+    } else if (SK_Scalar1 == w) {
+        this->quadTo(x1, y1, x2, y2);
+    } else {
+        SkDEBUGCODE(this->validate();)
+
+        this->injectMoveToIfNeeded();
+
+        SkPathRef::Editor ed(&fPathRef);
+        SkPoint* pts = ed.growForConic(w);
+        pts[0].set(x1, y1);
+        pts[1].set(x2, y2);
+        fSegmentMask |= kConic_SegmentMask;
+
+        GEN_ID_INC;
+        DIRTY_AFTER_EDIT;
+    }
+}
+
+void SkPath::rConicTo(SkScalar dx1, SkScalar dy1, SkScalar dx2, SkScalar dy2,
+                      SkScalar w) {
+    SkPoint pt;
+    this->getLastPt(&pt);
+    this->conicTo(pt.fX + dx1, pt.fY + dy1, pt.fX + dx2, pt.fY + dy2, w);
+}
+
 void SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                      SkScalar x3, SkScalar y3) {
     SkDEBUGCODE(this->validate();)
@@ -857,6 +830,7 @@ void SkPath::close() {
         switch (fPathRef->atVerb(count - 1)) {
             case kLine_Verb:
             case kQuad_Verb:
+            case kConic_Verb:
             case kCubic_Verb:
             case kMove_Verb: {
                 SkPathRef::Editor ed(&fPathRef);
@@ -864,8 +838,11 @@ void SkPath::close() {
                 GEN_ID_INC;
                 break;
             }
-            default:
+            case kClose_Verb:
                 // don't add a close if it's the first verb or a repeat
+                break;
+            default:
+                SkASSERT(!"unexpected verb");
                 break;
         }
     }
@@ -1430,6 +1407,10 @@ void SkPath::addPath(const SkPath& path, const SkMatrix& matrix) {
                 proc(matrix, &pts[1], &pts[1], 2);
                 this->quadTo(pts[1], pts[2]);
                 break;
+            case kConic_Verb:
+                proc(matrix, &pts[1], &pts[1], 2);
+                this->conicTo(pts[1], pts[2], iter.conicWeight());
+                break;
             case kCubic_Verb:
                 proc(matrix, &pts[1], &pts[1], 3);
                 this->cubicTo(pts[1], pts[2], pts[3]);
@@ -1445,14 +1426,20 @@ void SkPath::addPath(const SkPath& path, const SkMatrix& matrix) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static const uint8_t gPtsInVerb[] = {
-    1,  // kMove
-    1,  // kLine
-    2,  // kQuad
-    3,  // kCubic
-    0,  // kClose
-    0   // kDone
-};
+static int pts_in_verb(unsigned verb) {
+    static const uint8_t gPtsInVerb[] = {
+        1,  // kMove
+        1,  // kLine
+        2,  // kQuad
+        2,  // kConic
+        3,  // kCubic
+        0,  // kClose
+        0   // kDone
+    };
+
+    SkASSERT(verb < SK_ARRAY_COUNT(gPtsInVerb));
+    return gPtsInVerb[verb];
+}
 
 // ignore the initial moveto, and stop when the 1st contour ends
 void SkPath::pathTo(const SkPath& path) {
@@ -1469,6 +1456,7 @@ void SkPath::pathTo(const SkPath& path) {
     const uint8_t* verbs = path.fPathRef->verbs();
     // skip the initial moveTo
     const SkPoint*  pts = path.fPathRef->points() + 1;
+    const SkScalar* conicWeight = path.fPathRef->conicWeights();
 
     SkASSERT(verbs[~0] == kMove_Verb);
     for (i = 1; i < vcount; i++) {
@@ -1479,13 +1467,16 @@ void SkPath::pathTo(const SkPath& path) {
             case kQuad_Verb:
                 this->quadTo(pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY);
                 break;
+            case kConic_Verb:
+                this->conicTo(pts[0], pts[1], *conicWeight++);
+                break;
             case kCubic_Verb:
                 this->cubicTo(pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
                 break;
             case kClose_Verb:
                 return;
         }
-        pts += gPtsInVerb[verbs[~i]];
+        pts += pts_in_verb(verbs[~i]);
     }
 }
 
@@ -1503,14 +1494,17 @@ void SkPath::reversePathTo(const SkPath& path) {
 
     const uint8_t*  verbs = path.fPathRef->verbs();
     const SkPoint*  pts = path.fPathRef->points();
+    const SkScalar* conicWeights = path.fPathRef->conicWeights();
 
     SkASSERT(verbs[~0] == kMove_Verb);
     for (i = 1; i < vcount; ++i) {
-        int n = gPtsInVerb[verbs[~i]];
+        unsigned v = verbs[~i];
+        int n = pts_in_verb(v);
         if (n == 0) {
             break;
         }
         pts += n;
+        conicWeights += (SkPath::kConic_Verb == v);
     }
 
     while (--i > 0) {
@@ -1521,6 +1515,9 @@ void SkPath::reversePathTo(const SkPath& path) {
             case kQuad_Verb:
                 this->quadTo(pts[-1].fX, pts[-1].fY, pts[-2].fX, pts[-2].fY);
                 break;
+            case kConic_Verb:
+                this->conicTo(pts[-1], pts[-2], *--conicWeights);
+                break;
             case kCubic_Verb:
                 this->cubicTo(pts[-1].fX, pts[-1].fY, pts[-2].fX, pts[-2].fY,
                               pts[-3].fX, pts[-3].fY);
@@ -1529,7 +1526,7 @@ void SkPath::reversePathTo(const SkPath& path) {
                 SkDEBUGFAIL("bad verb");
                 break;
         }
-        pts -= gPtsInVerb[verbs[~i]];
+        pts -= pts_in_verb(verbs[~i]);
     }
 }
 
@@ -1540,6 +1537,7 @@ void SkPath::reverseAddPath(const SkPath& src) {
     // we will iterator through src's verbs backwards
     const uint8_t* verbs = src.fPathRef->verbsMemBegin(); // points at the last verb
     const uint8_t* verbsEnd = src.fPathRef->verbs(); // points just past the first verb
+    const SkScalar* conicWeights = src.fPathRef->conicWeightsEnd();
 
     fIsOval = false;
 
@@ -1547,7 +1545,7 @@ void SkPath::reverseAddPath(const SkPath& src) {
     bool needClose = false;
     while (verbs < verbsEnd) {
         uint8_t v = *(verbs++);
-        int n = gPtsInVerb[v];
+        int n = pts_in_verb(v);
 
         if (needMove) {
             --pts;
@@ -1569,6 +1567,9 @@ void SkPath::reverseAddPath(const SkPath& src) {
                 break;
             case kQuad_Verb:
                 this->quadTo(pts[1], pts[0]);
+                break;
+            case kConic_Verb:
+                this->conicTo(pts[1], pts[0], *--conicWeights);
                 break;
             case kCubic_Verb:
                 this->cubicTo(pts[2], pts[1], pts[0]);
@@ -1643,6 +1644,10 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
                     break;
                 case kQuad_Verb:
                     subdivide_quad_to(&tmp, pts);
+                    break;
+                case kConic_Verb:
+                    SkASSERT(!"TODO: compute new weight");
+                    tmp.conicTo(pts[1], pts[2], iter.conicWeight());
                     break;
                 case kCubic_Verb:
                     subdivide_cubic_to(&tmp, pts);
@@ -1741,6 +1746,7 @@ enum SegmentState {
 SkPath::Iter::Iter() {
 #ifdef SK_DEBUG
     fPts = NULL;
+    fConicWeights = NULL;
     fMoveTo.fX = fMoveTo.fY = fLastPt.fX = fLastPt.fY = 0;
     fForceClose = fCloseLine = false;
     fSegmentState = kEmptyContour_SegmentState;
@@ -1759,6 +1765,7 @@ void SkPath::Iter::setPath(const SkPath& path, bool forceClose) {
     fPts = path.fPathRef->points();
     fVerbs = path.fPathRef->verbs();
     fVerbStop = path.fPathRef->verbsMemBegin();
+    fConicWeights = path.fPathRef->conicWeights() - 1; // begin one behind
     fLastPt.fX = fLastPt.fY = 0;
     fMoveTo.fX = fMoveTo.fY = 0;
     fForceClose = SkToU8(forceClose);
@@ -1870,6 +1877,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                 fPts++;
                 break;
 
+            case kConic_Verb:
             case kQuad_Verb:
                 if (!IsQuadDegenerate(lastPt, fPts[0], fPts[1])) {
                     if (lastMoveVerb) {
@@ -1882,6 +1890,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                 // Ignore this line and continue
                 fVerbs--;
                 fPts += 2;
+                fConicWeights += (kConic_Verb == verb);
                 break;
 
             case kCubic_Verb:
@@ -1951,6 +1960,9 @@ SkPath::Verb SkPath::Iter::doNext(SkPoint ptsParam[4]) {
             fCloseLine = false;
             srcPts += 1;
             break;
+        case kConic_Verb:
+            fConicWeights += 1;
+            // fall-through
         case kQuad_Verb:
             pts[0] = this->cons_moveTo();
             memcpy(&pts[1], srcPts, 2 * sizeof(SkPoint));
@@ -1983,6 +1995,7 @@ SkPath::Verb SkPath::Iter::doNext(SkPoint ptsParam[4]) {
 SkPath::RawIter::RawIter() {
 #ifdef SK_DEBUG
     fPts = NULL;
+    fConicWeights = NULL;
     fMoveTo.fX = fMoveTo.fY = fLastPt.fX = fLastPt.fY = 0;
 #endif
     // need to init enough to make next() harmlessly return kDone_Verb
@@ -1998,6 +2011,7 @@ void SkPath::RawIter::setPath(const SkPath& path) {
     fPts = path.fPathRef->points();
     fVerbs = path.fPathRef->verbs();
     fVerbStop = path.fPathRef->verbsMemBegin();
+    fConicWeights = path.fPathRef->conicWeights() - 1; // begin one behind
     fMoveTo.fX = fMoveTo.fY = 0;
     fLastPt.fX = fLastPt.fY = 0;
 }
@@ -2025,6 +2039,9 @@ SkPath::Verb SkPath::RawIter::next(SkPoint pts[4]) {
             fLastPt = srcPts[0];
             srcPts += 1;
             break;
+        case kConic_Verb:
+            fConicWeights += 1;
+            // fall-through
         case kQuad_Verb:
             pts[0] = fLastPt;
             memcpy(&pts[1], srcPts, 2 * sizeof(SkPoint));
@@ -2057,22 +2074,12 @@ uint32_t SkPath::writeToMemory(void* storage) const {
 
     if (NULL == storage) {
         const int byteCount = sizeof(int32_t)
-#if NEW_PICTURE_FORMAT
                       + fPathRef->writeSize()
-#else
-                      + 2 * sizeof(int32_t)
-                      + sizeof(SkPoint) * fPathRef->countPoints()
-                      + sizeof(uint8_t) * fPathRef->countVerbs()
-#endif
                       + sizeof(SkRect);
         return SkAlign4(byteCount);
     }
 
     SkWBuffer   buffer(storage);
-#if !NEW_PICTURE_FORMAT
-    buffer.write32(fPathRef->countPoints());
-    buffer.write32(fPathRef->countVerbs());
-#endif
 
     // Call getBounds() to ensure (as a side-effect) that fBounds
     // and fIsFinite are computed.
@@ -2098,24 +2105,16 @@ uint32_t SkPath::writeToMemory(void* storage) const {
 
 uint32_t SkPath::readFromMemory(const void* storage) {
     SkRBuffer   buffer(storage);
-#if !NEW_PICTURE_FORMAT
-    int32_t pcount = buffer.readS32();
-    int32_t vcount = buffer.readS32();
-#endif
 
     uint32_t packed = buffer.readS32();
     fIsFinite = (packed >> kIsFinite_SerializationShift) & 1;
     fIsOval = (packed >> kIsOval_SerializationShift) & 1;
     fConvexity = (packed >> kConvexity_SerializationShift) & 0xFF;
     fFillType = (packed >> kFillType_SerializationShift) & 0xFF;
-    fSegmentMask = (packed >> kSegmentMask_SerializationShift) & 0x7;
+    fSegmentMask = (packed >> kSegmentMask_SerializationShift) & 0xF;
     fDirection = (packed >> kDirection_SerializationShift) & 0x3;
 
-#if NEW_PICTURE_FORMAT
     fPathRef.reset(SkPathRef::CreateFromBuffer(&buffer));
-#else
-    fPathRef.reset(SkPathRef::CreateFromBuffer(vcount, pcount, &buffer));
-#endif
 
     buffer.read(&fBounds, sizeof(fBounds));
     fBoundsIsDirty = false;
@@ -2142,7 +2141,7 @@ static void append_scalar(SkString* str, SkScalar value) {
 }
 
 static void append_params(SkString* str, const char label[], const SkPoint pts[],
-                          int count) {
+                          int count, SkScalar conicWeight = -1) {
     str->append(label);
     str->append("(");
 
@@ -2154,6 +2153,10 @@ static void append_params(SkString* str, const char label[], const SkPoint pts[]
         if (i < count - 1) {
             str->append(", ");
         }
+    }
+    if (conicWeight >= 0) {
+        str->append(", ");
+        append_scalar(str, conicWeight);
     }
     str->append(");\n");
 }
@@ -2175,10 +2178,12 @@ void SkPath::dump(bool forceClose, const char title[]) const {
                 break;
             case kLine_Verb:
                 append_params(&builder, "path.lineTo", &pts[1], 1);
-                append_params(&builder, "path.lineTo", &pts[1], 1);
                 break;
             case kQuad_Verb:
                 append_params(&builder, "path.quadTo", &pts[1], 2);
+                break;
+            case kConic_Verb:
+                append_params(&builder, "path.conicTo", &pts[1], 2, iter.conicWeight());
                 break;
             case kCubic_Verb:
                 append_params(&builder, "path.cubicTo", &pts[1], 3);
@@ -2238,6 +2243,9 @@ void SkPath::validate() const {
                 break;
             case kQuad_Verb:
                 mask |= kQuad_SegmentMask;
+                break;
+            case kConic_Verb:
+                mask |= kConic_SegmentMask;
                 break;
             case kCubic_Verb:
                 mask |= kCubic_SegmentMask;
@@ -2379,6 +2387,7 @@ SkPath::Convexity SkPath::internalGetConvexity() const {
                 break;
             case kLine_Verb: count = 1; break;
             case kQuad_Verb: count = 2; break;
+            case kConic_Verb: count = 2; break;
             case kCubic_Verb: count = 3; break;
             case kClose_Verb:
                 state.close();
@@ -2423,6 +2432,7 @@ private:
     const SkPoint* fCurrPt;
     const uint8_t* fCurrVerb;
     const uint8_t* fStopVerbs;
+    const SkScalar* fCurrConicWeight;
     bool fDone;
     SkDEBUGCODE(int fContourCounter;)
 };
@@ -2432,6 +2442,7 @@ ContourIter::ContourIter(const SkPathRef& pathRef) {
     fDone = false;
     fCurrPt = pathRef.points();
     fCurrVerb = pathRef.verbs();
+    fCurrConicWeight = pathRef.conicWeights();
     fCurrPtCount = 0;
     SkDEBUGCODE(fContourCounter = 0;)
     this->next();
@@ -2459,13 +2470,19 @@ void ContourIter::next() {
             case SkPath::kLine_Verb:
                 ptCount += 1;
                 break;
+            case SkPath::kConic_Verb:
+                fCurrConicWeight += 1;
+                // fall-through
             case SkPath::kQuad_Verb:
                 ptCount += 2;
                 break;
             case SkPath::kCubic_Verb:
                 ptCount += 3;
                 break;
-            default:    // kClose_Verb, just keep going
+            case SkPath::kClose_Verb:
+                break;
+            default:
+                SkASSERT(!"unexpected verb");
                 break;
         }
     }
@@ -2957,13 +2974,16 @@ bool SkPath::contains(SkScalar x, SkScalar y) const {
             case SkPath::kQuad_Verb:
                 w += winding_quad(pts, x, y);
                 break;
+            case SkPath::kConic_Verb:
+                SkASSERT(0);
+                break;
             case SkPath::kCubic_Verb:
                 w += winding_cubic(pts, x, y);
                 break;
             case SkPath::kDone_Verb:
                 done = true;
                 break;
-        }
+       }
     } while (!done);
 
     switch (this->getFillType()) {

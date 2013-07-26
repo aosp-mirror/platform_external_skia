@@ -122,7 +122,6 @@ SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
     // TODO should the caller give us the style?
     SkTypeface::Style style = SkTypeface::kNormal;
     SkTypeface* face = SkNEW_ARGS(FontConfigTypeface, (style, stream));
-    SkTypefaceCache::Add(face, style);
     return face;
 }
 
@@ -136,16 +135,32 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
 SkStream* FontConfigTypeface::onOpenStream(int* ttcIndex) const {
     SkStream* stream = this->getLocalStream();
     if (stream) {
-        // TODO: fix issue 1176.
-        // As of now open_stream will return a stream and unwind it, but the
-        // SkStream is not thread safe, and if two threads use the stream they
-        // may collide and print preview for example could still fail,
-        // or there could be some failures in rendering if this stream is used
-        // there.
-        stream->rewind();
-        stream->ref();
         // should have been provided by CreateFromStream()
         *ttcIndex = 0;
+
+        SkAutoTUnref<SkStream> dupStream(stream->duplicate());
+        if (dupStream) {
+            return dupStream.detach();
+        }
+
+        // TODO: update interface use, remove the following code in this block.
+        size_t length = stream->getLength();
+
+        const void* memory = stream->getMemoryBase();
+        if (NULL != memory) {
+            return new SkMemoryStream(memory, length, true);
+        }
+
+        SkAutoTMalloc<uint8_t> allocMemory(length);
+        stream->rewind();
+        if (length == stream->read(allocMemory.get(), length)) {
+            SkAutoTUnref<SkMemoryStream> copyStream(new SkMemoryStream());
+            copyStream->setMemoryOwned(allocMemory.detach(), length);
+            return copyStream.detach();
+        }
+
+        stream->rewind();
+        stream->ref();
     } else {
         SkAutoTUnref<SkFontConfigInterface> fci(RefFCI());
         if (NULL == fci.get()) {

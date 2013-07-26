@@ -1,7 +1,7 @@
 {
   'variables': {
     'conditions': [
-      [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+      [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
         # Use the systemwide Qt libs by default
         'variables': {
           'qt_sdk%': '/usr',
@@ -78,6 +78,7 @@
       ],
       'include_dirs' : [
         '../src/core',
+        '../src/utils/debugger',
         '../debugger',      # To pull SkDebugger.h
         '../src/gpu',       # To pull gl/GrGLUtil.h
         '../src/ports',     # To pull SkFontDescriptor.h
@@ -85,26 +86,21 @@
         '../tools',
       ],
       'sources': [
-        '../debugger/SkDebugCanvas.h',
-        '../debugger/SkDebugCanvas.cpp',
         '../debugger/SkDebugger.cpp',
-        '../debugger/SkDrawCommand.h',
-        '../debugger/SkDrawCommand.cpp',
-        '../debugger/SkObjectParser.h',
-        '../debugger/SkObjectParser.cpp',
+        '../src/utils/debugger/SkDebugCanvas.h',
+        '../src/utils/debugger/SkDebugCanvas.cpp',
+        '../src/utils/debugger/SkDrawCommand.h',
+        '../src/utils/debugger/SkDrawCommand.cpp',
+        '../src/utils/debugger/SkObjectParser.h',
+        '../src/utils/debugger/SkObjectParser.cpp',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
-        'images.gyp:images',
-        'effects.gyp:effects',
+        'skia_lib.gyp:skia_lib',
         'bench.gyp:bench_timer',
         'tools.gyp:picture_renderer',
       ],
       'conditions': [
         [ 'skia_os == "nacl"', {
-          'dependencies': [
-            'utils.gyp:utils', # For SkBase64.h
-          ],
           'include_dirs': [
             '../src/utils',
           ],

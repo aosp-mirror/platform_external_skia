@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,15 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef GrGpu_DEFINED
 #define GrGpu_DEFINED
 
 #include "GrDrawTarget.h"
-#include "GrRect.h"
 #include "GrRefCnt.h"
 #include "GrClipMaskManager.h"
-
 #include "SkPath.h"
 
 class GrContext;
@@ -27,7 +23,6 @@ class GrStencilBuffer;
 class GrVertexBufferAllocPool;
 
 class GrGpu : public GrDrawTarget {
-
 public:
 
     /**
@@ -66,7 +61,9 @@ public:
      * the GrGpu that the state was modified and it shouldn't make assumptions
      * about the state.
      */
-    void markContextDirty() { fContextIsDirty = true; }
+    void markContextDirty(uint32_t state = kAll_GrBackendState) {
+        fResetBits |= state;
+    }
 
     void unimpl(const char[]);
 
@@ -267,7 +264,7 @@ public:
     void removeResource(GrResource* resource);
 
     // GrDrawTarget overrides
-    virtual void clear(const GrIRect* rect,
+    virtual void clear(const SkIRect* rect,
                        GrColor color,
                        GrRenderTarget* renderTarget = NULL) SK_OVERRIDE;
 
@@ -308,7 +305,7 @@ public:
      * onStencilPath member functions.) The GrGpu subclass should flush the
      * stencil state to the 3D API in its implementation of flushGraphicsState.
      */
-    void enableScissor(const GrIRect& rect) {
+    void enableScissor(const SkIRect& rect) {
         fScissorState.fEnabled = true;
         fScissorState.fRect = rect;
     }
@@ -329,7 +326,7 @@ public:
     // GrGpu subclass sets clip bit in the stencil buffer. The subclass is
     // free to clear the remaining bits to zero if masked clears are more
     // expensive than clearing all bits.
-    virtual void clearStencilClip(const GrIRect& rect, bool insideClip) = 0;
+    virtual void clearStencilClip(const SkIRect& rect, bool insideClip) = 0;
 
     enum PrivateDrawStateStateBits {
         kFirstBit = (GrDrawState::kLastPublicStateBit << 1),
@@ -365,7 +362,9 @@ protected:
     }
 
     // prepares clip flushes gpu state before a draw
-    bool setupClipAndFlushState(DrawType, const GrDeviceCoordTexture* dstCopy);
+    bool setupClipAndFlushState(DrawType,
+                                const GrDeviceCoordTexture* dstCopy,
+                                GrDrawState::AutoRestoreEffects* are);
 
     // Functions used to map clip-respecting stencil tests into normal
     // stencil funcs supported by GPUs.
@@ -394,7 +393,7 @@ protected:
     // The state of the scissor is controlled by the clip manager
     struct ScissorState {
         bool    fEnabled;
-        GrIRect fRect;
+        SkIRect fRect;
     } fScissorState;
 
     // The final stencil settings to use as determined by the clip manager.
@@ -424,7 +423,7 @@ private:
 
     // called when the 3D context state is unknown. Subclass should emit any
     // assumed 3D context state and dirty any state cache.
-    virtual void onResetContext() = 0;
+    virtual void onResetContext(uint32_t resetBits) = 0;
 
     // overridden by backend-specific derived class to create objects.
     virtual GrTexture* onCreateTexture(const GrTextureDesc& desc,
@@ -438,7 +437,7 @@ private:
 
     // overridden by backend-specific derived class to perform the clear and
     // clearRect. NULL rect means clear whole target.
-    virtual void onClear(const GrIRect* rect, GrColor color) = 0;
+    virtual void onClear(const SkIRect* rect, GrColor color) = 0;
 
     // overridden by backend-specific derived class to perform the draw call.
     virtual void onGpuDraw(const DrawInfo&) = 0;
@@ -505,14 +504,14 @@ private:
         // stencil buffer. Perhaps we should detect whether it is a
         // internally created stencil buffer and if so skip the invalidate.
         fClipMaskManager.invalidateStencilMask();
-        this->onResetContext();
+        this->onResetContext(fResetBits);
+        fResetBits = 0;
         ++fResetTimestamp;
     }
 
     void handleDirtyContext() {
-        if (fContextIsDirty) {
+        if (fResetBits) {
             this->resetContext();
-            fContextIsDirty = false;
         }
     }
 
@@ -522,6 +521,7 @@ private:
     typedef SkTInternalLList<GrResource> ResourceList;
     SkSTArray<kPreallocGeomPoolStateStackCnt, GeometryPoolState, true>  fGeomPoolStateStack;
     ResetTimestamp                                                      fResetTimestamp;
+    uint32_t                                                            fResetBits;
     GrVertexBufferAllocPool*                                            fVertexPool;
     GrIndexBufferAllocPool*                                             fIndexPool;
     // counts number of uses of vertex/index pool in the geometry stack
@@ -529,7 +529,6 @@ private:
     int                                                                 fIndexPoolUseCnt;
     // these are mutable so they can be created on-demand
     mutable GrIndexBuffer*                                              fQuadIndexBuffer;
-    bool                                                                fContextIsDirty;
     // Used to abandon/release all resources created by this GrGpu. TODO: Move this
     // functionality to GrResourceCache.
     ResourceList                                                        fResourceList;

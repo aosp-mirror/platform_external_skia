@@ -10,6 +10,7 @@
 #include "GrGpu.h"
 #include "gl/GrGLEffect.h"
 #include "GrTBackendEffectFactory.h"
+#include "SkColorPriv.h"
 
 SK_DEFINE_INST_COUNT(GrAARectRenderer)
 
@@ -58,23 +59,28 @@ public:
                 builder->getEffectAttributeName(drawEffect.getVertexAttribIndices()[0]);
             builder->vsCodeAppendf("\t%s = %s;\n", vsRectName, attr0Name->c_str());
 
-            // TODO: compute these scale factors in the VS
-            // These scale factors adjust the coverage for < 1 pixel wide/high rects
-            builder->fsCodeAppendf("\tfloat wScale = max(1.0, 2.0/(0.5+%s.z));\n",
-                                   fsRectName);
-            builder->fsCodeAppendf("\tfloat hScale = max(1.0, 2.0/(0.5+%s.w));\n",
-                                   fsRectName);
+            // TODO: compute all these offsets, spans, and scales in the VS
+            builder->fsCodeAppendf("\tfloat insetW = min(1.0, %s.z) - 0.5;\n", fsRectName);
+            builder->fsCodeAppendf("\tfloat insetH = min(1.0, %s.w) - 0.5;\n", fsRectName);
+            builder->fsCodeAppend("\tfloat outset = 0.5;\n");
+            // For rects > 1 pixel wide and tall the span's are noops (i.e., 1.0). For rects
+            // < 1 pixel wide or tall they serve to normalize the < 1 ramp to a 0 .. 1 range.
+            builder->fsCodeAppend("\tfloat spanW = insetW + outset;\n");
+            builder->fsCodeAppend("\tfloat spanH = insetH + outset;\n");
+            // For rects < 1 pixel wide or tall, these scale factors are used to cap the maximum
+            // value of coverage that is used. In other words it is the coverage that is
+            // used in the interior of the rect after the ramp.
+            builder->fsCodeAppend("\tfloat scaleW = min(1.0, 2.0*insetW/spanW);\n");
+            builder->fsCodeAppend("\tfloat scaleH = min(1.0, 2.0*insetH/spanH);\n");
 
             // Compute the coverage for the rect's width
-            builder->fsCodeAppendf("\tfloat coverage = clamp(wScale*(%s.z-abs(%s.x)), 0.0, 1.0);\n",
-                                   fsRectName,
-                                   fsRectName);
-
+            builder->fsCodeAppendf(
+                "\tfloat coverage = scaleW*clamp((%s.z-abs(%s.x))/spanW, 0.0, 1.0);\n", fsRectName,
+                fsRectName);
             // Compute the coverage for the rect's height and merge with the width
             builder->fsCodeAppendf(
-                    "\tcoverage = min(coverage, clamp(hScale*(%s.w-abs(%s.y)), 0.0, 1.0));\n",
-                    fsRectName,
-                    fsRectName);
+                "\tcoverage = coverage*scaleH*clamp((%s.w-abs(%s.y))/spanH, 0.0, 1.0);\n",
+                fsRectName, fsRectName);
 
             SkString modulate;
             GrGLSLModulatef<4>(&modulate, inputColor, "coverage");
@@ -178,26 +184,34 @@ public:
                 builder->getEffectAttributeName(drawEffect.getVertexAttribIndices()[1]);
             builder->vsCodeAppendf("\t%s = %s;\n", vsWidthHeightName, attr1Name->c_str());
 
-            // TODO: compute these scale factors in the VS
-            // These scale factors adjust the coverage for < 1 pixel wide/high rects
-            builder->fsCodeAppendf("\tfloat wScale = max(1.0, 2.0/(0.5+%s.x));\n",
-                                   fsWidthHeightName);
-            builder->fsCodeAppendf("\tfloat hScale = max(1.0, 2.0/(0.5+%s.y));\n",
-                                   fsWidthHeightName);
+            // TODO: compute all these offsets, spans, and scales in the VS
+            builder->fsCodeAppendf("\tfloat insetW = min(1.0, %s.x) - 0.5;\n", fsWidthHeightName);
+            builder->fsCodeAppendf("\tfloat insetH = min(1.0, %s.y) - 0.5;\n", fsWidthHeightName);
+            builder->fsCodeAppend("\tfloat outset = 0.5;\n");
+            // For rects > 1 pixel wide and tall the span's are noops (i.e., 1.0). For rects
+            // < 1 pixel wide or tall they serve to normalize the < 1 ramp to a 0 .. 1 range.
+            builder->fsCodeAppend("\tfloat spanW = insetW + outset;\n");
+            builder->fsCodeAppend("\tfloat spanH = insetH + outset;\n");
+            // For rects < 1 pixel wide or tall, these scale factors are used to cap the maximum
+            // value of coverage that is used. In other words it is the coverage that is
+            // used in the interior of the rect after the ramp.
+            builder->fsCodeAppend("\tfloat scaleW = min(1.0, 2.0*insetW/spanW);\n");
+            builder->fsCodeAppend("\tfloat scaleH = min(1.0, 2.0*insetH/spanH);\n");
 
             // Compute the coverage for the rect's width
             builder->fsCodeAppendf("\tvec2 offset = %s.xy - %s.xy;\n",
                                    builder->fragmentPosition(), fsRectEdgeName);
             builder->fsCodeAppendf("\tfloat perpDot = abs(offset.x * %s.w - offset.y * %s.z);\n",
                                    fsRectEdgeName, fsRectEdgeName);
-            builder->fsCodeAppendf("\tfloat coverage = clamp(wScale*(%s.x-perpDot), 0.0, 1.0);\n",
-                                   fsWidthHeightName);
+            builder->fsCodeAppendf(
+                "\tfloat coverage = scaleW*clamp((%s.x-perpDot)/spanW, 0.0, 1.0);\n",
+                fsWidthHeightName);
 
             // Compute the coverage for the rect's height and merge with the width
             builder->fsCodeAppendf("\tperpDot = abs(dot(offset, %s.zw));\n",
                                    fsRectEdgeName);
             builder->fsCodeAppendf(
-                    "\tcoverage = min(coverage, clamp(hScale*(%s.y-perpDot), 0.0, 1.0));\n",
+                    "\tcoverage = coverage*scaleH*clamp((%s.y-perpDot)/spanH, 0.0, 1.0);\n",
                     fsWidthHeightName);
 
             SkString modulate;
@@ -263,7 +277,7 @@ static void set_aa_rect_vertex_attributes(GrDrawState* drawState, bool useCovera
 }
 
 static void set_inset_fan(GrPoint* pts, size_t stride,
-                          const GrRect& r, SkScalar dx, SkScalar dy) {
+                          const SkRect& r, SkScalar dx, SkScalar dy) {
     pts->setRectFan(r.fLeft + dx, r.fTop + dy,
                     r.fRight - dx, r.fBottom - dy, stride);
 }
@@ -362,9 +376,9 @@ GrIndexBuffer* GrAARectRenderer::aaStrokeRectIndexBuffer(GrGpu* gpu) {
 
 void GrAARectRenderer::geometryFillAARect(GrGpu* gpu,
                                           GrDrawTarget* target,
-                                          const GrRect& rect,
+                                          const SkRect& rect,
                                           const SkMatrix& combinedMatrix,
-                                          const GrRect& devRect,
+                                          const SkRect& devRect,
                                           bool useVertexCoverage) {
     GrDrawState* drawState = target->drawState();
 
@@ -389,6 +403,9 @@ void GrAARectRenderer::geometryFillAARect(GrGpu* gpu,
     GrPoint* fan0Pos = reinterpret_cast<GrPoint*>(verts);
     GrPoint* fan1Pos = reinterpret_cast<GrPoint*>(verts + 4 * vsize);
 
+    SkScalar inset = SkMinScalar(devRect.width(), SK_Scalar1);
+    inset = SK_ScalarHalf * SkMinScalar(inset, devRect.height());
+
     if (combinedMatrix.rectStaysRect()) {
         // Temporarily #if'ed out. We don't want to pass in the devRect but
         // right now it is computed in GrContext::apply_aa_to_rect and we don't
@@ -399,7 +416,7 @@ void GrAARectRenderer::geometryFillAARect(GrGpu* gpu,
 #endif
 
         set_inset_fan(fan0Pos, vsize, devRect, -SK_ScalarHalf, -SK_ScalarHalf);
-        set_inset_fan(fan1Pos, vsize, devRect,  SK_ScalarHalf,  SK_ScalarHalf);
+        set_inset_fan(fan1Pos, vsize, devRect, inset,  inset);
     } else {
         // compute transformed (1, 0) and (0, 1) vectors
         SkVector vec[2] = {
@@ -443,11 +460,23 @@ void GrAARectRenderer::geometryFillAARect(GrGpu* gpu,
         *reinterpret_cast<GrColor*>(verts + i * vsize) = 0;
     }
 
+    int scale;
+    if (inset < SK_ScalarHalf) {
+        scale = SkScalarFloorToInt(512.0f * inset / (inset + SK_ScalarHalf));
+        SkASSERT(scale >= 0 && scale <= 255);
+    } else {
+        scale = 0xff;
+    }
+
     GrColor innerColor;
     if (useVertexCoverage) {
-        innerColor = 0xffffffff;
+        innerColor = GrColorPackRGBA(scale, scale, scale, scale);
     } else {
-        innerColor = target->getDrawState().getColor();
+        if (0xff == scale) {
+            innerColor = target->getDrawState().getColor();
+        } else {
+            innerColor = SkAlphaMulQ(target->getDrawState().getColor(), scale);
+        }
     }
 
     verts += 4 * vsize;
@@ -496,7 +525,7 @@ extern const GrVertexAttrib gAAAARectVertexAttribs[] = {
 
 void GrAARectRenderer::shaderFillAARect(GrGpu* gpu,
                                         GrDrawTarget* target,
-                                        const GrRect& rect,
+                                        const SkRect& rect,
                                         const SkMatrix& combinedMatrix) {
     GrDrawState* drawState = target->drawState();
 
@@ -526,17 +555,10 @@ void GrAARectRenderer::shaderFillAARect(GrGpu* gpu,
 
     RectVertex* verts = reinterpret_cast<RectVertex*>(geo.vertices());
 
-    enum {
-        // the edge effects share this stage with glyph rendering
-        // (kGlyphMaskStage in GrTextContext) && SW path rendering
-        // (kPathMaskStage in GrSWMaskHelper)
-        kEdgeEffectStage = GrPaint::kTotalStages,
-    };
-
     GrEffectRef* effect = GrRectEffect::Create();
     static const int kRectAttrIndex = 1;
     static const int kWidthIndex = 2;
-    drawState->setEffect(kEdgeEffectStage, effect, kRectAttrIndex, kWidthIndex)->unref();
+    drawState->addCoverageEffect(effect, kRectAttrIndex, kWidthIndex)->unref();
 
     for (int i = 0; i < 4; ++i) {
         verts[i].fCenter = center;
@@ -567,7 +589,7 @@ void GrAARectRenderer::shaderFillAARect(GrGpu* gpu,
 
 void GrAARectRenderer::shaderFillAlignedAARect(GrGpu* gpu,
                                                GrDrawTarget* target,
-                                               const GrRect& rect,
+                                               const SkRect& rect,
                                                const SkMatrix& combinedMatrix) {
     GrDrawState* drawState = target->drawState();
     SkASSERT(combinedMatrix.rectStaysRect());
@@ -583,16 +605,9 @@ void GrAARectRenderer::shaderFillAlignedAARect(GrGpu* gpu,
 
     AARectVertex* verts = reinterpret_cast<AARectVertex*>(geo.vertices());
 
-    enum {
-        // the edge effects share this stage with glyph rendering
-        // (kGlyphMaskStage in GrTextContext) && SW path rendering
-        // (kPathMaskStage in GrSWMaskHelper)
-        kEdgeEffectStage = GrPaint::kTotalStages,
-    };
-
     GrEffectRef* effect = GrAlignedRectEffect::Create();
     static const int kOffsetIndex = 1;
-    drawState->setEffect(kEdgeEffectStage, effect, kOffsetIndex)->unref();
+    drawState->addCoverageEffect(effect, kOffsetIndex)->unref();
 
     SkRect devRect;
     combinedMatrix.mapRect(&devRect, rect);
@@ -632,9 +647,9 @@ void GrAARectRenderer::shaderFillAlignedAARect(GrGpu* gpu,
 
 void GrAARectRenderer::strokeAARect(GrGpu* gpu,
                                     GrDrawTarget* target,
-                                    const GrRect& rect,
+                                    const SkRect& rect,
                                     const SkMatrix& combinedMatrix,
-                                    const GrRect& devRect,
+                                    const SkRect& devRect,
                                     SkScalar width,
                                     bool useVertexCoverage) {
     GrVec devStrokeSize;
@@ -666,7 +681,7 @@ void GrAARectRenderer::strokeAARect(GrGpu* gpu,
         spare = GrMin(w, h);
     }
 
-    GrRect devOutside(devRect);
+    SkRect devOutside(devRect);
     devOutside.outset(rx, ry);
 
     if (spare <= 0) {
@@ -713,10 +728,23 @@ void GrAARectRenderer::geometryStrokeAARect(GrGpu* gpu,
     GrPoint* fan2Pos = reinterpret_cast<GrPoint*>(verts + 8 * vsize);
     GrPoint* fan3Pos = reinterpret_cast<GrPoint*>(verts + 12 * vsize);
 
+#ifndef SK_IGNORE_THIN_STROKED_RECT_FIX
+    // TODO: this only really works if the X & Y margins are the same all around
+    // the rect
+    SkScalar inset = SkMinScalar(SK_Scalar1, devOutside.fRight - devInside.fRight);
+    inset = SkMinScalar(inset, devInside.fLeft - devOutside.fLeft);
+    inset = SkMinScalar(inset, devInside.fTop - devOutside.fTop);
+    inset = SK_ScalarHalf * SkMinScalar(inset, devOutside.fBottom - devInside.fBottom);
+    SkASSERT(inset >= 0);
+#else
+    SkScalar inset = SK_ScalarHalf;
+#endif
+
     // outermost
     set_inset_fan(fan0Pos, vsize, devOutside, -SK_ScalarHalf, -SK_ScalarHalf);
-    set_inset_fan(fan1Pos, vsize, devOutside,  SK_ScalarHalf,  SK_ScalarHalf);
-    set_inset_fan(fan2Pos, vsize, devInside,  -SK_ScalarHalf, -SK_ScalarHalf);
+    // inner two
+    set_inset_fan(fan1Pos, vsize, devOutside,  inset,  inset);
+    set_inset_fan(fan2Pos, vsize, devInside,  -inset, -inset);
     // innermost
     set_inset_fan(fan3Pos, vsize, devInside,   SK_ScalarHalf,  SK_ScalarHalf);
 
@@ -726,13 +754,26 @@ void GrAARectRenderer::geometryStrokeAARect(GrGpu* gpu,
         *reinterpret_cast<GrColor*>(verts + i * vsize) = 0;
     }
 
+    int scale;
+    if (inset < SK_ScalarHalf) {
+        scale = SkScalarFloorToInt(512.0f * inset / (inset + SK_ScalarHalf));
+        SkASSERT(scale >= 0 && scale <= 255);
+    } else {
+        scale = 0xff;
+    }
+
     // The inner two rects have full coverage
     GrColor innerColor;
     if (useVertexCoverage) {
-        innerColor = 0xffffffff;
+        innerColor = GrColorPackRGBA(scale, scale, scale, scale);
     } else {
-        innerColor = target->getDrawState().getColor();
+        if (0xff == scale) {
+            innerColor = target->getDrawState().getColor();
+        } else {
+            innerColor = SkAlphaMulQ(target->getDrawState().getColor(), scale);
+        }
     }
+
     verts += 4 * vsize;
     for (int i = 0; i < 8; ++i) {
         *reinterpret_cast<GrColor*>(verts + i * vsize) = innerColor;

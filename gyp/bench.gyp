@@ -17,10 +17,9 @@
         'bench.gypi'
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
-        'effects.gyp:effects',
-        'images.gyp:images',
+        'skia_lib.gyp:skia_lib',
         'bench_timer',
+        'flags.gyp:flags',
       ],
       'conditions': [
         ['skia_gpu == 1',
@@ -50,7 +49,7 @@
         '../src/gpu',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
+        'skia_lib.gyp:skia_lib',
       ],
       'conditions': [
         [ 'skia_os not in ["mac", "ios"]', {
@@ -59,13 +58,13 @@
             '../bench/BenchSysTimer_mach.cpp',
           ],
         }],
-        [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "android"]', {
+        [ 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "android", "chromeos"]', {
           'sources!': [
             '../bench/BenchSysTimer_posix.h',
             '../bench/BenchSysTimer_posix.cpp',
           ],
         }],
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
           'link_settings': {
             'libraries': [
               '-lrt',

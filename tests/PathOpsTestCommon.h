@@ -8,8 +8,18 @@
 #define PathOpsTestCommon_DEFINED
 
 #include "SkPathOpsQuad.h"
-#include "SkTDArray.h"
+#include "SkTArray.h"
 
-void CubicToQuads(const SkDCubic& cubic, double precision, SkTDArray<SkDQuad>& quads);
+struct SkPathOpsBounds;
+
+void CubicToQuads(const SkDCubic& cubic, double precision, SkTArray<SkDQuad, true>& quads);
+bool ValidBounds(const SkPathOpsBounds&);
+bool ValidCubic(const SkDCubic& cubic);
+bool ValidLine(const SkDLine& line);
+bool ValidPoint(const SkDPoint& pt);
+bool ValidPoints(const SkPoint* pts, int count);
+bool ValidQuad(const SkDQuad& quad);
+bool ValidTriangle(const SkDTriangle& triangle);
+bool ValidVector(const SkDVector& v);
 
 #endif

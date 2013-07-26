@@ -7,6 +7,7 @@
 
 #include "BenchTimer.h"
 #include "CopyTilesRenderer.h"
+#include "LazyDecodeBitmap.h"
 #include "PictureBenchmark.h"
 #include "PictureRenderingFlags.h"
 #include "SkBenchLogger.h"
@@ -22,7 +23,6 @@
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "picture_utils.h"
-
 
 SkBenchLogger gLogger;
 
@@ -143,9 +143,8 @@ static SkString filterFlagsUsage() {
     return result;
 }
 
-// These are defined in PictureRenderingFlags.cpp
+// Defined in LazyDecodeBitmap.cpp
 extern SkLruImageCache gLruImageCache;
-extern bool lazy_decode_bitmap(const void* buffer, size_t size, SkBitmap* bitmap);
 
 #if LAZY_CACHE_STATS
 static int32_t gTotalCacheHits;
@@ -168,19 +167,18 @@ static bool run_single_benchmark(const SkString& inputPath,
     SkASSERT(gLruImageCache.getImageCacheUsed() == 0);
     if (FLAGS_countRAM) {
         // Set the limit to zero, so all pixels will be kept
-        gLruImageCache.setImageCacheLimit(0);
+      gLruImageCache.setImageCacheLimit(0);
     }
 
-    bool success = false;
-    SkPicture* picture;
+    SkPicture::InstallPixelRefProc proc;
     if (FLAGS_deferImageDecoding) {
-        picture = SkNEW_ARGS(SkPicture, (&inputStream, &success, &lazy_decode_bitmap));
+        proc = &sk_tools::LazyDecodeBitmap;
     } else {
-        picture = SkNEW_ARGS(SkPicture, (&inputStream, &success, &SkImageDecoder::DecodeMemory));
+        proc = &SkImageDecoder::DecodeMemory;
     }
-    SkAutoTDelete<SkPicture> ad(picture);
+    SkAutoTUnref<SkPicture> picture(SkPicture::CreateFromStream(&inputStream, proc));
 
-    if (!success) {
+    if (NULL == picture.get()) {
         SkString err;
         err.printf("Could not read an SkPicture from %s\n", inputPath.c_str());
         gLogger.logError(err);

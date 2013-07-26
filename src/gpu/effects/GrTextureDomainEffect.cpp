@@ -108,7 +108,7 @@ void GrGLTextureDomainEffect::emitCode(GrGLShaderBuilder* builder,
 void GrGLTextureDomainEffect::setData(const GrGLUniformManager& uman,
                                       const GrDrawEffect& drawEffect) {
     const GrTextureDomainEffect& texDom = drawEffect.castEffect<GrTextureDomainEffect>();
-    const GrRect& domain = texDom.domain();
+    const SkRect& domain = texDom.domain();
 
     float values[4] = {
         SkScalarToFloat(domain.left()),
@@ -151,13 +151,13 @@ GrGLEffect::EffectKey GrGLTextureDomainEffect::GenKey(const GrDrawEffect& drawEf
 
 GrEffectRef* GrTextureDomainEffect::Create(GrTexture* texture,
                                            const SkMatrix& matrix,
-                                           const GrRect& domain,
+                                           const SkRect& domain,
                                            WrapMode wrapMode,
-                                           bool bilerp,
+                                           GrTextureParams::FilterMode filterMode,
                                            CoordsType coordsType) {
     static const SkRect kFullRect = {0, 0, SK_Scalar1, SK_Scalar1};
     if (kClamp_WrapMode == wrapMode && domain.contains(kFullRect)) {
-        return GrSimpleTextureEffect::Create(texture, matrix, bilerp);
+        return GrSimpleTextureEffect::Create(texture, matrix, filterMode);
     } else {
         SkRect clippedDomain;
         // We don't currently handle domains that are empty or don't intersect the texture.
@@ -176,7 +176,7 @@ GrEffectRef* GrTextureDomainEffect::Create(GrTexture* texture,
                                                                   matrix,
                                                                   clippedDomain,
                                                                   wrapMode,
-                                                                  bilerp,
+                                                                  filterMode,
                                                                   coordsType)));
         return CreateEffectRef(effect);
 
@@ -185,11 +185,11 @@ GrEffectRef* GrTextureDomainEffect::Create(GrTexture* texture,
 
 GrTextureDomainEffect::GrTextureDomainEffect(GrTexture* texture,
                                              const SkMatrix& matrix,
-                                             const GrRect& domain,
+                                             const SkRect& domain,
                                              WrapMode wrapMode,
-                                             bool bilerp,
+                                             GrTextureParams::FilterMode filterMode,
                                              CoordsType coordsType)
-    : GrSingleTextureEffect(texture, matrix, bilerp, coordsType)
+    : GrSingleTextureEffect(texture, matrix, filterMode, coordsType)
     , fWrapMode(wrapMode)
     , fTextureDomain(domain) {
 }
@@ -226,7 +226,7 @@ GrEffectRef* GrTextureDomainEffect::TestCreate(SkMWCRandom* random,
                                                GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;
-    GrRect domain;
+    SkRect domain;
     domain.fLeft = random->nextUScalar1();
     domain.fRight = random->nextRangeScalar(domain.fLeft, SK_Scalar1);
     domain.fTop = random->nextUScalar1();
@@ -239,6 +239,6 @@ GrEffectRef* GrTextureDomainEffect::TestCreate(SkMWCRandom* random,
                                          matrix,
                                          domain,
                                          wrapMode,
-                                         bilerp,
+                                         bilerp ? GrTextureParams::kBilerp_FilterMode : GrTextureParams::kNone_FilterMode,
                                          coords);
 }

@@ -60,7 +60,7 @@ public:
 
     GrContext* context() const { return fContext; }
 
-    virtual SkGpuRenderTarget* accessRenderTarget() SK_OVERRIDE;
+    virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE;
 
     // overrides from SkDevice
 
@@ -81,7 +81,6 @@ public:
                           const SkPaint& paint, const SkMatrix* prePathMatrix,
                           bool pathIsMutable) SK_OVERRIDE;
     virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkIRect* srcRectOrNull,
                             const SkMatrix&, const SkPaint&) SK_OVERRIDE;
     virtual void drawBitmapRect(const SkDraw&, const SkBitmap&,
                                 const SkRect* srcOrNull, const SkRect& dst,
@@ -152,7 +151,6 @@ private:
                                                Usage usage) SK_OVERRIDE;
 
     SkDrawProcs* initDrawForText(GrTextContext*);
-    bool bindDeviceAsTexture(GrPaint* paint);
 
     // sets the render target, clip, and matrix on GrContext. Use forceIdenity to override
     // SkDraw's matrix and draw in device coords.
@@ -178,12 +176,12 @@ private:
                             const SkRect&,
                             const SkMatrix&,
                             const GrTextureParams& params,
-                            GrPaint* grPaint);
+                            const SkPaint& paint);
     void drawTiledBitmap(const SkBitmap& bitmap,
                          const SkRect& srcRect,
                          const SkMatrix& m,
                          const GrTextureParams& params,
-                         GrPaint* grPaint);
+                         const SkPaint& paint);
 
     /**
      * Returns non-initialized instance.

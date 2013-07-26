@@ -18,31 +18,32 @@
 #include "SkPath.h"
 #include "SkStrokeRec.h"
 
-// glyph rendering shares this stage with edge rendering (kEdgeEffectStage in GrContext) && SW path
-// rendering (kPathMaskStage in GrSWMaskHelper)
-static const int kGlyphMaskStage = GrPaint::kTotalStages;
 static const int kGlyphCoordsAttributeIndex = 1;
 
 void GrTextContext::flushGlyphs() {
     if (NULL == fDrawTarget) {
         return;
     }
+
     GrDrawState* drawState = fDrawTarget->drawState();
+    GrDrawState::AutoRestoreEffects are(drawState);
+    drawState->setFromPaint(fPaint, SkMatrix::I(), fContext->getRenderTarget());
+
     if (fCurrVertex > 0) {
         // setup our sampler state for our text texture/atlas
         GrAssert(GrIsALIGN4(fCurrVertex));
         GrAssert(fCurrTexture);
-        GrTextureParams params(SkShader::kRepeat_TileMode, false);
+        GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kNone_FilterMode);
 
         // This effect could be stored with one of the cache objects (atlas?)
-        drawState->setEffect(kGlyphMaskStage,
-                             GrSimpleTextureEffect::CreateWithCustomCoords(fCurrTexture, params),
-                             kGlyphCoordsAttributeIndex)->unref();
+        drawState->addCoverageEffect(
+                                GrSimpleTextureEffect::CreateWithCustomCoords(fCurrTexture, params),
+                                kGlyphCoordsAttributeIndex)->unref();
 
         if (!GrPixelConfigIsAlphaOnly(fCurrTexture->config())) {
             if (kOne_GrBlendCoeff != fPaint.getSrcBlendCoeff() ||
                 kISA_GrBlendCoeff != fPaint.getDstBlendCoeff() ||
-                fPaint.hasColorStage()) {
+                fPaint.numColorStages()) {
                 GrPrintf("LCD Text will not draw correctly.\n");
             }
             // setup blend so that we get mask * paintColor + (1-mask)*dstColor
@@ -68,8 +69,6 @@ void GrTextContext::flushGlyphs() {
         fCurrVertex = 0;
         GrSafeSetNull(fCurrTexture);
     }
-    drawState->disableStages();
-    fDrawTarget = NULL;
 }
 
 GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(paint) {
@@ -81,7 +80,7 @@ GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(
 
     const GrClipData* clipData = context->getClip();
 
-    GrRect devConservativeBound;
+    SkRect devConservativeBound;
     clipData->fClipStack->getConservativeBounds(
                                      -clipData->fOrigin.fX,
                                      -clipData->fOrigin.fY,
@@ -93,7 +92,7 @@ GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(
 
     fAutoMatrix.setIdentity(fContext, &fPaint);
 
-    fDrawTarget = NULL;
+    fDrawTarget = fContext->getTextTarget();
 
     fVertices = NULL;
     fMaxVertices = 0;
@@ -101,9 +100,6 @@ GrTextContext::GrTextContext(GrContext* context, const GrPaint& paint) : fPaint(
 
 GrTextContext::~GrTextContext() {
     this->flushGlyphs();
-    if (fDrawTarget) {
-        fDrawTarget->drawState()->disableStages();
-    }
 }
 
 void GrTextContext::flush() {
@@ -123,6 +119,9 @@ extern const GrVertexAttrib gTextVertexAttribs[] = {
 void GrTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
                                     GrFixed vx, GrFixed vy,
                                     GrFontScaler* scaler) {
+    if (NULL == fDrawTarget) {
+        return;
+    }
     if (NULL == fStrike) {
         fStrike = fContext->getFontCache()->getStrike(scaler);
     }
@@ -205,18 +204,14 @@ HAS_ATLAS:
        // If we need to reserve vertices allow the draw target to suggest
         // a number of verts to reserve and whether to perform a flush.
         fMaxVertices = kMinRequestedVerts;
-        bool flush = false;
-        fDrawTarget = fContext->getTextTarget(fPaint);
-        if (NULL != fDrawTarget) {
-            fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(SK_ARRAY_COUNT(gTextVertexAttribs));
-            flush = fDrawTarget->geometryHints(&fMaxVertices, NULL);
-        }
+        fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(
+            SK_ARRAY_COUNT(gTextVertexAttribs));
+        bool flush = fDrawTarget->geometryHints(&fMaxVertices, NULL);
         if (flush) {
             this->flushGlyphs();
             fContext->flush();
-            // flushGlyphs() will reset fDrawTarget to NULL.
-            fDrawTarget = fContext->getTextTarget(fPaint);
-            fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(SK_ARRAY_COUNT(gTextVertexAttribs));
+            fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(
+                SK_ARRAY_COUNT(gTextVertexAttribs));
         }
         fMaxVertices = kDefaultRequestedVerts;
         // ignore return, no point in flushing again.
@@ -229,11 +224,10 @@ HAS_ATLAS:
             // don't exceed the limit of the index buffer
             fMaxVertices = maxQuadVertices;
         }
-        bool success = fDrawTarget->reserveVertexAndIndexSpace(
-                                                   fMaxVertices,
-                                                   0,
-                                                   GrTCast<void**>(&fVertices),
-                                                   NULL);
+        bool success = fDrawTarget->reserveVertexAndIndexSpace(fMaxVertices,
+                                                               0,
+                                                               GrTCast<void**>(&fVertices),
+                                                               NULL);
         GrAlwaysAssert(success);
         GrAssert(2*sizeof(GrPoint) == fDrawTarget->getDrawState().getVertexSize());
     }

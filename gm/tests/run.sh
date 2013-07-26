@@ -85,7 +85,7 @@ function gm_test {
   rm -rf $ACTUAL_OUTPUT_DIR
   mkdir -p $ACTUAL_OUTPUT_DIR
 
-  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE --writePath $ACTUAL_OUTPUT_DIR/writePath --mismatchPath $ACTUAL_OUTPUT_DIR/mismatchPath"
+  COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE --writePath $ACTUAL_OUTPUT_DIR/writePath --mismatchPath $ACTUAL_OUTPUT_DIR/mismatchPath --missingExpectationsPath $ACTUAL_OUTPUT_DIR/missingExpectationsPath"
 
   echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
   $COMMAND >$ACTUAL_OUTPUT_DIR/stdout 2>$ACTUAL_OUTPUT_DIR/stderr
@@ -108,11 +108,14 @@ function gm_test {
   for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name *.png); do
     echo "[contents of $IMAGEFILE]" >$IMAGEFILE
   done
-  if [ -d $ACTUAL_OUTPUT_DIR/mismatchPath ]; then
-    for MISMATCHDIR in $(find $ACTUAL_OUTPUT_DIR/mismatchPath -mindepth 1 -type d); do
-      echo "Created additional file to make sure directory isn't empty, because self-test cannot handle empty directories." >$MISMATCHDIR/bogusfile
-    done
-  fi
+  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name *.pdf); do
+    echo "[contents of $IMAGEFILE]" >$IMAGEFILE
+  done
+
+  # Add a file to any empty subdirectories.
+  for DIR in $(find $ACTUAL_OUTPUT_DIR -mindepth 1 -type d); do
+    echo "Created additional file to make sure directory isn't empty, because self-test cannot handle empty directories." >$DIR/bogusfile
+  done
 
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
@@ -199,6 +202,9 @@ gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r ../path/to/nowhere"
 # Compare generated image against an empty "expected image" dir, but NOT in verbose mode.
 gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/nonverbose"
 
+# Add pdf to the list of configs.
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS pdf -r $GM_INPUTS/json/identical-bytes.json" "$GM_OUTPUTS/add-config-pdf"
+
 # If run without "-r", the JSON's "actual-results" section should contain
 # actual checksums marked as "failure-ignored", but the "expected-results"
 # section should be empty.
@@ -215,6 +221,10 @@ gm_test "--ignoreErrorTypes ExpectationsMismatch NoGpuContext --verbose --hierar
 
 # Test non-hierarchical mode.
 gm_test "--verbose --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels-no-hierarchy.json" "$GM_OUTPUTS/no-hierarchy"
+
+# Try writing out actual images using checksum-based filenames, like we do when
+# uploading to Google Storage.
+gm_test "--verbose --writeChecksumBasedFilenames --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels-no-hierarchy.json" "$GM_OUTPUTS/checksum-based-filenames"
 
 # Exercise display_json_results.py
 PASSING_CASES="compared-against-identical-bytes-json compared-against-identical-pixels-json"

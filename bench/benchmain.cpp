@@ -22,6 +22,7 @@ class GrContext;
 #include "SkBenchLogger.h"
 #include "SkBenchmark.h"
 #include "SkCanvas.h"
+#include "SkCommandLineFlags.h"
 #include "SkDeferredCanvas.h"
 #include "SkDevice.h"
 #include "SkColorPriv.h"
@@ -268,38 +269,6 @@ static int findConfig(const char config[]) {
         }
     }
     return -1;
-}
-
-static bool skip_name(const SkTDArray<const char*> array, const char name[]) {
-    // FIXME: this duplicates the logic in skia_test.cpp, gmmain.cpp -- consolidate
-    int count = array.count();
-    size_t testLen = strlen(name);
-    bool anyExclude = count == 0;
-    for (int i = 0; i < array.count(); ++i) {
-        const char* matchName = array[i];
-        size_t matchLen = strlen(matchName);
-        bool matchExclude, matchStart, matchEnd;
-        if ((matchExclude = matchName[0] == '~')) {
-            anyExclude = true;
-            matchName++;
-            matchLen--;
-        }
-        if ((matchStart = matchName[0] == '^')) {
-            matchName++;
-            matchLen--;
-        }
-        if ((matchEnd = matchName[matchLen - 1] == '$')) {
-            matchLen--;
-        }
-        if (matchStart ? (!matchEnd || matchLen == testLen)
-                && strncmp(name, matchName, matchLen) == 0
-                : matchEnd ? matchLen <= testLen
-                && strncmp(name + testLen - matchLen, matchName, matchLen) == 0
-                : strstr(name, matchName) != 0) {
-            return matchExclude;
-        }
-    }
-    return !anyExclude;
 }
 
 static void help() {
@@ -771,7 +740,7 @@ int tool_main(int argc, char** argv) {
         }
 
         // only run benchmarks if their name contains matchStr
-        if (skip_name(fMatches, bench->getName())) {
+        if (SkCommandLineFlags::ShouldSkip(fMatches, bench->getName())) {
             continue;
         }
 
@@ -781,6 +750,8 @@ int tool_main(int argc, char** argv) {
 
         for (int x = 0; x < configs.count(); ++x) {
             int configIndex = configs[x];
+
+            bool setupFailed = false;
 
             if (kNonRendering_Backend == gConfigs[configIndex].fBackend) {
                 if (bench->isRendering()) {
@@ -816,146 +787,159 @@ int tool_main(int argc, char** argv) {
 
             if (kNonRendering_Backend != backend) {
                 device = make_device(outConfig, dim, backend, sampleCount, context);
-
-                switch(benchMode) {
-                    case kDeferredSilent_benchModes:
-                    case kDeferred_benchModes:
-                        canvas = new SkDeferredCanvas(device);
-                        break;
-                    case kRecord_benchModes:
-                        canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
-                            SkPicture::kUsePathBoundsForClip_RecordingFlag);
-                        canvas->ref();
-                        break;
-                    case kPictureRecord_benchModes: {
-                        // This sets up picture-to-picture recording.
-                        // The C++ drawing calls for the benchmark are recorded into
-                        // pictureRecordFrom. As the benchmark, we will time how
-                        // long it takes to playback pictureRecordFrom into
-                        // pictureRecordTo.
-                        SkCanvas* tempCanvas = pictureRecordFrom.beginRecording(dim.fX, dim.fY,
-                            SkPicture::kUsePathBoundsForClip_RecordingFlag);
-                        bench->draw(tempCanvas);
-                        pictureRecordFrom.endRecording();
-                        canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
-                            SkPicture::kUsePathBoundsForClip_RecordingFlag);
-                        canvas->ref();
-                        break;
+                if (NULL == device) {
+                    SkString error;
+                    error.printf("Device creation failure for config %s. Will skip.\n", configName);
+                    logger.logError(error.c_str());
+                    setupFailed = true;
+                } else {
+                    switch(benchMode) {
+                        case kDeferredSilent_benchModes:
+                        case kDeferred_benchModes:
+                            canvas =
+#if SK_DEFERRED_CANVAS_USES_FACTORIES
+                                SkDeferredCanvas::Create(device);
+#else
+                                SkNEW_ARGS(SkDeferredCanvas, (device));
+#endif
+                            break;
+                        case kRecord_benchModes:
+                            canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                                SkPicture::kUsePathBoundsForClip_RecordingFlag);
+                            canvas->ref();
+                            break;
+                        case kPictureRecord_benchModes: {
+                            // This sets up picture-to-picture recording.
+                            // The C++ drawing calls for the benchmark are recorded into
+                            // pictureRecordFrom. As the benchmark, we will time how
+                            // long it takes to playback pictureRecordFrom into
+                            // pictureRecordTo.
+                            SkCanvas* tempCanvas = pictureRecordFrom.beginRecording(dim.fX, dim.fY,
+                                SkPicture::kUsePathBoundsForClip_RecordingFlag);
+                            bench->draw(tempCanvas);
+                            pictureRecordFrom.endRecording();
+                            canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                                SkPicture::kUsePathBoundsForClip_RecordingFlag);
+                            canvas->ref();
+                            break;
+                        }
+                        case kNormal_benchModes:
+                            canvas = new SkCanvas(device);
+                            break;
+                        default:
+                            SkASSERT(0);
                     }
-                    case kNormal_benchModes:
-                        canvas = new SkCanvas(device);
-                        break;
-                    default:
-                        SkASSERT(0);
+                    device->unref();
+                    canvas->clear(SK_ColorWHITE);
                 }
-                device->unref();
-                canvas->clear(SK_ColorWHITE);
             }
             SkAutoUnref canvasUnref(canvas);
-
-            if (NULL != canvas) {
-                if (doClip) {
-                    performClip(canvas, dim.fX, dim.fY);
-                }
-                if (doScale) {
-                    performScale(canvas, dim.fX, dim.fY);
-                }
-                if (doRotate) {
-                    performRotate(canvas, dim.fX, dim.fY);
-                }
-            }
-
-            if (!loggedBenchStart) {
-                loggedBenchStart = true;
-                SkString str;
-                str.printf("running bench [%d %d] %28s", dim.fX, dim.fY, bench->getName());
-                logger.logProgress(str);
-            }
-
-            // warm up caches if needed
-            if (repeatDraw > 1 && NULL != canvas) {
-#if SK_SUPPORT_GPU
-                // purge the GPU resources to reduce variance
-                if (NULL != context) {
-                    context->freeGpuResources();
-                }
-#endif
-                SkAutoCanvasRestore acr(canvas, true);
-                if (benchMode == kPictureRecord_benchModes) {
-                    pictureRecordFrom.draw(canvas);
-                } else {
-                    bench->draw(canvas);
-                }
-
-                if (kDeferredSilent_benchModes == benchMode) {
-                    static_cast<SkDeferredCanvas*>(canvas)->silentFlush();
-                } else {
-                    canvas->flush();
-                }
-#if SK_SUPPORT_GPU
-                if (NULL != context) {
-                    context->flush();
-                    SK_GL(*glContext, Finish());
-                }
-#endif
-            }
-
-            // record timer values for each repeat, and their sum
-            TimerData timerData(perIterTimeformat, normalTimeFormat);
-            for (int i = 0; i < repeatDraw; i++) {
-                if ((benchMode == kRecord_benchModes || benchMode == kPictureRecord_benchModes)) {
-                    // This will clear the recorded commands so that they do not
-                    // accumulate.
-                    canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
-                        SkPicture::kUsePathBoundsForClip_RecordingFlag);
-                }
-
-                timer->start();
+            if (!setupFailed) {
                 if (NULL != canvas) {
-                    canvas->save();
-                }
-                if (benchMode == kPictureRecord_benchModes) {
-                    pictureRecordFrom.draw(canvas);
-                } else {
-                    bench->draw(canvas);
-                }
-
-                if (kDeferredSilent_benchModes == benchMode) {
-                    static_cast<SkDeferredCanvas*>(canvas)->silentFlush();
-                } else if (NULL != canvas) {
-                    canvas->flush();
+                    if (doClip) {
+                        performClip(canvas, dim.fX, dim.fY);
+                    }
+                    if (doScale) {
+                        performScale(canvas, dim.fX, dim.fY);
+                    }
+                    if (doRotate) {
+                        performRotate(canvas, dim.fX, dim.fY);
+                    }
                 }
 
-                if (NULL != canvas) {
-                    canvas->restore();
+                if (!loggedBenchStart) {
+                    loggedBenchStart = true;
+                    SkString str;
+                    str.printf("running bench [%d %d] %28s", dim.fX, dim.fY, bench->getName());
+                    logger.logProgress(str);
                 }
 
-                // stop the truncated timer after the last canvas call but
-                // don't wait for all the GL calls to complete
-                timer->truncatedEnd();
+                // warm up caches if needed
+                if (repeatDraw > 1 && NULL != canvas) {
 #if SK_SUPPORT_GPU
-                if (NULL != glContext) {
-                    context->flush();
-                    SK_GL(*glContext, Finish());
-                }
+                    // purge the GPU resources to reduce variance
+                    if (NULL != context) {
+                        context->freeGpuResources();
+                    }
 #endif
-                // stop the inclusive and gpu timers once all the GL calls
-                // have completed
-                timer->end();
+                    SkAutoCanvasRestore acr(canvas, true);
+                    if (benchMode == kPictureRecord_benchModes) {
+                        pictureRecordFrom.draw(canvas);
+                    } else {
+                        bench->draw(canvas);
+                    }
 
-                timerData.appendTimes(timer, repeatDraw - 1 == i);
+                    if (kDeferredSilent_benchModes == benchMode) {
+                        static_cast<SkDeferredCanvas*>(canvas)->silentFlush();
+                    } else {
+                        canvas->flush();
+                    }
+#if SK_SUPPORT_GPU
+                    if (NULL != context) {
+                        context->flush();
+                        SK_GL(*glContext, Finish());
+                    }
+#endif
+                }
 
-            }
-            if (repeatDraw > 1) {
-                SkString result = timerData.getResult(logPerIter, printMin, repeatDraw, configName,
-                                                      timerWall, truncatedTimerWall, timerCpu,
-                                                      truncatedTimerCpu,
-                                                      timerGpu && NULL != context);
-                logger.logProgress(result);
-            }
-            if (outDir.size() > 0 && kNonRendering_Backend != backend) {
-                saveFile(bench->getName(), configName, outDir.c_str(),
-                         device->accessBitmap(false));
+                // record timer values for each repeat, and their sum
+                TimerData timerData(perIterTimeformat, normalTimeFormat);
+                for (int i = 0; i < repeatDraw; i++) {
+                    if ((benchMode == kRecord_benchModes || benchMode == kPictureRecord_benchModes)) {
+                        // This will clear the recorded commands so that they do not
+                        // accumulate.
+                        canvas = pictureRecordTo.beginRecording(dim.fX, dim.fY,
+                            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+                    }
+
+                    timer->start(bench->getDurationScale());
+                    if (NULL != canvas) {
+                        canvas->save();
+                    }
+                    if (benchMode == kPictureRecord_benchModes) {
+                        pictureRecordFrom.draw(canvas);
+                    } else {
+                        bench->draw(canvas);
+                    }
+
+                    if (kDeferredSilent_benchModes == benchMode) {
+                        static_cast<SkDeferredCanvas*>(canvas)->silentFlush();
+                    } else if (NULL != canvas) {
+                        canvas->flush();
+                    }
+
+                    if (NULL != canvas) {
+                        canvas->restore();
+                    }
+
+                    // stop the truncated timer after the last canvas call but
+                    // don't wait for all the GL calls to complete
+                    timer->truncatedEnd();
+#if SK_SUPPORT_GPU
+                    if (NULL != glContext) {
+                        context->flush();
+                        SK_GL(*glContext, Finish());
+                    }
+#endif
+                    // stop the inclusive and gpu timers once all the GL calls
+                    // have completed
+                    timer->end();
+
+                    timerData.appendTimes(timer, repeatDraw - 1 == i);
+
+                }
+                if (repeatDraw > 1) {
+                    SkString result = timerData.getResult(
+                                        logPerIter, printMin, repeatDraw, configName,
+                                        timerWall, truncatedTimerWall, timerCpu,
+                                        truncatedTimerCpu,
+                                        timerGpu && NULL != context);
+                    logger.logProgress(result);
+                }
+                if (outDir.size() > 0 && kNonRendering_Backend != backend) {
+                    saveFile(bench->getName(), configName, outDir.c_str(),
+                             device->accessBitmap(false));
+                }
             }
         }
         if (loggedBenchStart) {
