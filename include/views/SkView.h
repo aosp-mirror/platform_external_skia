@@ -365,8 +365,14 @@ protected:
     virtual void    onPostInflate(const SkTDict<SkView*>&);
 
 public:
+#ifdef SK_DEBUG
+    void validate() const;
+#else
+    void validate() const {}
+#endif
     // default action is to inval the view
     virtual void    onFocusChange(bool gainFocusP);
+
 protected:
 
     // override these if you're acting as a layer/host

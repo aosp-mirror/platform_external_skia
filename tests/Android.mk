@@ -26,6 +26,7 @@ LOCAL_SRC_FILES:= \
   EmptyPathTest.cpp \
   ErrorTest.cpp \
   FillPathTest.cpp \
+  FitsInTest.cpp \
   FlatDataTest.cpp \
   FlateTest.cpp \
   FontHostStreamTest.cpp \
@@ -39,6 +40,9 @@ LOCAL_SRC_FILES:= \
   GrMemoryPoolTest.cpp \
   GrSurfaceTest.cpp \
   HashCacheTest.cpp \
+  ImageCacheTest.cpp \
+  ImageDecodingTest.cpp \
+  ImageFilterTest.cpp \
   InfRectTest.cpp \
   LListTest.cpp \
   MD5Test.cpp \
@@ -47,12 +51,15 @@ LOCAL_SRC_FILES:= \
   MatrixTest.cpp \
   MemsetTest.cpp \
   MetaDataTest.cpp \
+  MipMapTest.cpp \
+  OSPathTest.cpp \
   PackBitsTest.cpp \
   PaintTest.cpp \
   ParsePathTest.cpp \
   PathCoverageTest.cpp \
   PathMeasureTest.cpp \
   PathTest.cpp \
+  PathUtilsTest.cpp \
   PipeTest.cpp \
   PointTest.cpp \
   PremulAlphaRoundTripTest.cpp \
@@ -131,6 +138,11 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL
 
+LOCAL_STATIC_LIBRARIES := libstlport_static
+
 LOCAL_MODULE_TAGS := eng tests
+
+#include stlport headers
+include external/stlport/libstlport.mk
 
 include $(BUILD_EXECUTABLE)

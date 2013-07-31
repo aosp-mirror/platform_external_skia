@@ -798,10 +798,7 @@ void SkScalerContextRec::getMatrixFrom2x2(SkMatrix* dst) const {
 }
 
 void SkScalerContextRec::getLocalMatrix(SkMatrix* m) const {
-    m->setScale(SkScalarMul(fTextSize, fPreScaleX), fTextSize);
-    if (fPreSkewX) {
-        m->postSkew(fPreSkewX, 0);
-    }
+    SkPaint::SetTextMatrix(m, fTextSize, fPreScaleX, fPreSkewX);
 }
 
 void SkScalerContextRec::getSingleMatrix(SkMatrix* m) const {
@@ -862,12 +859,11 @@ protected:
 
 extern SkScalerContext* SkCreateColorScalerContext(const SkDescriptor* desc);
 
-SkScalerContext* SkTypeface::createScalerContext(const SkDescriptor* desc) const {
-    SkScalerContext* c = NULL;  //SkCreateColorScalerContext(desc);
-    if (NULL == c) {
-        c = this->onCreateScalerContext(desc);
-    }
-    if (NULL == c) {
+SkScalerContext* SkTypeface::createScalerContext(const SkDescriptor* desc,
+                                                 bool allowFailure) const {
+    SkScalerContext* c = this->onCreateScalerContext(desc);
+
+    if (!c && !allowFailure) {
         c = SkNEW_ARGS(SkScalerContext_Empty,
                        (const_cast<SkTypeface*>(this), desc));
     }

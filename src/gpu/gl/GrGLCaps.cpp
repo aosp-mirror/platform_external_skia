@@ -28,6 +28,7 @@ void GrGLCaps::reset() {
     fFBFetchType = kNone_FBFetchType;
     fMaxFragmentUniformVectors = 0;
     fMaxVertexAttributes = 0;
+    fMaxFragmentTextureUnits = 0;
     fRGBA8RenderbufferSupport = false;
     fBGRAFormatSupport = false;
     fBGRAIsInternalFormat = false;
@@ -59,6 +60,7 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fStencilVerifiedColorConfigs = caps.fStencilVerifiedColorConfigs;
     fMaxFragmentUniformVectors = caps.fMaxFragmentUniformVectors;
     fMaxVertexAttributes = caps.fMaxVertexAttributes;
+    fMaxFragmentTextureUnits = caps.fMaxFragmentTextureUnits;
     fMSFBOType = caps.fMSFBOType;
     fCoverageAAType = caps.fCoverageAAType;
     fMSAACoverageModes = caps.fMSAACoverageModes;
@@ -109,6 +111,7 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fMaxFragmentUniformVectors = max / 4;
     }
     GR_GL_GetIntegerv(gli, GR_GL_MAX_VERTEX_ATTRIBS, &fMaxVertexAttributes);
+    GR_GL_GetIntegerv(gli, GR_GL_MAX_TEXTURE_IMAGE_UNITS, &fMaxFragmentTextureUnits);
 
     if (kDesktop_GrGLBinding == binding) {
         fRGBA8RenderbufferSupport = true;
@@ -161,10 +164,15 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
                          ctxInfo.hasExtension("GL_ARB_texture_storage") ||
                          ctxInfo.hasExtension("GL_EXT_texture_storage");
 
-    // ARB_texture_rg is part of OpenGL 3.0
+    // ARB_texture_rg is part of OpenGL 3.0, but mesa doesn't support it if
+    // it doesn't have ARB_texture_rg extension.
     if (kDesktop_GrGLBinding == binding) {
-        fTextureRedSupport = version >= GR_GL_VER(3,0) ||
-                             ctxInfo.hasExtension("GL_ARB_texture_rg");
+        if (ctxInfo.isMesa()) {
+            fTextureRedSupport = ctxInfo.hasExtension("GL_ARB_texture_rg");
+        } else {
+            fTextureRedSupport = version >= GR_GL_VER(3,0) ||
+                                 ctxInfo.hasExtension("GL_ARB_texture_rg");
+        }
     } else {
         fTextureRedSupport = ctxInfo.hasExtension("GL_EXT_texture_rg");
     }
@@ -222,12 +230,6 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     /**************************************************************************
      * GrDrawTargetCaps fields
      **************************************************************************/
-    GrGLint maxTextureUnits;
-    // check FS and fixed-function texture unit limits
-    // we only use textures in the fragment stage currently.
-    // checks are > to make sure we have a spare unit.
-    GR_GL_GetIntegerv(gli, GR_GL_MAX_TEXTURE_IMAGE_UNITS, &maxTextureUnits);
-
     GrGLint numFormats;
     GR_GL_GetIntegerv(gli, GR_GL_NUM_COMPRESSED_TEXTURE_FORMATS, &numFormats);
     if (numFormats) {
@@ -286,6 +288,16 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
                              ctxInfo.hasExtension("GL_NV_path_rendering");
 
     fDstReadInShaderSupport = kNone_FBFetchType != fFBFetchType;
+
+#if 0
+    // This has to be temporarily disabled. On Android it causes the texture
+    // usage to become front loaded and the OS kills the process. It can
+    // be re-enabled once the more dynamic (ref-driven) cache clearing
+    // system is in place.
+    fReuseScratchTextures = kARM_GrGLVendor != ctxInfo.vendor();
+#else
+    fReuseScratchTextures = true;
+#endif
 
     // Enable supported shader-related caps
     if (kDesktop_GrGLBinding == binding) {

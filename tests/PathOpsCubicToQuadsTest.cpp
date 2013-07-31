@@ -17,10 +17,11 @@ static void test(skiatest::Reporter* reporter, const SkDCubic* cubics, const cha
                  int firstTest, size_t testCount) {
     for (size_t index = firstTest; index < testCount; ++index) {
         const SkDCubic& cubic = cubics[index];
+        SkASSERT(ValidCubic(cubic));
         double precision = cubic.calcPrecision();
-        SkTDArray<SkDQuad> quads;
+        SkTArray<SkDQuad, true> quads;
         CubicToQuads(cubic, precision, quads);
-        if (quads.count() != 1) {
+        if (quads.count() != 1 && quads.count() != 2) {
             SkDebugf("%s [%d] cubic to quadratics failed count=%d\n", name, static_cast<int>(index),
                     quads.count());
         }
@@ -32,15 +33,16 @@ static void test(skiatest::Reporter* reporter, const SkDQuad* quadTests, const c
                  int firstTest, size_t testCount) {
     for (size_t index = firstTest; index < testCount; ++index) {
         const SkDQuad& quad = quadTests[index];
+        SkASSERT(ValidQuad(quad));
         SkDCubic cubic = quad.toCubic();
         double precision = cubic.calcPrecision();
-        SkTDArray<SkDQuad> quads;
+        SkTArray<SkDQuad, true> quads;
         CubicToQuads(cubic, precision, quads);
-        if (quads.count() != 1) {
+        if (quads.count() != 1 && quads.count() != 2) {
             SkDebugf("%s [%d] cubic to quadratics failed count=%d\n", name, static_cast<int>(index),
                     quads.count());
         }
-        REPORTER_ASSERT(reporter, quads.count() == 1);
+        REPORTER_ASSERT(reporter, quads.count() <= 2);
     }
 }
 
@@ -49,8 +51,9 @@ static void testC(skiatest::Reporter* reporter, const SkDCubic* cubics, const ch
     // test if computed line end points are valid
     for (size_t index = firstTest; index < testCount; ++index) {
         const SkDCubic& cubic = cubics[index];
+        SkASSERT(ValidCubic(cubic));
         double precision = cubic.calcPrecision();
-        SkTDArray<SkDQuad> quads;
+        SkTArray<SkDQuad, true> quads;
         CubicToQuads(cubic, precision, quads);
         if (!AlmostEqualUlps(cubic[0].fX, quads[0][0].fX)
                 || !AlmostEqualUlps(cubic[0].fY, quads[0][0].fY)) {
@@ -71,8 +74,9 @@ static void testC(skiatest::Reporter* reporter, const SkDCubic(* cubics)[2], con
     for (size_t index = firstTest; index < testCount; ++index) {
         for (int idx2 = 0; idx2 < 2; ++idx2) {
             const SkDCubic& cubic = cubics[index][idx2];
+            SkASSERT(ValidCubic(cubic));
             double precision = cubic.calcPrecision();
-            SkTDArray<SkDQuad> quads;
+            SkTArray<SkDQuad, true> quads;
             CubicToQuads(cubic, precision, quads);
             if (!AlmostEqualUlps(cubic[0].fX, quads[0][0].fX)
                     || !AlmostEqualUlps(cubic[0].fY, quads[0][0].fY)) {
@@ -168,6 +172,7 @@ extern const bool AVERAGE_END_POINTS;
 
 static void oneOff(skiatest::Reporter* reporter, size_t x) {
     const SkDCubic& cubic = locals[x];
+    SkASSERT(ValidCubic(cubic));
     const SkPoint skcubic[4] = {
             {static_cast<float>(cubic[0].fX), static_cast<float>(cubic[0].fY)},
             {static_cast<float>(cubic[1].fX), static_cast<float>(cubic[1].fY)},
@@ -176,7 +181,7 @@ static void oneOff(skiatest::Reporter* reporter, size_t x) {
     SkScalar skinflect[2];
     int skin = SkFindCubicInflections(skcubic, skinflect);
     if (false) SkDebugf("%s %d %1.9g\n", __FUNCTION__, skin, skinflect[0]);
-    SkTDArray<SkDQuad> quads;
+    SkTArray<SkDQuad, true> quads;
     double precision = cubic.calcPrecision();
     CubicToQuads(cubic, precision, quads);
     if (false) SkDebugf("%s quads=%d\n", __FUNCTION__, quads.count());

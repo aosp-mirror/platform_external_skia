@@ -46,7 +46,7 @@ public:
             SkASSERT(fCrosses[index] != crosser);
         }
 #endif
-        *fCrosses.append() = crosser;
+        fCrosses.push_back(crosser);
     }
 
     void addCubic(const SkPoint pts[4]) {
@@ -90,6 +90,20 @@ public:
 
     void calcCoincidentWinding();
 
+    void checkEnds() {
+        if (!fContainsCurves) {
+            return;
+        }
+        int segmentCount = fSegments.count();
+        for (int sIndex = 0; sIndex < segmentCount; ++sIndex) {
+            SkOpSegment* segment = &fSegments[sIndex];
+            if (segment->verb() == SkPath::kLine_Verb) {
+                continue;
+            }
+            fSegments[sIndex].checkEnds();
+        }
+    }
+
     void complete() {
         setBounds();
         fContainsIntercepts = false;
@@ -114,7 +128,7 @@ public:
 
     const SkPoint& end() const {
         const SkOpSegment& segment = fSegments.back();
-        return segment.pts()[segment.verb()];
+        return segment.pts()[SkPathOpsVerbToPoints(segment.verb())];
     }
 
     void findTooCloseToCall() {
@@ -195,7 +209,7 @@ public:
     int updateSegment(int index, const SkPoint* pts) {
         SkOpSegment& segment = fSegments[index];
         segment.updatePts(pts);
-        return segment.verb() + 1;
+        return SkPathOpsVerbToPoints(segment.verb()) + 1;
     }
 
 #if DEBUG_TEST
@@ -214,17 +228,17 @@ public:
 
 #if DEBUG_SHOW_WINDING
     int debugShowWindingValues(int totalSegments, int ofInterest);
-    static void debugShowWindingValues(const SkTDArray<SkOpContour*>& contourList);
+    static void debugShowWindingValues(const SkTArray<SkOpContour*, true>& contourList);
 #endif
 
 private:
     void setBounds();
 
     SkTArray<SkOpSegment> fSegments;
-    SkTDArray<SkOpSegment*> fSortedSegments;
+    SkTArray<SkOpSegment*, true> fSortedSegments;
     int fFirstSorted;
-    SkTDArray<SkCoincidence> fCoincidences;
-    SkTDArray<const SkOpContour*> fCrosses;
+    SkTArray<SkCoincidence, true> fCoincidences;
+    SkTArray<const SkOpContour*, true> fCrosses;
     SkPathOpsBounds fBounds;
     bool fContainsIntercepts;  // FIXME: is this used by anybody?
     bool fContainsCubics;

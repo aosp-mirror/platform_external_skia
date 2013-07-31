@@ -15,6 +15,7 @@
 #include "SkScaledBitmapSampler.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
+#include "SkTime.h"
 #include "SkUtils.h"
 #include "SkRect.h"
 #include "SkCanvas.h"
@@ -25,14 +26,13 @@ extern "C" {
     #include "jerror.h"
 }
 
-#ifdef SK_BUILD_FOR_ANDROID
-#include <cutils/properties.h>
+// Uncomment to enable the code path used by the Android framework with their
+// custom image decoders.
+//#if defined(SK_BUILD_FOR_ANDROID) && defined(SK_DEBUG)
+//  #define SK_BUILD_FOR_ANDROID_FRAMEWORK
+//#endif
 
-// Key to lookup the size of memory buffer set in system property
-static const char KEY_MEM_CAP[] = "ro.media.dec.jpeg.memcap";
-#endif
-
-// this enables timing code to report milliseconds for an encode
+// These enable timing code that report milliseconds for an encoding/decoding
 //#define TIME_ENCODE
 //#define TIME_DECODE
 
@@ -40,66 +40,97 @@ static const char KEY_MEM_CAP[] = "ro.media.dec.jpeg.memcap";
 // disable for the moment, as we have some glitches when width != multiple of 4
 #define WE_CONVERT_TO_YUV
 
+// If ANDROID_RGB is defined by in the jpeg headers it indicates that jpeg offers
+// support for two additional formats (1) JCS_RGBA_8888 and (2) JCS_RGB_565.
+
+//////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////
+
+static void overwrite_mem_buffer_size(j_decompress_ptr cinfo) {
+#ifdef SK_BUILD_FOR_ANDROID
+    /* Check if the device indicates that it has a large amount of system memory
+     * if so, increase the memory allocation to 30MB instead of the default 5MB.
+     */
+#ifdef ANDROID_LARGE_MEMORY_DEVICE
+    cinfo->mem->max_memory_to_use = 30 * 1024 * 1024;
+#else
+    cinfo->mem->max_memory_to_use = 5 * 1024 * 1024;
+#endif
+#endif // SK_BUILD_FOR_ANDROID
+}
+
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 
 class SkJPEGImageIndex {
 public:
-    SkJPEGImageIndex() {}
-    virtual ~SkJPEGImageIndex() {
-        jpeg_destroy_huffman_index(index);
-        jpeg_finish_decompress(cinfo);
-        jpeg_destroy_decompress(cinfo);
-        delete cinfo->src;
-        free(cinfo);
-    }
-    jpeg_decompress_struct *cinfo;
-    huffman_index *index;
-};
+    SkJPEGImageIndex(SkStream* stream, SkImageDecoder* decoder)
+        : fSrcMgr(stream, decoder) {}
 
+    ~SkJPEGImageIndex() {
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        jpeg_destroy_huffman_index(&fHuffmanIndex);
+#endif
+        jpeg_finish_decompress(&fCInfo);
+        jpeg_destroy_decompress(&fCInfo);
+    }
+
+    /**
+     * Init the cinfo struct using libjpeg and apply any necessary
+     * customizations.
+     */
+    void initializeInfo() {
+        jpeg_create_decompress(&fCInfo);
+        overwrite_mem_buffer_size(&fCInfo);
+        fCInfo.src = &fSrcMgr;
+    }
+
+    jpeg_decompress_struct* cinfo() { return &fCInfo; }
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    huffman_index* huffmanIndex() { return &fHuffmanIndex; }
+#endif
+
+private:
+    skjpeg_source_mgr  fSrcMgr;
+    jpeg_decompress_struct fCInfo;
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    huffman_index fHuffmanIndex;
+#endif
+};
 
 class SkJPEGImageDecoder : public SkImageDecoder {
 public:
     SkJPEGImageDecoder() {
-        index = NULL;
+        fImageIndex = NULL;
+        fImageWidth = 0;
+        fImageHeight = 0;
     }
-    ~SkJPEGImageDecoder() {
-        if (index)
-            delete index;
+
+    virtual ~SkJPEGImageDecoder() {
+        SkDELETE(fImageIndex);
     }
+
     virtual Format getFormat() const {
         return kJPEG_Format;
     }
+
 protected:
-    virtual bool onBuildTileIndex(SkStream *stream,
-                                int *width, int *height);
-    virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    virtual bool onBuildTileIndex(SkStream *stream, int *width, int *height) SK_OVERRIDE;
+    virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
+#endif
+    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
+
 private:
-    SkJPEGImageIndex *index;
-    int imageWidth;
-    int imageHeight;
+    SkJPEGImageIndex* fImageIndex;
+    int fImageWidth;
+    int fImageHeight;
+
+    typedef SkImageDecoder INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-#include "SkTime.h"
-
-class AutoTimeMillis {
-public:
-    AutoTimeMillis(const char label[]) : fLabel(label) {
-        if (!fLabel) {
-            fLabel = "";
-        }
-        fNow = SkTime::GetMSecs();
-    }
-    ~AutoTimeMillis() {
-        SkDebugf("---- Time (ms): %s %d\n", fLabel, SkTime::GetMSecs() - fNow);
-    }
-private:
-    const char* fLabel;
-    SkMSec      fNow;
-};
 
 /* Automatically clean up after throwing an exception */
 class JPEGAutoClean {
@@ -116,20 +147,6 @@ public:
 private:
     jpeg_decompress_struct* cinfo_ptr;
 };
-
-#ifdef SK_BUILD_FOR_ANDROID
-/* Check if the memory cap property is set.
-   If so, use the memory size for jpeg decode.
-*/
-static void overwrite_mem_buffer_size(j_decompress_ptr cinfo) {
-#ifdef ANDROID_LARGE_MEMORY_DEVICE
-    cinfo->mem->max_memory_to_use = 30 * 1024 * 1024;
-#else
-    cinfo->mem->max_memory_to_use = 5 * 1024 * 1024;
-#endif
-}
-#endif
-
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -149,40 +166,40 @@ static bool valid_output_dimensions(const jpeg_decompress_struct& cinfo) {
     /* These are initialized to 0, so if they have non-zero values, we assume
        they are "valid" (i.e. have been computed by libjpeg)
      */
-    return cinfo.output_width != 0 && cinfo.output_height != 0;
+    return 0 != cinfo.output_width && 0 != cinfo.output_height;
 }
 
-static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer,
-                          int count) {
+static bool skip_src_rows(jpeg_decompress_struct* cinfo, void* buffer, int count) {
     for (int i = 0; i < count; i++) {
         JSAMPLE* rowptr = (JSAMPLE*)buffer;
         int row_count = jpeg_read_scanlines(cinfo, &rowptr, 1);
-        if (row_count != 1) {
+        if (1 != row_count) {
             return false;
         }
     }
     return true;
 }
 
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
-                          huffman_index *index, void* buffer,
-                          int count) {
+                               huffman_index *index, void* buffer, int count) {
     for (int i = 0; i < count; i++) {
         JSAMPLE* rowptr = (JSAMPLE*)buffer;
         int row_count = jpeg_read_tile_scanline(cinfo, index, &rowptr);
-        if (row_count != 1) {
+        if (1 != row_count) {
             return false;
         }
     }
     return true;
 }
+#endif
 
 // This guy exists just to aid in debugging, as it allows debuggers to just
 // set a break-point in one place to see all error exists.
 static bool return_false(const jpeg_decompress_struct& cinfo,
                          const SkBitmap& bm, const char msg[]) {
 #ifdef SK_DEBUG
-    SkDebugf("libjpeg error %d <%s> from %s [%d %d]", cinfo.err->msg_code,
+    SkDebugf("libjpeg error %d <%s> from %s [%d %d]\n", cinfo.err->msg_code,
              cinfo.err->jpeg_message_table[cinfo.err->msg_code], msg,
              bm.width(), bm.height());
 #endif
@@ -214,34 +231,31 @@ static void convert_CMYK_to_RGB(uint8_t* scanline, unsigned int width) {
 
 bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 #ifdef TIME_DECODE
-    AutoTimeMillis atm("JPEG Decode");
+    SkAutoTime atm("JPEG Decode");
 #endif
 
-    SkAutoMalloc  srcStorage;
     JPEGAutoClean autoClean;
 
     jpeg_decompress_struct  cinfo;
-    skjpeg_error_mgr        sk_err;
-    skjpeg_source_mgr       sk_stream(stream, this, false);
+    skjpeg_error_mgr        errorManager;
+    skjpeg_source_mgr       srcManager(stream, this);
 
-    cinfo.err = jpeg_std_error(&sk_err);
-    sk_err.error_exit = skjpeg_error_exit;
+    cinfo.err = jpeg_std_error(&errorManager);
+    errorManager.error_exit = skjpeg_error_exit;
 
     // All objects need to be instantiated before this setjmp call so that
     // they will be cleaned up properly if an error occurs.
-    if (setjmp(sk_err.fJmpBuf)) {
+    if (setjmp(errorManager.fJmpBuf)) {
         return return_false(cinfo, *bm, "setjmp");
     }
 
     jpeg_create_decompress(&cinfo);
     autoClean.set(&cinfo);
 
-#ifdef SK_BUILD_FOR_ANDROID
     overwrite_mem_buffer_size(&cinfo);
-#endif
 
     //jpeg_stdio_src(&cinfo, file);
-    cinfo.src = &sk_stream;
+    cinfo.src = &srcManager;
 
     int status = jpeg_read_header(&cinfo, true);
     if (status != JPEG_HEADER_OK) {
@@ -254,11 +268,15 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     */
     int sampleSize = this->getSampleSize();
 
+#ifdef DCT_IFAST_SUPPORTED
     if (this->getPreferQualityOverSpeed()) {
         cinfo.dct_method = JDCT_ISLOW;
     } else {
         cinfo.dct_method = JDCT_IFAST;
     }
+#else
+    cinfo.dct_method = JDCT_ISLOW;
+#endif
 
     cinfo.scale_num = 1;
     cinfo.scale_denom = sampleSize;
@@ -271,21 +289,33 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     /* this gives another few percents */
     cinfo.do_block_smoothing = 0;
 
+    SrcDepth srcDepth = k32Bit_SrcDepth;
     /* default format is RGB */
     if (cinfo.jpeg_color_space == JCS_CMYK) {
         // libjpeg cannot convert from CMYK to RGB - here we set up
         // so libjpeg will give us CMYK samples back and we will
         // later manually convert them to RGB
         cinfo.out_color_space = JCS_CMYK;
+    } else if (cinfo.jpeg_color_space == JCS_GRAYSCALE) {
+        cinfo.out_color_space = JCS_GRAYSCALE;
+        srcDepth = k8BitGray_SrcDepth;
     } else {
         cinfo.out_color_space = JCS_RGB;
     }
 
-    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, false);
+    SkBitmap::Config config = this->getPrefConfig(srcDepth, false);
     // only these make sense for jpegs
-    if (config != SkBitmap::kARGB_8888_Config &&
-        config != SkBitmap::kARGB_4444_Config &&
-        config != SkBitmap::kRGB_565_Config) {
+    if (SkBitmap::kA8_Config == config) {
+        if (cinfo.jpeg_color_space != JCS_GRAYSCALE) {
+            // Converting from a non grayscale image to A8 is
+            // not currently supported.
+            config = SkBitmap::kARGB_8888_Config;
+            // Change the output from jpeg back to RGB.
+            cinfo.out_color_space = JCS_RGB;
+        }
+    } else if (config != SkBitmap::kARGB_8888_Config &&
+               config != SkBitmap::kARGB_4444_Config &&
+               config != SkBitmap::kRGB_565_Config) {
         config = SkBitmap::kARGB_8888_Config;
     }
 
@@ -301,9 +331,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     }
 #endif
 
-    if (sampleSize == 1 && mode == SkImageDecoder::kDecodeBounds_Mode) {
+    if (1 == sampleSize && SkImageDecoder::kDecodeBounds_Mode == mode) {
         bm->setConfig(config, cinfo.image_width, cinfo.image_height);
-        bm->setIsOpaque(true);
+        bm->setIsOpaque(config != SkBitmap::kA8_Config);
         return true;
     }
 
@@ -321,12 +351,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             to complete the setup. However, output dimensions seem to get
             computed very early, which is why this special check can pay off.
          */
-        if (SkImageDecoder::kDecodeBounds_Mode == mode &&
-                valid_output_dimensions(cinfo)) {
+        if (SkImageDecoder::kDecodeBounds_Mode == mode && valid_output_dimensions(cinfo)) {
             SkScaledBitmapSampler smpl(cinfo.output_width, cinfo.output_height,
                                        recompute_sampleSize(sampleSize, cinfo));
             bm->setConfig(config, smpl.scaledWidth(), smpl.scaledHeight());
-            bm->setIsOpaque(true);
+            bm->setIsOpaque(config != SkBitmap::kA8_Config);
             return true;
         } else {
             return return_false(cinfo, *bm, "start_decompress");
@@ -335,47 +364,35 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     sampleSize = recompute_sampleSize(sampleSize, cinfo);
 
     // should we allow the Chooser (if present) to pick a config for us???
-    if (!this->chooseFromOneChoice(config, cinfo.output_width,
-                                   cinfo.output_height)) {
+    if (!this->chooseFromOneChoice(config, cinfo.output_width, cinfo.output_height)) {
         return return_false(cinfo, *bm, "chooseFromOneChoice");
     }
+
+    SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height, sampleSize);
+    bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bm->setIsOpaque(config != SkBitmap::kA8_Config);
+    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+        return true;
+    }
+    if (!this->allocPixelRef(bm, NULL)) {
+        return return_false(cinfo, *bm, "allocPixelRef");
+    }
+
+    SkAutoLockPixels alp(*bm);
 
 #ifdef ANDROID_RGB
     /* short-circuit the SkScaledBitmapSampler when possible, as this gives
        a significant performance boost.
     */
     if (sampleSize == 1 &&
-        ((config == SkBitmap::kARGB_8888_Config && 
+        ((config == SkBitmap::kARGB_8888_Config &&
                 cinfo.out_color_space == JCS_RGBA_8888) ||
-        (config == SkBitmap::kRGB_565_Config && 
+        (config == SkBitmap::kRGB_565_Config &&
                 cinfo.out_color_space == JCS_RGB_565)))
     {
-        bm->lockPixels();
         JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
-        bm->unlockPixels();
-        bool reuseBitmap = (rowptr != NULL);
-        if (reuseBitmap && ((int) cinfo.output_width != bm->width() ||
-                (int) cinfo.output_height != bm->height())) {
-            // Dimensions must match
-            return false;
-        }
-
-        if (!reuseBitmap) {
-            bm->setConfig(config, cinfo.output_width, cinfo.output_height);
-            bm->setIsOpaque(true);
-            if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-                return true;
-            }
-            if (!this->allocPixelRef(bm, NULL)) {
-                return return_false(cinfo, *bm, "allocPixelRef");
-            }
-        } else if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-            return true;
-        }
-        SkAutoLockPixels alp(*bm);
-        rowptr = (JSAMPLE*)bm->getPixels();
         INT32 const bpr =  bm->rowBytes();
-        
+
         while (cinfo.output_scanline < cinfo.output_height) {
             int row_count = jpeg_read_scanlines(&cinfo, &rowptr, 1);
             // if row_count == 0, then we didn't get a scanline, so abort.
@@ -388,14 +405,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             }
             rowptr += bpr;
         }
-        if (reuseBitmap) {
-            bm->notifyPixelsChanged();
-        }
         jpeg_finish_decompress(&cinfo);
         return true;
     }
 #endif
-    
+
     // check for supported formats
     SkScaledBitmapSampler::SrcConfig sc;
     if (JCS_CMYK == cinfo.out_color_space) {
@@ -416,41 +430,13 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         return return_false(cinfo, *bm, "jpeg colorspace");
     }
 
-    SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height,
-                                  sampleSize);
-
-    bm->lockPixels();
-    JSAMPLE* rowptr = (JSAMPLE*)bm->getPixels();
-    bool reuseBitmap = (rowptr != NULL);
-    bm->unlockPixels();
-    if (reuseBitmap && (sampler.scaledWidth() != bm->width() ||
-            sampler.scaledHeight() != bm->height())) {
-        // Dimensions must match
-        return false;
-    }
-
-    if (!reuseBitmap) {
-        bm->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-        // jpegs are always opaque (i.e. have no per-pixel alpha)
-        bm->setIsOpaque(true);
-
-        if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-            return true;
-        }
-        if (!this->allocPixelRef(bm, NULL)) {
-            return return_false(cinfo, *bm, "allocPixelRef");
-        }
-    } else if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-        return true;
-    }
-
-    SkAutoLockPixels alp(*bm);                          
     if (!sampler.begin(bm, sc, this->getDitherImage())) {
         return return_false(cinfo, *bm, "sampler.begin");
     }
 
     // The CMYK work-around relies on 4 components per pixel here
-    uint8_t* srcRow = (uint8_t*)srcStorage.reset(cinfo.output_width * 4);
+    SkAutoMalloc srcStorage(cinfo.output_width * 4);
+    uint8_t* srcRow = (uint8_t*)srcStorage.get();
 
     //  Possibly skip initial rows [sampler.srcY0]
     if (!skip_src_rows(&cinfo, srcRow, sampler.srcY0())) {
@@ -488,29 +474,19 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
                        cinfo.output_height - cinfo.output_scanline)) {
         return return_false(cinfo, *bm, "skip rows");
     }
-    if (reuseBitmap) {
-        bm->notifyPixelsChanged();
-    }
     jpeg_finish_decompress(&cinfo);
 
-//    SkDebugf("------------------- bm2 size %d [%d %d] %d\n", bm->getSize(), bm->width(), bm->height(), bm->config());
     return true;
 }
 
-bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
-                                        int *width, int *height) {
-    SkAutoMalloc  srcStorage;
-    SkJPEGImageIndex *index = new SkJPEGImageIndex;
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream, int *width, int *height) {
 
-    jpeg_decompress_struct  *cinfo = (jpeg_decompress_struct*)
-                                        malloc(sizeof(jpeg_decompress_struct));
-    skjpeg_error_mgr        sk_err;
-    skjpeg_source_mgr       *sk_stream =
-        new skjpeg_source_mgr(stream, this, true);
-    if (cinfo == NULL || sk_stream == NULL) {
-        return false;
-    }
+    SkJPEGImageIndex* imageIndex = SkNEW_ARGS(SkJPEGImageIndex, (stream, this));
+    jpeg_decompress_struct* cinfo = imageIndex->cinfo();
+    huffman_index* huffmanIndex = imageIndex->huffmanIndex();
 
+    skjpeg_error_mgr sk_err;
     cinfo->err = jpeg_std_error(&sk_err);
     sk_err.error_exit = skjpeg_error_exit;
 
@@ -520,79 +496,76 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStream* stream,
         return false;
     }
 
-    jpeg_create_decompress(cinfo);
+    // create the cinfo used to create/build the huffmanIndex
+    imageIndex->initializeInfo();
     cinfo->do_fancy_upsampling = 0;
     cinfo->do_block_smoothing = 0;
 
-#ifdef SK_BUILD_FOR_ANDROID
-    overwrite_mem_buffer_size(cinfo);
-#endif
-
-    cinfo->src = sk_stream;
     int status = jpeg_read_header(cinfo, true);
-    if (status != JPEG_HEADER_OK) {
+    if (JPEG_HEADER_OK != status) {
+        SkDELETE(imageIndex);
         return false;
     }
-    index->index = (huffman_index*)malloc(sizeof(huffman_index));
-    jpeg_create_huffman_index(cinfo, index->index);
 
+    jpeg_create_huffman_index(cinfo, huffmanIndex);
     cinfo->scale_num = 1;
     cinfo->scale_denom = 1;
-    if (!jpeg_build_huffman_index(cinfo, index->index)) {
+    if (!jpeg_build_huffman_index(cinfo, huffmanIndex)) {
+        SkDELETE(imageIndex);
         return false;
     }
-    if (fReporter)
-        fReporter->reportMemory(index->index->mem_used);
+
+    // destroy the cinfo used to create/build the huffman index
     jpeg_destroy_decompress(cinfo);
 
-
     // Init decoder to image decode mode
-    jpeg_create_decompress(cinfo);
+    imageIndex->initializeInfo();
 
-#ifdef SK_BUILD_FOR_ANDROID
-    overwrite_mem_buffer_size(cinfo);
-#endif
-
-    cinfo->src = sk_stream;
-    status = jpeg_read_header(cinfo,true);
-    if (status != JPEG_HEADER_OK) {
+    status = jpeg_read_header(cinfo, true);
+    if (JPEG_HEADER_OK != status) {
+        SkDELETE(imageIndex);
         return false;
     }
+
     cinfo->out_color_space = JCS_RGBA_8888;
     cinfo->do_fancy_upsampling = 0;
     cinfo->do_block_smoothing = 0;
-    //jpeg_start_decompress(cinfo);
+
+    // instead of jpeg_start_decompress() we start a tiled decompress
     jpeg_start_tile_decompress(cinfo);
 
     cinfo->scale_num = 1;
-    index->cinfo = cinfo;
     *height = cinfo->output_height;
     *width = cinfo->output_width;
-    this->imageWidth = *width;
-    this->imageHeight = *height;
-    this->index = index;
+    fImageWidth = *width;
+    fImageHeight = *height;
+
+    SkDELETE(fImageIndex);
+    fImageIndex = imageIndex;
+
     return true;
 }
 
-bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
-    if (index == NULL) {
+bool SkJPEGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
+    if (NULL == fImageIndex) {
         return false;
     }
-    jpeg_decompress_struct *cinfo = index->cinfo;
+    jpeg_decompress_struct* cinfo = fImageIndex->cinfo();
 
-    SkIRect rect = SkIRect::MakeWH(this->imageWidth, this->imageHeight);
+    SkIRect rect = SkIRect::MakeWH(fImageWidth, fImageHeight);
     if (!rect.intersect(region)) {
-        // If the requested region is entirely outsides the image, just
-        // returns false
+        // If the requested region is entirely outside the image return false
         return false;
     }
-    SkAutoMalloc  srcStorage;
-    skjpeg_error_mgr        sk_err;
-    cinfo->err = jpeg_std_error(&sk_err);
-    sk_err.error_exit = skjpeg_error_exit;
-    if (setjmp(sk_err.fJmpBuf)) {
+
+
+    skjpeg_error_mgr errorManager;
+    cinfo->err = jpeg_std_error(&errorManager);
+    errorManager.error_exit = skjpeg_error_exit;
+    if (setjmp(errorManager.fJmpBuf)) {
         return false;
     }
+
     int requestedSampleSize = this->getSampleSize();
     cinfo->scale_denom = requestedSampleSize;
 
@@ -614,27 +587,53 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
 
 #ifdef ANDROID_RGB
     cinfo->dither_mode = JDITHER_NONE;
-    if (config == SkBitmap::kARGB_8888_Config) {
+    if (SkBitmap::kARGB_8888_Config == config) {
         cinfo->out_color_space = JCS_RGBA_8888;
-    } else if (config == SkBitmap::kRGB_565_Config) {
+    } else if (SkBitmap::kRGB_565_Config == config) {
         cinfo->out_color_space = JCS_RGB_565;
         if (this->getDitherImage()) {
             cinfo->dither_mode = JDITHER_ORDERED;
         }
     }
 #endif
+
     int startX = rect.fLeft;
     int startY = rect.fTop;
     int width = rect.width();
     int height = rect.height();
 
-    jpeg_init_read_tile_scanline(cinfo, index->index,
+    jpeg_init_read_tile_scanline(cinfo, fImageIndex->huffmanIndex(),
                                  &startX, &startY, &width, &height);
     int skiaSampleSize = recompute_sampleSize(requestedSampleSize, *cinfo);
     int actualSampleSize = skiaSampleSize * (DCTSIZE / cinfo->min_DCT_scaled_size);
 
-    SkBitmap *bitmap = new SkBitmap;
-    SkAutoTDelete<SkBitmap> adb(bitmap);
+    SkScaledBitmapSampler sampler(width, height, skiaSampleSize);
+
+    SkBitmap bitmap;
+    bitmap.setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+    bitmap.setIsOpaque(true);
+
+    // Check ahead of time if the swap(dest, src) is possible or not.
+    // If yes, then we will stick to AllocPixelRef since it's cheaper with the
+    // swap happening. If no, then we will use alloc to allocate pixels to
+    // prevent garbage collection.
+    int w = rect.width() / actualSampleSize;
+    int h = rect.height() / actualSampleSize;
+    bool swapOnly = (rect == region) && bm->isNull() &&
+                    (w == bitmap.width()) && (h == bitmap.height()) &&
+                    ((startX - rect.x()) / actualSampleSize == 0) &&
+                    ((startY - rect.y()) / actualSampleSize == 0);
+    if (swapOnly) {
+        if (!this->allocPixelRef(&bitmap, NULL)) {
+            return return_false(*cinfo, bitmap, "allocPixelRef");
+        }
+    } else {
+        if (!bitmap.allocPixels()) {
+            return return_false(*cinfo, bitmap, "allocPixels");
+        }
+    }
+
+    SkAutoLockPixels alp(bitmap);
 
 #ifdef ANDROID_RGB
     /* short-circuit the SkScaledBitmapSampler when possible, as this gives
@@ -646,64 +645,42 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
         (config == SkBitmap::kRGB_565_Config &&
                 cinfo->out_color_space == JCS_RGB_565)))
     {
-        bitmap->setConfig(config, cinfo->output_width, height);
-        bitmap->setIsOpaque(true);
+        JSAMPLE* rowptr = (JSAMPLE*)bitmap.getPixels();
+        INT32 const bpr = bitmap.rowBytes();
+        int rowTotalCount = 0;
 
-        // Check ahead of time if the swap(dest, src) is possible or not.
-        // If yes, then we will stick to AllocPixelRef since it's cheaper
-        // with the swap happening. If no, then we will use alloc to allocate
-        // pixels to prevent garbage collection.
-        //
-        // Not using a recycled-bitmap and the output rect is same as the
-        // decoded region.
-        int w = rect.width() / actualSampleSize;
-        int h = rect.height() / actualSampleSize;
-        bool swapOnly = (rect == region) && bm->isNull() &&
-                        (w == bitmap->width()) && (h == bitmap->height()) &&
-                        ((startX - rect.x()) / actualSampleSize == 0) &&
-                        ((startY - rect.y()) / actualSampleSize == 0);
-        if (swapOnly) {
-            if (!this->allocPixelRef(bitmap, NULL)) {
-                return return_false(*cinfo, *bitmap, "allocPixelRef");
-            }
-        } else {
-            if (!bitmap->allocPixels()) {
-                return return_false(*cinfo, *bitmap, "allocPixels");
-            }
-        }
-
-        SkAutoLockPixels alp(*bitmap);
-        JSAMPLE* rowptr = (JSAMPLE*)bitmap->getPixels();
-        INT32 const bpr = bitmap->rowBytes();
-        int row_total_count = 0;
-
-        while (row_total_count < height) {
-            int row_count = jpeg_read_tile_scanline(cinfo,
-                    index->index, &rowptr);
+        while (rowTotalCount < height) {
+            int rowCount = jpeg_read_tile_scanline(cinfo,
+                                                   fImageIndex->huffmanIndex(),
+                                                   &rowptr);
             // if row_count == 0, then we didn't get a scanline, so abort.
             // if we supported partial images, we might return true in this case
-            if (0 == row_count) {
-                return return_false(*cinfo, *bitmap, "read_scanlines");
+            if (0 == rowCount) {
+                return return_false(*cinfo, bitmap, "read_scanlines");
             }
             if (this->shouldCancelDecode()) {
-                return return_false(*cinfo, *bitmap, "shouldCancelDecode");
+                return return_false(*cinfo, bitmap, "shouldCancelDecode");
             }
-            row_total_count += row_count;
+            rowTotalCount += rowCount;
             rowptr += bpr;
         }
 
         if (swapOnly) {
-            bm->swap(*bitmap);
+            bm->swap(bitmap);
         } else {
-            cropBitmap(bm, bitmap, actualSampleSize, region.x(), region.y(),
+            cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
                        region.width(), region.height(), startX, startY);
         }
         return true;
     }
 #endif
+
     // check for supported formats
     SkScaledBitmapSampler::SrcConfig sc;
-    if (3 == cinfo->out_color_components && JCS_RGB == cinfo->out_color_space) {
+    if (JCS_CMYK == cinfo->out_color_space) {
+        // In this case we will manually convert the CMYK values to RGB
+        sc = SkScaledBitmapSampler::kRGBX;
+    } else if (3 == cinfo->out_color_components && JCS_RGB == cinfo->out_color_space) {
         sc = SkScaledBitmapSampler::kRGB;
 #ifdef ANDROID_RGB
     } else if (JCS_RGBA_8888 == cinfo->out_color_space) {
@@ -718,73 +695,54 @@ bool SkJPEGImageDecoder::onDecodeRegion(SkBitmap* bm, SkIRect region) {
         return return_false(*cinfo, *bm, "jpeg colorspace");
     }
 
-    SkScaledBitmapSampler sampler(width, height, skiaSampleSize);
-
-    bitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
-    bitmap->setIsOpaque(true);
-
-    // Check ahead of time if the swap(dest, src) is possible or not.
-    // If yes, then we will stick to AllocPixelRef since it's cheaper with the
-    // swap happening. If no, then we will use alloc to allocate pixels to
-    // prevent garbage collection.
-    int w = rect.width() / actualSampleSize;
-    int h = rect.height() / actualSampleSize;
-    bool swapOnly = (rect == region) && bm->isNull() &&
-                    (w == bitmap->width()) && (h == bitmap->height()) &&
-                    ((startX - rect.x()) / actualSampleSize == 0) &&
-                    ((startY - rect.y()) / actualSampleSize == 0);
-    if (swapOnly) {
-        if (!this->allocPixelRef(bitmap, NULL)) {
-            return return_false(*cinfo, *bitmap, "allocPixelRef");
-        }
-    } else {
-        if (!bitmap->allocPixels()) {
-            return return_false(*cinfo, *bitmap, "allocPixels");
-        }
+    if (!sampler.begin(&bitmap, sc, this->getDitherImage())) {
+        return return_false(*cinfo, bitmap, "sampler.begin");
     }
 
-    SkAutoLockPixels alp(*bitmap);
-    if (!sampler.begin(bitmap, sc, this->getDitherImage())) {
-        return return_false(*cinfo, *bitmap, "sampler.begin");
-    }
-
-    uint8_t* srcRow = (uint8_t*)srcStorage.reset(width * 4);
+    // The CMYK work-around relies on 4 components per pixel here
+    SkAutoMalloc  srcStorage(width * 4);
+    uint8_t* srcRow = (uint8_t*)srcStorage.get();
 
     //  Possibly skip initial rows [sampler.srcY0]
-    if (!skip_src_rows_tile(cinfo, index->index, srcRow, sampler.srcY0())) {
-        return return_false(*cinfo, *bitmap, "skip rows");
+    if (!skip_src_rows_tile(cinfo, fImageIndex->huffmanIndex(), srcRow, sampler.srcY0())) {
+        return return_false(*cinfo, bitmap, "skip rows");
     }
 
     // now loop through scanlines until y == bitmap->height() - 1
     for (int y = 0;; y++) {
         JSAMPLE* rowptr = (JSAMPLE*)srcRow;
-        int row_count = jpeg_read_tile_scanline(cinfo, index->index, &rowptr);
+        int row_count = jpeg_read_tile_scanline(cinfo, fImageIndex->huffmanIndex(), &rowptr);
         if (0 == row_count) {
-            return return_false(*cinfo, *bitmap, "read_scanlines");
+            return return_false(*cinfo, bitmap, "read_scanlines");
         }
         if (this->shouldCancelDecode()) {
-            return return_false(*cinfo, *bitmap, "shouldCancelDecode");
+            return return_false(*cinfo, bitmap, "shouldCancelDecode");
+        }
+
+        if (JCS_CMYK == cinfo->out_color_space) {
+            convert_CMYK_to_RGB(srcRow, width);
         }
 
         sampler.next(srcRow);
-        if (bitmap->height() - 1 == y) {
+        if (bitmap.height() - 1 == y) {
             // we're done
             break;
         }
 
-        if (!skip_src_rows_tile(cinfo, index->index, srcRow,
+        if (!skip_src_rows_tile(cinfo, fImageIndex->huffmanIndex(), srcRow,
                                 sampler.srcDY() - 1)) {
-            return return_false(*cinfo, *bitmap, "skip rows");
+            return return_false(*cinfo, bitmap, "skip rows");
         }
     }
     if (swapOnly) {
-        bm->swap(*bitmap);
+        bm->swap(bitmap);
     } else {
-        cropBitmap(bm, bitmap, actualSampleSize, region.x(), region.y(),
+        cropBitmap(bm, &bitmap, actualSampleSize, region.x(), region.y(),
                    region.width(), region.height(), startX, startY);
     }
     return true;
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -956,13 +914,8 @@ class SkJPEGImageEncoder : public SkImageEncoder {
 protected:
     virtual bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality) {
 #ifdef TIME_ENCODE
-        AutoTimeMillis atm("JPEG Encode");
+        SkAutoTime atm("JPEG Encode");
 #endif
-
-        const WriteScanline writer = ChooseWriter(bm);
-        if (NULL == writer) {
-            return false;
-        }
 
         SkAutoLockPixels alp(bm);
         if (NULL == bm.getPixels()) {
@@ -982,8 +935,14 @@ protected:
         if (setjmp(sk_err.fJmpBuf)) {
             return false;
         }
-        jpeg_create_compress(&cinfo);
 
+        // Keep after setjmp or mark volatile.
+        const WriteScanline writer = ChooseWriter(bm);
+        if (NULL == writer) {
+            return false;
+        }
+
+        jpeg_create_compress(&cinfo);
         cinfo.dest = &sk_wstream;
         cinfo.image_width = bm.width();
         cinfo.image_height = bm.height();
@@ -997,7 +956,9 @@ protected:
 
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
+#ifdef DCT_IFAST_SUPPORTED
         cinfo.dct_method = JDCT_IFAST;
+#endif
 
         jpeg_start_compress(&cinfo, TRUE);
 
@@ -1028,9 +989,7 @@ DEFINE_DECODER_CREATOR(JPEGImageDecoder);
 DEFINE_ENCODER_CREATOR(JPEGImageEncoder);
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkTRegistry.h"
-
-static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
+static bool is_jpeg(SkStream* stream) {
     static const unsigned char gHeader[] = { 0xFF, 0xD8, 0xFF };
     static const size_t HEADER_SIZE = sizeof(gHeader);
 
@@ -1038,12 +997,28 @@ static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
     size_t len = stream->read(buffer, HEADER_SIZE);
 
     if (len != HEADER_SIZE) {
-        return NULL;   // can't read enough
+        return false;   // can't read enough
     }
     if (memcmp(buffer, gHeader, HEADER_SIZE)) {
-        return NULL;
+        return false;
     }
-    return SkNEW(SkJPEGImageDecoder);
+    return true;
+}
+
+#include "SkTRegistry.h"
+
+static SkImageDecoder* sk_libjpeg_dfactory(SkStream* stream) {
+    if (is_jpeg(stream)) {
+        return SkNEW(SkJPEGImageDecoder);
+    }
+    return NULL;
+}
+
+static SkImageDecoder::Format get_format_jpeg(SkStream* stream) {
+    if (is_jpeg(stream)) {
+        return SkImageDecoder::kJPEG_Format;
+    }
+    return SkImageDecoder::kUnknown_Format;
 }
 
 static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
@@ -1052,4 +1027,5 @@ static SkImageEncoder* sk_libjpeg_efactory(SkImageEncoder::Type t) {
 
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libjpeg_dfactory);
+static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_jpeg);
 static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(sk_libjpeg_efactory);

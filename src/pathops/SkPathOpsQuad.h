@@ -19,6 +19,11 @@ struct SkDQuadPair {
 struct SkDQuad {
     SkDPoint fPts[3];
 
+    SkDQuad flip() const {
+        SkDQuad result = {{fPts[2], fPts[1], fPts[0]}};
+        return result;
+    }
+
     void set(const SkPoint pts[3]) {
         fPts[0] = pts[0];
         fPts[1] = pts[1];
@@ -29,6 +34,7 @@ struct SkDQuad {
     SkDPoint& operator[](int n) { SkASSERT(n >= 0 && n < 3); return fPts[n]; }
 
     static int AddValidTs(double s[], int realRoots, double* t);
+    void align(int endIndex, SkDPoint* dstPt) const;
     SkDQuadPair chopAt(double t) const;
     SkDVector dxdyAtT(double t) const;
     static int FindExtrema(double a, double b, double c, double tValue[1]);
@@ -36,6 +42,7 @@ struct SkDQuad {
     bool monotonicInY() const;
     double nearestT(const SkDPoint&) const;
     bool pointInHull(const SkDPoint&) const;
+    SkDPoint ptAtT(double t) const;
     static int RootsReal(double A, double B, double C, double t[2]);
     static int RootsValidT(const double A, const double B, const double C, double s[2]);
     static void SetABC(const double* quad, double* a, double* b, double* c);
@@ -54,7 +61,6 @@ struct SkDQuad {
     }
     SkDCubic toCubic() const;
     SkDPoint top(double startT, double endT) const;
-    SkDPoint xyAtT(double t) const;
 private:
 //  static double Tangent(const double* quadratic, double t);  // uncalled
 };

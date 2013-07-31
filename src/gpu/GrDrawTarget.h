@@ -343,9 +343,9 @@ public:
      *                    then srcRect will be transformed by srcMatrix.
      *                    srcMatrix can be NULL when no srcMatrix is desired.
      */
-    void drawRect(const GrRect& rect,
+    void drawRect(const SkRect& rect,
                   const SkMatrix* matrix,
-                  const GrRect* localRect,
+                  const SkRect* localRect,
                   const SkMatrix* localMatrix) {
         AutoGeometryPush agp(this);
         this->onDrawRect(rect, matrix, localRect, localMatrix);
@@ -354,10 +354,10 @@ public:
     /**
      * Helper for drawRect when the caller doesn't need separate local rects or matrices.
      */
-    void drawSimpleRect(const GrRect& rect, const SkMatrix* matrix = NULL) {
-        drawRect(rect, matrix, NULL, NULL);
+    void drawSimpleRect(const SkRect& rect, const SkMatrix* matrix = NULL) {
+        this->drawRect(rect, matrix, NULL, NULL);
     }
-    void drawSimpleRect(const GrIRect& irect, const SkMatrix* matrix = NULL) {
+    void drawSimpleRect(const SkIRect& irect, const SkMatrix* matrix = NULL) {
         SkRect rect = SkRect::MakeFromIRect(irect);
         this->drawRect(rect, matrix, NULL, NULL);
     }
@@ -403,7 +403,7 @@ public:
      * clip and all other draw state (blend mode, stages, etc). Clears the
      * whole thing if rect is NULL, otherwise just the rect.
      */
-    virtual void clear(const GrIRect* rect,
+    virtual void clear(const SkIRect* rect,
                        GrColor color,
                        GrRenderTarget* renderTarget = NULL) = 0;
 
@@ -488,8 +488,12 @@ public:
          *
          * @param init  Should the newly installed GrDrawState be a copy of the
          *              previous state or a default-initialized GrDrawState.
+         * @param viewMatrix Optional view matrix. If init = kPreserve then the draw state's
+         *                   matrix will be preconcat'ed with the param. All stages will be
+                             updated to compensate for the matrix change. If init == kReset
+                             then the draw state's matrix will be this matrix.
          */
-        AutoStateRestore(GrDrawTarget* target, ASRInit init);
+        AutoStateRestore(GrDrawTarget* target, ASRInit init, const SkMatrix* viewMatrix = NULL);
 
         ~AutoStateRestore();
 
@@ -501,13 +505,25 @@ public:
          *
          * @param init  Should the newly installed GrDrawState be a copy of the
          *              previous state or a default-initialized GrDrawState.
+         * @param viewMatrix Optional view matrix. If init = kPreserve then the draw state's
+         *                   matrix will be preconcat'ed with the param. All stages will be
+                             updated to compensate for the matrix change. If init == kReset
+                             then the draw state's matrix will be this matrix.
          */
-        void set(GrDrawTarget* target, ASRInit init);
+        void set(GrDrawTarget* target, ASRInit init, const SkMatrix* viewMatrix = NULL);
+
+        /**
+         * Like set() but makes the view matrix identity. When init is kReset it is as though
+         * NULL was passed to set's viewMatrix param. When init is kPreserve it is as though
+         * the inverse view matrix was passed. If kPreserve is passed and the draw state's matrix
+         * is not invertible then this may fail.
+         */
+        bool setIdentity(GrDrawTarget* target, ASRInit init);
 
     private:
-        GrDrawTarget*        fDrawTarget;
-        SkTLazy<GrDrawState> fTempState;
-        GrDrawState*         fSavedState;
+        GrDrawTarget*                       fDrawTarget;
+        SkTLazy<GrDrawState>                fTempState;
+        GrDrawState*                        fSavedState;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -586,8 +602,10 @@ public:
      */
     class AutoGeometryAndStatePush : ::GrNoncopyable {
     public:
-        AutoGeometryAndStatePush(GrDrawTarget* target, ASRInit init)
-            : fState(target, init){
+        AutoGeometryAndStatePush(GrDrawTarget* target,
+                                 ASRInit init,
+                                 const SkMatrix* viewMatrix = NULL)
+            : fState(target, init, viewMatrix) {
             GrAssert(NULL != target);
             fTarget = target;
             target->pushGeometrySource();
@@ -796,9 +814,9 @@ private:
     // one of the public GrDrawTarget draw methods (e.g. drawNonIndexed,
     // drawIndexedInstances, ...). The base class draws a two triangle fan using
     // drawNonIndexed from reserved vertex space.
-    virtual void onDrawRect(const GrRect& rect,
+    virtual void onDrawRect(const SkRect& rect,
                             const SkMatrix* matrix,
-                            const GrRect* localRect,
+                            const SkRect* localRect,
                             const SkMatrix* localMatrix);
     virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill) = 0;
 

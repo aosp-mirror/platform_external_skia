@@ -21,7 +21,6 @@
 #include "SkStream.h"
 #include "SkTemplates.h"
 #include "SkUtils.h"
-#include "SkTScopedPtr.h"
 
 // A WebP decoder only, on top of (subset of) libwebp
 // For more information on WebP image format, and libwebp library, see:
@@ -59,20 +58,19 @@ static const size_t WEBP_VP8_HEADER_SIZE = 64;
 static const size_t WEBP_IDECODE_BUFFER_SZ = (1 << 16);
 
 // Parse headers of RIFF container, and check for valid Webp (VP8) content.
-static bool webp_parse_header(SkStream* stream, int* width, int* height,
-                              int* alpha) {
+static bool webp_parse_header(SkStream* stream, int* width, int* height, int* alpha) {
     unsigned char buffer[WEBP_VP8_HEADER_SIZE];
     const uint32_t contentSize = stream->getLength();
     const size_t len = stream->read(buffer, WEBP_VP8_HEADER_SIZE);
-    const uint32_t read_bytes = (contentSize < WEBP_VP8_HEADER_SIZE) ?
-        contentSize : WEBP_VP8_HEADER_SIZE;
+    const uint32_t read_bytes =
+            (contentSize < WEBP_VP8_HEADER_SIZE) ? contentSize : WEBP_VP8_HEADER_SIZE;
     if (len != read_bytes) {
         return false; // can't read enough
     }
 
     WebPBitstreamFeatures features;
     VP8StatusCode status = WebPGetFeatures(buffer, read_bytes, &features);
-    if (status != VP8_STATUS_OK) {
+    if (VP8_STATUS_OK != status) {
         return false; // Invalid WebP file.
     }
     *width = features.width;
@@ -96,24 +94,48 @@ static bool webp_parse_header(SkStream* stream, int* width, int* height,
 
 class SkWEBPImageDecoder: public SkImageDecoder {
 public:
-    virtual Format getFormat() const {
+    SkWEBPImageDecoder() {
+        fInputStream = NULL;
+        fOrigWidth = 0;
+        fOrigHeight = 0;
+        fHasAlpha = 0;
+    }
+    virtual ~SkWEBPImageDecoder() {
+        SkSafeUnref(fInputStream);
+    }
+
+    virtual Format getFormat() const SK_OVERRIDE {
         return kWEBP_Format;
     }
 
 protected:
-    virtual bool onBuildTileIndex(SkStream *stream, int *width, int *height);
-    virtual bool onDecodeRegion(SkBitmap* bitmap, SkIRect rect);
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
+    virtual bool onBuildTileIndex(SkStream *stream, int *width, int *height) SK_OVERRIDE;
+    virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
+    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
 
 private:
+    /**
+     *  Called when determining the output config to request to webp.
+     *  If the image does not have alpha, there is no need to premultiply.
+     *  If the caller wants unpremultiplied colors, that is respected.
+     */
+    bool shouldPremultiply() const {
+        return SkToBool(fHasAlpha) && !this->getRequireUnpremultipliedColors();
+    }
+
     bool setDecodeConfig(SkBitmap* decodedBitmap, int width, int height);
-    SkStream *inputStream;
-    int origWidth;
-    int origHeight;
-    int hasAlpha;
+
+    SkStream* fInputStream;
+    int fOrigWidth;
+    int fOrigHeight;
+    int fHasAlpha;
+
+    typedef SkImageDecoder INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////
+
+#ifdef TIME_DECODE
 
 #include "SkTime.h"
 
@@ -121,7 +143,7 @@ class AutoTimeMillis {
 public:
     AutoTimeMillis(const char label[]) :
         fLabel(label) {
-        if (!fLabel) {
+        if (NULL == fLabel) {
             fLabel = "";
         }
         fNow = SkTime::GetMSecs();
@@ -134,130 +156,131 @@ private:
     SkMSec fNow;
 };
 
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 // This guy exists just to aid in debugging, as it allows debuggers to just
 // set a break-point in one place to see all error exists.
 static bool return_false(const SkBitmap& bm, const char msg[]) {
-#if 0
-    SkDebugf("libwebp error %s [%d %d]", msg, bm.width(), bm.height());
-#endif
+    SkDEBUGF(("libwebp error %s [%d %d]", msg, bm.width(), bm.height()));
     return false; // must always return false
 }
 
-static WEBP_CSP_MODE webp_decode_mode(SkBitmap* decodedBitmap, int hasAlpha) {
+static WEBP_CSP_MODE webp_decode_mode(const SkBitmap* decodedBitmap, bool premultiply) {
     WEBP_CSP_MODE mode = MODE_LAST;
     SkBitmap::Config config = decodedBitmap->config();
-    // For images that have alpha, choose appropriate color mode (MODE_rgbA,
-    // MODE_rgbA_4444) that pre-multiplies RGB pixel values with transparency
-    // factor (alpha).
+
     if (config == SkBitmap::kARGB_8888_Config) {
-      mode = hasAlpha ? MODE_rgbA : MODE_RGBA;
+        mode = premultiply ? MODE_rgbA : MODE_RGBA;
     } else if (config == SkBitmap::kARGB_4444_Config) {
-      mode = hasAlpha ? MODE_rgbA_4444 : MODE_RGBA_4444;
+        mode = premultiply ? MODE_rgbA_4444 : MODE_RGBA_4444;
     } else if (config == SkBitmap::kRGB_565_Config) {
-      mode = MODE_RGB_565;
+        mode = MODE_RGB_565;
     }
-    SkASSERT(mode != MODE_LAST);
+    SkASSERT(MODE_LAST != mode);
     return mode;
 }
 
 // Incremental WebP image decoding. Reads input buffer of 64K size iteratively
 // and decodes this block to appropriate color-space as per config object.
-static bool webp_idecode(SkStream* stream, WebPDecoderConfig& config) {
-    WebPIDecoder* idec = WebPIDecode(NULL, 0, &config);
-    if (idec == NULL) {
-        WebPFreeDecBuffer(&config.output);
+static bool webp_idecode(SkStream* stream, WebPDecoderConfig* config) {
+    WebPIDecoder* idec = WebPIDecode(NULL, 0, config);
+    if (NULL == idec) {
+        WebPFreeDecBuffer(&config->output);
         return false;
     }
 
     stream->rewind();
     const uint32_t contentSize = stream->getLength();
-    const uint32_t read_buffer_size = (contentSize < WEBP_IDECODE_BUFFER_SZ) ?
-        contentSize : WEBP_IDECODE_BUFFER_SZ;
-    SkAutoMalloc srcStorage(read_buffer_size);
+    const uint32_t readBufferSize = (contentSize < WEBP_IDECODE_BUFFER_SZ) ?
+                                       contentSize : WEBP_IDECODE_BUFFER_SZ;
+    SkAutoMalloc srcStorage(readBufferSize);
     unsigned char* input = (uint8_t*)srcStorage.get();
-    if (input == NULL) {
+    if (NULL == input) {
         WebPIDelete(idec);
-        WebPFreeDecBuffer(&config.output);
+        WebPFreeDecBuffer(&config->output);
         return false;
     }
 
-    bool success = true;
-    VP8StatusCode status = VP8_STATUS_SUSPENDED;
-    do {
-        const uint32_t bytes_to_read = WEBP_IDECODE_BUFFER_SZ;
-        const size_t bytes_read = stream->read(input, bytes_to_read);
-        if (bytes_read == 0) {
-            success = false;
+    uint32_t bytesRemaining = contentSize;
+    while (bytesRemaining > 0) {
+        const uint32_t bytesToRead = (bytesRemaining < WEBP_IDECODE_BUFFER_SZ) ?
+                                      bytesRemaining : WEBP_IDECODE_BUFFER_SZ;
+        const size_t bytesRead = stream->read(input, bytesToRead);
+        if (0 == bytesRead) {
             break;
         }
 
-        status = WebPIAppend(idec, input, bytes_read);
-        if (VP8_STATUS_OK != status && VP8_STATUS_SUSPENDED != status) {
-            success = false;
+        VP8StatusCode status = WebPIAppend(idec, input, bytesRead);
+        if (VP8_STATUS_OK == status || VP8_STATUS_SUSPENDED == status) {
+            bytesRemaining -= bytesRead;
+        } else {
             break;
         }
-    } while (VP8_STATUS_OK != status);
+    }
     srcStorage.free();
     WebPIDelete(idec);
-    WebPFreeDecBuffer(&config.output);
+    WebPFreeDecBuffer(&config->output);
 
-    return success;
+    if (bytesRemaining > 0) {
+        return false;
+    } else {
+        return true;
+    }
 }
 
-static bool webp_get_config_resize(WebPDecoderConfig& config,
+static bool webp_get_config_resize(WebPDecoderConfig* config,
                                    SkBitmap* decodedBitmap,
-                                   int width, int height, int hasAlpha) {
-    WEBP_CSP_MODE mode = webp_decode_mode(decodedBitmap, hasAlpha);
-    if (mode == MODE_LAST) {
+                                   int width, int height, bool premultiply) {
+    WEBP_CSP_MODE mode = webp_decode_mode(decodedBitmap, premultiply);
+    if (MODE_LAST == mode) {
         return false;
     }
 
-    if (WebPInitDecoderConfig(&config) == 0) {
+    if (0 == WebPInitDecoderConfig(config)) {
         return false;
     }
 
-    config.output.colorspace = mode;
-    config.output.u.RGBA.rgba = (uint8_t*)decodedBitmap->getPixels();
-    config.output.u.RGBA.stride = decodedBitmap->rowBytes();
-    config.output.u.RGBA.size = decodedBitmap->getSize();
-    config.output.is_external_memory = 1;
+    config->output.colorspace = mode;
+    config->output.u.RGBA.rgba = (uint8_t*)decodedBitmap->getPixels();
+    config->output.u.RGBA.stride = decodedBitmap->rowBytes();
+    config->output.u.RGBA.size = decodedBitmap->getSize();
+    config->output.is_external_memory = 1;
 
-    if (width != decodedBitmap->width() ||
-        height != decodedBitmap->height()) {
-        config.options.use_scaling = 1;
-        config.options.scaled_width = decodedBitmap->width();
-        config.options.scaled_height = decodedBitmap->height();
+    if (width != decodedBitmap->width() || height != decodedBitmap->height()) {
+        config->options.use_scaling = 1;
+        config->options.scaled_width = decodedBitmap->width();
+        config->options.scaled_height = decodedBitmap->height();
     }
 
     return true;
 }
 
-static bool webp_get_config_resize_crop(WebPDecoderConfig& config,
+static bool webp_get_config_resize_crop(WebPDecoderConfig* config,
                                         SkBitmap* decodedBitmap,
-                                        SkIRect region, int hasAlpha) {
+                                        const SkIRect& region, bool premultiply) {
 
-    if (!webp_get_config_resize(
-        config, decodedBitmap, region.width(), region.height(), hasAlpha)) {
+    if (!webp_get_config_resize(config, decodedBitmap, region.width(),
+                                region.height(), premultiply)) {
       return false;
     }
 
-    config.options.use_cropping = 1;
-    config.options.crop_left = region.fLeft;
-    config.options.crop_top = region.fTop;
-    config.options.crop_width = region.width();
-    config.options.crop_height = region.height();
+    config->options.use_cropping = 1;
+    config->options.crop_left = region.fLeft;
+    config->options.crop_top = region.fTop;
+    config->options.crop_width = region.width();
+    config->options.crop_height = region.height();
 
     return true;
 }
 
 bool SkWEBPImageDecoder::setDecodeConfig(SkBitmap* decodedBitmap,
                                          int width, int height) {
-    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, hasAlpha);
+    SkBitmap::Config config = this->getPrefConfig(k32Bit_SrcDepth, SkToBool(fHasAlpha));
 
     // YUV converter supports output in RGB565, RGBA4444 and RGBA8888 formats.
-    if (hasAlpha) {
+    if (fHasAlpha) {
         if (config != SkBitmap::kARGB_4444_Config) {
             config = SkBitmap::kARGB_8888_Config;
         }
@@ -274,7 +297,7 @@ bool SkWEBPImageDecoder::setDecodeConfig(SkBitmap* decodedBitmap,
 
     decodedBitmap->setConfig(config, width, height, 0);
 
-    decodedBitmap->setIsOpaque(!hasAlpha);
+    decodedBitmap->setIsOpaque(!fHasAlpha);
 
     return true;
 }
@@ -290,28 +313,27 @@ bool SkWEBPImageDecoder::onBuildTileIndex(SkStream* stream,
     *width = origWidth;
     *height = origHeight;
 
-    this->inputStream = stream;
-    this->origWidth = origWidth;
-    this->origHeight = origHeight;
-    this->hasAlpha = hasAlpha;
+    SkRefCnt_SafeAssign(this->fInputStream, stream);
+    this->fOrigWidth = origWidth;
+    this->fOrigHeight = origHeight;
+    this->fHasAlpha = hasAlpha;
 
     return true;
 }
 
-static bool isConfigCompatible(SkBitmap* bitmap) {
-    SkBitmap::Config config = bitmap->config();
+static bool is_config_compatible(const SkBitmap& bitmap) {
+    SkBitmap::Config config = bitmap.config();
     return config == SkBitmap::kARGB_4444_Config ||
            config == SkBitmap::kRGB_565_Config ||
            config == SkBitmap::kARGB_8888_Config;
 }
 
-bool SkWEBPImageDecoder::onDecodeRegion(SkBitmap* decodedBitmap,
-                                        SkIRect region) {
-    SkIRect rect = SkIRect::MakeWH(origWidth, origHeight);
+bool SkWEBPImageDecoder::onDecodeSubset(SkBitmap* decodedBitmap,
+                                        const SkIRect& region) {
+    SkIRect rect = SkIRect::MakeWH(fOrigWidth, fOrigHeight);
 
     if (!rect.intersect(region)) {
-        // If the requested region is entirely outsides the image, just
-        // returns false
+        // If the requested region is entirely outsides the image, return false
         return false;
     }
 
@@ -326,16 +348,15 @@ bool SkWEBPImageDecoder::onDecodeRegion(SkBitmap* decodedBitmap,
     //   3. bitmap's size is same as the required region (after sampled)
     bool directDecode = (rect == region) &&
                         (decodedBitmap->isNull() ||
-                         (isConfigCompatible(decodedBitmap) &&
+                         (is_config_compatible(*decodedBitmap) &&
                          (decodedBitmap->width() == width) &&
                          (decodedBitmap->height() == height)));
-    SkTScopedPtr<SkBitmap> adb;
+
+    SkBitmap tmpBitmap;
     SkBitmap *bitmap = decodedBitmap;
 
     if (!directDecode) {
-        // allocates a temp bitmap
-        bitmap = new SkBitmap;
-        adb.reset(bitmap);
+        bitmap = &tmpBitmap;
     }
 
     if (bitmap->isNull()) {
@@ -359,19 +380,20 @@ bool SkWEBPImageDecoder::onDecodeRegion(SkBitmap* decodedBitmap,
 
     SkAutoLockPixels alp(*bitmap);
     WebPDecoderConfig config;
-    if (!webp_get_config_resize_crop(config, bitmap, rect, hasAlpha)) {
+    if (!webp_get_config_resize_crop(&config, bitmap, rect,
+                                     this->shouldPremultiply())) {
         return false;
     }
 
     // Decode the WebP image data stream using WebP incremental decoding for
     // the specified cropped image-region.
-    if (!webp_idecode(this->inputStream, config)) {
+    if (!webp_idecode(this->fInputStream, &config)) {
         return false;
     }
 
     if (!directDecode) {
         cropBitmap(decodedBitmap, bitmap, sampleSize, region.x(), region.y(),
-                  region.width(), region.height(), rect.x(), rect.y());
+                   region.width(), region.height(), rect.x(), rect.y());
     }
     return true;
 }
@@ -386,28 +408,18 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
     if (!webp_parse_header(stream, &origWidth, &origHeight, &hasAlpha)) {
         return false;
     }
-    this->hasAlpha = hasAlpha;
+    this->fHasAlpha = hasAlpha;
 
     const int sampleSize = this->getSampleSize();
     SkScaledBitmapSampler sampler(origWidth, origHeight, sampleSize);
-
-    // If only bounds are requested, done
-    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-        if (!setDecodeConfig(decodedBitmap, sampler.scaledWidth(),
-                             sampler.scaledHeight())) {
-            return false;
-        }
-        return true;
-    }
-#ifdef SK_BUILD_FOR_ANDROID
-    // No Bitmap reuse supported for this format
-    if (!decodedBitmap->isNull()) {
-        return false;
-    }
-#endif
     if (!setDecodeConfig(decodedBitmap, sampler.scaledWidth(),
                          sampler.scaledHeight())) {
         return false;
+    }
+
+    // If only bounds are requested, done
+    if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+        return true;
     }
 
     if (!this->allocPixelRef(decodedBitmap, NULL)) {
@@ -417,13 +429,13 @@ bool SkWEBPImageDecoder::onDecode(SkStream* stream, SkBitmap* decodedBitmap,
     SkAutoLockPixels alp(*decodedBitmap);
 
     WebPDecoderConfig config;
-    if (!webp_get_config_resize(config, decodedBitmap, origWidth, origHeight,
-                                hasAlpha)) {
+    if (!webp_get_config_resize(&config, decodedBitmap, origWidth, origHeight,
+                                this->shouldPremultiply())) {
         return false;
     }
 
     // Decode the WebP image data stream using WebP incremental decoding.
-    return webp_idecode(stream, config);
+    return webp_idecode(stream, &config);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -494,15 +506,18 @@ static ScanlineImporter ChooseImporter(const SkBitmap::Config& config) {
     }
 }
 
-static int StreamWriter(const uint8_t* data, size_t data_size,
-                        const WebPPicture* const picture) {
+static int stream_writer(const uint8_t* data, size_t data_size,
+                         const WebPPicture* const picture) {
   SkWStream* const stream = (SkWStream*)picture->custom_ptr;
   return stream->write(data, data_size) ? 1 : 0;
 }
 
 class SkWEBPImageEncoder : public SkImageEncoder {
 protected:
-    virtual bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality);
+    virtual bool onEncode(SkWStream* stream, const SkBitmap& bm, int quality) SK_OVERRIDE;
+
+private:
+    typedef SkImageEncoder INHERITED;
 };
 
 bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
@@ -520,7 +535,7 @@ bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
     }
 
     WebPConfig webp_config;
-    if (!WebPConfigPreset(&webp_config, WEBP_PRESET_DEFAULT, quality)) {
+    if (!WebPConfigPreset(&webp_config, WEBP_PRESET_DEFAULT, (float) quality)) {
         return false;
     }
 
@@ -528,22 +543,22 @@ bool SkWEBPImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bm,
     WebPPictureInit(&pic);
     pic.width = bm.width();
     pic.height = bm.height();
-    pic.writer = StreamWriter;
+    pic.writer = stream_writer;
     pic.custom_ptr = (void*)stream;
 
     const SkPMColor* colors = ctLocker.lockColors(bm);
     const uint8_t* src = (uint8_t*)bm.getPixels();
-    const int rgb_stride = pic.width * 3;
+    const int rgbStride = pic.width * 3;
 
     // Import (for each scanline) the bit-map image (in appropriate color-space)
     // to RGB color space.
-    uint8_t* rgb = new uint8_t[rgb_stride * pic.height];
+    uint8_t* rgb = new uint8_t[rgbStride * pic.height];
     for (int y = 0; y < pic.height; ++y) {
-        scanline_import(src + y * bm.rowBytes(), rgb + y * rgb_stride,
+        scanline_import(src + y * bm.rowBytes(), rgb + y * rgbStride,
                         pic.width, colors);
     }
 
-    bool ok = WebPPictureImportRGB(&pic, rgb, rgb_stride);
+    bool ok = SkToBool(WebPPictureImportRGB(&pic, rgb, rgbStride));
     delete[] rgb;
 
     ok = ok && WebPEncode(&webp_config, &pic);
@@ -570,9 +585,18 @@ static SkImageDecoder* sk_libwebp_dfactory(SkStream* stream) {
     return SkNEW(SkWEBPImageDecoder);
 }
 
+static SkImageDecoder::Format get_format_webp(SkStream* stream) {
+    int width, height, hasAlpha;
+    if (webp_parse_header(stream, &width, &height, &hasAlpha)) {
+        return SkImageDecoder::kWEBP_Format;
+    }
+    return SkImageDecoder::kUnknown_Format;
+}
+
 static SkImageEncoder* sk_libwebp_efactory(SkImageEncoder::Type t) {
       return (SkImageEncoder::kWEBP_Type == t) ? SkNEW(SkWEBPImageEncoder) : NULL;
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gDReg(sk_libwebp_dfactory);
+static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_webp);
 static SkTRegistry<SkImageEncoder*, SkImageEncoder::Type> gEReg(sk_libwebp_efactory);

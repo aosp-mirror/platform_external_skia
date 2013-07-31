@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "LazyDecodeBitmap.h"
 #include "SkLua.h"
 #include "SkLuaCanvas.h"
 #include "SkPicture.h"
@@ -27,25 +28,20 @@ static const char gEndCanvasFunc[] = "sk_scrape_endcanvas";
 static const char gAccumulateFunc[] = "sk_scrape_accumulate";
 static const char gSummarizeFunc[] = "sk_scrape_summarize";
 
-// PictureRenderingFlags.cpp
-extern bool lazy_decode_bitmap(const void* buffer, size_t size, SkBitmap*);
-
-
-// Flags used by this file, alphabetically:
-DEFINE_string2(skpPath, r, "", "Read .skp files from this dir");
+// Example usage for the modulo flag:
+// for i in {0..5}; do lua_pictures --skpPath SKP_PATH -l YOUR_SCRIPT --modulo $i 6 &; done
+DEFINE_string(modulo, "", "[--modulo <remainder> <divisor>]: only run tests for which "
+              "testIndex %% divisor == remainder.");
+DEFINE_string2(skpPath, r, "", "Read this .skp file or .skp files from this dir");
 DEFINE_string2(luaFile, l, "", "File containing lua script to run");
+DEFINE_string2(headCode, s, "", "Optional lua code to call at beginning");
+DEFINE_string2(tailFunc, s, "", "Optional lua function to call at end");
 
 static SkPicture* load_picture(const char path[]) {
     SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
     SkPicture* pic = NULL;
     if (stream.get()) {
-        bool success;
-        pic = SkNEW_ARGS(SkPicture, (stream.get(), &success,
-                                     &lazy_decode_bitmap));
-        if (!success) {
-            SkDELETE(pic);
-            pic = NULL;
-        }
+        pic = SkPicture::CreateFromStream(stream.get(), &sk_tools::LazyDecodeBitmap);
     }
     return pic;
 }
@@ -91,8 +87,13 @@ int tool_main(int argc, char** argv) {
         exit(-1);
     }
 
+    const char* summary = gSummarizeFunc;
+    if (!FLAGS_tailFunc.isEmpty()) {
+        summary = FLAGS_tailFunc[0];
+    }
+
     SkAutoGraphics ag;
-    SkLua L(gSummarizeFunc);
+    SkLua L(summary);
 
     for (int i = 0; i < FLAGS_luaFile.count(); ++i) {
         SkAutoDataUnref data(read_into_data(FLAGS_luaFile[i]));
@@ -103,17 +104,47 @@ int tool_main(int argc, char** argv) {
         }
     }
 
+    if (!FLAGS_headCode.isEmpty()) {
+        L.runCode(FLAGS_headCode[0]);
+    }
+
+    int moduloRemainder = -1;
+    int moduloDivisor = -1;
+    SkString moduloStr;
+
+    if (FLAGS_modulo.count() == 2) {
+        moduloRemainder = atoi(FLAGS_modulo[0]);
+        moduloDivisor = atoi(FLAGS_modulo[1]);
+        if (moduloRemainder < 0 || moduloDivisor <= 0 || moduloRemainder >= moduloDivisor) {
+            SkDebugf("invalid modulo values.\n");
+            return -1;
+        }
+    }
+
     for (int i = 0; i < FLAGS_skpPath.count(); i ++) {
-        SkOSFile::Iter iter(FLAGS_skpPath[i], "skp");
-        SkString inputFilename;
+        SkTArray<SkString> paths;
+        if (sk_isdir(FLAGS_skpPath[i])) {
+            // Add all .skp in this directory.
+            const SkString directory(FLAGS_skpPath[i]);
+            SkString filename;
+            SkOSFile::Iter iter(FLAGS_skpPath[i], "skp");
+            while(iter.next(&filename)) {
+                sk_tools::make_filepath(&paths.push_back(), directory, filename);
+            }
+        } else {
+            // Add this as an .skp itself.
+            paths.push_back() = FLAGS_skpPath[i];
+        }
 
-        while (iter.next(&inputFilename)) {
-            SkString inputPath;
-            SkString inputAsSkString(FLAGS_skpPath[i]);
-            sk_tools::make_filepath(&inputPath, inputAsSkString, inputFilename);
-
-            const char* path = inputPath.c_str();
-            SkDebugf("scraping %s\n", path);
+        for (int i = 0; i < paths.count(); i++) {
+            if (moduloRemainder >= 0) {
+                if ((i % moduloDivisor) != moduloRemainder) {
+                    continue;
+                }
+                moduloStr.printf("[%d.%d] ", i, moduloDivisor);
+            }
+            const char* path = paths[i].c_str();
+            SkDebugf("scraping %s %s\n", path, moduloStr.c_str());
 
             SkAutoTUnref<SkPicture> pic(load_picture(path));
             if (pic.get()) {
@@ -121,9 +152,9 @@ int tool_main(int argc, char** argv) {
                                     new SkLuaCanvas(pic->width(), pic->height(),
                                                     L.get(), gAccumulateFunc));
 
-                call_canvas(L.get(), canvas.get(), inputFilename.c_str(), gStartCanvasFunc);
+                call_canvas(L.get(), canvas.get(), path, gStartCanvasFunc);
                 canvas->drawPicture(*pic);
-                call_canvas(L.get(), canvas.get(), inputFilename.c_str(), gEndCanvasFunc);
+                call_canvas(L.get(), canvas.get(), path, gEndCanvasFunc);
 
             } else {
                 SkDebugf("failed to load\n");

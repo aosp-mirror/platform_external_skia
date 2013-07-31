@@ -148,6 +148,36 @@ public:
             const uint32_t* glyphIDs = NULL,
             uint32_t glyphIDsCount = 0) const;
 
+    enum Encoding {
+        kUTF8_Encoding,
+        kUTF16_Encoding,
+        kUTF32_Encoding
+    };
+
+    /**
+     *  Given an array of character codes, of the specified encoding,
+     *  optionally return their corresponding glyph IDs (if glyphs is not NULL).
+     *
+     *  @param chars pointer to the array of character codes
+     *  @param encoding how the characteds are encoded
+     *  @param glyphs (optional) returns the corresponding glyph IDs for each
+     *          character code, up to glyphCount values. If a character code is
+     *          not found in the typeface, the corresponding glyph ID will be 0.
+     *  @param glyphCount number of code points in 'chars' to process. If glyphs
+     *          is not NULL, then it must point sufficient memory to write
+     *          glyphCount values into it.
+     *  @return the number of number of continuous non-zero glyph IDs computed
+     *          from the beginning of chars. This value is valid, even if the
+     *          glyphs parameter is NULL.
+     */
+    int charsToGlyphs(const void* chars, Encoding encoding, uint16_t glyphs[],
+                      int glyphCount) const;
+
+    /**
+     *  Return the number of glyphs in the typeface.
+     */
+    int countGlyphs() const;
+
     // Table getters -- may fail if the underlying font format is not organized
     // as 4-byte tables.
 
@@ -201,7 +231,23 @@ public:
      *  collection.
      */
     SkStream* openStream(int* ttcIndex) const;
-    SkScalerContext* createScalerContext(const SkDescriptor*) const;
+
+    /**
+     *  Return a scalercontext for the given descriptor. If this fails, then
+     *  if allowFailure is true, this returns NULL, else it returns a
+     *  dummy scalercontext that will not crash, but will draw nothing.
+     */
+    SkScalerContext* createScalerContext(const SkDescriptor*,
+                                         bool allowFailure = false) const;
+
+    // PRIVATE / EXPERIMENTAL -- do not call
+    void filterRec(SkScalerContextRec* rec) const {
+        this->onFilterRec(rec);
+    }
+    // PRIVATE / EXPERIMENTAL -- do not call
+    void getFontDescriptor(SkFontDescriptor* desc, bool* isLocal) const {
+        this->onGetFontDescriptor(desc, isLocal);
+    }
 
 protected:
     /** uniqueID must be unique and non-zero
@@ -224,7 +270,11 @@ protected:
     virtual SkStream* onOpenStream(int* ttcIndex) const = 0;
     virtual void onGetFontDescriptor(SkFontDescriptor*, bool* isLocal) const = 0;
 
-    virtual int onGetUPEM() const;
+    virtual int onCharsToGlyphs(const void* chars, Encoding, uint16_t glyphs[],
+                                int glyphCount) const;
+    virtual int onCountGlyphs() const = 0;
+
+    virtual int onGetUPEM() const = 0;
 
     virtual int onGetTableTags(SkFontTableTag tags[]) const;
     virtual size_t onGetTableData(SkFontTableTag, size_t offset,

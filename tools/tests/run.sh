@@ -39,7 +39,7 @@ function compare_directories {
     echo "compare_directories requires exactly 2 parameters, got $#"
     exit 1
   fi
-  diff --exclude=.* $1 $2
+  diff --recursive --exclude=.* $1 $2
   if [ $? != 0 ]; then
     echo "failed in: compare_directories $1 $2"
     exit 1
@@ -67,26 +67,6 @@ function skdiff_test {
 
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
-
-SKDIFF_TESTDIR=tools/tests/skdiff
-
-# Run skdiff over a variety of file pair types: identical bits, identical pixels, missing from
-# baseDir, etc.
-skdiff_test "$SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test1"
-
-# Run skdiff over the same set of files, but with arguments as used by our buildbots:
-# - return the number of mismatching file pairs (but ignore any files missing from either
-#   baseDir or comparisonDir)
-# - list filenames with each result type to stdout
-# - don't generate HTML output files
-skdiff_test "--failonresult DifferentPixels --failonresult DifferentSizes --failonresult Unknown --failonstatus CouldNotDecode,CouldNotRead any --failonstatus any CouldNotDecode,CouldNotRead --listfilenames --nodiffs $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test2"
-
-# Run skdiff over just the files that have identical bits.
-skdiff_test "--nodiffs --match identical-bits $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits"
-
-# Run skdiff over just the files that have identical bits or identical pixels.
-skdiff_test "--nodiffs --match identical-bits --match identical-pixels $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits-or-pixels"
-
 
 # Download a subset of the raw bench data for platform $1 at revision $2.
 # (For the subset, download all files matching any of the suffixes in
@@ -149,6 +129,112 @@ function benchgraph_test {
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
 
+# Test rebaseline.py's soon-to-disappear image file rebaselining capability.
+#
+# Run rebaseline.py with arguments in $1, recording its dry-run output.
+# Then compare that dry-run output to the content of $2/output-expected.
+function rebaseline_images_test {
+  if [ $# != 2 ]; then
+    echo "rebaseline_test requires exactly 2 parameters, got $#"
+    exit 1
+  fi
+  ARGS="$1"
+  ACTUAL_OUTPUT_DIR="$2/output-actual"
+  EXPECTED_OUTPUT_DIR="$2/output-expected"
+
+  rm -rf $ACTUAL_OUTPUT_DIR
+  mkdir -p $ACTUAL_OUTPUT_DIR
+  COMMAND="python tools/rebaseline.py --dry-run $ARGS"
+  echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
+  $COMMAND &>$ACTUAL_OUTPUT_DIR/stdout
+  echo $? >$ACTUAL_OUTPUT_DIR/return_value
+
+  compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
+}
+
+# Test rebaseline.py's new JSON-format expectations rebaselining capability.
+#
+# Copy expected-result.json files from $1 into a dir where they can be modified.
+# Run rebaseline.py with arguments in $2, recording its output.
+# Then compare the output (and modified expected-result.json files) to the
+# content of $2/output-expected.
+function rebaseline_test {
+  if [ $# != 3 ]; then
+    echo "rebaseline_test requires exactly 3 parameters, got $#"
+    exit 1
+  fi
+  COPY_EXPECTATIONS_FROM_DIR="$1"
+  ARGS="$2"
+  ACTUAL_OUTPUT_DIR="$3/output-actual"
+  EXPECTED_OUTPUT_DIR="$3/output-expected"
+
+  rm -rf $ACTUAL_OUTPUT_DIR
+  mkdir -p $ACTUAL_OUTPUT_DIR
+  EXPECTATIONS_TO_MODIFY_DIR="$ACTUAL_OUTPUT_DIR/gm-expectations"
+  SUBDIRS=$(ls $COPY_EXPECTATIONS_FROM_DIR)
+  for SUBDIR in $SUBDIRS; do
+    mkdir -p $EXPECTATIONS_TO_MODIFY_DIR/$SUBDIR
+    cp $COPY_EXPECTATIONS_FROM_DIR/$SUBDIR/expected-results.json \
+       $EXPECTATIONS_TO_MODIFY_DIR/$SUBDIR
+  done
+  COMMAND="python tools/rebaseline.py --expectations-root $EXPECTATIONS_TO_MODIFY_DIR $ARGS"
+  echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
+  $COMMAND &>$ACTUAL_OUTPUT_DIR/stdout
+  echo $? >$ACTUAL_OUTPUT_DIR/return_value
+
+  compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
+}
+
+# Run jsondiff.py with arguments in $1, recording its output.
+# Then compare that output to the content of $2/output-expected.
+function jsondiff_test {
+  if [ $# != 2 ]; then
+    echo "jsondiff_test requires exactly 2 parameters, got $#"
+    exit 1
+  fi
+  ARGS="$1"
+  ACTUAL_OUTPUT_DIR="$2/output-actual"
+  EXPECTED_OUTPUT_DIR="$2/output-expected"
+
+  rm -rf $ACTUAL_OUTPUT_DIR
+  mkdir -p $ACTUAL_OUTPUT_DIR
+  COMMAND="python tools/jsondiff.py $ARGS"
+  echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
+  $COMMAND &>$ACTUAL_OUTPUT_DIR/stdout
+  echo $? >$ACTUAL_OUTPUT_DIR/return_value
+
+  compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
+}
+
+
+
+#
+# Run skdiff tests...
+#
+
+SKDIFF_TESTDIR=tools/tests/skdiff
+
+# Run skdiff over a variety of file pair types: identical bits, identical pixels, missing from
+# baseDir, etc.
+skdiff_test "$SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test1"
+
+# Run skdiff over the same set of files, but with arguments as used by our buildbots:
+# - return the number of mismatching file pairs (but ignore any files missing from either
+#   baseDir or comparisonDir)
+# - list filenames with each result type to stdout
+# - don't generate HTML output files
+skdiff_test "--failonresult DifferentPixels --failonresult DifferentSizes --failonresult Unknown --failonstatus CouldNotDecode,CouldNotRead any --failonstatus any CouldNotDecode,CouldNotRead --listfilenames --nodiffs $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/test2"
+
+# Run skdiff over just the files that have identical bits.
+skdiff_test "--nodiffs --match identical-bits $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits"
+
+# Run skdiff over just the files that have identical bits or identical pixels.
+skdiff_test "--nodiffs --match identical-bits --match identical-pixels $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits-or-pixels"
+
+#
+# Run benchgraph tests...
+#
+
 # Parse a collection of bench data leading up to
 # http://70.32.156.53:10117/builders/Skia_Shuttle_Ubuntu12_ATI5770_Float_Bench_32/builds/878/steps/GenerateWebpagePictureBenchGraphs/logs/stdio
 # (this was during the period when the bench data included a ton of per-tile,
@@ -159,5 +245,43 @@ benchgraph_download_rawdata $PLATFORM 7671 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVID
 benchgraph_download_rawdata $PLATFORM 7679 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
 benchgraph_download_rawdata $PLATFORM 7686 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
 benchgraph_test $PLATFORM
+
+#
+# Run self test for skimage ...
+#
+
+COMMAND="python tools/tests/skimage_self_test.py"
+echo "$COMMAND"
+$COMMAND
+ret=$?
+if [ $ret -ne 0 ]; then
+    echo "skimage self tests failed."
+    exit 1
+fi
+
+#
+# Test rebaseline.py ...
+#
+
+REBASELINE_INPUT=tools/tests/rebaseline/input
+REBASELINE_OUTPUT=tools/tests/rebaseline/output
+
+# These test the old image-file expectations.
+rebaseline_images_test "--expectations-root $REBASELINE_INPUT/fake-gm-expected-dir --actuals-base-url file:$REBASELINE_INPUT/json1 --tests nonexistenttest1 imageblur nonexistenttest2 --configs nonexistentconfig1 8888 nonexistentconfig2 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float" "$REBASELINE_OUTPUT/subset"
+rebaseline_images_test "--expectations-root $REBASELINE_INPUT/fake-gm-expected-dir --actuals-base-url file:$REBASELINE_INPUT/json1 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float" "$REBASELINE_OUTPUT/using-json1"
+rebaseline_images_test "--expectations-root $REBASELINE_INPUT/fake-gm-expected-dir --actuals-base-url file:$REBASELINE_INPUT/json1 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float --add-new" "$REBASELINE_OUTPUT/using-json1-add-new"
+rebaseline_images_test "--expectations-root $REBASELINE_INPUT --actuals-base-url file:$REBASELINE_INPUT/json1 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float" "$REBASELINE_OUTPUT/exercise-bug1403"
+
+# These test the new JSON-format expectations.
+rebaseline_test "$REBASELINE_INPUT/json1" "--actuals-base-url $REBASELINE_INPUT/json1 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float" "$REBASELINE_OUTPUT/using-json1-expectations"
+
+#
+# Test jsondiff.py ...
+#
+
+JSONDIFF_INPUT=tools/tests/jsondiff/input
+JSONDIFF_OUTPUT=tools/tests/jsondiff/output
+jsondiff_test "$JSONDIFF_INPUT/old.json $JSONDIFF_INPUT/new.json" "$JSONDIFF_OUTPUT/old-vs-new"
+
 
 echo "All tests passed."

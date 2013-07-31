@@ -183,10 +183,17 @@ bool SkImageDecoder_WIC::decodeStream(SkStream* stream, SkBitmap* bm, WICModes w
         hr = piImagingFactory->CreateFormatConverter(&piFormatConverter);
     }
 
+    GUID destinationPixelFormat;
+    if (this->getRequireUnpremultipliedColors()) {
+        destinationPixelFormat = GUID_WICPixelFormat32bppBGRA;
+    } else {
+        destinationPixelFormat = GUID_WICPixelFormat32bppPBGRA;
+    }
+
     if (SUCCEEDED(hr)) {
         hr = piFormatConverter->Initialize(
             piBitmapSourceOriginal.get()      //Input bitmap to convert
-            , GUID_WICPixelFormat32bppPBGRA   //Destination pixel format
+            , destinationPixelFormat          //Destination pixel format
             , WICBitmapDitherTypeNone         //Specified dither patterm
             , NULL                            //Specify a particular palette
             , 0.f                             //Alpha threshold
@@ -206,7 +213,7 @@ bool SkImageDecoder_WIC::decodeStream(SkStream* stream, SkBitmap* bm, WICModes w
     if (SUCCEEDED(hr)) {
         SkAutoLockPixels alp(*bm);
         bm->eraseColor(SK_ColorTRANSPARENT);
-        const int stride = bm->rowBytes();
+        const UINT stride = bm->rowBytes();
         hr = piBitmapSourceConverted->CopyPixels(
             NULL,                             //Get all the pixels
             stride,
@@ -389,10 +396,11 @@ bool SkImageEncoder_WIC::onEncode(SkWStream* stream
     //Write the pixels into the frame.
     if (SUCCEEDED(hr)) {
         SkAutoLockPixels alp(*bitmap);
+        const UINT stride = bitmap->rowBytes();
         hr = piBitmapFrameEncode->WritePixels(
             height
-            , bitmap->rowBytes()
-            , bitmap->rowBytes()*height
+            , stride
+            , stride * height
             , reinterpret_cast<BYTE*>(bitmap->getPixels()));
     }
 

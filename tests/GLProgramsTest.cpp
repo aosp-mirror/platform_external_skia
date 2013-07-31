@@ -118,8 +118,6 @@ void GrGLProgramDesc::setRandom(SkMWCRandom* random,
 
 bool GrGpuGL::programUnitTest(int maxStages) {
 
-    maxStages = GrMin(maxStages, (int)GrDrawState::kNumStages);
-
     GrTextureDesc dummyDesc;
     dummyDesc.fFlags = kRenderTarget_GrTextureFlagBit;
     dummyDesc.fConfig = kSkia8888_GrPixelConfig;
@@ -174,8 +172,8 @@ bool GrGpuGL::programUnitTest(int maxStages) {
             for (int i = 0; i < numAttribs; ++i) {
                 attribIndices[i] = currAttribIndex++;
             }
-            GrEffectStage* stage = SkNEW(GrEffectStage);
-            stage->setEffect(effect.get(), attribIndices[0], attribIndices[1]);
+            GrEffectStage* stage = SkNEW_ARGS(GrEffectStage,
+                                              (effect.get(), attribIndices[0], attribIndices[1]));
             stages[s] = stage;
         }
         const GrTexture* dstTexture = random.nextBool() ? dummyTextures[0] : dummyTextures[1];
@@ -190,7 +188,8 @@ bool GrGpuGL::programUnitTest(int maxStages) {
 
         SkAutoTUnref<GrGLProgram> program(GrGLProgram::Create(this->glContext(),
                                                               pdesc,
-                                                              stages.get()));
+                                                              stages,
+                                                              stages + numColorStages));
         for (int s = 0; s < numStages; ++s) {
             SkDELETE(stages[s]);
         }
@@ -206,7 +205,7 @@ static void GLProgramsTest(skiatest::Reporter* reporter, GrContextFactory* facto
         GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(type));
         if (NULL != context) {
             GrGpuGL* gpu = static_cast<GrGpuGL*>(context->getGpu());
-            int maxStages = GrDrawState::kNumStages;
+            int maxStages = 6;
 #if SK_ANGLE
             // Some long shaders run out of temporary registers in the D3D compiler on ANGLE.
             if (type == GrContextFactory::kANGLE_GLContextType) {

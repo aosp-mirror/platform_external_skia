@@ -1,27 +1,31 @@
 {
+  'variables': {
+    #manaully set sample_pdf_file_viewer to 1 to have the PdfViewer in SampleApp
+    'sample_pdf_file_viewer%': 0,
+  },
   'targets': [
     {
       'target_name': 'SampleApp',
       'type': 'executable',
       'mac_bundle' : 1,
       'include_dirs' : [
-        '../debugger',
         '../src/core',
         '../src/effects', #needed for BlurMask.h
         '../gm',       # needed to pull gm.h
         '../samplecode', # To pull SampleApp.h and SampleCode.h
         '../src/pipe/utils', # For TiledPipeController
+        '../src/utils/debugger',
       ],
       'includes': [
         'gmslides.gypi',
       ],
       'sources': [
-        '../debugger/SkDrawCommand.h',
-        '../debugger/SkDrawCommand.cpp',
-        '../debugger/SkDebugCanvas.h',
-        '../debugger/SkDebugCanvas.cpp',
-        '../debugger/SkObjectParser.h',
-        '../debugger/SkObjectParser.cpp',
+        '../src/utils/debugger/SkDrawCommand.h',
+        '../src/utils/debugger/SkDrawCommand.cpp',
+        '../src/utils/debugger/SkDebugCanvas.h',
+        '../src/utils/debugger/SkDebugCanvas.cpp',
+        '../src/utils/debugger/SkObjectParser.h',
+        '../src/utils/debugger/SkObjectParser.cpp',
 
         '../gm/gm.cpp',
         '../gm/gm.h',
@@ -53,7 +57,6 @@
         '../samplecode/SampleComplexClip.cpp',
         '../samplecode/SampleConcavePaths.cpp',
         '../samplecode/SampleCull.cpp',
-        '../samplecode/SampleDecode.cpp',
         '../samplecode/SampleDegenerateTwoPtRadials.cpp',
         '../samplecode/SampleDither.cpp',
         '../samplecode/SampleDitherBitmap.cpp',
@@ -86,6 +89,7 @@
         '../samplecode/SamplePatch.cpp',
         '../samplecode/SamplePath.cpp',
         '../samplecode/SamplePathClip.cpp',
+        '../samplecode/SamplePathUtils.cpp',
         '../samplecode/SamplePathEffects.cpp',
         '../samplecode/SamplePicture.cpp',
         '../samplecode/SamplePictFile.cpp',
@@ -99,7 +103,6 @@
         '../samplecode/SampleSkLayer.cpp',
         '../samplecode/SampleSlides.cpp',
         '../samplecode/SampleStrokePath.cpp',
-        '../samplecode/SampleStrokeText.cpp',
         '../samplecode/SampleTests.cpp',
         '../samplecode/SampleText.cpp',
         '../samplecode/SampleTextAlpha.cpp',
@@ -109,6 +112,7 @@
         '../samplecode/SampleTiling.cpp',
         '../samplecode/SampleTinyBitmap.cpp',
         '../samplecode/SampleUnitMapper.cpp',
+        '../samplecode/SampleUnpremul.cpp',
         '../samplecode/SampleVertices.cpp',
         '../samplecode/SampleXfermodesBlur.cpp',
         '../samplecode/TransitionView.cpp',
@@ -142,9 +146,7 @@
         '../samplecode/SampleFontCache.cpp',
       ],
       'dependencies': [
-        'skia_base_libs.gyp:skia_base_libs',
-        'effects.gyp:effects',
-        'images.gyp:images',
+        'skia_lib.gyp:skia_lib',
         'views.gyp:views',
         'animator.gyp:animator',
         'xml.gyp:xml',
@@ -153,12 +155,21 @@
         'views_animated.gyp:views_animated',
         'lua.gyp:lua',
       ],
-      'conditions' : [
-       [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
-         'sources!': [
-            '../samplecode/SampleDecode.cpp',
+     'conditions' : [
+       [ 'sample_pdf_file_viewer == 1', {
+         'defines': [
+           'SAMPLE_PDF_FILE_VIEWER',
          ],
-        }],
+         'dependencies': [
+           'pdfviewer.gyp:libpdfviewer',
+         ],
+         'include_dirs' : [
+           '../experimental/PdfViewer/',
+         ],
+         'sources': [
+           '../samplecode/SamplePdfFileViewer.cpp',
+         ]
+       }],
         [ 'skia_os == "win"', {
           'sources!': [
             # require UNIX functions
@@ -166,9 +177,6 @@
           ],
         }],
         [ 'skia_os == "mac"', {
-          'sources!': [
-            '../samplecode/SampleDecode.cpp',
-          ],
           'sources': [
             # Sample App specific files
             '../src/views/mac/SampleApp-Info.plist',

@@ -341,12 +341,12 @@ GrEffectRef* GrBicubicEffect::TestCreate(SkMWCRandom* random,
     return GrBicubicEffect::Create(textures[texIdx], coefficients);
 }
 
-bool SkBicubicImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, SkBitmap* result) {
+bool SkBicubicImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, SkBitmap* result, SkIPoint* offset) {
     SkBitmap srcBM;
-    if (!SkImageFilterUtils::GetInputResultGPU(getInput(0), proxy, src, &srcBM)) {
+    if (!SkImageFilterUtils::GetInputResultGPU(getInput(0), proxy, src, &srcBM, offset)) {
         return false;
     }
-    GrTexture* srcTexture = (GrTexture*) srcBM.getTexture();
+    GrTexture* srcTexture = srcBM.getTexture();
     GrContext* context = srcTexture->getContext();
 
     SkRect dstRect = SkRect::MakeWH(srcBM.width() * fScale.fWidth,
@@ -365,7 +365,7 @@ bool SkBicubicImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, SkB
     }
     GrContext::AutoRenderTarget art(context, dst->asRenderTarget());
     GrPaint paint;
-    paint.colorStage(0)->setEffect(GrBicubicEffect::Create(srcTexture, fCoefficients))->unref();
+    paint.addColorEffect(GrBicubicEffect::Create(srcTexture, fCoefficients))->unref();
     SkRect srcRect;
     srcBM.getBounds(&srcRect);
     context->drawRectToRect(paint, dstRect, srcRect);

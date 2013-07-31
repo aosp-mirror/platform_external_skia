@@ -163,7 +163,7 @@ public:
     virtual uint32_t getDeviceCapabilities() SK_OVERRIDE;
     virtual int width() const SK_OVERRIDE;
     virtual int height() const SK_OVERRIDE;
-    virtual SkGpuRenderTarget* accessRenderTarget() SK_OVERRIDE;
+    virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE;
 
     virtual SkDevice* onCreateCompatibleDevice(SkBitmap::Config config,
                                                int width, int height,
@@ -186,58 +186,59 @@ protected:
 
     // None of the following drawing methods should ever get called on the
     // deferred device
-    virtual void clear(SkColor color)
+    virtual void clear(SkColor color) SK_OVERRIDE
         {SkASSERT(0);}
-    virtual void drawPaint(const SkDraw&, const SkPaint& paint)
+    virtual void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawPoints(const SkDraw&, SkCanvas::PointMode mode,
                             size_t count, const SkPoint[],
-                            const SkPaint& paint)
+                            const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawRect(const SkDraw&, const SkRect& r,
-                            const SkPaint& paint)
+                            const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawPath(const SkDraw&, const SkPath& path,
                             const SkPaint& paint,
                             const SkMatrix* prePathMatrix = NULL,
-                            bool pathIsMutable = false)
+                            bool pathIsMutable = false) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkIRect* srcRectOrNull,
-                            const SkMatrix& matrix, const SkPaint& paint)
+                            const SkMatrix& matrix, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
-                            int x, int y, const SkPaint& paint)
+                            int x, int y, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawText(const SkDraw&, const void* text, size_t len,
-                            SkScalar x, SkScalar y, const SkPaint& paint)
+                            SkScalar x, SkScalar y, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawPosText(const SkDraw&, const void* text, size_t len,
                                 const SkScalar pos[], SkScalar constY,
-                                int scalarsPerPos, const SkPaint& paint)
+                                int scalarsPerPos, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawTextOnPath(const SkDraw&, const void* text,
                                 size_t len, const SkPath& path,
                                 const SkMatrix* matrix,
-                                const SkPaint& paint)
+                                const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
+#ifdef SK_BUILD_FOR_ANDROID
     virtual void drawPosTextOnPath(const SkDraw& draw, const void* text,
                                     size_t len, const SkPoint pos[],
                                     const SkPaint& paint,
                                     const SkPath& path,
-                                    const SkMatrix* matrix)
+                                    const SkMatrix* matrix) SK_OVERRIDE
         {SkASSERT(0);}
+#endif
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode,
                                 int vertexCount, const SkPoint verts[],
                                 const SkPoint texs[], const SkColor colors[],
                                 SkXfermode* xmode, const uint16_t indices[],
-                                int indexCount, const SkPaint& paint)
+                                int indexCount, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawDevice(const SkDraw&, SkDevice*, int x, int y,
-                            const SkPaint&)
+                            const SkPaint&) SK_OVERRIDE
         {SkASSERT(0);}
 private:
-    virtual void flush();
+    virtual void flush() SK_OVERRIDE;
 
     void beginRecording();
     void init();
@@ -435,7 +436,7 @@ int DeferredDevice::height() const {
     return immediateDevice()->height();
 }
 
-SkGpuRenderTarget* DeferredDevice::accessRenderTarget() {
+GrRenderTarget* DeferredDevice::accessRenderTarget() {
     this->flushPendingCommands(kNormal_PlaybackMode);
     return immediateDevice()->accessRenderTarget();
 }
@@ -527,6 +528,7 @@ private:
     SkDeferredCanvas* fCanvas;
 };
 
+#if !SK_DEFERRED_CANVAS_USES_FACTORIES
 SkDeferredCanvas::SkDeferredCanvas() {
     this->init();
 }
@@ -539,6 +541,23 @@ SkDeferredCanvas::SkDeferredCanvas(SkDevice* device) {
 SkDeferredCanvas::SkDeferredCanvas(SkSurface* surface) {
     this->init();
     this->INHERITED::setDevice(SkNEW_ARGS(DeferredDevice, (surface)))->unref();
+}
+#endif
+
+SkDeferredCanvas* SkDeferredCanvas::Create(SkSurface* surface) {
+    SkAutoTUnref<DeferredDevice> deferredDevice(SkNEW_ARGS(DeferredDevice, (surface)));
+    return SkNEW_ARGS(SkDeferredCanvas, (deferredDevice));
+}
+
+#ifdef SK_DEVELOPER
+SkDeferredCanvas* SkDeferredCanvas::Create(SkDevice* device) {
+    SkAutoTUnref<DeferredDevice> deferredDevice(SkNEW_ARGS(DeferredDevice, (device)));
+    return SkNEW_ARGS(SkDeferredCanvas, (deferredDevice));
+}
+#endif
+
+SkDeferredCanvas::SkDeferredCanvas(DeferredDevice* device) : SkCanvas (device) {
+    this->init();
 }
 
 void SkDeferredCanvas::init() {
@@ -622,20 +641,21 @@ SkDeferredCanvas::~SkDeferredCanvas() {
 }
 
 SkDevice* SkDeferredCanvas::setDevice(SkDevice* device) {
+#if SK_DEFERRED_CANVAS_USES_FACTORIES
+    SkASSERT(0); // setDevice is deprecated
+#else
     this->INHERITED::setDevice(SkNEW_ARGS(DeferredDevice, (device)))->unref();
+#endif
     return device;
 }
 
 SkSurface* SkDeferredCanvas::setSurface(SkSurface* surface) {
     DeferredDevice* deferredDevice = this->getDeferredDevice();
-    if (NULL != deferredDevice) {
-        // By swapping the surface into the existing device, we preserve
-        // all pending commands, which can help to seamlessly recover from
-        // a lost accelerated graphics context.
-        deferredDevice->setSurface(surface);
-    } else {
-        this->INHERITED::setDevice(SkNEW_ARGS(DeferredDevice, (surface)))->unref();
-    }
+    SkASSERT(NULL != deferredDevice);
+    // By swapping the surface into the existing device, we preserve
+    // all pending commands, which can help to seamlessly recover from
+    // a lost accelerated graphics context.
+    deferredDevice->setSurface(surface);
     return surface;
 }
 

@@ -11,10 +11,22 @@
 #include "SkGeometry.h"
 #include "SkPaint.h"
 #include "SkPath.h"
+#include "SkPDFResourceDict.h"
 #include "SkPDFUtils.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "SkPDFTypes.h"
+
+//static
+SkPDFArray* SkPDFUtils::RectToArray(const SkRect& rect) {
+    SkPDFArray* result = new SkPDFArray();
+    result->reserve(4);
+    result->appendScalar(rect.fLeft);
+    result->appendScalar(rect.fTop);
+    result->appendScalar(rect.fRight);
+    result->appendScalar(rect.fBottom);
+    return result;
+}
 
 // static
 SkPDFArray* SkPDFUtils::MatrixToArray(const SkMatrix& matrix) {
@@ -206,14 +218,32 @@ void SkPDFUtils::StrokePath(SkWStream* content) {
 
 // static
 void SkPDFUtils::DrawFormXObject(int objectIndex, SkWStream* content) {
-    content->writeText("/X");
-    content->writeDecAsText(objectIndex);
+    content->writeText("/");
+    content->writeText(SkPDFResourceDict::getResourceName(
+            SkPDFResourceDict::kXObject_ResourceType,
+            objectIndex).c_str());
     content->writeText(" Do\n");
 }
 
 // static
 void SkPDFUtils::ApplyGraphicState(int objectIndex, SkWStream* content) {
-    content->writeText("/G");
-    content->writeDecAsText(objectIndex);
+    content->writeText("/");
+    content->writeText(SkPDFResourceDict::getResourceName(
+            SkPDFResourceDict::kExtGState_ResourceType,
+            objectIndex).c_str());
     content->writeText(" gs\n");
+}
+
+// static
+void SkPDFUtils::ApplyPattern(int objectIndex, SkWStream* content) {
+    // Select Pattern color space (CS, cs) and set pattern object as current
+    // color (SCN, scn)
+    SkString resourceName = SkPDFResourceDict::getResourceName(
+            SkPDFResourceDict::kPattern_ResourceType,
+            objectIndex);
+    content->writeText("/Pattern CS/Pattern cs/");
+    content->writeText(resourceName.c_str());
+    content->writeText(" SCN/");
+    content->writeText(resourceName.c_str());
+    content->writeText(" scn\n");
 }

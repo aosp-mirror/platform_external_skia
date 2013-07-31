@@ -20,7 +20,7 @@ static SkOpSegment* findChaseOp(SkTDArray<SkOpSpan*>& chase, int& nextStart, int
         const SkOpSpan& backPtr = span->fOther->span(span->fOtherIndex);
         SkOpSegment* segment = backPtr.fOther;
         nextStart = backPtr.fOtherIndex;
-        SkTDArray<SkOpAngle> angles;
+        SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle, true> angles;
         int done = 0;
         if (segment->activeAngle(nextStart, &done, &angles)) {
             SkOpAngle* last = angles.end() - 1;
@@ -36,11 +36,12 @@ static SkOpSegment* findChaseOp(SkTDArray<SkOpSpan*>& chase, int& nextStart, int
         if (done == angles.count()) {
             continue;
         }
-        SkTDArray<SkOpAngle*> sorted;
-        bool sortable = SkOpSegment::SortAngles(angles, &sorted);
+        SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle*, true> sorted;
+        bool sortable = SkOpSegment::SortAngles(angles, &sorted,
+                SkOpSegment::kMayBeUnordered_SortAngleKind);
         int angleCount = sorted.count();
 #if DEBUG_SORT
-        sorted[0]->segment()->debugShowSort(__FUNCTION__, sorted, 0);
+        sorted[0]->segment()->debugShowSort(__FUNCTION__, sorted, 0, sortable);
 #endif
         if (!sortable) {
             continue;
@@ -53,7 +54,7 @@ static SkOpSegment* findChaseOp(SkTDArray<SkOpSpan*>& chase, int& nextStart, int
             segment = angle->segment();
         } while (segment->windSum(angle) == SK_MinS32);
     #if DEBUG_SORT
-        segment->debugShowSort(__FUNCTION__, sorted, firstIndex);
+        segment->debugShowSort(__FUNCTION__, sorted, firstIndex, sortable);
     #endif
         int sumMiWinding = segment->updateWindingReverse(angle);
         int sumSuWinding = segment->updateOppWindingReverse(angle);
@@ -125,7 +126,7 @@ static bool windingIsActive(int winding, int oppWinding, int spanWinding, int op
 }
 */
 
-static bool bridgeOp(SkTDArray<SkOpContour*>& contourList, const SkPathOp op,
+static bool bridgeOp(SkTArray<SkOpContour*, true>& contourList, const SkPathOp op,
         const int xorMask, const int xorOpMask, SkPathWriter* simple) {
     bool firstContour = true;
     bool unsortable = false;
@@ -231,10 +232,12 @@ static const bool gOutInverse[kReverseDifference_PathOp + 1][2][2] = {
 };
 
 bool Op(const SkPath& one, const SkPath& two, SkPathOp op, SkPath* result) {
-#if DEBUG_SHOW_PATH
-    ShowPath(one, "path");
-    ShowPath(two, "pathB");
-    ShowOp(op, "path", "pathB");
+#if DEBUG_SHOW_TEST_NAME
+    char* debugName = DEBUG_FILENAME_STRING;
+    if (debugName && debugName[0]) {
+        DebugBumpTestName(debugName);
+        DebugShowPath(one, two, op, debugName);
+    }
 #endif
     op = gOpInverse[op][one.isInverseFillType()][two.isInverseFillType()];
     SkPath::FillType fillType = gOutInverse[op][one.isInverseFillType()][two.isInverseFillType()]
@@ -261,7 +264,7 @@ bool Op(const SkPath& one, const SkPath& two, SkPathOp op, SkPath* result) {
     result->reset();
     result->setFillType(fillType);
     const int xorOpMask = builder.xorMask();
-    SkTDArray<SkOpContour*> contourList;
+    SkTArray<SkOpContour*, true> contourList;
     MakeContourList(contours, contourList, xorMask == kEvenOdd_PathOpsMask,
             xorOpMask == kEvenOdd_PathOpsMask);
     SkOpContour** currentPtr = contourList.begin();
@@ -296,6 +299,7 @@ bool Op(const SkPath& one, const SkPath& two, SkPathOp op, SkPath* result) {
     SkOpContour::debugShowWindingValues(contourList);
 #endif
     FixOtherTIndex(&contourList);
+    CheckEnds(&contourList);
     SortSegments(&contourList);
 #if DEBUG_ACTIVE_SPANS || DEBUG_ACTIVE_SPANS_FIRST_ONLY
     DebugShowActiveSpans(contourList);

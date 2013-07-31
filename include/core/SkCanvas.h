@@ -712,9 +712,9 @@ public:
      *  bitmap is the "center", then the center-rect should be [2, 2, 3, 3].
      *
      *  If the dst is >= the bitmap size, then...
-     *  - The 4 corners are not stretch at all.
-     *  - The sides are stretch in only one axis.
-     *  - The center is stretch in both axes.
+     *  - The 4 corners are not stretched at all.
+     *  - The sides are stretched in only one axis.
+     *  - The center is stretched in both axes.
      * Else, for each axis where dst < bitmap,
      *  - The corners shrink proportionally
      *  - The sides (along the shrink axis) and center are not drawn
@@ -859,7 +859,24 @@ public:
         subclasses like SkPicture's recording canvas, that can store the data
         and then play it back later (via another call to drawData).
      */
-    virtual void drawData(const void* data, size_t length);
+    virtual void drawData(const void* data, size_t length) {
+        // do nothing. Subclasses may do something with the data
+    }
+
+    /** Add comments. beginCommentGroup/endCommentGroup open/close a new group.
+        Each comment added via addComment is notionally attached to its
+        enclosing group. Top-level comments simply belong to no group.
+     */
+    virtual void beginCommentGroup(const char* description) {
+        // do nothing. Subclasses may do something
+    }
+    virtual void addComment(const char* kywd, const char* value) {
+        // do nothing. Subclasses may do something
+    }
+    virtual void endCommentGroup() {
+        // do nothing. Subclasses may do something
+    }
+
 
     //////////////////////////////////////////////////////////////////////////
 
@@ -992,14 +1009,15 @@ protected:
     // is not released or deleted by the caller.
     virtual SkCanvas* canvasForDrawIter();
 
-    // all of the drawBitmap variants call this guy
-    void commonDrawBitmap(const SkBitmap&, const SkIRect*, const SkMatrix&,
-                          const SkPaint& paint);
-
     // Clip rectangle bounds. Called internally by saveLayer.
     // returns false if the entire rectangle is entirely clipped out
     bool clipRectBounds(const SkRect* bounds, SaveFlags flags,
                         SkIRect* intersection);
+
+    // Called by child classes that override clipPath and clipRRect to only
+    // track fast conservative clip bounds, rather than exact clips.
+    bool updateClipConservativelyUsingBounds(const SkRect&, SkRegion::Op,
+                                             bool inverseFilled);
 
     // notify our surface (if we have one) that we are about to draw, so it
     // can perform copy-on-write or invalidate any cached images
@@ -1057,8 +1075,7 @@ private:
 
     // internal methods are not virtual, so they can safely be called by other
     // canvas apis, without confusing subclasses (like SkPictureRecording)
-    void internalDrawBitmap(const SkBitmap&, const SkIRect*, const SkMatrix& m,
-                                  const SkPaint* paint);
+    void internalDrawBitmap(const SkBitmap&, const SkMatrix& m, const SkPaint* paint);
     void internalDrawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
                                 const SkRect& dst, const SkPaint* paint);
     void internalDrawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
@@ -1148,6 +1165,27 @@ public:
 private:
     SkCanvas*   fCanvas;
     int         fSaveCount;
+};
+
+/** Stack helper class to automatically open and close a comment block
+ */
+class SkAutoCommentBlock : SkNoncopyable {
+public:
+    SkAutoCommentBlock(SkCanvas* canvas, const char* description) {
+        fCanvas = canvas;
+        if (NULL != fCanvas) {
+            fCanvas->beginCommentGroup(description);
+        }
+    }
+
+    ~SkAutoCommentBlock() {
+        if (NULL != fCanvas) {
+            fCanvas->endCommentGroup();
+        }
+    }
+
+private:
+    SkCanvas* fCanvas;
 };
 
 #endif

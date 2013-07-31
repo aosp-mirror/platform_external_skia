@@ -394,8 +394,7 @@ int SkChopQuadAtXExtrema(const SkPoint src[3], SkPoint dst[5])
 //
 //  t = - (Ax Bx + Ay By) / (Bx ^ 2 + By ^ 2)
 //
-int SkChopQuadAtMaxCurvature(const SkPoint src[3], SkPoint dst[5])
-{
+float SkFindQuadMaxCurvature(const SkPoint src[3]) {
     SkScalar    Ax = src[1].fX - src[0].fX;
     SkScalar    Ay = src[1].fY - src[0].fY;
     SkScalar    Bx = src[0].fX - src[1].fX - src[1].fX + src[2].fX;
@@ -427,14 +426,16 @@ int SkChopQuadAtMaxCurvature(const SkPoint src[3], SkPoint dst[5])
         }
     }
 #endif
+    return t;
+}
 
-    if (t == 0)
-    {
+int SkChopQuadAtMaxCurvature(const SkPoint src[3], SkPoint dst[5])
+{
+    SkScalar t = SkFindQuadMaxCurvature(src);
+    if (t == 0) {
         memcpy(dst, src, 3 * sizeof(SkPoint));
         return 1;
-    }
-    else
-    {
+    } else {
         SkChopQuadAt(src, dst, t);
         return 2;
     }
@@ -1061,8 +1062,7 @@ int SkChopCubicAtMaxCurvature(const SkPoint src[4], SkPoint dst[13], SkScalar tV
 
     int count = SkFindCubicMaxCurvature(src, tValues);
 
-    if (dst)
-    {
+    if (dst) {
         if (count == 0)
             memcpy(dst, src, 4 * sizeof(SkPoint));
         else
@@ -1185,7 +1185,6 @@ int SkNumXRayCrossingsForCubic(const SkXRay& pt, const SkPoint cubic[4], bool* a
     }
     return num_crossings;
 }
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /*  Find t value for quadratic [a, b, c] = d.
@@ -1205,11 +1204,13 @@ static SkScalar quad_solve(SkScalar a, SkScalar b, SkScalar c, SkScalar d)
     return count == 1 ? roots[0] : 0;
 }
 
-/*  given a quad-curve and a point (x,y), chop the quad at that point and return
-    the new quad's offCurve point. Should only return false if the computed pos
-    is the start of the curve (i.e. root == 0)
+/*  given a quad-curve and a point (x,y), chop the quad at that point and place
+    the new off-curve point and endpoint into 'dest'. The new end point is used
+    (rather than (x,y)) to compensate for numerical inaccuracies.
+    Should only return false if the computed pos is the start of the curve
+    (i.e. root == 0)
 */
-static bool quad_pt2OffCurve(const SkPoint quad[3], SkScalar x, SkScalar y, SkPoint* offCurve)
+static bool truncate_last_curve(const SkPoint quad[3], SkScalar x, SkScalar y, SkPoint* dest)
 {
     const SkScalar* base;
     SkScalar        value;
@@ -1230,7 +1231,8 @@ static bool quad_pt2OffCurve(const SkPoint quad[3], SkScalar x, SkScalar y, SkPo
     {
         SkPoint tmp[5];
         SkChopQuadAt(quad, tmp, t);
-        *offCurve = tmp[1];
+        dest[0] = tmp[1];
+        dest[1] = tmp[2];
         return true;
     } else {
         /*  t == 0 means either the value triggered a root outside of [0, 1)
@@ -1247,7 +1249,8 @@ static bool quad_pt2OffCurve(const SkPoint quad[3], SkScalar x, SkScalar y, SkPo
         if ((base[0] < base[4] && value > base[2]) ||
             (base[0] > base[4] && value < base[2]))   // should root have been 1
         {
-            *offCurve = quad[1];
+            dest[0] = quad[1];
+            dest[1].set(x, y);
             return true;
         }
     }
@@ -1360,9 +1363,8 @@ int SkBuildQuadArc(const SkVector& uStart, const SkVector& uStop,
         memcpy(quadPoints, gQuadCirclePts, (wholeCount + 1) * sizeof(SkPoint));
 
         const SkPoint* arc = &gQuadCirclePts[wholeCount];
-        if (quad_pt2OffCurve(arc, x, y, &quadPoints[wholeCount + 1]))
+        if (truncate_last_curve(arc, x, y, &quadPoints[wholeCount + 1]))
         {
-            quadPoints[wholeCount + 2].set(x, y);
             wholeCount += 2;
         }
         pointCount = wholeCount + 1;

@@ -339,6 +339,9 @@ SIMPLE_TEST_STEP(DrawTextOnPath, drawTextOnPath(kTestText.c_str(),
 SIMPLE_TEST_STEP(DrawTextOnPathMatrix, drawTextOnPath(kTestText.c_str(),
     kTestText.size(), kTestPath, &kTestMatrix, kTestPaint));
 SIMPLE_TEST_STEP(DrawData, drawData(kTestText.c_str(), kTestText.size()));
+SIMPLE_TEST_STEP(BeginGroup, beginCommentGroup(kTestText.c_str()));
+SIMPLE_TEST_STEP(AddComment, addComment(kTestText.c_str(), kTestText.c_str()));
+SIMPLE_TEST_STEP(EndGroup, endCommentGroup());
 
 ///////////////////////////////////////////////////////////////////////////////
 // Complex test steps
@@ -777,24 +780,29 @@ public:
         SkBitmap deferredStore;
         createBitmap(&deferredStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
         SkDevice deferredDevice(deferredStore);
-        SkDeferredCanvas deferredCanvas(&deferredDevice);
+        SkAutoTUnref<SkDeferredCanvas> deferredCanvas(
+#if SK_DEFERRED_CANVAS_USES_FACTORIES
+            SkDeferredCanvas::Create(&deferredDevice));
+#else
+            SkNEW_ARGS(SkDeferredCanvas, (&deferredDevice)));
+#endif
         testStep->setAssertMessageFormat(kDeferredDrawAssertMessageFormat);
-        testStep->draw(&deferredCanvas, reporter);
+        testStep->draw(deferredCanvas, reporter);
         testStep->setAssertMessageFormat(kDeferredPreFlushAssertMessageFormat);
-        AssertCanvasStatesEqual(reporter, &deferredCanvas, &referenceCanvas,
+        AssertCanvasStatesEqual(reporter, deferredCanvas, &referenceCanvas,
             testStep);
 
         if (silent) {
-            deferredCanvas.silentFlush();
+            deferredCanvas->silentFlush();
         } else {
-            deferredCanvas.flush();
+            deferredCanvas->flush();
         }
 
         testStep->setAssertMessageFormat(
             silent ? kDeferredPostSilentFlushPlaybackAssertMessageFormat :
             kDeferredPostFlushPlaybackAssertMessageFormat);
         AssertCanvasStatesEqual(reporter,
-            deferredCanvas.immediateCanvas(),
+            deferredCanvas->immediateCanvas(),
             &referenceCanvas, testStep);
 
         // Verified that deferred canvas state is not affected by flushing

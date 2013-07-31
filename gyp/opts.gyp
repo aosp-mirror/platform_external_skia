@@ -23,16 +23,17 @@
       'product_name': 'skia_opts',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        'core.gyp:*',
+      ],
       'include_dirs': [
-        '../include/config',
-        '../include/core',
         '../src/core',
         '../src/opts',
       ],
       'conditions': [
         [ 'skia_arch_type == "x86" and skia_os != "ios"', {
           'conditions': [
-            [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
+            [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]', {
               'cflags': [
                 '-msse2',
               ],
@@ -43,9 +44,13 @@
               ],
             }],
           ],
+          'include_dirs': [
+            '../include/utils',
+          ],
           'sources': [
             '../src/opts/opts_check_SSE2.cpp',
             '../src/opts/SkBitmapProcState_opts_SSE2.cpp',
+            '../src/opts/SkBitmapFilter_opts_SSE2.cpp',
             '../src/opts/SkBlitRow_opts_SSE2.cpp',
             '../src/opts/SkBlitRect_opts_SSE2.cpp',
             '../src/opts/SkUtils_opts_SSE2.cpp',
@@ -107,13 +112,14 @@
       'product_name': 'skia_opts_ssse3',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        'core.gyp:*',
+      ],
       'include_dirs': [
-        '../include/config',
-        '../include/core',
         '../src/core',
       ],
       'conditions': [
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]', {
           'cflags': [
             '-mssse3',
           ],
@@ -142,9 +148,10 @@
       'product_name': 'skia_opts_neon',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        'core.gyp:*',
+      ],
       'include_dirs': [
-        '../include/config',
-        '../include/core',
         '../src/core',
         '../src/opts',
       ],

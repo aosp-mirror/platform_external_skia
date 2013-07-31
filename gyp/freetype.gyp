@@ -2,8 +2,50 @@
   'targets': [
     {
       'target_name': 'freetype',
+      'type': 'none',
+      'conditions': [
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
+          'direct_dependent_settings': {
+            'include_dirs' : [
+              '/usr/include/freetype2',
+            ],
+            'link_settings': {
+              'libraries': [
+                '-lfreetype',
+              ],
+              'defines': [
+                #The font host requires at least FreeType 2.3.0 at runtime.
+                'SK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020300',\
+                'SK_CAN_USE_DLOPEN=1',
+              ],
+            }
+          },
+        }],
+        [ 'skia_os in ["android", "nacl"]', {
+          'dependencies': [
+            'freetype_static'
+          ],
+          'export_dependent_settings': [
+            'freetype_static'
+          ],
+          'direct_dependent_settings': {
+            'defines': [
+              # Both Android and NaCl provide at least FreeType 2.4.0
+              'SK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400',
+              'SK_CAN_USE_DLOPEN=0',
+            ],
+          },
+        }],
+      ],
+    },
+    {
+      'target_name': 'freetype_static',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        # we are dependent upon PNG for color emoji glyphs
+        'images.gyp:images'
+      ],
       'sources': [
         # base components (required)
         '../third_party/externals/freetype/src/base/ftsystem.c',
@@ -37,11 +79,11 @@
 
         # auxiliary modules (optional)
         '../third_party/externals/freetype/src/autofit/autofit.c',   # auto hinting module
-        '../third_party/externals/freetype/src/psaux/psaux.c',       # PostScript Type 1 parsing
         '../third_party/externals/freetype/src/pshinter/pshinter.c', # PS hinting module
         '../third_party/externals/freetype/src/psnames/psnames.c',   # PostScript glyph names support
       ],
       'include_dirs': [
+        '../third_party/freetype/include_overrides',
         '../third_party/externals/freetype/internal',
         '../third_party/externals/freetype/builds',
         '../third_party/externals/freetype/include',
@@ -52,10 +94,16 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [
+          '../third_party/freetype/include_overrides',
           '../third_party/externals/freetype/include',
         ],
       },
       'conditions': [
+        [ 'skia_warnings_as_errors', {
+          'cflags!': [
+            '-Werror',
+          ],
+        }],
         [ 'skia_os == "mac"', {
           'sources': [
             '../third_party/externals/freetype/src/base/ftmac.c',        # only on the Macintosh

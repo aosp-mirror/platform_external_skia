@@ -379,6 +379,11 @@ enum GrTextureFlags {
      * Hint that the CPU may modify this texture after creation.
      */
     kDynamicUpdate_GrTextureFlagBit = 0x4,
+    /**
+     * Indicates that all allocations (color buffer, FBO completeness, etc)
+     * should be verified.
+     */
+    kCheckAllocation_GrTextureFlagBit  = 0x8,
 
     kDummy_GrTextureFlagBit,
     kLastPublic_GrTextureFlagBit = kDummy_GrTextureFlagBit-1,
@@ -594,6 +599,31 @@ struct GrBackendRenderTargetDesc {
      */
     GrBackendObject                 fRenderTargetHandle;
 };
+
+/**
+ * The GrContext's cache of backend context state can be partially invalidated.
+ * These enums are specific to the GL backend and we'd add a new set for an alternative backend.
+ */
+enum GrGLBackendState {
+    kRenderTarget_GrGLBackendState     = 1 << 0,
+    kTextureBinding_GrGLBackendState   = 1 << 1,
+    // View state stands for scissor and viewport
+    kView_GrGLBackendState             = 1 << 2,
+    kBlend_GrGLBackendState            = 1 << 3,
+    kAA_GrGLBackendState               = 1 << 4,
+    kVertex_GrGLBackendState           = 1 << 5,
+    kStencil_GrGLBackendState          = 1 << 6,
+    kPixelStore_GrGLBackendState       = 1 << 7,
+    kProgram_GrGLBackendState          = 1 << 8,
+    kPathStencil_GrGLBackendState      = 1 << 9,
+    kMisc_GrGLBackendState             = 1 << 10,
+    kALL_GrGLBackendState              = 0xffff
+};
+
+/**
+ * This value translates to reseting all the context state for any backend.
+ */
+static const uint32_t kAll_GrBackendState = 0xffffffff;
 
 ///////////////////////////////////////////////////////////////////////////////
 

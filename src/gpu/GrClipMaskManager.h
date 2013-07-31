@@ -10,8 +10,8 @@
 #define GrClipMaskManager_DEFINED
 
 #include "GrContext.h"
+#include "GrDrawState.h"
 #include "GrNoncopyable.h"
-#include "GrRect.h"
 #include "GrReducedClip.h"
 #include "GrStencil.h"
 #include "GrTexture.h"
@@ -29,7 +29,6 @@ class GrPathRenderer;
 class GrPathRendererChain;
 class SkPath;
 class GrTexture;
-class GrDrawState;
 
 /**
  * The clip mask creator handles the generation of the clip mask. If anti
@@ -51,7 +50,7 @@ public:
      * and sets the GrGpu's scissor and stencil state. If the return is false
      * then the draw can be skipped.
      */
-    bool setupClipping(const GrClipData* clipDataIn);
+    bool setupClipping(const GrClipData* clipDataIn, GrDrawState::AutoRestoreEffects*);
 
     void releaseResources();
 
@@ -142,13 +141,13 @@ private:
     void mergeMask(GrTexture* dstMask,
                    GrTexture* srcMask,
                    SkRegion::Op op,
-                   const GrIRect& dstBound,
-                   const GrIRect& srcBound);
+                   const SkIRect& dstBound,
+                   const SkIRect& srcBound);
 
     void getTemp(int width, int height, GrAutoScratchTexture* temp);
 
     void setupCache(const SkClipStack& clip,
-                    const GrIRect& bounds);
+                    const SkIRect& bounds);
 
     /**
      * Called prior to return control back the GrGpu in setupClipping. It

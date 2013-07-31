@@ -304,7 +304,7 @@ SkDPoint SkDCubic::top(double startT, double endT) const {
         int roots = FindExtrema(sub[0].fY, sub[1].fY, sub[2].fY, sub[3].fY, extremeTs);
         for (int index = 0; index < roots; ++index) {
             double t = startT + (endT - startT) * extremeTs[index];
-            SkDPoint mid = xyAtT(t);
+            SkDPoint mid = ptAtT(t);
             if (topPt.fY > mid.fY || (topPt.fY == mid.fY && topPt.fX > mid.fX)) {
                 topPt = mid;
             }
@@ -313,7 +313,13 @@ SkDPoint SkDCubic::top(double startT, double endT) const {
     return topPt;
 }
 
-SkDPoint SkDCubic::xyAtT(double t) const {
+SkDPoint SkDCubic::ptAtT(double t) const {
+    if (0 == t) {
+        return fPts[0];
+    }
+    if (1 == t) {
+        return fPts[3];
+    }
     double one_t = 1 - t;
     double one_t2 = one_t * one_t;
     double a = one_t2 * one_t;
@@ -383,8 +389,13 @@ static double interp_cubic_coords(const double* src, double t) {
 }
 
 SkDCubic SkDCubic::subDivide(double t1, double t2) const {
-    if (t1 == 0 && t2 == 1) {
-        return *this;
+    if (t1 == 0 || t2 == 1) {
+        if (t1 == 0 && t2 == 1) {
+            return *this;
+        }
+        SkDCubicPair pair = chopAt(t1 == 0 ? t2 : t1);
+        SkDCubic dst = t1 == 0 ? pair.first() : pair.second();
+        return dst;
     }
     SkDCubic dst;
     double ax = dst[0].fX = interp_cubic_coords(&fPts[0].fX, t1);
@@ -403,11 +414,23 @@ SkDCubic SkDCubic::subDivide(double t1, double t2) const {
     /* by = */ dst[1].fY = (my * 2 - ny) / 18;
     /* cx = */ dst[2].fX = (nx * 2 - mx) / 18;
     /* cy = */ dst[2].fY = (ny * 2 - my) / 18;
+    // FIXME: call align() ?
     return dst;
+}
+
+void SkDCubic::align(int endIndex, int ctrlIndex, SkDPoint* dstPt) const {
+    if (fPts[endIndex].fX == fPts[ctrlIndex].fX) {
+        dstPt->fX = fPts[endIndex].fX;
+    }
+    if (fPts[endIndex].fY == fPts[ctrlIndex].fY) {
+        dstPt->fY = fPts[endIndex].fY;
+    }
 }
 
 void SkDCubic::subDivide(const SkDPoint& a, const SkDPoint& d,
                          double t1, double t2, SkDPoint dst[2]) const {
+    SkASSERT(t1 != t2);
+#if 0
     double ex = interp_cubic_coords(&fPts[0].fX, (t1 * 2 + t2) / 3);
     double ey = interp_cubic_coords(&fPts[0].fY, (t1 * 2 + t2) / 3);
     double fx = interp_cubic_coords(&fPts[0].fX, (t1 + t2 * 2) / 3);
@@ -420,6 +443,30 @@ void SkDCubic::subDivide(const SkDPoint& a, const SkDPoint& d,
     /* by = */ dst[0].fY = (my * 2 - ny) / 18;
     /* cx = */ dst[1].fX = (nx * 2 - mx) / 18;
     /* cy = */ dst[1].fY = (ny * 2 - my) / 18;
+#else
+    // this approach assumes that the control points computed directly are accurate enough
+    SkDCubic sub = subDivide(t1, t2);
+    dst[0] = sub[1] + (a - sub[0]);
+    dst[1] = sub[2] + (d - sub[3]);
+#endif
+    if (t1 == 0 || t2 == 0) {
+        align(0, 1, t1 == 0 ? &dst[0] : &dst[1]);
+    }
+    if (t1 == 1 || t2 == 1) {
+        align(3, 2, t1 == 1 ? &dst[0] : &dst[1]);
+    }
+    if (precisely_subdivide_equal(dst[0].fX, a.fX)) {
+        dst[0].fX = a.fX;
+    }
+    if (precisely_subdivide_equal(dst[0].fY, a.fY)) {
+        dst[0].fY = a.fY;
+    }
+    if (precisely_subdivide_equal(dst[1].fX, d.fX)) {
+        dst[1].fX = d.fX;
+    }
+    if (precisely_subdivide_equal(dst[1].fY, d.fY)) {
+        dst[1].fY = d.fY;
+    }
 }
 
 /* classic one t subdivision */

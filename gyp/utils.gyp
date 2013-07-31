@@ -1,3 +1,4 @@
+# Gyp for utils.
 {
   'targets': [
     {
@@ -5,11 +6,14 @@
       'product_name': 'skia_utils',
       'type': 'static_library',
       'standalone_static_library': 1,
+      'dependencies': [
+        'core.gyp:*',
+      ],
       'include_dirs': [
-        '../include/config',
-        '../include/core',
         '../include/effects',
         '../include/images',
+        '../include/lazy',
+        '../include/pathops',
         '../include/pipe',
         '../include/utils',
         '../include/utils/mac',
@@ -80,6 +84,7 @@
         '../src/utils/SkParseColor.cpp',
         '../src/utils/SkParsePath.cpp',
         '../src/utils/SkPictureUtils.cpp',
+        '../src/utils/SkPathUtils.cpp',
         '../src/utils/SkProxyCanvas.cpp',
         '../src/utils/SkSHA1.cpp',
         '../src/utils/SkSHA1.h',
@@ -92,6 +97,8 @@
         '../src/utils/SkThreadUtils_pthread_other.cpp',
         '../src/utils/SkThreadUtils_win.cpp',
         '../src/utils/SkThreadUtils_win.h',
+        '../src/utils/SkTFitsIn.h',
+        '../src/utils/SkTLogic.h',
         '../src/utils/SkUnitMappers.cpp',
 
         #mac
@@ -111,6 +118,10 @@
         '../src/utils/win/SkHRESULT.cpp',
         '../src/utils/win/SkIStream.cpp',
         '../src/utils/win/SkWGL_win.cpp',
+
+        #testing
+        '../src/fonts/SkGScalerContext.cpp',
+        '../src/fonts/SkGScalerContext.h',
       ],
       'sources!': [
           '../src/utils/SDL/SkOSWindow_SDL.cpp',
@@ -142,11 +153,11 @@
             '../src/utils/SkThreadUtils_pthread_mach.cpp',
           ],
         }],
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]', {
           'sources!': [
             '../src/utils/SkThreadUtils_pthread_other.cpp',
           ],
-        },{ #else if 'skia_os not in ["linux", "freebsd", "openbsd", "solaris"]'
+        },{ #else if 'skia_os not in ["linux", "freebsd", "openbsd", "solaris", "chromeos"]'
           'include_dirs!': [
             '../include/utils/unix',
           ],

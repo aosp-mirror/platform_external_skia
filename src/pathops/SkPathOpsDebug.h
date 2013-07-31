@@ -56,14 +56,15 @@ extern int gDebugMaxWindValue;
 #define DEBUG_FLOW 0
 #define DEBUG_MARK_DONE 0
 #define DEBUG_PATH_CONSTRUCTION 0
-#define DEBUG_SHOW_PATH 0
 #define DEBUG_SHOW_TEST_NAME 0
 #define DEBUG_SHOW_TEST_PROGRESS 0
 #define DEBUG_SHOW_WINDING 0
 #define DEBUG_SORT 0
+#define DEBUG_SORT_COMPACT 0
 #define DEBUG_SORT_SINGLE 0
 #define DEBUG_SWAP_TOP 0
 #define DEBUG_UNSORTABLE 0
+#define DEBUG_VALIDATE 0
 #define DEBUG_WIND_BUMP 0
 #define DEBUG_WINDING 0
 #define DEBUG_WINDING_AT_T 0
@@ -73,7 +74,7 @@ extern int gDebugMaxWindValue;
 #define DEBUG_ACTIVE_OP 1
 #define DEBUG_ACTIVE_SPANS 1
 #define DEBUG_ACTIVE_SPANS_FIRST_ONLY 0
-#define DEBUG_ACTIVE_SPANS_SHORT_FORM 0
+#define DEBUG_ACTIVE_SPANS_SHORT_FORM 1
 #define DEBUG_ADD_INTERSECTING_TS 1
 #define DEBUG_ADD_T_PAIR 1
 #define DEBUG_ANGLE 1
@@ -85,14 +86,15 @@ extern int gDebugMaxWindValue;
 #define DEBUG_FLOW 1
 #define DEBUG_MARK_DONE 1
 #define DEBUG_PATH_CONSTRUCTION 1
-#define DEBUG_SHOW_PATH 0
 #define DEBUG_SHOW_TEST_NAME 1
 #define DEBUG_SHOW_TEST_PROGRESS 1
 #define DEBUG_SHOW_WINDING 0
 #define DEBUG_SORT 1
+#define DEBUG_SORT_COMPACT 0
 #define DEBUG_SORT_SINGLE 0
 #define DEBUG_SWAP_TOP 1
 #define DEBUG_UNSORTABLE 1
+#define DEBUG_VALIDATE 1
 #define DEBUG_WIND_BUMP 0
 #define DEBUG_WINDING 1
 #define DEBUG_WINDING_AT_T 1
@@ -103,10 +105,10 @@ extern int gDebugMaxWindValue;
         DEBUG_SORT_SINGLE | DEBUG_PATH_CONSTRUCTION)
 
 #if DEBUG_AS_C_CODE
-#define CUBIC_DEBUG_STR "{{%1.17g,%1.17g}, {%1.17g,%1.17g}, {%1.17g,%1.17g}, {%1.17g,%1.17g}}"
-#define QUAD_DEBUG_STR  "{{%1.17g,%1.17g}, {%1.17g,%1.17g}, {%1.17g,%1.17g}}"
-#define LINE_DEBUG_STR  "{{%1.17g,%1.17g}, {%1.17g,%1.17g}}"
-#define PT_DEBUG_STR "{{%1.17g,%1.17g}}"
+#define CUBIC_DEBUG_STR "{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}"
+#define QUAD_DEBUG_STR  "{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}}"
+#define LINE_DEBUG_STR  "{{%1.9g,%1.9g}, {%1.9g,%1.9g}}"
+#define PT_DEBUG_STR "{{%1.9g,%1.9g}}"
 #else
 #define CUBIC_DEBUG_STR "(%1.9g,%1.9g %1.9g,%1.9g %1.9g,%1.9g %1.9g,%1.9g)"
 #define QUAD_DEBUG_STR  "(%1.9g,%1.9g %1.9g,%1.9g %1.9g,%1.9g)"
@@ -139,13 +141,20 @@ void winding_printf(int winding);
 extern const char* kPathOpStr[];
 #endif
 
-#ifndef DEBUG_TEST
-#define DEBUG_TEST 0
+#if DEBUG_SHOW_TEST_NAME
+#include "SkTLS.h"
+
+extern void* PathOpsDebugCreateNameStr();
+extern void PathOpsDebugDeleteNameStr(void* v);
+#define DEBUG_FILENAME_STRING_LENGTH 64
+#define DEBUG_FILENAME_STRING \
+    (reinterpret_cast<char* >(SkTLS::Get(PathOpsDebugCreateNameStr, PathOpsDebugDeleteNameStr)))
+extern void DebugBumpTestName(char* );
+extern void DebugShowPath(const SkPath& one, const SkPath& two, SkPathOp op, const char* name);
 #endif
 
-#if DEBUG_SHOW_PATH
-void ShowPath(const SkPath& path, const char* pathName);
-void ShowOp(SkPathOp op, const char* pathOne, const char* pathTwo);
+#ifndef DEBUG_TEST
+#define DEBUG_TEST 0
 #endif
 
 #endif

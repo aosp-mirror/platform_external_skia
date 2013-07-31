@@ -41,9 +41,21 @@ public:
 #endif
     }
 
-    /** Return the reference count.
-    */
+    /** Return the reference count. Use only for debugging. */
     int32_t getRefCnt() const { return fRefCnt; }
+
+    /** Returns true if the caller is the only owner.
+     *  Ensures that all previous owner's actions are complete.
+     */
+    bool unique() const {
+        bool const unique = (1 == fRefCnt);
+        if (unique) {
+            // Aquire barrier (L/SL), if not provided by load of fRefCnt.
+            // Prevents user's 'unique' code from happening before decrements.
+            //TODO: issue the barrier.
+        }
+        return unique;
+    }
 
     /** Increment the reference count. Must be balanced by a call to unref().
     */
@@ -72,14 +84,9 @@ public:
     }
 
     /**
-     *  Alias for ref(), for compatibility with scoped_refptr.
+     * Alias for unref(), for compatibility with WTF::RefPtr.
      */
-    void AddRef() { this->ref(); }
-
-    /**
-     *  Alias for unref(), for compatibility with scoped_refptr.
-     */
-    void Release() { this->unref(); }
+    void deref() { this->unref(); }
 
 protected:
     /**
@@ -104,9 +111,10 @@ private:
         SkDELETE(this);
     }
 
+    // The following friends are those which override internal_dispose()
+    // and conditionally call SkRefCnt::internal_dispose().
+    friend class GrTexture;
     friend class SkWeakRefCnt;
-    friend class GrTexture;     // to allow GrTexture's internal_dispose to
-                                // call SkRefCnt's & directly set fRefCnt (to 1)
 
     mutable int32_t fRefCnt;
 

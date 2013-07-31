@@ -102,7 +102,7 @@ struct SkDPoint {
     bool approximatelyEqual(const SkDPoint& a) const {
         double denom = SkTMax(fabs(fX), SkTMax(fabs(fY),
                 SkTMax(fabs(a.fX), fabs(a.fY))));
-        if (denom == 0) {
+        if (precisely_zero(denom)) {
             return true;
         }
         double inv = 1 / denom;
@@ -111,14 +111,8 @@ struct SkDPoint {
     }
 
     bool approximatelyEqual(const SkPoint& a) const {
-        double denom = SkTMax(fabs(fX), SkTMax(fabs(fY),
-                SkScalarToDouble(SkTMax(fabsf(a.fX), fabsf(a.fY)))));
-        if (denom == 0) {
-            return true;
-        }
-        double inv = 1 / denom;
-        return approximately_equal(fX * inv, a.fX * inv)
-                && approximately_equal(fY * inv, a.fY * inv);
+        return AlmostEqualUlps(SkDoubleToScalar(fX), a.fX)
+                && AlmostEqualUlps(SkDoubleToScalar(fY), a.fY);
     }
 
     bool approximatelyEqualHalf(const SkDPoint& a) const {
@@ -149,6 +143,13 @@ struct SkDPoint {
     double distanceSquared(const SkDPoint& a) const {
         SkDVector temp = *this - a;
         return temp.lengthSquared();
+    }
+
+    static SkDPoint Mid(const SkDPoint& a, const SkDPoint& b) {
+        SkDPoint result;
+        result.fX = (a.fX + b.fX) / 2;
+        result.fY = (a.fY + b.fY) / 2;
+        return result;
     }
 
     double moreRoughlyEqual(const SkDPoint& a) const {

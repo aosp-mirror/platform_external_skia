@@ -20,36 +20,30 @@ typedef SkTRegistry<SkImageDecoder*, SkStream*> DecodeReg;
 // corner cases.
 template DecodeReg* SkTRegistry<SkImageDecoder*, SkStream*>::gHead;
 
-<<<<<<< HEAD:src/images/SkImageDecoder_Factory.cpp
-#ifdef SK_ENABLE_LIBPNG
-    extern SkImageDecoder* sk_libpng_dfactory(SkStream*);
-#endif
-
-SkImageDecoder* SkImageDecoder::Factory(SkStream* stream) {
-=======
 SkImageDecoder* image_decoder_from_stream(SkStream*);
 
 SkImageDecoder* image_decoder_from_stream(SkStream* stream) {
->>>>>>> goog/snapshot:src/images/SkImageDecoder_FactoryRegistrar.cpp
     SkImageDecoder* codec = NULL;
     const DecodeReg* curr = DecodeReg::Head();
     while (curr) {
         codec = curr->factory()(stream);
         // we rewind here, because we promise later when we call "decode", that
         // the stream will be at its beginning.
-        stream->rewind();
+        bool rewindSuceeded = stream->rewind();
+
+        // our image decoder's require that rewind is supported so we fail early
+        // if we are given a stream that does not support rewinding.
+        if (!rewindSuceeded) {
+            SkDEBUGF(("Unable to rewind the image stream."));
+            SkDELETE(codec);
+            return NULL;
+        }
+
         if (codec) {
             return codec;
         }
         curr = curr->next();
     }
-#ifdef SK_ENABLE_LIBPNG
-    codec = sk_libpng_dfactory(stream);
-    stream->rewind();
-    if (codec) {
-        return codec;
-    }
-#endif
     return NULL;
 }
 

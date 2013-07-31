@@ -41,31 +41,67 @@ static const char* opSuffixes[] = {
 };
 
 static bool gShowPath = false;
-static bool gComparePaths = true;
 static bool gComparePathsAssert = true;
 static bool gPathStrAssert = true;
 
-static void showPathContours(SkPath::Iter& iter) {
+static const char* gFillTypeStr[] = {
+    "kWinding_FillType",
+    "kEvenOdd_FillType",
+    "kInverseWinding_FillType",
+    "kInverseEvenOdd_FillType"
+};
+
+static void output_scalar(SkScalar num) {
+    if (num == (int) num) {
+        SkDebugf("%d", (int) num);
+    } else {
+        SkString str;
+        str.printf("%1.9g", num);
+        int width = str.size();
+        const char* cStr = str.c_str();
+        while (cStr[width - 1] == '0') {
+            --width;
+        }
+        str.resize(width);
+        SkDebugf("%sf", str.c_str());
+    }
+}
+
+static void output_points(const SkPoint* pts, int count) {
+    for (int index = 0; index < count; ++index) {
+        output_scalar(pts[index].fX);
+        SkDebugf(", ");
+        output_scalar(pts[index].fY);
+        if (index + 1 < count) {
+            SkDebugf(", ");
+        }
+    }
+    SkDebugf(");\n");
+}
+
+static void showPathContours(SkPath::RawIter& iter, const char* pathName) {
     uint8_t verb;
     SkPoint pts[4];
     while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
-                SkDebugf("path.moveTo(%1.9g,%1.9g);\n", pts[0].fX, pts[0].fY);
+                SkDebugf("    %s.moveTo(", pathName);
+                output_points(&pts[0], 1);
                 continue;
             case SkPath::kLine_Verb:
-                SkDebugf("path.lineTo(%1.9g,%1.9g);\n", pts[1].fX, pts[1].fY);
+                SkDebugf("    %s.lineTo(", pathName);
+                output_points(&pts[1], 1);
                 break;
             case SkPath::kQuad_Verb:
-                SkDebugf("path.quadTo(%1.9g,%1.9g, %1.9g,%1.9g);\n",
-                    pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
+                SkDebugf("    %s.quadTo(", pathName);
+                output_points(&pts[1], 2);
                 break;
             case SkPath::kCubic_Verb:
-                SkDebugf("path.cubicTo(%1.9g,%1.9g, %1.9g,%1.9g, %1.9g,%1.9g);\n",
-                    pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY, pts[3].fX, pts[3].fY);
+                SkDebugf("    %s.cubicTo(", pathName);
+                output_points(&pts[1], 3);
                 break;
             case SkPath::kClose_Verb:
-                SkDebugf("path.close();\n");
+                SkDebugf("    %s.close();\n", pathName);
                 break;
             default:
                 SkDEBUGFAIL("bad verb");
@@ -74,20 +110,8 @@ static void showPathContours(SkPath::Iter& iter) {
     }
 }
 
-void showPath(const SkPath& path, const char* str) {
-    SkDebugf("%s\n", !str ? "original:" : str);
-    showPath(path);
-}
-
-static const char* fillTypeStr[] = {
-    "kWinding_FillType",
-    "kEvenOdd_FillType",
-    "kInverseWinding_FillType",
-    "kInverseEvenOdd_FillType"
-};
-
-void showPath(const SkPath& path) {
-    SkPath::Iter iter(path, true);
+static void showPath(const SkPath& path, const char* pathName, bool includeDeclaration) {
+    SkPath::RawIter iter(path);
 #define SUPPORT_RECT_CONTOUR_DETECTION 0
 #if SUPPORT_RECT_CONTOUR_DETECTION
     int rectCount = path.isRectContours() ? path.rectContours(NULL, NULL) : 0;
@@ -108,33 +132,53 @@ void showPath(const SkPath& path) {
 #endif
     SkPath::FillType fillType = path.getFillType();
     SkASSERT(fillType >= SkPath::kWinding_FillType && fillType <= SkPath::kInverseEvenOdd_FillType);
-    SkDebugf("path.setFillType(%s);\n", fillTypeStr[fillType]);
-    iter.setPath(path, true);
-    showPathContours(iter);
+    if (includeDeclaration) {
+        SkDebugf("    SkPath %s;\n", pathName);
+    }
+    SkDebugf("    %s.setFillType(SkPath::%s);\n", pathName, gFillTypeStr[fillType]);
+    iter.setPath(path);
+    showPathContours(iter, pathName);
 }
 
-void showPathData(const SkPath& path) {
-    SkPath::Iter iter(path, true);
+#if DEBUG_SHOW_TEST_NAME
+static void showPathData(const SkPath& path) {
+    SkPath::RawIter iter(path);
     uint8_t verb;
     SkPoint pts[4];
+    SkPoint firstPt, lastPt;
+    bool firstPtSet = false;
+    bool lastPtSet = true;
     while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
+                firstPt = pts[0];
+                firstPtSet = true;
                 continue;
             case SkPath::kLine_Verb:
                 SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", pts[0].fX, pts[0].fY,
                         pts[1].fX, pts[1].fY);
+                lastPt = pts[1];
+                lastPtSet = true;
                 break;
             case SkPath::kQuad_Verb:
                 SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
                         pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY);
+                lastPt = pts[2];
+                lastPtSet = true;
                 break;
             case SkPath::kCubic_Verb:
                 SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}, {%1.9g,%1.9g}},\n",
                         pts[0].fX, pts[0].fY, pts[1].fX, pts[1].fY, pts[2].fX, pts[2].fY,
                         pts[3].fX, pts[3].fY);
+                lastPt = pts[3];
+                lastPtSet = true;
                 break;
             case SkPath::kClose_Verb:
+                if (firstPtSet && lastPtSet && firstPt != lastPt) {
+                    SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", lastPt.fX, lastPt.fY,
+                            firstPt.fX, firstPt.fY);
+                }
+                firstPtSet = lastPtSet = false;
                 break;
             default:
                 SkDEBUGFAIL("bad verb");
@@ -142,6 +186,7 @@ void showPathData(const SkPath& path) {
         }
     }
 }
+#endif
 
 void showOp(const SkPathOp op) {
     switch (op) {
@@ -165,16 +210,28 @@ void showOp(const SkPathOp op) {
     }
 }
 
-static void showPath(const SkPath& path, const char* str, const SkMatrix& scale) {
-    SkPath scaled;
-    SkMatrix inverse;
-    bool success = scale.invert(&inverse);
-    if (!success) {
-        SkASSERT(0);
+#if DEBUG_SHOW_TEST_NAME
+
+void ShowFunctionHeader(const char* functionName) {
+    SkDebugf("\nstatic void %s(skiatest::Reporter* reporter) {\n", functionName);
+    if (strcmp("skphealth_com76", functionName) == 0) {
+        SkDebugf("found it\n");
     }
-    path.transform(inverse, &scaled);
-    showPath(scaled, str);
 }
+
+static const char* gOpStrs[] = {
+    "kDifference_PathOp",
+    "kIntersect_PathOp",
+    "kUnion_PathOp",
+    "kXor_PathOp",
+    "kReverseDifference_PathOp",
+};
+
+void ShowOp(SkPathOp op, const char* pathOne, const char* pathTwo) {
+    SkDebugf("    testPathOp(reporter, %s, %s, %s);\n", pathOne, pathTwo, gOpStrs[op]);
+    SkDebugf("}\n");
+}
+#endif
 
 #if DEBUG_SHOW_TEST_NAME
 static char hexorator(int x) {
@@ -326,8 +383,7 @@ bool drawAsciiPaths(const SkPath& one, const SkPath& two, bool drawPaths) {
 
 static void showSimplifiedPath(const SkPath& one, const SkPath& two,
         const SkPath& scaledOne, const SkPath& scaledTwo) {
-    showPath(one, "original:");
-    showPath(two, "simplified:");
+    showPath(one, "path", false);
     drawAsciiPaths(scaledOne, scaledTwo, true);
 }
 
@@ -355,12 +411,12 @@ static void showPathOpPath(const SkPath& one, const SkPath& two, const SkPath& a
         const SkPath& scaledOne, const SkPath& scaledTwo, const SkPathOp shapeOp,
         const SkMatrix& scale) {
     SkASSERT((unsigned) shapeOp < SK_ARRAY_COUNT(opStrs));
-    showPath(a, "minuend:");
-    SkDebugf("op: %s\n", opStrs[shapeOp]);
-    showPath(b, "subtrahend:");
-    // the region often isn't very helpful since it approximates curves with a lot of line-tos
-    if (0) showPath(scaledOne, "region:", scale);
-    showPath(two, "op result:");
+    SkDebugf("static void xOp#%s(skiatest::Reporter* reporter) {\n", opSuffixes[shapeOp]);
+    SkDebugf("    SkPath path, pathB;\n");
+    showPath(a, "path", false);
+    showPath(b, "pathB", false);
+    SkDebugf("    testPathOp(reporter, path, pathB, %s);\n", opStrs[shapeOp]);
+    SkDebugf("}\n");
     drawAsciiPaths(scaledOne, scaledTwo, true);
 }
 
@@ -448,14 +504,14 @@ bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& st
     SkPath::FillType fillType = useXor ? SkPath::kEvenOdd_FillType : SkPath::kWinding_FillType;
     path.setFillType(fillType);
     if (gShowPath) {
-        showPath(path);
+        showPath(path, "path", false);
     }
     if (!Simplify(path, &out)) {
         SkDebugf("%s did not expect failure\n", __FUNCTION__);
         REPORTER_ASSERT(state.fReporter, 0);
         return false;
     }
-    if (!gComparePaths) {
+    if (!state.fReporter->verbose()) {
         return true;
     }
     int result = comparePaths(state.fReporter, path, out, *state.fBitmap);
@@ -497,18 +553,35 @@ bool testSimplify(skiatest::Reporter* reporter, const SkPath& path) {
     return result == 0;
 }
 
-bool testPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,
-                 const SkPathOp shapeOp) {
 #if DEBUG_SHOW_TEST_NAME
-    showPathData(a);
-    showOp(shapeOp);
-    showPathData(b);
+void DebugShowPath(const SkPath& a, const SkPath& b, SkPathOp shapeOp, const char* testName) {
+        ShowFunctionHeader(testName);
+        showPath(a, "path", true);
+        showPath(b, "pathB", true);
+        ShowOp(shapeOp, "path", "pathB");
+}
+#endif
+
+static bool innerPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,
+                 const SkPathOp shapeOp, const char* testName, bool threaded) {
+#if DEBUG_SHOW_TEST_NAME
+    if (testName == NULL) {
+        SkDebugf("\n");
+        showPathData(a);
+        showOp(shapeOp);
+        showPathData(b);
+    } else {
+        DebugShowPath(a, b, shapeOp, testName);
+    }
 #endif
     SkPath out;
     if (!Op(a, b, shapeOp, &out) ) {
         SkDebugf("%s did not expect failure\n", __FUNCTION__);
         REPORTER_ASSERT(reporter, 0);
         return false;
+    }
+    if (threaded && !reporter->verbose()) {
+        return true;
     }
     SkPath pathOut, scaledPathOut;
     SkRegion rgnA, rgnB, openClip, rgnOut;
@@ -543,6 +616,16 @@ bool testPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,
     return result == 0;
 }
 
+bool testPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,
+                 const SkPathOp shapeOp, const char* testName) {
+    return innerPathOp(reporter, a, b, shapeOp, testName, false);
+}
+
+bool testThreadedPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkPath& b,
+                 const SkPathOp shapeOp, const char* testName) {
+    return innerPathOp(reporter, a, b, shapeOp, testName, true);
+}
+
 int initializeTests(skiatest::Reporter* reporter, const char* test) {
 #ifdef SK_DEBUG
     gDebugMaxWindSum = 4;
@@ -564,7 +647,7 @@ int initializeTests(skiatest::Reporter* reporter, const char* test) {
             testNumber = atoi(numLoc) + 1;
         }
     }
-    return reporter->allowThreaded() ? SkThreadPool::kThreadPerCore : 0;
+    return reporter->allowThreaded() ? SkThreadPool::kThreadPerCore : 1;
 }
 
 void outputProgress(char* ramStr, const char* pathStr, SkPath::FillType pathFillType) {

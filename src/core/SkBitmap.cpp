@@ -161,7 +161,6 @@ int SkBitmap::ComputeBytesPerPixel(SkBitmap::Config config) {
         case kA1_Config:
             bpp = 0;   // not applicable
             break;
-        case kRLE_Index8_Config:
         case kA8_Config:
         case kIndex8_Config:
             bpp = 1;
@@ -191,7 +190,6 @@ size_t SkBitmap::ComputeRowBytes(Config c, int width) {
 
     switch (c) {
         case kNo_Config:
-        case kRLE_Index8_Config:
             break;
         case kA1_Config:
             rowBytes.set(width);
@@ -426,7 +424,7 @@ void SkBitmap::notifyPixelsChanged() const {
     }
 }
 
-SkGpuTexture* SkBitmap::getTexture() const {
+GrTexture* SkBitmap::getTexture() const {
     return fPixelRef ? fPixelRef->getTexture() : NULL;
 }
 
@@ -473,8 +471,7 @@ bool SkBitmap::copyPixelsTo(void* const dst, size_t dstSize,
         dstRowBytes = fRowBytes;
     }
 
-    if (getConfig() == kRLE_Index8_Config ||
-        dstRowBytes < ComputeRowBytes(getConfig(), fWidth) ||
+    if (dstRowBytes < ComputeRowBytes(getConfig(), fWidth) ||
         dst == NULL || (getPixels() == NULL && pixelRef() == NULL))
         return false;
 
@@ -538,19 +535,18 @@ bool SkBitmap::isOpaque() const {
         case kARGB_8888_Config:
             return (fFlags & kImageIsOpaque_Flag) != 0;
 
-        case kIndex8_Config:
-        case kRLE_Index8_Config: {
-                uint32_t flags = 0;
+        case kIndex8_Config: {
+            uint32_t flags = 0;
 
-                this->lockPixels();
-                // if lockPixels failed, we may not have a ctable ptr
-                if (fColorTable) {
-                    flags = fColorTable->getFlags();
-                }
-                this->unlockPixels();
-
-                return (flags & SkColorTable::kColorsAreOpaque_Flag) != 0;
+            this->lockPixels();
+            // if lockPixels failed, we may not have a ctable ptr
+            if (fColorTable) {
+                flags = fColorTable->getFlags();
             }
+            this->unlockPixels();
+
+            return (flags & SkColorTable::kColorsAreOpaque_Flag) != 0;
+        }
 
         case kRGB_565_Config:
             return true;
@@ -606,10 +602,6 @@ void* SkBitmap::getAddr(int x, int y) const {
             case SkBitmap::kA1_Config:
                 base += x >> 3;
                 break;
-            case kRLE_Index8_Config:
-                SkDEBUGFAIL("Can't return addr for kRLE_Index8_Config");
-                base = NULL;
-                break;
             default:
                 SkDEBUGFAIL("Can't return addr for config");
                 base = NULL;
@@ -654,15 +646,7 @@ SkColor SkBitmap::getColor(int x, int y) const {
             uint32_t* addr = this->getAddr32(x, y);
             return SkUnPreMultiply::PMColorToColor(addr[0]);
         }
-        case kRLE_Index8_Config: {
-            uint8_t dst;
-            const SkBitmap::RLEPixels* rle =
-                (const SkBitmap::RLEPixels*)this->getPixels();
-            SkPackBits::Unpack8(&dst, x, 1, rle->packedAtY(y));
-            return SkUnPreMultiply::PMColorToColor((*fColorTable)[dst]);
-        }
         case kNo_Config:
-        case kConfigCount:
             SkASSERT(false);
             return 0;
     }
@@ -696,7 +680,6 @@ bool SkBitmap::ComputeIsOpaque(const SkBitmap& bm) {
             }
             return true;
         } break;
-        case kRLE_Index8_Config:
         case SkBitmap::kIndex8_Config: {
             SkAutoLockColors alc(bm);
             const SkPMColor* table = alc.colors();
@@ -748,11 +731,26 @@ bool SkBitmap::ComputeIsOpaque(const SkBitmap& bm) {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
-    SkDEBUGCODE(this->validate();)
+static uint16_t pack_8888_to_4444(unsigned a, unsigned r, unsigned g, unsigned b) {
+    unsigned pixel = (SkA32To4444(a) << SK_A4444_SHIFT) |
+                     (SkR32To4444(r) << SK_R4444_SHIFT) |
+                     (SkG32To4444(g) << SK_G4444_SHIFT) |
+                     (SkB32To4444(b) << SK_B4444_SHIFT);
+    return SkToU16(pixel);
+}
 
-    if (0 == fWidth || 0 == fHeight ||
-            kNo_Config == fConfig || kIndex8_Config == fConfig) {
+void SkBitmap::internalErase(const SkIRect& area,
+                             U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
+#ifdef SK_DEBUG
+    SkDEBUGCODE(this->validate();)
+    SkASSERT(!area.isEmpty());
+    {
+        SkIRect total = { 0, 0, this->width(), this->height() };
+        SkASSERT(total.contains(area));
+    }
+#endif
+
+    if (kNo_Config == fConfig || kIndex8_Config == fConfig) {
         return;
     }
 
@@ -762,8 +760,8 @@ void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
         return;
     }
 
-    int height = fHeight;
-    const int width = fWidth;
+    int height = area.height();
+    const int width = area.width();
     const int rowBytes = fRowBytes;
 
     // make rgb premultiplied
@@ -775,18 +773,39 @@ void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
 
     switch (fConfig) {
         case kA1_Config: {
-            uint8_t* p = (uint8_t*)fPixels;
-            const int count = (width + 7) >> 3;
+            uint8_t* p = this->getAddr1(area.fLeft, area.fTop);
+            const int left = area.fLeft >> 3;
+            const int right = area.fRight >> 3;
+
+            int middle = right - left - 1;
+
+            uint8_t leftMask = 0xFF >> (area.fLeft & 7);
+            uint8_t rightMask = ~(0xFF >> (area.fRight & 7));
+            if (left == right) {
+                leftMask &= rightMask;
+                rightMask = 0;
+            }
+
             a = (a >> 7) ? 0xFF : 0;
-            SkASSERT(count <= rowBytes);
             while (--height >= 0) {
-                memset(p, a, count);
-                p += rowBytes;
+                uint8_t* startP = p;
+
+                *p = (*p & ~leftMask) | (a & leftMask);
+                p++;
+                if (middle > 0) {
+                    memset(p, a, middle);
+                    p += middle;
+                }
+                if (rightMask) {
+                    *p = (*p & ~rightMask) | (a & rightMask);
+                }
+
+                p = startP + rowBytes;
             }
             break;
         }
         case kA8_Config: {
-            uint8_t* p = (uint8_t*)fPixels;
+            uint8_t* p = this->getAddr8(area.fLeft, area.fTop);
             while (--height >= 0) {
                 memset(p, a, width);
                 p += rowBytes;
@@ -795,13 +814,14 @@ void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
         }
         case kARGB_4444_Config:
         case kRGB_565_Config: {
-            uint16_t* p = (uint16_t*)fPixels;
+            uint16_t* p = this->getAddr16(area.fLeft, area.fTop);;
             uint16_t v;
 
             if (kARGB_4444_Config == fConfig) {
-                v = SkPackARGB4444(a >> 4, r >> 4, g >> 4, b >> 4);
-            } else {    // kRGB_565_Config
-                v = SkPackRGB16(r >> (8 - SK_R16_BITS), g >> (8 - SK_G16_BITS),
+                v = pack_8888_to_4444(a, r, g, b);
+            } else {
+                v = SkPackRGB16(r >> (8 - SK_R16_BITS),
+                                g >> (8 - SK_G16_BITS),
                                 b >> (8 - SK_B16_BITS));
             }
             while (--height >= 0) {
@@ -811,7 +831,7 @@ void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
             break;
         }
         case kARGB_8888_Config: {
-            uint32_t* p = (uint32_t*)fPixels;
+            uint32_t* p = this->getAddr32(area.fLeft, area.fTop);
             uint32_t  v = SkPackARGB32(a, r, g, b);
 
             while (--height >= 0) {
@@ -823,6 +843,21 @@ void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
     }
 
     this->notifyPixelsChanged();
+}
+
+void SkBitmap::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const {
+    SkIRect area = { 0, 0, this->width(), this->height() };
+    if (!area.isEmpty()) {
+        this->internalErase(area, a, r, g, b);
+    }
+}
+
+void SkBitmap::eraseArea(const SkIRect& rect, SkColor c) const {
+    SkIRect area = { 0, 0, this->width(), this->height() };
+    if (area.intersect(rect)) {
+        this->internalErase(area, SkColorGetA(c), SkColorGetR(c),
+                            SkColorGetG(c), SkColorGetB(c));
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -938,34 +973,6 @@ bool SkBitmap::extractSubset(SkBitmap* result, const SkIRect& subset) const {
         }
     }
 
-    if (kRLE_Index8_Config == fConfig) {
-        SkAutoLockPixels alp(*this);
-        // don't call readyToDraw(), since we can operate w/o a colortable
-        // at this stage
-        if (this->getPixels() == NULL) {
-            return false;
-        }
-        SkBitmap bm;
-
-        bm.setConfig(kIndex8_Config, r.width(), r.height());
-        bm.allocPixels(this->getColorTable());
-        if (NULL == bm.getPixels()) {
-            return false;
-        }
-
-        const RLEPixels* rle = (const RLEPixels*)this->getPixels();
-        uint8_t* dst = bm.getAddr8(0, 0);
-        const int width = bm.width();
-        const size_t rowBytes = bm.rowBytes();
-
-        for (int y = r.fTop; y < r.fBottom; y++) {
-            SkPackBits::Unpack8(dst, r.fLeft, width, rle->packedAtY(y));
-            dst += rowBytes;
-        }
-        result->swap(bm);
-        return true;
-    }
-
     // If the upper left of the rectangle was outside the bounds of this SkBitmap, we should have
     // exited above.
     SkASSERT(static_cast<unsigned>(r.fLeft) < static_cast<unsigned>(this->width()));
@@ -1005,12 +1012,12 @@ bool SkBitmap::canCopyTo(Config dstConfig) const {
     bool sameConfigs = (this->config() == dstConfig);
     switch (dstConfig) {
         case kA8_Config:
-        case kARGB_4444_Config:
         case kRGB_565_Config:
         case kARGB_8888_Config:
             break;
         case kA1_Config:
         case kIndex8_Config:
+        case kARGB_4444_Config:
             if (!sameConfigs) {
                 return false;
             }
@@ -1625,7 +1632,11 @@ SkBitmap::RLEPixels::~RLEPixels() {
 void SkBitmap::validate() const {
     SkASSERT(fConfig < kConfigCount);
     SkASSERT(fRowBytes >= (unsigned)ComputeRowBytes((Config)fConfig, fWidth));
-    SkASSERT(fFlags <= (kImageIsOpaque_Flag | kImageIsVolatile_Flag | kImageIsImmutable_Flag));
+    uint8_t allFlags = kImageIsOpaque_Flag | kImageIsVolatile_Flag | kImageIsImmutable_Flag;
+#ifdef SK_BUILD_FOR_ANDROID
+    allFlags |= kHasHardwareMipMap_Flag;
+#endif
+    SkASSERT(fFlags <= allFlags);
     SkASSERT(fPixelLockCount >= 0);
     SkASSERT(NULL == fColorTable || (unsigned)fColorTable->getRefCnt() < 10000);
     SkASSERT((uint8_t)ComputeBytesPerPixel((Config)fConfig) == fBytesPerPixel);
@@ -1647,7 +1658,7 @@ void SkBitmap::validate() const {
 void SkBitmap::toString(SkString* str) const {
 
     static const char* gConfigNames[kConfigCount] = {
-        "NONE", "A1", "A8", "INDEX8", "565", "4444", "8888", "RLE"
+        "NONE", "A1", "A8", "INDEX8", "565", "4444", "8888"
     };
 
     str->appendf("bitmap: ((%d, %d) %s", this->width(), this->height(),

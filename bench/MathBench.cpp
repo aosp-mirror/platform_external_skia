@@ -439,12 +439,10 @@ class NormalizeBench : public SkBenchmark {
         LOOP = SkBENCHLOOP(1000),
     };
     SkVector fVec[ARRAY];
-    bool fUsePortable;
 
 public:
-    NormalizeBench(void* param, bool usePortable)
-    : INHERITED(param)
-    , fUsePortable(usePortable) {
+    NormalizeBench(void* param)
+    : INHERITED(param) {
 
         SkRandom rand;
         for (int i = 0; i < ARRAY; ++i) {
@@ -482,6 +480,48 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class FixedMathBench : public SkBenchmark {
+    enum {
+        N = SkBENCHLOOP(1000),
+        NN = SkBENCHLOOP(1000),
+    };
+    float fData[N];
+    SkFixed fResult[N];
+public:
+
+    FixedMathBench(void* param) : INHERITED(param) {
+        SkRandom rand;
+        for (int i = 0; i < N; ++i) {
+            fData[i] = rand.nextSScalar1();
+        }
+
+        fIsRendering = false;
+    }
+
+protected:
+    virtual void onDraw(SkCanvas*) {
+        for (int j = 0; j < NN; ++j) {
+            for (int i = 0; i < N - 4; ++i) {
+                fResult[i] = SkFloatToFixed(fData[i]);
+            }
+        }
+
+        SkPaint paint;
+        if (paint.getAlpha() == 0) {
+            SkDebugf("%d\n", fResult[0]);
+        }
+    }
+
+    virtual const char* onGetName() {
+        return "float_to_fixed";
+    }
+
+private:
+    typedef SkBenchmark INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 DEF_BENCH( return new NoOpMathBench(p); )
 DEF_BENCH( return new SlowISqrtMathBench(p); )
 DEF_BENCH( return new FastISqrtMathBench(p); )
@@ -502,4 +542,6 @@ DEF_BENCH( return new FloorBench(p, true); )
 DEF_BENCH( return new CLZBench(p, false); )
 DEF_BENCH( return new CLZBench(p, true); )
 
-DEF_BENCH( return new NormalizeBench(p, false); )
+DEF_BENCH( return new NormalizeBench(p); )
+
+DEF_BENCH( return new FixedMathBench(p); )

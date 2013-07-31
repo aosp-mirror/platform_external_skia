@@ -12,6 +12,7 @@
 #include "GrColor.h"
 #include "GrEffectStage.h"
 #include "GrPaint.h"
+#include "GrPoint.h"
 #include "GrRefCnt.h"
 #include "GrRenderTarget.h"
 #include "GrStencil.h"
@@ -27,80 +28,55 @@ class GrDrawState : public GrRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrDrawState)
 
-    /**
-     * Total number of effect stages. Each stage can host a GrEffect. A stage is enabled if it has a
-     * GrEffect. The effect produces an output color in the fragment shader. It's inputs are the
-     * output from the previous enabled stage and a position. The position is either derived from
-     * the interpolated vertex positions or explicit per-vertex coords, depending upon the
-     * GrAttribBindings used to draw.
-     *
-     * The stages are divided into two sets, color-computing and coverage-computing. The final color
-     * stage produces the final pixel color. The coverage-computing stages function exactly as the
-     * color-computing but the output of the final coverage stage is treated as a fractional pixel
-     * coverage rather than as input to the src/dst color blend step.
-     *
-     * The input color to the first enabled color-stage is either the constant color or interpolated
-     * per-vertex colors. The input to the first coverage stage is either a constant coverage
-     * (usually full-coverage) or interpolated per-vertex coverage.
-     *
-     * See the documentation of kCoverageDrawing_StateBit for information about disabling the
-     * the color / coverage distinction.
-     *
-     * Stages 0 through GrPaint::kTotalStages-1 are reserved for stages copied from the client's
-     * GrPaint. Stage GrPaint::kTotalStages is earmarked for use by GrTextContext, GrPathRenderer-
-     * derived classes, and the rect/oval helper classes. GrPaint::kTotalStages+1 is earmarked for
-     * clipping by GrClipMaskManager. TODO: replace fixed size array of stages with variable size
-     * arrays of color and coverage stages.
-     */
-    enum {
-        kNumStages = GrPaint::kTotalStages + 2,
-    };
-
     GrDrawState() {
+        GR_DEBUGCODE(fBlockEffectRemovalCnt = 0;)
         this->reset();
     }
 
-    GrDrawState(const GrDrawState& state) {
+    GrDrawState(const SkMatrix& initialViewMatrix) {
+        GR_DEBUGCODE(fBlockEffectRemovalCnt = 0;)
+        this->reset(initialViewMatrix);
+    }
+
+    /**
+     * Copies another draw state.
+     **/
+    GrDrawState(const GrDrawState& state) : INHERITED() {
+        GR_DEBUGCODE(fBlockEffectRemovalCnt = 0;)
         *this = state;
     }
 
-    virtual ~GrDrawState() {
-        this->disableStages();
+    /**
+     * Copies another draw state with a preconcat to the view matrix.
+     **/
+    GrDrawState(const GrDrawState& state, const SkMatrix& preConcatMatrix) {
+        GR_DEBUGCODE(fBlockEffectRemovalCnt = 0;)
+        *this = state;
+        if (!preConcatMatrix.isIdentity()) {
+            for (int i = 0; i < fColorStages.count(); ++i) {
+                fColorStages[i].localCoordChange(preConcatMatrix);
+            }
+            for (int i = 0; i < fCoverageStages.count(); ++i) {
+                fCoverageStages[i].localCoordChange(preConcatMatrix);
+            }
+        }
     }
 
-    /**
-     * Resets to the default state.
-     * GrEffects will be removed from all stages.
-     */
-    void reset() {
-
-        this->disableStages();
-
-        fRenderTarget.reset(NULL);
-
-        this->setDefaultVertexAttribs();
-
-        fCommon.fColor = 0xffffffff;
-        fCommon.fViewMatrix.reset();
-        fCommon.fSrcBlend = kOne_GrBlendCoeff;
-        fCommon.fDstBlend = kZero_GrBlendCoeff;
-        fCommon.fBlendConstant = 0x0;
-        fCommon.fFlagBits = 0x0;
-        fCommon.fStencilSettings.setDisabled();
-        fCommon.fFirstCoverageStage = kNumStages;
-        fCommon.fCoverage = 0xffffffff;
-        fCommon.fColorFilterMode = SkXfermode::kDst_Mode;
-        fCommon.fColorFilterColor = 0x0;
-        fCommon.fDrawFace = kBoth_DrawFace;
-    }
+    virtual ~GrDrawState() { GrAssert(0 == fBlockEffectRemovalCnt); }
 
     /**
-     * Initializes the GrDrawState based on a GrPaint. Note that GrDrawState
-     * encompasses more than GrPaint. Aspects of GrDrawState that have no
-     * GrPaint equivalents are not modified. GrPaint has fewer stages than
-     * GrDrawState. The extra GrDrawState stages are disabled.
+     * Resets to the default state. GrEffects will be removed from all stages.
      */
-    void setFromPaint(const GrPaint& paint);
+    void reset() { this->onReset(NULL); }
+
+    void reset(const SkMatrix& initialViewMatrix) { this->onReset(&initialViewMatrix); }
+
+    /**
+     * Initializes the GrDrawState based on a GrPaint, view matrix and render target. Note that
+     * GrDrawState encompasses more than GrPaint. Aspects of GrDrawState that have no GrPaint
+     * equivalents are set to default values. Clipping will be enabled.
+     */
+    void setFromPaint(const GrPaint& , const SkMatrix& viewMatrix, GrRenderTarget*);
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Vertex Attributes
@@ -363,90 +339,107 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Effect Stages
+    /// Each stage hosts a GrEffect. The effect produces an output color or coverage in the fragment
+    /// shader. Its inputs are the output from the previous stage as well as some variables
+    /// available to it in the fragment and vertex shader (e.g. the vertex position, the dst color,
+    /// the fragment position, local coordinates).
+    ///
+    /// The stages are divided into two sets, color-computing and coverage-computing. The final
+    /// color stage produces the final pixel color. The coverage-computing stages function exactly
+    /// as the color-computing but the output of the final coverage stage is treated as a fractional
+    /// pixel coverage rather than as input to the src/dst color blend step.
+    ///
+    /// The input color to the first color-stage is either the constant color or interpolated
+    /// per-vertex colors. The input to the first coverage stage is either a constant coverage
+    /// (usually full-coverage) or interpolated per-vertex coverage.
+    ///
+    /// See the documentation of kCoverageDrawing_StateBit for information about disabling the
+    /// the color / coverage distinction.
     ////
 
-    const GrEffectRef* setEffect(int stageIdx, const GrEffectRef* effect) {
-        fStages[stageIdx].setEffect(effect);
+    const GrEffectRef* addColorEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
+        GrAssert(NULL != effect);
+        SkNEW_APPEND_TO_TARRAY(&fColorStages, GrEffectStage, (effect, attr0, attr1));
         return effect;
     }
 
-    const GrEffectRef* setEffect(int stageIdx, const GrEffectRef* effect,
-                                 int attr0, int attr1 = -1) {
-        fStages[stageIdx].setEffect(effect, attr0, attr1);
+    const GrEffectRef* addCoverageEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
+        GrAssert(NULL != effect);
+        SkNEW_APPEND_TO_TARRAY(&fCoverageStages, GrEffectStage, (effect, attr0, attr1));
         return effect;
     }
 
     /**
      * Creates a GrSimpleTextureEffect that uses local coords as texture coordinates.
      */
-    void createTextureEffect(int stageIdx, GrTexture* texture, const SkMatrix& matrix) {
-        GrAssert(!this->getStage(stageIdx).getEffect());
+    void addColorTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
         GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix);
-        this->setEffect(stageIdx, effect)->unref();
+        this->addColorEffect(effect)->unref();
     }
-    void createTextureEffect(int stageIdx,
-                             GrTexture* texture,
-                             const SkMatrix& matrix,
-                             const GrTextureParams& params) {
-        GrAssert(!this->getStage(stageIdx).getEffect());
+
+    void addCoverageTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
+        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix);
+        this->addCoverageEffect(effect)->unref();
+    }
+
+    void addColorTextureEffect(GrTexture* texture,
+                               const SkMatrix& matrix,
+                               const GrTextureParams& params) {
         GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
-        this->setEffect(stageIdx, effect)->unref();
+        this->addColorEffect(effect)->unref();
     }
 
-    bool stagesDisabled() {
-        for (int i = 0; i < kNumStages; ++i) {
-            if (NULL != fStages[i].getEffect()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    void disableStage(int stageIdx) {
-        this->setEffect(stageIdx, NULL);
+    void addCoverageTextureEffect(GrTexture* texture,
+                                  const SkMatrix& matrix,
+                                  const GrTextureParams& params) {
+        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
+        this->addCoverageEffect(effect)->unref();
     }
 
     /**
-     * Release all the GrEffects referred to by this draw state.
+     * When this object is destroyed it will remove any effects from the draw state that were added
+     * after its constructor.
      */
-    void disableStages() {
-        for (int i = 0; i < kNumStages; ++i) {
-            this->disableStage(i);
-        }
-    }
-
-    class AutoStageDisable : public ::GrNoncopyable {
+    class AutoRestoreEffects : public ::GrNoncopyable {
     public:
-        AutoStageDisable(GrDrawState* ds) : fDrawState(ds) {}
-        ~AutoStageDisable() {
+        AutoRestoreEffects() : fDrawState(NULL), fColorEffectCnt(0), fCoverageEffectCnt(0) {}
+
+        AutoRestoreEffects(GrDrawState* ds) : fDrawState(NULL), fColorEffectCnt(0), fCoverageEffectCnt(0) {
+            this->set(ds);
+        }
+
+        ~AutoRestoreEffects() { this->set(NULL); }
+
+        void set(GrDrawState* ds) {
             if (NULL != fDrawState) {
-                fDrawState->disableStages();
+                int n = fDrawState->fColorStages.count() - fColorEffectCnt;
+                GrAssert(n >= 0);
+                fDrawState->fColorStages.pop_back_n(n);
+                n = fDrawState->fCoverageStages.count() - fCoverageEffectCnt;
+                GrAssert(n >= 0);
+                fDrawState->fCoverageStages.pop_back_n(n);
+                GR_DEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
+            }
+            fDrawState = ds;
+            if (NULL != ds) {
+                fColorEffectCnt = ds->fColorStages.count();
+                fCoverageEffectCnt = ds->fCoverageStages.count();
+                GR_DEBUGCODE(++ds->fBlockEffectRemovalCnt;)
             }
         }
+
     private:
         GrDrawState* fDrawState;
+        int fColorEffectCnt;
+        int fCoverageEffectCnt;
     };
 
-    /**
-     * Returns the current stage by index.
-     */
-    const GrEffectStage& getStage(int stageIdx) const {
-        GrAssert((unsigned)stageIdx < kNumStages);
-        return fStages[stageIdx];
-    }
+    int numColorStages() const { return fColorStages.count(); }
+    int numCoverageStages() const { return fCoverageStages.count(); }
+    int numTotalStages() const { return this->numColorStages() + this->numCoverageStages(); }
 
-    /**
-     * Called when the source coord system is changing. This ensures that effects will see the
-     * correct local coordinates. oldToNew gives the transformation from the old coord system in
-     * which the geometry was specified to the new coordinate system from which it will be rendered.
-     */
-    void localCoordChange(const SkMatrix& oldToNew) {
-        for (int i = 0; i < kNumStages; ++i) {
-            if (this->isStageEnabled(i)) {
-                fStages[i].localCoordChange(oldToNew);
-            }
-        }
-    }
+    const GrEffectStage& getColorStage(int stageIdx) const { return fColorStages[stageIdx]; }
+    const GrEffectStage& getCoverageStage(int stageIdx) const { return fCoverageStages[stageIdx]; }
 
     /**
      * Checks whether any of the effects will read the dst pixel color.
@@ -454,33 +447,6 @@ public:
     bool willEffectReadDstColor() const;
 
     /// @}
-
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Coverage / Color Stages
-    ////
-
-    /**
-     * A common pattern is to compute a color with the initial stages and then
-     * modulate that color by a coverage value in later stage(s) (AA, mask-
-     * filters, glyph mask, etc). Color-filters, xfermodes, etc should be
-     * computed based on the pre-coverage-modulated color. The division of
-     * stages between color-computing and coverage-computing is specified by
-     * this method. Initially this is kNumStages (all stages
-     * are color-computing).
-     */
-    void setFirstCoverageStage(int firstCoverageStage) {
-        GrAssert((unsigned)firstCoverageStage <= kNumStages);
-        fCommon.fFirstCoverageStage = firstCoverageStage;
-    }
-
-    /**
-     * Gets the index of the first coverage-computing stage.
-     */
-    int getFirstCoverageStage() const {
-        return fCommon.fFirstCoverageStage;
-    }
-
-    ///@}
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Blending
@@ -616,42 +582,10 @@ public:
     ////
 
     /**
-     * Sets the matrix applied to vertex positions.
-     *
-     * In the post-view-matrix space the rectangle [0,w]x[0,h]
-     * fully covers the render target. (w and h are the width and height of the
-     * the render-target.)
+     * Sets the view matrix to identity and updates any installed effects to compensate for the
+     * coord system change.
      */
-    void setViewMatrix(const SkMatrix& m) { fCommon.fViewMatrix = m; }
-
-    /**
-     * Gets a writable pointer to the view matrix.
-     */
-    SkMatrix* viewMatrix() { return &fCommon.fViewMatrix; }
-
-    /**
-     *  Multiplies the current view matrix by a matrix
-     *
-     *  After this call V' = V*m where V is the old view matrix,
-     *  m is the parameter to this function, and V' is the new view matrix.
-     *  (We consider positions to be column vectors so position vector p is
-     *  transformed by matrix X as p' = X*p.)
-     *
-     *  @param m the matrix used to modify the view matrix.
-     */
-    void preConcatViewMatrix(const SkMatrix& m) { fCommon.fViewMatrix.preConcat(m); }
-
-    /**
-     *  Multiplies the current view matrix by a matrix
-     *
-     *  After this call V' = m*V where V is the old view matrix,
-     *  m is the parameter to this function, and V' is the new view matrix.
-     *  (We consider positions to be column vectors so position vector p is
-     *  transformed by matrix X as p' = X*p.)
-     *
-     *  @param m the matrix used to modify the view matrix.
-     */
-    void postConcatViewMatrix(const SkMatrix& m) { fCommon.fViewMatrix.postConcat(m); }
+    bool setIdentityViewMatrix();
 
     /**
      * Retrieves the current view matrix
@@ -685,7 +619,7 @@ public:
 
     /**
      * Preconcats the current view matrix and restores the previous view matrix in the destructor.
-     * Effect matrices are automatically adjusted to compensate.
+     * Effect matrices are automatically adjusted to compensate and adjusted back in the destructor.
      */
     class AutoViewMatrixRestore : public ::GrNoncopyable {
     public:
@@ -705,66 +639,17 @@ public:
 
         void set(GrDrawState* drawState, const SkMatrix& preconcatMatrix);
 
-        bool isSet() const { return NULL != fDrawState; }
+        /** Sets the draw state's matrix to identity. This can fail because the current view matrix
+            is not invertible. */
+        bool setIdentity(GrDrawState* drawState);
 
     private:
-        GrDrawState*                        fDrawState;
-        SkMatrix                            fViewMatrix;
-        GrEffectStage::SavedCoordChange     fSavedCoordChanges[GrDrawState::kNumStages];
-        uint32_t                            fRestoreMask;
-    };
+        void doEffectCoordChanges(const SkMatrix& coordChangeMatrix);
 
-    ////////////////////////////////////////////////////////////////////////////
-
-    /**
-     * This sets the view matrix to identity and adjusts stage matrices to compensate. The
-     * destructor undoes the changes, restoring the view matrix that was set before the
-     * constructor. It is similar to passing the inverse of the current view matrix to
-     * AutoViewMatrixRestore, but lazily computes the inverse only if necessary.
-     */
-    class AutoDeviceCoordDraw : ::GrNoncopyable {
-    public:
-        AutoDeviceCoordDraw() : fDrawState(NULL) {}
-        /**
-         * If a stage's texture matrix is applied to explicit per-vertex coords, rather than to
-         * positions, then we don't want to modify its matrix. The explicitCoordStageMask is used
-         * to specify such stages.
-         */
-        AutoDeviceCoordDraw(GrDrawState* drawState) {
-            fDrawState = NULL;
-            this->set(drawState);
-        }
-
-        ~AutoDeviceCoordDraw() { this->restore(); }
-
-        bool set(GrDrawState* drawState);
-
-        /**
-         * Returns true if this object was successfully initialized on to a GrDrawState. It may
-         * return false because a non-default constructor or set() were never called or because
-         * the view matrix was not invertible.
-         */
-        bool succeeded() const { return NULL != fDrawState; }
-
-        /**
-         * Returns the matrix that was set previously set on the drawState. This is only valid
-         * if succeeded returns true.
-         */
-        const SkMatrix& getOriginalMatrix() const {
-            GrAssert(this->succeeded());
-            return fViewMatrix;
-        }
-
-        /**
-         * Can be called prior to destructor to restore the original matrix.
-         */
-        void restore();
-
-    private:
-        GrDrawState*                        fDrawState;
-        SkMatrix                            fViewMatrix;
-        GrEffectStage::SavedCoordChange     fSavedCoordChanges[GrDrawState::kNumStages];
-        uint32_t                            fRestoreMask;
+        GrDrawState*                                        fDrawState;
+        SkMatrix                                            fViewMatrix;
+        int                                                 fNumColorStages;
+        SkAutoSTArray<8, GrEffectStage::SavedCoordChange>   fSavedCoordChanges;
     };
 
     /// @}
@@ -992,21 +877,20 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////
 
-    bool isStageEnabled(int s) const {
-        GrAssert((unsigned)s < kNumStages);
-        return (NULL != fStages[s].getEffect());
-    }
-
     bool operator ==(const GrDrawState& s) const {
-        if (fRenderTarget.get() != s.fRenderTarget.get() || fCommon != s.fCommon) {
+        if (fRenderTarget.get() != s.fRenderTarget.get() ||
+            fColorStages.count() != s.fColorStages.count() ||
+            fCoverageStages.count() != s.fCoverageStages.count() ||
+            fCommon != s.fCommon) {
             return false;
         }
-        for (int i = 0; i < kNumStages; i++) {
-            bool enabled = this->isStageEnabled(i);
-            if (enabled != s.isStageEnabled(i)) {
+        for (int i = 0; i < fColorStages.count(); i++) {
+            if (fColorStages[i] != s.fColorStages[i]) {
                 return false;
             }
-            if (enabled && this->fStages[i] != s.fStages[i]) {
+        }
+        for (int i = 0; i < fCoverageStages.count(); i++) {
+            if (fCoverageStages[i] != s.fCoverageStages[i]) {
                 return false;
             }
         }
@@ -1015,17 +899,41 @@ public:
     bool operator !=(const GrDrawState& s) const { return !(*this == s); }
 
     GrDrawState& operator= (const GrDrawState& s) {
+        GrAssert(0 == fBlockEffectRemovalCnt || 0 == this->numTotalStages());
         this->setRenderTarget(s.fRenderTarget.get());
         fCommon = s.fCommon;
-        for (int i = 0; i < kNumStages; i++) {
-            if (s.isStageEnabled(i)) {
-                this->fStages[i] = s.fStages[i];
-            }
-        }
+        fColorStages = s.fColorStages;
+        fCoverageStages = s.fCoverageStages;
         return *this;
     }
 
 private:
+
+    void onReset(const SkMatrix* initialViewMatrix) {
+        GrAssert(0 == fBlockEffectRemovalCnt || 0 == this->numTotalStages());
+        fColorStages.reset();
+        fCoverageStages.reset();
+
+        fRenderTarget.reset(NULL);
+
+        this->setDefaultVertexAttribs();
+
+        fCommon.fColor = 0xffffffff;
+        if (NULL == initialViewMatrix) {
+            fCommon.fViewMatrix.reset();
+        } else {
+            fCommon.fViewMatrix = *initialViewMatrix;
+        }
+        fCommon.fSrcBlend = kOne_GrBlendCoeff;
+        fCommon.fDstBlend = kZero_GrBlendCoeff;
+        fCommon.fBlendConstant = 0x0;
+        fCommon.fFlagBits = 0x0;
+        fCommon.fStencilSettings.setDisabled();
+        fCommon.fCoverage = 0xffffffff;
+        fCommon.fColorFilterMode = SkXfermode::kDst_Mode;
+        fCommon.fColorFilterColor = 0x0;
+        fCommon.fDrawFace = kBoth_DrawFace;
+    }
 
     /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
     struct CommonState {
@@ -1039,7 +947,6 @@ private:
         const GrVertexAttrib* fVAPtr;
         int                   fVACount;
         GrStencilSettings     fStencilSettings;
-        int                   fFirstCoverageStage;
         GrColor               fCoverage;
         SkXfermode::Mode      fColorFilterMode;
         GrColor               fColorFilterColor;
@@ -1059,7 +966,6 @@ private:
                           fVACount == other.fVACount &&
                           !memcmp(fVAPtr, other.fVAPtr, fVACount * sizeof(GrVertexAttrib)) &&
                           fStencilSettings == other.fStencilSettings &&
-                          fFirstCoverageStage == other.fFirstCoverageStage &&
                           fCoverage == other.fCoverage &&
                           fColorFilterMode == other.fColorFilterMode &&
                           fColorFilterColor == other.fColorFilterColor &&
@@ -1103,8 +1009,13 @@ public:
             // Here we ref the effects directly rather than the effect-refs. TODO: When the effect-
             // ref gets fully unref'ed it will cause the underlying effect to unref its resources
             // and recycle them to the cache (if no one else is holding a ref to the resources).
-            for (int i = 0; i < kNumStages; ++i) {
-                fStages[i].saveFrom(drawState.fStages[i]);
+            fStages.reset(drawState.fColorStages.count() + drawState.fCoverageStages.count());
+            fColorStageCnt = drawState.fColorStages.count();
+            for (int i = 0; i < fColorStageCnt; ++i) {
+                fStages[i].saveFrom(drawState.fColorStages[i]);
+            }
+            for (int i = 0; i < drawState.fCoverageStages.count(); ++i) {
+                fStages[i + fColorStageCnt].saveFrom(drawState.fCoverageStages[i]);
             }
             GR_DEBUGCODE(fInitialized = true;)
         }
@@ -1113,17 +1024,36 @@ public:
             GrAssert(fInitialized);
             drawState->fCommon = fCommon;
             drawState->setRenderTarget(fRenderTarget);
-            for (int i = 0; i < kNumStages; ++i) {
-                fStages[i].restoreTo(&drawState->fStages[i]);
+            // reinflate color/cov stage arrays.
+            drawState->fColorStages.reset();
+            for (int i = 0; i < fColorStageCnt; ++i) {
+                SkNEW_APPEND_TO_TARRAY(&drawState->fColorStages, GrEffectStage, (fStages[i]));
+            }
+            int coverageStageCnt = fStages.count() - fColorStageCnt;
+            drawState->fCoverageStages.reset();
+            for (int i = 0; i < coverageStageCnt; ++i) {
+                SkNEW_APPEND_TO_TARRAY(&drawState->fCoverageStages,
+                                        GrEffectStage, (fStages[i + fColorStageCnt]));
             }
         }
 
         bool isEqual(const GrDrawState& state) const {
-            if (fRenderTarget != state.fRenderTarget.get() || fCommon != state.fCommon) {
+            int numCoverageStages = fStages.count() - fColorStageCnt;
+            if (fRenderTarget != state.fRenderTarget.get() ||
+                fColorStageCnt != state.fColorStages.count() ||
+                numCoverageStages != state.fCoverageStages.count() ||
+                fCommon != state.fCommon) {
                 return false;
             }
-            for (int i = 0; i < kNumStages; ++i) {
-                if (!fStages[i].isEqual(state.fStages[i])) {
+            bool explicitLocalCoords = state.hasLocalCoordAttribute();
+            for (int i = 0; i < fColorStageCnt; ++i) {
+                if (!fStages[i].isEqual(state.fColorStages[i], explicitLocalCoords)) {
+                    return false;
+                }
+            }
+            for (int i = 0; i < numCoverageStages; ++i) {
+                int s = fColorStageCnt + i;
+                if (!fStages[s].isEqual(state.fCoverageStages[i], explicitLocalCoords)) {
                     return false;
                 }
             }
@@ -1131,18 +1061,28 @@ public:
         }
 
     private:
+        typedef SkAutoSTArray<8, GrEffectStage::DeferredStage> DeferredStageArray;
+
         GrRenderTarget*                       fRenderTarget;
         CommonState                           fCommon;
-        GrEffectStage::DeferredStage          fStages[kNumStages];
+        int                                   fColorStageCnt;
+        DeferredStageArray                    fStages;
 
         GR_DEBUGCODE(bool fInitialized;)
     };
 
 private:
 
-    SkAutoTUnref<GrRenderTarget>           fRenderTarget;
-    CommonState                            fCommon;
-    GrEffectStage                          fStages[kNumStages];
+    SkAutoTUnref<GrRenderTarget>        fRenderTarget;
+    CommonState                         fCommon;
+
+    typedef SkSTArray<4, GrEffectStage> EffectStageArray;
+    EffectStageArray                    fColorStages;
+    EffectStageArray                    fCoverageStages;
+
+    // Some of the auto restore objects assume that no effects are removed during their lifetime.
+    // This is used to assert that this condition holds.
+    GR_DEBUGCODE(int fBlockEffectRemovalCnt;)
 
     /**
      *  Sets vertex attributes for next draw.

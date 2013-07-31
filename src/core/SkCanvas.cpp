@@ -461,31 +461,9 @@ private:
 
 #include "SkColorPriv.h"
 
-class AutoValidator {
-public:
-    AutoValidator(SkDevice* device) : fDevice(device) {}
-    ~AutoValidator() {
-#ifdef SK_DEBUG
-        const SkBitmap& bm = fDevice->accessBitmap(false);
-        if (bm.config() == SkBitmap::kARGB_4444_Config) {
-            for (int y = 0; y < bm.height(); y++) {
-                const SkPMColor16* p = bm.getAddr16(0, y);
-                for (int x = 0; x < bm.width(); x++) {
-                    SkPMColor16 c = p[x];
-                    SkPMColor16Assert(c);
-                }
-            }
-        }
-#endif
-    }
-private:
-    SkDevice* fDevice;
-};
-
 ////////// macros to place around the internal draw calls //////////////////
 
 #define LOOPER_BEGIN_DRAWDEVICE(paint, type)                        \
-/*    AutoValidator   validator(fMCRec->fTopLayer->fDevice); */     \
     this->predrawNotify();                                          \
     AutoDrawLooper  looper(this, paint, true);                      \
     while (looper.next(type)) {                                     \
@@ -493,7 +471,6 @@ private:
         SkDrawIter          iter(this);
 
 #define LOOPER_BEGIN(paint, type)                                   \
-/*    AutoValidator   validator(fMCRec->fTopLayer->fDevice); */     \
     this->predrawNotify();                                          \
     AutoDrawLooper  looper(this, paint);                            \
     while (looper.next(type)) {                                     \
@@ -975,14 +952,10 @@ bool SkCanvas::isDrawingToLayer() const {
 
 // can't draw it if its empty, or its too big for a fixed-point width or height
 static bool reject_bitmap(const SkBitmap& bitmap) {
-    return  bitmap.width() <= 0 || bitmap.height() <= 0
-#ifndef SK_ALLOW_OVER_32K_BITMAPS
-            || bitmap.width() > 32767 || bitmap.height() > 32767
-#endif
-            ;
+    return  bitmap.width() <= 0 || bitmap.height() <= 0;
 }
 
-void SkCanvas::internalDrawBitmap(const SkBitmap& bitmap, const SkIRect* srcRect,
+void SkCanvas::internalDrawBitmap(const SkBitmap& bitmap,
                                 const SkMatrix& matrix, const SkPaint* paint) {
     if (reject_bitmap(bitmap)) {
         return;
@@ -992,7 +965,17 @@ void SkCanvas::internalDrawBitmap(const SkBitmap& bitmap, const SkIRect* srcRect
     if (NULL == paint) {
         paint = lazy.init();
     }
-    this->commonDrawBitmap(bitmap, srcRect, matrix, *paint);
+
+    SkDEBUGCODE(bitmap.validate();)
+    CHECK_LOCKCOUNT_BALANCE(bitmap);
+
+    LOOPER_BEGIN(*paint, SkDrawFilter::kBitmap_Type)
+
+    while (iter.next()) {
+        iter.fDevice->drawBitmap(iter, bitmap, matrix, looper.paint());
+    }
+
+    LOOPER_END
 }
 
 void SkCanvas::internalDrawDevice(SkDevice* srcDev, int x, int y,
@@ -1167,7 +1150,10 @@ static bool clipPathHelper(const SkCanvas* canvas, SkRasterClip* currClip,
         // bounds, than just using the device. However, if currRgn is complex,
         // our region blitter may hork, so we do that case in two steps.
         if (currClip->isRect()) {
-            return currClip->setPath(devPath, *currClip, doAA);
+            // FIXME: we should also be able to do this when currClip->isBW(),
+            // but relaxing the test above triggers GM asserts in
+            // SkRgnBuilder::blitH(). We need to investigate what's going on.
+            return currClip->setPath(devPath, currClip->bwRgn(), doAA);
         } else {
             base.setRect(currClip->getBounds());
             SkRasterClip clip;
@@ -1277,6 +1263,80 @@ bool SkCanvas::clipPath(const SkPath& path, SkRegion::Op op, bool doAA) {
     }
 
     return clipPathHelper(this, fMCRec->fRasterClip, devPath, op, doAA);
+}
+
+bool SkCanvas::updateClipConservativelyUsingBounds(const SkRect& bounds, SkRegion::Op op,
+                                                   bool inverseFilled) {
+    // This is for updating the clip conservatively using only bounds
+    // information.
+    // Contract:
+    //    The current clip must contain the true clip. The true
+    //    clip is the clip that would have normally been computed
+    //    by calls to clipPath and clipRRect
+    // Objective:
+    //    Keep the current clip as small as possible without
+    //    breaking the contract, using only clip bounding rectangles
+    //    (for performance).
+
+    // N.B.: This *never* calls back through a virtual on canvas, so subclasses
+    // don't have to worry about getting caught in a loop. Thus anywhere
+    // we call a virtual method, we explicitly prefix it with
+    // SkCanvas:: to be sure to call the base-class.
+
+    if (inverseFilled) {
+        switch (op) {
+            case SkRegion::kIntersect_Op:
+            case SkRegion::kDifference_Op:
+                // These ops can only shrink the current clip. So leaving
+                // the clip unchanges conservatively respects the contract.
+                return this->getClipDeviceBounds(NULL);
+            case SkRegion::kUnion_Op:
+            case SkRegion::kReplace_Op:
+            case SkRegion::kReverseDifference_Op:
+            case SkRegion::kXOR_Op:
+                {
+                    // These ops can grow the current clip up to the extents of
+                    // the input clip, which is inverse filled, so we just set
+                    // the current clip to the device bounds.
+                    SkRect deviceBounds;
+                    SkIRect deviceIBounds;
+                    this->getDevice()->getGlobalBounds(&deviceIBounds);
+                    deviceBounds = SkRect::MakeFromIRect(deviceIBounds);
+                    this->SkCanvas::save(SkCanvas::kMatrix_SaveFlag);
+                    // set the clip in device space
+                    this->SkCanvas::setMatrix(SkMatrix::I());
+                    bool result = this->SkCanvas::clipRect(deviceBounds,
+                        SkRegion::kReplace_Op, false);
+                    this->SkCanvas::restore(); //pop the matrix, but keep the clip
+                    return result;
+                }
+            default:
+                SkASSERT(0); // unhandled op?
+        }
+    } else {
+        // Not inverse filled
+        switch (op) {
+            case SkRegion::kIntersect_Op:
+            case SkRegion::kUnion_Op:
+            case SkRegion::kReplace_Op:
+                return this->SkCanvas::clipRect(bounds, op, false);
+            case SkRegion::kDifference_Op:
+                // Difference can only shrink the current clip.
+                // Leaving clip unchanged conservatively fullfills the contract.
+                return this->getClipDeviceBounds(NULL);
+            case SkRegion::kReverseDifference_Op:
+                // To reverse, we swap in the bounds with a replace op.
+                // As with difference, leave it unchanged.
+                return this->SkCanvas::clipRect(bounds, SkRegion::kReplace_Op, false);
+            case SkRegion::kXOR_Op:
+                // Be conservative, based on (A XOR B) always included in (A union B),
+                // which is always included in (bounds(A) union bounds(B))
+                return this->SkCanvas::clipRect(bounds, SkRegion::kUnion_Op, false);
+            default:
+                SkASSERT(0); // unhandled op?
+        }
+    }
+    return true;
 }
 
 bool SkCanvas::clipRegion(const SkRegion& rgn, SkRegion::Op op) {
@@ -1683,7 +1743,7 @@ void SkCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar x, SkScalar y,
 
     SkMatrix matrix;
     matrix.setTranslate(x, y);
-    this->internalDrawBitmap(bitmap, NULL, matrix, paint);
+    this->internalDrawBitmap(bitmap, matrix, paint);
 }
 
 // this one is non-virtual, so it can be called safely by other canvas apis
@@ -1729,21 +1789,7 @@ void SkCanvas::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
 void SkCanvas::drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& matrix,
                                 const SkPaint* paint) {
     SkDEBUGCODE(bitmap.validate();)
-    this->internalDrawBitmap(bitmap, NULL, matrix, paint);
-}
-
-void SkCanvas::commonDrawBitmap(const SkBitmap& bitmap, const SkIRect* srcRect,
-                                const SkMatrix& matrix, const SkPaint& paint) {
-    SkDEBUGCODE(bitmap.validate();)
-    CHECK_LOCKCOUNT_BALANCE(bitmap);
-
-    LOOPER_BEGIN(paint, SkDrawFilter::kBitmap_Type)
-
-    while (iter.next()) {
-        iter.fDevice->drawBitmap(iter, bitmap, srcRect, matrix, looper.paint());
-    }
-
-    LOOPER_END
+    this->internalDrawBitmap(bitmap, matrix, paint);
 }
 
 void SkCanvas::internalDrawBitmapNine(const SkBitmap& bitmap,
@@ -2008,10 +2054,6 @@ void SkCanvas::drawVertices(VertexMode vmode, int vertexCount,
     }
 
     LOOPER_END
-}
-
-void SkCanvas::drawData(const void* data, size_t length) {
-    // do nothing. Subclasses may do something with the data
 }
 
 //////////////////////////////////////////////////////////////////////////////

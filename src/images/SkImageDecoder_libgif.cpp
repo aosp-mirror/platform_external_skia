@@ -18,12 +18,15 @@
 
 class SkGIFImageDecoder : public SkImageDecoder {
 public:
-    virtual Format getFormat() const {
+    virtual Format getFormat() const SK_OVERRIDE {
         return kGIF_Format;
     }
-    
+
 protected:
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode mode);
+    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode mode) SK_OVERRIDE;
+
+private:
+    typedef SkImageDecoder INHERITED;
 };
 
 static const uint8_t gStartingIterlaceYValue[] = {
@@ -48,7 +51,7 @@ public:
         fCurrY = *fStartYPtr++;
         fDeltaY = *fDeltaYPtr++;
     }
-    
+
     int currY() const {
         SkASSERT(fStartYPtr);
         SkASSERT(fDeltaYPtr);
@@ -77,7 +80,7 @@ public:
         }
         fCurrY = y;
     }
-    
+
 private:
     const int fHeight;
     int fCurrY;
@@ -87,9 +90,6 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
-//#define GIF_STAMP       "GIF"    /* First chars in file - GIF stamp. */
-//#define GIF_STAMP_LEN   (sizeof(GIF_STAMP) - 1)
 
 static int DecodeCallBackProc(GifFileType* fileType, GifByteType* out,
                               int size) {
@@ -178,22 +178,22 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
     int extFunction;
 #endif
     int transpIndex = -1;   // -1 means we don't have it (yet)
-    
+
     do {
         if (DGifGetRecordType(gif, &recType) == GIF_ERROR) {
             return error_return(gif, *bm, "DGifGetRecordType");
         }
-        
+
         switch (recType) {
         case IMAGE_DESC_RECORD_TYPE: {
             if (DGifGetImageDesc(gif) == GIF_ERROR) {
                 return error_return(gif, *bm, "IMAGE_DESC_RECORD_TYPE");
             }
-            
+
             if (gif->ImageCount < 1) {    // sanity check
                 return error_return(gif, *bm, "ImageCount < 1");
             }
-                
+
             width = gif->SWidth;
             height = gif->SHeight;
             if (width <= 0 || height <= 0 ||
@@ -201,29 +201,22 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
                                            width, height)) {
                 return error_return(gif, *bm, "chooseFromOneChoice");
             }
-            
-            if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-                bm->setConfig(SkBitmap::kIndex8_Config, width, height);
-                return true;
-            }
-#ifdef SK_BUILD_FOR_ANDROID
-            // No Bitmap reuse supported for this format
-            if (!bm->isNull()) {
-                return false;
-            }
-#endif
 
             bm->setConfig(SkBitmap::kIndex8_Config, width, height);
+            if (SkImageDecoder::kDecodeBounds_Mode == mode) {
+                return true;
+            }
+
             SavedImage* image = &gif->SavedImages[gif->ImageCount-1];
             const GifImageDesc& desc = image->ImageDesc;
-            
+
             // check for valid descriptor
             if (   (desc.Top | desc.Left) < 0 ||
                     desc.Left + desc.Width > width ||
                     desc.Top + desc.Height > height) {
                 return error_return(gif, *bm, "TopLeft");
             }
-            
+
             // now we decode the colortable
             int colorCount = 0;
             {
@@ -237,7 +230,7 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
                 SkPMColor* colorPtr = ctable->lockColors();
                 for (int index = 0; index < colorCount; index++)
                     colorPtr[index] = SkPackARGB32(0xFF,
-                                                   cmap->Colors[index].Red, 
+                                                   cmap->Colors[index].Red,
                                                    cmap->Colors[index].Green,
                                                    cmap->Colors[index].Blue);
 
@@ -253,7 +246,7 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
                     return error_return(gif, *bm, "allocPixelRef");
                 }
             }
-            
+
             SkAutoLockPixels alp(*bm);
 
             // time to decode the scanlines
@@ -287,7 +280,7 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
                 // bump our starting address
                 scanline += desc.Top * rowBytes + desc.Left;
             }
-            
+
             // now decode each scanline
             if (gif->Image.Interlace)
             {
@@ -313,7 +306,7 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
             }
             goto DONE;
             } break;
-            
+
         case EXTENSION_RECORD_TYPE:
 #if GIFLIB_MAJOR < 5
             if (DGifGetExtension(gif, &temp_save.Function,
@@ -346,11 +339,11 @@ bool SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* bm, Mode mode) {
 #endif
             }
             break;
-            
+
         case TERMINATE_RECORD_TYPE:
             break;
-            
-        default:	/* Should be trapped by DGifGetRecordType */
+
+        default:    /* Should be trapped by DGifGetRecordType */
             break;
         }
     } while (recType != TERMINATE_RECORD_TYPE);
@@ -363,18 +356,34 @@ DONE:
 DEFINE_DECODER_CREATOR(GIFImageDecoder);
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkTRegistry.h"
-
-static SkImageDecoder* sk_libgif_dfactory(SkStream* stream) {
+static bool is_gif(SkStream* stream) {
     char buf[GIF_STAMP_LEN];
     if (stream->read(buf, GIF_STAMP_LEN) == GIF_STAMP_LEN) {
         if (memcmp(GIF_STAMP,   buf, GIF_STAMP_LEN) == 0 ||
                 memcmp(GIF87_STAMP, buf, GIF_STAMP_LEN) == 0 ||
                 memcmp(GIF89_STAMP, buf, GIF_STAMP_LEN) == 0) {
-            return SkNEW(SkGIFImageDecoder);
+            return true;
         }
+    }
+    return false;
+}
+
+#include "SkTRegistry.h"
+
+static SkImageDecoder* sk_libgif_dfactory(SkStream* stream) {
+    if (is_gif(stream)) {
+        return SkNEW(SkGIFImageDecoder);
     }
     return NULL;
 }
 
 static SkTRegistry<SkImageDecoder*, SkStream*> gReg(sk_libgif_dfactory);
+
+static SkImageDecoder::Format get_format_gif(SkStream* stream) {
+    if (is_gif(stream)) {
+        return SkImageDecoder::kGIF_Format;
+    }
+    return SkImageDecoder::kUnknown_Format;
+}
+
+static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_gif);
