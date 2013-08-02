@@ -276,6 +276,20 @@ public:
     */
     void setDevKernText(bool devKernText);
 
+    enum FilterLevel {
+        kNone_FilterLevel,
+        kLow_FilterLevel,
+        kMedium_FilterLevel,
+        kHigh_FilterLevel
+    };
+
+    /**
+     *  Set the filter level. This affects the quality (and performance) of
+     *  drawing scaled images.
+     */
+    void setFilterLevel(FilterLevel) {}
+
+
     bool isFilterBitmap() const {
         return SkToBool(this->getFlags() & kFilterBitmap_Flag);
     }
