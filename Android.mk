@@ -360,6 +360,9 @@ LOCAL_SRC_FILES:= \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/utils/android/ashmem.cpp \
+	src/utils/debugger/SkDebugCanvas.cpp \
+	src/utils/debugger/SkDrawCommand.cpp \
+	src/utils/debugger/SkObjectParser.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitSet.cpp \
 	src/utils/SkBoundaryPatch.cpp \
