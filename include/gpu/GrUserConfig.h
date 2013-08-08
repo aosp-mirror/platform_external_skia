@@ -34,4 +34,10 @@
  */
 //#define GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT 96
 
+// Chromium expects to use the per-gl-func callback.
+#define GR_GL_PER_GL_FUNC_CALLBACK 1
+
+// Android's gl2.h provides the new glShaderSource signature
+#define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE 1
+
 #endif

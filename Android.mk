@@ -64,9 +64,6 @@ LOCAL_CFLAGS += -DSK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400
 #Skia should not use dlopen on Android.
 LOCAL_CFLAGS += -DSK_CAN_USE_DLOPEN=0
 
-# Android's gl2.h provides the new glShaderSource signature
-LOCAL_CFLAGS += -DGR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE=1
-
 # used for testing
 #LOCAL_CFLAGS += -g -O0
 
