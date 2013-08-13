@@ -11,6 +11,12 @@
 #include "SkTArray.h"
 #include "SkNulCanvas.h"
 
+#if SK_SUPPORT_GPU
+#include "GrContextFactory.h"
+#include "GrContext.h"
+#include "SkGpuDevice.h"
+#endif
+
 #include "SkPdfRenderer.h"
 
 DEFINE_string2(readPath, r, "", "pdf files or directories of pdf files to process.");
@@ -29,8 +35,12 @@ DEFINE_int32(benchLoad, 0, "Load the pdf file minimally N times, without any ren
              "\tminimal parsing to ensure correctness. Default 0 (disabled).");
 DEFINE_int32(benchRender, 0, "Render the pdf content N times. Default 0 (disabled)");
 DEFINE_string2(config, c, "8888", "Canvas to render:\n"
-                                  "\t8888 - all pages\n"
-                                  "\tnul - all pages, in reverse order\n"
+                                  "\t8888 - argb\n"
+
+#if SK_SUPPORT_GPU
+                                  "\tgpu: use the gpu\n"
+#endif
+                                  "\tnul - render in null canvas, any draw will just return.\n"
                );
 
 
@@ -156,6 +166,10 @@ static void setup_bitmap(SkBitmap* bitmap, int width, int height, SkColor color 
 extern "C" SkBitmap* gDumpBitmap;
 extern "C" SkCanvas* gDumpCanvas;
 
+#if SK_SUPPORT_GPU
+GrContextFactory gContextFactory;
+#endif
+
 static bool render_page(const SkString& outputDir,
                         const SkString& inputFilename,
                         const SkPdfRenderer& renderer,
@@ -183,7 +197,36 @@ static bool render_page(const SkString& outputDir,
 #else
         setup_bitmap(&bitmap, (int)SkScalarToDouble(width), (int)SkScalarToDouble(height));
 #endif
-        SkAutoTUnref<SkDevice> device(SkNEW_ARGS(SkDevice, (bitmap)));
+        SkAutoTUnref<SkDevice> device;
+        if (strcmp(FLAGS_config[0], "8888") == 0) {
+            device.reset(SkNEW_ARGS(SkDevice, (bitmap)));
+        }
+#if SK_SUPPORT_GPU
+        else if (strcmp(FLAGS_config[0], "gpu") == 0) {
+            SkAutoTUnref<GrSurface> target;
+            GrContext* gr = gContextFactory.get(GrContextFactory::kNative_GLContextType);
+            if (gr) {
+                // create a render target to back the device
+                GrTextureDesc desc;
+                desc.fConfig = kSkia8888_GrPixelConfig;
+                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fWidth = width;
+                desc.fHeight = height;
+                desc.fSampleCnt = 0;
+                target.reset(gr->createUncachedTexture(desc, NULL, 0));
+            }
+            if (NULL == target.get()) {
+                SkASSERT(0);
+                return false;
+            }
+
+            device.reset(SkGpuDevice::Create(target));
+        }
+#endif
+        else {
+            SkDebugf("unknown --config: %s\n", FLAGS_config[0]);
+            return false;
+        }
         SkCanvas canvas(device);
 
         gDumpBitmap = &bitmap;
@@ -216,14 +259,7 @@ static bool process_pdf(const SkString& inputPath, const SkString& outputDir,
     SkString inputFilename;
     get_basename(&inputFilename, inputPath);
 
-    SkFILEStream inputStream;
-    inputStream.setPath(inputPath.c_str());
-    if (!inputStream.isValid()) {
-        SkDebugf("Could not open file %s\n", inputPath.c_str());
-        return false;
-    }
-
-    bool success = false;
+    bool success = true;
 
     success = renderer.load(inputPath);
     if (FLAGS_showMemoryUsage) {
@@ -233,7 +269,7 @@ static bool process_pdf(const SkString& inputPath, const SkString& outputDir,
     // TODO(edisonn): bench timers
     if (FLAGS_benchLoad > 0) {
         for (int i = 0 ; i < FLAGS_benchLoad; i++) {
-            success = renderer.load(inputPath);
+            success = renderer.load(inputPath) && success;
             if (FLAGS_showMemoryUsage) {
                 SkDebugf("Memory usage after load %i number : %u\n", i, (unsigned int)renderer.bytesUsed());
             }
@@ -262,10 +298,14 @@ static bool process_pdf(const SkString& inputPath, const SkString& outputDir,
                     success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : renderer.pages() - 1) && success;
                 } else {
                     int pn = atoi(FLAGS_pages[0]);
-                    success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : renderer.pages() - 1) && pn;
+                    success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : pn) && success;
                 }
             }
         }
+    }
+
+    if (!success) {
+        SkDebugf("Failures for file %s\n", inputPath.c_str());
     }
 
     return success;

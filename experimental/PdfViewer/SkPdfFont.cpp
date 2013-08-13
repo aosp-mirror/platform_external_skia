@@ -255,10 +255,10 @@ SkPdfFont* SkPdfFont::fontFromPdfDictionary(SkNativeParsedPDF* doc, SkPdfFontDic
         return NULL;  // TODO(edisonn): report default one?
     }
 
-    if (dict->data() == NULL) {
-        dict->setData(fontFromPdfDictionaryOnce(doc, dict));
+    if (!dict->hasData(SkPdfObject::kFont_Data)) {
+        dict->setData(fontFromPdfDictionaryOnce(doc, dict), SkPdfObject::kFont_Data);
     }
-    return (SkPdfFont*)dict->data();
+    return (SkPdfFont*)dict->data(SkPdfObject::kFont_Data);
 }
 
 
@@ -308,7 +308,7 @@ SkPdfMultiMasterFont* SkPdfFont::fontFromMultiMasterFontDictionary(SkNativeParse
 static int skstoi(const SkPdfObject* str) {
     // TODO(edisonn): report err of it is not a (hex) string
     int ret = 0;
-    for (unsigned int i = 0 ; i < str->len(); i++) {
+    for (unsigned int i = 0 ; i < str->lenstr(); i++) {
         ret = (ret << 8) + ((unsigned char*)str->c_str())[i];
     }
     // TODO(edisonn): character larger than 0x0000ffff not supported right now.

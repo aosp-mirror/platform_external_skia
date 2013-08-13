@@ -99,7 +99,8 @@
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_CPU_BENDIAN) && !defined(SK_CPU_LENDIAN)
-    #if defined (__ppc__) || defined(__ppc64__)
+    #if defined (__ppc__) || defined(__PPC__) || defined(__ppc64__) \
+        || defined(__PPC64__)
         #define SK_CPU_BENDIAN
     #else
         #define SK_CPU_LENDIAN
@@ -191,16 +192,6 @@
             #define SK_ARM_HAS_EDSP
         #endif
     #endif
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-/**
- *  THUMB is the only known config where we avoid small branches in
- *  favor of more complex math.
- */
-#if !(defined(__arm__) && defined(__thumb__))
-    #define SK_CPU_HAS_CONDITIONAL_INSTR
 #endif
 
 //////////////////////////////////////////////////////////////////////

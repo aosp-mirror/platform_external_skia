@@ -63,6 +63,14 @@
     #endif
 #endif
 
+#if !defined(SK_ATTRIBUTE)
+    #if defined(__clang__) || defined(__GNUC__)
+        #define SK_ATTRIBUTE(attr) __attribute__((attr))
+    #else
+        #define SK_ATTRIBUTE(attr)
+    #endif
+#endif
+
 #if !defined(SK_SUPPORT_GPU)
     #define SK_SUPPORT_GPU 1
 #endif
@@ -140,11 +148,21 @@
         #define WIN32_LEAN_AND_MEAN
         #define WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
     #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+        #define NOMINMAX_WAS_LOCALLY_DEFINED
+    #endif
 
     #include <windows.h>
 
     #ifdef WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
+        #undef WIN32_IS_MEAN_WAS_LOCALLY_DEFINED
         #undef WIN32_LEAN_AND_MEAN
+    #endif
+
+    #ifdef NOMINMAX_WAS_LOCALLY_DEFINED
+        #undef NOMINMAX_WAS_LOCALLY_DEFINED
+        #undef NOMINMAX
     #endif
 
     #ifndef SK_DEBUGBREAK
@@ -336,10 +354,16 @@
                 #define SK_OVERRIDE override
             #endif
         #endif
-    #else
-        // Linux GCC ignores "__attribute__((override))" and rejects "override".
+    #endif
+    #ifndef SK_OVERRIDE
         #define SK_OVERRIDE
     #endif
+#endif
+
+//////////////////////////////////////////////////////////////////////
+
+#if !defined(SK_UNUSED)
+    #define SK_UNUSED SK_ATTRIBUTE(unused)
 #endif
 
 //////////////////////////////////////////////////////////////////////

@@ -28,13 +28,15 @@ static char* strrstrk(char* hayStart, char* hayEnd, const char* needle) {
     return NULL;
 }
 
-#ifdef PDF_TRACE
+#ifdef PDF_TRACE_TOKENIZER
 static void TRACE_INDENT(int level, const char* type) {
     static int id = 0;
     id++;
+#if 0
     if (478613 == id) {
         printf("break;\n");
     }
+#endif
     // all types should have 2 letters, so the text is alligned nicely
     printf("\n%10i %15s: ", id, type);
     for (int i = 0 ; i < level; i++) {
@@ -83,9 +85,9 @@ static void TRACE_HEXSTRING(const unsigned char* start, const unsigned char* end
 #define TRACE_HEXSTRING(start,end)
 #endif
 
-static const unsigned char* skipPdfWhiteSpaces(int level, const unsigned char* start, const unsigned char* end) {
+const unsigned char* skipPdfWhiteSpaces(int level, const unsigned char* start, const unsigned char* end) {
     TRACE_INDENT(level, "White Space");
-    while (start < end && isPdfWhiteSpace(*start)) {
+    while (start < end && (isPdfWhiteSpace(*start) || *start == kComment_PdfDelimiter)) {
         TRACE_COMMENT(*start);
         if (*start == kComment_PdfDelimiter) {
             // skip the comment until end of line
@@ -103,7 +105,7 @@ static const unsigned char* skipPdfWhiteSpaces(int level, const unsigned char* s
 }
 
 // TODO(edisonn) '(' can be used, will it break the string a delimiter or space inside () ?
-static const unsigned char* endOfPdfToken(int level, const unsigned char* start, const unsigned char* end) {
+const unsigned char* endOfPdfToken(int level, const unsigned char* start, const unsigned char* end) {
     //int opened brackets
     //TODO(edisonn): what out for special chars, like \n, \032
     TRACE_INDENT(level, "Token");
@@ -158,7 +160,6 @@ static const unsigned char* readArray(int level, const unsigned char* start, con
         }
         array->appendInArray(newObj);
     }
-    printf("break;\n");  // DO NOT SUBMIT!
     // TODO(edisonn): report not reached, we should never get here
     // TODO(edisonn): there might be a bug here, enable an assert and run it on files
     // or it might be that the files were actually corrupted
@@ -636,6 +637,21 @@ static const unsigned char* readStream(int level, const unsigned char* start, co
     // TODO(edisonn): laod external streams
     // TODO(edisonn): look at the last filter, to determione how to deal with possible issue
 
+
+    if (length >= 0) {
+        const unsigned char* endstream = start + length;
+
+        if (endstream[0] == kCR_PdfWhiteSpace && endstream[1] == kLF_PdfWhiteSpace) {
+            endstream += 2;
+        } else if (endstream[0] == kLF_PdfWhiteSpace) {
+            endstream += 1;
+        }
+
+        if (strncmp((const char*)endstream, "endstream", strlen("endstream")) != 0) {
+            length = -1;
+        }
+    }
+
     if (length < 0) {
         // scan the buffer, until we find first endstream
         // TODO(edisonn): all buffers must have a 0 at the end now,
@@ -840,7 +856,7 @@ const unsigned char* nextObject(int level, const unsigned char* start, const uns
         return current;
     }
 
-    if (tokenLen == 5 && start[0] == 'f' && start[1] == 'a' && start[2] == 'l' && start[3] == 's' && start[3] == 'e') {
+    if (tokenLen == 5 && start[0] == 'f' && start[1] == 'a' && start[2] == 'l' && start[3] == 's' && start[4] == 'e') {
         SkPdfObject::makeBoolean(false, token);
         return current;
     }
@@ -913,6 +929,10 @@ SkPdfNativeTokenizer::~SkPdfNativeTokenizer() {
 }
 
 bool SkPdfNativeTokenizer::readTokenCore(PdfToken* token) {
+    SkPdfObject obj;
+#ifdef PDF_TRACE_READ_TOKEN
+    static int read_op = 0;
+#endif
     token->fKeyword = NULL;
     token->fObject = NULL;
 
@@ -921,13 +941,12 @@ bool SkPdfNativeTokenizer::readTokenCore(PdfToken* token) {
         return false;
     }
 
-    SkPdfObject obj;
     fUncompressedStream = nextObject(0, fUncompressedStream, fUncompressedStreamEnd, &obj, fAllocator, fDoc);
 
     // If it is a keyword, we will only get the pointer of the string
     if (obj.type() == SkPdfObject::kKeyword_PdfObjectType) {
         token->fKeyword = obj.c_str();
-        token->fKeywordLength = obj.len();
+        token->fKeywordLength = obj.lenstr();
         token->fType = kKeyword_TokenType;
     } else {
         SkPdfObject* pobj = fAllocator->allocObject();
@@ -937,11 +956,12 @@ bool SkPdfNativeTokenizer::readTokenCore(PdfToken* token) {
     }
 
 #ifdef PDF_TRACE_READ_TOKEN
-    static int read_op = 0;
     read_op++;
+#if 0
     if (548 == read_op) {
         printf("break;\n");
     }
+#endif
     printf("%i READ %s %s\n", read_op, token->fType == kKeyword_TokenType ? "Keyword" : "Object", token->fKeyword ? std::string(token->fKeyword, token->fKeywordLength).c_str() : token->fObject->toString().c_str());
 #endif
 
@@ -1062,7 +1082,7 @@ SkPdfImageDictionary* SkPdfNativeTokenizer::readInlineImage() {
         SkPdfObject* key = fAllocator->allocObject();
         fUncompressedStream = nextObject(0, fUncompressedStream, fUncompressedStreamEnd, key, fAllocator, fDoc);
 
-        if (key->isKeyword() && key->len() == 2 && key->c_str()[0] == 'I' && key->c_str()[1] == 'D') { // ID
+        if (key->isKeyword() && key->lenstr() == 2 && key->c_str()[0] == 'I' && key->c_str()[1] == 'D') { // ID
             fUncompressedStream = readInlineImageStream(0, fUncompressedStream, fUncompressedStreamEnd, inlineImage, fDoc);
             return inlineImage;
         } else {

@@ -202,6 +202,10 @@ int SkGTypeface::onGetUPEM() const {
     return fProxy->getUnitsPerEm();
 }
 
+SkTypeface::LocalizedStrings* SkGTypeface::onCreateFamilyNameIterator() const {
+    return fProxy->createFamilyNameIterator();
+}
+
 int SkGTypeface::onGetTableTags(SkFontTableTag tags[]) const {
     return fProxy->getTableTags(tags);
 }
@@ -209,6 +213,15 @@ int SkGTypeface::onGetTableTags(SkFontTableTag tags[]) const {
 size_t SkGTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
                                     size_t length, void* data) const {
     return fProxy->getTableData(tag, offset, length, data);
+}
+
+SkTypeface* SkGTypeface::onRefMatchingStyle(Style style) const {
+    if (this->style() == style) {
+        return const_cast<SkGTypeface*>(SkRef(this));
+    }
+
+    SkAutoTUnref<SkTypeface> other(fProxy->refMatchingStyle(style));
+    return SkNEW_ARGS(SkGTypeface, (other, fPaint));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

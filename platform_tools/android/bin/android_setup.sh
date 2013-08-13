@@ -1,3 +1,31 @@
+#!/bin/bash
+#
+# android_setup.sh: Sets environment variables used by other Android scripts.
+
+# Parse the arguments for a DEVICE_ID.
+DEVICE_ID=""
+DEVICE_SERIAL=""
+while (( "$#" )); do
+  if [[ $(echo "$1" | grep "^-d$") != "" ]];
+  then
+    DEVICE_ID=$2
+    shift
+  elif [[ "$1" == "-s" ]];
+  then
+    if [[ $# -lt 2 ]];
+    then
+      echo "ERROR: missing serial number"
+      exit 1;
+    fi
+    DEVICE_SERIAL="-s $2"
+    shift
+  else
+    APP_ARGS=("${APP_ARGS[@]}" "${1}")
+  fi
+
+  shift
+done
+
 function exportVar {
   NAME=$1
   VALUE=$2
@@ -37,89 +65,88 @@ if [ ! -d "$THIRD_PARTY_EXTERNAL_DIR" ]; then
 	exit 1;
 fi
 
-# determine the toolchain that we will be using
-API_LEVEL=14
+# Helper function to determine and download the toolchain that we will be using.
+setup_toolchain() {
+  API_LEVEL=14
 
-if [[ -z "$NDK_REV" ]];
-then
-    NDK_REV="8d"
-fi
+  if [[ -z "$NDK_REV" ]];
+  then
+    NDK_REV="8e"
+  fi
 
-if [[ -z "$ANDROID_ARCH" ]];
-then
+  if [[ -z "$ANDROID_ARCH" ]];
+  then
     ANDROID_ARCH="arm"
-fi
+  fi
 
-TOOLCHAIN_DIR=${SCRIPT_DIR}/../toolchains
-if [ $(uname) == "Linux" ]; then
+  TOOLCHAIN_DIR=${SCRIPT_DIR}/../toolchains
+  if [ $(uname) == "Linux" ]; then
     echo "Using Linux toolchain."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-linux_v$API_LEVEL
-elif [ $(uname) == "Darwin" ]; then
+  elif [ $(uname) == "Darwin" ]; then
     echo "Using Mac toolchain."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-mac_v$API_LEVEL
-else
+  else
     echo "Could not automatically determine toolchain!  Defaulting to Linux."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-linux_v$API_LEVEL
-fi
-exportVar ANDROID_TOOLCHAIN ${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}/bin
-
-# if the toolchain doesn't exist on your machine then we need to fetch it
-if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
-  # create the toolchain directory if needed
-  if [ ! -d "$TOOLCHAIN_DIR" ]; then
-    mkdir $TOOLCHAIN_DIR
   fi
-  # enter the toolchain directory then download, unpack, and remove the tarball
-  pushd $TOOLCHAIN_DIR
-  TARBALL=ndk-r$NDK_REV-v$API_LEVEL.tgz
+  exportVar ANDROID_TOOLCHAIN ${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}/bin
 
-  echo "Downloading $TARBALL ..."
-  ${SCRIPT_DIR}/download_toolchains.py http://chromium-skia-gm.commondatastorage.googleapis.com/android-toolchains/$TARBALL $TOOLCHAIN_DIR/$TARBALL
-  if [[ "$?" != "0" ]]; then
-    echo "ERROR: Unable to download toolchain $TARBALL."
-    exit 1
+  # if the toolchain doesn't exist on your machine then we need to fetch it
+  if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
+    # create the toolchain directory if needed
+    if [ ! -d "$TOOLCHAIN_DIR" ]; then
+      mkdir $TOOLCHAIN_DIR
+    fi
+    # enter the toolchain directory then download, unpack, and remove the tarball
+    pushd $TOOLCHAIN_DIR
+    TARBALL=ndk-r$NDK_REV-v$API_LEVEL.tgz
+
+    echo "Downloading $TARBALL ..."
+    ${SCRIPT_DIR}/download_toolchains.py http://chromium-skia-gm.commondatastorage.googleapis.com/android-toolchains/$TARBALL $TOOLCHAIN_DIR/$TARBALL
+    if [[ "$?" != "0" ]]; then
+      echo "ERROR: Unable to download toolchain $TARBALL."
+      exit 1
+    fi
+
+    echo "Untarring $TOOLCHAIN_TYPE from $TARBALL."
+    tar -xzf $TARBALL $TOOLCHAIN_TYPE
+    echo "Removing $TARBALL"
+    rm $TARBALL
+    popd
   fi
 
-  echo "Untarring $TOOLCHAIN_TYPE from $TARBALL."
-  tar -xzf $TARBALL $TOOLCHAIN_TYPE
-  echo "Removing $TARBALL"
-  rm $TARBALL
-  popd
-fi
+  if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
+    echo "ERROR: unable to download/setup the required toolchain (${TOOLCHAIN_TYPE})"
+    return 1;
+  fi
 
-if [ ! -d "$ANDROID_TOOLCHAIN" ]; then
-  echo "ERROR: unable to download/setup the required toolchain (${TOOLCHAIN_TYPE})"
-  return 1;
-fi
+  echo "The build is targeting NDK API level $API_LEVEL for use on Android 4.0 (NDK Revision $NDK_REV) and above"
 
-echo "The build is targeting NDK API level $API_LEVEL for use on Android 4.0 (NDK Revision $NDK_REV) and above"
-
-LS="/bin/ls"  # Use directly to avoid any 'ls' alias that might be defined.
-GCC=$($LS $ANDROID_TOOLCHAIN/*-gcc | head -n1)
-if [ -z "$GCC" ]; then
+  LS="/bin/ls"  # Use directly to avoid any 'ls' alias that might be defined.
+  GCC=$($LS $ANDROID_TOOLCHAIN/*-gcc | head -n1)
+  if [ -z "$GCC" ]; then
     echo "ERROR: Could not find Android cross-compiler in: $ANDROID_TOOLCHAIN"
     return 1
-fi
+  fi
 
-# Remove the '-gcc' at the end to get the full toolchain prefix
-ANDROID_TOOLCHAIN_PREFIX=${GCC%%-gcc}
+  # Remove the '-gcc' at the end to get the full toolchain prefix
+  ANDROID_TOOLCHAIN_PREFIX=${GCC%%-gcc}
 
-exportVar AR "$ANDROID_TOOLCHAIN_PREFIX-ar"
-if [[ -z "$ANDROID_MAKE_CCACHE" ]]; then
-  exportVar CC "$ANDROID_TOOLCHAIN_PREFIX-gcc"
-  exportVar CXX "$ANDROID_TOOLCHAIN_PREFIX-g++"
-  exportVar LINK "$ANDROID_TOOLCHAIN_PREFIX-gcc"
-else
-  exportVar CC "$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-gcc"
-  exportVar CXX "$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-g++"
-  exportVar LINK "$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-gcc"
-fi
-exportVar RANLIB "$ANDROID_TOOLCHAIN_PREFIX-ranlib"
-exportVar OBJCOPY "$ANDROID_TOOLCHAIN_PREFIX-objcopy"
-exportVar STRIP "$ANDROID_TOOLCHAIN_PREFIX-strip"
-
-# Use the "android" flavor of the Makefile generator for both Linux and OS X.
-exportVar GYP_GENERATORS "make-android"
+  if [[ -z "$ANDROID_MAKE_CCACHE" ]]; then
+    export CC="$ANDROID_TOOLCHAIN_PREFIX-gcc"
+    export CXX="$ANDROID_TOOLCHAIN_PREFIX-g++"
+    export LINK="$ANDROID_TOOLCHAIN_PREFIX-gcc"
+  else
+    export CC="$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-gcc"
+    export CXX="$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-g++"
+    export LINK="$ANDROID_MAKE_CCACHE $ANDROID_TOOLCHAIN_PREFIX-gcc"
+  fi
+  export AR="$ANDROID_TOOLCHAIN_PREFIX-ar"
+  export RANLIB="$ANDROID_TOOLCHAIN_PREFIX-ranlib"
+  export OBJCOPY="$ANDROID_TOOLCHAIN_PREFIX-objcopy"
+  export STRIP="$ANDROID_TOOLCHAIN_PREFIX-strip"
+}
 
 # Helper function to configure the GYP defines to the appropriate values
 # based on the target device.
@@ -128,7 +155,6 @@ setup_device() {
   DEFINES="${DEFINES} host_os=$(uname -s | sed -e 's/Linux/linux/;s/Darwin/mac/')"
   DEFINES="${DEFINES} skia_os=android"
   DEFINES="${DEFINES} android_base=${SCRIPT_DIR}/.."
-  DEFINES="${DEFINES} android_toolchain=${TOOLCHAIN_TYPE}"
   DEFINES="${DEFINES} skia_shared_lib=1"
 
   # Setup the build variation depending on the target device
@@ -141,62 +167,68 @@ setup_device() {
 
   case $TARGET_DEVICE in
     nexus_s)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
-        ;;
-    nexus_s_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 arm_version=7 arm_thumb=1"
+      DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
+      ANDROID_ARCH="arm"
+      ;;
     nexus_4 | nexus_7 | nexus_10)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
-        ;;
-    nexus_4_thumb | nexus_7_thumb | nexus_10_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 arm_version=7 arm_thumb=1"
+      ANDROID_ARCH="arm"
+      ;;
     xoom)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=1 arm_thumb=0"
-        ;;
-    xoom_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=1 arm_thumb=1"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 arm_version=7 arm_thumb=1"
+      ANDROID_ARCH="arm"
+      ;;
     galaxy_nexus)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=0"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
-        ;;
-    galaxy_nexus_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 armv7=1 arm_thumb=1"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 arm_version=7 arm_thumb=1"
+      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      ANDROID_ARCH="arm"
+      ;;
     razr_i)
-        DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
+      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      ANDROID_ARCH="x86"
+      ;;
     arm_v7)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 armv7=1 arm_thumb=0"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=0"
+      ANDROID_ARCH="arm"
+      ;;
     arm_v7_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 armv7=1 arm_thumb=1"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=1"
+      ANDROID_ARCH="arm"
+      ;;
     arm)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=0 arm_thumb=0"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 arm_thumb=0"
+      ANDROID_ARCH="arm"
+      ;;
     arm_thumb)
-        DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 armv7=0 arm_thumb=1"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 arm_thumb=1"
+      ANDROID_ARCH="arm"
+      ;;
     x86)
-        DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
-        DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
-        ;;
+      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
+      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      ANDROID_ARCH="x86"
+      ;;
     *)
-        echo -n "ERROR: unknown device specified ($TARGET_DEVICE), valid values: "
-        echo "nexus_[s,4,7,10] xoom galaxy_nexus arm arm_thumb arm_v7 arm_v7_thumb x86"
-        return 1;
-        ;;
+      echo -n "ERROR: unknown device specified ($TARGET_DEVICE), valid values: "
+      echo "nexus_[s,4,7,10] xoom galaxy_nexus razr_i arm arm_thumb arm_v7 arm_v7_thumb x86"
+      return 1;
+      ;;
   esac
 
   echo "The build is targeting the device: $TARGET_DEVICE"
+  export DEVICE_ID="$TARGET_DEVICE"
 
+  # Set up the toolchain.
+  setup_toolchain
+  if [[ "$?" != "0" ]]; then
+    return 1
+  fi
+  DEFINES="${DEFINES} android_toolchain=${TOOLCHAIN_TYPE}"
+
+  # Use the "android" flavor of the Makefile generator for both Linux and OS X.
+  exportVar GYP_GENERATORS "make-android"
   exportVar GYP_DEFINES "$DEFINES"
   exportVar SKIA_OUT "out/config/android-${TARGET_DEVICE}"
 }
@@ -221,16 +253,58 @@ adb_pull_if_needed() {
   if [ -f $HOST_DST ];
   then
     #get the MD5 for dst and src
-    ANDROID_MD5=`$ADB shell md5 $ANDROID_SRC`
+    ANDROID_MD5=`$ADB $DEVICE_SERIAL shell md5 $ANDROID_SRC`
     HOST_MD5=`md5sum $HOST_DST`
 
     if [ "${ANDROID_MD5:0:32}" != "${HOST_MD5:0:32}" ];
     then
-      $ADB pull $ANDROID_SRC $HOST_DST
+      $ADB $DEVICE_SERIAL pull $ANDROID_SRC $HOST_DST
 #   else
 #      echo "md5 match of android [$ANDROID_SRC] and host [$HOST_DST]"
     fi
   else
-    $ADB pull $ANDROID_SRC $HOST_DST
+    $ADB $DEVICE_SERIAL pull $ANDROID_SRC $HOST_DST
   fi
 }
+
+# adb_push_if_needed(host_src, android_dst)
+adb_push_if_needed() {
+
+  # get adb location
+  source $SCRIPT_DIR/utils/setup_adb.sh
+
+  # read input params
+  HOST_SRC="$1"
+  ANDROID_DST="$2"
+
+  ANDROID_LS=`$ADB $DEVICE_SERIAL shell ls -ld $ANDROID_DST`
+  if [ "${ANDROID_LS:0:1}" == "d" ];
+  then
+    ANDROID_DST="${ANDROID_DST}/$(basename ${HOST_SRC})"
+  fi
+
+  echo "ANDROID: $ANDROID_DST"
+
+  ANDROID_LS=`$ADB $DEVICE_SERIAL shell ls -ld $ANDROID_DST`
+  if [ "${ANDROID_LS:0:1}" == "-" ];
+  then
+    #get the MD5 for dst and src
+    ANDROID_MD5=`$ADB $DEVICE_SERIAL shell md5 $ANDROID_DST`
+    HOST_MD5=`md5sum $HOST_SRC`
+
+    if [ "${ANDROID_MD5:0:32}" != "${HOST_MD5:0:32}" ];
+    then
+      $ADB $DEVICE_SERIAL push $HOST_SRC $ANDROID_DST
+#    else
+#      echo "md5 match of android [${ANDROID_DST}] and host [${HOST_SRC}]"
+    fi
+  else
+    $ADB $DEVICE_SERIAL push $HOST_SRC $ANDROID_DST
+  fi
+}
+
+# Set up the device.
+setup_device "${DEVICE_ID}"
+if [[ "$?" != "0" ]]; then
+  exit 1
+fi

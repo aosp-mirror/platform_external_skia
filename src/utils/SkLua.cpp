@@ -712,12 +712,26 @@ static int lshader_asAGradient(lua_State* L) {
     if (shader) {
         SkShader::GradientInfo info;
         sk_bzero(&info, sizeof(info));
+
+        SkColor colors[3];  // hacked in for extracting info on 3 color case.
+        SkScalar pos[3];
+
+        info.fColorCount = 3;
+        info.fColors = &colors[0];
+        info.fColorOffsets = &pos[0];
+
         SkShader::GradientType t = shader->asAGradient(&info);
+
         if (SkShader::kNone_GradientType != t) {
             lua_newtable(L);
             setfield_string(L, "type", gradtype2string(t));
             setfield_number(L, "colorCount", info.fColorCount);
             setfield_string(L, "tile", mode2string(info.fTileMode));
+
+            if (info.fColorCount == 3){
+                setfield_number(L, "midPos", pos[1]);
+            }
+
             return 1;
         }
     }
@@ -750,8 +764,32 @@ static int lmatrix_getType(lua_State* L) {
     return 1;
 }
 
+static int lmatrix_getScaleX(lua_State* L) {
+    lua_pushnumber(L, get_obj<SkMatrix>(L,1)->getScaleX());
+    return 1;
+}
+
+static int lmatrix_getScaleY(lua_State* L) {
+    lua_pushnumber(L, get_obj<SkMatrix>(L,1)->getScaleY());
+    return 1;
+}
+
+static int lmatrix_getTranslateX(lua_State* L) {
+    lua_pushnumber(L, get_obj<SkMatrix>(L,1)->getTranslateX());
+    return 1;
+}
+
+static int lmatrix_getTranslateY(lua_State* L) {
+    lua_pushnumber(L, get_obj<SkMatrix>(L,1)->getTranslateY());
+    return 1;
+}
+
 static const struct luaL_Reg gSkMatrix_Methods[] = {
     { "getType", lmatrix_getType },
+    { "getScaleX", lmatrix_getScaleX },
+    { "getScaleY", lmatrix_getScaleY },
+    { "getTranslateX", lmatrix_getTranslateX },
+    { "getTranslateY", lmatrix_getTranslateY },
     { NULL, NULL }
 };
 

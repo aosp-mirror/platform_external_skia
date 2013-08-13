@@ -47,7 +47,7 @@ struct SkUnencodedText {
 public:
     SkUnencodedText(const SkPdfString* obj) {
         text = (void*)obj->c_str();
-        len = obj->len();
+        len = obj->lenstr();
     }
 };
 
@@ -164,13 +164,22 @@ public:
 public:
     SkPdfFont() : fBaseFont(NULL), fEncoding(SkPdfDefaultEncoding::instance()), fToUnicode(NULL) {}
 
+    virtual ~SkPdfFont() {
+        // TODO(edisonn): NYI (will leak for now)
+    }
+
     const SkPdfEncoding* encoding() const {return fEncoding;}
 
     void drawText(const SkDecodedText& text, SkPaint* paint, PdfContext* pdfContext, SkCanvas* canvas) {
         for (int i = 0 ; i < text.size(); i++) {
+            canvas->setMatrix(pdfContext->fGraphicsState.fMatrixTm);
+#ifdef PDF_TRACE
+            SkPoint point = SkPoint::Make(SkDoubleToScalar(0), SkDoubleToScalar(0));
+            pdfContext->fGraphicsState.fMatrixTm.mapPoints(&point, 1);
+            printf("DrawText at (%f, %f)\n", SkScalarToDouble(point.x()), SkScalarToDouble(point.y()));
+#endif  // PDF_TRACE
             double width = drawOneChar(text[i], paint, pdfContext, canvas);
             pdfContext->fGraphicsState.fMatrixTm.preTranslate(SkDoubleToScalar(width), SkDoubleToScalar(0.0));
-            canvas->translate(SkDoubleToScalar(width), SkDoubleToScalar(0.0));
         }
     }
 
@@ -315,7 +324,7 @@ CIDToGIDMap* fCidToGid;
 
 class SkPdfType3Font : public SkPdfFont {
     struct Type3FontChar {
-        const SkPdfObject* fObj;
+        SkPdfObject* fObj;
         double fWidth;
     };
 

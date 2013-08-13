@@ -54,6 +54,7 @@ public:
 
     size_t objects() const;
     SkPdfObject* object(int i);
+    SkPdfPageObjectDictionary* page(int page);
 
     const SkPdfMapper* mapper() const;
     SkPdfAllocator* allocator() const;
@@ -63,7 +64,7 @@ public:
     // the string does not own the char*
     SkPdfString* createString(const unsigned char* sz, size_t len) const;
 
-    SkPdfObject* resolveReference(const SkPdfObject* ref);
+    SkPdfObject* resolveReference(SkPdfObject* ref);
 
     // Reports an approximation of all the memory usage.
     size_t bytesUsed() const;
@@ -72,9 +73,10 @@ private:
 
     // Takes ownership of bytes.
     void init(const void* bytes, size_t length);
+    void loadWithoutXRef();
 
     const unsigned char* readCrossReferenceSection(const unsigned char* xrefStart, const unsigned char* trailerEnd);
-    long readTrailer(const unsigned char* trailerStart, const unsigned char* trailerEnd, bool storeCatalog);
+    const unsigned char* readTrailer(const unsigned char* trailerStart, const unsigned char* trailerEnd, bool storeCatalog, long* prev, bool skipKeyword);
 
     // TODO(edisonn): updates not supported right now, generation ignored
     void addCrossSectionInfo(int id, int generation, int offset, bool isFreed);
@@ -93,7 +95,7 @@ private:
     SkPdfMapper* fMapper;
     const unsigned char* fFileContent;
     size_t fContentLength;
-    const SkPdfObject* fRootCatalogRef;
+    SkPdfObject* fRootCatalogRef;
     SkPdfCatalogDictionary* fRootCatalog;
 
     mutable SkTDArray<PublicObjectEntry> fObjects;

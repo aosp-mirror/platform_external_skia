@@ -15,8 +15,9 @@
 #include "SkRandom.h"
 #include "SkReader32.h"
 #include "SkSize.h"
-#include "SkWriter32.h"
 #include "SkSurface.h"
+#include "SkTypes.h"
+#include "SkWriter32.h"
 
 #if defined(WIN32)
     #define SUPPRESS_VISIBILITY_WARNING
@@ -29,6 +30,73 @@ static SkSurface* new_surface(int w, int h) {
         w, h, SkImage::kPMColor_ColorType, SkImage::kPremul_AlphaType
     };
     return SkSurface::NewRaster(info);
+}
+
+static void test_path_close_issue1474(skiatest::Reporter* reporter) {
+    // This test checks that r{Line,Quad,Conic,Cubic}To following a close()
+    // are relative to the point we close to, not relative to the point we close from.
+    SkPath path;
+    SkPoint last;
+
+    // Test rLineTo().
+    path.rLineTo(0, 100);
+    path.rLineTo(100, 0);
+    path.close();          // Returns us back to 0,0.
+    path.rLineTo(50, 50);  // This should go to 50,50.
+
+    path.getLastPt(&last);
+    REPORTER_ASSERT(reporter, 50 == last.fX);
+    REPORTER_ASSERT(reporter, 50 == last.fY);
+
+    // Test rQuadTo().
+    path.rewind();
+    path.rLineTo(0, 100);
+    path.rLineTo(100, 0);
+    path.close();
+    path.rQuadTo(50, 50, 75, 75);
+
+    path.getLastPt(&last);
+    REPORTER_ASSERT(reporter, 75 == last.fX);
+    REPORTER_ASSERT(reporter, 75 == last.fY);
+
+    // Test rConicTo().
+    path.rewind();
+    path.rLineTo(0, 100);
+    path.rLineTo(100, 0);
+    path.close();
+    path.rConicTo(50, 50, 85, 85, 2);
+
+    path.getLastPt(&last);
+    REPORTER_ASSERT(reporter, 85 == last.fX);
+    REPORTER_ASSERT(reporter, 85 == last.fY);
+
+    // Test rCubicTo().
+    path.rewind();
+    path.rLineTo(0, 100);
+    path.rLineTo(100, 0);
+    path.close();
+    path.rCubicTo(50, 50, 85, 85, 95, 95);
+
+    path.getLastPt(&last);
+    REPORTER_ASSERT(reporter, 95 == last.fX);
+    REPORTER_ASSERT(reporter, 95 == last.fY);
+}
+
+static void test_android_specific_behavior(skiatest::Reporter* reporter) {
+#ifdef SK_BUILD_FOR_ANDROID
+    // Copy constructor should preserve generation ID, but assignment shouldn't.
+    SkPath original;
+    original.moveTo(0, 0);
+    original.lineTo(1, 1);
+    REPORTER_ASSERT(reporter, original.getGenerationID() > 0);
+
+    const SkPath copy(original);
+    REPORTER_ASSERT(reporter, copy.getGenerationID() == original.getGenerationID());
+
+    SkPath assign;
+    assign = original;
+    REPORTER_ASSERT(reporter, assign.getGenerationID() != original.getGenerationID());
+#endif
 }
 
 // This used to assert in the debug build, as the edges did not all line-up.
@@ -1161,6 +1229,18 @@ static void test_conservativelyContains(skiatest::Reporter* reporter) {
                                                                                 SkIntToScalar(200),
                                                                                 SkIntToScalar(20),
                                                                                 SkIntToScalar(5))));
+
+    // same as above path and first test but with an extra moveTo.
+    path.reset();
+    path.moveTo(100, 100);
+    path.moveTo(0, 0);
+    path.lineTo(SkIntToScalar(100), 0);
+    path.lineTo(0, SkIntToScalar(100));
+
+    REPORTER_ASSERT(reporter, path.conservativelyContainsRect(SkRect::MakeXYWH(SkIntToScalar(50), 0,
+                                                                               SkIntToScalar(10),
+                                                                               SkIntToScalar(10))));
+
 }
 
 // Simple isRect test is inline TestPath, below.
@@ -2438,6 +2518,8 @@ static void TestPath(skiatest::Reporter* reporter) {
     test_crbug_170666();
     test_bad_cubic_crbug229478();
     test_bad_cubic_crbug234190();
+    test_android_specific_behavior(reporter);
+    test_path_close_issue1474(reporter);
 }
 
 #include "TestClassDef.h"

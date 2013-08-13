@@ -236,11 +236,11 @@ static bool readToken(SkPdfNativeTokenizer* fTokenizer, PdfToken* token) {
     bool ret = fTokenizer->readToken(token);
 
     gReadOp++;
-
+    gLastOpKeyword++;
 #ifdef PDF_TRACE_DIFF_IN_PNG
     // TODO(edisonn): compare with old bitmap, and save only new bits are available, and save
     // the numbar and name of last operation, so the file name will reflect op that changed.
-    if (hasVisualEffect(gLastKeyword)) {  // TODO(edisonn): and has dirty bits.
+    if (gLastKeyword[0] && hasVisualEffect(gLastKeyword)) {  // TODO(edisonn): and has dirty bits.
         gDumpCanvas->flush();
 
         SkBitmap bitmap;
@@ -265,7 +265,7 @@ static bool readToken(SkPdfNativeTokenizer* fTokenizer, PdfToken* token) {
             const SkClipStack::Element* elem;
             double y = 0;
             int total = 0;
-            while (elem = iter.next()) {
+            while ((elem = iter.next()) != NULL) {
                 total++;
                 y += 30;
 
@@ -312,12 +312,13 @@ static bool readToken(SkPdfNativeTokenizer* fTokenizer, PdfToken* token) {
         SkImageEncoder::EncodeFile(out.c_str(), bitmap, SkImageEncoder::kPNG_Type, 100);
     }
 
-    if (token->fType == kKeyword_TokenType) {
-        strcpy(gLastKeyword, token->fKeyword);
-        gLastOpKeyword = gReadOp;
+    if (ret && token->fType == kKeyword_TokenType && token->fKeyword && token->fKeywordLength > 0 && token->fKeywordLength < 100) {
+        strncpy(gLastKeyword, token->fKeyword, token->fKeywordLength);
+        gLastKeyword[token->fKeywordLength] = '\0';
     } else {
-        strcpy(gLastKeyword, "");
+        gLastKeyword[0] = '\0';
     }
+
 #endif
 
     return ret;
@@ -387,32 +388,9 @@ static PdfResult DrawText(PdfContext* pdfContext,
 
     pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
 
-    canvas->save();
-
-#if 1
-    SkMatrix matrix = pdfContext->fGraphicsState.fMatrixTm;
-
-    SkPoint point1;
-    pdfContext->fGraphicsState.fMatrixTm.mapXY(SkIntToScalar(0), SkIntToScalar(0), &point1);
-
-    SkMatrix mirror;
-    mirror.setTranslate(0, -point1.y());
-    // TODO(edisonn): fix rotated text, and skewed too
-    mirror.postScale(SK_Scalar1, -SK_Scalar1);
-    // TODO(edisonn): post rotate, skew
-    mirror.postTranslate(0, point1.y());
-
-    matrix.postConcat(mirror);
-
-    canvas->setMatrix(matrix);
-
-    SkTraceMatrix(matrix, "mirrored");
-#endif
-
     skfont->drawText(decoded, &paint, pdfContext, canvas);
-    canvas->restore();
 
-    return kPartial_PdfResult;
+    return kOK_PdfResult;
 }
 
 // TODO(edisonn): create header files with declarations!
@@ -435,11 +413,11 @@ static SkColorTable* getGrayColortable() {
     return grayColortable;
 }
 
-static SkBitmap transferImageStreamToBitmap(const unsigned char* uncompressedStream, size_t uncompressedStreamLength,
+static SkBitmap* transferImageStreamToBitmap(const unsigned char* uncompressedStream, size_t uncompressedStreamLength,
                                      int width, int height, int bytesPerLine,
                                      int bpc, const std::string& colorSpace,
                                      bool transparencyMask) {
-    SkBitmap bitmap;
+    SkBitmap* bitmap = new SkBitmap();
 
     //int components = GetColorSpaceComponents(colorSpace);
 //#define MAX_COMPONENTS 10
@@ -462,8 +440,8 @@ static SkBitmap transferImageStreamToBitmap(const unsigned char* uncompressedStr
             uncompressedStream += bytesPerLine;
         }
 
-        bitmap.setConfig(SkBitmap::kARGB_8888_Config, width, height);
-        bitmap.setPixels(uncompressedStreamArgb);
+        bitmap->setConfig(SkBitmap::kARGB_8888_Config, width, height);
+        bitmap->setPixels(uncompressedStreamArgb);
     }
     else if ((colorSpace == "DeviceGray" || colorSpace == "Gray") && bpc == 8) {
         unsigned char* uncompressedStreamA8 = (unsigned char*)malloc(width * height);
@@ -478,9 +456,9 @@ static SkBitmap transferImageStreamToBitmap(const unsigned char* uncompressedStr
             uncompressedStream += bytesPerLine;
         }
 
-        bitmap.setConfig(transparencyMask ? SkBitmap::kA8_Config : SkBitmap::kIndex8_Config,
+        bitmap->setConfig(transparencyMask ? SkBitmap::kA8_Config : SkBitmap::kIndex8_Config,
                          width, height);
-        bitmap.setPixels(uncompressedStreamA8, transparencyMask ? NULL : getGrayColortable());
+        bitmap->setPixels(uncompressedStreamA8, transparencyMask ? NULL : getGrayColortable());
     }
 
     // TODO(edisonn): Report Warning, NYI, or error
@@ -496,10 +474,10 @@ static SkBitmap transferImageStreamToBitmap(const unsigned char* uncompressedStr
 
 // this functions returns the image, it does not look at the smask.
 
-static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary* image, bool transparencyMask) {
+static SkBitmap* getImageFromObjectCore(PdfContext* pdfContext, SkPdfImageDictionary* image, bool transparencyMask) {
     if (image == NULL || !image->hasStream()) {
         // TODO(edisonn): report warning to be used in testing.
-        return SkBitmap();
+        return NULL;
     }
 
     int64_t bpc = image->BitsPerComponent(pdfContext->fPdfDoc);
@@ -507,9 +485,37 @@ static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary*
     int64_t height = image->Height(pdfContext->fPdfDoc);
     std::string colorSpace = "DeviceRGB";
 
+    bool indexed = false;
+    SkPMColor colors[256];
+    int cnt = 0;
+
     // TODO(edisonn): color space can be an array too!
     if (image->isColorSpaceAName(pdfContext->fPdfDoc)) {
         colorSpace = image->getColorSpaceAsName(pdfContext->fPdfDoc);
+    } else if (image->isColorSpaceAArray(pdfContext->fPdfDoc)) {
+        SkPdfArray* array = image->getColorSpaceAsArray(pdfContext->fPdfDoc);
+        if (array && array->size() == 4 && array->objAtAIndex(0)->isName("Indexed") &&
+                                           (array->objAtAIndex(1)->isName("DeviceRGB") || array->objAtAIndex(1)->isName("RGB")) &&
+                                           array->objAtAIndex(2)->isInteger() &&
+                                           array->objAtAIndex(3)->isHexString()
+                                           ) {
+            // TODO(edisonn): suport only DeviceRGB for now.
+            indexed = true;
+            cnt = array->objAtAIndex(2)->intValue() + 1;
+            if (cnt > 256) {
+                // TODO(edionn): report NYIs
+                return NULL;
+            }
+            SkColorTable colorTable(cnt);
+            NotOwnedString data = array->objAtAIndex(3)->strRef();
+            if (data.fBytes != (unsigned int)cnt * 3) {
+                // TODO(edionn): report error/warning
+                return NULL;
+            }
+            for (int i = 0 ; i < cnt; i++) {
+                colors[i] = SkPreMultiplyARGB(0xff, data.fBuffer[3 * i], data.fBuffer[3 * i + 1], data.fBuffer[3 * i + 2]);
+            }
+        }
     }
 
 /*
@@ -532,7 +538,7 @@ static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary*
     if (!stream || !stream->GetFilteredStreamRef(&uncompressedStream, &uncompressedStreamLength) ||
             uncompressedStream == NULL || uncompressedStreamLength == 0) {
         // TODO(edisonn): report warning to be used in testing.
-        return SkBitmap();
+        return NULL;
     }
 
     SkPdfStreamCommonDictionary* streamDict = (SkPdfStreamCommonDictionary*)stream;
@@ -543,8 +549,8 @@ static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary*
                                           streamDict->getFilterAsArray(NULL)->size() > 0 &&
                                           streamDict->getFilterAsArray(NULL)->objAtAIndex(0)->isName() &&
                                           streamDict->getFilterAsArray(NULL)->objAtAIndex(0)->nameValue2() == "DCTDecode"))) {
-        SkBitmap bitmap;
-        SkImageDecoder::DecodeMemory(uncompressedStream, uncompressedStreamLength, &bitmap);
+        SkBitmap* bitmap = new SkBitmap();
+        SkImageDecoder::DecodeMemory(uncompressedStream, uncompressedStreamLength, bitmap);
         return bitmap;
     }
 
@@ -562,14 +568,23 @@ static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary*
 //        SkImageDecoder::Factory()
 //    }
 
-    int bytesPerLine = uncompressedStreamLength / height;
+    // TODO(edisonn): assumes RGB for now, since it is the only onwe implemented
+    if (indexed) {
+        SkBitmap* bitmap = new SkBitmap();
+        bitmap->setConfig(SkBitmap::kIndex8_Config, width, height);
+        SkColorTable* colorTable = new SkColorTable(colors, cnt);
+        bitmap->setPixels((void*)uncompressedStream, colorTable);
+        return bitmap;
+    }
+
+    int bytesPerLine = (int)(uncompressedStreamLength / height);
 #ifdef PDF_TRACE
     if (uncompressedStreamLength % height != 0) {
         printf("Warning uncompressedStreamLength modulo height != 0 !!!\n");
     }
 #endif
 
-    SkBitmap bitmap = transferImageStreamToBitmap(
+    SkBitmap* bitmap = transferImageStreamToBitmap(
             (unsigned char*)uncompressedStream, uncompressedStreamLength,
             (int)width, (int)height, bytesPerLine,
             (int)bpc, colorSpace,
@@ -578,7 +593,19 @@ static SkBitmap getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary*
     return bitmap;
 }
 
-static SkBitmap getSmaskFromObject(PdfContext* pdfContext, SkPdfImageDictionary* obj) {
+static SkBitmap* getImageFromObject(PdfContext* pdfContext, SkPdfImageDictionary* image, bool transparencyMask) {
+    if (!transparencyMask) {
+        if (!image->hasData(SkPdfObject::kBitmap_Data)) {
+            SkBitmap* bitmap = getImageFromObjectCore(pdfContext, image, transparencyMask);
+            image->setData(bitmap, SkPdfObject::kBitmap_Data);
+        }
+        return (SkBitmap*) image->data(SkPdfObject::kBitmap_Data);
+    } else {
+        return getImageFromObjectCore(pdfContext, image, transparencyMask);
+    }
+}
+
+static SkBitmap* getSmaskFromObject(PdfContext* pdfContext, SkPdfImageDictionary* obj) {
     SkPdfImageDictionary* sMask = obj->SMask(pdfContext->fPdfDoc);
 
     if (sMask) {
@@ -594,13 +621,12 @@ static PdfResult doXObject_Image(PdfContext* pdfContext, SkCanvas* canvas, SkPdf
         return kIgnoreError_PdfResult;
     }
 
-    SkBitmap image = getImageFromObject(pdfContext, skpdfimage, false);
-    SkBitmap sMask = getSmaskFromObject(pdfContext, skpdfimage);
+    SkBitmap* image = getImageFromObject(pdfContext, skpdfimage, false);
+    SkBitmap* sMask = getSmaskFromObject(pdfContext, skpdfimage);
 
     canvas->save();
-    canvas->setMatrix(pdfContext->fGraphicsState.fMatrix);
+    canvas->setMatrix(pdfContext->fGraphicsState.fCTM);
 
-#if 1
     SkScalar z = SkIntToScalar(0);
     SkScalar one = SkIntToScalar(1);
 
@@ -608,22 +634,35 @@ static PdfResult doXObject_Image(PdfContext* pdfContext, SkCanvas* canvas, SkPdf
     SkPoint to[4] = {SkPoint::Make(z, one), SkPoint::Make(one, one), SkPoint::Make(one, z), SkPoint::Make(z, z)};
     SkMatrix flip;
     SkAssertResult(flip.setPolyToPoly(from, to, 4));
-    SkMatrix solveImageFlip = pdfContext->fGraphicsState.fMatrix;
+    SkMatrix solveImageFlip = pdfContext->fGraphicsState.fCTM;
     solveImageFlip.preConcat(flip);
     canvas->setMatrix(solveImageFlip);
-#endif
+
+#ifdef PDF_TRACE
+    SkPoint final[4] = {SkPoint::Make(z, z), SkPoint::Make(one, z), SkPoint::Make(one, one), SkPoint::Make(z, one)};
+    solveImageFlip.mapPoints(final, 4);
+    printf("IMAGE rect = ");
+    for (int i = 0; i < 4; i++) {
+        printf("(%f %f) ", SkScalarToDouble(final[i].x()), SkScalarToDouble(final[i].y()));
+    }
+    printf("\n");
+#endif  // PDF_TRACE
 
     SkRect dst = SkRect::MakeXYWH(SkDoubleToScalar(0.0), SkDoubleToScalar(0.0), SkDoubleToScalar(1.0), SkDoubleToScalar(1.0));
 
-    if (sMask.empty()) {
-        canvas->drawBitmapRect(image, dst, NULL);
+    // TODO(edisonn): soft mask type? alpha/luminosity.
+    SkPaint paint;
+    pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
+
+    if (!sMask || sMask->empty()) {
+        canvas->drawBitmapRect(*image, dst, &paint);
     } else {
-        canvas->saveLayer(&dst, NULL);
-        canvas->drawBitmapRect(image, dst, NULL);
+        canvas->saveLayer(&dst, &paint);
+        canvas->drawBitmapRect(*image, dst, NULL);
         SkPaint xfer;
-        pdfContext->fGraphicsState.applyGraphicsState(&xfer, false);
+        // TODO(edisonn): is the blend mode specified already implicitly/explicitly in pdf?
         xfer.setXfermodeMode(SkXfermode::kSrcOut_Mode); // SkXfermode::kSdtOut_Mode
-        canvas->drawBitmapRect(sMask, dst, &xfer);
+        canvas->drawBitmapRect(*sMask, dst, &xfer);
         canvas->restore();
     }
 
@@ -632,38 +671,142 @@ static PdfResult doXObject_Image(PdfContext* pdfContext, SkCanvas* canvas, SkPdf
     return kPartial_PdfResult;
 }
 
+//TODO(edisonn): options for implementing isolation and knockout
+// 1) emulate them (current solution)
+//     PRO: simple
+//     CON: will need to use readPixels, which means serious perf issues
+// 2) Compile a plan for an array of matrixes, compose the result at the end
+//     PRO: might be faster then 1, no need to readPixels
+//     CON: multiple drawings (but on smaller areas), pay a price at loading pdf to compute a pdf draw plan
+//          on average, a load with empty draw is 100ms on all the skps we have, for complete sites
+// 3) support them natively in SkCanvas
+//     PRO: simple
+//     CON: we would still need to use a form of readPixels anyway, so perf might be the same as 1)
+// 4) compile a plan using pathops, and render once without any fancy rules with backdrop
+//     PRO: simple, fast
+//     CON: pathops must be bug free first + time to compute new paths
+//          pay a price at loading pdf to compute a pdf draw plan
+//          on average, a load with empty draw is 100ms on all the skps we have, for complete sites
+// 5) for knockout, render the objects in reverse order, and add every object to the clip, and any new draw will be cliped
 
 
+// TODO(edisonn): draw plan from point! - list of draw ops of a point, like a tree!
+// TODO(edisonn): Minimal PDF to draw some points - remove everything that it is not needed, save pdf uncompressed
+
+
+
+static void doGroup_before(PdfContext* pdfContext, SkCanvas* canvas, SkRect bbox, SkPdfTransparencyGroupDictionary* tgroup, bool page) {
+    SkRect bboxOrig = bbox;
+    SkBitmap backdrop;
+    bool isolatedGroup = tgroup->I(pdfContext->fPdfDoc);
+//  bool knockoutGroup = tgroup->K(pdfContext->fPdfDoc);
+    SkPaint paint;
+    pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
+    canvas->saveLayer(&bboxOrig, isolatedGroup ? &paint : NULL);
+}
+
+// TODO(edisonn): non isolation implemented in skia
+//static void doGroup_after(PdfContext* pdfContext, SkCanvas* canvas, SkRect bbox, SkPdfTransparencyGroupDictionary* tgroup) {
+//    if not isolated
+//        canvas->drawBitmapRect(backdrop, bboxOrig, NULL);
+//}
 
 static PdfResult doXObject_Form(PdfContext* pdfContext, SkCanvas* canvas, SkPdfType1FormDictionary* skobj) {
     if (!skobj || !skobj->hasStream()) {
         return kIgnoreError_PdfResult;
     }
 
+    if (!skobj->has_BBox()) {
+        return kIgnoreError_PdfResult;
+    }
+
     PdfOp_q(pdfContext, canvas, NULL);
-    canvas->save();
 
 
     if (skobj->Resources(pdfContext->fPdfDoc)) {
         pdfContext->fGraphicsState.fResources = skobj->Resources(pdfContext->fPdfDoc);
     }
 
-    SkTraceMatrix(pdfContext->fGraphicsState.fMatrix, "Current matrix");
+    SkTraceMatrix(pdfContext->fGraphicsState.fCTM, "Current matrix");
 
     if (skobj->has_Matrix()) {
-        pdfContext->fGraphicsState.fMatrix.preConcat(skobj->Matrix(pdfContext->fPdfDoc));
-        pdfContext->fGraphicsState.fMatrixTm = pdfContext->fGraphicsState.fMatrix;
-        pdfContext->fGraphicsState.fMatrixTlm = pdfContext->fGraphicsState.fMatrix;
+        pdfContext->fGraphicsState.fCTM.preConcat(skobj->Matrix(pdfContext->fPdfDoc));
+        SkMatrix matrix = pdfContext->fGraphicsState.fCTM;
+        matrix.preScale(SkDoubleToScalar(1), SkDoubleToScalar(-1));
+        pdfContext->fGraphicsState.fMatrixTm = matrix;
+        pdfContext->fGraphicsState.fMatrixTlm = matrix;
         // TODO(edisonn) reset matrixTm and matricTlm also?
     }
 
-    SkTraceMatrix(pdfContext->fGraphicsState.fMatrix, "Total matrix");
+    SkTraceMatrix(pdfContext->fGraphicsState.fCTM, "Total matrix");
+    pdfContext->fGraphicsState.fContentStreamMatrix = pdfContext->fGraphicsState.fCTM;
 
-    canvas->setMatrix(pdfContext->fGraphicsState.fMatrix);
+    canvas->setMatrix(pdfContext->fGraphicsState.fCTM);
 
-    if (skobj->has_BBox()) {
-        canvas->clipRect(skobj->BBox(pdfContext->fPdfDoc), SkRegion::kIntersect_Op, true);  // TODO(edisonn): AA from settings.
+    SkRect bbox = skobj->BBox(pdfContext->fPdfDoc);
+    canvas->clipRect(bbox, SkRegion::kIntersect_Op, true);  // TODO(edisonn): AA from settings.
+
+    // TODO(edisonn): iterate smart on the stream even if it is compressed, tokenize it as we go.
+    // For this PdfContentsTokenizer needs to be extended.
+
+    // This is a group?
+    if (skobj->has_Group()) {
+        SkPdfTransparencyGroupDictionary* tgroup = skobj->Group(pdfContext->fPdfDoc);
+        doGroup_before(pdfContext, canvas, bbox, tgroup, false);
     }
+
+    SkPdfStream* stream = (SkPdfStream*)skobj;
+
+    SkPdfNativeTokenizer* tokenizer =
+            pdfContext->fPdfDoc->tokenizerOfStream(stream, pdfContext->fTmpPageAllocator);
+    if (tokenizer != NULL) {
+        PdfMainLooper looper(NULL, tokenizer, pdfContext, canvas);
+        looper.loop();
+        delete tokenizer;
+    }
+
+    // TODO(edisonn): should we restore the variable stack at the same state?
+    // There could be operands left, that could be consumed by a parent tokenizer when we pop.
+
+    if (skobj->has_Group()) {
+        canvas->restore();
+    }
+
+    PdfOp_Q(pdfContext, canvas, NULL);
+    return kPartial_PdfResult;
+}
+
+
+// TODO(edisonn): Extract a class like ObjWithStream
+static PdfResult doXObject_Pattern(PdfContext* pdfContext, SkCanvas* canvas, SkPdfType1PatternDictionary* skobj) {
+    if (!skobj || !skobj->hasStream()) {
+        return kIgnoreError_PdfResult;
+    }
+
+    if (!skobj->has_BBox()) {
+        return kIgnoreError_PdfResult;
+    }
+
+    PdfOp_q(pdfContext, canvas, NULL);
+
+
+    if (skobj->Resources(pdfContext->fPdfDoc)) {
+        pdfContext->fGraphicsState.fResources = skobj->Resources(pdfContext->fPdfDoc);
+    }
+
+    SkTraceMatrix(pdfContext->fGraphicsState.fContentStreamMatrix, "Current Content stream matrix");
+
+    if (skobj->has_Matrix()) {
+        pdfContext->fGraphicsState.fContentStreamMatrix.preConcat(skobj->Matrix(pdfContext->fPdfDoc));
+    }
+
+    SkTraceMatrix(pdfContext->fGraphicsState.fContentStreamMatrix, "Total Content stream matrix");
+
+    canvas->setMatrix(pdfContext->fGraphicsState.fContentStreamMatrix);
+    pdfContext->fGraphicsState.fCTM = pdfContext->fGraphicsState.fContentStreamMatrix;
+
+    SkRect bbox = skobj->BBox(pdfContext->fPdfDoc);
+    canvas->clipRect(bbox, SkRegion::kIntersect_Op, true);  // TODO(edisonn): AA from settings.
 
     // TODO(edisonn): iterate smart on the stream even if it is compressed, tokenize it as we go.
     // For this PdfContentsTokenizer needs to be extended.
@@ -680,10 +823,11 @@ static PdfResult doXObject_Form(PdfContext* pdfContext, SkCanvas* canvas, SkPdfT
 
     // TODO(edisonn): should we restore the variable stack at the same state?
     // There could be operands left, that could be consumed by a parent tokenizer when we pop.
-    canvas->restore();
+
     PdfOp_Q(pdfContext, canvas, NULL);
     return kPartial_PdfResult;
 }
+
 
 //static PdfResult doXObject_PS(PdfContext* pdfContext, SkCanvas* canvas, const SkPdfObject* obj) {
 //    return kNYI_PdfResult;
@@ -695,20 +839,20 @@ PdfResult doType3Char(PdfContext* pdfContext, SkCanvas* canvas, const SkPdfObjec
     }
 
     PdfOp_q(pdfContext, canvas, NULL);
-    canvas->save();
 
     pdfContext->fGraphicsState.fMatrixTm.preConcat(matrix);
     pdfContext->fGraphicsState.fMatrixTm.preScale(SkDoubleToScalar(textSize), SkDoubleToScalar(textSize));
+    pdfContext->fGraphicsState.fMatrixTlm = pdfContext->fGraphicsState.fMatrixTm;
 
-    pdfContext->fGraphicsState.fMatrix = pdfContext->fGraphicsState.fMatrixTm;
-    pdfContext->fGraphicsState.fMatrixTlm = pdfContext->fGraphicsState.fMatrix;
+    pdfContext->fGraphicsState.fCTM = pdfContext->fGraphicsState.fMatrixTm;
+    pdfContext->fGraphicsState.fCTM.preScale(SkDoubleToScalar(1), SkDoubleToScalar(-1));
 
-    SkTraceMatrix(pdfContext->fGraphicsState.fMatrix, "Total matrix");
+    SkTraceMatrix(pdfContext->fGraphicsState.fCTM, "Total matrix");
 
-    canvas->setMatrix(pdfContext->fGraphicsState.fMatrix);
+    canvas->setMatrix(pdfContext->fGraphicsState.fCTM);
 
     SkRect rm = bBox;
-    pdfContext->fGraphicsState.fMatrix.mapRect(&rm);
+    pdfContext->fGraphicsState.fCTM.mapRect(&rm);
 
     SkTraceRect(rm, "bbox mapped");
 
@@ -729,7 +873,6 @@ PdfResult doType3Char(PdfContext* pdfContext, SkCanvas* canvas, const SkPdfObjec
 
     // TODO(edisonn): should we restore the variable stack at the same state?
     // There could be operands left, that could be consumed by a parent tokenizer when we pop.
-    canvas->restore();
     PdfOp_Q(pdfContext, canvas, NULL);
 
     return kPartial_PdfResult;
@@ -772,9 +915,68 @@ static PdfResult doXObject(PdfContext* pdfContext, SkCanvas* canvas, const SkPdf
             return doXObject_Form(pdfContext, canvas, (SkPdfType1FormDictionary*)obj);
         //case kObjectDictionaryXObjectPS_SkPdfObjectType:
             //return doXObject_PS(skxobj.asPS());
-        default:
-            return kIgnoreError_PdfResult;
+        default: {
+            if (pdfContext->fPdfDoc->mapper()->mapType1PatternDictionary(obj) != kNone_SkPdfObjectType) {
+                SkPdfType1PatternDictionary* pattern = (SkPdfType1PatternDictionary*)obj;
+                return doXObject_Pattern(pdfContext, canvas, pattern);
+            }
+        }
     }
+    return kIgnoreError_PdfResult;
+}
+
+static PdfResult doPage(PdfContext* pdfContext, SkCanvas* canvas, SkPdfPageObjectDictionary* skobj) {
+    if (!skobj) {
+        return kIgnoreError_PdfResult;
+    }
+
+    if (!skobj->isContentsAStream(pdfContext->fPdfDoc)) {
+        return kNYI_PdfResult;
+    }
+
+    SkPdfStream* stream = skobj->getContentsAsStream(pdfContext->fPdfDoc);
+
+    if (!stream) {
+        return kIgnoreError_PdfResult;
+    }
+
+    if (CheckRecursiveRendering::IsInRendering(skobj)) {
+        // Oops, corrupt PDF!
+        return kIgnoreError_PdfResult;
+    }
+    CheckRecursiveRendering checkRecursion(skobj);
+
+
+    PdfOp_q(pdfContext, canvas, NULL);
+
+
+    if (skobj->Resources(pdfContext->fPdfDoc)) {
+        pdfContext->fGraphicsState.fResources = skobj->Resources(pdfContext->fPdfDoc);
+    }
+
+    // TODO(edisonn): MediaBox can be inherited!!!!
+    SkRect bbox = skobj->MediaBox(pdfContext->fPdfDoc);
+    if (skobj->has_Group()) {
+        SkPdfTransparencyGroupDictionary* tgroup = skobj->Group(pdfContext->fPdfDoc);
+        doGroup_before(pdfContext, canvas, bbox, tgroup, true);
+    } else {
+        canvas->save();
+    }
+
+
+    SkPdfNativeTokenizer* tokenizer =
+            pdfContext->fPdfDoc->tokenizerOfStream(stream, pdfContext->fTmpPageAllocator);
+    if (tokenizer != NULL) {
+        PdfMainLooper looper(NULL, tokenizer, pdfContext, canvas);
+        looper.loop();
+        delete tokenizer;
+    }
+
+    // TODO(edisonn): should we restore the variable stack at the same state?
+    // There could be operands left, that could be consumed by a parent tokenizer when we pop.
+    canvas->restore();
+    PdfOp_Q(pdfContext, canvas, NULL);
+    return kPartial_PdfResult;
 }
 
 PdfResult PdfOp_q(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
@@ -810,7 +1012,7 @@ static PdfResult PdfOp_cm(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
     // tx ty
     SkMatrix matrix = SkMatrixFromPdfMatrix(array);
 
-    pdfContext->fGraphicsState.fMatrix.preConcat(matrix);
+    pdfContext->fGraphicsState.fCTM.preConcat(matrix);
 
 #ifdef PDF_TRACE
     printf("cm ");
@@ -818,7 +1020,7 @@ static PdfResult PdfOp_cm(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
         printf("%f ", array[i]);
     }
     printf("\n");
-    SkTraceMatrix(pdfContext->fGraphicsState.fMatrix, "cm");
+    SkTraceMatrix(pdfContext->fGraphicsState.fCTM, "cm");
 #endif
 
     return kOK_PdfResult;
@@ -836,10 +1038,15 @@ static PdfResult PdfOp_TL(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
 }
 
 static PdfResult PdfOp_Td(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
+#ifdef PDF_TRACE
+    printf("stack size = %i\n", (int)pdfContext->fObjectStack.size());
+#endif
     double ty = pdfContext->fObjectStack.top()->numberValue(); pdfContext->fObjectStack.pop();
+    SkPdfObject* obj = pdfContext->fObjectStack.top();
+    obj = obj;
     double tx = pdfContext->fObjectStack.top()->numberValue(); pdfContext->fObjectStack.pop();
 
-    double array[6] = {1, 0, 0, 1, tx, ty};
+    double array[6] = {1, 0, 0, 1, tx, -ty};
     SkMatrix matrix = SkMatrixFromPdfMatrix(array);
 
     pdfContext->fGraphicsState.fMatrixTm.preConcat(matrix);
@@ -889,7 +1096,8 @@ static PdfResult PdfOp_Tm(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
     array[5] = f;
 
     SkMatrix matrix = SkMatrixFromPdfMatrix(array);
-    matrix.postConcat(pdfContext->fGraphicsState.fMatrix);
+    matrix.postConcat(pdfContext->fGraphicsState.fCTM);
+    matrix.preScale(SkDoubleToScalar(1), SkDoubleToScalar(-1));
 
     // TODO(edisonn): Text positioning.
     pdfContext->fGraphicsState.fMatrixTm = matrix;
@@ -1044,7 +1252,7 @@ static PdfResult PdfOp_fillAndStroke(PdfContext* pdfContext, SkCanvas* canvas, b
         path.close();
     }
 
-    canvas->setMatrix(pdfContext->fGraphicsState.fMatrix);
+    canvas->setMatrix(pdfContext->fGraphicsState.fCTM);
 
     SkPaint paint;
 
@@ -1052,29 +1260,103 @@ static PdfResult PdfOp_fillAndStroke(PdfContext* pdfContext, SkCanvas* canvas, b
     if (fill && !stroke && path.isLine(line)) {
         paint.setStyle(SkPaint::kStroke_Style);
 
+        // TODO(edisonn): implement this with patterns
         pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
         paint.setStrokeWidth(SkDoubleToScalar(0));
 
         canvas->drawPath(path, paint);
     } else {
         if (fill) {
-            paint.setStyle(SkPaint::kFill_Style);
-            if (evenOdd) {
-                path.setFillType(SkPath::kEvenOdd_FillType);
+            if (strncmp((char*)pdfContext->fGraphicsState.fNonStroking.fColorSpace.fBuffer, "Pattern", strlen("Pattern")) == 0 &&
+                pdfContext->fGraphicsState.fNonStroking.fPattern != NULL) {
+
+                // TODO(edisonn): we can use a shader here, like imageshader to draw fast. ultimately,
+                // if this is not possible, and we are in rasper mode, and the cells don't intersect, we could even have multiple cpus.
+
+                PdfOp_q(pdfContext, canvas, NULL);
+
+                if (evenOdd) {
+                    path.setFillType(SkPath::kEvenOdd_FillType);
+                }
+                canvas->clipPath(path);
+
+                if (pdfContext->fPdfDoc->mapper()->mapType1PatternDictionary(pdfContext->fGraphicsState.fNonStroking.fPattern) != kNone_SkPdfObjectType) {
+                    SkPdfType1PatternDictionary* pattern = (SkPdfType1PatternDictionary*)pdfContext->fGraphicsState.fNonStroking.fPattern;
+
+                    // TODO(edisonn): constants
+                    // TODO(edisonn): colored
+                    if (pattern->PaintType(pdfContext->fPdfDoc) == 1) {
+                        // TODO(edisonn): don't use abs, iterate as asked, if the cells intersect
+                        // it will change the result iterating in reverse
+                        int xStep = abs((int)pattern->XStep(pdfContext->fPdfDoc));
+                        int yStep = abs((int)pattern->YStep(pdfContext->fPdfDoc));
+
+                        SkRect bounds = path.getBounds();
+
+                        // TODO(edisonn): xstep and ystep can be negative, and we need to iterate in reverse
+                        // TODO(edisonn): don't do that!
+                        bounds.sort();
+
+                        SkScalar x;
+                        SkScalar y;
+
+                        y = bounds.top();
+                        int totalx = 0;
+                        int totaly = 0;
+                        while (y < bounds.bottom()) {
+                            x = bounds.left();
+                            totalx = 0;
+
+                            while (x < bounds.right()) {
+                                doXObject(pdfContext, canvas, pattern);
+
+                                pdfContext->fGraphicsState.fContentStreamMatrix.preTranslate(SkIntToScalar(xStep), SkIntToScalar(0));
+                                totalx += xStep;
+                                x += SkIntToScalar(xStep);
+                            }
+                            pdfContext->fGraphicsState.fContentStreamMatrix.preTranslate(SkIntToScalar(-totalx), SkIntToScalar(0));
+
+                            pdfContext->fGraphicsState.fContentStreamMatrix.preTranslate(SkIntToScalar(0), SkIntToScalar(-yStep));
+                            totaly += yStep;
+                            y += SkIntToScalar(yStep);
+                        }
+                        pdfContext->fGraphicsState.fContentStreamMatrix.preTranslate(SkIntToScalar(0), SkIntToScalar(totaly));
+                    }
+                }
+
+                // apply matrix
+                // get xstep, y step, bbox ... for cliping, and bos of the path
+
+                PdfOp_Q(pdfContext, canvas, NULL);
+            } else {
+                paint.setStyle(SkPaint::kFill_Style);
+                if (evenOdd) {
+                    path.setFillType(SkPath::kEvenOdd_FillType);
+                }
+
+                pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
+
+                canvas->drawPath(path, paint);
             }
-
-            pdfContext->fGraphicsState.applyGraphicsState(&paint, false);
-
-            canvas->drawPath(path, paint);
         }
 
         if (stroke) {
-            paint.setStyle(SkPaint::kStroke_Style);
+            if (false && strncmp((char*)pdfContext->fGraphicsState.fNonStroking.fColorSpace.fBuffer, "Pattern", strlen("Pattern")) == 0) {
+                // TODO(edisonn): implement Pattern for strokes
+                paint.setStyle(SkPaint::kStroke_Style);
 
-            pdfContext->fGraphicsState.applyGraphicsState(&paint, true);
+                paint.setColor(SK_ColorGREEN);
 
-            path.setFillType(SkPath::kWinding_FillType);  // reset it, just in case it messes up the stroke
-            canvas->drawPath(path, paint);
+                path.setFillType(SkPath::kWinding_FillType);  // reset it, just in case it messes up the stroke
+                canvas->drawPath(path, paint);
+            } else {
+                paint.setStyle(SkPaint::kStroke_Style);
+
+                pdfContext->fGraphicsState.applyGraphicsState(&paint, true);
+
+                path.setFillType(SkPath::kWinding_FillType);  // reset it, just in case it messes up the stroke
+                canvas->drawPath(path, paint);
+            }
         }
     }
 
@@ -1090,7 +1372,7 @@ static PdfResult PdfOp_fillAndStroke(PdfContext* pdfContext, SkCanvas* canvas, b
     //pdfContext->fGraphicsState.fClipPath.reset();
     pdfContext->fGraphicsState.fHasClipPathToApply = false;
 
-    return kPartial_PdfResult;
+    return kOK_PdfResult;
 
 }
 
@@ -1131,7 +1413,7 @@ static PdfResult PdfOp_b_star(PdfContext* pdfContext, SkCanvas* canvas, PdfToken
 }
 
 static PdfResult PdfOp_n(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    canvas->setMatrix(pdfContext->fGraphicsState.fMatrix);
+    canvas->setMatrix(pdfContext->fGraphicsState.fCTM);
     if (pdfContext->fGraphicsState.fHasClipPathToApply) {
 #ifndef PDF_DEBUG_NO_CLIPING
         canvas->clipPath(pdfContext->fGraphicsState.fClipPath, SkRegion::kIntersect_Op, true);
@@ -1148,8 +1430,10 @@ static PdfResult PdfOp_n(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoope
 
 static PdfResult PdfOp_BT(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
     pdfContext->fGraphicsState.fTextBlock   = true;
-    pdfContext->fGraphicsState.fMatrixTm = pdfContext->fGraphicsState.fMatrix;
-    pdfContext->fGraphicsState.fMatrixTlm = pdfContext->fGraphicsState.fMatrix;
+    SkMatrix matrix = pdfContext->fGraphicsState.fCTM;
+    matrix.preScale(SkDoubleToScalar(1), SkDoubleToScalar(-1));
+    pdfContext->fGraphicsState.fMatrixTm = matrix;
+    pdfContext->fGraphicsState.fMatrixTlm = matrix;
 
     return kPartial_PdfResult;
 }
@@ -1159,7 +1443,35 @@ static PdfResult PdfOp_ET(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
         return kIgnoreError_PdfResult;
     }
     // TODO(edisonn): anything else to be done once we are done with draw text? Like restore stack?
-    return kPartial_PdfResult;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApplyFontCore(PdfContext* pdfContext, const SkPdfObject* fontName, double fontSize) {
+#ifdef PDF_TRACE
+    printf("font name: %s\n", fontName->nameValue2().c_str());
+#endif
+
+    if (!pdfContext->fGraphicsState.fResources->Font(pdfContext->fPdfDoc)) {
+        // TODO(edisonn): try to recover and draw it any way?
+        return kIgnoreError_PdfResult;
+    }
+
+    SkPdfObject* objFont = pdfContext->fGraphicsState.fResources->Font(pdfContext->fPdfDoc)->get(fontName);
+    objFont = pdfContext->fPdfDoc->resolveReference(objFont);
+    if (kNone_SkPdfObjectType == pdfContext->fPdfDoc->mapper()->mapFontDictionary(objFont)) {
+        // TODO(edisonn): try to recover and draw it any way?
+        return kIgnoreError_PdfResult;
+    }
+
+    SkPdfFontDictionary* fd = (SkPdfFontDictionary*)objFont;
+
+    SkPdfFont* skfont = SkPdfFont::fontFromPdfDictionary(pdfContext->fPdfDoc, fd);
+
+    if (skfont) {
+        pdfContext->fGraphicsState.fSkFont = skfont;
+    }
+    pdfContext->fGraphicsState.fCurFontSize = fontSize;
+    return kOK_PdfResult;
 }
 
 //font size Tf Set the text font, Tf
@@ -1168,29 +1480,9 @@ static PdfResult PdfOp_ET(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
 //a number representing a scale factor. There is no initial value for either font or
 //size; they must be speciﬁed explicitly using Tf before any text is shown.
 static PdfResult PdfOp_Tf(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    pdfContext->fGraphicsState.fCurFontSize = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
+    double fontSize = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
     SkPdfObject* fontName = pdfContext->fObjectStack.top();                           pdfContext->fObjectStack.pop();
-
-#ifdef PDF_TRACE
-    printf("font name: %s\n", fontName->nameValue2().c_str());
-#endif
-
-    if (pdfContext->fGraphicsState.fResources->Font(pdfContext->fPdfDoc)) {
-        SkPdfObject* objFont = pdfContext->fGraphicsState.fResources->Font(pdfContext->fPdfDoc)->get(fontName);
-        objFont = pdfContext->fPdfDoc->resolveReference(objFont);
-        if (kNone_SkPdfObjectType == pdfContext->fPdfDoc->mapper()->mapFontDictionary(objFont)) {
-            // TODO(edisonn): try to recover and draw it any way?
-            return kIgnoreError_PdfResult;
-        }
-        SkPdfFontDictionary* fd = (SkPdfFontDictionary*)objFont;
-
-        SkPdfFont* skfont = SkPdfFont::fontFromPdfDictionary(pdfContext->fPdfDoc, fd);
-
-        if (skfont) {
-            pdfContext->fGraphicsState.fSkFont = skfont;
-        }
-    }
-    return kIgnoreError_PdfResult;
+    return skpdfGraphicsStateApplyFontCore(pdfContext, fontName, fontSize);
 }
 
 static PdfResult PdfOp_Tj(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
@@ -1281,8 +1573,49 @@ static PdfResult PdfOp_TJ(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
 }
 
 static PdfResult PdfOp_CS_cs(PdfContext* pdfContext, SkCanvas* canvas, SkPdfColorOperator* colorOperator) {
-    colorOperator->fColorSpace = pdfContext->fObjectStack.top()->strRef();    pdfContext->fObjectStack.pop();
-    return kOK_PdfResult;
+    SkPdfObject* name = pdfContext->fObjectStack.top();    pdfContext->fObjectStack.pop();
+
+    //Next, get the ColorSpace Dictionary from the Resource Dictionary:
+    SkPdfDictionary* colorSpaceResource = pdfContext->fGraphicsState.fResources->ColorSpace(pdfContext->fPdfDoc);
+
+    SkPdfObject* colorSpace = colorSpaceResource ? pdfContext->fPdfDoc->resolveReference(colorSpaceResource->get(name)) : name;
+
+    if (colorSpace == NULL) {
+        colorOperator->fColorSpace = name->strRef();
+    } else {
+#ifdef PDF_TRACE
+        printf("CS = %s\n", colorSpace->toString(0, 0).c_str());
+#endif   // PDF_TRACE
+        if (colorSpace->isName()) {
+            colorOperator->fColorSpace = colorSpace->strRef();
+        } else if (colorSpace->isArray()) {
+            int cnt = colorSpace->size();
+            if (cnt == 0) {
+                return kIgnoreError_PdfResult;
+            }
+            SkPdfObject* type = colorSpace->objAtAIndex(0);
+            type = pdfContext->fPdfDoc->resolveReference(type);
+
+            if (type->isName("ICCBased")) {
+                if (cnt != 2) {
+                    return kIgnoreError_PdfResult;
+                }
+                SkPdfObject* prop = colorSpace->objAtAIndex(1);
+                prop = pdfContext->fPdfDoc->resolveReference(prop);
+#ifdef PDF_TRACE
+                printf("ICCBased prop = %s\n", prop->toString(0, 0).c_str());
+#endif   // PDF_TRACE
+                // TODO(edisonn): hack
+                if (prop && prop->isDictionary() && prop->get("N") &&  prop->get("N")->isInteger() && prop->get("N")->intValue() == 3) {
+                    colorOperator->setColorSpace(&strings_DeviceRGB);
+                    return kPartial_PdfResult;
+                }
+                return kNYI_PdfResult;
+            }
+        }
+    }
+
+    return kPartial_PdfResult;
 }
 
 static PdfResult PdfOp_CS(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
@@ -1320,7 +1653,7 @@ static PdfResult PdfOp_SC_sc(PdfContext* pdfContext, SkCanvas* canvas, SkPdfColo
     // TODO(edisonn): do possible field values to enum at parsing time!
     // TODO(edisonn): support also abreviations /DeviceRGB == /RGB
     if (colorOperator->fColorSpace.equals("DeviceRGB") || colorOperator->fColorSpace.equals("RGB")) {
-        colorOperator->setRGBColor(SkColorSetRGB(255*c[0], 255*c[1], 255*c[2]));
+        colorOperator->setRGBColor(SkColorSetRGB((U8CPU)(255*c[0]), (U8CPU)(255*c[1]), (U8CPU)(255*c[2])));
     }
     return kPartial_PdfResult;
 }
@@ -1334,10 +1667,20 @@ static PdfResult PdfOp_sc(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
 }
 
 static PdfResult PdfOp_SCN_scn(PdfContext* pdfContext, SkCanvas* canvas, SkPdfColorOperator* colorOperator) {
-    //SkPdfString* name;
     if (pdfContext->fObjectStack.top()->isName()) {
-        // TODO(edisonn): get name, pass it
-        pdfContext->fObjectStack.pop();
+        SkPdfObject* name = pdfContext->fObjectStack.top();    pdfContext->fObjectStack.pop();
+
+        //Next, get the ExtGState Dictionary from the Resource Dictionary:
+        SkPdfDictionary* patternResources = pdfContext->fGraphicsState.fResources->Pattern(pdfContext->fPdfDoc);
+
+        if (patternResources == NULL) {
+#ifdef PDF_TRACE
+            printf("ExtGState is NULL!\n");
+#endif
+            return kIgnoreError_PdfResult;
+        }
+
+        colorOperator->setPatternColorSpace(pdfContext->fPdfDoc->resolveReference(patternResources->get(name)));
     }
 
     // TODO(edisonn): SCN supports more color spaces than SCN. Read and implement spec.
@@ -1373,7 +1716,7 @@ static PdfResult PdfOp_RG_rg(PdfContext* pdfContext, SkCanvas* canvas, SkPdfColo
     double r = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
 
     colorOperator->fColorSpace = strings_DeviceRGB;
-    colorOperator->setRGBColor(SkColorSetRGB(255*r, 255*g, 255*b));
+    colorOperator->setRGBColor(SkColorSetRGB((U8CPU)(255*r), (U8CPU)(255*g), (U8CPU)(255*b)));
     return kOK_PdfResult;
 }
 
@@ -1415,17 +1758,10 @@ static PdfResult PdfOp_W(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoope
 static PdfResult PdfOp_W_star(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
     pdfContext->fGraphicsState.fClipPath = pdfContext->fGraphicsState.fPath;
 
-#ifdef PDF_TRACE
-    if (pdfContext->fGraphicsState.fClipPath.isRect(NULL)) {
-        printf("CLIP IS RECT\n");
-    }
-#endif
-
-    // TODO(edisonn): there seem to be a bug with clipPath of a rect with even odd.
     pdfContext->fGraphicsState.fClipPath.setFillType(SkPath::kEvenOdd_FillType);
     pdfContext->fGraphicsState.fHasClipPathToApply = true;
 
-    return kPartial_PdfResult;
+    return kOK_PdfResult;
 }
 
 static PdfResult PdfOp_BX(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
@@ -1462,45 +1798,139 @@ static PdfResult PdfOp_EI(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
     return kIgnoreError_PdfResult;
 }
 
-//lineWidth w Set the line width in the graphics state (see “Line Width” on page 152).
-static PdfResult PdfOp_w(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    double lineWidth = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
+
+// TODO(edisonn): security review here, make sure all parameters are valid, and safe.
+PdfResult skpdfGraphicsStateApply_ca(PdfContext* pdfContext, double ca) {
+    pdfContext->fGraphicsState.fNonStroking.fOpacity = ca;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApply_CA(PdfContext* pdfContext, double CA) {
+    pdfContext->fGraphicsState.fStroking.fOpacity = CA;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApplyLW(PdfContext* pdfContext, double lineWidth) {
     pdfContext->fGraphicsState.fLineWidth = lineWidth;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApplyLC(PdfContext* pdfContext, int64_t lineCap) {
+    pdfContext->fGraphicsState.fLineCap = (int)lineCap;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApplyLJ(PdfContext* pdfContext, int64_t lineJoin) {
+    pdfContext->fGraphicsState.fLineJoin = (int)lineJoin;
+    return kOK_PdfResult;
+}
+
+PdfResult skpdfGraphicsStateApplyML(PdfContext* pdfContext, double miterLimit) {
+    pdfContext->fGraphicsState.fMiterLimit = miterLimit;
+    return kOK_PdfResult;
+}
+
+// TODO(edisonn): implement all rules, as of now 3) and 5) and 6) do not seem suported by skia, but I am not sure
+/*
+1) [ ] 0 No dash; solid, unbroken lines
+2) [3] 0 3 units on, 3 units off, …
+3) [2] 1 1 on, 2 off, 2 on, 2 off, …
+4) [2 1] 0 2 on, 1 off, 2 on, 1 off, …
+5) [3 5] 6 2 off, 3 on, 5 off, 3 on, 5 off, …
+6) [2 3] 11 1 on, 3 off, 2 on, 3 off, 2 on, …
+ */
+
+PdfResult skpdfGraphicsStateApplyD(PdfContext* pdfContext, SkPdfArray* intervals, SkPdfObject* phase) {
+    int cnt = intervals->size();
+    if (cnt >= 256) {
+        // TODO(edisonn): report error/warning, unsuported;
+        // TODO(edisonn): alloc memory
+        return kIgnoreError_PdfResult;
+    }
+    for (int i = 0; i < cnt; i++) {
+        if (!intervals->objAtAIndex(i)->isNumber()) {
+            // TODO(edisonn): report error/warning
+            return kIgnoreError_PdfResult;
+        }
+    }
+
+    double total = 0;
+    for (int i = 0 ; i < cnt; i++) {
+        pdfContext->fGraphicsState.fDashArray[i] = intervals->objAtAIndex(i)->scalarValue();
+        total += pdfContext->fGraphicsState.fDashArray[i];
+    }
+    if (cnt & 1) {
+        if (cnt == 1) {
+            pdfContext->fGraphicsState.fDashArray[1] = pdfContext->fGraphicsState.fDashArray[0];
+            cnt++;
+        } else {
+            // TODO(edisonn): report error/warning
+            return kNYI_PdfResult;
+        }
+    }
+    pdfContext->fGraphicsState.fDashArrayLength = cnt;
+    pdfContext->fGraphicsState.fDashPhase = phase->scalarValue();
+    if (pdfContext->fGraphicsState.fDashPhase == 0) {
+        // other rules, changes?
+        pdfContext->fGraphicsState.fDashPhase = total;
+    }
 
     return kOK_PdfResult;
 }
 
+PdfResult skpdfGraphicsStateApplyD(PdfContext* pdfContext, SkPdfArray* dash) {
+    // TODO(edisonn): verify input
+    if (!dash || dash->isArray() || dash->size() != 2 || !dash->objAtAIndex(0)->isArray() || !dash->objAtAIndex(1)->isNumber()) {
+        // TODO(edisonn): report error/warning
+        return kIgnoreError_PdfResult;
+    }
+    return skpdfGraphicsStateApplyD(pdfContext, (SkPdfArray*)dash->objAtAIndex(0), dash->objAtAIndex(1));
+}
+
+void skpdfGraphicsStateApplyFont(PdfContext* pdfContext, SkPdfArray* fontAndSize) {
+    if (!fontAndSize || fontAndSize->isArray() || fontAndSize->size() != 2 || !fontAndSize->objAtAIndex(0)->isName() || !fontAndSize->objAtAIndex(1)->isNumber()) {
+        // TODO(edisonn): report error/warning
+        return;
+    }
+    skpdfGraphicsStateApplyFontCore(pdfContext, fontAndSize->objAtAIndex(0), fontAndSize->objAtAIndex(1)->numberValue());
+}
+
+
+//lineWidth w Set the line width in the graphics state (see “Line Width” on page 152).
+static PdfResult PdfOp_w(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
+    double lw = pdfContext->fObjectStack.top()->numberValue();    pdfContext->fObjectStack.pop();
+    return skpdfGraphicsStateApplyLW(pdfContext, lw);
+}
+
 //lineCap J Set the line cap style in the graphics state (see “Line Cap Style” on page 153).
 static PdfResult PdfOp_J(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    pdfContext->fObjectStack.pop();
-    //double lineCap = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
-
-    return kNYI_PdfResult;
+    int64_t lc = pdfContext->fObjectStack.top()->numberValue();    pdfContext->fObjectStack.pop();
+    return skpdfGraphicsStateApplyLC(pdfContext, lc);
 }
 
 //lineJoin j Set the line join style in the graphics state (see “Line Join Style” on page 153).
 static PdfResult PdfOp_j(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    pdfContext->fObjectStack.pop();
-    //double lineJoin = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
-
-    return kNYI_PdfResult;
+    double lj = pdfContext->fObjectStack.top()->numberValue();    pdfContext->fObjectStack.pop();
+    return skpdfGraphicsStateApplyLJ(pdfContext, lj);
 }
 
 //miterLimit M Set the miter limit in the graphics state (see “Miter Limit” on page 153).
 static PdfResult PdfOp_M(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    pdfContext->fObjectStack.pop();
-    //double miterLimit = pdfContext->fObjectStack.top()->numberValue();     pdfContext->fObjectStack.pop();
-
-    return kNYI_PdfResult;
+    double ml = pdfContext->fObjectStack.top()->numberValue();    pdfContext->fObjectStack.pop();
+    return skpdfGraphicsStateApplyML(pdfContext, ml);
 }
 
 //dashArray dashPhase d Set the line dash pattern in the graphics state (see “Line Dash Pattern” on
 //page 155).
 static PdfResult PdfOp_d(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLooper** looper) {
-    pdfContext->fObjectStack.pop();
-    pdfContext->fObjectStack.pop();
+    SkPdfObject* phase = pdfContext->fObjectStack.top();          pdfContext->fObjectStack.pop();
+    SkPdfObject* array = pdfContext->fObjectStack.top();          pdfContext->fObjectStack.pop();
 
-    return kNYI_PdfResult;
+    if (!array->isArray()) {
+        return kIgnoreError_PdfResult;
+    }
+
+    return skpdfGraphicsStateApplyD(pdfContext, (SkPdfArray*)array, phase);
 }
 
 //intent ri (PDF 1.1) Set the color rendering intent in the graphics state (see “Rendering Intents” on page 197).
@@ -1518,6 +1948,128 @@ static PdfResult PdfOp_i(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoope
 
     return kNYI_PdfResult;
 }
+
+SkTDict<SkXfermode::Mode> gPdfBlendModes(20);
+
+class InitBlendModes {
+public:
+    InitBlendModes() {
+        // TODO(edisonn): use the python code generator?
+        // TABLE 7.2 Standard separable blend modes
+        gPdfBlendModes.set("Normal", SkXfermode::kSrc_Mode);
+        gPdfBlendModes.set("Multiply", SkXfermode::kMultiply_Mode);
+        gPdfBlendModes.set("Screen", SkXfermode::kScreen_Mode);
+        gPdfBlendModes.set("Overlay", SkXfermode::kOverlay_Mode);
+        gPdfBlendModes.set("Darken", SkXfermode::kDarken_Mode);
+        gPdfBlendModes.set("Lighten", SkXfermode::kLighten_Mode);
+        gPdfBlendModes.set("ColorDodge", SkXfermode::kColorDodge_Mode);
+        gPdfBlendModes.set("ColorBurn", SkXfermode::kColorBurn_Mode);
+        gPdfBlendModes.set("HardLight", SkXfermode::kHardLight_Mode);
+        gPdfBlendModes.set("SoftLight", SkXfermode::kSoftLight_Mode);
+        gPdfBlendModes.set("Difference", SkXfermode::kDifference_Mode);
+        gPdfBlendModes.set("Exclusion", SkXfermode::kExclusion_Mode);
+
+        // TABLE 7.3 Standard nonseparable blend modes
+        gPdfBlendModes.set("Hue", SkXfermode::kHue_Mode);
+        gPdfBlendModes.set("Saturation", SkXfermode::kSaturation_Mode);
+        gPdfBlendModes.set("Color", SkXfermode::kColor_Mode);
+        gPdfBlendModes.set("Luminosity", SkXfermode::kLuminosity_Mode);
+    }
+};
+
+InitBlendModes _gDummyInniter;
+
+SkXfermode::Mode xferModeFromBlendMode(const char* blendMode, size_t len) {
+    SkXfermode::Mode mode = (SkXfermode::Mode)(SkXfermode::kLastMode + 1);
+    if (gPdfBlendModes.find(blendMode, len, &mode)) {
+        return mode;
+    }
+
+    return (SkXfermode::Mode)(SkXfermode::kLastMode + 1);
+}
+
+void skpdfGraphicsStateApplyBM_name(PdfContext* pdfContext, const std::string& blendMode) {
+    SkXfermode::Mode mode = xferModeFromBlendMode(blendMode.c_str(), blendMode.length());
+    if (mode <= SkXfermode::kLastMode) {
+        pdfContext->fGraphicsState.fBlendModesLength = 1;
+        pdfContext->fGraphicsState.fBlendModes[0] = mode;
+    } else {
+        // TODO(edisonn): report unknown blend mode
+    }
+}
+
+void skpdfGraphicsStateApplyBM_array(PdfContext* pdfContext, SkPdfArray* blendModes) {
+    if (!blendModes || blendModes->isArray() || blendModes->size() == 0 || blendModes->size() > 256) {
+        // TODO(edisonn): report error/warning
+        return;
+    }
+    SkXfermode::Mode modes[256];
+    int cnt = blendModes->size();
+    for (int i = 0; i < cnt; i++) {
+        SkPdfObject* name = blendModes->objAtAIndex(i);
+        if (!name->isName()) {
+            // TODO(edisonn): report error/warning
+            return;
+        }
+        SkXfermode::Mode mode = xferModeFromBlendMode(name->c_str(), name->lenstr());
+        if (mode > SkXfermode::kLastMode) {
+            // TODO(edisonn): report error/warning
+            return;
+        }
+    }
+
+    pdfContext->fGraphicsState.fBlendModesLength = cnt;
+    for (int i = 0; i < cnt; i++) {
+        pdfContext->fGraphicsState.fBlendModes[i] = modes[i];
+    }
+}
+
+void skpdfGraphicsStateApplySMask_dict(PdfContext* pdfContext, SkPdfDictionary* sMask) {
+    // TODO(edisonn): verify input
+    if (pdfContext->fPdfDoc->mapper()->mapSoftMaskDictionary(sMask)) {
+        pdfContext->fGraphicsState.fSoftMaskDictionary = (SkPdfSoftMaskDictionary*)sMask;
+    } else if (pdfContext->fPdfDoc->mapper()->mapSoftMaskImageDictionary(sMask)) {
+        SkPdfSoftMaskImageDictionary* smid = (SkPdfSoftMaskImageDictionary*)sMask;
+        pdfContext->fGraphicsState.fSMask = getImageFromObject(pdfContext, smid, true);
+    } else {
+        // TODO (edisonn): report error/warning
+    }
+}
+
+void skpdfGraphicsStateApplySMask_name(PdfContext* pdfContext, const std::string& sMask) {
+    if (sMask == "None") {
+        pdfContext->fGraphicsState.fSoftMaskDictionary = NULL;
+        pdfContext->fGraphicsState.fSMask = NULL;
+        return;
+    }
+
+    //Next, get the ExtGState Dictionary from the Resource Dictionary:
+    SkPdfDictionary* extGStateDictionary = pdfContext->fGraphicsState.fResources->ExtGState(pdfContext->fPdfDoc);
+
+    if (extGStateDictionary == NULL) {
+#ifdef PDF_TRACE
+        printf("ExtGState is NULL!\n");
+#endif
+        // TODO (edisonn): report error/warning
+        return;
+    }
+
+    SkPdfObject* obj = pdfContext->fPdfDoc->resolveReference(extGStateDictionary->get(sMask.c_str()));
+    if (!obj || !obj->isDictionary()) {
+        // TODO (edisonn): report error/warning
+        return;
+    }
+
+    pdfContext->fGraphicsState.fSoftMaskDictionary = NULL;
+    pdfContext->fGraphicsState.fSMask = NULL;
+
+    skpdfGraphicsStateApplySMask_dict(pdfContext, obj->asDictionary());
+}
+
+void skpdfGraphicsStateApplyAIS(PdfContext* pdfContext, bool alphaSource) {
+    pdfContext->fGraphicsState.fAlphaSource = alphaSource;
+}
+
 
 //dictName gs (PDF 1.2) Set the speciﬁed parameters in the graphics state. dictName is
 //the name of a graphics state parameter dictionary in the ExtGState subdictionary of the current resource dictionary (see the next section).
@@ -1550,19 +2102,63 @@ static PdfResult PdfOp_gs(PdfContext* pdfContext, SkCanvas* canvas, PdfTokenLoop
         return kIgnoreError_PdfResult;
     }
 
-    if (gs->has_CA()) {
-        pdfContext->fGraphicsState.fStroking.fOpacity = gs->CA(pdfContext->fPdfDoc);
+    if (gs->has_LW()) {
+        skpdfGraphicsStateApplyLW(pdfContext, gs->LW(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_LC()) {
+        skpdfGraphicsStateApplyLC(pdfContext, gs->LC(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_LJ()) {
+        skpdfGraphicsStateApplyLJ(pdfContext, gs->LJ(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_ML()) {
+        skpdfGraphicsStateApplyML(pdfContext, gs->ML(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_D()) {
+        skpdfGraphicsStateApplyD(pdfContext, gs->D(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_Font()) {
+        skpdfGraphicsStateApplyFont(pdfContext, gs->Font(pdfContext->fPdfDoc));
+    }
+
+    if (gs->has_BM()) {
+        if (gs->isBMAName(pdfContext->fPdfDoc)) {
+            skpdfGraphicsStateApplyBM_name(pdfContext, gs->getBMAsName(pdfContext->fPdfDoc));
+        } else if (gs->isBMAArray(pdfContext->fPdfDoc)) {
+            skpdfGraphicsStateApplyBM_array(pdfContext, gs->getBMAsArray(pdfContext->fPdfDoc));
+        } else {
+            // TODO(edisonn): report/warn
+        }
+    }
+
+    if (gs->has_SMask()) {
+        if (gs->isSMaskAName(pdfContext->fPdfDoc)) {
+            skpdfGraphicsStateApplySMask_name(pdfContext, gs->getSMaskAsName(pdfContext->fPdfDoc));
+        } else if (gs->isSMaskADictionary(pdfContext->fPdfDoc)) {
+            skpdfGraphicsStateApplySMask_dict(pdfContext, gs->getSMaskAsDictionary(pdfContext->fPdfDoc));
+        } else {
+            // TODO(edisonn): report/warn
+        }
     }
 
     if (gs->has_ca()) {
-        pdfContext->fGraphicsState.fNonStroking.fOpacity = gs->ca(pdfContext->fPdfDoc);
+        skpdfGraphicsStateApply_ca(pdfContext, gs->ca(pdfContext->fPdfDoc));
     }
 
-    if (gs->has_LW()) {
-        pdfContext->fGraphicsState.fLineWidth = gs->LW(pdfContext->fPdfDoc);
+    if (gs->has_CA()) {
+        skpdfGraphicsStateApply_CA(pdfContext, gs->CA(pdfContext->fPdfDoc));
     }
 
-    return kNYI_PdfResult;
+    if (gs->has_AIS()) {
+        skpdfGraphicsStateApplyAIS(pdfContext, gs->AIS(pdfContext->fPdfDoc));
+    }
+
+    return kOK_PdfResult;
 }
 
 //charSpace Tc Set the character spacing, Tc
@@ -1826,22 +2422,18 @@ void reportPdfRenderStats() {
 }
 
 PdfResult PdfMainLooper::consumeToken(PdfToken& token) {
-    char keyword[256];
-
     if (token.fType == kKeyword_TokenType && token.fKeywordLength < 256)
     {
-        strncpy(keyword, token.fKeyword, token.fKeywordLength);
-        keyword[token.fKeywordLength] = '\0';
         // TODO(edisonn): log trace flag (verbose, error, info, warning, ...)
         PdfOperatorRenderer pdfOperatorRenderer = NULL;
-        if (gPdfOps.find(keyword, &pdfOperatorRenderer) && pdfOperatorRenderer) {
+        if (gPdfOps.find(token.fKeyword, token.fKeywordLength, &pdfOperatorRenderer) && pdfOperatorRenderer) {
             // caller, main work is done by pdfOperatorRenderer(...)
             PdfTokenLooper* childLooper = NULL;
             PdfResult result = pdfOperatorRenderer(fPdfContext, fCanvas, &childLooper);
 
             int cnt = 0;
-            gRenderStats[result].find(keyword, &cnt);
-            gRenderStats[result].set(keyword, cnt + 1);
+            gRenderStats[result].find(token.fKeyword, token.fKeywordLength, &cnt);
+            gRenderStats[result].set(token.fKeyword, token.fKeywordLength, cnt + 1);
 
             if (childLooper) {
                 childLooper->setUp(this);
@@ -1850,8 +2442,8 @@ PdfResult PdfMainLooper::consumeToken(PdfToken& token) {
             }
         } else {
             int cnt = 0;
-            gRenderStats[kUnsupported_PdfResult].find(keyword, &cnt);
-            gRenderStats[kUnsupported_PdfResult].set(keyword, cnt + 1);
+            gRenderStats[kUnsupported_PdfResult].find(token.fKeyword, token.fKeywordLength, &cnt);
+            gRenderStats[kUnsupported_PdfResult].set(token.fKeyword, token.fKeywordLength, cnt + 1);
         }
     }
     else if (token.fType == kObject_TokenType)
@@ -1882,21 +2474,6 @@ void PdfInlineImageLooper::loop() {
 }
 
 PdfResult PdfInlineImageLooper::done() {
-
-    // TODO(edisonn): long to short names
-    // TODO(edisonn): set properties in a map
-    // TODO(edisonn): extract bitmap stream, check if PoDoFo has public utilities to uncompress
-    // the stream.
-
-    SkBitmap bitmap;
-    setup_bitmap(&bitmap, 50, 50, SK_ColorRED);
-
-    // TODO(edisonn): matrix use.
-    // Draw dummy red square, to show the prezence of the inline image.
-    fCanvas->drawBitmap(bitmap,
-                       SkDoubleToScalar(0),
-                       SkDoubleToScalar(0),
-                       NULL);
     return kNYI_PdfResult;
 }
 
@@ -1948,12 +2525,6 @@ bool SkPdfRenderer::renderPage(int page, SkCanvas* canvas, const SkRect& dst) co
 
     PdfContext pdfContext(fPdfDoc);
 
-    SkPdfNativeTokenizer* tokenizer = fPdfDoc->tokenizerOfPage(page, pdfContext.fTmpPageAllocator);
-    if (!tokenizer) {
-        // TODO(edisonn): report/warning/debug
-        return false;
-    }
-
     pdfContext.fOriginalMatrix = SkMatrix::I();
     pdfContext.fGraphicsState.fResources = fPdfDoc->pageResources(page);
 
@@ -1992,10 +2563,10 @@ bool SkPdfRenderer::renderPage(int page, SkCanvas* canvas, const SkRect& dst) co
     SkAssertResult(pdfContext.fOriginalMatrix.setPolyToPoly(pdfSpace, skiaSpace, 4));
     SkTraceMatrix(pdfContext.fOriginalMatrix, "Original matrix");
 
-
-    pdfContext.fGraphicsState.fMatrix = pdfContext.fOriginalMatrix;
-    pdfContext.fGraphicsState.fMatrixTm = pdfContext.fGraphicsState.fMatrix;
-    pdfContext.fGraphicsState.fMatrixTlm = pdfContext.fGraphicsState.fMatrix;
+    pdfContext.fGraphicsState.fCTM = pdfContext.fOriginalMatrix;
+    pdfContext.fGraphicsState.fContentStreamMatrix = pdfContext.fOriginalMatrix;
+    pdfContext.fGraphicsState.fMatrixTm = pdfContext.fGraphicsState.fCTM;
+    pdfContext.fGraphicsState.fMatrixTlm = pdfContext.fGraphicsState.fCTM;
 
 #ifndef PDF_DEBUG_NO_PAGE_CLIPING
     canvas->clipRect(dst, SkRegion::kIntersect_Op, true);
@@ -2003,15 +2574,13 @@ bool SkPdfRenderer::renderPage(int page, SkCanvas* canvas, const SkRect& dst) co
 
     canvas->setMatrix(pdfContext.fOriginalMatrix);
 
-// erase with red before?
+    doPage(&pdfContext, canvas, fPdfDoc->page(page));
+
+          // TODO(edisonn:) erase with white before draw?
 //        SkPaint paint;
-//        paint.setColor(SK_ColorRED);
+//        paint.setColor(SK_ColorWHITE);
 //        canvas->drawRect(rect, paint);
 
-    PdfMainLooper looper(NULL, tokenizer, &pdfContext, canvas);
-    looper.loop();
-
-    delete tokenizer;
 
     canvas->flush();
     return true;
