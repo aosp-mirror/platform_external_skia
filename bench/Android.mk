@@ -18,7 +18,6 @@ LOCAL_SRC_FILES += \
   BitmapBench.cpp \
   BitmapRectBench.cpp \
   BitmapScaleBench.cpp \
-  BlendBench.cpp \
   BlurBench.cpp \
   BlurImageFilterBench.cpp \
   BlurRectBench.cpp \
@@ -32,6 +31,7 @@ LOCAL_SRC_FILES += \
   DisplacementBench.cpp \
   FontCacheBench.cpp \
   FontScalerBench.cpp \
+  FSRectBench.cpp \
   GameBench.cpp \
   GradientBench.cpp \
   GrMemoryPoolBench.cpp \

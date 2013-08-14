@@ -17,6 +17,7 @@
 #include "SkGlyph.h"
 #include "SkMask.h"
 #include "SkMaskGamma.h"
+#include "SkOTUtils.h"
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkScalerContext.h"
 #include "SkStream.h"
@@ -205,8 +206,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-
-#include "SkStream.h"
 
 struct SkFaceRec {
     SkFaceRec*      fNext;
@@ -1560,6 +1559,74 @@ int SkTypeface_FreeType::onCountGlyphs() const {
         fGlyphCount = face ? face->num_glyphs : 0;
     }
     return fGlyphCount;
+}
+
+SkTypeface::LocalizedStrings* SkTypeface_FreeType::onCreateFamilyNameIterator() const {
+    SkTypeface::LocalizedStrings* nameIter =
+        SkOTUtils::LocalizedStrings_NameTable::CreateForFamilyNames(*this);
+    if (NULL == nameIter) {
+        SkString familyName;
+        this->getFamilyName(&familyName);
+        SkString language("und"); //undetermined
+        nameIter = new SkOTUtils::LocalizedStrings_SingleName(familyName, language);
+    }
+    return nameIter;
+}
+
+int SkTypeface_FreeType::onGetTableTags(SkFontTableTag tags[]) const {
+    AutoFTAccess fta(this);
+    FT_Face face = fta.face();
+
+    FT_ULong tableCount = 0;
+    FT_Error error;
+
+    // When 'tag' is NULL, returns number of tables in 'length'.
+    error = FT_Sfnt_Table_Info(face, 0, NULL, &tableCount);
+    if (error) {
+        return 0;
+    }
+
+    if (tags) {
+        for (FT_ULong tableIndex = 0; tableIndex < tableCount; ++tableIndex) {
+            FT_ULong tableTag;
+            FT_ULong tablelength;
+            error = FT_Sfnt_Table_Info(face, tableIndex, &tableTag, &tablelength);
+            if (error) {
+                return 0;
+            }
+            tags[tableIndex] = static_cast<SkFontTableTag>(tableTag);
+        }
+    }
+    return tableCount;
+}
+
+size_t SkTypeface_FreeType::onGetTableData(SkFontTableTag tag, size_t offset,
+                                           size_t length, void* data) const
+{
+    AutoFTAccess fta(this);
+    FT_Face face = fta.face();
+
+    FT_ULong tableLength = 0;
+    FT_Error error;
+
+    // When 'length' is 0 it is overwritten with the full table length; 'offset' is ignored.
+    error = FT_Load_Sfnt_Table(face, tag, 0, NULL, &tableLength);
+    if (error) {
+        return 0;
+    }
+
+    if (offset > tableLength) {
+        return 0;
+    }
+    FT_ULong size = SkTMin((FT_ULong)length, tableLength - (FT_ULong)offset);
+    if (NULL != data) {
+        error = FT_Load_Sfnt_Table(face, tag, offset, reinterpret_cast<FT_Byte*>(data), &size);
+        if (error) {
+            return 0;
+        }
+    }
+
+    return size;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

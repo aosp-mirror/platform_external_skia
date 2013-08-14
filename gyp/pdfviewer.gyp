@@ -33,7 +33,7 @@
           ],
           'destination': '<(SHARED_INTERMEDIATE_DIR)',
         },
-      ],        
+      ],
       'actions': [
         {
           'action_name': 'spec2def',
@@ -55,6 +55,8 @@
           ],
           'outputs': [
             '<(SHARED_INTERMEDIATE_DIR)/native/autogen/SkPdfEnums_autogen.h',
+            '<(SHARED_INTERMEDIATE_DIR)/native/autogen/SkPdfMapper_autogen.h',
+            '<(SHARED_INTERMEDIATE_DIR)/native/autogen/SkPdfHeaders_autogen.h',
             '<(SHARED_INTERMEDIATE_DIR)/native/autogen/SkPdfMapper_autogen.cpp',
             '<(SHARED_INTERMEDIATE_DIR)/native/autogen/SkPdfHeaders_autogen.cpp',
             # TODO(edisonn): ok, there are many more files here, which we should list but since
@@ -70,8 +72,7 @@
         '<(SHARED_INTERMEDIATE_DIR)/native/autogen',
       ],
       'dependencies': [
-        'core.gyp:core',
-        'images.gyp:images',
+        'skia_lib.gyp:skia_lib',
         'zlib.gyp:zlib',
       ],
     },
@@ -93,9 +94,25 @@
         '../experimental/PdfViewer/pdfparser/native/autogen',
       ],
       'dependencies': [
-        'core.gyp:core',
+        'skia_lib.gyp:skia_lib',
         'flags.gyp:flags',
         'libpdfviewer',
+        'chop_transparency',
+      ],
+    },
+    {
+      'target_name': 'chop_transparency',
+      'type': 'executable',
+      'sources': [
+        '../experimental/PdfViewer/chop_transparency_main.cpp',
+      ],
+      'include_dirs': [
+        # For SkBitmapHasher.h
+        '../src/utils/',
+      ],
+      'dependencies': [
+        'skia_lib.gyp:skia_lib',
+        'flags.gyp:flags',
       ],
     },
   ],

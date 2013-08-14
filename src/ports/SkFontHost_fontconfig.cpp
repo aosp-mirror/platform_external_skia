@@ -72,9 +72,10 @@ static bool find_proc(SkTypeface* face, SkTypeface::Style style, void* ctx) {
     return rec->fStyle == style && fci->isFamilyName(rec->fFamilyName);
 }
 
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style style) {
+SkTypeface* FontConfigTypeface::LegacyCreateTypeface(
+                const SkTypeface* familyFace,
+                const char familyName[],
+                SkTypeface::Style style) {
     SkAutoTUnref<SkFontConfigInterface> fci(RefFCI());
     if (NULL == fci.get()) {
         return NULL;
@@ -107,6 +108,15 @@ SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
     return face;
 }
 
+#ifndef SK_FONTHOST_USES_FONTMGR
+
+SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
+                                       const char familyName[],
+                                       SkTypeface::Style style) {
+    return FontConfigTypeface::LegacyCreateTypeface(familyFace, familyName,
+                                                    style);
+}
+
 SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
     if (!stream) {
         return NULL;
@@ -129,6 +139,8 @@ SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
     SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
     return stream.get() ? CreateTypefaceFromStream(stream) : NULL;
 }
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -172,28 +184,12 @@ SkStream* FontConfigTypeface::onOpenStream(int* ttcIndex) const {
     return stream;
 }
 
-int FontConfigTypeface::onGetTableTags(SkFontTableTag tags[]) const {
-    int ttcIndex;
-    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
-    return stream.get()
-                ? SkFontStream::GetTableTags(stream, ttcIndex, tags)
-                : 0;
-}
-
-size_t FontConfigTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
-                                  size_t length, void* data) const {
-    int ttcIndex;
-    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
-    return stream.get()
-                ? SkFontStream::GetTableData(stream, ttcIndex,
-                                             tag, offset, length, data)
-                : 0;
-}
-
 void FontConfigTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
                                              bool* isLocalStream) const {
     desc->setFamilyName(this->getFamilyName());
     *isLocalStream = SkToBool(this->getLocalStream());
 }
 
-///////////////////////////////////////////////////////////////////////////////
+SkTypeface* FontConfigTypeface::onRefMatchingStyle(Style style) const {
+    return LegacyCreateTypeface(this, NULL, style);
+}

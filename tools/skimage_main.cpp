@@ -22,6 +22,7 @@
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
+DEFINE_string(config, "None", "Preferred config to decode into. [None|8888|565|A8]");
 DEFINE_string(createExpectationsPath, "", "Path to write JSON expectations.");
 DEFINE_string(mismatchPath, "", "Folder to write mismatched images to.");
 DEFINE_string2(readPath, r, "", "Folder(s) and files to decode images. Required.");
@@ -97,6 +98,12 @@ static SkTArray<SkString, false> gEncodeFailures;
 static SkTArray<SkString, false> gSuccessfulDecodes;
 static SkTArray<SkString, false> gSuccessfulSubsetDecodes;
 static SkTArray<SkString, false> gFailedSubsetDecodes;
+// Files/subsets that do not have expectations. Not reported as a failure of the test so
+// the bots will not turn red with each new image test.
+static SkTArray<SkString, false> gMissingExpectations;
+static SkTArray<SkString, false> gMissingSubsetExpectations;
+
+static SkBitmap::Config gPrefConfig(SkBitmap::kNo_Config);
 
 // Expections read from a file specified by readExpectationsPath. The expectations must have been
 // previously written using createExpectationsPath.
@@ -179,6 +186,8 @@ static bool expect_to_fail(const char* filename) {
  *  Compare against an expectation for this filename, if there is one.
  *  @param bitmap SkBitmap to compare to the expected value.
  *  @param filename String used to find the expected value.
+ *  @param failureArray Array to add a failure message to on failure.
+ *  @param missingArray Array to add missing expectation to on failure.
  *  @return bool True in any of these cases:
  *                  - the bitmap matches the expectation.
  *               False in any of these cases:
@@ -188,7 +197,8 @@ static bool expect_to_fail(const char* filename) {
  *                  - expectation could not be computed from the bitmap.
  */
 static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const char* filename,
-                                                 SkTArray<SkString, false>* failureArray) {
+                                                 SkTArray<SkString, false>* failureArray,
+                                                 SkTArray<SkString, false>* missingArray) {
     skiagm::GmResultDigest resultDigest(bitmap);
     if (!resultDigest.isValid()) {
         if (failureArray != NULL) {
@@ -204,8 +214,8 @@ static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const c
 
     skiagm::Expectations jsExpectation = gJsonExpectations->get(filename);
     if (jsExpectation.empty()) {
-        if (failureArray != NULL) {
-            failureArray->push_back().printf("decoded %s, but could not find expectation.",
+        if (missingArray != NULL) {
+            missingArray->push_back().printf("decoded %s, but could not find expectation.",
                                              filename);
         }
         return false;
@@ -316,7 +326,7 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
     SkString basename = SkOSPath::SkBasename(srcPath);
     const char* filename = basename.c_str();
 
-    if (!codec->decode(&stream, &bitmap, SkBitmap::kARGB_8888_Config,
+    if (!codec->decode(&stream, &bitmap, gPrefConfig,
                        SkImageDecoder::kDecodePixels_Mode)) {
         if (expect_to_fail(filename)) {
             gSuccessfulDecodes.push_back().appendf(
@@ -343,7 +353,9 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
         }
     }
 
-    if (compare_to_expectations_if_necessary(bitmap, filename, &gDecodeFailures)) {
+    if (compare_to_expectations_if_necessary(bitmap, filename,
+                                             &gDecodeFailures,
+                                             &gMissingExpectations)) {
         gSuccessfulDecodes.push_back().printf("%s [%d %d]", srcPath, bitmap.width(),
                                               bitmap.height());
     } else if (!FLAGS_mismatchPath.isEmpty()) {
@@ -384,11 +396,12 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
                 SkIRect rect = generate_random_rect(&rand, width, height);
                 SkString subsetDim = SkStringPrintf("[%d,%d,%d,%d]", rect.fLeft, rect.fTop,
                                                     rect.fRight, rect.fBottom);
-                if (codec->decodeSubset(&bitmapFromDecodeSubset, rect, SkBitmap::kNo_Config)) {
+                if (codec->decodeSubset(&bitmapFromDecodeSubset, rect, gPrefConfig)) {
                     SkString subsetName = SkStringPrintf("%s_%s", filename, subsetDim.c_str());
                     if (compare_to_expectations_if_necessary(bitmapFromDecodeSubset,
                                                              subsetName.c_str(),
-                                                             &gFailedSubsetDecodes)) {
+                                                             &gFailedSubsetDecodes,
+                                                             &gMissingSubsetExpectations)) {
                         gSuccessfulSubsetDecodes.push_back().printf("Decoded subset %s from %s",
                                                               subsetDim.c_str(), srcPath);
                     } else if (!FLAGS_mismatchPath.isEmpty()) {
@@ -466,7 +479,7 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
         SkMemoryStream memStream(data);
         SkBitmap redecodedBitmap;
         SkImageDecoder::Format formatOnSecondDecode;
-        if (SkImageDecoder::DecodeStream(&memStream, &redecodedBitmap, SkBitmap::kNo_Config,
+        if (SkImageDecoder::DecodeStream(&memStream, &redecodedBitmap, gPrefConfig,
                                           SkImageDecoder::kDecodePixels_Mode,
                                           &formatOnSecondDecode)) {
             SkASSERT(format_to_type(formatOnSecondDecode) == type);
@@ -550,6 +563,21 @@ int tool_main(int argc, char** argv) {
         outDirPtr = NULL;
     }
 
+    if (FLAGS_config.count() == 1) {
+        // Only consider the first config specified on the command line.
+        const char* config = FLAGS_config[0];
+        if (0 == strcmp(config, "8888")) {
+            gPrefConfig = SkBitmap::kARGB_8888_Config;
+        } else if (0 == strcmp(config, "565")) {
+            gPrefConfig = SkBitmap::kRGB_565_Config;
+        } else if (0 == strcmp(config, "A8")) {
+            gPrefConfig = SkBitmap::kA8_Config;
+        } else if (0 != strcmp(config, "None")) {
+            SkDebugf("Invalid preferred config\n");
+            return -1;
+        }
+    }
+
     for (int i = 0; i < FLAGS_readPath.count(); i++) {
         const char* readPath = FLAGS_readPath[i];
         if (strlen(readPath) < 1) {
@@ -589,10 +617,12 @@ int tool_main(int argc, char** argv) {
     failed |= print_strings("Failed to decode", gDecodeFailures);
     failed |= print_strings("Failed to encode", gEncodeFailures);
     print_strings("Decoded", gSuccessfulDecodes);
+    print_strings("Missing expectations", gMissingExpectations);
 
     if (FLAGS_testSubsetDecoding) {
         failed |= print_strings("Failed subset decodes", gFailedSubsetDecodes);
         print_strings("Decoded subsets", gSuccessfulSubsetDecodes);
+        print_strings("Missing subset expectations", gMissingSubsetExpectations);
     }
 
     return failed ? -1 : 0;

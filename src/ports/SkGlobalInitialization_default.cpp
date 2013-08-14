@@ -20,7 +20,6 @@
 #include "SkAvoidXfermode.h"
 #include "SkBicubicImageFilter.h"
 #include "SkBitmapSource.h"
-#include "SkBlendImageFilter.h"
 #include "SkBlurDrawLooper.h"
 #include "SkBlurImageFilter.h"
 #include "SkBlurMaskFilter.h"
@@ -29,6 +28,7 @@
 #include "SkColorMatrixFilter.h"
 #include "SkColorShader.h"
 #include "SkColorTable.h"
+#include "SkComposeImageFilter.h"
 #include "SkComposeShader.h"
 #include "SkCornerPathEffect.h"
 #include "SkDashPathEffect.h"
@@ -36,6 +36,7 @@
 #include "SkDataSet.h"
 #include "SkDiscretePathEffect.h"
 #include "SkDisplacementMapEffect.h"
+#include "SkDropShadowImageFilter.h"
 #include "SkEmptyShader.h"
 #include "SkEmbossMaskFilter.h"
 #include "SkFlattenable.h"
@@ -64,7 +65,6 @@ void SkFlattenable::InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBicubicImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapProcShader)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapSource)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlendImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurDrawLooper)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorMatrixFilter)
@@ -79,6 +79,7 @@ void SkFlattenable::InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDilateImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDiscretePathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDisplacementMapEffect)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDropShadowImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkEmbossMaskFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkEmptyShader)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkErodeImageFilter)

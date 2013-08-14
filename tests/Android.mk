@@ -23,6 +23,7 @@ LOCAL_SRC_FILES:= \
   DrawBitmapRectTest.cpp \
   DrawPathTest.cpp \
   DrawTextTest.cpp \
+  DynamicHashTest.cpp \
   EmptyPathTest.cpp \
   ErrorTest.cpp \
   FillPathTest.cpp \
@@ -35,6 +36,7 @@ LOCAL_SRC_FILES:= \
   GLInterfaceValidation.cpp \
   GLProgramsTest.cpp \
   GpuBitmapCopyTest.cpp \
+  GpuDrawPathTest.cpp \
   GrContextFactoryTest.cpp \
   GradientTest.cpp \
   GrMemoryPoolTest.cpp \
@@ -71,6 +73,7 @@ LOCAL_SRC_FILES:= \
   RefCntTest.cpp \
   RefDictTest.cpp \
   RegionTest.cpp \
+  ResourceCacheTest.cpp \
   RoundRectTest.cpp \
   RTreeTest.cpp \
   SHA1Test.cpp \

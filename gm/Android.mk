@@ -29,10 +29,11 @@ LOCAL_SRC_FILES += \
   bitmaprecttest.cpp \
   bitmapscroll.cpp \
   bleed.cpp \
-  blend.cpp \
   blurs.cpp \
   blurrect.cpp \
+  blurquickreject.cpp \
   circles.cpp \
+  circularclips.cpp \
   colorfilterimagefilter.cpp \
   colormatrix.cpp \
   colortype.cpp \
@@ -40,6 +41,7 @@ LOCAL_SRC_FILES += \
   complexclip2.cpp \
   composeshader.cpp \
   convexpaths.cpp \
+  copyTo4444.cpp \
   cubicpaths.cpp \
   cmykjpeg.cpp \
   degeneratesegments.cpp \
@@ -71,6 +73,7 @@ LOCAL_SRC_FILES += \
   hittestpath.cpp \
   imageblur.cpp \
   imagemagnifier.cpp \
+  inversepaths.cpp \
   lighting.cpp \
   image.cpp \
   imagefiltersbase.cpp \
@@ -131,7 +134,8 @@ LOCAL_SRC_FILES += \
   verylargebitmap.cpp \
   xfermodeimagefilter.cpp \
   xfermodes.cpp \
-  xfermodes2.cpp
+  xfermodes2.cpp \
+  xfermodes3.cpp
 
 LOCAL_SHARED_LIBRARIES := \
   libcutils \

@@ -134,6 +134,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkFilterShader.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableBuffers.cpp \
+	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkFontDescriptor.cpp \
@@ -219,7 +220,6 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkAvoidXfermode.cpp \
 	src/effects/SkBicubicImageFilter.cpp \
 	src/effects/SkBitmapSource.cpp \
-	src/effects/SkBlendImageFilter.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMask.cpp \
@@ -228,10 +228,12 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkColorFilters.cpp \
 	src/effects/SkColorMatrix.cpp \
 	src/effects/SkColorMatrixFilter.cpp \
+	src/effects/SkComposeImageFilter.cpp \
 	src/effects/SkCornerPathEffect.cpp \
 	src/effects/SkDashPathEffect.cpp \
 	src/effects/SkDiscretePathEffect.cpp \
 	src/effects/SkDisplacementMapEffect.cpp \
+	src/effects/SkDropShadowImageFilter.cpp \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkGpuBlurUtils.cpp \
@@ -359,6 +361,8 @@ LOCAL_SRC_FILES:= \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
+	src/sfnt/SkOTTable_name.cpp \
+	src/sfnt/SkOTUtils.cpp \
 	src/utils/android/ashmem.cpp \
 	src/utils/debugger/SkDebugCanvas.cpp \
 	src/utils/debugger/SkDrawCommand.cpp \
@@ -563,6 +567,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/lazy \
+	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/utils \
 	external/freetype/include \
 	external/zlib \

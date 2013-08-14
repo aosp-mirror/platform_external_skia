@@ -8,7 +8,6 @@
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkFontDescriptor.h"
 #include "SkFontHost.h"
-#include "SkFontStream.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
 
@@ -195,11 +194,26 @@ int SkTypeface::getUnitsPerEm() const {
     return this->onGetUPEM();
 }
 
+SkTypeface::LocalizedStrings* SkTypeface::createFamilyNameIterator() const {
+    return this->onCreateFamilyNameIterator();
+}
+
+void SkTypeface::getFamilyName(SkString* name) const {
+    bool isLocal = false;
+    SkFontDescriptor desc(this->style());
+    this->onGetFontDescriptor(&desc, &isLocal);
+    name->set(desc.getFamilyName());
+}
+
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
                                 SkAdvancedTypefaceMetrics::PerGlyphInfo info,
                                 const uint32_t* glyphIDs,
                                 uint32_t glyphIDsCount) const {
     return this->onGetAdvancedTypefaceMetrics(info, glyphIDs, glyphIDsCount);
+}
+
+SkTypeface* SkTypeface::refMatchingStyle(Style style) const {
+    return this->onRefMatchingStyle(style);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -212,33 +226,4 @@ int SkTypeface::onCharsToGlyphs(const void* chars, Encoding encoding,
         sk_bzero(glyphs, glyphCount * sizeof(glyphs[0]));
     }
     return 0;
-}
-
-int SkTypeface::onGetUPEM() const {
-    int upem = 0;
-
-    SkAdvancedTypefaceMetrics* metrics;
-    metrics = this->getAdvancedTypefaceMetrics(
-                             SkAdvancedTypefaceMetrics::kNo_PerGlyphInfo,
-                             NULL, 0);
-    if (metrics) {
-        upem = metrics->fEmSize;
-        metrics->unref();
-    }
-    return upem;
-}
-
-int SkTypeface::onGetTableTags(SkFontTableTag tags[]) const {
-    int ttcIndex;
-    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
-    return stream.get() ? SkFontStream::GetTableTags(stream, ttcIndex, tags) : 0;
-}
-
-size_t SkTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
-                                  size_t length, void* data) const {
-    int ttcIndex;
-    SkAutoTUnref<SkStream> stream(this->openStream(&ttcIndex));
-    return stream.get()
-        ? SkFontStream::GetTableData(stream, ttcIndex, tag, offset, length, data)
-        : 0;
 }

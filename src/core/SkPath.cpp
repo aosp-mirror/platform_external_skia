@@ -185,12 +185,12 @@ void SkPath::resetFields() {
 }
 
 SkPath::SkPath(const SkPath& that)
-    : fPathRef(SkRef(that.fPathRef.get()))
-#ifdef SK_BUILD_FOR_ANDROID
-    , fGenerationID(0)
-#endif
-{
+    : fPathRef(SkRef(that.fPathRef.get())) {
     this->copyFields(that);
+#ifdef SK_BUILD_FOR_ANDROID
+    fGenerationID = that.fGenerationID;
+    fSourcePath   = NULL;  // TODO(mtklein): follow up with Android: do we want to copy this too?
+#endif
     SkDEBUGCODE(that.validate();)
 }
 
@@ -204,6 +204,10 @@ SkPath& SkPath::operator=(const SkPath& that) {
     if (this != &that) {
         fPathRef.reset(SkRef(that.fPathRef.get()));
         this->copyFields(that);
+#ifdef SK_BUILD_FOR_ANDROID
+        GEN_ID_INC;  // Similar to swap, we can't just copy this or it could go back in time.
+        fSourcePath = NULL;  // TODO(mtklein): follow up with Android: do we want to copy this too?
+#endif
     }
     SkDEBUGCODE(this->validate();)
     return *this;
@@ -220,13 +224,9 @@ void SkPath::copyFields(const SkPath& that) {
     fDirection       = that.fDirection;
     fIsFinite        = that.fIsFinite;
     fIsOval          = that.fIsOval;
-#ifdef SK_BUILD_FOR_ANDROID
-    GEN_ID_INC;
-    fSourcePath      = NULL;
-#endif
 }
 
-SK_API bool operator==(const SkPath& a, const SkPath& b) {
+bool operator==(const SkPath& a, const SkPath& b) {
     // note: don't need to look at isConvex or bounds, since just comparing the
     // raw data is sufficient.
 
@@ -253,8 +253,13 @@ void SkPath::swap(SkPath& that) {
         SkTSwap<uint8_t>(fDirection, that.fDirection);
         SkTSwap<SkBool8>(fIsFinite, that.fIsFinite);
         SkTSwap<SkBool8>(fIsOval, that.fIsOval);
+#ifdef SK_BUILD_FOR_ANDROID
+        // It doesn't really make sense to swap the generation IDs here, because they might go
+        // backwards.  To be safe we increment both to mark them both as changed.
         GEN_ID_INC;
         GEN_ID_PTR_INC(&that);
+        SkTSwap<const SkPath*>(fSourcePath, that.fSourcePath);
+#endif
     }
 }
 
@@ -301,29 +306,35 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
     SkPath::Verb verb;
     SkPoint pts[4];
     SkDEBUGCODE(int moveCnt = 0;)
+    SkDEBUGCODE(int segmentCount = 0;)
+    SkDEBUGCODE(int closeCount = 0;)
 
     while ((verb = iter.next(pts)) != kDone_Verb) {
         int nextPt = -1;
         switch (verb) {
             case kMove_Verb:
-                SkASSERT(!moveCnt);
+                SkASSERT(!segmentCount && !closeCount);
                 SkDEBUGCODE(++moveCnt);
                 firstPt = prevPt = pts[0];
                 break;
             case kLine_Verb:
                 nextPt = 1;
-                SkASSERT(moveCnt);
+                SkASSERT(moveCnt && !closeCount);
+                SkDEBUGCODE(++segmentCount);
                 break;
             case kQuad_Verb:
             case kConic_Verb:
-                SkASSERT(moveCnt);
+                SkASSERT(moveCnt && !closeCount);
+                SkDEBUGCODE(++segmentCount);
                 nextPt = 2;
                 break;
             case kCubic_Verb:
-                SkASSERT(moveCnt);
+                SkASSERT(moveCnt && !closeCount);
+                SkDEBUGCODE(++segmentCount);
                 nextPt = 3;
                 break;
             case kClose_Verb:
+                SkDEBUGCODE(++closeCount;)
                 break;
             default:
                 SkDEBUGFAIL("unknown verb");
@@ -374,11 +385,11 @@ bool SkPath::isEmpty() const {
 
 bool SkPath::isLine(SkPoint line[2]) const {
     int verbCount = fPathRef->countVerbs();
-    int ptCount = fPathRef->countVerbs();
 
-    if (2 == verbCount && 2 == ptCount) {
-        if (kMove_Verb == fPathRef->atVerb(0) &&
-            kLine_Verb == fPathRef->atVerb(1)) {
+    if (2 == verbCount) {
+        SkASSERT(kMove_Verb == fPathRef->atVerb(0));
+        if (kLine_Verb == fPathRef->atVerb(1)) {
+            SkASSERT(2 == fPathRef->countPoints());
             if (line) {
                 const SkPoint* pts = fPathRef->points();
                 line[0] = pts[0];
@@ -738,6 +749,7 @@ void SkPath::lineTo(SkScalar x, SkScalar y) {
 }
 
 void SkPath::rLineTo(SkScalar x, SkScalar y) {
+    this->injectMoveToIfNeeded();  // This can change the result of this->getLastPt().
     SkPoint pt;
     this->getLastPt(&pt);
     this->lineTo(pt.fX + x, pt.fY + y);
@@ -759,6 +771,7 @@ void SkPath::quadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
 }
 
 void SkPath::rQuadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
+    this->injectMoveToIfNeeded();  // This can change the result of this->getLastPt().
     SkPoint pt;
     this->getLastPt(&pt);
     this->quadTo(pt.fX + x1, pt.fY + y1, pt.fX + x2, pt.fY + y2);
@@ -792,6 +805,7 @@ void SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
 
 void SkPath::rConicTo(SkScalar dx1, SkScalar dy1, SkScalar dx2, SkScalar dy2,
                       SkScalar w) {
+    this->injectMoveToIfNeeded();  // This can change the result of this->getLastPt().
     SkPoint pt;
     this->getLastPt(&pt);
     this->conicTo(pt.fX + dx1, pt.fY + dy1, pt.fX + dx2, pt.fY + dy2, w);
@@ -816,6 +830,7 @@ void SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
 
 void SkPath::rCubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
                       SkScalar x3, SkScalar y3) {
+    this->injectMoveToIfNeeded();  // This can change the result of this->getLastPt().
     SkPoint pt;
     this->getLastPt(&pt);
     this->cubicTo(pt.fX + x1, pt.fY + y1, pt.fX + x2, pt.fY + y2,
