@@ -8,10 +8,11 @@
 
 
 #include "bmpdecoderhelper.h"
+#include "SkColorPriv.h"
 #include "SkImageDecoder.h"
 #include "SkScaledBitmapSampler.h"
 #include "SkStream.h"
-#include "SkColorPriv.h"
+#include "SkStreamHelpers.h"
 #include "SkTDArray.h"
 #include "SkTRegistry.h"
 
@@ -93,12 +94,15 @@ private:
 };
 
 bool SkBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
+    // First read the entire stream, so that all of the data can be passed to
+    // the BmpDecoderHelper.
 
-    size_t length = stream->getLength();
-    SkAutoMalloc storage(length);
-
-    if (stream->read(storage.get(), length) != length) {
-        return false;
+    // Allocated space used to hold the data.
+    SkAutoMalloc storage;
+    // Byte length of all of the data.
+    const size_t length = CopyStreamToStorage(&storage, stream);
+    if (0 == length) {
+        return 0;
     }
 
     const bool justBounds = SkImageDecoder::kDecodeBounds_Mode == mode;
