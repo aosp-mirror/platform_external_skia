@@ -303,6 +303,7 @@ LOCAL_SRC_FILES:= \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
+	src/images/SkStreamHelpers.cpp \
 	src/pathops/SkAddIntersections.cpp \
 	src/pathops/SkDCubicIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
