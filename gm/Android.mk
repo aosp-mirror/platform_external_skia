@@ -87,6 +87,7 @@ LOCAL_SRC_FILES += \
   mixedxfermodes.cpp \
   modecolorfilters.cpp \
   morphology.cpp \
+  nested.cpp \
   ninepatchstretch.cpp \
   nocolorbleed.cpp \
   optimizations.cpp \

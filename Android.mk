@@ -122,6 +122,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkDebug.cpp \
 	src/core/SkDeque.cpp \
 	src/core/SkDevice.cpp \
+        src/core/SkDeviceLooper.cpp \
 	src/core/SkDeviceProfile.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
