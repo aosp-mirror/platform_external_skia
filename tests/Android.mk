@@ -11,6 +11,7 @@ LOCAL_SRC_FILES:= \
   BitSetTest.cpp \
   BlitRowTest.cpp \
   BlurTest.cpp \
+  CanvasStateTest.cpp \
   ClampRangeTest.cpp \
   ClipCacheTest.cpp \
   ClipCubicTest.cpp \
