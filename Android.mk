@@ -379,6 +379,7 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkCullPoints.cpp \
 	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
+	src/utils/SkFrontBufferedStream.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix44.cpp \

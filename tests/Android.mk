@@ -33,6 +33,7 @@ LOCAL_SRC_FILES:= \
   FlateTest.cpp \
   FontHostStreamTest.cpp \
   FontHostTest.cpp \
+  FrontBufferedStreamTest.cpp \
   GeometryTest.cpp \
   GLInterfaceValidation.cpp \
   GLProgramsTest.cpp \
