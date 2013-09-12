@@ -733,62 +733,67 @@ int SkTypeface_FreeType::onGetUPEM() const {
 }
 
 #ifdef DEBUG_METRICS
-static void dumpFTFaceMetrics(FT_Face face) {
+static void dumpFTFaceMetrics(const FT_Face face) {
     SkASSERT(face);
-    SkDebugf("FT_Face metrics for \"%s\":", face->family_name);
-    SkDebugf("  units_per_EM: %hu", face->units_per_EM);
-    SkDebugf("  ascender: %hd", face->ascender);
-    SkDebugf("  descender: %hd", face->descender);
-    SkDebugf("  height: %hd", face->height);
-    SkDebugf("  max_advance_width: %hd", face->max_advance_width);
-    SkDebugf("  max_advance_height: %hd", face->max_advance_height);
+    SkDebugf("  units_per_EM: %hu\n", face->units_per_EM);
+    SkDebugf("  ascender: %hd\n", face->ascender);
+    SkDebugf("  descender: %hd\n", face->descender);
+    SkDebugf("  height: %hd\n", face->height);
+    SkDebugf("  max_advance_width: %hd\n", face->max_advance_width);
+    SkDebugf("  max_advance_height: %hd\n", face->max_advance_height);
 }
 
-static void dumpFTFaceSizeMetrics(FT_Face face) {
-    SkASSERT(face && face->size);
-    SkDebugf("FT_Face->size->metrics for \"%s\":", face->family_name);
-    SkDebugf("  x_ppem: %hu", face->size->metrics.x_ppem);
-    SkDebugf("  y_ppem: %hu", face->size->metrics.y_ppem);
-    SkDebugf("  x_scale: %f", face->size->metrics.x_scale / 65536.0f);
-    SkDebugf("  y_scale: %f", face->size->metrics.y_scale / 65536.0f);
-    SkDebugf("  ascender: %f", face->size->metrics.ascender / 64.0f);
-    SkDebugf("  descender: %f", face->size->metrics.descender / 64.0f);
-    SkDebugf("  height: %f", face->size->metrics.height / 64.0f);
-    SkDebugf("  max_advance: %f", face->size->metrics.max_advance / 64.0f);
+static void dumpFTSize(const FT_Size size) {
+    SkASSERT(size);
+    SkDebugf("  x_ppem: %hu\n", size->metrics.x_ppem);
+    SkDebugf("  y_ppem: %hu\n", size->metrics.y_ppem);
+    SkDebugf("  x_scale: %f\n", size->metrics.x_scale / 65536.0f);
+    SkDebugf("  y_scale: %f\n", size->metrics.y_scale / 65536.0f);
+    SkDebugf("  ascender: %f\n", size->metrics.ascender / 64.0f);
+    SkDebugf("  descender: %f\n", size->metrics.descender / 64.0f);
+    SkDebugf("  height: %f\n", size->metrics.height / 64.0f);
+    SkDebugf("  max_advance: %f\n", size->metrics.max_advance / 64.0f);
 }
 
-static void dumpBitmapStrikeMetrics(FT_Face face, int strikeIndex) {
+static void dumpBitmapStrikeMetrics(const FT_Face face, int strikeIndex) {
     SkASSERT(face);
     SkASSERT(strikeIndex >= 0 && strikeIndex < face->num_fixed_sizes);
-    SkDebugf("bitmap strike metrics for face \"%s\", strike %d:", face->family_name, strikeIndex);
-    SkDebugf("  height: %hd", face->available_sizes[strikeIndex].height);
-    SkDebugf("  width: %hd", face->available_sizes[strikeIndex].width);
-    SkDebugf("  size: %f", face->available_sizes[strikeIndex].size / 64.0f);
-    SkDebugf("  x_ppem: %f", face->available_sizes[strikeIndex].x_ppem / 64.0f);
-    SkDebugf("  y_ppem: %f", face->available_sizes[strikeIndex].y_ppem / 64.0f);
+    SkDebugf("  height: %hd\n", face->available_sizes[strikeIndex].height);
+    SkDebugf("  width: %hd\n", face->available_sizes[strikeIndex].width);
+    SkDebugf("  size: %f\n", face->available_sizes[strikeIndex].size / 64.0f);
+    SkDebugf("  x_ppem: %f\n", face->available_sizes[strikeIndex].x_ppem / 64.0f);
+    SkDebugf("  y_ppem: %f\n", face->available_sizes[strikeIndex].y_ppem / 64.0f);
 }
 
-static void dumpSkFontMetrics(SkPaint::FontMetrics* metrics) {
-    SkASSERT(metrics);
-    SkDebugf("  fTop: %f", metrics->fTop);
-    SkDebugf("  fAscent: %f", metrics->fAscent);
-    SkDebugf("  fDescent: %f", metrics->fDescent);
-    SkDebugf("  fBottom: %f", metrics->fBottom);
-    SkDebugf("  fLeading: %f", metrics->fLeading);
-    SkDebugf("  fAvgCharWidth: %f", metrics->fAvgCharWidth);
-    SkDebugf("  fXMin: %f", metrics->fXMin);
-    SkDebugf("  fXMax: %f", metrics->fXMax);
-    SkDebugf("  fXHeight: %f", metrics->fXHeight);
+static void dumpSkFontMetrics(const SkPaint::FontMetrics& metrics) {
+    SkDebugf("  fTop: %f\n", metrics.fTop);
+    SkDebugf("  fAscent: %f\n", metrics.fAscent);
+    SkDebugf("  fDescent: %f\n", metrics.fDescent);
+    SkDebugf("  fBottom: %f\n", metrics.fBottom);
+    SkDebugf("  fLeading: %f\n", metrics.fLeading);
+    SkDebugf("  fAvgCharWidth: %f\n", metrics.fAvgCharWidth);
+    SkDebugf("  fXMin: %f\n", metrics.fXMin);
+    SkDebugf("  fXMax: %f\n", metrics.fXMax);
+    SkDebugf("  fXHeight: %f\n", metrics.fXHeight);
+}
+
+static void dumpSkGlyphMetrics(const SkGlyph& glyph) {
+    SkDebugf("  fAdvanceX: %f\n", SkFixedToScalar(glyph.fAdvanceX));
+    SkDebugf("  fAdvanceY: %f\n", SkFixedToScalar(glyph.fAdvanceY));
+    SkDebugf("  fWidth: %hu\n", glyph.fWidth);
+    SkDebugf("  fHeight: %hu\n", glyph.fHeight);
+    SkDebugf("  fTop: %hd\n", glyph.fTop);
+    SkDebugf("  fLeft: %hd\n", glyph.fLeft);
 }
 #endif
 
 static FT_Int chooseBitmapStrike(FT_Face face, SkFixed scaleY) {
     // early out if face is bad
     if (face == NULL) {
-        SkDEBUGF(("chooseBitmapStrike aborted due to NULL face"));
+        SkDEBUGF(("chooseBitmapStrike aborted due to NULL face\n"));
         return -1;
     }
-    // determine target ppemY, default to ppemX if necessary
+    // determine target ppem
     FT_Pos targetPPEM = SkFixedToFDot6(scaleY);
     // find a bitmap strike equal to or just larger than the requested size
     FT_Int chosenStrikeIndex = -1;
@@ -814,21 +819,20 @@ static FT_Int chooseBitmapStrike(FT_Face face, SkFixed scaleY) {
             }
         }
     }
-    if (chosenStrikeIndex == -1) {
-        // no usable strike found, abort abort
-        return -1;
-    }
-    // use the chosen strike
-    FT_Error err = FT_Select_Size(face, chosenStrikeIndex);
-    if (err != 0) {
-        SkDEBUGF(("FT_Select_Size(%08x, %d) returned 0x%x\n", face, chosenStrikeIndex, err));
-        return -1;
-    }
+    if (chosenStrikeIndex != -1) {
+        // use the chosen strike
 #ifdef DEBUG_METRICS
-    SkDebugf("chooseBitmapStrike: chose strike %d for face \"%s\" at size %f",
-            chosenStrikeIndex, face->family_name, SkFixedToScalar(scaleY));
-    dumpBitmapStrikeMetrics(face, chosenStrikeIndex);
+        SkDebugf("chooseBitmapStrike: chose strike %d for face \"%s\" at size %f\n",
+                 chosenStrikeIndex, face->family_name, SkFixedToScalar(scaleY));
+        dumpBitmapStrikeMetrics(face, chosenStrikeIndex);
 #endif
+        FT_Error err = FT_Select_Size(face, chosenStrikeIndex);
+        if (err != 0) {
+            SkDEBUGF(("FT_Select_Size(%s, %d) returned 0x%x\n", face->family_name,
+                      chosenStrikeIndex, err));
+            chosenStrikeIndex = -1;
+        }
+    }
     return chosenStrikeIndex;
 }
 
@@ -998,40 +1002,40 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
         fDoLinearMetrics = linearMetrics;
     }
 
-    // now create the FT_Size
+    FT_Error err = FT_New_Size(fFace, &fFTSize);
+    if (err != 0) {
+        SkDEBUGF(("FT_New_Size returned %x for face %s\n", err, fFace->family_name));
+        fFace = NULL;
+        return;
+    }
+    err = FT_Activate_Size(fFTSize);
+    if (err != 0) {
+        SkDEBUGF(("FT_Activate_Size(%08x, 0x%x, 0x%x) returned 0x%x\n", fFace, fScaleX, fScaleY,
+                  err));
+        fFTSize = NULL;
+        return;
+    }
 
-    {
-        FT_Error    err;
+    if (fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag) {
+        fStrikeIndex = chooseBitmapStrike(fFace, fScaleY);
+    }
 
-        err = FT_New_Size(fFace, &fFTSize);
-        if (err != 0) {
-            SkDEBUGF(("FT_New_Size(%08x) returned 0x%x\n", fFace, err));
-            fFace = NULL;
-            return;
-        }
-
-        err = FT_Activate_Size(fFTSize);
-        if (err != 0) {
-            SkDEBUGF(("FT_Activate_Size(%08x, 0x%x, 0x%x) returned 0x%x\n", fFace, fScaleX, fScaleY, err));
-            fFTSize = NULL;
-        }
-
-        err = FT_Set_Char_Size( fFace,
-                                SkFixedToFDot6(fScaleX), SkFixedToFDot6(fScaleY),
-                                72, 72);
-        // default to choosing a bitmap strike if FT_Set_Char_Size fails
-        if (err != 0 && (fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag) != 0) {
-            fStrikeIndex = chooseBitmapStrike(fFace, fScaleY);
-            if (fStrikeIndex < 0) {
-                // unable to FT_Set_Char_Size() *or* chooseBitmapStrike()
+    if (fStrikeIndex == -1) {
+        if (fFace->face_flags & FT_FACE_FLAG_SCALABLE) {
+            err = FT_Set_Char_Size(fFace,
+                                   SkFixedToFDot6(fScaleX), SkFixedToFDot6(fScaleY),
+                                   72, 72);
+            if (err != 0) {
                 SkDEBUGF(("FT_Set_CharSize(%08x, 0x%x, 0x%x) returned 0x%x\n", fFace, fScaleX,
-                        fScaleY, err));
+                          fScaleY, err));
                 fFace = NULL;
                 return;
             }
+            FT_Set_Transform(fFace, &fMatrix22, NULL);
+        } else {
+            SkDEBUGF(("no glyphs for font \"%s\" size %f?\n", fFace->family_name,
+                      SkFixedToScalar(fScaleY)));
         }
-
-        FT_Set_Transform( fFace, &fMatrix22, NULL);
     }
 }
 
@@ -1056,18 +1060,18 @@ SkScalerContext_FreeType::~SkScalerContext_FreeType() {
     this face with other context (at different sizes).
 */
 FT_Error SkScalerContext_FreeType::setupSize() {
-    FT_Error    err = FT_Activate_Size(fFTSize);
-
+    FT_Error err = FT_Activate_Size(fFTSize);
     if (err != 0) {
         SkDEBUGF(("SkScalerContext_FreeType::FT_Activate_Size(%x, 0x%x, 0x%x) returned 0x%x\n",
-                    fFaceRec->fFontID, fScaleX, fScaleY, err));
+                  fFaceRec->fFontID, fScaleX, fScaleY, err));
         fFTSize = NULL;
-    } else {
-        // seems we need to reset this every time (not sure why, but without it
-        // I get random italics from some other fFTSize)
-        FT_Set_Transform( fFace, &fMatrix22, NULL);
+        return err;
     }
-    return err;
+
+    // seems we need to reset this every time (not sure why, but without it
+    // I get random italics from some other fFTSize)
+    FT_Set_Transform(fFace, &fMatrix22, NULL);
+    return 0;
 }
 
 unsigned SkScalerContext_FreeType::generateGlyphCount() {
@@ -1177,6 +1181,18 @@ void SkScalerContext_FreeType::updateGlyphIfLCD(SkGlyph* glyph) {
     }
 }
 
+inline void scaleGlyphMetrics(SkGlyph& glyph, SkScalar scale) {
+    glyph.fWidth = SkToU16(SkScalarRoundToInt(SkScalarMul(SkIntToScalar(glyph.fWidth),  scale)));
+    glyph.fHeight = SkToU16(SkScalarRoundToInt(SkScalarMul(SkIntToScalar(glyph.fHeight), scale)));
+
+    glyph.fTop = SkToS16(SkScalarRoundToInt(SkScalarMul(SkIntToScalar(glyph.fTop), scale)));
+    glyph.fLeft = SkToS16(SkScalarRoundToInt(SkScalarMul(SkIntToScalar(glyph.fLeft), scale)));
+
+    SkFixed fixedScale = SkScalarToFixed(scale);
+    glyph.fAdvanceX = SkFixedMul(glyph.fAdvanceX, fixedScale);
+    glyph.fAdvanceY = SkFixedMul(glyph.fAdvanceY, fixedScale);
+}
+
 void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
     SkAutoMutexAcquire  ac(gFTMutex);
 
@@ -1201,32 +1217,28 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
     }
 
     switch ( fFace->glyph->format ) {
-      case FT_GLYPH_FORMAT_OUTLINE: {
-        FT_BBox bbox;
-
+      case FT_GLYPH_FORMAT_OUTLINE:
         if (0 == fFace->glyph->outline.n_contours) {
             glyph->fWidth = 0;
             glyph->fHeight = 0;
             glyph->fTop = 0;
             glyph->fLeft = 0;
-            break;
+        } else {
+            if (fRec.fFlags & kEmbolden_Flag && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
+                emboldenOutline(fFace, &fFace->glyph->outline);
+            }
+
+            FT_BBox bbox;
+            getBBoxForCurrentGlyph(glyph, &bbox, true);
+
+            glyph->fWidth   = SkToU16(SkFDot6Floor(bbox.xMax - bbox.xMin));
+            glyph->fHeight  = SkToU16(SkFDot6Floor(bbox.yMax - bbox.yMin));
+            glyph->fTop     = -SkToS16(SkFDot6Floor(bbox.yMax));
+            glyph->fLeft    = SkToS16(SkFDot6Floor(bbox.xMin));
+
+            updateGlyphIfLCD(glyph);
         }
-
-        if (fRec.fFlags & kEmbolden_Flag && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
-            emboldenOutline(fFace, &fFace->glyph->outline);
-        }
-
-        getBBoxForCurrentGlyph(glyph, &bbox, true);
-
-        glyph->fWidth   = SkToU16(SkFDot6Floor(bbox.xMax - bbox.xMin));
-        glyph->fHeight  = SkToU16(SkFDot6Floor(bbox.yMax - bbox.yMin));
-        glyph->fTop     = -SkToS16(SkFDot6Floor(bbox.yMax));
-        glyph->fLeft    = SkToS16(SkFDot6Floor(bbox.xMin));
-
-        updateGlyphIfLCD(glyph);
-
         break;
-      }
 
       case FT_GLYPH_FORMAT_BITMAP:
         if ((fRec.fFlags & kEmbolden_Flag) && !(fFace->style_flags & FT_STYLE_FLAG_BOLD)) {
@@ -1282,6 +1294,20 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
             }
         }
     }
+
+    if (fFace->glyph->format == FT_GLYPH_FORMAT_BITMAP && fScaleY && fFace->size->metrics.y_ppem) {
+#ifdef DEBUG_METRICS
+        SkDebugf("pre-scale glyph metrics:\n");
+        dumpSkGlyphMetrics(*glyph);
+#endif
+        // NOTE: both dimensions are scaled by y_ppem. this is WAI.
+        scaleGlyphMetrics(*glyph, SkScalarDiv(SkFixedToScalar(fScaleY),
+                                              SkIntToScalar(fFace->size->metrics.y_ppem)));
+    }
+#ifdef DEBUG_METRICS
+    SkDebugf("post-scale glyph metrics:\n");
+    dumpSkGlyphMetrics(*glyph);
+#endif
 
 
 #ifdef ENABLE_GLYPH_SPEW
@@ -1376,9 +1402,9 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
     SkScalar myy = fMatrix22Scalar.getScaleY();
 
 #ifdef DEBUG_METRICS
-    SkDebugf("generateFontMetrics(\"%s\")", face->family_name);
+    SkDebugf("generateFontMetrics(\"%s\"):\n", face->family_name);
     dumpFTFaceMetrics(face);
-    dumpFTFaceSizeMetrics(face);
+    dumpFTSize(face->size);
 #endif
 
     // fetch units/EM from "head" table if needed (ie for bitmap fonts)
@@ -1468,7 +1494,7 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         mx->fXHeight = x_height * mxy * scaleY;
 #ifdef DEBUG_METRICS
         SkDebugf("generateFontMetrics(\"%s\"): mx is:", face->family_name);
-        dumpSkFontMetrics(mx);
+        dumpSkFontMetrics(*mx);
 #endif
     }
     if (my) {
@@ -1482,8 +1508,8 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         my->fXMax = xmax * myy * scaleX;
         my->fXHeight = x_height * myy * scaleY;
 #ifdef DEBUG_METRICS
-        SkDebugf("generateFontMetrics(\"%s\"): my is:", face->family_name);
-        dumpSkFontMetrics(my);
+       SkDebugf("generateFontMetrics(\"%s\"): my is:", face->family_name);
+       dumpSkFontMetrics(*my);
 #endif
     }
 }
