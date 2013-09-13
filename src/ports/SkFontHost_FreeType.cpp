@@ -934,9 +934,9 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
     fLCDIsVert = SkToBool(fRec.fFlags & SkScalerContext::kLCD_Vertical_Flag);
 
     // compute the flags we send to Load_Glyph
+    bool linearMetrics = SkToBool(fRec.fFlags & SkScalerContext::kSubpixelPositioning_Flag);
     {
         FT_Int32 loadFlags = FT_LOAD_DEFAULT;
-        bool linearMetrics = SkToBool(fRec.fFlags & SkScalerContext::kSubpixelPositioning_Flag);
 
         if (SkMask::kBW_Format == fRec.fMaskFormat) {
             // See http://code.google.com/p/chromium/issues/detail?id=43252#c24
@@ -999,7 +999,6 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
 #endif
 
         fLoadGlyphFlags = loadFlags;
-        fDoLinearMetrics = linearMetrics;
     }
 
     FT_Error err = FT_New_Size(fFace, &fFTSize);
@@ -1036,7 +1035,10 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
             SkDEBUGF(("no glyphs for font \"%s\" size %f?\n", fFace->family_name,
                       SkFixedToScalar(fScaleY)));
         }
+    } else {
+        linearMetrics = false; // no linear metrics for bitmap fonts
     }
+    fDoLinearMetrics = linearMetrics;
 }
 
 SkScalerContext_FreeType::~SkScalerContext_FreeType() {
@@ -1376,6 +1378,104 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
     }
 }
 
+#ifdef DEBUG_METRICS
+void generateFontMetricsOLD(FT_Face face, SkScalar scaleX, SkScalar scaleY,
+                            uint32_t loadGlyphFlags, uint16_t recFlags, SkMatrix matrix22Scalar,
+                            SkPaint::FontMetrics* mx, SkPaint::FontMetrics* my) {
+    if (NULL == mx && NULL == my) {
+        return;
+    }
+
+    if (false) {
+    ERROR:
+        if (mx) {
+            sk_bzero(mx, sizeof(SkPaint::FontMetrics));
+        }
+        if (my) {
+            sk_bzero(my, sizeof(SkPaint::FontMetrics));
+        }
+        return;
+    }
+
+    int upem = face->units_per_EM;
+    if (upem <= 0) {
+        goto ERROR;
+    }
+
+    SkPoint pts[6];
+    SkFixed ys[6];
+    SkScalar mxy = matrix22Scalar.getSkewX();
+    SkScalar myy = matrix22Scalar.getScaleY();
+    SkScalar xmin = SkIntToScalar(face->bbox.xMin) / upem;
+    SkScalar xmax = SkIntToScalar(face->bbox.xMax) / upem;
+
+    int leading = face->height - (face->ascender + -face->descender);
+    if (leading < 0) {
+        leading = 0;
+    }
+
+    TT_OS2* os2 = (TT_OS2*) FT_Get_Sfnt_Table(face, ft_sfnt_os2);
+
+    ys[0] = -face->bbox.yMax;
+    ys[1] = -face->ascender;
+    ys[2] = -face->descender;
+    ys[3] = -face->bbox.yMin;
+    ys[4] = leading;
+    ys[5] = os2 ? os2->xAvgCharWidth : 0;
+
+    SkScalar x_height;
+    if (os2 && os2->sxHeight) {
+        x_height = scaleX * os2->sxHeight / upem;
+    } else {
+        const FT_UInt x_glyph = FT_Get_Char_Index(face, 'x');
+        if (x_glyph) {
+            FT_BBox bbox;
+            FT_Load_Glyph(face, x_glyph, loadGlyphFlags);
+            if (recFlags & SkScalerContext::kEmbolden_Flag) {
+                SkDebugf("x_height is incorrect (skipped embolden step)\n");
+            }
+            FT_Outline_Get_CBox(&face->glyph->outline, &bbox);
+            x_height = bbox.yMax / 64.0f;
+         } else {
+            x_height = 0;
+         }
+    }
+
+    for (int i = 0; i < 6; i++) {
+        SkScalar y = scaleY * ys[i] / upem;
+        pts[i].set(y * mxy, y * myy);
+    }
+
+    if (mx) {
+        mx->fTop = pts[0].fX;
+        mx->fAscent = pts[1].fX;
+        mx->fDescent = pts[2].fX;
+        mx->fBottom = pts[3].fX;
+        mx->fLeading = pts[4].fX;
+        mx->fAvgCharWidth = pts[5].fX;
+        mx->fXMin = xmin;
+        mx->fXMax = xmax;
+        mx->fXHeight = x_height;
+        SkDebugf("generateFontMetricsOLD(\"%s\"): mx is:\n", face->family_name);
+        dumpSkFontMetrics(*mx);
+   }
+
+   if (my) {
+        my->fTop = pts[0].fY;
+        my->fAscent = pts[1].fY;
+        my->fDescent = pts[2].fY;
+        my->fBottom = pts[3].fY;
+        my->fLeading = pts[4].fY;
+        my->fAvgCharWidth = pts[5].fY;
+        my->fXMin = xmin;
+        my->fXMax = xmax;
+        my->fXHeight = x_height;
+        SkDebugf("generateFontMetricsOLD(\"%s\"): my is:\n", face->family_name);
+        dumpSkFontMetrics(*my);
+   }
+}
+#endif
+
 void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
                                                    SkPaint::FontMetrics* my) {
     if (NULL == mx && NULL == my) {
@@ -1398,8 +1498,8 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
     FT_Face face = fFace;
     SkScalar scaleX = fScale.x();
     SkScalar scaleY = fScale.y();
-    SkScalar mxy = fMatrix22Scalar.getSkewX();
-    SkScalar myy = fMatrix22Scalar.getScaleY();
+    SkScalar mxy = fMatrix22Scalar.getSkewX() * scaleY;
+    SkScalar myy = fMatrix22Scalar.getScaleY() * scaleY;
 
 #ifdef DEBUG_METRICS
     SkDebugf("generateFontMetrics(\"%s\"):\n", face->family_name);
@@ -1417,25 +1517,20 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
     }
 
     // use the os/2 table as a source of reasonable defaults.
-    SkScalar leading = 0.0f;
     SkScalar x_height = 0.0f;
     SkScalar avgCharWidth = 0.0f;
     TT_OS2* os2 = (TT_OS2*) FT_Get_Sfnt_Table(face, ft_sfnt_os2);
     if (os2) {
-        x_height = SkIntToScalar(os2->sxHeight) / upem;
+        x_height = scaleX * SkIntToScalar(os2->sxHeight) / upem;
         avgCharWidth = SkIntToScalar(os2->xAvgCharWidth) / upem;
-        leading = SkIntToScalar(os2->sTypoLineGap) / upem;
     }
 
-    // pull as much as possible from face->size->metrics
-    SkScalar xppem = SkIntToScalar(face->size->metrics.x_ppem);
-    SkScalar yppem = SkIntToScalar(face->size->metrics.y_ppem);
-    SkScalar ascent = -SkIntToScalar(face->size->metrics.ascender) / (yppem * 64.0f);
-    SkScalar descent = -SkIntToScalar(face->size->metrics.descender) / (yppem * 64.0f);
-
     // pull from format-specific metrics as needed
-    SkScalar xmin, xmax, ymin, ymax;
+    SkScalar ascent, descent, leading, xmin, xmax, ymin, ymax;
     if (face->face_flags & FT_FACE_FLAG_SCALABLE) { // scalable outline font
+        ascent = -SkIntToScalar(face->ascender) / upem;
+        descent = -SkIntToScalar(face->descender) / upem;
+        leading = SkIntToScalar(face->height + (face->descender - face->ascender)) / upem;
         xmin = SkIntToScalar(face->bbox.xMin) / upem;
         xmax = SkIntToScalar(face->bbox.xMax) / upem;
         ymin = -SkIntToScalar(face->bbox.yMin) / upem;
@@ -1450,31 +1545,31 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
                     emboldenOutline(fFace, &fFace->glyph->outline);
                 }
                 FT_Outline_Get_CBox(&fFace->glyph->outline, &bbox);
-                x_height = SkIntToScalar(bbox.yMax) / (yppem * 64.0f);
+                x_height = SkIntToScalar(bbox.yMax) / 64.0f;
             }
         }
     } else if (fStrikeIndex != -1) { // bitmap strike metrics
 #ifdef DEBUG_METRICS
         dumpBitmapStrikeMetrics(fFace, fStrikeIndex);
 #endif
+        SkScalar xppem = SkIntToScalar(face->size->metrics.x_ppem);
+        SkScalar yppem = SkIntToScalar(face->size->metrics.y_ppem);
+        ascent = -SkIntToScalar(face->size->metrics.ascender) / (yppem * 64.0f);
+        descent = -SkIntToScalar(face->size->metrics.descender) / (yppem * 64.0f);
+        leading = (SkIntToScalar(face->size->metrics.height) / (yppem * 64.0f))
+                + ascent - descent;
         xmin = 0.0f;
         xmax = SkIntToScalar(face->available_sizes[fStrikeIndex].width) / xppem;
         ymin = descent + leading;
         ymax = ascent - descent;
+        if (!x_height) {
+            x_height = -ascent;
+        }
+        if (!avgCharWidth) {
+            avgCharWidth = xmax - xmin;
+        }
     } else {
         goto ERROR;
-    }
-
-    // synthesize elements that were not provided by the os/2 table or format-specific metrics
-    if (!leading) {
-        leading = (SkIntToScalar(face->size->metrics.height) / (yppem * 64.0f))
-                + ascent - descent;
-    }
-    if (!x_height) {
-        x_height = -ascent;
-    }
-    if (!avgCharWidth) {
-        avgCharWidth = xmax - xmin;
     }
 
     // disallow negative linespacing
@@ -1482,33 +1577,37 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         leading = 0.0f;
     }
 
-    if (mx) {
-        mx->fTop = ymax * mxy * scaleY;
-        mx->fAscent = ascent * mxy * scaleY;
-        mx->fDescent = descent * mxy * scaleY;
-        mx->fBottom = ymin * mxy * scaleY;
-        mx->fLeading = leading * mxy * scaleY;
-        mx->fAvgCharWidth = avgCharWidth * mxy * scaleX;
-        mx->fXMin = xmin * mxy * scaleX;
-        mx->fXMax = xmax * mxy * scaleX;
-        mx->fXHeight = x_height * mxy * scaleY;
 #ifdef DEBUG_METRICS
-        SkDebugf("generateFontMetrics(\"%s\"): mx is:", face->family_name);
+    generateFontMetricsOLD(fFace, fScale.x(), fScale.y(), fLoadGlyphFlags, fRec.fFlags,
+                           fMatrix22Scalar, mx, my);
+#endif
+    if (mx) {
+        mx->fTop = ymax * mxy;
+        mx->fAscent = ascent * mxy;
+        mx->fDescent = descent * mxy;
+        mx->fBottom = ymin * mxy;
+        mx->fLeading = leading * mxy;
+        mx->fAvgCharWidth = avgCharWidth * mxy;
+        mx->fXMin = xmin;
+        mx->fXMax = xmax;
+        mx->fXHeight = x_height;
+#ifdef DEBUG_METRICS
+        SkDebugf("generateFontMetrics(\"%s\"): mx is:\n", face->family_name);
         dumpSkFontMetrics(*mx);
 #endif
     }
     if (my) {
-        my->fTop = ymax * myy * scaleY;
-        my->fAscent = ascent * myy * scaleY;
-        my->fDescent = descent * myy * scaleY;
-        my->fBottom = ymin * myy * scaleY;
-        my->fLeading = leading * myy * scaleY;
-        my->fAvgCharWidth = avgCharWidth * myy * scaleX;
-        my->fXMin = xmin * myy * scaleX;
-        my->fXMax = xmax * myy * scaleX;
-        my->fXHeight = x_height * myy * scaleY;
+        my->fTop = ymax * myy;
+        my->fAscent = ascent * myy;
+        my->fDescent = descent * myy;
+        my->fBottom = ymin * myy;
+        my->fLeading = leading * myy;
+        my->fAvgCharWidth = avgCharWidth * myy;
+        my->fXMin = xmin;
+        my->fXMax = xmax;
+        my->fXHeight = x_height;
 #ifdef DEBUG_METRICS
-       SkDebugf("generateFontMetrics(\"%s\"): my is:", face->family_name);
+       SkDebugf("generateFontMetrics(\"%s\"): my is:\n", face->family_name);
        dumpSkFontMetrics(*my);
 #endif
     }
