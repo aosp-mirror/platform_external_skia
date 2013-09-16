@@ -246,10 +246,10 @@ SkFontConfigInterfaceAndroid::SkFontConfigInterfaceAndroid(SkTDArray<FontFamily*
 
             if (fontRec.fIsValid) {
                 DEBUG_FONT(("---- SystemFonts[%d][%d] fallback=%d file=%s",
-                           i, fFonts.count() - 1, fontRec.fIsFallbackFont, filename.c_str()));
+                           i, fFonts.count() - 1, family->fIsFallbackFont, filename.c_str()));
             } else {
                 DEBUG_FONT(("---- SystemFonts[%d][%d] fallback=%d file=%s (INVALID)",
-                           i, fFonts.count() - 1, fontRec.fIsFallbackFont, filename.c_str()));
+                           i, fFonts.count() - 1, family->fIsFallbackFont, filename.c_str()));
                 continue;
             }
 
@@ -610,7 +610,7 @@ SkTypeface* SkFontConfigInterfaceAndroid::nextLogicalTypeface(SkFontID currFontI
     const SkTypeface* currTypeface = SkTypefaceCache::FindByID(currFontID);
     // non-system fonts are not in the font cache so if we are asked to fallback
     // for a non-system font we will start at the front of the chain.
-    if (NULL != currTypeface && currFontID != origFontID) {
+    if (NULL != currTypeface) {
         currFontRecID = ((FontConfigTypeface*)currTypeface)->getIdentity().fID;
         SkASSERT(INVALID_FONT_REC_ID != currFontRecID);
     }
