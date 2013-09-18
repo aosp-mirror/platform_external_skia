@@ -358,7 +358,9 @@ void SkScalerContext_FreeType_Base::generateGlyphImage(FT_Face face, const SkGly
                                 / SkIntToScalar(face->glyph->bitmap.width),
                                 SkIntToScalar(glyph.fHeight)
                                 / SkIntToScalar(face->glyph->bitmap.rows));
-                    canvas.drawBitmap(unscaledBitmap, 0, 0);
+                    SkPaint paint;
+                    paint.setFilterLevel(SkPaint::kLow_FilterLevel);
+                    canvas.drawBitmap(unscaledBitmap, 0, 0, &paint);
                 } else {
                     // no scaling needed - directly copy glyph data
                     copyFTBitmap(face->glyph->bitmap, reinterpret_cast<uint8_t*>(glyph.fImage),
