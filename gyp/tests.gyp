@@ -33,6 +33,7 @@
         '../tests/BitSetTest.cpp',
         '../tests/BlitRowTest.cpp',
         '../tests/BlurTest.cpp',
+        '../tests/BufferedStreamTest.cpp',
         '../tests/CanvasTest.cpp',
         '../tests/CanvasStateTest.cpp',
         '../tests/ChecksumTest.cpp',
