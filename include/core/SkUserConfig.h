@@ -46,6 +46,20 @@
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
 #define SK_SUPPORT_GPU 1
 
+// Android Text Tuning
+#define SK_GAMMA_APPLY_TO_A8
+#define SK_GAMMA_EXPONENT 1.4
+#define SK_GAMMA_CONTRAST 0.0
+
+// Optimizations for chromium (m30)
+#define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
+#define IGNORE_ROT_AA_RECT_OPT
+#define SKIA_IGNORE_GPU_MIPMAPS
+
+// Disable this check because it is too strict for some chromium-specific
+// subclasses of SkPixelRef. See bug: crbug.com/171776.
+#define SK_DISABLE_PIXELREF_LOCKCOUNT_BALANCE_CHECK
+
 // do this build check for other tools that still read this header
 #ifdef ANDROID
     #include <utils/misc.h>
