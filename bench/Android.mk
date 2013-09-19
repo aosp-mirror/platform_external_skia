@@ -68,6 +68,7 @@ LOCAL_SRC_FILES += \
   RTreeBench.cpp \
   ScalarBench.cpp \
   ShaderMaskBench.cpp \
+  SkipZeroesBench.cpp \
   SortBench.cpp \
   StrokeBench.cpp \
   TableBench.cpp \
