@@ -147,7 +147,7 @@ bool SkBMPImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     SkAutoLockPixels alp(*bm);
 
-    if (!sampler.begin(bm, SkScaledBitmapSampler::kRGB, getDitherImage())) {
+    if (!sampler.begin(bm, SkScaledBitmapSampler::kRGB, *this)) {
         return false;
     }
 
