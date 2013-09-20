@@ -68,7 +68,6 @@ LOCAL_SRC_FILES += \
   RTreeBench.cpp \
   ScalarBench.cpp \
   ShaderMaskBench.cpp \
-  SkipZeroesBench.cpp \
   SortBench.cpp \
   StrokeBench.cpp \
   TableBench.cpp \
@@ -77,6 +76,10 @@ LOCAL_SRC_FILES += \
   VertBench.cpp \
   WriterBench.cpp \
   XfermodeBench.cpp
+
+# Disabling this bench since it depends on recent
+# changes to bench.
+# SkipZeroesBench.cpp \
 
 # Files that are missing dependencies
 #LOCAL_SRC_FILES += \
