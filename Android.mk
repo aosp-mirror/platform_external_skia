@@ -551,7 +551,6 @@ LOCAL_SHARED_LIBRARIES := \
 
 LOCAL_STATIC_LIBRARIES := \
 	libgif \
-	libstlport_static \
 	libwebp-decode \
 	libwebp-encode
 
@@ -594,6 +593,11 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/lazy
+
+# Add SFTNLY support for PDF (which in turns depends on ICU)
+LOCAL_C_INCLUDES += external/sfntly/cpp/src
+LOCAL_STATIC_LIBRARIES += libsfntly
+LOCAL_SHARED_LIBRARIES += libicuuc libicui18n
 
 # Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
 # Revert to -D_FORTIFY_SOURCE=1
