@@ -17,6 +17,7 @@ LOCAL_SRC_FILES += \
   aaclip.cpp \
   aarectmodes.cpp \
   alphagradients.cpp \
+  androidfallback.cpp \
   arcofzorro.cpp \
   arithmode.cpp \
   bicubicfilter.cpp \
