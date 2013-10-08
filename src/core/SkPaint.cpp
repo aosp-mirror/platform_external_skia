@@ -21,6 +21,7 @@
 #include "SkOrderedReadBuffer.h"
 #include "SkOrderedWriteBuffer.h"
 #include "SkPaintDefaults.h"
+#include "SkPaintOptionsAndroid.h"
 #include "SkPathEffect.h"
 #include "SkRasterizer.h"
 #include "SkScalar.h"
@@ -2027,8 +2028,9 @@ static uint32_t pack_4(unsigned a, unsigned b, unsigned c, unsigned d) {
 }
 
 enum FlatFlags {
-    kHasTypeface_FlatFlag   = 0x01,
-    kHasEffects_FlatFlag    = 0x02,
+    kHasTypeface_FlatFlag                      = 0x01,
+    kHasEffects_FlatFlag                       = 0x02,
+    kHasNonDefaultPaintOptionsAndroid_FlatFlag = 0x04,
 };
 
 // The size of a flat paint's POD fields
@@ -2060,7 +2062,11 @@ void SkPaint::flatten(SkFlattenableWriteBuffer& buffer) const {
         asint(this->getImageFilter())) {
         flatFlags |= kHasEffects_FlatFlag;
     }
-
+#ifdef SK_BUILD_FOR_ANDROID
+    if (this->getPaintOptionsAndroid() != SkPaintOptionsAndroid()) {
+        flatFlags |= kHasNonDefaultPaintOptionsAndroid_FlatFlag;
+    }
+#endif
 
     if (buffer.isOrderedBinaryBuffer()) {
         SkASSERT(SkAlign4(kPODPaintSize) == kPODPaintSize);
@@ -2127,6 +2133,11 @@ void SkPaint::flatten(SkFlattenableWriteBuffer& buffer) const {
         buffer.writeFlattenable(this->getImageFilter());
         buffer.writeFlattenable(this->getAnnotation());
     }
+#ifdef SK_BUILD_FOR_ANDROID
+    if (flatFlags & kHasNonDefaultPaintOptionsAndroid_FlatFlag) {
+        this->getPaintOptionsAndroid().flatten(buffer);
+    }
+#endif
 }
 
 void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
@@ -2219,6 +2230,17 @@ void SkPaint::unflatten(SkFlattenableReadBuffer& buffer) {
         this->setRasterizer(NULL);
         this->setLooper(NULL);
         this->setImageFilter(NULL);
+    }
+
+#ifdef SK_BUILD_FOR_ANDROID
+    this->setPaintOptionsAndroid(SkPaintOptionsAndroid());
+#endif
+    if (flatFlags & kHasNonDefaultPaintOptionsAndroid_FlatFlag) {
+        SkPaintOptionsAndroid options;
+        options.unflatten(buffer);
+#ifdef SK_BUILD_FOR_ANDROID
+        this->setPaintOptionsAndroid(options);
+#endif
     }
 }
 

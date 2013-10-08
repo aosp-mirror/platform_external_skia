@@ -4,6 +4,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
   AAClipTest.cpp \
+  AndroidPaintTest.cpp \
   AtomicTest.cpp \
   BitmapCopyTest.cpp \
   BitmapGetColorTest.cpp \
