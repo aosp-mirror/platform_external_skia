@@ -10,6 +10,7 @@
 #ifndef SkPDFDevice_DEFINED
 #define SkPDFDevice_DEFINED
 
+#include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDevice.h"
 #include "SkPaint.h"
@@ -64,7 +65,7 @@ public:
      *         inverse scale+translate to accommodate the one that SkPDFDevice
      *         always does.
      */
-    // TODO(vandebo): The sizes should be SkSize and not SkISize.
+    // Deprecated, please use SkDocument::CreatePdf() instead.
     SK_API SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
                        const SkMatrix& initialTransform);
     SK_API virtual ~SkPDFDevice();
