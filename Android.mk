@@ -351,6 +351,7 @@ LOCAL_SRC_FILES:= \
 	src/ports/SkTLS_pthread.cpp \
 	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
+	src/pdf/SkPDFDeviceFlattener.cpp \
 	src/pdf/SkPDFDocument.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
@@ -571,6 +572,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/lazy \
+	$(LOCAL_PATH)/src/pdf \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/utils \
 	external/freetype/include \
