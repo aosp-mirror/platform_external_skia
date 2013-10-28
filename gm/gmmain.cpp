@@ -23,6 +23,7 @@
 #include "SkData.h"
 #include "SkDeferredCanvas.h"
 #include "SkDevice.h"
+#include "SkDocument.h"
 #include "SkDrawFilter.h"
 #include "SkForceLinking.h"
 #include "SkGPipe.h"
@@ -32,6 +33,7 @@
 #include "SkOSFile.h"
 #include "SkPicture.h"
 #include "SkRefCnt.h"
+#include "SkScalar.h"
 #include "SkStream.h"
 #include "SkTArray.h"
 #include "SkTDict.h"
@@ -68,6 +70,7 @@ typedef int GLContextType;
 #define DEBUGFAIL_SEE_STDERR SkDEBUGFAIL("see stderr for message")
 
 extern bool gSkSuppressFontCachePurgeSpew;
+DECLARE_bool(useDocumentInsteadOfDevice);
 
 #ifdef SK_SUPPORT_PDF
     #include "SkPDFDevice.h"
@@ -596,34 +599,51 @@ public:
         }
     }
 
-    static void generate_pdf(GM* gm, SkDynamicMemoryWStream& pdf) {
+    static bool generate_pdf(GM* gm, SkDynamicMemoryWStream& pdf) {
 #ifdef SK_SUPPORT_PDF
         SkMatrix initialTransform = gm->getInitialTransform();
-        SkISize pageSize = gm->getISize();
-        SkPDFDevice* dev = NULL;
-        if (initialTransform.isIdentity()) {
-            dev = new SkPDFDevice(pageSize, pageSize, initialTransform);
+        if (FLAGS_useDocumentInsteadOfDevice) {
+            SkISize pageISize = gm->getISize();
+            SkAutoTUnref<SkDocument> pdfDoc(SkDocument::CreatePDF(&pdf, NULL, encode_to_dct_data));
+
+            if (!pdfDoc.get()) {
+                return false;
+            }
+
+            SkCanvas* canvas = NULL;
+            canvas = pdfDoc->beginPage(SkIntToScalar(pageISize.width()),
+                                       SkIntToScalar(pageISize.height()));
+            canvas->concat(initialTransform);
+
+            invokeGM(gm, canvas, true, false);
+
+            return pdfDoc->close();
         } else {
-            SkRect content = SkRect::MakeWH(SkIntToScalar(pageSize.width()),
-                                            SkIntToScalar(pageSize.height()));
-            initialTransform.mapRect(&content);
-            content.intersect(0, 0, SkIntToScalar(pageSize.width()),
-                              SkIntToScalar(pageSize.height()));
-            SkISize contentSize =
-                SkISize::Make(SkScalarRoundToInt(content.width()),
-                              SkScalarRoundToInt(content.height()));
-            dev = new SkPDFDevice(pageSize, contentSize, initialTransform);
+            SkISize pageSize = gm->getISize();
+            SkPDFDevice* dev = NULL;
+            if (initialTransform.isIdentity()) {
+                dev = new SkPDFDevice(pageSize, pageSize, initialTransform);
+            } else {
+                SkRect content = SkRect::MakeWH(SkIntToScalar(pageSize.width()),
+                                                SkIntToScalar(pageSize.height()));
+                initialTransform.mapRect(&content);
+                content.intersect(0, 0, SkIntToScalar(pageSize.width()),
+                                  SkIntToScalar(pageSize.height()));
+                SkISize contentSize =
+                    SkISize::Make(SkScalarRoundToInt(content.width()),
+                                  SkScalarRoundToInt(content.height()));
+                dev = new SkPDFDevice(pageSize, contentSize, initialTransform);
+            }
+            dev->setDCTEncoder(encode_to_dct_data);
+            SkAutoUnref aur(dev);
+            SkCanvas c(dev);
+            invokeGM(gm, &c, true, false);
+            SkPDFDocument doc;
+            doc.appendPage(dev);
+            doc.emitPDF(&pdf);
         }
-        dev->setDCTEncoder(encode_to_dct_stream);
-        SkAutoUnref aur(dev);
-
-        SkCanvas c(dev);
-        invokeGM(gm, &c, true, false);
-
-        SkPDFDocument doc;
-        doc.appendPage(dev);
-        doc.emitPDF(&pdf);
-#endif
+#endif  // SK_SUPPORT_PDF
+        return true; // Do not report failure if pdf is not supported.
     }
 
     static void generate_xps(GM* gm, SkDynamicMemoryWStream& xps) {
@@ -1042,11 +1062,49 @@ public:
                 return errors;
             }
         } else if (gRec.fBackend == kPDF_Backend) {
-            generate_pdf(gm, document);
 #if CAN_IMAGE_PDF
-            SkAutoDataUnref data(document.copyToData());
-            SkMemoryStream stream(data->data(), data->size());
-            SkPDFDocumentToBitmap(&stream, bitmap);
+            if (!generate_pdf(gm, document)) {
+                errors.add(kGeneratePdfFailed_ErrorType);
+            } else {
+                SkAutoTUnref<SkStreamAsset> documentStream(document.detachAsStream());
+                if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
+                    path = make_filename(writePath, gm->shortName(), gRec.fName, "", "pdf");
+                    errors.add(write_document(path, documentStream));
+                }
+
+                if (!(gm->getFlags() & GM::kSkipPDFRasterization_Flag)) {
+                    for (int i = 0; i < pdfRasterizers.count(); i++) {
+                        SkBitmap pdfBitmap;
+                        SkASSERT(documentStream->rewind());
+                        bool success = (*pdfRasterizers[i]->fRasterizerFunction)(
+                                documentStream.get(), &pdfBitmap);
+                        if (!success) {
+                            gm_fprintf(stderr, "FAILED to render PDF for %s using renderer %s\n",
+                                       gm->shortName(),
+                                       pdfRasterizers[i]->fName);
+                            continue;
+                        }
+
+                        SkString configName(gRec.fName);
+                        configName.append("-");
+                        configName.append(pdfRasterizers[i]->fName);
+
+                        BitmapAndDigest bitmapAndDigest(pdfBitmap);
+                        errors.add(compare_test_results_to_stored_expectations(
+                                   gm, gRec, configName.c_str(), &bitmapAndDigest));
+
+                        if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
+                            path = make_bitmap_filename(writePath, gm->shortName(),
+                                                        configName.c_str(),
+                                                        "", bitmapAndDigest.fDigest);
+                            errors.add(write_bitmap(path, bitmapAndDigest.fBitmap));
+                        }
+                    }
+                } else {
+                    errors.add(kIntentionallySkipped_ErrorType);
+                }
+            }
+
 #else
             bitmap = NULL;  // we don't generate a bitmap rendering of the PDF file
 #endif
@@ -1364,6 +1422,7 @@ DEFINE_string2(writePicturePath, p, "", "Write .skp files into this directory.")
 DEFINE_int32(pdfJpegQuality, -1, "Encodes images in JPEG at quality level N, "
              "which can be in range 0-100). N = -1 will disable JPEG compression. "
              "Default is N = 100, maximum quality.");
+DEFINE_bool(useDocumentInsteadOfDevice, false, "Use SkDocument::CreateFoo instead of SkFooDevice.");
 
 static bool encode_to_dct_stream(SkWStream* stream, const SkBitmap& bitmap, const SkIRect& rect) {
     // Filter output of warnings that JPEG is not available for the image.
