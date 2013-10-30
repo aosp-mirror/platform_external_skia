@@ -32,6 +32,7 @@ class SkPDFObject;
 class SkPDFResourceDict;
 class SkPDFShader;
 class SkPDFStream;
+class SkRRect;
 template <typename T> class SkTSet;
 
 // Private classes.
@@ -84,6 +85,8 @@ public:
                             size_t count, const SkPoint[],
                             const SkPaint& paint) SK_OVERRIDE;
     virtual void drawRect(const SkDraw&, const SkRect& r, const SkPaint& paint);
+    virtual void drawRRect(const SkDraw&, const SkRRect& rr,
+                           const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPath(const SkDraw&, const SkPath& origpath,
                           const SkPaint& paint, const SkMatrix* prePathMatrix,
                           bool pathIsMutable) SK_OVERRIDE;
