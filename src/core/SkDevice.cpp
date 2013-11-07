@@ -356,11 +356,7 @@ void SkDevice::drawOval(const SkDraw& draw, const SkRect& oval, const SkPaint& p
 void SkDevice::drawRRect(const SkDraw& draw, const SkRRect& rrect, const SkPaint& paint) {
     CHECK_FOR_NODRAW_ANNOTATION(paint);
 
-    SkPath  path;
-    path.addRRect(rrect);
-    // call the VIRTUAL version, so any subclasses who do handle drawPath aren't
-    // required to override drawRRect.
-    this->drawPath(draw, path, paint, NULL, true);
+    draw.drawRRect(rrect, paint);
 }
 
 void SkDevice::drawPath(const SkDraw& draw, const SkPath& path,
