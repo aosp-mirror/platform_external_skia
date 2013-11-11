@@ -344,6 +344,8 @@ SkBlurMaskFilterImpl::filterRRectToNine(const SkRRect& rrect, const SkMatrix& ma
         return kFalse_FilterReturn;
     }
 
+    SkAutoMaskFreeImage amf(srcM.fImage);
+
     if (!this->filterMask(&patch->fMask, srcM, matrix, &margin)) {
         return kFalse_FilterReturn;
     }
