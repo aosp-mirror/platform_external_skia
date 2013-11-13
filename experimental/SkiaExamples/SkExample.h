@@ -28,7 +28,7 @@ public:
 
     SkString getName() { return fName; };
     // Use this public registry to tell the world about your sample.
-    typedef SkTRegistry<SkExample*, SkExampleWindow*> Registry;
+    typedef SkTRegistry<SkExample*(*)(SkExampleWindow*)> Registry;
 
 protected:
     SkExampleWindow* fWindow;
@@ -69,7 +69,6 @@ private:
 
     SkExample* fCurrExample;
     const SkExample::Registry* fRegistry;
-    SkTDArray<const char*> fMatchStrs;
     GrContext* fContext;
     GrRenderTarget* fRenderTarget;
     AttachmentInfo fAttachmentInfo;

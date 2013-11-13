@@ -90,6 +90,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
         NULL == fGetString ||
         NULL == fGetUniformLocation ||
         NULL == fLinkProgram ||
+        NULL == fLineWidth ||
         NULL == fPixelStorei ||
         NULL == fReadPixels ||
         NULL == fScissor ||
@@ -143,6 +144,13 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
 
     GrGLVersion glVer = GrGLGetVersion(this);
 
+    bool isCoreProfile = false;
+    if (kDesktop_GrGLBinding == binding && glVer >= GR_GL_VER(3,2)) {
+        GrGLint profileMask;
+        GR_GL_GetIntegerv(this, GR_GL_CONTEXT_PROFILE_MASK, &profileMask);
+        isCoreProfile = SkToBool(profileMask & GR_GL_CONTEXT_CORE_PROFILE_BIT);
+    }
+
     // Now check that baseline ES/Desktop fns not covered above are present
     // and that we have fn pointers for any advertised extensions that we will
     // try to use.
@@ -150,7 +158,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
     // these functions are part of ES2, we assume they are available
     // On the desktop we assume they are available if the extension
     // is present or GL version is high enough.
-    if (kES2_GrGLBinding == binding) {
+    if (kES_GrGLBinding == binding) {
         if (NULL == fStencilFuncSeparate ||
             NULL == fStencilMaskSeparate ||
             NULL == fStencilOpSeparate) {
@@ -198,14 +206,19 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
                 return false;
             }
         }
-        // The below two blocks are checks for functions used with
-        // GL_NV_path_rendering. We're not enforcing that they be non-NULL
-        // because they aren't actually called at this time.
-        if (false &&
-            (NULL == fMatrixMode ||
-             NULL == fLoadIdentity ||
-             NULL == fLoadMatrixf)) {
-            return false;
+        if (!isCoreProfile) {
+            if (NULL == fClientActiveTexture ||
+                NULL == fDisableClientState ||
+                NULL == fEnableClientState ||
+                NULL == fLoadIdentity ||
+                NULL == fLoadMatrixf ||
+                NULL == fMatrixMode ||
+                NULL == fTexGenf ||
+                NULL == fTexGenfv ||
+                NULL == fTexGeni ||
+                NULL == fVertexPointer) {
+                return false;
+            }
         }
         if (false && extensions.has("GL_NV_path_rendering")) {
             if (NULL == fPathCommands ||
@@ -273,8 +286,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
 
     // part of desktop GL, but not ES
     if (kDesktop_GrGLBinding == binding &&
-        (NULL == fLineWidth ||
-         NULL == fGetTexLevelParameteriv ||
+        (NULL == fGetTexLevelParameteriv ||
          NULL == fDrawBuffer ||
          NULL == fReadBuffer)) {
         return false;
@@ -290,7 +302,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
                 return false;
             }
         }
-    } else if (extensions.has("GL_EXT_texture_storage")) {
+    } else if (glVer >= GR_GL_VER(3,0) || extensions.has("GL_EXT_texture_storage")) {
         if (NULL == fTexStorage2D) {
             return false;
         }
@@ -324,25 +336,45 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
             }
         }
     } else {
+#if GR_GL_IGNORE_ES3_MSAA
         if (extensions.has("GL_CHROMIUM_framebuffer_multisample")) {
+            if (NULL == fRenderbufferStorageMultisample ||
+                NULL == fBlitFramebuffer) {
+                return false;
+            }
+        } else if (extensions.has("GL_APPLE_framebuffer_multisample")) {
+            if (NULL == fRenderbufferStorageMultisample ||
+                NULL == fResolveMultisampleFramebuffer) {
+                return false;
+            }
+        } else if (extensions.has("GL_IMG_multisampled_render_to_texture") ||
+                   extensions.has("GL_EXT_multisampled_render_to_texture")) {
+            if (NULL == fRenderbufferStorageMultisample ||
+                NULL == fFramebufferTexture2DMultisample) {
+                return false;
+            }
+        }
+#else
+        if (glVer >= GR_GL_VER(3,0) || extensions.has("GL_CHROMIUM_framebuffer_multisample")) {
             if (NULL == fRenderbufferStorageMultisample ||
                 NULL == fBlitFramebuffer) {
                 return false;
             }
         }
         if (extensions.has("GL_APPLE_framebuffer_multisample")) {
-            if (NULL == fRenderbufferStorageMultisample ||
+            if (NULL == fRenderbufferStorageMultisampleES2APPLE ||
                 NULL == fResolveMultisampleFramebuffer) {
                 return false;
             }
         }
         if (extensions.has("GL_IMG_multisampled_render_to_texture") ||
             extensions.has("GL_EXT_multisampled_render_to_texture")) {
-            if (NULL == fRenderbufferStorageMultisample ||
+            if (NULL == fRenderbufferStorageMultisampleES2EXT ||
                 NULL == fFramebufferTexture2DMultisample) {
                 return false;
             }
         }
+#endif
     }
 
     // On ES buffer mapping is an extension. On Desktop
@@ -363,7 +395,8 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
         }
     }
 
-    if (kDesktop_GrGLBinding == binding && glVer >= GR_GL_VER(3, 0)) {
+    // glGetStringi was added in version 3.0 of both desktop and ES.
+    if (glVer >= GR_GL_VER(3, 0)) {
         if (NULL == fGetStringi) {
             return false;
         }
@@ -378,7 +411,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
             }
         }
     } else {
-        if (extensions.has("GL_OES_vertex_array_object")) {
+        if (glVer >= GR_GL_VER(3,0) || extensions.has("GL_OES_vertex_array_object")) {
             if (NULL == fBindVertexArray ||
                 NULL == fDeleteVertexArrays ||
                 NULL == fGenVertexArrays) {

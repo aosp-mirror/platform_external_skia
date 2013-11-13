@@ -18,10 +18,16 @@ public:
     GrRectanizerPow2(int w, int h) : GrRectanizer(w, h) {
         fNextStripY = 0;
         fAreaSoFar = 0;
-        Gr_bzero(fRows, sizeof(fRows));
+        sk_bzero(fRows, sizeof(fRows));
     }
 
     virtual ~GrRectanizerPow2() {
+    }
+
+    virtual void reset() {
+        fNextStripY = 0;
+        fAreaSoFar = 0;
+        sk_bzero(fRows, sizeof(fRows));
     }
 
     virtual bool addRect(int w, int h, GrIPoint16* loc);
@@ -47,7 +53,7 @@ public:
     Row fRows[16];
 
     static int HeightToRowIndex(int height) {
-        GrAssert(height >= MIN_HEIGHT_POW2);
+        SkASSERT(height >= MIN_HEIGHT_POW2);
         return 32 - SkCLZ(height - 1);
     }
 
@@ -84,7 +90,7 @@ bool GrRectanizerPow2::addRect(int width, int height, GrIPoint16* loc) {
     }
 
     Row* row = &fRows[HeightToRowIndex(height)];
-    GrAssert(row->fRowHeight == 0 || row->fRowHeight == height);
+    SkASSERT(row->fRowHeight == 0 || row->fRowHeight == height);
 
     if (0 == row->fRowHeight) {
         if (!this->canAddStrip(height)) {
@@ -102,20 +108,21 @@ bool GrRectanizerPow2::addRect(int width, int height, GrIPoint16* loc) {
         }
     }
 
-    GrAssert(row->fRowHeight == height);
-    GrAssert(row->canAddWidth(width, this->width()));
+    SkASSERT(row->fRowHeight == height);
+    SkASSERT(row->canAddWidth(width, this->width()));
     *loc = row->fLoc;
     row->fLoc.fX += width;
 
-    GrAssert(row->fLoc.fX <= this->width());
-    GrAssert(row->fLoc.fY <= this->height());
-    GrAssert(fNextStripY <= this->height());
+    SkASSERT(row->fLoc.fX <= this->width());
+    SkASSERT(row->fLoc.fY <= this->height());
+    SkASSERT(fNextStripY <= this->height());
     fAreaSoFar += area;
     return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrRectanizer* GrRectanizer::Factory(int width, int height) {
-    return SkNEW_ARGS(GrRectanizerPow2, (width, height));
-}
+// factory is now in GrRectanizer_skyline.cpp
+//GrRectanizer* GrRectanizer::Factory(int width, int height) {
+//    return SkNEW_ARGS(GrRectanizerPow2, (width, height));
+//}

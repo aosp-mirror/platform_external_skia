@@ -9,7 +9,6 @@
 
 #include "SkPDFShader.h"
 
-#include "SkCanvas.h"
 #include "SkData.h"
 #include "SkPDFCatalog.h"
 #include "SkPDFDevice.h"
@@ -24,7 +23,7 @@
 #include "SkTSet.h"
 #include "SkTypes.h"
 
-static bool transformBBox(const SkMatrix& matrix, SkRect* bbox) {
+static bool inverseTransformBBox(const SkMatrix& matrix, SkRect* bbox) {
     SkMatrix inverse;
     if (!matrix.invert(&inverse)) {
         return false;
@@ -55,6 +54,7 @@ static void unitToPointsMatrix(const SkPoint pts[2], SkMatrix* matrix) {
  */
 static void interpolateColorCode(SkScalar range, SkScalar* curColor,
                                  SkScalar* prevColor, SkString* result) {
+    SkASSERT(range != SkIntToScalar(0));
     static const int kColorComponents = 3;
 
     // Figure out how to scale each color component.
@@ -152,7 +152,13 @@ static void gradientFunctionCode(const SkShader::GradientInfo& info,
     result->append(" }\n");
 
     // The gradient colors.
+    int gradients = 0;
     for (int i = 1 ; i < info.fColorCount; i++) {
+        if (info.fColorOffsets[i] == info.fColorOffsets[i - 1]) {
+            continue;
+        }
+        gradients++;
+
         result->append("{dup ");
         result->appendScalar(info.fColorOffsets[i]);
         result->append(" le {");
@@ -174,7 +180,7 @@ static void gradientFunctionCode(const SkShader::GradientInfo& info,
     result->append(" ");
     result->appendScalar(colorData[info.fColorCount - 1][2]);
 
-    for (int i = 0 ; i < info.fColorCount; i++) {
+    for (int i = 0 ; i < gradients + 1; i++) {
         result->append("} ifelse\n");
     }
 }
@@ -204,16 +210,73 @@ static void tileModeCode(SkShader::TileMode mode, SkString* result) {
     }
 }
 
-static SkString linearCode(const SkShader::GradientInfo& info) {
-    SkString function("{pop\n");  // Just ditch the y value.
+/**
+ *  Returns PS function code that applies inverse perspective
+ *  to a x, y point.
+ *  The function assumes that the stack has at least two elements,
+ *  and that the top 2 elements are numeric values.
+ *  After executing this code on a PS stack, the last 2 elements are updated
+ *  while the rest of the stack is preserved intact.
+ *  inversePerspectiveMatrix is the inverse perspective matrix.
+ */
+static SkString apply_perspective_to_coordinates(
+        const SkMatrix& inversePerspectiveMatrix) {
+    SkString code;
+    if (!inversePerspectiveMatrix.hasPerspective()) {
+        return code;
+    }
+
+    // Perspective matrix should be:
+    // 1   0  0
+    // 0   1  0
+    // p0 p1 p2
+
+    const SkScalar p0 = inversePerspectiveMatrix[SkMatrix::kMPersp0];
+    const SkScalar p1 = inversePerspectiveMatrix[SkMatrix::kMPersp1];
+    const SkScalar p2 = inversePerspectiveMatrix[SkMatrix::kMPersp2];
+
+    // y = y / (p2 + p0 x + p1 y)
+    // x = x / (p2 + p0 x + p1 y)
+
+    // Input on stack: x y
+    code.append(" dup ");               // x y y
+    code.appendScalar(p1);              // x y y p1
+    code.append(" mul "                 // x y y*p1
+                " 2 index ");           // x y y*p1 x
+    code.appendScalar(p0);              // x y y p1 x p0
+    code.append(" mul ");               // x y y*p1 x*p0
+    code.appendScalar(p2);              // x y y p1 x*p0 p2
+    code.append(" add "                 // x y y*p1 x*p0+p2
+                "add "                  // x y y*p1+x*p0+p2
+                "3 1 roll "             // y*p1+x*p0+p2 x y
+                "2 index "              // z x y y*p1+x*p0+p2
+                "div "                  // y*p1+x*p0+p2 x y/(y*p1+x*p0+p2)
+                "3 1 roll "             // y/(y*p1+x*p0+p2) y*p1+x*p0+p2 x
+                "exch "                 // y/(y*p1+x*p0+p2) x y*p1+x*p0+p2
+                "div "                  // y/(y*p1+x*p0+p2) x/(y*p1+x*p0+p2)
+                "exch\n");              // x/(y*p1+x*p0+p2) y/(y*p1+x*p0+p2)
+    return code;
+}
+
+static SkString linearCode(const SkShader::GradientInfo& info,
+                           const SkMatrix& perspectiveRemover) {
+    SkString function("{");
+
+    function.append(apply_perspective_to_coordinates(perspectiveRemover));
+
+    function.append("pop\n");  // Just ditch the y value.
     tileModeCode(info.fTileMode, &function);
     gradientFunctionCode(info, &function);
     function.append("}");
     return function;
 }
 
-static SkString radialCode(const SkShader::GradientInfo& info) {
+static SkString radialCode(const SkShader::GradientInfo& info,
+                           const SkMatrix& perspectiveRemover) {
     SkString function("{");
+
+    function.append(apply_perspective_to_coordinates(perspectiveRemover));
+
     // Find the distance from the origin.
     function.append("dup "      // x y y
                     "mul "      // x y^2
@@ -233,7 +296,8 @@ static SkString radialCode(const SkShader::GradientInfo& info) {
    with one simplification, the coordinate space has been scaled so that
    Dr = 1.  This means we don't need to scale the entire equation by 1/Dr^2.
  */
-static SkString twoPointRadialCode(const SkShader::GradientInfo& info) {
+static SkString twoPointRadialCode(const SkShader::GradientInfo& info,
+                                   const SkMatrix& perspectiveRemover) {
     SkScalar dx = info.fPoint[0].fX - info.fPoint[1].fX;
     SkScalar dy = info.fPoint[0].fY - info.fPoint[1].fY;
     SkScalar sr = info.fRadius[0];
@@ -243,6 +307,9 @@ static SkString twoPointRadialCode(const SkShader::GradientInfo& info) {
     // We start with a stack of (x y), copy it and then consume one copy in
     // order to calculate b and the other to calculate c.
     SkString function("{");
+
+    function.append(apply_perspective_to_coordinates(perspectiveRemover));
+
     function.append("2 copy ");
 
     // Calculate -b and b^2.
@@ -280,7 +347,8 @@ static SkString twoPointRadialCode(const SkShader::GradientInfo& info) {
 /* Conical gradient shader, based on the Canvas spec for radial gradients
    See: http://www.w3.org/TR/2dcontext/#dom-context-2d-createradialgradient
  */
-static SkString twoPointConicalCode(const SkShader::GradientInfo& info) {
+static SkString twoPointConicalCode(const SkShader::GradientInfo& info,
+                                    const SkMatrix& perspectiveRemover) {
     SkScalar dx = info.fPoint[1].fX - info.fPoint[0].fX;
     SkScalar dy = info.fPoint[1].fY - info.fPoint[0].fY;
     SkScalar r0 = info.fRadius[0];
@@ -294,6 +362,9 @@ static SkString twoPointConicalCode(const SkShader::GradientInfo& info) {
     // We start with a stack of (x y), copy it and then consume one copy in
     // order to calculate b and the other to calculate c.
     SkString function("{");
+
+    function.append(apply_perspective_to_coordinates(perspectiveRemover));
+
     function.append("2 copy ");
 
     // Calculate b and b^2; b = -2 * (y * dy + x * dx + r0 * dr).
@@ -389,7 +460,8 @@ static SkString twoPointConicalCode(const SkShader::GradientInfo& info) {
     return function;
 }
 
-static SkString sweepCode(const SkShader::GradientInfo& info) {
+static SkString sweepCode(const SkShader::GradientInfo& info,
+                          const SkMatrix& perspectiveRemover) {
     SkString function("{exch atan 360 div\n");
     tileModeCode(info.fTileMode, &function);
     gradientFunctionCode(info, &function);
@@ -719,10 +791,49 @@ SkPDFAlphaFunctionShader::SkPDFAlphaFunctionShader(SkPDFShader::State* state)
                                  SkMatrix::I());
 }
 
+// Finds affine and persp such that in = affine * persp.
+// but it returns the inverse of perspective matrix.
+static bool split_perspective(const SkMatrix in, SkMatrix* affine,
+                              SkMatrix* perspectiveInverse) {
+    const SkScalar p2 = in[SkMatrix::kMPersp2];
+
+    if (SkScalarNearlyZero(p2)) {
+        return false;
+    }
+
+    const SkScalar zero = SkIntToScalar(0);
+    const SkScalar one = SkIntToScalar(1);
+
+    const SkScalar sx = in[SkMatrix::kMScaleX];
+    const SkScalar kx = in[SkMatrix::kMSkewX];
+    const SkScalar tx = in[SkMatrix::kMTransX];
+    const SkScalar ky = in[SkMatrix::kMSkewY];
+    const SkScalar sy = in[SkMatrix::kMScaleY];
+    const SkScalar ty = in[SkMatrix::kMTransY];
+    const SkScalar p0 = in[SkMatrix::kMPersp0];
+    const SkScalar p1 = in[SkMatrix::kMPersp1];
+
+    // Perspective matrix would be:
+    // 1  0  0
+    // 0  1  0
+    // p0 p1 p2
+    // But we need the inverse of persp.
+    perspectiveInverse->setAll(one,          zero,       zero,
+                               zero,         one,        zero,
+                               -p0/p2,     -p1/p2,     1/p2);
+
+    affine->setAll(sx - p0 * tx / p2,       kx - p1 * tx / p2,      tx / p2,
+                   ky - p0 * ty / p2,       sy - p1 * ty / p2,      ty / p2,
+                   zero,                    zero,                   one);
+
+    return true;
+}
+
 SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
         : SkPDFDict("Pattern"),
           fState(state) {
-    SkString (*codeFunction)(const SkShader::GradientInfo& info) = NULL;
+    SkString (*codeFunction)(const SkShader::GradientInfo& info,
+                             const SkMatrix& perspectiveRemover) = NULL;
     SkPoint transformPoints[2];
 
     // Depending on the type of the gradient, we want to transform the
@@ -774,13 +885,27 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
     // the gradient can be drawn on on the unit segment.
     SkMatrix mapperMatrix;
     unitToPointsMatrix(transformPoints, &mapperMatrix);
+
     SkMatrix finalMatrix = fState.get()->fCanvasTransform;
     finalMatrix.preConcat(fState.get()->fShaderTransform);
     finalMatrix.preConcat(mapperMatrix);
 
+    // Preserves as much as posible in the final matrix, and only removes
+    // the perspective. The inverse of the perspective is stored in
+    // perspectiveInverseOnly matrix and has 3 useful numbers
+    // (p0, p1, p2), while everything else is either 0 or 1.
+    // In this way the shader will handle it eficiently, with minimal code.
+    SkMatrix perspectiveInverseOnly = SkMatrix::I();
+    if (finalMatrix.hasPerspective()) {
+        if (!split_perspective(finalMatrix,
+                               &finalMatrix, &perspectiveInverseOnly)) {
+            return;
+        }
+    }
+
     SkRect bbox;
     bbox.set(fState.get()->fBBox);
-    if (!transformBBox(finalMatrix, &bbox)) {
+    if (!inverseTransformBBox(finalMatrix, &bbox)) {
         return;
     }
 
@@ -806,9 +931,9 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
             inverseMapperMatrix.mapRadius(info->fRadius[0]);
         twoPointRadialInfo.fRadius[1] =
             inverseMapperMatrix.mapRadius(info->fRadius[1]);
-        functionCode = codeFunction(twoPointRadialInfo);
+        functionCode = codeFunction(twoPointRadialInfo, perspectiveInverseOnly);
     } else {
-        functionCode = codeFunction(*info);
+        functionCode = codeFunction(*info, perspectiveInverseOnly);
     }
 
     SkAutoTUnref<SkPDFDict> pdfShader(new SkPDFDict);
@@ -828,34 +953,62 @@ SkPDFFunctionShader::SkPDFFunctionShader(SkPDFShader::State* state)
 SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     fState.get()->fImage.lockPixels();
 
+    // The image shader pattern cell will be drawn into a separate device
+    // in pattern cell space (no scaling on the bitmap, though there may be
+    // translations so that all content is in the device, coordinates > 0).
+
+    // Map clip bounds to shader space to ensure the device is large enough
+    // to handle fake clamping.
     SkMatrix finalMatrix = fState.get()->fCanvasTransform;
     finalMatrix.preConcat(fState.get()->fShaderTransform);
-    SkRect surfaceBBox;
-    surfaceBBox.set(fState.get()->fBBox);
-    if (!transformBBox(finalMatrix, &surfaceBBox)) {
+    SkRect deviceBounds;
+    deviceBounds.set(fState.get()->fBBox);
+    if (!inverseTransformBBox(finalMatrix, &deviceBounds)) {
         return;
     }
 
-    SkMatrix unflip;
-    unflip.setTranslate(0, SkScalarRoundToScalar(surfaceBBox.height()));
-    unflip.preScale(SK_Scalar1, -SK_Scalar1);
-    SkISize size = SkISize::Make(SkScalarRound(surfaceBBox.width()),
-                                 SkScalarRound(surfaceBBox.height()));
-    SkPDFDevice pattern(size, size, unflip);
-    SkCanvas canvas(&pattern);
-    canvas.translate(-surfaceBBox.fLeft, -surfaceBBox.fTop);
-    finalMatrix.preTranslate(surfaceBBox.fLeft, surfaceBBox.fTop);
-
     const SkBitmap* image = &fState.get()->fImage;
-    SkScalar width = SkIntToScalar(image->width());
-    SkScalar height = SkIntToScalar(image->height());
+    SkRect bitmapBounds;
+    image->getBounds(&bitmapBounds);
+
+    // For tiling modes, the bounds should be extended to include the bitmap,
+    // otherwise the bitmap gets clipped out and the shader is empty and awful.
+    // For clamp modes, we're only interested in the clip region, whether
+    // or not the main bitmap is in it.
     SkShader::TileMode tileModes[2];
     tileModes[0] = fState.get()->fImageTileModes[0];
     tileModes[1] = fState.get()->fImageTileModes[1];
+    if (tileModes[0] != SkShader::kClamp_TileMode ||
+            tileModes[1] != SkShader::kClamp_TileMode) {
+        deviceBounds.join(bitmapBounds);
+    }
 
+    SkMatrix unflip;
+    unflip.setTranslate(0, SkScalarRoundToScalar(deviceBounds.height()));
+    unflip.preScale(SK_Scalar1, -SK_Scalar1);
+    SkISize size = SkISize::Make(SkScalarRound(deviceBounds.width()),
+                                 SkScalarRound(deviceBounds.height()));
+    // TODO(edisonn): should we pass here the DCT encoder of the destination device?
+    // TODO(edisonn): NYI Perspective, use SkPDFDeviceFlattener.
+    SkPDFDevice pattern(size, size, unflip);
+    SkCanvas canvas(&pattern);
+
+    SkRect patternBBox;
+    image->getBounds(&patternBBox);
+
+    // Translate the canvas so that the bitmap origin is at (0, 0).
+    canvas.translate(-deviceBounds.left(), -deviceBounds.top());
+    patternBBox.offset(-deviceBounds.left(), -deviceBounds.top());
+    // Undo the translation in the final matrix
+    finalMatrix.preTranslate(deviceBounds.left(), deviceBounds.top());
+
+    // If the bitmap is out of bounds (i.e. clamp mode where we only see the
+    // stretched sides), canvas will clip this out and the extraneous data
+    // won't be saved to the PDF.
     canvas.drawBitmap(*image, 0, 0);
-    SkRect patternBBox = SkRect::MakeXYWH(-surfaceBBox.fLeft, -surfaceBBox.fTop,
-                                          width, height);
+
+    SkScalar width = SkIntToScalar(image->width());
+    SkScalar height = SkIntToScalar(image->height());
 
     // Tiling is implied.  First we handle mirroring.
     if (tileModes[0] == SkShader::kMirror_TileMode) {
@@ -889,28 +1042,29 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
             tileModes[1] == SkShader::kClamp_TileMode) {
         SkPaint paint;
         SkRect rect;
-        rect = SkRect::MakeLTRB(surfaceBBox.fLeft, surfaceBBox.fTop, 0, 0);
+        rect = SkRect::MakeLTRB(deviceBounds.left(), deviceBounds.top(), 0, 0);
         if (!rect.isEmpty()) {
             paint.setColor(image->getColor(0, 0));
             canvas.drawRect(rect, paint);
         }
 
-        rect = SkRect::MakeLTRB(width, surfaceBBox.fTop, surfaceBBox.fRight, 0);
+        rect = SkRect::MakeLTRB(width, deviceBounds.top(),
+                                deviceBounds.right(), 0);
         if (!rect.isEmpty()) {
             paint.setColor(image->getColor(image->width() - 1, 0));
             canvas.drawRect(rect, paint);
         }
 
-        rect = SkRect::MakeLTRB(width, height, surfaceBBox.fRight,
-                                surfaceBBox.fBottom);
+        rect = SkRect::MakeLTRB(width, height,
+                                deviceBounds.right(), deviceBounds.bottom());
         if (!rect.isEmpty()) {
             paint.setColor(image->getColor(image->width() - 1,
                                            image->height() - 1));
             canvas.drawRect(rect, paint);
         }
 
-        rect = SkRect::MakeLTRB(surfaceBBox.fLeft, height, 0,
-                                surfaceBBox.fBottom);
+        rect = SkRect::MakeLTRB(deviceBounds.left(), height,
+                                0, deviceBounds.bottom());
         if (!rect.isEmpty()) {
             paint.setColor(image->getColor(0, image->height() - 1));
             canvas.drawRect(rect, paint);
@@ -920,13 +1074,13 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
     // Then expand the left, right, top, then bottom.
     if (tileModes[0] == SkShader::kClamp_TileMode) {
         SkIRect subset = SkIRect::MakeXYWH(0, 0, 1, image->height());
-        if (surfaceBBox.fLeft < 0) {
+        if (deviceBounds.left() < 0) {
             SkBitmap left;
             SkAssertResult(image->extractSubset(&left, subset));
 
             SkMatrix leftMatrix;
-            leftMatrix.setScale(-surfaceBBox.fLeft, 1);
-            leftMatrix.postTranslate(surfaceBBox.fLeft, 0);
+            leftMatrix.setScale(-deviceBounds.left(), 1);
+            leftMatrix.postTranslate(deviceBounds.left(), 0);
             canvas.drawBitmapMatrix(left, leftMatrix);
 
             if (tileModes[1] == SkShader::kMirror_TileMode) {
@@ -937,13 +1091,13 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
             patternBBox.fLeft = 0;
         }
 
-        if (surfaceBBox.fRight > width) {
+        if (deviceBounds.right() > width) {
             SkBitmap right;
             subset.offset(image->width() - 1, 0);
             SkAssertResult(image->extractSubset(&right, subset));
 
             SkMatrix rightMatrix;
-            rightMatrix.setScale(surfaceBBox.fRight - width, 1);
+            rightMatrix.setScale(deviceBounds.right() - width, 1);
             rightMatrix.postTranslate(width, 0);
             canvas.drawBitmapMatrix(right, rightMatrix);
 
@@ -952,19 +1106,19 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
                 rightMatrix.postTranslate(0, 2 * height);
                 canvas.drawBitmapMatrix(right, rightMatrix);
             }
-            patternBBox.fRight = surfaceBBox.width();
+            patternBBox.fRight = deviceBounds.width();
         }
     }
 
     if (tileModes[1] == SkShader::kClamp_TileMode) {
         SkIRect subset = SkIRect::MakeXYWH(0, 0, image->width(), 1);
-        if (surfaceBBox.fTop < 0) {
+        if (deviceBounds.top() < 0) {
             SkBitmap top;
             SkAssertResult(image->extractSubset(&top, subset));
 
             SkMatrix topMatrix;
-            topMatrix.setScale(SK_Scalar1, -surfaceBBox.fTop);
-            topMatrix.postTranslate(0, surfaceBBox.fTop);
+            topMatrix.setScale(SK_Scalar1, -deviceBounds.top());
+            topMatrix.postTranslate(0, deviceBounds.top());
             canvas.drawBitmapMatrix(top, topMatrix);
 
             if (tileModes[0] == SkShader::kMirror_TileMode) {
@@ -975,13 +1129,13 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
             patternBBox.fTop = 0;
         }
 
-        if (surfaceBBox.fBottom > height) {
+        if (deviceBounds.bottom() > height) {
             SkBitmap bottom;
             subset.offset(0, image->height() - 1);
             SkAssertResult(image->extractSubset(&bottom, subset));
 
             SkMatrix bottomMatrix;
-            bottomMatrix.setScale(SK_Scalar1, surfaceBBox.fBottom - height);
+            bottomMatrix.setScale(SK_Scalar1, deviceBounds.bottom() - height);
             bottomMatrix.postTranslate(0, height);
             canvas.drawBitmapMatrix(bottom, bottomMatrix);
 
@@ -990,7 +1144,7 @@ SkPDFImageShader::SkPDFImageShader(SkPDFShader::State* state) : fState(state) {
                 bottomMatrix.postTranslate(2 * width, 0);
                 canvas.drawBitmapMatrix(bottom, bottomMatrix);
             }
-            patternBBox.fBottom = surfaceBBox.height();
+            patternBBox.fBottom = deviceBounds.height();
         }
     }
 

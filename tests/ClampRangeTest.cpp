@@ -65,7 +65,7 @@ static void slow_check(const SkClampRange& range,
         }
         if (range.fCount1 > 0 && fx != range.fFx1) {
             SkDebugf("%x %x\n", fx, range.fFx1);
-            R_ASSERT(!"bad fFx1");
+            R_ASSERT(false); // bad fFx1
             return;
         }
         for (i = 0; i < range.fCount1; i++) {
@@ -107,7 +107,7 @@ void TestClampRange(skiatest::Reporter* reporter) {
     test_range(ff(1)/2, ff(16384), 100);
     test_range(ff(1)/2, ff(-16384), 100);
 
-    SkMWCRandom rand;
+    SkRandom rand;
 
     // test non-overflow cases
     for (int i = 0; i < 1000000; i++) {

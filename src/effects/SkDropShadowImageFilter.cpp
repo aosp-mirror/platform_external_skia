@@ -29,6 +29,9 @@ SkDropShadowImageFilter::SkDropShadowImageFilter(SkFlattenableReadBuffer& buffer
     fDy = buffer.readScalar();
     fSigma = buffer.readScalar();
     fColor = buffer.readColor();
+    buffer.validate(SkScalarIsFinite(fDx) &&
+                    SkScalarIsFinite(fDy) &&
+                    SkScalarIsFinite(fSigma));
 }
 
 void SkDropShadowImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const
@@ -46,7 +49,7 @@ bool SkDropShadowImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source
     if (getInput(0) && !getInput(0)->filterImage(proxy, source, matrix, &src, loc))
         return false;
 
-    SkAutoTUnref<SkDevice> device(proxy->createDevice(src.width(), src.height()));
+    SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(src.width(), src.height()));
     SkCanvas canvas(device.get());
 
     SkAutoTUnref<SkImageFilter> blurFilter(new SkBlurImageFilter(fSigma, fSigma));

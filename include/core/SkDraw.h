@@ -17,7 +17,7 @@
 class SkBitmap;
 class SkBounder;
 class SkClipStack;
-class SkDevice;
+class SkBaseDevice;
 class SkMatrix;
 class SkPath;
 class SkRegion;
@@ -97,15 +97,15 @@ public:
     static RectType ComputeRectType(const SkPaint&, const SkMatrix&,
                                     SkPoint* strokeSize);
 
-private:
     void    drawText_asPaths(const char text[], size_t byteLength,
                              SkScalar x, SkScalar y, const SkPaint&) const;
-    void    drawDevMask(const SkMask& mask, const SkPaint&) const;
-    void    drawBitmapAsMask(const SkBitmap&, const SkPaint&) const;
-
     void    drawPosText_asPaths(const char text[], size_t byteLength,
                                 const SkScalar pos[], SkScalar constY,
                                 int scalarsPerPosition, const SkPaint&) const;
+
+private:
+    void    drawDevMask(const SkMask& mask, const SkPaint&) const;
+    void    drawBitmapAsMask(const SkBitmap&, const SkPaint&) const;
 
     /**
      *  Return the current clip bounds, in local coordinates, with slop to account
@@ -127,7 +127,7 @@ public:
     const SkRasterClip* fRC;        // required
 
     const SkClipStack* fClipStack;  // optional
-    SkDevice*       fDevice;        // optional
+    SkBaseDevice*   fDevice;        // optional
     SkBounder*      fBounder;       // optional
     SkDrawProcs*    fProcs;         // optional
 

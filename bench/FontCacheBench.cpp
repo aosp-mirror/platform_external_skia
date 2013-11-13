@@ -20,16 +20,12 @@ static int count_glyphs(const uint16_t start[]) {
     while (*curr != gUniqueGlyphIDs_Sentinel) {
         curr += 1;
     }
-    return curr - start;
+    return static_cast<int>(curr - start);
 }
 
 class FontCacheBench : public SkBenchmark {
-    enum {
-        N = SkBENCHLOOP(50)
-    };
-
 public:
-    FontCacheBench(void* param) : INHERITED(param) {}
+    FontCacheBench()  {}
 
 protected:
     virtual const char* onGetName() SK_OVERRIDE {
@@ -43,8 +39,8 @@ protected:
 
         const uint16_t* array = gUniqueGlyphIDs;
         while (*array != gUniqueGlyphIDs_Sentinel) {
-            size_t count = count_glyphs(array);
-            for (int i = 0; i < N; ++i) {
+            int count = count_glyphs(array);
+            for (int i = 0; i < this->getLoops(); ++i) {
                 paint.measureText(array, count * sizeof(uint16_t));
             }
             array += count + 1;    // skip the sentinel
@@ -113,7 +109,7 @@ static void dump_array(const uint16_t array[], int count) {
 
 class FontCacheEfficiency : public SkBenchmark {
 public:
-    FontCacheEfficiency(void* param) : INHERITED(param) {
+    FontCacheEfficiency()  {
         if (false) dump_array(NULL, 0);
         if (false) rotr(0, 0);
     }
@@ -156,7 +152,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return new FontCacheBench(p); )
+DEF_BENCH( return new FontCacheBench(); )
 
 // undefine this to run the efficiency test
-//DEF_BENCH( return new FontCacheEfficiency(p); )
+//DEF_BENCH( return new FontCacheEfficiency(); )

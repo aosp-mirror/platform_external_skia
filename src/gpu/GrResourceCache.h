@@ -13,8 +13,9 @@
 
 #include "GrConfig.h"
 #include "GrTypes.h"
-#include "GrTHashCache.h"
+#include "GrTHashTable.h"
 #include "GrBinHashKey.h"
+#include "SkMessageBus.h"
 #include "SkTInternalLList.h"
 
 class GrResource;
@@ -141,6 +142,11 @@ private:
     Key fKey;
 };
 
+// The cache listens for these messages to purge junk resources proactively.
+struct GrResourceInvalidatedMessage {
+    GrResourceKey key;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 
 class GrResourceEntry {
@@ -148,7 +154,7 @@ public:
     GrResource* resource() const { return fResource; }
     const GrResourceKey& key() const { return fKey; }
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     void validate() const;
 #else
     void validate() const {}
@@ -185,8 +191,6 @@ bool GrResourceKey::EQ(const GrResourceEntry& a, const GrResourceEntry& b) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "GrTHashCache.h"
 
 /**
  *  Cache of GrResource objects.
@@ -340,7 +344,7 @@ public:
      */
     void purgeAsNeeded(int extraCount = 0, size_t extraBytes = 0);
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     void validate() const;
 #else
     void validate() const {}
@@ -367,7 +371,7 @@ private:
     typedef SkTInternalLList<GrResourceEntry> EntryList;
     EntryList      fList;
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     // These objects cannot be returned by a search
     EntryList      fExclusiveList;
 #endif
@@ -397,14 +401,18 @@ private:
 
     void internalPurge(int extraCount, size_t extraBytes);
 
-#if GR_DEBUG
+    // Listen for messages that a resource has been invalidated and purge cached junk proactively.
+    SkMessageBus<GrResourceInvalidatedMessage>::Inbox fInvalidationInbox;
+    void purgeInvalidated();
+
+#ifdef SK_DEBUG
     static size_t countBytes(const SkTInternalLList<GrResourceEntry>& list);
 #endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     class GrAutoResourceCacheValidate {
     public:
         GrAutoResourceCacheValidate(GrResourceCache* cache) : fCache(cache) {

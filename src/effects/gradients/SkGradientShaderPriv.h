@@ -203,8 +203,8 @@ static inline int next_dither_toggle16(int toggle) {
 
 #if SK_SUPPORT_GPU
 
+#include "GrCoordTransform.h"
 #include "gl/GrGLEffect.h"
-#include "gl/GrGLEffectMatrix.h"
 
 class GrEffectStage;
 class GrBackendEffectFactory;
@@ -247,9 +247,29 @@ public:
 
     bool useAtlas() const { return SkToBool(-1 != fRow); }
     SkScalar getYCoord() const { return fYCoord; };
-    const SkMatrix& getMatrix() const { return fMatrix;}
 
     virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
+
+    enum ColorType {
+        kTwo_ColorType,
+        kThree_ColorType,
+        kTexture_ColorType
+    };
+
+    ColorType getColorType() const { return fColorType; }
+
+    enum PremulType {
+        kBeforeInterp_PremulType,
+        kAfterInterp_PremulType,
+    };
+
+    PremulType getPremulType() const { return fPremulType; }
+
+    const SkColor* getColors(int pos) const {
+        SkASSERT(fColorType != kTexture_ColorType);
+        SkASSERT((pos-1) <= fColorType);
+        return &fColors[pos];
+    }
 
 protected:
 
@@ -261,22 +281,32 @@ protected:
         passed to the gradient factory rather than the array.
     */
     static const int kMaxRandomGradientColors = 4;
-    static int RandomGradientParams(SkMWCRandom* r,
+    static int RandomGradientParams(SkRandom* r,
                                     SkColor colors[kMaxRandomGradientColors],
                                     SkScalar** stops,
                                     SkShader::TileMode* tm);
 
     virtual bool onIsEqual(const GrEffect& effect) const SK_OVERRIDE;
 
-private:
+    const GrCoordTransform& getCoordTransform() const { return fCoordTransform; }
 
+private:
+    static const GrCoordSet kCoordSet = kLocal_GrCoordSet;
+
+    enum {
+        kMaxAnalyticColors = 3 // if more colors use texture
+    };
+
+    GrCoordTransform fCoordTransform;
     GrTextureAccess fTextureAccess;
     SkScalar fYCoord;
     GrTextureStripAtlas* fAtlas;
     int fRow;
-    SkMatrix fMatrix;
     bool fIsOpaque;
-
+    ColorType fColorType;
+    SkColor fColors[kMaxAnalyticColors];
+    PremulType fPremulType; // This only changes behavior for two and three color special cases.
+                            // It is already baked into to the table for texture gradients.
     typedef GrEffect INHERITED;
 
 };
@@ -292,54 +322,64 @@ public:
     virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
 
 protected:
-    /**
-     * Subclasses must reserve the lower kMatrixKeyBitCnt of their key for use by
-     * GrGLGradientEffect.
-     */
     enum {
-        kMatrixKeyBitCnt = GrGLEffectMatrix::kKeyBits,
-        kMatrixKeyMask = (1 << kMatrixKeyBitCnt) - 1,
+        kPremulTypeKeyBitCnt = 1,
+        kPremulTypeMask = 1,
+        kPremulBeforeInterpKey = kPremulTypeMask,
+
+        kTwoColorKey = 2 << kPremulTypeKeyBitCnt,
+        kThreeColorKey = 3 << kPremulTypeKeyBitCnt,
+        kColorKeyMask = kTwoColorKey | kThreeColorKey,
+        kColorKeyBitCnt = 2,
+
+        // Subclasses must shift any key bits they produce up by this amount
+        // and combine with the result of GenBaseGradientKey.
+        kBaseKeyBitCnt = (kPremulTypeKeyBitCnt + kColorKeyBitCnt)
     };
 
-    /**
-     * Subclasses must call this. It will return a value restricted to the lower kMatrixKeyBitCnt
-     * bits.
-     */
-    static EffectKey GenMatrixKey(const GrDrawEffect&);
+    static GrGradientEffect::ColorType ColorTypeFromKey(EffectKey key){
+        if (kTwoColorKey == (key & kColorKeyMask)) {
+            return GrGradientEffect::kTwo_ColorType;
+        } else if (kThreeColorKey == (key & kColorKeyMask)) {
+            return GrGradientEffect::kThree_ColorType;
+        } else {return GrGradientEffect::kTexture_ColorType;}
+    }
+
+    static GrGradientEffect::PremulType PremulTypeFromKey(EffectKey key){
+        if (kPremulBeforeInterpKey == (key & kPremulTypeMask)) {
+            return GrGradientEffect::kBeforeInterp_PremulType;
+        } else {
+            return GrGradientEffect::kAfterInterp_PremulType;
+        }
+    }
 
     /**
-     * Inserts code to implement the GrGradientEffect's matrix. This should be called before a
-     * subclass emits its own code. The name of the 2D coords is output via fsCoordName and already
-     * incorporates any perspective division. The caller can also optionally retrieve the name of
-     * the varying inserted in the VS and its type, which may be either vec2f or vec3f depending
-     * upon whether the matrix has perspective or not. It is not necessary to mask the key before
-     * calling.
+     * Subclasses must call this. It will return a value restricted to the lower kBaseKeyBitCnt
+     * bits.
      */
-    void setupMatrix(GrGLShaderBuilder* builder,
-                     EffectKey key,
-                     const char** fsCoordName,
-                     const char** vsVaryingName = NULL,
-                     GrSLType* vsVaryingType = NULL);
+    static EffectKey GenBaseGradientKey(const GrDrawEffect&);
 
     // Emits the uniform used as the y-coord to texture samples in derived classes. Subclasses
     // should call this method from their emitCode().
-    void emitYCoordUniform(GrGLShaderBuilder* builder);
+    void emitUniforms(GrGLShaderBuilder* builder, EffectKey key);
 
-    // emit code that gets a fragment's color from an expression for t; for now this always uses the
-    // texture, but for simpler cases we'll be able to lerp. Subclasses should call this method from
-    // their emitCode().
-    void emitColorLookup(GrGLShaderBuilder* builder,
-                         const char* gradientTValue,
-                         const char* outputColor,
-                         const char* inputColor,
-                         const GrGLShaderBuilder::TextureSampler&);
+
+    // emit code that gets a fragment's color from an expression for t; Has branches for 3 separate
+    // control flows inside -- 2 color gradients, 3 color symmetric gradients (both using
+    // native GLSL mix), and 4+ color gradients that use the traditional texture lookup.
+    void emitColor(GrGLShaderBuilder* builder,
+                   const char* gradientTValue,
+                   EffectKey key,
+                   const char* outputColor,
+                   const char* inputColor,
+                   const TextureSamplerArray& samplers);
 
 private:
-    static const GrEffect::CoordsType kCoordsType = GrEffect::kLocal_CoordsType;
-
     SkScalar fCachedYCoord;
     GrGLUniformManager::UniformHandle fFSYUni;
-    GrGLEffectMatrix fEffectMatrix;
+    GrGLUniformManager::UniformHandle fColorStartUni;
+    GrGLUniformManager::UniformHandle fColorMidUni;
+    GrGLUniformManager::UniformHandle fColorEndUni;
 
     typedef GrGLEffect INHERITED;
 };

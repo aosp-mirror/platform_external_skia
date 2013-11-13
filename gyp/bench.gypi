@@ -62,6 +62,7 @@
     '../bench/RTreeBench.cpp',
     '../bench/ScalarBench.cpp',
     '../bench/ShaderMaskBench.cpp',
+    '../bench/SkipZeroesBench.cpp',
     '../bench/SortBench.cpp',
     '../bench/StrokeBench.cpp',
     '../bench/TableBench.cpp',
@@ -70,11 +71,10 @@
     '../bench/VertBench.cpp',
     '../bench/WriterBench.cpp',
     '../bench/XfermodeBench.cpp',
+    '../bench/WritePixelsBench.cpp',
 
     '../bench/SkBenchLogger.h',
     '../bench/SkBenchLogger.cpp',
-    '../bench/TimerData.h',
-    '../bench/TimerData.cpp',
   ],
 }
 

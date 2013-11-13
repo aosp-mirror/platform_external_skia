@@ -1,6 +1,6 @@
 {
   'variables': {
-    #manaully set sample_pdf_file_viewer to 1 to have the PdfViewer in SampleApp
+    #manually set sample_pdf_file_viewer to 1 to have the PdfViewer in SampleApp
     'sample_pdf_file_viewer%': 0,
   },
   'targets': [
@@ -51,6 +51,7 @@
         '../samplecode/SampleCamera.cpp',
         '../samplecode/SampleChart.cpp',
         '../samplecode/SampleCircle.cpp',
+        '../samplecode/SampleClock.cpp',
         '../samplecode/SampleClip.cpp',
         '../samplecode/SampleCode.h',
         '../samplecode/SampleColorFilter.cpp',
@@ -68,6 +69,7 @@
         '../samplecode/SampleFillType.cpp',
         '../samplecode/SampleFilter.cpp',
         '../samplecode/SampleFilter2.cpp',
+        '../samplecode/SampleFilterFuzz.cpp',
         '../samplecode/SampleFontCache.cpp',
         '../samplecode/SampleFontScalerTest.cpp',
         '../samplecode/SampleFuzz.cpp',
@@ -102,6 +104,7 @@
         '../samplecode/SampleShaderText.cpp',
         '../samplecode/SampleSkLayer.cpp',
         '../samplecode/SampleSlides.cpp',
+        '../samplecode/SampleStringArt.cpp',
         '../samplecode/SampleStrokePath.cpp',
         '../samplecode/SampleTests.cpp',
         '../samplecode/SampleText.cpp',
@@ -161,7 +164,7 @@
            'SAMPLE_PDF_FILE_VIEWER',
          ],
          'dependencies': [
-           'pdfviewer.gyp:libpdfviewer',
+           'pdfviewer_lib.gyp:pdfviewer_lib',
          ],
          'include_dirs' : [
            '../experimental/PdfViewer/',
@@ -300,8 +303,8 @@
           ],
         }],
         [ 'skia_gpu == 1', {
-          'include_dirs': [
-            '../src/gpu', # To pull gl/GrGLUtil.h
+          'dependencies': [
+            'gputest.gyp:skgputest',
           ],
         }],
         [ 'skia_os == "nacl"', {

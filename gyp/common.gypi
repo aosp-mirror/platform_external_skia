@@ -92,14 +92,12 @@
       'Debug': {
         'defines': [
           'SK_DEBUG',
-          'GR_DEBUG=1',
           'SK_DEVELOPER=1',
         ],
       },
       'Release': {
         'defines': [
           'SK_RELEASE',
-          'GR_RELEASE=1',
         ],
       },
       'Release_Developer': {

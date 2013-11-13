@@ -17,7 +17,7 @@ void gr_run_unittests();
 // If we aren't inheriting these as #defines from elsewhere,
 // clang demands they be declared before we #include the template
 // that relies on them.
-#if GR_DEBUG
+#ifdef SK_DEBUG
 static bool LT(const int& elem, int value) {
     return elem < value;
 }
@@ -31,12 +31,12 @@ static void test_bsearch() {
         1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 22, 33, 44, 55, 66, 77, 88, 99
     };
 
-    for (size_t n = 0; n < GR_ARRAY_COUNT(array); n++) {
-        for (size_t i = 0; i < n; i++) {
+    for (int n = 0; n < static_cast<int>(GR_ARRAY_COUNT(array)); ++n) {
+        for (int i = 0; i < n; i++) {
             int index = GrTBSearch<int, int>(array, n, array[i]);
-            GrAssert(index == (int) i);
+            SkASSERT(index == (int) i);
             index = GrTBSearch<int, int>(array, n, -array[i]);
-            GrAssert(index < 0);
+            SkASSERT(index < 0);
         }
     }
 }
@@ -59,22 +59,22 @@ static void test_binHashKey()
     keyA.setKeyData(testStringA);
     // test copy constructor and comparison
     GrTBinHashKey<BogusEntry, kDataLenUsedForKey> keyA2(keyA);
-    GrAssert(keyA.compare(keyA2) == 0);
-    GrAssert(keyA.getHash() == keyA2.getHash());
+    SkASSERT(keyA.compare(keyA2) == 0);
+    SkASSERT(keyA.getHash() == keyA2.getHash());
     // test re-init
     keyA2.setKeyData(testStringA);
-    GrAssert(keyA.compare(keyA2) == 0);
-    GrAssert(keyA.getHash() == keyA2.getHash());
+    SkASSERT(keyA.compare(keyA2) == 0);
+    SkASSERT(keyA.getHash() == keyA2.getHash());
     // test sorting
     GrTBinHashKey<BogusEntry, kDataLenUsedForKey> keyB;
     keyB.setKeyData(testStringB);
-    GrAssert(keyA.compare(keyB) < 0);
-    GrAssert(keyA.getHash() != keyB.getHash());
+    SkASSERT(keyA.compare(keyB) < 0);
+    SkASSERT(keyA.getHash() != keyB.getHash());
 }
 
 
 void gr_run_unittests() {
-    GR_DEBUGCODE(test_bsearch();)
+    SkDEBUGCODE(test_bsearch();)
     test_binHashKey();
     GrRedBlackTree<int>::UnitTest();
 }

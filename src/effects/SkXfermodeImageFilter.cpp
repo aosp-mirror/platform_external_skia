@@ -7,6 +7,7 @@
 
 #include "SkXfermodeImageFilter.h"
 #include "SkCanvas.h"
+#include "SkDevice.h"
 #include "SkColorPriv.h"
 #include "SkFlattenableBuffers.h"
 #include "SkXfermode.h"
@@ -21,8 +22,9 @@
 
 SkXfermodeImageFilter::SkXfermodeImageFilter(SkXfermode* mode,
                                              SkImageFilter* background,
-                                             SkImageFilter* foreground)
-  : INHERITED(background, foreground), fMode(mode) {
+                                             SkImageFilter* foreground,
+                                             const CropRect* cropRect)
+  : INHERITED(background, foreground, cropRect), fMode(mode) {
     SkSafeRef(fMode);
 }
 
@@ -32,7 +34,7 @@ SkXfermodeImageFilter::~SkXfermodeImageFilter() {
 
 SkXfermodeImageFilter::SkXfermodeImageFilter(SkFlattenableReadBuffer& buffer)
   : INHERITED(buffer) {
-    fMode = buffer.readFlattenableT<SkXfermode>();
+    fMode = buffer.readXfermode();
 }
 
 void SkXfermodeImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
@@ -58,19 +60,29 @@ bool SkXfermodeImageFilter::onFilterImage(Proxy* proxy,
         !foregroundInput->filterImage(proxy, src, ctm, &foreground, &foregroundOffset)) {
         return false;
     }
-    dst->setConfig(background.config(), background.width(), background.height());
-    dst->allocPixels();
-    SkCanvas canvas(*dst);
+
+    SkIRect bounds;
+    background.getBounds(&bounds);
+    if (!applyCropRect(&bounds, ctm)) {
+        return false;
+    }
+    backgroundOffset.fX -= bounds.left();
+    backgroundOffset.fY -= bounds.top();
+    foregroundOffset.fX -= bounds.left();
+    foregroundOffset.fY -= bounds.top();
+
+    SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
+    SkCanvas canvas(device);
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
-    canvas.drawBitmap(background, 0, 0, &paint);
+    canvas.drawBitmap(background, SkIntToScalar(backgroundOffset.fX),
+                      SkIntToScalar(backgroundOffset.fY), &paint);
     paint.setXfermode(fMode);
-    canvas.drawBitmap(foreground,
-                      SkIntToScalar(foregroundOffset.fX - backgroundOffset.fX),
-                      SkIntToScalar(foregroundOffset.fY - backgroundOffset.fY),
-                      &paint);
-    offset->fX += backgroundOffset.fX;
-    offset->fY += backgroundOffset.fY;
+    canvas.drawBitmap(foreground, SkIntToScalar(foregroundOffset.fX),
+                      SkIntToScalar(foregroundOffset.fY), &paint);
+    *dst = device->accessBitmap(false);
+    offset->fX += bounds.left();
+    offset->fY += bounds.top();
     return true;
 }
 
@@ -111,7 +123,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     GrContext::AutoRenderTarget art(context, dst->asRenderTarget());
 
     SkXfermode::Coeff sm, dm;
-    if (!SkXfermode::AsNewEffectOrCoeff(fMode, context, &xferEffect, &sm, &dm, backgroundTex)) {
+    if (!SkXfermode::AsNewEffectOrCoeff(fMode, &xferEffect, &sm, &dm, backgroundTex)) {
         return false;
     }
 

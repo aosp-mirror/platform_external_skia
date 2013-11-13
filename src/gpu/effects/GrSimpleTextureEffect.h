@@ -25,9 +25,8 @@ public:
     /* unfiltered, clamp mode */
     static GrEffectRef* Create(GrTexture* tex,
                                const SkMatrix& matrix,
-                               CoordsType coordsType = kLocal_CoordsType) {
-        GrAssert(kLocal_CoordsType == coordsType || kPosition_CoordsType == coordsType);
-        AutoEffectUnref effect(SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, GrTextureParams::kNone_FilterMode, coordsType)));
+                               GrCoordSet coordSet = kLocal_GrCoordSet) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, GrTextureParams::kNone_FilterMode, coordSet)));
         return CreateEffectRef(effect);
     }
 
@@ -35,29 +34,17 @@ public:
     static GrEffectRef* Create(GrTexture* tex,
                                const SkMatrix& matrix,
                                GrTextureParams::FilterMode filterMode,
-                               CoordsType coordsType = kLocal_CoordsType) {
-        GrAssert(kLocal_CoordsType == coordsType || kPosition_CoordsType == coordsType);
+                               GrCoordSet coordSet = kLocal_GrCoordSet) {
         AutoEffectUnref effect(
-            SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, filterMode, coordsType)));
+            SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, filterMode, coordSet)));
         return CreateEffectRef(effect);
     }
 
     static GrEffectRef* Create(GrTexture* tex,
                                const SkMatrix& matrix,
                                const GrTextureParams& p,
-                               CoordsType coordsType = kLocal_CoordsType) {
-        GrAssert(kLocal_CoordsType == coordsType || kPosition_CoordsType == coordsType);
-        AutoEffectUnref effect(SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, p, coordsType)));
-        return CreateEffectRef(effect);
-    }
-
-    /** Variant that requires the client to install a custom kVec2 vertex attribute that will be
-        the source of the coords. No matrix is allowed in this mode. */
-    static GrEffectRef* CreateWithCustomCoords(GrTexture* tex, const GrTextureParams& p) {
-        AutoEffectUnref effect(SkNEW_ARGS(GrSimpleTextureEffect, (tex,
-                                                                  SkMatrix::I(),
-                                                                  p,
-                                                                  kCustom_CoordsType)));
+                               GrCoordSet coordSet = kLocal_GrCoordSet) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrSimpleTextureEffect, (tex, matrix, p, coordSet)));
         return CreateEffectRef(effect);
     }
 
@@ -75,25 +62,20 @@ private:
     GrSimpleTextureEffect(GrTexture* texture,
                           const SkMatrix& matrix,
                           GrTextureParams::FilterMode filterMode,
-                          CoordsType coordsType)
-        : GrSingleTextureEffect(texture, matrix, filterMode, coordsType) {
-        GrAssert(kLocal_CoordsType == coordsType || kPosition_CoordsType == coordsType);
+                          GrCoordSet coordSet)
+        : GrSingleTextureEffect(texture, matrix, filterMode, coordSet) {
     }
 
     GrSimpleTextureEffect(GrTexture* texture,
                           const SkMatrix& matrix,
                           const GrTextureParams& params,
-                          CoordsType coordsType)
-        : GrSingleTextureEffect(texture, matrix, params, coordsType) {
-        if (kCustom_CoordsType == coordsType) {
-            GrAssert(matrix.isIdentity());
-            this->addVertexAttrib(kVec2f_GrSLType);
-        }
+                          GrCoordSet coordSet)
+        : GrSingleTextureEffect(texture, matrix, params, coordSet) {
     }
 
     virtual bool onIsEqual(const GrEffect& other) const SK_OVERRIDE {
         const GrSimpleTextureEffect& ste = CastEffect<GrSimpleTextureEffect>(other);
-        return this->hasSameTextureParamsMatrixAndCoordsType(ste);
+        return this->hasSameTextureParamsMatrixAndSourceCoords(ste);
     }
 
     GR_DECLARE_EFFECT_TEST;

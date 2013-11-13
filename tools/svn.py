@@ -85,6 +85,15 @@ class Svn:
         """
         return self._RunCommand([SVN, 'checkout', url, path])
 
+    def Update(self, path):
+        """Update the working copy.
+        Returns stdout as a single string.
+
+        @param path path (within self._directory) within which to run
+        "svn update"
+        """
+        return self._RunCommand([SVN, 'update', path])
+
     def ListSubdirs(self, url):
         """Returns a list of all subdirectories (not files) within a given SVN
         url.
@@ -126,7 +135,7 @@ class Svn:
         if status & STATUS_NOT_UNDER_SVN_CONTROL:
             status_types_string += '\?'
         status_regex_string = '^[%s].....\s+(.+)$' % status_types_string
-        stdout = self._RunCommand([SVN, 'status'])
+        stdout = self._RunCommand([SVN, 'status']).replace('\r', '')
         status_regex = re.compile(status_regex_string, re.MULTILINE)
         files = status_regex.findall(stdout)
         return files
@@ -170,5 +179,5 @@ class Svn:
                version you wish to obtain
         @param dest_path destination to which to write the base content
         """
-        self._RunCommand([SVN, 'export', '--revision', 'BASE',
+        self._RunCommand([SVN, 'export', '--revision', 'BASE', '--force',
                           file_within_repo, dest_path])

@@ -13,8 +13,6 @@
 #include "SkTypes.h"
 #include "SkString.h"
 
-#ifdef SK_BUILD_FOR_ANDROID
-
 class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 
@@ -72,6 +70,10 @@ public:
         return *this;
     }
 
+    bool operator==(const SkPaintOptionsAndroid& b) const {
+        return !(*this != b);
+    }
+
     bool operator!=(const SkPaintOptionsAndroid& b) const {
         return fLanguage != b.fLanguage ||
                fFontVariant != b.fFontVariant ||
@@ -94,7 +96,7 @@ public:
 
 
     enum FontVariant {
-       kDefault_Variant = 0x01, // Currently setting yourself to Default gives you Compact Variant
+       kDefault_Variant = 0x01,
        kCompact_Variant = 0x02,
        kElegant_Variant = 0x04,
        kLast_Variant = kElegant_Variant,
@@ -125,5 +127,4 @@ private:
     bool fUseFontFallbacks;
 };
 
-#endif // #ifdef SK_BUILD_FOR_ANDROID
 #endif // #ifndef SkPaintOptionsAndroid_DEFINED

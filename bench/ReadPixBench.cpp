@@ -17,7 +17,7 @@
  */
 class ReadPixBench : public SkBenchmark {
 public:
-    ReadPixBench(void* param) : INHERITED(param) {}
+    ReadPixBench() {}
 
 protected:
     virtual const char* onGetName() SK_OVERRIDE {
@@ -45,9 +45,11 @@ protected:
 
         bitmap.setConfig(SkBitmap::kARGB_8888_Config, kWindowSize, kWindowSize);
 
-        for (int x = 0; x < kNumStepsX; ++x) {
-            for (int y = 0; y < kNumStepsY; ++y) {
-                canvas->readPixels(&bitmap, x * offX, y * offY);
+        for (int i = 0; i < this->getLoops(); i++) {
+            for (int x = 0; x < kNumStepsX; ++x) {
+                for (int y = 0; y < kNumStepsY; ++y) {
+                    canvas->readPixels(&bitmap, x * offX, y * offY);
+                }
             }
         }
     }
@@ -62,5 +64,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* fact(void* p) { return new ReadPixBench(p); }
-static BenchRegistry gReg(fact);
+DEF_BENCH( return new ReadPixBench(); )

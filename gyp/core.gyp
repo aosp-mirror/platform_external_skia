@@ -22,6 +22,7 @@
         '../include/utils',
         '../include/xml',
         '../src/core',
+        '../src/opts',
         '../src/image',
       ],
       'sources': [
@@ -76,9 +77,6 @@
           ],
         }],
         [ 'skia_os == "android"', {
-          'sources': [
-            '../src/core/SkPaintOptionsAndroid.cpp',
-          ],
           'dependencies': [
             'android_deps.gyp:cpu_features',
           ],

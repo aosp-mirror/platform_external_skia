@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-
+#include "SkColorPriv.h"
 #include "SkImageDecoder.h"
 #include "SkStream.h"
-#include "SkColorPriv.h"
+#include "SkStreamHelpers.h"
 #include "SkTypes.h"
 
 class SkICOImageDecoder : public SkImageDecoder {
@@ -75,12 +74,13 @@ static int calculateRowBytesFor8888(int w, int bitCount)
 
 bool SkICOImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode)
 {
-    size_t length = stream->getLength();
-    SkAutoMalloc autoMal(length);
-    unsigned char* buf = (unsigned char*)autoMal.get();
-    if (stream->read((void*)buf, length) != length) {
+    SkAutoMalloc autoMal;
+    const size_t length = CopyStreamToStorage(&autoMal, stream);
+    if (0 == length) {
         return false;
     }
+
+    unsigned char* buf = (unsigned char*)autoMal.get();
 
     //these should always be the same - should i use for error checking? - what about files that have some
     //incorrect values, but still decode properly?
@@ -383,7 +383,7 @@ static void editPixelBit32(const int pixelNo, const unsigned char* buf,
 DEFINE_DECODER_CREATOR(ICOImageDecoder);
 /////////////////////////////////////////////////////////////////////////////////////////
 
-static bool is_ico(SkStream* stream) {
+static bool is_ico(SkStreamRewindable* stream) {
     // Check to see if the first four bytes are 0,0,1,0
     // FIXME: Is that required and sufficient?
     SkAutoMalloc autoMal(4);
@@ -398,22 +398,20 @@ static bool is_ico(SkStream* stream) {
     return true;
 }
 
-#include "SkTRegistry.h"
-
-static SkImageDecoder* sk_libico_dfactory(SkStream* stream) {
+static SkImageDecoder* sk_libico_dfactory(SkStreamRewindable* stream) {
     if (is_ico(stream)) {
         return SkNEW(SkICOImageDecoder);
     }
     return NULL;
 }
 
-static SkTRegistry<SkImageDecoder*, SkStream*> gReg(sk_libico_dfactory);
+static SkImageDecoder_DecodeReg gReg(sk_libico_dfactory);
 
-static SkImageDecoder::Format get_format_ico(SkStream* stream) {
+static SkImageDecoder::Format get_format_ico(SkStreamRewindable* stream) {
     if (is_ico(stream)) {
         return SkImageDecoder::kICO_Format;
     }
     return SkImageDecoder::kUnknown_Format;
 }
 
-static SkTRegistry<SkImageDecoder::Format, SkStream*> gFormatReg(get_format_ico);
+static SkImageDecoder_FormatReg gFormatReg(get_format_ico);

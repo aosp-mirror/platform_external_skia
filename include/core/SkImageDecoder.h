@@ -15,9 +15,11 @@
 #include "SkImage.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
+#include "SkTRegistry.h"
 #include "SkTypes.h"
 
 class SkStream;
+class SkStreamRewindable;
 
 /** \class SkImageDecoder
 
@@ -45,10 +47,10 @@ public:
     */
     virtual Format getFormat() const;
 
-    /** Return the format of the SkStream or kUnknown_Format if it cannot be determined. Rewinds the
-        stream before returning.
+    /** Return the format of the SkStreamRewindable or kUnknown_Format if it cannot be determined.
+        Rewinds the stream before returning.
     */
-    static Format GetStreamFormat(SkStream*);
+    static Format GetStreamFormat(SkStreamRewindable*);
 
     /** Return a readable string of the Format provided.
     */
@@ -57,6 +59,23 @@ public:
     /** Return a readable string of the value returned by getFormat().
     */
     const char* getFormatName() const;
+
+    /** Whether the decoder should skip writing zeroes to output if possible.
+    */
+    bool getSkipWritingZeroes() const { return fSkipWritingZeroes; }
+
+    /** Set to true if the decoder should skip writing any zeroes when
+        creating the output image.
+        This is a hint that may not be respected by the decoder.
+        It should only be used if it is known that the memory to write
+        to has already been set to 0; otherwise the resulting image will
+        have garbage.
+        This is ideal for images that contain a lot of completely transparent
+        pixels, but may be a performance hit for an image that has only a
+        few transparent pixels.
+        The default is false.
+    */
+    void setSkipWritingZeroes(bool skip) { fSkipWritingZeroes = skip; }
 
     /** Returns true if the decoder should try to dither the resulting image.
         The default setting is true.
@@ -289,7 +308,7 @@ public:
      *
      * Return true for success or false on failure.
      */
-    bool buildTileIndex(SkStream*, int *width, int *height);
+    bool buildTileIndex(SkStreamRewindable*, int *width, int *height);
 
     /**
      * Decode a rectangle subset in the image.
@@ -311,7 +330,7 @@ public:
     /** Given a stream, this will try to find an appropriate decoder object.
         If none is found, the method returns NULL.
     */
-    static SkImageDecoder* Factory(SkStream*);
+    static SkImageDecoder* Factory(SkStreamRewindable*);
 
     /** Decode the image stored in the specified file, and store the result
         in bitmap. Return true for success or false on failure.
@@ -358,7 +377,7 @@ public:
      *  Sample usage:
      *  <code>
      *      // Determine the image's info: width/height/config
-     *      SkImage::Info info;
+     *      SkImageInfo info;
      *      bool success = DecodeMemoryToTarget(src, size, &info, NULL);
      *      if (!success) return;
      *      // Allocate space for the result:
@@ -370,10 +389,10 @@ public:
      *      success = DecodeMemoryToTarget(src, size, &info, &target);
      *  </code>
      */
-    static bool DecodeMemoryToTarget(const void* buffer, size_t size, SkImage::Info* info,
+    static bool DecodeMemoryToTarget(const void* buffer, size_t size, SkImageInfo* info,
                                      const SkBitmapFactory::Target* target);
 
-    /** Decode the image stored in the specified SkStream, and store the result
+    /** Decode the image stored in the specified SkStreamRewindable, and store the result
         in bitmap. Return true for success or false on failure.
 
         @param prefConfig If the PrefConfigTable is not set, prefer this config.
@@ -382,10 +401,10 @@ public:
         @param format On success, if format is non-null, it is set to the format
                       of the decoded stream. On failure it is ignored.
      */
-    static bool DecodeStream(SkStream* stream, SkBitmap* bitmap,
+    static bool DecodeStream(SkStreamRewindable* stream, SkBitmap* bitmap,
                              SkBitmap::Config prefConfig, Mode,
                              Format* format = NULL);
-    static bool DecodeStream(SkStream* stream, SkBitmap* bitmap) {
+    static bool DecodeStream(SkStreamRewindable* stream, SkBitmap* bitmap) {
         return DecodeStream(stream, bitmap, SkBitmap::kNo_Config,
                             kDecodePixels_Mode, NULL);
     }
@@ -410,7 +429,7 @@ protected:
 
     // If the decoder wants to support tiled based decoding,
     // this method must be overridden. This guy is called by buildTileIndex(...)
-    virtual bool onBuildTileIndex(SkStream*, int *width, int *height) {
+    virtual bool onBuildTileIndex(SkStreamRewindable*, int *width, int *height) {
         return false;
     }
 
@@ -506,6 +525,7 @@ private:
     PrefConfigTable         fPrefTable;     // use if fUsePrefTable is true
     bool                    fDitherImage;
     bool                    fUsePrefTable;
+    bool                    fSkipWritingZeroes;
     mutable bool            fShouldCancelDecode;
     bool                    fPreferQualityOverSpeed;
     bool                    fRequireUnpremultipliedColors;
@@ -521,7 +541,7 @@ class SkImageDecoderFactory : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkImageDecoderFactory)
 
-    virtual SkImageDecoder* newDecoder(SkStream*) = 0;
+    virtual SkImageDecoder* newDecoder(SkStreamRewindable*) = 0;
 
 private:
     typedef SkRefCnt INHERITED;
@@ -530,7 +550,7 @@ private:
 class SkDefaultImageDecoderFactory : SkImageDecoderFactory {
 public:
     // calls SkImageDecoder::Factory(stream)
-    virtual SkImageDecoder* newDecoder(SkStream* stream) {
+    virtual SkImageDecoder* newDecoder(SkStreamRewindable* stream) {
         return SkImageDecoder::Factory(stream);
     }
 };
@@ -556,5 +576,11 @@ DECLARE_DECODER_CREATOR(JPEGImageDecoder);
 DECLARE_DECODER_CREATOR(PNGImageDecoder);
 DECLARE_DECODER_CREATOR(WBMPImageDecoder);
 DECLARE_DECODER_CREATOR(WEBPImageDecoder);
+
+
+// Typedefs to make registering decoder and formatter callbacks easier.
+// These have to be defined outside SkImageDecoder. :(
+typedef SkTRegistry<SkImageDecoder*(*)(SkStreamRewindable*)>        SkImageDecoder_DecodeReg;
+typedef SkTRegistry<SkImageDecoder::Format(*)(SkStreamRewindable*)> SkImageDecoder_FormatReg;
 
 #endif

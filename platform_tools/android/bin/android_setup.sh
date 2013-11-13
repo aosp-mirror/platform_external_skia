@@ -26,10 +26,16 @@ while (( "$#" )); do
   shift
 done
 
+function verbose {
+    if [[ -n $SKIA_ANDROID_VERBOSE_SETUP ]]; then
+        echo $@
+    fi
+}
+
 function exportVar {
   NAME=$1
   VALUE=$2
-  echo export $NAME=\"$VALUE\"
+  verbose export $NAME=\"$VALUE\"
   export $NAME="$VALUE"
 }
 
@@ -41,7 +47,7 @@ if [ -z "$ANDROID_SDK_ROOT" ]; then
   if [ -z "$ANDROID_TOOL" ]; then
     echo "ERROR: Please define ANDROID_SDK_ROOT in your environment to point"
     echo "       to a valid Android SDK installation."
-    return 1
+    exit 1
   fi
   ANDROID_SDK_ROOT=$(cd $(dirname "$ANDROID_TOOL")/.. && pwd)
   exportVar ANDROID_SDK_ROOT "$ANDROID_SDK_ROOT"
@@ -81,13 +87,13 @@ setup_toolchain() {
 
   TOOLCHAIN_DIR=${SCRIPT_DIR}/../toolchains
   if [ $(uname) == "Linux" ]; then
-    echo "Using Linux toolchain."
+    verbose "Using Linux toolchain."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-linux_v$API_LEVEL
   elif [ $(uname) == "Darwin" ]; then
-    echo "Using Mac toolchain."
+    verbose "Using Mac toolchain."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-mac_v$API_LEVEL
   else
-    echo "Could not automatically determine toolchain!  Defaulting to Linux."
+    verbose "Could not automatically determine toolchain!  Defaulting to Linux."
     TOOLCHAIN_TYPE=ndk-r$NDK_REV-$ANDROID_ARCH-linux_v$API_LEVEL
   fi
   exportVar ANDROID_TOOLCHAIN ${TOOLCHAIN_DIR}/${TOOLCHAIN_TYPE}/bin
@@ -121,7 +127,7 @@ setup_toolchain() {
     return 1;
   fi
 
-  echo "The build is targeting NDK API level $API_LEVEL for use on Android 4.0 (NDK Revision $NDK_REV) and above"
+  verbose "The build is targeting NDK API level $API_LEVEL for use on Android 4.0 (NDK Revision $NDK_REV) and above"
 
   LS="/bin/ls"  # Use directly to avoid any 'ls' alias that might be defined.
   GCC=$($LS $ANDROID_TOOLCHAIN/*-gcc | head -n1)
@@ -161,14 +167,19 @@ setup_device() {
   TARGET_DEVICE="$1"
 
   if [ -z "$TARGET_DEVICE" ]; then
-    echo "INFO: no target device type was specified so using the default 'arm_v7'"
-    TARGET_DEVICE="arm_v7"
+    if [ -f .android_config ]; then
+      TARGET_DEVICE=$(cat .android_config)
+      verbose "INFO: no target device was specified so using the device (${TARGET_DEVICE}) from the most recent build"
+    else
+      TARGET_DEVICE="arm_v7_thumb"
+      verbose "INFO: no target device type was specified so using the default '${TARGET_DEVICE}'"
+    fi
   fi
 
   case $TARGET_DEVICE in
     nexus_s)
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 arm_version=7 arm_thumb=1"
-      DEFINES="${DEFINES} skia_texture_cache_mb_limit=24"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=24"
       ANDROID_ARCH="arm"
       ;;
     nexus_4 | nexus_7 | nexus_10)
@@ -181,12 +192,17 @@ setup_device() {
       ;;
     galaxy_nexus)
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon=1 arm_version=7 arm_thumb=1"
-      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
       ANDROID_ARCH="arm"
+      ;;
+    intel_rhb)
+      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
+      ANDROID_ARCH="x86"
       ;;
     razr_i)
       DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
-      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
       ANDROID_ARCH="x86"
       ;;
     arm_v7)
@@ -207,7 +223,7 @@ setup_device() {
       ;;
     x86)
       DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
-      DEFINES="${DEFINES} skia_texture_cache_mb_limit=32"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
       ANDROID_ARCH="x86"
       ;;
     *)
@@ -217,7 +233,7 @@ setup_device() {
       ;;
   esac
 
-  echo "The build is targeting the device: $TARGET_DEVICE"
+  verbose "The build is targeting the device: $TARGET_DEVICE"
   export DEVICE_ID="$TARGET_DEVICE"
 
   # Set up the toolchain.
@@ -227,8 +243,6 @@ setup_device() {
   fi
   DEFINES="${DEFINES} android_toolchain=${TOOLCHAIN_TYPE}"
 
-  # Use the "android" flavor of the Makefile generator for both Linux and OS X.
-  exportVar GYP_GENERATORS "make-android"
   exportVar GYP_DEFINES "$DEFINES"
   exportVar SKIA_OUT "out/config/android-${TARGET_DEVICE}"
 }
@@ -254,7 +268,11 @@ adb_pull_if_needed() {
   then
     #get the MD5 for dst and src
     ANDROID_MD5=`$ADB $DEVICE_SERIAL shell md5 $ANDROID_SRC`
-    HOST_MD5=`md5sum $HOST_DST`
+    if [ $(uname) == "Darwin" ]; then
+      HOST_MD5=`md5 -q $HOST_DST`
+    else
+      HOST_MD5=`md5sum $HOST_DST`
+    fi
 
     if [ "${ANDROID_MD5:0:32}" != "${HOST_MD5:0:32}" ];
     then
@@ -290,7 +308,11 @@ adb_push_if_needed() {
   then
     #get the MD5 for dst and src
     ANDROID_MD5=`$ADB $DEVICE_SERIAL shell md5 $ANDROID_DST`
-    HOST_MD5=`md5sum $HOST_SRC`
+    if [ $(uname) == "Darwin" ]; then
+      HOST_MD5=`md5 -q $HOST_SRC`
+    else
+      HOST_MD5=`md5sum $HOST_SRC`
+    fi
 
     if [ "${ANDROID_MD5:0:32}" != "${HOST_MD5:0:32}" ];
     then

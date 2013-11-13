@@ -12,6 +12,7 @@
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
+#include "SkPixelRef.h"
 #include "SkStream.h"
 #include "SkTArray.h"
 #include "PdfRenderer.h"
@@ -81,30 +82,33 @@ static bool replace_filename_extension(SkString* path,
 }
 
 int gJpegQuality = 100;
-static bool encode_to_dct_stream(SkWStream* stream, const SkBitmap& bitmap, const SkIRect& rect) {
-    if (gJpegQuality == -1) return false;
+static SkData* encode_to_dct_data(size_t* pixelRefOffset, const SkBitmap& bitmap) {
+    if (gJpegQuality == -1) {
+        return NULL;
+    }
 
-        SkIRect bitmapBounds;
-        SkBitmap subset;
-        const SkBitmap* bitmapToUse = &bitmap;
-        bitmap.getBounds(&bitmapBounds);
-        if (rect != bitmapBounds) {
-            SkAssertResult(bitmap.extractSubset(&subset, rect));
-            bitmapToUse = &subset;
-        }
-
+    SkBitmap bm = bitmap;
 #if defined(SK_BUILD_FOR_MAC)
-        // Workaround bug #1043 where bitmaps with referenced pixels cause
-        // CGImageDestinationFinalize to crash
-        SkBitmap copy;
-        bitmapToUse->deepCopyTo(&copy, bitmapToUse->config());
-        bitmapToUse = &copy;
+    // Workaround bug #1043 where bitmaps with referenced pixels cause
+    // CGImageDestinationFinalize to crash
+    SkBitmap copy;
+    bitmap.deepCopyTo(&copy, bitmap.config());
+    bm = copy;
 #endif
 
-    return SkImageEncoder::EncodeStream(stream,
-                                        *bitmapToUse,
-                                        SkImageEncoder::kJPEG_Type,
-                                        gJpegQuality);
+    SkPixelRef* pr = bm.pixelRef();
+    if (pr != NULL) {
+        SkData* data = pr->refEncodedData();
+        if (data != NULL) {
+            *pixelRefOffset = bm.pixelRefOffset();
+            return data;
+        }
+    }
+
+    *pixelRefOffset = 0;
+    return SkImageEncoder::EncodeData(bm,
+                                      SkImageEncoder::kJPEG_Type,
+                                      gJpegQuality);
 }
 
 /** Builds the output filename. path = dir/name, and it replaces expected
@@ -127,28 +131,24 @@ static bool make_output_filepath(SkString* path, const SkString& dir,
  * @param inputFilename The skp file that was read.
  * @param renderer The object responsible to write the pdf file.
  */
-static bool write_output(const SkString& outputDir,
-                         const SkString& inputFilename,
-                         const sk_tools::PdfRenderer& renderer) {
+static SkWStream* open_stream(const SkString& outputDir,
+                              const SkString& inputFilename) {
     if (outputDir.isEmpty()) {
-        SkDynamicMemoryWStream stream;
-        renderer.write(&stream);
-        return true;
+        return SkNEW(SkDynamicMemoryWStream);
     }
 
     SkString outputPath;
     if (!make_output_filepath(&outputPath, outputDir, inputFilename)) {
-        return false;
+        return NULL;
     }
 
-    SkFILEWStream stream(outputPath.c_str());
-    if (!stream.isValid()) {
+    SkFILEWStream* stream = SkNEW_ARGS(SkFILEWStream, (outputPath.c_str()));
+    if (!stream->isValid()) {
         SkDebugf("Could not write to file %s\n", outputPath.c_str());
-        return false;
+        return NULL;
     }
-    renderer.write(&stream);
 
-    return true;
+    return stream;
 }
 
 /** Reads an skp file, renders it to pdf and writes the output to a pdf file
@@ -178,13 +178,19 @@ static bool render_pdf(const SkString& inputPath, const SkString& outputDir,
     SkDebugf("exporting... [%i %i] %s\n", picture->width(), picture->height(),
              inputPath.c_str());
 
-    renderer.init(picture);
+    SkWStream* stream(open_stream(outputDir, inputFilename));
 
-    renderer.render();
+    if (!stream) {
+        return false;
+    }
 
-    bool success = write_output(outputDir, inputFilename, renderer);
+    renderer.init(picture, stream);
+
+    bool success = renderer.render();
+    SkDELETE(stream);
 
     renderer.end();
+
     return success;
 }
 
@@ -264,7 +270,7 @@ int tool_main_core(int argc, char** argv) {
     SkTArray<SkString> inputs;
 
     SkAutoTUnref<sk_tools::PdfRenderer>
-        renderer(SkNEW_ARGS(sk_tools::SimplePdfRenderer, (encode_to_dct_stream)));
+        renderer(SkNEW_ARGS(sk_tools::SimplePdfRenderer, (encode_to_dct_data)));
     SkASSERT(renderer.get());
 
     SkString outputDir;

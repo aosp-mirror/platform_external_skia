@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -9,17 +8,14 @@
 #include "Test.h"
 #include "SkCanvas.h"
 #include "SkConfig8888.h"
-#include "SkDevice.h"
+#include "SkBitmapDevice.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
 #include "SkGpuDevice.h"
 #endif
 
-
-namespace {
-
-void fillCanvas(SkCanvas* canvas, SkCanvas::Config8888 unpremulConfig) {
+static void fillCanvas(SkCanvas* canvas, SkCanvas::Config8888 unpremulConfig) {
     SkBitmap bmp;
     bmp.setConfig(SkBitmap::kARGB_8888_Config, 256, 256);
     bmp.allocPixels();
@@ -40,8 +36,8 @@ static const SkCanvas::Config8888 gUnpremulConfigs[] = {
     SkCanvas::kRGBA_Unpremul_Config8888,
 };
 
-void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFactory* factory) {
-    SkAutoTUnref<SkDevice> device;
+static void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFactory* factory) {
+    SkAutoTUnref<SkBaseDevice> device;
     for (int dtype = 0; dtype < 2; ++dtype) {
 
         int glCtxTypeCnt = 1;
@@ -52,10 +48,10 @@ void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFactory* fa
 #endif
         for (int glCtxType = 0; glCtxType < glCtxTypeCnt; ++glCtxType) {
             if (0 == dtype) {
-                device.reset(new SkDevice(SkBitmap::kARGB_8888_Config,
-                                              256,
-                                              256,
-                                              false));
+                device.reset(new SkBitmapDevice(SkBitmap::kARGB_8888_Config,
+                                                256,
+                                                256,
+                                                false));
             } else {
 #if SK_SUPPORT_GPU
                 GrContextFactory::GLContextType type =
@@ -113,7 +109,6 @@ void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFactory* fa
             }
         }
     }
-}
 }
 
 #include "TestClassDef.h"

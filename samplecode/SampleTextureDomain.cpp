@@ -1,17 +1,17 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SampleCode.h"
+#include "SkBlurMask.h"
+#include "SkBlurMaskFilter.h"
 #include "SkCanvas.h"
 #include "SkDevice.h"
-#include "SkBlurMaskFilter.h"
 
-namespace {
-SkBitmap make_bitmap() {
+static SkBitmap make_bitmap() {
     SkBitmap bm;
     bm.setConfig(SkBitmap::kARGB_8888_Config , 5, 5);
     bm.allocPixels();
@@ -25,7 +25,6 @@ SkBitmap make_bitmap() {
     bm.unlockPixels();
     return bm;
 }
-} // unnamed namespace
 
 class TextureDomainView : public SampleView {
     SkBitmap    fBM;
@@ -49,7 +48,7 @@ protected:
         SkIRect srcRect;
         SkRect dstRect;
         SkPaint paint;
-        paint.setFilterBitmap(true);
+        paint.setFilterLevel(SkPaint::kLow_FilterLevel);
 
         // Test that bitmap draws from malloc-backed bitmaps respect
         // the constrained texture domain.
@@ -61,7 +60,7 @@ protected:
         // the constrainted texture domain.
         // Note:  GPU-backed bitmaps follow a different rendering path
         // when copying from one GPU device to another.
-        SkAutoTUnref<SkDevice> secondDevice(canvas->createCompatibleDevice(
+        SkAutoTUnref<SkBaseDevice> secondDevice(canvas->createCompatibleDevice(
                 SkBitmap::kARGB_8888_Config, 5, 5, true));
         SkCanvas secondCanvas(secondDevice.get());
 
@@ -80,8 +79,8 @@ protected:
         srcRect.setXYWH(1, 1, 3, 3);
         dstRect.setXYWH(5.0f, 405.0f, 305.0f, 305.0f);
         SkMaskFilter* mf = SkBlurMaskFilter::Create(
-            5,
             SkBlurMaskFilter::kNormal_BlurStyle,
+            SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(5)),
             SkBlurMaskFilter::kHighQuality_BlurFlag |
             SkBlurMaskFilter::kIgnoreTransform_BlurFlag);
         paint.setMaskFilter(mf)->unref();
@@ -93,8 +92,8 @@ protected:
         // that handles blurs with rects transformed to non-
         // orthogonal rects. It also tests the NULL src rect handling
     mf = SkBlurMaskFilter::Create(
-            5,
             SkBlurMaskFilter::kNormal_BlurStyle,
+            SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(5)),
             SkBlurMaskFilter::kHighQuality_BlurFlag);
         paint.setMaskFilter(mf)->unref();
 

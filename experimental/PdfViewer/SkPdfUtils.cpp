@@ -1,5 +1,15 @@
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkPdfUtils.h"
-#include "SkPdfConfig.h"
+
+bool operator !=(const SkString& first, const char* second) {
+    return !first.equals(second);
+}
 
 #ifdef PDF_TRACE
 void SkTraceMatrix(const SkMatrix& matrix, const char* sz) {

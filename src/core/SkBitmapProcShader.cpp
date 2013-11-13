@@ -5,11 +5,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkBitmapProcShader.h"
 #include "SkColorPriv.h"
 #include "SkFlattenableBuffers.h"
 #include "SkPixelRef.h"
 #include "SkErrorInternals.h"
+#include "SkBitmapProcShader.h"
+
+#if SK_SUPPORT_GPU
+#include "effects/GrSimpleTextureEffect.h"
+#include "effects/GrBicubicEffect.h"
+#endif
 
 bool SkBitmapProcShader::CanDo(const SkBitmap& bm, TileMode tx, TileMode ty) {
     switch (bm.config()) {
@@ -75,24 +80,37 @@ bool SkBitmapProcShader::isOpaque() const {
     return fRawBitmap.isOpaque();
 }
 
+static bool valid_for_drawing(const SkBitmap& bm) {
+    if (0 == bm.width() || 0 == bm.height()) {
+        return false;   // nothing to draw
+    }
+    if (NULL == bm.pixelRef()) {
+        return false;   // no pixels to read
+    }
+    if (SkBitmap::kIndex8_Config == bm.config()) {
+        // ugh, I have to lock-pixels to inspect the colortable
+        SkAutoLockPixels alp(bm);
+        if (!bm.getColorTable()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SkBitmapProcShader::setContext(const SkBitmap& device,
                                     const SkPaint& paint,
                                     const SkMatrix& matrix) {
+    if (!fRawBitmap.getTexture() && !valid_for_drawing(fRawBitmap)) {
+        return false;
+    }
+
     // do this first, so we have a correct inverse matrix
     if (!this->INHERITED::setContext(device, paint, matrix)) {
         return false;
     }
 
     fState.fOrigBitmap = fRawBitmap;
-    fState.fOrigBitmap.lockPixels();
-    if (!fState.fOrigBitmap.getTexture() && !fState.fOrigBitmap.readyToDraw()) {
-        fState.fOrigBitmap.unlockPixels();
-        this->INHERITED::endContext();
-        return false;
-    }
-
     if (!fState.chooseProcs(this->getTotalInverse(), paint)) {
-        fState.fOrigBitmap.unlockPixels();
         this->INHERITED::endContext();
         return false;
     }
@@ -142,7 +160,6 @@ bool SkBitmapProcShader::setContext(const SkBitmap& device,
 }
 
 void SkBitmapProcShader::endContext() {
-    fState.fOrigBitmap.unlockPixels();
     fState.endContext();
     this->INHERITED::endContext();
 }
@@ -367,11 +384,9 @@ GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& 
             textureFilterMode = GrTextureParams::kMipMap_FilterMode;
             break;
         case SkPaint::kHigh_FilterLevel:
-            SkErrorInternals::SetError( kInvalidPaint_SkError,
-                                        "Sorry, I don't yet support high quality "
-                                        "filtering on the GPU; falling back to "
-                                        "MIPMaps.");
-            textureFilterMode = GrTextureParams::kMipMap_FilterMode;
+            // fall back to no filtering here; we will install another
+            // shader that will do the HQ filtering.
+            textureFilterMode = GrTextureParams::kNone_FilterMode;
             break;
         default:
             SkErrorInternals::SetError( kInvalidPaint_SkError,
@@ -386,11 +401,17 @@ GrEffectRef* SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& 
     GrTexture* texture = GrLockAndRefCachedBitmapTexture(context, fRawBitmap, &params);
 
     if (NULL == texture) {
-        SkDebugf("Couldn't convert bitmap to texture.\n");
+        SkErrorInternals::SetError( kInternalError_SkError,
+                                    "Couldn't convert bitmap to texture.");
         return NULL;
     }
 
-    GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
+    GrEffectRef* effect = NULL;
+    if (paintFilterLevel == SkPaint::kHigh_FilterLevel) {
+        effect = GrBicubicEffect::Create(texture, matrix, params);
+    } else {
+        effect = GrSimpleTextureEffect::Create(texture, matrix, params);
+    }
     GrUnlockAndUnrefCachedBitmapTexture(texture);
     return effect;
 }

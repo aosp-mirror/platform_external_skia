@@ -10,6 +10,7 @@
 #include "GrRectanizer.h"
 #include "GrTextStrike.h"
 #include "GrTextStrike_impl.h"
+#include "SkString.h"
 
 SK_DEFINE_INST_COUNT(GrFontScaler)
 SK_DEFINE_INST_COUNT(GrKey)
@@ -23,34 +24,53 @@ static int g_PurgeCount = 0;
 
 GrFontCache::GrFontCache(GrGpu* gpu) : fGpu(gpu) {
     gpu->ref();
-    fAtlasMgr = NULL;
+    for (int i = 0; i < kMaskFormatCount; ++i) {
+        fAtlasMgr[i] = NULL;
+    }
 
     fHead = fTail = NULL;
 }
 
 GrFontCache::~GrFontCache() {
     fCache.deleteAll();
-    delete fAtlasMgr;
+    for (int i = 0; i < kMaskFormatCount; ++i) {
+        delete fAtlasMgr[i];
+    }
     fGpu->unref();
 #if FONT_CACHE_STATS
       GrPrintf("Num purges: %d\n", g_PurgeCount);
 #endif
 }
 
+static GrPixelConfig mask_format_to_pixel_config(GrMaskFormat format) {
+    switch (format) {
+        case kA8_GrMaskFormat:
+            return kAlpha_8_GrPixelConfig;
+        case kA565_GrMaskFormat:
+            return kRGB_565_GrPixelConfig;
+        case kA888_GrMaskFormat:
+            return kSkia8888_GrPixelConfig;
+        default:
+            SkDEBUGFAIL("unknown maskformat");
+    }
+    return kUnknown_GrPixelConfig;
+}
+
 GrTextStrike* GrFontCache::generateStrike(GrFontScaler* scaler,
                                           const Key& key) {
-    if (NULL == fAtlasMgr) {
-        fAtlasMgr = SkNEW_ARGS(GrAtlasMgr, (fGpu));
+    GrMaskFormat format = scaler->getMaskFormat();
+    GrPixelConfig config = mask_format_to_pixel_config(format);
+    if (NULL == fAtlasMgr[format]) {
+        fAtlasMgr[format] = SkNEW_ARGS(GrAtlasMgr, (fGpu, config));
     }
     GrTextStrike* strike = SkNEW_ARGS(GrTextStrike,
-                                      (this, scaler->getKey(),
-                                       scaler->getMaskFormat(), fAtlasMgr));
+                                      (this, scaler->getKey(), format, fAtlasMgr[format]));
     fCache.insert(key, strike);
 
     if (fHead) {
         fHead->fPrev = strike;
     } else {
-        GrAssert(NULL == fTail);
+        SkASSERT(NULL == fTail);
         fTail = strike;
     }
     strike->fPrev = NULL;
@@ -62,17 +82,28 @@ GrTextStrike* GrFontCache::generateStrike(GrFontScaler* scaler,
 
 void GrFontCache::freeAll() {
     fCache.deleteAll();
-    delete fAtlasMgr;
-    fAtlasMgr = NULL;
+    for (int i = 0; i < kMaskFormatCount; ++i) {
+        delete fAtlasMgr[i];
+        fAtlasMgr[i] = NULL;
+    }
     fHead = NULL;
     fTail = NULL;
 }
 
+void GrFontCache::purgeStrike(GrTextStrike* strike) {
+    const GrFontCache::Key key(strike->fFontScalerKey);
+    fCache.remove(key, strike);
+    this->detachStrikeFromList(strike);
+    delete strike;
+}
+
 void GrFontCache::purgeExceptFor(GrTextStrike* preserveStrike) {
+    SkASSERT(NULL != preserveStrike);
     GrTextStrike* strike = fTail;
     bool purge = true;
+    GrMaskFormat maskFormat = preserveStrike->fMaskFormat;
     while (strike) {
-        if (strike == preserveStrike) {
+        if (strike == preserveStrike || maskFormat != strike->fMaskFormat) {
             strike = strike->fPrev;
             continue;
         }
@@ -80,15 +111,8 @@ void GrFontCache::purgeExceptFor(GrTextStrike* preserveStrike) {
         strike = strikeToPurge->fPrev;
         if (purge) {
             // keep purging if we won't free up any atlases with this strike.
-            purge = (NULL == strikeToPurge->fAtlas);
-            int index = fCache.slowFindIndex(strikeToPurge);
-            GrAssert(index >= 0);
-            fCache.removeAt(index, strikeToPurge->fFontScalerKey->getHash());
-            this->detachStrikeFromList(strikeToPurge);
-            delete strikeToPurge;
-        } else {
-            // for the remaining strikes, we just mark them unused
-            GrAtlas::MarkAllUnused(strikeToPurge->fAtlas);
+            purge = strikeToPurge->fAtlas.isEmpty();
+            this->purgeStrike(strikeToPurge);
         }
     }
 #if FONT_CACHE_STATS
@@ -96,38 +120,36 @@ void GrFontCache::purgeExceptFor(GrTextStrike* preserveStrike) {
 #endif
 }
 
-void GrFontCache::freeAtlasExceptFor(GrTextStrike* preserveStrike) {
+void GrFontCache::freePlotExceptFor(GrTextStrike* preserveStrike) {
+    SkASSERT(NULL != preserveStrike);
     GrTextStrike* strike = fTail;
+    GrMaskFormat maskFormat = preserveStrike->fMaskFormat;
     while (strike) {
-        if (strike == preserveStrike) {
+        if (strike == preserveStrike || maskFormat != strike->fMaskFormat) {
             strike = strike->fPrev;
             continue;
         }
         GrTextStrike* strikeToPurge = strike;
         strike = strikeToPurge->fPrev;
-        if (strikeToPurge->removeUnusedAtlases()) {
-            if (NULL == strikeToPurge->fAtlas) {
-                int index = fCache.slowFindIndex(strikeToPurge);
-                GrAssert(index >= 0);
-                fCache.removeAt(index, strikeToPurge->fFontScalerKey->getHash());
-                this->detachStrikeFromList(strikeToPurge);
-                delete strikeToPurge;
+        if (strikeToPurge->removeUnusedPlots()) {
+            if (strikeToPurge->fAtlas.isEmpty()) {
+                this->purgeStrike(strikeToPurge);
             }
             break;
         }
     }
 }
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
 void GrFontCache::validate() const {
     int count = fCache.count();
     if (0 == count) {
-        GrAssert(!fHead);
-        GrAssert(!fTail);
+        SkASSERT(!fHead);
+        SkASSERT(!fTail);
     } else if (1 == count) {
-        GrAssert(fHead == fTail);
+        SkASSERT(fHead == fTail);
     } else {
-        GrAssert(fHead != fTail);
+        SkASSERT(fHead != fTail);
     }
 
     int count2 = 0;
@@ -136,7 +158,7 @@ void GrFontCache::validate() const {
         count2 += 1;
         strike = strike->fNext;
     }
-    GrAssert(count == count2);
+    SkASSERT(count == count2);
 
     count2 = 0;
     strike = fTail;
@@ -144,13 +166,30 @@ void GrFontCache::validate() const {
         count2 += 1;
         strike = strike->fPrev;
     }
-    GrAssert(count == count2);
+    SkASSERT(count == count2);
+}
+#endif
+
+#ifdef SK_DEVELOPER
+void GrFontCache::dump() const {
+    static int gDumpCount = 0;
+    for (int i = 0; i < kMaskFormatCount; ++i) {
+        if (NULL != fAtlasMgr[i]) {
+            GrTexture* texture = fAtlasMgr[i]->getTexture();
+            if (NULL != texture) {
+                SkString filename;
+                filename.printf("fontcache_%d%d.png", gDumpCount, i);
+                texture->savePixels(filename.c_str());
+            }
+        }
+    }
+    ++gDumpCount;
 }
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     static int gCounter;
 #endif
 
@@ -164,17 +203,16 @@ void GrFontCache::validate() const {
 
 GrTextStrike::GrTextStrike(GrFontCache* cache, const GrKey* key,
                            GrMaskFormat format,
-                           GrAtlasMgr* atlasMgr) : fPool(64) {
+                           GrAtlasMgr* atlasMgr) : fPool(64), fAtlas(atlasMgr) {
     fFontScalerKey = key;
     fFontScalerKey->ref();
 
     fFontCache = cache;     // no need to ref, it won't go away before we do
     fAtlasMgr = atlasMgr;   // no need to ref, it won't go away before we do
-    fAtlas = NULL;
 
     fMaskFormat = format;
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
 //    GrPrintf(" GrTextStrike %p %d\n", this, gCounter);
     gCounter += 1;
 #endif
@@ -185,17 +223,16 @@ GrTextStrike::GrTextStrike(GrFontCache* cache, const GrKey* key,
 static void free_glyph(GrGlyph*& glyph) { glyph->free(); }
 
 static void invalidate_glyph(GrGlyph*& glyph) {
-    if (glyph->fAtlas && !glyph->fAtlas->used()) {
-        glyph->fAtlas = NULL;
+    if (glyph->fPlot && glyph->fPlot->drawToken().isIssued()) {
+        glyph->fPlot = NULL;
     }
 }
 
 GrTextStrike::~GrTextStrike() {
-    GrAtlas::FreeLList(fAtlas);
     fFontScalerKey->unref();
     fCache.getArray().visitAll(free_glyph);
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     gCounter -= 1;
 //    GrPrintf("~GrTextStrike %p %d\n", this, gCounter);
 #endif
@@ -214,11 +251,9 @@ GrGlyph* GrTextStrike::generateGlyph(GrGlyph::PackedID packed,
     return glyph;
 }
 
-bool GrTextStrike::removeUnusedAtlases() {
+bool GrTextStrike::removeUnusedPlots() {
     fCache.getArray().visitAll(invalidate_glyph);
-    return GrAtlas::RemoveUnusedAtlases(fAtlasMgr, &fAtlas);
-
-    return false;
+    return fAtlasMgr->removeUnusedPlots(&fAtlas);
 }
 
 bool GrTextStrike::getGlyphAtlas(GrGlyph* glyph, GrFontScaler* scaler) {
@@ -227,15 +262,12 @@ bool GrTextStrike::getGlyphAtlas(GrGlyph* glyph, GrFontScaler* scaler) {
     if ((++gCounter % 10) == 0) return false;
 #endif
 
-    GrAssert(glyph);
-    GrAssert(scaler);
-    GrAssert(fCache.contains(glyph));
-    if (glyph->fAtlas) {
-        glyph->fAtlas->setUsed(true);
-        return true;
-    }
+    SkASSERT(glyph);
+    SkASSERT(scaler);
+    SkASSERT(fCache.contains(glyph));
+    SkASSERT(NULL == glyph->fPlot);
 
-    GrAutoRef ar(scaler);
+    SkAutoRef ar(scaler);
 
     int bytesPerPixel = GrMaskFormatBytesPerPixel(fMaskFormat);
     size_t size = glyph->fBounds.area() * bytesPerPixel;
@@ -247,15 +279,13 @@ bool GrTextStrike::getGlyphAtlas(GrGlyph* glyph, GrFontScaler* scaler) {
         return false;
     }
 
-    GrAtlas* atlas = fAtlasMgr->addToAtlas(&fAtlas, glyph->width(),
-                                           glyph->height(), storage.get(),
-                                           fMaskFormat,
-                                           &glyph->fAtlasLocation);
-    if (NULL == atlas) {
+    GrPlot* plot = fAtlasMgr->addToAtlas(&fAtlas, glyph->width(),
+                                         glyph->height(), storage.get(),
+                                         &glyph->fAtlasLocation);
+    if (NULL == plot) {
         return false;
     }
 
-    glyph->fAtlas = atlas;
-    atlas->setUsed(true);
+    glyph->fPlot = plot;
     return true;
 }

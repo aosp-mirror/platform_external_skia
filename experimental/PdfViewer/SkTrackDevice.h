@@ -1,31 +1,51 @@
-#ifndef EXPERIMENTAL_PDFVIEWER_SKTRACKDEVICE_H_
-#define EXPERIMENTAL_PDFVIEWER_SKTRACKDEVICE_H_
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
 
-#include "SkDevice.h"
+#ifndef SkTrackDevice_DEFINED
+#define SkTrackDevice_DEFINED
+
+#include "SkBitmapDevice.h"
 #include "SkTracker.h"
 
-class SkTrackDevice : public SkDevice {
+/** \class SkTrackDevice
+ *
+ *   A Track Device is used to track that callstack of an operation that affected some pixels.
+ *   It can be used with SampleApp to investigate bugs (CL not checked in yet).
+ *
+ *   every drawFoo is implemented as such:
+ *      before();   // - collects state of interesting pixels
+ *      INHERITED::drawFoo(...);
+ *      after();  // - checks if pixels of interest, and issue a breakpoint.
+ *
+ */
+class SkTrackDevice : public SkBitmapDevice {
 public:
     SK_DECLARE_INST_COUNT(SkTrackDevice)
 
-    SkTrackDevice(const SkBitmap& bitmap) : SkDevice(bitmap)
+    SkTrackDevice(const SkBitmap& bitmap) : SkBitmapDevice(bitmap)
                                           , fTracker(NULL) {}
 
     SkTrackDevice(const SkBitmap& bitmap, const SkDeviceProperties& deviceProperties)
-        : SkDevice(bitmap, deviceProperties)
+        : SkBitmapDevice(bitmap, deviceProperties)
         , fTracker(NULL) {}
 
     SkTrackDevice(SkBitmap::Config config, int width, int height, bool isOpaque = false)
-        : SkDevice(config, width, height, isOpaque)
+        : SkBitmapDevice(config, width, height, isOpaque)
         , fTracker(NULL) {}
 
     SkTrackDevice(SkBitmap::Config config, int width, int height, bool isOpaque,
                   const SkDeviceProperties& deviceProperties)
-        : SkDevice(config, width, height, isOpaque, deviceProperties)
+        : SkBitmapDevice(config, width, height, isOpaque, deviceProperties)
         , fTracker(NULL) {}
 
     virtual ~SkTrackDevice() {}
 
+    // Install a tracker - we can reuse the tracker between multiple devices, and the state of the
+    // tracker is preserved - number and location of poinbts, ...
     void installTracker(SkTracker* tracker) {
         fTracker = tracker;
         fTracker->newFrame();
@@ -98,9 +118,10 @@ protected:
 
     virtual void drawBitmapRect(const SkDraw& dummy1, const SkBitmap& dummy2,
                                 const SkRect* srcOrNull, const SkRect& dst,
-                                const SkPaint& paint) {
+                                const SkPaint& paint,
+                                SkCanvas::DrawBitmapRectFlags flags) {
         before();
-        INHERITED::drawBitmapRect(dummy1, dummy2, srcOrNull, dst, paint);
+        INHERITED::drawBitmapRect(dummy1, dummy2, srcOrNull, dst, paint, flags);
         after();
     }
 
@@ -142,11 +163,12 @@ protected:
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) {
         before();
-        INHERITED::drawVertices(dummy1, dummy2, vertexCount,verts, texs,colors, xmode, indices, indexCount, paint);
+        INHERITED::drawVertices(dummy1, dummy2, vertexCount,verts, texs,colors, xmode, indices,
+                                indexCount, paint);
         after();
     }
 
-    virtual void drawDevice(const SkDraw& dummy1, SkDevice* dummy2, int x, int y,
+    virtual void drawDevice(const SkDraw& dummy1, SkBaseDevice* dummy2, int x, int y,
                             const SkPaint& dummy3) {
         before();
         INHERITED::drawDevice(dummy1, dummy2, x, y, dummy3);
@@ -170,7 +192,7 @@ private:
 private:
     SkTracker* fTracker;
 
-    typedef SkDevice INHERITED;
+    typedef SkBitmapDevice INHERITED;
 };
 
-#endif  // EXPERIMENTAL_PDFVIEWER_SKTRACKDEVICE_H_
+#endif  // SkTrackDevice_DEFINED

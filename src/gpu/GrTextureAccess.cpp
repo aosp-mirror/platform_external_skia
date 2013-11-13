@@ -10,7 +10,7 @@
 #include "GrTexture.h"
 
 GrTextureAccess::GrTextureAccess() {
-#if GR_DEBUG
+#ifdef SK_DEBUG
     memcpy(fSwizzle, "void", 5);
     fSwizzleMask = 0xbeeffeed;
 #endif
@@ -42,8 +42,8 @@ GrTextureAccess::GrTextureAccess(GrTexture* texture,
 void GrTextureAccess::reset(GrTexture* texture,
                             const char* swizzle,
                             const GrTextureParams& params) {
-    GrAssert(NULL != texture);
-    GrAssert(strlen(swizzle) >= 1 && strlen(swizzle) <= 4);
+    SkASSERT(NULL != texture);
+    SkASSERT(strlen(swizzle) >= 1 && strlen(swizzle) <= 4);
 
     fParams = params;
     fTexture.reset(SkRef(texture));
@@ -54,8 +54,8 @@ void GrTextureAccess::reset(GrTexture* texture,
                             const char* swizzle,
                             GrTextureParams::FilterMode filterMode,
                             SkShader::TileMode tileXAndY) {
-    GrAssert(NULL != texture);
-    GrAssert(strlen(swizzle) >= 1 && strlen(swizzle) <= 4);
+    SkASSERT(NULL != texture);
+    SkASSERT(strlen(swizzle) >= 1 && strlen(swizzle) <= 4);
 
     fParams.reset(tileXAndY, filterMode);
     fTexture.reset(SkRef(texture));
@@ -64,7 +64,7 @@ void GrTextureAccess::reset(GrTexture* texture,
 
 void GrTextureAccess::reset(GrTexture* texture,
                             const GrTextureParams& params) {
-    GrAssert(NULL != texture);
+    SkASSERT(NULL != texture);
     fTexture.reset(SkRef(texture));
     fParams = params;
     memcpy(fSwizzle, "rgba", 5);
@@ -74,7 +74,7 @@ void GrTextureAccess::reset(GrTexture* texture,
 void GrTextureAccess::reset(GrTexture* texture,
                             GrTextureParams::FilterMode filterMode,
                             SkShader::TileMode tileXAndY) {
-    GrAssert(NULL != texture);
+    SkASSERT(NULL != texture);
     fTexture.reset(SkRef(texture));
     fParams.reset(tileXAndY, filterMode);
     memcpy(fSwizzle, "rgba", 5);

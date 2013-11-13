@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 Google Inc.
  *
@@ -6,16 +5,15 @@
  * found in the LICENSE file.
  */
 
-
-
 #ifndef GrAllocator_DEFINED
 #define GrAllocator_DEFINED
 
-#include "GrNoncopyable.h"
 #include "GrConfig.h"
+#include "GrTypes.h"
 #include "SkTArray.h"
+#include "SkTypes.h"
 
-class GrAllocator : GrNoncopyable {
+class GrAllocator : public SkNoncopyable {
 public:
     ~GrAllocator() {
         reset();
@@ -35,10 +33,10 @@ public:
             fItemsPerBlock(itemsPerBlock),
             fOwnFirstBlock(NULL == initialBlock),
             fCount(0) {
-        GrAssert(itemsPerBlock > 0);
+        SkASSERT(itemsPerBlock > 0);
         fBlockSize = fItemSize * fItemsPerBlock;
         fBlocks.push_back() = initialBlock;
-        GR_DEBUGCODE(if (!fOwnFirstBlock) {*((char*)initialBlock+fBlockSize-1)='a';} );
+        SkDEBUGCODE(if (!fOwnFirstBlock) {*((char*)initialBlock+fBlockSize-1)='a';} );
     }
 
     /**
@@ -51,9 +49,9 @@ public:
         // we always have at least one block
         if (0 == indexInBlock) {
             if (0 != fCount) {
-                fBlocks.push_back() = GrMalloc(fBlockSize);
+                fBlocks.push_back() = sk_malloc_throw(fBlockSize);
             } else if (fOwnFirstBlock) {
-                fBlocks[0] = GrMalloc(fBlockSize);
+                fBlocks[0] = sk_malloc_throw(fBlockSize);
             }
         }
         void* ret = (char*)fBlocks[fCount/fItemsPerBlock] +
@@ -69,10 +67,10 @@ public:
         int blockCount = GrMax((unsigned)1,
                                GrUIDivRoundUp(fCount, fItemsPerBlock));
         for (int i = 1; i < blockCount; ++i) {
-            GrFree(fBlocks[i]);
+            sk_free(fBlocks[i]);
         }
         if (fOwnFirstBlock) {
-            GrFree(fBlocks[0]);
+            sk_free(fBlocks[0]);
             fBlocks[0] = NULL;
         }
         fBlocks.pop_back_n(blockCount-1);
@@ -95,7 +93,7 @@ public:
      * access last item, only call if count() != 0
      */
     void* back() {
-        GrAssert(fCount);
+        SkASSERT(fCount);
         return (*this)[fCount-1];
     }
 
@@ -103,7 +101,7 @@ public:
      * access last item, only call if count() != 0
      */
     const void* back() const {
-        GrAssert(fCount);
+        SkASSERT(fCount);
         return (*this)[fCount-1];
     }
 
@@ -111,7 +109,7 @@ public:
      * access item by index.
      */
     void* operator[] (int i) {
-        GrAssert(i >= 0 && i < fCount);
+        SkASSERT(i >= 0 && i < fCount);
         return (char*)fBlocks[i / fItemsPerBlock] +
                fItemSize * (i % fItemsPerBlock);
     }
@@ -120,7 +118,7 @@ public:
      * access item by index.
      */
     const void* operator[] (int i) const {
-        GrAssert(i >= 0 && i < fCount);
+        SkASSERT(i >= 0 && i < fCount);
         return (const char*)fBlocks[i / fItemsPerBlock] +
                fItemSize * (i % fItemsPerBlock);
     }
@@ -135,12 +133,11 @@ private:
     bool                                    fOwnFirstBlock;
     int                                     fCount;
 
-    typedef GrNoncopyable INHERITED;
+    typedef SkNoncopyable INHERITED;
 };
 
 template <typename T>
-class GrTAllocator : GrNoncopyable {
-
+class GrTAllocator : public SkNoncopyable {
 public:
     virtual ~GrTAllocator() { this->reset(); };
 
@@ -162,14 +159,14 @@ public:
      */
     T& push_back() {
         void* item = fAllocator.push_back();
-        GrAssert(NULL != item);
+        SkASSERT(NULL != item);
         SkNEW_PLACEMENT(item, T);
         return *(T*)item;
     }
 
     T& push_back(const T& t) {
         void* item = fAllocator.push_back();
-        GrAssert(NULL != item);
+        SkASSERT(NULL != item);
         SkNEW_PLACEMENT_ARGS(item, T, (t));
         return *(T*)item;
     }
@@ -232,7 +229,7 @@ protected:
 
 private:
     GrAllocator fAllocator;
-    typedef GrNoncopyable INHERITED;
+    typedef SkNoncopyable INHERITED;
 };
 
 template <int N, typename T> class GrSTAllocator : public GrTAllocator<T> {

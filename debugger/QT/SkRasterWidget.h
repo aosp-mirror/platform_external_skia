@@ -13,7 +13,7 @@
 #include "SkGpuDevice.h"
 #endif
 
-#include "SkDevice.h"
+#include "SkBitmapDevice.h"
 #include "SkDebugger.h"
 
 #include <QApplication>
@@ -44,7 +44,7 @@ private:
     SkBitmap fBitmap;
     SkDebugger* fDebugger;
     SkCanvas* fCanvas;
-    SkDevice* fDevice;
+    SkBaseDevice* fDevice;
 };
 
 #endif /* SKRASTERWIDGET_H_ */

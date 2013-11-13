@@ -84,7 +84,7 @@ SkTCPServer gServer;
 #if SK_ANGLE
 //#define DEFAULT_TO_ANGLE 1
 #else
-//#define DEFAULT_TO_GPU 1
+#define DEFAULT_TO_GPU 0 // if 1 default rendering is on GPU
 #endif
 
 #define ANIMATING_EVENTTYPE "nextSample"
@@ -269,7 +269,7 @@ public:
                                    SampleWindow* win) {
 #if SK_SUPPORT_GPU
         if (IsGpuDeviceType(dType) && NULL != fCurContext) {
-            SkAutoTUnref<SkDevice> device(new SkGpuDevice(fCurContext, fCurRenderTarget));
+            SkAutoTUnref<SkBaseDevice> device(new SkGpuDevice(fCurContext, fCurRenderTarget));
             return new SkCanvas(device);
         } else
 #endif
@@ -505,7 +505,8 @@ public:
             paint->setAntiAlias(SkOSMenu::kOnState == fAAState);
         }
         if (SkOSMenu::kMixedState != fFilterState) {
-            paint->setFilterBitmap(SkOSMenu::kOnState == fFilterState);
+            paint->setFilterLevel(SkOSMenu::kOnState == fFilterState ?
+                                  SkPaint::kLow_FilterLevel : SkPaint::kNone_FilterLevel);
         }
         if (SkOSMenu::kMixedState != fSubpixelState) {
             paint->setSubpixelText(SkOSMenu::kOnState == fSubpixelState);
@@ -769,7 +770,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     const char* const commandName = argv[0];
     char* const* stop = argv + argc;
     for (++argv; argv < stop; ++argv) {
-        if (strcmp(*argv, "-i") == 0) {
+        if (!strcmp(*argv, "-i") || !strcmp(*argv, "--resourcePath")) {
             argv++;
             if (argv < stop && **argv) {
                 resourcePath = *argv;
@@ -790,6 +791,10 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
             }
         } else if (strcmp(*argv, "--list") == 0) {
             listTitles();
+        } else if (strcmp(*argv, "--pictureDir") == 0) {
+            ++argv;  // This case is dealt with in registerPictFileSamples().
+        } else if (strcmp(*argv, "--picture") == 0) {
+            ++argv;  // This case is dealt with in registerPictFileSample().
         }
         else {
             usage(commandName);
@@ -1429,7 +1434,7 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
     if (fRequestGrabImage) {
         fRequestGrabImage = false;
 
-        SkDevice* device = orig->getDevice();
+        SkBaseDevice* device = orig->getDevice();
         SkBitmap bmp;
         if (device->accessBitmap(false).copyTo(&bmp, SkBitmap::kARGB_8888_Config)) {
             static int gSampleGrabCounter;

@@ -11,9 +11,9 @@
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
 
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkChunkAlloc.h"
-#include "SkDevice.h"
 #include "SkPicture.h"
 #include "SkRegion.h"
 #include "SkStream.h"
@@ -205,7 +205,7 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
 
     SkBitmap bm;
     bm.setConfig(SkBitmap::kNo_Config, width, height);
-    SkAutoTUnref<SkDevice> dev(SkNEW_ARGS(SkDevice, (bm)));
+    SkAutoTUnref<SkBaseDevice> dev(SkNEW_ARGS(SkBitmapDevice, (bm)));
 
     // Must be set before calling createBBoxHierarchy
     fWidth = width;
@@ -232,8 +232,10 @@ SkBBoxHierarchy* SkPicture::createBBoxHierarchy() const {
 
     SkScalar aspectRatio = SkScalarDiv(SkIntToScalar(fWidth),
                                        SkIntToScalar(fHeight));
+    bool sortDraws = false;  // Do not sort draw calls when bulk loading.
+
     return SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
-                           aspectRatio);
+                           aspectRatio, sortDraws);
 }
 
 SkCanvas* SkPicture::getRecordingCanvas() const {
@@ -273,7 +275,16 @@ bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (!stream->read(&info, sizeof(SkPictInfo))) {
         return false;
     }
-    if (PICTURE_VERSION != info.fVersion) {
+    if (PICTURE_VERSION != info.fVersion
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V13_AND_ALL_OTHER_INSTANCES_TOO
+        // V13 is backwards compatible with V12
+        && PRIOR_PRIOR_PICTURE_VERSION != info.fVersion  // TODO: remove when .skps regenerated
+#endif
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
+        // V14 is backwards compatible with V13
+        && PRIOR_PICTURE_VERSION2 != info.fVersion  // TODO: remove when .skps regenerated
+#endif
+        ) {
         return false;
     }
 
@@ -299,7 +310,10 @@ SkPicture* SkPicture::CreateFromStream(SkStream* stream, InstallPixelRefProc pro
     SkPicturePlayback* playback;
     // Check to see if there is a playback to recreate.
     if (stream->readBool()) {
-        playback = SkNEW_ARGS(SkPicturePlayback, (stream, info, proc));
+        playback = SkPicturePlayback::CreateFromStream(stream, info, proc);
+        if (NULL == playback) {
+            return NULL;
+        }
     } else {
         playback = NULL;
     }
@@ -338,6 +352,11 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     } else {
         stream->writeBool(false);
     }
+}
+
+bool SkPicture::willPlayBackBitmaps() const {
+    if (!fPlayback) return false;
+    return fPlayback->containsBitmaps();
 }
 
 #ifdef SK_BUILD_FOR_ANDROID

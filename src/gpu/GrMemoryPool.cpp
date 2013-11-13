@@ -7,14 +7,14 @@
 
 #include "GrMemoryPool.h"
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     #define VALIDATE this->validate()
 #else
     #define VALIDATE
 #endif
 
 GrMemoryPool::GrMemoryPool(size_t preallocSize, size_t minAllocSize) {
-    GR_DEBUGCODE(fAllocationCnt = 0);
+    SkDEBUGCODE(fAllocationCnt = 0);
 
     minAllocSize = GrMax<size_t>(minAllocSize, 1 << 10);
     fMinAllocSize = GrSizeAlignUp(minAllocSize + kPerAllocPad, kAlignment),
@@ -30,9 +30,9 @@ GrMemoryPool::GrMemoryPool(size_t preallocSize, size_t minAllocSize) {
 
 GrMemoryPool::~GrMemoryPool() {
     VALIDATE;
-    GrAssert(0 == fAllocationCnt);
-    GrAssert(fHead == fTail);
-    GrAssert(0 == fHead->fLiveCount);
+    SkASSERT(0 == fAllocationCnt);
+    SkASSERT(fHead == fTail);
+    SkASSERT(0 == fHead->fLiveCount);
     DeleteBlock(fHead);
 };
 
@@ -41,17 +41,17 @@ void* GrMemoryPool::allocate(size_t size) {
     size = GrSizeAlignUp(size, kAlignment);
     size += kPerAllocPad;
     if (fTail->fFreeSize < size) {
-        int blockSize = size;
+        size_t blockSize = size;
         blockSize = GrMax<size_t>(blockSize, fMinAllocSize);
         BlockHeader* block = CreateBlock(blockSize);
 
         block->fPrev = fTail;
         block->fNext = NULL;
-        GrAssert(NULL == fTail->fNext);
+        SkASSERT(NULL == fTail->fNext);
         fTail->fNext = block;
         fTail = block;
     }
-    GrAssert(fTail->fFreeSize >= size);
+    SkASSERT(fTail->fFreeSize >= size);
     intptr_t ptr = fTail->fCurrPtr;
     // We stash a pointer to the block header, just before the allocated space,
     // so that we can decrement the live count on delete in constant time.
@@ -61,7 +61,7 @@ void* GrMemoryPool::allocate(size_t size) {
     fTail->fCurrPtr += size;
     fTail->fFreeSize -= size;
     fTail->fLiveCount += 1;
-    GR_DEBUGCODE(++fAllocationCnt);
+    SkDEBUGCODE(++fAllocationCnt);
     VALIDATE;
     return reinterpret_cast<void*>(ptr);
 }
@@ -80,12 +80,12 @@ void GrMemoryPool::release(void* p) {
         } else {
             BlockHeader* prev = block->fPrev;
             BlockHeader* next = block->fNext;
-            GrAssert(prev);
+            SkASSERT(prev);
             prev->fNext = next;
             if (next) {
                 next->fPrev = prev;
             } else {
-                GrAssert(fTail == block);
+                SkASSERT(fTail == block);
                 fTail = prev;
             }
             DeleteBlock(block);
@@ -98,15 +98,15 @@ void GrMemoryPool::release(void* p) {
             block->fCurrPtr = block->fPrevPtr;
         }
     }
-    GR_DEBUGCODE(--fAllocationCnt);
+    SkDEBUGCODE(--fAllocationCnt);
     VALIDATE;
 }
 
 GrMemoryPool::BlockHeader* GrMemoryPool::CreateBlock(size_t size) {
     BlockHeader* block =
-        reinterpret_cast<BlockHeader*>(GrMalloc(size + kHeaderSize));
+        reinterpret_cast<BlockHeader*>(sk_malloc_throw(size + kHeaderSize));
     // we assume malloc gives us aligned memory
-    GrAssert(!(reinterpret_cast<intptr_t>(block) % kAlignment));
+    SkASSERT(!(reinterpret_cast<intptr_t>(block) % kAlignment));
     block->fLiveCount = 0;
     block->fFreeSize = size;
     block->fCurrPtr = reinterpret_cast<intptr_t>(block) + kHeaderSize;
@@ -115,20 +115,20 @@ GrMemoryPool::BlockHeader* GrMemoryPool::CreateBlock(size_t size) {
 }
 
 void GrMemoryPool::DeleteBlock(BlockHeader* block) {
-    GrFree(block);
+    sk_free(block);
 }
 
 void GrMemoryPool::validate() {
 #ifdef SK_DEBUG
     BlockHeader* block = fHead;
     BlockHeader* prev = NULL;
-    GrAssert(block);
+    SkASSERT(block);
     int allocCount = 0;
     do {
         allocCount += block->fLiveCount;
-        GrAssert(prev == block->fPrev);
+        SkASSERT(prev == block->fPrev);
         if (NULL != prev) {
-            GrAssert(prev->fNext == block);
+            SkASSERT(prev->fNext == block);
         }
 
         intptr_t b = reinterpret_cast<intptr_t>(block);
@@ -137,25 +137,25 @@ void GrMemoryPool::validate() {
         size_t userSize = totalSize - kHeaderSize;
         intptr_t userStart = b + kHeaderSize;
 
-        GrAssert(!(b % kAlignment));
-        GrAssert(!(totalSize % kAlignment));
-        GrAssert(!(userSize % kAlignment));
-        GrAssert(!(block->fCurrPtr % kAlignment));
+        SkASSERT(!(b % kAlignment));
+        SkASSERT(!(totalSize % kAlignment));
+        SkASSERT(!(userSize % kAlignment));
+        SkASSERT(!(block->fCurrPtr % kAlignment));
         if (fHead != block) {
-            GrAssert(block->fLiveCount);
-            GrAssert(userSize >= fMinAllocSize);
+            SkASSERT(block->fLiveCount);
+            SkASSERT(userSize >= fMinAllocSize);
         } else {
-            GrAssert(userSize == fPreallocSize);
+            SkASSERT(userSize == fPreallocSize);
         }
         if (!block->fLiveCount) {
-            GrAssert(ptrOffset ==  kHeaderSize);
-            GrAssert(userStart == block->fCurrPtr);
+            SkASSERT(ptrOffset ==  kHeaderSize);
+            SkASSERT(userStart == block->fCurrPtr);
         } else {
-            GrAssert(block == *reinterpret_cast<BlockHeader**>(userStart));
+            SkASSERT(block == *reinterpret_cast<BlockHeader**>(userStart));
         }
         prev = block;
     } while ((block = block->fNext));
-    GrAssert(allocCount == fAllocationCnt);
-    GrAssert(prev == fTail);
+    SkASSERT(allocCount == fAllocationCnt);
+    SkASSERT(prev == fTail);
 #endif
 }

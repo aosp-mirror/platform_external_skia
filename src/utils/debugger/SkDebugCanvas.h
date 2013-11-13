@@ -16,6 +16,8 @@
 #include "SkTArray.h"
 #include "SkString.h"
 
+class SkTexOverrideFilter;
+
 class SK_API SkDebugCanvas : public SkCanvas {
 public:
     SkDebugCanvas(int width, int height);
@@ -27,6 +29,11 @@ public:
      * Enable or disable overdraw visualization
      */
     void setOverdrawViz(bool overdrawViz) { fOverdrawViz = overdrawViz; }
+
+    /**
+     * Enable or disable texure filtering override
+     */
+    void overrideTexFiltering(bool overrideTexFiltering, SkPaint::FilterLevel level);
 
     /**
         Executes all draw calls to the canvas.
@@ -102,8 +109,8 @@ public:
 
     /**
         Returns the vector of draw commands
-        DEPRECATED: please use getDrawCommandAt and getSize instead
      */
+    SK_ATTR_DEPRECATED("please use getDrawCommandAt and getSize instead")
     const SkTDArray<SkDrawCommand*>& getDrawCommands() const;
 
     /**
@@ -161,7 +168,8 @@ public:
                             const SkPaint*) SK_OVERRIDE;
 
     virtual void drawBitmapRectToRect(const SkBitmap&, const SkRect* src,
-                                  const SkRect& dst, const SkPaint*) SK_OVERRIDE;
+                                      const SkRect& dst, const SkPaint* paint,
+                                      DrawBitmapRectFlags flags) SK_OVERRIDE;
 
     virtual void drawBitmapMatrix(const SkBitmap&, const SkMatrix&,
                                   const SkPaint*) SK_OVERRIDE;
@@ -244,8 +252,12 @@ private:
     SkMatrix fUserMatrix;
     SkMatrix fMatrix;
     SkIRect fClip;
+
     bool fOverdrawViz;
     SkDrawFilter* fOverdrawFilter;
+
+    bool fOverrideTexFiltering;
+    SkTexOverrideFilter* fTexOverrideFilter;
 
     /**
         Number of unmatched save() calls at any point during a draw.

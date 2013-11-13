@@ -102,7 +102,7 @@ protected:
 
     // TODO: make this pure-virtual once all ports know about it
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
-                                               unsigned styleBits);
+                                               unsigned styleBits) = 0;
 private:
     static SkFontMgr* Factory();    // implemented by porting layer
 

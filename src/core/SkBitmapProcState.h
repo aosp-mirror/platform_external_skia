@@ -13,6 +13,7 @@
 #include "SkBitmap.h"
 #include "SkBitmapFilter.h"
 #include "SkMatrix.h"
+#include "SkPaint.h"
 #include "SkScaledImageCache.h"
 
 #define FractionalInt_IS_64BIT
@@ -79,8 +80,6 @@ struct SkBitmapProcState {
     SkFixed             fFilterOneX;
     SkFixed             fFilterOneY;
 
-    SkConvolutionProcs* fConvolutionProcs;         // possiblyScaleImage
-
     SkPMColor           fPaintPMColor;      // chooseProcs - A8 config
     SkFixed             fInvSx;             // chooseProcs
     SkFixed             fInvKy;             // chooseProcs
@@ -115,7 +114,7 @@ struct SkBitmapProcState {
         if we have SIMD versions of them.
       */
 
-    void platformConvolutionProcs();
+    void platformConvolutionProcs(SkConvolutionProcs*);
 
     /** Given the byte size of the index buffer to be passed to the matrix proc,
         return the maximum number of resulting pixels that can be computed
@@ -162,11 +161,19 @@ private:
     bool chooseProcs(const SkMatrix& inv, const SkPaint&);
     ShaderProc32 chooseShaderProc32();
 
-    void possiblyScaleImage();
+    // returns false if we did not try to scale the image. In that case, we
+    // will need to "lock" its pixels some other way.
+    bool possiblyScaleImage();
+
+    // returns false if we failed to "lock" the pixels at all. Typically this
+    // means we have to abort the shader.
+    bool lockBaseBitmap();
 
     SkBitmapFilter* fBitmapFilter;
 
-    ShaderProc32 chooseBitmapFilterProc();
+    // If supported, sets fShaderProc32 and fShaderProc16 and returns true,
+    // otherwise returns false.
+    bool setBitmapFilterProcs();
 
     // Return false if we failed to setup for fast translate (e.g. overflow)
     bool setupForTranslate();
@@ -208,9 +215,9 @@ void S32_opaque_D32_filter_DX(const SkBitmapProcState& s, const uint32_t xy[],
 void S32_alpha_D32_filter_DX(const SkBitmapProcState& s, const uint32_t xy[],
                              int count, SkPMColor colors[]);
 void S32_opaque_D32_filter_DXDY(const SkBitmapProcState& s,
-                           const uint32_t xy[], int count, SkPMColor colors[]);
+                                const uint32_t xy[], int count, SkPMColor colors[]);
 void S32_alpha_D32_filter_DXDY(const SkBitmapProcState& s,
-                           const uint32_t xy[], int count, SkPMColor colors[]);
+                               const uint32_t xy[], int count, SkPMColor colors[]);
 void ClampX_ClampY_filter_scale(const SkBitmapProcState& s, uint32_t xy[],
                                 int count, int x, int y);
 void ClampX_ClampY_nofilter_scale(const SkBitmapProcState& s, uint32_t xy[],
@@ -220,10 +227,12 @@ void ClampX_ClampY_filter_affine(const SkBitmapProcState& s,
 void ClampX_ClampY_nofilter_affine(const SkBitmapProcState& s,
                                    uint32_t xy[], int count, int x, int y);
 void S32_D16_filter_DX(const SkBitmapProcState& s,
-                                   const uint32_t* xy, int count, uint16_t* colors);
+                       const uint32_t* xy, int count, uint16_t* colors);
 
-void highQualityFilter(const SkBitmapProcState &s, int x, int y,
-                   SkPMColor *SK_RESTRICT colors, int count);
+void highQualityFilter32(const SkBitmapProcState &s, int x, int y,
+                         SkPMColor *SK_RESTRICT colors, int count);
+void highQualityFilter16(const SkBitmapProcState &s, int x, int y,
+                         uint16_t *SK_RESTRICT colors, int count);
 
 
 #endif

@@ -8,6 +8,7 @@
 #include "GrEffect.h"
 #include "GrBackendEffectFactory.h"
 #include "GrContext.h"
+#include "GrCoordTransform.h"
 #include "GrMemoryPool.h"
 #include "SkTLS.h"
 
@@ -21,7 +22,7 @@ SkTArray<GrEffectTestFactory*, true>* GrEffectTestFactory::GetFactories() {
 #endif
 
 namespace GrEffectUnitTest {
-const SkMatrix& TestMatrix(SkMWCRandom* random) {
+const SkMatrix& TestMatrix(SkRandom* random) {
     static SkMatrix gMatrices[5];
     static bool gOnce;
     if (!gOnce) {
@@ -63,7 +64,7 @@ int32_t GrBackendEffectFactory::fCurrEffectClassID = GrBackendEffectFactory::kIl
 SK_DEFINE_INST_COUNT(GrEffectRef)
 
 GrEffectRef::~GrEffectRef() {
-    GrAssert(this->unique());
+    SkASSERT(this->unique());
     fEffect->EffectRefDestroyed();
     fEffect->unref();
 }
@@ -79,20 +80,20 @@ void GrEffectRef::operator delete(void* target) {
 ///////////////////////////////////////////////////////////////////////////////
 
 GrEffect::~GrEffect() {
-    GrAssert(NULL == fEffectRef);
+    SkASSERT(NULL == fEffectRef);
 }
 
 const char* GrEffect::name() const {
     return this->getFactory().name();
 }
 
-void GrEffect::addTextureAccess(const GrTextureAccess* access) {
-    fTextureAccesses.push_back(access);
+void GrEffect::addCoordTransform(const GrCoordTransform* transform) {
+    fCoordTransforms.push_back(transform);
+    SkDEBUGCODE(transform->setInEffect();)
 }
 
-void GrEffect::addVertexAttrib(GrSLType type) {
-    GrAssert(fVertexAttribTypes.count() < kMaxVertexAttribs);
-    fVertexAttribTypes.push_back(type);
+void GrEffect::addTextureAccess(const GrTextureAccess* access) {
+    fTextureAccesses.push_back(access);
 }
 
 void* GrEffect::operator new(size_t size) {
@@ -102,3 +103,16 @@ void* GrEffect::operator new(size_t size) {
 void GrEffect::operator delete(void* target) {
     GrEffect_Globals::GetTLS()->release(target);
 }
+
+#ifdef SK_DEBUG
+void GrEffect::assertEquality(const GrEffect& other) const {
+    SkASSERT(this->numTransforms() == other.numTransforms());
+    for (int i = 0; i < this->numTransforms(); ++i) {
+        SkASSERT(this->coordTransform(i) == other.coordTransform(i));
+    }
+    SkASSERT(this->numTextures() == other.numTextures());
+    for (int i = 0; i < this->numTextures(); ++i) {
+        SkASSERT(this->textureAccess(i) == other.textureAccess(i));
+    }
+}
+#endif

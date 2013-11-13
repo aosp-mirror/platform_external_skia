@@ -21,6 +21,7 @@
 // effects
 #include "SkGradientShader.h"
 #include "SkUnitMappers.h"
+#include "SkBlurMask.h"
 #include "SkBlurDrawLooper.h"
 
 static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
@@ -51,7 +52,7 @@ static void setup(SkPaint* paint, const SkBitmap& bm, bool filter,
                   SkShader::TileMode tmx, SkShader::TileMode tmy) {
     SkShader* shader = SkShader::CreateBitmapShader(bm, tmx, tmy);
     paint->setShader(shader)->unref();
-    paint->setFilterBitmap(filter);
+    paint->setFilterLevel(filter ? SkPaint::kLow_FilterLevel : SkPaint::kNone_FilterLevel);
 }
 
 static const SkBitmap::Config gConfigs[] = {
@@ -66,8 +67,9 @@ class TilingView : public SampleView {
     SkBlurDrawLooper    fLooper;
 public:
     TilingView()
-            : fLooper(SkIntToScalar(1), SkIntToScalar(2), SkIntToScalar(2),
-                      0x88000000) {
+            : fLooper(0x88000000,
+                      SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(1)),
+                      SkIntToScalar(2), SkIntToScalar(2)) {
         fTextPicture = new SkPicture();
         for (size_t i = 0; i < SK_ARRAY_COUNT(gConfigs); i++) {
             makebm(&fTexture[i], gConfigs[i], gWidth, gHeight);

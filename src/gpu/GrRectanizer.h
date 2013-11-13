@@ -20,11 +20,13 @@ public:
 class GrRectanizer {
 public:
     GrRectanizer(int width, int height) : fWidth(width), fHeight(height) {
-        GrAssert(width >= 0);
-        GrAssert(height >= 0);
+        SkASSERT(width >= 0);
+        SkASSERT(height >= 0);
     }
 
     virtual ~GrRectanizer() {}
+
+    virtual void reset() = 0;
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }

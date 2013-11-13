@@ -1,94 +1,102 @@
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkPdfFont.h"
 
+#include "SkPdfNativeTokenizer.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
-#include "SkPdfNativeTokenizer.h"
 
-std::map<std::string, SkPdfStandardFontEntry>& getStandardFonts() {
-    static std::map<std::string, SkPdfStandardFontEntry> gPdfStandardFonts;
+SkTDict<SkPdfStandardFontEntry>& getStandardFonts() {
+    static SkTDict<SkPdfStandardFontEntry> gPdfStandardFonts(100);
 
     // TODO (edisonn): , vs - ? what does it mean?
     // TODO (edisonn): MT, PS, Oblique=italic?, ... what does it mean?
-    if (gPdfStandardFonts.empty()) {
-        gPdfStandardFonts["Arial"] = SkPdfStandardFontEntry("Arial", false, false);
-        gPdfStandardFonts["Arial,Bold"] = SkPdfStandardFontEntry("Arial", true, false);
-        gPdfStandardFonts["Arial,BoldItalic"] = SkPdfStandardFontEntry("Arial", true, true);
-        gPdfStandardFonts["Arial,Italic"] = SkPdfStandardFontEntry("Arial", false, true);
-        gPdfStandardFonts["Arial-Bold"] = SkPdfStandardFontEntry("Arial", true, false);
-        gPdfStandardFonts["Arial-BoldItalic"] = SkPdfStandardFontEntry("Arial", true, true);
-        gPdfStandardFonts["Arial-BoldItalicMT"] = SkPdfStandardFontEntry("Arial", true, true);
-        gPdfStandardFonts["Arial-BoldMT"] = SkPdfStandardFontEntry("Arial", true, false);
-        gPdfStandardFonts["Arial-Italic"] = SkPdfStandardFontEntry("Arial", false, true);
-        gPdfStandardFonts["Arial-ItalicMT"] = SkPdfStandardFontEntry("Arial", false, true);
-        gPdfStandardFonts["ArialMT"] = SkPdfStandardFontEntry("Arial", false, false);
-        gPdfStandardFonts["Courier"] = SkPdfStandardFontEntry("Courier New", false, false);
-        gPdfStandardFonts["Courier,Bold"] = SkPdfStandardFontEntry("Courier New", true, false);
-        gPdfStandardFonts["Courier,BoldItalic"] = SkPdfStandardFontEntry("Courier New", true, true);
-        gPdfStandardFonts["Courier,Italic"] = SkPdfStandardFontEntry("Courier New", false, true);
-        gPdfStandardFonts["Courier-Bold"] = SkPdfStandardFontEntry("Courier New", true, false);
-        gPdfStandardFonts["Courier-BoldOblique"] = SkPdfStandardFontEntry("Courier New", true, true);
-        gPdfStandardFonts["Courier-Oblique"] = SkPdfStandardFontEntry("Courier New", false, true);
-        gPdfStandardFonts["CourierNew"] = SkPdfStandardFontEntry("Courier New", false, false);
-        gPdfStandardFonts["CourierNew,Bold"] = SkPdfStandardFontEntry("Courier New", true, false);
-        gPdfStandardFonts["CourierNew,BoldItalic"] = SkPdfStandardFontEntry("Courier New", true, true);
-        gPdfStandardFonts["CourierNew,Italic"] = SkPdfStandardFontEntry("Courier New", false, true);
-        gPdfStandardFonts["CourierNew-Bold"] = SkPdfStandardFontEntry("Courier New", true, false);
-        gPdfStandardFonts["CourierNew-BoldItalic"] = SkPdfStandardFontEntry("Courier New", true, true);
-        gPdfStandardFonts["CourierNew-Italic"] = SkPdfStandardFontEntry("Courier New", false, true);
-        gPdfStandardFonts["CourierNewPS-BoldItalicMT"] = SkPdfStandardFontEntry("Courier New", true, true);
-        gPdfStandardFonts["CourierNewPS-BoldMT"] = SkPdfStandardFontEntry("Courier New", true, false);
-        gPdfStandardFonts["CourierNewPS-ItalicMT"] = SkPdfStandardFontEntry("Courier New", false, true);
-        gPdfStandardFonts["CourierNewPSMT"] = SkPdfStandardFontEntry("Courier New", false, false);
-        gPdfStandardFonts["Helvetica"] = SkPdfStandardFontEntry("Helvetica", false, false);
-        gPdfStandardFonts["Helvetica,Bold"] = SkPdfStandardFontEntry("Helvetica", true, false);
-        gPdfStandardFonts["Helvetica,BoldItalic"] = SkPdfStandardFontEntry("Helvetica", true, true);
-        gPdfStandardFonts["Helvetica,Italic"] = SkPdfStandardFontEntry("Helvetica", false, true);
-        gPdfStandardFonts["Helvetica-Bold"] = SkPdfStandardFontEntry("Helvetica", true, false);
-        gPdfStandardFonts["Helvetica-BoldItalic"] = SkPdfStandardFontEntry("Helvetica", true, true);
-        gPdfStandardFonts["Helvetica-BoldOblique"] = SkPdfStandardFontEntry("Helvetica", true, true);
-        gPdfStandardFonts["Helvetica-Italic"] = SkPdfStandardFontEntry("Helvetica", false, true);
-        gPdfStandardFonts["Helvetica-Oblique"] = SkPdfStandardFontEntry("Helvetica", false, true);
-        gPdfStandardFonts["Times-Bold"] = SkPdfStandardFontEntry("Times New Roman", true, false);
-        gPdfStandardFonts["Times-BoldItalic"] = SkPdfStandardFontEntry("Times New Roman", true, true);
-        gPdfStandardFonts["Times-Italic"] = SkPdfStandardFontEntry("Times New Roman", false, true);
-        gPdfStandardFonts["Times-Roman"] = SkPdfStandardFontEntry("Times New Roman", false, false);
-        gPdfStandardFonts["TimesNewRoman"] = SkPdfStandardFontEntry("Times New Roman", false, false);
-        gPdfStandardFonts["TimesNewRoman,Bold"] = SkPdfStandardFontEntry("Times New Roman", true, false);
-        gPdfStandardFonts["TimesNewRoman,BoldItalic"] = SkPdfStandardFontEntry("Times New Roman", true, true);
-        gPdfStandardFonts["TimesNewRoman,Italic"] = SkPdfStandardFontEntry("Times New Roman", false, true);
-        gPdfStandardFonts["TimesNewRoman-Bold"] = SkPdfStandardFontEntry("Times New Roman", true, false);
-        gPdfStandardFonts["TimesNewRoman-BoldItalic"] = SkPdfStandardFontEntry("Times New Roman", true, true);
-        gPdfStandardFonts["TimesNewRoman-Italic"] = SkPdfStandardFontEntry("Times New Roman", false, true);
-        gPdfStandardFonts["TimesNewRomanPS"] = SkPdfStandardFontEntry("Times New Roman", false, false);
-        gPdfStandardFonts["TimesNewRomanPS-Bold"] = SkPdfStandardFontEntry("Times New Roman", true, false);
-        gPdfStandardFonts["TimesNewRomanPS-BoldItalic"] = SkPdfStandardFontEntry("Times New Roman", true, true);
-        gPdfStandardFonts["TimesNewRomanPS-BoldItalicMT"] = SkPdfStandardFontEntry("Times New Roman", true, true);
-        gPdfStandardFonts["TimesNewRomanPS-BoldMT"] = SkPdfStandardFontEntry("Times New Roman", true, false);
-        gPdfStandardFonts["TimesNewRomanPS-Italic"] = SkPdfStandardFontEntry("Times New Roman", false, true);
-        gPdfStandardFonts["TimesNewRomanPS-ItalicMT"] = SkPdfStandardFontEntry("Times New Roman", false, true);
-        gPdfStandardFonts["TimesNewRomanPSMT"] = SkPdfStandardFontEntry("Times New Roman", false, false);
-        gPdfStandardFonts["Symbol"] = SkPdfStandardFontEntry("Symbol", false, false);
-        gPdfStandardFonts["ZapfDingbats"] = SkPdfStandardFontEntry("ZapfDingbats", false, false);
+    if (gPdfStandardFonts.count() == 0) {
+        gPdfStandardFonts.set("Arial", SkPdfStandardFontEntry("Arial", false, false));
+        gPdfStandardFonts.set("Arial,Bold", SkPdfStandardFontEntry("Arial", true, false));
+        gPdfStandardFonts.set("Arial,BoldItalic", SkPdfStandardFontEntry("Arial", true, true));
+        gPdfStandardFonts.set("Arial,Italic", SkPdfStandardFontEntry("Arial", false, true));
+        gPdfStandardFonts.set("Arial-Bold", SkPdfStandardFontEntry("Arial", true, false));
+        gPdfStandardFonts.set("Arial-BoldItalic", SkPdfStandardFontEntry("Arial", true, true));
+        gPdfStandardFonts.set("Arial-BoldItalicMT", SkPdfStandardFontEntry("Arial", true, true));
+        gPdfStandardFonts.set("Arial-BoldMT", SkPdfStandardFontEntry("Arial", true, false));
+        gPdfStandardFonts.set("Arial-Italic", SkPdfStandardFontEntry("Arial", false, true));
+        gPdfStandardFonts.set("Arial-ItalicMT", SkPdfStandardFontEntry("Arial", false, true));
+        gPdfStandardFonts.set("ArialMT", SkPdfStandardFontEntry("Arial", false, false));
+        gPdfStandardFonts.set("Courier", SkPdfStandardFontEntry("Courier New", false, false));
+        gPdfStandardFonts.set("Courier,Bold", SkPdfStandardFontEntry("Courier New", true, false));
+        gPdfStandardFonts.set("Courier,BoldItalic", SkPdfStandardFontEntry("Courier New", true, true));
+        gPdfStandardFonts.set("Courier,Italic", SkPdfStandardFontEntry("Courier New", false, true));
+        gPdfStandardFonts.set("Courier-Bold", SkPdfStandardFontEntry("Courier New", true, false));
+        gPdfStandardFonts.set("Courier-BoldOblique", SkPdfStandardFontEntry("Courier New", true, true));
+        gPdfStandardFonts.set("Courier-Oblique", SkPdfStandardFontEntry("Courier New", false, true));
+        gPdfStandardFonts.set("CourierNew", SkPdfStandardFontEntry("Courier New", false, false));
+        gPdfStandardFonts.set("CourierNew,Bold", SkPdfStandardFontEntry("Courier New", true, false));
+        gPdfStandardFonts.set("CourierNew,BoldItalic", SkPdfStandardFontEntry("Courier New", true, true));
+        gPdfStandardFonts.set("CourierNew,Italic", SkPdfStandardFontEntry("Courier New", false, true));
+        gPdfStandardFonts.set("CourierNew-Bold", SkPdfStandardFontEntry("Courier New", true, false));
+        gPdfStandardFonts.set("CourierNew-BoldItalic", SkPdfStandardFontEntry("Courier New", true, true));
+        gPdfStandardFonts.set("CourierNew-Italic", SkPdfStandardFontEntry("Courier New", false, true));
+        gPdfStandardFonts.set("CourierNewPS-BoldItalicMT", SkPdfStandardFontEntry("Courier New", true, true));
+        gPdfStandardFonts.set("CourierNewPS-BoldMT", SkPdfStandardFontEntry("Courier New", true, false));
+        gPdfStandardFonts.set("CourierNewPS-ItalicMT", SkPdfStandardFontEntry("Courier New", false, true));
+        gPdfStandardFonts.set("CourierNewPSMT", SkPdfStandardFontEntry("Courier New", false, false));
+        gPdfStandardFonts.set("Helvetica", SkPdfStandardFontEntry("Helvetica", false, false));
+        gPdfStandardFonts.set("Helvetica,Bold", SkPdfStandardFontEntry("Helvetica", true, false));
+        gPdfStandardFonts.set("Helvetica,BoldItalic", SkPdfStandardFontEntry("Helvetica", true, true));
+        gPdfStandardFonts.set("Helvetica,Italic", SkPdfStandardFontEntry("Helvetica", false, true));
+        gPdfStandardFonts.set("Helvetica-Bold", SkPdfStandardFontEntry("Helvetica", true, false));
+        gPdfStandardFonts.set("Helvetica-BoldItalic", SkPdfStandardFontEntry("Helvetica", true, true));
+        gPdfStandardFonts.set("Helvetica-BoldOblique", SkPdfStandardFontEntry("Helvetica", true, true));
+        gPdfStandardFonts.set("Helvetica-Italic", SkPdfStandardFontEntry("Helvetica", false, true));
+        gPdfStandardFonts.set("Helvetica-Oblique", SkPdfStandardFontEntry("Helvetica", false, true));
+        gPdfStandardFonts.set("Times-Bold", SkPdfStandardFontEntry("Times New Roman", true, false));
+        gPdfStandardFonts.set("Times-BoldItalic", SkPdfStandardFontEntry("Times New Roman", true, true));
+        gPdfStandardFonts.set("Times-Italic", SkPdfStandardFontEntry("Times New Roman", false, true));
+        gPdfStandardFonts.set("Times-Roman", SkPdfStandardFontEntry("Times New Roman", false, false));
+        gPdfStandardFonts.set("TimesNewRoman", SkPdfStandardFontEntry("Times New Roman", false, false));
+        gPdfStandardFonts.set("TimesNewRoman,Bold", SkPdfStandardFontEntry("Times New Roman", true, false));
+        gPdfStandardFonts.set("TimesNewRoman,BoldItalic", SkPdfStandardFontEntry("Times New Roman", true, true));
+        gPdfStandardFonts.set("TimesNewRoman,Italic", SkPdfStandardFontEntry("Times New Roman", false, true));
+        gPdfStandardFonts.set("TimesNewRoman-Bold", SkPdfStandardFontEntry("Times New Roman", true, false));
+        gPdfStandardFonts.set("TimesNewRoman-BoldItalic", SkPdfStandardFontEntry("Times New Roman", true, true));
+        gPdfStandardFonts.set("TimesNewRoman-Italic", SkPdfStandardFontEntry("Times New Roman", false, true));
+        gPdfStandardFonts.set("TimesNewRomanPS", SkPdfStandardFontEntry("Times New Roman", false, false));
+        gPdfStandardFonts.set("TimesNewRomanPS-Bold", SkPdfStandardFontEntry("Times New Roman", true, false));
+        gPdfStandardFonts.set("TimesNewRomanPS-BoldItalic", SkPdfStandardFontEntry("Times New Roman", true, true));
+        gPdfStandardFonts.set("TimesNewRomanPS-BoldItalicMT", SkPdfStandardFontEntry("Times New Roman", true, true));
+        gPdfStandardFonts.set("TimesNewRomanPS-BoldMT", SkPdfStandardFontEntry("Times New Roman", true, false));
+        gPdfStandardFonts.set("TimesNewRomanPS-Italic", SkPdfStandardFontEntry("Times New Roman", false, true));
+        gPdfStandardFonts.set("TimesNewRomanPS-ItalicMT", SkPdfStandardFontEntry("Times New Roman", false, true));
+        gPdfStandardFonts.set("TimesNewRomanPSMT", SkPdfStandardFontEntry("Times New Roman", false, false));
+        gPdfStandardFonts.set("Symbol", SkPdfStandardFontEntry("Symbol", false, false));
+        gPdfStandardFonts.set("ZapfDingbats", SkPdfStandardFontEntry("ZapfDingbats", false, false));
 
         // TODO(edisonn): these are hacks. Load Post Script font name.
         // see FT_Get_Postscript_Name
         // Font config is not using it, yet.
         //https://bugs.freedesktop.org/show_bug.cgi?id=18095
 
-        gPdfStandardFonts["Arial-Black"] = SkPdfStandardFontEntry("Arial", true, false);
-        gPdfStandardFonts["DejaVuSans"] = SkPdfStandardFontEntry("DejaVu Sans", false, false);
-        gPdfStandardFonts["DejaVuSansMono"] = SkPdfStandardFontEntry("DejaVuSans Mono", false, false);
-        gPdfStandardFonts["DejaVuSansMono-Bold"] = SkPdfStandardFontEntry("DejaVuSans Mono", true, false);
-        gPdfStandardFonts["DejaVuSansMono-Oblique"] = SkPdfStandardFontEntry("DejaVuSans Mono", false, true);
-        gPdfStandardFonts["Georgia-Bold"] = SkPdfStandardFontEntry("Georgia", true, false);
-        gPdfStandardFonts["Georgia-BoldItalic"] = SkPdfStandardFontEntry("Georgia", true, true);
-        gPdfStandardFonts["Georgia-Italic"] = SkPdfStandardFontEntry("Georgia", false, true);
-        gPdfStandardFonts["TrebuchetMS"] = SkPdfStandardFontEntry("Trebuchet MS", false, false);
-        gPdfStandardFonts["TrebuchetMS-Bold"] = SkPdfStandardFontEntry("Trebuchet MS", true, false);
-        gPdfStandardFonts["Verdana-Bold"] = SkPdfStandardFontEntry("Verdana", true, false);
-        gPdfStandardFonts["WenQuanYiMicroHei"] = SkPdfStandardFontEntry("WenQuanYi Micro Hei", false, false);
+        gPdfStandardFonts.set("Arial-Black", SkPdfStandardFontEntry("Arial", true, false));
+        gPdfStandardFonts.set("DejaVuSans", SkPdfStandardFontEntry("DejaVu Sans", false, false));
+        gPdfStandardFonts.set("DejaVuSansMono", SkPdfStandardFontEntry("DejaVuSans Mono", false, false));
+        gPdfStandardFonts.set("DejaVuSansMono-Bold", SkPdfStandardFontEntry("DejaVuSans Mono", true, false));
+        gPdfStandardFonts.set("DejaVuSansMono-Oblique", SkPdfStandardFontEntry("DejaVuSans Mono", false, true));
+        gPdfStandardFonts.set("Georgia-Bold", SkPdfStandardFontEntry("Georgia", true, false));
+        gPdfStandardFonts.set("Georgia-BoldItalic", SkPdfStandardFontEntry("Georgia", true, true));
+        gPdfStandardFonts.set("Georgia-Italic", SkPdfStandardFontEntry("Georgia", false, true));
+        gPdfStandardFonts.set("TrebuchetMS", SkPdfStandardFontEntry("Trebuchet MS", false, false));
+        gPdfStandardFonts.set("TrebuchetMS-Bold", SkPdfStandardFontEntry("Trebuchet MS", true, false));
+        gPdfStandardFonts.set("Verdana-Bold", SkPdfStandardFontEntry("Verdana", true, false));
+        gPdfStandardFonts.set("WenQuanYiMicroHei", SkPdfStandardFontEntry("WenQuanYi Micro Hei", false, false));
 
-        // TODO(edisonn): list all phonts available, builf post script name as in pdf spec
+        // TODO(edisonn): list all fonts available, buil post script name as in pdf spec
+        // TODO(edisonn): Does it work in all OSs ?
         /*
          * The PostScript name for the value of BaseFontis determined in one of two ways:
 • Use the PostScript name that is an optional entry in the “name” table of the
@@ -111,22 +119,18 @@ by underscores in the value of BaseFont. For instance, as illustrated in Example
 5.7, the name “MinionMM 366 465 11 ” (which ends with a space character)
 becomes /MinionMM_366_465_11_.
          */
-
-        // might not work on all oses ?
-        //
-
     }
 
     return gPdfStandardFonts;
 }
 
 SkTypeface* SkTypefaceFromPdfStandardFont(const char* fontName, bool bold, bool italic) {
-    std::map<std::string, SkPdfStandardFontEntry>& standardFontMap = getStandardFonts();
+    SkTDict<SkPdfStandardFontEntry>& standardFontMap = getStandardFonts();
 
     SkTypeface* typeface = NULL;
-    if (standardFontMap.find(fontName) != standardFontMap.end()) {
-        SkPdfStandardFontEntry fontData = standardFontMap[fontName];
+    SkPdfStandardFontEntry fontData;
 
+    if (standardFontMap.find(fontName, &fontData)) {
         // TODO(edisonn): How does the bold/italic specified in standard definition combines with
         // the one in /font key? use OR for now.
         bold = bold || fontData.fIsBold;
@@ -148,8 +152,9 @@ SkTypeface* SkTypefaceFromPdfStandardFont(const char* fontName, bool bold, bool 
     return typeface;
 }
 
-SkPdfFont* SkPdfFont::fontFromFontDescriptor(SkNativeParsedPDF* doc, SkPdfFontDescriptorDictionary* fd, bool loadFromName) {
-    // TODO(edisonn): partial implementation ... also const handling ...
+SkPdfFont* SkPdfFont::fontFromFontDescriptor(SkPdfNativeDoc* doc, SkPdfFontDescriptorDictionary* fd,
+                                             bool loadFromName) {
+    // TODO(edisonn): partial implementation.
     // Only one, at most be available
     SkPdfStream* pdfStream = NULL;
     if (fd->has_FontFile()) {
@@ -188,7 +193,7 @@ SkPdfFont* SkPdfFont::fontFromFontDescriptor(SkNativeParsedPDF* doc, SkPdfFontDe
     return new SkPdfStandardFont(face);
 }
 
-SkPdfFont* fontFromName(SkNativeParsedPDF* doc, SkPdfObject* obj, const char* fontName) {
+SkPdfFont* fontFromName(SkPdfNativeDoc* doc, SkPdfNativeObject* obj, const char* fontName) {
     SkTypeface* typeface = SkTypefaceFromPdfStandardFont(fontName, false, false);
     if (typeface != NULL) {
         return new SkPdfStandardFont(typeface);
@@ -196,7 +201,7 @@ SkPdfFont* fontFromName(SkNativeParsedPDF* doc, SkPdfObject* obj, const char* fo
 
     // TODO(edisonn): perf - make a map
     for (unsigned int i = 0 ; i < doc->objects(); i++) {
-        SkPdfObject* obj = doc->object(i);
+        SkPdfNativeObject* obj = doc->object(i);
         if (!obj || !obj->isDictionary()) {
             continue;
         }
@@ -207,7 +212,7 @@ SkPdfFont* fontFromName(SkNativeParsedPDF* doc, SkPdfObject* obj, const char* fo
             continue;
         }
 
-        if (fd->has_FontName() && fd->FontName(doc) == fontName) {
+        if (fd->has_FontName() && fd->FontName(doc).equals(fontName)) {
             SkPdfFont* font = SkPdfFont::fontFromFontDescriptor(doc, fd, false);
             if (font) {
                 return font;
@@ -222,26 +227,26 @@ SkPdfFont* fontFromName(SkNativeParsedPDF* doc, SkPdfObject* obj, const char* fo
     return SkPdfFont::Default();
 }
 
-SkPdfFont* SkPdfFont::fontFromPdfDictionaryOnce(SkNativeParsedPDF* doc, SkPdfFontDictionary* dict) {
-    // TODO(edisonn): keep the type in a smart way in the SkPdfObject
+SkPdfFont* SkPdfFont::fontFromPdfDictionaryOnce(SkPdfNativeDoc* doc, SkPdfFontDictionary* dict) {
+    // TODO(edisonn): keep the type in a smart way in the SkPdfNativeObject
     // 1) flag, isResolved (1bit): reset at reset, add/remove/update (array) and set(dict)
     // in a tree like structure, 3-4 bits for all the datatypes inheriting from obj (int, real, ...)
-    // if is a dict, reserveve a few bytes to encode type of dict, and so on like in a tree
+    // if is a dict, reserve a few bytes to encode type of dict, and so on like in a tree
     // issue: type can be determined from context! atribute night be missing/wrong
     switch (doc->mapper()->mapFontDictionary(dict)) {
-        case kType0FontDictionary_SkPdfObjectType:
+        case kType0FontDictionary_SkPdfNativeObjectType:
             return fontFromType0FontDictionary(doc, dict->asType0FontDictionary());
 
-        case kTrueTypeFontDictionary_SkPdfObjectType:
+        case kTrueTypeFontDictionary_SkPdfNativeObjectType:
             return fontFromTrueTypeFontDictionary(doc, dict->asTrueTypeFontDictionary());
 
-        case kType1FontDictionary_SkPdfObjectType:
+        case kType1FontDictionary_SkPdfNativeObjectType:
             return fontFromType1FontDictionary(doc, dict->asType1FontDictionary());
 
-        case kMultiMasterFontDictionary_SkPdfObjectType:
+        case kMultiMasterFontDictionary_SkPdfNativeObjectType:
             return fontFromMultiMasterFontDictionary(doc, dict->asMultiMasterFontDictionary());
 
-        case kType3FontDictionary_SkPdfObjectType:
+        case kType3FontDictionary_SkPdfNativeObjectType:
             return fontFromType3FontDictionary(doc, dict->asType3FontDictionary());
 
         default:
@@ -250,20 +255,21 @@ SkPdfFont* SkPdfFont::fontFromPdfDictionaryOnce(SkNativeParsedPDF* doc, SkPdfFon
     }
 }
 
-SkPdfFont* SkPdfFont::fontFromPdfDictionary(SkNativeParsedPDF* doc, SkPdfFontDictionary* dict) {
+SkPdfFont* SkPdfFont::fontFromPdfDictionary(SkPdfNativeDoc* doc, SkPdfFontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // TODO(edisonn): report default one?
     }
 
-    if (!dict->hasData(SkPdfObject::kFont_Data)) {
-        dict->setData(fontFromPdfDictionaryOnce(doc, dict), SkPdfObject::kFont_Data);
+    if (!dict->hasData(SkPdfNativeObject::kFont_Data)) {
+        dict->setData(fontFromPdfDictionaryOnce(doc, dict), SkPdfNativeObject::kFont_Data);
     }
-    return (SkPdfFont*)dict->data(SkPdfObject::kFont_Data);
+    return (SkPdfFont*)dict->data(SkPdfNativeObject::kFont_Data);
 }
 
 
 
-SkPdfType0Font* SkPdfFont::fontFromType0FontDictionary(SkNativeParsedPDF* doc, SkPdfType0FontDictionary* dict) {
+SkPdfType0Font* SkPdfFont::fontFromType0FontDictionary(SkPdfNativeDoc* doc,
+                                                       SkPdfType0FontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // default one?
     }
@@ -271,7 +277,8 @@ SkPdfType0Font* SkPdfFont::fontFromType0FontDictionary(SkNativeParsedPDF* doc, S
     return new SkPdfType0Font(doc, dict);
 }
 
-SkPdfType1Font* SkPdfFont:: fontFromType1FontDictionary(SkNativeParsedPDF* doc, SkPdfType1FontDictionary* dict) {
+SkPdfType1Font* SkPdfFont:: fontFromType1FontDictionary(SkPdfNativeDoc* doc,
+                                                        SkPdfType1FontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // default one?
     }
@@ -279,7 +286,8 @@ SkPdfType1Font* SkPdfFont:: fontFromType1FontDictionary(SkNativeParsedPDF* doc, 
     return new SkPdfType1Font(doc, dict);
 }
 
-SkPdfType3Font* SkPdfFont::fontFromType3FontDictionary(SkNativeParsedPDF* doc, SkPdfType3FontDictionary* dict) {
+SkPdfType3Font* SkPdfFont::fontFromType3FontDictionary(SkPdfNativeDoc* doc,
+                                                       SkPdfType3FontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // default one?
     }
@@ -289,7 +297,8 @@ SkPdfType3Font* SkPdfFont::fontFromType3FontDictionary(SkNativeParsedPDF* doc, S
     return new SkPdfType3Font(doc, dict);
 }
 
-SkPdfTrueTypeFont* SkPdfFont::fontFromTrueTypeFontDictionary(SkNativeParsedPDF* doc, SkPdfTrueTypeFontDictionary* dict) {
+SkPdfTrueTypeFont* SkPdfFont::fontFromTrueTypeFontDictionary(SkPdfNativeDoc* doc,
+                                                             SkPdfTrueTypeFontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // default one?
     }
@@ -297,7 +306,8 @@ SkPdfTrueTypeFont* SkPdfFont::fontFromTrueTypeFontDictionary(SkNativeParsedPDF* 
     return new SkPdfTrueTypeFont(doc, dict);
 }
 
-SkPdfMultiMasterFont* SkPdfFont::fontFromMultiMasterFontDictionary(SkNativeParsedPDF* doc, SkPdfMultiMasterFontDictionary* dict) {
+SkPdfMultiMasterFont* SkPdfFont::fontFromMultiMasterFontDictionary(
+        SkPdfNativeDoc* doc, SkPdfMultiMasterFontDictionary* dict) {
     if (dict == NULL) {
         return NULL;  // default one?
     }
@@ -305,7 +315,7 @@ SkPdfMultiMasterFont* SkPdfFont::fontFromMultiMasterFontDictionary(SkNativeParse
     return new SkPdfMultiMasterFont(doc, dict);
 }
 
-static int skstoi(const SkPdfObject* str) {
+static int skstoi(const SkPdfNativeObject* str) {
     // TODO(edisonn): report err of it is not a (hex) string
     int ret = 0;
     for (unsigned int i = 0 ; i < str->lenstr(); i++) {
@@ -315,9 +325,11 @@ static int skstoi(const SkPdfObject* str) {
     return ret & 0x0000ffff;
 }
 
-#define tokenIsKeyword(token,keyword) (token.fType == kKeyword_TokenType && token.fKeywordLength==sizeof(keyword)-1 && strncmp(token.fKeyword, keyword, sizeof(keyword)-1) == 0)
+#define tokenIsKeyword(token,keyword) (token.fType == kKeyword_TokenType && \
+                                      token.fKeywordLength==sizeof(keyword)-1 && \
+                                      strncmp(token.fKeyword, keyword, sizeof(keyword)-1) == 0)
 
-SkPdfToUnicode::SkPdfToUnicode(SkNativeParsedPDF* parsed, SkPdfStream* stream) : fParsed(parsed) {
+SkPdfToUnicode::SkPdfToUnicode(SkPdfNativeDoc* parsed, SkPdfStream* stream) : fParsed(parsed) {
     fCMapEncoding = NULL;
     fCMapEncodingFlag = NULL;
 
@@ -335,16 +347,16 @@ SkPdfToUnicode::SkPdfToUnicode(SkNativeParsedPDF* parsed, SkPdfStream* stream) :
         }
 
         // TODO(edisonn): deal with multibyte character, or longer strings.
-        // Ritght now we deal with up 2 characters, e.g. <0020> but not longer like <00660066006C>
+        // Right now we deal with up 2 characters, e.g. <0020> but not longer like <00660066006C>
         //2 beginbfrange
         //<0000> <005E> <0020>
         //<005F> <0061> [<00660066> <00660069> <00660066006C>]
 
         while (tokenizer->readToken(&token)) {
 
-            // TODO(edisonn): perf, macro that would make equal first for token.fKeywordLength with sizeof(keyword), instead od strlen, make sure it is keyword, not a char*
             if (tokenIsKeyword(token, "begincodespacerange")) {
-                while (tokenizer->readToken(&token) && !tokenIsKeyword(token, "endcodespacerange")) {
+                while (tokenizer->readToken(&token) &&
+                       !tokenIsKeyword(token, "endcodespacerange")) {
 //                    tokenizer->PutBack(token);
 //                    tokenizer->readToken(&token);
                     // TODO(edisonn): check token type! ignore/report errors.
@@ -380,6 +392,7 @@ SkPdfToUnicode::SkPdfToUnicode(SkNativeParsedPDF* parsed, SkPdfStream* stream) :
 
 
                     tokenizer->readToken(&token); // [ or just an array directly?
+                    // do not putback, we will reuse the read. See next commented read.
 //                    tokenizer->PutBack(token);
 
                     // TODO(edisonn): read spec: any string or only hex string?
@@ -397,23 +410,21 @@ SkPdfToUnicode::SkPdfToUnicode(SkNativeParsedPDF* parsed, SkPdfStream* stream) :
                         // read one string
                     } else if (token.fType == kObject_TokenType && token.fObject->isArray()) {
 //                        tokenizer->readToken(&token);
+                        // read array
                         for (unsigned int i = 0; i < token.fObject->size(); i++) {
                             fCMapEncodingFlag[start + i] |= 2;
                             fCMapEncoding[start + i] = skstoi((*token.fObject)[i]);
                         }
-                        // read array
+                    } else {
+                        tokenizer->PutBack(token);
                     }
-
-                    //fCMapEncodingFlag[from] = 1;
-                    //fCMapEncoding[from] = to;
                 }
             }
         }
     }
 }
 
-
-SkPdfType0Font::SkPdfType0Font(SkNativeParsedPDF* doc, SkPdfType0FontDictionary* dict) {
+SkPdfType0Font::SkPdfType0Font(SkPdfNativeDoc* doc, SkPdfType0FontDictionary* dict) {
     fBaseFont = fontFromName(doc, dict, dict->BaseFont(doc).c_str());
     fEncoding = NULL;
 
@@ -421,6 +432,7 @@ SkPdfType0Font::SkPdfType0Font(SkNativeParsedPDF* doc, SkPdfType0FontDictionary*
         if (dict->isEncodingAName(doc)) {
             fEncoding = SkPdfEncoding::fromName(dict->getEncodingAsName(doc).c_str());
         } else if (dict->isEncodingAStream(doc)) {
+            // TODO(edisonn): NYI
             //fEncoding = loadEncodingFromStream(dict->getEncodingAsStream());
         } else {
             // TODO(edisonn): error ... warning .. assert?
@@ -432,18 +444,20 @@ SkPdfType0Font::SkPdfType0Font(SkNativeParsedPDF* doc, SkPdfType0FontDictionary*
     }
 }
 
-std::map<std::string, SkPdfEncoding*>& getStandardEncodings() {
-    static std::map<std::string, SkPdfEncoding*> encodings;
-    if (encodings.empty()) {
-        encodings["Identity-H"] = SkPdfIdentityHEncoding::instance();
+SkTDict<SkPdfEncoding*>& getStandardEncodings() {
+    static SkTDict<SkPdfEncoding*> encodings(10);
+    if (encodings.count() == 0) {
+        encodings.set("Identity-H", SkPdfIdentityHEncoding::instance());
     }
 
     return encodings;
 }
 
-
 SkPdfEncoding* SkPdfEncoding::fromName(const char* name) {
-    SkPdfEncoding* encoding = getStandardEncodings()[name];
+    SkPdfEncoding* encoding = NULL;
+    if (!getStandardEncodings().find(name, &encoding)) {
+        encoding = NULL;
+    }
 
 #ifdef PDF_TRACE
     if (encoding == NULL) {

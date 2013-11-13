@@ -25,7 +25,7 @@ class SkPath;
 //      use growToInclude to fit skp round rects & generate stats (RRs vs. real paths)
 //      check on # of rectorus's the RRs could handle
 //   rendering work
-//      add entry points (clipRRect, drawRRect) - plumb down to SkDevice
+//      add entry points (clipRRect, drawRRect) - plumb down to SkBaseDevice
 //      update SkPath.addRRect() to take an SkRRect - only use quads
 //          -- alternatively add addRRectToPath here
 //      add GM and bench
@@ -197,30 +197,6 @@ public:
                !SkScalarsEqual(a.fRadii[0].asScalars(),
                                b.fRadii[0].asScalars(), 8);
     }
-
-    /**
-     *  Returns true if (p.fX,p.fY) is inside the RR, and the RR
-     *  is not empty.
-     *
-     *  Contains treats the left and top differently from the right and bottom.
-     *  The left and top coordinates of the RR are themselves considered
-     *  to be inside, while the right and bottom are not. All the points on the
-     *  edges of the corners are considered to be inside.
-     */
-    bool contains(const SkPoint& p) const {
-        return contains(p.fX, p.fY);
-    }
-
-    /**
-     *  Returns true if (x,y) is inside the RR, and the RR
-     *  is not empty.
-     *
-     *  Contains treats the left and top differently from the right and bottom.
-     *  The left and top coordinates of the RR are themselves considered
-     *  to be inside, while the right and bottom are not. All the points on the
-     *  edges of the corners are considered to be inside.
-     */
-    bool contains(SkScalar x, SkScalar y) const;
 
     /**
      *  Call inset on the bounds, and adjust the radii to reflect what happens

@@ -94,6 +94,7 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
 #if SK_SUPPORT_GPU
     connect(&fSettingsWidget, SIGNAL(glSettingsChanged()), this, SLOT(actionGLWidget()));
 #endif
+    connect(&fSettingsWidget, SIGNAL(texFilterSettingsChanged()), this, SLOT(actionTextureFilter()));
     connect(fSettingsWidget.getRasterCheckBox(), SIGNAL(toggled(bool)), this, SLOT(actionRasterWidget(bool)));
     connect(fSettingsWidget.getOverdrawVizCheckBox(), SIGNAL(toggled(bool)), this, SLOT(actionOverdrawVizWidget(bool)));
     connect(&fActionPause, SIGNAL(toggled(bool)), this, SLOT(pauseDrawing(bool)));
@@ -147,10 +148,20 @@ void SkDebuggerGUI::showDeletes() {
 // offsets to individual commands.
 class SkTimedPicturePlayback : public SkPicturePlayback {
 public:
-    SkTimedPicturePlayback(SkStream* stream, const SkPictInfo& info,
-                           SkPicture::InstallPixelRefProc proc,
-                           const SkTDArray<bool>& deletedCommands)
-        : INHERITED(stream, info, proc)
+    static SkTimedPicturePlayback* CreateFromStream(SkStream* stream, const SkPictInfo& info,
+                                                    SkPicture::InstallPixelRefProc proc,
+                                                    const SkTDArray<bool>& deletedCommands) {
+        // Mimics SkPicturePlayback::CreateFromStream
+        SkAutoTDelete<SkTimedPicturePlayback> playback(SkNEW_ARGS(SkTimedPicturePlayback,
+                                                                  (deletedCommands)));
+        if (!playback->parseStream(stream, info, proc)) {
+            return NULL; // we're invalid
+        }
+        return playback.detach();
+    }
+
+    SkTimedPicturePlayback(const SkTDArray<bool>& deletedCommands)
+        : INHERITED()
         , fSkipCommands(deletedCommands)
         , fTot(0.0)
         , fCurCommand(0) {
@@ -232,6 +243,14 @@ protected:
 #endif
 
 private:
+    // SkPicturePlayback::parseStream is protected, so it can be
+    // called here, but not by our static factory function. This
+    // allows the factory function to call it.
+    bool parseStream(SkStream* stream, const SkPictInfo& info,
+                     SkPicture::InstallPixelRefProc proc) {
+        return this->INHERITED::parseStream(stream, info, proc);
+    }
+
     typedef SkPicturePlayback INHERITED;
 };
 
@@ -249,8 +268,11 @@ public:
         SkTimedPicturePlayback* playback;
         // Check to see if there is a playback to recreate.
         if (stream->readBool()) {
-            playback = SkNEW_ARGS(SkTimedPicturePlayback,
-                                  (stream, info, proc, deletedCommands));
+            playback = SkTimedPicturePlayback::CreateFromStream(stream, info, proc,
+                                                                deletedCommands);
+            if (NULL == playback) {
+                return NULL;
+            }
         } else {
             playback = NULL;
         }
@@ -497,6 +519,13 @@ void SkDebuggerGUI::actionRasterWidget(bool isToggled) {
 
 void SkDebuggerGUI::actionOverdrawVizWidget(bool isToggled) {
     fDebugger.setOverdrawViz(isToggled);
+    fCanvasWidget.update();
+}
+
+void SkDebuggerGUI::actionTextureFilter() {
+    SkPaint::FilterLevel level;
+    bool enabled = fSettingsWidget.getFilterOverride(&level);
+    fDebugger.setTexFilterOverride(enabled, level);
     fCanvasWidget.update();
 }
 

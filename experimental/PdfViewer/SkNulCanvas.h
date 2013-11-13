@@ -1,14 +1,27 @@
-#ifndef EXPERIMENTAL_PDFVIEWER_SKNULCANVAS_H_
-#define EXPERIMENTAL_PDFVIEWER_SKNULCANVAS_H_
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+#ifndef SkNulCanvas_DEFINED
+#define SkNulCanvas_DEFINED
 
 #include "SkCanvas.h"
 
+/** \class SkNulCanvas
+ *
+ *   Nul Canvas is a canvas that does nothing. It is used to measure the perf of just parsing
+ *   a pdf, without actually rendering anything.
+ *
+ */
 class SK_API SkNulCanvas : public SkCanvas {
 public:
     SK_DECLARE_INST_COUNT(SkNulCanvas);
 
     SkNulCanvas() {}
-    explicit SkNulCanvas(SkDevice* device) : SkCanvas(device) {}
+    explicit SkNulCanvas(SkBaseDevice* device) : SkCanvas(device) {}
 
     explicit SkNulCanvas(const SkBitmap& bitmap) : SkCanvas(bitmap) {}
     virtual ~SkNulCanvas() {}
@@ -50,7 +63,8 @@ public:
                             const SkPaint* paint = NULL) {}
     virtual void drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
                                       const SkRect& dst,
-                                      const SkPaint* paint) {}
+                                      const SkPaint* paint,
+                                      DrawBitmapRectFlags flags) {}
     virtual void drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& m,
                                   const SkPaint* paint = NULL) {}
     virtual void drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
@@ -82,10 +96,10 @@ public:
 
 protected:
     virtual SkCanvas* canvasForDrawIter() {return NULL;}
-    virtual SkDevice* setDevice(SkDevice* device) {return NULL;}
+    virtual SkBaseDevice* setDevice(SkBaseDevice* device) {return NULL;}
 
 private:
     typedef SkCanvas INHERITED;
 };
 
-#endif  // EXPERIMENTAL_PDFVIEWER_SKNULCANVAS_H_
+#endif  // SkNulCanvas_DEFINED

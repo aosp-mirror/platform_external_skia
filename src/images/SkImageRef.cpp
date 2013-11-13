@@ -18,7 +18,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
+SkImageRef::SkImageRef(SkStreamRewindable* stream, SkBitmap::Config config,
                        int sampleSize, SkBaseMutex* mutex)
         : SkPixelRef(mutex), fErrorInDecoding(false) {
     SkASSERT(stream);
@@ -64,7 +64,8 @@ bool SkImageRef::getInfo(SkBitmap* bitmap) {
 bool SkImageRef::isOpaque(SkBitmap* bitmap) {
     if (bitmap && bitmap->pixelRef() == this) {
         bitmap->lockPixels();
-        bitmap->setIsOpaque(fBitmap.isOpaque());
+        // what about colortables??????
+        bitmap->setAlphaType(fBitmap.alphaType());
         bitmap->unlockPixels();
         return true;
     }
@@ -79,7 +80,7 @@ SkImageDecoderFactory* SkImageRef::setDecoderFactory(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkImageRef::onDecode(SkImageDecoder* codec, SkStream* stream,
+bool SkImageRef::onDecode(SkImageDecoder* codec, SkStreamRewindable* stream,
                           SkBitmap* bitmap, SkBitmap::Config config,
                           SkImageDecoder::Mode mode) {
     return codec->decode(stream, bitmap, config, mode);
@@ -107,7 +108,10 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 
     SkASSERT(fBitmap.getPixels() == NULL);
 
-    fStream->rewind();
+    if (!fStream->rewind()) {
+        SkDEBUGF(("Failed to rewind SkImageRef stream!"));
+        return false;
+    }
 
     SkImageDecoder* codec;
     if (fFactory) {
@@ -172,7 +176,7 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
 
     size_t length = buffer.getArrayCount();
     fStream = SkNEW_ARGS(SkMemoryStream, (length));
-    buffer.readByteArray((void*)fStream->getMemoryBase());
+    buffer.readByteArray((void*)fStream->getMemoryBase(), length);
 
     fPrev = fNext = NULL;
     fFactory = NULL;
@@ -184,6 +188,15 @@ void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
     buffer.writeUInt(fConfig);
     buffer.writeInt(fSampleSize);
     buffer.writeBool(fDoDither);
-    fStream->rewind();
-    buffer.writeStream(fStream, fStream->getLength());
+    // FIXME: Consider moving this logic should go into writeStream itself.
+    // writeStream currently has no other callers, so this may be fine for
+    // now.
+    if (!fStream->rewind()) {
+        SkDEBUGF(("Failed to rewind SkImageRef stream!"));
+        buffer.write32(0);
+    } else {
+        // FIXME: Handle getLength properly here. Perhaps this class should
+        // take an SkStreamAsset.
+        buffer.writeStream(fStream, fStream->getLength());
+    }
 }

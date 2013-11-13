@@ -163,6 +163,14 @@ function create_inputs_dir {
   $GM_BINARY --hierarchy --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
     --writeJsonSummaryPath $JSON_DIR/different-pixels.json
 
+  # Create another JSON expectations file which is identical to
+  # different-pixels.json, but in which the *first* ignore-failure is changed
+  # from false to true.
+  OLD='"ignore-failure" : false'
+  NEW='"ignore-failure" : true'
+  sed -e "0,/$OLD/{s/$OLD/$NEW/}" $JSON_DIR/different-pixels.json \
+      >$JSON_DIR/different-pixels-ignore-some-failures.json
+
   THIS_IMAGE_DIR=$IMAGES_DIR/different-pixels-no-hierarchy
   mkdir -p $THIS_IMAGE_DIR
   $GM_BINARY --match selftest2 $CONFIGS -w $THIS_IMAGE_DIR
@@ -172,12 +180,19 @@ function create_inputs_dir {
     --writeJsonSummaryPath $JSON_DIR/different-pixels-no-hierarchy.json
 
   mkdir -p $IMAGES_DIR/empty-dir
+
+  echo "# Comment line" >$GM_IGNORE_FAILURES_FILE
+  echo "" >>$GM_IGNORE_FAILURES_FILE
+  echo "# ignore any test runs whose filename contains '8888/selfte'" >>$GM_IGNORE_FAILURES_FILE
+  echo "#   (in other words, config is 8888 and test name starts with 'selfte')" >>$GM_IGNORE_FAILURES_FILE
+  echo "8888/selfte" >>$GM_IGNORE_FAILURES_FILE
 }
 
 GM_TESTDIR=gm/tests
 GM_INPUTS=$GM_TESTDIR/inputs
 GM_OUTPUTS=$GM_TESTDIR/outputs
 GM_TEMPFILES=$GM_TESTDIR/tempfiles
+GM_IGNORE_FAILURES_FILE=$GM_INPUTS/ignored-tests.txt
 
 create_inputs_dir $GM_INPUTS
 
@@ -193,8 +208,17 @@ gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/ide
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/different-pixels" "$GM_OUTPUTS/compared-against-different-pixels-images"
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/compared-against-different-pixels-json"
 
+# Exercise --ignoreFailuresFile flag.
+gm_test "--verbose --hierarchy --match selftest1 --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/ignoring-one-test"
+
+# Compare different pixels, but with a SUBSET of the expectations marked as
+# ignore-failure.
+gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels-ignore-some-failures.json" "$GM_OUTPUTS/ignoring-some-failures"
+
 # Compare generated image against an empty "expected image" dir.
-gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
+# Even the tests that have been marked as ignore-failure should show up as
+# no-comparison.
+gm_test "--verbose --hierarchy --match selftest1 --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
 
 # Compare generated image against a nonexistent "expected image" dir.
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r ../path/to/nowhere" "$GM_OUTPUTS/compared-against-nonexistent-dir"
@@ -205,13 +229,12 @@ gm_test "--hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/empty-dir" 
 # Add pdf to the list of configs.
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS pdf -r $GM_INPUTS/json/identical-bytes.json" "$GM_OUTPUTS/add-config-pdf"
 
-# If run without "-r", the JSON's "actual-results" section should contain
-# actual checksums marked as "failure-ignored", but the "expected-results"
-# section should be empty.
+# Test what happens if run without -r (no expected-results.json to compare
+# against).
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS" "$GM_OUTPUTS/no-readpath"
 
 # Test what happens if a subset of the renderModes fail (e.g. pipe)
-gm_test "--simulatePipePlaybackFailure --verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/pipe-playback-failure"
+gm_test "--pipe --simulatePipePlaybackFailure --verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/identical-pixels.json" "$GM_OUTPUTS/pipe-playback-failure"
 
 # Confirm that IntentionallySkipped tests are recorded as such.
 gm_test "--verbose --hierarchy --match selftest1 selftest2 $CONFIGS" "$GM_OUTPUTS/intentionally-skipped-tests"

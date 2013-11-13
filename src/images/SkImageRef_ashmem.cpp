@@ -31,7 +31,7 @@ static size_t roundToPageSize(size_t size) {
     return newsize;
 }
 
-SkImageRef_ashmem::SkImageRef_ashmem(SkStream* stream,
+SkImageRef_ashmem::SkImageRef_ashmem(SkStreamRewindable* stream,
                                              SkBitmap::Config config,
                                              int sampleSize)
         : SkImageRef(stream, config, sampleSize) {
@@ -126,13 +126,16 @@ private:
     const char*  fName;
 };
 
-bool SkImageRef_ashmem::onDecode(SkImageDecoder* codec, SkStream* stream,
+bool SkImageRef_ashmem::onDecode(SkImageDecoder* codec, SkStreamRewindable* stream,
                                  SkBitmap* bitmap, SkBitmap::Config config,
                                  SkImageDecoder::Mode mode) {
 
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return this->INHERITED::onDecode(codec, stream, bitmap, config, mode);
     }
+
+    // Ashmem memory is guaranteed to be initialized to 0.
+    codec->setSkipWritingZeroes(true);
 
     AshmemAllocator alloc(&fRec, this->getURI());
 

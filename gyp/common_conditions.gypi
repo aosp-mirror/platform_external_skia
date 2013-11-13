@@ -3,7 +3,6 @@
 {
   'defines': [
     'SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=<(skia_static_initializers)',
-#    'SK_SUPPORT_HINTING_SCALE_FACTOR',
   ],
   'conditions' : [
     [ 'skia_gpu == 1',
@@ -33,7 +32,6 @@
         'defines': [
           'SK_BUILD_FOR_WIN32',
           'SK_FONTHOST_USES_FONTMGR',
-          'SK_IGNORE_STDINT_DOT_H',
           '_CRT_SECURE_NO_WARNINGS',
           'GR_GL_FUNCTION_TYPE=__stdcall',
         ],
@@ -206,6 +204,10 @@
           'SK_BUILD_FOR_UNIX',
         ],
         'configurations': {
+          'Coverage': {
+            'cflags': ['-g --coverage'],
+            'ldflags': ['--coverage'],
+          },
           'Debug': {
             'cflags': ['-g']
           },
@@ -222,7 +224,7 @@
           '-Wextra',
           # suppressions below here were added for clang
           '-Wno-unused-parameter',
-          '-Wno-c++11-extensions'
+          '-Wno-c++11-extensions',
         ],
         'conditions' : [
           [ 'skia_shared_lib', {
@@ -230,8 +232,6 @@
               '-fPIC',
             ],
             'defines': [
-              'GR_DLL=1',
-              'GR_IMPLEMENTATION=1',
               'SKIA_DLL',
               'SKIA_IMPLEMENTATION=1',
             ],
@@ -248,13 +248,15 @@
                 '-pthread',
               ],
             },
+          }, { # skia_os != "nacl"
+            'link_settings': {
+              'ldflags': [
+                '-lstdc++',
+                '-lm',
+              ],
+            },
           }],
-          [ 'skia_os == "chromeos"', {
-            'ldflags': [
-              '-lstdc++',
-              '-lm',
-            ],
-          }, {
+          [ 'skia_os != "chromeos"', {
             'conditions': [
               [ 'skia_arch_width == 64 and skia_arch_type == "x86"', {
                 'cflags': [
@@ -274,14 +276,35 @@
               }],
             ],
           }],
-          [ 'skia_asan_build', {
+          # Enable asan, tsan, etc.
+          [ 'skia_sanitizer', {
             'cflags': [
-              '-fsanitize=address',
-              '-fno-omit-frame-pointer',
+              '-fsanitize=<(skia_sanitizer)',
             ],
             'ldflags': [
-              '-fsanitize=address',
+              '-fsanitize=<(skia_sanitizer)',
             ],
+            'conditions' : [
+              [ 'skia_sanitizer == "thread"', {
+                'defines': [ 'DYNAMIC_ANNOTATIONS_ENABLED=1' ],
+                'cflags': [ '-fPIC' ],
+                'target_conditions': [
+                  [ '_type == "executable"', {
+                    'cflags': [ '-fPIE' ],
+                    'ldflags': [ '-pie' ],
+                  }],
+                ],
+              }],
+            ],
+          }],
+          [ 'skia_clang_build', {
+            'cflags': [
+              # Extra warnings we like but that only Clang knows about.
+              '-Wstring-conversion',
+            ],
+          }],
+          [ 'skia_keep_frame_pointer', {
+            'cflags': [ '-fno-omit-frame-pointer' ],
           }],
         ],
       },
@@ -455,8 +478,6 @@
               '-fPIC',
             ],
             'defines': [
-              'GR_DLL=1',
-              'GR_IMPLEMENTATION=1',
               'SKIA_DLL',
               'SKIA_IMPLEMENTATION=1',
             ],

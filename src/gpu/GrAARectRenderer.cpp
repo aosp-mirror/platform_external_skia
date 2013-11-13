@@ -6,11 +6,12 @@
  */
 
 #include "GrAARectRenderer.h"
-#include "GrRefCnt.h"
 #include "GrGpu.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLVertexEffect.h"
 #include "GrTBackendEffectFactory.h"
 #include "SkColorPriv.h"
+#include "effects/GrVertexEffect.h"
 
 SK_DEFINE_INST_COUNT(GrAARectRenderer)
 
@@ -18,7 +19,7 @@ SK_DEFINE_INST_COUNT(GrAARectRenderer)
 class GrGLAlignedRectEffect;
 
 // Axis Aligned special case
-class GrAlignedRectEffect : public GrEffect {
+class GrAlignedRectEffect : public GrVertexEffect {
 public:
     static GrEffectRef* Create() {
         GR_CREATE_STATIC_EFFECT(gAlignedRectEffect, GrAlignedRectEffect, ());
@@ -39,16 +40,17 @@ public:
         return GrTBackendEffectFactory<GrAlignedRectEffect>::getInstance();
     }
 
-    class GLEffect : public GrGLEffect {
+    class GLEffect : public GrGLVertexEffect {
     public:
         GLEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&)
         : INHERITED (factory) {}
 
-        virtual void emitCode(GrGLShaderBuilder* builder,
+        virtual void emitCode(GrGLFullShaderBuilder* builder,
                               const GrDrawEffect& drawEffect,
                               EffectKey key,
                               const char* outputColor,
                               const char* inputColor,
+                              const TransformedCoordsArray&,
                               const TextureSamplerArray& samplers) SK_OVERRIDE {
             // setup the varying for the Axis aligned rect effect
             //      xy -> interpolated offset
@@ -82,9 +84,9 @@ public:
                 "\tcoverage = coverage*scaleH*clamp((%s.w-abs(%s.y))/spanH, 0.0, 1.0);\n",
                 fsRectName, fsRectName);
 
-            SkString modulate;
-            GrGLSLModulatef<4>(&modulate, inputColor, "coverage");
-            builder->fsCodeAppendf("\t%s = %s;\n", outputColor, modulate.c_str());
+
+            builder->fsCodeAppendf("\t%s = %s;\n", outputColor,
+                                   (GrGLSLExpr4(inputColor) * GrGLSLExpr1("coverage")).c_str());
         }
 
         static inline EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
@@ -94,12 +96,12 @@ public:
         virtual void setData(const GrGLUniformManager& uman, const GrDrawEffect&) SK_OVERRIDE {}
 
     private:
-        typedef GrGLEffect INHERITED;
+        typedef GrGLVertexEffect INHERITED;
     };
 
 
 private:
-    GrAlignedRectEffect() : GrEffect() {
+    GrAlignedRectEffect() : GrVertexEffect() {
         this->addVertexAttrib(kVec4f_GrSLType);
     }
 
@@ -107,13 +109,13 @@ private:
 
     GR_DECLARE_EFFECT_TEST;
 
-    typedef GrEffect INHERITED;
+    typedef GrVertexEffect INHERITED;
 };
 
 
 GR_DEFINE_EFFECT_TEST(GrAlignedRectEffect);
 
-GrEffectRef* GrAlignedRectEffect::TestCreate(SkMWCRandom* random,
+GrEffectRef* GrAlignedRectEffect::TestCreate(SkRandom* random,
                                              GrContext* context,
                                              const GrDrawTargetCaps&,
                                              GrTexture* textures[]) {
@@ -135,7 +137,7 @@ class GrGLRectEffect;
  * The munged width and height are stored in a vec2 varying ("WidthHeight")
  * with the width in x and the height in y.
  */
-class GrRectEffect : public GrEffect {
+class GrRectEffect : public GrVertexEffect {
 public:
     static GrEffectRef* Create() {
         GR_CREATE_STATIC_EFFECT(gRectEffect, GrRectEffect, ());
@@ -156,16 +158,17 @@ public:
         return GrTBackendEffectFactory<GrRectEffect>::getInstance();
     }
 
-    class GLEffect : public GrGLEffect {
+    class GLEffect : public GrGLVertexEffect {
     public:
         GLEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&)
         : INHERITED (factory) {}
 
-        virtual void emitCode(GrGLShaderBuilder* builder,
+        virtual void emitCode(GrGLFullShaderBuilder* builder,
                               const GrDrawEffect& drawEffect,
                               EffectKey key,
                               const char* outputColor,
                               const char* inputColor,
+                              const TransformedCoordsArray&,
                               const TextureSamplerArray& samplers) SK_OVERRIDE {
             // setup the varying for the center point and the unit vector
             // that points down the height of the rect
@@ -214,9 +217,9 @@ public:
                     "\tcoverage = coverage*scaleH*clamp((%s.y-perpDot)/spanH, 0.0, 1.0);\n",
                     fsWidthHeightName);
 
-            SkString modulate;
-            GrGLSLModulatef<4>(&modulate, inputColor, "coverage");
-            builder->fsCodeAppendf("\t%s = %s;\n", outputColor, modulate.c_str());
+
+            builder->fsCodeAppendf("\t%s = %s;\n", outputColor,
+                                   (GrGLSLExpr4(inputColor) * GrGLSLExpr1("coverage")).c_str());
         }
 
         static inline EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
@@ -226,12 +229,12 @@ public:
         virtual void setData(const GrGLUniformManager& uman, const GrDrawEffect&) SK_OVERRIDE {}
 
     private:
-        typedef GrGLEffect INHERITED;
+        typedef GrGLVertexEffect INHERITED;
     };
 
 
 private:
-    GrRectEffect() : GrEffect() {
+    GrRectEffect() : GrVertexEffect() {
         this->addVertexAttrib(kVec4f_GrSLType);
         this->addVertexAttrib(kVec2f_GrSLType);
         this->setWillReadFragmentPosition();
@@ -241,13 +244,13 @@ private:
 
     GR_DECLARE_EFFECT_TEST;
 
-    typedef GrEffect INHERITED;
+    typedef GrVertexEffect INHERITED;
 };
 
 
 GR_DEFINE_EFFECT_TEST(GrRectEffect);
 
-GrEffectRef* GrRectEffect::TestCreate(SkMWCRandom* random,
+GrEffectRef* GrRectEffect::TestCreate(SkRandom* random,
                                       GrContext* context,
                                       const GrDrawTargetCaps&,
                                       GrTexture* textures[]) {
@@ -285,8 +288,8 @@ static void set_inset_fan(GrPoint* pts, size_t stride,
 };
 
 void GrAARectRenderer::reset() {
-    GrSafeSetNull(fAAFillRectIndexBuffer);
-    GrSafeSetNull(fAAStrokeRectIndexBuffer);
+    SkSafeSetNull(fAAFillRectIndexBuffer);
+    SkSafeSetNull(fAAStrokeRectIndexBuffer);
 }
 
 static const uint16_t gFillAARectIdx[] = {
@@ -363,7 +366,7 @@ GrIndexBuffer* GrAARectRenderer::aaStrokeRectIndexBuffer(GrGpu* gpu) {
         fAAStrokeRectIndexBuffer =
                   gpu->createIndexBuffer(sizeof(gStrokeAARectIdx), false);
         if (NULL != fAAStrokeRectIndexBuffer) {
-#if GR_DEBUG
+#ifdef SK_DEBUG
             bool updated =
 #endif
             fAAStrokeRectIndexBuffer->updateData(gStrokeAARectIdx,
@@ -398,7 +401,7 @@ void GrAARectRenderer::geometryFillAARect(GrGpu* gpu,
 
     intptr_t verts = reinterpret_cast<intptr_t>(geo.vertices());
     size_t vsize = drawState->getVertexSize();
-    GrAssert(sizeof(GrPoint) + sizeof(GrColor) == vsize);
+    SkASSERT(sizeof(GrPoint) + sizeof(GrColor) == vsize);
 
     GrPoint* fan0Pos = reinterpret_cast<GrPoint*>(verts);
     GrPoint* fan1Pos = reinterpret_cast<GrPoint*>(verts + 4 * vsize);
@@ -545,7 +548,7 @@ void GrAARectRenderer::shaderFillAARect(GrGpu* gpu,
     SkScalar newWidth = SkScalarHalf(rect.width() * vec[0].length()) + SK_ScalarHalf;
     SkScalar newHeight = SkScalarHalf(rect.height() * vec[1].length()) + SK_ScalarHalf;
     drawState->setVertexAttribs<gAARectVertexAttribs>(SK_ARRAY_COUNT(gAARectVertexAttribs));
-    GrAssert(sizeof(RectVertex) == drawState->getVertexSize());
+    SkASSERT(sizeof(RectVertex) == drawState->getVertexSize());
 
     GrDrawTarget::AutoReleaseGeometry geo(target, 4, 0);
     if (!geo.succeeded()) {
@@ -595,7 +598,7 @@ void GrAARectRenderer::shaderFillAlignedAARect(GrGpu* gpu,
     SkASSERT(combinedMatrix.rectStaysRect());
 
     drawState->setVertexAttribs<gAAAARectVertexAttribs>(SK_ARRAY_COUNT(gAAAARectVertexAttribs));
-    GrAssert(sizeof(AARectVertex) == drawState->getVertexSize());
+    SkASSERT(sizeof(AARectVertex) == drawState->getVertexSize());
 
     GrDrawTarget::AutoReleaseGeometry geo(target, 4, 0);
     if (!geo.succeeded()) {
@@ -718,7 +721,7 @@ void GrAARectRenderer::geometryStrokeAARect(GrGpu* gpu,
 
     intptr_t verts = reinterpret_cast<intptr_t>(geo.vertices());
     size_t vsize = drawState->getVertexSize();
-    GrAssert(sizeof(GrPoint) + sizeof(GrColor) == vsize);
+    SkASSERT(sizeof(GrPoint) + sizeof(GrColor) == vsize);
 
     // We create vertices for four nested rectangles. There are two ramps from 0 to full
     // coverage, one on the exterior of the stroke and the other on the interior.

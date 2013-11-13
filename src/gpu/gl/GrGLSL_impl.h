@@ -8,185 +8,168 @@
 #ifndef GrGLSL_impl_DEFINED
 #define GrGLSL_impl_DEFINED
 
-#include "SkString.h"
-
-namespace {
-template<int N>
-GrSLConstantVec return_const_vecf(GrSLConstantVec constVec, SkString* outAppend, bool omitAppend) {
-    GrAssert(kNone_GrSLConstantVec != constVec);
-    if (!omitAppend) {
-        if (kZeros_GrSLConstantVec == constVec) {
-            outAppend->append(GrGLSLZerosVecf(N));
-        } else {
-            outAppend->append(GrGLSLOnesVecf(N));
-        }
+template<typename Self>
+template<typename T>
+inline Self GrGLSLExpr<Self>::VectorCastImpl(const T& expr) {
+    if (expr.isZeros()) {
+        return Self(0);
     }
-    return constVec;
-}
+    if (expr.isOnes()) {
+        return Self(1);
+    }
+    return Self(Self::CastStr(), expr.c_str());
 }
 
-template <int N>
-GrSLConstantVec GrGLSLModulatef(SkString* outAppend,
-                                const char* in0,
-                                const char* in1,
-                                GrSLConstantVec default0,
-                                GrSLConstantVec default1,
-                                bool omitIfConstVec) {
-    GrAssert(N > 0 && N <= 4);
-    GrAssert(NULL != outAppend);
-
-    bool has0 = NULL != in0 && '\0' != *in0;
-    bool has1 = NULL != in1 && '\0' != *in1;
-
-    GrAssert(has0 || kNone_GrSLConstantVec != default0);
-    GrAssert(has1 || kNone_GrSLConstantVec != default1);
-
-    if (!has0 && !has1) {
-        GrAssert(kZeros_GrSLConstantVec == default0 || kOnes_GrSLConstantVec == default0);
-        GrAssert(kZeros_GrSLConstantVec == default1 || kOnes_GrSLConstantVec == default1);
-        if (kZeros_GrSLConstantVec == default0 || kZeros_GrSLConstantVec == default1) {
-            return return_const_vecf<N>(kZeros_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else {
-            // both inputs are ones vectors
-            return return_const_vecf<N>(kOnes_GrSLConstantVec, outAppend, omitIfConstVec);
-        }
-    } else if (!has0) {
-        GrAssert(kZeros_GrSLConstantVec == default0 || kOnes_GrSLConstantVec == default0);
-        if (kZeros_GrSLConstantVec == default0) {
-            return return_const_vecf<N>(kZeros_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else {
-            outAppend->appendf("%s(%s)", GrGLSLFloatVectorTypeString(N), in1);
-            return kNone_GrSLConstantVec;
-        }
-    } else if (!has1) {
-        GrAssert(kZeros_GrSLConstantVec == default1 || kOnes_GrSLConstantVec == default1);
-        if (kZeros_GrSLConstantVec == default1) {
-            return return_const_vecf<N>(kZeros_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else {
-            outAppend->appendf("%s(%s)", GrGLSLFloatVectorTypeString(N), in0);
-            return kNone_GrSLConstantVec;
-        }
-    } else {
-        outAppend->appendf("%s((%s) * (%s))", GrGLSLFloatVectorTypeString(N), in0, in1);
-        return kNone_GrSLConstantVec;
+template<typename Self>
+template<typename T0, typename T1>
+inline Self GrGLSLExpr<Self>::Mul(T0 in0, T1 in1) {
+    if (in0.isZeros() || in1.isZeros()) {
+        return Self(0);
     }
+    if (in0.isOnes()) {
+        return Self::VectorCast(in1);
+    }
+    if (in1.isOnes()) {
+        return Self::VectorCast(in0);
+    }
+    return Self("(%s * %s)", in0.c_str(), in1.c_str());
 }
 
-template <int N>
-GrSLConstantVec GrGLSLAddf(SkString* outAppend,
-                           const char* in0,
-                           const char* in1,
-                           GrSLConstantVec default0,
-                           GrSLConstantVec default1,
-                           bool omitIfConstVec) {
-    GrAssert(N > 0 && N <= 4);
-    GrAssert(NULL != outAppend);
-
-    bool has0 = NULL != in0 && '\0' != *in0;
-    bool has1 = NULL != in1 && '\0' != *in1;
-
-    if (!has0 && !has1) {
-        GrAssert(kNone_GrSLConstantVec != default0);
-        GrAssert(kNone_GrSLConstantVec != default1);
-        int sum = (kOnes_GrSLConstantVec == default0) + (kOnes_GrSLConstantVec == default1);
-        if (0 == sum) {
-            return return_const_vecf<N>(kZeros_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else if (1 == sum) {
-            outAppend->append(GrGLSLOnesVecf(N));
-            return return_const_vecf<N>(kOnes_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else {
-            GrAssert(2 == sum);
-            outAppend->appendf("%s(2)", GrGLSLFloatVectorTypeString(N));
-            return kNone_GrSLConstantVec;
-        }
-    } else if (!has0) {
-        GrAssert(kNone_GrSLConstantVec != default0);
-        if (kZeros_GrSLConstantVec == default0) {
-            outAppend->appendf("%s(%s)", GrGLSLFloatVectorTypeString(N), in1);
-        } else {
-            outAppend->appendf("%s(%s) + %s",
-                               GrGLSLFloatVectorTypeString(N),
-                               in1,
-                               GrGLSLOnesVecf(N));
-        }
-        return kNone_GrSLConstantVec;
-    } else if (!has1) {
-        GrAssert(kNone_GrSLConstantVec != default1);
-        if (kZeros_GrSLConstantVec == default1) {
-            outAppend->appendf("%s(%s)", GrGLSLFloatVectorTypeString(N), in0);
-        } else {
-            outAppend->appendf("%s(%s) + %s",
-                               GrGLSLFloatVectorTypeString(N),
-                               in0,
-                               GrGLSLOnesVecf(N));
-        }
-        return kNone_GrSLConstantVec;
-    } else {
-        outAppend->appendf("(%s(%s) + %s(%s))",
-                           GrGLSLFloatVectorTypeString(N),
-                           in0,
-                           GrGLSLFloatVectorTypeString(N),
-                           in1);
-        return kNone_GrSLConstantVec;
+template<typename Self>
+template<typename T0, typename T1>
+inline Self GrGLSLExpr<Self>::Add(T0 in0, T1 in1) {
+    if (in1.isZeros()) {
+        return Self::VectorCast(in0);
     }
+    if (in0.isZeros()) {
+        return Self::VectorCast(in1);
+    }
+    if (in0.isOnes() && in1.isOnes()) {
+        return Self(2);
+    }
+    return Self("(%s + %s)", in0.c_str(), in1.c_str());
 }
 
-template <int N>
-GrSLConstantVec GrGLSLSubtractf(SkString* outAppend,
-                                 const char* in0,
-                                 const char* in1,
-                                 GrSLConstantVec default0,
-                                 GrSLConstantVec default1,
-                                 bool omitIfConstVec) {
-    GrAssert(N > 0 && N <= 4);
-    GrAssert(NULL != outAppend);
-
-    bool has0 = NULL != in0 && '\0' != *in0;
-    bool has1 = NULL != in1 && '\0' != *in1;
-
-    if (!has0 && !has1) {
-        GrAssert(kNone_GrSLConstantVec != default0);
-        GrAssert(kNone_GrSLConstantVec != default1);
-        int diff = (kOnes_GrSLConstantVec == default0) - (kOnes_GrSLConstantVec == default1);
-        if (-1 == diff) {
-            outAppend->appendf("%s(-1)", GrGLSLFloatVectorTypeString(N));
-            return kNone_GrSLConstantVec;
-        } else if (0 == diff) {
-            return return_const_vecf<N>(kZeros_GrSLConstantVec, outAppend, omitIfConstVec);
-        } else {
-            GrAssert(1 == diff);
-            return return_const_vecf<N>(kOnes_GrSLConstantVec, outAppend, omitIfConstVec);
-        }
-    } else if (!has0) {
-        GrAssert(kNone_GrSLConstantVec != default0);
-        if (kZeros_GrSLConstantVec == default0) {
-            outAppend->appendf("-%s(%s)", GrGLSLFloatVectorTypeString(N), in1);
-        } else {
-            outAppend->appendf("%s - %s(%s)",
-                               GrGLSLOnesVecf(N),
-                               GrGLSLFloatVectorTypeString(N),
-                               in1);
-        }
-        return kNone_GrSLConstantVec;
-    } else if (!has1) {
-        GrAssert(kNone_GrSLConstantVec != default1);
-        if (kZeros_GrSLConstantVec == default1) {
-            outAppend->appendf("%s(%s)", GrGLSLFloatVectorTypeString(N), in0);
-        } else {
-            outAppend->appendf("%s(%s) - %s",
-                               GrGLSLFloatVectorTypeString(N),
-                               in0,
-                               GrGLSLOnesVecf(N));
-        }
-        return kNone_GrSLConstantVec;
-    } else {
-        outAppend->appendf("(%s(%s) - %s(%s))",
-                           GrGLSLFloatVectorTypeString(N),
-                           in0,
-                           GrGLSLFloatVectorTypeString(N),
-                           in1);
-        return kNone_GrSLConstantVec;
+template<typename Self>
+template<typename T0, typename T1>
+inline Self GrGLSLExpr<Self>::Sub(T0 in0, T1 in1) {
+    if (in1.isZeros()) {
+        return Self::VectorCast(in0);
     }
+    if (in1.isOnes()) {
+        if (in0.isOnes()) {
+            return Self(0);
+        }
+    }
+
+    return Self("(%s - %s)", in0.c_str(), in1.c_str());
+}
+
+template <typename Self>
+template <typename T>
+T GrGLSLExpr<Self>::extractComponents(const char format[]) const {
+    if (this->isZeros()) {
+        return T(0);
+    }
+    if (this->isOnes()) {
+        return T(1);
+    }
+    return T(format, this->c_str());
+}
+
+inline GrGLSLExpr1 GrGLSLExpr1::VectorCast(const GrGLSLExpr1& expr) {
+    return expr;
+}
+
+inline const char* GrGLSLExpr1::ZerosStr() {
+    return "0";
+}
+
+inline const char* GrGLSLExpr1::OnesStr() {
+    return "1.0";
+}
+
+// GrGLSLExpr1::CastStr() is unimplemented because using them is likely an
+// error. This is now caught compile-time.
+
+inline const char* GrGLSLExpr1::CastIntStr() {
+    return "%d";
+}
+
+inline GrGLSLExpr1 operator*(const GrGLSLExpr1& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr1::Mul(in0, in1);
+}
+
+inline GrGLSLExpr1 operator+(const GrGLSLExpr1& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr1::Add(in0, in1);
+}
+
+inline GrGLSLExpr1 operator-(const GrGLSLExpr1& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr1::Sub(in0, in1);
+}
+
+inline const char* GrGLSLExpr4::ZerosStr() {
+    return "vec4(0)";
+}
+
+inline const char* GrGLSLExpr4::OnesStr() {
+    return "vec4(1)";
+}
+
+inline const char* GrGLSLExpr4::CastStr() {
+    return "vec4(%s)";
+}
+
+inline const char* GrGLSLExpr4::CastIntStr() {
+    return "vec4(%d)";
+}
+
+inline GrGLSLExpr4 GrGLSLExpr4::VectorCast(const GrGLSLExpr1& expr) {
+    return INHERITED::VectorCastImpl(expr);
+}
+
+inline GrGLSLExpr4 GrGLSLExpr4::VectorCast(const GrGLSLExpr4& expr) {
+    return expr;
+}
+
+inline GrGLSLExpr4::AExpr GrGLSLExpr4::a() const {
+    return this->extractComponents<GrGLSLExpr4::AExpr>("%s.a");
+}
+
+inline GrGLSLExpr4 operator*(const GrGLSLExpr1& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Mul(in0, in1);
+}
+
+inline GrGLSLExpr4 operator+(const GrGLSLExpr1& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Add(in0, in1);
+}
+
+inline GrGLSLExpr4 operator-(const GrGLSLExpr1& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Sub(in0, in1);
+}
+
+inline GrGLSLExpr4 operator*(const GrGLSLExpr4& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr4::Mul(in0, in1);
+}
+
+inline GrGLSLExpr4 operator+(const GrGLSLExpr4& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr4::Add(in0, in1);
+}
+
+inline GrGLSLExpr4 operator-(const GrGLSLExpr4& in0, const GrGLSLExpr1& in1) {
+    return GrGLSLExpr4::Sub(in0, in1);
+}
+
+inline GrGLSLExpr4 operator*(const GrGLSLExpr4& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Mul(in0, in1);
+}
+
+inline GrGLSLExpr4 operator+(const GrGLSLExpr4& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Add(in0, in1);
+}
+
+inline GrGLSLExpr4 operator-(const GrGLSLExpr4& in0, const GrGLSLExpr4& in1) {
+    return GrGLSLExpr4::Sub(in0, in1);
 }
 
 #endif

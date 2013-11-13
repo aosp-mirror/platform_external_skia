@@ -1,3 +1,10 @@
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #include "SkCanvas.h"
 #include "SkCommandLineFlags.h"
 #include "SkDevice.h"
@@ -5,6 +12,7 @@
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
+#include "SkPdfRenderer.h"
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
@@ -16,8 +24,6 @@
 #include "GrContext.h"
 #include "SkGpuDevice.h"
 #endif
-
-#include "SkPdfRenderer.h"
 
 DEFINE_string2(readPath, r, "", "pdf files or directories of pdf files to process.");
 DEFINE_string2(writePath, w, "", "Directory to write the rendered pages.");
@@ -36,15 +42,12 @@ DEFINE_int32(benchLoad, 0, "Load the pdf file minimally N times, without any ren
 DEFINE_int32(benchRender, 0, "Render the pdf content N times. Default 0 (disabled)");
 DEFINE_string2(config, c, "8888", "Canvas to render:\n"
                                   "\t8888 - argb\n"
-
 #if SK_SUPPORT_GPU
                                   "\tgpu: use the gpu\n"
 #endif
                                   "\tnul - render in null canvas, any draw will just return.\n"
                );
-
-
-// TODO(edisonn): add config for device target(gpu, raster, pdf), + ability not to render at all
+DEFINE_bool2(transparentBackground, t, false, "Make background transparent instead of white.");
 
 /**
  * Given list of directories and files to use as input, expects to find .pdf
@@ -83,7 +86,7 @@ static bool add_page_and_replace_filename_extension(SkString* path, int page,
     return false;
 }
 
-void make_filepath(SkString* path, const SkString& dir, const SkString& name) {
+static void make_filepath(SkString* path, const SkString& dir, const SkString& name) {
     size_t len = dir.size();
     path->set(dir);
     if (0 < len  && '/' != dir[len - 1]) {
@@ -92,7 +95,7 @@ void make_filepath(SkString* path, const SkString& dir, const SkString& name) {
     path->append(name);
 }
 
-bool is_path_seperator(const char chr) {
+static bool is_path_seperator(const char chr) {
 #if defined(SK_BUILD_FOR_WIN)
     return chr == '\\' || chr == '/';
 #else
@@ -100,7 +103,7 @@ bool is_path_seperator(const char chr) {
 #endif
 }
 
-void get_basename(SkString* basename, const SkString& path) {
+static void get_basename(SkString* basename, const SkString& path) {
     if (path.size() == 0) {
         basename->reset();
         return;
@@ -149,7 +152,7 @@ static bool make_output_filepath(SkString* path, const SkString& dir,
                                                    PNG_FILE_EXTENSION);
 }
 
-static void setup_bitmap(SkBitmap* bitmap, int width, int height, SkColor color = SK_ColorTRANSPARENT) {
+static void setup_bitmap(SkBitmap* bitmap, int width, int height, SkColor color) {
     bitmap->setConfig(SkBitmap::kARGB_8888_Config, width, height);
 
     bitmap->allocPixels();
@@ -179,7 +182,7 @@ static bool render_page(const SkString& outputDir,
     // Exercise all pdf codepaths as in normal rendering, but no actual bits are changed.
     if (!FLAGS_config.isEmpty() && strcmp(FLAGS_config[0], "nul") == 0) {
         SkBitmap bitmap;
-        SkAutoTUnref<SkDevice> device(SkNEW_ARGS(SkDevice, (bitmap)));
+        SkAutoTUnref<SkBaseDevice> device(SkNEW_ARGS(SkBitmapDevice, (bitmap)));
         SkNulCanvas canvas(device);
         renderer.renderPage(page < 0 ? 0 : page, &canvas, rect);
     } else {
@@ -192,14 +195,18 @@ static bool render_page(const SkString& outputDir,
 
         rect = SkRect::MakeWH(width, height);
 
+        SkColor background = FLAGS_transparentBackground ? SK_ColorTRANSPARENT : SK_ColorWHITE;
+
 #ifdef PDF_DEBUG_3X
-        setup_bitmap(&bitmap, 3 * (int)SkScalarToDouble(width), 3 * (int)SkScalarToDouble(height));
+        setup_bitmap(&bitmap, 3 * (int)SkScalarToDouble(width), 3 * (int)SkScalarToDouble(height),
+                     background);
 #else
-        setup_bitmap(&bitmap, (int)SkScalarToDouble(width), (int)SkScalarToDouble(height));
+        setup_bitmap(&bitmap, (int)SkScalarToDouble(width), (int)SkScalarToDouble(height),
+                     background);
 #endif
-        SkAutoTUnref<SkDevice> device;
+        SkAutoTUnref<SkBaseDevice> device;
         if (strcmp(FLAGS_config[0], "8888") == 0) {
-            device.reset(SkNEW_ARGS(SkDevice, (bitmap)));
+            device.reset(SkNEW_ARGS(SkBitmapDevice, (bitmap)));
         }
 #if SK_SUPPORT_GPU
         else if (strcmp(FLAGS_config[0], "gpu") == 0) {
@@ -241,7 +248,8 @@ static bool render_page(const SkString& outputDir,
         SkImageEncoder::EncodeFile(outputPath.c_str(), bitmap, SkImageEncoder::kPNG_Type, 100);
 
         if (FLAGS_showMemoryUsage) {
-            SkDebugf("Memory usage after page %i rendered: %u\n", page < 0 ? 0 : page, (unsigned int)renderer.bytesUsed());
+            SkDebugf("Memory usage after page %i rendered: %u\n",
+                     page < 0 ? 0 : page, (unsigned int)renderer.bytesUsed());
         }
     }
     return true;
@@ -271,7 +279,8 @@ static bool process_pdf(const SkString& inputPath, const SkString& outputDir,
         for (int i = 0 ; i < FLAGS_benchLoad; i++) {
             success = renderer.load(inputPath) && success;
             if (FLAGS_showMemoryUsage) {
-                SkDebugf("Memory usage after load %i number : %u\n", i, (unsigned int)renderer.bytesUsed());
+                SkDebugf("Memory usage after load %i number : %u\n", i,
+                         (unsigned int)renderer.bytesUsed());
             }
         }
     }
@@ -286,19 +295,43 @@ static bool process_pdf(const SkString& inputPath, const SkString& outputDir,
                 // TODO(edisonn) if (i == 1) start timer
                 if (strcmp(FLAGS_pages[0], "all") == 0) {
                     for (int pn = 0; pn < renderer.pages(); ++pn) {
-                        success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : pn) && success;
+                        success = render_page(
+                                outputDir,
+                                inputFilename,
+                                renderer,
+                                FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 :
+                                                                                          pn) &&
+                                     success;
                     }
                 } else if (strcmp(FLAGS_pages[0], "reverse") == 0) {
                     for (int pn = renderer.pages() - 1; pn >= 0; --pn) {
-                        success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : pn) && success;
+                        success = render_page(
+                                outputDir,
+                                inputFilename,
+                                renderer,
+                                FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 :
+                                                                                          pn) &&
+                                   success;
                     }
                 } else if (strcmp(FLAGS_pages[0], "first") == 0) {
-                    success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : 0) && success;
+                    success = render_page(
+                            outputDir,
+                            inputFilename,
+                            renderer,
+                            FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : 0) &&
+                                success;
                 } else if (strcmp(FLAGS_pages[0], "last") == 0) {
-                    success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : renderer.pages() - 1) && success;
+                    success = render_page(
+                            outputDir,
+                            inputFilename,
+                            renderer,
+                            FLAGS_noExtensionForOnePagePdf &&
+                                    renderer.pages() == 1 ? -1 : renderer.pages() - 1) && success;
                 } else {
                     int pn = atoi(FLAGS_pages[0]);
-                    success = render_page(outputDir, inputFilename, renderer, FLAGS_noExtensionForOnePagePdf && renderer.pages() == 1 ? -1 : pn) && success;
+                    success = render_page(outputDir, inputFilename, renderer,
+                                          FLAGS_noExtensionForOnePagePdf &&
+                                              renderer.pages() == 1 ? -1 : pn) && success;
                 }
             }
         }

@@ -13,9 +13,8 @@
 
 class ScalarBench : public SkBenchmark {
     SkString    fName;
-    enum { N = 100000 };
 public:
-    ScalarBench(void* param, const char name[]) : INHERITED(param) {
+    ScalarBench(const char name[])  {
         fName.printf("scalar_%s", name);
         fIsRendering = false;
     }
@@ -30,8 +29,7 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-        int n = SkBENCHLOOP(N * this->mulLoopCount());
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < this->getLoops(); i++) {
             this->performTest();
         }
     }
@@ -64,7 +62,7 @@ template <typename T> void init9(T array[9]) {
 
 class FloatComparisonBench : public ScalarBench {
 public:
-    FloatComparisonBench(void* param) : INHERITED(param, "compare_float") {
+    FloatComparisonBench() : INHERITED("compare_float") {
         init9(fArray);
     }
 protected:
@@ -80,8 +78,8 @@ private:
 
 class ForcedIntComparisonBench : public ScalarBench {
 public:
-    ForcedIntComparisonBench(void* param)
-    : INHERITED(param, "compare_forced_int") {
+    ForcedIntComparisonBench()
+    : INHERITED("compare_forced_int") {
         init9(fArray);
     }
 protected:
@@ -101,7 +99,7 @@ private:
 
 class IsFiniteScalarBench : public ScalarBench {
 public:
-    IsFiniteScalarBench(void* param) : INHERITED(param, "isfinite") {
+    IsFiniteScalarBench() : INHERITED("isfinite") {
         SkRandom rand;
         for (size_t i = 0; i < ARRAY_N; ++i) {
             fArray[i] = rand.nextSScalar1();
@@ -135,12 +133,11 @@ private:
 class RectBoundsBench : public SkBenchmark {
     enum {
         PTS = 100,
-        N = SkBENCHLOOP(10000)
     };
     SkPoint fPts[PTS];
 
 public:
-    RectBoundsBench(void* param) : INHERITED(param) {
+    RectBoundsBench() {
         SkRandom rand;
         for (int i = 0; i < PTS; ++i) {
             fPts[i].fX = rand.nextSScalar1();
@@ -156,7 +153,7 @@ protected:
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkRect r;
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < this->getLoops(); ++i) {
             r.set(fPts, PTS);
         }
     }
@@ -167,12 +164,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* S0(void* p) { return new FloatComparisonBench(p); }
-static SkBenchmark* S1(void* p) { return new ForcedIntComparisonBench(p); }
-static SkBenchmark* S2(void* p) { return new RectBoundsBench(p); }
-static SkBenchmark* S3(void* p) { return new IsFiniteScalarBench(p); }
-
-static BenchRegistry gReg0(S0);
-static BenchRegistry gReg1(S1);
-static BenchRegistry gReg2(S2);
-static BenchRegistry gReg3(S3);
+DEF_BENCH( return new FloatComparisonBench(); )
+DEF_BENCH( return new ForcedIntComparisonBench(); )
+DEF_BENCH( return new RectBoundsBench(); )
+DEF_BENCH( return new IsFiniteScalarBench(); )

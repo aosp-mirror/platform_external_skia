@@ -78,12 +78,14 @@
         }],
       ],
 
+      'skia_sanitizer%': '',
       'skia_scalar%': 'float',
       'skia_mesa%': 0,
       'skia_nv_path_rendering%': 0,
       'skia_stroke_path_rendering%': 0,
       'skia_android_path_rendering%': 0,
-      'skia_texture_cache_mb_limit%': 0,
+      'skia_resource_cache_mb_limit%': 0,
+      'skia_resource_cache_count_limit%': 0,
       'skia_angle%': 0,
       'skia_directwrite%': 0,
       'skia_gpu%': 1,
@@ -117,6 +119,13 @@
       }, {
         'skia_release_optimization_level%': '<(skia_default_gcc_optimization_level)',
       }],
+      [ 'skia_sanitizer', {
+        'skia_clang_build': 1,
+        'skia_keep_frame_pointer': 1,
+      }, {
+        'skia_clang_build%': 0,
+        'skia_keep_frame_pointer%': 0,
+      }],
     ],
 
     # Re-define all variables defined within the level-2 'variables' dict,
@@ -126,12 +135,14 @@
     'arm_neon_optional%': 0,
     'skia_os%': '<(skia_os)',
     'os_posix%': '<(os_posix)',
+    'skia_sanitizer%': '<(skia_sanitizer)',
     'skia_scalar%': '<(skia_scalar)',
     'skia_mesa%': '<(skia_mesa)',
     'skia_nv_path_rendering%': '<(skia_nv_path_rendering)',
     'skia_stroke_path_rendering%': '<(skia_stroke_path_rendering)',
     'skia_android_path_rendering%': '<(skia_android_path_rendering)',
-    'skia_texture_cache_mb_limit%': '<(skia_texture_cache_mb_limit)',
+    'skia_resource_cache_mb_limit%': '<(skia_resource_cache_mb_limit)',
+    'skia_resource_cache_count_limit%': '<(skia_resource_cache_count_limit)',
     'skia_angle%': '<(skia_angle)',
     'skia_arch_width%': '<(skia_arch_width)',
     'skia_arch_type%': '<(skia_arch_type)',
@@ -145,7 +156,6 @@
     'skia_static_initializers%': '<(skia_static_initializers)',
     'ios_sdk_version%': '6.0',
     'skia_win_debuggers_path%': '<(skia_win_debuggers_path)',
-    'skia_asan_build%': 0,
 
     # These are referenced by our .gypi files that list files (e.g. core.gypi)
     #

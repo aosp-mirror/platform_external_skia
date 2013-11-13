@@ -8,11 +8,65 @@
 #include "Test.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
+#include "SkData.h"
+#include "SkPaint.h"
 #include "SkShader.h"
+#include "SkSurface.h"
 #include "SkRandom.h"
 #include "SkMatrixUtils.h"
 
-static void rand_matrix(SkMatrix* mat, SkMWCRandom& rand, unsigned mask) {
+#include "SkLazyPixelRef.h"
+#include "SkLruImageCache.h"
+
+// A BitmapFactory that always fails when asked to return pixels.
+static bool FailureDecoder(const void* data, size_t length, SkImageInfo* info,
+                           const SkBitmapFactory::Target* target) {
+    if (info) {
+        info->fWidth = info->fHeight = 100;
+        info->fColorType = kRGBA_8888_SkColorType;
+        info->fAlphaType = kPremul_SkAlphaType;
+    }
+    // this will deliberately return false if they are asking us to decode
+    // into pixels.
+    return NULL == target;
+}
+
+// crbug.com/295895
+// Crashing in skia when a pixelref fails in lockPixels
+//
+static void test_faulty_pixelref(skiatest::Reporter* reporter) {
+    // need a cache, but don't expect to use it, so the budget is not critical
+    SkLruImageCache cache(10 * 1000);
+    // construct a garbage data represent "bad" encoded data.
+    SkAutoDataUnref data(SkData::NewFromMalloc(malloc(1000), 1000));
+    SkAutoTUnref<SkPixelRef> pr(new SkLazyPixelRef(data, FailureDecoder, &cache));
+
+    SkBitmap bm;
+    bm.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
+    bm.setPixelRef(pr);
+    // now our bitmap has a pixelref, but we know it will fail to lock
+
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(200, 200));
+    SkCanvas* canvas = surface->getCanvas();
+
+    const SkPaint::FilterLevel levels[] = {
+        SkPaint::kNone_FilterLevel,
+        SkPaint::kLow_FilterLevel,
+        SkPaint::kMedium_FilterLevel,
+        SkPaint::kHigh_FilterLevel,
+    };
+
+    SkPaint paint;
+    canvas->scale(2, 2);    // need a scale, otherwise we may ignore filtering
+    for (size_t i = 0; i < SK_ARRAY_COUNT(levels); ++i) {
+        paint.setFilterLevel(levels[i]);
+        canvas->drawBitmap(bm, 0, 0, &paint);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+static void rand_matrix(SkMatrix* mat, SkRandom& rand, unsigned mask) {
     mat->setIdentity();
     if (mask & SkMatrix::kTranslate_Mask) {
         mat->postTranslate(rand.nextSScalar1(), rand.nextSScalar1());
@@ -29,7 +83,7 @@ static void rand_matrix(SkMatrix* mat, SkMWCRandom& rand, unsigned mask) {
     }
 }
 
-static void rand_size(SkISize* size, SkMWCRandom& rand) {
+static void rand_size(SkISize* size, SkRandom& rand) {
     size->set(rand.nextU() & 0xFFFF, rand.nextU() & 0xFFFF);
 }
 
@@ -43,7 +97,7 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
 
     SkMatrix mat;
     SkISize  size;
-    SkMWCRandom rand;
+    SkRandom rand;
 
     // assert: translate-only no-filter can always be treated as sprite
     for (int i = 0; i < 1000; ++i) {
@@ -268,6 +322,7 @@ static void TestDrawBitmapRect(skiatest::Reporter* reporter) {
     test_giantrepeat_crbug118018(reporter);
 
     test_treatAsSprite(reporter);
+    test_faulty_pixelref(reporter);
 }
 
 #include "TestClassDef.h"
