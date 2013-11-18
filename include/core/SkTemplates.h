@@ -98,6 +98,16 @@ private:
     T* fObj;
 };
 
+/** \class SkAutoTDelete
+  An SkAutoTDelete<T> is like a T*, except that the destructor of SkAutoTDelete<T>
+  automatically deletes the pointer it holds (if any).  That is, SkAutoTDelete<T>
+  owns the T object that it points to.  Like a T*, an SkAutoTDelete<T> may hold
+  either NULL or a pointer to a T object.  Also like T*, SkAutoTDelete<T> is
+  thread-compatible, and once you dereference it, you get the threadsafety
+  guarantees of T.
+
+  The size of a SkAutoTDelete is small: sizeof(SkAutoTDelete<T>) == sizeof(T*)
+*/
 template <typename T> class SkAutoTDelete : SkNoncopyable {
 public:
     SkAutoTDelete(T* obj = NULL) : fObj(obj) {}
@@ -221,7 +231,7 @@ private:
 
 /** Wraps SkAutoTArray, with room for up to N elements preallocated
  */
-template <size_t N, typename T> class SkAutoSTArray : SkNoncopyable {
+template <int N, typename T> class SkAutoSTArray : SkNoncopyable {
 public:
     /** Initialize with no objects */
     SkAutoSTArray() {
@@ -231,7 +241,7 @@ public:
 
     /** Allocate count number of T elements
      */
-    SkAutoSTArray(size_t count) {
+    SkAutoSTArray(int count) {
         fArray = NULL;
         fCount = 0;
         this->reset(count);
@@ -242,7 +252,7 @@ public:
     }
 
     /** Destroys previous objects in the array and default constructs count number of objects */
-    void reset(size_t count) {
+    void reset(int count) {
         T* start = fArray;
         T* iter = start + fCount;
         while (iter > start) {
@@ -276,7 +286,7 @@ public:
 
     /** Return the number of T elements in the array
      */
-    size_t count() const { return fCount; }
+    int count() const { return fCount; }
 
     /** Return the array of T elements. Will be NULL if count == 0
      */
@@ -285,12 +295,12 @@ public:
     /** Return the nth element in the array
      */
     T&  operator[](int index) const {
-        SkASSERT((unsigned)index < fCount);
+        SkASSERT(index < fCount);
         return fArray[index];
     }
 
 private:
-    size_t  fCount;
+    int     fCount;
     T*      fArray;
     // since we come right after fArray, fStorage should be properly aligned
     char    fStorage[N * sizeof(T)];
@@ -359,7 +369,7 @@ private:
     T* fPtr;
 };
 
-template <size_t N, typename T> class SK_API SkAutoSTMalloc : SkNoncopyable {
+template <size_t N, typename T> class SkAutoSTMalloc : SkNoncopyable {
 public:
     SkAutoSTMalloc() {
         fPtr = NULL;

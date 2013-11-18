@@ -12,12 +12,18 @@
     {
       'target_name': 'everything',
       'type': 'none',
-      'dependencies': ['most.gyp:most'],
+      'dependencies': [
+        'most.gyp:most',
+      ],
       'conditions': [
-        ['skia_os in ("ios", "android") or (skia_os == "mac" and skia_arch_width == 32)', {
+        ['skia_os in ("ios", "android", "chromeos") or (skia_os == "mac" and skia_arch_width == 32)', {
           # debugger is not supported on this platform
         }, {
           'dependencies': [ 'debugger.gyp:debugger' ],
+        }],
+        # DM assumes you've got a GPU.
+        ['skia_gpu == 1', {
+          'dependencies': [ 'dm.gyp:dm' ],
         }],
       ],
     },

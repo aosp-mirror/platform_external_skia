@@ -456,7 +456,7 @@ class ScrollGmailBench : public SkBenchmark {
         N = 431
     };
 public:
-    ScrollGmailBench(void* param) : INHERITED(param) { }
+    ScrollGmailBench()  { }
 
 protected:
 
@@ -468,7 +468,7 @@ protected:
         for (int i = 0; i < N; i++) {
             SkRect current;
             setRectangle(current, i);
-            for (int j = 0; j < SkBENCHLOOP(gmailScrollingRectSpec[i*3]); j++) {
+            for (int j = 0; j < this->getLoops() * gmailScrollingRectSpec[i*3]; j++) {
                 canvas->drawRect(current, paint);
             }
         }
@@ -491,10 +491,6 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-static inline SkBenchmark* ScrollGmailFactory(void* p) {
-    return SkNEW_ARGS(ScrollGmailBench, (p));
-}
-
 // Disabled this benchmark: it takes 15x longer than any other benchmark
 // and is probably not giving us important information.
-//static BenchRegistry gScrollGmailReg(ScrollGmailFactory);
+// DEF_BENCH(return SkNEW(ScrollGmailBench));

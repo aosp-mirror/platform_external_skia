@@ -8,7 +8,6 @@
 #include "SkPDFDeviceFlattener.h"
 
 #include "SkDraw.h"
-#include "SkShader.h"
 
 static SkISize SkSizeToISize(const SkSize& size) {
     return SkISize::Make(SkScalarRoundToInt(size.width()), SkScalarRoundToInt(size.height()));

@@ -10,7 +10,7 @@
 
 // This is a GR test
 #if SK_SUPPORT_GPU
-#include "GrTHashCache.h"
+#include "GrTHashTable.h"
 
 struct HashElement {
     int     fKey;
@@ -46,7 +46,7 @@ public:
         return entry.fKey == key.fKey;
     }
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     static uint32_t GetHash(const HashElement& entry) {
         return entry.fKey;
     }
@@ -154,12 +154,6 @@ static void TestHashCache(skiatest::Reporter* reporter) {
 
         HashElement* found = cache.find(0);
         REPORTER_ASSERT(reporter, NULL == found);
-    }
-
-    // remove all
-    {
-        cache.removeAll();
-        REPORTER_ASSERT(reporter, 0 == cache.count());
     }
 }
 

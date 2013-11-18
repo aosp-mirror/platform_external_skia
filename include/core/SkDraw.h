@@ -17,7 +17,7 @@
 class SkBitmap;
 class SkBounder;
 class SkClipStack;
-class SkDevice;
+class SkBaseDevice;
 class SkMatrix;
 class SkPath;
 class SkRegion;
@@ -129,7 +129,7 @@ public:
     const SkRasterClip* fRC;        // required
 
     const SkClipStack* fClipStack;  // optional
-    SkDevice*       fDevice;        // optional
+    SkBaseDevice*   fDevice;        // optional
     SkBounder*      fBounder;       // optional
     SkDrawProcs*    fProcs;         // optional
 

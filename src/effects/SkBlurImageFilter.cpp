@@ -19,12 +19,16 @@ SkBlurImageFilter::SkBlurImageFilter(SkFlattenableReadBuffer& buffer)
   : INHERITED(buffer) {
     fSigma.fWidth = buffer.readScalar();
     fSigma.fHeight = buffer.readScalar();
+    buffer.validate(SkScalarIsFinite(fSigma.fWidth) &&
+                    SkScalarIsFinite(fSigma.fHeight) &&
+                    (fSigma.fWidth >= 0) &&
+                    (fSigma.fHeight >= 0));
 }
 
 SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX,
                                      SkScalar sigmaY,
                                      SkImageFilter* input,
-                                     const SkIRect* cropRect)
+                                     const CropRect* cropRect)
     : INHERITED(input, cropRect), fSigma(SkSize::Make(sigmaX, sigmaY)) {
     SkASSERT(sigmaX >= 0 && sigmaY >= 0);
 }
@@ -158,7 +162,7 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
 
     SkIRect srcBounds, dstBounds;
     src.getBounds(&srcBounds);
-    if (!this->applyCropRect(&srcBounds)) {
+    if (!this->applyCropRect(&srcBounds, ctm)) {
         return false;
     }
 
@@ -216,7 +220,7 @@ bool SkBlurImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const 
     GrTexture* source = input.getTexture();
     SkIRect rect;
     src.getBounds(&rect);
-    if (!this->applyCropRect(&rect)) {
+    if (!this->applyCropRect(&rect, ctm)) {
         return false;
     }
     SkAutoTUnref<GrTexture> tex(SkGpuBlurUtils::GaussianBlur(source->getContext(),

@@ -71,11 +71,10 @@
     '../bench/VertBench.cpp',
     '../bench/WriterBench.cpp',
     '../bench/XfermodeBench.cpp',
+    '../bench/WritePixelsBench.cpp',
 
     '../bench/SkBenchLogger.h',
     '../bench/SkBenchLogger.cpp',
-    '../bench/TimerData.h',
-    '../bench/TimerData.cpp',
   ],
 }
 

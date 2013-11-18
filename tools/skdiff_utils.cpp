@@ -102,7 +102,7 @@ static SkString replace_all(const SkString &input,
     const char *input_cstr = input.c_str();
     const char *first_char = input_cstr;
     const char *match_char;
-    int oldSubstringLen = strlen(oldSubstring);
+    size_t oldSubstringLen = strlen(oldSubstring);
     while (NULL != (match_char = strstr(first_char, oldSubstring))) {
         output.append(first_char, (match_char - first_char));
         output.append(newSubstring);
@@ -115,7 +115,7 @@ static SkString replace_all(const SkString &input,
 static SkString filename_to_derived_filename(const SkString& filename, const char *suffix) {
     SkString diffName (filename);
     const char* cstring = diffName.c_str();
-    int dotOffset = strrchr(cstring, '.') - cstring;
+    size_t dotOffset = strrchr(cstring, '.') - cstring;
     diffName.remove(dotOffset, diffName.size() - dotOffset);
     diffName.append(suffix);
 

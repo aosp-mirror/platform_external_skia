@@ -129,7 +129,7 @@ int SkDCubic::RootsReal(double A, double B, double C, double D, double s[3]) {
     sk_bzero(str, sizeof(str));
     SK_SNPRINTF(str, sizeof(str), "Solve[%1.19g x^3 + %1.19g x^2 + %1.19g x + %1.19g == 0, x]",
             A, B, C, D);
-    mathematica_ize(str, sizeof(str));
+    SkPathOpsDebug::MathematicaIze(str, sizeof(str));
 #if ONE_OFF_DEBUG && ONE_OFF_DEBUG_MATHEMATICA
     SkDebugf("%s\n", str);
 #endif
@@ -155,7 +155,7 @@ int SkDCubic::RootsReal(double A, double B, double C, double D, double s[3]) {
     if (approximately_zero(A + B + C + D)) {  // 1 is one root
         int num = SkDQuad::RootsReal(A, A + B, -D, s);
         for (int i = 0; i < num; ++i) {
-            if (AlmostEqualUlps(s[i], 1)) {
+            if (AlmostDequalUlps(s[i], 1)) {
                 return num;
             }
         }
@@ -186,11 +186,11 @@ int SkDCubic::RootsReal(double A, double B, double C, double D, double s[3]) {
         *roots++ = r;
 
         r = neg2RootQ * cos((theta + 2 * PI) / 3) - adiv3;
-        if (!AlmostEqualUlps(s[0], r)) {
+        if (!AlmostDequalUlps(s[0], r)) {
             *roots++ = r;
         }
         r = neg2RootQ * cos((theta - 2 * PI) / 3) - adiv3;
-        if (!AlmostEqualUlps(s[0], r) && (roots - s == 1 || !AlmostEqualUlps(s[1], r))) {
+        if (!AlmostDequalUlps(s[0], r) && (roots - s == 1 || !AlmostDequalUlps(s[1], r))) {
             *roots++ = r;
         }
     } else {  // we have 1 real root
@@ -205,9 +205,9 @@ int SkDCubic::RootsReal(double A, double B, double C, double D, double s[3]) {
         }
         r = A - adiv3;
         *roots++ = r;
-        if (AlmostEqualUlps(R2, Q3)) {
+        if (AlmostDequalUlps(R2, Q3)) {
             r = -A / 2 - adiv3;
-            if (!AlmostEqualUlps(s[0], r)) {
+            if (!AlmostDequalUlps(s[0], r)) {
                 *roots++ = r;
             }
         }
@@ -508,3 +508,16 @@ SkDCubicPair SkDCubic::chopAt(double t) const {
     interp_cubic_coords(&fPts[0].fY, &dst.pts[0].fY, t);
     return dst;
 }
+
+#ifdef SK_DEBUG
+void SkDCubic::dump() {
+    SkDebugf("{{");
+    int index = 0;
+    do {
+        fPts[index].dump();
+        SkDebugf(", ");
+    } while (++index < 3);
+    fPts[index].dump();
+    SkDebugf("}}\n");
+}
+#endif

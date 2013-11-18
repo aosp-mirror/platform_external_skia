@@ -82,7 +82,8 @@ class XfermodesGM : public GM {
         p.setXfermode(mode);
         switch (srcType) {
             case kQuarterClearInLayer_SrcType: {
-                SkRect bounds = SkRect::MakeXYWH(x, y, W, H);
+                SkRect bounds = SkRect::MakeXYWH(x, y, SkIntToScalar(W),
+                                                 SkIntToScalar(H));
                 canvas->saveLayer(&bounds, &p);
                 restoreNeeded = true;
                 p.setXfermodeMode(SkXfermode::kSrcOver_Mode);
@@ -92,10 +93,11 @@ class XfermodesGM : public GM {
                 SkScalar halfW = SkIntToScalar(W) / 2;
                 SkScalar halfH = SkIntToScalar(H) / 2;
                 p.setColor(0xFF66AAFF);
-                SkRect r = SkRect::MakeXYWH(x + halfW, y, halfW, H);
+                SkRect r = SkRect::MakeXYWH(x + halfW, y, halfW,
+                                            SkIntToScalar(H));
                 canvas->drawRect(r, p);
                 p.setColor(0xFFAA66FF);
-                r = SkRect::MakeXYWH(x, y + halfH, W, halfH);
+                r = SkRect::MakeXYWH(x, y + halfH, SkIntToScalar(W), halfH);
                 canvas->drawRect(r, p);
                 break;
             }
@@ -127,9 +129,8 @@ class XfermodesGM : public GM {
     }
 
     virtual void onOnceBeforeDraw() SK_OVERRIDE {
-        fBG.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4);
+        fBG.setConfig(SkBitmap::kARGB_4444_Config, 2, 2, 4, kOpaque_SkAlphaType);
         fBG.setPixels(gData);
-        fBG.setIsOpaque(true);
 
         make_bitmaps(W, H, &fSrcB, &fDstB);
     }

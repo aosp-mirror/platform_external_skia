@@ -20,21 +20,27 @@ LOCAL_SRC_FILES += \
   androidfallback.cpp \
   arcofzorro.cpp \
   arithmode.cpp \
+  beziereffects.cpp \
   bicubicfilter.cpp \
   bigmatrix.cpp \
   bigtext.cpp \
+  bitmapalphathreshold.cpp \
   bitmapcopy.cpp \
   bitmapmatrix.cpp \
   bitmapfilters.cpp \
+  bitmappremul.cpp \
   bitmaprect.cpp \
   bitmaprecttest.cpp \
   bitmapscroll.cpp \
   bleed.cpp \
   blurs.cpp \
-  blurrect.cpp \
   blurquickreject.cpp \
+  blurrect.cpp \
+  canvasstate.cpp \
   circles.cpp \
   circularclips.cpp \
+  clippedbitmapshaders.cpp \
+  coloremoji.cpp \
   colorfilterimagefilter.cpp \
   colormatrix.cpp \
   colortype.cpp \
@@ -61,12 +67,14 @@ LOCAL_SRC_FILES += \
   filltypes.cpp \
   filltypespersp.cpp \
   filterbitmap.cpp \
+  fontcache.cpp \
   fontmgr.cpp \
   fontscaler.cpp \
   gammatext.cpp \
   getpostextpath.cpp \
   giantbitmap.cpp \
   gradients.cpp \
+  gradients_no_texture.cpp \
   gradientDirtyLaundry.cpp \
   gradient_matrix.cpp \
   gradtext.cpp \
@@ -76,6 +84,7 @@ LOCAL_SRC_FILES += \
   imagemagnifier.cpp \
   inversepaths.cpp \
   lighting.cpp \
+  lumafilter.cpp \
   image.cpp \
   imagefiltersbase.cpp \
   imagefilterscropped.cpp \
@@ -90,6 +99,7 @@ LOCAL_SRC_FILES += \
   morphology.cpp \
   nested.cpp \
   ninepatchstretch.cpp \
+  offsetimagefilter.cpp \
   nocolorbleed.cpp \
   optimizations.cpp \
   ovals.cpp \
@@ -116,6 +126,8 @@ LOCAL_SRC_FILES += \
   shadows.cpp \
   shallowgradient.cpp \
   simpleaaclip.cpp \
+  skbug1719.cpp \
+  stringart.cpp \
   spritebitmap.cpp \
   srcmode.cpp \
   strokefill.cpp \
@@ -127,7 +139,9 @@ LOCAL_SRC_FILES += \
   texdata.cpp \
   thinrects.cpp \
   thinstrokedrects.cpp \
+  tileimagefilter.cpp \
   tilemodes.cpp \
+  tilemodes_scaled.cpp \
   tinybitmap.cpp \
   twopointradial.cpp \
   typeface.cpp \

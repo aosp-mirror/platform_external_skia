@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkPictureUtils.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkDevice.h"
+#include "SkPictureUtils.h"
 #include "SkPixelRef.h"
-#include "SkShader.h"
 #include "SkRRect.h"
+#include "SkShader.h"
 
 class PixelRefSet {
 public:
@@ -37,7 +37,7 @@ private:
 };
 
 static void not_supported() {
-    SkASSERT(!"this method should never be called");
+    SkDEBUGFAIL("this method should never be called");
 }
 
 static void nothing_to_do() {}
@@ -46,9 +46,8 @@ static void nothing_to_do() {}
  *  This device will route all bitmaps (primitives and in shaders) to its PRSet.
  *  It should never actually draw anything, so there need not be any pixels
  *  behind its device-bitmap.
- *  FIXME: Derive from SkBaseDevice.
  */
-class GatherPixelRefDevice : public SkDevice {
+class GatherPixelRefDevice : public SkBitmapDevice {
 private:
     PixelRefSet*  fPRSet;
 
@@ -71,7 +70,7 @@ private:
     }
 
 public:
-    GatherPixelRefDevice(const SkBitmap& bm, PixelRefSet* prset) : SkDevice(bm) {
+    GatherPixelRefDevice(const SkBitmap& bm, PixelRefSet* prset) : SkBitmapDevice(bm) {
         fPRSet = prset;
     }
 
@@ -113,7 +112,8 @@ public:
     }
     virtual void drawBitmapRect(const SkDraw&, const SkBitmap& bitmap,
                                 const SkRect* srcOrNull, const SkRect& dst,
-                                const SkPaint&) SK_OVERRIDE {
+                                const SkPaint&,
+                                SkCanvas::DrawBitmapRectFlags flags) SK_OVERRIDE {
         this->addBitmap(bitmap);
     }
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
@@ -142,7 +142,7 @@ public:
                               const SkPaint& paint) SK_OVERRIDE {
         this->addBitmapFromPaint(paint);
     }
-    virtual void drawDevice(const SkDraw&, SkDevice*, int x, int y,
+    virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) SK_OVERRIDE {
         nothing_to_do();
     }
@@ -154,11 +154,14 @@ protected:
         not_supported();
         return false;
     }
+
+private:
+    typedef SkBitmapDevice INHERITED;
 };
 
 class NoSaveLayerCanvas : public SkCanvas {
 public:
-    NoSaveLayerCanvas(SkDevice* device) : INHERITED(device) {}
+    NoSaveLayerCanvas(SkBaseDevice* device) : INHERITED(device) {}
 
     // turn saveLayer() into save() for speed, should not affect correctness.
     virtual int saveLayer(const SkRect* bounds, const SkPaint* paint,

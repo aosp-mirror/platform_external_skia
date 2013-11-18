@@ -34,20 +34,18 @@ public:
     virtual bool render() = 0;
     virtual void end();
 
-    PdfRenderer(EncodeToDCTStream encoder)
+    PdfRenderer(SkPicture::EncodeBitmap encoder)
         : fPicture(NULL)
         , fEncoder(encoder)
-        , fPDFDoc(NULL)
+        , fPdfDoc(NULL)
         {}
-
-    void write(SkWStream* stream) const;
 
 protected:
     SkCanvas* setupCanvas(SkWStream* stream, int width, int height);
 
     SkAutoTUnref<SkCanvas> fCanvas;
     SkPicture* fPicture;
-    EncodeToDCTStream fEncoder;
+    SkPicture::EncodeBitmap fEncoder;
     SkAutoTUnref<SkDocument> fPdfDoc;
 
 private:
@@ -56,7 +54,7 @@ private:
 
 class SimplePdfRenderer : public PdfRenderer {
 public:
-    SimplePdfRenderer(EncodeToDCTStream encoder)
+    SimplePdfRenderer(SkPicture::EncodeBitmap encoder)
         : PdfRenderer(encoder) {}
     virtual bool render() SK_OVERRIDE;
 

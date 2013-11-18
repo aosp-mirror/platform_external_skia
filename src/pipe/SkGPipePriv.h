@@ -19,15 +19,14 @@
 enum PaintFlats {
     kColorFilter_PaintFlat,
     kDrawLooper_PaintFlat,
+    kImageFilter_PaintFlat,
     kMaskFilter_PaintFlat,
     kPathEffect_PaintFlat,
     kRasterizer_PaintFlat,
     kShader_PaintFlat,
-    kImageFilter_PaintFlat,
     kXfermode_PaintFlat,
-    kAnnotation_PaintFlat,
 
-    kLast_PaintFlat = kAnnotation_PaintFlat
+    kLast_PaintFlat = kXfermode_PaintFlat
 };
 #define kCount_PaintFlats   (kLast_PaintFlat + 1)
 
@@ -70,6 +69,7 @@ enum DrawOps {
 
     kPaintOp_DrawOp,
     kSetTypeface_DrawOp,
+    kSetAnnotation_DrawOp,
 
     kDef_Typeface_DrawOp,
     kDef_Flattenable_DrawOp,
@@ -148,6 +148,9 @@ enum {
     // Specific to drawBitmapRect, but needs to be different from HasPaint,
     // which is used for all drawBitmap calls, so include it here.
     kDrawBitmap_HasSrcRect_DrawOpFlag = 1 << 1,
+    // SkCanvas::DrawBitmapRectFlags::kBleed_DrawBitmapRectFlag is
+    // converted into and out of this flag to save space
+    kDrawBitmap_Bleed_DrawOpFlag      = 1 << 2,
 };
 enum {
     kClip_HasAntiAlias_DrawOpFlag = 1 << 0,
@@ -223,7 +226,7 @@ enum PaintOps {
     kJoin_PaintOp,      // arg inline
     kCap_PaintOp,       // arg inline
     kWidth_PaintOp,     // arg scalar
-    kMiter_PaintOp,// arg scalar
+    kMiter_PaintOp,     // arg scalar
 
     kEncoding_PaintOp,  // arg inline - text
     kHinting_PaintOp,   // arg inline - text

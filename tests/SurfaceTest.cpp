@@ -24,11 +24,11 @@ enum SurfaceType {
 };
 
 static SkSurface* createSurface(SurfaceType surfaceType, GrContext* context) {
-    static const SkImage::Info imageSpec = {
+    static const SkImageInfo imageSpec = {
         10,  // width
         10,  // height
-        SkImage::kPMColor_ColorType,
-        SkImage::kPremul_AlphaType
+        kPMColor_SkColorType,
+        kPremul_SkAlphaType
     };
 
     switch (surfaceType) {
@@ -84,6 +84,7 @@ static void TestSurfaceCopyOnWrite(skiatest::Reporter* reporter, SurfaceType sur
     SkBitmap testBitmap;
     testBitmap.setConfig(SkBitmap::kARGB_8888_Config, 10, 10);
     testBitmap.allocPixels();
+    testBitmap.eraseColor(0);
 
     SkRRect testRRect;
     testRRect.setRectXY(testRect, SK_Scalar1, SK_Scalar1);
@@ -209,22 +210,22 @@ static void TestSurfaceNoCanvas(skiatest::Reporter* reporter,
         SkSurface* surface = createSurface(surfaceType, context);
         SkAutoTUnref<SkSurface> aur_surface(surface);
         surface->notifyContentWillChange(mode);
-        surface->validate();
+        SkDEBUGCODE(surface->validate();)
     }
     {
         SkSurface* surface = createSurface(surfaceType, context);
         SkAutoTUnref<SkSurface> aur_surface(surface);
         SkImage* image1 = surface->newImageSnapshot();
         SkAutoTUnref<SkImage> aur_image1(image1);
-        image1->validate();
-        surface->validate();
+        SkDEBUGCODE(image1->validate();)
+        SkDEBUGCODE(surface->validate();)
         surface->notifyContentWillChange(mode);
-        image1->validate();
-        surface->validate();
+        SkDEBUGCODE(image1->validate();)
+        SkDEBUGCODE(surface->validate();)
         SkImage* image2 = surface->newImageSnapshot();
         SkAutoTUnref<SkImage> aur_image2(image2);
-        image2->validate();
-        surface->validate();
+        SkDEBUGCODE(image2->validate();)
+        SkDEBUGCODE(surface->validate();)
         REPORTER_ASSERT(reporter, image1 != image2);
     }
 

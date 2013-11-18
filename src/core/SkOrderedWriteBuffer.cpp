@@ -253,7 +253,7 @@ void SkOrderedWriteBuffer::setBitmapEncoder(SkPicture::EncodeBitmap bitmapEncode
     }
 }
 
-void SkOrderedWriteBuffer::writeFlattenable(SkFlattenable* flattenable) {
+void SkOrderedWriteBuffer::writeFlattenable(const SkFlattenable* flattenable) {
     /*
      *  If we have a factoryset, then the first 32bits tell us...
      *       0: failure to write the flattenable
@@ -270,7 +270,10 @@ void SkOrderedWriteBuffer::writeFlattenable(SkFlattenable* flattenable) {
         factory = flattenable->getFactory();
     }
     if (NULL == factory) {
-        if (fFactorySet != NULL || fNamedFactorySet != NULL) {
+        if (this->isValidating()) {
+            this->writeString("");
+            SkASSERT(NULL == flattenable); // We shouldn't get in here in this scenario
+        } else if (fFactorySet != NULL || fNamedFactorySet != NULL) {
             this->write32(0);
         } else {
             this->writeFunctionPtr(NULL);
@@ -290,7 +293,9 @@ void SkOrderedWriteBuffer::writeFlattenable(SkFlattenable* flattenable) {
      *      name. SkGPipe uses this technique so it can write the name to its
      *      stream before writing the flattenable.
      */
-    if (fFactorySet) {
+    if (this->isValidating()) {
+        this->writeString(flattenable->getTypeName());
+    } else if (fFactorySet) {
         this->write32(fFactorySet->add(factory));
     } else if (fNamedFactorySet) {
         int32_t index = fNamedFactorySet->find(factory);
@@ -305,10 +310,10 @@ void SkOrderedWriteBuffer::writeFlattenable(SkFlattenable* flattenable) {
     // make room for the size of the flattened object
     (void)fWriter.reserve(sizeof(uint32_t));
     // record the current size, so we can subtract after the object writes.
-    uint32_t offset = fWriter.size();
+    uint32_t offset = fWriter.bytesWritten();
     // now flatten the object
     flattenObject(flattenable, *this);
-    uint32_t objSize = fWriter.size() - offset;
+    uint32_t objSize = fWriter.bytesWritten() - offset;
     // record the obj's size
     *fWriter.peek32(offset - sizeof(uint32_t)) = objSize;
 }

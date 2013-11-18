@@ -85,31 +85,13 @@ public:
     bool isDither() const { return fDither; }
 
     /**
-     * Enables a SkXfermode::Mode-based color filter applied to the primitive color. The constant
-     * color passed to this function is considered the "src" color and the primitive's color is
-     * considered the "dst" color. Defaults to kDst_Mode which equates to simply passing through
-     * the primitive color unmodified.
-     */
-    void setXfermodeColorFilter(SkXfermode::Mode mode, GrColor color) {
-        fColorFilterColor = color;
-        fColorFilterXfermode = mode;
-    }
-    SkXfermode::Mode getColorFilterMode() const { return fColorFilterXfermode; }
-    GrColor getColorFilterColor() const { return fColorFilterColor; }
-
-    /**
-     * Disables the SkXfermode::Mode color filter.
-     */
-    void resetColorFilter() {
-        fColorFilterXfermode = SkXfermode::kDst_Mode;
-        fColorFilterColor = GrColorPackRGBA(0xff, 0xff, 0xff, 0xff);
-    }
-
-    /**
      * Appends an additional color effect to the color computation.
      */
     const GrEffectRef* addColorEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
-        GrAssert(NULL != effect);
+        SkASSERT(NULL != effect);
+        if (!(*effect)->willUseInputColor()) {
+            fColorStages.reset();
+        }
         SkNEW_APPEND_TO_TARRAY(&fColorStages, GrEffectStage, (effect, attr0, attr1));
         return effect;
     }
@@ -118,7 +100,10 @@ public:
      * Appends an additional coverage effect to the coverage computation.
      */
     const GrEffectRef* addCoverageEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
-        GrAssert(NULL != effect);
+        SkASSERT(NULL != effect);
+        if (!(*effect)->willUseInputColor()) {
+            fCoverageStages.reset();
+        }
         SkNEW_APPEND_TO_TARRAY(&fCoverageStages, GrEffectStage, (effect, attr0, attr1));
         return effect;
     }
@@ -153,9 +138,6 @@ public:
         fColor = paint.fColor;
         fCoverage = paint.fCoverage;
 
-        fColorFilterColor = paint.fColorFilterColor;
-        fColorFilterXfermode = paint.fColorFilterXfermode;
-
         fColorStages = paint.fColorStages;
         fCoverageStages = paint.fCoverageStages;
 
@@ -171,10 +153,30 @@ public:
         this->resetColor();
         this->resetCoverage();
         this->resetStages();
-        this->resetColorFilter();
     }
 
+    /**
+     * Determines whether the drawing with this paint is opaque with respect to both color blending
+     * and fractional coverage. It does not consider whether AA has been enabled on the paint or
+     * not. Depending upon whether multisampling or coverage-based AA is in use, AA may make the
+     * result only apply to the interior of primitives.
+     *
+     */
+    bool isOpaque() const;
+
+    /**
+     * Returns true if isOpaque would return true and the paint represents a solid constant color
+     * draw. If the result is true, constantColor will be updated to contain the constant color.
+     */
+    bool isOpaqueAndConstantColor(GrColor* constantColor) const;
+
 private:
+
+    /**
+     * Helper for isOpaque and isOpaqueAndConstantColor.
+     */
+    bool getOpaqueAndKnownColor(GrColor* solidColor, uint32_t* solidColorKnownComponents) const;
+
     /**
      * Called when the source coord system from which geometry is rendered changes. It ensures that
      * the local coordinates seen by effects remains unchanged. oldToNew gives the transformation
@@ -223,9 +225,6 @@ private:
 
     GrColor                     fColor;
     uint8_t                     fCoverage;
-
-    GrColor                     fColorFilterColor;
-    SkXfermode::Mode            fColorFilterXfermode;
 
     void resetBlend() {
         fSrcBlendCoeff = kOne_GrBlendCoeff;

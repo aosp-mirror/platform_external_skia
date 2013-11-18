@@ -18,7 +18,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
+SkImageRef::SkImageRef(SkStreamRewindable* stream, SkBitmap::Config config,
                        int sampleSize, SkBaseMutex* mutex)
         : SkPixelRef(mutex), fErrorInDecoding(false) {
     SkASSERT(stream);
@@ -64,7 +64,8 @@ bool SkImageRef::getInfo(SkBitmap* bitmap) {
 bool SkImageRef::isOpaque(SkBitmap* bitmap) {
     if (bitmap && bitmap->pixelRef() == this) {
         bitmap->lockPixels();
-        bitmap->setIsOpaque(fBitmap.isOpaque());
+        // what about colortables??????
+        bitmap->setAlphaType(fBitmap.alphaType());
         bitmap->unlockPixels();
         return true;
     }
@@ -79,7 +80,7 @@ SkImageDecoderFactory* SkImageRef::setDecoderFactory(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkImageRef::onDecode(SkImageDecoder* codec, SkStream* stream,
+bool SkImageRef::onDecode(SkImageDecoder* codec, SkStreamRewindable* stream,
                           SkBitmap* bitmap, SkBitmap::Config config,
                           SkImageDecoder::Mode mode) {
     return codec->decode(stream, bitmap, config, mode);
@@ -175,7 +176,7 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
 
     size_t length = buffer.getArrayCount();
     fStream = SkNEW_ARGS(SkMemoryStream, (length));
-    buffer.readByteArray((void*)fStream->getMemoryBase());
+    buffer.readByteArray((void*)fStream->getMemoryBase(), length);
 
     fPrev = fNext = NULL;
     fFactory = NULL;

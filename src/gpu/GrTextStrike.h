@@ -13,11 +13,12 @@
 
 #include "GrAllocPool.h"
 #include "GrFontScaler.h"
-#include "GrTHashCache.h"
+#include "GrTHashTable.h"
 #include "GrPoint.h"
 #include "GrGlyph.h"
+#include "GrDrawTarget.h"
+#include "GrAtlas.h"
 
-class GrAtlasMgr;
 class GrFontCache;
 class GrGpu;
 class GrFontPurgeListener;
@@ -28,8 +29,7 @@ class GrFontPurgeListener;
  */
 class GrTextStrike {
 public:
-    GrTextStrike(GrFontCache*, const GrKey* fontScalerKey, GrMaskFormat,
-                 GrAtlasMgr*);
+    GrTextStrike(GrFontCache*, const GrKey* fontScalerKey, GrMaskFormat, GrAtlasMgr*);
     ~GrTextStrike();
 
     const GrKey* getFontScalerKey() const { return fFontScalerKey; }
@@ -44,10 +44,9 @@ public:
     const GrGlyph* glyphAt(int index) const {
         return fCache.getArray()[index];
     }
-    GrAtlas* getAtlas() const { return fAtlas; }
 
-    // returns true if an atlas was removed
-    bool removeUnusedAtlases();
+    // returns true if a plot was removed
+    bool removeUnusedPlots();
 
 public:
     // for LRU
@@ -62,13 +61,11 @@ private:
 
     GrFontCache*    fFontCache;
     GrAtlasMgr*     fAtlasMgr;
-    GrAtlas*        fAtlas;     // linklist
+    GrAtlas         fAtlas;
 
-    GrMaskFormat fMaskFormat;
+    GrMaskFormat    fMaskFormat;
 
     GrGlyph* generateGlyph(GrGlyph::PackedID packed, GrFontScaler* scaler);
-    // returns true if after the purge, the strike is empty
-    bool purgeAtlasAtY(GrAtlas* atlas, int yCoord);
 
     friend class GrFontCache;
 };
@@ -84,8 +81,8 @@ public:
 
     void purgeExceptFor(GrTextStrike*);
 
-    // remove an unused atlas and its strike (if necessary)
-    void freeAtlasExceptFor(GrTextStrike*);
+    // remove an unused plot and its strike (if necessary)
+    void freePlotExceptFor(GrTextStrike*);
 
     // testing
     int countStrikes() const { return fCache.getArray().count(); }
@@ -94,10 +91,14 @@ public:
     }
     GrTextStrike* getHeadStrike() const { return fHead; }
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     void validate() const;
 #else
     void validate() const {}
+#endif
+
+#ifdef SK_DEVELOPER
+    void dump() const;
 #endif
 
 private:
@@ -110,11 +111,11 @@ private:
     GrTextStrike* fTail;
 
     GrGpu*      fGpu;
-    GrAtlasMgr* fAtlasMgr;
-
+    GrAtlasMgr* fAtlasMgr[kMaskFormatCount];
 
     GrTextStrike* generateStrike(GrFontScaler*, const Key&);
     inline void detachStrikeFromList(GrTextStrike*);
+    void purgeStrike(GrTextStrike* strike);
 };
 
 #endif

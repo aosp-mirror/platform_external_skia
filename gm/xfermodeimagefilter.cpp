@@ -31,7 +31,7 @@ protected:
     void make_bitmap() {
         fBitmap.setConfig(SkBitmap::kARGB_8888_Config, 80, 80);
         fBitmap.allocPixels();
-        SkDevice device(fBitmap);
+        SkBitmapDevice device(fBitmap);
         SkCanvas canvas(&device);
         canvas.clear(0x00000000);
         SkPaint paint;
@@ -45,7 +45,7 @@ protected:
     void make_checkerboard() {
         fCheckerboard.setConfig(SkBitmap::kARGB_8888_Config, 80, 80);
         fCheckerboard.allocPixels();
-        SkDevice device(fCheckerboard);
+        SkBitmapDevice device(fCheckerboard);
         SkCanvas canvas(&device);
         canvas.clear(0x00000000);
         SkPaint darkPaint;
@@ -189,6 +189,42 @@ protected:
                                           SkIntToScalar(fBitmap.height() + 4)));
         canvas->drawPaint(paint);
         canvas->restore();
+        x += fBitmap.width() + MARGIN;
+        if (x + fBitmap.width() > WIDTH) {
+            x = 0;
+            y += fBitmap.height() + MARGIN;
+        }
+        // Test cropping
+        static const size_t nbSamples = 3;
+        SkXfermode::Mode sampledModes[nbSamples] = {SkXfermode::kOverlay_Mode,
+                                                    SkXfermode::kSrcOver_Mode,
+                                                    SkXfermode::kPlus_Mode};
+        int offsets[nbSamples][4] = {{ 10,  10, -16, -16},
+                                     { 10,  10,  10,  10},
+                                     {-10, -10,  -6,  -6}};
+        for (size_t i = 0; i < nbSamples; ++i) {
+            SkIRect cropRect = SkIRect::MakeXYWH(x + offsets[i][0],
+                                                 y + offsets[i][1],
+                                                 fBitmap.width()  + offsets[i][2],
+                                                 fBitmap.height() + offsets[i][3]);
+            SkImageFilter::CropRect rect(SkRect::Make(cropRect));
+            mode.reset(SkXfermode::Create(sampledModes[i]));
+            filter.reset(SkNEW_ARGS(SkXfermodeImageFilter,
+                                    (mode, offsetBackground, offsetForeground, &rect)));
+            paint.setImageFilter(filter);
+            canvas->save();
+            canvas->clipRect(SkRect::MakeXYWH(SkIntToScalar(x),
+                                              SkIntToScalar(y),
+                                              SkIntToScalar(fBitmap.width() + 4),
+                                              SkIntToScalar(fBitmap.height() + 4)));
+            canvas->drawPaint(paint);
+            canvas->restore();
+            x += fBitmap.width() + MARGIN;
+            if (x + fBitmap.width() > WIDTH) {
+                x = 0;
+                y += fBitmap.height() + MARGIN;
+            }
+        }
     }
 private:
     typedef GM INHERITED;

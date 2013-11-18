@@ -16,6 +16,8 @@
       ],
       'include_dirs': [
         '../include/effects',
+        '../src/effects',
+        '../src/opts',
         '../src/core',
       ],
       'direct_dependent_settings': {

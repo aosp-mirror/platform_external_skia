@@ -608,7 +608,7 @@ SkAdvancedTypefaceMetrics* SkTypeface_FreeType::onGetAdvancedTypefaceMetrics(
                 FT_Fixed advances[128];
                 int advanceCount = 128;
                 if (gID + advanceCount > face->num_glyphs)
-                    advanceCount = face->num_glyphs - gID + 1;
+                    advanceCount = face->num_glyphs - gID;
                 getAdvances(face, gID, advanceCount, FT_LOAD_NO_SCALE,
                             advances);
                 for (int i = 0; i < advanceCount; i++) {
@@ -836,6 +836,26 @@ static FT_Int chooseBitmapStrike(FT_Face face, SkFixed scaleY) {
     return chosenStrikeIndex;
 }
 
+bool SkTypeface_FreeType::onGetKerningPairAdjustments(const uint16_t glyphs[],
+                                      int count, int32_t adjustments[]) const {
+    AutoFTAccess fta(this);
+    FT_Face face = fta.face();
+    if (!face || !FT_HAS_KERNING(face)) {
+        return false;
+    }
+
+    for (int i = 0; i < count - 1; ++i) {
+        FT_Vector delta;
+        FT_Error err = FT_Get_Kerning(face, glyphs[i], glyphs[i+1],
+                                      FT_KERNING_UNSCALED, &delta);
+        if (err) {
+            return false;
+        }
+        adjustments[i] = delta.x;
+    }
+    return true;
+}
+
 SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
                                                    const SkDescriptor* desc)
         : SkScalerContext_FreeType_Base(typeface, desc) {
@@ -902,34 +922,9 @@ SkScalerContext_FreeType::SkScalerContext_FreeType(SkTypeface* typeface,
         fMatrix22.xx = fMatrix22.yy = SK_Fixed1;
         fMatrix22.xy = fMatrix22.yx = 0;
     }
-
-#ifdef SK_SUPPORT_HINTING_SCALE_FACTOR
-    if (fRec.getHinting() == SkPaint::kNo_Hinting) {
-        fScale.set(sx, sy);
-        fScaleX = SkScalarToFixed(sx);
-        fScaleY = SkScalarToFixed(sy);
-    } else {
-        SkScalar hintingScaleFactor = fRec.fHintingScaleFactor;
-
-        fScale.set(sx / hintingScaleFactor, sy / hintingScaleFactor);
-        fScaleX = SkScalarToFixed(fScale.fX);
-        fScaleY = SkScalarToFixed(fScale.fY);
-
-        fMatrix22.xx *= hintingScaleFactor;
-        fMatrix22.xy *= hintingScaleFactor;
-        fMatrix22.yx *= hintingScaleFactor;
-        fMatrix22.yy *= hintingScaleFactor;
-
-        fMatrix22Scalar.setScaleX(fMatrix22Scalar.getScaleX() * hintingScaleFactor);
-        fMatrix22Scalar.setSkewX(fMatrix22Scalar..getSkewX() * hintingScaleFactor);
-        fMatrix22Scalar.setSkewY(fMatrix22Scalar..getSkewY() * hintingScaleFactor);
-        fMatrix22Scalar.setScaleY(fMatrix22Scalar..getScaleY() * hintingScaleFactor);
-    }
-#else
     fScale.set(sx, sy);
     fScaleX = SkScalarToFixed(sx);
     fScaleY = SkScalarToFixed(sy);
-#endif
 
     fLCDIsVert = SkToBool(fRec.fFlags & SkScalerContext::kLCD_Vertical_Flag);
 

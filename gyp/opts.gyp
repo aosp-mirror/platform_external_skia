@@ -51,7 +51,9 @@
             '../src/opts/SkBitmapFilter_opts_SSE2.cpp',
             '../src/opts/SkBlitRow_opts_SSE2.cpp',
             '../src/opts/SkBlitRect_opts_SSE2.cpp',
+            '../src/opts/SkMorphology_opts_SSE2.cpp',
             '../src/opts/SkUtils_opts_SSE2.cpp',
+            '../src/opts/SkXfermode_opts_none.cpp',
           ],
         }],
         [ 'skia_arch_type == "arm" and arm_version >= 7', {
@@ -73,8 +75,11 @@
             '../src/opts/opts_check_arm.cpp',
             '../src/opts/memset.arm.S',
             '../src/opts/SkBitmapProcState_opts_arm.cpp',
+            '../src/opts/SkBlitMask_opts_arm.cpp',
             '../src/opts/SkBlitRow_opts_arm.cpp',
             '../src/opts/SkBlitRow_opts_arm.h',
+            '../src/opts/SkMorphology_opts_none.cpp',
+            '../src/opts/SkXfermode_opts_arm.cpp',
           ],
           'conditions': [
             [ 'arm_neon == 1 or arm_neon_optional == 1', {
@@ -95,8 +100,11 @@
         [ '(skia_arch_type == "arm" and arm_version < 7) or (skia_os == "ios")', {
           'sources': [
             '../src/opts/SkBitmapProcState_opts_none.cpp',
+            '../src/opts/SkBlitMask_opts_none.cpp',
             '../src/opts/SkBlitRow_opts_none.cpp',
+            '../src/opts/SkMorphology_opts_none.cpp',
             '../src/opts/SkUtils_opts_none.cpp',
+            '../src/opts/SkXfermode_opts_none.cpp',
           ],
         }],
       ],
@@ -168,6 +176,7 @@
         '../src/opts/SkBitmapProcState_matrix_clamp_neon.h',
         '../src/opts/SkBitmapProcState_matrix_repeat_neon.h',
         '../src/opts/SkBlitRow_opts_arm_neon.cpp',
+        '../src/opts/SkXfermode_opts_arm_neon.cpp',
       ],
     },
   ],

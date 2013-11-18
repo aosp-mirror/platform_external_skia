@@ -38,7 +38,7 @@ static void check_list(const SkTInternalLList<ListElement>& list,
                        ListElement elements[4]) {
 
     REPORTER_ASSERT(reporter, empty == list.isEmpty());
-#if SK_DEBUG
+#ifdef SK_DEBUG
     list.validate();
     REPORTER_ASSERT(reporter, numElements == list.countEntries());
     REPORTER_ASSERT(reporter, in0 == list.isInList(&elements[0]));
@@ -124,7 +124,7 @@ static void TestTInternalLList(skiatest::Reporter* reporter) {
 static void TestTLList(skiatest::Reporter* reporter) {
     typedef SkTLList<ListElement> ElList;
     typedef ElList::Iter Iter;
-    SkMWCRandom random;
+    SkRandom random;
 
     for (int i = 1; i <= 16; i *= 2) {
 

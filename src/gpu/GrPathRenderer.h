@@ -6,7 +6,6 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef GrPathRenderer_DEFINED
 #define GrPathRenderer_DEFINED
 
@@ -28,7 +27,7 @@ struct GrPoint;
  *  stages before GrPaint::kTotalStages are reserved for setting up the draw (i.e., textures and
  *  filter masks).
  */
-class GR_API GrPathRenderer : public GrRefCnt {
+class SK_API GrPathRenderer : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrPathRenderer)
 
@@ -84,7 +83,7 @@ public:
     StencilSupport getStencilSupport(const SkPath& path,
                                      const SkStrokeRec& stroke,
                                      const GrDrawTarget* target) const {
-        GrAssert(!path.isInverseFillType());
+        SkASSERT(!path.isInverseFillType());
         return this->onGetStencilSupport(path, stroke, target);
     }
 
@@ -117,9 +116,9 @@ public:
                   const SkStrokeRec& stroke,
                   GrDrawTarget* target,
                   bool antiAlias) {
-        GrAssert(!path.isEmpty());
-        GrAssert(this->canDrawPath(path, stroke, target, antiAlias));
-        GrAssert(target->drawState()->getStencil().isDisabled() ||
+        SkASSERT(!path.isEmpty());
+        SkASSERT(this->canDrawPath(path, stroke, target, antiAlias));
+        SkASSERT(target->drawState()->getStencil().isDisabled() ||
                  kNoRestriction_StencilSupport == this->getStencilSupport(path, stroke, target));
         return this->onDrawPath(path, stroke, target, antiAlias);
     }
@@ -133,8 +132,8 @@ public:
      * @param target                target that the path will be rendered to
      */
     void stencilPath(const SkPath& path, const SkStrokeRec& stroke, GrDrawTarget* target) {
-        GrAssert(!path.isEmpty());
-        GrAssert(kNoSupport_StencilSupport != this->getStencilSupport(path, stroke, target));
+        SkASSERT(!path.isEmpty());
+        SkASSERT(kNoSupport_StencilSupport != this->getStencilSupport(path, stroke, target));
         this->onStencilPath(path, stroke, target);
     }
 
@@ -193,7 +192,7 @@ protected:
 
 private:
 
-    typedef GrRefCnt INHERITED;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

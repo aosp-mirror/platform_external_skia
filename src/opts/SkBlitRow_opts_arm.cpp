@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlitMask.h"
 #include "SkBlitRow.h"
 #include "SkColorPriv.h"
 #include "SkDither.h"
@@ -376,20 +375,4 @@ SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
 #define Color32_arm  NULL
 SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
     return SK_ARM_NEON_WRAP(Color32_arm);
-}
-
-SkBlitMask::ColorProc SkBlitMask::PlatformColorProcs(SkBitmap::Config dstConfig,
-                                                     SkMask::Format maskFormat,
-                                                     SkColor color) {
-    return NULL;
-}
-
-SkBlitMask::BlitLCD16RowProc SkBlitMask::PlatformBlitRowProcs16(bool isOpaque) {
-    return NULL;
-}
-
-SkBlitMask::RowProc SkBlitMask::PlatformRowProcs(SkBitmap::Config dstConfig,
-                                                 SkMask::Format maskFormat,
-                                                 RowFlags flags) {
-    return NULL;
 }

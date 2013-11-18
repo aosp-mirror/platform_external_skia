@@ -13,9 +13,9 @@ void SkOpEdgeBuilder::init() {
     fOperand = false;
     fXorMask[0] = fXorMask[1] = (fPath->getFillType() & 1) ? kEvenOdd_PathOpsMask
             : kWinding_PathOpsMask;
-#if DEBUG_DUMP
-    gContourID = 0;
-    gSegmentID = 0;
+#ifdef SK_DEBUG
+    SkPathOpsDebug::gContourID = 0;
+    SkPathOpsDebug::gSegmentID = 0;
 #endif
     fUnparseable = false;
     fSecondHalf = preFetch();
@@ -42,16 +42,11 @@ bool SkOpEdgeBuilder::finish() {
 }
 
 void SkOpEdgeBuilder::closeContour(const SkPoint& curveEnd, const SkPoint& curveStart) {
-    if ((!AlmostEqualUlps(curveEnd.fX, curveStart.fX)
-            || !AlmostEqualUlps(curveEnd.fY, curveStart.fY))) {
+    if (!SkDPoint::ApproximatelyEqual(curveEnd, curveStart)) {
         fPathVerbs.push_back(SkPath::kLine_Verb);
         fPathPts.push_back_n(1, &curveStart);
     } else {
-        if (curveEnd.fX != curveStart.fX || curveEnd.fY != curveStart.fY) {
-            fPathPts[fPathPts.count() - 1] = curveStart;
-        } else {
-            fPathPts[fPathPts.count() - 1] = curveStart;
-        }
+        fPathPts[fPathPts.count() - 1] = curveStart;
     }
     fPathVerbs.push_back(SkPath::kClose_Verb);
 }
@@ -82,8 +77,11 @@ int SkOpEdgeBuilder::preFetch() {
                 lastCurve = false;
                 continue;
             case SkPath::kLine_Verb:
-                if (AlmostEqualUlps(curve[0].fX, pts[1].fX)
-                        && AlmostEqualUlps(curve[0].fY, pts[1].fY)) {
+                if (SkDPoint::ApproximatelyEqual(curve[0], pts[1])) {
+                    uint8_t lastVerb = fPathVerbs.back();
+                    if (lastVerb != SkPath::kLine_Verb && lastVerb != SkPath::kMove_Verb) {
+                        fPathPts.back() = pts[1];
+                    }
                     continue;  // skip degenerate points
                 }
                 break;

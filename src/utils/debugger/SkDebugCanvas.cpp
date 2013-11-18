@@ -24,6 +24,8 @@ SkDebugCanvas::SkDebugCanvas(int width, int height)
         : INHERITED(make_noconfig_bm(width, height))
         , fOverdrawViz(false)
         , fOverdrawFilter(NULL)
+        , fOverrideTexFiltering(false)
+        , fTexOverrideFilter(NULL)
         , fOutstandingSaveCount(0) {
     // TODO(chudy): Free up memory from all draw commands in destructor.
     fWidth = width;
@@ -109,13 +111,13 @@ static SkPMColor OverdrawXferModeProc(SkPMColor src, SkPMColor dst) {
 
 // The OverdrawFilter modifies every paint to use an SkProcXfermode which
 // in turn invokes OverdrawXferModeProc
-class OverdrawFilter : public SkDrawFilter {
+class SkOverdrawFilter : public SkDrawFilter {
 public:
-    OverdrawFilter() {
+    SkOverdrawFilter() {
         fXferMode = new SkProcXfermode(OverdrawXferModeProc);
     }
 
-    virtual ~OverdrawFilter() {
+    virtual ~SkOverdrawFilter() {
         delete fXferMode;
     }
 
@@ -126,6 +128,29 @@ public:
 
 protected:
     SkXfermode* fXferMode;
+
+private:
+    typedef SkDrawFilter INHERITED;
+};
+
+// SkTexOverrideFilter modifies every paint to use the specified
+// texture filtering mode
+class SkTexOverrideFilter : public SkDrawFilter {
+public:
+    SkTexOverrideFilter() : fFilterLevel(SkPaint::kNone_FilterLevel) {
+    }
+
+    void setFilterLevel(SkPaint::FilterLevel filterLevel) {
+        fFilterLevel = filterLevel;
+    }
+
+    virtual bool filter(SkPaint* p, Type) SK_OVERRIDE {
+        p->setFilterLevel(fFilterLevel);
+        return true;
+    }
+
+protected:
+    SkPaint::FilterLevel fFilterLevel;
 
 private:
     typedef SkDrawFilter INHERITED;
@@ -161,11 +186,19 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
     // call setDrawFilter on anything but the root layer odd things happen.
     if (fOverdrawViz) {
         if (NULL == fOverdrawFilter) {
-            fOverdrawFilter = new OverdrawFilter;
+            fOverdrawFilter = new SkOverdrawFilter;
         }
 
         if (fOverdrawFilter != canvas->getDrawFilter()) {
             canvas->setDrawFilter(fOverdrawFilter);
+        }
+    } else if (fOverrideTexFiltering) {
+        if (NULL == fTexOverrideFilter) {
+            fTexOverrideFilter = new SkTexOverrideFilter;
+        }
+
+        if (fTexOverrideFilter != canvas->getDrawFilter()) {
+            canvas->setDrawFilter(fTexOverrideFilter);
         }
     } else {
         canvas->setDrawFilter(NULL);
@@ -246,6 +279,15 @@ void SkDebugCanvas::toggleFilter(bool toggle) {
     fFilter = toggle;
 }
 
+void SkDebugCanvas::overrideTexFiltering(bool overrideTexFiltering, SkPaint::FilterLevel level) {
+    if (NULL == fTexOverrideFilter) {
+        fTexOverrideFilter = new SkTexOverrideFilter;
+    }
+
+    fOverrideTexFiltering = overrideTexFiltering;
+    fTexOverrideFilter->setFilterLevel(level);
+}
+
 void SkDebugCanvas::clear(SkColor color) {
     addDrawCommand(new SkClearCommand(color));
 }
@@ -276,17 +318,19 @@ bool SkDebugCanvas::concat(const SkMatrix& matrix) {
 }
 
 void SkDebugCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar left,
-        SkScalar top, const SkPaint* paint = NULL) {
+                               SkScalar top, const SkPaint* paint = NULL) {
     addDrawCommand(new SkDrawBitmapCommand(bitmap, left, top, paint));
 }
 
 void SkDebugCanvas::drawBitmapRectToRect(const SkBitmap& bitmap,
-        const SkRect* src, const SkRect& dst, const SkPaint* paint) {
-    addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint));
+                                         const SkRect* src, const SkRect& dst,
+                                         const SkPaint* paint,
+                                         SkCanvas::DrawBitmapRectFlags flags) {
+    addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint, flags));
 }
 
 void SkDebugCanvas::drawBitmapMatrix(const SkBitmap& bitmap,
-        const SkMatrix& matrix, const SkPaint* paint) {
+                                     const SkMatrix& matrix, const SkPaint* paint) {
     addDrawCommand(new SkDrawBitmapMatrixCommand(bitmap, matrix, paint));
 }
 

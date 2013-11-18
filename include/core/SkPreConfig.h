@@ -14,6 +14,13 @@
     #include "config.h"
 #endif
 
+// Allows embedders that want to disable macros that take arguments to just
+// define that symbol to be one of these
+//
+#define SK_NOTHING_ARG1(arg1)
+#define SK_NOTHING_ARG2(arg1, arg2)
+#define SK_NOTHING_ARG3(arg1, arg2, arg3)
+
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_BUILD_FOR_ANDROID) && !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_PALM) && !defined(SK_BUILD_FOR_WINCE) && !defined(SK_BUILD_FOR_WIN32) && !defined(SK_BUILD_FOR_UNIX) && !defined(SK_BUILD_FOR_MAC) && !defined(SK_BUILD_FOR_SDL) && !defined(SK_BUILD_FOR_BREW) && !defined(SK_BUILD_FOR_NACL)
@@ -53,13 +60,6 @@
     #define SK_BUILD_FOR_ANDROID
 #endif
 
-
-// USE_CHROMIUM_SKIA is defined when building Skia for the Chromium
-// browser.
-#if defined(USE_CHROMIUM_SKIA)
-    #define SK_BUILD_FOR_CHROMIUM
-#endif
-
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_DEBUG) && !defined(SK_RELEASE)
@@ -77,7 +77,6 @@
     #if !defined(SK_WARN_UNUSED_RESULT)
         #define SK_WARN_UNUSED_RESULT
     #endif
-    #include "sk_stdint.h"
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -104,17 +103,6 @@
         #define SK_CPU_BENDIAN
     #else
         #define SK_CPU_LENDIAN
-    #endif
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-#ifndef SK_MMAP_SUPPORT
-    #ifdef SK_BUILD_FOR_WIN32
-        // by default, if we're windows, we assume we don't have mmap
-        #define SK_MMAP_SUPPORT 0
-    #else
-        #define SK_MMAP_SUPPORT 1
     #endif
 #endif
 

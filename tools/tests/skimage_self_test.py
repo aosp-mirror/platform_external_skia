@@ -39,6 +39,84 @@ def DieIfFilesMismatch(expected, actual):
             expected, actual)
         exit(1)
 
+def test_invalid_file(file_dir, skimage_binary):
+    """ Test the return value of skimage when an invalid file is decoded.
+        If there is no expectation file, or the file expects a particular
+        result, skimage should return nonzero indicating failure.
+        If the file has no expectation, or ignore-failure is set to true,
+        skimage should return zero indicating success. """
+    invalid_file = os.path.join(file_dir, "skimage", "input", "bad-images",
+                                "invalid.png")
+    # No expectations file:
+    args = [skimage_binary, "--readPath", invalid_file]
+    result = subprocess.call(args)
+    if 0 == result:
+      print "'%s' should have reported failure!" % " ".join(args)
+      exit(1)
+
+    # Directory holding all expectations files
+    expectations_dir = os.path.join(file_dir, "skimage", "input", "bad-images")
+
+    # Expectations file expecting a valid decode:
+    incorrect_expectations = os.path.join(expectations_dir,
+                                          "incorrect-results.json")
+    args = [skimage_binary, "--readPath", invalid_file,
+            "--readExpectationsPath", incorrect_expectations]
+    result = subprocess.call(args)
+    if 0 == result:
+      print "'%s' should have reported failure!" % " ".join(args)
+      exit(1)
+
+    # Empty expectations:
+    empty_expectations = os.path.join(expectations_dir, "empty-results.json")
+    output = subprocess.check_output([skimage_binary, "--readPath", invalid_file,
+                                      "--readExpectationsPath",
+                                      empty_expectations],
+                                     stderr=subprocess.STDOUT)
+    if not "Missing" in output:
+      # Another test (in main()) tests to ensure that "Missing" does not appear
+      # in the output. That test could be passed if the output changed so
+      # "Missing" never appears. This ensures that an error is not missed if
+      # that happens.
+      print "skimage output changed! This may cause other self tests to fail!"
+      exit(1)
+
+    # Ignore failure:
+    ignore_expectations = os.path.join(expectations_dir, "ignore-results.json")
+    output = subprocess.check_output([skimage_binary, "--readPath", invalid_file,
+                                      "--readExpectationsPath",
+                                      ignore_expectations],
+                                     stderr=subprocess.STDOUT)
+    if not "failures" in output:
+      # Another test (in main()) tests to ensure that "failures" does not
+      # appear in the output. That test could be passed if the output changed
+      # so "failures" never appears. This ensures that an error is not missed
+      # if that happens.
+      print "skimage output changed! This may cause other self tests to fail!"
+      exit(1)
+
+def test_incorrect_expectations(file_dir, skimage_binary):
+    """ Test that comparing to incorrect expectations fails, unless
+        ignore-failures is set to true. """
+    valid_file = os.path.join(file_dir, "skimage", "input",
+                                    "images-with-known-hashes",
+                                    "1209453360120438698.png")
+    expectations_dir = os.path.join(file_dir, "skimage", "input",
+                                    "images-with-known-hashes")
+
+    incorrect_results = os.path.join(expectations_dir,
+                                     "incorrect-results.json")
+    args = [skimage_binary, "--readPath", valid_file, "--readExpectationsPath",
+            incorrect_results]
+    result = subprocess.call(args)
+    if 0 == result:
+      print "'%s' should have reported failure!" % " ".join(args)
+      exit(1)
+
+    ignore_results = os.path.join(expectations_dir, "ignore-failures.json")
+    subprocess.check_call([skimage_binary, "--readPath", valid_file,
+                           "--readExpectationsPath", ignore_results])
+
 def main():
     # Use the directory of this file as the out directory
     file_dir = os.path.abspath(os.path.dirname(__file__))
@@ -65,11 +143,31 @@ def main():
 
     # Tell skimage to read back the expectations file it just wrote, and
     # confirm that the images in images_dir match it.
-    subprocess.check_call([skimage_binary, "--readPath", images_dir,
-                           "--readExpectationsPath", expectations_path])
+    output = subprocess.check_output([skimage_binary, "--readPath", images_dir,
+                                      "--readExpectationsPath",
+                                      expectations_path],
+                                     stderr=subprocess.STDOUT)
 
-    # TODO(scroggo): Add a test that compares expectations and image files that
-    # are known to NOT match, and make sure it returns an error.
+    # Although skimage succeeded, it would have reported success if the file
+    # was missing from the expectations file. Consider this a failure, since
+    # the expectations file was created from this same image. (It will print
+    # "Missing" in this case before listing the missing expectations).
+    if "Missing" in output:
+      print "Expectations file was missing expectations!"
+      print output
+      exit(1)
+
+    # Again, skimage would succeed if there were known failures (and print
+    # "failures"), but there should be no failures, since the file just
+    # created did not include failures to ignore.
+    if "failures" in output:
+      print "Image failed!"
+      print output
+      exit(1)
+
+
+    test_incorrect_expectations(file_dir=file_dir,
+                                skimage_binary=skimage_binary)
 
     # Generate an expectations file from an empty directory.
     empty_dir = tempfile.mkdtemp()
@@ -90,6 +188,8 @@ def main():
     golden_expectations = os.path.join(file_dir, "skimage", "output-expected",
                                        "nonexistent-dir", "expectations.json")
     DieIfFilesMismatch(expected=golden_expectations, actual=expectations_path)
+
+    test_invalid_file(file_dir=file_dir, skimage_binary=skimage_binary)
 
     # Done with all tests.
     print "Self tests succeeded!"

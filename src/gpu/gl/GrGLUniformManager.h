@@ -14,7 +14,7 @@
 
 #include "SkTArray.h"
 
-class GrGLContext;
+class GrGpuGL;
 class SkMatrix;
 
 /** Manages a program's uniforms.
@@ -22,10 +22,31 @@ class SkMatrix;
 class GrGLUniformManager {
 public:
     // Opaque handle to a uniform
-    typedef int UniformHandle;
-    static const UniformHandle kInvalidUniformHandle = 0;
+    class UniformHandle {
+    public:
+        static UniformHandle CreateFromUniformIndex(int i);
 
-    GrGLUniformManager(const GrGLContext& context) : fContext(context) {}
+        bool isValid() const { return 0 != fValue; }
+
+        bool operator==(const UniformHandle& other) const { return other.fValue == fValue; }
+
+        UniformHandle()
+            : fValue(0) {
+        }
+
+    private:
+        UniformHandle(int value)
+            : fValue(~value) {
+            SkASSERT(isValid());
+        }
+
+        int toUniformIndex() const { SkASSERT(isValid()); return ~fValue; }
+
+        int fValue;
+        friend class GrGLUniformManager; // For accessing toUniformIndex().
+    };
+
+    GrGLUniformManager(GrGpuGL* gpu) : fGpu(gpu) {}
 
     UniformHandle appendUniform(GrSLType type, int arrayCount = GrGLShaderVar::kNonArray);
 
@@ -65,6 +86,11 @@ public:
      */
     void getUniformLocations(GrGLuint programID, const BuilderUniformArray& uniforms);
 
+    /**
+     * Called by the GrGLShaderBuilder to access the array by the handle (index).
+     */
+    const BuilderUniform& getBuilderUniform(const BuilderUniformArray&, GrGLUniformManager::UniformHandle) const;
+
 private:
     enum {
         kUnusedUniform = -1,
@@ -78,7 +104,7 @@ private:
     };
 
     SkTArray<Uniform, true> fUniforms;
-    const GrGLContext&  fContext;
+    GrGpuGL* fGpu;
 };
 
 #endif

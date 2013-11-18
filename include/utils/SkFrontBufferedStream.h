@@ -26,7 +26,7 @@ public:
      *  @param bufferSize Exact size of the buffer to be used.
      *  @return An SkStream that can buffer up to bufferSize.
      */
-    static SkFrontBufferedStream* Create(SkStream* stream, size_t bufferSize);
+    static SkStreamRewindable* Create(SkStream* stream, size_t bufferSize);
 
     virtual size_t read(void* buffer, size_t size) SK_OVERRIDE;
 
@@ -55,15 +55,23 @@ private:
     const size_t            fBufferSize;
     SkAutoTMalloc<char>     fBuffer;
 
-    // Unimplemented.
-    SkFrontBufferedStream();
-
     // Private. Use Create.
     SkFrontBufferedStream(SkStream*, size_t bufferSize);
 
-    char* getBufferAtOffset() {
-        return fBuffer.get() + fOffset;
-    }
+    // Read up to size bytes from already buffered data, and copy to
+    // dst, if non-NULL. Updates fOffset. Assumes that fOffset is less
+    // than fBufferedSoFar.
+    size_t readFromBuffer(char* dst, size_t size);
+
+    // Buffer up to size bytes from the stream, and copy to dst if non-
+    // NULL. Updates fOffset and fBufferedSoFar. Assumes that fOffset is
+    // less than fBufferedSoFar, and size is greater than 0.
+    size_t bufferAndWriteTo(char* dst, size_t size);
+
+    // Read up to size bytes directly from the stream and into dst if non-
+    // NULL. Updates fOffset. Assumes fOffset is at or beyond the buffered
+    // data, and size is greater than 0.
+    size_t readDirectlyFromStream(char* dst, size_t size);
 
     typedef SkStream INHERITED;
 };

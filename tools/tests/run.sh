@@ -17,17 +17,13 @@ cd $(dirname $0)/../..
 # TODO: make it look in Release and/or Debug
 SKDIFF_BINARY=out/Debug/skdiff
 
-# Suffixes of all the raw bench data files we want to process.
+# Suffixes of the raw bench data files we want to process.
 BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES=\
-"data_skp_device_bitmap_multi_2_mode_tile_256_256_timeIndividualTiles "\
-"data_skp_device_bitmap_multi_3_mode_tile_256_256_timeIndividualTiles "\
-"data_skp_device_bitmap_multi_4_mode_tile_256_256_timeIndividualTiles "\
-"data_skp_device_bitmap_mode_record_bbh_rtree"
+"data_skp_scale_1.3061_config_8888_mode_tile_256_256_timeIndividualTiles_bbh_rtree "\
+"data_skp_scale_1.3061_config_8888_mode_tile_256_256_timeIndividualTiles"
 BENCHDATA_FILE_SUFFIXES_NO_INDIVIDUAL_TILES=\
-"data_skp_device_bitmap_multi_2_mode_tile_256_256 "\
-"data_skp_device_bitmap_multi_3_mode_tile_256_256 "\
-"data_skp_device_bitmap_multi_4_mode_tile_256_256 "\
-"data_skp_device_bitmap_mode_record_bbh_rtree"
+"data_skp_multi_4_scale_1.3061_config_8888_mode_tile_256_256 "\
+"data_skp_scale_1.3061_config_8888_mode_record"
 
 # Compare contents of all files within directories $1 and $2,
 # EXCEPT for any dotfiles.
@@ -73,67 +69,68 @@ function skdiff_test {
 # whitespace-separated list $3.)
 # If any of those files already exist locally, we assume that they are
 # correct and up to date, and we don't download them again.
-function benchgraph_download_rawdata {
+function download_bench_rawdata {
   if [ $# != 3 ]; then
-    echo "benchgraph_download_rawdata requires exactly 3 parameters, got $#"
+    echo "download_bench_rawdata requires exactly 3 parameters, got $#"
     exit 1
   fi
   PLATFORM="$1"
   REV="$2"
   FILE_SUFFIXES="$3"
 
-  PLATFORM_DIR="tools/tests/benchgraphs/$PLATFORM"
+  PLATFORM_DIR="tools/tests/benchalerts/$PLATFORM"
   RAW_BENCH_DATA_DIR="$PLATFORM_DIR/raw-bench-data"
   mkdir -p $RAW_BENCH_DATA_DIR
 
   for FILE_SUFFIX in $FILE_SUFFIXES; do
-    FILE=bench_r${REV}_${FILE_SUFFIX}
+    FILE=bench_${REV}_${FILE_SUFFIX}
     DESTFILE=$RAW_BENCH_DATA_DIR/$FILE
     if [ ! -f $DESTFILE ];
     then
-      URL=http://chromium-skia-gm.commondatastorage.googleapis.com/playback/perfdata/${PLATFORM}/data/${FILE}
+      URL=http://chromium-skia-gm.commondatastorage.googleapis.com/perfdata/${PLATFORM}/${FILE}
       echo Downloading $URL ...
       curl $URL --output $DESTFILE
     fi
   done
 }
 
-# Run bench_graph_svg.py across the data from platform $1,
+# Run check_bench_regressions.py across the data from platform $1,
 # writing its output to output-actual and comparing those results against
 # output-expected.
-function benchgraph_test {
-  if [ $# != 1 ]; then
-    echo "benchgraph_test requires exactly 1 parameter, got $#"
+function benchalert_test {
+  if [ $# != 2 ]; then
+    echo "benchalert_test requires exactly 2 parameter, got $#"
     exit 1
   fi
   PLATFORM="$1"
+  REVISION="$2"
 
-  PLATFORM_DIR="tools/tests/benchgraphs/$PLATFORM"
+  PLATFORM_DIR="tools/tests/benchalerts/$PLATFORM"
   RAW_BENCH_DATA_DIR="$PLATFORM_DIR/raw-bench-data"
   ACTUAL_OUTPUT_DIR="$PLATFORM_DIR/output-actual"
   EXPECTED_OUTPUT_DIR="$PLATFORM_DIR/output-expected"
 
-  # Run bench_graph_svg.py .
+  # Run check_bench_regressions.py .
   rm -rf $ACTUAL_OUTPUT_DIR
   mkdir -p $ACTUAL_OUTPUT_DIR
-  COMMAND="python bench/bench_graph_svg.py -d $RAW_BENCH_DATA_DIR -r -150 -f -150 -x 1024 -y 768 -l Title -m 25th -o $ACTUAL_OUTPUT_DIR/graph.xhtml"
+  COMMAND="python bench/check_bench_regressions.py -a 25th -b $PLATFORM -d $RAW_BENCH_DATA_DIR -e $PLATFORM_DIR/expectations.txt -r $REVISION"
   echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
   START_TIMESTAMP=$(date +%s)
-  $COMMAND &>$ACTUAL_OUTPUT_DIR/stdout
+  $COMMAND 2>$ACTUAL_OUTPUT_DIR/stderr
   echo $? >$ACTUAL_OUTPUT_DIR/return_value
   END_TIMESTAMP=$(date +%s)
 
   SECONDS_RUN=$(expr $END_TIMESTAMP - $START_TIMESTAMP)
-  echo "bench_graph_svg.py for $PLATFORM took $SECONDS_RUN seconds to complete"
+  echo "check_bench_regressions.py took $SECONDS_RUN seconds to complete"
 
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
 }
 
 # Test rebaseline.py's JSON-format expectations rebaselining capability.
 #
-# Copy expected-result.json files from $1 into a dir where they can be modified.
+# Copy expected-results.json files from $1 into a dir where they can be modified.
 # Run rebaseline.py with arguments in $2, recording its output.
-# Then compare the output (and modified expected-result.json files) to the
+# Then compare the output (and modified expected-results.json files) to the
 # content of $2/output-expected.
 function rebaseline_test {
   if [ $# != 3 ]; then
@@ -148,11 +145,11 @@ function rebaseline_test {
   rm -rf $ACTUAL_OUTPUT_DIR
   mkdir -p $ACTUAL_OUTPUT_DIR
   EXPECTATIONS_TO_MODIFY_DIR="$ACTUAL_OUTPUT_DIR/gm-expectations"
-  SUBDIRS=$(ls $COPY_EXPECTATIONS_FROM_DIR)
-  for SUBDIR in $SUBDIRS; do
-    mkdir -p $EXPECTATIONS_TO_MODIFY_DIR/$SUBDIR
-    cp $COPY_EXPECTATIONS_FROM_DIR/$SUBDIR/expected-results.json \
-       $EXPECTATIONS_TO_MODIFY_DIR/$SUBDIR
+  BUILDERS=$(ls $COPY_EXPECTATIONS_FROM_DIR)
+  for BUILDER in $BUILDERS; do
+    mkdir -p $EXPECTATIONS_TO_MODIFY_DIR/$BUILDER
+    cp $COPY_EXPECTATIONS_FROM_DIR/$BUILDER/expected-results.json \
+       $EXPECTATIONS_TO_MODIFY_DIR/$BUILDER
   done
   COMMAND="python tools/rebaseline.py --expectations-root $EXPECTATIONS_TO_MODIFY_DIR $ARGS"
   echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
@@ -209,19 +206,15 @@ skdiff_test "--nodiffs --match identical-bits $SKDIFF_TESTDIR/baseDir $SKDIFF_TE
 skdiff_test "--nodiffs --match identical-bits --match identical-pixels $SKDIFF_TESTDIR/baseDir $SKDIFF_TESTDIR/comparisonDir" "$SKDIFF_TESTDIR/identical-bits-or-pixels"
 
 #
-# Run benchgraph tests...
+# Run bench alerts tests...
 #
 
-# Parse a collection of bench data leading up to
-# http://70.32.156.53:10117/builders/Skia_Shuttle_Ubuntu12_ATI5770_Float_Bench_32/builds/878/steps/GenerateWebpagePictureBenchGraphs/logs/stdio
-# (this was during the period when the bench data included a ton of per-tile,
-# per-iteration data)
-PLATFORM=Skia_Shuttle_Ubuntu12_ATI5770_Float_Bench_32
-benchgraph_download_rawdata $PLATFORM 7618 "$BENCHDATA_FILE_SUFFIXES_NO_INDIVIDUAL_TILES"
-benchgraph_download_rawdata $PLATFORM 7671 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
-benchgraph_download_rawdata $PLATFORM 7679 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
-benchgraph_download_rawdata $PLATFORM 7686 "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
-benchgraph_test $PLATFORM
+# Parse a collection of bench data
+PLATFORM=Perf-Android-Nexus7-Tegra3-Arm7-Release
+REVISION=69c9e1a7261a3c8361e2b2c109d6340862149e34
+download_bench_rawdata $PLATFORM $REVISION "$BENCHDATA_FILE_SUFFIXES_NO_INDIVIDUAL_TILES"
+download_bench_rawdata $PLATFORM $REVISION "$BENCHDATA_FILE_SUFFIXES_YES_INDIVIDUAL_TILES"
+benchalert_test $PLATFORM $REVISION
 
 #
 # Run self test for skimage ...
@@ -242,7 +235,9 @@ fi
 
 REBASELINE_INPUT=tools/tests/rebaseline/input
 REBASELINE_OUTPUT=tools/tests/rebaseline/output
-rebaseline_test "$REBASELINE_INPUT/json1" "--actuals-base-url $REBASELINE_INPUT/json1 --subdirs base-android-galaxy-nexus base-shuttle-win7-intel-float" "$REBASELINE_OUTPUT/using-json1-expectations"
+rebaseline_test "$REBASELINE_INPUT/json1" "--actuals-base-url $REBASELINE_INPUT/json1 --builders Test-Android-GalaxyNexus-SGX540-Arm7-Debug Test-Win7-ShuttleA-HD2000-x86-Release" "$REBASELINE_OUTPUT/using-json1-expectations"
+rebaseline_test "$REBASELINE_INPUT/json1" "--actuals-base-url $REBASELINE_INPUT/json1 --bugs 1234 5678 --builders Test-Android-GalaxyNexus-SGX540-Arm7-Debug Test-Win7-ShuttleA-HD2000-x86-Release --notes notes_content --unreviewed" "$REBASELINE_OUTPUT/marked-unreviewed"
+rebaseline_test "$REBASELINE_INPUT/json1" "--actuals-base-url $REBASELINE_INPUT/json1 --add-new --builders Test-Android-GalaxyNexus-SGX540-Arm7-Debug Test-Mac10.6-MacMini4.1-GeForce320M-x86-Release Test-Win7-ShuttleA-HD2000-x86-Release" "$REBASELINE_OUTPUT/add-new"
 
 #
 # Test jsondiff.py ...

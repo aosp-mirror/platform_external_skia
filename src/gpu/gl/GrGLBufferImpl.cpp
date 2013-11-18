@@ -10,7 +10,7 @@
 
 #define GL_CALL(GPU, X) GR_GL_CALL(GPU->glInterface(), X)
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
 #define VALIDATE() this->validate()
 #else
 #define VALIDATE() do {} while(false)
@@ -44,7 +44,7 @@ void GrGLBufferImpl::release(GrGpuGL* gpu) {
         if (GR_GL_ARRAY_BUFFER == fBufferType) {
             gpu->notifyVertexBufferDelete(fDesc.fID);
         } else {
-            GrAssert(GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
+            SkASSERT(GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
             gpu->notifyIndexBufferDelete(fDesc.fID);
         }
         fDesc.fID = 0;
@@ -64,21 +64,21 @@ void GrGLBufferImpl::bind(GrGpuGL* gpu) const {
     if (GR_GL_ARRAY_BUFFER == fBufferType) {
         gpu->bindVertexBuffer(fDesc.fID);
     } else {
-        GrAssert(GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
+        SkASSERT(GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
         gpu->bindIndexBufferAndDefaultVertexArray(fDesc.fID);
     }
 }
 
 void* GrGLBufferImpl::lock(GrGpuGL* gpu) {
     VALIDATE();
-    GrAssert(!this->isLocked());
+    SkASSERT(!this->isLocked());
     if (0 == fDesc.fID) {
         fLockPtr = fCPUData;
     } else if (gpu->caps()->bufferLockSupport()) {
         this->bind(gpu);
         // Let driver know it can discard the old data
         GL_CALL(gpu, BufferData(fBufferType,
-                                fDesc.fSizeInBytes,
+                                (GrGLsizeiptr) fDesc.fSizeInBytes,
                                 NULL,
                                 fDesc.fDynamic ? DYNAMIC_USAGE_PARAM : GR_GL_STATIC_DRAW));
         GR_GL_CALL_RET(gpu->glInterface(),
@@ -90,9 +90,9 @@ void* GrGLBufferImpl::lock(GrGpuGL* gpu) {
 
 void GrGLBufferImpl::unlock(GrGpuGL* gpu) {
     VALIDATE();
-    GrAssert(this->isLocked());
+    SkASSERT(this->isLocked());
     if (0 != fDesc.fID) {
-        GrAssert(gpu->caps()->bufferLockSupport());
+        SkASSERT(gpu->caps()->bufferLockSupport());
         this->bind(gpu);
         GL_CALL(gpu, UnmapBuffer(fBufferType));
     }
@@ -105,7 +105,7 @@ bool GrGLBufferImpl::isLocked() const {
 }
 
 bool GrGLBufferImpl::updateData(GrGpuGL* gpu, const void* src, size_t srcSizeInBytes) {
-    GrAssert(!this->isLocked());
+    SkASSERT(!this->isLocked());
     VALIDATE();
     if (srcSizeInBytes > fDesc.fSizeInBytes) {
         return false;
@@ -119,7 +119,7 @@ bool GrGLBufferImpl::updateData(GrGpuGL* gpu, const void* src, size_t srcSizeInB
 
 #if GR_GL_USE_BUFFER_DATA_NULL_HINT
     if (fDesc.fSizeInBytes == srcSizeInBytes) {
-        GL_CALL(gpu, BufferData(fBufferType, srcSizeInBytes, src, usage));
+        GL_CALL(gpu, BufferData(fBufferType, (GrGLsizeiptr) srcSizeInBytes, src, usage));
     } else {
         // Before we call glBufferSubData we give the driver a hint using
         // glBufferData with NULL. This makes the old buffer contents
@@ -127,8 +127,8 @@ bool GrGLBufferImpl::updateData(GrGpuGL* gpu, const void* src, size_t srcSizeInB
         // draws that reference the old contents. With this hint it can
         // assign a different allocation for the new contents to avoid
         // flushing the gpu past draws consuming the old contents.
-        GL_CALL(gpu, BufferData(fBufferType, fDesc.fSizeInBytes, NULL, usage));
-        GL_CALL(gpu, BufferSubData(fBufferType, 0, srcSizeInBytes, src));
+        GL_CALL(gpu, BufferData(fBufferType, (GrGLsizeiptr) fDesc.fSizeInBytes, NULL, usage));
+        GL_CALL(gpu, BufferSubData(fBufferType, 0, (GrGLsizeiptr) srcSizeInBytes, src));
     }
 #else
     // Note that we're cheating on the size here. Currently no methods
@@ -157,9 +157,9 @@ bool GrGLBufferImpl::updateData(GrGpuGL* gpu, const void* src, size_t srcSizeInB
 }
 
 void GrGLBufferImpl::validate() const {
-    GrAssert(GR_GL_ARRAY_BUFFER == fBufferType || GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
+    SkASSERT(GR_GL_ARRAY_BUFFER == fBufferType || GR_GL_ELEMENT_ARRAY_BUFFER == fBufferType);
     // The following assert isn't valid when the buffer has been abandoned:
-    // GrAssert((0 == fDesc.fID) == (NULL != fCPUData));
-    GrAssert(0 != fDesc.fID || !fDesc.fIsWrapped);
-    GrAssert(NULL == fCPUData || NULL == fLockPtr || fCPUData == fLockPtr);
+    // SkASSERT((0 == fDesc.fID) == (NULL != fCPUData));
+    SkASSERT(0 != fDesc.fID || !fDesc.fIsWrapped);
+    SkASSERT(NULL == fCPUData || NULL == fLockPtr || fCPUData == fLockPtr);
 }

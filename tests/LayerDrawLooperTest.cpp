@@ -4,11 +4,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
 #include "SkBitmap.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkDraw.h"
-#include "SkDevice.h"
 #include "SkLayerDrawLooper.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
@@ -17,22 +18,21 @@
 #include "SkScalar.h"
 #include "SkXfermode.h"
 
-namespace {
-
-class FakeDevice : public SkDevice {
+class FakeDevice : public SkBitmapDevice {
 public:
-    FakeDevice() : SkDevice(SkBitmap::kARGB_8888_Config, 100, 100) { }
+    FakeDevice() : SkBitmapDevice(SkBitmap::kARGB_8888_Config, 100, 100, false) { }
 
     virtual void drawRect(const SkDraw& draw, const SkRect& r,
                           const SkPaint& paint) SK_OVERRIDE {
         fLastMatrix = *draw.fMatrix;
-        SkDevice::drawRect(draw, r, paint);
+        INHERITED::drawRect(draw, r, paint);
     }
 
     SkMatrix fLastMatrix;
-};
 
-} // namespace
+private:
+    typedef SkBitmapDevice INHERITED;
+};
 
 static void test_frontToBack(skiatest::Reporter* reporter) {
     SkAutoTUnref<SkLayerDrawLooper> looper(SkNEW(SkLayerDrawLooper));

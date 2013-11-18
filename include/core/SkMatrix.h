@@ -423,6 +423,19 @@ public:
         }
     }
 
+    /** Apply this matrix to the array of homogeneous points, specified by src,
+        where a homogeneous point is defined by 3 contiguous scalar values,
+        and write the transformed points into the array of scalars specified by dst.
+        dst[] = M * src[]
+        @param dst  Where the transformed coordinates are written. It must
+                    contain at least 3 * count entries
+        @param src  The original coordinates that are to be transformed. It
+                    must contain at least 3 * count entries
+        @param count The number of triples (homogeneous points) in src to read,
+                     and then transform into dst.
+    */
+    void mapHomogeneousPoints(SkScalar dst[], const SkScalar src[], int count) const;
+
     void mapXY(SkScalar x, SkScalar y, SkPoint* result) const {
         SkASSERT(result);
         this->getMapXYProc()(*this, x, y, result);
@@ -468,6 +481,18 @@ public:
     */
     bool mapRect(SkRect* rect) const {
         return this->mapRect(rect, *rect);
+    }
+
+    /** Apply this matrix to the src rectangle, and write the four transformed
+        points into dst. The points written to dst will be the original top-left, top-right,
+        bottom-right, and bottom-left points transformed by the matrix.
+        @param dst  Where the transformed quad is written.
+        @param rect The original rectangle to be transformed.
+    */
+    void mapRectToQuad(SkPoint dst[4], const SkRect& rect) const {
+        // This could potentially be faster if we only transformed each x and y of the rect once.
+        rect.toQuad(dst);
+        this->mapPoints(dst, 4);
     }
 
     /** Return the mean radius of a circle after it has been mapped by

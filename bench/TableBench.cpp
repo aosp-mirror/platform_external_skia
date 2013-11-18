@@ -25,14 +25,8 @@ static const SkScalar kCellHeight = SkIntToScalar(10);
 // This trio of drawRects is then repeat for the next cell.
 class TableBench : public SkBenchmark {
 public:
-
-    static const int kNumIterations = SkBENCHLOOP(10);
     static const int kNumRows = 48;
     static const int kNumCols = 32;
-
-    TableBench(void* param)
-        : INHERITED(param) {
-    }
 
 protected:
     virtual const char* onGetName() {
@@ -40,14 +34,13 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) {
-
         SkPaint cellPaint;
         cellPaint.setColor(0xFFFFFFF);
 
         SkPaint borderPaint;
         borderPaint.setColor(0xFFCCCCCC);
 
-        for (int i = 0; i < kNumIterations; ++i) {
+        for (int i = 0; i < this->getLoops(); ++i) {
             for (int row = 0; row < kNumRows; ++row) {
                 for (int col = 0; col < kNumCols; ++col) {
                     SkRect cell = SkRect::MakeLTRB(col * kCellWidth,
@@ -76,6 +69,4 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-static SkBenchmark* gFactory(void* p) { return new TableBench(p); }
-
-static BenchRegistry gRegistry(gFactory);
+DEF_BENCH( return new TableBench(); )

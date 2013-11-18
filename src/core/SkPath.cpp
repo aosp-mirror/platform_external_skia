@@ -77,12 +77,12 @@ private:
     (usually a new contour, but not required).
 
     It captures some state about the path up front (i.e. if it already has a
-    cached bounds), and the if it can, it updates the cache bounds explicitly,
+    cached bounds), and then if it can, it updates the cache bounds explicitly,
     avoiding the need to revisit all of the points in getBounds().
 
     It also notes if the path was originally degenerate, and if so, sets
     isConvex to true. Thus it can only be used if the contour being added is
-    convex.
+    convex (which is always true since we only allow the addition of rects).
  */
 class SkAutoPathBoundsUpdate {
 public:
@@ -97,48 +97,34 @@ public:
     }
 
     ~SkAutoPathBoundsUpdate() {
-        fPath->setIsConvex(fDegenerate);
-        if (fEmpty) {
-            fPath->fBounds = fRect;
-            fPath->fBoundsIsDirty = false;
-            fPath->fIsFinite = fPath->fBounds.isFinite();
-        } else if (!fDirty) {
-            joinNoEmptyChecks(&fPath->fBounds, fRect);
-            fPath->fBoundsIsDirty = false;
-            fPath->fIsFinite = fPath->fBounds.isFinite();
+        fPath->setConvexity(fDegenerate ? SkPath::kConvex_Convexity
+                                        : SkPath::kUnknown_Convexity);
+        if (fEmpty || fHasValidBounds) {
+            fPath->setBounds(fRect);
         }
     }
 
 private:
     SkPath* fPath;
     SkRect  fRect;
-    bool    fDirty;
+    bool    fHasValidBounds;
     bool    fDegenerate;
     bool    fEmpty;
 
-    // returns true if we should proceed
     void init(SkPath* path) {
+        // Cannot use fRect for our bounds unless we know it is sorted
+        fRect.sort();
         fPath = path;
         // Mark the path's bounds as dirty if (1) they are, or (2) the path
         // is non-finite, and therefore its bounds are not meaningful
-        fDirty = SkToBool(path->fBoundsIsDirty) || !path->fIsFinite;
-        fDegenerate = is_degenerate(*path);
+        fHasValidBounds = path->hasComputedBounds() && path->isFinite();
         fEmpty = path->isEmpty();
-        // Cannot use fRect for our bounds unless we know it is sorted
-        fRect.sort();
+        if (fHasValidBounds && !fEmpty) {
+            joinNoEmptyChecks(&fRect, fPath->getBounds());
+        }
+        fDegenerate = is_degenerate(*path);
     }
 };
-
-// Return true if the computed bounds are finite.
-static bool compute_pt_bounds(SkRect* bounds, const SkPathRef& ref) {
-    int count = ref.countPoints();
-    if (count <= 1) {  // we ignore just 1 point (moveto)
-        bounds->setEmpty();
-        return count ? ref.points()->isFinite() : true;
-    } else {
-        return bounds->setBoundsCheck(ref.points(), count);
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -162,7 +148,7 @@ static bool compute_pt_bounds(SkRect* bounds, const SkPathRef& ref) {
 SkPath::SkPath()
     : fPathRef(SkPathRef::CreateEmpty())
 #ifdef SK_BUILD_FOR_ANDROID
-    , fGenerationID(0)
+    , fSourcePath(NULL)
 #endif
 {
     this->resetFields();
@@ -173,23 +159,19 @@ void SkPath::resetFields() {
     fLastMoveToIndex = INITIAL_LASTMOVETOINDEX_VALUE;
     fFillType = kWinding_FillType;
     fSegmentMask = 0;
-    fBoundsIsDirty = true;
     fConvexity = kUnknown_Convexity;
     fDirection = kUnknown_Direction;
-    fIsFinite = false;
     fIsOval = false;
-#ifdef SK_BUILD_FOR_ANDROID
-    GEN_ID_INC;
-    fSourcePath = NULL;
-#endif
+
+    // We don't touch Android's fSourcePath.  It's used to track texture garbage collection, so we
+    // don't want to muck with it if it's been set to something non-NULL.
 }
 
 SkPath::SkPath(const SkPath& that)
     : fPathRef(SkRef(that.fPathRef.get())) {
     this->copyFields(that);
 #ifdef SK_BUILD_FOR_ANDROID
-    fGenerationID = that.fGenerationID;
-    fSourcePath   = NULL;  // TODO(mtklein): follow up with Android: do we want to copy this too?
+    fSourcePath   = that.fSourcePath;
 #endif
     SkDEBUGCODE(that.validate();)
 }
@@ -205,8 +187,7 @@ SkPath& SkPath::operator=(const SkPath& that) {
         fPathRef.reset(SkRef(that.fPathRef.get()));
         this->copyFields(that);
 #ifdef SK_BUILD_FOR_ANDROID
-        GEN_ID_INC;  // Similar to swap, we can't just copy this or it could go back in time.
-        fSourcePath = NULL;  // TODO(mtklein): follow up with Android: do we want to copy this too?
+        fSourcePath = that.fSourcePath;
 #endif
     }
     SkDEBUGCODE(this->validate();)
@@ -215,14 +196,11 @@ SkPath& SkPath::operator=(const SkPath& that) {
 
 void SkPath::copyFields(const SkPath& that) {
     //fPathRef is assumed to have been set by the caller.
-    fBounds          = that.fBounds;
     fLastMoveToIndex = that.fLastMoveToIndex;
     fFillType        = that.fFillType;
     fSegmentMask     = that.fSegmentMask;
-    fBoundsIsDirty   = that.fBoundsIsDirty;
     fConvexity       = that.fConvexity;
     fDirection       = that.fDirection;
-    fIsFinite        = that.fIsFinite;
     fIsOval          = that.fIsOval;
 }
 
@@ -244,20 +222,13 @@ void SkPath::swap(SkPath& that) {
 
     if (this != &that) {
         fPathRef.swap(&that.fPathRef);
-        SkTSwap<SkRect>(fBounds, that.fBounds);
         SkTSwap<int>(fLastMoveToIndex, that.fLastMoveToIndex);
         SkTSwap<uint8_t>(fFillType, that.fFillType);
         SkTSwap<uint8_t>(fSegmentMask, that.fSegmentMask);
-        SkTSwap<uint8_t>(fBoundsIsDirty, that.fBoundsIsDirty);
         SkTSwap<uint8_t>(fConvexity, that.fConvexity);
         SkTSwap<uint8_t>(fDirection, that.fDirection);
-        SkTSwap<SkBool8>(fIsFinite, that.fIsFinite);
         SkTSwap<SkBool8>(fIsOval, that.fIsOval);
 #ifdef SK_BUILD_FOR_ANDROID
-        // It doesn't really make sense to swap the generation IDs here, because they might go
-        // backwards.  To be safe we increment both to mark them both as changed.
-        GEN_ID_INC;
-        GEN_ID_PTR_INC(&that);
         SkTSwap<const SkPath*>(fSourcePath, that.fSourcePath);
 #endif
     }
@@ -350,11 +321,16 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
     return check_edge_against_rect(prevPt, firstPt, rect, direction);
 }
 
-#ifdef SK_BUILD_FOR_ANDROID
 uint32_t SkPath::getGenerationID() const {
-    return fGenerationID;
+    uint32_t genID = fPathRef->genID();
+#ifdef SK_BUILD_FOR_ANDROID
+    SkASSERT((unsigned)fFillType < (1 << (32 - kPathRefGenIDBitCnt)));
+    genID |= static_cast<uint32_t>(fFillType) << kPathRefGenIDBitCnt;
+#endif
+    return genID;
 }
 
+#ifdef SK_BUILD_FOR_ANDROID
 const SkPath* SkPath::getSourcePath() const {
     return fSourcePath;
 }
@@ -376,11 +352,6 @@ void SkPath::rewind() {
 
     SkPathRef::Rewind(&fPathRef);
     this->resetFields();
-}
-
-bool SkPath::isEmpty() const {
-    SkDEBUGCODE(this->validate();)
-    return 0 == fPathRef->countVerbs();
 }
 
 bool SkPath::isLine(SkPoint line[2]) const {
@@ -513,7 +484,7 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 closedOrMoved = true;
                 break;
             default:
-                SkASSERT(!"unexpected verb");
+                SkDEBUGFAIL("unexpected verb");
                 break;
         }
         *currVerb += 1;
@@ -660,22 +631,12 @@ void SkPath::setLastPt(SkScalar x, SkScalar y) {
         fIsOval = false;
         SkPathRef::Editor ed(&fPathRef);
         ed.atPoint(count-1)->set(x, y);
-        GEN_ID_INC;
     }
-}
-
-void SkPath::computeBounds() const {
-    SkDEBUGCODE(this->validate();)
-    SkASSERT(fBoundsIsDirty);
-
-    fIsFinite = compute_pt_bounds(&fBounds, *fPathRef.get());
-    fBoundsIsDirty = false;
 }
 
 void SkPath::setConvexity(Convexity c) {
     if (fConvexity != c) {
         fConvexity = c;
-        GEN_ID_INC;
     }
 }
 
@@ -684,15 +645,9 @@ void SkPath::setConvexity(Convexity c) {
 
 #define DIRTY_AFTER_EDIT                 \
     do {                                 \
-        fBoundsIsDirty = true;           \
         fConvexity = kUnknown_Convexity; \
         fDirection = kUnknown_Direction; \
         fIsOval = false;                 \
-    } while (0)
-
-#define DIRTY_AFTER_EDIT_NO_CONVEXITY_OR_DIRECTION_CHANGE   \
-    do {                                                    \
-        fBoundsIsDirty = true;                              \
     } while (0)
 
 void SkPath::incReserve(U16CPU inc) {
@@ -710,9 +665,6 @@ void SkPath::moveTo(SkScalar x, SkScalar y) {
     fLastMoveToIndex = ed.pathRef()->countPoints();
 
     ed.growForVerb(kMove_Verb)->set(x, y);
-
-    GEN_ID_INC;
-    DIRTY_AFTER_EDIT_NO_CONVEXITY_OR_DIRECTION_CHANGE;
 }
 
 void SkPath::rMoveTo(SkScalar x, SkScalar y) {
@@ -744,7 +696,6 @@ void SkPath::lineTo(SkScalar x, SkScalar y) {
     ed.growForVerb(kLine_Verb)->set(x, y);
     fSegmentMask |= kLine_SegmentMask;
 
-    GEN_ID_INC;
     DIRTY_AFTER_EDIT;
 }
 
@@ -766,7 +717,6 @@ void SkPath::quadTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2) {
     pts[1].set(x2, y2);
     fSegmentMask |= kQuad_SegmentMask;
 
-    GEN_ID_INC;
     DIRTY_AFTER_EDIT;
 }
 
@@ -798,7 +748,6 @@ void SkPath::conicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
         pts[1].set(x2, y2);
         fSegmentMask |= kConic_SegmentMask;
 
-        GEN_ID_INC;
         DIRTY_AFTER_EDIT;
     }
 }
@@ -824,7 +773,6 @@ void SkPath::cubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
     pts[2].set(x3, y3);
     fSegmentMask |= kCubic_SegmentMask;
 
-    GEN_ID_INC;
     DIRTY_AFTER_EDIT;
 }
 
@@ -850,14 +798,13 @@ void SkPath::close() {
             case kMove_Verb: {
                 SkPathRef::Editor ed(&fPathRef);
                 ed.growForVerb(kClose_Verb);
-                GEN_ID_INC;
                 break;
             }
             case kClose_Verb:
                 // don't add a close if it's the first verb or a repeat
                 break;
             default:
-                SkASSERT(!"unexpected verb");
+                SkDEBUGFAIL("unexpected verb");
                 break;
         }
     }
@@ -936,9 +883,71 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
         vb[~count] = kClose_Verb;
     }
 
-    GEN_ID_INC;
     DIRTY_AFTER_EDIT;
     SkDEBUGCODE(this->validate();)
+}
+
+#include "SkGeometry.h"
+
+static int build_arc_points(const SkRect& oval, SkScalar startAngle,
+                            SkScalar sweepAngle,
+                            SkPoint pts[kSkBuildQuadArcStorage]) {
+
+    if (0 == sweepAngle &&
+        (0 == startAngle || SkIntToScalar(360) == startAngle)) {
+        // Chrome uses this path to move into and out of ovals. If not
+        // treated as a special case the moves can distort the oval's
+        // bounding box (and break the circle special case).
+        pts[0].set(oval.fRight, oval.centerY());
+        return 1;
+    } else if (0 == oval.width() && 0 == oval.height()) {
+        // Chrome will sometimes create 0 radius round rects. Having degenerate
+        // quad segments in the path prevents the path from being recognized as
+        // a rect.
+        // TODO: optimizing the case where only one of width or height is zero
+        // should also be considered. This case, however, doesn't seem to be
+        // as common as the single point case.
+        pts[0].set(oval.fRight, oval.fTop);
+        return 1;
+    }
+
+    SkVector start, stop;
+
+    start.fY = SkScalarSinCos(SkDegreesToRadians(startAngle), &start.fX);
+    stop.fY = SkScalarSinCos(SkDegreesToRadians(startAngle + sweepAngle),
+                             &stop.fX);
+
+    /*  If the sweep angle is nearly (but less than) 360, then due to precision
+        loss in radians-conversion and/or sin/cos, we may end up with coincident
+        vectors, which will fool SkBuildQuadArc into doing nothing (bad) instead
+        of drawing a nearly complete circle (good).
+             e.g. canvas.drawArc(0, 359.99, ...)
+             -vs- canvas.drawArc(0, 359.9, ...)
+        We try to detect this edge case, and tweak the stop vector
+     */
+    if (start == stop) {
+        SkScalar sw = SkScalarAbs(sweepAngle);
+        if (sw < SkIntToScalar(360) && sw > SkIntToScalar(359)) {
+            SkScalar stopRad = SkDegreesToRadians(startAngle + sweepAngle);
+            // make a guess at a tiny angle (in radians) to tweak by
+            SkScalar deltaRad = SkScalarCopySign(SK_Scalar1/512, sweepAngle);
+            // not sure how much will be enough, so we use a loop
+            do {
+                stopRad -= deltaRad;
+                stop.fY = SkScalarSinCos(stopRad, &stop.fX);
+            } while (start == stop);
+        }
+    }
+
+    SkMatrix    matrix;
+
+    matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
+    matrix.postTranslate(oval.centerX(), oval.centerY());
+
+    return SkBuildQuadArc(start, stop,
+                          sweepAngle > 0 ? kCW_SkRotationDirection :
+                                           kCCW_SkRotationDirection,
+                          &matrix, pts);
 }
 
 static void add_corner_arc(SkPath* path, const SkRect& rect,
@@ -1031,7 +1040,9 @@ bool SkPath::hasOnlyMoveTos() const {
     return true;
 }
 
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
 #define CUBIC_ARC_FACTOR    ((SK_ScalarSqrt2 - SK_Scalar1) * 4 / 3)
+#endif
 
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                           Direction dir) {
@@ -1072,61 +1083,130 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
     } else if (skip_vert) {
         ry = halfH;
     }
-
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
     SkScalar    sx = SkScalarMul(rx, CUBIC_ARC_FACTOR);
     SkScalar    sy = SkScalarMul(ry, CUBIC_ARC_FACTOR);
 
     this->incReserve(17);
-    this->moveTo(rect.fRight - rx, rect.fTop);
+#else
+// The mid point of the quadratic arc approximation is half way between the two
+// control points. The float epsilon adjustment moves the on curve point out by
+// two bits, distributing the convex test error between the round rect approximation
+// and the convex cross product sign equality test.
+    SkScalar    midPtX = rx * (SK_Scalar1 + SK_ScalarTanPIOver8 + FLT_EPSILON * 4) / 2;
+    SkScalar    midPtY = ry * (SK_Scalar1 + SK_ScalarTanPIOver8 + FLT_EPSILON * 4) / 2;
+
+    SkScalar    offPtX = rx * SK_ScalarTanPIOver8;
+    SkScalar    offPtY = ry * SK_ScalarTanPIOver8;
+
+    this->incReserve(21);
+#endif
+    this->moveTo(rect.fRight - rx, rect.fTop);                  // top-right
     if (dir == kCCW_Direction) {
         if (!skip_hori) {
-            this->lineTo(rect.fLeft + rx, rect.fTop);       // top
+            this->lineTo(rect.fLeft + rx, rect.fTop);           // top
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fLeft + rx - sx, rect.fTop,
                       rect.fLeft, rect.fTop + ry - sy,
                       rect.fLeft, rect.fTop + ry);          // top-left
+#else
+        this->quadTo(rect.fLeft + rx - offPtX, rect.fTop,
+                     rect.fLeft + rx - midPtX, rect.fTop + ry - midPtY);
+        this->quadTo(rect.fLeft, rect.fTop + ry - offPtY,
+                     rect.fLeft, rect.fTop + ry);
+#endif
         if (!skip_vert) {
             this->lineTo(rect.fLeft, rect.fBottom - ry);        // left
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fLeft, rect.fBottom - ry + sy,
                       rect.fLeft + rx - sx, rect.fBottom,
                       rect.fLeft + rx, rect.fBottom);       // bot-left
+#else
+        this->quadTo(rect.fLeft, rect.fBottom - ry + offPtY,
+                     rect.fLeft + rx - midPtX, rect.fBottom - ry + midPtY);
+        this->quadTo(rect.fLeft + rx - offPtX, rect.fBottom,
+                     rect.fLeft + rx, rect.fBottom);
+#endif
         if (!skip_hori) {
-            this->lineTo(rect.fRight - rx, rect.fBottom);   // bottom
+            this->lineTo(rect.fRight - rx, rect.fBottom);       // bottom
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fRight - rx + sx, rect.fBottom,
                       rect.fRight, rect.fBottom - ry + sy,
                       rect.fRight, rect.fBottom - ry);      // bot-right
+#else
+        this->quadTo(rect.fRight - rx + offPtX, rect.fBottom,
+                     rect.fRight - rx + midPtX, rect.fBottom - ry + midPtY);
+        this->quadTo(rect.fRight, rect.fBottom - ry + offPtY,
+                     rect.fRight, rect.fBottom - ry);
+#endif
         if (!skip_vert) {
-            this->lineTo(rect.fRight, rect.fTop + ry);
+            this->lineTo(rect.fRight, rect.fTop + ry);          // right
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fRight, rect.fTop + ry - sy,
                       rect.fRight - rx + sx, rect.fTop,
                       rect.fRight - rx, rect.fTop);         // top-right
+#else
+        this->quadTo(rect.fRight, rect.fTop + ry - offPtY,
+                     rect.fRight - rx + midPtX, rect.fTop + ry - midPtY);
+        this->quadTo(rect.fRight - rx + offPtX, rect.fTop,
+                     rect.fRight - rx, rect.fTop);
+#endif
     } else {
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fRight - rx + sx, rect.fTop,
                       rect.fRight, rect.fTop + ry - sy,
                       rect.fRight, rect.fTop + ry);         // top-right
+#else
+        this->quadTo(rect.fRight - rx + offPtX, rect.fTop,
+                     rect.fRight - rx + midPtX, rect.fTop + ry - midPtY);
+        this->quadTo(rect.fRight, rect.fTop + ry - offPtY,
+                     rect.fRight, rect.fTop + ry);
+#endif
         if (!skip_vert) {
-            this->lineTo(rect.fRight, rect.fBottom - ry);
+            this->lineTo(rect.fRight, rect.fBottom - ry);       // right
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fRight, rect.fBottom - ry + sy,
                       rect.fRight - rx + sx, rect.fBottom,
                       rect.fRight - rx, rect.fBottom);      // bot-right
+#else
+        this->quadTo(rect.fRight, rect.fBottom - ry + offPtY,
+                     rect.fRight - rx + midPtX, rect.fBottom - ry + midPtY);
+        this->quadTo(rect.fRight - rx + offPtX, rect.fBottom,
+                     rect.fRight - rx, rect.fBottom);
+#endif
         if (!skip_hori) {
-            this->lineTo(rect.fLeft + rx, rect.fBottom);    // bottom
+            this->lineTo(rect.fLeft + rx, rect.fBottom);        // bottom
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fLeft + rx - sx, rect.fBottom,
                       rect.fLeft, rect.fBottom - ry + sy,
                       rect.fLeft, rect.fBottom - ry);       // bot-left
+#else
+        this->quadTo(rect.fLeft + rx - offPtX, rect.fBottom,
+                     rect.fLeft + rx - midPtX, rect.fBottom - ry + midPtY);
+        this->quadTo(rect.fLeft, rect.fBottom - ry + offPtY,
+                     rect.fLeft, rect.fBottom - ry);
+#endif
         if (!skip_vert) {
-            this->lineTo(rect.fLeft, rect.fTop + ry);       // left
+            this->lineTo(rect.fLeft, rect.fTop + ry);           // left
         }
+#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
         this->cubicTo(rect.fLeft, rect.fTop + ry - sy,
                       rect.fLeft + rx - sx, rect.fTop,
                       rect.fLeft + rx, rect.fTop);          // top-left
+#else
+        this->quadTo(rect.fLeft, rect.fTop + ry - offPtY,
+                     rect.fLeft + rx - midPtX, rect.fTop + ry - midPtY);
+        this->quadTo(rect.fLeft + rx - offPtX, rect.fTop,
+                     rect.fLeft + rx, rect.fTop);
+#endif
         if (!skip_hori) {
-            this->lineTo(rect.fRight - rx, rect.fTop);      // top
+            this->lineTo(rect.fRight - rx, rect.fTop);          // top
         }
     }
     this->close();
@@ -1214,68 +1294,6 @@ void SkPath::addCircle(SkScalar x, SkScalar y, SkScalar r, Direction dir) {
     }
 }
 
-#include "SkGeometry.h"
-
-static int build_arc_points(const SkRect& oval, SkScalar startAngle,
-                            SkScalar sweepAngle,
-                            SkPoint pts[kSkBuildQuadArcStorage]) {
-
-    if (0 == sweepAngle &&
-        (0 == startAngle || SkIntToScalar(360) == startAngle)) {
-        // Chrome uses this path to move into and out of ovals. If not
-        // treated as a special case the moves can distort the oval's
-        // bounding box (and break the circle special case).
-        pts[0].set(oval.fRight, oval.centerY());
-        return 1;
-    } else if (0 == oval.width() && 0 == oval.height()) {
-        // Chrome will sometimes create 0 radius round rects. Having degenerate
-        // quad segments in the path prevents the path from being recognized as
-        // a rect.
-        // TODO: optimizing the case where only one of width or height is zero
-        // should also be considered. This case, however, doesn't seem to be
-        // as common as the single point case.
-        pts[0].set(oval.fRight, oval.fTop);
-        return 1;
-    }
-
-    SkVector start, stop;
-
-    start.fY = SkScalarSinCos(SkDegreesToRadians(startAngle), &start.fX);
-    stop.fY = SkScalarSinCos(SkDegreesToRadians(startAngle + sweepAngle),
-                             &stop.fX);
-
-    /*  If the sweep angle is nearly (but less than) 360, then due to precision
-        loss in radians-conversion and/or sin/cos, we may end up with coincident
-        vectors, which will fool SkBuildQuadArc into doing nothing (bad) instead
-        of drawing a nearly complete circle (good).
-             e.g. canvas.drawArc(0, 359.99, ...)
-             -vs- canvas.drawArc(0, 359.9, ...)
-        We try to detect this edge case, and tweak the stop vector
-     */
-    if (start == stop) {
-        SkScalar sw = SkScalarAbs(sweepAngle);
-        if (sw < SkIntToScalar(360) && sw > SkIntToScalar(359)) {
-            SkScalar stopRad = SkDegreesToRadians(startAngle + sweepAngle);
-            // make a guess at a tiny angle (in radians) to tweak by
-            SkScalar deltaRad = SkScalarCopySign(SK_Scalar1/512, sweepAngle);
-            // not sure how much will be enough, so we use a loop
-            do {
-                stopRad -= deltaRad;
-                stop.fY = SkScalarSinCos(stopRad, &stop.fX);
-            } while (start == stop);
-        }
-    }
-
-    SkMatrix    matrix;
-
-    matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
-    matrix.postTranslate(oval.centerX(), oval.centerY());
-
-    return SkBuildQuadArc(start, stop,
-          sweepAngle > 0 ? kCW_SkRotationDirection : kCCW_SkRotationDirection,
-                          &matrix, pts);
-}
-
 void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
                    bool forceMoveTo) {
     if (oval.width() < 0 || oval.height() < 0) {
@@ -1296,8 +1314,7 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
     }
 }
 
-void SkPath::addArc(const SkRect& oval, SkScalar startAngle,
-                    SkScalar sweepAngle) {
+void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle) {
     if (oval.isEmpty() || 0 == sweepAngle) {
         return;
     }
@@ -1593,7 +1610,7 @@ void SkPath::reverseAddPath(const SkPath& src) {
                 needClose = true;
                 break;
             default:
-                SkASSERT(!"unexpected verb");
+                SkDEBUGFAIL("unexpected verb");
         }
     }
 }
@@ -1661,7 +1678,7 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
                     subdivide_quad_to(&tmp, pts);
                     break;
                 case kConic_Verb:
-                    SkASSERT(!"TODO: compute new weight");
+                    SkDEBUGFAIL("TODO: compute new weight");
                     tmp.conicTo(pts[1], pts[2], iter.conicWeight());
                     break;
                 case kCubic_Verb:
@@ -1681,35 +1698,6 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
         matrix.mapPoints(ed.points(), ed.pathRef()->countPoints());
         dst->fDirection = kUnknown_Direction;
     } else {
-        /*
-         *  If we're not in perspective, we can transform all of the points at
-         *  once.
-         *
-         *  Here we also want to optimize bounds, by noting if the bounds are
-         *  already known, and if so, we just transform those as well and mark
-         *  them as "known", rather than force the transformed path to have to
-         *  recompute them.
-         *
-         *  Special gotchas if the path is effectively empty (<= 1 point) or
-         *  if it is non-finite. In those cases bounds need to stay empty,
-         *  regardless of the matrix.
-         */
-        if (!fBoundsIsDirty && matrix.rectStaysRect() && fPathRef->countPoints() > 1) {
-            dst->fBoundsIsDirty = false;
-            if (fIsFinite) {
-                matrix.mapRect(&dst->fBounds, fBounds);
-                if (!(dst->fIsFinite = dst->fBounds.isFinite())) {
-                    dst->fBounds.setEmpty();
-                }
-            } else {
-                dst->fIsFinite = false;
-                dst->fBounds.setEmpty();
-            }
-        } else {
-            GEN_ID_PTR_INC(dst);
-            dst->fBoundsIsDirty = true;
-        }
-
         SkPathRef::CreateTransformedCopy(&dst->fPathRef, *fPathRef.get(), matrix);
 
         if (this != dst) {
@@ -1717,12 +1705,6 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
             dst->fSegmentMask = fSegmentMask;
             dst->fConvexity = fConvexity;
         }
-
-#ifdef SK_BUILD_FOR_ANDROID
-        if (!matrix.isIdentity()) {
-            GEN_ID_PTR_INC(dst);
-        }
-#endif
 
         if (kUnknown_Direction == fDirection) {
             dst->fDirection = kUnknown_Direction;
@@ -2088,31 +2070,24 @@ uint32_t SkPath::writeToMemory(void* storage) const {
     SkDEBUGCODE(this->validate();)
 
     if (NULL == storage) {
-        const int byteCount = sizeof(int32_t)
-                      + fPathRef->writeSize()
-                      + sizeof(SkRect);
+        const int byteCount = sizeof(int32_t) + fPathRef->writeSize();
         return SkAlign4(byteCount);
     }
 
     SkWBuffer   buffer(storage);
 
-    // Call getBounds() to ensure (as a side-effect) that fBounds
-    // and fIsFinite are computed.
-    const SkRect& bounds = this->getBounds();
-    SkASSERT(!fBoundsIsDirty);
-
-    int32_t packed = ((fIsFinite & 1) << kIsFinite_SerializationShift) |
-                     ((fIsOval & 1) << kIsOval_SerializationShift) |
+    int32_t packed = ((fIsOval & 1) << kIsOval_SerializationShift) |
                      (fConvexity << kConvexity_SerializationShift) |
                      (fFillType << kFillType_SerializationShift) |
                      (fSegmentMask << kSegmentMask_SerializationShift) |
-                     (fDirection << kDirection_SerializationShift);
+                     (fDirection << kDirection_SerializationShift)
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
+                     | (0x1 << kNewFormat_SerializationShift);
+#endif
 
     buffer.write32(packed);
 
     fPathRef->writeToBuffer(&buffer);
-
-    buffer.write(&bounds, sizeof(bounds));
 
     buffer.padToAlign4();
     return SkToU32(buffer.pos());
@@ -2122,21 +2097,22 @@ uint32_t SkPath::readFromMemory(const void* storage) {
     SkRBuffer   buffer(storage);
 
     uint32_t packed = buffer.readS32();
-    fIsFinite = (packed >> kIsFinite_SerializationShift) & 1;
     fIsOval = (packed >> kIsOval_SerializationShift) & 1;
     fConvexity = (packed >> kConvexity_SerializationShift) & 0xFF;
     fFillType = (packed >> kFillType_SerializationShift) & 0xFF;
     fSegmentMask = (packed >> kSegmentMask_SerializationShift) & 0xF;
     fDirection = (packed >> kDirection_SerializationShift) & 0x3;
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
+    bool newFormat = (packed >> kNewFormat_SerializationShift) & 1;
+#endif
 
-    fPathRef.reset(SkPathRef::CreateFromBuffer(&buffer));
-
-    buffer.read(&fBounds, sizeof(fBounds));
-    fBoundsIsDirty = false;
+    fPathRef.reset(SkPathRef::CreateFromBuffer(&buffer
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
+        , newFormat, packed)
+#endif
+        );
 
     buffer.skipToAlign4();
-
-    GEN_ID_INC;
 
     SkDEBUGCODE(this->validate();)
     return SkToU32(buffer.pos());
@@ -2285,8 +2261,20 @@ void SkPath::validate() const {
 static int sign(SkScalar x) { return x < 0; }
 #define kValueNeverReturnedBySign   2
 
-static int CrossProductSign(const SkVector& a, const SkVector& b) {
-    return SkScalarSignAsInt(SkPoint::CrossProduct(a, b));
+static bool AlmostEqual(SkScalar compA, SkScalar compB) {
+    // The error epsilon was empirically derived; worse case round rects
+    // with a mid point outset by 2x float epsilon in tests had an error
+    // of 12.
+    const int epsilon = 16;
+    if (!SkScalarIsFinite(compA) || !SkScalarIsFinite(compB)) {
+        return false;
+    }
+    if (sk_float_abs(compA) <= FLT_EPSILON && sk_float_abs(compB) <= FLT_EPSILON) {
+        return true;
+    }
+    int aBits = SkFloatAs2sCompliment(compA);
+    int bBits = SkFloatAs2sCompliment(compB);
+    return aBits < bBits + epsilon && bBits < aBits + epsilon;
 }
 
 // only valid for a single contour
@@ -2297,6 +2285,7 @@ struct Convexicator {
     , fDirection(SkPath::kUnknown_Direction) {
         fSign = 0;
         // warnings
+        fLastPt.set(0, 0);
         fCurrPt.set(0, 0);
         fVec0.set(0, 0);
         fVec1.set(0, 0);
@@ -2322,6 +2311,7 @@ struct Convexicator {
         } else {
             SkVector vec = pt - fCurrPt;
             if (vec.fX || vec.fY) {
+                fLastPt = fCurrPt;
                 fCurrPt = pt;
                 if (++fPtCount == 2) {
                     fFirstVec = fVec1 = vec;
@@ -2355,7 +2345,11 @@ private:
         SkASSERT(vec.fX || vec.fY);
         fVec0 = fVec1;
         fVec1 = vec;
-        int sign = CrossProductSign(fVec0, fVec1);
+        SkScalar cross = SkPoint::CrossProduct(fVec0, fVec1);
+        SkScalar smallest = SkTMin(fCurrPt.fX, SkTMin(fCurrPt.fY, SkTMin(fLastPt.fX, fLastPt.fY)));
+        SkScalar largest = SkTMax(fCurrPt.fX, SkTMax(fCurrPt.fY, SkTMax(fLastPt.fX, fLastPt.fY)));
+        largest = SkTMax(largest, -smallest);
+        int sign = AlmostEqual(largest, largest + cross) ? 0 : SkScalarSignAsInt(cross);
         if (0 == fSign) {
             fSign = sign;
             if (1 == sign) {
@@ -2371,6 +2365,7 @@ private:
         }
     }
 
+    SkPoint             fLastPt;
     SkPoint             fCurrPt;
     SkVector            fVec0, fVec1, fFirstVec;
     int                 fPtCount;   // non-degenerate points
@@ -2497,7 +2492,7 @@ void ContourIter::next() {
             case SkPath::kClose_Verb:
                 break;
             default:
-                SkASSERT(!"unexpected verb");
+                SkDEBUGFAIL("unexpected verb");
                 break;
         }
     }
@@ -2963,14 +2958,17 @@ static int winding_line(const SkPoint pts[], SkScalar x, SkScalar y) {
     return dir;
 }
 
+static bool contains_inclusive(const SkRect& r, SkScalar x, SkScalar y) {
+    return r.fLeft <= x && x <= r.fRight && r.fTop <= y && y <= r.fBottom;
+}
+
 bool SkPath::contains(SkScalar x, SkScalar y) const {
     bool isInverse = this->isInverseFillType();
     if (this->isEmpty()) {
         return isInverse;
     }
 
-    const SkRect& bounds = this->getBounds();
-    if (!bounds.contains(x, y)) {
+    if (!contains_inclusive(this->getBounds(), x, y)) {
         return isInverse;
     }
 

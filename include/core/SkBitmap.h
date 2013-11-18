@@ -11,6 +11,7 @@
 #define SkBitmap_DEFINED
 
 #include "Sk64.h"
+#include "SkAlpha.h"
 #include "SkColor.h"
 #include "SkColorTable.h"
 #include "SkPoint.h"
@@ -95,20 +96,19 @@ public:
     */
     bool isNull() const { return NULL == fPixelRef; }
 
-    /** Return the config for the bitmap.
-    */
+    /** Return the config for the bitmap. */
     Config  config() const { return (Config)fConfig; }
-    /** DEPRECATED, use config()
-    */
+
+    SK_ATTR_DEPRECATED("use config()")
     Config  getConfig() const { return this->config(); }
-    /** Return the bitmap's width, in pixels.
-    */
+
+    /** Return the bitmap's width, in pixels. */
     int width() const { return fWidth; }
-    /** Return the bitmap's height, in pixels.
-    */
+
+    /** Return the bitmap's height, in pixels. */
     int height() const { return fHeight; }
-    /** Return the number of bytes between subsequent rows of the bitmap.
-    */
+
+    /** Return the number of bytes between subsequent rows of the bitmap. */
     size_t rowBytes() const { return fRowBytes; }
 
     /** Return the shift amount per pixel (i.e. 0 for 1-byte per pixel, 1 for
@@ -129,6 +129,15 @@ public:
         than 1-byte per pixel (e.g. kA1_Config)
     */
     int rowBytesAsPixels() const { return fRowBytes >> (fBytesPerPixel >> 1); }
+
+    SkAlphaType alphaType() const { return (SkAlphaType)fAlphaType; }
+
+    /**
+     *  Set the bitmap's alphaType, returning true on success. If false is
+     *  returned, then the specified new alphaType is incompatible with the
+     *  Config, and the current alphaType is unchanged.
+     */
+    bool setAlphaType(SkAlphaType);
 
     /** Return the address of the pixels for this SkBitmap.
     */
@@ -175,12 +184,14 @@ public:
 
     /** Returns true if the bitmap is opaque (has no translucent/transparent pixels).
     */
-    bool isOpaque() const;
+    bool isOpaque() const {
+        return SkAlphaTypeIsOpaque(this->alphaType());
+    }
 
-    /** Specify if this bitmap's pixels are all opaque or not. Is only meaningful for configs
-        that support per-pixel alpha (RGB32, A1, A8).
-    */
-    void setIsOpaque(bool);
+    SK_ATTR_DEPRECATED("use setAlphaType")
+    void setIsOpaque(bool opaque) {
+        this->setAlphaType(opaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
+    }
 
     /** Returns true if the bitmap is volatile (i.e. should not be cached by devices.)
     */
@@ -232,13 +243,6 @@ public:
     static bool ComputeIsOpaque(const SkBitmap&);
 
     /**
-     *  Calls ComputeIsOpaque, and passes its result to setIsOpaque().
-     */
-    void computeAndSetOpaquePredicate() {
-        this->setIsOpaque(ComputeIsOpaque(*this));
-    }
-
-    /**
      *  Return the bitmap's bounds [0, 0, width, height] as an SkRect
      */
     void getBounds(SkRect* bounds) const;
@@ -248,7 +252,14 @@ public:
         ComputeRowBytes() is called to compute the optimal value. This resets
         any pixel/colortable ownership, just like reset().
     */
-    void setConfig(Config, int width, int height, size_t rowBytes = 0);
+    bool setConfig(Config, int width, int height, size_t rowBytes, SkAlphaType);
+
+    bool setConfig(Config config, int width, int height, size_t rowBytes = 0) {
+        return this->setConfig(config, width, height, rowBytes,
+                               kPremul_SkAlphaType);
+    }
+
+
     /** Use this to assign a new pixel address for an existing bitmap. This
         will automatically release any pixelref previously installed. Only call
         this if you are handling ownership/lifetime of the pixel memory.
@@ -405,7 +416,7 @@ public:
      */
     void eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const;
 
-    // DEPRECATED -- call eraseColor or eraseARGB
+    SK_ATTR_DEPRECATED("use eraseARGB or eraseColor")
     void eraseRGB(U8CPU r, U8CPU g, U8CPU b) const {
         this->eraseARGB(0xFF, r, g, b);
     }
@@ -539,9 +550,7 @@ public:
      */
     bool canCopyTo(Config newConfig) const;
 
-    /**
-     *  DEPRECATED -- will be replaced with API on SkPaint
-     */
+    SK_ATTR_DEPRECATED("use setFilterLevel on SkPaint")
     void buildMipMap(bool forceRebuild = false);
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -672,6 +681,7 @@ private:
     uint32_t    fWidth;
     uint32_t    fHeight;
     uint8_t     fConfig;
+    uint8_t     fAlphaType;
     uint8_t     fFlags;
     uint8_t     fBytesPerPixel; // based on config
 
@@ -748,7 +758,7 @@ public:
     }
     ~SkAutoLockColors() {
         if (fCTable) {
-            fCTable->unlockColors(false);
+            fCTable->unlockColors();
         }
     }
 
@@ -762,7 +772,7 @@ public:
      */
     const SkPMColor* lockColors(SkColorTable* ctable) {
         if (fCTable) {
-            fCTable->unlockColors(false);
+            fCTable->unlockColors();
         }
         fCTable = ctable;
         fColors = ctable ? ctable->lockColors() : NULL;

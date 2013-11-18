@@ -17,8 +17,7 @@
 
 class LightingBaseBench : public SkBenchmark {
 public:
-    LightingBaseBench(void* param, bool small) : INHERITED(param), fIsSmall(small) {
-    }
+    LightingBaseBench(bool small) : fIsSmall(small) { }
 
 protected:
     void draw(SkCanvas* canvas, SkImageFilter* imageFilter) const {
@@ -26,7 +25,9 @@ protected:
                               SkRect::MakeWH(FILTER_WIDTH_LARGE, FILTER_HEIGHT_LARGE);
         SkPaint paint;
         paint.setImageFilter(imageFilter)->unref();
-        canvas->drawRect(r, paint);
+        for (int i = 0; i < this->getLoops(); i++) {
+            canvas->drawRect(r, paint);
+        }
     }
 
     static SkPoint3 getPointLocation() {
@@ -96,7 +97,7 @@ protected:
 
 class LightingPointLitDiffuseBench : public LightingBaseBench {
 public:
-    LightingPointLitDiffuseBench(void* param, bool small) : INHERITED(param, small) {
+    LightingPointLitDiffuseBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -115,7 +116,7 @@ private:
 
 class LightingDistantLitDiffuseBench : public LightingBaseBench {
 public:
-    LightingDistantLitDiffuseBench(void* param, bool small) : INHERITED(param, small) {
+    LightingDistantLitDiffuseBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -134,7 +135,7 @@ private:
 
 class LightingSpotLitDiffuseBench : public LightingBaseBench {
 public:
-    LightingSpotLitDiffuseBench(void* param, bool small) : INHERITED(param, small) {
+    LightingSpotLitDiffuseBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -154,7 +155,7 @@ private:
 
 class LightingPointLitSpecularBench : public LightingBaseBench {
 public:
-    LightingPointLitSpecularBench(void* param, bool small) : INHERITED(param, small) {
+    LightingPointLitSpecularBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -173,7 +174,7 @@ private:
 
 class LightingDistantLitSpecularBench : public LightingBaseBench {
 public:
-    LightingDistantLitSpecularBench(void* param, bool small) : INHERITED(param, small) {
+    LightingDistantLitSpecularBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -192,7 +193,7 @@ private:
 
 class LightingSpotLitSpecularBench : public LightingBaseBench {
 public:
-    LightingSpotLitSpecularBench(void* param, bool small) : INHERITED(param, small) {
+    LightingSpotLitSpecularBench(bool small) : INHERITED(small) {
     }
 
 protected:
@@ -212,15 +213,15 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return new LightingPointLitDiffuseBench(p, true); )
-DEF_BENCH( return new LightingPointLitDiffuseBench(p, false); )
-DEF_BENCH( return new LightingDistantLitDiffuseBench(p, true); )
-DEF_BENCH( return new LightingDistantLitDiffuseBench(p, false); )
-DEF_BENCH( return new LightingSpotLitDiffuseBench(p, true); )
-DEF_BENCH( return new LightingSpotLitDiffuseBench(p, false); )
-DEF_BENCH( return new LightingPointLitSpecularBench(p, true); )
-DEF_BENCH( return new LightingPointLitSpecularBench(p, false); )
-DEF_BENCH( return new LightingDistantLitSpecularBench(p, true); )
-DEF_BENCH( return new LightingDistantLitSpecularBench(p, false); )
-DEF_BENCH( return new LightingSpotLitSpecularBench(p, true); )
-DEF_BENCH( return new LightingSpotLitSpecularBench(p, false); )
+DEF_BENCH( return new LightingPointLitDiffuseBench(true); )
+DEF_BENCH( return new LightingPointLitDiffuseBench(false); )
+DEF_BENCH( return new LightingDistantLitDiffuseBench(true); )
+DEF_BENCH( return new LightingDistantLitDiffuseBench(false); )
+DEF_BENCH( return new LightingSpotLitDiffuseBench(true); )
+DEF_BENCH( return new LightingSpotLitDiffuseBench(false); )
+DEF_BENCH( return new LightingPointLitSpecularBench(true); )
+DEF_BENCH( return new LightingPointLitSpecularBench(false); )
+DEF_BENCH( return new LightingDistantLitSpecularBench(true); )
+DEF_BENCH( return new LightingDistantLitSpecularBench(false); )
+DEF_BENCH( return new LightingSpotLitSpecularBench(true); )
+DEF_BENCH( return new LightingSpotLitSpecularBench(false); )

@@ -97,7 +97,7 @@ const char* SkImageDecoder::GetFormatName(Format format) {
         case kWEBP_Format:
             return "WEBP";
         default:
-            SkASSERT(!"Invalid format type!");
+            SkDEBUGFAIL("Invalid format type!");
     }
     return "Unknown Format";
 }
@@ -216,8 +216,8 @@ bool SkImageDecoder::decodeSubset(SkBitmap* bm, const SkIRect& rect,
     return this->onDecodeSubset(bm, rect);
 }
 
-bool SkImageDecoder::buildTileIndex(SkStream* stream,
-                                int *width, int *height) {
+bool SkImageDecoder::buildTileIndex(SkStreamRewindable* stream,
+                                    int *width, int *height) {
     // we reset this to false before calling onBuildTileIndex
     fShouldCancelDecode = false;
 
@@ -229,7 +229,7 @@ bool SkImageDecoder::cropBitmap(SkBitmap *dst, SkBitmap *src, int sampleSize,
                                 int srcX, int srcY) {
     int w = width / sampleSize;
     int h = height / sampleSize;
-    if (src->getConfig() == SkBitmap::kIndex8_Config) {
+    if (src->config() == SkBitmap::kIndex8_Config) {
         // kIndex8 does not allow drawing via an SkCanvas, as is done below.
         // Instead, use extractSubset. Note that this shares the SkPixelRef and
         // SkColorTable.
@@ -245,8 +245,7 @@ bool SkImageDecoder::cropBitmap(SkBitmap *dst, SkBitmap *src, int sampleSize,
     }
     // if the destination has no pixels then we must allocate them.
     if (dst->isNull()) {
-        dst->setConfig(src->getConfig(), w, h);
-        dst->setIsOpaque(src->isOpaque());
+        dst->setConfig(src->config(), w, h, 0, src->alphaType());
 
         if (!this->allocPixelRef(dst, NULL)) {
             SkDEBUGF(("failed to allocate pixels needed to crop the bitmap"));
@@ -279,7 +278,7 @@ bool SkImageDecoder::DecodeFile(const char file[], SkBitmap* bm,
     SkASSERT(file);
     SkASSERT(bm);
 
-    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(file));
+    SkAutoTUnref<SkStreamRewindable> stream(SkStream::NewFromFile(file));
     if (stream.get()) {
         if (SkImageDecoder::DecodeStream(stream, bm, pref, mode, format)) {
             bm->pixelRef()->setURI(file);
@@ -404,12 +403,8 @@ static bool decode_pixels_to_8888(SkImageDecoder* decoder, SkStream* stream,
 }
 
 bool SkImageDecoder::DecodeMemoryToTarget(const void* buffer, size_t size,
-                                          SkImage::Info* info,
+                                          SkImageInfo* info,
                                           const SkBitmapFactory::Target* target) {
-    if (NULL == info) {
-        return false;
-    }
-
     // FIXME: Just to get this working, implement in terms of existing
     // ImageDecoder calls.
     SkBitmap bm;
@@ -428,15 +423,18 @@ bool SkImageDecoder::DecodeMemoryToTarget(const void* buffer, size_t size,
     // Now set info properly.
     // Since Config is SkBitmap::kARGB_8888_Config, SkBitmapToImageInfo
     // will always succeed.
-    SkAssertResult(SkBitmapToImageInfo(bm, info));
+    if (info) {
+        SkAssertResult(SkBitmapToImageInfo(bm, info));
+    }
 
     if (NULL == target) {
         return true;
     }
 
     if (target->fRowBytes != SkToU32(bm.rowBytes())) {
-        if (target->fRowBytes < SkImageMinRowBytes(*info)) {
-            SkASSERT(!"Desired row bytes is too small");
+        size_t minRB = SkBitmap::ComputeRowBytes(bm.config(), bm.width());
+        if (target->fRowBytes < minRB) {
+            SkDEBUGFAIL("Desired row bytes is too small");
             return false;
         }
         bm.setConfig(bm.config(), bm.width(), bm.height(), target->fRowBytes);
@@ -448,8 +446,9 @@ bool SkImageDecoder::DecodeMemoryToTarget(const void* buffer, size_t size,
 }
 
 
-bool SkImageDecoder::DecodeStream(SkStream* stream, SkBitmap* bm,
-                          SkBitmap::Config pref, Mode mode, Format* format) {
+bool SkImageDecoder::DecodeStream(SkStreamRewindable* stream, SkBitmap* bm,
+                                  SkBitmap::Config pref, Mode mode,
+                                  Format* format) {
     SkASSERT(stream);
     SkASSERT(bm);
 
