@@ -148,6 +148,8 @@ LOCAL_STATIC_LIBRARIES := libstlport_static
 
 LOCAL_MODULE_TAGS := eng tests
 
+LOCAL_CFLAGS := -Wno-unused-parameter -Wno-maybe-uninitialized
+
 #include stlport headers
 include external/stlport/libstlport.mk
 
