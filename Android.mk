@@ -614,6 +614,9 @@ LOCAL_C_INCLUDES += external/sfntly/cpp/src
 LOCAL_STATIC_LIBRARIES += libsfntly
 LOCAL_SHARED_LIBRARIES += libicuuc libicui18n
 
+# Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
+# Revert to -D_FORTIFY_SOURCE=1
+LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
 
 # Skia does not enforce this usage pattern so we disable it here to avoid
 # unecessary log spew when building
