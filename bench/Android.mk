@@ -101,6 +101,8 @@ LOCAL_MODULE := skia_bench
 
 LOCAL_MODULE_TAGS := optional
 
+LOCAL_CFLAGS += -Wno-unused-parameter
+
 #include stlport headers
 include external/stlport/libstlport.mk
 
