@@ -83,7 +83,7 @@ public:
      */
     void toggleInverseFillType() {
         fFillType ^= 2;
-     }
+    }
 
     enum Convexity {
         kUnknown_Convexity,
@@ -151,7 +151,7 @@ public:
      *              optimization for performance and so some paths that are in
      *              fact ovals can report false.
      */
-    bool isOval(SkRect* rect) const;
+    bool isOval(SkRect* rect) const { return fPathRef->isOval(rect); }
 
     /** Clear any lines and curves from the path, making it empty. This frees up
         internal storage associated with those segments.
@@ -446,8 +446,8 @@ public:
         @param dy3   The amount to add to the y-coordinate of the last point on
                      this contour, to specify the end point of a cubic curve
     */
-    void    rCubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
-                     SkScalar x3, SkScalar y3);
+    void rCubicTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
+                  SkScalar x3, SkScalar y3);
 
     /** Append the specified arc to the path as a new contour. If the start of
         the path is different from the path's current last point, then an
@@ -461,8 +461,8 @@ public:
                           treated mod 360.
         @param forceMoveTo If true, always begin a new contour with the arc
     */
-    void    arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
-                  bool forceMoveTo);
+    void arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
+               bool forceMoveTo);
 
     /** Append a line and arc to the current path. This is the same as the
         PostScript call "arct".
@@ -778,7 +778,7 @@ public:
      *  set if the path contains 1 or more segments of that type.
      *  Returns 0 for an empty path (no segments).
      */
-    uint32_t getSegmentMasks() const { return fSegmentMask; }
+    uint32_t getSegmentMasks() const { return fPathRef->getSegmentMasks(); }
 
     enum Verb {
         kMove_Verb,     //!< iter.next returns 1 point
@@ -899,16 +899,19 @@ public:
     void dump() const;
 
     /**
-     *  Write the region to the buffer, and return the number of bytes written.
+     *  Write the path to the buffer, and return the number of bytes written.
      *  If buffer is NULL, it still returns the number of bytes.
      */
-    uint32_t writeToMemory(void* buffer) const;
-
+    size_t writeToMemory(void* buffer) const;
     /**
-     *  Initialized the region from the buffer, returning the number
-     *  of bytes actually read.
+     * Initializes the path from the buffer
+     *
+     * @param buffer Memory to read from
+     * @param length Amount of memory available in the buffer
+     * @return number of bytes read (must be a multiple of 4) or
+     *         0 if there was not enough memory available
      */
-    uint32_t readFromMemory(const void* buffer);
+    size_t readFromMemory(const void* buffer, size_t length);
 
     /** Returns a non-zero, globally unique value corresponding to the set of verbs
         and points in the path (but not the fill type [except on Android skbug.com/1762]).
@@ -928,28 +931,28 @@ public:
 
 private:
     enum SerializationOffsets {
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
-        kNewFormat_SerializationShift = 28, // requires 1 bit
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+        kNewFormat_SerializationShift = 29, // requires 1 bit
 #endif
+        kUnused1_SerializationShift = 28,    // 1 free bit
         kDirection_SerializationShift = 26, // requires 2 bits
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
-        // rename to kUnused_SerializationShift
-        kOldIsFinite_SerializationShift = 25,    // 1 bit
+        kUnused2_SerializationShift = 25,    // 1 free bit
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+        kOldIsOval_SerializationShift = 24,    // requires 1 bit
 #endif
-        kIsOval_SerializationShift = 24,    // requires 1 bit
         kConvexity_SerializationShift = 16, // requires 8 bits
         kFillType_SerializationShift = 8,   // requires 8 bits
-        kSegmentMask_SerializationShift = 0 // requires 4 bits
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+        kOldSegmentMask_SerializationShift = 0 // requires 4 bits
+#endif
     };
 
     SkAutoTUnref<SkPathRef> fPathRef;
 
     int                 fLastMoveToIndex;
     uint8_t             fFillType;
-    uint8_t             fSegmentMask;
     mutable uint8_t     fConvexity;
     mutable uint8_t     fDirection;
-    mutable SkBool8     fIsOval;
 #ifdef SK_BUILD_FOR_ANDROID
     const SkPath*       fSourcePath;
 #endif
@@ -969,11 +972,6 @@ private:
     friend class Iter;
 
     friend class SkPathStroker;
-    /*  Append the first contour of path, ignoring path's initial point. If no
-        moveTo() call has been made for this contour, the first point is
-        automatically set to (0,0).
-    */
-    void pathTo(const SkPath& path);
 
     /*  Append, in reverse order, the first contour of path, ignoring path's
         last point. If no moveTo() call has been made for this contour, the
@@ -1007,16 +1005,19 @@ private:
 
     // 'rect' needs to be sorted
     void setBounds(const SkRect& rect) {
-        fPathRef->setBounds(rect);
+        SkPathRef::Editor ed(&fPathRef);
+
+        ed.setBounds(rect);
     }
 
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
     friend class SkPathRef;     // just for SerializationOffsets
 #endif
     friend class SkAutoPathBoundsUpdate;
     friend class SkAutoDisableOvalCheck;
     friend class SkAutoDisableDirectionCheck;
-    friend class SkBench_AddPathTest; // perf test pathTo/reversePathTo
+    friend class SkBench_AddPathTest; // perf test reversePathTo
+    friend class PathTest_Private; // unit test reversePathTo
 };
 
 #endif

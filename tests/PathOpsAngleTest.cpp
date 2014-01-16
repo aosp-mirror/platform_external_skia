@@ -169,12 +169,12 @@ static const SortSet set12[] = {
     {lines[9], 2, 0.5, 0, {0, 0}},
 };
 
-static const SortSet set13[] = {
+/*static const SortSet set13[] = {
     {cubics[13], 4, 0.5, 0.400631046, {0, 0}},
     {lines[10], 2, 0.791666667, 0.928, {0, 0}},
     {lines[10], 2, 0.791666667, 0.333333333, {0, 0}},
     {cubics[13], 4, 0.5, 0.866666667, {0, 0}},
-};
+};*/
 
 static const SortSet set14[] = {
     {quads[2], 3, 0.5, 0.310102051, {0, 0}},
@@ -216,7 +216,7 @@ static const SortSetTests tests[] = {
     { TEST_ENTRY(set16), {130.090179f,11417.5957f} },
 //    { TEST_ENTRY(set15), {0, 0}},
     { TEST_ENTRY(set14), {0, 0}},
-    { TEST_ENTRY(set13), {0, 0}},
+//    { TEST_ENTRY(set13), {0, 0}},
     { TEST_ENTRY(set12), {0, 0}},
     { TEST_ENTRY(set11), {0, 0}},
     { TEST_ENTRY(set10), {0, 0}},
@@ -287,13 +287,13 @@ static void setup(const SortSet* set, const size_t idx,
     }
     double tStart = set[idx].tStart;
     double tEnd = set[idx].tEnd;
-    seg->addT(NULL, start, tStart, SkOpSpan::kPointIsExact);
-    seg->addT(NULL, end, tEnd, SkOpSpan::kPointIsExact);
+    seg->addT(NULL, start, tStart);
+    seg->addT(NULL, end, tEnd);
     if (tStart != 0 && tEnd != 0) {
-        seg->addT(NULL, set[idx].ptData[0], 0, SkOpSpan::kPointIsExact);
+        seg->addT(NULL, set[idx].ptData[0], 0);
     }
     if (tStart != 1 && tEnd != 1) {
-        seg->addT(NULL, set[idx].ptData[set[idx].ptCount - 1], 1, SkOpSpan::kPointIsExact);
+        seg->addT(NULL, set[idx].ptData[set[idx].ptCount - 1], 1);
     }
     int tIndex = 0;
     ts[0] = 0;

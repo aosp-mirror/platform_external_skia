@@ -16,6 +16,8 @@
 #include "SkFlattenable.h"
 #include "SkTDArray.h"
 
+//#define SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
+
 #ifdef SK_DEBUG
     /**
      *  Defining SK_IGNORE_PIXELREF_SETPRELOCKED will force all pixelref
@@ -49,8 +51,18 @@ class SK_API SkPixelRef : public SkFlattenable {
 public:
     SK_DECLARE_INST_COUNT(SkPixelRef)
 
+#ifdef SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
+    // DEPRECATED -- use a constructor that takes SkImageInfo
     explicit SkPixelRef(SkBaseMutex* mutex = NULL);
+#endif
+
+    explicit SkPixelRef(const SkImageInfo&);
+    SkPixelRef(const SkImageInfo&, SkBaseMutex* mutex);
     virtual ~SkPixelRef();
+
+    const SkImageInfo& info() const {
+        return fInfo;
+    }
 
     /** Return the pixel memory returned from lockPixels, or null if the
         lockCount is 0.
@@ -232,10 +244,15 @@ protected:
         acquire a mutex for thread safety, so this method need not do that.
     */
     virtual void* onLockPixels(SkColorTable**) = 0;
-    /** Called when the lock count goes from 1 to 0. The caller will have
-        already acquire a mutex for thread safety, so this method need not do
-        that.
-    */
+ 
+    /**
+     *  Called when the lock count goes from 1 to 0. The caller will have
+     *  already acquire a mutex for thread safety, so this method need not do
+     *  that.
+     *
+     *  If the previous call to onLockPixels failed (i.e. returned NULL), then
+     *  the onUnlockPixels will NOT be called.
+     */
     virtual void onUnlockPixels() = 0;
 
     /** Default impl returns true */
@@ -257,6 +274,16 @@ protected:
     // default impl returns NULL.
     virtual SkData* onRefEncodedData();
 
+    /**
+     *  Returns the size (in bytes) of the internally allocated memory.
+     *  This should be implemented in all serializable SkPixelRef derived classes.
+     *  SkBitmap::fPixelRefOffset + SkBitmap::getSafeSize() should never overflow this value,
+     *  otherwise the rendering code may attempt to read memory out of bounds.
+     *
+     *  @return default impl returns 0.
+     */
+    virtual size_t getAllocatedSizeInBytes() const;
+
     /** Return the mutex associated with this pixelref. This value is assigned
         in the constructor, and cannot change during the lifetime of the object.
     */
@@ -273,6 +300,10 @@ protected:
 
 private:
     SkBaseMutex*    fMutex; // must remain in scope for the life of this object
+    // FIXME: fInfo should be const once we remove old constructor that does
+    // not set it.
+    SkImageInfo     fInfo;
+
     void*           fPixels;
     SkColorTable*   fColorTable;    // we do not track ownership, subclass does
     int             fLockCount;

@@ -40,7 +40,9 @@ static SkBitmap load_bitmap() {
 
         if (SkImageDecoder::DecodeStream(stream, &bm, SkBitmap::kNo_Config,
                                          SkImageDecoder::kDecodeBounds_Mode)) {
-            SkPixelRef* pr = new SkImageRef_GlobalPool(stream, bm.config(), 1);
+            SkImageInfo info;
+            bm.asImageInfo(&info);
+            SkPixelRef* pr = new SkImageRef_GlobalPool(info, stream, 1);
             bm.setPixelRef(pr)->unref();
         }
     }
@@ -104,7 +106,7 @@ protected:
         SkPaint paint;
 
         canvas->save();
-        canvas->scale(SkFloatToScalar(0.5f), SkFloatToScalar(0.5f));
+        canvas->scale(0.5f, 0.5f);
         canvas->drawBitmap(fBitmap, 0, 0, NULL);
         canvas->restore();
 

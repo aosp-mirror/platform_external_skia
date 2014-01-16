@@ -1,6 +1,6 @@
 #include "DMGpuTask.h"
 
-#include "DMComparisonTask.h"
+#include "DMExpectationsTask.h"
 #include "DMUtil.h"
 #include "DMWriteTask.h"
 #include "SkCommandLineFlags.h"
@@ -12,7 +12,7 @@ namespace DM {
 GpuTask::GpuTask(const char* name,
                  Reporter* reporter,
                  TaskRunner* taskRunner,
-                 const skiagm::ExpectationsSource& expectations,
+                 const Expectations& expectations,
                  skiagm::GMRegistry::Factory gmFactory,
                  SkBitmap::Config config,
                  GrContextFactory::GLContextType contextType,
@@ -20,7 +20,7 @@ GpuTask::GpuTask(const char* name,
     : Task(reporter, taskRunner)
     , fGM(gmFactory(NULL))
     , fName(UnderJoin(fGM->shortName(), name))
-    , fExpectations(expectations.get(Png(fName).c_str()))
+    , fExpectations(expectations)
     , fConfig(config)
     , fContextType(contextType)
     , fSampleCount(sampleCount)
@@ -60,9 +60,7 @@ void GpuTask::draw() {
     gr->printCacheStats();
 #endif
 
-    // We offload checksum comparison to the main CPU threadpool.
-    // This cuts run time by about 30%.
-    this->spawnChild(SkNEW_ARGS(ComparisonTask, (*this, fExpectations, bitmap)));
+    this->spawnChild(SkNEW_ARGS(ExpectationsTask, (*this, fExpectations, bitmap)));
     this->spawnChild(SkNEW_ARGS(WriteTask, (*this, bitmap)));
 }
 

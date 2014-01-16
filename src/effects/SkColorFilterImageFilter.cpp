@@ -82,7 +82,8 @@ SkColorFilterImageFilter::SkColorFilterImageFilter(SkColorFilter* cf,
     SkSafeRef(cf);
 }
 
-SkColorFilterImageFilter::SkColorFilterImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+SkColorFilterImageFilter::SkColorFilterImageFilter(SkFlattenableReadBuffer& buffer)
+  : INHERITED(1, buffer) {
     fColorFilter = buffer.readColorFilter();
 }
 
@@ -112,6 +113,9 @@ bool SkColorFilterImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& sourc
     }
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
+    if (NULL == device.get()) {
+        return false;
+    }
     SkCanvas canvas(device.get());
     SkPaint paint;
 

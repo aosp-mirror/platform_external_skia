@@ -273,7 +273,7 @@ static CGFloat ScalarToCG(SkScalar scalar) {
 
 static SkScalar CGToScalar(CGFloat cgFloat) {
     if (sizeof(CGFloat) == sizeof(float)) {
-        return SkFloatToScalar(cgFloat);
+        return cgFloat;
     } else {
         SkASSERT(sizeof(CGFloat) == sizeof(double));
         return SkDoubleToScalar(cgFloat);
@@ -467,7 +467,6 @@ protected:
     virtual int onCharsToGlyphs(const void* chars, Encoding, uint16_t glyphs[],
                                 int glyphCount) const SK_OVERRIDE;
     virtual int onCountGlyphs() const SK_OVERRIDE;
-    virtual SkTypeface* onRefMatchingStyle(Style) const SK_OVERRIDE;
 
 private:
 
@@ -631,10 +630,6 @@ static SkTypeface* create_typeface(const SkTypeface* familyFace,
         }
     }
     return face;
-}
-
-SkTypeface* SkTypeface_Mac::onRefMatchingStyle(Style styleBits) const {
-    return create_typeface(this, NULL, styleBits);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1080,7 +1075,7 @@ static void build_power_table(uint8_t table[], float ee) {
     for (int i = 0; i < 256; i++) {
         float x = i / 255.f;
         x = sk_float_pow(x, ee);
-        int xx = SkScalarRoundToInt(SkFloatToScalar(x * 255));
+        int xx = SkScalarRoundToInt(x * 255);
         table[i] = SkToU8(xx);
     }
 }
@@ -1330,7 +1325,7 @@ void SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
         fRec.getSingleMatrix(&m);
 
         // start out by assuming that we want no hining in X and Y
-        scaleX = scaleY = SkFloatToScalar(kScaleForSubPixelPositionHinting);
+        scaleX = scaleY = kScaleForSubPixelPositionHinting;
         // now see if we need to restore hinting for axis-aligned baselines
         switch (SkComputeAxisAlignmentForHText(m)) {
             case kX_SkAxisAlignment:
@@ -2112,7 +2107,13 @@ static SkTypeface* createFromDesc(CFStringRef cfFamilyName,
         return face;
     }
 
-    AutoCFRelease<CTFontRef> ctNamed(CTFontCreateWithName(cfFamilyName, 1, NULL));
+    AutoCFRelease<CFDictionaryRef> fontFamilyNameDictionary(
+        CFDictionaryCreate(kCFAllocatorDefault,
+                           (const void**)&kCTFontFamilyNameAttribute, (const void**)&cfFamilyName,
+                           1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+    AutoCFRelease<CTFontDescriptorRef> fontDescriptor(
+        CTFontDescriptorCreateWithAttributes(fontFamilyNameDictionary));
+    AutoCFRelease<CTFontRef> ctNamed(CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL));
     CTFontRef ctFont = CTFontCreateCopyWithAttributes(ctNamed, 1, NULL, desc);
     if (NULL == ctFont) {
         return NULL;
@@ -2314,32 +2315,6 @@ protected:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#ifndef SK_FONTHOST_USES_FONTMGR
-
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style style) {
-    return create_typeface(familyFace, familyName, style);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
-    AutoCFRelease<CGDataProviderRef> provider(SkCreateDataProviderFromStream(stream));
-    if (NULL == provider) {
-        return NULL;
-    }
-    return create_from_dataProvider(provider);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    AutoCFRelease<CGDataProviderRef> provider(CGDataProviderCreateWithFilename(path));
-    if (NULL == provider) {
-        return NULL;
-    }
-    return create_from_dataProvider(provider);
-}
-
-#endif
 
 SkFontMgr* SkFontMgr::Factory() {
     return SkNEW(SkFontMgr_Mac);

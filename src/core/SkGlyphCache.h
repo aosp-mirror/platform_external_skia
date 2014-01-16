@@ -211,8 +211,6 @@ private:
     SkTDArray<SkGlyph*> fGlyphArray;
     SkChunkAlloc        fGlyphAlloc;
 
-    int fMetricsCount, fAdvanceCount;
-
     struct CharGlyphRec {
         uint32_t    fID;    // unichar + subpixel
         SkGlyph*    fGlyph;
@@ -273,5 +271,6 @@ private:
 
     static bool DetachProc(const SkGlyphCache*, void*);
 };
+#define SkAutoGlyphCache(...) SK_REQUIRE_LOCAL_VAR(SkAutoGlyphCache)
 
 #endif

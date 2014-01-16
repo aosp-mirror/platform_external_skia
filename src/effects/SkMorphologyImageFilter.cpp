@@ -21,7 +21,7 @@
 #endif
 
 SkMorphologyImageFilter::SkMorphologyImageFilter(SkFlattenableReadBuffer& buffer)
-  : INHERITED(buffer) {
+  : INHERITED(1, buffer) {
     fRadius.fWidth = buffer.readInt();
     fRadius.fHeight = buffer.readInt();
     buffer.validate((fRadius.fWidth >= 0) &&
@@ -188,6 +188,9 @@ bool SkErodeImageFilter::onFilterImage(Proxy* proxy,
 
     dst->setConfig(src.config(), bounds.width(), bounds.height());
     dst->allocPixels();
+    if (!dst->getPixels()) {
+        return false;
+    }
 
     int width = radius().width();
     int height = radius().height();
@@ -247,6 +250,9 @@ bool SkDilateImageFilter::onFilterImage(Proxy* proxy,
 
     dst->setConfig(src.config(), bounds.width(), bounds.height());
     dst->allocPixels();
+    if (!dst->getPixels()) {
+        return false;
+    }
 
     int width = radius().width();
     int height = radius().height();
@@ -434,7 +440,7 @@ void GrGLMorphologyEffect::setData(const GrGLUniformManager& uman,
         default:
             GrCrash("Unknown filter direction.");
     }
-    uman.set2fv(fImageIncrementUni, 0, 1, imageIncrement);
+    uman.set2fv(fImageIncrementUni, 1, imageIncrement);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

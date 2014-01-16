@@ -153,10 +153,12 @@
         [ 'skia_os == "android"', {
           'sources!': [
             '../src/ports/SkDebug_stdio.cpp',
+            '../src/ports/SkDiscardableMemory_none.cpp',
             '../src/ports/SkPurgeableMemoryBlock_none.cpp',
           ],
           'sources': [
             '../src/ports/SkDebug_android.cpp',
+            '../src/ports/SkDiscardableMemory_ashmem.cpp',
             '../src/ports/SkFontConfigInterface_android.cpp',
             '../src/ports/SkFontConfigParser_android.cpp',
             '../src/ports/SkFontHost_fontconfig.cpp',
@@ -175,9 +177,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

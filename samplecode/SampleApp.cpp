@@ -42,8 +42,6 @@ class GrContext;
 #include "OverView.h"
 #include "TransitionView.h"
 
-SK_DEFINE_INST_COUNT(SampleWindow::DeviceManager)
-
 extern SampleView* CreateSamplePictFileView(const char filename[]);
 
 class PictFileFactory : public SkViewFactory {
@@ -101,7 +99,7 @@ static SampleWindow* gSampleWindow;
 
 static bool gShowGMBounds;
 
-static void postEventToSink(SkEvent* evt, SkEventSink* sink) {
+static void post_event_to_sink(SkEvent* evt, SkEventSink* sink) {
     evt->setTargetID(sink->getSinkID())->post();
 }
 
@@ -490,12 +488,31 @@ static HintingState gHintingStates[] = {
     {SkPaint::kFull_Hinting, "Full", "Hf " },
 };
 
+struct FilterLevelState {
+    SkPaint::FilterLevel    fLevel;
+    const char*             fName;
+    const char*             fLabel;
+};
+static FilterLevelState gFilterLevelStates[] = {
+    { SkPaint::kNone_FilterLevel,   "Mixed",    NULL    },
+    { SkPaint::kNone_FilterLevel,   "None",     "F0 "   },
+    { SkPaint::kLow_FilterLevel,    "Low",      "F1 "   },
+    { SkPaint::kMedium_FilterLevel, "Medium",   "F2 "   },
+    { SkPaint::kHigh_FilterLevel,   "High",     "F3 "   },
+};
+
 class FlagsDrawFilter : public SkDrawFilter {
 public:
-    FlagsDrawFilter(SkOSMenu::TriState lcd, SkOSMenu::TriState aa, SkOSMenu::TriState filter,
-                    SkOSMenu::TriState subpixel, int hinting)
-        : fLCDState(lcd), fAAState(aa), fFilterState(filter), fSubpixelState(subpixel)
-        , fHintingState(hinting) {}
+    FlagsDrawFilter(SkOSMenu::TriState lcd, SkOSMenu::TriState aa,
+                    SkOSMenu::TriState subpixel, int hinting, int filterlevel)
+        : fLCDState(lcd)
+        , fAAState(aa)
+        , fSubpixelState(subpixel)
+        , fHintingState(hinting)
+        , fFilterLevelIndex(filterlevel)
+    {
+        SkASSERT((unsigned)filterlevel < SK_ARRAY_COUNT(gFilterLevelStates));
+    }
 
     virtual bool filter(SkPaint* paint, Type t) {
         if (kText_Type == t && SkOSMenu::kMixedState != fLCDState) {
@@ -504,9 +521,8 @@ public:
         if (SkOSMenu::kMixedState != fAAState) {
             paint->setAntiAlias(SkOSMenu::kOnState == fAAState);
         }
-        if (SkOSMenu::kMixedState != fFilterState) {
-            paint->setFilterLevel(SkOSMenu::kOnState == fFilterState ?
-                                  SkPaint::kLow_FilterLevel : SkPaint::kNone_FilterLevel);
+        if (0 != fFilterLevelIndex) {
+            paint->setFilterLevel(gFilterLevelStates[fFilterLevelIndex].fLevel);
         }
         if (SkOSMenu::kMixedState != fSubpixelState) {
             paint->setSubpixelText(SkOSMenu::kOnState == fSubpixelState);
@@ -520,9 +536,9 @@ public:
 private:
     SkOSMenu::TriState  fLCDState;
     SkOSMenu::TriState  fAAState;
-    SkOSMenu::TriState  fFilterState;
     SkOSMenu::TriState  fSubpixelState;
     int fHintingState;
+    int fFilterLevelIndex;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -639,6 +655,41 @@ namespace skiagm {
 
 //////////////////////////////////////////////////////////////////////////////
 
+enum TilingMode {
+    kNo_Tiling,
+    kAbs_128x128_Tiling,
+    kAbs_256x256_Tiling,
+    kRel_4x4_Tiling,
+    kRel_1x16_Tiling,
+    kRel_16x1_Tiling,
+
+    kLast_TilingMode_Enum
+};
+
+struct TilingInfo {
+    const char* label;
+    SkScalar    w, h;
+};
+
+static const struct TilingInfo gTilingInfo[] = {
+    { "No tiling", SK_Scalar1        , SK_Scalar1         }, // kNo_Tiling
+    { "128x128"  , SkIntToScalar(128), SkIntToScalar(128) }, // kAbs_128x128_Tiling
+    { "256x256"  , SkIntToScalar(256), SkIntToScalar(256) }, // kAbs_256x256_Tiling
+    { "1/4x1/4"  , SK_Scalar1 / 4    , SK_Scalar1 / 4     }, // kRel_4x4_Tiling
+    { "1/1x1/16" , SK_Scalar1        , SK_Scalar1 / 16    }, // kRel_1x16_Tiling
+    { "1/16x1/1" , SK_Scalar1 / 16   , SK_Scalar1         }, // kRel_16x1_Tiling
+};
+SK_COMPILE_ASSERT((SK_ARRAY_COUNT(gTilingInfo) == kLast_TilingMode_Enum),
+                  Incomplete_tiling_labels);
+
+SkSize SampleWindow::tileSize() const {
+    SkASSERT((TilingMode)fTilingMode < kLast_TilingMode_Enum);
+    const struct TilingInfo* info = gTilingInfo + fTilingMode;
+    return SkSize::Make(info->w > SK_Scalar1 ? info->w : this->width() * info->w,
+                        info->h > SK_Scalar1 ? info->h : this->height() * info->h);
+}
+//////////////////////////////////////////////////////////////////////////////
+
 static SkView* curr_view(SkWindow* wind) {
     SkView::F2BIter iter(wind);
     return iter.next();
@@ -658,8 +709,8 @@ static bool curr_title(SkWindow* wind, SkString* title) {
 
 void SampleWindow::setZoomCenter(float x, float y)
 {
-    fZoomCenterX = SkFloatToScalar(x);
-    fZoomCenterY = SkFloatToScalar(y);
+    fZoomCenterX = x;
+    fZoomCenterY = y;
 }
 
 bool SampleWindow::zoomIn()
@@ -840,14 +891,13 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fPerspAnimTime = 0;
     fRequestGrabImage = false;
     fPipeState = SkOSMenu::kOffState;
-    fTilingState = SkOSMenu::kOffState;
-    fTileCount.set(1, 1);
+    fTilingMode = kNo_Tiling;
     fMeasureFPS = false;
     fLCDState = SkOSMenu::kMixedState;
     fAAState = SkOSMenu::kMixedState;
-    fFilterState = SkOSMenu::kMixedState;
     fSubpixelState = SkOSMenu::kMixedState;
     fHintingState = 0;
+    fFilterLevelIndex = 0;
     fFlipAxis = 0;
     fScrollTestX = fScrollTestY = 0;
 
@@ -883,7 +933,13 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fAppMenu->assignKeyEquivalentToItem(itemID, 'b');
     itemID = fAppMenu->appendTriState("LCD", "LCD", sinkID, fLCDState);
     fAppMenu->assignKeyEquivalentToItem(itemID, 'l');
-    itemID = fAppMenu->appendTriState("Filter", "Filter", sinkID, fFilterState);
+    itemID = fAppMenu->appendList("FilterLevel", "FilterLevel", sinkID, fFilterLevelIndex,
+                                  gFilterLevelStates[0].fName,
+                                  gFilterLevelStates[1].fName,
+                                  gFilterLevelStates[2].fName,
+                                  gFilterLevelStates[3].fName,
+                                  gFilterLevelStates[4].fName,
+                                  NULL);
     fAppMenu->assignKeyEquivalentToItem(itemID, 'n');
     itemID = fAppMenu->appendTriState("Subpixel", "Subpixel", sinkID, fSubpixelState);
     fAppMenu->assignKeyEquivalentToItem(itemID, 's');
@@ -900,7 +956,14 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
                                                   fPipeState);
     fAppMenu->assignKeyEquivalentToItem(fUsePipeMenuItemID, 'P');
 
-    itemID = fAppMenu->appendTriState("Tiling", "Tiling", sinkID, fTilingState);
+    itemID =fAppMenu->appendList("Tiling", "Tiling", sinkID, fTilingMode,
+                                 gTilingInfo[kNo_Tiling].label,
+                                 gTilingInfo[kAbs_128x128_Tiling].label,
+                                 gTilingInfo[kAbs_256x256_Tiling].label,
+                                 gTilingInfo[kRel_4x4_Tiling].label,
+                                 gTilingInfo[kRel_1x16_Tiling].label,
+                                 gTilingInfo[kRel_16x1_Tiling].label,
+                                 NULL);
     fAppMenu->assignKeyEquivalentToItem(itemID, 't');
 
     itemID = fAppMenu->appendSwitch("Slide Show", "Slide Show" , sinkID, false);
@@ -961,7 +1024,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     // to implement, or the caller may need us to have returned from the
     // constructor first. Hence we post an event to ourselves.
 //    this->updateTitle();
-    postEventToSink(new SkEvent(gUpdateWindowTitleEvtName), this);
+    post_event_to_sink(new SkEvent(gUpdateWindowTitleEvtName), this);
 }
 
 SampleWindow::~SampleWindow() {
@@ -1165,24 +1228,29 @@ void SampleWindow::draw(SkCanvas* canvas) {
         if (bitmap_diff(canvas, orig, &diff)) {
         }
     } else {
-        const SkScalar cw = SkScalarDiv(this->width(), SkIntToScalar(fTileCount.width()));
-        const SkScalar ch = SkScalarDiv(this->height(), SkIntToScalar(fTileCount.height()));
+        SkSize tile = this->tileSize();
 
-        for (int y = 0; y < fTileCount.height(); ++y) {
-            for (int x = 0; x < fTileCount.width(); ++x) {
+        for (SkScalar y = 0; y < height(); y += tile.height()) {
+            for (SkScalar x = 0; x < width(); x += tile.width()) {
                 SkAutoCanvasRestore acr(canvas, true);
-                canvas->clipRect(SkRect::MakeXYWH(x * cw, y * ch, cw, ch));
+                canvas->clipRect(SkRect::MakeXYWH(x, y,
+                                                  tile.width(),
+                                                  tile.height()));
                 this->INHERITED::draw(canvas);
             }
         }
 
-        if (!fTileCount.equals(1, 1)) {
+        if (fTilingMode != kNo_Tiling) {
             SkPaint paint;
             paint.setColor(0x60FF00FF);
             paint.setStyle(SkPaint::kStroke_Style);
-            for (int y = 0; y < fTileCount.height(); ++y) {
-                for (int x = 0; x < fTileCount.width(); ++x) {
-                    canvas->drawRect(SkRect::MakeXYWH(x * cw, y * ch, cw, ch), paint);
+
+            for (SkScalar y = 0; y < height(); y += tile.height()) {
+                for (SkScalar x = 0; x < width(); x += tile.width()) {
+                    canvas->drawRect(SkRect::MakeXYWH(x, y,
+                                                      tile.width(),
+                                                      tile.height()),
+                                     paint);
                 }
             }
         }
@@ -1537,7 +1605,6 @@ void SampleWindow::afterChild(SkView* child, SkCanvas* canvas) {
 
 static SkBitmap::Config gConfigCycle[] = {
     SkBitmap::kNo_Config,           // none -> none
-    SkBitmap::kNo_Config,           // a1 -> none
     SkBitmap::kNo_Config,           // a8 -> none
     SkBitmap::kNo_Config,           // index8 -> none
     SkBitmap::kARGB_4444_Config,    // 565 -> 4444
@@ -1550,7 +1617,7 @@ static SkBitmap::Config cycle_configs(SkBitmap::Config c) {
 }
 
 void SampleWindow::changeZoomLevel(float delta) {
-    fZoomLevel += SkFloatToScalar(delta);
+    fZoomLevel += delta;
     if (fZoomLevel > 0) {
         fZoomLevel = SkMinScalar(fZoomLevel, MAX_ZOOM_LEVEL);
         fZoomScale = fZoomLevel + SK_Scalar1;
@@ -1633,8 +1700,8 @@ void SampleWindow::showOverview() {
 }
 
 void SampleWindow::installDrawFilter(SkCanvas* canvas) {
-    canvas->setDrawFilter(new FlagsDrawFilter(fLCDState, fAAState, fFilterState, fSubpixelState,
-                                              fHintingState))->unref();
+    canvas->setDrawFilter(new FlagsDrawFilter(fLCDState, fAAState, fSubpixelState,
+                                              fHintingState, fFilterLevelIndex))->unref();
 }
 
 void SampleWindow::postAnimatingEvent() {
@@ -1682,24 +1749,13 @@ bool SampleWindow::onEvent(const SkEvent& evt) {
         this->inval(NULL);
         return true;
     }
-    if (SkOSMenu::FindTriState(evt, "Tiling", &fTilingState)) {
-        int nx = 1, ny = 1;
-        switch (fTilingState) {
-            case SkOSMenu::kOffState:   nx = 1; ny = 1; break;
-            case SkOSMenu::kMixedState: nx = 1; ny = 16; break;
-            case SkOSMenu::kOnState:    nx = 4; ny = 4; break;
-        }
-        fTileCount.set(nx, ny);
-        this->inval(NULL);
-        return true;
-    }
     if (SkOSMenu::FindSwitchState(evt, "Slide Show", NULL)) {
         this->toggleSlideshow();
         return true;
     }
     if (SkOSMenu::FindTriState(evt, "AA", &fAAState) ||
         SkOSMenu::FindTriState(evt, "LCD", &fLCDState) ||
-        SkOSMenu::FindTriState(evt, "Filter", &fFilterState) ||
+        SkOSMenu::FindListIndex(evt, "FilterLevel", &fFilterLevelIndex) ||
         SkOSMenu::FindTriState(evt, "Subpixel", &fSubpixelState) ||
         SkOSMenu::FindListIndex(evt, "Hinting", &fHintingState) ||
         SkOSMenu::FindSwitchState(evt, "Clip", &fUseClip) ||
@@ -1707,6 +1763,14 @@ bool SampleWindow::onEvent(const SkEvent& evt) {
         SkOSMenu::FindSwitchState(evt, "Magnify", &fMagnify) ||
         SkOSMenu::FindListIndex(evt, "Transition-Next", &fTransitionNext) ||
         SkOSMenu::FindListIndex(evt, "Transition-Prev", &fTransitionPrev)) {
+        this->inval(NULL);
+        this->updateTitle();
+        return true;
+    }
+    if (SkOSMenu::FindListIndex(evt, "Tiling", &fTilingMode)) {
+        if (SampleView::IsSampleView(curr_view(this))) {
+            ((SampleView*)curr_view(this))->onTileSizeChanged(this->tileSize());
+        }
         this->inval(NULL);
         this->updateTitle();
         return true;
@@ -1767,8 +1831,6 @@ static void cleanup_for_filename(SkString* name) {
 }
 #endif
 
-//extern bool gIgnoreFastBlurRect;
-
 bool SampleWindow::onHandleChar(SkUnichar uni) {
     {
         SkView* view = curr_view(this);
@@ -1811,18 +1873,13 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
     }
 
     switch (uni) {
-        case 'b':
-            {
-            postEventToSink(SkNEW_ARGS(SkEvent, ("PictFileView::toggleBBox")), curr_view(this));
-            this->updateTitle();
-            this->inval(NULL);
-            break;
-            }
         case 'B':
-//            gIgnoreFastBlurRect = !gIgnoreFastBlurRect;
+            post_event_to_sink(SkNEW_ARGS(SkEvent, ("PictFileView::toggleBBox")), curr_view(this));
+            // Cannot call updateTitle() synchronously, because the toggleBBox event is still in
+            // the queue.
+            post_event_to_sink(SkNEW_ARGS(SkEvent, (gUpdateWindowTitleEvtName)), this);
             this->inval(NULL);
             break;
-
         case 'f':
             // only
             toggleFPS();
@@ -1833,7 +1890,7 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
             break;
         case 'G':
             gShowGMBounds = !gShowGMBounds;
-            postEventToSink(GMSampleView::NewShowSizeEvt(gShowGMBounds),
+            post_event_to_sink(GMSampleView::NewShowSizeEvt(gShowGMBounds),
                             curr_view(this));
             this->inval(NULL);
             break;
@@ -2066,15 +2123,17 @@ void SampleWindow::loadView(SkView* view) {
     fSlideMenu->reset();
 
     (void)SampleView::SetUsePipe(view, fPipeState);
-    if (SampleView::IsSampleView(view))
-        ((SampleView*)view)->requestMenu(fSlideMenu);
+    if (SampleView::IsSampleView(view)) {
+        SampleView* sampleView = (SampleView*)view;
+        sampleView->requestMenu(fSlideMenu);
+        sampleView->onTileSizeChanged(this->tileSize());
+    }
     this->onUpdateMenu(fSlideMenu);
     this->updateTitle();
 }
 
 static const char* gConfigNames[] = {
     "unknown config",
-    "A1",
     "A8",
     "Index8",
     "565",
@@ -2123,6 +2182,9 @@ void SampleWindow::updateTitle() {
     title.prepend(" ");
     title.prepend(configToString(this->getBitmap().config()));
 
+    if (fTilingMode != kNo_Tiling) {
+        title.prependf("<T: %s> ", gTilingInfo[fTilingMode].label);
+    }
     if (fAnimating) {
         title.prepend("<A> ");
     }
@@ -2138,7 +2200,7 @@ void SampleWindow::updateTitle() {
 
     title.prepend(trystate_str(fLCDState, "LCD ", "lcd "));
     title.prepend(trystate_str(fAAState, "AA ", "aa "));
-    title.prepend(trystate_str(fFilterState, "N ", "n "));
+    title.prepend(gFilterLevelStates[fFilterLevelIndex].fLabel);
     title.prepend(trystate_str(fSubpixelState, "S ", "s "));
     title.prepend(fFlipAxis & kFlipAxis_X ? "X " : NULL);
     title.prepend(fFlipAxis & kFlipAxis_Y ? "Y " : NULL);
@@ -2218,6 +2280,10 @@ void SampleWindow::onSizeChange() {
 #endif
     this->updateTitle();    // to refresh our config
     fDevManager->windowSizeChanged(this);
+
+    if (fTilingMode != kNo_Tiling && SampleView::IsSampleView(view)) {
+        ((SampleView*)view)->onTileSizeChanged(this->tileSize());
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

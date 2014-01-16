@@ -29,6 +29,8 @@
       'type': 'executable',
       'include_dirs' : [
         '../src/core',
+        '../src/images',
+        '../src/lazy',
         '../src/effects',
         '../src/pipe/utils/',
         '../src/utils/',
@@ -60,6 +62,17 @@
         'pdf.gyp:pdf',
       ],
       'conditions': [
+        ['skia_run_pdfviewer_in_gm', {
+          'defines': [
+            'SK_BUILD_NATIVE_PDF_RENDERER',
+          ],
+          'include_dirs' : [
+            '../experimental/PdfViewer/inc',
+          ],
+          'dependencies': [
+            'pdfviewer_lib.gyp:pdfviewer_lib',
+          ],
+        }],
         ['skia_os in ["linux", "mac", "win"]', {
           'dependencies': [
             'poppler.gyp:libpoppler-cpp-gpl',
@@ -102,9 +115,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

@@ -34,8 +34,12 @@ public:
         if (fBulkLoad) {
             fName.append("_bulk");
         }
-        fIsRendering = false;
     }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
+    }
+
     virtual ~BBoxBuildBench() {
         fTree->unref();
     }
@@ -43,9 +47,9 @@ protected:
     virtual const char* onGetName() SK_OVERRIDE {
         return fName.c_str();
     }
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         SkRandom rand;
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             for (int j = 0; j < NUM_BUILD_RECTS; ++j) {
                 fTree->insert(reinterpret_cast<void*>(j), fProc(rand, j, NUM_BUILD_RECTS),
                               fBulkLoad);
@@ -84,8 +88,12 @@ public:
         if (fBulkLoad) {
             fName.append("_bulk");
         }
-        fIsRendering = false;
     }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
+    }
+
     virtual ~BBoxQueryBench() {
         fTree->unref();
     }
@@ -103,9 +111,9 @@ protected:
         fTree->flushDeferredInserts();
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         SkRandom rand;
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             SkTDArray<void*> hits;
             SkIRect query;
             switch(fQuery) {

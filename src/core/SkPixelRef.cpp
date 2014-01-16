@@ -9,9 +9,6 @@
 #include "SkFlattenableBuffers.h"
 #include "SkThread.h"
 
-SK_DEFINE_INST_COUNT(SkPixelRef)
-
-
 #ifdef SK_USE_POSIX_THREADS
 
     static SkBaseMutex gPixelRefMutexRing[] = {
@@ -85,8 +82,9 @@ void SkPixelRef::setMutex(SkBaseMutex* mutex) {
 // just need a > 0 value, so pick a funny one to aid in debugging
 #define SKPIXELREF_PRELOCKED_LOCKCOUNT     123456789
 
-SkPixelRef::SkPixelRef(SkBaseMutex* mutex) {
+SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex) {
     this->setMutex(mutex);
+    fInfo = info;
     fPixels = NULL;
     fColorTable = NULL; // we do not track ownership of this
     fLockCount = 0;
@@ -95,9 +93,36 @@ SkPixelRef::SkPixelRef(SkBaseMutex* mutex) {
     fPreLocked = false;
 }
 
+SkPixelRef::SkPixelRef(const SkImageInfo& info) {
+    this->setMutex(NULL);
+    fInfo = info;
+    fPixels = NULL;
+    fColorTable = NULL; // we do not track ownership of this
+    fLockCount = 0;
+    this->needsNewGenID();
+    fIsImmutable = false;
+    fPreLocked = false;
+}
+
+#ifdef SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
+// THIS GUY IS DEPRECATED -- don't use me!
+SkPixelRef::SkPixelRef(SkBaseMutex* mutex) {
+    this->setMutex(mutex);
+    // Fill with dummy values.
+    sk_bzero(&fInfo, sizeof(fInfo));
+    fPixels = NULL;
+    fColorTable = NULL; // we do not track ownership of this
+    fLockCount = 0;
+    this->needsNewGenID();
+    fIsImmutable = false;
+    fPreLocked = false;
+}
+#endif
+
 SkPixelRef::SkPixelRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
         : INHERITED(buffer) {
     this->setMutex(mutex);
+    fInfo.unflatten(buffer);
     fPixels = NULL;
     fColorTable = NULL; // we do not track ownership of this
     fLockCount = 0;
@@ -136,6 +161,7 @@ void SkPixelRef::setPreLocked(void* pixels, SkColorTable* ctable) {
 
 void SkPixelRef::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
+    fInfo.flatten(buffer);
     buffer.writeBool(fIsImmutable);
     // We write the gen ID into the picture for within-process recording. This
     // is safe since the same genID will never refer to two different sets of
@@ -158,6 +184,10 @@ void SkPixelRef::lockPixels() {
 
         if (1 == ++fLockCount) {
             fPixels = this->onLockPixels(&fColorTable);
+            // If onLockPixels failed, it will return NULL
+            if (NULL == fPixels) {
+                fColorTable = NULL;
+            }
         }
     }
 }
@@ -170,9 +200,14 @@ void SkPixelRef::unlockPixels() {
 
         SkASSERT(fLockCount > 0);
         if (0 == --fLockCount) {
-            this->onUnlockPixels();
-            fPixels = NULL;
-            fColorTable = NULL;
+            // don't call onUnlockPixels unless onLockPixels succeeded
+            if (fPixels) {
+                this->onUnlockPixels();
+                fPixels = NULL;
+                fColorTable = NULL;
+            } else {
+                SkASSERT(NULL == fColorTable);
+            }
         }
     }
 }
@@ -245,6 +280,10 @@ bool SkPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
 
 SkData* SkPixelRef::onRefEncodedData() {
     return NULL;
+}
+
+size_t SkPixelRef::getAllocatedSizeInBytes() const {
+    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

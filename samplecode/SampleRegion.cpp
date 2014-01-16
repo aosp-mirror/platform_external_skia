@@ -76,7 +76,7 @@ static void drawFadingText(SkCanvas* canvas,
 
     // pos[1] value is where we start to fade, relative to the width
     // of our pts[] array.
-    const SkScalar pos[] = { 0, SkFloatToScalar(0.9f), SK_Scalar1 };
+    const SkScalar pos[] = { 0, 0.9f, SK_Scalar1 };
 
     SkShader* s = SkGradientShader::CreateLinear(pts, colors, pos, 3,
                                                  SkShader::kClamp_TileMode);
@@ -280,7 +280,7 @@ protected:
                 SkASSERT(size == size2);
 
                 SkRegion    tmp3;
-                SkDEBUGCODE(size2 = ) tmp3.readFromMemory(buffer);
+                SkDEBUGCODE(size2 = ) tmp3.readFromMemory(buffer, 1000);
                 SkASSERT(size == size2);
 
                 SkASSERT(tmp3 == tmp);

@@ -30,6 +30,7 @@
 #include "SkGraphics.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
+#include "SkJSONCPP.h"
 #include "SkOSFile.h"
 #include "SkPDFRasterizer.h"
 #include "SkPicture.h"
@@ -49,17 +50,6 @@ static const bool kDebugOnly = false;
 #endif
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
-
-#ifdef SK_BUILD_FOR_WIN
-    // json includes xlocale which generates warning 4530 because we're compiling without
-    // exceptions; see https://code.google.com/p/skia/issues/detail?id=1067
-    #pragma warning(push)
-    #pragma warning(disable : 4530)
-#endif
-#include "json/value.h"
-#ifdef SK_BUILD_FOR_WIN
-    #pragma warning(pop)
-#endif
 
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
@@ -198,6 +188,7 @@ static PipeFlagComboData gPipeWritingFlagCombos[] = {
 };
 
 static SkData* encode_to_dct_data(size_t* pixelRefOffset, const SkBitmap& bitmap);
+DECLARE_int32(pdfRasterDpi);
 
 const static ErrorCombination kDefaultIgnorableErrorTypes = ErrorCombination()
     .plus(kMissingExpectations_ErrorType)
@@ -636,7 +627,10 @@ public:
         SkMatrix initialTransform = gm->getInitialTransform();
         if (FLAGS_useDocumentInsteadOfDevice) {
             SkISize pageISize = gm->getISize();
-            SkAutoTUnref<SkDocument> pdfDoc(SkDocument::CreatePDF(&pdf, NULL, encode_to_dct_data));
+            SkAutoTUnref<SkDocument> pdfDoc(
+                    SkDocument::CreatePDF(&pdf, NULL,
+                                          encode_to_dct_data,
+                                          SkIntToScalar(FLAGS_pdfRasterDpi)));
 
             if (!pdfDoc.get()) {
                 return false;
@@ -667,6 +661,7 @@ public:
                 dev = new SkPDFDevice(pageSize, contentSize, initialTransform);
             }
             dev->setDCTEncoder(encode_to_dct_data);
+            dev->setRasterDpi(SkIntToScalar(FLAGS_pdfRasterDpi));
             SkAutoUnref aur(dev);
             SkCanvas c(dev);
             invokeGM(gm, &c, true, false);
@@ -1081,7 +1076,7 @@ public:
                 if (!(gm->getFlags() & GM::kSkipPDFRasterization_Flag)) {
                     for (int i = 0; i < pdfRasterizers.count(); i++) {
                         SkBitmap pdfBitmap;
-                        SkASSERT(documentStream->rewind());
+                        documentStream->rewind();
                         bool success = (*pdfRasterizers[i]->fRasterizerFunction)(
                                 documentStream.get(), &pdfBitmap);
                         if (!success) {
@@ -1321,6 +1316,9 @@ static const PDFRasterizerData kPDFRasterizers[] = {
 #ifdef SK_BUILD_POPPLER
     { &SkPopplerRasterizePDF, "poppler", true },
 #endif
+#ifdef SK_BUILD_NATIVE_PDF_RENDERER
+    { &SkNativeRasterizePDF,  "native",  true },
+#endif  // SK_BUILD_NATIVE_PDF_RENDERER
 };
 
 static const char kDefaultsConfigStr[] = "defaults";
@@ -1408,7 +1406,7 @@ static SkString pdfRasterizerUsage() {
 
 // Alphabetized ignoring "no" prefix ("readPath", "noreplay", "resourcePath").
 DEFINE_string(config, "", configUsage().c_str());
-DEFINE_string(pdfRasterizers, "", pdfRasterizerUsage().c_str());
+DEFINE_string(pdfRasterizers, "default", pdfRasterizerUsage().c_str());
 DEFINE_bool(deferred, false, "Exercise the deferred rendering test pass.");
 DEFINE_string(excludeConfig, "", "Space delimited list of configs to skip.");
 DEFINE_bool(forceBWtext, false, "Disable text anti-aliasing.");
@@ -1472,7 +1470,10 @@ DEFINE_int32(pdfJpegQuality, -1, "Encodes images in JPEG at quality level N, "
 // then we can write something reabable like --rotate centerx centery 90
 DEFINE_bool(forcePerspectiveMatrix, false, "Force a perspective matrix.");
 DEFINE_bool(useDocumentInsteadOfDevice, false, "Use SkDocument::CreateFoo instead of SkFooDevice.");
-
+DEFINE_int32(pdfRasterDpi, 72, "Scale at which at which the non suported "
+             "features in PDF are rasterized. Must be be in range 0-10000. "
+             "Default is 72. N = 0 will disable rasterizing features like "
+             "text shadows or perspective bitmaps.");
 static SkData* encode_to_dct_data(size_t* pixelRefOffset, const SkBitmap& bitmap) {
     // Filter output of warnings that JPEG is not available for the image.
     if (bitmap.width() >= 65500 || bitmap.height() >= 65500) return NULL;
@@ -2003,24 +2004,24 @@ static bool parse_flags_pdf_rasterizers(const SkTDArray<size_t>& configs,
         return true;
     }
 
-    for (int i = 0; i < FLAGS_pdfRasterizers.count(); i++) {
-        const char* rasterizer = FLAGS_pdfRasterizers[i];
-        const PDFRasterizerData* rasterizerPtr = findPDFRasterizer(rasterizer);
-
-        if (rasterizerPtr == NULL) {
-            gm_fprintf(stderr, "unrecognized rasterizer %s\n", rasterizer);
-            return false;
-        }
-        appendUnique<const PDFRasterizerData*>(outRasterizers,
-                                               rasterizerPtr);
-    }
-
-    if (outRasterizers->count() == 0) {
-        // if no config is specified by user, add the defaults
+    if (FLAGS_pdfRasterizers.count() == 1 &&
+            !strcmp(FLAGS_pdfRasterizers[0], "default")) {
         for (int i = 0; i < (int)SK_ARRAY_COUNT(kPDFRasterizers); ++i) {
             if (kPDFRasterizers[i].fRunByDefault) {
                 *outRasterizers->append() = &kPDFRasterizers[i];
             }
+        }
+    } else {
+        for (int i = 0; i < FLAGS_pdfRasterizers.count(); i++) {
+            const char* rasterizer = FLAGS_pdfRasterizers[i];
+            const PDFRasterizerData* rasterizerPtr =
+                    findPDFRasterizer(rasterizer);
+            if (rasterizerPtr == NULL) {
+                gm_fprintf(stderr, "unrecognized rasterizer %s\n", rasterizer);
+                return false;
+            }
+            appendUnique<const PDFRasterizerData*>(outRasterizers,
+                                                   rasterizerPtr);
         }
     }
 

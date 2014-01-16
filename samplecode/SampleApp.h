@@ -194,7 +194,7 @@ private:
     SkMSec fMeasureFPS_Time;
     SkMSec fMeasureFPS_StartTime;
     bool fMagnify;
-    SkISize fTileCount;
+    int fTilingMode;
 
 
     SkOSMenu::TriState fPipeState;  // Mixed uses a tiled pipe
@@ -212,10 +212,9 @@ private:
 
     SkOSMenu::TriState fLCDState;
     SkOSMenu::TriState fAAState;
-    SkOSMenu::TriState fFilterState;
     SkOSMenu::TriState fSubpixelState;
     int fHintingState;
-    SkOSMenu::TriState fTilingState;
+    int fFilterLevelIndex;
     unsigned   fFlipAxis;
 
     int fMSAASampleCount;
@@ -244,6 +243,7 @@ private:
     void installDrawFilter(SkCanvas*);
     int findByTitle(const char*);
     void listTitles();
+    SkSize tileSize() const;
 
     typedef SkOSWindow INHERITED;
 };

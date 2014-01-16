@@ -30,13 +30,13 @@ namespace {
 
 const SkScalar gOneThird = SkScalarInvert(SkIntToScalar(3));
 const SkScalar gTwoThirds = SkScalarDiv(SkIntToScalar(2), SkIntToScalar(3));
-const SkScalar gOneHalf = SkFloatToScalar(0.5f);
-const SkScalar gOneQuarter = SkFloatToScalar(0.25f);
+const SkScalar gOneHalf = 0.5f;
+const SkScalar gOneQuarter = 0.25f;
 
 #if SK_SUPPORT_GPU
 void setUniformPoint3(const GrGLUniformManager& uman, UniformHandle uni, const SkPoint3& point) {
     GR_STATIC_ASSERT(sizeof(SkPoint3) == 3 * sizeof(GrGLfloat));
-    uman.set3fv(uni, 0, 1, &point.fX);
+    uman.set3fv(uni, 1, &point.fX);
 }
 
 void setUniformNormal3(const GrGLUniformManager& uman, UniformHandle uni, const SkPoint3& point) {
@@ -549,8 +549,6 @@ private:
     SkPoint3 fColor;
 };
 
-SK_DEFINE_INST_COUNT(SkLight)
-
 ///////////////////////////////////////////////////////////////////////////////
 
 class SkDistantLight : public SkLight {
@@ -675,7 +673,7 @@ public:
        fS = target - location;
        fS.normalize();
        fCosOuterConeAngle = SkScalarCos(SkDegreesToRadians(cutoffAngle));
-       const SkScalar antiAliasThreshold = SkFloatToScalar(0.016f);
+       const SkScalar antiAliasThreshold = 0.016f;
        fCosInnerConeAngle = fCosOuterConeAngle + antiAliasThreshold;
        fConeScale = SkScalarInvert(antiAliasThreshold);
     }
@@ -791,8 +789,8 @@ private:
 
 // According to the spec, the specular term should be in the range [1, 128] :
 // http://www.w3.org/TR/SVG/filters.html#feSpecularLightingSpecularExponentAttribute
-const SkScalar SkSpotLight::kSpecularExponentMin = SkFloatToScalar(1.0f);
-const SkScalar SkSpotLight::kSpecularExponentMax = SkFloatToScalar(128.0f);
+const SkScalar SkSpotLight::kSpecularExponentMin = 1.0f;
+const SkScalar SkSpotLight::kSpecularExponentMax = 128.0f;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -814,6 +812,7 @@ void SkLight::flattenLight(SkFlattenableWriteBuffer& buffer) const {
         case SkLight::kSpot_LightType:    return SkNEW_ARGS(SkSpotLight, (buffer));
         default:
             SkDEBUGFAIL("Unknown LightType.");
+            buffer.validate(false);
             return NULL;
     }
 }
@@ -887,7 +886,7 @@ SkLightingImageFilter::~SkLightingImageFilter() {
 }
 
 SkLightingImageFilter::SkLightingImageFilter(SkFlattenableReadBuffer& buffer)
-  : INHERITED(buffer) {
+  : INHERITED(1, buffer) {
     fLight = SkLight::UnflattenLight(buffer);
     fSurfaceScale = buffer.readScalar();
     buffer.validate(SkScalarIsFinite(fSurfaceScale));
@@ -903,7 +902,9 @@ void SkLightingImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
 
 SkDiffuseLightingImageFilter::SkDiffuseLightingImageFilter(SkLight* light, SkScalar surfaceScale, SkScalar kd, SkImageFilter* input, const CropRect* cropRect = NULL)
   : SkLightingImageFilter(light, surfaceScale, input, cropRect),
-    fKD(kd)
+    // According to the spec, kd can be any non-negative number :
+    // http://www.w3.org/TR/SVG/filters.html#feDiffuseLightingElement
+    fKD(kd < 0 ? 0 : kd)
 {
 }
 
@@ -911,7 +912,7 @@ SkDiffuseLightingImageFilter::SkDiffuseLightingImageFilter(SkFlattenableReadBuff
   : INHERITED(buffer)
 {
     fKD = buffer.readScalar();
-    buffer.validate(SkScalarIsFinite(fKD));
+    buffer.validate(SkScalarIsFinite(fKD) && (fKD >= 0));
 }
 
 void SkDiffuseLightingImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
@@ -950,6 +951,9 @@ bool SkDiffuseLightingImageFilter::onFilterImage(Proxy* proxy,
 
     dst->setConfig(src.config(), bounds.width(), bounds.height());
     dst->allocPixels();
+    if (!dst->getPixels()) {
+        return false;
+    }
 
     SkAutoTUnref<SkLight> transformedLight(light()->transform(ctm));
 
@@ -985,7 +989,9 @@ bool SkDiffuseLightingImageFilter::asNewEffect(GrEffectRef** effect, GrTexture* 
 
 SkSpecularLightingImageFilter::SkSpecularLightingImageFilter(SkLight* light, SkScalar surfaceScale, SkScalar ks, SkScalar shininess, SkImageFilter* input, const CropRect* cropRect)
   : SkLightingImageFilter(light, surfaceScale, input, cropRect),
-    fKS(ks),
+    // According to the spec, ks can be any non-negative number :
+    // http://www.w3.org/TR/SVG/filters.html#feSpecularLightingElement
+    fKS(ks < 0 ? 0 : ks),
     fShininess(shininess)
 {
 }
@@ -995,7 +1001,7 @@ SkSpecularLightingImageFilter::SkSpecularLightingImageFilter(SkFlattenableReadBu
 {
     fKS = buffer.readScalar();
     fShininess = buffer.readScalar();
-    buffer.validate(SkScalarIsFinite(fKS) &&
+    buffer.validate(SkScalarIsFinite(fKS) && (fKS >= 0) &&
                     SkScalarIsFinite(fShininess));
 }
 
@@ -1036,6 +1042,9 @@ bool SkSpecularLightingImageFilter::onFilterImage(Proxy* proxy,
 
     dst->setConfig(src.config(), bounds.width(), bounds.height());
     dst->allocPixels();
+    if (!dst->getPixels()) {
+        return false;
+    }
 
     SpecularLightingType lightingType(fKS, fShininess);
     SkAutoTUnref<SkLight> transformedLight(light()->transform(ctm));

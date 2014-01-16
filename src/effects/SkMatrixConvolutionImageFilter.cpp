@@ -58,7 +58,7 @@ SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(
 }
 
 SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(SkFlattenableReadBuffer& buffer)
-    : INHERITED(buffer) {
+    : INHERITED(1, buffer) {
     // We need to be able to read at most SK_MaxS32 bytes, so divide that
     // by the size of a scalar to know how many scalars we can read.
     static const int32_t kMaxSize = SK_MaxS32 / sizeof(SkScalar);
@@ -279,6 +279,9 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
 
     result->setConfig(src.config(), bounds.width(), bounds.height());
     result->allocPixels();
+    if (!result->getPixels()) {
+        return false;
+    }
 
     SkIRect interior = SkIRect::MakeXYWH(bounds.left() + fTarget.fX,
                                          bounds.top() + fTarget.fY,
@@ -537,9 +540,9 @@ void GrGLMatrixConvolutionEffect::setData(const GrGLUniformManager& uman,
     float ySign = texture.origin() == kTopLeft_GrSurfaceOrigin ? 1.0f : -1.0f;
     imageIncrement[0] = 1.0f / texture.width();
     imageIncrement[1] = ySign / texture.height();
-    uman.set2fv(fImageIncrementUni, 0, 1, imageIncrement);
-    uman.set2fv(fTargetUni, 0, 1, conv.target());
-    uman.set1fv(fKernelUni, 0, fKernelSize.width() * fKernelSize.height(), conv.kernel());
+    uman.set2fv(fImageIncrementUni, 1, imageIncrement);
+    uman.set2fv(fTargetUni, 1, conv.target());
+    uman.set1fv(fKernelUni, fKernelSize.width() * fKernelSize.height(), conv.kernel());
     uman.set1f(fGainUni, conv.gain());
     uman.set1f(fBiasUni, conv.bias());
     const SkIRect& bounds = conv.bounds();

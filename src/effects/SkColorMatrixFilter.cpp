@@ -308,10 +308,8 @@ void SkColorMatrixFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
 SkColorMatrixFilter::SkColorMatrixFilter(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer) {
     SkASSERT(buffer.getArrayCount() == 20);
-    buffer.readScalarArray(fMatrix.fMat, 20);
-    this->initState(fMatrix.fMat);
-    for (int i = 0; i < 20; ++i) {
-        buffer.validate(SkScalarIsFinite(fMatrix.fMat[i]));
+    if (buffer.readScalarArray(fMatrix.fMat, 20)) {
+        this->initState(fMatrix.fMat);
     }
 }
 
@@ -441,8 +439,8 @@ public:
             GrGLfloat vec[] = {
                 m[4] * kScale, m[9] * kScale, m[14] * kScale, m[19] * kScale,
             };
-            uniManager.setMatrix4fv(fMatrixHandle, 0, 1, mt);
-            uniManager.set4fv(fVectorHandle, 0, 1, vec);
+            uniManager.setMatrix4fv(fMatrixHandle, 1, mt);
+            uniManager.set4fv(fVectorHandle, 1, vec);
         }
 
     private:

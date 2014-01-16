@@ -23,15 +23,6 @@
         '<(skia_src_path)/gpu/GrTest.cpp',
         '<(skia_src_path)/gpu/GrTest.h',
       ],
-      'defines': [
-        'GR_IMPLEMENTATION=1',
-      ],
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

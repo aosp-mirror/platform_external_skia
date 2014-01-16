@@ -126,11 +126,11 @@ void SkPdfNativeDoc::init(const void* bytes, size_t length) {
 
     bool storeCatalog = true;
     while (xrefByteOffset >= 0) {
-        const unsigned char* trailerStart = readCrossReferenceSection(fFileContent + xrefByteOffset,
-                                                                      xrefstartKeywordLine);
+        const unsigned char* trailerStart = this->readCrossReferenceSection(fFileContent + xrefByteOffset,
+                                                                            xrefstartKeywordLine);
         xrefByteOffset = -1;
         if (trailerStart < xrefstartKeywordLine) {
-            readTrailer(trailerStart, xrefstartKeywordLine, storeCatalog, &xrefByteOffset, false);
+            this->readTrailer(trailerStart, xrefstartKeywordLine, storeCatalog, &xrefByteOffset, false);
             storeCatalog = false;
         }
     }
@@ -140,7 +140,7 @@ void SkPdfNativeDoc::init(const void* bytes, size_t length) {
 
     if (fRootCatalogRef) {
         fRootCatalog = (SkPdfCatalogDictionary*)resolveReference(fRootCatalogRef);
-        if (fRootCatalog->isDictionary() && fRootCatalog->valid()) {
+        if (fRootCatalog != NULL && fRootCatalog->isDictionary() && fRootCatalog->valid()) {
             SkPdfPageTreeNodeDictionary* tree = fRootCatalog->Pages(this);
             if (tree && tree->isDictionary() && tree->valid()) {
                 fillPages(tree);
@@ -222,7 +222,7 @@ void SkPdfNativeDoc::loadWithoutXRef() {
 
     if (fRootCatalogRef) {
         fRootCatalog = (SkPdfCatalogDictionary*)resolveReference(fRootCatalogRef);
-        if (fRootCatalog->isDictionary() && fRootCatalog->valid()) {
+        if (fRootCatalog != NULL && fRootCatalog->isDictionary() && fRootCatalog->valid()) {
             SkPdfPageTreeNodeDictionary* tree = fRootCatalog->Pages(this);
             if (tree && tree->isDictionary() && tree->valid()) {
                 fillPages(tree);
@@ -303,7 +303,7 @@ const unsigned char* SkPdfNativeDoc::readCrossReferenceSection(const unsigned ch
                 return current;
             }
 
-            addCrossSectionInfo(startId + i, generation, offset, *token.c_str() == 'f');
+            this->addCrossSectionInfo(startId + i, generation, offset, *token.c_str() == 'f');
         }
     }
     SkPdfReport(kInfo_SkPdfIssueSeverity, kNoIssue_SkPdfIssue,
@@ -363,7 +363,7 @@ const unsigned char* SkPdfNativeDoc::readTrailer(const unsigned char* trailerSta
 void SkPdfNativeDoc::addCrossSectionInfo(int id, int generation, int offset, bool isFreed) {
     // TODO(edisonn): security here, verify id
     while (fObjects.count() < id + 1) {
-        reset(fObjects.append());
+        this->reset(fObjects.append());
     }
 
     fObjects[id].fOffset = offset;
@@ -379,7 +379,7 @@ SkPdfNativeObject* SkPdfNativeDoc::readObject(int id/*, int expectedGeneration*/
     const unsigned char* current = fFileContent + startOffset;
     const unsigned char* end = fFileContent + fContentLength;
 
-    SkPdfNativeTokenizer tokenizer(current, end - current, fAllocator, this);
+    SkPdfNativeTokenizer tokenizer(current, (int) (end - current), fAllocator, this);
 
     SkPdfNativeObject idObj;
     SkPdfNativeObject generationObj;
@@ -439,7 +439,7 @@ void SkPdfNativeDoc::fillPages(SkPdfPageTreeNodeDictionary* tree) {
         return;
     }
 
-    int cnt = kids->size();
+    int cnt = (int) kids->size();
     for (int i = 0; i < cnt; i++) {
         SkPdfNativeObject* obj = resolveReference(kids->objAtAIndex(i));
         if (fMapper->mapPageObjectDictionary(obj) != kPageObjectDictionary_SkPdfNativeObjectType) {
@@ -477,30 +477,6 @@ SkRect SkPdfNativeDoc::MediaBox(int page) {
         return current->MediaBox(this);
     }
     return SkRect::MakeEmpty();
-}
-
-SkPdfNativeTokenizer* SkPdfNativeDoc::tokenizerOfPage(int page, SkPdfAllocator* allocator) {
-    if (fPages[page]->isContentsAStream(this)) {
-        return tokenizerOfStream(fPages[page]->getContentsAsStream(this), allocator);
-    } else {
-        // TODO(edisonn): NYI, we need to concatenate all streams in the array or
-        // make the tokenizer smart so we don't allocate new memory.
-        return NULL;
-    }
-}
-
-SkPdfNativeTokenizer* SkPdfNativeDoc::tokenizerOfStream(SkPdfNativeObject* stream,
-                                                        SkPdfAllocator* allocator) {
-    if (stream == NULL) {
-        return NULL;
-    }
-
-    return new SkPdfNativeTokenizer(stream, allocator, this);
-}
-
-SkPdfNativeTokenizer* SkPdfNativeDoc::tokenizerOfBuffer(const unsigned char* buffer, size_t len,
-                                                        SkPdfAllocator* allocator) {
-    return new SkPdfNativeTokenizer(buffer, len, allocator, this);
 }
 
 size_t SkPdfNativeDoc::objects() const {
@@ -583,7 +559,7 @@ SkPdfNativeObject* SkPdfNativeDoc::resolveReference(SkPdfNativeObject* ref) {
             fObjects[id].fObj = readObject(id);
         }
 
-        if (fObjects[id].fResolvedReference == NULL) {
+        if (fObjects[id].fObj != NULL && fObjects[id].fResolvedReference == NULL) {
             if (!fObjects[id].fObj->isReference()) {
                 fObjects[id].fResolvedReference = fObjects[id].fObj;
             } else {

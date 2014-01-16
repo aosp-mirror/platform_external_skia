@@ -12,8 +12,6 @@
 
 #include <stdio.h>
 
-SK_DEFINE_INST_COUNT(GrGLInterface)
-
 #if GR_GL_PER_GL_FUNC_CALLBACK
 namespace {
 void GrGLDefaultInterfaceCallback(const GrGLInterface*) {}
@@ -78,9 +76,7 @@ bool GrGLInterface::validate(GrGLBinding binding) const {
         NULL == fGenBuffers ||
         NULL == fGenTextures ||
         NULL == fGetBufferParameteriv ||
-#ifndef SKIA_IGNORE_GPU_MIPMAPS
         NULL == fGenerateMipmap ||
-#endif
         NULL == fGetError ||
         NULL == fGetIntegerv ||
         NULL == fGetProgramInfoLog ||

@@ -161,7 +161,9 @@ setup_device() {
   DEFINES="${DEFINES} host_os=$(uname -s | sed -e 's/Linux/linux/;s/Darwin/mac/')"
   DEFINES="${DEFINES} skia_os=android"
   DEFINES="${DEFINES} android_base=${SCRIPT_DIR}/.."
-  DEFINES="${DEFINES} skia_shared_lib=1"
+  if [[ "$GYP_DEFINES" != *skia_shared_lib=* ]]; then
+      DEFINES="${DEFINES} skia_shared_lib=1"
+  fi
 
   # Setup the build variation depending on the target device
   TARGET_DEVICE="$1"
@@ -209,7 +211,7 @@ setup_device() {
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=0"
       ANDROID_ARCH="arm"
       ;;
-    arm_v7_thumb)
+    arm_v7_thumb | nvidia_logan)
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=1"
       ANDROID_ARCH="arm"
       ;;
@@ -220,6 +222,11 @@ setup_device() {
     arm_thumb)
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon=0 arm_thumb=1"
       ANDROID_ARCH="arm"
+      ;;
+    mips)
+      DEFINES="${DEFINES} skia_arch_type=mips skia_arch_width=32"
+      DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
+      ANDROID_ARCH="mips"
       ;;
     x86)
       DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
@@ -243,7 +250,7 @@ setup_device() {
   fi
   DEFINES="${DEFINES} android_toolchain=${TOOLCHAIN_TYPE}"
 
-  exportVar GYP_DEFINES "$DEFINES"
+  exportVar GYP_DEFINES "$DEFINES $GYP_DEFINES"
   exportVar SKIA_OUT "out/config/android-${TARGET_DEVICE}"
 }
 

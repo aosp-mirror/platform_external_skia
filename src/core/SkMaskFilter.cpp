@@ -12,6 +12,7 @@
 #include "SkBounder.h"
 #include "SkDraw.h"
 #include "SkRasterClip.h"
+#include "SkRRect.h"
 #include "SkTypes.h"
 
 #if SK_SUPPORT_GPU
@@ -19,8 +20,6 @@
 #include "SkGr.h"
 #include "SkGrPixelRef.h"
 #endif
-
-SK_DEFINE_INST_COUNT(SkMaskFilter)
 
 bool SkMaskFilter::filterMask(SkMask*, const SkMask&, const SkMatrix&,
                               SkIPoint*) const {
@@ -204,6 +203,26 @@ static int countNestedRects(const SkPath& path, SkRect rects[2]) {
     return path.isRect(&rects[0]);
 }
 
+bool SkMaskFilter::filterRRect(const SkRRect& devRRect, const SkMatrix& matrix,
+                               const SkRasterClip& clip, SkBounder* bounder,
+                               SkBlitter* blitter, SkPaint::Style style) const {
+    // Attempt to speed up drawing by creating a nine patch. If a nine patch
+    // cannot be used, return false to allow our caller to recover and perform
+    // the drawing another way.
+    NinePatch patch;
+    patch.fMask.fImage = NULL;
+    if (kTrue_FilterReturn != this->filterRRectToNine(devRRect, matrix,
+                                                      clip.getBounds(),
+                                                      &patch)) {
+        SkASSERT(NULL == patch.fMask.fImage);
+        return false;
+    }
+    draw_nine(patch.fMask, patch.fOuterRect, patch.fCenter, true, clip,
+              bounder, blitter);
+    SkMask::FreeImage(patch.fMask.fImage);
+    return true;
+}
+
 bool SkMaskFilter::filterPath(const SkPath& devPath, const SkMatrix& matrix,
                               const SkRasterClip& clip, SkBounder* bounder,
                               SkBlitter* blitter, SkPaint::Style style) const {
@@ -267,6 +286,12 @@ bool SkMaskFilter::filterPath(const SkPath& devPath, const SkMatrix& matrix,
 }
 
 SkMaskFilter::FilterReturn
+SkMaskFilter::filterRRectToNine(const SkRRect&, const SkMatrix&,
+                                const SkIRect& clipBounds, NinePatch*) const {
+    return kUnimplemented_FilterReturn;
+}
+
+SkMaskFilter::FilterReturn
 SkMaskFilter::filterRectsToNine(const SkRect[], int count, const SkMatrix&,
                                 const SkIRect& clipBounds, NinePatch*) const {
     return kUnimplemented_FilterReturn;
@@ -324,10 +349,14 @@ bool SkMaskFilter::filterMaskGPU(GrContext* context,
     if (!result) {
         return false;
     }
+    SkAutoUnref aur(dst);
 
+    SkImageInfo info;
     resultBM->setConfig(srcBM.config(), dst->width(), dst->height());
-    resultBM->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (dst)))->unref();
-    dst->unref();
+    if (!resultBM->asImageInfo(&info)) {
+        return false;
+    }
+    resultBM->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, dst)))->unref();
     return true;
 }
 

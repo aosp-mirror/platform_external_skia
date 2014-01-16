@@ -12,7 +12,7 @@
 #ifndef SkPdfFont_DEFINED
 #define SkPdfFont_DEFINED
 
-#include "SkPdfGraphicsState.h"
+#include "SkPdfContext.h"
 #include "SkPdfHeaders_autogen.h"
 #include "SkPdfMapper_autogen.h"
 #include "SkPdfUtils.h"
@@ -54,7 +54,7 @@ struct SkUnencodedText {
 public:
     SkUnencodedText(const SkPdfString* obj) {
         text = (void*)obj->c_str();
-        len = obj->lenstr();
+        len = (int) obj->lenstr();
     }
 };
 
@@ -77,6 +77,7 @@ public:
 
 class SkPdfEncoding {
 public:
+    virtual ~SkPdfEncoding() {}
     virtual bool decodeText(const SkUnencodedText& textIn, SkDecodedText* textOut) const = 0;
     static SkPdfEncoding* fromName(const char* name);
 };
@@ -96,6 +97,7 @@ public:
 
 class SkPdfIdentityHEncoding : public SkPdfEncoding {
 public:
+    virtual ~SkPdfIdentityHEncoding() {}
     virtual bool decodeText(const SkUnencodedText& textIn, SkDecodedText* textOut) const {
         // TODO(edisonn): SkASSERT(textIn.len % 2 == 0); or report error?
 
@@ -119,6 +121,7 @@ public:
 // TODO(edisonn): using this one when no encoding is specified
 class SkPdfDefaultEncoding : public SkPdfEncoding {
 public:
+    virtual ~SkPdfDefaultEncoding() {}
     virtual bool decodeText(const SkUnencodedText& textIn, SkDecodedText* textOut) const {
         // TODO(edisonn): SkASSERT(textIn.len % 2 == 0); or report error?
 
@@ -141,6 +144,7 @@ public:
 
 class SkPdfCIDToGIDMapIdentityEncoding : public SkPdfEncoding {
 public:
+    virtual ~SkPdfCIDToGIDMapIdentityEncoding() {}
     virtual bool decodeText(const SkUnencodedText& textIn, SkDecodedText* textOut) const {
         // TODO(edisonn): SkASSERT(textIn.len % 2 == 0); or report error?
 
@@ -268,7 +272,7 @@ public:
 
         unsigned long ch4 = ch;
         char utf8[10];
-        int len = SkUTF8_FromUnichar(ch4, utf8);
+        size_t len = SkUTF8_FromUnichar((SkUnichar) ch4, utf8);
 
         canvas->drawText(utf8, len, SkDoubleToScalar(0), SkDoubleToScalar(0), *paint);
 

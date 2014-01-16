@@ -54,8 +54,10 @@ public:
                     break;
             }
         }
+    }
 
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -63,9 +65,9 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
         if (fRaw) {
-            for (int i = 0; i < this->getLoops(); ++i) {
+            for (int i = 0; i < loops; ++i) {
                 SkPath::RawIter iter(fPath);
                 SkPath::Verb verb;
                 SkPoint      pts[4];
@@ -73,7 +75,7 @@ protected:
                 while ((verb = iter.next(pts)) != SkPath::kDone_Verb) { }
             }
         } else {
-            for (int i = 0; i < this->getLoops(); ++i) {
+            for (int i = 0; i < loops; ++i) {
                 SkPath::Iter iter(fPath, false);
                 SkPath::Verb verb;
                 SkPoint      pts[4];

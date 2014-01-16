@@ -16,7 +16,10 @@ class MatrixBench : public SkBenchmark {
 public:
     MatrixBench(const char name[])  {
         fName.printf("matrix_%s", name);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest() = 0;
@@ -28,8 +31,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); i++) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; i++) {
             this->performTest();
         }
     }
@@ -71,7 +74,7 @@ private:
 class ScaleMatrixBench : public MatrixBench {
 public:
     ScaleMatrixBench() : INHERITED("scale") {
-        fSX = fSY = SkFloatToScalar(1.5f);
+        fSX = fSY = 1.5f;
         fM0.reset();
         fM1.setScale(fSX, fSY);
         fM2.setTranslate(fSX, fSY);
@@ -380,17 +383,17 @@ public:
         fMatrix.reset();
         fIteration = 0;
         if (flags & kScale_Flag) {
-            fMatrix.postScale(SkFloatToScalar(1.5f), SkFloatToScalar(2.5f));
+            fMatrix.postScale(1.5f, 2.5f);
         }
         if (flags & kTranslate_Flag) {
-            fMatrix.postTranslate(SkFloatToScalar(1.5f), SkFloatToScalar(2.5f));
+            fMatrix.postTranslate(1.5f, 2.5f);
         }
         if (flags & kRotate_Flag) {
-            fMatrix.postRotate(SkFloatToScalar(45.0f));
+            fMatrix.postRotate(45.0f);
         }
         if (flags & kPerspective_Flag) {
-            fMatrix.setPerspX(SkFloatToScalar(1.5f));
-            fMatrix.setPerspY(SkFloatToScalar(2.5f));
+            fMatrix.setPerspX(1.5f);
+            fMatrix.setPerspY(2.5f);
         }
         if (0 == (flags & kUncachedTypeMask_Flag)) {
             fMatrix.getType();

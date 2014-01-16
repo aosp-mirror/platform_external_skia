@@ -29,8 +29,10 @@ public:
         for (int i = 0; i < kBuffer; ++i) {
             fSrc[i] = rand.nextSScalar1();
         }
+    }
 
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest(float* SK_RESTRICT dst,
@@ -44,8 +46,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) {
-        int n = this->getLoops() * this->mulLoopCount();
+    virtual void onDraw(const int loops, SkCanvas*) {
+        int n = loops * this->mulLoopCount();
         for (int i = 0; i < n; i++) {
             this->performTest(fDst, fSrc, kBuffer);
         }
@@ -91,6 +93,22 @@ protected:
 private:
     typedef MathBench INHERITED;
 };
+
+class SkRSqrtMathBench : public MathBench {
+public:
+    SkRSqrtMathBench() : INHERITED("sk_float_rsqrt") {}
+protected:
+    virtual void performTest(float* SK_RESTRICT dst,
+                              const float* SK_RESTRICT src,
+                              int count) {
+        for (int i = 0; i < count; ++i) {
+            dst[i] = sk_float_rsqrt(src[i]);
+        }
+    }
+private:
+    typedef MathBench INHERITED;
+};
+
 
 class SlowISqrtMathBench : public MathBench {
 public:
@@ -265,24 +283,27 @@ public:
             fProc = gRec[index].fProc;
             fName = gRec[index].fName;
         }
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         IsFiniteProc proc = fProc;
         const float* data = fData;
         // do this so the compiler won't throw away the function call
         int counter = 0;
 
         if (proc) {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < N - 4; ++i) {
                     counter += proc(&data[i]);
                 }
             }
         } else {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < N - 4; ++i) {
                     const SkRect* r = reinterpret_cast<const SkRect*>(&data[i]);
                     if (false) { // avoid bit rot, suppress warning
@@ -330,26 +351,29 @@ public:
         } else {
             fName = "floor_std";
         }
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void process(float) {}
 
 protected:
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         SkRandom rand;
         float accum = 0;
         const float* data = fData;
 
         if (fFast) {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < ARRAY; ++i) {
                     accum += fast_floor(data[i]);
                 }
                 this->process(accum);
             }
         } else {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < ARRAY; ++i) {
                     accum += sk_float_floor(data[i]);
                 }
@@ -388,25 +412,28 @@ public:
         } else {
             fName = "clz_intrinsic";
         }
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     // just so the compiler doesn't remove our loops
     virtual void process(int) {}
 
 protected:
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         int accum = 0;
 
         if (fUsePortable) {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < ARRAY; ++i) {
                     accum += SkCLZ_portable(fData[i]);
                 }
                 this->process(accum);
             }
         } else {
-            for (int j = 0; j < this->getLoops(); ++j) {
+            for (int j = 0; j < loops; ++j) {
                 for (int i = 0; i < ARRAY; ++i) {
                     accum += SkCLZ(fData[i]);
                 }
@@ -441,17 +468,20 @@ public:
         }
 
         fName = "point_normalize";
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     // just so the compiler doesn't remove our loops
     virtual void process(int) {}
 
 protected:
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         int accum = 0;
 
-        for (int j = 0; j < this->getLoops(); ++j) {
+        for (int j = 0; j < loops; ++j) {
             for (int i = 0; i < ARRAY; ++i) {
                 accum += fVec[i].normalize();
             }
@@ -481,16 +511,19 @@ public:
 
     FixedMathBench()  {
         SkRandom rand;
-        for (int i = 0; i < this->getLoops(); ++i) {
-            fData[i%N] = rand.nextSScalar1();
+        for (int i = 0; i < N; ++i) {
+            fData[i] = rand.nextSScalar1();
         }
 
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
-    virtual void onDraw(SkCanvas*) {
-        for (int j = 0; j < this->getLoops(); ++j) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int j = 0; j < loops; ++j) {
             for (int i = 0; i < N - 4; ++i) {
                 fResult[i] = SkFloatToFixed(fData[i]);
             }
@@ -518,7 +551,10 @@ class DivModBench : public SkBenchmark {
 public:
     explicit DivModBench(const char* name) {
         fName.printf("divmod_%s", name);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -526,10 +562,10 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         volatile T a = 0, b = 0;
         T div = 0, mod = 0;
-        for (int i = 0; i < this->getLoops(); i++) {
+        for (int i = 0; i < loops; i++) {
             if ((T)i == 0) continue;  // Small T will wrap around.
             SkTDivMod((T)(i+1), (T)i, &div, &mod);
             a ^= div;
@@ -550,6 +586,7 @@ DEF_BENCH(return new DivModBench<int64_t>("int64_t"))
 ///////////////////////////////////////////////////////////////////////////////
 
 DEF_BENCH( return new NoOpMathBench(); )
+DEF_BENCH( return new SkRSqrtMathBench(); )
 DEF_BENCH( return new SlowISqrtMathBench(); )
 DEF_BENCH( return new FastISqrtMathBench(); )
 DEF_BENCH( return new QMul64Bench(); )

@@ -137,6 +137,7 @@ void DeferredPipeController::playback(bool silent) {
 //-----------------------------------------------------------------------------
 // DeferredDevice
 //-----------------------------------------------------------------------------
+// FIXME: Derive from SkBaseDevice.
 class DeferredDevice : public SkBitmapDevice {
 public:
     explicit DeferredDevice(SkBaseDevice* immediateDevice);
@@ -197,6 +198,9 @@ protected:
     virtual void drawRect(const SkDraw&, const SkRect& r,
                             const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
+    virtual void drawRRect(const SkDraw&, const SkRRect& rr,
+                           const SkPaint& paint) SK_OVERRIDE
+        {SkASSERT(0);}
     virtual void drawPath(const SkDraw&, const SkPath& path,
                             const SkPaint& paint,
                             const SkMatrix* prePathMatrix = NULL,
@@ -220,14 +224,6 @@ protected:
                                 const SkMatrix* matrix,
                                 const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
-#ifdef SK_BUILD_FOR_ANDROID
-    virtual void drawPosTextOnPath(const SkDraw& draw, const void* text,
-                                    size_t len, const SkPoint pos[],
-                                    const SkPaint& paint,
-                                    const SkPath& path,
-                                    const SkMatrix* matrix) SK_OVERRIDE
-        {SkASSERT(0);}
-#endif
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode,
                                 int vertexCount, const SkPoint verts[],
                                 const SkPoint texs[], const SkColor colors[],

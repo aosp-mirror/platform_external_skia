@@ -275,7 +275,6 @@ protected:
     virtual int onGetTableTags(SkFontTableTag tags[]) const SK_OVERRIDE;
     virtual size_t onGetTableData(SkFontTableTag, size_t offset,
                                   size_t length, void* data) const SK_OVERRIDE;
-    virtual SkTypeface* onRefMatchingStyle(Style) const SK_OVERRIDE;
 };
 
 class FontMemResourceTypeface : public LogFontTypeface {
@@ -1066,7 +1065,7 @@ static void build_power_table(uint8_t table[], float ee) {
     for (int i = 0; i < 256; i++) {
         float x = i / 255.f;
         x = sk_float_pow(x, ee);
-        int xx = SkScalarRound(SkFloatToScalar(x * 255));
+        int xx = SkScalarRound(x * 255);
         table[i] = SkToU8(xx);
     }
 }
@@ -2154,6 +2153,7 @@ private:
     HFONT fFont;
     HFONT fSavefont;
 };
+#define SkAutoHDC(...) SK_REQUIRE_LOCAL_VAR(SkAutoHDC)
 
 int LogFontTypeface::onCharsToGlyphs(const void* chars, Encoding encoding,
                                      uint16_t userGlyphs[], int glyphCount) const
@@ -2436,26 +2436,6 @@ void LogFontTypeface::onFilterRec(SkScalerContextRec* rec) const {
     }
 }
 
-static SkTypeface* create_typeface(const SkTypeface* familyFace,
-                                   const char familyName[],
-                                   unsigned styleBits) {
-    LOGFONT lf;
-    if (NULL == familyFace && NULL == familyName) {
-        lf = get_default_font();
-    } else if (familyFace) {
-        LogFontTypeface* face = (LogFontTypeface*)familyFace;
-        lf = face->fLogFont;
-    } else {
-        logfont_for_name(familyName, &lf);
-    }
-    setStyle(&lf, (SkTypeface::Style)styleBits);
-    return SkCreateTypefaceFromLOGFONT(lf);
-}
-
-SkTypeface* LogFontTypeface::onRefMatchingStyle(Style style) const {
-    return create_typeface(this, NULL, style);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkFontMgr.h"
@@ -2608,7 +2588,14 @@ protected:
 
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
                                                unsigned styleBits) SK_OVERRIDE {
-        return create_typeface(NULL, familyName, styleBits);
+        LOGFONT lf;
+        if (NULL == familyName) {
+            lf = get_default_font();
+        } else {
+            logfont_for_name(familyName, &lf);
+        }
+        setStyle(&lf, (SkTypeface::Style)styleBits);
+        return SkCreateTypefaceFromLOGFONT(lf);
     }
 
 private:
@@ -2616,25 +2603,6 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#ifndef SK_FONTHOST_USES_FONTMGR
-
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style styleBits) {
-    return create_typeface(familyFace, familyName, styleBits);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
-    return stream.get() ? CreateTypefaceFromStream(stream) : NULL;
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
-    return create_from_stream(stream);
-}
-
-#endif
 
 SkFontMgr* SkFontMgr_New_GDI() {
     return SkNEW(SkFontMgrGDI);

@@ -6,6 +6,7 @@
 #include "SkCommandLineFlags.h"
 #include "SkForceLinking.h"
 #include "SkGraphics.h"
+#include "SkString.h"
 #include "gm.h"
 
 #include "DMReporter.h"
@@ -13,18 +14,18 @@
 #include "DMTaskRunner.h"
 #include "DMCpuTask.h"
 #include "DMGpuTask.h"
+#include "DMWriteTask.h"
 
 #include <string.h>
 
 using skiagm::GM;
 using skiagm::GMRegistry;
-using skiagm::Expectations;
-using skiagm::ExpectationsSource;
-using skiagm::JsonExpectationsSource;
 
 DEFINE_int32(cpuThreads, -1, "Threads for CPU work. Default NUM_CPUS.");
 DEFINE_int32(gpuThreads, 1, "Threads for GPU work.");
-DEFINE_string(expectations, "", "Compare generated images against JSON expectations at this path.");
+DEFINE_string2(expectations, r, "",
+               "If a directory, compare generated images against images under this path. "
+               "If a file, compare generated images against JSON expectations at this path.");
 DEFINE_string(resources, "resources", "Path to resources directory.");
 DEFINE_string(match, "",  "[~][^]substring[$] [...] of GM name to run.\n"
                           "Multiple matches may be separated by spaces.\n"
@@ -39,19 +40,6 @@ DEFINE_string(config, "8888 gpu",
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
-// Split str on any characters in delimiters into out.  (Think, strtok with a sane API.)
-static void split(const char* str, const char* delimiters, SkTArray<SkString>* out) {
-    const char* end = str + strlen(str);
-    while (str != end) {
-        // Find a token.
-        const size_t len = strcspn(str, delimiters);
-        out->push_back().set(str, len);
-        str += len;
-        // Skip any delimiters.
-        str += strspn(str, delimiters);
-    }
-}
-
 // "FooBar" -> "foobar".  Obviously, ASCII only.
 static SkString lowercase(SkString s) {
     for (size_t i = 0; i < s.size(); i++) {
@@ -62,7 +50,7 @@ static SkString lowercase(SkString s) {
 
 static void kick_off_tasks(const SkTDArray<GMRegistry::Factory>& gms,
                            const SkTArray<SkString>& configs,
-                           const ExpectationsSource& expectations,
+                           const DM::Expectations& expectations,
                            DM::Reporter* reporter,
                            DM::TaskRunner* tasks) {
     const SkBitmap::Config _565 = SkBitmap::kRGB_565_Config;
@@ -119,13 +107,6 @@ static void report_failures(const DM::Reporter& reporter) {
     }
 }
 
-class NoExpectations : public ExpectationsSource {
-public:
-    Expectations get(const char* /*testName*/) const SK_OVERRIDE {
-        return Expectations();
-    }
-};
-
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
     SkGraphics::Init();
@@ -134,7 +115,7 @@ int tool_main(int argc, char** argv) {
     GM::SetResourcePath(FLAGS_resources[0]);
     SkTArray<SkString> configs;
     for (int i = 0; i < FLAGS_config.count(); i++) {
-        split(FLAGS_config[i], ", ", &configs);
+        SkStrSplit(FLAGS_config[i], ", ", &configs);
     }
 
     SkTDArray<GMRegistry::Factory> gms;
@@ -146,9 +127,14 @@ int tool_main(int argc, char** argv) {
     }
     SkDebugf("%d GMs x %d configs\n", gms.count(), configs.count());
 
-    SkAutoTUnref<ExpectationsSource> expectations(SkNEW(NoExpectations));
+    SkAutoTDelete<DM::Expectations> expectations(SkNEW(DM::NoExpectations));
     if (FLAGS_expectations.count() > 0) {
-        expectations.reset(SkNEW_ARGS(JsonExpectationsSource, (FLAGS_expectations[0])));
+        const char* path = FLAGS_expectations[0];
+        if (sk_isdir(path)) {
+            expectations.reset(SkNEW_ARGS(DM::WriteTask::Expectations, (path)));
+        } else {
+            expectations.reset(SkNEW_ARGS(DM::JsonExpectations, (path)));
+        }
     }
 
     DM::Reporter reporter;

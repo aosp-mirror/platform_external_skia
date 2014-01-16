@@ -18,6 +18,9 @@
 
 #include "SkPDFRasterizer.h"
 #include "SkColorPriv.h"
+#ifdef SK_BUILD_NATIVE_PDF_RENDERER
+#include "SkPdfRenderer.h"
+#endif  // SK_BUILD_NATIVE_PDF_RENDERER
 
 bool SkPopplerRasterizePDF(SkStream* pdf, SkBitmap* output) {
   size_t size = pdf->getLength();
@@ -71,3 +74,9 @@ bool SkPopplerRasterizePDF(SkStream* pdf, SkBitmap* output) {
 
   return true;
 }
+
+#ifdef SK_BUILD_NATIVE_PDF_RENDERER
+bool SkNativeRasterizePDF(SkStream* pdf, SkBitmap* output) {
+    return SkPDFNativeRenderToBitmap(pdf, output);
+}
+#endif  // SK_BUILD_NATIVE_PDF_RENDERER

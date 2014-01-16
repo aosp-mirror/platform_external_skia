@@ -19,8 +19,6 @@
 #include "SkXfermode_opts_arm_neon.h"
 #endif
 
-SK_DEFINE_INST_COUNT(SkXfermode)
-
 #define SkAlphaMulAlpha(a, b)   SkMulDiv255Round(a, b)
 
 #if 0
@@ -470,16 +468,18 @@ static inline void clipColor(int* r, int* g, int* b, int a) {
     int L = Lum(*r, *g, *b);
     int n = minimum(*r, *g, *b);
     int x = maximum(*r, *g, *b);
-    if(n < 0) {
-       *r = L + SkMulDiv(*r - L, L, L - n);
-       *g = L + SkMulDiv(*g - L, L, L - n);
-       *b = L + SkMulDiv(*b - L, L, L - n);
+    int denom;
+    if ((n < 0) && (denom = L - n)) { // Compute denom and make sure it's non zero
+       *r = L + SkMulDiv(*r - L, L, denom);
+       *g = L + SkMulDiv(*g - L, L, denom);
+       *b = L + SkMulDiv(*b - L, L, denom);
     }
 
-    if (x > a) {
-       *r = L + SkMulDiv(*r - L, a - L, x - L);
-       *g = L + SkMulDiv(*g - L, a - L, x - L);
-       *b = L + SkMulDiv(*b - L, a - L, x - L);
+    if ((x > a) && (denom = x - L)) { // Compute denom and make sure it's non zero
+       int numer = a - L;
+       *r = L + SkMulDiv(*r - L, numer, denom);
+       *g = L + SkMulDiv(*g - L, numer, denom);
+       *b = L + SkMulDiv(*b - L, numer, denom);
     }
 }
 
@@ -1343,6 +1343,22 @@ GrEffectRef* XferEffect::TestCreate(SkRandom* rand,
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+SkProcCoeffXfermode::SkProcCoeffXfermode(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+    uint32_t mode32 = buffer.read32() % SK_ARRAY_COUNT(gProcCoeffs);
+    if (mode32 >= SK_ARRAY_COUNT(gProcCoeffs)) {
+        // out of range, just set to something harmless
+        mode32 = SkXfermode::kSrcOut_Mode;
+    }
+    fMode = (SkXfermode::Mode)mode32;
+
+    const ProcCoeff& rec = gProcCoeffs[fMode];
+    // these may be valid, or may be CANNOT_USE_COEFF
+    fSrcCoeff = rec.fSC;
+    fDstCoeff = rec.fDC;
+    // now update our function-ptr in the super class
+    this->INHERITED::setProc(rec.fProc);
+}
+
 bool SkProcCoeffXfermode::asMode(Mode* mode) const {
     if (mode) {
         *mode = fMode;
@@ -1655,6 +1671,7 @@ void SkXfermode::Term() {
 
 extern SkProcCoeffXfermode* SkPlatformXfermodeFactory(const ProcCoeff& rec,
                                                       SkXfermode::Mode mode);
+extern SkXfermodeProc SkPlatformXfermodeProcFactory(SkXfermode::Mode mode);
 
 SkXfermode* SkXfermode::Create(Mode mode) {
     SkASSERT(SK_ARRAY_COUNT(gProcCoeffs) == kModeCount);
@@ -1676,7 +1693,13 @@ SkXfermode* SkXfermode::Create(Mode mode) {
 
     SkXfermode* xfer = gCachedXfermodes[mode];
     if (NULL == xfer) {
-        const ProcCoeff& rec = gProcCoeffs[mode];
+        ProcCoeff rec = gProcCoeffs[mode];
+
+        SkXfermodeProc pp = SkPlatformXfermodeProcFactory(mode);
+
+        if (pp != NULL) {
+            rec.fProc = pp;
+        }
 
         // check if we have a platform optim for that
         SkProcCoeffXfermode* xfm = SkPlatformXfermodeFactory(rec, mode);

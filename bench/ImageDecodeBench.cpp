@@ -26,7 +26,10 @@ public:
     , fStream()
     , fValid(false) {
         fName.append(SkOSPath::SkBasename(filename));
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -49,7 +52,7 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
 #ifdef SK_DEBUG
         if (!fValid) {
             SkDebugf("stream was invalid: %s\n", fName.c_str());
@@ -58,7 +61,7 @@ protected:
 #endif
         // Decode a bunch of times
         SkBitmap bm;
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             SkDEBUGCODE(bool success =) SkImageDecoder::DecodeStream(&fStream, &bm);
 #ifdef SK_DEBUG
             if (!success) {

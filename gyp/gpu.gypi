@@ -70,7 +70,6 @@
       '<(skia_src_path)/gpu/GrDrawTarget.h',
       '<(skia_src_path)/gpu/GrDrawTargetCaps.h',
       '<(skia_src_path)/gpu/GrEffect.cpp',
-      '<(skia_src_path)/gpu/GrGeometryBuffer.cpp',
       '<(skia_src_path)/gpu/GrGeometryBuffer.h',
       '<(skia_src_path)/gpu/GrClipMaskCache.h',
       '<(skia_src_path)/gpu/GrClipMaskCache.cpp',
@@ -126,7 +125,6 @@
       '<(skia_src_path)/gpu/GrTextureAccess.cpp',
       '<(skia_src_path)/gpu/GrTHashTable.h',
       '<(skia_src_path)/gpu/GrVertexBuffer.h',
-      '<(skia_src_path)/gpu/gr_unittests.cpp',
 
       '<(skia_src_path)/gpu/effects/Gr1DKernelEffect.h',
       '<(skia_src_path)/gpu/effects/GrConfigConversionEffect.cpp',
@@ -143,8 +141,8 @@
       '<(skia_src_path)/gpu/effects/GrSimpleTextureEffect.h',
       '<(skia_src_path)/gpu/effects/GrSingleTextureEffect.cpp',
       '<(skia_src_path)/gpu/effects/GrSingleTextureEffect.h',
-      '<(skia_src_path)/gpu/effects/GrTextureDomainEffect.cpp',
-      '<(skia_src_path)/gpu/effects/GrTextureDomainEffect.h',
+      '<(skia_src_path)/gpu/effects/GrTextureDomain.cpp',
+      '<(skia_src_path)/gpu/effects/GrTextureDomain.h',
       '<(skia_src_path)/gpu/effects/GrTextureStripAtlas.cpp',
       '<(skia_src_path)/gpu/effects/GrTextureStripAtlas.h',
 
@@ -283,9 +281,3 @@
     ],
   },
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

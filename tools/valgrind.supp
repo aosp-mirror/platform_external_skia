@@ -6,10 +6,10 @@
     fun:FcConfigFileExists
 }
 {
-    Mesa_glsl_parsing
-    Memcheck:Cond
-    fun:_ZN22_mesa_glsl_parse_stateC1EP10gl_contextjPv
-    obj:/usr/lib/x86_64-linux-gnu/dri/libglsl.so
+    FcFontSetCreate_Leak
+    Memcheck:Leak
+    fun:malloc
+    fun:FcFontSetCreate
 }
 {
     lib_png_inflate
@@ -33,24 +33,57 @@
     fun:FcPatternObjectAddWithBinding
 }
 {
-    Driver_bug_1
-    Memcheck:Value8
+    driver_bug_1
+    Memcheck:Param
+    ioctl(generic)
+    fun:ioctl
     ...
-    obj:/usr/lib/x86_64-linux-gnu/dri/swrast_dri.so
-    fun:lp_rast_triangle_3
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
 }
 {
-    Driver_bug_2
-    Memcheck:Value8
-    ...
-    obj:/usr/lib/x86_64-linux-gnu/dri/swrast_dri.so
-    fun:lp_rast_triangle_2
+    driver_bug_2
+    Memcheck:Cond
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
 }
 {
-    Driver_bug_3
-    Memcheck:Value8
-    obj:/usr/lib/x86_64-linux-gnu/dri/libdricore.so
-    fun:_mesa_readpixels
-    fun:_mesa_ReadnPixelsARB
-    fun:_mesa_ReadPixels
+    driver_bug_3
+    Memcheck:Addr8
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_4
+    Memcheck:Addr4
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_5
+    Memcheck:Addr2
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_6
+    Memcheck:Addr1
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_7
+    Memcheck:Leak
+    fun:malloc
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_8
+    Memcheck:Overlap
+    fun:strcpy
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    driver_bug_9
+    Memcheck:Leak
+    fun:calloc
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
 }

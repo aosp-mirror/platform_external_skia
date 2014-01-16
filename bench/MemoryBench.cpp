@@ -19,7 +19,10 @@ public:
     ChunkAllocBench(size_t minSize)  {
         fMinSize = minSize;
         fName.printf("chunkalloc_" SK_SIZE_T_SPECIFIER, minSize);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -27,14 +30,14 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
         size_t inc = fMinSize >> 4;
         SkASSERT(inc > 0);
         size_t total = fMinSize * 64;
 
         SkChunkAlloc alloc(fMinSize);
 
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             size_t size = 0;
             int calls = 0;
             while (size < total) {
@@ -85,7 +88,10 @@ public:
             fName.appendf("_w");
         }
         fName.appendf("_"SK_SIZE_T_SPECIFIER, num);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -93,8 +99,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
-        for (int i = 0; i < this->getLoops(); i++) {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
+        for (int i = 0; i < loops; i++) {
             int* zeros = fUseCalloc ? calloc(fNum) : malloc_bzero(fNum);
             if (fRead) {
                 volatile int x = 15;

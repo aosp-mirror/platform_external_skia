@@ -12,4 +12,8 @@
 
 bool SkPopplerRasterizePDF(SkStream* pdf, SkBitmap* output);
 
+#ifdef SK_BUILD_NATIVE_PDF_RENDERER
+bool SkNativeRasterizePDF(SkStream* pdf, SkBitmap* output);
+#endif  // SK_BUILD_NATIVE_PDF_RENDERER
+
 #endif

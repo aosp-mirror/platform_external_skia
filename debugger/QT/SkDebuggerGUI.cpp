@@ -29,7 +29,7 @@ __SK_FORCE_IMAGE_DECODER_LINKING;
 
 SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
         QMainWindow(parent)
-    , fCentralWidget(this)
+    , fCentralSplitter(this)
     , fStatusBar(this)
     , fToolBar(this)
     , fActionOpen(this)
@@ -56,8 +56,8 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     , fActionZoomIn(this)
     , fActionZoomOut(this)
     , fMapper(this)
-    , fListWidget(&fCentralWidget)
-    , fDirectoryWidget(&fCentralWidget)
+    , fListWidget(&fCentralSplitter)
+    , fDirectoryWidget(&fCentralSplitter)
     , fCanvasWidget(this, &fDebugger)
     , fImageWidget(&fDebugger)
     , fMenuBar(this)
@@ -90,7 +90,7 @@ SkDebuggerGUI::SkDebuggerGUI(QWidget *parent) :
     connect(&fActionClearBreakpoints, SIGNAL(triggered()), this, SLOT(actionClearBreakpoints()));
     connect(&fActionClearDeletes, SIGNAL(triggered()), this, SLOT(actionClearDeletes()));
     connect(&fActionClose, SIGNAL(triggered()), this, SLOT(actionClose()));
-    connect(fSettingsWidget.getVisibilityButton(), SIGNAL(toggled(bool)), this, SLOT(actionCommandFilter()));
+    connect(&fSettingsWidget, SIGNAL(visibilityFilterChanged()), this, SLOT(actionCommandFilter()));
 #if SK_SUPPORT_GPU
     connect(&fSettingsWidget, SIGNAL(glSettingsChanged()), this, SLOT(actionGLWidget()));
 #endif
@@ -440,8 +440,7 @@ void SkDebuggerGUI::actionClearDeletes() {
 }
 
 void SkDebuggerGUI::actionCommandFilter() {
-    fDebugger.highlightCurrentCommand(
-            fSettingsWidget.getVisibilityButton()->isChecked());
+    fDebugger.highlightCurrentCommand(fSettingsWidget.getVisibilityFilter());
     fCanvasWidget.drawTo(fListWidget.currentRow());
     fImageWidget.draw();
 }
@@ -801,11 +800,11 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
 
     fListWidget.setItemDelegate(new SkListWidget(&fListWidget));
     fListWidget.setObjectName(QString::fromUtf8("listWidget"));
-    fListWidget.setMaximumWidth(250);
+    fListWidget.setMinimumWidth(250);
 
     fFilter.addItem("--Filter By Available Commands--");
 
-    fDirectoryWidget.setMaximumWidth(250);
+    fDirectoryWidget.setMinimumWidth(250);
     fDirectoryWidget.setStyleSheet("QListWidget::Item {padding: 5px;}");
 
     fCanvasWidget.setSizePolicy(QSizePolicy::Expanding,
@@ -826,26 +825,25 @@ void SkDebuggerGUI::setupUi(QMainWindow *SkDebuggerGUI) {
             QSizePolicy::Expanding);
     fSettingsWidget.setMaximumWidth(250);
 
-    fLeftColumnLayout.setSpacing(6);
-    fLeftColumnLayout.addWidget(&fListWidget);
-    fLeftColumnLayout.addWidget(&fDirectoryWidget);
+    fLeftColumnSplitter.addWidget(&fListWidget);
+    fLeftColumnSplitter.addWidget(&fDirectoryWidget);
+    fLeftColumnSplitter.setOrientation(Qt::Vertical);
 
     fCanvasSettingsAndImageLayout.setSpacing(6);
     fCanvasSettingsAndImageLayout.addWidget(&fCanvasWidget);
     fCanvasSettingsAndImageLayout.addLayout(&fSettingsAndImageLayout);
 
-
     fMainAndRightColumnLayout.setSpacing(6);
     fMainAndRightColumnLayout.addLayout(&fCanvasSettingsAndImageLayout);
     fMainAndRightColumnLayout.addWidget(&fInspectorWidget);
+    fMainAndRightColumnWidget.setLayout(&fMainAndRightColumnLayout);
 
-    fCentralWidget.setLayout(&fContainerLayout);
-    fContainerLayout.setSpacing(6);
-    fContainerLayout.setContentsMargins(11, 11, 11, 11);
-    fContainerLayout.addLayout(&fLeftColumnLayout);
-    fContainerLayout.addLayout(&fMainAndRightColumnLayout);
+    fCentralSplitter.addWidget(&fLeftColumnSplitter);
+    fCentralSplitter.addWidget(&fMainAndRightColumnWidget);
+    fCentralSplitter.setStretchFactor(0, 0);
+    fCentralSplitter.setStretchFactor(1, 1);
 
-    SkDebuggerGUI->setCentralWidget(&fCentralWidget);
+    SkDebuggerGUI->setCentralWidget(&fCentralSplitter);
     SkDebuggerGUI->setStatusBar(&fStatusBar);
 
     fToolBar.setIconSize(QSize(32, 32));
@@ -969,7 +967,7 @@ void SkDebuggerGUI::loadPicture(const SkString& fileName) {
      * TODO(chudy): This should be deprecated since fDebugger is not
      * recreated.
      * */
-    fDebugger.highlightCurrentCommand(fSettingsWidget.getVisibilityButton()->isChecked());
+    fDebugger.highlightCurrentCommand(fSettingsWidget.getVisibilityFilter());
 
     setupListWidget(commands);
     setupComboBox(commands);

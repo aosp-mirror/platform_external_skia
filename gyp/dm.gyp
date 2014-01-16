@@ -9,6 +9,8 @@
         'include_dirs': [
             '../dm',
             '../gm',
+            '../src/images',
+            '../src/lazy',
             '../src/core',
             '../src/effects',
             '../src/pipe/utils/',
@@ -18,8 +20,8 @@
         'includes': [ 'gmslides.gypi' ],
         'sources': [
             '../dm/DM.cpp',
-            '../dm/DMComparisonTask.cpp',
             '../dm/DMCpuTask.cpp',
+            '../dm/DMExpectationsTask.cpp',
             '../dm/DMGpuTask.cpp',
             '../dm/DMPipeTask.cpp',
             '../dm/DMReplayTask.cpp',
@@ -27,6 +29,7 @@
             '../dm/DMSerializeTask.cpp',
             '../dm/DMTask.cpp',
             '../dm/DMTaskRunner.cpp',
+            '../dm/DMTileGridTask.cpp',
             '../dm/DMUtil.cpp',
             '../dm/DMWriteTask.cpp',
             '../gm/gm.cpp',
