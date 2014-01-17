@@ -273,7 +273,7 @@ static CGFloat ScalarToCG(SkScalar scalar) {
 
 static SkScalar CGToScalar(CGFloat cgFloat) {
     if (sizeof(CGFloat) == sizeof(float)) {
-        return SkFloatToScalar(cgFloat);
+        return cgFloat;
     } else {
         SkASSERT(sizeof(CGFloat) == sizeof(double));
         return SkDoubleToScalar(cgFloat);
@@ -467,7 +467,6 @@ protected:
     virtual int onCharsToGlyphs(const void* chars, Encoding, uint16_t glyphs[],
                                 int glyphCount) const SK_OVERRIDE;
     virtual int onCountGlyphs() const SK_OVERRIDE;
-    virtual SkTypeface* onRefMatchingStyle(Style) const SK_OVERRIDE;
 
 private:
 
@@ -631,10 +630,6 @@ static SkTypeface* create_typeface(const SkTypeface* familyFace,
         }
     }
     return face;
-}
-
-SkTypeface* SkTypeface_Mac::onRefMatchingStyle(Style styleBits) const {
-    return create_typeface(this, NULL, styleBits);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -945,21 +940,18 @@ unsigned SkScalerContext_Mac::generateGlyphCount(void) {
 }
 
 uint16_t SkScalerContext_Mac::generateCharToGlyph(SkUnichar uni) {
-    CGGlyph     cgGlyph;
-    UniChar     theChar;
-
-    // Validate our parameters and state
-    SkASSERT(uni <= 0x0000FFFF);
-    SkASSERT(sizeof(CGGlyph) <= sizeof(uint16_t));
+    CGGlyph cgGlyph[2];
+    UniChar theChar[2]; // UniChar is a UTF-16 16-bit code unit.
 
     // Get the glyph
-    theChar = (UniChar) uni;
+    size_t numUniChar = SkUTF16_FromUnichar(uni, theChar);
+    SkASSERT(sizeof(CGGlyph) <= sizeof(uint16_t));
 
-    if (!CTFontGetGlyphsForCharacters(fCTFont, &theChar, &cgGlyph, 1)) {
-        cgGlyph = 0;
-    }
-
-    return cgGlyph;
+    // Undocumented behavior of CTFontGetGlyphsForCharacters with non-bmp code points:
+    // When a surrogate pair is detected, the glyph index used is the index of the high surrogate.
+    // It is documented that if a mapping is unavailable, the glyph will be set to 0.
+    CTFontGetGlyphsForCharacters(fCTFont, theChar, cgGlyph, numUniChar);
+    return cgGlyph[0];
 }
 
 void SkScalerContext_Mac::generateAdvance(SkGlyph* glyph) {
@@ -1083,7 +1075,7 @@ static void build_power_table(uint8_t table[], float ee) {
     for (int i = 0; i < 256; i++) {
         float x = i / 255.f;
         x = sk_float_pow(x, ee);
-        int xx = SkScalarRoundToInt(SkFloatToScalar(x * 255));
+        int xx = SkScalarRoundToInt(x * 255);
         table[i] = SkToU8(xx);
     }
 }
@@ -1333,7 +1325,7 @@ void SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
         fRec.getSingleMatrix(&m);
 
         // start out by assuming that we want no hining in X and Y
-        scaleX = scaleY = SkFloatToScalar(kScaleForSubPixelPositionHinting);
+        scaleX = scaleY = kScaleForSubPixelPositionHinting;
         // now see if we need to restore hinting for axis-aligned baselines
         switch (SkComputeAxisAlignmentForHText(m)) {
             case kX_SkAxisAlignment:
@@ -1920,53 +1912,89 @@ void SkTypeface_Mac::onGetFontDescriptor(SkFontDescriptor* desc,
 }
 
 int SkTypeface_Mac::onCharsToGlyphs(const void* chars, Encoding encoding,
-                                    uint16_t glyphs[], int glyphCount) const {
-    // UniChar is utf16
+                                    uint16_t glyphs[], int glyphCount) const
+{
+    // Undocumented behavior of CTFontGetGlyphsForCharacters with non-bmp code points:
+    // When a surrogate pair is detected, the glyph index used is the index of the high surrogate.
+    // It is documented that if a mapping is unavailable, the glyph will be set to 0.
+
     SkAutoSTMalloc<1024, UniChar> charStorage;
-    const UniChar* src;
+    const UniChar* src; // UniChar is a UTF-16 16-bit code unit.
+    int srcCount;
     switch (encoding) {
         case kUTF8_Encoding: {
-            const char* u8 = (const char*)chars;
-            const UniChar* u16 = src = charStorage.reset(2 * glyphCount);
+            const char* utf8 = reinterpret_cast<const char*>(chars);
+            UniChar* utf16 = charStorage.reset(2 * glyphCount);
+            src = utf16;
             for (int i = 0; i < glyphCount; ++i) {
-                SkUnichar uni = SkUTF8_NextUnichar(&u8);
-                int n = SkUTF16_FromUnichar(uni, (uint16_t*)u16);
-                u16 += n;
+                SkUnichar uni = SkUTF8_NextUnichar(&utf8);
+                utf16 += SkUTF16_FromUnichar(uni, utf16);
             }
+            srcCount = utf16 - src;
             break;
         }
-        case kUTF16_Encoding:
-            src = (const UniChar*)chars;
-            break;
-        case kUTF32_Encoding: {
-            const SkUnichar* u32 = (const SkUnichar*)chars;
-            const UniChar* u16 = src = charStorage.reset(2 * glyphCount);
+        case kUTF16_Encoding: {
+            src = reinterpret_cast<const UniChar*>(chars);
+            int extra = 0;
             for (int i = 0; i < glyphCount; ++i) {
-                int n = SkUTF16_FromUnichar(u32[i], (uint16_t*)u16);
-                u16 += n;
+                if (SkUTF16_IsHighSurrogate(src[i + extra])) {
+                    ++extra;
+                }
             }
+            srcCount = glyphCount + extra;
+            break;
+        }
+        case kUTF32_Encoding: {
+            const SkUnichar* utf32 = reinterpret_cast<const SkUnichar*>(chars);
+            UniChar* utf16 = charStorage.reset(2 * glyphCount);
+            src = utf16;
+            for (int i = 0; i < glyphCount; ++i) {
+                utf16 += SkUTF16_FromUnichar(utf32[i], utf16);
+            }
+            srcCount = utf16 - src;
             break;
         }
     }
 
-    // Our caller may not want glyphs for output, but we need to give that
-    // storage to CT, so we can walk it looking for the first non-zero.
+    // If glyphs is NULL, CT still needs glyph storage for finding the first failure.
+    // Also, if there are any non-bmp code points, the provided 'glyphs' storage will be inadequate.
     SkAutoSTMalloc<1024, uint16_t> glyphStorage;
     uint16_t* macGlyphs = glyphs;
-    if (NULL == macGlyphs) {
-        macGlyphs = glyphStorage.reset(glyphCount);
+    if (NULL == macGlyphs || srcCount > glyphCount) {
+        macGlyphs = glyphStorage.reset(srcCount);
     }
 
-    if (CTFontGetGlyphsForCharacters(fFontRef, src, macGlyphs, glyphCount)) {
+    bool allEncoded = CTFontGetGlyphsForCharacters(fFontRef, src, macGlyphs, srcCount);
+
+    // If there were any non-bmp, then copy and compact.
+    // If 'glyphs' is NULL, then compact glyphStorage in-place.
+    // If all are bmp and 'glyphs' is non-NULL, 'glyphs' already contains the compact glyphs.
+    // If some are non-bmp and 'glyphs' is non-NULL, copy and compact into 'glyphs'.
+    uint16_t* compactedGlyphs = glyphs;
+    if (NULL == compactedGlyphs) {
+        compactedGlyphs = macGlyphs;
+    }
+    if (srcCount > glyphCount) {
+        int extra = 0;
+        for (int i = 0; i < glyphCount; ++i) {
+            if (SkUTF16_IsHighSurrogate(src[i + extra])) {
+                ++extra;
+            }
+            compactedGlyphs[i] = macGlyphs[i + extra];
+        }
+    }
+
+    if (allEncoded) {
         return glyphCount;
     }
-    // If we got false, then we need to manually look for first failure
+
+    // If we got false, then we need to manually look for first failure.
     for (int i = 0; i < glyphCount; ++i) {
-        if (0 == macGlyphs[i]) {
+        if (0 == compactedGlyphs[i]) {
             return i;
         }
     }
-    // odd to get here, as we expected CT to have returned true up front.
+    // Odd to get here, as we expected CT to have returned true up front.
     return glyphCount;
 }
 
@@ -2079,7 +2107,13 @@ static SkTypeface* createFromDesc(CFStringRef cfFamilyName,
         return face;
     }
 
-    AutoCFRelease<CTFontRef> ctNamed(CTFontCreateWithName(cfFamilyName, 1, NULL));
+    AutoCFRelease<CFDictionaryRef> fontFamilyNameDictionary(
+        CFDictionaryCreate(kCFAllocatorDefault,
+                           (const void**)&kCTFontFamilyNameAttribute, (const void**)&cfFamilyName,
+                           1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+    AutoCFRelease<CTFontDescriptorRef> fontDescriptor(
+        CTFontDescriptorCreateWithAttributes(fontFamilyNameDictionary));
+    AutoCFRelease<CTFontRef> ctNamed(CTFontCreateWithFontDescriptor(fontDescriptor, 0, NULL));
     CTFontRef ctFont = CTFontCreateCopyWithAttributes(ctNamed, 1, NULL, desc);
     if (NULL == ctFont) {
         return NULL;
@@ -2281,32 +2315,6 @@ protected:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#ifndef SK_FONTHOST_USES_FONTMGR
-
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style style) {
-    return create_typeface(familyFace, familyName, style);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
-    AutoCFRelease<CGDataProviderRef> provider(SkCreateDataProviderFromStream(stream));
-    if (NULL == provider) {
-        return NULL;
-    }
-    return create_from_dataProvider(provider);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    AutoCFRelease<CGDataProviderRef> provider(CGDataProviderCreateWithFilename(path));
-    if (NULL == provider) {
-        return NULL;
-    }
-    return create_from_dataProvider(provider);
-}
-
-#endif
 
 SkFontMgr* SkFontMgr::Factory() {
     return SkNEW(SkFontMgr_Mac);

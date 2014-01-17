@@ -28,9 +28,12 @@ DEFINE_string(mismatchPath, "", "Folder to write mismatched images to.");
 DEFINE_string2(readPath, r, "", "Folder(s) and files to decode images. Required.");
 DEFINE_string(readExpectationsPath, "", "Path to read JSON expectations from.");
 DEFINE_bool(reencode, true, "Reencode the images to test encoding.");
-DEFINE_bool(testSubsetDecoding, true, "Test decoding subsets of images.");
-DEFINE_string2(writePath, w, "",  "Write rendered images into this directory.");
+DEFINE_int32(sampleSize, 1, "Set the sampleSize for decoding.");
 DEFINE_bool(skip, false, "Skip writing zeroes.");
+DEFINE_bool(testSubsetDecoding, true, "Test decoding subsets of images.");
+DEFINE_bool(writeChecksumBasedFilenames, false,  "When writing out actual images, use checksum-"
+            "based filenames, as rebaseline.py will use when downloading them from Google Storage");
+DEFINE_string2(writePath, w, "",  "Write rendered images into this directory.");
 
 struct Format {
     SkImageEncoder::Type    fType;
@@ -79,19 +82,26 @@ static void make_outname(SkString* dst, const char outDir[], const char src[],
                          const char suffix[]) {
     SkString basename = SkOSPath::SkBasename(src);
     dst->set(SkOSPath::SkPathJoin(outDir, basename.c_str()));
-    if (!dst->endsWith(suffix)) {
-        const char* cstyleDst = dst->c_str();
-        const char* dot = strrchr(cstyleDst, '.');
-        if (dot != NULL) {
-            int32_t index = SkToS32(dot - cstyleDst);
-            dst->remove(index, dst->size() - index);
-        }
-        dst->append(suffix);
-    }
+    dst->append(suffix);
 }
 
 // Store the names of the filenames to report later which ones failed, succeeded, and were
 // invalid.
+// FIXME: Add more arrays, for more specific types of errors, and make the output simpler.
+// If each array holds one type of error, the output can change from:
+//
+// Failures:
+//      <image> failed for such and such reason
+//      <image> failed for some different reason
+//
+// to:
+//
+// Such and such failures:
+//      <image>
+//
+// Different reason failures:
+//      <image>
+//
 static SkTArray<SkString, false> gInvalidStreams;
 static SkTArray<SkString, false> gMissingCodecs;
 static SkTArray<SkString, false> gDecodeFailures;
@@ -103,6 +113,9 @@ static SkTArray<SkString, false> gFailedSubsetDecodes;
 // the bots will not turn red with each new image test.
 static SkTArray<SkString, false> gMissingExpectations;
 static SkTArray<SkString, false> gMissingSubsetExpectations;
+// For files that are expected to fail.
+static SkTArray<SkString, false> gKnownFailures;
+static SkTArray<SkString, false> gKnownSubsetFailures;
 
 static SkBitmap::Config gPrefConfig(SkBitmap::kNo_Config);
 
@@ -110,20 +123,59 @@ static SkBitmap::Config gPrefConfig(SkBitmap::kNo_Config);
 // previously written using createExpectationsPath.
 SkAutoTUnref<skiagm::JsonExpectationsSource> gJsonExpectations;
 
-static bool write_bitmap(const char outName[], const SkBitmap& bm) {
-    const SkBitmap* bmPtr;
-    SkBitmap bm8888;
-    if (bm.config() == SkBitmap::kA8_Config) {
-        // Copy A8 into ARGB_8888, since our image encoders do not currently
-        // support A8.
-        if (!bm.copyTo(&bm8888, SkBitmap::kARGB_8888_Config)) {
+/**
+ *  Encode the bitmap to a file, written one of two ways, depending on
+ *  FLAGS_writeChecksumBasedFilenames. If true, the final image will be
+ *  written to:
+ *      outDir/hashType/src/digestValue.png
+ *  If false, the final image will be written out to:
+ *      outDir/src.png
+ *  The function returns whether the file was successfully written.
+ */
+static bool write_bitmap(const char outDir[], const char src[],
+                         const skiagm::BitmapAndDigest& bitmapAndDigest) {
+    SkString filename;
+    if (FLAGS_writeChecksumBasedFilenames) {
+        // First create the directory for the hashtype.
+        const SkString hashType = bitmapAndDigest.fDigest.getHashType();
+        const SkString hashDir = SkOSPath::SkPathJoin(outDir, hashType.c_str());
+        if (!sk_mkdir(hashDir.c_str())) {
             return false;
         }
-        bmPtr = &bm8888;
+
+        // Now create the name of the folder specific to this image.
+        SkString basename = SkOSPath::SkBasename(src);
+        const SkString imageDir = SkOSPath::SkPathJoin(hashDir.c_str(), basename.c_str());
+        if (!sk_mkdir(imageDir.c_str())) {
+            return false;
+        }
+
+        // Name the file <digest>.png
+        SkString checksumBasedName = bitmapAndDigest.fDigest.getDigestValue();
+        checksumBasedName.append(".png");
+
+        filename = SkOSPath::SkPathJoin(imageDir.c_str(), checksumBasedName.c_str());
     } else {
-        bmPtr = &bm;
+        make_outname(&filename, outDir, src, ".png");
     }
-    return SkImageEncoder::EncodeFile(outName, *bmPtr, SkImageEncoder::kPNG_Type, 100);
+
+    const SkBitmap& bm = bitmapAndDigest.fBitmap;
+    if (SkImageEncoder::EncodeFile(filename.c_str(), bm, SkImageEncoder::kPNG_Type, 100)) {
+        return true;
+    }
+
+    if (bm.config() == SkBitmap::kARGB_8888_Config) {
+        // First attempt at encoding failed, and the bitmap was already 8888. Making
+        // a copy is not going to help.
+        return false;
+    }
+
+    // Encoding failed. Copy to 8888 and try again.
+    SkBitmap bm8888;
+    if (!bm.copyTo(&bm8888, SkBitmap::kARGB_8888_Config)) {
+        return false;
+    }
+    return SkImageEncoder::EncodeFile(filename.c_str(), bm8888, SkImageEncoder::kPNG_Type, 100);
 }
 
 /**
@@ -167,40 +219,52 @@ static SkIRect generate_random_rect(SkRandom* rand, int32_t maxX, int32_t maxY) 
     return rect;
 }
 
+/**
+ *  Return a string which includes the name of the file and the preferred config,
+ *  as specified by "--config". The resulting string will match the pattern of
+ *  gm_json.py's IMAGE_FILENAME_PATTERN: "filename_config.png"
+ */
+static SkString create_json_key(const char* filename) {
+    SkASSERT(FLAGS_config.count() == 1);
+    return SkStringPrintf("%s_%s.png", filename, FLAGS_config[0]);
+}
+
 // Stored expectations to be written to a file if createExpectationsPath is specified.
 static Json::Value gExpectationsToWrite;
 
 /**
- *  If expectations are to be recorded, record the bitmap expectations into global
+ *  If expectations are to be recorded, record the bitmap expectations into the global
  *  expectations array.
+ *  As is the case with reading expectations, the key used will combine the filename
+ *  parameter with the preferred config, as specified by "--config", matching the
+ *  pattern of gm_json.py's IMAGE_FILENAME_PATTERN: "filename_config.png"
  */
-static void write_expectations(const SkBitmap& bitmap, const char* filename) {
+static void write_expectations(const skiagm::BitmapAndDigest& bitmapAndDigest,
+                               const char* filename) {
+    const SkString name_config = create_json_key(filename);
     if (!FLAGS_createExpectationsPath.isEmpty()) {
         // Creates an Expectations object, and add it to the list to write.
-        skiagm::Expectations expectation(bitmap);
+        skiagm::Expectations expectation(bitmapAndDigest);
         Json::Value value = expectation.asJsonValue();
-        gExpectationsToWrite[filename] = value;
+        gExpectationsToWrite[name_config.c_str()] = value;
     }
 }
 
 /**
- *  Return true if this filename is a known failure, and therefore a failure
- *  to decode should be ignored.
- */
-static bool expect_to_fail(const char* filename) {
-    if (NULL == gJsonExpectations.get()) {
-        return false;
-    }
-    skiagm::Expectations jsExpectations = gJsonExpectations->get(filename);
-    return jsExpectations.ignoreFailure();
-}
-
-/**
- *  Compare against an expectation for this filename, if there is one.
- *  @param bitmap SkBitmap to compare to the expected value.
- *  @param filename String used to find the expected value.
+ *  If --readExpectationsPath is set, compare this bitmap to the json expectations
+ *  provided.
+ *
+ *  @param digest GmResultDigest, computed from the decoded bitmap, to compare to
+ *         the existing expectation.
+ *  @param filename String used to find the expected value. Will be combined with the
+ *         preferred config, as specified by "--config", to match the pattern of
+ *         gm_json.py's IMAGE_FILENAME_PATTERN: "filename_config.png". The resulting
+ *         key will be used to find the proper expectations.
  *  @param failureArray Array to add a failure message to on failure.
- *  @param missingArray Array to add missing expectation to on failure.
+ *  @param missingArray Array to add failure message to when missing image
+ *          expectation.
+ *  @param ignoreArray Array to add failure message to when the image does not match
+ *          the expectation, but this is a failure we can ignore.
  *  @return bool True in any of these cases:
  *                  - the bitmap matches the expectation.
  *               False in any of these cases:
@@ -209,11 +273,17 @@ static bool expect_to_fail(const char* filename) {
  *                  - there is an expectation for this bitmap, but it did not match.
  *                  - expectation could not be computed from the bitmap.
  */
-static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const char* filename,
+static bool compare_to_expectations_if_necessary(const skiagm::GmResultDigest& digest,
+                                                 const char* filename,
                                                  SkTArray<SkString, false>* failureArray,
-                                                 SkTArray<SkString, false>* missingArray) {
-    skiagm::GmResultDigest resultDigest(bitmap);
-    if (!resultDigest.isValid()) {
+                                                 SkTArray<SkString, false>* missingArray,
+                                                 SkTArray<SkString, false>* ignoreArray) {
+    // For both writing and reading, the key for this entry will include the name
+    // of the file and the pref config, matching the pattern of gm_json.py's
+    // IMAGE_FILENAME_PATTERN: "name_config.png"
+    const SkString name_config = create_json_key(filename);
+
+    if (!digest.isValid()) {
         if (failureArray != NULL) {
             failureArray->push_back().printf("decoded %s, but could not create a GmResultDigest.",
                                              filename);
@@ -225,7 +295,7 @@ static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const c
         return false;
     }
 
-    skiagm::Expectations jsExpectation = gJsonExpectations->get(filename);
+    skiagm::Expectations jsExpectation = gJsonExpectations->get(name_config.c_str());
     if (jsExpectation.empty()) {
         if (missingArray != NULL) {
             missingArray->push_back().printf("decoded %s, but could not find expectation.",
@@ -234,11 +304,14 @@ static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const c
         return false;
     }
 
-    if (jsExpectation.match(resultDigest)) {
+    if (jsExpectation.match(digest)) {
         return true;
     }
 
-    if (failureArray != NULL) {
+    if (jsExpectation.ignoreFailure()) {
+        ignoreArray->push_back().printf("%s does not match expectation, but this is known.",
+                                        filename);
+    } else if (failureArray != NULL) {
         failureArray->push_back().printf("decoded %s, but the result does not match "
                                          "expectations.",
                                          filename);
@@ -248,73 +321,161 @@ static bool compare_to_expectations_if_necessary(const SkBitmap& bitmap, const c
 
 /**
  *  Helper function to write a bitmap subset to a file. Only called if subsets were created
- *  and a writePath was provided. Creates a subdirectory called 'subsets' and writes a PNG to
- *  that directory. Also creates a subdirectory called 'extracted' and writes a bitmap created
- *  using extractSubset to a PNG in that directory. Both files will represent the same
- *  subrectangle and have the same name for comparison.
+ *  and a writePath was provided. Behaves differently depending on
+ *  FLAGS_writeChecksumBasedFilenames. If true:
+ *      Writes the image to a PNG file named according to the digest hash, as described in
+ *      write_bitmap.
+ *  If false:
+ *      Creates a subdirectory called 'subsets' and writes a PNG to that directory. Also
+ *      creates a subdirectory called 'extracted' and writes a bitmap created using
+ *      extractSubset to a PNG in that directory. Both files will represent the same
+ *      subrectangle and have the same name for convenient comparison. In this case, the
+ *      digest is ignored.
+ *
  *  @param writePath Parent directory to hold the folders for the PNG files to write. Must
  *      not be NULL.
- *  @param filename Basename of the original file. Used to name the new files. Must not be
- *      NULL.
- *  @param subsetDim String representing the dimensions of the subset. Used to name the new
- *      files. Must not be NULL.
- *  @param bitmapFromDecodeSubset Pointer to SkBitmap created by SkImageDecoder::DecodeSubset,
- *      using rect as the area to decode.
+ *  @param subsetName Basename of the original file, with the dimensions of the subset tacked
+ *      on. Used to name the new file/folder.
+ *  @param bitmapAndDigestFromDecodeSubset SkBitmap (with digest) created by
+ *      SkImageDecoder::DecodeSubset, using rect as the area to decode.
  *  @param rect Rectangle of the area decoded into bitmapFromDecodeSubset. Used to call
  *      extractSubset on originalBitmap to create a bitmap with the same dimensions/pixels as
  *      bitmapFromDecodeSubset (assuming decodeSubset worked properly).
  *  @param originalBitmap SkBitmap decoded from the same stream as bitmapFromDecodeSubset,
  *      using SkImageDecoder::decode to get the entire image. Used to create a PNG file for
- *      comparison to the PNG created by bitmapFromDecodeSubset.
+ *      comparison to the PNG created by bitmapAndDigestFromDecodeSubset's bitmap.
  *  @return bool Whether the function succeeded at drawing the decoded subset and the extracted
  *      subset to files.
  */
-static bool write_subset(const char* writePath, const char* filename, const char* subsetDim,
-                          SkBitmap* bitmapFromDecodeSubset, SkIRect rect,
-                          const SkBitmap& originalBitmap) {
+static bool write_subset(const char* writePath, const SkString& subsetName,
+                          const skiagm::BitmapAndDigest bitmapAndDigestFromDecodeSubset,
+                          SkIRect rect, const SkBitmap& originalBitmap) {
     // All parameters must be valid.
     SkASSERT(writePath != NULL);
-    SkASSERT(filename != NULL);
-    SkASSERT(subsetDim != NULL);
-    SkASSERT(bitmapFromDecodeSubset != NULL);
 
-    // Create a subdirectory to hold the results of decodeSubset.
-    SkString dir = SkOSPath::SkPathJoin(writePath, "subsets");
-    if (!sk_mkdir(dir.c_str())) {
-        gFailedSubsetDecodes.push_back().printf("Successfully decoded %s from %s, but failed to "
-                                                "create a directory to write to.", subsetDim,
-                                                 filename);
-        return false;
+    SkString subsetPath;
+    if (FLAGS_writeChecksumBasedFilenames) {
+        subsetPath.set(writePath);
+    } else {
+        // Create a subdirectory to hold the results of decodeSubset.
+        subsetPath = SkOSPath::SkPathJoin(writePath, "subsets");
+        if (!sk_mkdir(subsetPath.c_str())) {
+            gFailedSubsetDecodes.push_back().printf("Successfully decoded subset %s, but "
+                                                    "failed to create a directory to write to.",
+                                                     subsetName.c_str());
+            return false;
+        }
     }
+    SkAssertResult(write_bitmap(subsetPath.c_str(), subsetName.c_str(),
+                                bitmapAndDigestFromDecodeSubset));
+    gSuccessfulSubsetDecodes.push_back().printf("\twrote %s", subsetName.c_str());
 
-    // Write the subset to a file whose name includes the dimensions.
-    SkString suffix = SkStringPrintf("_%s.png", subsetDim);
-    SkString outPath;
-    make_outname(&outPath, dir.c_str(), filename, suffix.c_str());
-    SkAssertResult(write_bitmap(outPath.c_str(), *bitmapFromDecodeSubset));
-    gSuccessfulSubsetDecodes.push_back().printf("\twrote %s", outPath.c_str());
+    if (!FLAGS_writeChecksumBasedFilenames) {
+        // FIXME: The goal of extracting the subset is for visual comparison/using skdiff/skpdiff.
+        // Currently disabling for writeChecksumBasedFilenames since it will be trickier to
+        // determine which files to compare.
 
-    // Also use extractSubset from the original for visual comparison.
-    // Write the result to a file in a separate subdirectory.
-    SkBitmap extractedSubset;
-    if (!originalBitmap.extractSubset(&extractedSubset, rect)) {
-        gFailedSubsetDecodes.push_back().printf("Successfully decoded %s from %s, but failed to "
-                                                "extract a similar subset for comparison.",
-                                                subsetDim, filename);
-        return false;
+        // Also use extractSubset from the original for visual comparison.
+        // Write the result to a file in a separate subdirectory.
+        SkBitmap extractedSubset;
+        if (!originalBitmap.extractSubset(&extractedSubset, rect)) {
+            gFailedSubsetDecodes.push_back().printf("Successfully decoded subset %s, but failed "
+                                                    "to extract a similar subset for comparison.",
+                                                    subsetName.c_str());
+            return false;
+        }
+
+        SkString dirExtracted = SkOSPath::SkPathJoin(writePath, "extracted");
+        if (!sk_mkdir(dirExtracted.c_str())) {
+            gFailedSubsetDecodes.push_back().printf("Successfully decoded subset%s, but failed "
+                                                    "to create a directory for extractSubset "
+                                                    "comparison.",
+                                                    subsetName.c_str());
+            return false;
+        }
+
+        skiagm::BitmapAndDigest bitmapAndDigestFromExtractSubset(extractedSubset);
+        SkAssertResult(write_bitmap(dirExtracted.c_str(), subsetName.c_str(),
+                                    bitmapAndDigestFromExtractSubset));
     }
-
-    SkString dirExtracted = SkOSPath::SkPathJoin(writePath, "extracted");
-    if (!sk_mkdir(dirExtracted.c_str())) {
-        gFailedSubsetDecodes.push_back().printf("Successfully decoded %s from %s, but failed to "
-                                                "create a directory for extractSubset comparison.",
-                                                subsetDim, filename);
-        return false;
-    }
-
-    make_outname(&outPath, dirExtracted.c_str(), filename, suffix.c_str());
-    SkAssertResult(write_bitmap(outPath.c_str(), extractedSubset));
     return true;
+}
+
+// FIXME: This test could be run on windows/mac once we remove their dependence on
+// getLength. See https://code.google.com/p/skia/issues/detail?id=1570
+#if defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
+
+/**
+ *  Dummy class for testing to ensure that a stream without a length decodes the same
+ *  as a stream with a length.
+ */
+class FILEStreamWithoutLength : public SkFILEStream {
+public:
+    FILEStreamWithoutLength(const char path[])
+    : INHERITED(path) {}
+
+    virtual bool hasLength() const SK_OVERRIDE {
+        return false;
+    }
+
+private:
+    typedef SkFILEStream INHERITED;
+};
+
+/**
+ *  Test that decoding a stream which reports to not have a length still results in the
+ *  same image as if it did report to have a length. Assumes that codec was used to
+ *  successfully decode the file using SkFILEStream.
+ *  @param srcPath The path to the file, for recreating the length-less stream.
+ *  @param codec The SkImageDecoder originally used to decode srcPath, which will be used
+ *      again to decode the length-less stream.
+ *  @param digest GmResultDigest computed from decoding the stream the first time.
+ *      Decoding the length-less stream is expected to result in a matching digest.
+ */
+static void test_stream_without_length(const char srcPath[], SkImageDecoder* codec,
+                                       const skiagm::GmResultDigest& digest) {
+    if (!digest.isValid()) {
+        // An error was already reported.
+        return;
+    }
+    SkASSERT(srcPath);
+    SkASSERT(codec);
+    FILEStreamWithoutLength stream(srcPath);
+    // This will only be called after a successful decode. Creating a stream from the same
+    // path should never fail.
+    SkASSERT(stream.isValid());
+    SkBitmap bm;
+    if (!codec->decode(&stream, &bm, gPrefConfig, SkImageDecoder::kDecodePixels_Mode)) {
+        gDecodeFailures.push_back().appendf("Without using getLength, %s failed to decode\n",
+                                            srcPath);
+        return;
+    }
+    skiagm::GmResultDigest lengthLessDigest(bm);
+    if (!lengthLessDigest.isValid()) {
+        gDecodeFailures.push_back().appendf("Without using getLength, %s failed to build "
+                                            "a digest\n", srcPath);
+        return;
+    }
+    if (!lengthLessDigest.equals(digest)) {
+        gDecodeFailures.push_back().appendf("Without using getLength, %s did not match digest "
+                                            "that uses getLength\n", srcPath);
+    }
+}
+#endif // defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
+
+/**
+ *  Replace all instances of oldChar with newChar in str.
+ *  TODO: Add this function to SkString and write tests for it.
+ */
+static void replace_char(SkString* str, const char oldChar, const char newChar) {
+    if (NULL == str) {
+        return;
+    }
+    for (size_t i = 0; i < str->size(); ++i) {
+        if (oldChar == str->operator[](i)) {
+            str->operator[](i) = newChar;
+        }
+    }
 }
 
 static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) {
@@ -334,20 +495,41 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
     SkAutoTDelete<SkImageDecoder> ad(codec);
 
     codec->setSkipWritingZeroes(FLAGS_skip);
+    codec->setSampleSize(FLAGS_sampleSize);
     stream.rewind();
 
     // Create a string representing just the filename itself, for use in json expectations.
     SkString basename = SkOSPath::SkBasename(srcPath);
+    // Replace '_' with '-', so that the names can fit gm_json.py's IMAGE_FILENAME_PATTERN
+    replace_char(&basename, '_', '-');
+    // Replace '.' with '-', so the output filename can still retain the original file extension,
+    // but still end up with only one '.', which denotes the actual extension of the final file.
+    replace_char(&basename, '.', '-');
     const char* filename = basename.c_str();
 
     if (!codec->decode(&stream, &bitmap, gPrefConfig,
                        SkImageDecoder::kDecodePixels_Mode)) {
-        if (expect_to_fail(filename)) {
-            gSuccessfulDecodes.push_back().appendf(
-                "failed to decode %s, which is a known failure.", srcPath);
-        } else {
-            gDecodeFailures.push_back().set(srcPath);
+        if (NULL != gJsonExpectations.get()) {
+            const SkString name_config = create_json_key(filename);
+            skiagm::Expectations jsExpectations = gJsonExpectations->get(name_config.c_str());
+            if (jsExpectations.ignoreFailure()) {
+                // This is a known failure.
+                gKnownFailures.push_back().appendf(
+                    "failed to decode %s, which is a known failure.", srcPath);
+                return;
+            }
+            if (jsExpectations.empty()) {
+                // This is a failure, but it is a new file. Mark it as missing, with
+                // a note that it should be marked failing.
+                gMissingExpectations.push_back().appendf(
+                    "new file %s (with no expectations) FAILED to decode.", srcPath);
+                return;
+            }
         }
+
+        // If there was a failure, and either there was no expectations file, or
+        // the expectations file listed a valid expectation, report the failure.
+        gDecodeFailures.push_back().set(srcPath);
         return;
     }
 
@@ -367,32 +549,34 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
         }
     }
 
-    if (compare_to_expectations_if_necessary(bitmap, filename,
-                                             &gDecodeFailures,
-                                             &gMissingExpectations)) {
+    skiagm::BitmapAndDigest bitmapAndDigest(bitmap);
+    if (compare_to_expectations_if_necessary(bitmapAndDigest.fDigest, filename, &gDecodeFailures,
+                                             &gMissingExpectations, &gKnownFailures)) {
         gSuccessfulDecodes.push_back().printf("%s [%d %d]", srcPath, bitmap.width(),
                                               bitmap.height());
     } else if (!FLAGS_mismatchPath.isEmpty()) {
-        SkString outPath;
-        make_outname(&outPath, FLAGS_mismatchPath[0], srcPath, ".png");
-        if (write_bitmap(outPath.c_str(), bitmap)) {
-            gSuccessfulDecodes.push_back().appendf("\twrote %s", outPath.c_str());
+        if (write_bitmap(FLAGS_mismatchPath[0], filename, bitmapAndDigest)) {
+            gSuccessfulDecodes.push_back().appendf("\twrote %s", filename);
         } else {
-            gEncodeFailures.push_back().set(outPath);
+            gEncodeFailures.push_back().set(filename);
         }
     }
+
+// FIXME: This test could be run on windows/mac once we remove their dependence on
+// getLength. See https://code.google.com/p/skia/issues/detail?id=1570
+#if defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
+    test_stream_without_length(srcPath, codec, bitmapAndDigest.fDigest);
+#endif
 
     if (writePath != NULL) {
-        SkString outPath;
-        make_outname(&outPath, writePath->c_str(), srcPath, ".png");
-        if (write_bitmap(outPath.c_str(), bitmap)) {
-            gSuccessfulDecodes.push_back().appendf("\twrote %s", outPath.c_str());
+        if (write_bitmap(writePath->c_str(), filename, bitmapAndDigest)) {
+            gSuccessfulDecodes.push_back().appendf("\twrote %s", filename);
         } else {
-            gEncodeFailures.push_back().set(outPath);
+            gEncodeFailures.push_back().set(filename);
         }
     }
 
-    write_expectations(bitmap, filename);
+    write_expectations(bitmapAndDigest, filename);
 
     if (FLAGS_testSubsetDecoding) {
         SkDEBUGCODE(bool couldRewind =) stream.rewind();
@@ -411,22 +595,25 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
                 SkString subsetDim = SkStringPrintf("[%d,%d,%d,%d]", rect.fLeft, rect.fTop,
                                                     rect.fRight, rect.fBottom);
                 if (codec->decodeSubset(&bitmapFromDecodeSubset, rect, gPrefConfig)) {
-                    SkString subsetName = SkStringPrintf("%s_%s", filename, subsetDim.c_str());
-                    if (compare_to_expectations_if_necessary(bitmapFromDecodeSubset,
+                    SkString subsetName = SkStringPrintf("%s-%s", filename, subsetDim.c_str());
+                    skiagm::BitmapAndDigest subsetBitmapAndDigest(bitmapFromDecodeSubset);
+                    if (compare_to_expectations_if_necessary(subsetBitmapAndDigest.fDigest,
                                                              subsetName.c_str(),
                                                              &gFailedSubsetDecodes,
-                                                             &gMissingSubsetExpectations)) {
+                                                             &gMissingSubsetExpectations,
+                                                             &gKnownSubsetFailures)) {
                         gSuccessfulSubsetDecodes.push_back().printf("Decoded subset %s from %s",
                                                               subsetDim.c_str(), srcPath);
                     } else if (!FLAGS_mismatchPath.isEmpty()) {
-                        write_subset(FLAGS_mismatchPath[0], filename, subsetDim.c_str(),
-                                     &bitmapFromDecodeSubset, rect, bitmap);
+                        write_subset(FLAGS_mismatchPath[0], subsetName,
+                                     subsetBitmapAndDigest, rect, bitmap);
                     }
 
-                    write_expectations(bitmapFromDecodeSubset, subsetName.c_str());
+                    write_expectations(subsetBitmapAndDigest, subsetName.c_str());
+
                     if (writePath != NULL) {
-                        write_subset(writePath->c_str(), filename, subsetDim.c_str(),
-                                     &bitmapFromDecodeSubset, rect, bitmap);
+                        write_subset(writePath->c_str(), subsetName,
+                                     subsetBitmapAndDigest, rect, bitmap);
                     }
                 } else {
                     gFailedSubsetDecodes.push_back().printf("Failed to decode region %s from %s",
@@ -482,7 +669,7 @@ static void decodeFileAndWrite(const char srcPath[], const SkString* writePath) 
         if (writePath != NULL && type != SkImageEncoder::kPNG_Type) {
             // Write the encoded data to a file. Do not write to PNG, which was already written.
             SkString outPath;
-            make_outname(&outPath, writePath->c_str(), srcPath, suffix_for_type(type));
+            make_outname(&outPath, writePath->c_str(), filename, suffix_for_type(type));
             SkFILEWStream file(outPath.c_str());
             if(file.write(data->data(), data->size())) {
                 gSuccessfulDecodes.push_back().appendf("\twrote %s", outPath.c_str());
@@ -638,7 +825,10 @@ int tool_main(int argc, char** argv) {
         failed |= print_strings("Failed subset decodes", gFailedSubsetDecodes);
         print_strings("Decoded subsets", gSuccessfulSubsetDecodes);
         print_strings("Missing subset expectations", gMissingSubsetExpectations);
+        print_strings("Known subset failures", gKnownSubsetFailures);
     }
+
+    print_strings("Known failures", gKnownFailures);
 
     return failed ? -1 : 0;
 }

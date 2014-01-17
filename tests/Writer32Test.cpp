@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-
-
+#include "Test.h"
+#include "TestClassDef.h"
 #include "SkRandom.h"
 #include "SkReader32.h"
 #include "SkWriter32.h"
-#include "Test.h"
 
 static void check_contents(skiatest::Reporter* reporter, const SkWriter32& writer,
                            const void* expected, size_t size) {
@@ -21,32 +19,23 @@ static void check_contents(skiatest::Reporter* reporter, const SkWriter32& write
     REPORTER_ASSERT(reporter, !memcmp(storage.get(), expected, size));
 }
 
+
+static void test_reserve(skiatest::Reporter* reporter) {
+    // There used to be a bug where we'd assert your first reservation had to
+    // fit in external storage if you used it.  This would crash in debug mode.
+    uint8_t storage[4];
+    SkWriter32 writer(0, storage, sizeof(storage));
+    writer.reserve(40);
+}
+
 static void test_string_null(skiatest::Reporter* reporter) {
     uint8_t storage[8];
     SkWriter32 writer(0, storage, sizeof(storage));
-    SkReader32 reader(storage, sizeof(storage));
-
-    const char* str;
-    size_t len;
 
     // Can we write NULL?
     writer.writeString(NULL);
-    const int32_t null[] = { 0xFFFF };
-    check_contents(reporter, writer, null, sizeof(null));
-    str = reader.readString(&len);
-    REPORTER_ASSERT(reporter, NULL == str);
-    REPORTER_ASSERT(reporter, 0 == len);
-
-    writer.reset(storage, sizeof(storage));
-    reader.rewind();
-
-    // Is NULL distinct from ""?
-    writer.writeString("");
-    const int32_t empty[] = { 0x0, 0x0 };
-    check_contents(reporter, writer, empty, sizeof(empty));
-    str = reader.readString(&len);
-    REPORTER_ASSERT(reporter, 0 == strcmp("", str));
-    REPORTER_ASSERT(reporter, 0 == len);
+    const int32_t expected[] = { 0x0, 0x0 };
+    check_contents(reporter, writer, expected, sizeof(expected));
 }
 
 static void test_rewind(skiatest::Reporter* reporter) {
@@ -95,7 +84,7 @@ static void test_ptr(skiatest::Reporter* reporter) {
     writer.writePtr(p1);
     writer.write8(0x66);
 
-    size_t size = writer.size();
+    size_t size = writer.bytesWritten();
     REPORTER_ASSERT(reporter, 2 * sizeof(void*) + 2 * sizeof(int32_t));
 
     char buffer[32];
@@ -112,14 +101,14 @@ static void test_ptr(skiatest::Reporter* reporter) {
 static void test1(skiatest::Reporter* reporter, SkWriter32* writer) {
     const uint32_t data[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     for (size_t i = 0; i < SK_ARRAY_COUNT(data); ++i) {
-        REPORTER_ASSERT(reporter, i*4 == writer->size());
+        REPORTER_ASSERT(reporter, i*4 == writer->bytesWritten());
         writer->write32(data[i]);
         uint32_t* addr = writer->peek32(i * 4);
         REPORTER_ASSERT(reporter, data[i] == *addr);
     }
 
     char buffer[sizeof(data)];
-    REPORTER_ASSERT(reporter, sizeof(buffer) == writer->size());
+    REPORTER_ASSERT(reporter, sizeof(buffer) == writer->bytesWritten());
     writer->flatten(buffer);
     REPORTER_ASSERT(reporter, !memcmp(data, buffer, sizeof(buffer)));
 }
@@ -133,7 +122,7 @@ static void test2(skiatest::Reporter* reporter, SkWriter32* writer) {
         len += SkWriter32::WriteStringSize(gStr, i);
         writer->writeString(gStr, i);
     }
-    REPORTER_ASSERT(reporter, writer->size() == len);
+    REPORTER_ASSERT(reporter, writer->bytesWritten() == len);
 
     SkAutoMalloc storage(len);
     writer->flatten(storage.get());
@@ -162,7 +151,7 @@ static void testWritePad(skiatest::Reporter* reporter, SkWriter32* writer) {
 
     SkAutoMalloc originalData(dataSize);
     {
-        SkMWCRandom rand(0);
+        SkRandom rand(0);
         uint32_t* ptr = static_cast<uint32_t*>(originalData.get());
         uint32_t* stop = ptr + (dataSize>>2);
         while (ptr < stop) {
@@ -176,7 +165,7 @@ static void testWritePad(skiatest::Reporter* reporter, SkWriter32* writer) {
         }
     }
 
-    uint32_t totalBytes = writer->size();
+    uint32_t totalBytes = writer->bytesWritten();
 
     SkAutoMalloc readStorage(totalBytes);
     writer->flatten(readStorage.get());
@@ -197,7 +186,7 @@ static void testWritePad(skiatest::Reporter* reporter, SkWriter32* writer) {
     }
 }
 
-static void Tests(skiatest::Reporter* reporter) {
+DEF_TEST(Writer32, reporter) {
     // dynamic allocator
     {
         SkWriter32 writer(256 * 4);
@@ -256,10 +245,8 @@ static void Tests(skiatest::Reporter* reporter) {
         testWritePad(reporter, &writer);
     }
 
+    test_reserve(reporter);
     test_string_null(reporter);
     test_ptr(reporter);
     test_rewind(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Writer32", Writer32Class, Tests)

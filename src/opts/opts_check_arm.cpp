@@ -17,6 +17,9 @@
 #include "SkUtils.h"
 
 #include "SkUtilsArm.h"
+#include "SkMorphology_opts.h"
+#include "SkMorphology_opts_neon.h"
+#include "SkBlurImage_opts_neon.h"
 
 #if defined(SK_CPU_LENDIAN) && !SK_ARM_NEON_IS_NONE
 extern "C" void memset16_neon(uint16_t dst[], uint16_t value, int count);
@@ -64,4 +67,44 @@ SkMemset32Proc SkMemset32GetPlatformProc() {
 
 SkBlitRow::ColorRectProc PlatformColorRectProcFactory() {
     return NULL;
+}
+
+SkMorphologyProc SkMorphologyGetPlatformProc(SkMorphologyProcType type) {
+#if SK_ARM_NEON_IS_NONE
+    return NULL;
+#else
+#if SK_ARM_NEON_IS_DYNAMIC
+    if (!sk_cpu_arm_has_neon()) {
+        return NULL;
+    }
+#endif
+    switch (type) {
+        case kDilateX_SkMorphologyProcType:
+            return SkDilateX_neon;
+        case kDilateY_SkMorphologyProcType:
+            return SkDilateY_neon;
+        case kErodeX_SkMorphologyProcType:
+            return SkErodeX_neon;
+        case kErodeY_SkMorphologyProcType:
+            return SkErodeY_neon;
+        default:
+            return NULL;
+    }
+#endif
+}
+
+bool SkBoxBlurGetPlatformProcs(SkBoxBlurProc* boxBlurX,
+                               SkBoxBlurProc* boxBlurY,
+                               SkBoxBlurProc* boxBlurXY,
+                               SkBoxBlurProc* boxBlurYX) {
+#if SK_ARM_NEON_IS_NONE
+    return false;
+#else
+#if SK_ARM_NEON_IS_DYNAMIC
+    if (!sk_cpu_arm_has_neon()) {
+        return false;
+    }
+#endif
+    return SkBoxBlurGetPlatformProcs_NEON(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
+#endif
 }

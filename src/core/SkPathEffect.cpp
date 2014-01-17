@@ -12,8 +12,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SK_DEFINE_INST_COUNT(SkPathEffect)
-
 void SkPathEffect::computeFastBounds(SkRect* dst, const SkRect& src) const {
     *dst = src;
 }
@@ -48,8 +46,8 @@ void SkPairPathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
 }
 
 SkPairPathEffect::SkPairPathEffect(SkFlattenableReadBuffer& buffer) {
-    fPE0 = buffer.readFlattenableT<SkPathEffect>();
-    fPE1 = buffer.readFlattenableT<SkPathEffect>();
+    fPE0 = buffer.readPathEffect();
+    fPE1 = buffer.readPathEffect();
     // either of these may fail, so we have to check for nulls later on
 }
 

@@ -122,7 +122,7 @@ int SkDQuad::RootsReal(const double A, const double B, const double C, double s[
     }
     /* normal form: x^2 + px + q = 0 */
     const double p2 = p * p;
-    if (!AlmostEqualUlps(p2, q) && p2 < q) {
+    if (!AlmostDequalUlps(p2, q) && p2 < q) {
         return 0;
     }
     double sqrt_D = 0;
@@ -131,7 +131,7 @@ int SkDQuad::RootsReal(const double A, const double B, const double C, double s[
     }
     s[0] = sqrt_D - p;
     s[1] = -sqrt_D - p;
-    return 1 + !AlmostEqualUlps(s[0], s[1]);
+    return 1 + !AlmostDequalUlps(s[0], s[1]);
 }
 
 bool SkDQuad::isLinear(int startIndex, int endIndex) const {
@@ -340,3 +340,16 @@ void SkDQuad::SetABC(const double* quad, double* a, double* b, double* c) {
     *a -= *b;          // a = A - 2*B +   C
     *b -= *c;          // b =     2*B - 2*C
 }
+
+#ifdef SK_DEBUG
+void SkDQuad::dump() {
+    SkDebugf("{{");
+    int index = 0;
+    do {
+        fPts[index].dump();
+        SkDebugf(", ");
+    } while (++index < 2);
+    fPts[index].dump();
+    SkDebugf("}}\n");
+}
+#endif

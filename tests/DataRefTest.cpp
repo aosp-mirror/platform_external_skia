@@ -1,13 +1,13 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkData.h"
-#include "SkDataSet.h"
 #include "SkDataTable.h"
 #include "SkOrderedReadBuffer.h"
 #include "SkOrderedWriteBuffer.h"
@@ -26,26 +26,10 @@ static void test_is_equal(skiatest::Reporter* reporter,
     }
 }
 
-static void test_datatable_flatten(skiatest::Reporter* reporter,
-                                   SkDataTable* table) {
-    SkOrderedWriteBuffer wb(1024);
-    wb.writeFlattenable(table);
-
-    size_t wsize = wb.size();
-    SkAutoMalloc storage(wsize);
-    wb.writeToMemory(storage.get());
-
-    SkOrderedReadBuffer rb(storage.get(), wsize);
-    SkAutoTUnref<SkDataTable> newTable((SkDataTable*)rb.readFlattenable());
-
-    test_is_equal(reporter, table, newTable);
-}
-
 static void test_datatable_is_empty(skiatest::Reporter* reporter,
                                     SkDataTable* table) {
     REPORTER_ASSERT(reporter, table->isEmpty());
     REPORTER_ASSERT(reporter, 0 == table->count());
-    test_datatable_flatten(reporter, table);
 }
 
 static void test_emptytable(skiatest::Reporter* reporter) {
@@ -78,7 +62,6 @@ static void test_simpletable(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, *itable->atT<int>(i, &size) == idata[i]);
         REPORTER_ASSERT(reporter, sizeof(int) == size);
     }
-    test_datatable_flatten(reporter, itable);
 }
 
 static void test_vartable(skiatest::Reporter* reporter) {
@@ -105,7 +88,6 @@ static void test_vartable(skiatest::Reporter* reporter) {
         const char* s = table->atStr(i);
         REPORTER_ASSERT(reporter, strlen(s) == strlen(str[i]));
     }
-    test_datatable_flatten(reporter, table);
 }
 
 static void test_tablebuilder(skiatest::Reporter* reporter) {
@@ -132,7 +114,6 @@ static void test_tablebuilder(skiatest::Reporter* reporter) {
         const char* s = table->atStr(i);
         REPORTER_ASSERT(reporter, strlen(s) == strlen(str[i]));
     }
-    test_datatable_flatten(reporter, table);
 }
 
 static void test_globaltable(skiatest::Reporter* reporter) {
@@ -151,80 +132,14 @@ static void test_globaltable(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, *table->atT<const char>(i, &size) == i);
         REPORTER_ASSERT(reporter, sizeof(int) == size);
     }
-    test_datatable_flatten(reporter, table);
 }
 
-static void TestDataTable(skiatest::Reporter* reporter) {
+DEF_TEST(DataTable, reporter) {
     test_emptytable(reporter);
     test_simpletable(reporter);
     test_vartable(reporter);
     test_tablebuilder(reporter);
     test_globaltable(reporter);
-}
-
-static void unrefAll(const SkDataSet::Pair pairs[], int count) {
-    for (int i = 0; i < count; ++i) {
-        pairs[i].fValue->unref();
-    }
-}
-
-// asserts that inner is a subset of outer
-static void test_dataset_subset(skiatest::Reporter* reporter,
-                                const SkDataSet& outer, const SkDataSet& inner) {
-    SkDataSet::Iter iter(inner);
-    for (; !iter.done(); iter.next()) {
-        SkData* outerData = outer.find(iter.key());
-        REPORTER_ASSERT(reporter, outerData);
-        REPORTER_ASSERT(reporter, outerData->equals(iter.value()));
-    }
-}
-
-static void test_datasets_equal(skiatest::Reporter* reporter,
-                                const SkDataSet& ds0, const SkDataSet& ds1) {
-    REPORTER_ASSERT(reporter, ds0.count() == ds1.count());
-
-    test_dataset_subset(reporter, ds0, ds1);
-    test_dataset_subset(reporter, ds1, ds0);
-}
-
-static void test_dataset(skiatest::Reporter* reporter, const SkDataSet& ds,
-                         int count) {
-    REPORTER_ASSERT(reporter, ds.count() == count);
-
-    SkDataSet::Iter iter(ds);
-    int index = 0;
-    for (; !iter.done(); iter.next()) {
-//        const char* name = iter.key();
-//        SkData* data = iter.value();
-//        SkDebugf("[%d] %s:%s\n", index, name, (const char*)data->bytes());
-        index += 1;
-    }
-    REPORTER_ASSERT(reporter, index == count);
-
-    SkDynamicMemoryWStream ostream;
-    ds.writeToStream(&ostream);
-    SkMemoryStream istream;
-    istream.setData(ostream.copyToData())->unref();
-    SkDataSet copy(&istream);
-
-    test_datasets_equal(reporter, ds, copy);
-}
-
-static void test_dataset(skiatest::Reporter* reporter) {
-    SkDataSet set0(NULL, 0);
-    SkDataSet set1("hello", SkAutoTUnref<SkData>(SkData::NewWithCString("world")));
-
-    const SkDataSet::Pair pairs[] = {
-        { "one", SkData::NewWithCString("1") },
-        { "two", SkData::NewWithCString("2") },
-        { "three", SkData::NewWithCString("3") },
-    };
-    SkDataSet set3(pairs, 3);
-    unrefAll(pairs, 3);
-
-    test_dataset(reporter, set0, 0);
-    test_dataset(reporter, set1, 1);
-    test_dataset(reporter, set3, 3);
 }
 
 static void* gGlobal;
@@ -292,7 +207,7 @@ static void test_files(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, strncmp(static_cast<const char*>(r2->data()), s, 26) == 0);
 }
 
-static void TestData(skiatest::Reporter* reporter) {
+DEF_TEST(Data, reporter) {
     const char* str = "We the people, in order to form a more perfect union.";
     const int N = 10;
 
@@ -318,10 +233,5 @@ static void TestData(skiatest::Reporter* reporter) {
     tmp->unref();
 
     test_cstring(reporter);
-    test_dataset(reporter);
     test_files(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Data", DataTestClass, TestData)
-DEFINE_TESTCLASS("DataTable", DataTableTestClass, TestDataTable)

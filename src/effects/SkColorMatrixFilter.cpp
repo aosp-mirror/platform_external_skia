@@ -308,8 +308,9 @@ void SkColorMatrixFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
 SkColorMatrixFilter::SkColorMatrixFilter(SkFlattenableReadBuffer& buffer)
         : INHERITED(buffer) {
     SkASSERT(buffer.getArrayCount() == 20);
-    buffer.readScalarArray(fMatrix.fMat);
-    this->initState(fMatrix.fMat);
+    if (buffer.readScalarArray(fMatrix.fMat, 20)) {
+        this->initState(fMatrix.fMat);
+    }
 }
 
 bool SkColorMatrixFilter::asColorMatrix(SkScalar matrix[20]) const {
@@ -391,26 +392,26 @@ public:
 
         GLEffect(const GrBackendEffectFactory& factory,
                  const GrDrawEffect&)
-        : INHERITED(factory)
-        , fMatrixHandle(GrGLUniformManager::kInvalidUniformHandle)
-        , fVectorHandle(GrGLUniformManager::kInvalidUniformHandle) {}
+        : INHERITED(factory) {
+        }
 
         virtual void emitCode(GrGLShaderBuilder* builder,
                               const GrDrawEffect&,
                               EffectKey,
                               const char* outputColor,
                               const char* inputColor,
+                              const TransformedCoordsArray&,
                               const TextureSamplerArray&) SK_OVERRIDE {
-            fMatrixHandle = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
+            fMatrixHandle = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
                                                 kMat44f_GrSLType,
                                                 "ColorMatrix");
-            fVectorHandle = builder->addUniform(GrGLShaderBuilder::kFragment_ShaderType,
+            fVectorHandle = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
                                                 kVec4f_GrSLType,
                                                 "ColorMatrixVector");
 
             if (NULL == inputColor) {
                 // could optimize this case, but we aren't for now.
-                inputColor = GrGLSLOnesVecf(4);
+                inputColor = "vec4(1)";
             }
             // The max() is to guard against 0 / 0 during unpremul when the incoming color is
             // transparent black.
@@ -438,8 +439,8 @@ public:
             GrGLfloat vec[] = {
                 m[4] * kScale, m[9] * kScale, m[14] * kScale, m[19] * kScale,
             };
-            uniManager.setMatrix4fv(fMatrixHandle, 0, 1, mt);
-            uniManager.set4fv(fVectorHandle, 0, 1, vec);
+            uniManager.setMatrix4fv(fMatrixHandle, 1, mt);
+            uniManager.set4fv(fVectorHandle, 1, vec);
         }
 
     private:
@@ -462,7 +463,7 @@ private:
 
 GR_DEFINE_EFFECT_TEST(ColorMatrixEffect);
 
-GrEffectRef* ColorMatrixEffect::TestCreate(SkMWCRandom* random,
+GrEffectRef* ColorMatrixEffect::TestCreate(SkRandom* random,
                                            GrContext*,
                                            const GrDrawTargetCaps&,
                                            GrTexture* dummyTextures[2]) {

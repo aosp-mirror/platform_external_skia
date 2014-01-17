@@ -8,9 +8,7 @@
 #include "SkDocument.h"
 #include "SkStream.h"
 
-SK_DEFINE_INST_COUNT(SkDocument)
-
-SkDocument::SkDocument(SkWStream* stream, void (*doneProc)(SkWStream*)) {
+SkDocument::SkDocument(SkWStream* stream, void (*doneProc)(SkWStream*, bool)) {
     fStream = stream;   // we do not own this object.
     fDoneProc = doneProc;
     fState = kBetweenPages_State;
@@ -49,7 +47,7 @@ SkCanvas* SkDocument::beginPage(SkScalar width, SkScalar height,
                 return NULL;
         }
     }
-    SkASSERT(!"never get here");
+    SkDEBUGFAIL("never get here");
     return NULL;
 }
 
@@ -60,25 +58,38 @@ void SkDocument::endPage() {
     }
 }
 
-void SkDocument::close() {
+bool SkDocument::close() {
     for (;;) {
         switch (fState) {
-            case kBetweenPages_State:
+            case kBetweenPages_State: {
                 fState = kClosed_State;
-                this->onClose(fStream);
+                bool success = this->onClose(fStream);
 
                 if (fDoneProc) {
-                    fDoneProc(fStream);
+                    fDoneProc(fStream, false);
                 }
                 // we don't own the stream, but we mark it NULL since we can
                 // no longer write to it.
                 fStream = NULL;
-                return;
+                return success;
+            }
             case kInPage_State:
                 this->endPage();
                 break;
             case kClosed_State:
-                return;
+                return false;
         }
     }
+}
+
+void SkDocument::abort() {
+    this->onAbort();
+
+    fState = kClosed_State;
+    if (fDoneProc) {
+        fDoneProc(fStream, true);
+    }
+    // we don't own the stream, but we mark it NULL since we can
+    // no longer write to it.
+    fStream = NULL;
 }

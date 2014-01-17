@@ -21,13 +21,16 @@ LOCAL_SRC_FILES += \
   BlurBench.cpp \
   BlurImageFilterBench.cpp \
   BlurRectBench.cpp \
+  BlurRoundRectBench.cpp \
   ChartBench.cpp \
   ChromeBench.cpp \
   CmapBench.cpp \
   ColorFilterBench.cpp \
+  ColorPrivBench.cpp \
   DashBench.cpp \
   DecodeBench.cpp \
   DeferredCanvasBench.cpp \
+  DeferredSurfaceCopyBench.cpp \
   DisplacementBench.cpp \
   FontCacheBench.cpp \
   FontScalerBench.cpp \
@@ -35,10 +38,11 @@ LOCAL_SRC_FILES += \
   GameBench.cpp \
   GradientBench.cpp \
   GrMemoryPoolBench.cpp \
+  GrResourceCacheBench.cpp \
+  HairlinePathBench.cpp \
   ImageCacheBench.cpp \
   ImageDecodeBench.cpp \
   InterpBench.cpp \
-  HairlinePathBench.cpp \
   LineBench.cpp \
   LightingBench.cpp \
   MagnifierBench.cpp \
@@ -74,6 +78,7 @@ LOCAL_SRC_FILES += \
   TextBench.cpp \
   TileBench.cpp \
   VertBench.cpp \
+  WritePixelsBench.cpp \
   WriterBench.cpp \
   XfermodeBench.cpp
 
@@ -100,6 +105,10 @@ LOCAL_C_INCLUDES := \
 LOCAL_MODULE := skia_bench
 
 LOCAL_MODULE_TAGS := optional
+
+# Skia does not enforce this usage pattern so we disable it here to avoid
+# unecessary log spew when building
+LOCAL_CFLAGS := -Wno-unused-parameter
 
 #include stlport headers
 include external/stlport/libstlport.mk

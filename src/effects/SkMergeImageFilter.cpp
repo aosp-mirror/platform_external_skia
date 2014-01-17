@@ -9,6 +9,7 @@
 #include "SkCanvas.h"
 #include "SkDevice.h"
 #include "SkFlattenableBuffers.h"
+#include "SkValidationUtils.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +40,8 @@ void SkMergeImageFilter::initModes(const SkXfermode::Mode modes[]) {
 }
 
 SkMergeImageFilter::SkMergeImageFilter(SkImageFilter* first, SkImageFilter* second,
-                                       SkXfermode::Mode mode) : INHERITED(first, second) {
+                                       SkXfermode::Mode mode,
+                                       const CropRect* cropRect) : INHERITED(first, second, cropRect) {
     if (SkXfermode::kSrcOver_Mode != mode) {
         SkXfermode::Mode modes[] = { mode, mode };
         this->initModes(modes);
@@ -49,7 +51,9 @@ SkMergeImageFilter::SkMergeImageFilter(SkImageFilter* first, SkImageFilter* seco
 }
 
 SkMergeImageFilter::SkMergeImageFilter(SkImageFilter* filters[], int count,
-                                       const SkXfermode::Mode modes[]) : INHERITED(count, filters) {
+                                       const SkXfermode::Mode modes[],
+                                       const CropRect* cropRect) : INHERITED(count, filters, cropRect) {
+    SkASSERT(count >= 0);
     this->initModes(modes);
 }
 
@@ -99,17 +103,16 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
         return false;
     }
 
-    const SkIRect srcBounds = SkIRect::MakeXYWH(loc->x(), loc->y(),
-                                                src.width(), src.height());
     SkIRect bounds;
-    if (!this->filterBounds(srcBounds, ctm, &bounds)) {
+    src.getBounds(&bounds);
+    if (!this->applyCropRect(&bounds, ctm)) {
         return false;
     }
 
     const int x0 = bounds.left();
     const int y0 = bounds.top();
 
-    SkAutoTUnref<SkDevice> dst(proxy->createDevice(bounds.width(), bounds.height()));
+    SkAutoTUnref<SkBaseDevice> dst(proxy->createDevice(bounds.width(), bounds.height()));
     if (NULL == dst) {
         return false;
     }
@@ -120,7 +123,7 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
     for (int i = 0; i < inputCount; ++i) {
         SkBitmap tmp;
         const SkBitmap* srcPtr;
-        SkIPoint pos = *loc;
+        SkIPoint pos = SkIPoint::Make(0, 0);
         SkImageFilter* filter = getInput(i);
         if (filter) {
             if (!filter->filterImage(proxy, src, ctm, &tmp, &pos)) {
@@ -139,7 +142,8 @@ bool SkMergeImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
         canvas.drawSprite(*srcPtr, pos.x() - x0, pos.y() - y0, &paint);
     }
 
-    loc->set(bounds.left(), bounds.top());
+    loc->fX += bounds.left();
+    loc->fY += bounds.top();
     *result = dst->accessBitmap(false);
     return true;
 }
@@ -153,12 +157,19 @@ void SkMergeImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
     }
 }
 
-SkMergeImageFilter::SkMergeImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+SkMergeImageFilter::SkMergeImageFilter(SkFlattenableReadBuffer& buffer)
+  : INHERITED(-1, buffer) {
     bool hasModes = buffer.readBool();
     if (hasModes) {
         this->initAllocModes();
-        SkASSERT(buffer.getArrayCount() == countInputs() * sizeof(fModes[0]));
-        buffer.readByteArray(fModes);
+        int nbInputs = countInputs();
+        size_t size = nbInputs * sizeof(fModes[0]);
+        SkASSERT(buffer.getArrayCount() == size);
+        if (buffer.readByteArray(fModes, size)) {
+            for (int i = 0; i < nbInputs; ++i) {
+                buffer.validate(SkIsValidMode((SkXfermode::Mode)fModes[i]));
+            }
+        }
     } else {
         fModes = 0;
     }

@@ -102,9 +102,8 @@ void SkWindow::resize(int width, int height, SkBitmap::Config config)
     if (width != fBitmap.width() || height != fBitmap.height() || config != fConfig)
     {
         fConfig = config;
-        fBitmap.setConfig(config, width, height);
+        fBitmap.setConfig(config, width, height, 0, kOpaque_SkAlphaType);
         fBitmap.allocPixels();
-        fBitmap.setIsOpaque(true);
 
         this->setSize(SkIntToScalar(width), SkIntToScalar(height));
         this->inval(NULL);
@@ -118,7 +117,7 @@ void SkWindow::eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b)
 
 void SkWindow::eraseRGB(U8CPU r, U8CPU g, U8CPU b)
 {
-    fBitmap.eraseRGB(r, g, b);
+    fBitmap.eraseARGB(0xFF, r, g, b);
 }
 
 bool SkWindow::handleInval(const SkRect* localR)

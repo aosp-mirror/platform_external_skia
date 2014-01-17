@@ -7,7 +7,6 @@
  */
 
 #include "SkBitmap.h"
-#include "SkBitmapFactory.h"
 #include "SkImage.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
@@ -15,10 +14,15 @@
 
 class SkColorTable;
 class SkStream;
+class SkStreamRewindable;
 
 // Empty implementations for SkImageDecoder.
 
-SkImageDecoder* SkImageDecoder::Factory(SkStream*) {
+SkImageDecoder::SkImageDecoder() {}
+
+SkImageDecoder::~SkImageDecoder() {}
+
+SkImageDecoder* SkImageDecoder::Factory(SkStreamRewindable*) {
     return NULL;
 }
 
@@ -33,7 +37,7 @@ bool SkImageDecoder::decode(SkStream*, SkBitmap*, SkBitmap::Config, Mode) {
     return false;
 }
 
-bool SkImageDecoder::DecodeStream(SkStream*, SkBitmap*, SkBitmap::Config,
+bool SkImageDecoder::DecodeStream(SkStreamRewindable*, SkBitmap*, SkBitmap::Config,
                                   SkImageDecoder::Mode,
                                   SkImageDecoder::Format*) {
     return false;
@@ -45,7 +49,7 @@ bool SkImageDecoder::DecodeMemory(const void*, size_t, SkBitmap*,
     return false;
 }
 
-bool SkImageDecoder::buildTileIndex(SkStream*, int *width, int *height) {
+bool SkImageDecoder::buildTileIndex(SkStreamRewindable*, int *width, int *height) {
     return false;
 }
 
@@ -57,7 +61,7 @@ SkImageDecoder::Format SkImageDecoder::getFormat() const {
     return kUnknown_Format;
 }
 
-SkImageDecoder::Format SkImageDecoder::GetStreamFormat(SkStream*) {
+SkImageDecoder::Format SkImageDecoder::GetStreamFormat(SkStreamRewindable*) {
     return kUnknown_Format;
 }
 
@@ -78,11 +82,6 @@ SkBitmap::Allocator* SkImageDecoder::setAllocator(SkBitmap::Allocator*) {
 }
 
 void SkImageDecoder::setSampleSize(int) {}
-
-bool SkImageDecoder::DecodeMemoryToTarget(const void*, size_t, SkImage::Info*,
-                                          const SkBitmapFactory::Target*) {
-    return false;
-}
 
 SkBitmap::Config SkImageDecoder::GetDeviceConfig() {
     return SkBitmap::kNo_Config;
@@ -112,7 +111,7 @@ SkBitmap::Config SkImageDecoder::getPrefConfig(SrcDepth, bool) const {
 
 // Empty implementation for SkMovie.
 
-SkMovie* SkMovie::DecodeStream(SkStream* stream) {
+SkMovie* SkMovie::DecodeStream(SkStreamRewindable* stream) {
     return NULL;
 }
 

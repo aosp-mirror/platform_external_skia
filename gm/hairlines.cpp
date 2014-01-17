@@ -80,6 +80,84 @@ protected:
             unevenClosedQuad->quadTo(SkIntToScalar(100), SkIntToScalar(100),
                                      SkIntToScalar(75), SkIntToScalar(75));
         }
+
+        // Two problem cases for gpu hairline renderer found by shapeops testing. These used
+        // to assert that the computed bounding box didn't contain all the vertices.
+        {
+            SkPath* problem1 = &fPaths.push_back();
+            problem1->moveTo(SkIntToScalar(4), SkIntToScalar(6));
+            problem1->cubicTo(SkIntToScalar(5), SkIntToScalar(6),
+                              SkIntToScalar(5), SkIntToScalar(4),
+                              SkIntToScalar(4), SkIntToScalar(0));
+            problem1->close();
+        }
+
+        {
+            SkPath* problem2 = &fPaths.push_back();
+            problem2->moveTo(SkIntToScalar(5), SkIntToScalar(1));
+            problem2->lineTo(4.32787323f, 1.67212653f);
+            problem2->cubicTo(2.75223875f, 3.24776125f,
+                              3.00581908f, 4.51236057f,
+                              3.7580452f, 4.37367964f);
+            problem2->cubicTo(4.66472578f, 3.888381f,
+                              5.f, 2.875f,
+                              5.f, 1.f);
+            problem2->close();
+        }
+
+        // Three paths that show the same bug (missing end caps)
+        {
+            // A caret (crbug.com/131770)
+            SkPath* bug0 = &fPaths.push_back();
+            bug0->moveTo(6.5f,5.5f);
+            bug0->lineTo(3.5f,0.5f);
+            bug0->moveTo(0.5f,5.5f);
+            bug0->lineTo(3.5f,0.5f);
+        }
+
+        {
+            // An X (crbug.com/137317)
+            SkPath* bug1 = &fPaths.push_back();
+
+            bug1->moveTo(1, 1);
+            bug1->lineTo(6, 6);
+            bug1->moveTo(1, 6);
+            bug1->lineTo(6, 1);
+        }
+
+        {
+            // A right angle (crbug.com/137465 and crbug.com/256776)
+            SkPath* bug2 = &fPaths.push_back();
+
+            bug2->moveTo(5.5f, 5.5f);
+            bug2->lineTo(5.5f, 0.5f);
+            bug2->lineTo(0.5f, 0.5f);
+        }
+
+        {
+            // Arc example to test imperfect truncation bug (crbug.com/295626)
+            static const SkScalar kRad = SkIntToScalar(2000);
+            static const SkScalar kStartAngle = 262.59717f;
+            static const SkScalar kSweepAngle = SkScalarHalf(17.188717f);
+
+            SkPath* bug = &fPaths.push_back();
+
+            // Add a circular arc
+            SkRect circle = SkRect::MakeLTRB(-kRad, -kRad, kRad, kRad);
+            bug->addArc(circle, kStartAngle, kSweepAngle);
+
+            // Now add the chord that should cap the circular arc
+            SkScalar cosV, sinV = SkScalarSinCos(SkDegreesToRadians(kStartAngle), &cosV);
+
+            SkPoint p0 = SkPoint::Make(kRad * cosV, kRad * sinV);
+
+            sinV = SkScalarSinCos(SkDegreesToRadians(kStartAngle + kSweepAngle), &cosV);
+
+            SkPoint p1 = SkPoint::Make(kRad * cosV, kRad * sinV);
+
+            bug->moveTo(p0);
+            bug->lineTo(p1);
+        }
     }
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {

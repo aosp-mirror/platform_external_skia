@@ -15,7 +15,7 @@ public:
                    int srcFullWidth, int srcFullHeight,
                    int destWidth, int destHeight,
                    const SkIRect& destSubset,
-                   SkConvolutionProcs* convolveProcs);
+                   const SkConvolutionProcs& convolveProcs);
     ~SkResizeFilter() {
         SkDELETE( fBitmapFilter );
     }
@@ -43,7 +43,7 @@ private:
                         int destSubsetLo, int destSubsetSize,
                         float scale,
                         SkConvolutionFilter1D* output,
-                        SkConvolutionProcs* convolveProcs);
+                        const SkConvolutionProcs& convolveProcs);
 
     SkConvolutionFilter1D fXFilter;
     SkConvolutionFilter1D fYFilter;
@@ -53,7 +53,7 @@ SkResizeFilter::SkResizeFilter(SkBitmapScaler::ResizeMethod method,
                                int srcFullWidth, int srcFullHeight,
                                int destWidth, int destHeight,
                                const SkIRect& destSubset,
-                               SkConvolutionProcs* convolveProcs) {
+                               const SkConvolutionProcs& convolveProcs) {
 
     // method will only ever refer to an "algorithm method".
     SkASSERT((SkBitmapScaler::RESIZE_FIRST_ALGORITHM_METHOD <= method) &&
@@ -108,7 +108,7 @@ void SkResizeFilter::computeFilters(int srcSize,
                                   int destSubsetLo, int destSubsetSize,
                                   float scale,
                                   SkConvolutionFilter1D* output,
-                                  SkConvolutionProcs* convolveProcs) {
+                                  const SkConvolutionProcs& convolveProcs) {
   int destSubsetHi = destSubsetLo + destSubsetSize;  // [lo, hi)
 
   // When we're doing a magnification, the scale will be larger than one. This
@@ -197,8 +197,8 @@ void SkResizeFilter::computeFilters(int srcSize,
                       static_cast<int>(fixedFilterValues.count()));
   }
 
-  if (convolveProcs->fApplySIMDPadding) {
-      convolveProcs->fApplySIMDPadding( output );
+  if (convolveProcs.fApplySIMDPadding) {
+      convolveProcs.fApplySIMDPadding( output );
   }
 }
 
@@ -238,7 +238,7 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
                             ResizeMethod method,
                             int destWidth, int destHeight,
                             const SkIRect& destSubset,
-                            SkConvolutionProcs* convolveProcs,
+                            const SkConvolutionProcs& convolveProcs,
                             SkBitmap::Allocator* allocator) {
   // Ensure that the ResizeMethod enumeration is sound.
     SkASSERT(((RESIZE_FIRST_QUALITY_METHOD <= method) &&
@@ -287,7 +287,8 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
     // Convolve into the result.
     SkBitmap result;
     result.setConfig(SkBitmap::kARGB_8888_Config,
-        destSubset.width(), destSubset.height());
+                     destSubset.width(), destSubset.height(), 0,
+                     source.alphaType());
     result.allocPixels(allocator, NULL);
     if (!result.readyToDraw()) {
         return false;
@@ -299,9 +300,9 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
         static_cast<unsigned char*>(result.getPixels()),
         convolveProcs, true);
 
-    // Preserve the "opaque" flag for use as an optimization later.
-    result.setIsOpaque(source.isOpaque());
     *resultPtr = result;
+    resultPtr->lockPixels();
+    SkASSERT(NULL != resultPtr->getPixels());
     return true;
 }
 
@@ -310,7 +311,7 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
                             const SkBitmap& source,
                             ResizeMethod method,
                             int destWidth, int destHeight,
-                            SkConvolutionProcs* convolveProcs,
+                            const SkConvolutionProcs& convolveProcs,
                             SkBitmap::Allocator* allocator) {
     SkIRect destSubset = { 0, 0, destWidth, destHeight };
     return Resize(resultPtr, source, method, destWidth, destHeight, destSubset,

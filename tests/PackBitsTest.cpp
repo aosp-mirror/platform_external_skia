@@ -1,11 +1,12 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkPackBits.h"
 
 static const uint16_t gTest0[] = { 0, 0, 1, 1 };
@@ -14,7 +15,7 @@ static const uint16_t gTest2[] = { 0, 0, 0, 1, 2, 3, 3, 3 };
 static const uint16_t gTest3[] = { 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 0, 0, 1 };
 
 #include "SkRandom.h"
-static SkMWCRandom gRand;
+static SkRandom gRand;
 static void rand_fill(uint16_t buffer[], int count) {
     for (int i = 0; i < count; i++)
         buffer[i] = (uint16_t)gRand.nextU();
@@ -125,10 +126,7 @@ static void test_pack8(skiatest::Reporter* reporter) {
     }
 }
 
-static void TestPackBits(skiatest::Reporter* reporter) {
+DEF_TEST(PackBits, reporter) {
     test_pack8(reporter);
     test_pack16(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("PackBits", PackBitsTestClass, TestPackBits)

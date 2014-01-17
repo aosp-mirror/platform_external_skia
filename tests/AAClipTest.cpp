@@ -39,7 +39,7 @@ static bool operator==(const SkMask& a, const SkMask& b) {
             wbytes <<= 2;
             break;
         default:
-            SkASSERT(!"unknown mask format");
+            SkDEBUGFAIL("unknown mask format");
             return false;
     }
 
@@ -87,7 +87,7 @@ static void copyToMask(const SkRegion& rgn, SkMask* mask) {
     canvas.drawColor(SK_ColorBLACK);
 }
 
-static SkIRect rand_rect(SkMWCRandom& rand, int n) {
+static SkIRect rand_rect(SkRandom& rand, int n) {
     int x = rand.nextS() % n;
     int y = rand.nextS() % n;
     int w = rand.nextU() % n;
@@ -95,7 +95,7 @@ static SkIRect rand_rect(SkMWCRandom& rand, int n) {
     return SkIRect::MakeXYWH(x, y, w, h);
 }
 
-static void make_rand_rgn(SkRegion* rgn, SkMWCRandom& rand) {
+static void make_rand_rgn(SkRegion* rgn, SkRandom& rand) {
     int count = rand.nextU() % 20;
     for (int i = 0; i < count; ++i) {
         rgn->op(rand_rect(rand, 100), SkRegion::kXOR_Op);
@@ -128,7 +128,7 @@ static void setRgnToPath(SkRegion* rgn, const SkPath& path) {
 
 // aaclip.setRegion should create idential masks to the region
 static void test_rgn(skiatest::Reporter* reporter) {
-    SkMWCRandom rand;
+    SkRandom rand;
     for (int i = 0; i < 1000; i++) {
         SkRegion rgn;
         make_rand_rgn(&rgn, rand);
@@ -232,7 +232,7 @@ static void test_empty(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, mask.fBounds.isEmpty());
 }
 
-static void rand_irect(SkIRect* r, int N, SkMWCRandom& rand) {
+static void rand_irect(SkIRect* r, int N, SkRandom& rand) {
     r->setXYWH(0, 0, rand.nextU() % N, rand.nextU() % N);
     int dx = rand.nextU() % (2*N);
     int dy = rand.nextU() % (2*N);
@@ -241,7 +241,7 @@ static void rand_irect(SkIRect* r, int N, SkMWCRandom& rand) {
 }
 
 static void test_irect(skiatest::Reporter* reporter) {
-    SkMWCRandom rand;
+    SkRandom rand;
 
     for (int i = 0; i < 10000; i++) {
         SkAAClip clip0, clip1;
@@ -386,15 +386,16 @@ static void test_regressions() {
     {
         SkAAClip clip;
         SkRect r;
-        r.fLeft = SkFloatToScalar(129.892181f);
-        r.fTop = SkFloatToScalar(10.3999996f);
-        r.fRight = SkFloatToScalar(130.892181f);
-        r.fBottom = SkFloatToScalar(20.3999996f);
+        r.fLeft = 129.892181f;
+        r.fTop = 10.3999996f;
+        r.fRight = 130.892181f;
+        r.fBottom = 20.3999996f;
         clip.setRect(r, true);
     }
 }
 
-static void TestAAClip(skiatest::Reporter* reporter) {
+#include "TestClassDef.h"
+DEF_TEST(AAClip, reporter) {
     test_empty(reporter);
     test_path_bounds(reporter);
     test_irect(reporter);
@@ -403,6 +404,3 @@ static void TestAAClip(skiatest::Reporter* reporter) {
     test_regressions();
     test_nearly_integral(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("AAClip", AAClipTestClass, TestAAClip)

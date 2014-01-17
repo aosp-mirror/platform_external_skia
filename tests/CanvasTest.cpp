@@ -63,6 +63,7 @@
 #include "SkStream.h"
 #include "SkTDArray.h"
 #include "Test.h"
+#include "TestClassDef.h"
 
 class Canvas2CanvasClipVisitor : public SkCanvas::ClipVisitor {
 public:
@@ -94,8 +95,6 @@ static void test_clipVisitor(skiatest::Reporter* reporter, SkCanvas* canvas) {
 
 static const int kWidth = 2;
 static const int kHeight = 2;
-// Maximum stream length for picture serialization
-static const size_t kMaxPictureBufferSize = 1024;
 
 // Format strings that describe the test context.  The %s token is where
 // the name of the test step is inserted.  The context is required for
@@ -109,28 +108,18 @@ static const char* const kPictureDrawAssertMessageFormat =
     "Drawing test step %s with SkPicture";
 static const char* const kPictureSecondDrawAssertMessageFormat =
     "Duplicate draw of test step %s with SkPicture";
-static const char* const kPictureReDrawAssertMessageFormat =
-    "Playing back test step %s from an SkPicture to another SkPicture";
 static const char* const kDeferredDrawAssertMessageFormat =
     "Drawing test step %s with SkDeferredCanvas";
 static const char* const kProxyDrawAssertMessageFormat =
     "Drawing test step %s with SkProxyCanvas";
 static const char* const kNWayDrawAssertMessageFormat =
     "Drawing test step %s with SkNWayCanvas";
-static const char* const kRoundTripAssertMessageFormat =
-    "test step %s, SkPicture consistency after round trip";
-static const char* const kPictureRecoringAssertMessageFormat =
-    "test step %s, SkPicture state consistency after recording";
-static const char* const kPicturePlaybackAssertMessageFormat =
-    "test step %s, SkPicture state consistency in playback canvas";
 static const char* const kDeferredPreFlushAssertMessageFormat =
     "test step %s, SkDeferredCanvas state consistency before flush";
 static const char* const kDeferredPostFlushPlaybackAssertMessageFormat =
     "test step %s, SkDeferredCanvas playback canvas state consistency after flush";
 static const char* const kDeferredPostSilentFlushPlaybackAssertMessageFormat =
     "test step %s, SkDeferredCanvas playback canvas state consistency after silent flush";
-static const char* const kDeferredPostFlushAssertMessageFormat =
-    "test step %s, SkDeferredCanvas state consistency after flush";
 static const char* const kPictureResourceReuseMessageFormat =
     "test step %s, SkPicture duplicate flattened object test";
 static const char* const kProxyStateAssertMessageFormat =
@@ -779,7 +768,7 @@ public:
 
         SkBitmap deferredStore;
         createBitmap(&deferredStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-        SkDevice deferredDevice(deferredStore);
+        SkBitmapDevice deferredDevice(deferredStore);
         SkAutoTUnref<SkDeferredCanvas> deferredCanvas(SkDeferredCanvas::Create(&deferredDevice));
         testStep->setAssertMessageFormat(kDeferredDrawAssertMessageFormat);
         testStep->draw(deferredCanvas, reporter);
@@ -821,7 +810,7 @@ static void TestProxyCanvasStateConsistency(
 
     SkBitmap indirectStore;
     createBitmap(&indirectStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkDevice indirectDevice(indirectStore);
+    SkBitmapDevice indirectDevice(indirectStore);
     SkCanvas indirectCanvas(&indirectDevice);
     SkProxyCanvas proxyCanvas(&indirectCanvas);
     testStep->setAssertMessageFormat(kProxyDrawAssertMessageFormat);
@@ -844,12 +833,12 @@ static void TestNWayCanvasStateConsistency(
 
     SkBitmap indirectStore1;
     createBitmap(&indirectStore1, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkDevice indirectDevice1(indirectStore1);
+    SkBitmapDevice indirectDevice1(indirectStore1);
     SkCanvas indirectCanvas1(&indirectDevice1);
 
     SkBitmap indirectStore2;
     createBitmap(&indirectStore2, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkDevice indirectDevice2(indirectStore2);
+    SkBitmapDevice indirectDevice2(indirectStore2);
     SkCanvas indirectCanvas2(&indirectDevice2);
 
     SkISize canvasSize = referenceCanvas.getDeviceSize();
@@ -882,7 +871,7 @@ static void TestOverrideStateConsistency(skiatest::Reporter* reporter,
                                          CanvasTestStep* testStep) {
     SkBitmap referenceStore;
     createBitmap(&referenceStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkDevice referenceDevice(referenceStore);
+    SkBitmapDevice referenceDevice(referenceStore);
     SkCanvas referenceCanvas(&referenceDevice);
     testStep->setAssertMessageFormat(kCanvasDrawAssertMessageFormat);
     testStep->draw(&referenceCanvas, reporter);
@@ -913,7 +902,7 @@ static void TestOverrideStateConsistency(skiatest::Reporter* reporter,
     }
 }
 
-static void TestCanvas(skiatest::Reporter* reporter) {
+DEF_TEST(Canvas, reporter) {
     // Init global here because bitmap pixels cannot be alocated during
     // static initialization
     kTestBitmap = testBitmap();
@@ -930,6 +919,3 @@ static void TestCanvas(skiatest::Reporter* reporter) {
     // Explicitly call reset(), so we don't leak the pixels (since kTestBitmap is a global)
     kTestBitmap.reset();
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Canvas", TestCanvasClass, TestCanvas)

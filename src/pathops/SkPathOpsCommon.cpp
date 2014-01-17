@@ -4,6 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "SkAddIntersections.h"
 #include "SkOpEdgeBuilder.h"
 #include "SkPathOpsCommon.h"
 #include "SkPathWriter.h"
@@ -250,6 +251,9 @@ static SkOpSegment* findSortableTop(const SkTArray<SkOpContour*, true>& contourL
         *topLeft = bestXY;
         result = topStart->findTop(index, endIndex, unsortable, onlySortable);
     } while (!result);
+    if (result) {
+        *unsortable = false;
+    }
     return result;
 }
 
@@ -288,9 +292,9 @@ static void skipVertical(const SkTArray<SkOpContour*, true>& contourList,
     }
 }
 
-SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList, bool* firstContour,
-                             int* indexPtr, int* endIndexPtr, SkPoint* topLeft, bool* unsortable,
-                             bool* done,  bool binary) {
+SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList,
+        SkOpAngle::IncludeType angleIncludeType, bool* firstContour, int* indexPtr,
+        int* endIndexPtr, SkPoint* topLeft, bool* unsortable, bool* done) {
     SkOpSegment* current = findSortableTop(contourList, indexPtr, endIndexPtr, topLeft, unsortable,
             done, true);
     if (!current) {
@@ -308,8 +312,11 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList, bo
     if (sumWinding != SK_MinS32) {
         return current;
     }
-    sumWinding = current->computeSum(index, endIndex, binary);
-    if (sumWinding != SK_MinS32) {
+    SkASSERT(current->windSum(SkMin32(index, endIndex)) == SK_MinS32);
+    SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle, true> angles;
+    SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle*, true> sorted;
+    sumWinding = current->computeSum(index, endIndex, angleIncludeType, &angles, &sorted);
+    if (sumWinding != SK_MinS32 && sumWinding != SK_NaN32) {
         return current;
     }
     int contourWinding;
@@ -333,7 +340,7 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList, bo
         if (tryAgain) {
             continue;
         }
-        if (!binary) {
+        if (angleIncludeType < SkOpAngle::kBinarySingle) {
             break;
         }
         oppContourWinding = rightAngleWinding(contourList, &current, indexPtr, endIndexPtr, &tHit,
@@ -344,7 +351,7 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList, bo
     return current;
 }
 
-void CheckEnds(SkTArray<SkOpContour*, true>* contourList) {
+static void checkEnds(SkTArray<SkOpContour*, true>* contourList) {
     // it's hard to determine if the end of a cubic or conic nearly intersects another curve.
     // instead, look to see if the connecting curve intersected at that same end.
     int contourCount = (*contourList).count();
@@ -354,7 +361,16 @@ void CheckEnds(SkTArray<SkOpContour*, true>* contourList) {
     }
 }
 
-void FixOtherTIndex(SkTArray<SkOpContour*, true>* contourList) {
+// A tiny interval may indicate an undiscovered coincidence. Find and fix.
+static void checkTiny(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->checkTiny();
+    }
+}
+
+static void fixOtherTIndex(SkTArray<SkOpContour*, true>* contourList) {
     int contourCount = (*contourList).count();
     for (int cTest = 0; cTest < contourCount; ++cTest) {
         SkOpContour* contour = (*contourList)[cTest];
@@ -362,7 +378,15 @@ void FixOtherTIndex(SkTArray<SkOpContour*, true>* contourList) {
     }
 }
 
-void SortSegments(SkTArray<SkOpContour*, true>* contourList) {
+static void joinCoincidence(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->joinCoincidence();
+    }
+}
+
+static void sortSegments(SkTArray<SkOpContour*, true>* contourList) {
     int contourCount = (*contourList).count();
     for (int cTest = 0; cTest < contourCount; ++cTest) {
         SkOpContour* contour = (*contourList)[cTest];
@@ -382,10 +406,6 @@ void MakeContourList(SkTArray<SkOpContour>& contours, SkTArray<SkOpContour*, tru
         list.push_back(&contour);
     }
     SkTQSort<SkOpContour>(list.begin(), list.end() - 1);
-}
-
-static bool approximatelyEqual(const SkPoint& a, const SkPoint& b) {
-    return AlmostEqualUlps(a.fX, b.fX) && AlmostEqualUlps(a.fY, b.fY);
 }
 
 class DistanceLessThan {
@@ -420,7 +440,7 @@ void Assemble(const SkPathWriter& path, SkPathWriter* simple) {
         const SkPoint& eEnd = eContour.end();
 #if DEBUG_ASSEMBLE
         SkDebugf("%s contour", __FUNCTION__);
-        if (!approximatelyEqual(eStart, eEnd)) {
+        if (!SkDPoint::ApproximatelyEqual(eStart, eEnd)) {
             SkDebugf("[%d]", runs.count());
         } else {
             SkDebugf("   ");
@@ -428,7 +448,7 @@ void Assemble(const SkPathWriter& path, SkPathWriter* simple) {
         SkDebugf(" start=(%1.9g,%1.9g) end=(%1.9g,%1.9g)\n",
                 eStart.fX, eStart.fY, eEnd.fX, eEnd.fY);
 #endif
-        if (approximatelyEqual(eStart, eEnd)) {
+        if (SkDPoint::ApproximatelyEqual(eStart, eEnd)) {
             eContour.toPath(simple);
             continue;
         }
@@ -590,5 +610,23 @@ void Assemble(const SkPathWriter& path, SkPathWriter* simple) {
        SkASSERT(sLink[rIndex] == SK_MaxS32);
        SkASSERT(eLink[rIndex] == SK_MaxS32);
     }
+#endif
+}
+
+void HandleCoincidence(SkTArray<SkOpContour*, true>* contourList, int total) {
+#if DEBUG_SHOW_WINDING
+    SkOpContour::debugShowWindingValues(contourList);
+#endif
+    CoincidenceCheck(contourList, total);
+#if DEBUG_SHOW_WINDING
+    SkOpContour::debugShowWindingValues(contourList);
+#endif
+    fixOtherTIndex(contourList);
+    checkEnds(contourList);
+    checkTiny(contourList);
+    joinCoincidence(contourList);
+    sortSegments(contourList);
+#if DEBUG_ACTIVE_SPANS || DEBUG_ACTIVE_SPANS_FIRST_ONLY
+    DebugShowActiveSpans(*contourList);
 #endif
 }

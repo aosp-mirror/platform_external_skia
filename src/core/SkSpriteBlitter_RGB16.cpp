@@ -145,7 +145,7 @@ public:
 #define SkSPRITE_PREAMBLE(srcBM, x, y)      const SkPMColor* ctable = srcBM.getColorTable()->lockColors()
 #define SkSPRITE_BLIT_PIXEL(dst, src)       D16_S32A_Opaque_Pixel(dst, ctable[src])
 #define SkSPRITE_NEXT_ROW
-#define SkSPRITE_POSTAMBLE(srcBM)           srcBM.getColorTable()->unlockColors(false)
+#define SkSPRITE_POSTAMBLE(srcBM)           srcBM.getColorTable()->unlockColors()
 #include "SkSpriteBlitterTemplate.h"
 
 #define SkSPRITE_CLASSNAME                  Sprite_D16_SIndex8A_Blend
@@ -159,7 +159,7 @@ public:
 #define SkSPRITE_PREAMBLE(srcBM, x, y)      const SkPMColor* ctable = srcBM.getColorTable()->lockColors(); unsigned src_scale = SkAlpha255To256(fSrcAlpha);
 #define SkSPRITE_BLIT_PIXEL(dst, src)       D16_S32A_Blend_Pixel(dst, ctable[src], src_scale)
 #define SkSPRITE_NEXT_ROW
-#define SkSPRITE_POSTAMBLE(srcBM)           srcBM.getColorTable()->unlockColors(false);
+#define SkSPRITE_POSTAMBLE(srcBM)           srcBM.getColorTable()->unlockColors();
 #include "SkSpriteBlitterTemplate.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -324,7 +324,7 @@ SkSpriteBlitter* SkSpriteBlitter::ChooseD16(const SkBitmap& source,
     SkSpriteBlitter* blitter = NULL;
     unsigned alpha = paint.getAlpha();
 
-    switch (source.getConfig()) {
+    switch (source.config()) {
         case SkBitmap::kARGB_8888_Config:
             SK_PLACEMENT_NEW_ARGS(blitter, Sprite_D16_S32_BlitRowProc,
                                   storage, storageSize, (source));

@@ -7,6 +7,7 @@
 
 #include "GrSWMaskHelper.h"
 #include "GrDrawState.h"
+#include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 
 #include "SkStrokeRec.h"
@@ -72,16 +73,16 @@ void GrSWMaskHelper::draw(const SkPath& path, const SkStrokeRec& stroke, SkRegio
             paint.setStrokeWidth(stroke.getWidth());
         }
     }
-
-    SkXfermode* mode = SkXfermode::Create(op_to_mode(op));
-
-    paint.setXfermode(mode);
     paint.setAntiAlias(antiAlias);
-    paint.setColor(SkColorSetARGB(alpha, alpha, alpha, alpha));
 
-    fDraw.drawPath(path, paint);
-
-    SkSafeUnref(mode);
+    if (SkRegion::kReplace_Op == op && 0xFF == alpha) {
+        SkASSERT(0xFF == paint.getAlpha());
+        fDraw.drawPathCoverage(path, paint);
+    } else {
+        paint.setXfermodeMode(op_to_mode(op));
+        paint.setColor(SkColorSetARGB(alpha, alpha, alpha, alpha));
+        fDraw.drawPath(path, paint);
+    }
 }
 
 bool GrSWMaskHelper::init(const SkIRect& resultBounds,
@@ -133,9 +134,17 @@ bool GrSWMaskHelper::getTexture(GrAutoScratchTexture* texture) {
 void GrSWMaskHelper::toTexture(GrTexture *texture) {
     SkAutoLockPixels alp(fBM);
 
+    // If we aren't reusing scratch textures we don't need to flush before
+    // writing since no one else will be using 'texture'
+    bool reuseScratch = fContext->getGpu()->caps()->reuseScratchTextures();
+
+    // Since we're uploading to it, 'texture' shouldn't have a render target.
+    SkASSERT(NULL == texture->asRenderTarget());
+
     texture->writePixels(0, 0, fBM.width(), fBM.height(),
                          kAlpha_8_GrPixelConfig,
-                         fBM.getPixels(), fBM.rowBytes());
+                         fBM.getPixels(), fBM.rowBytes(),
+                         reuseScratch ? 0 : GrContext::kDontFlush_PixelOpsFlag);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,7 +207,7 @@ void GrSWMaskHelper::DrawToTargetWithPathMask(GrTexture* texture,
                          GrSimpleTextureEffect::Create(texture,
                                                        maskMatrix,
                                                        GrTextureParams::kNone_FilterMode,
-                                                       GrEffect::kPosition_CoordsType))->unref();
+                                                       kPosition_GrCoordSet))->unref();
 
     target->drawSimpleRect(dstRect);
 }

@@ -15,8 +15,6 @@
 #include "GrRenderTarget.h"
 #include "GrResourceCache.h"
 
-SK_DEFINE_INST_COUNT(GrTexture)
-
 GrTexture::~GrTexture() {
     if (NULL != fRenderTarget.get()) {
         fRenderTarget.get()->owningTextureDestroyed();
@@ -42,6 +40,7 @@ void GrTexture::internal_dispose() const {
         return;
     }
 
+    SkASSERT(0 == this->getDeferredRefCount());
     this->INHERITED::internal_dispose();
 }
 
@@ -74,7 +73,7 @@ void GrTexture::writePixels(int left, int top, int width, int height,
 }
 
 void GrTexture::onRelease() {
-    GrAssert(!this->isSetFlag((GrTextureFlags) kReturnToCache_FlagBit));
+    SkASSERT(!this->isSetFlag((GrTextureFlags) kReturnToCache_FlagBit));
     INHERITED::onRelease();
 }
 
@@ -88,19 +87,19 @@ void GrTexture::onAbandon() {
 void GrTexture::validateDesc() const {
     if (NULL != this->asRenderTarget()) {
         // This texture has a render target
-        GrAssert(0 != (fDesc.fFlags & kRenderTarget_GrTextureFlagBit));
+        SkASSERT(0 != (fDesc.fFlags & kRenderTarget_GrTextureFlagBit));
 
         if (NULL != this->asRenderTarget()->getStencilBuffer()) {
-            GrAssert(0 != (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
+            SkASSERT(0 != (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
         } else {
-            GrAssert(0 == (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
+            SkASSERT(0 == (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
         }
 
-        GrAssert(fDesc.fSampleCnt == this->asRenderTarget()->numSamples());
+        SkASSERT(fDesc.fSampleCnt == this->asRenderTarget()->numSamples());
     } else {
-        GrAssert(0 == (fDesc.fFlags & kRenderTarget_GrTextureFlagBit));
-        GrAssert(0 == (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
-        GrAssert(0 == fDesc.fSampleCnt);
+        SkASSERT(0 == (fDesc.fFlags & kRenderTarget_GrTextureFlagBit));
+        SkASSERT(0 == (fDesc.fFlags & kNoStencil_GrTextureFlagBit));
+        SkASSERT(0 == fDesc.fSampleCnt);
     }
 }
 
@@ -173,8 +172,8 @@ GrResourceKey GrTexture::ComputeScratchKey(const GrTextureDesc& desc) {
     // Instead of a client-provided key of the texture contents we create a key from the
     // descriptor.
     GR_STATIC_ASSERT(sizeof(idKey) >= 16);
-    GrAssert(desc.fHeight < (1 << 16));
-    GrAssert(desc.fWidth < (1 << 16));
+    SkASSERT(desc.fHeight < (1 << 16));
+    SkASSERT(desc.fWidth < (1 << 16));
     idKey.fData32[0] = (desc.fWidth) | (desc.fHeight << 16);
     idKey.fData32[1] = desc.fConfig | desc.fSampleCnt << 16;
     idKey.fData32[2] = desc.fFlags;

@@ -45,10 +45,9 @@ class TextBench : public SkBenchmark {
     FontQuality fFQ;
     bool        fDoPos;
     SkPoint*    fPos;
-    enum { N = SkBENCHLOOP(800) };
 public:
-    TextBench(void* param, const char text[], int ps,
-              SkColor color, FontQuality fq, bool doPos = false) : INHERITED(param) {
+    TextBench(const char text[], int ps,
+              SkColor color, FontQuality fq, bool doPos = false)  {
         fPos = NULL;
         fFQ = fq;
         fDoPos = doPos;
@@ -92,7 +91,7 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         const SkIPoint dim = this->getSize();
         SkRandom rand;
 
@@ -112,7 +111,7 @@ protected:
             canvas->translate(SK_Scalar1, SK_Scalar1);
         }
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < loops; i++) {
             if (fDoPos) {
                 canvas->drawPosText(fText.c_str(), fText.size(), fPos, paint);
             } else {
@@ -131,30 +130,16 @@ private:
 
 #define STR     "Hamburgefons"
 
-static SkBenchmark* Fact01(void* p) { return new TextBench(p, STR, 16, 0xFF000000, kBW); }
-static SkBenchmark* Fact02(void* p) { return new TextBench(p, STR, 16, 0xFFFF0000, kBW); }
-static SkBenchmark* Fact03(void* p) { return new TextBench(p, STR, 16, 0x88FF0000, kBW); }
+DEF_BENCH( return new TextBench(STR, 16, 0xFF000000, kBW); )
+DEF_BENCH( return new TextBench(STR, 16, 0xFFFF0000, kBW); )
+DEF_BENCH( return new TextBench(STR, 16, 0x88FF0000, kBW); )
 
-static SkBenchmark* Fact11(void* p) { return new TextBench(p, STR, 16, 0xFF000000, kAA); }
-static SkBenchmark* Fact12(void* p) { return new TextBench(p, STR, 16, 0xFFFF0000, kAA); }
-static SkBenchmark* Fact13(void* p) { return new TextBench(p, STR, 16, 0x88FF0000, kAA); }
+DEF_BENCH( return new TextBench(STR, 16, 0xFF000000, kAA); )
+DEF_BENCH( return new TextBench(STR, 16, 0xFFFF0000, kAA); )
+DEF_BENCH( return new TextBench(STR, 16, 0x88FF0000, kAA); )
 
-static SkBenchmark* Fact21(void* p) { return new TextBench(p, STR, 16, 0xFF000000, kLCD); }
-static SkBenchmark* Fact22(void* p) { return new TextBench(p, STR, 16, 0xFFFF0000, kLCD); }
-static SkBenchmark* Fact23(void* p) { return new TextBench(p, STR, 16, 0x88FF0000, kLCD); }
+DEF_BENCH( return new TextBench(STR, 16, 0xFF000000, kLCD); )
+DEF_BENCH( return new TextBench(STR, 16, 0xFFFF0000, kLCD); )
+DEF_BENCH( return new TextBench(STR, 16, 0x88FF0000, kLCD); )
 
-static SkBenchmark* Fact111(void* p) { return new TextBench(p, STR, 16, 0xFF000000, kAA, true); }
-
-static BenchRegistry gReg01(Fact01);
-static BenchRegistry gReg02(Fact02);
-static BenchRegistry gReg03(Fact03);
-
-static BenchRegistry gReg11(Fact11);
-static BenchRegistry gReg12(Fact12);
-static BenchRegistry gReg13(Fact13);
-
-static BenchRegistry gReg21(Fact21);
-static BenchRegistry gReg22(Fact22);
-static BenchRegistry gReg23(Fact23);
-
-static BenchRegistry gReg111(Fact111);
+DEF_BENCH( return new TextBench(STR, 16, 0xFF000000, kAA, true); )

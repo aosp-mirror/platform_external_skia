@@ -12,19 +12,15 @@
 
 // This file is used for registration of SkImageDecoders. It also holds a function
 // for checking all the the registered SkImageDecoders for one that matches an
-// input SkStream.
+// input SkStreamRewindable.
 
-typedef SkTRegistry<SkImageDecoder*, SkStream*> DecodeReg;
+template SkImageDecoder_DecodeReg* SkImageDecoder_DecodeReg::gHead;
 
-// N.B. You can't use "DecodeReg::gHead here" due to complex C++
-// corner cases.
-template DecodeReg* SkTRegistry<SkImageDecoder*, SkStream*>::gHead;
+SkImageDecoder* image_decoder_from_stream(SkStreamRewindable*);
 
-SkImageDecoder* image_decoder_from_stream(SkStream*);
-
-SkImageDecoder* image_decoder_from_stream(SkStream* stream) {
+SkImageDecoder* image_decoder_from_stream(SkStreamRewindable* stream) {
     SkImageDecoder* codec = NULL;
-    const DecodeReg* curr = DecodeReg::Head();
+    const SkImageDecoder_DecodeReg* curr = SkImageDecoder_DecodeReg::Head();
     while (curr) {
         codec = curr->factory()(stream);
         // we rewind here, because we promise later when we call "decode", that
@@ -47,12 +43,10 @@ SkImageDecoder* image_decoder_from_stream(SkStream* stream) {
     return NULL;
 }
 
-typedef SkTRegistry<SkImageDecoder::Format, SkStream*> FormatReg;
+template SkImageDecoder_FormatReg* SkImageDecoder_FormatReg::gHead;
 
-template FormatReg* SkTRegistry<SkImageDecoder::Format, SkStream*>::gHead;
-
-SkImageDecoder::Format SkImageDecoder::GetStreamFormat(SkStream* stream) {
-    const FormatReg* curr = FormatReg::Head();
+SkImageDecoder::Format SkImageDecoder::GetStreamFormat(SkStreamRewindable* stream) {
+    const SkImageDecoder_FormatReg* curr = SkImageDecoder_FormatReg::Head();
     while (curr != NULL) {
         Format format = curr->factory()(stream);
         if (!stream->rewind()) {

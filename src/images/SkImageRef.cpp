@@ -18,13 +18,12 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
+SkImageRef::SkImageRef(const SkImageInfo& info, SkStreamRewindable* stream,
                        int sampleSize, SkBaseMutex* mutex)
-        : SkPixelRef(mutex), fErrorInDecoding(false) {
+        : SkPixelRef(info, mutex), fErrorInDecoding(false) {
     SkASSERT(stream);
     stream->ref();
     fStream = stream;
-    fConfig = config;
     fSampleSize = sampleSize;
     fDoDither = true;
     fPrev = fNext = NULL;
@@ -32,7 +31,7 @@ SkImageRef::SkImageRef(SkStream* stream, SkBitmap::Config config,
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("add ImageRef %p [%d] data=%d\n",
-              this, config, (int)stream->getLength());
+              this, this->info().fColorType, (int)stream->getLength());
 #endif
 }
 
@@ -64,7 +63,8 @@ bool SkImageRef::getInfo(SkBitmap* bitmap) {
 bool SkImageRef::isOpaque(SkBitmap* bitmap) {
     if (bitmap && bitmap->pixelRef() == this) {
         bitmap->lockPixels();
-        bitmap->setIsOpaque(fBitmap.isOpaque());
+        // what about colortables??????
+        bitmap->setAlphaType(fBitmap.alphaType());
         bitmap->unlockPixels();
         return true;
     }
@@ -79,7 +79,7 @@ SkImageDecoderFactory* SkImageRef::setDecoderFactory(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkImageRef::onDecode(SkImageDecoder* codec, SkStream* stream,
+bool SkImageRef::onDecode(SkImageDecoder* codec, SkStreamRewindable* stream,
                           SkBitmap* bitmap, SkBitmap::Config config,
                           SkImageDecoder::Mode mode) {
     return codec->decode(stream, bitmap, config, mode);
@@ -89,14 +89,6 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 
     if (fErrorInDecoding) {
         return false;
-    }
-
-    /*  As soon as we really know our config, we record it, so that on
-        subsequent calls to the codec, we are sure we will always get the same
-        result.
-    */
-    if (SkBitmap::kNo_Config != fBitmap.config()) {
-        fConfig = fBitmap.config();
     }
 
     if (NULL != fBitmap.getPixels() ||
@@ -124,7 +116,7 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 
         codec->setSampleSize(fSampleSize);
         codec->setDitherImage(fDoDither);
-        if (this->onDecode(codec, fStream, &fBitmap, fConfig, mode)) {
+        if (this->onDecode(codec, fStream, &fBitmap, fBitmap.config(), mode)) {
             return true;
         }
     }
@@ -169,13 +161,12 @@ size_t SkImageRef::ramUsed() const {
 
 SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
         : INHERITED(buffer, mutex), fErrorInDecoding(false) {
-    fConfig = (SkBitmap::Config)buffer.readUInt();
     fSampleSize = buffer.readInt();
     fDoDither = buffer.readBool();
 
     size_t length = buffer.getArrayCount();
     fStream = SkNEW_ARGS(SkMemoryStream, (length));
-    buffer.readByteArray((void*)fStream->getMemoryBase());
+    buffer.readByteArray((void*)fStream->getMemoryBase(), length);
 
     fPrev = fNext = NULL;
     fFactory = NULL;
@@ -184,7 +175,6 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
 void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
-    buffer.writeUInt(fConfig);
     buffer.writeInt(fSampleSize);
     buffer.writeBool(fDoDither);
     // FIXME: Consider moving this logic should go into writeStream itself.

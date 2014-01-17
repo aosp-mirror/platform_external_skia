@@ -16,17 +16,16 @@
 static const int GENERATE_EXTENTS = 1000;
 static const int NUM_BUILD_RECTS = 500;
 static const int NUM_QUERY_RECTS = 5000;
-static const int NUM_QUERIES = 1000;
+static const int GRID_WIDTH = 100;
 
-typedef SkIRect (*MakeRectProc)(SkMWCRandom&, int, int);
+typedef SkIRect (*MakeRectProc)(SkRandom&, int, int);
 
 // Time how long it takes to build an R-Tree either bulk-loaded or not
 class BBoxBuildBench : public SkBenchmark {
 public:
-    BBoxBuildBench(void* param, const char* name, MakeRectProc proc, bool bulkLoad,
+    BBoxBuildBench(const char* name, MakeRectProc proc, bool bulkLoad,
                     SkBBoxHierarchy* tree)
-        : INHERITED(param)
-        , fTree(tree)
+        : fTree(tree)
         , fProc(proc)
         , fBulkLoad(bulkLoad) {
         fName.append("rtree_");
@@ -35,8 +34,12 @@ public:
         if (fBulkLoad) {
             fName.append("_bulk");
         }
-        fIsRendering = false;
     }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
+    }
+
     virtual ~BBoxBuildBench() {
         fTree->unref();
     }
@@ -44,9 +47,9 @@ protected:
     virtual const char* onGetName() SK_OVERRIDE {
         return fName.c_str();
     }
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        SkMWCRandom rand;
-        for (int i = 0; i < SkBENCHLOOP(100); ++i) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+        SkRandom rand;
+        for (int i = 0; i < loops; ++i) {
             for (int j = 0; j < NUM_BUILD_RECTS; ++j) {
                 fTree->insert(reinterpret_cast<void*>(j), fProc(rand, j, NUM_BUILD_RECTS),
                               fBulkLoad);
@@ -73,10 +76,9 @@ public:
         kFull_QueryType   // queries that cover everything
     };
 
-    BBoxQueryBench(void* param, const char* name, MakeRectProc proc, bool bulkLoad,
+    BBoxQueryBench(const char* name, MakeRectProc proc, bool bulkLoad,
                     QueryType q, SkBBoxHierarchy* tree)
-        : INHERITED(param)
-        , fTree(tree)
+        : fTree(tree)
         , fProc(proc)
         , fBulkLoad(bulkLoad)
         , fQuery(q) {
@@ -86,8 +88,12 @@ public:
         if (fBulkLoad) {
             fName.append("_bulk");
         }
-        fIsRendering = false;
     }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
+    }
+
     virtual ~BBoxQueryBench() {
         fTree->unref();
     }
@@ -96,17 +102,18 @@ protected:
         return fName.c_str();
     }
     virtual void onPreDraw() SK_OVERRIDE {
-        SkMWCRandom rand;
-        for (int j = 0; j < SkBENCHLOOP(NUM_QUERY_RECTS); ++j) {
-            fTree->insert(reinterpret_cast<void*>(j), fProc(rand, j,
-                           SkBENCHLOOP(NUM_QUERY_RECTS)), fBulkLoad);
+        SkRandom rand;
+        for (int j = 0; j < NUM_QUERY_RECTS; ++j) {
+            fTree->insert(reinterpret_cast<void*>(j),
+                          fProc(rand, j, NUM_QUERY_RECTS),
+                          fBulkLoad);
         }
         fTree->flushDeferredInserts();
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        SkMWCRandom rand;
-        for (int i = 0; i < SkBENCHLOOP(NUM_QUERIES); ++i) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+        SkRandom rand;
+        for (int i = 0; i < loops; ++i) {
             SkTDArray<void*> hits;
             SkIRect query;
             switch(fQuery) {
@@ -148,31 +155,29 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-static inline SkIRect make_simple_rect(SkMWCRandom&, int index, int numRects) {
-    SkIRect out = {0, 0, GENERATE_EXTENTS, GENERATE_EXTENTS};
-    return out;
-}
-
-static inline SkIRect make_concentric_rects_increasing(SkMWCRandom&, int index, int numRects) {
+static inline SkIRect make_concentric_rects_increasing(SkRandom&, int index, int numRects) {
     SkIRect out = {0, 0, index + 1, index + 1};
     return out;
 }
 
-static inline SkIRect make_concentric_rects_decreasing(SkMWCRandom&, int index, int numRects) {
-    SkIRect out = {0, 0, numRects - index, numRects - index};
-    return out;
-}
-
-static inline SkIRect make_point_rects(SkMWCRandom& rand, int index, int numRects) {
+static inline SkIRect make_XYordered_rects(SkRandom& rand, int index, int numRects) {
     SkIRect out;
-    out.fLeft   = rand.nextU() % GENERATE_EXTENTS;
-    out.fTop    = rand.nextU() % GENERATE_EXTENTS;
-    out.fRight  = out.fLeft + (GENERATE_EXTENTS / 200);
-    out.fBottom = out.fTop + (GENERATE_EXTENTS / 200);
+    out.fLeft = index % GRID_WIDTH;
+    out.fTop = index / GRID_WIDTH;
+    out.fRight  = out.fLeft + 1 + rand.nextU() % (GENERATE_EXTENTS / 3);
+    out.fBottom = out.fTop + 1 + rand.nextU() % (GENERATE_EXTENTS / 3);
+    return out;
+}
+static inline SkIRect make_YXordered_rects(SkRandom& rand, int index, int numRects) {
+    SkIRect out;
+    out.fLeft = index / GRID_WIDTH;
+    out.fTop = index % GRID_WIDTH;
+    out.fRight  = out.fLeft + 1 + rand.nextU() % (GENERATE_EXTENTS / 3);
+    out.fBottom = out.fTop + 1 + rand.nextU() % (GENERATE_EXTENTS / 3);
     return out;
 }
 
-static inline SkIRect make_random_rects(SkMWCRandom& rand, int index, int numRects) {
+static inline SkIRect make_random_rects(SkRandom& rand, int index, int numRects) {
     SkIRect out;
     out.fLeft   = rand.nextS() % GENERATE_EXTENTS;
     out.fTop    = rand.nextS() % GENERATE_EXTENTS;
@@ -181,40 +186,84 @@ static inline SkIRect make_random_rects(SkMWCRandom& rand, int index, int numRec
     return out;
 }
 
-static inline SkIRect make_large_rects(SkMWCRandom& rand, int index, int numRects) {
-    SkIRect out;
-    out.fLeft   = rand.nextU() % GENERATE_EXTENTS;
-    out.fTop    = rand.nextU() % GENERATE_EXTENTS;
-    out.fRight  = out.fLeft + (GENERATE_EXTENTS / 3);
-    out.fBottom = out.fTop  + (GENERATE_EXTENTS / 3);
-    return out;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
-static inline SkBenchmark* Fact0(void* p) {
-    return SkNEW_ARGS(BBoxBuildBench, (p, "random", &make_random_rects, true,
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("XYordered", &make_XYordered_rects, false,
                       SkRTree::Create(5, 16)));
-}
-static inline SkBenchmark* Fact1(void* p) {
-    return SkNEW_ARGS(BBoxBuildBench, (p, "random", &make_random_rects, false,
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("XYordered", &make_XYordered_rects, true,
                       SkRTree::Create(5, 16)));
-}
-static inline SkBenchmark* Fact2(void* p) {
-    return SkNEW_ARGS(BBoxBuildBench, (p, "concentric",
-                      &make_concentric_rects_increasing, true, SkRTree::Create(5, 16)));
-}
-static inline SkBenchmark* Fact3(void* p) {
-    return SkNEW_ARGS(BBoxQueryBench, (p, "random", &make_random_rects, true,
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("(unsorted)XYordered", &make_XYordered_rects, true,
+                      SkRTree::Create(5, 16, 1, false)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("XYordered", &make_XYordered_rects, true,
                       BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16)));
-}
-static inline SkBenchmark* Fact4(void* p) {
-    return SkNEW_ARGS(BBoxQueryBench, (p, "random", &make_random_rects, false,
-                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16)));
-}
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("(unsorted)XYordered", &make_XYordered_rects, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16, 1, false)));
+)
 
-static BenchRegistry gReg0(Fact0);
-static BenchRegistry gReg1(Fact1);
-static BenchRegistry gReg2(Fact2);
-static BenchRegistry gReg3(Fact3);
-static BenchRegistry gReg4(Fact4);
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("YXordered", &make_YXordered_rects, false,
+                      SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("YXordered", &make_YXordered_rects, true,
+                      SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("(unsorted)YXordered", &make_YXordered_rects, true,
+                      SkRTree::Create(5, 16, 1, false)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("YXordered", &make_YXordered_rects, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("(unsorted)YXordered", &make_YXordered_rects, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16, 1, false)));
+)
+
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("random", &make_random_rects, false,
+                      SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("random", &make_random_rects, true,
+                      SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("(unsorted)random", &make_random_rects, true,
+                      SkRTree::Create(5, 16, 1, false)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("random", &make_random_rects, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("(unsorted)random", &make_random_rects, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16, 1, false)));
+)
+
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("concentric",
+                      &make_concentric_rects_increasing, true, SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxBuildBench, ("(unsorted)concentric",
+                      &make_concentric_rects_increasing, true, SkRTree::Create(5, 16, 1, false)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("concentric", &make_concentric_rects_increasing, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16)));
+)
+DEF_BENCH(
+    return SkNEW_ARGS(BBoxQueryBench, ("(unsorted)concentric", &make_concentric_rects_increasing, true,
+                      BBoxQueryBench::kRandom_QueryType, SkRTree::Create(5, 16, 1, false)));
+)

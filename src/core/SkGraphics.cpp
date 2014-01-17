@@ -59,7 +59,6 @@ void SkGraphics::Init() {
     skRTConfRegistry().printNonDefault( );
 #endif
 
-    SkFlattenable::InitializeFlattenables();
 #ifdef BUILD_EMBOSS_TABLE
     SkEmbossMask_BuildTable();
 #endif
@@ -129,6 +128,7 @@ void SkGraphics::Init() {
 void SkGraphics::Term() {
     PurgeFontCache();
     SkPaint::Term();
+    SkXfermode::Term();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

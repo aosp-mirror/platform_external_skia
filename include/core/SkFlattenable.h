@@ -16,7 +16,8 @@ class SkFlattenableReadBuffer;
 class SkFlattenableWriteBuffer;
 
 #define SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(flattenable) \
-        SkFlattenable::Registrar(#flattenable, flattenable::CreateProc);
+        SkFlattenable::Registrar(#flattenable, flattenable::CreateProc, \
+                                 flattenable::GetFlattenableType());
 
 #define SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP() static void InitializeFlattenables();
 
@@ -27,12 +28,20 @@ class SkFlattenableWriteBuffer;
     }
 
 #define SK_DECLARE_UNFLATTENABLE_OBJECT() \
-    virtual Factory getFactory() SK_OVERRIDE { return NULL; }; \
+    virtual Factory getFactory() const SK_OVERRIDE { return NULL; }
 
 #define SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(flattenable) \
-    virtual Factory getFactory() SK_OVERRIDE { return CreateProc; } \
+    virtual Factory getFactory() const SK_OVERRIDE { return CreateProc; } \
     static SkFlattenable* CreateProc(SkFlattenableReadBuffer& buffer) { \
         return SkNEW_ARGS(flattenable, (buffer)); \
+    }
+
+/** For SkFlattenable derived objects with a valid type
+    This macro should only be used in base class objects in core
+  */
+#define SK_DEFINE_FLATTENABLE_TYPE(flattenable) \
+    static Type GetFlattenableType() { \
+        return k##flattenable##_Type; \
     }
 
 /** \class SkFlattenable
@@ -43,6 +52,19 @@ class SkFlattenableWriteBuffer;
  */
 class SK_API SkFlattenable : public SkRefCnt {
 public:
+    enum Type {
+        kSkColorFilter_Type,
+        kSkDrawLooper_Type,
+        kSkImageFilter_Type,
+        kSkMaskFilter_Type,
+        kSkPathEffect_Type,
+        kSkPixelRef_Type,
+        kSkRasterizer_Type,
+        kSkShader_Type,
+        kSkUnitMapper_Type,
+        kSkXfermode_Type,
+    };
+
     SK_DECLARE_INST_COUNT(SkFlattenable)
 
     typedef SkFlattenable* (*Factory)(SkFlattenableReadBuffer&);
@@ -53,16 +75,22 @@ public:
      to recreate your class given a buffer (previously written to by your
      override of flatten().
      */
-    virtual Factory getFactory() = 0;
+    virtual Factory getFactory() const = 0;
+
+    /** Returns the name of the object's class
+      */
+    const char* getTypeName() const { return FactoryToName(getFactory()); }
 
     static Factory NameToFactory(const char name[]);
     static const char* FactoryToName(Factory);
-    static void Register(const char name[], Factory);
+    static bool NameToType(const char name[], Type* type);
+
+    static void Register(const char name[], Factory, Type);
 
     class Registrar {
     public:
-        Registrar(const char name[], Factory factory) {
-            SkFlattenable::Register(name, factory);
+        Registrar(const char name[], Factory factory, Type type) {
+            SkFlattenable::Register(name, factory, type);
         }
     };
 
@@ -75,7 +103,7 @@ protected:
     virtual void flatten(SkFlattenableWriteBuffer&) const;
 
 private:
-    static void InitializeFlattenables();
+    static void InitializeFlattenablesIfNeeded();
 
     friend class SkGraphics;
     friend class SkFlattenableWriteBuffer;

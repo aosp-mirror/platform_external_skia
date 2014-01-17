@@ -13,8 +13,6 @@
 #include "GrGpu.h"
 #include "GrStencilBuffer.h"
 
-SK_DEFINE_INST_COUNT(GrRenderTarget)
-
 bool GrRenderTarget::readPixels(int left, int top, int width, int height,
                                 GrPixelConfig config,
                                 void* buffer,
@@ -57,7 +55,7 @@ void GrRenderTarget::resolve() {
 }
 
 size_t GrRenderTarget::sizeInBytes() const {
-    int colorBits;
+    size_t colorBits;
     if (kUnknown_GrPixelConfig == fDesc.fConfig) {
         colorBits = 32; // don't know, make a guess
     } else {

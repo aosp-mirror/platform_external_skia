@@ -25,31 +25,6 @@
         'sources/': [ ['exclude', '_nacl.(h|cpp)$'],
         ],
       }],
-      [ 'skia_os == "android"', {
-        'defines': [
-          'GR_ANDROID_BUILD=1',
-        ],
-      }],
-      [ 'skia_os == "mac"', {
-        'defines': [
-          'GR_MAC_BUILD=1',
-        ],
-      }],
-      [ 'skia_os == "linux" or skia_os == "chromeos"', {
-        'defines': [
-          'GR_LINUX_BUILD=1',
-        ],
-      }],
-      [ 'skia_os == "ios"', {
-        'defines': [
-          'GR_IOS_BUILD=1',
-        ],
-      }],
-      [ 'skia_os == "win"', {
-        'defines': [
-          'GR_WIN32_BUILD=1',
-        ],
-      }],
       # nullify the targets in this gyp file if skia_gpu is 0
       [ 'skia_gpu == 0', {
         'sources/': [
@@ -75,37 +50,21 @@
           ],
         },
       }],
-      [ 'skia_texture_cache_mb_limit != 0', {
+      [ 'skia_resource_cache_mb_limit != 0', {
         'defines': [
-          'GR_DEFAULT_TEXTURE_CACHE_MB_LIMIT=<(skia_texture_cache_mb_limit)',
+          'GR_DEFAULT_RESOURCE_CACHE_MB_LIMIT=<(skia_resource_cache_mb_limit)',
+        ],
+      }],
+      [ 'skia_resource_cache_count_limit != 0', {
+        'defines': [
+          'GR_DEFAULT_RESOURCE_CACHE_COUNT_LIMIT=<(skia_resource_cache_count_limit)',
         ],
       }],
     ],
     'direct_dependent_settings': {
       'conditions': [
-        [ 'skia_os == "android"', {
-          'defines': [
-            'GR_ANDROID_BUILD=1',
-          ],
-        }],
-        [ 'skia_os == "mac"', {
-          'defines': [
-            'GR_MAC_BUILD=1',
-          ],
-        }],
-        [ 'skia_os == "linux"', {
-          'defines': [
-            'GR_LINUX_BUILD=1',
-          ],
-        }],
-        [ 'skia_os == "ios"', {
-          'defines': [
-            'GR_IOS_BUILD=1',
-          ],
-        }],
         [ 'skia_os == "win"', {
           'defines': [
-            'GR_WIN32_BUILD=1',
             'GR_GL_FUNCTION_TYPE=__stdcall',
           ],
         }],
@@ -124,6 +83,7 @@
       'dependencies': [
         'angle.gyp:*',
         'core.gyp:*',
+        'edtaa.gyp:*',
         'utils.gyp:*',
       ],
       'includes': [
@@ -145,9 +105,6 @@
         '<@(skgpu_debug_gl_sources)',
         '<@(skgpu_null_gl_sources)',
         'gpu.gypi', # Makes the gypi appear in IDEs (but does not modify the build).
-      ],
-      'defines': [
-        'GR_IMPLEMENTATION=1',
       ],
       'conditions': [
         [ 'skia_nv_path_rendering', {
@@ -174,6 +131,26 @@
           ],
           'defines': [
             'GR_ANDROID_PATH_RENDERING=1',
+          ],
+        }],
+        [ 'skia_chrome_utils', {
+          'sources': [
+            '../experimental/ChromeUtils/SkBorder.cpp',
+            '../experimental/ChromeUtils/SkBorder.h',
+          ],
+          'defines': [
+            'GR_CHROME_UTILS=1',
+          ],
+        }],
+        [ 'skia_distancefield_fonts', {
+          'sources': [
+            '<(skia_include_path)/gpu/GrDistanceFieldTextContext.h',
+            '<(skia_src_path)/gpu/GrDistanceFieldTextContext.cpp',
+            '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.cpp',
+            '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.h',
+          ],
+          'defines': [
+            'GR_DISTANCEFIELD_FONTS=1',
           ],
         }],
         [ 'skia_os == "linux" or skia_os == "chromeos"', {
@@ -263,9 +240,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

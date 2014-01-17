@@ -6,6 +6,7 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkRandom.h"
 #include "SkTInternalLList.h"
 #include "SkTLList.h"
@@ -28,8 +29,6 @@ private:
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(ListElement);
 };
 
-SK_DEFINE_INST_COUNT(ListElement);
-
 static void check_list(const SkTInternalLList<ListElement>& list,
                        skiatest::Reporter* reporter,
                        bool empty,
@@ -38,7 +37,7 @@ static void check_list(const SkTInternalLList<ListElement>& list,
                        ListElement elements[4]) {
 
     REPORTER_ASSERT(reporter, empty == list.isEmpty());
-#if SK_DEBUG
+#ifdef SK_DEBUG
     list.validate();
     REPORTER_ASSERT(reporter, numElements == list.countEntries());
     REPORTER_ASSERT(reporter, in0 == list.isInList(&elements[0]));
@@ -124,7 +123,7 @@ static void TestTInternalLList(skiatest::Reporter* reporter) {
 static void TestTLList(skiatest::Reporter* reporter) {
     typedef SkTLList<ListElement> ElList;
     typedef ElList::Iter Iter;
-    SkMWCRandom random;
+    SkRandom random;
 
     for (int i = 1; i <= 16; i *= 2) {
 
@@ -312,10 +311,7 @@ static void TestTLList(skiatest::Reporter* reporter) {
     }
 }
 
-static void test_llists(skiatest::Reporter* reporter) {
+DEF_TEST(LList, reporter) {
     TestTInternalLList(reporter);
     TestTLList(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("LList", TestLListClass, test_llists)

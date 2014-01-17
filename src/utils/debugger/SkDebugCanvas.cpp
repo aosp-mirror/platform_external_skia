@@ -22,22 +22,40 @@ static SkBitmap make_noconfig_bm(int width, int height) {
 
 SkDebugCanvas::SkDebugCanvas(int width, int height)
         : INHERITED(make_noconfig_bm(width, height))
+        , fWidth(width)
+        , fHeight(height)
+        , fFilter(false)
+        , fIndex(0)
         , fOverdrawViz(false)
         , fOverdrawFilter(NULL)
+        , fOverrideTexFiltering(false)
+        , fTexOverrideFilter(NULL)
         , fOutstandingSaveCount(0) {
-    // TODO(chudy): Free up memory from all draw commands in destructor.
-    fWidth = width;
-    fHeight = height;
-    // do we need fBm anywhere?
-    fBm.setConfig(SkBitmap::kNo_Config, fWidth, fHeight);
-    fFilter = false;
-    fIndex = 0;
     fUserMatrix.reset();
+
+    // SkPicturePlayback uses the base-class' quickReject calls to cull clipped
+    // operations. This can lead to problems in the debugger which expects all
+    // the operations in the captured skp to appear in the debug canvas. To
+    // circumvent this we create a wide open clip here (an empty clip rect
+    // is not sufficient).
+    // Internally, the SkRect passed to clipRect is converted to an SkIRect and
+    // rounded out. The following code creates a nearly maximal rect that will
+    // not get collapsed by the coming conversions (Due to precision loss the
+    // inset has to be surprisingly large).
+    SkIRect largeIRect = SkIRect::MakeLargest();
+    largeIRect.inset(1024, 1024);
+    SkRect large = SkRect::Make(largeIRect);
+#ifdef SK_DEBUG
+    large.roundOut(&largeIRect);
+    SkASSERT(!largeIRect.isEmpty());
+#endif
+    INHERITED::clipRect(large, SkRegion::kReplace_Op, false);
 }
 
 SkDebugCanvas::~SkDebugCanvas() {
     fCommandVector.deleteAll();
     SkSafeUnref(fOverdrawFilter);
+    SkSafeUnref(fTexOverrideFilter);
 }
 
 void SkDebugCanvas::addDrawCommand(SkDrawCommand* command) {
@@ -45,14 +63,9 @@ void SkDebugCanvas::addDrawCommand(SkDrawCommand* command) {
 }
 
 void SkDebugCanvas::draw(SkCanvas* canvas) {
-    if(!fCommandVector.isEmpty()) {
-        for (int i = 0; i < fCommandVector.count(); i++) {
-            if (fCommandVector[i]->isVisible()) {
-                fCommandVector[i]->execute(canvas);
-            }
-        }
+    if (!fCommandVector.isEmpty()) {
+        drawTo(canvas, fCommandVector.count() - 1);
     }
-    fIndex = fCommandVector.count() - 1;
 }
 
 void SkDebugCanvas::applyUserTransform(SkCanvas* canvas) {
@@ -109,13 +122,13 @@ static SkPMColor OverdrawXferModeProc(SkPMColor src, SkPMColor dst) {
 
 // The OverdrawFilter modifies every paint to use an SkProcXfermode which
 // in turn invokes OverdrawXferModeProc
-class OverdrawFilter : public SkDrawFilter {
+class SkOverdrawFilter : public SkDrawFilter {
 public:
-    OverdrawFilter() {
+    SkOverdrawFilter() {
         fXferMode = new SkProcXfermode(OverdrawXferModeProc);
     }
 
-    virtual ~OverdrawFilter() {
+    virtual ~SkOverdrawFilter() {
         delete fXferMode;
     }
 
@@ -131,21 +144,45 @@ private:
     typedef SkDrawFilter INHERITED;
 };
 
+// SkTexOverrideFilter modifies every paint to use the specified
+// texture filtering mode
+class SkTexOverrideFilter : public SkDrawFilter {
+public:
+    SkTexOverrideFilter() : fFilterLevel(SkPaint::kNone_FilterLevel) {
+    }
+
+    void setFilterLevel(SkPaint::FilterLevel filterLevel) {
+        fFilterLevel = filterLevel;
+    }
+
+    virtual bool filter(SkPaint* p, Type) SK_OVERRIDE {
+        p->setFilterLevel(fFilterLevel);
+        return true;
+    }
+
+protected:
+    SkPaint::FilterLevel fFilterLevel;
+
+private:
+    typedef SkDrawFilter INHERITED;
+};
+
 void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
     SkASSERT(!fCommandVector.isEmpty());
     SkASSERT(index < fCommandVector.count());
-    int i;
+    int i = 0;
 
     // This only works assuming the canvas and device are the same ones that
     // were previously drawn into because they need to preserve all saves
     // and restores.
-    if (fIndex < index) {
+    // The visibility filter also requires a full re-draw - otherwise we can
+    // end up drawing the filter repeatedly.
+    if (fIndex < index && !fFilter) {
         i = fIndex + 1;
     } else {
         for (int j = 0; j < fOutstandingSaveCount; j++) {
             canvas->restore();
         }
-        i = 0;
         canvas->clear(SK_ColorTRANSPARENT);
         canvas->resetMatrix();
         SkRect rect = SkRect::MakeWH(SkIntToScalar(fWidth),
@@ -161,11 +198,19 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
     // call setDrawFilter on anything but the root layer odd things happen.
     if (fOverdrawViz) {
         if (NULL == fOverdrawFilter) {
-            fOverdrawFilter = new OverdrawFilter;
+            fOverdrawFilter = new SkOverdrawFilter;
         }
 
         if (fOverdrawFilter != canvas->getDrawFilter()) {
             canvas->setDrawFilter(fOverdrawFilter);
+        }
+    } else if (fOverrideTexFiltering) {
+        if (NULL == fTexOverrideFilter) {
+            fTexOverrideFilter = new SkTexOverrideFilter;
+        }
+
+        if (fTexOverrideFilter != canvas->getDrawFilter()) {
+            canvas->setDrawFilter(fTexOverrideFilter);
         }
     } else {
         canvas->setDrawFilter(NULL);
@@ -246,6 +291,15 @@ void SkDebugCanvas::toggleFilter(bool toggle) {
     fFilter = toggle;
 }
 
+void SkDebugCanvas::overrideTexFiltering(bool overrideTexFiltering, SkPaint::FilterLevel level) {
+    if (NULL == fTexOverrideFilter) {
+        fTexOverrideFilter = new SkTexOverrideFilter;
+    }
+
+    fOverrideTexFiltering = overrideTexFiltering;
+    fTexOverrideFilter->setFilterLevel(level);
+}
+
 void SkDebugCanvas::clear(SkColor color) {
     addDrawCommand(new SkClearCommand(color));
 }
@@ -276,17 +330,19 @@ bool SkDebugCanvas::concat(const SkMatrix& matrix) {
 }
 
 void SkDebugCanvas::drawBitmap(const SkBitmap& bitmap, SkScalar left,
-        SkScalar top, const SkPaint* paint = NULL) {
+                               SkScalar top, const SkPaint* paint = NULL) {
     addDrawCommand(new SkDrawBitmapCommand(bitmap, left, top, paint));
 }
 
 void SkDebugCanvas::drawBitmapRectToRect(const SkBitmap& bitmap,
-        const SkRect* src, const SkRect& dst, const SkPaint* paint) {
-    addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint));
+                                         const SkRect* src, const SkRect& dst,
+                                         const SkPaint* paint,
+                                         SkCanvas::DrawBitmapRectFlags flags) {
+    addDrawCommand(new SkDrawBitmapRectCommand(bitmap, src, dst, paint, flags));
 }
 
 void SkDebugCanvas::drawBitmapMatrix(const SkBitmap& bitmap,
-        const SkMatrix& matrix, const SkPaint* paint) {
+                                     const SkMatrix& matrix, const SkPaint* paint) {
     addDrawCommand(new SkDrawBitmapMatrixCommand(bitmap, matrix, paint));
 }
 

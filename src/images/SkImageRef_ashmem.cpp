@@ -1,10 +1,10 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SkImageRef_ashmem.h"
 #include "SkImageDecoder.h"
 #include "SkFlattenableBuffers.h"
@@ -31,11 +31,11 @@ static size_t roundToPageSize(size_t size) {
     return newsize;
 }
 
-SkImageRef_ashmem::SkImageRef_ashmem(SkStream* stream,
-                                             SkBitmap::Config config,
-                                             int sampleSize)
-        : SkImageRef(stream, config, sampleSize) {
-
+SkImageRef_ashmem::SkImageRef_ashmem(const SkImageInfo& info,
+                                     SkStreamRewindable* stream,
+                                     int sampleSize)
+    : SkImageRef(info, stream, sampleSize)
+{
     fRec.fFD = -1;
     fRec.fAddr = NULL;
     fRec.fSize = 0;
@@ -126,7 +126,7 @@ private:
     const char*  fName;
 };
 
-bool SkImageRef_ashmem::onDecode(SkImageDecoder* codec, SkStream* stream,
+bool SkImageRef_ashmem::onDecode(SkImageDecoder* codec, SkStreamRewindable* stream,
                                  SkBitmap* bitmap, SkBitmap::Config config,
                                  SkImageDecoder::Mode mode) {
 

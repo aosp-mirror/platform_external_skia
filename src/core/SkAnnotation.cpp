@@ -6,37 +6,36 @@
  */
 
 #include "SkAnnotation.h"
-#include "SkDataSet.h"
+#include "SkData.h"
 #include "SkFlattenableBuffers.h"
 #include "SkPoint.h"
 #include "SkStream.h"
 
-SkAnnotation::SkAnnotation(SkDataSet* data, uint32_t flags) {
-    if (NULL == data) {
-        data = SkDataSet::NewEmpty();
+SkAnnotation::SkAnnotation(const char key[], SkData* value) : fKey(key) {
+    if (NULL == value) {
+        value = SkData::NewEmpty();
     } else {
-        data->ref();
+        value->ref();
     }
-    fDataSet = data;
-    fFlags = flags;
+    fData = value;
 }
 
 SkAnnotation::~SkAnnotation() {
-    fDataSet->unref();
+    fData->unref();
 }
 
-SkData* SkAnnotation::find(const char name[]) const {
-    return fDataSet->find(name);
+SkData* SkAnnotation::find(const char key[]) const {
+    return fKey.equals(key) ? fData : NULL;
 }
 
-SkAnnotation::SkAnnotation(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
-    fFlags = buffer.readUInt();
-    fDataSet = buffer.readFlattenableT<SkDataSet>();
+SkAnnotation::SkAnnotation(SkFlattenableReadBuffer& buffer) {
+    buffer.readString(&fKey);
+    fData = buffer.readByteArrayAsData();
 }
 
-void SkAnnotation::flatten(SkFlattenableWriteBuffer& buffer) const {
-    buffer.writeUInt(fFlags);
-    buffer.writeFlattenable(fDataSet);
+void SkAnnotation::writeToBuffer(SkFlattenableWriteBuffer& buffer) const {
+    buffer.writeString(fKey.c_str());
+    buffer.writeDataAsByteArray(fData);
 }
 
 const char* SkAnnotationKeys::URL_Key() {
@@ -56,12 +55,7 @@ const char* SkAnnotationKeys::Link_Named_Dest_Key() {
 #include "SkCanvas.h"
 
 static void annotate_paint(SkPaint& paint, const char* key, SkData* value) {
-    SkAutoTUnref<SkDataSet> dataset(SkNEW_ARGS(SkDataSet, (key, value)));
-    SkAnnotation* ann = SkNEW_ARGS(SkAnnotation, (dataset,
-                                                  SkAnnotation::kNoDraw_Flag));
-
-    paint.setAnnotation(ann)->unref();
-    SkASSERT(paint.isNoDrawAnnotation());
+    paint.setAnnotation(SkNEW_ARGS(SkAnnotation, (key, value)))->unref();
 }
 
 void SkAnnotateRectWithURL(SkCanvas* canvas, const SkRect& rect, SkData* value) {

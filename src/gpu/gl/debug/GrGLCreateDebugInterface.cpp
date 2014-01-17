@@ -32,6 +32,13 @@ GrGLvoid GR_GL_FUNCTION_TYPE debugGLActiveTexture(GrGLenum texture) {
     GrDebugGL::getInstance()->setCurTextureUnit(texture);
 }
 
+GrGLvoid GR_GL_FUNCTION_TYPE debugGLClientActiveTexture(GrGLenum texture) {
+
+    // Ganesh offsets the texture unit indices
+    texture -= GR_GL_TEXTURE0;
+    GrAlwaysAssert(texture < GrDebugGL::getInstance()->getMaxTextureUnits());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 GrGLvoid GR_GL_FUNCTION_TYPE debugGLAttachShader(GrGLuint programID,
                                                  GrGLuint shaderID) {
@@ -779,8 +786,6 @@ private:
     typedef GrGLInterface INHERITED;
 };
 
-SK_DEFINE_INST_COUNT(GrDebugGLInterface)
-
 ////////////////////////////////////////////////////////////////////////////////
 const GrGLInterface* GrGLCreateDebugInterface() {
     GrGLInterface* interface = SkNEW(GrDebugGLInterface);
@@ -801,6 +806,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fClear = noOpGLClear;
     interface->fClearColor = noOpGLClearColor;
     interface->fClearStencil = noOpGLClearStencil;
+    interface->fClientActiveTexture = debugGLClientActiveTexture;
     interface->fColorMask = noOpGLColorMask;
     interface->fCompileShader = noOpGLCompileShader;
     interface->fCompressedTexImage2D = noOpGLCompressedTexImage2D;
@@ -816,12 +822,14 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fDeleteVertexArrays = debugGLDeleteVertexArrays;
     interface->fDepthMask = noOpGLDepthMask;
     interface->fDisable = noOpGLDisable;
+    interface->fDisableClientState = noOpGLDisableClientState;
     interface->fDisableVertexAttribArray = noOpGLDisableVertexAttribArray;
     interface->fDrawArrays = noOpGLDrawArrays;
     interface->fDrawBuffer = noOpGLDrawBuffer;
     interface->fDrawBuffers = noOpGLDrawBuffers;
     interface->fDrawElements = noOpGLDrawElements;
     interface->fEnable = noOpGLEnable;
+    interface->fEnableClientState = noOpGLEnableClientState;
     interface->fEnableVertexAttribArray = noOpGLEnableVertexAttribArray;
     interface->fEndQuery = noOpGLEndQuery;
     interface->fFinish = noOpGLFinish;
@@ -848,8 +856,11 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fGetTexLevelParameteriv = noOpGLGetTexLevelParameteriv;
     interface->fGetUniformLocation = noOpGLGetUniformLocation;
     interface->fGenVertexArrays = debugGLGenVertexArrays;
+    interface->fLoadIdentity = noOpGLLoadIdentity;
+    interface->fLoadMatrixf = noOpGLLoadMatrixf;
     interface->fLineWidth = noOpGLLineWidth;
     interface->fLinkProgram = noOpGLLinkProgram;
+    interface->fMatrixMode = noOpGLMatrixMode;
     interface->fPixelStorei = debugGLPixelStorei;
     interface->fQueryCounter = noOpGLQueryCounter;
     interface->fReadBuffer = noOpGLReadBuffer;
@@ -862,6 +873,9 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fStencilMaskSeparate = noOpGLStencilMaskSeparate;
     interface->fStencilOp = noOpGLStencilOp;
     interface->fStencilOpSeparate = noOpGLStencilOpSeparate;
+    interface->fTexGenf = noOpGLTexGenf;
+    interface->fTexGenfv = noOpGLTexGenfv;
+    interface->fTexGeni = noOpGLTexGeni;
     interface->fTexImage2D = noOpGLTexImage2D;
     interface->fTexParameteri = noOpGLTexParameteri;
     interface->fTexParameteriv = noOpGLTexParameteriv;
@@ -890,6 +904,7 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     interface->fUseProgram = debugGLUseProgram;
     interface->fVertexAttrib4fv = noOpGLVertexAttrib4fv;
     interface->fVertexAttribPointer = noOpGLVertexAttribPointer;
+    interface->fVertexPointer = noOpGLVertexPointer;
     interface->fViewport = noOpGLViewport;
     interface->fBindFramebuffer = debugGLBindFramebuffer;
     interface->fBindRenderbuffer = debugGLBindRenderbuffer;

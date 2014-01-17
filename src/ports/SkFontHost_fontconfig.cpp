@@ -124,7 +124,7 @@ SkTypeface* FontConfigTypeface::LegacyCreateTypeface(
     return face;
 }
 
-#ifndef SK_FONTHOST_USES_FONTMGR
+#ifdef SK_FONTHOST_DOES_NOT_USE_FONTMGR
 
 SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
                                        const char familyName[],
@@ -209,8 +209,4 @@ void FontConfigTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
                                              bool* isLocalStream) const {
     desc->setFamilyName(this->getFamilyName());
     *isLocalStream = SkToBool(this->getLocalStream());
-}
-
-SkTypeface* FontConfigTypeface::onRefMatchingStyle(Style style) const {
-    return LegacyCreateTypeface(this, NULL, style);
 }

@@ -18,8 +18,6 @@
 
 namespace skiagm {
 
-extern GrContext* GetGr();
-
 static const int S = 200;
 
 class TexDataGM : public GM {
@@ -37,12 +35,14 @@ protected:
         return make_isize(2*S, 2*S);
     }
 
+    virtual uint32_t onGetFlags() const SK_OVERRIDE { return kGPUOnly_Flag; }
+
     virtual void onDraw(SkCanvas* canvas) {
-        SkDevice* device = canvas->getTopDevice();
+        SkBaseDevice* device = canvas->getTopDevice();
         GrRenderTarget* target = device->accessRenderTarget();
-        GrContext* ctx = GetGr();
+        GrContext* ctx = canvas->getGrContext();
         if (ctx && target) {
-            SkPMColor gTextureData[(2 * S) * (2 * S)];
+            SkAutoTArray<SkPMColor> gTextureData((2 * S) * (2 * S));
             static const int stride = 2 * S;
             static const SkPMColor gray  = SkPackARGB32(0x40, 0x40, 0x40, 0x40);
             static const SkPMColor white = SkPackARGB32(0xff, 0xff, 0xff, 0xff);
@@ -88,12 +88,12 @@ protected:
                 desc.fWidth     = 2 * S;
                 desc.fHeight    = 2 * S;
                 GrTexture* texture =
-                    ctx->createUncachedTexture(desc, gTextureData, 0);
+                    ctx->createUncachedTexture(desc, gTextureData.get(), 0);
 
                 if (!texture) {
                     return;
                 }
-                GrAutoUnref au(texture);
+                SkAutoUnref au(texture);
 
                 GrContext::AutoClip acs(ctx, SkRect::MakeWH(2*S, 2*S));
 
@@ -127,7 +127,7 @@ protected:
                     }
                 }
                 texture->writePixels(S, (i ? 0 : S), S, S,
-                                     texture->config(), gTextureData,
+                                     texture->config(), gTextureData.get(),
                                      4 * stride);
                 ctx->drawRect(paint, SkRect::MakeWH(2*S, 2*S));
             }

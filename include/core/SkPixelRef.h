@@ -14,6 +14,9 @@
 #include "SkRefCnt.h"
 #include "SkString.h"
 #include "SkFlattenable.h"
+#include "SkTDArray.h"
+
+//#define SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
 
 #ifdef SK_DEBUG
     /**
@@ -48,7 +51,18 @@ class SK_API SkPixelRef : public SkFlattenable {
 public:
     SK_DECLARE_INST_COUNT(SkPixelRef)
 
+#ifdef SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
+    // DEPRECATED -- use a constructor that takes SkImageInfo
     explicit SkPixelRef(SkBaseMutex* mutex = NULL);
+#endif
+
+    explicit SkPixelRef(const SkImageInfo&);
+    SkPixelRef(const SkImageInfo&, SkBaseMutex* mutex);
+    virtual ~SkPixelRef();
+
+    const SkImageInfo& info() const {
+        return fInfo;
+    }
 
     /** Return the pixel memory returned from lockPixels, or null if the
         lockCount is 0.
@@ -141,6 +155,37 @@ public:
         return this->onRefEncodedData();
     }
 
+    /**
+     *  Experimental -- tells the caller if it is worth it to call decodeInto().
+     *  Just an optimization at this point, to avoid checking the cache first.
+     *  We may remove/change this call in the future.
+     */
+    bool implementsDecodeInto() {
+        return this->onImplementsDecodeInto();
+    }
+
+    /**
+     *  Return a decoded instance of this pixelRef in bitmap. If this cannot be
+     *  done, return false and the bitmap parameter is ignored/unchanged.
+     *
+     *  pow2 is the requeste power-of-two downscale that the caller needs. This
+     *  can be ignored, and the "original" size can be returned, but if the
+     *  underlying codec can efficiently return a smaller size, that should be
+     *  done. Some examples:
+     *
+     *  To request the "base" version (original scale), pass 0 for pow2
+     *  To request 1/2 scale version (1/2 width, 1/2 height), pass 1 for pow2
+     *  To request 1/4 scale version (1/4 width, 1/4 height), pass 2 for pow2
+     *  ...
+     *
+     *  If this returns true, then bitmap must be "locked" such that
+     *  bitmap->getPixels() will return the correct address.
+     */
+    bool decodeInto(int pow2, SkBitmap* bitmap) {
+        SkASSERT(pow2 >= 0);
+        return this->onDecodeInto(pow2, bitmap);
+    }
+
     /** Are we really wrapping a texture instead of a bitmap?
      */
     virtual GrTexture* getTexture() { return NULL; }
@@ -176,19 +221,47 @@ public:
     virtual void globalUnref();
 #endif
 
+    SK_DEFINE_FLATTENABLE_TYPE(SkPixelRef)
+
+    // Register a listener that may be called the next time our generation ID changes.
+    //
+    // We'll only call the listener if we're confident that we are the only SkPixelRef with this
+    // generation ID.  If our generation ID changes and we decide not to call the listener, we'll
+    // never call it: you must add a new listener for each generation ID change.  We also won't call
+    // the listener when we're certain no one knows what our generation ID is.
+    //
+    // This can be used to invalidate caches keyed by SkPixelRef generation ID.
+    struct GenIDChangeListener {
+        virtual ~GenIDChangeListener() {}
+        virtual void onChange() = 0;
+    };
+
+    // Takes ownership of listener.
+    void addGenIDChangeListener(GenIDChangeListener* listener);
+
 protected:
     /** Called when the lockCount goes from 0 to 1. The caller will have already
         acquire a mutex for thread safety, so this method need not do that.
     */
     virtual void* onLockPixels(SkColorTable**) = 0;
-    /** Called when the lock count goes from 1 to 0. The caller will have
-        already acquire a mutex for thread safety, so this method need not do
-        that.
-    */
+ 
+    /**
+     *  Called when the lock count goes from 1 to 0. The caller will have
+     *  already acquire a mutex for thread safety, so this method need not do
+     *  that.
+     *
+     *  If the previous call to onLockPixels failed (i.e. returned NULL), then
+     *  the onUnlockPixels will NOT be called.
+     */
     virtual void onUnlockPixels() = 0;
 
     /** Default impl returns true */
     virtual bool onLockPixelsAreWritable() const;
+
+    // returns false;
+    virtual bool onImplementsDecodeInto();
+    // returns false;
+    virtual bool onDecodeInto(int pow2, SkBitmap* bitmap);
 
     /**
      *  For pixelrefs that don't have access to their raw pixels, they may be
@@ -200,6 +273,16 @@ protected:
 
     // default impl returns NULL.
     virtual SkData* onRefEncodedData();
+
+    /**
+     *  Returns the size (in bytes) of the internally allocated memory.
+     *  This should be implemented in all serializable SkPixelRef derived classes.
+     *  SkBitmap::fPixelRefOffset + SkBitmap::getSafeSize() should never overflow this value,
+     *  otherwise the rendering code may attempt to read memory out of bounds.
+     *
+     *  @return default impl returns 0.
+     */
+    virtual size_t getAllocatedSizeInBytes() const;
 
     /** Return the mutex associated with this pixelref. This value is assigned
         in the constructor, and cannot change during the lifetime of the object.
@@ -216,17 +299,19 @@ protected:
     void setPreLocked(void* pixels, SkColorTable* ctable);
 
 private:
-
     SkBaseMutex*    fMutex; // must remain in scope for the life of this object
+    // FIXME: fInfo should be const once we remove old constructor that does
+    // not set it.
+    SkImageInfo     fInfo;
+
     void*           fPixels;
     SkColorTable*   fColorTable;    // we do not track ownership, subclass does
     int             fLockCount;
 
     mutable uint32_t fGenerationID;
+    mutable bool     fUniqueGenerationID;
 
-    // SkBitmap is only a friend so that when copying, it can modify the new SkPixelRef to have the
-    // same fGenerationID as the original.
-    friend class SkBitmap;
+    SkTDArray<GenIDChangeListener*> fGenIDChangeListeners;  // pointers are owned
 
     SkString    fURI;
 
@@ -235,7 +320,15 @@ private:
     // only ever set in constructor, const after that
     bool    fPreLocked;
 
+    void needsNewGenID();
+    void callGenIDChangeListeners();
+
     void setMutex(SkBaseMutex* mutex);
+
+    // When copying a bitmap to another with the same shape and config, we can safely
+    // clone the pixelref generation ID too, which makes them equivalent under caching.
+    friend class SkBitmap;  // only for cloneGenID
+    void cloneGenID(const SkPixelRef&);
 
     typedef SkFlattenable INHERITED;
 };

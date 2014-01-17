@@ -8,11 +8,17 @@
 #ifndef SkDocument_DEFINED
 #define SkDocument_DEFINED
 
+#include "SkBitmap.h"
+#include "SkPicture.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
 
 class SkCanvas;
 class SkWStream;
+
+/** SK_ScalarDefaultDPI is 72 DPI.
+*/
+#define SK_ScalarDefaultRasterDPI           72.0f
 
 /**
  *  High-level API for creating a document-based canvas. To use..
@@ -31,8 +37,21 @@ public:
     /**
      *  Create a PDF-backed document, writing the results into a file.
      *  If there is an error trying to create the doc, returns NULL.
+     *  encoder sets the DCTEncoder for images, to encode a bitmap
+     *    as JPEG (DCT).
+     *  rasterDpi - the DPI at which features without native PDF support
+     *              will be rasterized (e.g. draw image with perspective,
+     *              draw text with perspective, ...)
+     *              A larger DPI would create a PDF that reflects the original
+     *              intent with better fidelity, but it can make for larger
+     *              PDF files too, which would use more memory while rendering,
+     *              and it would be slower to be processed or sent online or
+     *              to printer.
      */
-    static SkDocument* CreatePDF(const char filename[]);
+    static SkDocument* CreatePDF(
+            const char filename[],
+            SkPicture::EncodeBitmap encoder = NULL,
+            SkScalar rasterDpi = SK_ScalarDefaultRasterDPI);
 
     /**
      *  Create a PDF-backed document, writing the results into a stream.
@@ -43,8 +62,23 @@ public:
      *  has been called, and all of the data has been written to the stream,
      *  if there is a Done proc provided, it will be called with the stream.
      *  The proc can delete the stream, or whatever it needs to do.
-     */
-    static SkDocument* CreatePDF(SkWStream*, void (*Done)(SkWStream*) = NULL);
+     *  encoder sets the DCTEncoder for images, to encode a bitmap
+     *    as JPEG (DCT).
+     *  Done - clean up method intended to allow deletion of the stream.
+     *         Its aborted parameter is true if the cleanup is due to an abort
+     *         call. It is false otherwise.
+     *  rasterDpi - the DPI at which features without native PDF support
+     *              will be rasterized (e.g. draw image with perspective,
+     *              draw text with perspective, ...)
+     *              A larger DPI would create a PDF that reflects the original
+     *              intent with better fidelity, but it can make for larger
+     *              PDF files too, which would use more memory while rendering,
+     *              and it would be slower to be processed or sent online or
+     *              to printer.     */
+    static SkDocument* CreatePDF(
+            SkWStream*, void (*Done)(SkWStream*,bool aborted) = NULL,
+            SkPicture::EncodeBitmap encoder = NULL,
+            SkScalar rasterDpi = SK_ScalarDefaultRasterDPI);
 
     /**
      *  Begin a new page for the document, returning the canvas that will draw
@@ -66,11 +100,18 @@ public:
      *  or stream holding the document's contents. After close() the document
      *  can no longer add new pages. Deleting the document will automatically
      *  call close() if need be.
+     *  Returns true on success or false on failure.
      */
-    void close();
+    bool close();
+
+    /**
+     *  Call abort() to stop producing the document immediately.
+     *  The stream output must be ignored, and should not be trusted.
+     */
+    void abort();
 
 protected:
-    SkDocument(SkWStream*, void (*)(SkWStream*));
+    SkDocument(SkWStream*, void (*)(SkWStream*, bool aborted));
     // note: subclasses must call close() in their destructor, as the base class
     // cannot do this for them.
     virtual ~SkDocument();
@@ -78,7 +119,8 @@ protected:
     virtual SkCanvas* onBeginPage(SkScalar width, SkScalar height,
                                   const SkRect& content) = 0;
     virtual void onEndPage() = 0;
-    virtual void onClose(SkWStream*) = 0;
+    virtual bool onClose(SkWStream*) = 0;
+    virtual void onAbort() = 0;
 
     enum State {
         kBetweenPages_State,
@@ -89,7 +131,7 @@ protected:
 
 private:
     SkWStream* fStream;
-    void       (*fDoneProc)(SkWStream*);
+    void       (*fDoneProc)(SkWStream*, bool aborted);
     State      fState;
 
     typedef SkRefCnt INHERITED;

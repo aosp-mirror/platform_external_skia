@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2013 Google Inc.
  *
@@ -7,10 +6,12 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkCanvasStateUtils.h"
-#include "SkDevice.h"
 #include "SkDrawFilter.h"
+#include "SkError.h"
 #include "SkPaint.h"
 #include "SkRect.h"
 #include "SkRRect.h"
@@ -20,7 +21,9 @@ static void test_complex_layers(skiatest::Reporter* reporter) {
     const int HEIGHT = 400;
     const int SPACER = 10;
 
-    SkRect rect = SkRect::MakeXYWH(SPACER, SPACER, WIDTH-(2*SPACER), (HEIGHT-(2*SPACER)) / 7);
+    SkRect rect = SkRect::MakeXYWH(SkIntToScalar(SPACER), SkIntToScalar(SPACER),
+                                   SkIntToScalar(WIDTH-(2*SPACER)),
+                                   SkIntToScalar((HEIGHT-(2*SPACER)) / 7));
 
     const SkBitmap::Config configs[] = { SkBitmap::kRGB_565_Config,
                                          SkBitmap::kARGB_8888_Config
@@ -92,17 +95,16 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
 
     const int WIDTH = 400;
     const int HEIGHT = 400;
-    const SkScalar SPACER = SkIntToScalar(10);
+    const int SPACER = 10;
 
-    SkRect layerRect = SkRect::MakeWH(SkIntToScalar(WIDTH), SkIntToScalar(HEIGHT / 4));
+    SkIRect layerRect = SkIRect::MakeWH(WIDTH, HEIGHT / 4);
     layerRect.inset(2*SPACER, 2*SPACER);
 
-    SkRect clipRect = layerRect;
+    SkIRect clipRect = layerRect;
     clipRect.fRight = clipRect.fLeft + (clipRect.width() / 2) - (2*SPACER);
     clipRect.outset(SPACER, SPACER);
 
-    SkIRect regionBounds;
-    clipRect.roundIn(&regionBounds);
+    SkIRect regionBounds = clipRect;
     regionBounds.offset(clipRect.width() + (2*SPACER), 0);
 
     SkIRect regionInterior = regionBounds;
@@ -136,7 +138,8 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
         SkRegion localRegion = clipRegion;
 
         for (int j = 0; j < layerCombinations; ++j) {
-            canvas.saveLayerAlpha(&layerRect, 128, flags[j]);
+            SkRect layerBounds = SkRect::Make(layerRect);
+            canvas.saveLayerAlpha(&layerBounds, 128, flags[j]);
 
             SkCanvasState* state = NULL;
             SkCanvas* tmpCanvas = NULL;
@@ -150,7 +153,7 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
             }
 
             tmpCanvas->save();
-            tmpCanvas->clipRect(clipRect, clipOps[j]);
+            tmpCanvas->clipRect(SkRect::Make(clipRect), clipOps[j]);
             tmpCanvas->drawColor(SK_ColorBLUE);
             tmpCanvas->restore();
 
@@ -163,7 +166,7 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
             canvas.restore();
 
             // translate the canvas and region for the next iteration
-            canvas.translate(0, 2*(layerRect.height() + SPACER));
+            canvas.translate(0, SkIntToScalar(2*(layerRect.height() + (SPACER))));
             localRegion.translate(0, 2*(layerRect.height() + SPACER));
         }
     }
@@ -184,7 +187,7 @@ public:
 
 static void test_draw_filters(skiatest::Reporter* reporter) {
     TestDrawFilter drawFilter;
-    SkDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
+    SkBitmapDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
     SkCanvas canvas(&device);
 
     canvas.setDrawFilter(&drawFilter);
@@ -203,8 +206,11 @@ static void test_draw_filters(skiatest::Reporter* reporter) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// we need this function to prevent SkError from printing to stdout
+static void error_callback(SkError code, void* ctx) {}
+
 static void test_soft_clips(skiatest::Reporter* reporter) {
-    SkDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
+    SkBitmapDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
     SkCanvas canvas(&device);
 
     SkRRect roundRect;
@@ -212,18 +218,18 @@ static void test_soft_clips(skiatest::Reporter* reporter) {
 
     canvas.clipRRect(roundRect, SkRegion::kIntersect_Op, true);
 
+    SkSetErrorCallback(error_callback, NULL);
+
     SkCanvasState* state = SkCanvasStateUtils::CaptureCanvasState(&canvas);
     REPORTER_ASSERT(reporter, !state);
+
+    REPORTER_ASSERT(reporter, kInvalidOperation_SkError == SkGetLastError());
+    SkClearLastError();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-static void test_canvas_state_utils(skiatest::Reporter* reporter) {
+DEF_TEST(CanvasState, reporter) {
     test_complex_layers(reporter);
     test_complex_clips(reporter);
     test_draw_filters(reporter);
     test_soft_clips(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("CanvasState", TestCanvasStateClass, test_canvas_state_utils)

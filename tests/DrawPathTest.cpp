@@ -6,9 +6,11 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDashPathEffect.h"
+#include "SkSurface.h"
 
 static SkCanvas* create(SkBitmap::Config config, int w, int h, int rb,
                         void* addr = NULL) {
@@ -24,6 +26,46 @@ static SkCanvas* create(SkBitmap::Config config, int w, int h, int rb,
 
 static SkCanvas* new_canvas(int w, int h) {
     return create(SkBitmap::kARGB_8888_Config, w, h, 0, NULL);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+// test that we can draw an aa-rect at coordinates > 32K (bigger than fixedpoint)
+static void test_big_aa_rect(skiatest::Reporter* reporter) {
+    SkBitmap output;
+    SkPMColor pixel[1];
+    output.setConfig(SkBitmap::kARGB_8888_Config, 1, 1, 4);
+    output.setPixels(pixel);
+
+    SkSurface* surf = SkSurface::NewRasterPMColor(300, 33300);
+    SkCanvas* canvas = surf->getCanvas();
+
+    SkRect r = { 0, 33000, 300, 33300 };
+    int x = SkScalarRoundToInt(r.left());
+    int y = SkScalarRoundToInt(r.top());
+
+    // check that the pixel in question starts as transparent (by the surface)
+    if (canvas->readPixels(&output, x, y)) {
+        REPORTER_ASSERT(reporter, 0 == pixel[0]);
+    } else {
+        REPORTER_ASSERT_MESSAGE(reporter, false, "readPixels failed");
+    }
+
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    paint.setColor(SK_ColorWHITE);
+
+    canvas->drawRect(r, paint);
+
+    // Now check that it is BLACK
+    if (canvas->readPixels(&output, x, y)) {
+        // don't know what swizzling PMColor did, but white should always
+        // appear the same.
+        REPORTER_ASSERT(reporter, 0xFFFFFFFF == pixel[0]);
+    } else {
+        REPORTER_ASSERT_MESSAGE(reporter, false, "readPixels failed");
+    }
+    surf->unref();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -264,7 +306,7 @@ static void test_crbug_165432(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, filteredPath.isEmpty());
 }
 
-static void TestDrawPath(skiatest::Reporter* reporter) {
+DEF_TEST(DrawPath, reporter) {
     test_giantaa();
     test_bug533();
     test_bigcubic();
@@ -276,7 +318,5 @@ static void TestDrawPath(skiatest::Reporter* reporter) {
     if (false) test_crbug131181();
     test_infinite_dash(reporter);
     test_crbug_165432(reporter);
+    test_big_aa_rect(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("DrawPath", TestDrawPathClass, TestDrawPath)

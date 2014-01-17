@@ -9,8 +9,6 @@
 #include "SkImagePriv.h"
 #include "SkCanvas.h"
 
-SK_DEFINE_INST_COUNT(SkSurface)
-
 ///////////////////////////////////////////////////////////////////////////////
 
 SkSurface_Base::SkSurface_Base(int width, int height) : INHERITED(width, height) {
@@ -101,7 +99,7 @@ SkImage* SkSurface::newImageSnapshot() {
     return image;
 }
 
-SkSurface* SkSurface::newSurface(const SkImage::Info& info) {
+SkSurface* SkSurface::newSurface(const SkImageInfo& info) {
     return asSB(this)->onNewSurface(info);
 }
 

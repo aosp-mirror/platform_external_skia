@@ -11,6 +11,10 @@
 #include "SkGraphics.h"
 #include "SkTypeface.h"
 
+#ifdef SK_BUILD_FOR_WIN
+    #include "SkTypeface_win.h"
+#endif
+
 // limit this just so we don't take too long to draw
 #define MAX_FAMILIES    30
 
@@ -22,13 +26,21 @@ static SkScalar drawString(SkCanvas* canvas, const SkString& text, SkScalar x,
 
 class FontMgrGM : public skiagm::GM {
 public:
-    FontMgrGM() {
+    FontMgrGM(SkFontMgr* (*factory)() = NULL) {
         SkGraphics::SetFontCacheLimit(16 * 1024 * 1024);
+
+        fName.set("fontmgr_iter");
+        if (factory) {
+            fName.append("_factory");
+            fFM.reset(factory());
+        } else {
+            fFM.reset(SkFontMgr::RefDefault());
+        }
     }
 
 protected:
     virtual SkString onShortName() {
-        return SkString("fontmgr_iter");
+        return fName;
     }
 
     virtual SkISize onISize() {
@@ -43,7 +55,7 @@ protected:
         paint.setSubpixelText(true);
         paint.setTextSize(17);
 
-        SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+        SkFontMgr* fm = fFM;
         int count = SkMin32(fm->countFamilies(), MAX_FAMILIES);
 
         for (int i = 0; i < count; ++i) {
@@ -79,6 +91,8 @@ protected:
     }
 
 private:
+    SkAutoTUnref<SkFontMgr> fFM;
+    SkString fName;
     typedef GM INHERITED;
 };
 
@@ -148,18 +162,16 @@ protected:
             "Helvetica Neue", "Arial"
         };
 
-        SkFontStyleSet* fset = NULL;
+        SkAutoTUnref<SkFontStyleSet> fset;
         for (size_t i = 0; i < SK_ARRAY_COUNT(gNames); ++i) {
-            fset = fFM->matchFamily(gNames[i]);
-            if (fset && fset->count() > 0) {
+            fset.reset(fFM->matchFamily(gNames[i]));
+            if (fset->count() > 0) {
                 break;
             }
         }
-
-        if (NULL == fset) {
+        if (NULL == fset.get()) {
             return;
         }
-        SkAutoUnref aur(fset);
 
         canvas->translate(20, 40);
         this->exploreFamily(canvas, paint, fset);
@@ -181,3 +193,7 @@ private:
 
 DEF_GM( return SkNEW(FontMgrGM); )
 DEF_GM( return SkNEW(FontMgrMatchGM); )
+
+#ifdef SK_BUILD_FOR_WIN
+    DEF_GM( return SkNEW_ARGS(FontMgrGM, (SkFontMgr_New_DirectWrite)); )
+#endif

@@ -7,6 +7,10 @@
 #include "SkOpContour.h"
 #include "SkPath.h"
 
+#ifdef SK_DEBUG
+#include "SkPathOpsPoint.h"
+#endif
+
 class SkIntersectionHelper {
 public:
     enum SegmentType {
@@ -17,14 +21,20 @@ public:
         kCubic_Segment = SkPath::kCubic_Verb,
     };
 
-    void addCoincident(SkIntersectionHelper& other, const SkIntersections& ts, bool swap) {
-        fContour->addCoincident(fIndex, other.fContour, other.fIndex, ts, swap);
+    bool addCoincident(SkIntersectionHelper& other, const SkIntersections& ts, bool swap) {
+        return fContour->addCoincident(fIndex, other.fContour, other.fIndex, ts, swap);
     }
 
     // FIXME: does it make sense to write otherIndex now if we're going to
     // fix it up later?
     void addOtherT(int index, double otherT, int otherIndex) {
         fContour->addOtherT(fIndex, index, otherT, otherIndex);
+    }
+
+    bool addPartialCoincident(SkIntersectionHelper& other, const SkIntersections& ts, int index,
+            bool swap) {
+        return fContour->addPartialCoincident(fIndex, other.fContour, other.fIndex, ts, index,
+                swap);
     }
 
     // Avoid collapsing t values that are close to the same since
@@ -38,11 +48,6 @@ public:
 
     int addSelfT(const SkIntersectionHelper& other, const SkPoint& pt, double newT) {
         return fContour->addSelfT(fIndex, other.fContour, other.fIndex, pt, newT);
-    }
-
-    int addUnsortableT(const SkIntersectionHelper& other, bool start, const SkPoint& pt,
-                       double newT) {
-        return fContour->addUnsortableT(fIndex, other.fContour, other.fIndex, start, pt, newT);
     }
 
     bool advance() {
@@ -70,6 +75,14 @@ public:
     bool isFirstLast(const SkIntersectionHelper& next) {
         return fContour == next.fContour && fIndex == 0
                 && next.fIndex == fLast - 1;
+    }
+
+    bool isPartial(double t1, double t2, const SkDPoint& pt1, const SkDPoint& pt2) const {
+        const SkOpSegment& segment = fContour->segments()[fIndex];
+        double mid = (t1 + t2) / 2;
+        SkDPoint midPtByT = segment.dPtAtT(mid);
+        SkDPoint midPtByAvg = SkDPoint::Mid(pt1, pt2);
+        return midPtByT.approximatelyPEqual(midPtByAvg);
     }
 
     SkScalar left() const {
@@ -127,6 +140,19 @@ public:
     bool yFlipped() const {
         return y() != pts()[0].fY;
     }
+
+#ifdef SK_DEBUG
+    void dump() {
+        SkDPoint::dump(pts()[0]);
+        SkDPoint::dump(pts()[1]);
+        if (verb() >= SkPath::kQuad_Verb) {
+            SkDPoint::dump(pts()[2]);
+        }
+        if (verb() >= SkPath::kCubic_Verb) {
+            SkDPoint::dump(pts()[3]);
+        }
+    }
+#endif
 
 private:
     SkOpContour* fContour;

@@ -22,16 +22,17 @@
 // the image is rotated or has some other complex transformation applied.
 // Scaled images will usually be rescaled directly before rasterization.
 
-void highQualityFilter(const SkBitmapProcState& s, int x, int y,
-                   SkPMColor* SK_RESTRICT colors, int count) {
+namespace {
 
+template <typename Color, typename ColorPacker>
+void highQualityFilter(ColorPacker pack, const SkBitmapProcState& s, int x, int y, Color* SK_RESTRICT colors, int count) {
     const int maxX = s.fBitmap->width() - 1;
     const int maxY = s.fBitmap->height() - 1;
 
     while (count-- > 0) {
         SkPoint srcPt;
-        s.fInvProc(s.fInvMatrix, SkFloatToScalar(x + 0.5f),
-                    SkFloatToScalar(y + 0.5f), &srcPt);
+        s.fInvProc(s.fInvMatrix, x + 0.5f,
+                    y + 0.5f, &srcPt);
         srcPt.fX -= SK_ScalarHalf;
         srcPt.fY -= SK_ScalarHalf;
 
@@ -39,14 +40,14 @@ void highQualityFilter(const SkBitmapProcState& s, int x, int y,
         SkScalar fr = 0, fg = 0, fb = 0, fa = 0;
 
         int y0 = SkClampMax(SkScalarCeilToInt(srcPt.fY-s.getBitmapFilter()->width()), maxY);
-        int y1 = SkClampMax(SkScalarFloorToInt(srcPt.fY+s.getBitmapFilter()->width()), maxY);
+        int y1 = SkClampMax(SkScalarFloorToInt(srcPt.fY+s.getBitmapFilter()->width()+1), maxY);
         int x0 = SkClampMax(SkScalarCeilToInt(srcPt.fX-s.getBitmapFilter()->width()), maxX);
-        int x1 = SkClampMax(SkScalarFloorToInt(srcPt.fX+s.getBitmapFilter()->width()), maxX);
+        int x1 = SkClampMax(SkScalarFloorToInt(srcPt.fX+s.getBitmapFilter()->width())+1, maxX);
 
-        for (int srcY = y0; srcY <= y1; srcY++) {
+        for (int srcY = y0; srcY < y1; srcY++) {
             SkScalar yWeight = s.getBitmapFilter()->lookupScalar((srcPt.fY - srcY));
 
-            for (int srcX = x0; srcX <= x1 ; srcX++) {
+            for (int srcX = x0; srcX < x1 ; srcX++) {
                 SkScalar xWeight = s.getBitmapFilter()->lookupScalar((srcPt.fX - srcX));
 
                 SkScalar combined_weight = SkScalarMul(xWeight, yWeight);
@@ -70,11 +71,26 @@ void highQualityFilter(const SkBitmapProcState& s, int x, int y,
         int g = SkClampMax(SkScalarRoundToInt(fg), a);
         int b = SkClampMax(SkScalarRoundToInt(fb), a);
 
-        *colors++ = SkPackARGB32(a, r, g, b);
+        *colors++ = pack(a, r, g, b);
 
         x++;
     }
 }
+
+uint16_t PackTo565(int /*a*/, int r, int g, int b) {
+    return SkPack888ToRGB16(r, g, b);
+}
+
+}  // namespace
+
+void highQualityFilter32(const SkBitmapProcState& s, int x, int y, SkPMColor* SK_RESTRICT colors, int count) {
+    highQualityFilter(&SkPackARGB32, s, x, y, colors, count);
+}
+
+void highQualityFilter16(const SkBitmapProcState& s, int x, int y, uint16_t* SK_RESTRICT colors, int count) {
+    highQualityFilter(&PackTo565, s, x, y, colors, count);
+}
+
 
 SK_CONF_DECLARE(const char *, c_bitmapFilter, "bitmap.filter", "mitchell", "Which scanline bitmap filter to use [mitchell, lanczos, hamming, gaussian, triangle, box]");
 
@@ -92,40 +108,41 @@ SkBitmapFilter *SkBitmapFilter::Allocate() {
     } else if (!strcmp(c_bitmapFilter, "box")) {
         return SkNEW(SkBoxFilter);
     } else {
-        SkASSERT(!!!"Unknown filter type");
+        SkDEBUGFAIL("Unknown filter type");
     }
 
     return NULL;
 }
 
-SkBitmapProcState::ShaderProc32
-SkBitmapProcState::chooseBitmapFilterProc() {
-
+bool SkBitmapProcState::setBitmapFilterProcs() {
     if (fFilterLevel != SkPaint::kHigh_FilterLevel) {
-        return NULL;
+        return false;
     }
 
     if (fAlphaScale != 256) {
-        return NULL;
+        return false;
     }
 
     // TODO: consider supporting other configs (e.g. 565, A8)
     if (fBitmap->config() != SkBitmap::kARGB_8888_Config) {
-        return NULL;
+        return false;
     }
 
     // TODO: consider supporting repeat and mirror
     if (SkShader::kClamp_TileMode != fTileModeX || SkShader::kClamp_TileMode != fTileModeY) {
-        return NULL;
+        return false;
     }
 
+    // TODO: is this right?  do we want fBitmapFilter allocated even if we can't set shader procs?
     if (fInvType & (SkMatrix::kAffine_Mask | SkMatrix::kScale_Mask)) {
         fBitmapFilter = SkBitmapFilter::Allocate();
     }
 
     if (fInvType & SkMatrix::kScale_Mask) {
-        return highQualityFilter;
+        fShaderProc32 = highQualityFilter32;
+        fShaderProc16 = highQualityFilter16;
+        return true;
     } else {
-        return NULL;
+        return false;
     }
 }

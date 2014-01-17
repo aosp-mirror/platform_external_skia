@@ -10,7 +10,7 @@
 
 #include "SkCanvas.h"
 
-struct SkCanvasState;
+class SkCanvasState;
 
 /**
  * A set of functions that are useful for copying an SkCanvas across a library

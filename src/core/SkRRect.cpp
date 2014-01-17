@@ -117,27 +117,6 @@ void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
     SkDEBUGCODE(this->validate();)
 }
 
-bool SkRRect::contains(SkScalar x, SkScalar y) const {
-    SkDEBUGCODE(this->validate();)
-
-    if (kEmpty_Type == this->type()) {
-        return false;
-    }
-
-    if (!fRect.contains(x, y)) {
-        return false;
-    }
-
-    if (kRect_Type == this->type()) {
-        // the 'fRect' test above was sufficient
-        return true;
-    }
-
-    // We know the point is inside the RR's bounds. The only way it can
-    // be out is if it outside one of the corners
-    return checkCornerContainment(x, y);
-}
-
 // This method determines if a point known to be inside the RRect's bounds is
 // inside all the corners.
 bool SkRRect::checkCornerContainment(SkScalar x, SkScalar y) const {
@@ -276,6 +255,8 @@ bool SkRRect::transform(const SkMatrix& matrix, SkRRect* dst) const {
         return true;
     }
 
+    // If transform supported 90 degree rotations (which it could), we could
+    // use SkMatrix::rectStaysRect() to check for a valid transformation.
     if (!matrix_only_scale_and_translate(matrix)) {
         return false;
     }
@@ -358,7 +339,7 @@ void SkRRect::inset(SkScalar dx, SkScalar dy, SkRRect* dst) const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-uint32_t SkRRect::writeToMemory(void* buffer) const {
+size_t SkRRect::writeToMemory(void* buffer) const {
     SkASSERT(kSizeInMemory == sizeof(SkRect) + sizeof(fRadii));
 
     memcpy(buffer, &fRect, sizeof(SkRect));
@@ -366,7 +347,11 @@ uint32_t SkRRect::writeToMemory(void* buffer) const {
     return kSizeInMemory;
 }
 
-uint32_t SkRRect::readFromMemory(const void* buffer) {
+size_t SkRRect::readFromMemory(const void* buffer, size_t length) {
+    if (length < kSizeInMemory) {
+        return 0;
+    }
+
     SkScalar storage[12];
     SkASSERT(sizeof(storage) == kSizeInMemory);
 

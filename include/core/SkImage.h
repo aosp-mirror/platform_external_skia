@@ -8,6 +8,7 @@
 #ifndef SkImage_DEFINED
 #define SkImage_DEFINED
 
+#include "SkImageInfo.h"
 #include "SkImageEncoder.h"
 #include "SkRefCnt.h"
 #include "SkScalar.h"
@@ -36,31 +37,28 @@ class SK_API SkImage : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkImage)
 
-    enum ColorType {
-        kAlpha_8_ColorType,
-        kRGB_565_ColorType,
-        kRGBA_8888_ColorType,
-        kBGRA_8888_ColorType,
-        kPMColor_ColorType,
+#ifdef SK_SUPPORT_LEGACY_COLORTYPE
+    typedef SkColorType ColorType;
 
-        kLastEnum_ColorType = kPMColor_ColorType
-    };
+    static const SkColorType kAlpha_8_ColorType     = kAlpha_8_SkColorType;
+    static const SkColorType kARGB_4444_ColorType   = kARGB_4444_SkColorType;
+    static const SkColorType kRGB_565_ColorType     = kRGB_565_SkColorType;
+    static const SkColorType kRGBA_8888_ColorType   = kRGBA_8888_SkColorType;
+    static const SkColorType kBGRA_8888_ColorType   = kBGRA_8888_SkColorType;
+    static const SkColorType kPMColor_ColorType     = kPMColor_SkColorType;
+    static const SkColorType kLastEnum_ColorType    = kLastEnum_SkColorType;
+#endif
 
-    enum AlphaType {
-        kIgnore_AlphaType,
-        kOpaque_AlphaType,
-        kPremul_AlphaType,
-        kUnpremul_AlphaType,
+#ifdef SK_SUPPORT_LEGACY_ALPHATYPE
+    typedef SkAlphaType AlphaType;
 
-        kLastEnum_AlphaType = kUnpremul_AlphaType
-    };
+    static const SkAlphaType kIgnore_AlphaType   = kIgnore_SkAlphaType;
+    static const SkAlphaType kOpaque_AlphaType   = kOpaque_SkAlphaType;
+    static const SkAlphaType kPremul_AlphaType   = kPremul_SkAlphaType;
+    static const SkAlphaType kUnpremul_AlphaType = kUnpremul_SkAlphaType;
+#endif
 
-    struct Info {
-        int         fWidth;
-        int         fHeight;
-        ColorType   fColorType;
-        AlphaType   fAlphaType;
-    };
+    typedef SkImageInfo Info;
 
     static SkImage* NewRasterCopy(const Info&, const void* pixels, size_t rowBytes);
     static SkImage* NewRasterData(const Info&, SkData* pixels, size_t rowBytes);

@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2013 Google Inc.
  *
@@ -16,12 +15,10 @@
  * to write one subclass that can be a GM, bench, and/or Sample.
  */
 
-namespace {
-
 // Generates y values for the chart plots.
-void gen_data(SkScalar yAvg, SkScalar ySpread, int count, SkTDArray<SkScalar>* dataPts) {
+static void gen_data(SkScalar yAvg, SkScalar ySpread, int count, SkTDArray<SkScalar>* dataPts) {
     dataPts->setCount(count);
-    static SkMWCRandom gRandom;
+    static SkRandom gRandom;
     for (int i = 0; i < count; ++i) {
         (*dataPts)[i] = gRandom.nextRangeScalar(yAvg - SkScalarHalf(ySpread),
                                                 yAvg + SkScalarHalf(ySpread));
@@ -32,12 +29,12 @@ void gen_data(SkScalar yAvg, SkScalar ySpread, int count, SkTDArray<SkScalar>* d
 // plot. The fill path is bounded below by the bottomData plot points or a horizontal line at
 // yBase if bottomData == NULL.
 // The plots are animated by rotating the data points by leftShift.
-void gen_paths(const SkTDArray<SkScalar>& topData,
-               const SkTDArray<SkScalar>* bottomData,
-               SkScalar yBase,
-               SkScalar xLeft, SkScalar xDelta,
-               int leftShift,
-               SkPath* plot, SkPath* fill) {
+static void gen_paths(const SkTDArray<SkScalar>& topData,
+                      const SkTDArray<SkScalar>* bottomData,
+                      SkScalar yBase,
+                      SkScalar xLeft, SkScalar xDelta,
+                      int leftShift,
+                      SkPath* plot, SkPath* fill) {
     plot->rewind();
     fill->rewind();
     plot->incReserve(topData.count());
@@ -85,13 +82,11 @@ void gen_paths(const SkTDArray<SkScalar>& topData,
     }
 }
 
-}
-
 // A set of scrolling line plots with the area between each plot filled. Stresses out GPU path
 // filling
 class ChartBench : public SkBenchmark {
 public:
-    ChartBench(void* param, bool aa) : SkBenchmark(param) {
+    ChartBench(bool aa) {
         fShift = 0;
         fAA = aa;
         fSize.fWidth = -1;
@@ -107,7 +102,7 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         bool sizeChanged = false;
         if (canvas->getDeviceSize() != fSize) {
             fSize = canvas->getDeviceSize();
@@ -127,11 +122,11 @@ protected:
             }
         }
 
-        for (int frame = 0; frame < kFramesPerRun; ++frame) {
+        for (int frame = 0; frame < loops; ++frame) {
 
             canvas->clear(0xFFE0F0E0);
 
-            static SkMWCRandom colorRand;
+            static SkRandom colorRand;
             static SkColor gColors[kNumGraphs] = { 0x0 };
             if (0 == gColors[0]) {
                 for (int i = 0; i < kNumGraphs; ++i) {
@@ -183,8 +178,6 @@ private:
         kNumGraphs = 5,
         kPixelsPerTick = 3,
         kShiftPerFrame = 1,
-
-        kFramesPerRun = SkBENCHLOOP(5),
     };
     int                 fShift;
     SkISize             fSize;
@@ -196,8 +189,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* Fact0(void* p) { return new ChartBench(p, true); }
-static SkBenchmark* Fact1(void* p) { return new ChartBench(p, false); }
-
-static BenchRegistry gReg0(Fact0);
-static BenchRegistry gReg1(Fact1);
+DEF_BENCH( return new ChartBench(true); )
+DEF_BENCH( return new ChartBench(false); )

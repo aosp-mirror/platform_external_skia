@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+
+<html ng-app="Loader" ng-controller="Loader.Controller">
+
+<head>
+  <title ng-bind="windowTitle"></title>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.1.5/angular.js"></script>
+  <script src="loader.js"></script>
+  <link rel="stylesheet" href="view.css">
+</head>
+
+<body>
+  <h2>
+    Instructions, roadmap, etc. are at
+    <a href="http://tinyurl.com/SkiaRebaselineServer">
+      http://tinyurl.com/SkiaRebaselineServer
+    </a>
+  </h2>
+
+  <em>
+    {{loadingMessage}}
+  </em>
+
+  <div ng-hide="!categories"><!-- everything: hide until data is loaded -->
+
+    <div class="warning-div"
+         ng-hide="!(header.isEditable && header.isExported)">
+      WARNING!  These results are editable and exported, so any user
+      who can connect to this server over the network can modify them.
+    </div>
+
+    <div ng-hide="!(header.timeUpdated)">
+      Results current as of {{localTimeString(header.timeUpdated)}}
+    </div>
+
+    <div><!-- tabs -->
+      <div class="tab-spacer" ng-repeat="tab in tabs">
+        <div class="tab-{{tab == viewingTab}}"
+             ng-click="setViewingTab(tab)">
+          &nbsp;{{tab}} ({{numResultsPerTab[tab]}})&nbsp;
+        </div>
+        <div class="tab-spacer">
+          &nbsp;
+        </div>
+      </div>
+    </div><!-- tabs -->
+
+    <div class="tab-main"><!-- main display area of selected tab -->
+
+    <br>
+    <!-- We only show the filters/settings table on the Unfiled tab. -->
+    <table ng-hide="viewingTab != defaultTab" border="1">
+    <tr>
+      <th colspan="4">
+        Filters
+      </th>
+      <th>
+        Settings
+      </th>
+    </tr>
+    <tr valign="top">
+      <!-- TODO(epoger): make this an ng-repeat over resultType, config, etc? -->
+      <td>
+        resultType<br>
+        <label ng-repeat="(resultType, count) in categories['resultType'] track by $index">
+          <input type="checkbox"
+                 name="resultTypes"
+                 value="{{resultType}}"
+                 ng-checked="!isValueInSet(resultType, hiddenResultTypes)"
+                 ng-click="toggleValueInSet(resultType, hiddenResultTypes); setUpdatesPending(true)">
+          {{resultType}} ({{count}})<br>
+        </label>
+        <button ng-click="hiddenResultTypes = {}; updateResults()">
+          all
+        </button>
+        <button ng-click="hiddenResultTypes = {}; toggleValuesInSet(allResultTypes, hiddenResultTypes); updateResults()">
+          none
+        </button>
+        <button ng-click="toggleValuesInSet(allResultTypes, hiddenResultTypes); updateResults()">
+          toggle
+        </button>
+      </td>
+      <td ng-repeat="category in ['builder', 'test']">
+        {{category}}
+        <br>
+        <input type="text"
+               ng-model="categoryValueMatch[category]"
+               ng-change="setUpdatesPending(true)"/>
+        <br>
+        <button ng-click="setCategoryValueMatch(category, '')"
+                ng-disabled="('' == categoryValueMatch[category])">
+          clear (show all)
+        </button>
+      </td>
+      <td>
+        config<br>
+        <label ng-repeat="(config, count) in categories['config'] track by $index">
+          <input type="checkbox"
+                 name="configs"
+                 value="{{config}}"
+                 ng-checked="!isValueInSet(config, hiddenConfigs)"
+                 ng-click="toggleValueInSet(config, hiddenConfigs); setUpdatesPending(true)">
+          {{config}} ({{count}})<br>
+        </label>
+        <button ng-click="hiddenConfigs = {}; updateResults()">
+          all
+        </button>
+        <button ng-click="hiddenConfigs = {}; toggleValuesInSet(allConfigs, hiddenConfigs); updateResults()">
+          none
+        </button>
+        <button ng-click="toggleValuesInSet(allConfigs, hiddenConfigs); updateResults()">
+          toggle
+        </button>
+      </td>
+      <td><table>
+        <tr><td>
+          Image size
+          <input type="text" ng-model="imageSizePending"
+                 ng-init="imageSizePending=100"
+                 ng-change="areUpdatesPending = true"
+                 maxlength="4"/>
+        </td></tr>
+        <tr><td>
+          Max records to display
+          <input type="text" ng-model="displayLimitPending"
+                 ng-init="displayLimitPending=50"
+                 ng-change="areUpdatesPending = true"
+                 maxlength="4"/>
+        </td></tr>
+        <tr><td>
+          <button class="update-results-button"
+                  ng-click="updateResults()"
+                  ng-disabled="!areUpdatesPending">
+            Update Results
+          </button>
+        </td></tr>
+      </tr></table></td>
+    </tr>
+  </table>
+
+      <p>
+
+      <!-- Submission UI that we only show in the Pending Approval tab. -->
+      <div ng-hide="'Pending Approval' != viewingTab">
+        <div style="display:inline-block">
+          <button style="font-size:20px"
+                  ng-click="submitApprovals(filteredTestData)"
+                  ng-disabled="submitPending || (filteredTestData.length == 0)">
+            Update these {{filteredTestData.length}} expectations on the server
+          </button>
+        </div>
+        <div style="display:inline-block">
+          <div style="font-size:20px"
+               ng-hide="!submitPending">
+            Submitting, please wait...
+          </div>
+        </div>
+        <div>
+          Advanced settings...
+          <input type="checkbox" ng-model="showSubmitAdvancedSettings">
+          show
+          <ul ng-hide="!showSubmitAdvancedSettings">
+            <li ng-repeat="setting in ['reviewed-by-human', 'ignore-failure']">
+              {{setting}}
+              <input type="checkbox" ng-model="submitAdvancedSettings[setting]">
+            </li>
+            <li ng-repeat="setting in ['bug']">
+              {{setting}}
+              <input type="text" ng-model="submitAdvancedSettings[setting]">
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <p>
+
+    <table border="0"><tr><td> <!-- table holding results header + results table -->
+      <table border="0" width="100%"> <!-- results header -->
+        <tr>
+          <td>
+            Found {{filteredTestData.length}} matches;
+            <span ng-hide="filteredTestData.length <= limitedTestData.length">
+              displaying the first {{limitedTestData.length}}
+            </span>
+            <span ng-hide="filteredTestData.length > limitedTestData.length">
+              displaying them all
+            </span>
+            <br>
+            (click on the column header radio buttons to re-sort by that column)
+          </td>
+          <td align="right">
+            <div>
+              all tests shown:
+              <button ng-click="selectAllItems()">
+                select
+              </button>
+              <button ng-click="clearAllItems()">
+                clear
+              </button>
+              <button ng-click="toggleAllItems()">
+                toggle
+              </button>
+            </div>
+            <div ng-repeat="otherTab in tabs">
+              <button ng-click="moveSelectedItemsToTab(otherTab)"
+                      ng-disabled="selectedItems.length == 0"
+                      ng-hide="otherTab == viewingTab">
+                move {{selectedItems.length}} selected tests to {{otherTab}} tab
+              </button>
+            </div>
+          </td>
+        </tr>
+      </table> <!-- results header -->
+      </td></tr><tr><td>
+      <table border="1"> <!-- results -->
+        <tr>
+          <!-- Most column headers are displayed in a common fashion... -->
+          <th ng-repeat="categoryName in ['resultType', 'builder', 'test', 'config']">
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="{{categoryName}}"
+                   ng-checked="(sortColumn == categoryName)"
+                   ng-click="sortResultsBy(categoryName)">
+            {{categoryName}}
+          </th>
+          <!-- ... but there are a few columns where we display things differently. -->
+          <th>
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="bugs"
+                   ng-checked="(sortColumn == 'bugs')"
+                   ng-click="sortResultsBy('bugs')">
+            bugs
+          </th>
+          <th width="{{imageSize}}">
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="expectedHashDigest"
+                   ng-checked="(sortColumn == 'expectedHashDigest')"
+                   ng-click="sortResultsBy('expectedHashDigest')">
+            expected image
+          </th>
+          <th width="{{imageSize}}">
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="actualHashDigest"
+                   ng-checked="(sortColumn == 'actualHashDigest')"
+                   ng-click="sortResultsBy('actualHashDigest')">
+            actual image
+          </th>
+          <th width="{{imageSize}}">
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="percentDifferingPixels"
+                   ng-checked="(sortColumn == 'percentDifferingPixels')"
+                   ng-click="sortResultsBy('percentDifferingPixels')">
+            differing pixels in white
+          </th>
+          <th width="{{imageSize}}">
+            <input type="radio"
+                   name="sortColumnRadio"
+                   value="weightedDiffMeasure"
+                   ng-checked="(sortColumn == 'weightedDiffMeasure')"
+                   ng-click="sortResultsBy('weightedDiffMeasure')">
+            difference per pixel
+          </th>
+          <th>
+            <!-- item-selection checkbox column -->
+          </th>
+        </tr>
+
+        <!-- For most columns... if the user clicks on the cell, and we are on
+             the default tab, update the filter to only show results with the
+             same value for this category.
+             This is made a bit tricky by the fact that AngularJS expressions
+             do not allow control flow statements.  See
+             http://docs.angularjs.org/guide/expression -->
+        <tr ng-repeat="result in limitedTestData">
+          <td ng-click="(viewingTab != defaultTab) || showOnlyResultType(result.resultType)">
+            {{result.resultType}}
+          </td>
+          <td ng-repeat="categoryName in ['builder', 'test']"
+              ng-click="(viewingTab != defaultTab) || setCategoryValueMatch(categoryName, result[categoryName])">
+            {{result[categoryName]}}
+          </td>
+          <td ng-click="(viewingTab != defaultTab) || showOnlyConfig(result.config)">
+            {{result.config}}
+          </td>
+          <td>
+            <a ng-repeat="bug in result['bugs']"
+               href="https://code.google.com/p/skia/issues/detail?id={{bug}}"
+               target="_blank">
+              {{bug}}
+            </a>
+          </td>
+
+          <!-- expected image -->
+          <td valign="top" width="{{imageSize}}">
+            <a class="image-link" target="_blank" href="http://chromium-skia-gm.commondatastorage.googleapis.com/gm/{{result.expectedHashType}}/{{result.test}}/{{result.expectedHashDigest}}.png">
+              <img width="{{imageSize}}" src="http://chromium-skia-gm.commondatastorage.googleapis.com/gm/{{result.expectedHashType}}/{{result.test}}/{{result.expectedHashDigest}}.png"/>
+            </a>
+          </td>
+
+          <!-- actual image -->
+          <td valign="top" width="{{imageSize}}">
+            <a class="image-link" target="_blank" href="http://chromium-skia-gm.commondatastorage.googleapis.com/gm/{{result.actualHashType}}/{{result.test}}/{{result.actualHashDigest}}.png">
+              <img width="{{imageSize}}" src="http://chromium-skia-gm.commondatastorage.googleapis.com/gm/{{result.actualHashType}}/{{result.test}}/{{result.actualHashDigest}}.png"/>
+            </a>
+          </td>
+
+          <!-- whitediffs: every differing pixel shown in white -->
+          <td valign="top" width="{{imageSize}}">
+            <div ng-hide="result.expectedHashDigest == result.actualHashDigest"
+                 title="{{result.numDifferingPixels | number:0}} of {{(100 * result.numDifferingPixels / result.percentDifferingPixels) | number:0}} pixels ({{result.percentDifferingPixels.toFixed(4)}}%) differ from expectation.">
+              <a class="image-link" target="_blank" href="/static/generated-images/whitediffs/{{result.expectedHashDigest}}-vs-{{result.actualHashDigest}}.png">
+                <img width="{{imageSize}}" src="/static/generated-images/whitediffs/{{result.expectedHashDigest}}-vs-{{result.actualHashDigest}}.png"/>
+              </a><br>
+              {{result.percentDifferingPixels.toFixed(4)}}%
+              ({{result.numDifferingPixels}})
+            </div>
+            <div ng-hide="result.expectedHashDigest != result.actualHashDigest"
+                 style="text-align:center">
+              &ndash;none&ndash;
+            </div>
+          </td>
+
+          <!-- diffs: per-channel RGB deltas -->
+          <td valign="top" width="{{imageSize}}">
+            <div ng-hide="result.expectedHashDigest == result.actualHashDigest"
+                 title="Weighted difference measure is {{result.weightedDiffMeasure.toFixed(4)}}%.  Maximum difference per channel: R={{result.maxDiffPerChannel[0]}}, G={{result.maxDiffPerChannel[1]}}, B={{result.maxDiffPerChannel[2]}}">
+              <a class="image-link" target="_blank" href="/static/generated-images/diffs/{{result.expectedHashDigest}}-vs-{{result.actualHashDigest}}.png">
+                <img width="{{imageSize}}" src="/static/generated-images/diffs/{{result.expectedHashDigest}}-vs-{{result.actualHashDigest}}.png"/>
+              </a><br>
+              {{result.weightedDiffMeasure.toFixed(4)}}%
+              {{result.maxDiffPerChannel}}
+            </div>
+            <div ng-hide="result.expectedHashDigest != result.actualHashDigest"
+                 style="text-align:center">
+              &ndash;none&ndash;
+            </div>
+          </td>
+
+          <td>
+            <input type="checkbox"
+                   name="rowSelect"
+                   value="{{result.index}}"
+                   ng-checked="isValueInArray(result.index, selectedItems)"
+                   ng-click="toggleValueInArray(result.index, selectedItems)">
+        </tr>
+      </table> <!-- results -->
+    </td></tr></table> <!-- table holding results header + results table -->
+
+  </div><!-- main display area of selected tab -->
+  </div><!-- everything: hide until data is loaded -->
+
+  <!-- TODO(epoger): Can we get the base URLs (commondatastorage and
+       issues list) from
+       http://skia.googlecode.com/svn/buildbot/site_config/global_variables.json
+       ?  I tried importing the
+       http://skia.googlecode.com/svn/buildbot/skia_tools.js script and using
+       that to do so, but I got Access-Control-Allow-Origin errors.
+    -->
+
+</body>
+</html>

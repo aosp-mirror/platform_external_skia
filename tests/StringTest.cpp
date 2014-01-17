@@ -1,14 +1,15 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkString.h"
 #include <stdarg.h>
-
+#include <stdio.h>
 
 // Windows vsnprintf doesn't 0-terminate safely), but is so far
 // encapsulated in SkString that we can't test it directly.
@@ -32,9 +33,7 @@ static void printfAnalog(char* buffer, int size, const char format[], ...) {
     ARGS_TO_BUFFER(format, buffer, size);
 }
 
-
-
-static void TestString(skiatest::Reporter* reporter) {
+DEF_TEST(String, reporter) {
     SkString    a;
     SkString    b((size_t)0);
     SkString    c("");
@@ -190,5 +189,15 @@ static void TestString(skiatest::Reporter* reporter) {
 
 }
 
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("String", StringTestClass, TestString)
+DEF_TEST(String_SkStrSplit, r) {
+    SkTArray<SkString> results;
+
+    SkStrSplit("a-_b_c-dee--f-_-_-g-", "-_", &results);
+    REPORTER_ASSERT(r, results.count() == 6);
+    REPORTER_ASSERT(r, results[0].equals("a"));
+    REPORTER_ASSERT(r, results[1].equals("b"));
+    REPORTER_ASSERT(r, results[2].equals("c"));
+    REPORTER_ASSERT(r, results[3].equals("dee"));
+    REPORTER_ASSERT(r, results[4].equals("f"));
+    REPORTER_ASSERT(r, results[5].equals("g"));
+}

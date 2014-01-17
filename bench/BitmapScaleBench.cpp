@@ -20,7 +20,7 @@ class BitmapScaleBench: public SkBenchmark {
     SkString    fName;
 
 public:
-    BitmapScaleBench(void *param, int is, int os) : INHERITED(param) {
+    BitmapScaleBench( int is, int os)  {
         fInputSize = is;
         fOutputSize = os;
 
@@ -57,25 +57,25 @@ protected:
     }
 
     virtual void onPreDraw() {
-        fInputBitmap.setConfig(SkBitmap::kARGB_8888_Config, fInputSize, fInputSize);
+        fInputBitmap.setConfig(SkBitmap::kARGB_8888_Config,
+                               fInputSize, fInputSize, 0, kOpaque_SkAlphaType);
         fInputBitmap.allocPixels();
         fInputBitmap.eraseColor(SK_ColorWHITE);
-        fInputBitmap.setIsOpaque(true);
 
-        fOutputBitmap.setConfig(SkBitmap::kARGB_8888_Config, fOutputSize, fOutputSize);
+        fOutputBitmap.setConfig(SkBitmap::kARGB_8888_Config,
+                                fOutputSize, fOutputSize, 0, kOpaque_SkAlphaType);
         fOutputBitmap.allocPixels();
-        fOutputBitmap.setIsOpaque(true);
 
         fMatrix.setScale( scale(), scale() );
     }
 
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         SkPaint paint;
         this->setupPaint(&paint);
 
         preBenchSetup();
 
-        for (int i = 0; i < SkBENCHLOOP(fLoopCount); i++) {
+        for (int i = 0; i < loops; i++) {
             doScaleImage();
         }
     }
@@ -88,7 +88,7 @@ private:
 
 class BitmapFilterScaleBench: public BitmapScaleBench {
  public:
-    BitmapFilterScaleBench(void *param, int is, int os) : INHERITED(param, is, os) {
+    BitmapFilterScaleBench( int is, int os) : INHERITED(is, os) {
         setName( "filter" );
     }
 protected:
@@ -103,12 +103,12 @@ private:
     typedef BitmapScaleBench INHERITED;
 };
 
-DEF_BENCH(return new BitmapFilterScaleBench(p, 10, 90);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 30, 90);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 80, 90);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 90, 90);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 90, 80);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 90, 30);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 90, 10);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 256, 64);)
-DEF_BENCH(return new BitmapFilterScaleBench(p, 64, 256);)
+DEF_BENCH(return new BitmapFilterScaleBench(10, 90);)
+DEF_BENCH(return new BitmapFilterScaleBench(30, 90);)
+DEF_BENCH(return new BitmapFilterScaleBench(80, 90);)
+DEF_BENCH(return new BitmapFilterScaleBench(90, 90);)
+DEF_BENCH(return new BitmapFilterScaleBench(90, 80);)
+DEF_BENCH(return new BitmapFilterScaleBench(90, 30);)
+DEF_BENCH(return new BitmapFilterScaleBench(90, 10);)
+DEF_BENCH(return new BitmapFilterScaleBench(256, 64);)
+DEF_BENCH(return new BitmapFilterScaleBench(64, 256);)

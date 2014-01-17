@@ -25,8 +25,7 @@
 
 class SkBlurMaskFilterImpl : public SkMaskFilter {
 public:
-    SkBlurMaskFilterImpl(SkScalar radius, SkBlurMaskFilter::BlurStyle,
-                         uint32_t flags);
+    SkBlurMaskFilterImpl(SkScalar sigma, SkBlurMaskFilter::BlurStyle, uint32_t flags);
 
     // overrides from SkMaskFilter
     virtual SkMask::Format getFormat() const SK_OVERRIDE;
@@ -65,37 +64,26 @@ private:
     // To avoid unseemly allocation requests (esp. for finite platforms like
     // handset) we limit the radius so something manageable. (as opposed to
     // a request like 10,000)
-    static const SkScalar kMAX_BLUR_RADIUS;
-    // This constant approximates the scaling done in the software path's
-    // "high quality" mode, in SkBlurMask::Blur() (1 / sqrt(3)).
-    // IMHO, it actually should be 1:  we blur "less" than we should do
-    // according to the CSS and canvas specs, simply because Safari does the same.
-    // Firefox used to do the same too, until 4.0 where they fixed it.  So at some
-    // point we should probably get rid of these scaling constants and rebaseline
-    // all the blur tests.
-    static const SkScalar kBLUR_SIGMA_SCALE;
+    static const SkScalar kMAX_BLUR_SIGMA;
 
-    SkScalar                    fRadius;
+    SkScalar                    fSigma;
     SkBlurMaskFilter::BlurStyle fBlurStyle;
     uint32_t                    fBlurFlags;
 
     SkBlurMaskFilterImpl(SkFlattenableReadBuffer&);
     virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
-#if SK_SUPPORT_GPU
-    SkScalar computeXformedRadius(const SkMatrix& ctm) const {
+
+    SkScalar computeXformedSigma(const SkMatrix& ctm) const {
         bool ignoreTransform = SkToBool(fBlurFlags & SkBlurMaskFilter::kIgnoreTransform_BlurFlag);
 
-        SkScalar xformedRadius = ignoreTransform ? fRadius
-                                                 : ctm.mapRadius(fRadius);
-        return SkMinScalar(xformedRadius, kMAX_BLUR_RADIUS);
+        SkScalar xformedSigma = ignoreTransform ? fSigma : ctm.mapRadius(fSigma);
+        return SkMinScalar(xformedSigma, kMAX_BLUR_SIGMA);
     }
-#endif
 
     typedef SkMaskFilter INHERITED;
 };
 
-const SkScalar SkBlurMaskFilterImpl::kMAX_BLUR_RADIUS = SkIntToScalar(128);
-const SkScalar SkBlurMaskFilterImpl::kBLUR_SIGMA_SCALE = SkFloatToScalar(0.6f);
+const SkScalar SkBlurMaskFilterImpl::kMAX_BLUR_SIGMA = SkIntToScalar(128);
 
 SkMaskFilter* SkBlurMaskFilter::Create(SkScalar radius,
                                        SkBlurMaskFilter::BlurStyle style,
@@ -106,15 +94,29 @@ SkMaskFilter* SkBlurMaskFilter::Create(SkScalar radius,
         return NULL;
     }
 
-    return SkNEW_ARGS(SkBlurMaskFilterImpl, (radius, style, flags));
+    SkScalar sigma = SkBlurMask::ConvertRadiusToSigma(radius);
+
+    return SkNEW_ARGS(SkBlurMaskFilterImpl, (sigma, style, flags));
+}
+
+SkMaskFilter* SkBlurMaskFilter::Create(SkBlurMaskFilter::BlurStyle style,
+                                       SkScalar sigma,
+                                       uint32_t flags) {
+    // use !(sigma > 0) instead of sigma <= 0 to reject NaN values
+    if (!(sigma > 0) || (unsigned)style >= SkBlurMaskFilter::kBlurStyleCount
+        || flags > SkBlurMaskFilter::kAll_BlurFlag) {
+        return NULL;
+    }
+
+    return SkNEW_ARGS(SkBlurMaskFilterImpl, (sigma, style, flags));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkScalar radius,
+SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkScalar sigma,
                                            SkBlurMaskFilter::BlurStyle style,
                                            uint32_t flags)
-    : fRadius(radius), fBlurStyle(style), fBlurFlags(flags) {
+    : fSigma(sigma), fBlurStyle(style), fBlurFlags(flags) {
 #if 0
     fGamma = NULL;
     if (gammaScale) {
@@ -125,7 +127,7 @@ SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkScalar radius,
             SkBlurMask::BuildSqrtGamma(fGamma, -gammaScale);
     }
 #endif
-    SkASSERT(radius >= 0);
+    SkASSERT(fSigma >= 0);
     SkASSERT((unsigned)style < SkBlurMaskFilter::kBlurStyleCount);
     SkASSERT(flags <= SkBlurMaskFilter::kAll_BlurFlag);
 }
@@ -137,35 +139,22 @@ SkMask::Format SkBlurMaskFilterImpl::getFormat() const {
 bool SkBlurMaskFilterImpl::filterMask(SkMask* dst, const SkMask& src,
                                       const SkMatrix& matrix,
                                       SkIPoint* margin) const{
-    SkScalar radius;
-    if (fBlurFlags & SkBlurMaskFilter::kIgnoreTransform_BlurFlag) {
-        radius = fRadius;
-    } else {
-        radius = matrix.mapRadius(fRadius);
-    }
+    SkScalar sigma = this->computeXformedSigma(matrix);
 
-    radius = SkMinScalar(radius, kMAX_BLUR_RADIUS);
     SkBlurMask::Quality blurQuality =
         (fBlurFlags & SkBlurMaskFilter::kHighQuality_BlurFlag) ?
             SkBlurMask::kHigh_Quality : SkBlurMask::kLow_Quality;
 
-    return SkBlurMask::Blur(dst, src, radius, (SkBlurMask::Style)fBlurStyle,
-                            blurQuality, margin);
+    return SkBlurMask::BoxBlur(dst, src, sigma, (SkBlurMask::Style)fBlurStyle,
+                               blurQuality, margin);
 }
 
 bool SkBlurMaskFilterImpl::filterRectMask(SkMask* dst, const SkRect& r,
                                           const SkMatrix& matrix,
                                           SkIPoint* margin, SkMask::CreateMode createMode) const{
-    SkScalar radius;
-    if (fBlurFlags & SkBlurMaskFilter::kIgnoreTransform_BlurFlag) {
-        radius = fRadius;
-    } else {
-        radius = matrix.mapRadius(fRadius);
-    }
+    SkScalar sigma = computeXformedSigma(matrix);
 
-    radius = SkMinScalar(radius, kMAX_BLUR_RADIUS);
-
-    return SkBlurMask::BlurRect(dst, r, radius, (SkBlurMask::Style)fBlurStyle,
+    return SkBlurMask::BlurRect(sigma, dst, r, (SkBlurMask::Style)fBlurStyle,
                                 margin, createMode);
 }
 
@@ -193,7 +182,7 @@ static bool draw_rrect_into_mask(const SkRRect rrect, SkMask* mask) {
         return false;
     }
 
-    // FIXME: This code duplicates code in drawRectsIntoMask, below. Is there a
+    // FIXME: This code duplicates code in draw_rects_into_mask, below. Is there a
     // clean way to share more code?
     SkBitmap bitmap;
     bitmap.setConfig(SkBitmap::kA8_Config,
@@ -211,7 +200,7 @@ static bool draw_rrect_into_mask(const SkRRect rrect, SkMask* mask) {
     return true;
 }
 
-static bool drawRectsIntoMask(const SkRect rects[], int count, SkMask* mask) {
+static bool draw_rects_into_mask(const SkRect rects[], int count, SkMask* mask) {
     if (!prepare_to_draw_into_mask(rects[0], mask)) {
         return false;
     }
@@ -374,7 +363,8 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
 
     // TODO: report correct metrics for innerstyle, where we do not grow the
     // total bounds, but we do need an inset the size of our blur-radius
-    if (SkBlurMaskFilter::kInner_BlurStyle == fBlurStyle) {
+    if (SkBlurMaskFilter::kInner_BlurStyle == fBlurStyle ||
+        SkBlurMaskFilter::kOuter_BlurStyle == fBlurStyle) {
         return kUnimplemented_FilterReturn;
     }
 
@@ -452,7 +442,9 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
     }
 
     smallR[0].set(rects[0].left(), rects[0].top(), rects[0].right() - dx, rects[0].bottom() - dy);
-    SkASSERT(!smallR[0].isEmpty());
+    if (smallR[0].width() < 2 || smallR[0].height() < 2) {
+        return kUnimplemented_FilterReturn;
+    }
     if (2 == count) {
         smallR[1].set(rects[1].left(), rects[1].top(),
                       rects[1].right() - dx, rects[1].bottom() - dy);
@@ -460,7 +452,7 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
     }
 
     if (count > 1 || !c_analyticBlurNinepatch) {
-        if (!drawRectsIntoMask(smallR, count, &srcM)) {
+        if (!draw_rects_into_mask(smallR, count, &srcM)) {
             return kFalse_FilterReturn;
         }
 
@@ -483,24 +475,7 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
 
 void SkBlurMaskFilterImpl::computeFastBounds(const SkRect& src,
                                              SkRect* dst) const {
-    SkScalar gpuPad, rasterPad;
-
-    {
-        // GPU path
-        SkScalar sigma = SkScalarMul(fRadius, kBLUR_SIGMA_SCALE);
-        gpuPad = sigma * 3.0f;
-    }
-
-    {
-        // raster path
-        SkScalar radius = SkScalarMul(fRadius, SkBlurMask::kBlurRadiusFudgeFactor);
-
-        radius = (radius + .5f) * 2.f;
-
-        rasterPad = SkIntToScalar(SkScalarRoundToInt(radius * 3)/2);
-    }
-
-    SkScalar pad = SkMaxScalar(gpuPad, rasterPad);
+    SkScalar pad = 3.0f * fSigma;
 
     dst->set(src.fLeft  - pad, src.fTop    - pad,
              src.fRight + pad, src.fBottom + pad);
@@ -508,16 +483,19 @@ void SkBlurMaskFilterImpl::computeFastBounds(const SkRect& src,
 
 SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkFlattenableReadBuffer& buffer)
         : SkMaskFilter(buffer) {
-    fRadius = buffer.readScalar();
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+    // TODO: when the skps are recaptured at > v15 the SkScalarAbs can be removed
+#endif
+    fSigma = SkScalarAbs(buffer.readScalar());
     fBlurStyle = (SkBlurMaskFilter::BlurStyle)buffer.readInt();
     fBlurFlags = buffer.readUInt() & SkBlurMaskFilter::kAll_BlurFlag;
-    SkASSERT(fRadius >= 0);
+    SkASSERT(fSigma >= 0);
     SkASSERT((unsigned)fBlurStyle < SkBlurMaskFilter::kBlurStyleCount);
 }
 
 void SkBlurMaskFilterImpl::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.writeScalar(fRadius);
+    buffer.writeScalar(fSigma);
     buffer.writeInt(fBlurStyle);
     buffer.writeUInt(fBlurFlags);
 }
@@ -528,17 +506,17 @@ bool SkBlurMaskFilterImpl::canFilterMaskGPU(const SkRect& srcBounds,
                                             const SkIRect& clipBounds,
                                             const SkMatrix& ctm,
                                             SkRect* maskRect) const {
-    SkScalar xformedRadius = this->computeXformedRadius(ctm);
-    if (xformedRadius <= 0) {
+    SkScalar xformedSigma = this->computeXformedSigma(ctm);
+    if (xformedSigma <= 0) {
         return false;
     }
 
-    static const SkScalar kMIN_GPU_BLUR_SIZE = SkIntToScalar(64);
-    static const SkScalar kMIN_GPU_BLUR_RADIUS = SkIntToScalar(32);
+    static const SkScalar kMIN_GPU_BLUR_SIZE  = SkIntToScalar(64);
+    static const SkScalar kMIN_GPU_BLUR_SIGMA = SkIntToScalar(32);
 
     if (srcBounds.width() <= kMIN_GPU_BLUR_SIZE &&
         srcBounds.height() <= kMIN_GPU_BLUR_SIZE &&
-        xformedRadius <= kMIN_GPU_BLUR_RADIUS) {
+        xformedSigma <= kMIN_GPU_BLUR_SIGMA) {
         // We prefer to blur small rect with small radius via CPU.
         return false;
     }
@@ -548,14 +526,14 @@ bool SkBlurMaskFilterImpl::canFilterMaskGPU(const SkRect& srcBounds,
         return true;
     }
 
-    float sigma3 = 3 * SkScalarToFloat(xformedRadius) * kBLUR_SIGMA_SCALE;
+    float sigma3 = 3 * SkScalarToFloat(xformedSigma);
 
-    SkRect clipRect = SkRect::MakeFromIRect(clipBounds);
+    SkRect clipRect = SkRect::Make(clipBounds);
     SkRect srcRect(srcBounds);
 
     // Outset srcRect and clipRect by 3 * sigma, to compute affected blur area.
-    srcRect.outset(SkFloatToScalar(sigma3), SkFloatToScalar(sigma3));
-    clipRect.outset(SkFloatToScalar(sigma3), SkFloatToScalar(sigma3));
+    srcRect.outset(sigma3, sigma3);
+    clipRect.outset(sigma3, sigma3);
     srcRect.intersect(clipRect);
     *maskRect = srcRect;
     return true;
@@ -571,16 +549,14 @@ bool SkBlurMaskFilterImpl::filterMaskGPU(GrTexture* src,
 
     GrContext::AutoWideOpenIdentityDraw awo(context, NULL);
 
-    SkScalar xformedRadius = this->computeXformedRadius(context->getMatrix());
-    SkASSERT(xformedRadius > 0);
-
-    float sigma = SkScalarToFloat(xformedRadius) * kBLUR_SIGMA_SCALE;
+    SkScalar xformedSigma = this->computeXformedSigma(context->getMatrix());
+    SkASSERT(xformedSigma > 0);
 
     // If we're doing a normal blur, we can clobber the pathTexture in the
     // gaussianBlur.  Otherwise, we need to save it for later compositing.
     bool isNormalBlur = (SkBlurMaskFilter::kNormal_BlurStyle == fBlurStyle);
     *result = SkGpuBlurUtils::GaussianBlur(context, src, isNormalBlur && canOverwriteSrc,
-                                           clipRect, false, sigma, sigma);
+                                           clipRect, false, xformedSigma, xformedSigma);
     if (NULL == *result) {
         return false;
     }
@@ -618,8 +594,8 @@ bool SkBlurMaskFilterImpl::filterMaskGPU(GrTexture* src,
 void SkBlurMaskFilterImpl::toString(SkString* str) const {
     str->append("SkBlurMaskFilterImpl: (");
 
-    str->append("radius: ");
-    str->appendScalar(fRadius);
+    str->append("sigma: ");
+    str->appendScalar(fSigma);
     str->append(" ");
 
     static const char* gStyleName[SkBlurMaskFilter::kBlurStyleCount] = {

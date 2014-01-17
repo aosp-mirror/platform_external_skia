@@ -1,19 +1,22 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkColor.h"
+#include "SkColorPriv.h"
 #include "SkColorFilter.h"
+#include "SkLumaColorFilter.h"
 #include "SkRandom.h"
 #include "SkXfermode.h"
 #include "SkOrderedReadBuffer.h"
 #include "SkOrderedWriteBuffer.h"
 
-static SkFlattenable* reincarnate_flattenable(SkFlattenable* obj) {
+static SkColorFilter* reincarnate_colorfilter(SkFlattenable* obj) {
     SkOrderedWriteBuffer wb(1024);
     wb.writeFlattenable(obj);
 
@@ -23,19 +26,15 @@ static SkFlattenable* reincarnate_flattenable(SkFlattenable* obj) {
     wb.writeToMemory(storage.get());
 
     SkOrderedReadBuffer rb(storage.get(), size);
-    return rb.readFlattenable();
-}
-
-template <typename T> T* reincarnate(T* obj) {
-    return (T*)reincarnate_flattenable(obj);
+    return rb.readColorFilter();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ILLEGAL_MODE    ((SkXfermode::Mode)-1)
 
-static void test_asColorMode(skiatest::Reporter* reporter) {
-    SkMWCRandom rand;
+DEF_TEST(ColorFilter, reporter) {
+    SkRandom rand;
 
     for (int mode = 0; mode <= SkXfermode::kLastMode; mode++) {
         SkColor color = rand.nextU();
@@ -80,7 +79,7 @@ static void test_asColorMode(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, m == expectedMode);
 
         {
-            SkColorFilter* cf2 = reincarnate(cf);
+            SkColorFilter* cf2 = reincarnate_colorfilter(cf);
             SkAutoUnref aur2(cf2);
             REPORTER_ASSERT(reporter, cf2);
 
@@ -93,5 +92,37 @@ static void test_asColorMode(skiatest::Reporter* reporter) {
     }
 }
 
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("ColorFilter", ColorFilterTestClass, test_asColorMode)
+///////////////////////////////////////////////////////////////////////////////
+
+DEF_TEST(LumaColorFilter, reporter) {
+    SkPMColor in, out;
+    SkAutoTUnref<SkColorFilter> lf(SkLumaColorFilter::Create());
+
+    // Applying luma to white produces black with the same transparency.
+    for (unsigned i = 0; i < 256; ++i) {
+        in = SkPackARGB32(i, i, i, i);
+        lf->filterSpan(&in, 1, &out);
+        REPORTER_ASSERT(reporter, SkGetPackedA32(out) == i);
+        REPORTER_ASSERT(reporter, SkGetPackedR32(out) == 0);
+        REPORTER_ASSERT(reporter, SkGetPackedG32(out) == 0);
+        REPORTER_ASSERT(reporter, SkGetPackedB32(out) == 0);
+    }
+
+    // Applying luma to black yields transparent black (luminance(black) == 0)
+    for (unsigned i = 0; i < 256; ++i) {
+        in = SkPackARGB32(i, 0, 0, 0);
+        lf->filterSpan(&in, 1, &out);
+        REPORTER_ASSERT(reporter, out == SK_ColorTRANSPARENT);
+    }
+
+    // For general colors, a luma filter generates black with an attenuated alpha channel.
+    for (unsigned i = 1; i < 256; ++i) {
+        in = SkPackARGB32(i, i, i / 2, i / 3);
+        lf->filterSpan(&in, 1, &out);
+        REPORTER_ASSERT(reporter, out != in);
+        REPORTER_ASSERT(reporter, SkGetPackedA32(out) <= i);
+        REPORTER_ASSERT(reporter, SkGetPackedR32(out) == 0);
+        REPORTER_ASSERT(reporter, SkGetPackedG32(out) == 0);
+        REPORTER_ASSERT(reporter, SkGetPackedB32(out) == 0);
+    }
+}

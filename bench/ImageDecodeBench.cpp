@@ -21,13 +21,15 @@ class SkCanvas;
 class ImageDecodeBench : public SkBenchmark {
 public:
     ImageDecodeBench(void* p, const char* filename)
-    : INHERITED(p)
-    , fName("image_decode_")
+    : fName("image_decode_")
     , fFilename(filename)
     , fStream()
     , fValid(false) {
         fName.append(SkOSPath::SkBasename(filename));
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -50,7 +52,7 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
 #ifdef SK_DEBUG
         if (!fValid) {
             SkDebugf("stream was invalid: %s\n", fName.c_str());
@@ -59,7 +61,7 @@ protected:
 #endif
         // Decode a bunch of times
         SkBitmap bm;
-        for (int i = 0; i < SkBENCHLOOP(1000); ++i) {
+        for (int i = 0; i < loops; ++i) {
             SkDEBUGCODE(bool success =) SkImageDecoder::DecodeStream(&fStream, &bm);
 #ifdef SK_DEBUG
             if (!success) {
@@ -87,5 +89,5 @@ private:
 };
 
 // These are files which call decodePalette
-//DEF_BENCH( return SkNEW_ARGS(ImageDecodeBench, (p, "/usr/local/google/home/scroggo/Downloads/images/hal_163x90.png")); )
-//DEF_BENCH( return SkNEW_ARGS(ImageDecodeBench, (p, "/usr/local/google/home/scroggo/Downloads/images/box_19_top-left.png")); )
+//DEF_BENCH( return SkNEW_ARGS(ImageDecodeBench, ("/usr/local/google/home/scroggo/Downloads/images/hal_163x90.png")); )
+//DEF_BENCH( return SkNEW_ARGS(ImageDecodeBench, ("/usr/local/google/home/scroggo/Downloads/images/box_19_top-left.png")); )

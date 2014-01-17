@@ -10,7 +10,7 @@
 #include "SkWGL.h"
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 
 SkNativeGLContext::AutoContextRestore::AutoContextRestore() {
     fOldHGLRC = wglGetCurrentContext();
@@ -110,5 +110,11 @@ const GrGLInterface* SkNativeGLContext::createGLContext() {
 void SkNativeGLContext::makeCurrent() const {
     if (!wglMakeCurrent(fDeviceContext, fGlRenderContext)) {
         SkDebugf("Could not create rendering context.\n");
+    }
+}
+
+void SkNativeGLContext::swapBuffers() const {
+    if (!SwapBuffers(fDeviceContext)) {
+        SkDebugf("Could not complete SwapBuffers.\n");
     }
 }

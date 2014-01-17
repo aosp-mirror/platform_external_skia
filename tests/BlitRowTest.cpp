@@ -1,24 +1,21 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkGradientShader.h"
 #include "SkRect.h"
 
-static inline const char* boolStr(bool value) {
-    return value ? "true" : "false";
-}
-
 // these are in the same order as the SkBitmap::Config enum
 static const char* gConfigName[] = {
-    "None", "A1", "A8", "Index8", "565", "4444", "8888", "RLE_Index8"
+    "None", "A8", "Index8", "565", "4444", "8888"
 };
 
 /** Returns -1 on success, else the x coord of the first bad pixel, return its
@@ -266,10 +263,7 @@ static void test_diagonal(skiatest::Reporter* reporter) {
     }
 }
 
-static void TestBlitRow(skiatest::Reporter* reporter) {
+DEF_TEST(BlitRow, reporter) {
     test_00_FF(reporter);
     test_diagonal(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("BlitRow", TestBlitRowClass, TestBlitRow)

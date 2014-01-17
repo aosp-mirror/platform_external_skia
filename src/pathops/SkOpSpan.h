@@ -24,8 +24,13 @@ struct SkOpSpan {
     bool fDone;  // if set, this span to next higher T has been processed
     bool fUnsortableStart;  // set when start is part of an unsortable pair
     bool fUnsortableEnd;  // set when end is part of an unsortable pair
+    bool fSmall;   // if set, consecutive points are almost equal
     bool fTiny;  // if set, span may still be considered once for edge following
     bool fLoop;  // set when a cubic loops back to this point
+
+#ifdef SK_DEBUG
+    void dump() const;
+#endif
 };
 
 #endif
