@@ -38,14 +38,16 @@ public:
 
     virtual size_t getPosition() const SK_OVERRIDE { return fOffset; }
 
-    virtual bool hasLength() const SK_OVERRIDE;
+    virtual bool hasLength() const SK_OVERRIDE { return fHasLength; }
 
-    virtual size_t getLength() const SK_OVERRIDE;
+    virtual size_t getLength() const SK_OVERRIDE { return fLength; }
 
     virtual SkStreamRewindable* duplicate() const SK_OVERRIDE { return NULL; }
 
 private:
     SkAutoTUnref<SkStream>  fStream;
+    const bool              fHasLength;
+    const size_t            fLength;
     // Current offset into the stream. Always >= 0.
     size_t                  fOffset;
     // Amount that has been buffered by calls to read. Will always be less than
