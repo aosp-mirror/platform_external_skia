@@ -16,6 +16,8 @@ SkStreamRewindable* SkFrontBufferedStream::Create(SkStream* stream, size_t buffe
 
 SkFrontBufferedStream::SkFrontBufferedStream(SkStream* stream, size_t bufferSize)
     : fStream(SkRef(stream))
+    , fHasLength(stream->hasPosition() && stream->hasLength())
+    , fLength(stream->getLength() - stream->getPosition())
     , fOffset(0)
     , fBufferedSoFar(0)
     , fBufferSize(bufferSize)
@@ -38,14 +40,6 @@ bool SkFrontBufferedStream::rewind() {
         return true;
     }
     return false;
-}
-
-bool SkFrontBufferedStream::hasLength() const {
-    return fStream->hasLength();
-}
-
-size_t SkFrontBufferedStream::getLength() const {
-    return fStream->getLength();
 }
 
 size_t SkFrontBufferedStream::readFromBuffer(char* dst, size_t size) {
