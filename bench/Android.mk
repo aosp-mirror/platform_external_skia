@@ -106,6 +106,10 @@ LOCAL_MODULE_TAGS := optional
 # unecessary log spew when building
 LOCAL_CFLAGS := -Wno-unused-parameter
 
+# Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
+# Revert to -D_FORTIFY_SOURCE=1
+LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
+
 #include stlport headers
 include external/stlport/libstlport.mk
 
