@@ -27,7 +27,7 @@ LOCAL_PATH:= $(call my-dir)
 
 
 #############################################################
-#   build the skia+freetype+png+jpeg+zlib+gif+webp library
+#   build the skia+fretype+png+jpeg+zlib+gif+webp library
 #
 
 include $(CLEAR_VARS)
@@ -514,14 +514,14 @@ LOCAL_SRC_FILES += \
 
 ifeq ($(TARGET_ARCH),arm)
 
-	ifeq ($(ARCH_ARM_HAVE_NEON),true)
-	LOCAL_SRC_FILES += \
-		src/opts/memset16_neon.S \
-		src/opts/memset32_neon.S \
-		src/opts/SkBitmapProcState_arm_neon.cpp \
-		src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
-		src/opts/SkBlitRow_opts_arm_neon.cpp
-	endif
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
+LOCAL_SRC_FILES += \
+	src/opts/memset16_neon.S \
+	src/opts/memset32_neon.S \
+	src/opts/SkBitmapProcState_arm_neon.cpp \
+	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBlitRow_opts_arm_neon.cpp
+endif
 
 LOCAL_SRC_FILES += \
 	src/core/SkUtilsArm.cpp \
@@ -531,27 +531,10 @@ LOCAL_SRC_FILES += \
 	src/opts/SkBlitRow_opts_arm.cpp
 
 else
-
-	ifeq ($(TARGET_ARCH),x86)
-	LOCAL_SRC_FILES += \
-		src/opts/opts_check_SSE2.cpp \
-		src/opts/SkBitmapProcState_opts_SSE2.cpp \
-		src/opts/SkBitmapFilter_opts_SSE2.cpp \
-		src/opts/SkBlitRow_opts_SSE2.cpp \
-		src/opts/SkBlitRect_opts_SSE2.cpp \
-		src/opts/SkUtils_opts_SSE2.cpp
-
-		ifeq ($(ARCH_X86_HAVE_SSSE3),true)
-		LOCAL_SRC_FILES += \
-			src/opts/SkBitmapProcState_opts_SSSE3.cpp
-		endif
-
-	else
-	LOCAL_SRC_FILES += \
-		src/opts/SkBlitRow_opts_none.cpp \
-		src/opts/SkBitmapProcState_opts_none.cpp \
-		src/opts/SkUtils_opts_none.cpp
-	endif
+LOCAL_SRC_FILES += \
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBitmapProcState_opts_none.cpp \
+	src/opts/SkUtils_opts_none.cpp
 endif
 
 LOCAL_SHARED_LIBRARIES := \
