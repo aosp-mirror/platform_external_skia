@@ -29,6 +29,10 @@ SkImageRef::SkImageRef(const SkImageInfo& info, SkStreamRewindable* stream,
     fPrev = fNext = NULL;
     fFactory = NULL;
 
+    // This sets the colortype/alphatype to exactly match our info, so that this
+    // can get communicated down to the codec.
+    fBitmap.setConfig(info);
+
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("add ImageRef %p [%d] data=%d\n",
               this, this->info().fColorType, (int)stream->getLength());
@@ -117,6 +121,10 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
         codec->setSampleSize(fSampleSize);
         codec->setDitherImage(fDoDither);
         if (this->onDecode(codec, fStream, &fBitmap, fBitmap.config(), mode)) {
+            SkDEBUGCODE(SkImageInfo info;)
+            SkASSERT(!fBitmap.asImageInfo(&info) || this->info().fColorType == info.fColorType);
+            SkASSERT(this->info().fWidth == fBitmap.width());
+            SkASSERT(this->info().fHeight == fBitmap.height());
             return true;
         }
     }
@@ -170,6 +178,10 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
 
     fPrev = fNext = NULL;
     fFactory = NULL;
+
+    // This sets the colortype/alphatype to exactly match our info, so that this
+    // can get communicated down to the codec.
+    fBitmap.setConfig(this->info());
 }
 
 void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
