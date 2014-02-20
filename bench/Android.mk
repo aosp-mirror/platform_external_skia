@@ -1,4 +1,4 @@
-
+local_target_dir := $(TARGET_OUT_DATA)/local/tmp
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -99,8 +99,8 @@ LOCAL_C_INCLUDES := \
   external/skia/tools/flags
 
 LOCAL_MODULE := skia_bench
-
-LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(local_target_dir)
+LOCAL_MODULE_TAGS := tests
 
 # Skia does not enforce this usage pattern so we disable it here to avoid
 # unecessary log spew when building
