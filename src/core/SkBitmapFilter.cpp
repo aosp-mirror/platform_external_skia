@@ -31,8 +31,8 @@ void highQualityFilter(ColorPacker pack, const SkBitmapProcState& s, int x, int 
 
     while (count-- > 0) {
         SkPoint srcPt;
-        s.fInvProc(s.fInvMatrix, SkFloatToScalar(x + 0.5f),
-                    SkFloatToScalar(y + 0.5f), &srcPt);
+        s.fInvProc(s.fInvMatrix, x + 0.5f,
+                    y + 0.5f, &srcPt);
         srcPt.fX -= SK_ScalarHalf;
         srcPt.fY -= SK_ScalarHalf;
 
@@ -40,14 +40,14 @@ void highQualityFilter(ColorPacker pack, const SkBitmapProcState& s, int x, int 
         SkScalar fr = 0, fg = 0, fb = 0, fa = 0;
 
         int y0 = SkClampMax(SkScalarCeilToInt(srcPt.fY-s.getBitmapFilter()->width()), maxY);
-        int y1 = SkClampMax(SkScalarFloorToInt(srcPt.fY+s.getBitmapFilter()->width()), maxY);
+        int y1 = SkClampMax(SkScalarFloorToInt(srcPt.fY+s.getBitmapFilter()->width()+1), maxY);
         int x0 = SkClampMax(SkScalarCeilToInt(srcPt.fX-s.getBitmapFilter()->width()), maxX);
-        int x1 = SkClampMax(SkScalarFloorToInt(srcPt.fX+s.getBitmapFilter()->width()), maxX);
+        int x1 = SkClampMax(SkScalarFloorToInt(srcPt.fX+s.getBitmapFilter()->width())+1, maxX);
 
-        for (int srcY = y0; srcY <= y1; srcY++) {
+        for (int srcY = y0; srcY < y1; srcY++) {
             SkScalar yWeight = s.getBitmapFilter()->lookupScalar((srcPt.fY - srcY));
 
-            for (int srcX = x0; srcX <= x1 ; srcX++) {
+            for (int srcX = x0; srcX < x1 ; srcX++) {
                 SkScalar xWeight = s.getBitmapFilter()->lookupScalar((srcPt.fX - srcX));
 
                 SkScalar combined_weight = SkScalarMul(xWeight, yWeight);

@@ -87,6 +87,7 @@
       'skia_resource_cache_mb_limit%': 0,
       'skia_resource_cache_count_limit%': 0,
       'skia_angle%': 0,
+      'skia_chrome_utils%': 1,
       'skia_directwrite%': 0,
       'skia_gpu%': 1,
       'skia_osx_sdkroot%': '',
@@ -94,6 +95,7 @@
       'skia_win_debuggers_path%': '',
       'skia_shared_lib%': 0,
       'skia_opencl%': 0,
+      'skia_distancefield_fonts%': 0,
 
       # These variables determine the default optimization level for different
       # compilers.
@@ -146,6 +148,7 @@
     'skia_angle%': '<(skia_angle)',
     'skia_arch_width%': '<(skia_arch_width)',
     'skia_arch_type%': '<(skia_arch_type)',
+    'skia_chrome_utils%': '<(skia_chrome_utils)',
     'skia_directwrite%': '<(skia_directwrite)',
     'skia_gpu%': '<(skia_gpu)',
     'skia_win_exceptions%': 0,
@@ -153,9 +156,11 @@
     'skia_profile_enabled%': '<(skia_profile_enabled)',
     'skia_shared_lib%': '<(skia_shared_lib)',
     'skia_opencl%': '<(skia_opencl)',
+    'skia_distancefield_fonts%': '<(skia_distancefield_fonts)',
     'skia_static_initializers%': '<(skia_static_initializers)',
     'ios_sdk_version%': '6.0',
     'skia_win_debuggers_path%': '<(skia_win_debuggers_path)',
+    'skia_run_pdfviewer_in_gm%': 0,
 
     # These are referenced by our .gypi files that list files (e.g. core.gypi)
     #
@@ -163,8 +168,3 @@
     'skia_include_path%': '../include',
   },
 }
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

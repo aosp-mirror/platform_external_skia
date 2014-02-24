@@ -7,6 +7,7 @@
 
 #include "SkDither.h"
 #include "SkPerlinNoiseShader.h"
+#include "SkColorFilter.h"
 #include "SkFlattenableBuffers.h"
 #include "SkShader.h"
 #include "SkUnPreMultiply.h"
@@ -44,10 +45,15 @@ inline int checkNoise(int noiseValue, int limitValue, int newValue) {
 }
 
 inline SkScalar smoothCurve(SkScalar t) {
-    static const SkScalar SK_Scalar3 = SkFloatToScalar(3.0f);
+    static const SkScalar SK_Scalar3 = 3.0f;
 
     // returns t * t * (3 - 2 * t)
     return SkScalarMul(SkScalarSquare(t), SK_Scalar3 - 2 * t);
+}
+
+bool perlin_noise_type_is_valid(SkPerlinNoiseShader::Type type) {
+    return (SkPerlinNoiseShader::kFractalNoise_Type == type) ||
+           (SkPerlinNoiseShader::kTurbulence_Type == type);
 }
 
 } // end namespace
@@ -164,7 +170,7 @@ public:
         }
 
         // Half of the largest possible value for 16 bit unsigned int
-        static const SkScalar gHalfMax16bits = SkFloatToScalar(32767.5f);
+        static const SkScalar gHalfMax16bits = 32767.5f;
 
         // Compute gradients from permutated noise data
         for (int channel = 0; channel < 4; ++channel) {
@@ -278,7 +284,7 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
   : fType(type)
   , fBaseFrequencyX(baseFrequencyX)
   , fBaseFrequencyY(baseFrequencyY)
-  , fNumOctaves(numOctaves & 0xFF /*[0,255] octaves allowed*/)
+  , fNumOctaves(numOctaves > 255 ? 255 : numOctaves/*[0,255] octaves allowed*/)
   , fSeed(seed)
   , fStitchTiles((tileSize != NULL) && !tileSize->isEmpty())
   , fPaintingData(NULL)
@@ -300,6 +306,8 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkFlattenableReadBuffer& buffer) :
     fTileSize.fHeight = buffer.readInt();
     setTileSize(fTileSize);
     fMatrix.reset();
+    buffer.validate(perlin_noise_type_is_valid(fType) &&
+                    (fNumOctaves >= 0) && (fNumOctaves <= 255));
 }
 
 SkPerlinNoiseShader::~SkPerlinNoiseShader() {
@@ -728,10 +736,10 @@ GrEffectRef* GrPerlinNoiseEffect::TestCreate(SkRandom* random,
     bool     stitchTiles = random->nextBool();
     SkScalar seed = SkIntToScalar(random->nextU());
     SkISize  tileSize = SkISize::Make(random->nextRangeU(4, 4096), random->nextRangeU(4, 4096));
-    SkScalar baseFrequencyX = random->nextRangeScalar(SkFloatToScalar(0.01f),
-                                                      SkFloatToScalar(0.99f));
-    SkScalar baseFrequencyY = random->nextRangeScalar(SkFloatToScalar(0.01f),
-                                                      SkFloatToScalar(0.99f));
+    SkScalar baseFrequencyX = random->nextRangeScalar(0.01f,
+                                                      0.99f);
+    SkScalar baseFrequencyY = random->nextRangeScalar(0.01f,
+                                                      0.99f);
 
     SkShader* shader = random->nextBool() ?
         SkPerlinNoiseShader::CreateFractalNoise(baseFrequencyX, baseFrequencyY, numOctaves, seed,
@@ -1294,6 +1302,16 @@ void GrGLSimplexNoise::setData(const GrGLUniformManager& uman, const GrDrawEffec
 
 GrEffectRef* SkPerlinNoiseShader::asNewEffect(GrContext* context, const SkPaint& paint) const {
     SkASSERT(NULL != context);
+
+    if (0 == fNumOctaves) {
+        SkColor clearColor = 0;
+        if (kFractalNoise_Type == fType) {
+            clearColor = SkColorSetARGB(paint.getAlpha() / 2, 127, 127, 127);
+        }
+        SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(
+                                                clearColor, SkXfermode::kSrc_Mode));
+        return cf->asNewEffect(context);
+    }
 
     // Either we don't stitch tiles, either we have a valid tile size
     SkASSERT(!fStitchTiles || !fTileSize.isEmpty());

@@ -2094,7 +2094,7 @@ HRESULT SkXPSDevice::CreateTypefaceUse(const SkPaint& paint,
     newTypefaceUse.fontData = fontData;
     newTypefaceUse.xpsFont = xpsFontResource.release();
 
-    SkAutoGlyphCache agc = SkAutoGlyphCache(paint, NULL, &SkMatrix::I());
+    SkAutoGlyphCache agc(paint, NULL, &SkMatrix::I());
     SkGlyphCache* glyphCache = agc.getCache();
     unsigned int glyphCount = glyphCache->getGlyphCount();
     newTypefaceUse.glyphsUsed = new SkBitSet(glyphCount);
@@ -2242,6 +2242,9 @@ static void text_draw_init(const SkPaint& paint,
                            SkBitSet& glyphsUsed,
                            SkDraw& myDraw, SkXPSDrawProcs& procs) {
     procs.fD1GProc = xps_draw_1_glyph;
+#if SK_DISTANCEFIELD_FONTS
+    procs.fFlags = 0;
+#endif
     size_t numGlyphGuess;
     switch (paint.getTextEncoding()) {
         case SkPaint::kUTF8_TextEncoding:

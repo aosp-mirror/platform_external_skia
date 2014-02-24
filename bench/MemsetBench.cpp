@@ -34,7 +34,10 @@ public:
         fMaxSize = maxSize;
         fName.printf("memset%d_" SK_SIZE_T_SPECIFIER "_" SK_SIZE_T_SPECIFIER,
                      type, minSize, maxSize);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest() = 0;
@@ -44,8 +47,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        for (int i = 0; i < this->getLoops(); ++i) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+        for (int i = 0; i < loops; ++i) {
             this->performTest();
         }
     }

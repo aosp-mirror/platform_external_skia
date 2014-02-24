@@ -35,7 +35,7 @@ SkRectShaderImageFilter::SkRectShaderImageFilter(SkShader* s, const CropRect* cr
 }
 
 SkRectShaderImageFilter::SkRectShaderImageFilter(SkFlattenableReadBuffer& buffer)
-  : INHERITED(buffer) {
+  : INHERITED(1, buffer) {
     fShader = buffer.readShader();
 }
 
@@ -62,6 +62,9 @@ bool SkRectShaderImageFilter::onFilterImage(Proxy* proxy,
 
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(),
                                                           bounds.height()));
+    if (NULL == device.get()) {
+        return false;
+    }
     SkCanvas canvas(device.get());
     SkPaint paint;
     paint.setShader(fShader);

@@ -20,12 +20,17 @@ SkValidatingReadBuffer::SkValidatingReadBuffer(const void* data, size_t size) :
 SkValidatingReadBuffer::~SkValidatingReadBuffer() {
 }
 
-void SkValidatingReadBuffer::validate(bool isValid) {
+bool SkValidatingReadBuffer::validate(bool isValid) {
     if (!fError && !isValid) {
         // When an error is found, send the read cursor to the end of the stream
         fReader.skip(fReader.available());
         fError = true;
     }
+    return !fError;
+}
+
+bool SkValidatingReadBuffer::isValid() const {
+    return !fError;
 }
 
 void SkValidatingReadBuffer::setMemory(const void* data, size_t size) {
@@ -93,14 +98,16 @@ void SkValidatingReadBuffer::readString(SkString* string) {
     // skip over the string + '\0' and then pad to a multiple of 4
     const size_t alignedSize = SkAlign4(len + 1);
     this->skip(alignedSize);
-    this->validate(cptr[len] == '\0');
+    if (!fError) {
+        this->validate(cptr[len] == '\0');
+    }
     if (!fError) {
         string->set(cptr, len);
     }
 }
 
 void* SkValidatingReadBuffer::readEncodedString(size_t* length, SkPaint::TextEncoding encoding) {
-    const int32_t encodingType = fReader.readInt();
+    const int32_t encodingType = this->readInt();
     this->validate(encodingType == encoding);
     *length = this->readInt();
     const void* ptr = this->skip(SkAlign4(*length));
@@ -113,13 +120,16 @@ void* SkValidatingReadBuffer::readEncodedString(size_t* length, SkPaint::TextEnc
 }
 
 void SkValidatingReadBuffer::readPoint(SkPoint* point) {
-    point->fX = fReader.readScalar();
-    point->fY = fReader.readScalar();
+    point->fX = this->readScalar();
+    point->fY = this->readScalar();
 }
 
 void SkValidatingReadBuffer::readMatrix(SkMatrix* matrix) {
-    const size_t size = matrix->readFromMemory(fReader.peek());
-    this->validate(SkAlign4(size) == size);
+    size_t size = 0;
+    if (!fError) {
+        size = matrix->readFromMemory(fReader.peek(), fReader.available());
+        this->validate((SkAlign4(size) == size) && (0 != size));
+    }
     if (!fError) {
         (void)this->skip(size);
     }
@@ -140,16 +150,22 @@ void SkValidatingReadBuffer::readRect(SkRect* rect) {
 }
 
 void SkValidatingReadBuffer::readRegion(SkRegion* region) {
-    const size_t size = region->readFromMemory(fReader.peek());
-    this->validate(SkAlign4(size) == size);
+    size_t size = 0;
+    if (!fError) {
+        size = region->readFromMemory(fReader.peek(), fReader.available());
+        this->validate((SkAlign4(size) == size) && (0 != size));
+    }
     if (!fError) {
         (void)this->skip(size);
     }
 }
 
 void SkValidatingReadBuffer::readPath(SkPath* path) {
-    const size_t size = path->readFromMemory(fReader.peek());
-    this->validate(SkAlign4(size) == size);
+    size_t size = 0;
+    if (!fError) {
+        size = path->readFromMemory(fReader.peek(), fReader.available());
+        this->validate((SkAlign4(size) == size) && (0 != size));
+    }
     if (!fError) {
         (void)this->skip(size);
     }
@@ -189,7 +205,9 @@ bool SkValidatingReadBuffer::readScalarArray(SkScalar* values, size_t size) {
 }
 
 uint32_t SkValidatingReadBuffer::getArrayCount() {
-    return *(uint32_t*)fReader.peek();
+    const size_t inc = sizeof(uint32_t);
+    fError = fError || !IsPtrAlign4(fReader.peek()) || !fReader.isAvailable(inc);
+    return fError ? 0 : *(uint32_t*)fReader.peek();
 }
 
 void SkValidatingReadBuffer::readBitmap(SkBitmap* bitmap) {

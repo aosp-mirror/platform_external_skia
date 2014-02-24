@@ -9,7 +9,10 @@
 #include "SkData.h"
 #include "SkFlattenableBuffers.h"
 
-SkDataPixelRef::SkDataPixelRef(SkData* data) : fData(data) {
+SkDataPixelRef::SkDataPixelRef(const SkImageInfo& info, SkData* data)
+    : INHERITED(info)
+    , fData(data)
+{
     fData->ref();
     this->setPreLocked(const_cast<void*>(fData->data()), NULL);
 }
@@ -25,6 +28,10 @@ void* SkDataPixelRef::onLockPixels(SkColorTable** ct) {
 
 void SkDataPixelRef::onUnlockPixels() {
     // nothing to do
+}
+
+size_t SkDataPixelRef::getAllocatedSizeInBytes() const {
+    return fData ? fData->size() : 0;
 }
 
 void SkDataPixelRef::flatten(SkFlattenableWriteBuffer& buffer) const {

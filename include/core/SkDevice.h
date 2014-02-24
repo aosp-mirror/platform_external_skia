@@ -83,7 +83,12 @@ public:
      *  canvas. The root device will have its top-left at 0,0, but other devices
      *  such as those associated with saveLayer may have a non-zero origin.
      */
-    virtual void getGlobalBounds(SkIRect* bounds) const = 0;
+    void getGlobalBounds(SkIRect* bounds) const {
+        SkASSERT(bounds);
+        const SkIPoint& origin = this->getOrigin();
+        bounds->setXYWH(origin.x(), origin.y(), this->width(), this->height());
+    }
+
 
     /** Returns true if the device's bitmap's config treats every pixel as
         implicitly opaque.
@@ -267,11 +272,6 @@ protected:
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint) = 0;
-#ifdef SK_BUILD_FOR_ANDROID
-    virtual void drawPosTextOnPath(const SkDraw& draw, const void* text, size_t len,
-                                   const SkPoint pos[], const SkPaint& paint,
-                                   const SkPath& path, const SkMatrix* matrix) = 0;
-#endif
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode, int vertexCount,
                               const SkPoint verts[], const SkPoint texs[],
                               const SkColor colors[], SkXfermode* xmode,
@@ -282,6 +282,11 @@ protected:
      */
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) = 0;
+
+    // DEPRECATED -- will remove this once the subclass stop overriding it
+    virtual void drawPosTextOnPath(const SkDraw&, const void* text, size_t len,
+                                   const SkPoint pos[], const SkPaint&,
+                                   const SkPath&, const SkMatrix*) {}
 
     /**
      *  On success (returns true), copy the device pixels into the bitmap.
@@ -383,6 +388,7 @@ private:
     // used to change the backend's pixels (and possibly config/rowbytes)
     // but cannot change the width/height, so there should be no change to
     // any clip information.
+    // TODO: move to SkBitmapDevice
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) = 0;
 
     // just called by SkCanvas when built as a layer

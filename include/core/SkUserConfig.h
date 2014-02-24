@@ -44,7 +44,11 @@
 // When built as part of the system image we can enable certian non-NDK compliant
 // optimizations.
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
+#define SK_FONTHOST_DOES_NOT_USE_FONTMGR
 #define SK_SUPPORT_GPU 1
+
+// temporary define until we can update the callers to the new convention
+#define SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
 
 // Android Text Tuning
 #define SK_GAMMA_APPLY_TO_A8

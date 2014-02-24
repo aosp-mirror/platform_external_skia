@@ -6,6 +6,7 @@ LOCAL_SRC_FILES:= \
   AAClipTest.cpp \
   AndroidPaintTest.cpp \
   AtomicTest.cpp \
+  BitmapTest.cpp \
   BitmapCopyTest.cpp \
   BitmapGetColorTest.cpp \
   BitmapHeapTest.cpp \
@@ -20,10 +21,13 @@ LOCAL_SRC_FILES:= \
   ClipStackTest.cpp \
   ClipperTest.cpp \
   ColorFilterTest.cpp \
+  ColorPrivTest.cpp \
   ColorTest.cpp \
   DataRefTest.cpp \
   DequeTest.cpp \
   DeviceLooperTest.cpp \
+  DiscardableMemoryPool.cpp \
+  DiscardableMemoryTest.cpp \
   DocumentTest.cpp \
   DrawBitmapRectTest.cpp \
   DrawPathTest.cpp \
@@ -46,9 +50,11 @@ LOCAL_SRC_FILES:= \
   GpuColorFilterTest.cpp \
   GpuDrawPathTest.cpp \
   GrContextFactoryTest.cpp \
+  GrDrawTargetTest.cpp \
   GradientTest.cpp \
   GrMemoryPoolTest.cpp \
   GrSurfaceTest.cpp \
+  GrUnitTests.cpp \
   HashCacheTest.cpp \
   ImageCacheTest.cpp \
   ImageDecodingTest.cpp \
@@ -88,6 +94,7 @@ LOCAL_SRC_FILES:= \
   RegionTest.cpp \
   ResourceCacheTest.cpp \
   RoundRectTest.cpp \
+  RuntimeConfigTest.cpp \
   RTreeTest.cpp \
   SHA1Test.cpp \
   ScalarTest.cpp \
@@ -150,6 +157,7 @@ LOCAL_C_INCLUDES := \
    external/skia/src/effects \
    external/skia/src/gpu \
    external/skia/src/image \
+   external/skia/src/images \
    external/skia/src/lazy \
    external/skia/src/pdf \
    external/skia/src/pipe/utils \

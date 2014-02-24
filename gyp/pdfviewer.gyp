@@ -16,6 +16,7 @@
       ],
       'include_dirs': [
         '../experimental/PdfViewer',
+        '../experimental/PdfViewer/inc',
         '../experimental/PdfViewer/pdfparser',
         '../experimental/PdfViewer/pdfparser/native',
       ],
@@ -43,9 +44,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

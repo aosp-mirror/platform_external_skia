@@ -40,10 +40,10 @@ Loader.filter(
 
 Loader.controller(
   'Loader.Controller',
-    function($scope, $http, $filter, $location) {
+    function($scope, $http, $filter, $location, $timeout) {
     $scope.windowTitle = "Loading GM Results...";
-    var resultsToLoad = $location.search().resultsToLoad;
-    $scope.loadingMessage = "Loading results of type '" + resultsToLoad +
+    $scope.resultsToLoad = $location.search().resultsToLoad;
+    $scope.loadingMessage = "Loading results of type '" + $scope.resultsToLoad +
         "', please wait...";
 
     /**
@@ -51,73 +51,85 @@ Loader.controller(
      * Once the dictionary is loaded, unhide the page elements so they can
      * render the data.
      */
-    $http.get("/results/" + resultsToLoad).success(
+    $http.get("/results/" + $scope.resultsToLoad).success(
       function(data, status, header, config) {
-        $scope.loadingMessage = "Processing data, please wait...";
+        if (data.header.resultsStillLoading) {
+          $scope.loadingMessage =
+              "Server is still loading initial results; will retry at " +
+              $scope.localTimeString(data.header.timeNextUpdateAvailable);
+          $timeout(
+              function(){location.reload();},
+              (data.header.timeNextUpdateAvailable * 1000) - new Date().getTime());
+        } else {
+          $scope.loadingMessage = "Processing data, please wait...";
 
-        $scope.header = data.header;
-        $scope.categories = data.categories;
-        $scope.testData = data.testData;
-        $scope.sortColumn = 'test';
-        $scope.showTodos = false;
+          $scope.header = data.header;
+          $scope.categories = data.categories;
+          $scope.testData = data.testData;
+          $scope.sortColumn = 'weightedDiffMeasure';
+          $scope.showTodos = false;
 
-        $scope.showSubmitAdvancedSettings = false;
-        $scope.submitAdvancedSettings = {};
-        $scope.submitAdvancedSettings['reviewed-by-human'] = true;
-        $scope.submitAdvancedSettings['ignore-failures'] = false;
-        $scope.submitAdvancedSettings['bug'] = '';
+          $scope.showSubmitAdvancedSettings = false;
+          $scope.submitAdvancedSettings = {};
+          $scope.submitAdvancedSettings['reviewed-by-human'] = true;
+          $scope.submitAdvancedSettings['ignore-failure'] = false;
+          $scope.submitAdvancedSettings['bug'] = '';
 
-        // Create the list of tabs (lists into which the user can file each
-        // test).  This may vary, depending on isEditable.
-        $scope.tabs = [
-          'Unfiled', 'Hidden'
-        ];
-        if (data.header.isEditable) {
-          $scope.tabs = $scope.tabs.concat(
-              ['Pending Approval']);
+          // Create the list of tabs (lists into which the user can file each
+          // test).  This may vary, depending on isEditable.
+          $scope.tabs = [
+            'Unfiled', 'Hidden'
+          ];
+          if (data.header.isEditable) {
+            $scope.tabs = $scope.tabs.concat(
+                ['Pending Approval']);
+          }
+          $scope.defaultTab = $scope.tabs[0];
+          $scope.viewingTab = $scope.defaultTab;
+
+          // Track the number of results on each tab.
+          $scope.numResultsPerTab = {};
+          for (var i = 0; i < $scope.tabs.length; i++) {
+            $scope.numResultsPerTab[$scope.tabs[i]] = 0;
+          }
+          $scope.numResultsPerTab[$scope.defaultTab] = $scope.testData.length;
+
+          // Add index and tab fields to all records.
+          for (var i = 0; i < $scope.testData.length; i++) {
+            $scope.testData[i].index = i;
+            $scope.testData[i].tab = $scope.defaultTab;
+          }
+
+          // Arrays within which the user can toggle individual elements.
+          $scope.selectedItems = [];
+
+          // Sets within which the user can toggle individual elements.
+          $scope.hiddenResultTypes = {
+            'failure-ignored': true,
+            'no-comparison': true,
+            'succeeded': true,
+          };
+          $scope.allResultTypes = Object.keys(data.categories['resultType']);
+          $scope.hiddenConfigs = {};
+          $scope.allConfigs = Object.keys(data.categories['config']);
+
+          // Associative array of partial string matches per category.
+          $scope.categoryValueMatch = {};
+          $scope.categoryValueMatch.builder = "";
+          $scope.categoryValueMatch.test = "";
+
+          // If any defaults were overridden in the URL, get them now.
+          $scope.queryParameters.load();
+
+          $scope.updateResults();
+          $scope.loadingMessage = "";
+          $scope.windowTitle = "Current GM Results";
         }
-        $scope.defaultTab = $scope.tabs[0];
-        $scope.viewingTab = $scope.defaultTab;
-
-        // Track the number of results on each tab.
-        $scope.numResultsPerTab = {};
-        for (var i = 0; i < $scope.tabs.length; i++) {
-          $scope.numResultsPerTab[$scope.tabs[i]] = 0;
-        }
-        $scope.numResultsPerTab[$scope.defaultTab] = $scope.testData.length;
-
-        // Add index and tab fields to all records.
-        for (var i = 0; i < $scope.testData.length; i++) {
-          $scope.testData[i].index = i;
-          $scope.testData[i].tab = $scope.defaultTab;
-        }
-
-        // Arrays within which the user can toggle individual elements.
-        $scope.selectedItems = [];
-
-        // Sets within which the user can toggle individual elements.
-        $scope.hiddenResultTypes = {
-          'failure-ignored': true,
-          'no-comparison': true,
-          'succeeded': true,
-        };
-        $scope.allResultTypes = Object.keys(data.categories['resultType']);
-        $scope.hiddenConfigs = {};
-        $scope.allConfigs = Object.keys(data.categories['config']);
-
-        // Associative array of partial string matches per category.
-        $scope.categoryValueMatch = {};
-        $scope.categoryValueMatch.builder = "";
-        $scope.categoryValueMatch.test = "";
-
-        $scope.updateResults();
-        $scope.loadingMessage = "";
-        $scope.windowTitle = "Current GM Results";
       }
     ).error(
       function(data, status, header, config) {
         $scope.loadingMessage = "Failed to load results of type '"
-            + resultsToLoad + "'";
+            + $scope.resultsToLoad + "'";
         $scope.windowTitle = "Failed to Load GM Results";
       }
     );
@@ -211,6 +223,93 @@ Loader.controller(
 
 
     //
+    // $scope.queryParameters:
+    // Transfer parameter values between $scope and the URL query string.
+    //
+    $scope.queryParameters = {};
+
+    // load and save functions for parameters of each type
+    // (load a parameter value into $scope from nameValuePairs,
+    //  save a parameter value from $scope into nameValuePairs)
+    $scope.queryParameters.copiers = {
+      'simple': {
+        'load': function(nameValuePairs, name) {
+          var value = nameValuePairs[name];
+          if (value) {
+            $scope[name] = value;
+          }
+        },
+        'save': function(nameValuePairs, name) {
+          nameValuePairs[name] = $scope[name];
+        }
+      },
+
+      'categoryValueMatch': {
+        'load': function(nameValuePairs, name) {
+          var value = nameValuePairs[name];
+          if (value) {
+            $scope.categoryValueMatch[name] = value;
+          }
+        },
+        'save': function(nameValuePairs, name) {
+          nameValuePairs[name] = $scope.categoryValueMatch[name];
+        }
+      },
+
+      'set': {
+        'load': function(nameValuePairs, name) {
+          var value = nameValuePairs[name];
+          if (value) {
+            var valueArray = value.split(',');
+            $scope[name] = {};
+            $scope.toggleValuesInSet(valueArray, $scope[name]);
+          }
+        },
+        'save': function(nameValuePairs, name) {
+          nameValuePairs[name] = Object.keys($scope[name]).join(',');
+        }
+      },
+
+    };
+
+    // parameter name -> copier objects to load/save parameter value
+    $scope.queryParameters.map = {
+      'resultsToLoad':       $scope.queryParameters.copiers.simple,
+      'displayLimitPending': $scope.queryParameters.copiers.simple,
+      'imageSizePending':    $scope.queryParameters.copiers.simple,
+      'sortColumn':          $scope.queryParameters.copiers.simple,
+
+      'builder': $scope.queryParameters.copiers.categoryValueMatch,
+      'test':    $scope.queryParameters.copiers.categoryValueMatch,
+
+      'hiddenResultTypes': $scope.queryParameters.copiers.set,
+      'hiddenConfigs':     $scope.queryParameters.copiers.set,
+    };
+
+    // Loads all parameters into $scope from the URL query string;
+    // any which are not found within the URL will keep their current value.
+    $scope.queryParameters.load = function() {
+      var nameValuePairs = $location.search();
+      angular.forEach($scope.queryParameters.map,
+                      function(copier, paramName) {
+                        copier.load(nameValuePairs, paramName);
+                      }
+                     );
+    };
+
+    // Saves all parameters from $scope into the URL query string.
+    $scope.queryParameters.save = function() {
+      var nameValuePairs = {};
+      angular.forEach($scope.queryParameters.map,
+                      function(copier, paramName) {
+                        copier.save(nameValuePairs, paramName);
+                      }
+                     );
+      $location.search(nameValuePairs);
+    };
+
+
+    //
     // updateResults() and friends.
     //
 
@@ -232,7 +331,9 @@ Loader.controller(
     }
 
     /**
-     * Update the displayed results, based on filters/settings.
+     * Update the displayed results, based on filters/settings,
+     * and call $scope.queryParameters.save() so that the new filter results
+     * can be bookmarked.
      */
     $scope.updateResults = function() {
       $scope.displayLimit = $scope.displayLimitPending;
@@ -242,6 +343,13 @@ Loader.controller(
       // array copies?  (For better performance.)
 
       if ($scope.viewingTab == $scope.defaultTab) {
+
+        // TODO(epoger): Until we allow the user to reverse sort order,
+        // there are certain columns we want to sort in a different order.
+        var doReverse = (
+            ($scope.sortColumn == 'percentDifferingPixels') ||
+            ($scope.sortColumn == 'weightedDiffMeasure'));
+
         $scope.filteredTestData =
             $filter("orderBy")(
                 $filter("removeHiddenItems")(
@@ -252,7 +360,7 @@ Loader.controller(
                     $scope.categoryValueMatch.test,
                     $scope.viewingTab
                 ),
-                $scope.sortColumn);
+                $scope.sortColumn, doReverse);
         $scope.limitedTestData = $filter("limitTo")(
             $scope.filteredTestData, $scope.displayLimit);
       } else {
@@ -268,6 +376,7 @@ Loader.controller(
       }
       $scope.imageSize = $scope.imageSizePending;
       $scope.setUpdatesPending(false);
+      $scope.queryParameters.save();
     }
 
     /**
@@ -368,7 +477,7 @@ Loader.controller(
             $scope.submitAdvancedSettings['reviewed-by-human'];
         if (true == $scope.submitAdvancedSettings['ignore-failure']) {
           // if it's false, don't send it at all (just keep the default)
-          expectedResult['ignoreFailure'] = true;
+          expectedResult['ignore-failure'] = true;
         }
         expectedResult['bugs'] = bugs;
 

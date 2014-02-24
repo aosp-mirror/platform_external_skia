@@ -1,49 +1,56 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkDiscardableMemoryPool.h"
+#include "SkImageGenerator.h"
 #include "SkPaint.h"
 #include "SkShader.h"
 #include "SkSurface.h"
 #include "SkRandom.h"
 #include "SkMatrixUtils.h"
 
-#include "SkLazyPixelRef.h"
-#include "SkLruImageCache.h"
-
+namespace {
 // A BitmapFactory that always fails when asked to return pixels.
-static bool FailureDecoder(const void* data, size_t length, SkImageInfo* info,
-                           const SkBitmapFactory::Target* target) {
-    if (info) {
-        info->fWidth = info->fHeight = 100;
-        info->fColorType = kRGBA_8888_SkColorType;
+class FailureImageGenerator : public SkImageGenerator {
+public:
+    FailureImageGenerator() { }
+    virtual ~FailureImageGenerator() { }
+    virtual bool getInfo(SkImageInfo* info) {
+        info->fWidth = 100;
+        info->fHeight = 100;
+        info->fColorType = kPMColor_SkColorType;
         info->fAlphaType = kPremul_SkAlphaType;
+        return true;
     }
-    // this will deliberately return false if they are asking us to decode
-    // into pixels.
-    return NULL == target;
-}
+    virtual bool getPixels(const SkImageInfo& info,
+                           void* pixels,
+                           size_t rowBytes) SK_OVERRIDE {
+        // this will deliberately return false if they are asking us
+        // to decode into pixels.
+        return false;
+    }
+};
+}  // namespace
 
 // crbug.com/295895
 // Crashing in skia when a pixelref fails in lockPixels
 //
 static void test_faulty_pixelref(skiatest::Reporter* reporter) {
     // need a cache, but don't expect to use it, so the budget is not critical
-    SkLruImageCache cache(10 * 1000);
-    // construct a garbage data represent "bad" encoded data.
-    SkAutoDataUnref data(SkData::NewFromMalloc(malloc(1000), 1000));
-    SkAutoTUnref<SkPixelRef> pr(new SkLazyPixelRef(data, FailureDecoder, &cache));
-
+    SkAutoTUnref<SkDiscardableMemoryPool> pool(SkNEW_ARGS(SkDiscardableMemoryPool,
+                                                          (10 * 1000, NULL)));
     SkBitmap bm;
-    bm.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    bm.setPixelRef(pr);
+    bool installSuccess = SkInstallDiscardablePixelRef(SkNEW(FailureImageGenerator), &bm, pool);
+    REPORTER_ASSERT(reporter, installSuccess);
     // now our bitmap has a pixelref, but we know it will fail to lock
 
     SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(200, 200));
@@ -120,13 +127,13 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
 
     size.set(500, 600);
 
-    const SkScalar tooMuchSubpixel = SkFloatToScalar(100.1f);
+    const SkScalar tooMuchSubpixel = 100.1f;
     mat.setTranslate(tooMuchSubpixel, 0);
     REPORTER_ASSERT(reporter, !treat_as_sprite(mat, size, bilerBits));
     mat.setTranslate(0, tooMuchSubpixel);
     REPORTER_ASSERT(reporter, !treat_as_sprite(mat, size, bilerBits));
 
-    const SkScalar tinySubPixel = SkFloatToScalar(100.02f);
+    const SkScalar tinySubPixel = 100.02f;
     mat.setTranslate(tinySubPixel, 0);
     REPORTER_ASSERT(reporter, treat_as_sprite(mat, size, bilerBits));
     mat.setTranslate(0, tinySubPixel);
@@ -181,12 +188,12 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
     SkMatrix matrix;
 
     SkCanvas c(dev);
-    matrix.setAll(SkFloatToScalar(-119.34097f),
-                  SkFloatToScalar(-43.436558f),
-                  SkFloatToScalar(93489.945f),
-                  SkFloatToScalar(43.436558f),
-                  SkFloatToScalar(-119.34097f),
-                  SkFloatToScalar(123.98426f),
+    matrix.setAll(-119.34097f,
+                  -43.436558f,
+                  93489.945f,
+                  43.436558f,
+                  -119.34097f,
+                  123.98426f,
                   0, 0, SK_Scalar1);
     c.concat(matrix);
 
@@ -197,11 +204,11 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
 
     SkShader* s = SkShader::CreateBitmapShader(bm, SkShader::kRepeat_TileMode,
                                                SkShader::kRepeat_TileMode);
-    matrix.setAll(SkFloatToScalar(0.0078740157f),
+    matrix.setAll(0.0078740157f,
                   0,
                   SkIntToScalar(249),
                   0,
-                  SkFloatToScalar(0.0078740157f),
+                  0.0078740157f,
                   SkIntToScalar(239),
                   0, 0, SK_Scalar1);
     s->setLocalMatrix(matrix);
@@ -302,7 +309,7 @@ static void create(SkBitmap* bm, SkBitmap::Config config, SkColor color) {
     bm->eraseColor(color);
 }
 
-static void TestDrawBitmapRect(skiatest::Reporter* reporter) {
+DEF_TEST(DrawBitmapRect, reporter) {
     SkBitmap src, dst;
 
     create(&src, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
@@ -324,6 +331,3 @@ static void TestDrawBitmapRect(skiatest::Reporter* reporter) {
     test_treatAsSprite(reporter);
     test_faulty_pixelref(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("DrawBitmapRect", TestDrawBitmapRectClass, TestDrawBitmapRect)

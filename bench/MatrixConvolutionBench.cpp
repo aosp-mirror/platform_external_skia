@@ -21,7 +21,7 @@ public:
             SkIntToScalar( 1), SkIntToScalar(-7), SkIntToScalar( 1),
             SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
         };
-        SkScalar gain = SkFloatToScalar(0.3f), bias = SkIntToScalar(100);
+        SkScalar gain = 0.3f, bias = SkIntToScalar(100);
         SkIPoint target = SkIPoint::Make(1, 1);
         fFilter = new SkMatrixConvolutionImageFilter(kernelSize, kernel, gain, bias, target, tileMode, convolveAlpha);
     }
@@ -35,12 +35,12 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setAntiAlias(true);
         SkRandom rand;
-        for (int i = 0; i < this->getLoops(); i++) {
+        for (int i = 0; i < loops; i++) {
             SkRect r = SkRect::MakeWH(rand.nextUScalar1() * 400,
                                       rand.nextUScalar1() * 400);
             paint.setImageFilter(fFilter);

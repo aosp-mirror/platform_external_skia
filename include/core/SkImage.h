@@ -8,7 +8,7 @@
 #ifndef SkImage_DEFINED
 #define SkImage_DEFINED
 
-#include "SkAlpha.h"
+#include "SkImageInfo.h"
 #include "SkImageEncoder.h"
 #include "SkRefCnt.h"
 #include "SkScalar.h"
@@ -22,30 +22,6 @@ class GrTexture;
 
 // need for TileMode
 #include "SkShader.h"
-
-enum SkColorType {
-    kAlpha_8_SkColorType,
-    kRGB_565_SkColorType,
-    kRGBA_8888_SkColorType,
-    kBGRA_8888_SkColorType,
-
-#if SK_PMCOLOR_BYTE_ORDER(B,G,R,A)
-    kPMColor_SkColorType = kBGRA_8888_SkColorType,
-#elif SK_PMCOLOR_BYTE_ORDER(R,G,B,A)
-    kPMColor_SkColorType = kRGBA_8888_SkColorType,
-#else
-    #error "SK_*32_SHFIT values must correspond to BGRA or RGBA byte order"
-#endif
-
-    kLastEnum_SkColorType = kBGRA_8888_SkColorType
-};
-
-struct SkImageInfo {
-    int         fWidth;
-    int         fHeight;
-    SkColorType fColorType;
-    SkAlphaType fAlphaType;
-};
 
 /**
  *  SkImage is an abstraction for drawing a rectagle of pixels, though the
@@ -65,6 +41,7 @@ public:
     typedef SkColorType ColorType;
 
     static const SkColorType kAlpha_8_ColorType     = kAlpha_8_SkColorType;
+    static const SkColorType kARGB_4444_ColorType   = kARGB_4444_SkColorType;
     static const SkColorType kRGB_565_ColorType     = kRGB_565_SkColorType;
     static const SkColorType kRGBA_8888_ColorType   = kRGBA_8888_SkColorType;
     static const SkColorType kBGRA_8888_ColorType   = kBGRA_8888_SkColorType;

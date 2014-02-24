@@ -8,9 +8,7 @@
 #include "SkDocument.h"
 #include "SkStream.h"
 
-SK_DEFINE_INST_COUNT(SkDocument)
-
-SkDocument::SkDocument(SkWStream* stream, void (*doneProc)(SkWStream*)) {
+SkDocument::SkDocument(SkWStream* stream, void (*doneProc)(SkWStream*, bool)) {
     fStream = stream;   // we do not own this object.
     fDoneProc = doneProc;
     fState = kBetweenPages_State;
@@ -68,7 +66,7 @@ bool SkDocument::close() {
                 bool success = this->onClose(fStream);
 
                 if (fDoneProc) {
-                    fDoneProc(fStream);
+                    fDoneProc(fStream, false);
                 }
                 // we don't own the stream, but we mark it NULL since we can
                 // no longer write to it.
@@ -85,5 +83,13 @@ bool SkDocument::close() {
 }
 
 void SkDocument::abort() {
+    this->onAbort();
+
     fState = kClosed_State;
+    if (fDoneProc) {
+        fDoneProc(fStream, true);
+    }
+    // we don't own the stream, but we mark it NULL since we can
+    // no longer write to it.
+    fStream = NULL;
 }

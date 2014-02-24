@@ -18,8 +18,8 @@
 #define FILTER_HEIGHT_SMALL 32
 #define FILTER_WIDTH_LARGE  256
 #define FILTER_HEIGHT_LARGE 256
-#define BLUR_SIGMA_SMALL    SkFloatToScalar(1.0f)
-#define BLUR_SIGMA_LARGE    SkFloatToScalar(10.0f)
+#define BLUR_SIGMA_SMALL    1.0f
+#define BLUR_SIGMA_LARGE    10.0f
 
 class BlurImageFilterBench : public SkBenchmark {
 public:
@@ -41,11 +41,11 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         paint.setImageFilter(new SkBlurImageFilter(fSigmaX, fSigmaY))->unref();
 
-        for (int i = 0; i < this->getLoops(); i++) {
+        for (int i = 0; i < loops; i++) {
             canvas->drawBitmap(fCheckerboard, 0, 0, &paint);
         }
     }
@@ -84,6 +84,10 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
+DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_LARGE, 0, false);)
+DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_SMALL, 0, false);)
+DEF_BENCH(return new BlurImageFilterBench(0, BLUR_SIGMA_LARGE, false);)
+DEF_BENCH(return new BlurImageFilterBench(0, BLUR_SIGMA_SMALL, false);)
 DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_SMALL, BLUR_SIGMA_SMALL, true);)
 DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_SMALL, BLUR_SIGMA_SMALL, false);)
 DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_LARGE, BLUR_SIGMA_LARGE, true);)

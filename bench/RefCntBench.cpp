@@ -16,16 +16,17 @@ enum {
 
 class RefCntBench_Stack : public SkBenchmark {
 public:
-    RefCntBench_Stack() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_stack";
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); ++i) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; ++i) {
             SkRefCnt ref;
             for (int j = 0; j < M; ++j) {
                 ref.ref();
@@ -49,21 +50,20 @@ private:
     typedef SkRefCnt INHERITED;
 };
 
-SK_DEFINE_INST_COUNT(PlacedRefCnt)
-
 class RefCntBench_Heap : public SkBenchmark {
 public:
-    RefCntBench_Heap() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_heap";
     }
 
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         char memory[sizeof(PlacedRefCnt)];
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             PlacedRefCnt* ref = new (memory) PlacedRefCnt();
             for (int j = 0; j < M; ++j) {
                 ref->ref();
@@ -79,16 +79,17 @@ private:
 
 class RefCntBench_New : public SkBenchmark {
 public:
-    RefCntBench_New() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_new";
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); ++i) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; ++i) {
             SkRefCnt* ref = new SkRefCnt();
             for (int j = 0; j < M; ++j) {
                 ref->ref();
@@ -106,16 +107,17 @@ private:
 
 class WeakRefCntBench_Stack : public SkBenchmark {
 public:
-    WeakRefCntBench_Stack() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_stack_weak";
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); ++i) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; ++i) {
             SkWeakRefCnt ref;
             for (int j = 0; j < M; ++j) {
                 ref.ref();
@@ -136,17 +138,18 @@ public:
 
 class WeakRefCntBench_Heap : public SkBenchmark {
 public:
-    WeakRefCntBench_Heap() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_heap_weak";
     }
 
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         char memory[sizeof(PlacedWeakRefCnt)];
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             PlacedWeakRefCnt* ref = new (memory) PlacedWeakRefCnt();
             for (int j = 0; j < M; ++j) {
                 ref->ref();
@@ -162,16 +165,17 @@ private:
 
 class WeakRefCntBench_New : public SkBenchmark {
 public:
-    WeakRefCntBench_New() {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "ref_cnt_new_weak";
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); ++i) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; ++i) {
             SkWeakRefCnt* ref = new SkWeakRefCnt();
             for (int j = 0; j < M; ++j) {
                 ref->ref();

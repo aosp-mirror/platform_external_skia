@@ -11,7 +11,6 @@
 #define SkImageDecoder_DEFINED
 
 #include "SkBitmap.h"
-#include "SkBitmapFactory.h"
 #include "SkImage.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
@@ -157,36 +156,6 @@ public:
 
     Chooser* getChooser() const { return fChooser; }
     Chooser* setChooser(Chooser*);
-
-    /**
-        @Deprecated. Use the struct version instead.
-
-        This optional table describes the caller's preferred config based on
-        information about the src data. For this table, the src attributes are
-        described in terms of depth (index (8), 16, 32/24) and if there is
-        per-pixel alpha. These inputs combine to create an index into the
-        pref[] table, which contains the caller's preferred config for that
-        input, or kNo_Config if there is no preference.
-
-        To specify no preference, call setPrefConfigTable(NULL), which is
-        the default.
-
-        Note, it is still at the discretion of the codec as to what output
-        config is actually returned, as it may not be able to support the
-        caller's preference.
-
-        Here is how the index into the table is computed from the src:
-            depth [8, 16, 32/24] -> 0, 2, 4
-            alpha [no, yes] -> 0, 1
-        The two index values are OR'd together.
-            src: 8-index, no-alpha  -> 0
-            src: 8-index, yes-alpha -> 1
-            src: 16bit,   no-alpha  -> 2    // e.g. 565
-            src: 16bit,   yes-alpha -> 3    // e.g. 1555
-            src: 32/24,   no-alpha  -> 4
-            src: 32/24,   yes-alpha -> 5
-     */
-    void setPrefConfigTable(const SkBitmap::Config pref[6]);
 
     /**
      *  Optional table describing the caller's preferred config based on
@@ -366,31 +335,19 @@ public:
     }
 
     /**
-     *  Decode memory.
-     *  @param info Output parameter. Returns info about the encoded image.
-     *  @param target Contains the address of pixel memory to decode into
-     *         (which must be large enough to hold the width in info) and
-     *         the row bytes to use. If NULL, returns info and does not
-     *         decode pixels.
-     *  @return bool Whether the function succeeded.
-     *
-     *  Sample usage:
-     *  <code>
-     *      // Determine the image's info: width/height/config
-     *      SkImageInfo info;
-     *      bool success = DecodeMemoryToTarget(src, size, &info, NULL);
-     *      if (!success) return;
-     *      // Allocate space for the result:
-     *      SkBitmapFactory::Target target;
-     *      target.fAddr = malloc/other allocation
-     *      target.fRowBytes = ...
-     *      // Now decode the actual pixels into target. &info is optional,
-     *      // and could be NULL
-     *      success = DecodeMemoryToTarget(src, size, &info, &target);
-     *  </code>
+     *  Struct containing information about a pixel destination.
      */
-    static bool DecodeMemoryToTarget(const void* buffer, size_t size, SkImageInfo* info,
-                                     const SkBitmapFactory::Target* target);
+    struct Target {
+        /**
+         *  Pre-allocated memory.
+         */
+        void*  fAddr;
+
+        /**
+         *  Rowbytes of the allocated memory.
+         */
+        size_t fRowBytes;
+    };
 
     /** Decode the image stored in the specified SkStreamRewindable, and store the result
         in bitmap. Return true for success or false on failure.

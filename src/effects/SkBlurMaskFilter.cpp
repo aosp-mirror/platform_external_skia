@@ -182,7 +182,7 @@ static bool draw_rrect_into_mask(const SkRRect rrect, SkMask* mask) {
         return false;
     }
 
-    // FIXME: This code duplicates code in drawRectsIntoMask, below. Is there a
+    // FIXME: This code duplicates code in draw_rects_into_mask, below. Is there a
     // clean way to share more code?
     SkBitmap bitmap;
     bitmap.setConfig(SkBitmap::kA8_Config,
@@ -200,7 +200,7 @@ static bool draw_rrect_into_mask(const SkRRect rrect, SkMask* mask) {
     return true;
 }
 
-static bool drawRectsIntoMask(const SkRect rects[], int count, SkMask* mask) {
+static bool draw_rects_into_mask(const SkRect rects[], int count, SkMask* mask) {
     if (!prepare_to_draw_into_mask(rects[0], mask)) {
         return false;
     }
@@ -363,7 +363,8 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
 
     // TODO: report correct metrics for innerstyle, where we do not grow the
     // total bounds, but we do need an inset the size of our blur-radius
-    if (SkBlurMaskFilter::kInner_BlurStyle == fBlurStyle) {
+    if (SkBlurMaskFilter::kInner_BlurStyle == fBlurStyle ||
+        SkBlurMaskFilter::kOuter_BlurStyle == fBlurStyle) {
         return kUnimplemented_FilterReturn;
     }
 
@@ -451,7 +452,7 @@ SkBlurMaskFilterImpl::filterRectsToNine(const SkRect rects[], int count,
     }
 
     if (count > 1 || !c_analyticBlurNinepatch) {
-        if (!drawRectsIntoMask(smallR, count, &srcM)) {
+        if (!draw_rects_into_mask(smallR, count, &srcM)) {
             return kFalse_FilterReturn;
         }
 
@@ -482,18 +483,10 @@ void SkBlurMaskFilterImpl::computeFastBounds(const SkRect& src,
 
 SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkFlattenableReadBuffer& buffer)
         : SkMaskFilter(buffer) {
-    fSigma = buffer.readScalar();
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V13_AND_ALL_OTHER_INSTANCES_TOO
-    // Fixing this must be done in two stages. When the skps are recaptured in V13,
-    // remove the ConvertRadiusToSigma but retain the absolute value.
-    // At the same time, switch the code in flatten to write a positive value.
-    // When the skps are captured in V14 the absolute value can be removed.
-    if (fSigma > 0) {
-        fSigma = SkBlurMask::ConvertRadiusToSigma(fSigma);
-    } else {
-        fSigma = -fSigma;
-    }
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+    // TODO: when the skps are recaptured at > v15 the SkScalarAbs can be removed
 #endif
+    fSigma = SkScalarAbs(buffer.readScalar());
     fBlurStyle = (SkBlurMaskFilter::BlurStyle)buffer.readInt();
     fBlurFlags = buffer.readUInt() & SkBlurMaskFilter::kAll_BlurFlag;
     SkASSERT(fSigma >= 0);
@@ -502,7 +495,7 @@ SkBlurMaskFilterImpl::SkBlurMaskFilterImpl(SkFlattenableReadBuffer& buffer)
 
 void SkBlurMaskFilterImpl::flatten(SkFlattenableWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.writeScalar(-fSigma);
+    buffer.writeScalar(fSigma);
     buffer.writeInt(fBlurStyle);
     buffer.writeUInt(fBlurFlags);
 }
@@ -539,8 +532,8 @@ bool SkBlurMaskFilterImpl::canFilterMaskGPU(const SkRect& srcBounds,
     SkRect srcRect(srcBounds);
 
     // Outset srcRect and clipRect by 3 * sigma, to compute affected blur area.
-    srcRect.outset(SkFloatToScalar(sigma3), SkFloatToScalar(sigma3));
-    clipRect.outset(SkFloatToScalar(sigma3), SkFloatToScalar(sigma3));
+    srcRect.outset(sigma3, sigma3);
+    clipRect.outset(sigma3, sigma3);
     srcRect.intersect(clipRect);
     *maskRect = srcRect;
     return true;

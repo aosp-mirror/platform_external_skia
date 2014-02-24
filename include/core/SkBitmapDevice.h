@@ -73,13 +73,6 @@ public:
     */
     virtual int height() const SK_OVERRIDE { return fBitmap.height(); }
 
-    /**
-     *  Return the bounds of the device in the coordinate space of the root
-     *  canvas. The root device will have its top-left at 0,0, but other devices
-     *  such as those associated with saveLayer may have a non-zero origin.
-     */
-    virtual void getGlobalBounds(SkIRect* bounds) const SK_OVERRIDE;
-
     /** Returns true if the device's bitmap's config treats every pixels as
         implicitly opaque.
     */
@@ -184,11 +177,6 @@ protected:
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint) SK_OVERRIDE;
-#ifdef SK_BUILD_FOR_ANDROID
-    virtual void drawPosTextOnPath(const SkDraw& draw, const void* text, size_t len,
-                                   const SkPoint pos[], const SkPaint& paint,
-                                   const SkPath& path, const SkMatrix* matrix) SK_OVERRIDE;
-#endif
     virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode, int vertexCount,
                               const SkPoint verts[], const SkPoint texs[],
                               const SkColor colors[], SkXfermode* xmode,

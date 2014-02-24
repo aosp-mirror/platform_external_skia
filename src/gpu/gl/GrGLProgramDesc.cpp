@@ -105,7 +105,7 @@ void GrGLProgramDesc::Build(const GrDrawState& drawState,
         memset(desc->header(), 0, kHeaderSize);
     }
     // write the key length
-    *desc->atOffset<uint32_t, kLengthOffset>() = newKeyLength;
+    *desc->atOffset<uint32_t, kLengthOffset>() = SkToU32(newKeyLength);
 
     KeyHeader* header = desc->header();
     EffectKey* effectKeys = desc->effectKeys();
@@ -156,7 +156,7 @@ void GrGLProgramDesc::Build(const GrDrawState& drawState,
         header->fHasVertexCode = true;
     }
 
-    bool covIsSolidWhite = !requiresCoverageAttrib && 0xffffffff == drawState.getCoverage();
+    bool covIsSolidWhite = !requiresCoverageAttrib && 0xffffffff == drawState.getCoverageColor();
 
     if (skipCoverage) {
         header->fCoverageInput = kTransBlack_ColorInput;

@@ -255,6 +255,7 @@ bool SkPNGImageDecoder::onDecodeInit(SkStream* sk_stream, png_structp *png_ptrp,
     * set up your own error handlers in the png_create_read_struct() earlier.
     */
     if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, png_infopp_NULL);
         return false;
     }
 
@@ -309,11 +310,11 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
         return false;
     }
 
+    PNGAutoClean autoClean(png_ptr, info_ptr);
+
     if (setjmp(png_jmpbuf(png_ptr))) {
         return false;
     }
-
-    PNGAutoClean autoClean(png_ptr, info_ptr);
 
     png_uint_32 origWidth, origHeight;
     int bitDepth, colorType, interlaceType;
@@ -331,6 +332,11 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
     const int sampleSize = this->getSampleSize();
     SkScaledBitmapSampler sampler(origWidth, origHeight, sampleSize);
     decodedBitmap->setConfig(config, sampler.scaledWidth(), sampler.scaledHeight());
+
+    // we should communicate alphaType, even if we early-return in bounds-only-mode.
+    if (this->getRequireUnpremultipliedColors()) {
+        decodedBitmap->setAlphaType(kUnpremul_SkAlphaType);
+    }
 
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return true;
@@ -477,15 +483,9 @@ bool SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap* decodedBitmap,
         }
     }
 
-    SkAlphaType alphaType = kOpaque_SkAlphaType;
-    if (reallyHasAlpha) {
-        if (this->getRequireUnpremultipliedColors()) {
-            alphaType = kUnpremul_SkAlphaType;
-        } else {
-            alphaType = kPremul_SkAlphaType;
-        }
+    if (!reallyHasAlpha) {
+        decodedBitmap->setAlphaType(kOpaque_SkAlphaType);
     }
-    decodedBitmap->setAlphaType(alphaType);
     return true;
 }
 

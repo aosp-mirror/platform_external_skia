@@ -17,8 +17,6 @@
 #include "GrGLSL.h"
 #include "SkXfermode.h"
 
-SK_DEFINE_INST_COUNT(GrGLProgram)
-
 #define GL_CALL(X) GR_GL_CALL(fGpu->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fGpu->glInterface(), R, X)
 
@@ -207,10 +205,10 @@ void GrGLProgram::setData(GrDrawState::BlendOptFlags blendOpts,
         coverage = 0;
     } else if (blendOpts & GrDrawState::kEmitCoverage_BlendOptFlag) {
         color = 0xffffffff;
-        coverage = drawState.getCoverage();
+        coverage = drawState.getCoverageColor();
     } else {
         color = drawState.getColor();
-        coverage = drawState.getCoverage();
+        coverage = drawState.getCoverageColor();
     }
 
     this->setColor(drawState, color, sharedState);
@@ -272,7 +270,7 @@ void GrGLProgram::setColor(const GrDrawState& drawState,
                     // OpenGL ES doesn't support unsigned byte varieties of glUniform
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(color, c);
-                    fUniformManager.set4fv(fUniformHandles.fColorUni, 0, 1, c);
+                    fUniformManager.set4fv(fUniformHandles.fColorUni, 1, c);
                     fColor = color;
                 }
                 sharedState->fConstAttribColorIndex = -1;
@@ -311,7 +309,7 @@ void GrGLProgram::setCoverage(const GrDrawState& drawState,
                     // OpenGL ES doesn't support unsigned byte varieties of glUniform
                     GrGLfloat c[4];
                     GrColorToRGBAFloat(coverage, c);
-                    fUniformManager.set4fv(fUniformHandles.fCoverageUni, 0, 1, c);
+                    fUniformManager.set4fv(fUniformHandles.fCoverageUni, 1, c);
                     fCoverage = coverage;
                 }
                 sharedState->fConstAttribCoverageIndex = -1;

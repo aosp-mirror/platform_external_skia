@@ -12,11 +12,16 @@
         '../src/effects',
         '../src/image',
         '../src/lazy',
+        '../src/images',
         '../src/pathops',
         '../src/pdf',
         '../src/pipe/utils',
         '../src/utils',
         '../tools/',
+
+        # Needed for TDStackNesterTest.
+        '../experimental/PdfViewer',
+        '../experimental/PdfViewer/src',
       ],
       'includes': [
         'pathops_unittest.gypi',
@@ -27,8 +32,8 @@
         '../tests/AnnotationTest.cpp',
         '../tests/ARGBImageEncoderTest.cpp',
         '../tests/AtomicTest.cpp',
+        '../tests/BitmapTest.cpp',
         '../tests/BitmapCopyTest.cpp',
-        '../tests/BitmapFactoryTest.cpp',
         '../tests/BitmapGetColorTest.cpp',
         '../tests/BitmapHasherTest.cpp',
         '../tests/BitmapHeapTest.cpp',
@@ -45,11 +50,14 @@
         '../tests/ClipStackTest.cpp',
         '../tests/ClipperTest.cpp',
         '../tests/ColorFilterTest.cpp',
+        '../tests/ColorPrivTest.cpp',
         '../tests/ColorTest.cpp',
         '../tests/DataRefTest.cpp',
         '../tests/DeferredCanvasTest.cpp',
         '../tests/DequeTest.cpp',
         '../tests/DeviceLooperTest.cpp',
+        '../tests/DiscardableMemoryPool.cpp',
+        '../tests/DiscardableMemoryTest.cpp',
         '../tests/DocumentTest.cpp',
         '../tests/DrawBitmapRectTest.cpp',
         '../tests/DrawPathTest.cpp',
@@ -74,9 +82,11 @@
         '../tests/GpuColorFilterTest.cpp',
         '../tests/GpuDrawPathTest.cpp',
         '../tests/GrContextFactoryTest.cpp',
+        '../tests/GrDrawTargetTest.cpp',
         '../tests/GradientTest.cpp',
         '../tests/GrMemoryPoolTest.cpp',
         '../tests/GrSurfaceTest.cpp',
+        '../tests/GrUnitTests.cpp',
         '../tests/HashCacheTest.cpp',
         '../tests/ImageCacheTest.cpp',
         '../tests/ImageDecodingTest.cpp',
@@ -120,6 +130,7 @@
         '../tests/RegionTest.cpp',
         '../tests/ResourceCacheTest.cpp',
         '../tests/RoundRectTest.cpp',
+        '../tests/RuntimeConfigTest.cpp',
         '../tests/RTreeTest.cpp',
         '../tests/SHA1Test.cpp',
         '../tests/ScalarTest.cpp',
@@ -150,6 +161,9 @@
         '../tests/Writer32Test.cpp',
         '../tests/XfermodeTest.cpp',
 
+        '../experimental/PdfViewer/src/SkTDStackNester.h',
+        '../tests/TDStackNesterTest.cpp',
+
         # Needed for PipeTest.
         '../src/pipe/utils/SamplePipeControllers.cpp',
       ],
@@ -170,9 +184,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

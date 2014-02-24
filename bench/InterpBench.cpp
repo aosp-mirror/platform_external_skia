@@ -20,7 +20,10 @@ public:
         fName.printf("interp_%s", name);
         fFx = 3.3f;
         fDx = 0.1257f;
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest(int16_t dst[], float x, float dx, int count) = 0;
@@ -32,8 +35,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) {
-        int n = this->getLoops() * this->mulLoopCount();
+    virtual void onDraw(const int loops, SkCanvas*) {
+        int n = loops * this->mulLoopCount();
         for (int i = 0; i < n; i++) {
             this->performTest(fDst, fFx, fDx, kBuffer);
         }

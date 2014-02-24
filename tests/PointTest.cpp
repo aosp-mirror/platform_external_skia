@@ -84,7 +84,7 @@ static float force_as_float(skiatest::Reporter* reporter, float value) {
 // test that we handle very large values correctly. i.e. that we can
 // successfully normalize something whose mag overflows a float.
 static void test_overflow(skiatest::Reporter* reporter) {
-    SkScalar bigFloat = get_value(reporter, SkFloatToScalar(3.4e38f));
+    SkScalar bigFloat = get_value(reporter, 3.4e38f);
     SkPoint pt = { bigFloat, bigFloat };
 
     SkScalar length = pt.length();
@@ -107,7 +107,7 @@ static void test_overflow(skiatest::Reporter* reporter) {
 // test that we handle very small values correctly. i.e. that we can
 // report failure if we try to normalize them.
 static void test_underflow(skiatest::Reporter* reporter) {
-    SkPoint pt = { SkFloatToScalar(1.0e-37f), SkFloatToScalar(1.0e-37f) };
+    SkPoint pt = { 1.0e-37f, 1.0e-37f };
     SkPoint copy = pt;
 
     REPORTER_ASSERT(reporter, 0 == SkPoint::Normalize(&pt));
@@ -117,7 +117,8 @@ static void test_underflow(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, pt == copy);  // pt is unchanged
 }
 
-static void PointTest(skiatest::Reporter* reporter) {
+#include "TestClassDef.h"
+DEF_TEST(Point, reporter) {
     test_casts(reporter);
 
     static const struct {
@@ -126,7 +127,7 @@ static void PointTest(skiatest::Reporter* reporter) {
         SkScalar fLength;
     } gRec[] = {
         { SkIntToScalar(3), SkIntToScalar(4), SkIntToScalar(5) },
-        { SkFloatToScalar(0.6f), SkFloatToScalar(0.8f), SK_Scalar1 },
+        { 0.6f, 0.8f, SK_Scalar1 },
     };
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
@@ -137,5 +138,22 @@ static void PointTest(skiatest::Reporter* reporter) {
     test_overflow(reporter);
 }
 
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Point", PointTestClass, PointTest)
+DEF_TEST(Point_setLengthFast, reporter) {
+    // Scale a (1,1) point to a bunch of different lengths,
+    // making sure the slow and fast paths are within 0.1%.
+    const float tests[] = { 1.0f, 0.0f, 1.0e-37f, 3.4e38f, 42.0f, 0.00012f };
+
+    const SkPoint kOne = {1.0f, 1.0f};
+    for (unsigned i = 0; i < SK_ARRAY_COUNT(tests); i++) {
+        SkPoint slow = kOne, fast = kOne;
+
+        slow.setLength(tests[i]);
+        fast.setLengthFast(tests[i]);
+
+        if (slow.length() < FLT_MIN && fast.length() < FLT_MIN) continue;
+
+        SkScalar ratio = slow.length() / fast.length();
+        REPORTER_ASSERT(reporter, ratio > 0.999f);
+        REPORTER_ASSERT(reporter, ratio < 1.001f);
+    }
+}

@@ -6,6 +6,7 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkRandom.h"
 #include "SkTInternalLList.h"
 #include "SkTLList.h"
@@ -27,8 +28,6 @@ private:
     SK_DECLARE_INST_COUNT_ROOT(ListElement);
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(ListElement);
 };
-
-SK_DEFINE_INST_COUNT(ListElement);
 
 static void check_list(const SkTInternalLList<ListElement>& list,
                        skiatest::Reporter* reporter,
@@ -312,10 +311,7 @@ static void TestTLList(skiatest::Reporter* reporter) {
     }
 }
 
-static void test_llists(skiatest::Reporter* reporter) {
+DEF_TEST(LList, reporter) {
     TestTInternalLList(reporter);
     TestTLList(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("LList", TestLListClass, test_llists)

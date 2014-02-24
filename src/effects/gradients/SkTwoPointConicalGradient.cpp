@@ -236,16 +236,17 @@ void SkTwoPointConicalGradient::shadeSpan(int x, int y, SkPMColor* dstCParam,
         fRec.setup(fx, fy, dx, dy);
         (*shadeProc)(&fRec, dstC, cache, toggle, count);
     } else {    // perspective case
-        SkScalar dstX = SkIntToScalar(x);
-        SkScalar dstY = SkIntToScalar(y);
+        SkScalar dstX = SkIntToScalar(x) + SK_ScalarHalf;
+        SkScalar dstY = SkIntToScalar(y) + SK_ScalarHalf;
         for (; count > 0; --count) {
             SkPoint srcPt;
             dstProc(fDstToIndex, dstX, dstY, &srcPt);
-            dstX += SK_Scalar1;
-
             fRec.setup(srcPt.fX, srcPt.fY, 0, 0);
             (*shadeProc)(&fRec, dstC, cache, toggle, 1);
+
+            dstX += SK_Scalar1;
             toggle = next_dither_toggle(toggle);
+            dstC += 1;
         }
     }
 }
@@ -655,7 +656,7 @@ void GrGLConical2Gradient::setData(const GrGLUniformManager& uman,
             SkScalarToFloat(diffRadius)
         };
 
-        uman.set1fv(fParamUni, 0, 6, values);
+        uman.set1fv(fParamUni, 6, values);
         fCachedCenter = centerX1;
         fCachedRadius = radius0;
         fCachedDiffRadius = diffRadius;

@@ -21,7 +21,7 @@ SkScalar SkBlurMask::ConvertRadiusToSigma(SkScalar radius) {
     // Firefox used to do the same too, until 4.0 where they fixed it.  So at some
     // point we should probably get rid of these scaling constants and rebaseline
     // all the blur tests.
-    static const SkScalar kBLUR_SIGMA_SCALE = SkFloatToScalar(0.57735f);
+    static const SkScalar kBLUR_SIGMA_SCALE = 0.57735f;
 
     return radius ? kBLUR_SIGMA_SCALE * radius + 0.5f : 0.0f;
 }
@@ -83,11 +83,7 @@ static int boxBlur(const uint8_t* src, int src_y_stride, uint8_t* dst,
     int new_width = width + SkMax32(leftRadius, rightRadius) * 2;
     int dst_x_stride = transpose ? height : 1;
     int dst_y_stride = transpose ? 1 : new_width;
-#ifndef SK_DISABLE_BLUR_ROUNDING
     uint32_t half = 1 << 23;
-#else
-    uint32_t half = 0;
-#endif
     for (int y = 0; y < height; ++y) {
         uint32_t sum = 0;
         uint8_t* dptr = dst + y * dst_y_stride;
@@ -290,11 +286,7 @@ static int boxBlurInterp(const uint8_t* src, int src_y_stride, uint8_t* dst,
     inner_weight += inner_weight >> 7;
     uint32_t outer_scale = (outer_weight << 16) / kernelSize;
     uint32_t inner_scale = (inner_weight << 16) / (kernelSize - 2);
-#ifndef SK_DISABLE_BLUR_ROUNDING
     uint32_t half = 1 << 23;
-#else
-    uint32_t half = 0;
-#endif
     int new_width = width + diameter;
     int dst_x_stride = transpose ? height : 1;
     int dst_y_stride = transpose ? 1 : new_width;
@@ -413,7 +405,7 @@ static int boxBlurInterp(const uint8_t* src, int src_y_stride, uint8_t* dst,
 static void get_adjusted_radii(SkScalar passRadius, int *loRadius, int *hiRadius)
 {
     *loRadius = *hiRadius = SkScalarCeil(passRadius);
-    if (SkIntToScalar(*hiRadius) - passRadius > SkFloatToScalar(0.5f)) {
+    if (SkIntToScalar(*hiRadius) - passRadius > 0.5f) {
         *loRadius = *hiRadius - 1;
     }
 }

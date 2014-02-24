@@ -72,7 +72,6 @@ public:
     virtual int height() const SK_OVERRIDE {
         return NULL == fRenderTarget ? 0 : fRenderTarget->height();
     }
-    virtual void getGlobalBounds(SkIRect* bounds) const SK_OVERRIDE;
     virtual bool isOpaque() const SK_OVERRIDE {
         return NULL == fRenderTarget ? false
                                      : kRGB_565_GrPixelConfig == fRenderTarget->config();
@@ -198,14 +197,16 @@ private:
                             const SkRect&,
                             const GrTextureParams& params,
                             const SkPaint& paint,
-                            SkCanvas::DrawBitmapRectFlags flags);
+                            SkCanvas::DrawBitmapRectFlags flags,
+                            bool bicubic);
     void drawTiledBitmap(const SkBitmap& bitmap,
                          const SkRect& srcRect,
                          const SkIRect& clippedSrcRect,
                          const GrTextureParams& params,
                          const SkPaint& paint,
                          SkCanvas::DrawBitmapRectFlags flags,
-                         int tileSize);
+                         int tileSize,
+                         bool bicubic);
 
     /**
      * Returns non-initialized instance.

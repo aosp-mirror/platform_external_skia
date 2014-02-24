@@ -70,7 +70,10 @@ void GrBitmapTextContext::flushGlyphs() {
                                 GrCustomCoordsTextureEffect::Create(fCurrTexture, params),
                                 kGlyphCoordsAttributeIndex)->unref();
 
-        if (!GrPixelConfigIsAlphaOnly(fCurrTexture->config())) {
+        if (NULL != fStrike && kARGB_GrMaskFormat == fStrike->getMaskFormat()) {
+            drawState->setBlendFunc(fPaint.getSrcBlendCoeff(), fPaint.getDstBlendCoeff());
+            drawState->setColor(0xffffffff);
+        } else if (!GrPixelConfigIsAlphaOnly(fCurrTexture->config())) {
             if (kOne_GrBlendCoeff != fPaint.getSrcBlendCoeff() ||
                 kISA_GrBlendCoeff != fPaint.getDstBlendCoeff() ||
                 fPaint.numColorStages()) {
@@ -123,7 +126,11 @@ void GrBitmapTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
         return;
     }
     if (NULL == fStrike) {
+#if SK_DISTANCEFIELD_FONTS
+        fStrike = fContext->getFontCache()->getStrike(scaler, false);
+#else
         fStrike = fContext->getFontCache()->getStrike(scaler);
+#endif
     }
 
     GrGlyph* glyph = fStrike->getGlyph(packed, scaler);

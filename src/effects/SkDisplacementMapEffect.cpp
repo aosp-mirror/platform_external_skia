@@ -49,7 +49,7 @@ template<SkDisplacementMapEffect::ChannelSelectorType typeX,
          SkDisplacementMapEffect::ChannelSelectorType typeY>
 void computeDisplacement(SkScalar scale, SkBitmap* dst, SkBitmap* displ, SkBitmap* src, const SkIRect& bounds)
 {
-    static const SkScalar Inv8bit = SkScalarDiv(SK_Scalar1, SkFloatToScalar(255.0f));
+    static const SkScalar Inv8bit = SkScalarDiv(SK_Scalar1, 255.0f);
     const int srcW = src->width();
     const int srcH = src->height();
     const SkScalar scaleForColor = SkScalarMul(scale, Inv8bit);
@@ -161,7 +161,7 @@ SkDisplacementMapEffect::~SkDisplacementMapEffect() {
 }
 
 SkDisplacementMapEffect::SkDisplacementMapEffect(SkFlattenableReadBuffer& buffer)
-  : INHERITED(buffer)
+  : INHERITED(2, buffer)
 {
     fXChannelSelector = (SkDisplacementMapEffect::ChannelSelectorType) buffer.readInt();
     fYChannelSelector = (SkDisplacementMapEffect::ChannelSelectorType) buffer.readInt();
@@ -203,6 +203,14 @@ bool SkDisplacementMapEffect::onFilterImage(Proxy* proxy,
     SkIRect bounds;
     color.getBounds(&bounds);
     if (!this->applyCropRect(&bounds, ctm)) {
+        return false;
+    }
+    SkIRect displBounds;
+    displ.getBounds(&displBounds);
+    if (!this->applyCropRect(&displBounds, ctm)) {
+        return false;
+    }
+    if (!bounds.intersect(displBounds)) {
         return false;
     }
 
@@ -338,6 +346,14 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
     if (!this->applyCropRect(&bounds, ctm)) {
         return false;
     }
+    SkIRect displBounds;
+    displacementBM.getBounds(&displBounds);
+    if (!this->applyCropRect(&displBounds, ctm)) {
+        return false;
+    }
+    if (!bounds.intersect(displBounds)) {
+        return false;
+    }
     SkRect srcRect = SkRect::Make(bounds);
     SkRect dstRect = SkRect::MakeWH(srcRect.width(), srcRect.height());
     context->drawRectToRect(paint, dstRect, srcRect);
@@ -413,7 +429,7 @@ GrEffectRef* GrDisplacementMapEffect::TestCreate(SkRandom* random,
     SkDisplacementMapEffect::ChannelSelectorType yChannelSelector =
         static_cast<SkDisplacementMapEffect::ChannelSelectorType>(
         random->nextRangeU(1, kMaxComponent));
-    SkScalar scale = random->nextRangeScalar(0, SkFloatToScalar(100.0f));
+    SkScalar scale = random->nextRangeScalar(0, 100.0f);
 
     return GrDisplacementMapEffect::Create(xChannelSelector, yChannelSelector, scale,
                                            textures[texIdxDispl], textures[texIdxColor]);

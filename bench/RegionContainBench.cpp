@@ -43,17 +43,19 @@ public:
         }
 
         fB.setRect(0, 0, H, W);
+    }
 
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
     virtual const char* onGetName() { return fName.c_str(); }
 
-    virtual void onDraw(SkCanvas*) {
+    virtual void onDraw(const int loops, SkCanvas*) {
         Proc proc = fProc;
 
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
            proc(fA, fB);
         }
     }

@@ -16,7 +16,10 @@ class ScalarBench : public SkBenchmark {
 public:
     ScalarBench(const char name[])  {
         fName.printf("scalar_%s", name);
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
     virtual void performTest() = 0;
@@ -28,8 +31,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
-        for (int i = 0; i < this->getLoops(); i++) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
+        for (int i = 0; i < loops; i++) {
             this->performTest();
         }
     }
@@ -143,7 +146,10 @@ public:
             fPts[i].fX = rand.nextSScalar1();
             fPts[i].fY = rand.nextSScalar1();
         }
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -151,9 +157,9 @@ protected:
         return "rect_bounds";
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         SkRect r;
-        for (int i = 0; i < this->getLoops(); ++i) {
+        for (int i = 0; i < loops; ++i) {
             r.set(fPts, PTS);
         }
     }

@@ -15,9 +15,9 @@
 #include "SkBlurMaskFilter.h"
 
 #define SMALL   SkIntToScalar(2)
-#define REAL    SkFloatToScalar(1.5f)
+#define REAL    1.5f
 #define BIG     SkIntToScalar(10)
-#define REALBIG SkFloatToScalar(100.5f)
+#define REALBIG 100.5f
 
 static const char* gStyleName[] = {
     "normal",
@@ -52,14 +52,14 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
 
         paint.setAntiAlias(true);
 
         SkRandom rand;
-        for (int i = 0; i < this->getLoops(); i++) {
+        for (int i = 0; i < loops; i++) {
             SkRect r = SkRect::MakeWH(rand.nextUScalar1() * 400,
                                       rand.nextUScalar1() * 400);
             r.offset(fRadius, fRadius);

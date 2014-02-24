@@ -22,6 +22,7 @@ LOCAL_SRC_FILES += \
   arithmode.cpp \
   beziereffects.cpp \
   bicubicfilter.cpp \
+  bigblurs.cpp \
   bigmatrix.cpp \
   bigtext.cpp \
   bitmapalphathreshold.cpp \
@@ -32,10 +33,13 @@ LOCAL_SRC_FILES += \
   bitmaprect.cpp \
   bitmaprecttest.cpp \
   bitmapscroll.cpp \
+  bitmapshader.cpp \
+  bitmapsource.cpp \
   bleed.cpp \
   blurs.cpp \
   blurquickreject.cpp \
   blurrect.cpp \
+  blurroundrect.cpp \
   canvasstate.cpp \
   circles.cpp \
   circularclips.cpp \
@@ -60,6 +64,7 @@ LOCAL_SRC_FILES += \
   downsamplebitmap.cpp \
   drawbitmaprect.cpp \
   drawlooper.cpp \
+  dropshadowimagefilter.cpp \
   extractbitmap.cpp \
   emptypath.cpp \
   fatpathfill.cpp \
@@ -100,7 +105,8 @@ LOCAL_SRC_FILES += \
   nested.cpp \
   ninepatchstretch.cpp \
   offsetimagefilter.cpp \
-  nocolorbleed.cpp \
+  nonclosedpaths.cpp \
+  offsetimagefilter.cpp \
   optimizations.cpp \
   ovals.cpp \
   patheffects.cpp \
@@ -110,8 +116,10 @@ LOCAL_SRC_FILES += \
   pathopsskpclip.cpp \
   pathreverse.cpp \
   perlinnoise.cpp \
+  pictureimagefilter.cpp \
   points.cpp \
   poly2poly.cpp \
+  polygons.cpp \
   quadpaths.cpp \
   rects.cpp \
   rrect.cpp \

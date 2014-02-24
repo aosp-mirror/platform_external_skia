@@ -21,8 +21,6 @@
 #include "SkGrPixelRef.h"
 #endif
 
-SK_DEFINE_INST_COUNT(SkMaskFilter)
-
 bool SkMaskFilter::filterMask(SkMask*, const SkMask&, const SkMatrix&,
                               SkIPoint*) const {
     return false;
@@ -351,10 +349,14 @@ bool SkMaskFilter::filterMaskGPU(GrContext* context,
     if (!result) {
         return false;
     }
+    SkAutoUnref aur(dst);
 
+    SkImageInfo info;
     resultBM->setConfig(srcBM.config(), dst->width(), dst->height());
-    resultBM->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (dst)))->unref();
-    dst->unref();
+    if (!resultBM->asImageInfo(&info)) {
+        return false;
+    }
+    resultBM->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, dst)))->unref();
     return true;
 }
 

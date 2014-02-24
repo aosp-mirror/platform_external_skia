@@ -17,8 +17,6 @@
 #include "SkImageFilterUtils.h"
 #endif
 
-SK_DEFINE_INST_COUNT(SkImageFilter)
-
 SkImageFilter::SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect)
   : fInputCount(inputCount),
     fInputs(new SkImageFilter*[inputCount]),
@@ -53,20 +51,31 @@ SkImageFilter::~SkImageFilter() {
     delete[] fInputs;
 }
 
-SkImageFilter::SkImageFilter(SkFlattenableReadBuffer& buffer)
-    : fInputCount(buffer.readInt()), fInputs(new SkImageFilter*[fInputCount]) {
-    for (int i = 0; i < fInputCount; i++) {
-        if (buffer.readBool()) {
-            fInputs[i] = buffer.readImageFilter();
-        } else {
-            fInputs[i] = NULL;
+SkImageFilter::SkImageFilter(int inputCount, SkFlattenableReadBuffer& buffer) {
+    fInputCount = buffer.readInt();
+    if (buffer.validate((fInputCount >= 0) && ((inputCount < 0) || (fInputCount == inputCount)))) {
+        fInputs = new SkImageFilter*[fInputCount];
+        for (int i = 0; i < fInputCount; i++) {
+            if (buffer.readBool()) {
+                fInputs[i] = buffer.readImageFilter();
+            } else {
+                fInputs[i] = NULL;
+            }
+            if (!buffer.isValid()) {
+                fInputCount = i; // Do not use fInputs past that point in the destructor
+                break;
+            }
         }
+        SkRect rect;
+        buffer.readRect(&rect);
+        if (buffer.isValid() && buffer.validate(SkIsValidRect(rect))) {
+            uint32_t flags = buffer.readUInt();
+            fCropRect = CropRect(rect, flags);
+        }
+    } else {
+        fInputCount = 0;
+        fInputs = NULL;
     }
-    SkRect rect;
-    buffer.readRect(&rect);
-    uint32_t flags = buffer.readUInt();
-    fCropRect = CropRect(rect, flags);
-    buffer.validate(SkIsValidRect(rect));
 }
 
 void SkImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {

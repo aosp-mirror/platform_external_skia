@@ -1,4 +1,4 @@
-/*
+ /*
  * Copyright 2013 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -6,6 +6,8 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
+#include "SkDiscardableMemory.h"
 #include "SkScaledImageCache.h"
 
 static void make_bm(SkBitmap* bm, int w, int h) {
@@ -13,21 +15,24 @@ static void make_bm(SkBitmap* bm, int w, int h) {
     bm->allocPixels();
 }
 
-static void TestImageCache(skiatest::Reporter* reporter) {
-    static const int COUNT = 10;
-    static const int DIM = 256;
-    static const size_t defLimit = DIM * DIM * 4 * COUNT + 1024;    // 1K slop
-    SkScaledImageCache cache(defLimit);
+static const int COUNT = 10;
+static const int DIM = 256;
+
+static void test_cache(skiatest::Reporter* reporter, SkScaledImageCache& cache,
+                       bool testPurge) {
     SkScaledImageCache::ID* id;
 
     SkBitmap bm[COUNT];
 
-    SkScalar scale = 2;
+    const SkScalar scale = 2;
+    for (int i = 0; i < COUNT; ++i) {
+        make_bm(&bm[i], DIM, DIM);
+    }
+    
     for (int i = 0; i < COUNT; ++i) {
         SkBitmap tmp;
 
-        make_bm(&bm[i], DIM, DIM);
-        id = cache.findAndLock(bm[i], scale, scale, &tmp);
+        SkScaledImageCache::ID* id = cache.findAndLock(bm[i], scale, scale, &tmp);
         REPORTER_ASSERT(reporter, NULL == id);
 
         make_bm(&tmp, DIM, DIM);
@@ -46,20 +51,75 @@ static void TestImageCache(skiatest::Reporter* reporter) {
         cache.unlock(id);
     }
 
-    // stress test, should trigger purges
-    for (size_t i = 0; i < COUNT * 100; ++i) {
-        scale += 1;
+    if (testPurge) {
+        // stress test, should trigger purges
+        float incScale = 2;
+        for (size_t i = 0; i < COUNT * 100; ++i) {
+            incScale += 1;
 
+            SkBitmap tmp;
+            make_bm(&tmp, DIM, DIM);
+
+            SkScaledImageCache::ID* id = cache.addAndLock(bm[0], incScale,
+                                                          incScale, tmp);
+            REPORTER_ASSERT(reporter, NULL != id);
+            cache.unlock(id);
+        }
+    }
+
+    // test the originals after all that purging
+    for (int i = 0; i < COUNT; ++i) {
         SkBitmap tmp;
-
-        make_bm(&tmp, DIM, DIM);
-        id = cache.addAndLock(bm[0], scale, scale, tmp);
-        REPORTER_ASSERT(reporter, NULL != id);
-        cache.unlock(id);
+        id = cache.findAndLock(bm[i], scale, scale, &tmp);
+        if (id) {
+            cache.unlock(id);
+        }
     }
 
     cache.setByteLimit(0);
 }
 
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("ImageCache", TestImageCacheClass, TestImageCache)
+#include "SkDiscardableMemoryPool.h"
+
+static SkDiscardableMemoryPool* gPool;
+static SkDiscardableMemory* pool_factory(size_t bytes) {
+    return gPool->create(bytes);
+}
+
+DEF_TEST(ImageCache, reporter) {
+    static const size_t defLimit = DIM * DIM * 4 * COUNT + 1024;    // 1K slop
+
+    {
+        SkScaledImageCache cache(defLimit);
+        test_cache(reporter, cache, true);
+    }
+    {
+        SkDiscardableMemoryPool pool(defLimit);
+        gPool = &pool;
+        SkScaledImageCache cache(pool_factory);
+        test_cache(reporter, cache, true);
+    }
+    {
+        SkScaledImageCache cache(SkDiscardableMemory::Create);
+        test_cache(reporter, cache, false);
+    }
+}
+
+DEF_TEST(ImageCache_doubleAdd, r) {
+    // Adding the same key twice should be safe.
+    SkScaledImageCache cache(1024);
+
+    SkBitmap original;
+    original.setConfig(SkBitmap::kARGB_8888_Config, 40, 40);
+    original.allocPixels();
+
+    SkBitmap scaled;
+    scaled.setConfig(SkBitmap::kARGB_8888_Config, 20, 20);
+    scaled.allocPixels();
+
+    SkScaledImageCache::ID* id1 = cache.addAndLock(original, 0.5f, 0.5f, scaled);
+    SkScaledImageCache::ID* id2 = cache.addAndLock(original, 0.5f, 0.5f, scaled);
+    // We don't really care if id1 == id2 as long as unlocking both works.
+    cache.unlock(id1);
+    cache.unlock(id2);
+}

@@ -26,8 +26,6 @@
 #include "SkRTree.h"
 #include "SkBBoxHierarchyRecord.h"
 
-SK_DEFINE_INST_COUNT(SkPicture)
-
 #define DUMP_BUFFER_SIZE 65536
 
 //#define ENABLE_TIME_DRAW    // dumps milliseconds for each draw
@@ -266,8 +264,17 @@ void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
 
 #include "SkStream.h"
 
+static const char kMagic[] = { 's', 'k', 'i', 'a', 'p', 'i', 'c', 't' };
+
 bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (NULL == stream) {
+        return false;
+    }
+
+    // Check magic bytes.
+    char magic[sizeof(kMagic)];
+    stream->read(magic, sizeof(kMagic));
+    if (0 != memcmp(magic, kMagic, sizeof(kMagic))) {
         return false;
     }
 
@@ -275,14 +282,11 @@ bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (!stream->read(&info, sizeof(SkPictInfo))) {
         return false;
     }
+
     if (PICTURE_VERSION != info.fVersion
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V13_AND_ALL_OTHER_INSTANCES_TOO
-        // V13 is backwards compatible with V12
-        && PRIOR_PRIOR_PICTURE_VERSION != info.fVersion  // TODO: remove when .skps regenerated
-#endif
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V14_AND_ALL_OTHER_INSTANCES_TOO
-        // V14 is backwards compatible with V13
-        && PRIOR_PICTURE_VERSION2 != info.fVersion  // TODO: remove when .skps regenerated
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+        // V16 is backwards compatible with V15
+        && PRIOR_PICTURE_VERSION != info.fVersion  // TODO: remove when .skps regenerated
 #endif
         ) {
         return false;
@@ -340,6 +344,10 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     if (8 == sizeof(void*)) {
         info.fFlags |= SkPictInfo::kPtrIs64Bit_Flag;
     }
+
+    // Write 8 magic bytes to ID this file format.
+    SkASSERT(sizeof(kMagic) == 8);
+    stream->write(kMagic, sizeof(kMagic));
 
     stream->write(&info, sizeof(info));
     if (playback) {

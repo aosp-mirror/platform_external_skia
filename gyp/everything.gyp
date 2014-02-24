@@ -19,7 +19,11 @@
         ['skia_os in ("ios", "android", "chromeos") or (skia_os == "mac" and skia_arch_width == 32)', {
           # debugger is not supported on this platform
         }, {
-          'dependencies': [ 'debugger.gyp:debugger' ],
+          'dependencies': [
+            'debugger.gyp:debugger',
+            'pdfviewer.gyp:pdfviewer',
+            #'v8.gyp:SkV8Example',
+            ],
         }],
         # DM assumes you've got a GPU.
         ['skia_gpu == 1', {
@@ -29,9 +33,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

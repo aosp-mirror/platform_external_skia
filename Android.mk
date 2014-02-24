@@ -79,7 +79,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkAAClip.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
-	src/core/SkBBoxHierarchy.cpp \
 	src/core/SkBBoxRecord.cpp \
 	src/core/SkBBoxHierarchyRecord.cpp \
 	src/core/SkBitmap.cpp \
@@ -95,7 +94,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkBlitRow_D16.cpp \
 	src/core/SkBlitRow_D32.cpp \
 	src/core/SkBlitter.cpp \
-	src/core/SkBlitter_A1.cpp \
 	src/core/SkBlitter_A8.cpp \
 	src/core/SkBlitter_ARGB32.cpp \
 	src/core/SkBlitter_RGB16.cpp \
@@ -142,6 +140,7 @@ LOCAL_SRC_FILES:= \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageFilterUtils.cpp \
+	src/core/SkImageInfo.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
@@ -175,7 +174,6 @@ LOCAL_SRC_FILES:= \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkRect.cpp \
-	src/core/SkRefCnt.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
 	src/core/SkRegion_path.cpp \
@@ -249,6 +247,7 @@ LOCAL_SRC_FILES:= \
 	src/effects/SkOffsetImageFilter.cpp \
 	src/effects/SkPaintFlagsDrawFilter.cpp \
 	src/effects/SkPerlinNoiseShader.cpp \
+	src/effects/SkPictureImageFilter.cpp \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
@@ -279,6 +278,7 @@ LOCAL_SRC_FILES:= \
 	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/images/bmpdecoderhelper.cpp \
+	src/images/SkDecodingImageGenerator.cpp \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
 	src/images/SkImageDecoder_FactoryRegistrar.cpp \
 	src/images/SkImages.cpp \
@@ -335,7 +335,7 @@ LOCAL_SRC_FILES:= \
 	src/pipe/SkGPipeRead.cpp \
 	src/pipe/SkGPipeWrite.cpp \
 	src/ports/SkDebug_android.cpp \
-	src/ports/SkDiscardableMemory_none.cpp \
+	src/ports/SkDiscardableMemory_ashmem.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkFontConfigInterface_android.cpp \
 	src/ports/SkFontConfigParser_android.cpp \
@@ -400,11 +400,9 @@ LOCAL_SRC_FILES:= \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/utils/SkUnitMappers.cpp \
-	src/lazy/SkBitmapFactory.cpp \
-	src/lazy/SkLazyPixelRef.cpp \
-	src/lazy/SkLruImageCache.cpp \
-	src/lazy/SkPurgeableMemoryBlock_common.cpp \
-	src/lazy/SkPurgeableImageCache.cpp \
+	src/lazy/SkDiscardableMemoryPool.cpp \
+	src/lazy/SkDiscardablePixelRef.cpp \
+	src/lazy/SkCachingPixelRef.cpp 
 
 #	src/utils/SkBitmapHasher.cpp \
 
@@ -450,7 +448,6 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrEffect.cpp \
-	src/gpu/GrGeometryBuffer.cpp \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrGpu.cpp \
@@ -479,7 +476,6 @@ LOCAL_SRC_FILES += \
 	src/gpu/GrTextStrike.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
-	src/gpu/gr_unittests.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrBezierEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
@@ -487,7 +483,7 @@ LOCAL_SRC_FILES += \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
-	src/gpu/effects/GrTextureDomainEffect.cpp \
+	src/gpu/effects/GrTextureDomain.cpp \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
@@ -521,8 +517,14 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/memset32_neon.S \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
 	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_arm_neon.cpp \
+	src/opts/SkBlurImage_opts_neon.cpp \
+	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
+else
+LOCAL_SRC_FILES_arm += \
+	src/opts/SkMorphology_opts_none.cpp
 endif
 
 LOCAL_SRC_FILES_arm += \
@@ -532,7 +534,6 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitRow_opts_arm.cpp \
-	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkXfermode_opts_arm.cpp
 
 LOCAL_SRC_FILES_mips += \
@@ -593,6 +594,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/src/image \
+	$(LOCAL_PATH)/src/images \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/opts \
 	$(LOCAL_PATH)/src/pdf \
@@ -646,13 +648,13 @@ include $(BUILD_SHARED_LIBRARY)
 #
 
 # benchmark (timings)
-include $(BASE_PATH)/bench/Android.mk
+#include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
 #include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
-include $(BASE_PATH)/tests/Android.mk
+#include $(BASE_PATH)/tests/Android.mk
 
 # pathOps unit-tests
 # TODO include those sources!

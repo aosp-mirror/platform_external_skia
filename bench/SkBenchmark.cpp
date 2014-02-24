@@ -10,8 +10,6 @@
 
 const char* SkTriState::Name[] = { "default", "true", "false" };
 
-SK_DEFINE_INST_COUNT(SkBenchmark)
-
 template BenchRegistry* BenchRegistry::gHead;
 
 SkString SkBenchmark::gResourcePath;
@@ -21,9 +19,7 @@ SkBenchmark::SkBenchmark() {
     fForceAA = true;
     fForceFilter = false;
     fDither = SkTriState::kDefault;
-    fIsRendering = true;
     fOrMask = fClearMask = 0;
-    fLoops = 1;
 }
 
 const char* SkBenchmark::getName() {
@@ -38,8 +34,8 @@ void SkBenchmark::preDraw() {
     this->onPreDraw();
 }
 
-void SkBenchmark::draw(SkCanvas* canvas) {
-    this->onDraw(canvas);
+void SkBenchmark::draw(const int loops, SkCanvas* canvas) {
+    this->onDraw(loops, canvas);
 }
 
 void SkBenchmark::postDraw() {

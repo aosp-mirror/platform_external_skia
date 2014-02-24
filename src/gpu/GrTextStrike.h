@@ -61,9 +61,12 @@ private:
 
     GrFontCache*    fFontCache;
     GrAtlasMgr*     fAtlasMgr;
-    GrAtlas         fAtlas;
-
     GrMaskFormat    fMaskFormat;
+#if SK_DISTANCEFIELD_FONTS
+    bool            fUseDistanceField;
+#endif
+
+    GrAtlas         fAtlas;
 
     GrGlyph* generateGlyph(GrGlyph::PackedID packed, GrFontScaler* scaler);
 
@@ -75,7 +78,11 @@ public:
     GrFontCache(GrGpu*);
     ~GrFontCache();
 
+#if SK_DISTANCEFIELD_FONTS
+    inline GrTextStrike* getStrike(GrFontScaler*, bool useDistanceField);
+#else
     inline GrTextStrike* getStrike(GrFontScaler*);
+#endif
 
     void freeAll();
 
@@ -101,6 +108,15 @@ public:
     void dump() const;
 #endif
 
+    enum AtlasType {
+        kA8_AtlasType,   //!< 1-byte per pixel
+        k565_AtlasType,  //!< 2-bytes per pixel
+        k8888_AtlasType, //!< 4-bytes per pixel
+
+        kLast_AtlasType = k8888_AtlasType
+    };
+    static const int kAtlasCount = kLast_AtlasType + 1;
+
 private:
     friend class GrFontPurgeListener;
 
@@ -111,7 +127,7 @@ private:
     GrTextStrike* fTail;
 
     GrGpu*      fGpu;
-    GrAtlasMgr* fAtlasMgr[kMaskFormatCount];
+    GrAtlasMgr* fAtlasMgr[kAtlasCount];
 
     GrTextStrike* generateStrike(GrFontScaler*, const Key&);
     inline void detachStrikeFromList(GrTextStrike*);

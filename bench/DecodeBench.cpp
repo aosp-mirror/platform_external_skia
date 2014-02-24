@@ -27,7 +27,10 @@ public:
 
         SkString fname = SkOSPath::SkBasename(FLAGS_decodeBenchFilename[0]);
         fName.printf("decode_%s_%s", gConfigName[c], fname.c_str());
-        fIsRendering = false;
+    }
+
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
 
 protected:
@@ -35,8 +38,8 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < this->getLoops(); i++) {
+    virtual void onDraw(const int loops, SkCanvas*) {
+        for (int i = 0; i < loops; i++) {
             SkBitmap bm;
             SkImageDecoder::DecodeFile(FLAGS_decodeBenchFilename[0],
                                        &bm,

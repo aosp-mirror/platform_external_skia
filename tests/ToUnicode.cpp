@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 The Android Open Source Project
  *
@@ -6,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkData.h"
 #include "SkPDFTypes.h"
 #include "SkPDFFont.h"
@@ -28,10 +27,11 @@ static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
 void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
                           const SkPDFGlyphSet* subset,
                           SkDynamicMemoryWStream* cmap,
+                          bool multiByteGlyphs,
                           uint16_t firstGlypthID,
                           uint16_t lastGlypthID);
 
-static void TestToUnicode(skiatest::Reporter* reporter) {
+DEF_TEST(ToUnicode, reporter) {
     SkTDArray<SkUnichar> glyphToUnicode;
     SkTDArray<uint16_t> glyphsInSubset;
     SkPDFGlyphSet subset;
@@ -74,7 +74,7 @@ static void TestToUnicode(skiatest::Reporter* reporter) {
 
     SkDynamicMemoryWStream buffer;
     subset.set(glyphsInSubset.begin(), glyphsInSubset.count());
-    append_cmap_sections(glyphToUnicode, &subset, &buffer, 0, 0xFFFF);
+    append_cmap_sections(glyphToUnicode, &subset, &buffer, true, 0, 0xFFFF);
 
     char expectedResult[] =
 "4 beginbfchar\n\
@@ -96,7 +96,7 @@ endbfrange\n";
     // Remove characters and ranges.
     buffer.reset();
 
-    append_cmap_sections(glyphToUnicode, &subset, &buffer, 8, 0x00FF);
+    append_cmap_sections(glyphToUnicode, &subset, &buffer, true, 8, 0x00FF);
 
     char expectedResultChop1[] =
 "2 beginbfchar\n\
@@ -114,7 +114,7 @@ endbfrange\n";
     // Remove characters from range to downdrade it to one char.
     buffer.reset();
 
-    append_cmap_sections(glyphToUnicode, &subset, &buffer, 0x00D, 0x00FE);
+    append_cmap_sections(glyphToUnicode, &subset, &buffer, true, 0x00D, 0x00FE);
 
     char expectedResultChop2[] =
 "2 beginbfchar\n\
@@ -123,6 +123,23 @@ endbfrange\n";
 endbfchar\n";
 
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0, expectedResultChop2,
+                                            buffer.getOffset()));
+
+    buffer.reset();
+
+    append_cmap_sections(glyphToUnicode, NULL, &buffer, false, 0xFC, 0x110);
+
+    char expectedResultSingleBytes[] =
+"2 beginbfchar\n\
+<0001> <0000>\n\
+<0002> <0000>\n\
+endbfchar\n\
+1 beginbfrange\n\
+<0003> <0006> <1010>\n\
+endbfrange\n";
+
+    REPORTER_ASSERT(reporter, stream_equals(buffer, 0,
+                                            expectedResultSingleBytes,
                                             buffer.getOffset()));
 
     glyphToUnicode.reset();
@@ -146,7 +163,7 @@ endbfchar\n";
 
     SkDynamicMemoryWStream buffer2;
     subset2.set(glyphsInSubset.begin(), glyphsInSubset.count());
-    append_cmap_sections(glyphToUnicode, &subset2, &buffer2, 0, 0xffff);
+    append_cmap_sections(glyphToUnicode, &subset2, &buffer2, true, 0, 0xffff);
 
     char expectedResult2[] =
 "4 beginbfchar\n\
@@ -162,6 +179,3 @@ endbfrange\n";
     REPORTER_ASSERT(reporter, stream_equals(buffer2, 0, expectedResult2,
                                             buffer2.getOffset()));
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("ToUnicode", ToUnicodeTestClass, TestToUnicode)

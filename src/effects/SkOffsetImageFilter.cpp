@@ -48,6 +48,9 @@ bool SkOffsetImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
         }
 
         SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(bounds.width(), bounds.height()));
+        if (NULL == device.get()) {
+            return false;
+        }
         SkCanvas canvas(device);
         SkPaint paint;
         paint.setXfermodeMode(SkXfermode::kSrc_Mode);
@@ -79,7 +82,8 @@ SkOffsetImageFilter::SkOffsetImageFilter(SkScalar dx, SkScalar dy, SkImageFilter
     fOffset.set(dx, dy);
 }
 
-SkOffsetImageFilter::SkOffsetImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+SkOffsetImageFilter::SkOffsetImageFilter(SkFlattenableReadBuffer& buffer)
+  : INHERITED(1, buffer) {
     buffer.readPoint(&fOffset);
     buffer.validate(SkScalarIsFinite(fOffset.fX) &&
                     SkScalarIsFinite(fOffset.fY));

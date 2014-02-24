@@ -21,13 +21,16 @@ LOCAL_SRC_FILES += \
   BlurBench.cpp \
   BlurImageFilterBench.cpp \
   BlurRectBench.cpp \
+  BlurRoundRectBench.cpp \
   ChartBench.cpp \
   ChromeBench.cpp \
   CmapBench.cpp \
   ColorFilterBench.cpp \
+  ColorPrivBench.cpp \
   DashBench.cpp \
   DecodeBench.cpp \
   DeferredCanvasBench.cpp \
+  DeferredSurfaceCopyBench.cpp \
   DisplacementBench.cpp \
   FontCacheBench.cpp \
   FontScalerBench.cpp \
@@ -35,10 +38,11 @@ LOCAL_SRC_FILES += \
   GameBench.cpp \
   GradientBench.cpp \
   GrMemoryPoolBench.cpp \
+  GrResourceCacheBench.cpp \
+  HairlinePathBench.cpp \
   ImageCacheBench.cpp \
   ImageDecodeBench.cpp \
   InterpBench.cpp \
-  HairlinePathBench.cpp \
   LineBench.cpp \
   LightingBench.cpp \
   MagnifierBench.cpp \
@@ -109,6 +113,10 @@ LOCAL_CFLAGS := -Wno-unused-parameter
 # Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
 # Revert to -D_FORTIFY_SOURCE=1
 LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
+
+# Skia does not enforce this usage pattern so we disable it here to avoid
+# unecessary log spew when building
+LOCAL_CFLAGS := -Wno-unused-parameter
 
 #include stlport headers
 include external/stlport/libstlport.mk

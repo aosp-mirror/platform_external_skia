@@ -27,8 +27,6 @@ struct GrGpuGL::ProgramCache::Entry {
     unsigned int                fLRUStamp;
 };
 
-SK_DEFINE_INST_COUNT(GrGpuGL::ProgramCache::Entry);
-
 struct GrGpuGL::ProgramCache::ProgDescLess {
     bool operator() (const GrGLProgramDesc& desc, const Entry* entry) {
         SkASSERT(NULL != entry->fProgram.get());
@@ -291,7 +289,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
 
 void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
 
-    GrGLsizei stride = this->getDrawState().getVertexSize();
+    GrGLsizei stride = static_cast<GrGLsizei>(this->getDrawState().getVertexSize());
 
     size_t vertexOffsetInBytes = stride * info.startVertex();
 

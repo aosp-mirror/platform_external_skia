@@ -84,7 +84,7 @@ const GrGLInterface* GrGLCreateANGLEInterface();
  * Creates a null GrGLInterface that doesn't draw anything. Used for measuring
  * CPU overhead.
  */
-const GrGLInterface* GrGLCreateNullInterface();
+const SK_API GrGLInterface* GrGLCreateNullInterface();
 
 /**
  * Creates a debugging GrGLInterface that doesn't draw anything. Used for
@@ -251,6 +251,9 @@ public:
     //  This is used to store the pointer for GL_ARB/EXT/ANGLE/CHROMIUM_framebuffer_multisample or
     //  the standard function in ES3+ or GL 3.0+.
     GLPtr<GrGLRenderbufferStorageMultisampleProc> fRenderbufferStorageMultisample;
+
+    // Pointer to BindUniformLocationCHROMIUM from the GL_CHROMIUM_bind_uniform_location extension.
+    GLPtr<GrGLBindUniformLocation> fBindUniformLocation;
 
     GLPtr<GrGLResolveMultisampleFramebufferProc> fResolveMultisampleFramebuffer;
     GLPtr<GrGLScissorProc> fScissor;

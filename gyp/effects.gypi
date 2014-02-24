@@ -48,6 +48,7 @@
     '<(skia_src_path)/effects/SkOffsetImageFilter.cpp',
     '<(skia_src_path)/effects/SkPaintFlagsDrawFilter.cpp',
     '<(skia_src_path)/effects/SkPerlinNoiseShader.cpp',
+    '<(skia_src_path)/effects/SkPictureImageFilter.cpp',
     '<(skia_src_path)/effects/SkPixelXorXfermode.cpp',
     '<(skia_src_path)/effects/SkPorterDuff.cpp',
     '<(skia_src_path)/effects/SkRectShaderImageFilter.cpp',
@@ -119,9 +120,3 @@
     '<(skia_include_path)/effects/SkMagnifierImageFilter.h',
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

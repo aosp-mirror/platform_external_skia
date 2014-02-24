@@ -18,8 +18,6 @@
 
 #include "SkStrokeRec.h"
 
-SK_DEFINE_INST_COUNT(GrDrawTarget)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
@@ -962,8 +960,6 @@ void GrDrawTarget::initCopySurfaceDstDesc(const GrSurface* src, GrTextureDesc* d
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SK_DEFINE_INST_COUNT(GrDrawTargetCaps)
-
 void GrDrawTargetCaps::reset() {
     f8BitPaletteSupport = false;
     fNPOTTextureTileSupport = false;
@@ -1008,23 +1004,24 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     return *this;
 }
 
-void GrDrawTargetCaps::print() const {
+SkString GrDrawTargetCaps::dump() const {
+    SkString r;
     static const char* gNY[] = {"NO", "YES"};
-    GrPrintf("8 Bit Palette Support       : %s\n", gNY[f8BitPaletteSupport]);
-    GrPrintf("NPOT Texture Tile Support   : %s\n", gNY[fNPOTTextureTileSupport]);
-    GrPrintf("Two Sided Stencil Support   : %s\n", gNY[fTwoSidedStencilSupport]);
-    GrPrintf("Stencil Wrap Ops  Support   : %s\n", gNY[fStencilWrapOpsSupport]);
-    GrPrintf("HW AA Lines Support         : %s\n", gNY[fHWAALineSupport]);
-    GrPrintf("Shader Derivative Support   : %s\n", gNY[fShaderDerivativeSupport]);
-    GrPrintf("Geometry Shader Support     : %s\n", gNY[fGeometryShaderSupport]);
-    GrPrintf("Dual Source Blending Support: %s\n", gNY[fDualSourceBlendingSupport]);
-    GrPrintf("Buffer Lock Support         : %s\n", gNY[fBufferLockSupport]);
-    GrPrintf("Path Rendering Support      : %s\n", gNY[fPathRenderingSupport]);
-    GrPrintf("Dst Read In Shader Support  : %s\n", gNY[fDstReadInShaderSupport]);
-    GrPrintf("Reuse Scratch Textures      : %s\n", gNY[fReuseScratchTextures]);
-    GrPrintf("Max Texture Size            : %d\n", fMaxTextureSize);
-    GrPrintf("Max Render Target Size      : %d\n", fMaxRenderTargetSize);
-    GrPrintf("Max Sample Count            : %d\n", fMaxSampleCount);
+    r.appendf("8 Bit Palette Support       : %s\n", gNY[f8BitPaletteSupport]);
+    r.appendf("NPOT Texture Tile Support   : %s\n", gNY[fNPOTTextureTileSupport]);
+    r.appendf("Two Sided Stencil Support   : %s\n", gNY[fTwoSidedStencilSupport]);
+    r.appendf("Stencil Wrap Ops  Support   : %s\n", gNY[fStencilWrapOpsSupport]);
+    r.appendf("HW AA Lines Support         : %s\n", gNY[fHWAALineSupport]);
+    r.appendf("Shader Derivative Support   : %s\n", gNY[fShaderDerivativeSupport]);
+    r.appendf("Geometry Shader Support     : %s\n", gNY[fGeometryShaderSupport]);
+    r.appendf("Dual Source Blending Support: %s\n", gNY[fDualSourceBlendingSupport]);
+    r.appendf("Buffer Lock Support         : %s\n", gNY[fBufferLockSupport]);
+    r.appendf("Path Rendering Support      : %s\n", gNY[fPathRenderingSupport]);
+    r.appendf("Dst Read In Shader Support  : %s\n", gNY[fDstReadInShaderSupport]);
+    r.appendf("Reuse Scratch Textures      : %s\n", gNY[fReuseScratchTextures]);
+    r.appendf("Max Texture Size            : %d\n", fMaxTextureSize);
+    r.appendf("Max Render Target Size      : %d\n", fMaxRenderTargetSize);
+    r.appendf("Max Sample Count            : %d\n", fMaxSampleCount);
 
     static const char* kConfigNames[] = {
         "Unknown",  // kUnknown_GrPixelConfig
@@ -1044,13 +1041,15 @@ void GrDrawTargetCaps::print() const {
     GR_STATIC_ASSERT(6 == kBGRA_8888_GrPixelConfig);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kConfigNames) == kGrPixelConfigCnt);
 
-    SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig]);
+    SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig][0]);
+    SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig][1]);
     for (size_t i = 0; i < SK_ARRAY_COUNT(kConfigNames); ++i)  {
         if (i != kUnknown_GrPixelConfig) {
-            GrPrintf("%s is renderable: %s, with MSAA: %s\n",
+            r.appendf("%s is renderable: %s, with MSAA: %s\n",
                      kConfigNames[i],
                      gNY[fConfigRenderSupport[i][0]],
                      gNY[fConfigRenderSupport[i][1]]);
         }
     }
+    return r;
 }

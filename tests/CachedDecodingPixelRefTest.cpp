@@ -8,15 +8,16 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkForceLinking.h"
+#include "SkDecodingImageGenerator.h"
+#include "SkDiscardableMemoryPool.h"
 #include "SkImageDecoder.h"
-#include "SkImagePriv.h"
-#include "SkLazyPixelRef.h"
+#include "SkCachingPixelRef.h"
 #include "SkScaledImageCache.h"
 #include "SkStream.h"
-#include "Test.h"
+#include "SkUtils.h"
 
-__SK_FORCE_IMAGE_DECODER_LINKING;
+#include "Test.h"
+#include "TestClassDef.h"
 
 /**
  * Fill this bitmap with some color.
@@ -49,23 +50,7 @@ static SkData* create_data_from_bitmap(const SkBitmap& bm,
     return NULL;
 }
 
-/**
- *  A simplified version of SkBitmapFactory
- */
-static bool simple_bitmap_factory(SkBitmapFactory::DecodeProc proc,
-                                  SkData* data,
-                                  SkBitmap* dst) {
-    SkImageInfo info;
-    if (!proc(data->data(), data->size(), &info, NULL)) {
-        return false;
-    }
-    dst->setConfig(SkImageInfoToBitmapConfig(info), info.fWidth,
-                    info.fHeight, 0, info.fAlphaType);
-    SkAutoTUnref<SkLazyPixelRef> ref(SkNEW_ARGS(SkLazyPixelRef,
-                                                (data, proc, NULL)));
-    dst->setPixelRef(ref);
-    return true;
-}
+////////////////////////////////////////////////////////////////////////////////
 
 static void compare_bitmaps(skiatest::Reporter* reporter,
                             const SkBitmap& b1, const SkBitmap& b2,
@@ -92,6 +77,7 @@ static void compare_bitmaps(skiatest::Reporter* reporter,
     if (!pixelPerfect) {
         return;
     }
+
     int pixelErrors = 0;
     for (int y = 0; y < b2.height(); ++y) {
         for (int x = 0; x < b2.width(); ++x) {
@@ -103,23 +89,25 @@ static void compare_bitmaps(skiatest::Reporter* reporter,
     REPORTER_ASSERT(reporter, 0 == pixelErrors);
 }
 
+typedef bool (*InstallEncoded)(SkData* encoded, SkBitmap* dst);
+
 /**
- *  This checks to see that a SkLazyPixelRef works as advertized.
- */
-#include "TestClassDef.h"
-DEF_TEST(CachedDecodingPixelRefTest, reporter) {
+   This function tests three differently encoded images against the
+   original bitmap */
+static void test_three_encodings(skiatest::Reporter* reporter,
+                                 InstallEncoded install) {
     SkBitmap original;
     make_test_image(&original);
-    const size_t bitmapSize = original.getSize();
-    const size_t oldByteLimit = SkScaledImageCache::GetByteLimit();
-    REPORTER_ASSERT(reporter, (!(original.empty())) && (!(original.isNull())));
-
+    REPORTER_ASSERT(reporter, !original.empty());
+    REPORTER_ASSERT(reporter, !original.isNull());
+    if (original.empty() || original.isNull()) {
+        return;
+    }
     static const SkImageEncoder::Type types[] = {
         SkImageEncoder::kPNG_Type,
         SkImageEncoder::kJPEG_Type,
         SkImageEncoder::kWEBP_Type
     };
-
     for (size_t i = 0; i < SK_ARRAY_COUNT(types); i++) {
         SkImageEncoder::Type type = types[i];
         SkAutoDataUnref encoded(create_data_from_bitmap(original, type));
@@ -128,76 +116,208 @@ DEF_TEST(CachedDecodingPixelRefTest, reporter) {
             continue;
         }
         SkBitmap lazy;
-        static const SkBitmapFactory::DecodeProc decoder =
-            &(SkImageDecoder::DecodeMemoryToTarget);
-        bool success = simple_bitmap_factory(decoder, encoded.get(), &lazy);
-
-        REPORTER_ASSERT(reporter, success);
-
-        size_t bytesUsed = SkScaledImageCache::GetBytesUsed();
-
-        if (oldByteLimit < bitmapSize) {
-            SkScaledImageCache::SetByteLimit(bitmapSize + oldByteLimit);
+        bool installSuccess = install(encoded.get(), &lazy);
+        REPORTER_ASSERT(reporter, installSuccess);
+        if (!installSuccess) {
+            continue;
         }
-        void* lazyPixels = NULL;
-
-        // Since this is lazy, it shouldn't have fPixels yet!
         REPORTER_ASSERT(reporter, NULL == lazy.getPixels());
         {
             SkAutoLockPixels autoLockPixels(lazy);  // now pixels are good.
-            lazyPixels = lazy.getPixels();
             REPORTER_ASSERT(reporter, NULL != lazy.getPixels());
-            // first time we lock pixels, we should get bump in the size
-            // of the cache by exactly bitmapSize.
-            REPORTER_ASSERT(reporter, bytesUsed + bitmapSize
-                            == SkScaledImageCache::GetBytesUsed());
-            bytesUsed = SkScaledImageCache::GetBytesUsed();
+            if (NULL == lazy.getPixels()) {
+                continue;
+            }
         }
         // pixels should be gone!
         REPORTER_ASSERT(reporter, NULL == lazy.getPixels());
         {
             SkAutoLockPixels autoLockPixels(lazy);  // now pixels are good.
             REPORTER_ASSERT(reporter, NULL != lazy.getPixels());
-
-            // verify that the same pixels are used this time.
-            REPORTER_ASSERT(reporter, lazy.getPixels() == lazyPixels);
+            if (NULL == lazy.getPixels()) {
+                continue;
+            }
         }
-
         bool comparePixels = (SkImageEncoder::kPNG_Type == type);
-        // Only PNG is pixel-perfect.
         compare_bitmaps(reporter, original, lazy, comparePixels);
-
-        // force the cache to clear by making it too small.
-        SkScaledImageCache::SetByteLimit(bitmapSize / 2);
-        compare_bitmaps(reporter, original, lazy, comparePixels);
-
-        // I'm pretty sure that the logic of the cache should mean
-        // that it will clear to zero, regardless of where it started.
-        REPORTER_ASSERT(reporter, SkScaledImageCache::GetBytesUsed() == 0);
-        // TODO(someone) - write a custom allocator that can verify
-        // that the memory where those pixels were cached really did
-        // get freed.
-
-        ////////////////////////////////////////////////////////////////////////
-        //  The following commented-out code happens to work on my
-        //  machine, and indicates to me that the SkLazyPixelRef is
-        //  behaving as designed.  But I don't know an easy way to
-        //  guarantee that a second allocation of the same size will
-        //  give a different address.
-        ////////////////////////////////////////////////////////////////////////
-        // {
-        //     // confuse the heap allocation system
-        //     SkAutoMalloc autoMalloc(bitmapSize);
-        //     REPORTER_ASSERT(reporter, autoMalloc.get() == lazyPixels);
-        //     {
-        //         SkAutoLockPixels autoLockPixels(lazy);
-        //         // verify that *different* pixels are used this time.
-        //         REPORTER_ASSERT(reporter, lazy.getPixels() != lazyPixels);
-        //         compare_bitmaps(reporter, original, lazy, comparePixels);
-        //     }
-        // }
-
-        // restore cache size
-        SkScaledImageCache::SetByteLimit(oldByteLimit);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+static bool install_skCachingPixelRef(SkData* encoded, SkBitmap* dst) {
+    return SkCachingPixelRef::Install(
+        SkNEW_ARGS(SkDecodingImageGenerator, (encoded)), dst);
+}
+static bool install_skDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
+    // Use system-default discardable memory.
+    return SkDecodingImageGenerator::Install(encoded, dst, NULL);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/**
+ *  This checks to see that a SkCachingPixelRef and a
+ *  SkDiscardablePixelRef works as advertised with a
+ *  SkDecodingImageGenerator.
+ */
+DEF_TEST(DecodingImageGenerator, reporter) {
+    test_three_encodings(reporter, install_skCachingPixelRef);
+    test_three_encodings(reporter, install_skDiscardablePixelRef);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+namespace {
+class TestImageGenerator : public SkImageGenerator {
+public:
+    enum TestType {
+        kFailGetInfo_TestType,
+        kFailGetPixels_TestType,
+        kSucceedGetPixels_TestType,
+        kLast_TestType = kSucceedGetPixels_TestType
+    };
+    static int Width() { return 10; }
+    static int Height() { return 10; }
+    static SkColor Color() { return SK_ColorCYAN; }
+    TestImageGenerator(TestType type, skiatest::Reporter* reporter)
+        : fType(type), fReporter(reporter) {
+        SkASSERT((fType <= kLast_TestType) && (fType >= 0));
+    }
+    ~TestImageGenerator() { }
+    bool getInfo(SkImageInfo* info) SK_OVERRIDE {
+        REPORTER_ASSERT(fReporter, NULL != info);
+        if ((NULL == info) || (kFailGetInfo_TestType == fType)) {
+            return false;
+        }
+        info->fWidth = TestImageGenerator::Width();
+        info->fHeight = TestImageGenerator::Height();
+        info->fColorType = kPMColor_SkColorType;
+        info->fAlphaType = kOpaque_SkAlphaType;
+        return true;
+    }
+    bool getPixels(const SkImageInfo& info,
+                   void* pixels,
+                   size_t rowBytes) SK_OVERRIDE {
+        REPORTER_ASSERT(fReporter, pixels != NULL);
+        size_t minRowBytes
+            = static_cast<size_t>(info.fWidth * info.bytesPerPixel());
+        REPORTER_ASSERT(fReporter, rowBytes >= minRowBytes);
+        if ((NULL == pixels)
+            || (fType != kSucceedGetPixels_TestType)
+            || (info.fColorType != kPMColor_SkColorType)) {
+            return false;
+        }
+        char* bytePtr = static_cast<char*>(pixels);
+        for (int y = 0; y < info.fHeight; ++y) {
+            sk_memset32(reinterpret_cast<SkColor*>(bytePtr),
+                        TestImageGenerator::Color(), info.fWidth);
+            bytePtr += rowBytes;
+        }
+        return true;
+    }
+private:
+    const TestType fType;
+    skiatest::Reporter* const fReporter;
+};
+void CheckTestImageGeneratorBitmap(skiatest::Reporter* reporter,
+                                   const SkBitmap& bm) {
+    REPORTER_ASSERT(reporter, TestImageGenerator::Width() == bm.width());
+    REPORTER_ASSERT(reporter, TestImageGenerator::Height() == bm.height());
+    SkAutoLockPixels autoLockPixels(bm);
+    REPORTER_ASSERT(reporter, NULL != bm.getPixels());
+    if (NULL == bm.getPixels()) {
+        return;
+    }
+    int errors = 0;
+    for (int y = 0; y < bm.height(); ++y) {
+        for (int x = 0; x < bm.width(); ++x) {
+            if (TestImageGenerator::Color() != *bm.getAddr32(x, y)) {
+                ++errors;
+            }
+        }
+    }
+    REPORTER_ASSERT(reporter, 0 == errors);
+}
+
+enum PixelRefType {
+    kSkCaching_PixelRefType,
+    kSkDiscardable_PixelRefType,
+    kLast_PixelRefType = kSkDiscardable_PixelRefType
+};
+void CheckPixelRef(TestImageGenerator::TestType type,
+                   skiatest::Reporter* reporter,
+                   PixelRefType pixelRefType,
+                   SkDiscardableMemory::Factory* factory) {
+    SkASSERT((pixelRefType >= 0) && (pixelRefType <= kLast_PixelRefType));
+    SkAutoTDelete<SkImageGenerator> gen(SkNEW_ARGS(TestImageGenerator,
+                                                   (type, reporter)));
+    REPORTER_ASSERT(reporter, gen.get() != NULL);
+    SkBitmap lazy;
+    bool success;
+    if (kSkCaching_PixelRefType == pixelRefType) {
+        // Ignore factory; use global SkScaledImageCache.
+        success = SkCachingPixelRef::Install(gen.detach(), &lazy);
+    } else {
+        success = SkInstallDiscardablePixelRef(gen.detach(), &lazy, factory);
+    }
+    REPORTER_ASSERT(reporter, success
+                    == (TestImageGenerator::kFailGetInfo_TestType != type));
+    if (TestImageGenerator::kSucceedGetPixels_TestType == type) {
+        CheckTestImageGeneratorBitmap(reporter, lazy);
+    } else if (TestImageGenerator::kFailGetPixels_TestType == type) {
+        SkAutoLockPixels autoLockPixels(lazy);
+        REPORTER_ASSERT(reporter, NULL == lazy.getPixels());
+    }
+}
+}  // namespace
+
+// new/lock/delete is an odd pattern for a pixelref, but it needs to not assert
+static void test_newlockdelete(skiatest::Reporter* reporter) {
+    SkBitmap bm;
+    SkImageGenerator* ig = new TestImageGenerator(
+                                 TestImageGenerator::kSucceedGetPixels_TestType,
+                                 reporter);
+    SkInstallDiscardablePixelRef(ig, &bm, NULL);
+    bm.pixelRef()->lockPixels();
+}
+
+/**
+ *  This tests the basic functionality of SkDiscardablePixelRef with a
+ *  basic SkImageGenerator implementation and several
+ *  SkDiscardableMemory::Factory choices.
+ */
+DEF_TEST(DiscardableAndCachingPixelRef, reporter) {
+    test_newlockdelete(reporter);
+
+    CheckPixelRef(TestImageGenerator::kFailGetInfo_TestType,
+                  reporter, kSkCaching_PixelRefType, NULL);
+    CheckPixelRef(TestImageGenerator::kFailGetPixels_TestType,
+                  reporter, kSkCaching_PixelRefType, NULL);
+    CheckPixelRef(TestImageGenerator::kSucceedGetPixels_TestType,
+                  reporter, kSkCaching_PixelRefType, NULL);
+
+    CheckPixelRef(TestImageGenerator::kFailGetInfo_TestType,
+                  reporter, kSkDiscardable_PixelRefType, NULL);
+    CheckPixelRef(TestImageGenerator::kFailGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, NULL);
+    CheckPixelRef(TestImageGenerator::kSucceedGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, NULL);
+
+    SkAutoTUnref<SkDiscardableMemoryPool> pool(
+        SkNEW_ARGS(SkDiscardableMemoryPool, (1, NULL)));
+    REPORTER_ASSERT(reporter, 0 == pool->getRAMUsed());
+    CheckPixelRef(TestImageGenerator::kFailGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, pool);
+    REPORTER_ASSERT(reporter, 0 == pool->getRAMUsed());
+    CheckPixelRef(TestImageGenerator::kSucceedGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, pool);
+    REPORTER_ASSERT(reporter, 0 == pool->getRAMUsed());
+
+    SkDiscardableMemoryPool* globalPool = SkGetGlobalDiscardableMemoryPool();
+    // Only acts differently from NULL on a platform that has a
+    // default discardable memory implementation that differs from the
+    // global DM pool.
+    CheckPixelRef(TestImageGenerator::kFailGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, globalPool);
+    CheckPixelRef(TestImageGenerator::kSucceedGetPixels_TestType,
+                  reporter, kSkDiscardable_PixelRefType, globalPool);
+}
+////////////////////////////////////////////////////////////////////////////////

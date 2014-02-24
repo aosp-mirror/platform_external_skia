@@ -4,17 +4,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkTypes.h"
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
 #include "SkPaint.h"
 #include "SkPoint.h"
 #include "SkRect.h"
-
-///////////////////////////////////////////////////////////////////////////////
+#include "SkTypes.h"
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -62,8 +61,7 @@ static bool compare(const SkBitmap& ref, const SkIRect& iref,
     return true;
 }
 
-static void test_drawText(skiatest::Reporter* reporter) {
-
+DEF_TEST(DrawText, reporter) {
     SkPaint paint;
     paint.setColor(SK_ColorGRAY);
     paint.setTextSize(SkIntToScalar(20));
@@ -80,8 +78,8 @@ static void test_drawText(skiatest::Reporter* reporter) {
 
     for (float offsetY = 0.0f; offsetY < 1.0f; offsetY += (1.0f / 16.0f)) {
         for (float offsetX = 0.0f; offsetX < 1.0f; offsetX += (1.0f / 16.0f)) {
-            SkPoint point = SkPoint::Make(SkFloatToScalar(25.0f + offsetX),
-                                          SkFloatToScalar(25.0f + offsetY));
+            SkPoint point = SkPoint::Make(25.0f + offsetX,
+                                          25.0f + offsetY);
 
             for (int align = 0; align < SkPaint::kAlignCount; ++align) {
                 paint.setTextAlign(static_cast<SkPaint::Align>(align));
@@ -110,6 +108,3 @@ static void test_drawText(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("DrawText_DrawPosText", DrawTextTestClass, test_drawText)

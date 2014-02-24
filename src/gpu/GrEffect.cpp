@@ -12,8 +12,6 @@
 #include "GrMemoryPool.h"
 #include "SkTLS.h"
 
-SK_DEFINE_INST_COUNT(GrEffect)
-
 #if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 SkTArray<GrEffectTestFactory*, true>* GrEffectTestFactory::GetFactories() {
     static SkTArray<GrEffectTestFactory*, true> gFactories;
@@ -33,8 +31,8 @@ const SkMatrix& TestMatrix(SkRandom* random) {
         gMatrices[3].postTranslate(SkIntToScalar(66), SkIntToScalar(-33));
         gMatrices[3].postScale(SkIntToScalar(2), SK_ScalarHalf);
         gMatrices[4].setRotate(SkIntToScalar(215));
-        gMatrices[4].set(SkMatrix::kMPersp0, SkFloatToScalar(0.00013f));
-        gMatrices[4].set(SkMatrix::kMPersp1, SkFloatToScalar(-0.000039f));
+        gMatrices[4].set(SkMatrix::kMPersp0, 0.00013f);
+        gMatrices[4].set(SkMatrix::kMPersp1, -0.000039f);
         gOnce = true;
     }
     return gMatrices[random->nextULessThan(static_cast<uint32_t>(SK_ARRAY_COUNT(gMatrices)))];
@@ -60,8 +58,6 @@ private:
 int32_t GrBackendEffectFactory::fCurrEffectClassID = GrBackendEffectFactory::kIllegalEffectClassID;
 
 ///////////////////////////////////////////////////////////////////////////////
-
-SK_DEFINE_INST_COUNT(GrEffectRef)
 
 GrEffectRef::~GrEffectRef() {
     SkASSERT(this->unique());

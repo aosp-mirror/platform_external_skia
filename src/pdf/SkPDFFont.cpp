@@ -460,7 +460,7 @@ static void append_bfrange_section(const SkTDArray<BFRange>& bfrange,
 // endbfchar              endbfrange
 //
 // Adobe Technote 5014 said: "Code mappings (unlike codespace ranges) may
-// overlap, but succeeding maps superceded preceding maps."
+// overlap, but succeeding maps supersede preceding maps."
 //
 // In case of searching text in PDF, bfrange will have higher precedence so
 // typing char id 0x0014 in search box will get glyph id 0x0004 first.  However,
@@ -475,16 +475,22 @@ static void append_bfrange_section(const SkTDArray<BFRange>& bfrange,
 void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
                           const SkPDFGlyphSet* subset,
                           SkDynamicMemoryWStream* cmap,
+                          bool multiByteGlyphs,
                           uint16_t firstGlyphID,
                           uint16_t lastGlyphID);
 
 void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
                           const SkPDFGlyphSet* subset,
                           SkDynamicMemoryWStream* cmap,
+                          bool multiByteGlyphs,
                           uint16_t firstGlyphID,
                           uint16_t lastGlyphID) {
     if (glyphToUnicode.isEmpty()) {
         return;
+    }
+    int glyphOffset = 0;
+    if (!multiByteGlyphs) {
+        glyphOffset = firstGlyphID - 1;
     }
 
     SkTDArray<BFChar> bfcharEntries;
@@ -492,11 +498,12 @@ void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
 
     BFRange currentRangeEntry = {0, 0, 0};
     bool rangeEmpty = true;
-    const int limit = SkMin32(lastGlyphID + 1, glyphToUnicode.count());
+    const int limit =
+            SkMin32(lastGlyphID + 1, glyphToUnicode.count()) - glyphOffset;
 
-    for (int i = firstGlyphID; i < limit + 1; ++i) {
+    for (int i = firstGlyphID - glyphOffset; i < limit + 1; ++i) {
         bool inSubset = i < limit &&
-                        (subset == NULL || subset->has(i));
+                        (subset == NULL || subset->has(i + glyphOffset));
         if (!rangeEmpty) {
             // PDF spec requires bfrange not changing the higher byte,
             // e.g. <1035> <10FF> <2222> is ok, but
@@ -505,8 +512,8 @@ void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
                 i == currentRangeEntry.fEnd + 1 &&
                 i >> 8 == currentRangeEntry.fStart >> 8 &&
                 i < limit &&
-                glyphToUnicode[i] == currentRangeEntry.fUnicode + i -
-                                         currentRangeEntry.fStart;
+                glyphToUnicode[i + glyphOffset] ==
+                    currentRangeEntry.fUnicode + i - currentRangeEntry.fStart;
             if (!inSubset || !inRange) {
                 if (currentRangeEntry.fEnd > currentRangeEntry.fStart) {
                     bfrangeEntries.push(currentRangeEntry);
@@ -522,7 +529,7 @@ void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
             currentRangeEntry.fEnd = i;
             if (rangeEmpty) {
               currentRangeEntry.fStart = i;
-              currentRangeEntry.fUnicode = glyphToUnicode[i];
+              currentRangeEntry.fUnicode = glyphToUnicode[i + glyphOffset];
               rangeEmpty = false;
             }
         }
@@ -537,11 +544,16 @@ void append_cmap_sections(const SkTDArray<SkUnichar>& glyphToUnicode,
 static SkPDFStream* generate_tounicode_cmap(
         const SkTDArray<SkUnichar>& glyphToUnicode,
         const SkPDFGlyphSet* subset,
+        bool multiByteGlyphs,
         uint16_t firstGlyphID,
         uint16_t lastGlyphID) {
     SkDynamicMemoryWStream cmap;
-    append_tounicode_header(&cmap, firstGlyphID, lastGlyphID);
-    append_cmap_sections(glyphToUnicode, subset, &cmap,
+    if (multiByteGlyphs) {
+        append_tounicode_header(&cmap, firstGlyphID, lastGlyphID);
+    } else {
+        append_tounicode_header(&cmap, 1, lastGlyphID - firstGlyphID + 1);
+    }
+    append_cmap_sections(glyphToUnicode, subset, &cmap, multiByteGlyphs,
                          firstGlyphID, lastGlyphID);
     append_cmap_footer(&cmap);
     SkAutoTUnref<SkMemoryStream> cmapStream(new SkMemoryStream());
@@ -875,9 +887,8 @@ SkPDFFont::SkPDFFont(SkAdvancedTypefaceMetrics* info, SkTypeface* typeface,
           fTypeface(ref_or_default(typeface)),
           fFirstGlyphID(1),
           fLastGlyphID(info ? info->fLastGlyphID : 0),
-          fFontInfo(info),
-          fDescriptor(relatedFontDescriptor) {
-    SkSafeRef(info);
+          fFontInfo(SkSafeRef(info)),
+          fDescriptor(SkSafeRef(relatedFontDescriptor)) {
     if (info == NULL) {
         fFontType = SkAdvancedTypefaceMetrics::kNotEmbeddable_Font;
     } else if (info->fMultiMaster) {
@@ -1028,7 +1039,8 @@ void SkPDFFont::populateToUnicodeTable(const SkPDFGlyphSet* subset) {
     }
     SkAutoTUnref<SkPDFStream> pdfCmap(
         generate_tounicode_cmap(fFontInfo->fGlyphToUnicode, subset,
-                                firstGlyphID(), lastGlyphID()));
+                                multiByteGlyphs(), firstGlyphID(),
+                                lastGlyphID()));
     addResource(pdfCmap.get());
     insert("ToUnicode", new SkPDFObjRef(pdfCmap.get()))->unref();
 }
@@ -1144,8 +1156,11 @@ bool SkPDFCIDFont::populate(const SkPDFGlyphSet* subset) {
     if (fontInfo()->fType == SkAdvancedTypefaceMetrics::kTrueType_Font) {
         // Generate glyph id array.
         SkTDArray<uint32_t> glyphIDs;
-        glyphIDs.push(0);  // Always include glyph 0.
         if (subset) {
+            // Always include glyph 0.
+            if (!subset->has(0)) {
+                glyphIDs.push(0);
+            }
             subset->exportTo(&glyphIDs);
         }
 
@@ -1153,7 +1168,7 @@ bool SkPDFCIDFont::populate(const SkPDFGlyphSet* subset) {
         info = SkAdvancedTypefaceMetrics::kGlyphNames_PerGlyphInfo;
         info = SkTBitOr<SkAdvancedTypefaceMetrics::PerGlyphInfo>(
                   info, SkAdvancedTypefaceMetrics::kHAdvance_PerGlyphInfo);
-        uint32_t* glyphs = (glyphIDs.count() == 1) ? NULL : glyphIDs.begin();
+        uint32_t* glyphs = (glyphIDs.count() == 0) ? NULL : glyphIDs.begin();
         uint32_t glyphsCount = glyphs ? glyphIDs.count() : 0;
         SkAutoTUnref<SkAdvancedTypefaceMetrics> fontMetrics(
             typeface()->getAdvancedTypefaceMetrics(info, glyphs, glyphsCount));
@@ -1421,8 +1436,8 @@ bool SkPDFType3Font::populate(int16_t glyphID) {
     }
 
     insert("FontBBox", makeFontBBox(bbox, 1000))->unref();
-    insertInt("FirstChar", firstGlyphID());
-    insertInt("LastChar", lastGlyphID());
+    insertInt("FirstChar", 1);
+    insertInt("LastChar", lastGlyphID() - firstGlyphID() + 1);
     insert("Widths", widthArray.get());
     insertName("CIDToGIDMap", "Identity");
 
