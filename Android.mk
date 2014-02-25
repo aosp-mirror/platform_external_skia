@@ -537,6 +537,7 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
@@ -545,6 +546,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
@@ -552,6 +554,7 @@ LOCAL_SRC_FILES_x86 += \
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
