@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2013 Google Inc.
  *
@@ -15,12 +14,11 @@
 #include "SkColor.h"
 #include "SkGpuDevice.h"
 #include "SkPaint.h"
-#include "SkRect.h"
 #include "SkRRect.h"
+#include "SkRect.h"
 #include "Test.h"
 
-static void test_drawPathEmpty(skiatest::Reporter*, SkCanvas* canvas)
-{
+static void test_drawPathEmpty(skiatest::Reporter*, SkCanvas* canvas) {
     // Filling an empty path should not crash.
     SkPaint paint;
     canvas->drawRect(SkRect(), paint);
@@ -43,7 +41,7 @@ static void test_drawPathEmpty(skiatest::Reporter*, SkCanvas* canvas)
 }
 
 
-static void TestGpuDrawPath(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(GpuDrawPath, reporter, factory) {
     return;
 
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
@@ -73,8 +71,5 @@ static void TestGpuDrawPath(skiatest::Reporter* reporter, GrContextFactory* fact
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("GpuDrawPath", TestGpuDrawPathClass, TestGpuDrawPath)
 
 #endif

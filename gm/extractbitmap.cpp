@@ -1,23 +1,23 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "gm.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDevice.h"
 #include "SkString.h"
+#include "SkSurface.h"
 
 namespace skiagm {
 
 static void create_bitmap(SkBitmap* bitmap) {
     const int W = 100;
     const int H = 100;
-    bitmap->setConfig(SkBitmap::kARGB_8888_Config, W, H);
-    bitmap->allocPixels();
+    bitmap->allocN32Pixels(W, H);
 
     SkCanvas canvas(*bitmap);
     canvas.drawColor(SK_ColorRED);
@@ -72,24 +72,6 @@ protected:
             canvas->translate(0, SkIntToScalar(bitmap.height() + 20));
             canvas->drawBitmap(subset, 0, 0);
         }
-
-        // Now do the same but with a device bitmap as source image
-        SkAutoTUnref<SkBaseDevice> secondDevice(canvas->createCompatibleDevice(
-            SkBitmap::kARGB_8888_Config, bitmap.width(),
-            bitmap.height(), true));
-        SkCanvas secondCanvas(secondDevice.get());
-        secondCanvas.writePixels(bitmap, 0, 0);
-
-        SkBitmap deviceBitmap = secondDevice->accessBitmap(false);
-        SkBitmap deviceSubset;
-        deviceBitmap.extractSubset(&deviceSubset,
-             SkIRect::MakeXYWH(x, y, x, y));
-
-        canvas->translate(SkIntToScalar(120), SkIntToScalar(0));
-
-        canvas->drawBitmap(deviceBitmap, 0, 0);
-        canvas->drawBitmap(deviceSubset, 0, 0);
-
     }
 
 private:

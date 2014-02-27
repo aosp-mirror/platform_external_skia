@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkString.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include "SkString.h"
+#include "Test.h"
 
 // Windows vsnprintf doesn't 0-terminate safely), but is so far
 // encapsulated in SkString that we can't test it directly.
@@ -157,7 +156,6 @@ DEF_TEST(String, reporter) {
         { SK_Scalar1,   "1" },
         { -SK_Scalar1,  "-1" },
         { SK_Scalar1/2, "0.5" },
-#ifdef SK_SCALAR_IS_FLOAT
   #ifdef SK_BUILD_FOR_WIN
         { 3.4028234e38f,   "3.4028235e+038" },
         { -3.4028234e38f, "-3.4028235e+038" },
@@ -165,7 +163,6 @@ DEF_TEST(String, reporter) {
         { 3.4028234e38f,   "3.4028235e+38" },
         { -3.4028234e38f, "-3.4028235e+38" },
   #endif
-#endif
     };
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); i++) {
         a.reset();

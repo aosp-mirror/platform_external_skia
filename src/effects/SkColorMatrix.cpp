@@ -6,7 +6,8 @@
  * found in the LICENSE file.
  */
 #include "SkColorMatrix.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 
 void SkColorMatrix::setIdentity() {
     memset(fMat, 0, sizeof(fMat));

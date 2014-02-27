@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-
-// This is a GPU test
 #if SK_SUPPORT_GPU
+
 #include "GrContextFactory.h"
+#include "GrResourceCache.h"
 #include "SkGpuDevice.h"
+#include "Test.h"
 
 static const int gWidth = 640;
 static const int gHeight = 480;
@@ -22,8 +22,7 @@ static void test_cache(skiatest::Reporter* reporter,
     const SkIRect size = SkIRect::MakeWH(gWidth, gHeight);
 
     SkBitmap src;
-    src.setConfig(SkBitmap::kARGB_8888_Config, size.width(), size.height());
-    src.allocPixels();
+    src.allocN32Pixels(size.width(), size.height());
     src.eraseColor(SK_ColorBLACK);
     size_t srcSize = src.getSize();
 
@@ -39,8 +38,7 @@ static void test_cache(skiatest::Reporter* reporter,
     context->setTextureCacheLimits(1000, maxCacheSize);
 
     SkBitmap readback;
-    readback.setConfig(SkBitmap::kARGB_8888_Config, size.width(), size.height());
-    readback.allocPixels();
+    readback.allocN32Pixels(size.width(), size.height());
 
     for (int i = 0; i < 100; ++i) {
         canvas->drawBitmap(src, 0, 0);
@@ -58,8 +56,126 @@ static void test_cache(skiatest::Reporter* reporter,
     context->setTextureCacheLimits(oldMaxNum, oldMaxBytes);
 }
 
+class TestResource : public GrResource {
+public:
+    SK_DECLARE_INST_COUNT(TestResource);
+    explicit TestResource(GrGpu* gpu)
+        : INHERITED(gpu, false)
+        , fCache(NULL)
+        , fToDelete(NULL) {
+        ++fAlive;
+    }
+
+    ~TestResource() {
+        --fAlive;
+        if (NULL != fToDelete) {
+            // Breaks our little 2-element cycle below.
+            fToDelete->setDeleteWhenDestroyed(NULL, NULL);
+            fCache->deleteResource(fToDelete->getCacheEntry());
+        }
+        this->release();
+    }
+
+    size_t sizeInBytes() const SK_OVERRIDE { return 100; }
+
+    static int alive() { return fAlive; }
+
+    void setDeleteWhenDestroyed(GrResourceCache* cache, TestResource* resource) {
+        fCache = cache;
+        fToDelete = resource;
+    }
+
+private:
+    GrResourceCache* fCache;
+    TestResource* fToDelete;
+    static int fAlive;
+
+    typedef GrResource INHERITED;
+};
+int TestResource::fAlive = 0;
+
+static void test_purge_invalidated(skiatest::Reporter* reporter, GrContext* context) {
+    GrCacheID::Domain domain = GrCacheID::GenerateDomain();
+    GrCacheID::Key keyData;
+    keyData.fData64[0] = 5;
+    keyData.fData64[1] = 18;
+    GrResourceKey::ResourceType t = GrResourceKey::GenerateResourceType();
+    GrResourceKey key(GrCacheID(domain, keyData), t, 0);
+
+    GrResourceCache cache(5, 30000);
+
+    // Add two resources with the same key that delete each other from the cache when destroyed.
+    TestResource* a = new TestResource(context->getGpu());
+    TestResource* b = new TestResource(context->getGpu());
+    cache.addResource(key, a);
+    cache.addResource(key, b);
+    // Circle back.
+    a->setDeleteWhenDestroyed(&cache, b);
+    b->setDeleteWhenDestroyed(&cache, a);
+    a->unref();
+    b->unref();
+
+    // Add a third independent resource also with the same key.
+    GrResource* r = new TestResource(context->getGpu());
+    cache.addResource(key, r);
+    r->unref();
+
+    // Invalidate all three, all three should be purged and destroyed.
+    REPORTER_ASSERT(reporter, 3 == TestResource::alive());
+    const GrResourceInvalidatedMessage msg = { key };
+    SkMessageBus<GrResourceInvalidatedMessage>::Post(msg);
+    cache.purgeAsNeeded();
+    REPORTER_ASSERT(reporter, 0 == TestResource::alive());
+}
+
+static void test_cache_delete_on_destruction(skiatest::Reporter* reporter,
+                                             GrContext* context) {
+    GrCacheID::Domain domain = GrCacheID::GenerateDomain();
+    GrCacheID::Key keyData;
+    keyData.fData64[0] = 5;
+    keyData.fData64[1] = 0;
+    GrResourceKey::ResourceType t = GrResourceKey::GenerateResourceType();
+
+    GrResourceKey key(GrCacheID(domain, keyData), t, 0);
+
+    {
+        {
+            GrResourceCache cache(3, 30000);
+            TestResource* a = new TestResource(context->getGpu());
+            TestResource* b = new TestResource(context->getGpu());
+            cache.addResource(key, a);
+            cache.addResource(key, b);
+
+            a->setDeleteWhenDestroyed(&cache, b);
+            b->setDeleteWhenDestroyed(&cache, a);
+
+            a->unref();
+            b->unref();
+            REPORTER_ASSERT(reporter, 2 == TestResource::alive());
+        }
+        REPORTER_ASSERT(reporter, 0 == TestResource::alive());
+    }
+    {
+        GrResourceCache cache(3, 30000);
+        TestResource* a = new TestResource(context->getGpu());
+        TestResource* b = new TestResource(context->getGpu());
+        cache.addResource(key, a);
+        cache.addResource(key, b);
+
+        a->setDeleteWhenDestroyed(&cache, b);
+        b->setDeleteWhenDestroyed(&cache, a);
+
+        a->unref();
+        b->unref();
+
+        cache.deleteResource(a->getCacheEntry());
+
+        REPORTER_ASSERT(reporter, 0 == TestResource::alive());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-static void TestResourceCache(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(ResourceCache, reporter, factory) {
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
         GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
         if (!GrContextFactory::IsRenderingGLContext(glType)) {
@@ -81,11 +197,9 @@ static void TestResourceCache(skiatest::Reporter* reporter, GrContextFactory* fa
         SkCanvas canvas(device.get());
 
         test_cache(reporter, context, &canvas);
+        test_purge_invalidated(reporter, context);
+        test_cache_delete_on_destruction(reporter, context);
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("ResourceCache", ResourceCacheTestClass, TestResourceCache)
 
 #endif

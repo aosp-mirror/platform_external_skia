@@ -1,3 +1,4 @@
+# Gyp file for opts projects
 {
   'targets': [
     # Due to an unfortunate intersection of lameness between gcc and gyp,
@@ -25,6 +26,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'core.gyp:*',
+        'effects.gyp:*'
       ],
       'include_dirs': [
         '../src/core',
@@ -73,12 +75,14 @@
             'arm_neon_optional%': '<(arm_neon_optional>',
           },
           'sources': [
-            '../src/opts/opts_check_arm.cpp',
             '../src/opts/memset.arm.S',
             '../src/opts/SkBitmapProcState_opts_arm.cpp',
             '../src/opts/SkBlitMask_opts_arm.cpp',
             '../src/opts/SkBlitRow_opts_arm.cpp',
             '../src/opts/SkBlitRow_opts_arm.h',
+            '../src/opts/SkBlurImage_opts_arm.cpp',
+            '../src/opts/SkMorphology_opts_arm.cpp',
+            '../src/opts/SkUtils_opts_arm.cpp',
             '../src/opts/SkXfermode_opts_arm.cpp',
           ],
           'conditions': [
@@ -97,7 +101,9 @@
             }],
           ],
         }],
-        [ '(skia_arch_type == "mips") or (skia_arch_type == "arm" and arm_version < 7) or (skia_os == "ios")', {
+        [ '(skia_arch_type == "mips") or (skia_arch_type == "arm" and arm_version < 7) \
+            or (skia_os == "ios") \
+            or (skia_os == "android" and skia_arch_type not in ["x86", "arm", "mips"])', {
           'sources': [
             '../src/opts/SkBitmapProcState_opts_none.cpp',
             '../src/opts/SkBlitMask_opts_none.cpp',
@@ -121,6 +127,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'core.gyp:*',
+        'effects.gyp:*'
       ],
       'include_dirs': [
         '../src/core',
@@ -150,6 +157,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'core.gyp:*',
+        'effects.gyp:*'
       ],
       'include_dirs': [
         '../src/core',
@@ -174,8 +182,7 @@
         '../src/opts/memset32_neon.S',
         '../src/opts/SkBitmapProcState_arm_neon.cpp',
         '../src/opts/SkBitmapProcState_matrixProcs_neon.cpp',
-        '../src/opts/SkBitmapProcState_matrix_clamp_neon.h',
-        '../src/opts/SkBitmapProcState_matrix_repeat_neon.h',
+        '../src/opts/SkBitmapProcState_matrix_neon.h',
         '../src/opts/SkBlitMask_opts_arm_neon.cpp',
         '../src/opts/SkBlitRow_opts_arm_neon.cpp',
         '../src/opts/SkBlurImage_opts_neon.cpp',

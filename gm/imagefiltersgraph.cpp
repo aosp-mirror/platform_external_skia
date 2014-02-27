@@ -8,12 +8,14 @@
 #include "gm.h"
 
 #include "SkArithmeticMode.h"
+#include "SkDevice.h"
 #include "SkBitmapSource.h"
 #include "SkBlurImageFilter.h"
 #include "SkColorFilter.h"
 #include "SkColorFilterImageFilter.h"
 #include "SkColorMatrixFilter.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOnce.h"
@@ -28,7 +30,7 @@ public:
     : SkImageFilter(input), fDX(dx), fDY(dy) {}
 
     virtual bool onFilterImage(Proxy* proxy, const SkBitmap& src, const SkMatrix& ctm,
-                               SkBitmap* dst, SkIPoint* offset) SK_OVERRIDE {
+                               SkBitmap* dst, SkIPoint* offset) const SK_OVERRIDE {
         SkBitmap source = src;
         SkImageFilter* input = getInput(0);
         SkIPoint srcOffset = SkIPoint::Make(0, 0);
@@ -57,13 +59,13 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SimpleOffsetFilter);
 
 protected:
-    explicit SimpleOffsetFilter(SkFlattenableReadBuffer& buffer)
+    explicit SimpleOffsetFilter(SkReadBuffer& buffer)
     : SkImageFilter(1, buffer) {
         fDX = buffer.readScalar();
         fDY = buffer.readScalar();
     }
 
-    virtual void flatten(SkFlattenableWriteBuffer& buffer) const SK_OVERRIDE {
+    virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->SkImageFilter::flatten(buffer);
         buffer.writeScalar(fDX);
         buffer.writeScalar(fDY);
@@ -91,10 +93,8 @@ protected:
     }
 
     void make_bitmap() {
-        fBitmap.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-        fBitmap.allocPixels();
-        SkBitmapDevice device(fBitmap);
-        SkCanvas canvas(&device);
+        fBitmap.allocN32Pixels(100, 100);
+        SkCanvas canvas(fBitmap);
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -180,6 +180,25 @@ protected:
             SkPaint paint;
             paint.setImageFilter(blend);
             drawClippedBitmap(canvas, fBitmap, paint);
+            canvas->translate(SkIntToScalar(100), 0);
+        }
+        {
+            // Test that crop offsets are absolute, not relative to the parent's crop rect.
+            SkAutoTUnref<SkColorFilter> cf1(SkColorFilter::CreateModeFilter(SK_ColorBLUE,
+                                                                            SkXfermode::kSrcIn_Mode));
+            SkAutoTUnref<SkColorFilter> cf2(SkColorFilter::CreateModeFilter(SK_ColorGREEN,
+                                                                            SkXfermode::kSrcIn_Mode));
+            SkImageFilter::CropRect outerRect(SkRect::MakeXYWH(SkIntToScalar(10), SkIntToScalar(10),
+                                                               SkIntToScalar(80), SkIntToScalar(80)));
+            SkImageFilter::CropRect innerRect(SkRect::MakeXYWH(SkIntToScalar(20), SkIntToScalar(20),
+                                                               SkIntToScalar(60), SkIntToScalar(60)));
+            SkAutoTUnref<SkImageFilter> color1(SkColorFilterImageFilter::Create(cf1, NULL, &outerRect));
+            SkAutoTUnref<SkImageFilter> color2(SkColorFilterImageFilter::Create(cf2, color1, &innerRect));
+
+            SkPaint paint;
+            paint.setImageFilter(color2);
+            paint.setColor(0xFFFF0000);
+            canvas->drawRect(SkRect::MakeXYWH(0, 0, 100, 100), paint);
             canvas->translate(SkIntToScalar(100), 0);
         }
     }

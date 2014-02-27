@@ -16,7 +16,7 @@ static const SkDCubic tests[] = {
 
 static const size_t tests_count = SK_ARRAY_COUNT(tests);
 
-static void PathOpsDCubicTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsDCubic, reporter) {
     for (size_t index = 0; index < tests_count; ++index) {
         const SkDCubic& cubic = tests[index];
         SkASSERT(ValidCubic(cubic));
@@ -27,6 +27,3 @@ static void PathOpsDCubicTest(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsDCubicTest)

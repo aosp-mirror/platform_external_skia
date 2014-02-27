@@ -10,6 +10,7 @@
 #ifndef SkRefCnt_DEFINED
 #define SkRefCnt_DEFINED
 
+#include "SkDynamicAnnotations.h"
 #include "SkThread.h"
 #include "SkInstCnt.h"
 #include "SkTemplates.h"
@@ -44,13 +45,15 @@ public:
     /** Return the reference count. Use only for debugging. */
     int32_t getRefCnt() const { return fRefCnt; }
 
-    /** Returns true if the caller is the only owner.
+    /** May return true if the caller is the only owner.
      *  Ensures that all previous owner's actions are complete.
      */
     bool unique() const {
-        bool const unique = (1 == fRefCnt);
+        // We believe we're reading fRefCnt in a safe way here, so we stifle the TSAN warning about
+        // an unproctected read.  Generally, don't read fRefCnt, and don't stifle this warning.
+        bool const unique = (1 == SK_ANNOTATE_UNPROTECTED_READ(fRefCnt));
         if (unique) {
-            // Aquire barrier (L/SL), if not provided by load of fRefCnt.
+            // Acquire barrier (L/SL), if not provided by load of fRefCnt.
             // Prevents user's 'unique' code from happening before decrements.
             //TODO: issue the barrier.
         }
@@ -72,9 +75,9 @@ public:
         SkASSERT(fRefCnt > 0);
         // Release barrier (SL/S), if not provided below.
         if (sk_atomic_dec(&fRefCnt) == 1) {
-            // Aquire barrier (L/SL), if not provided above.
+            // Acquire barrier (L/SL), if not provided above.
             // Prevents code in dispose from happening before the decrement.
-            sk_membar_aquire__after_atomic_dec();
+            sk_membar_acquire__after_atomic_dec();
             internal_dispose();
         }
     }

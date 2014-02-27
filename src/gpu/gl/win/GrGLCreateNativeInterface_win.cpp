@@ -6,8 +6,6 @@
  * found in the LICENSE file.
  */
 
-
-#include "gl/GrGLExtensions.h"
 #include "gl/GrGLInterface.h"
 #include "gl/GrGLUtil.h"
 #define WIN32_LEAN_AND_MEAN
@@ -19,10 +17,9 @@
  * Otherwise, a springboard would be needed that hides the calling convention.
  */
 
-#define SET_PROC(F) interface->f ## F = (GrGL ## F ## Proc) GetProcAddress(alu.get(), "gl" #F);
-#define WGL_SET_PROC(F) interface->f ## F = (GrGL ## F ## Proc) wglGetProcAddress("gl" #F);
-#define WGL_SET_PROC_SUFFIX(F, S) interface->f ## F = \
-                                  (GrGL ## F ## Proc) wglGetProcAddress("gl" #F #S);
+#define SET_PROC(F) interface->fFunctions.f ## F = (GrGL ## F ## Proc) GetProcAddress(alu.get(), "gl" #F);
+#define WGL_SET_PROC(F) interface->fFunctions.f ## F = (GrGL ## F ## Proc) wglGetProcAddress("gl" #F);
+#define WGL_SET_PROC_SUFFIX(F, S) interface->fFunctions.f ## F = (GrGL ## F ## Proc) wglGetProcAddress("gl" #F #S);
 
 class AutoLibraryUnload {
 public:
@@ -41,10 +38,6 @@ private:
 };
 
 const GrGLInterface* GrGLCreateNativeInterface() {
-    // wglGetProcAddress requires a context.
-    // GL Function pointers retrieved in one context may not be valid in another
-    // context. For that reason we create a new GrGLInterface each time we're
-    // called.
     AutoLibraryUnload alu("opengl32.dll");
     if (NULL == alu.get()) {
         return NULL;
@@ -65,7 +58,7 @@ const GrGLInterface* GrGLCreateNativeInterface() {
         GrGLGetStringiProc glGetStringi = (GrGLGetStringiProc)  wglGetProcAddress("glGetStringi");
 
         GrGLExtensions extensions;
-        if (!extensions.init(kDesktop_GrGLBinding, glGetString, glGetStringi, glGetIntegerv)) {
+        if (!extensions.init(kGL_GrGLStandard, glGetString, glGetStringi, glGetIntegerv)) {
             return NULL;
         }
         const char* versionString = (const char*) glGetString(GR_GL_VERSION);
@@ -75,7 +68,7 @@ const GrGLInterface* GrGLCreateNativeInterface() {
             // We must have array and element_array buffer objects.
             return NULL;
         }
-        GrGLInterface* interface = new GrGLInterface();
+        GrGLInterface* interface = SkNEW(GrGLInterface);
 
         // Functions that are part of GL 1.1 will return NULL in
         // wglGetProcAddress
@@ -311,7 +304,8 @@ const GrGLInterface* GrGLCreateNativeInterface() {
             WGL_SET_PROC_SUFFIX(PointAlongPath, NV);
         }
 
-        interface->fBindingsExported = kDesktop_GrGLBinding;
+        interface->fStandard = kGL_GrGLStandard;
+        interface->fExtensions.swap(&extensions);
 
         return interface;
     } else {

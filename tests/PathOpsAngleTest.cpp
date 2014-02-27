@@ -391,7 +391,7 @@ static void testOne(skiatest::Reporter* reporter, const SortSetTests& test) {
     }
 }
 
-static void PathOpsAngleTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsAngle, reporter) {
     for (size_t index = 0; index < SK_ARRAY_COUNT(tests); ++index) {
         const SortSetTests& test = tests[index];
         testOne(reporter, test);
@@ -399,7 +399,7 @@ static void PathOpsAngleTest(skiatest::Reporter* reporter) {
     }
 }
 
-static void PathOpsAngleTestOne(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsAngleTestOne, reporter) {
     size_t index = 0;
     const SortSetTests& test = tests[index];
     testOne(reporter, test);
@@ -451,7 +451,7 @@ static const double slopTests[][4] = {
     {-2.1033774145221198, -1.4046019261273715e-008, -0.70062688352066704, -1.2706324683777995e-008},
 };
 
-static void PathOpsAngleFindSlop(skiatest::Reporter* reporter) {
+/*DEF_TEST(PathOpsAngleFindSlop, reporter) {
     for (size_t index = 0; index < SK_ARRAY_COUNT(slopTests); ++index) {
         const double* slopTest = slopTests[index];
         double x = slopTest[0];
@@ -467,12 +467,5 @@ static void PathOpsAngleFindSlop(skiatest::Reporter* reporter) {
                 angle, rAngle, diff, (int) (diff / FLT_EPSILON));
 
     }
-}
+}*/
 #endif
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsAngleTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsAngleTestOne)
-
-// DEFINE_TESTCLASS_SHORT(PathOpsAngleFindSlop)

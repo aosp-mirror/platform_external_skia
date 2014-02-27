@@ -24,8 +24,8 @@ class SkAutoGlyphCache;
 class SkColorFilter;
 class SkDescriptor;
 struct SkDeviceProperties;
-class SkFlattenableReadBuffer;
-class SkFlattenableWriteBuffer;
+class SkReadBuffer;
+class SkWriteBuffer;
 struct SkGlyph;
 struct SkRect;
 class SkGlyphCache;
@@ -72,8 +72,8 @@ public:
         return !(a == b);
     }
 
-    void flatten(SkFlattenableWriteBuffer&) const;
-    void unflatten(SkFlattenableReadBuffer&);
+    void flatten(SkWriteBuffer&) const;
+    void unflatten(SkReadBuffer&);
 
     /** Restores the paint to its initial settings.
     */
@@ -740,7 +740,8 @@ public:
         SkScalar    fMaxCharWidth;  //!< the max charactor width (>= 0)
         SkScalar    fXMin;      //!< The minimum bounding box x value for all glyphs
         SkScalar    fXMax;      //!< The maximum bounding box x value for all glyphs
-        SkScalar    fXHeight;   //!< the height of an 'x' in px, or 0 if no 'x' in face
+        SkScalar    fXHeight;   //!< The height of an 'x' in px, or 0 if no 'x' in face
+        SkScalar    fCapHeight;  //!< The cap height (> 0), or 0 if cannot be determined.
     };
 
     /** Return the recommend spacing between lines (which will be
@@ -938,6 +939,7 @@ public:
             uintptr_t effects = reinterpret_cast<uintptr_t>(this->getLooper());
             effects |= reinterpret_cast<uintptr_t>(this->getMaskFilter());
             effects |= reinterpret_cast<uintptr_t>(this->getPathEffect());
+            effects |= reinterpret_cast<uintptr_t>(this->getImageFilter());
             if (!effects) {
                 return orig;
             }
@@ -1065,6 +1067,8 @@ private:
     friend class SkDraw;
     friend class SkGraphics; // So Term() can be called.
     friend class SkPDFDevice;
+    friend class GrBitmapTextContext;
+    friend class GrDistanceFieldTextContext;
     friend class SkTextToPathIter;
     friend class SkCanonicalizePaint;
 

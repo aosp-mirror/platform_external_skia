@@ -36,7 +36,7 @@ static const SkDPoint outPoint[]= {
 
 static const size_t tests_count = SK_ARRAY_COUNT(tests);
 
-static void PathOpsDQuadTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsDQuad, reporter) {
     for (size_t index = 0; index < tests_count; ++index) {
         const SkDQuad& quad = tests[index];
         SkASSERT(ValidQuad(quad));
@@ -53,7 +53,7 @@ static void PathOpsDQuadTest(skiatest::Reporter* reporter) {
     }
 }
 
-static void PathOpsRRectTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsRRect, reporter) {
     SkPath path;
     SkRRect rRect;
     SkRect rect = {135, 143, 250, 177};
@@ -61,8 +61,3 @@ static void PathOpsRRectTest(skiatest::Reporter* reporter) {
     rRect.setRectRadii(rect, radii);
     path.addRRect(rRect);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsDQuadTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsRRectTest)

@@ -82,6 +82,8 @@ public:
     */
     virtual SkBitmap::Config config() const SK_OVERRIDE { return fBitmap.config(); }
 
+    virtual SkImageInfo imageInfo() const SK_OVERRIDE;
+
     /**
      *  DEPRECATED: This will be made protected once WebKit stops using it.
      *              Instead use Canvas' writePixels method.
@@ -199,8 +201,8 @@ protected:
 
     SkPixelRef* getPixelRef() const { return fBitmap.pixelRef(); }
     // just for subclasses, to assign a custom pixelref
-    SkPixelRef* setPixelRef(SkPixelRef* pr, size_t offset) {
-        fBitmap.setPixelRef(pr, offset);
+    SkPixelRef* setPixelRef(SkPixelRef* pr) {
+        fBitmap.setPixelRef(pr);
         return pr;
     }
 
@@ -227,7 +229,7 @@ protected:
      *  some subclasses that do not support pixel manipulations after drawing
      *  has occurred (e.g. printing). The default implementation returns true.
      */
-    virtual bool allowImageFilter(SkImageFilter*) SK_OVERRIDE;
+    virtual bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE;
 
     /**
      *  Override and return true for filters that the device can handle
@@ -236,7 +238,7 @@ protected:
      *  Returning false means the SkCanvas will have apply the filter itself,
      *  and just pass the resulting image to the device.
      */
-    virtual bool canHandleImageFilter(SkImageFilter*) SK_OVERRIDE;
+    virtual bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE;
 
     /**
      *  Related (but not required) to canHandleImageFilter, this method returns
@@ -245,7 +247,7 @@ protected:
      *  If the device does not recognize or support this filter,
      *  it just returns false and leaves result and offset unchanged.
      */
-    virtual bool filterImage(SkImageFilter*, const SkBitmap&, const SkMatrix&,
+    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkMatrix&,
                              SkBitmap* result, SkIPoint* offset) SK_OVERRIDE;
 
 private:
@@ -257,6 +259,8 @@ private:
     friend class SkDeviceImageFilterProxy;
 
     friend class SkSurface_Raster;
+
+    void init(SkBitmap::Config config, int width, int height, bool isOpaque);
 
     // used to change the backend's pixels (and possibly config/rowbytes)
     // but cannot change the width/height, so there should be no change to
@@ -274,6 +278,9 @@ private:
     /** Causes any deferred drawing to the device to be completed.
      */
     virtual void flush() SK_OVERRIDE {}
+
+    virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
+    virtual const void* peekPixels(SkImageInfo*, size_t* rowBytes) SK_OVERRIDE;
 
     SkBitmap    fBitmap;
 

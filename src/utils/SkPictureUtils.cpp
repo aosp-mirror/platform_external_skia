@@ -8,6 +8,7 @@
 #include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkNoSaveLayerCanvas.h"
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
 #include "SkRRect.h"
@@ -49,6 +50,8 @@ static void nothing_to_do() {}
  */
 class GatherPixelRefDevice : public SkBaseDevice {
 public:
+    SK_DECLARE_INST_COUNT(GatherPixelRefDevice)
+
     GatherPixelRefDevice(int width, int height, PixelRefSet* prset) {
         fSize.set(width, height);
         fEmptyBitmap.setConfig(SkBitmap::kNo_Config, width, height);
@@ -64,7 +67,7 @@ public:
     }
     virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE { return NULL; }
     virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) SK_OVERRIDE {
-        return true;
+        return false;
     }
     // TODO: allow this call to return failure, or move to SkBitmapDevice only.
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE {
@@ -72,9 +75,9 @@ public:
     }
     virtual void lockPixels() SK_OVERRIDE { nothing_to_do(); }
     virtual void unlockPixels() SK_OVERRIDE { nothing_to_do(); }
-    virtual bool allowImageFilter(SkImageFilter*) SK_OVERRIDE { return false; }
-    virtual bool canHandleImageFilter(SkImageFilter*) SK_OVERRIDE { return false; }
-    virtual bool filterImage(SkImageFilter*, const SkBitmap&, const SkMatrix&,
+    virtual bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
+    virtual bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
+    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkMatrix&,
                              SkBitmap* result, SkIPoint* offset) SK_OVERRIDE {
         return false;
     }
@@ -112,14 +115,20 @@ public:
         this->addBitmapFromPaint(paint);
     }
     virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkMatrix&, const SkPaint&) SK_OVERRIDE {
+                            const SkMatrix&, const SkPaint& paint) SK_OVERRIDE {
         this->addBitmap(bitmap);
+        if (SkBitmap::kA8_Config == bitmap.config()) {
+            this->addBitmapFromPaint(paint);
+        }
     }
     virtual void drawBitmapRect(const SkDraw&, const SkBitmap& bitmap,
                                 const SkRect* srcOrNull, const SkRect& dst,
-                                const SkPaint&,
+                                const SkPaint& paint,
                                 SkCanvas::DrawBitmapRectFlags flags) SK_OVERRIDE {
         this->addBitmap(bitmap);
+        if (SkBitmap::kA8_Config == bitmap.config()) {
+            this->addBitmapFromPaint(paint);
+        }
     }
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
                             int x, int y, const SkPaint& paint) SK_OVERRIDE {
@@ -199,45 +208,6 @@ private:
     typedef SkBaseDevice INHERITED;
 };
 
-class NoSaveLayerCanvas : public SkCanvas {
-public:
-    NoSaveLayerCanvas(SkBaseDevice* device) : INHERITED(device) {}
-
-    // turn saveLayer() into save() for speed, should not affect correctness.
-    virtual int saveLayer(const SkRect* bounds, const SkPaint* paint,
-                          SaveFlags flags) SK_OVERRIDE {
-
-        // Like SkPictureRecord, we don't want to create layers, but we do need
-        // to respect the save and (possibly) its rect-clip.
-
-        int count = this->INHERITED::save(flags);
-        if (bounds) {
-            this->INHERITED::clipRectBounds(bounds, flags, NULL);
-        }
-        return count;
-    }
-
-    // disable aa for speed
-    virtual bool clipRect(const SkRect& rect, SkRegion::Op op,
-                          bool doAA) SK_OVERRIDE {
-        return this->INHERITED::clipRect(rect, op, false);
-    }
-
-    // for speed, just respect the bounds, and disable AA. May give us a few
-    // false positives and negatives.
-    virtual bool clipPath(const SkPath& path, SkRegion::Op op,
-                          bool doAA) SK_OVERRIDE {
-        return this->updateClipConservativelyUsingBounds(path.getBounds(), op, path.isInverseFillType());
-    }
-    virtual bool clipRRect(const SkRRect& rrect, SkRegion::Op op,
-                           bool doAA) SK_OVERRIDE {
-        return this->updateClipConservativelyUsingBounds(rrect.getBounds(), op, false);
-    }
-
-private:
-    typedef SkCanvas INHERITED;
-};
-
 SkData* SkPictureUtils::GatherPixelRefs(SkPicture* pict, const SkRect& area) {
     if (NULL == pict) {
         return NULL;
@@ -254,7 +224,7 @@ SkData* SkPictureUtils::GatherPixelRefs(SkPicture* pict, const SkRect& area) {
     PixelRefSet prset(&array);
 
     GatherPixelRefDevice device(pict->width(), pict->height(), &prset);
-    NoSaveLayerCanvas canvas(&device);
+    SkNoSaveLayerCanvas canvas(&device);
 
     canvas.clipRect(area, SkRegion::kIntersect_Op, false);
     canvas.drawPicture(*pict);

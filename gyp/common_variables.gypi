@@ -45,19 +45,32 @@
         # We set it automatically based on 'OS' (the host OS), but allow the
         # user to override it via GYP_DEFINES if they like.
         'skia_os%': '<(OS)',
+
+        'skia_android_framework%': 0,
       },
 
       # Re-define all variables defined within the level-3 'variables' dict,
       # so that siblings of the level-2 'variables' dict can see them.
-      'skia_os%': '<(skia_os)',
+      # (skia_os will depend on skia_android_framework.)
+      'skia_android_framework%': '<(skia_android_framework)',
 
       'conditions': [
+        [ 'skia_android_framework == 1', {
+          'skia_os%': 'android',
+        }, {
+          'skia_os%': '<(skia_os)',
+        }],
         [ 'skia_os == "win"', {
           'os_posix%': 0,
         }, {
           'os_posix%': 1,
         }],
-        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
+        [ 'skia_os in ["linux", "win"]', {
+          'skia_poppler_enabled%': 1,
+        }, {
+          'skia_poppler_enabled%': 0,
+        }],
+        [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "mac"]', {
           'skia_arch_width%': 64,
         }, {
           'skia_arch_width%': 32,
@@ -81,7 +94,6 @@
       'skia_sanitizer%': '',
       'skia_scalar%': 'float',
       'skia_mesa%': 0,
-      'skia_nv_path_rendering%': 0,
       'skia_stroke_path_rendering%': 0,
       'skia_android_path_rendering%': 0,
       'skia_resource_cache_mb_limit%': 0,
@@ -90,7 +102,7 @@
       'skia_chrome_utils%': 1,
       'skia_directwrite%': 0,
       'skia_gpu%': 1,
-      'skia_osx_sdkroot%': '',
+      'skia_osx_deployment_target%': '',
       'skia_profile_enabled%': 0,
       'skia_win_debuggers_path%': '',
       'skia_shared_lib%': 0,
@@ -105,7 +117,8 @@
 
     'conditions': [
       [ 'skia_os == "win" and skia_arch_width == 32 or '
-        'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android"] or '
+        'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android"] '
+            'and skia_android_framework == 0 or '
         'skia_os == "mac" and skia_arch_width == 32', {
         'skia_warnings_as_errors%': 1,
       }, {
@@ -140,19 +153,20 @@
     'skia_sanitizer%': '<(skia_sanitizer)',
     'skia_scalar%': '<(skia_scalar)',
     'skia_mesa%': '<(skia_mesa)',
-    'skia_nv_path_rendering%': '<(skia_nv_path_rendering)',
     'skia_stroke_path_rendering%': '<(skia_stroke_path_rendering)',
+    'skia_android_framework%': '<(skia_android_framework)',
     'skia_android_path_rendering%': '<(skia_android_path_rendering)',
     'skia_resource_cache_mb_limit%': '<(skia_resource_cache_mb_limit)',
     'skia_resource_cache_count_limit%': '<(skia_resource_cache_count_limit)',
     'skia_angle%': '<(skia_angle)',
+    'skia_poppler_enabled%': '<(skia_poppler_enabled)',
     'skia_arch_width%': '<(skia_arch_width)',
     'skia_arch_type%': '<(skia_arch_type)',
     'skia_chrome_utils%': '<(skia_chrome_utils)',
     'skia_directwrite%': '<(skia_directwrite)',
     'skia_gpu%': '<(skia_gpu)',
     'skia_win_exceptions%': 0,
-    'skia_osx_sdkroot%': '<(skia_osx_sdkroot)',
+    'skia_osx_deployment_target%': '<(skia_osx_deployment_target)',
     'skia_profile_enabled%': '<(skia_profile_enabled)',
     'skia_shared_lib%': '<(skia_shared_lib)',
     'skia_opencl%': '<(skia_opencl)',
@@ -161,6 +175,7 @@
     'ios_sdk_version%': '6.0',
     'skia_win_debuggers_path%': '<(skia_win_debuggers_path)',
     'skia_run_pdfviewer_in_gm%': 0,
+    'skia_disable_inlining%': 0,
 
     # These are referenced by our .gypi files that list files (e.g. core.gypi)
     #

@@ -8,7 +8,8 @@
 #include "SkMatrixConvolutionImageFilter.h"
 #include "SkBitmap.h"
 #include "SkColorPriv.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkRect.h"
 #include "SkUnPreMultiply.h"
 
@@ -57,7 +58,7 @@ SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(
     SkASSERT(target.fY >= 0 && target.fY < kernelSize.fHeight);
 }
 
-SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(SkFlattenableReadBuffer& buffer)
+SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(SkReadBuffer& buffer)
     : INHERITED(1, buffer) {
     // We need to be able to read at most SK_MaxS32 bytes, so divide that
     // by the size of a scalar to know how many scalars we can read.
@@ -88,7 +89,7 @@ SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(SkFlattenableRead
                     tile_mode_is_valid(fTileMode));
 }
 
-void SkMatrixConvolutionImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkMatrixConvolutionImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeInt(fKernelSize.fWidth);
     buffer.writeInt(fKernelSize.fHeight);
@@ -151,7 +152,7 @@ template<class PixelFetcher, bool convolveAlpha>
 void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
                                                   SkBitmap* result,
                                                   const SkIRect& rect,
-                                                  const SkIRect& bounds) {
+                                                  const SkIRect& bounds) const {
     for (int y = rect.fTop; y < rect.fBottom; ++y) {
         SkPMColor* dptr = result->getAddr32(rect.fLeft - bounds.fLeft, y - bounds.fTop);
         for (int x = rect.fLeft; x < rect.fRight; ++x) {
@@ -191,7 +192,7 @@ template<class PixelFetcher>
 void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
                                                   SkBitmap* result,
                                                   const SkIRect& rect,
-                                                  const SkIRect& bounds) {
+                                                  const SkIRect& bounds) const {
     if (fConvolveAlpha) {
         filterPixels<PixelFetcher, true>(src, result, rect, bounds);
     } else {
@@ -202,14 +203,14 @@ void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
 void SkMatrixConvolutionImageFilter::filterInteriorPixels(const SkBitmap& src,
                                                           SkBitmap* result,
                                                           const SkIRect& rect,
-                                                          const SkIRect& bounds) {
+                                                          const SkIRect& bounds) const {
     filterPixels<UncheckedPixelFetcher>(src, result, rect, bounds);
 }
 
 void SkMatrixConvolutionImageFilter::filterBorderPixels(const SkBitmap& src,
                                                         SkBitmap* result,
                                                         const SkIRect& rect,
-                                                        const SkIRect& bounds) {
+                                                        const SkIRect& bounds) const {
     switch (fTileMode) {
         case kClamp_TileMode:
             filterPixels<ClampPixelFetcher>(src, result, rect, bounds);
@@ -252,9 +253,10 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
                                                    const SkBitmap& source,
                                                    const SkMatrix& matrix,
                                                    SkBitmap* result,
-                                                   SkIPoint* loc) {
+                                                   SkIPoint* offset) const {
     SkBitmap src = source;
-    if (getInput(0) && !getInput(0)->filterImage(proxy, source, matrix, &src, loc)) {
+    SkIPoint srcOffset = SkIPoint::Make(0, 0);
+    if (getInput(0) && !getInput(0)->filterImage(proxy, source, matrix, &src, &srcOffset)) {
         return false;
     }
 
@@ -264,6 +266,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
 
     SkIRect bounds;
     src.getBounds(&bounds);
+    bounds.offset(srcOffset);
     if (!this->applyCropRect(&bounds, matrix)) {
         return false;
     }
@@ -283,6 +286,9 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
+    offset->fX = bounds.fLeft;
+    offset->fY = bounds.fTop;
+    bounds.offset(-srcOffset);
     SkIRect interior = SkIRect::MakeXYWH(bounds.left() + fTarget.fX,
                                          bounds.top() + fTarget.fY,
                                          bounds.width() - fKernelSize.fWidth + 1,
@@ -299,8 +305,6 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
     filterInteriorPixels(src, result, interior, bounds);
     filterBorderPixels(src, result, right, bounds);
     filterBorderPixels(src, result, bottom, bounds);
-    loc->fX += bounds.fLeft;
-    loc->fY += bounds.fTop;
     return true;
 }
 

@@ -22,6 +22,7 @@ PictureBenchmark::PictureBenchmark()
 , fTimerResult(TimerData::kAvg_Result)
 , fTimerTypes(0)
 , fTimeIndividualTiles(false)
+, fPurgeDecodedTex(false)
 {}
 
 PictureBenchmark::~PictureBenchmark() {
@@ -78,6 +79,10 @@ void PictureBenchmark::run(SkPicture* pict) {
     fRenderer->setup();
     fRenderer->render(NULL);
     fRenderer->resetState(true);
+
+    if (fPurgeDecodedTex) {
+        fRenderer->purgeTextures();
+    }
 
     bool usingGpu = false;
 #if SK_SUPPORT_GPU
@@ -140,6 +145,10 @@ void PictureBenchmark::run(SkPicture* pict) {
                 tiledRenderer->resetState(false);
                 perTileTimer->end();
                 SkAssertResult(perTileTimerData.appendTimes(perTileTimer.get()));
+
+                if (fPurgeDecodedTex) {
+                    fRenderer->purgeTextures();
+                }
             }
             longRunningTimer->truncatedEnd();
             tiledRenderer->resetState(true);
@@ -160,7 +169,9 @@ void PictureBenchmark::run(SkPicture* pict) {
 #if 0
             this->logProgress(result.c_str());
 #endif
-
+            if (fPurgeDecodedTex) {
+                configName.append(" <withPurging>");
+            }
             configName.append(" <averaged>");
             SkString longRunningResult = longRunningTimerData.getResult(
                 tiledRenderer->getNormalTimeFormat().c_str(),
@@ -170,30 +181,56 @@ void PictureBenchmark::run(SkPicture* pict) {
             this->logProgress(longRunningResult.c_str());
         }
     } else {
-        SkAutoTDelete<BenchTimer> timer(this->setupTimer());
-        TimerData timerData(fRepeats);
+        SkAutoTDelete<BenchTimer> longRunningTimer(this->setupTimer());
+        TimerData longRunningTimerData(1);
+        SkAutoTDelete<BenchTimer> perRunTimer(this->setupTimer(false));
+        TimerData perRunTimerData(fRepeats);
+
+        longRunningTimer->start();
         for (int i = 0; i < fRepeats; ++i) {
             fRenderer->setup();
 
-            timer->start();
+            perRunTimer->start();
             fRenderer->render(NULL);
-            timer->truncatedEnd();
+            perRunTimer->truncatedEnd();
+            fRenderer->resetState(false);
+            perRunTimer->end();
 
-            // Finishes gl context
-            fRenderer->resetState(true);
-            timer->end();
+            SkAssertResult(perRunTimerData.appendTimes(perRunTimer.get()));
 
-            SkAssertResult(timerData.appendTimes(timer.get()));
+            if (fPurgeDecodedTex) {
+                fRenderer->purgeTextures();
+            }
         }
+        longRunningTimer->truncatedEnd();
+        fRenderer->resetState(true);
+        longRunningTimer->end();
+        SkAssertResult(longRunningTimerData.appendTimes(longRunningTimer.get()));
 
         SkString configName = fRenderer->getConfigName();
+        if (fPurgeDecodedTex) {
+            configName.append(" <withPurging>");
+        }
 
-        SkString result = timerData.getResult(timeFormat.c_str(),
-                                              fTimerResult,
-                                              configName.c_str(),
-                                              timerTypes);
+        // Beware - since the per-run-timer doesn't ever include a glFinish it can
+        // report a lower time then the long-running-timer
+#if 0
+        SkString result = perRunTimerData.getResult(timeFormat.c_str(),
+                                                    fTimerResult,
+                                                    configName.c_str(),
+                                                    timerTypes);
+        result.append("\n");
+
+        this->logProgress(result.c_str());
+#else
+        SkString result = longRunningTimerData.getResult(timeFormat.c_str(),
+                                                         fTimerResult,
+                                                         configName.c_str(),
+                                                         timerTypes,
+                                                         fRepeats);
         result.append("\n");
         this->logProgress(result.c_str());
+#endif
     }
 
     fRenderer->end();

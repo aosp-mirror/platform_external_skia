@@ -17,19 +17,22 @@ public:
                       SkScalar sigmaY,
                       SkImageFilter* input = NULL,
                       const CropRect* cropRect = NULL);
+    virtual void computeFastBounds(const SkRect&, SkRect*) const SK_OVERRIDE;
 
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBlurImageFilter)
 
 protected:
-    explicit SkBlurImageFilter(SkFlattenableReadBuffer& buffer);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+    explicit SkBlurImageFilter(SkReadBuffer& buffer);
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const SkMatrix&,
-                               SkBitmap* result, SkIPoint* offset) SK_OVERRIDE;
+                               SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
+    virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,
+                                SkIRect* dst) const SK_OVERRIDE;
 
     bool canFilterImageGPU() const SK_OVERRIDE { return true; }
     virtual bool filterImageGPU(Proxy* proxy, const SkBitmap& src, const SkMatrix& ctm,
-                                SkBitmap* result, SkIPoint* offset) SK_OVERRIDE;
+                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
 
 private:
     SkSize   fSigma;

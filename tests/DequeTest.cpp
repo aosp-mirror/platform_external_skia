@@ -5,9 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkDeque.h"
+#include "Test.h"
 
 static void assert_count(skiatest::Reporter* reporter, const SkDeque& deq, int count) {
     if (0 == count) {

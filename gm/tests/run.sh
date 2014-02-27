@@ -47,10 +47,11 @@ function compare_directories {
 # Run a command, and validate that it succeeds (returns 0).
 function assert_passes {
   COMMAND="$1"
-  OUTPUT=$($COMMAND 2>&1)
+  echo
+  echo "assert_passes $COMMAND ..."
+  $COMMAND
   if [ $? != 0 ]; then
     echo "This command was supposed to pass, but failed: [$COMMAND]"
-    echo $OUTPUT
     ENCOUNTERED_ANY_ERRORS=1
   fi
 }
@@ -58,17 +59,17 @@ function assert_passes {
 # Run a command, and validate that it fails (returns nonzero).
 function assert_fails {
   COMMAND="$1"
-  OUTPUT=$($COMMAND 2>&1)
+  echo
+  echo "assert_fails $COMMAND ..."
+  $COMMAND
   if [ $? == 0 ]; then
     echo "This command was supposed to fail, but passed: [$COMMAND]"
-    echo $OUTPUT
     ENCOUNTERED_ANY_ERRORS=1
   fi
 }
 
 # Run gm...
 # - with the arguments in $1
-# - writing stdout into $2/$OUTPUT_ACTUAL_SUBDIR/stdout
 # - writing json summary into $2/$OUTPUT_ACTUAL_SUBDIR/json-summary.txt
 # - writing return value into $2/$OUTPUT_ACTUAL_SUBDIR/return_value
 # Then compare all of those against $2/$OUTPUT_EXPECTED_SUBDIR .
@@ -87,28 +88,17 @@ function gm_test {
 
   COMMAND="$GM_BINARY $GM_ARGS --writeJsonSummaryPath $JSON_SUMMARY_FILE --writePath $ACTUAL_OUTPUT_DIR/writePath --mismatchPath $ACTUAL_OUTPUT_DIR/mismatchPath --missingExpectationsPath $ACTUAL_OUTPUT_DIR/missingExpectationsPath"
 
-  echo "$COMMAND" >$ACTUAL_OUTPUT_DIR/command_line
-  $COMMAND >$ACTUAL_OUTPUT_DIR/stdout 2>$ACTUAL_OUTPUT_DIR/stderr
+  $COMMAND
   echo $? >$ACTUAL_OUTPUT_DIR/return_value
-
-  # Only compare selected lines in the stdout, to ignore any spurious lines
-  # as noted in http://code.google.com/p/skia/issues/detail?id=1068 .
-  #
-  # TODO(epoger): This is still hacky... we need to rewrite this script in
-  # Python soon, and make stuff like this more maintainable.
-  grep ^GM: $ACTUAL_OUTPUT_DIR/stdout >$ACTUAL_OUTPUT_DIR/stdout-tmp
-  mv $ACTUAL_OUTPUT_DIR/stdout-tmp $ACTUAL_OUTPUT_DIR/stdout
-  grep ^GM: $ACTUAL_OUTPUT_DIR/stderr >$ACTUAL_OUTPUT_DIR/stderr-tmp
-  mv $ACTUAL_OUTPUT_DIR/stderr-tmp $ACTUAL_OUTPUT_DIR/stderr
 
   # Replace image file contents with just the filename, for two reasons:
   # 1. Image file encoding may vary by platform
   # 2. https://code.google.com/p/chromium/issues/detail?id=169600
   #    ('gcl/upload.py fail to upload binary files to rietveld')
-  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name *.png); do
+  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name \*.png); do
     echo "[contents of $IMAGEFILE]" >$IMAGEFILE
   done
-  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name *.pdf); do
+  for IMAGEFILE in $(find $ACTUAL_OUTPUT_DIR -name \*.pdf); do
     echo "[contents of $IMAGEFILE]" >$IMAGEFILE
   done
 
@@ -118,6 +108,17 @@ function gm_test {
   done
 
   compare_directories $EXPECTED_OUTPUT_DIR $ACTUAL_OUTPUT_DIR
+}
+
+# Swap contents of two files at paths $1 and $2.
+function swap_files {
+  if [ $# != 2 ]; then
+    echo "swap_files requires exactly 2 parameters, got $#"
+    exit 1
+  fi
+  mv "$1" "$1.tmp"
+  mv "$2" "$1"
+  mv "$1.tmp" "$2"
 }
 
 # Create input dir (at path $1) with expectations (both image and json)
@@ -157,10 +158,10 @@ function create_inputs_dir {
 
   THIS_IMAGE_DIR=$IMAGES_DIR/different-pixels
   mkdir -p $THIS_IMAGE_DIR
-  $GM_BINARY --hierarchy --match selftest2 $CONFIGS -w $THIS_IMAGE_DIR
-  mv $THIS_IMAGE_DIR/8888/selftest2.png $THIS_IMAGE_DIR/8888/selftest1.png
-  mv $THIS_IMAGE_DIR/565/selftest2.png  $THIS_IMAGE_DIR/565/selftest1.png
-  $GM_BINARY --hierarchy --match selftest1 $CONFIGS -r $THIS_IMAGE_DIR \
+  $GM_BINARY --hierarchy --match selftest $CONFIGS -w $THIS_IMAGE_DIR
+  swap_files $THIS_IMAGE_DIR/8888/selftest2.png $THIS_IMAGE_DIR/8888/selftest1.png
+  swap_files $THIS_IMAGE_DIR/565/selftest2.png  $THIS_IMAGE_DIR/565/selftest1.png
+  $GM_BINARY --hierarchy --match selftest $CONFIGS -r $THIS_IMAGE_DIR \
     --writeJsonSummaryPath $JSON_DIR/different-pixels.json
 
   # Create another JSON expectations file which is identical to
@@ -183,9 +184,11 @@ function create_inputs_dir {
 
   echo "# Comment line" >$GM_IGNORE_FAILURES_FILE
   echo "" >>$GM_IGNORE_FAILURES_FILE
-  echo "# ignore any test runs whose filename contains '8888/selfte'" >>$GM_IGNORE_FAILURES_FILE
-  echo "#   (in other words, config is 8888 and test name starts with 'selfte')" >>$GM_IGNORE_FAILURES_FILE
-  echo "8888/selfte" >>$GM_IGNORE_FAILURES_FILE
+  echo "# ignore any runs of the 'selftest1' test" >>$GM_IGNORE_FAILURES_FILE
+  echo "selftest1" >>$GM_IGNORE_FAILURES_FILE
+  echo "" >>$GM_IGNORE_FAILURES_FILE
+  echo "# make sure we don't do partial matches (should NOT ignore 'selftest2' runs)" >>$GM_IGNORE_FAILURES_FILE
+  echo "selftest" >>$GM_IGNORE_FAILURES_FILE
 }
 
 GM_TESTDIR=gm/tests
@@ -209,16 +212,18 @@ gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/images/d
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/compared-against-different-pixels-json"
 
 # Exercise --ignoreFailuresFile flag.
-gm_test "--verbose --hierarchy --match selftest1 --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/ignoring-one-test"
+# This should run two GM tests: selftest1 and selftest2.
+# Failures in selftest1 should be ignored, but failures in selftest2 should not.
+gm_test "--verbose --hierarchy --match selftest --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/json/different-pixels.json" "$GM_OUTPUTS/ignoring-one-test"
 
 # Compare different pixels, but with a SUBSET of the expectations marked as
 # ignore-failure.
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r $GM_INPUTS/json/different-pixels-ignore-some-failures.json" "$GM_OUTPUTS/ignoring-some-failures"
 
 # Compare generated image against an empty "expected image" dir.
-# Even the tests that have been marked as ignore-failure should show up as
-# no-comparison.
-gm_test "--verbose --hierarchy --match selftest1 --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
+# Even the tests that have been marked as ignore-failure (selftest1) should
+# show up as no-comparison.
+gm_test "--verbose --hierarchy --match selftest --ignoreFailuresFile $GM_IGNORE_FAILURES_FILE $CONFIGS -r $GM_INPUTS/images/empty-dir" "$GM_OUTPUTS/compared-against-empty-dir"
 
 # Compare generated image against a nonexistent "expected image" dir.
 gm_test "--verbose --hierarchy --match selftest1 $CONFIGS -r ../path/to/nowhere" "$GM_OUTPUTS/compared-against-nonexistent-dir"
@@ -259,9 +264,14 @@ for CASE in $FAILING_CASES; do
   assert_fails "python gm/display_json_results.py $GM_OUTPUTS/$CASE/$OUTPUT_EXPECTED_SUBDIR/json-summary.txt"
 done
 
+# Exercise all rebaseline_server unittests.
+assert_passes "python gm/rebaseline_server/test_all.py"
+
+echo
 if [ $ENCOUNTERED_ANY_ERRORS == 0 ]; then
   echo "All tests passed."
   exit 0
 else
+  echo "Some tests failed."
   exit 1
 fi

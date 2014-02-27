@@ -93,10 +93,6 @@
  * stencil formats as attachments. If the FBO is complete we will assume
  * subsequent attachments with the same formats are complete as well.
  *
- * GR_GL_USE_NV_PATH_RENDERING: Enable experimental support for
- * GL_NV_path_rendering. There are known issues with clipping, non-AA paths, and
- * perspective.
- *
  * GR_GL_MUST_USE_VBO: Indicates that all vertices and indices must be rendered
  * from VBOs. Chromium's command buffer doesn't allow glVertexAttribArray with
  * ARARY_BUFFER 0 bound or glDrawElements with ELEMENT_ARRAY_BUFFER 0 bound.
@@ -158,25 +154,12 @@
     #define GR_GL_CHECK_FBO_STATUS_ONCE_PER_FORMAT      0
 #endif
 
-#if !defined(GR_GL_USE_NV_PATH_RENDERING)
-    #define GR_GL_USE_NV_PATH_RENDERING                 0
-#endif
-
 #if !defined(GR_GL_MUST_USE_VBO)
     #define GR_GL_MUST_USE_VBO                          0
 #endif
 
 #if !defined(GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE)
     #define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE       0
-#endif
-
-// We now have a separate GrGLInterface function pointer entry for the IMG/EXT version of
-// glRenderbufferStorageMultisampled. However, Chrome is setting the one we now use for
-// ES3 MSAA to point to the IMG/EXT function. This macro exists to make Skia ignore the
-// ES3 MSAA and instead use the IMG/EXT version with the old function pointer entry. It will
-// be removed as soon as Chrome is updated to set the new function pointer.
-#if !defined(GR_GL_IGNORE_ES3_MSAA)
-    #define GR_GL_IGNORE_ES3_MSAA 0
 #endif
 
 /**

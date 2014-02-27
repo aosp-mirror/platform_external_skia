@@ -9,8 +9,8 @@
 #include "SkCanvas.h"
 #include "SkPicture.h"
 
-SkBitmap::Config SkImageInfoToBitmapConfig(const SkImageInfo& info) {
-    switch (info.fColorType) {
+SkBitmap::Config SkColorTypeToBitmapConfig(SkColorType colorType) {
+    switch (colorType) {
         case kAlpha_8_SkColorType:
             return SkBitmap::kA8_Config;
 
@@ -31,6 +31,23 @@ SkBitmap::Config SkImageInfoToBitmapConfig(const SkImageInfo& info) {
             break;
     }
     return SkBitmap::kNo_Config;
+}
+
+SkBitmap::Config SkImageInfoToBitmapConfig(const SkImageInfo& info) {
+    return SkColorTypeToBitmapConfig(info.fColorType);
+}
+
+SkColorType SkBitmapConfigToColorType(SkBitmap::Config config) {
+    static const SkColorType gCT[] = {
+        kUnknown_SkColorType,   // kNo_Config
+        kAlpha_8_SkColorType,   // kA8_Config
+        kIndex_8_SkColorType,   // kIndex8_Config
+        kRGB_565_SkColorType,   // kRGB_565_Config
+        kARGB_4444_SkColorType, // kARGB_4444_Config
+        kPMColor_SkColorType,   // kARGB_8888_Config
+    };
+    SkASSERT((unsigned)config < SK_ARRAY_COUNT(gCT));
+    return gCT[config];
 }
 
 SkImage* SkNewImageFromBitmap(const SkBitmap& bm, bool canSharePixelRef) {

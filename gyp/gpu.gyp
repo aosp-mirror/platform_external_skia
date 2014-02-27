@@ -107,11 +107,6 @@
         'gpu.gypi', # Makes the gypi appear in IDEs (but does not modify the build).
       ],
       'conditions': [
-        [ 'skia_nv_path_rendering', {
-          'defines': [
-            'GR_GL_USE_NV_PATH_RENDERING=1',
-          ],
-        }],
         [ 'skia_stroke_path_rendering', {
           'sources': [
             '../experimental/StrokePathRenderer/GrStrokePathRenderer.h',
@@ -144,7 +139,7 @@
         }],
         [ 'skia_distancefield_fonts', {
           'sources': [
-            '<(skia_include_path)/gpu/GrDistanceFieldTextContext.h',
+            '<(skia_src_path)/gpu/GrDistanceFieldTextContext.h',
             '<(skia_src_path)/gpu/GrDistanceFieldTextContext.cpp',
             '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.cpp',
             '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.h',

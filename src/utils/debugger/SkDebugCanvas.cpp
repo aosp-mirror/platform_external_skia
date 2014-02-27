@@ -14,14 +14,8 @@
 #include "SkDevice.h"
 #include "SkXfermode.h"
 
-static SkBitmap make_noconfig_bm(int width, int height) {
-    SkBitmap bm;
-    bm.setConfig(SkBitmap::kNo_Config, width, height);
-    return bm;
-}
-
 SkDebugCanvas::SkDebugCanvas(int width, int height)
-        : INHERITED(make_noconfig_bm(width, height))
+        : INHERITED(width, height)
         , fWidth(width)
         , fHeight(height)
         , fFilter(false)
@@ -74,8 +68,7 @@ void SkDebugCanvas::applyUserTransform(SkCanvas* canvas) {
 
 int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
     SkBitmap bitmap;
-    bitmap.setConfig(SkBitmap::kARGB_8888_Config, 1, 1);
-    bitmap.allocPixels();
+    bitmap.allocPixels(SkImageInfo::MakeN32Premul(1, 1));
 
     SkCanvas canvas(bitmap);
     canvas.translate(SkIntToScalar(-x), SkIntToScalar(-y));

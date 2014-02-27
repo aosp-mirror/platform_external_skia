@@ -12,11 +12,11 @@
 
 #if SK_SUPPORT_GPU && SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 
-#include "gl/GrGpuGL.h"
 #include "GrBackendEffectFactory.h"
 #include "GrContextFactory.h"
 #include "GrDrawEffect.h"
 #include "effects/GrConfigConversionEffect.h"
+#include "gl/GrGpuGL.h"
 
 #include "SkChecksum.h"
 #include "SkRandom.h"
@@ -64,8 +64,6 @@ void GrGLProgramDesc::setRandom(SkRandom* random,
 #if GR_GL_EXPERIMENTAL_GS
     header->fExperimentalGS = gpu->caps()->geometryShaderSupport() && random->nextBool();
 #endif
-
-    header->fDiscardIfZeroCoverage = random->nextBool();
 
     bool useLocalCoords = random->nextBool() && currAttribIndex < GrDrawState::kMaxVertexAttribCnt;
     header->fLocalCoordAttributeIndex = useLocalCoords ? currAttribIndex++ : -1;
@@ -173,6 +171,7 @@ bool GrGpuGL::programUnitTest(int maxStages) {
                                                                             this->getContext(),
                                                                             *this->caps(),
                                                                             dummyTextures));
+            SkASSERT(effect);
             int numAttribs = (*effect)->numVertexAttribs();
 
             // If adding this effect would exceed the max attrib count then generate a
@@ -226,7 +225,7 @@ bool GrGpuGL::programUnitTest(int maxStages) {
     return true;
 }
 
-static void GLProgramsTest(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(GLPrograms, reporter, factory) {
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
         GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(type));
         if (NULL != context) {
@@ -243,23 +242,21 @@ static void GLProgramsTest(skiatest::Reporter* reporter, GrContextFactory* facto
     }
 }
 
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("GLPrograms", GLProgramsTestClass, GLProgramsTest)
-
 // This is evil evil evil. The linker may throw away whole translation units as dead code if it
 // thinks none of the functions are called. It will do this even if there are static initializers
 // in the unit that could pass pointers to functions from the unit out to other translation units!
 // We force some of the effects that would otherwise be discarded to link here.
 
+#include "SkAlphaThresholdFilter.h"
+#include "SkColorMatrixFilter.h"
 #include "SkLightingImageFilter.h"
 #include "SkMagnifierImageFilter.h"
-#include "SkColorMatrixFilter.h"
-#include "SkBitmapAlphaThresholdShader.h"
 
 void forceLinking();
 
 void forceLinking() {
     SkLightingImageFilter::CreateDistantLitDiffuse(SkPoint3(0,0,0), 0, 0, 0);
+    SkAlphaThresholdFilter::Create(SkRegion(), .5f, .5f);
     SkMagnifierImageFilter mag(SkRect::MakeWH(SK_Scalar1, SK_Scalar1), SK_Scalar1);
     GrConfigConversionEffect::Create(NULL,
                                      false,
@@ -267,7 +264,6 @@ void forceLinking() {
                                      SkMatrix::I());
     SkScalar matrix[20];
     SkColorMatrixFilter cmf(matrix);
-    SkBitmapAlphaThresholdShader::Create(SkBitmap(), SkRegion(), 0x80);
 }
 
 #endif

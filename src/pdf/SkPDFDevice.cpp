@@ -232,15 +232,14 @@ GraphicStateEntry::GraphicStateEntry() : fColor(SK_ColorBLACK),
     fMatrix.reset();
 }
 
-bool GraphicStateEntry::compareInitialState(const GraphicStateEntry& b) {
-    return fColor == b.fColor &&
-           fShaderIndex == b.fShaderIndex &&
-           fGraphicStateIndex == b.fGraphicStateIndex &&
-           fMatrix == b.fMatrix &&
-           fClipStack == b.fClipStack &&
-               (fTextScaleX == 0 ||
-                b.fTextScaleX == 0 ||
-                (fTextScaleX == b.fTextScaleX && fTextFill == b.fTextFill));
+bool GraphicStateEntry::compareInitialState(const GraphicStateEntry& cur) {
+    return fColor == cur.fColor &&
+           fShaderIndex == cur.fShaderIndex &&
+           fGraphicStateIndex == cur.fGraphicStateIndex &&
+           fMatrix == cur.fMatrix &&
+           fClipStack == cur.fClipStack &&
+           (fTextScaleX == 0 ||
+               (fTextScaleX == cur.fTextScaleX && fTextFill == cur.fTextFill));
 }
 
 class GraphicStackState {
@@ -1341,7 +1340,7 @@ void SkPDFDevice::drawVertices(const SkDraw& d, SkCanvas::VertexMode,
     if (d.fClip->isEmpty()) {
         return;
     }
-    NOT_IMPLEMENTED("drawVerticies", true);
+    // TODO: implement drawVertices
 }
 
 void SkPDFDevice::drawDevice(const SkDraw& d, SkBaseDevice* device,
@@ -2250,13 +2249,11 @@ void SkPDFDevice::internalDrawBitmap(const SkMatrix& origMatrix,
         // the image.  Avoiding alpha will reduce the pdf size and generation
         // CPU time some.
 
-        perspectiveBitmap.setConfig(
-                SkBitmap::kARGB_8888_Config,
-                SkScalarCeilToInt(
-                        physicalPerspectiveOutline.getBounds().width()),
-                SkScalarCeilToInt(
-                        physicalPerspectiveOutline.getBounds().height()));
-        perspectiveBitmap.allocPixels();
+        const int w = SkScalarCeilToInt(physicalPerspectiveOutline.getBounds().width());
+        const int h = SkScalarCeilToInt(physicalPerspectiveOutline.getBounds().height());
+        if (!perspectiveBitmap.allocPixels(SkImageInfo::MakeN32Premul(w, h))) {
+            return;
+        }
         perspectiveBitmap.eraseColor(SK_ColorTRANSPARENT);
 
         SkBitmapDevice device(perspectiveBitmap);
@@ -2332,6 +2329,6 @@ bool SkPDFDevice::onReadPixels(const SkBitmap& bitmap, int x, int y,
     return false;
 }
 
-bool SkPDFDevice::allowImageFilter(SkImageFilter*) {
+bool SkPDFDevice::allowImageFilter(const SkImageFilter*) {
     return false;
 }

@@ -11,7 +11,7 @@
 #include <stdio.h>
 
 void GrGLClearErr(const GrGLInterface* gl) {
-    while (GR_GL_NO_ERROR != gl->fGetError()) {}
+    while (GR_GL_NO_ERROR != gl->fFunctions.fGetError()) {}
 }
 
 namespace {
@@ -75,6 +75,10 @@ bool get_gl_version_for_mesa(int mesaMajorVersion, int* major, int* minor) {
             *major = 3;
             *minor = 1;
             return true;
+        case 10:
+            *major = 3;
+            *minor = 3;
+            return true;
         default:
             return false;
     }
@@ -93,10 +97,10 @@ bool get_gl_version_for_mesa(int mesaMajorVersion, int* major, int* minor) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGLBinding GrGLGetBindingInUseFromString(const char* versionString) {
+GrGLStandard GrGLGetStandardInUseFromString(const char* versionString) {
     if (NULL == versionString) {
         SkDEBUGFAIL("NULL GL version string.");
-        return kNone_GrGLBinding;
+        return kNone_GrGLStandard;
     }
 
     int major, minor;
@@ -104,7 +108,7 @@ GrGLBinding GrGLGetBindingInUseFromString(const char* versionString) {
     // check for desktop
     int n = sscanf(versionString, "%d.%d", &major, &minor);
     if (2 == n) {
-        return kDesktop_GrGLBinding;
+        return kGL_GrGLStandard;
     }
 
     // check for ES 1
@@ -112,15 +116,15 @@ GrGLBinding GrGLGetBindingInUseFromString(const char* versionString) {
     n = sscanf(versionString, "OpenGL ES-%c%c %d.%d", profile, profile+1, &major, &minor);
     if (4 == n) {
         // we no longer support ES1.
-        return kNone_GrGLBinding;
+        return kNone_GrGLStandard;
     }
 
     // check for ES2
     n = sscanf(versionString, "OpenGL ES %d.%d", &major, &minor);
     if (2 == n) {
-        return kES_GrGLBinding;
+        return kGLES_GrGLStandard;
     }
-    return kNone_GrGLBinding;
+    return kNone_GrGLStandard;
 }
 
 bool GrGLIsMesaFromVersionString(const char* versionString) {
@@ -223,15 +227,11 @@ GrGLRenderer GrGLGetRendererFromString(const char* rendererString) {
     if (NULL != rendererString) {
         if (0 == strcmp(rendererString, "NVIDIA Tegra 3")) {
             return kTegra3_GrGLRenderer;
+        } else if (0 == strcmp(rendererString, "NVIDIA Tegra")) {
+            return kTegra2_GrGLRenderer;
         }
     }
     return kOther_GrGLRenderer;
-}
-
-GrGLBinding GrGLGetBindingInUse(const GrGLInterface* gl) {
-    const GrGLubyte* v;
-    GR_GL_CALL_RET(gl, v, GetString(GR_GL_VERSION));
-    return GrGLGetBindingInUseFromString((const char*) v);
 }
 
 GrGLVersion GrGLGetVersion(const GrGLInterface* gl) {

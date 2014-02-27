@@ -18,21 +18,34 @@
 
 // Alphabetized list of flags used by this file or bench_ and render_pictures.
 DEFINE_string(bbh, "none", "bbhType [width height]: Set the bounding box hierarchy type to "
-              "be used. Accepted values are: none, rtree, grid. "
+              "be used. Accepted values are: none, rtree, quadtree, grid. "
               "Not compatible with --pipe. With value "
               "'grid', width and height must be specified. 'grid' can "
               "only be used with modes tile, record, and "
               "playbackCreation.");
+
+
+#if SK_SUPPORT_GPU
+#define GPU_CONFIG_STRING "|gpu|msaa4|msaa16"
+#else
+#define GPU_CONFIG_STRING ""
+#endif
+#if SK_ANGLE
+#define ANGLE_CONFIG_STRING "|angle"
+#else
+#define ANGLE_CONFIG_STRING ""
+#endif
+#if SK_MESA
+#define MESA_CONFIG_STRING "|mesa"
+#else
+#define MESA_CONFIG_STRING ""
+#endif
+
 // Although this config does not support all the same options as gm, the names should be kept
 // consistent.
-#if SK_ANGLE
-// ANGLE assumes GPU
-DEFINE_string(config, "8888", "[8888|gpu|msaa4|msaa16|angle]: Use the corresponding config.");
-#elif SK_SUPPORT_GPU
-DEFINE_string(config, "8888", "[8888|gpu|msaa4|msaa16]: Use the corresponding config.");
-#else
-DEFINE_string(config, "8888", "[8888]: Use the corresponding config.");
-#endif
+DEFINE_string(config, "8888", "["
+              "8888" GPU_CONFIG_STRING ANGLE_CONFIG_STRING MESA_CONFIG_STRING
+              "]: Use the corresponding config.");
 
 DEFINE_bool(deferImageDecoding, false, "Defer decoding until drawing images. "
             "Has no effect if the provided skp does not have its images encoded.");
@@ -285,6 +298,15 @@ sk_tools::PictureRenderer* parseRenderer(SkString& error, PictureTool tool) {
             }
         }
 #endif
+#if SK_MESA
+        else if (0 == strcmp(FLAGS_config[0], "mesa")) {
+            deviceType = sk_tools::PictureRenderer::kMesa_DeviceType;
+            if (FLAGS_multi > 1) {
+                error.printf("Mesa not compatible with multithreaded tiling.\n");
+                return NULL;
+            }
+        }
+#endif
 #endif
         else {
             error.printf("%s is not a valid mode for --config\n", FLAGS_config[0]);
@@ -303,6 +325,8 @@ sk_tools::PictureRenderer* parseRenderer(SkString& error, PictureTool tool) {
         const char* type = FLAGS_bbh[0];
         if (0 == strcmp(type, "none")) {
             bbhType = sk_tools::PictureRenderer::kNone_BBoxHierarchyType;
+        } else if (0 == strcmp(type, "quadtree")) {
+            bbhType = sk_tools::PictureRenderer::kQuadTree_BBoxHierarchyType;
         } else if (0 == strcmp(type, "rtree")) {
             bbhType = sk_tools::PictureRenderer::kRTree_BBoxHierarchyType;
         } else if (0 == strcmp(type, "grid")) {

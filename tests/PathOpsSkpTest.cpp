@@ -6,6 +6,7 @@
  */
 #include "PathOpsExtendedTest.h"
 
+
 #define TEST(name) { name, #name }
 
 static void skpcheeseandburger_com225(skiatest::Reporter* reporter) {
@@ -1657,13 +1658,9 @@ static const size_t testCount = SK_ARRAY_COUNT(tests);
 static bool runReverse = false;
 static void (*stopTest)(skiatest::Reporter* ) = 0;
 
-static void PathOpsSkpTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSkp, reporter) {
 #if DEBUG_SHOW_TEST_NAME
     strncpy(DEBUG_FILENAME_STRING, "", DEBUG_FILENAME_STRING_LENGTH);
 #endif
     RunTestSet(reporter, tests, testCount, firstTest, stopTest, runReverse);
 }
-
-#include "TestClassDef.h"
-
-DEFINE_TESTCLASS_SHORT(PathOpsSkpTest)

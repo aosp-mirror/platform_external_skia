@@ -1,0 +1,20 @@
+# This is the official list of Skia authors for copyright purposes.
+# 
+# Names should be added to this file with one of the following patterns:
+#
+# For individual contributors:
+# Name <email address>
+#
+# For corporate contributors:
+# Organization <fnmatch pattern>
+# See examples below or python fnmatch module documentation for more information.
+#
+# Please keep the list sorted.
+
+ACCESS CO., LTD. <*@access-company.com>
+ARM <*@arm.com>
+Google Inc. <*@google.com>
+Intel <*@intel.com>
+NVIDIA <*@nvidia.com>
+The Chromium Authors <*@chromium.org>
+Thiago Fransosi Farina <thiago.farina@gmail.com>

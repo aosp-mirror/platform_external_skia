@@ -403,10 +403,8 @@ void TestResult::testOne() {
         do {
             int dimX = (width + scale - 1) / scale;
             int dimY = (height + scale - 1) / scale;
-            oldBitmap.setConfig(SkBitmap::kARGB_8888_Config, dimX, dimY);
-            opBitmap.setConfig(SkBitmap::kARGB_8888_Config, dimX, dimY);
-            bool success = oldBitmap.allocPixels() && opBitmap.allocPixels();
-            if (success) {
+            if (oldBitmap.allocN32Pixels(dimX, dimY) &&
+                opBitmap.allocN32Pixels(dimX, dimY)) {
                 break;
             }
             SkDebugf("-%d-", scale);
@@ -612,7 +610,7 @@ static void encodeFound(skiatest::Reporter* reporter, TestState& state) {
     }
 }
 
-static void PathOpsSkpClipTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSkpClip, reporter) {
     if (!initTest()) {
         return;
     }
@@ -635,7 +633,7 @@ static void testSkpClipMain(TestState* data) {
         (void) doOneDir(data);
 }
 
-static void PathOpsSkpClipThreadedTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSkpClipThreaded, reporter) {
     if (!initTest()) {
         return;
     }
@@ -661,7 +659,7 @@ static void PathOpsSkpClipThreadedTest(skiatest::Reporter* reporter) {
     encodeFound(reporter, state);
 }
 
-static void PathOpsSkpClipOneOffTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSkpClipOneOff, reporter) {
     if (!initTest()) {
         return;
     }
@@ -677,10 +675,3 @@ static void PathOpsSkpClipOneOffTest(skiatest::Reporter* reporter) {
     state.fTestStep = kEncodeFiles;
     state.testOne();
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsSkpClipTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsSkpClipOneOffTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsSkpClipThreadedTest)

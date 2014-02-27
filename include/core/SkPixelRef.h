@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2008 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkPixelRef_DEFINED
 #define SkPixelRef_DEFINED
@@ -14,9 +12,10 @@
 #include "SkRefCnt.h"
 #include "SkString.h"
 #include "SkFlattenable.h"
+#include "SkImageInfo.h"
 #include "SkTDArray.h"
 
-//#define SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
+//#define xed
 
 #ifdef SK_DEBUG
     /**
@@ -51,11 +50,6 @@ class SK_API SkPixelRef : public SkFlattenable {
 public:
     SK_DECLARE_INST_COUNT(SkPixelRef)
 
-#ifdef SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
-    // DEPRECATED -- use a constructor that takes SkImageInfo
-    explicit SkPixelRef(SkBaseMutex* mutex = NULL);
-#endif
-
     explicit SkPixelRef(const SkImageInfo&);
     SkPixelRef(const SkImageInfo&, SkBaseMutex* mutex);
     virtual ~SkPixelRef();
@@ -67,11 +61,29 @@ public:
     /** Return the pixel memory returned from lockPixels, or null if the
         lockCount is 0.
     */
-    void* pixels() const { return fPixels; }
+    void* pixels() const { return fRec.fPixels; }
 
     /** Return the current colorTable (if any) if pixels are locked, or null.
     */
-    SkColorTable* colorTable() const { return fColorTable; }
+    SkColorTable* colorTable() const { return fRec.fColorTable; }
+
+    size_t rowBytes() const { return fRec.fRowBytes; }
+
+    /**
+     *  To access the actual pixels of a pixelref, it must be "locked".
+     *  Calling lockPixels returns a LockRec struct (on success).
+     */
+    struct LockRec {
+        void*           fPixels;
+        SkColorTable*   fColorTable;
+        size_t          fRowBytes;
+
+        void zero() { sk_bzero(this, sizeof(*this)); }
+
+        bool isZero() const {
+            return NULL == fPixels && NULL == fColorTable && 0 == fRowBytes;
+        }
+    };
 
     /**
      *  Returns true if the lockcount > 0
@@ -80,10 +92,19 @@ public:
 
     SkDEBUGCODE(int getLockCount() const { return fLockCount; })
 
-    /** Call to access the pixel memory, which is returned. Balance with a call
-        to unlockPixels().
-    */
-    void lockPixels();
+    /**
+     *  Call to access the pixel memory. Return true on success. Balance this
+     *  with a call to unlockPixels().
+     */
+    bool lockPixels();
+
+    /**
+     *  Call to access the pixel memory. On success, return true and fill out
+     *  the specified rec. On failure, return false and ignore the rec parameter.
+     *  Balance this with a call to unlockPixels().
+     */
+    bool lockPixels(LockRec* rec);
+
     /** Call to balanace a previous call to lockPixels(). Returns the pixels
         (or null) after the unlock. NOTE: lock calls can be nested, but the
         matching number of unlock calls must be made in order to free the
@@ -105,11 +126,19 @@ public:
     */
     uint32_t getGenerationID() const;
 
-    /** Call this if you have changed the contents of the pixels. This will in-
-        turn cause a different generation ID value to be returned from
-        getGenerationID().
-    */
+    /**
+     *  Call this if you have changed the contents of the pixels. This will in-
+     *  turn cause a different generation ID value to be returned from
+     *  getGenerationID().
+     */
     void notifyPixelsChanged();
+
+    /**
+     *  Change the info's AlphaType. Note that this does not automatically
+     *  invalidate the generation ID. If the pixel values themselves have
+     *  changed, then you must explicitly call notifyPixelsChanged() as well.
+     */
+    void changeAlphaType(SkAlphaType at);
 
     /** Returns true if this pixelref is marked as immutable, meaning that the
         contents of its pixels will not change for the lifetime of the pixelref.
@@ -240,18 +269,22 @@ public:
     void addGenIDChangeListener(GenIDChangeListener* listener);
 
 protected:
-    /** Called when the lockCount goes from 0 to 1. The caller will have already
-        acquire a mutex for thread safety, so this method need not do that.
-    */
-    virtual void* onLockPixels(SkColorTable**) = 0;
- 
     /**
-     *  Called when the lock count goes from 1 to 0. The caller will have
-     *  already acquire a mutex for thread safety, so this method need not do
-     *  that.
+     *  On success, returns true and fills out the LockRec for the pixels. On
+     *  failure returns false and ignores the LockRec parameter.
      *
-     *  If the previous call to onLockPixels failed (i.e. returned NULL), then
-     *  the onUnlockPixels will NOT be called.
+     *  The caller will have already acquired a mutex for thread safety, so this
+     *  method need not do that.
+     */
+    virtual bool onNewLockPixels(LockRec*) = 0;
+
+    /**
+     *  Balancing the previous successful call to onNewLockPixels. The locked
+     *  pixel address will no longer be referenced, so the subclass is free to
+     *  move or discard that memory.
+     *
+     *  The caller will have already acquired a mutex for thread safety, so this
+     *  method need not do that.
      */
     virtual void onUnlockPixels() = 0;
 
@@ -290,22 +323,22 @@ protected:
     SkBaseMutex* mutex() const { return fMutex; }
 
     // serialization
-    SkPixelRef(SkFlattenableReadBuffer&, SkBaseMutex*);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+    SkPixelRef(SkReadBuffer&, SkBaseMutex*);
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     // only call from constructor. Flags this to always be locked, removing
     // the need to grab the mutex and call onLockPixels/onUnlockPixels.
     // Performance tweak to avoid those calls (esp. in multi-thread use case).
-    void setPreLocked(void* pixels, SkColorTable* ctable);
+    void setPreLocked(void*, size_t rowBytes, SkColorTable*);
 
 private:
     SkBaseMutex*    fMutex; // must remain in scope for the life of this object
-    // FIXME: fInfo should be const once we remove old constructor that does
-    // not set it.
-    SkImageInfo     fInfo;
 
-    void*           fPixels;
-    SkColorTable*   fColorTable;    // we do not track ownership, subclass does
+    // mostly const. fInfo.fAlpahType can be changed at runtime.
+    const SkImageInfo fInfo;
+
+    // LockRec is only valid if we're in a locked state (isLocked())
+    LockRec         fRec;
     int             fLockCount;
 
     mutable uint32_t fGenerationID;
@@ -331,6 +364,17 @@ private:
     void cloneGenID(const SkPixelRef&);
 
     typedef SkFlattenable INHERITED;
+};
+
+class SkPixelRefFactory : public SkRefCnt {
+public:
+    /**
+     *  Allocate a new pixelref matching the specified ImageInfo, allocating
+     *  the memory for the pixels. If the ImageInfo requires a ColorTable,
+     *  the pixelref will ref() the colortable.
+     *  On failure return NULL.
+     */
+    virtual SkPixelRef* create(const SkImageInfo&, SkColorTable*) = 0;
 };
 
 #endif

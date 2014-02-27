@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkRandom.h"
 #include "SkRTree.h"
+#include "SkRandom.h"
 #include "SkTSort.h"
+#include "Test.h"
 
 static const size_t MIN_CHILDREN = 6;
 static const size_t MAX_CHILDREN = 11;

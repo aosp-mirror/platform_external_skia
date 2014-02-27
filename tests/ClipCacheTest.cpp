@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #include "Test.h"
 // This is a GR test
 #if SK_SUPPORT_GPU
+#include "../../src/gpu/GrClipMaskManager.h"
 #include "GrContextFactory.h"
 #include "SkGpuDevice.h"
-#include "../../src/gpu/GrClipMaskManager.h"
 
 static const int X_SIZE = 12;
 static const int Y_SIZE = 12;
@@ -220,8 +219,7 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
 #endif
 }
 
-////////////////////////////////////////////////////////////////////////////////
-static void TestClipCache(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(ClipCache, reporter, factory) {
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
         GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
         if (!GrContextFactory::IsRenderingGLContext(glType)) {
@@ -236,9 +234,5 @@ static void TestClipCache(skiatest::Reporter* reporter, GrContextFactory* factor
         test_clip_bounds(reporter, context);
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("ClipCache", ClipCacheTestClass, TestClipCache)
 
 #endif

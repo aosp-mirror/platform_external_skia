@@ -28,7 +28,7 @@ static const SkDPoint left[] = {
 
 static const size_t tests_count = SK_ARRAY_COUNT(tests);
 
-static void PathOpsLineUtilitiesTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsLineUtilities, reporter) {
     for (size_t index = 0; index < tests_count; ++index) {
         const SkDLine& line = tests[index];
         SkASSERT(ValidLine(line));
@@ -52,6 +52,3 @@ static void PathOpsLineUtilitiesTest(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, approximately_equal((line[0].fY + line[1].fY) / 2, mid.fY));
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsLineUtilitiesTest)

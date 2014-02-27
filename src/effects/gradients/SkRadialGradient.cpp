@@ -12,7 +12,7 @@
 #define kSQRT_TABLE_BITS    11
 #define kSQRT_TABLE_SIZE    (1 << kSQRT_TABLE_BITS)
 
-#if defined(SK_BUILD_FOR_WIN32) && defined(SK_DEBUG)
+#if 0
 
 #include <stdio.h>
 
@@ -239,13 +239,13 @@ SkShader::GradientType SkRadialGradient::asAGradient(GradientInfo* info) const {
     return kRadial_GradientType;
 }
 
-SkRadialGradient::SkRadialGradient(SkFlattenableReadBuffer& buffer)
+SkRadialGradient::SkRadialGradient(SkReadBuffer& buffer)
     : INHERITED(buffer),
       fCenter(buffer.readPoint()),
       fRadius(buffer.readScalar()) {
 }
 
-void SkRadialGradient::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkRadialGradient::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writePoint(fCenter);
     buffer.writeScalar(fRadius);

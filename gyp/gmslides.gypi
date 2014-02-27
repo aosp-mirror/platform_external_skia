@@ -1,6 +1,17 @@
 # include this gypi to include all the golden master slides.
 {
+  'include_dirs': [
+    '../gm',
+    # include dirs needed by particular GMs
+    '../src/utils/debugger',
+    '../src/images',
+    '../src/lazy',
+  ],
   'sources': [
+    # base class for GMs
+    '../gm/gm.cpp',
+    '../gm/gm.h',
+
     '../gm/aaclip.cpp',
     '../gm/aarectmodes.cpp',
     '../gm/alphagradients.cpp',
@@ -12,7 +23,6 @@
     '../gm/bigblurs.cpp',
     '../gm/bigmatrix.cpp',
     '../gm/bigtext.cpp',
-    '../gm/bitmapalphathreshold.cpp',
     '../gm/bitmapcopy.cpp',
     '../gm/bitmapmatrix.cpp',
     '../gm/bitmapfilters.cpp',
@@ -33,6 +43,7 @@
     '../gm/clippedbitmapshaders.cpp',
     '../gm/coloremoji.cpp',
     '../gm/colorfilterimagefilter.cpp',
+    '../gm/colorfilters.cpp',
     '../gm/colormatrix.cpp',
     '../gm/colortype.cpp',
     '../gm/complexclip.cpp',
@@ -40,6 +51,8 @@
     '../gm/composeshader.cpp',
     #'../gm/conicpaths.cpp',
     '../gm/convexpaths.cpp',
+    '../gm/convexpolyclip.cpp',
+    '../gm/convexpolyeffect.cpp',
     '../gm/copyTo4444.cpp',
     '../gm/cubicpaths.cpp',
     '../gm/cmykjpeg.cpp',
@@ -74,7 +87,9 @@
     '../gm/hairlines.cpp',
     '../gm/hairmodes.cpp',
     '../gm/hittestpath.cpp',
+    '../gm/imagealphathreshold.cpp',
     '../gm/imageblur.cpp',
+    '../gm/imageblurtiled.cpp',
     '../gm/imagemagnifier.cpp',
     '../gm/inversepaths.cpp',
     '../gm/lerpmode.cpp',
@@ -82,8 +97,10 @@
     '../gm/lumafilter.cpp',
     '../gm/image.cpp',
     '../gm/imagefiltersbase.cpp',
+    '../gm/imagefiltersclipped.cpp',
     '../gm/imagefilterscropped.cpp',
     '../gm/imagefiltersgraph.cpp',
+    '../gm/imagefiltersscaled.cpp',
     '../gm/internal_links.cpp',
     '../gm/lcdtext.cpp',
     '../gm/linepaths.cpp',
@@ -104,6 +121,7 @@
     '../gm/pathopsinverse.cpp',
     '../gm/pathopsskpclip.cpp',
     '../gm/pathreverse.cpp',
+    '../gm/peekpixels.cpp',
     '../gm/perlinnoise.cpp',
     '../gm/pictureimagefilter.cpp',
     '../gm/points.cpp',
@@ -111,6 +129,7 @@
     '../gm/polygons.cpp',
     '../gm/quadpaths.cpp',
     '../gm/rects.cpp',
+    '../gm/resizeimagefilter.cpp',
     '../gm/rrect.cpp',
     '../gm/rrects.cpp',
     '../gm/roundrects.cpp',
@@ -144,6 +163,7 @@
     '../gm/tinybitmap.cpp',
     '../gm/twopointradial.cpp',
     '../gm/typeface.cpp',
+    '../gm/vertices.cpp',
     '../gm/verttext.cpp',
     '../gm/verttext2.cpp',
     '../gm/verylargebitmap.cpp',
@@ -151,5 +171,14 @@
     '../gm/xfermodes.cpp',
     '../gm/xfermodes2.cpp',
     '../gm/xfermodes3.cpp',
+
+    # Files needed by particular GMs
+    '../src/utils/debugger/SkDrawCommand.h',
+    '../src/utils/debugger/SkDrawCommand.cpp',
+    '../src/utils/debugger/SkDebugCanvas.h',
+    '../src/utils/debugger/SkDebugCanvas.cpp',
+    '../src/utils/debugger/SkObjectParser.h',
+    '../src/utils/debugger/SkObjectParser.cpp',
+
   ],
 }

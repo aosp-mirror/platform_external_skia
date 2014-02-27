@@ -23,16 +23,6 @@
         'gmslides.gypi',
       ],
       'sources': [
-        '../src/utils/debugger/SkDrawCommand.h',
-        '../src/utils/debugger/SkDrawCommand.cpp',
-        '../src/utils/debugger/SkDebugCanvas.h',
-        '../src/utils/debugger/SkDebugCanvas.cpp',
-        '../src/utils/debugger/SkObjectParser.h',
-        '../src/utils/debugger/SkObjectParser.cpp',
-
-        '../gm/gm.cpp',
-        '../gm/gm.h',
-
         '../samplecode/GMSampleView.h',
         '../samplecode/ClockFaceView.cpp',
         '../samplecode/OverView.cpp',
@@ -90,7 +80,6 @@
         '../samplecode/SampleMipMap.cpp',
         '../samplecode/SampleMovie.cpp',
         '../samplecode/SampleOvalTest.cpp',
-        '../samplecode/SampleOverflow.cpp',
         '../samplecode/SamplePatch.cpp',
         '../samplecode/SamplePath.cpp',
         '../samplecode/SamplePathClip.cpp',
@@ -109,7 +98,6 @@
         '../samplecode/SampleSlides.cpp',
         '../samplecode/SampleStringArt.cpp',
         '../samplecode/SampleStrokePath.cpp',
-        '../samplecode/SampleTests.cpp',
         '../samplecode/SampleText.cpp',
         '../samplecode/SampleTextAlpha.cpp',
         '../samplecode/SampleTextBox.cpp',
@@ -147,7 +135,6 @@
       ],
       'sources!': [
         '../samplecode/SampleSkLayer.cpp', #relies on SkMatrix44 which doesn't compile
-        '../samplecode/SampleTests.cpp',   #includes unknown file SkShaderExtras.h
         '../samplecode/SampleWarp.cpp',
         '../samplecode/SampleFontCache.cpp',
       ],

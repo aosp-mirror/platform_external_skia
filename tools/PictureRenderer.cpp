@@ -12,6 +12,7 @@
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkDevice.h"
+#include "SkDiscardableMemoryPool.h"
 #include "SkGPipe.h"
 #if SK_SUPPORT_GPU
 #include "gl/GrGLDefines.h"
@@ -24,6 +25,8 @@
 #include "SkPicture.h"
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
+#include "SkQuadTree.h"
+#include "SkQuadTreePicture.h"
 #include "SkRTree.h"
 #include "SkScalar.h"
 #include "SkStream.h"
@@ -33,6 +36,12 @@
 #include "SkTDArray.h"
 #include "SkThreadUtils.h"
 #include "SkTypes.h"
+
+static inline SkScalar scalar_log2(SkScalar x) {
+    static const SkScalar log2_conversion_factor = SkScalarDiv(1, SkScalarLog(2));
+
+    return SkScalarLog(x) * log2_conversion_factor;
+}
 
 namespace sk_tools {
 
@@ -46,13 +55,7 @@ enum {
  * Figure out a way to share the definitions instead.
  */
 const static char kJsonKey_ActualResults[]   = "actual-results";
-const static char kJsonKey_ActualResults_Failed[]        = "failed";
-const static char kJsonKey_ActualResults_FailureIgnored[]= "failure-ignored";
 const static char kJsonKey_ActualResults_NoComparison[]  = "no-comparison";
-const static char kJsonKey_ActualResults_Succeeded[]     = "succeeded";
-const static char kJsonKey_ExpectedResults[] = "expected-results";
-const static char kJsonKey_ExpectedResults_AllowedDigests[] = "allowed-digests";
-const static char kJsonKey_ExpectedResults_IgnoreFailure[]  = "ignore-failure";
 const static char kJsonKey_Hashtype_Bitmap_64bitMD5[]  = "bitmap-64bitMD5";
 
 void ImageResultsSummary::add(const char *testName, const SkBitmap& bitmap) {
@@ -145,6 +148,10 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
         case kAngle_DeviceType:
             // fall through
 #endif
+#if SK_MESA
+        case kMesa_DeviceType:
+            // fall through
+#endif
         case kGPU_DeviceType: {
             SkAutoTUnref<GrSurface> target;
             if (fGrContext) {
@@ -173,6 +180,11 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
     }
     setUpFilter(canvas, fDrawFilters);
     this->scaleToScaleFactor(canvas);
+
+    // Pictures often lie about their extent (i.e., claim to be 100x100 but
+    // only ever draw to 90x100). Clear here so the undrawn portion will have
+    // a consistent color
+    canvas->clear(SK_ColorTRANSPARENT);
     return canvas;
 }
 
@@ -237,6 +249,25 @@ void PictureRenderer::resetState(bool callFinish) {
     if (callFinish) {
         SK_GL(*glContext, Finish());
     }
+#endif
+}
+
+void PictureRenderer::purgeTextures() {
+    SkDiscardableMemoryPool* pool = SkGetGlobalDiscardableMemoryPool();
+
+    pool->dumpPool();
+
+#if SK_SUPPORT_GPU
+    SkGLContextHelper* glContext = this->getGLContext();
+    if (NULL == glContext) {
+        SkASSERT(kBitmap_DeviceType == fDeviceType);
+        return;
+    }
+
+    // resetState should've already done this
+    fGrContext->flush();
+
+    fGrContext->purgeAllUnlockedResources();
 #endif
 }
 
@@ -316,16 +347,8 @@ SkCanvas* RecordPictureRenderer::setupCanvas(int width, int height) {
     return NULL;
 }
 
-static SkData* encode_bitmap_to_data(size_t* offset, const SkBitmap& bm) {
-    SkPixelRef* pr = bm.pixelRef();
-    if (pr != NULL) {
-        SkData* data = pr->refEncodedData();
-        if (data != NULL) {
-            *offset = bm.pixelRefOffset();
-            return data;
-        }
-    }
-    *offset = 0;
+// the size_t* parameter is deprecated, so we ignore it
+static SkData* encode_bitmap_to_data(size_t*, const SkBitmap& bm) {
     return SkImageEncoder::EncodeData(bm, SkImageEncoder::kPNG_Type, 100);
 }
 
@@ -512,7 +535,7 @@ void TiledPictureRenderer::setupPowerOf2Tiles() {
         rounded_value = width - (width % fTileMinPowerOf2Width) + fTileMinPowerOf2Width;
     }
 
-    int num_bits = SkScalarCeilToInt(SkScalarLog2(SkIntToScalar(width)));
+    int num_bits = SkScalarCeilToInt(scalar_log2(SkIntToScalar(width)));
     int largest_possible_tile_size = 1 << num_bits;
 
     fTilesX = fTilesY = 0;
@@ -874,6 +897,9 @@ SkPicture* PictureRenderer::createPicture() {
     switch (fBBoxHierarchyType) {
         case kNone_BBoxHierarchyType:
             return SkNEW(SkPicture);
+        case kQuadTree_BBoxHierarchyType:
+            return SkNEW_ARGS(SkQuadTreePicture, (SkIRect::MakeWH(fPicture->width(),
+                fPicture->height())));
         case kRTree_BBoxHierarchyType:
             return SkNEW(RTreePicture);
         case kTileGrid_BBoxHierarchyType:

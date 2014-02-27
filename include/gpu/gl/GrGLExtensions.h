@@ -8,9 +8,11 @@
 #ifndef GrGLExtensions_DEFINED
 #define GrGLExtensions_DEFINED
 
-#include "GrGLInterface.h"
+#include "GrGLFunctions.h"
 #include "SkString.h"
 #include "SkTArray.h"
+
+struct GrGLInterface;
 
 /**
  * This helper queries the current GL context for its extensions, remembers them, and can be
@@ -19,31 +21,46 @@
  */
 class GrGLExtensions {
 public:
-    bool init(GrGLBinding binding, const GrGLInterface* iface) {
-        SkASSERT(binding & iface->fBindingsExported);
-        return this->init(binding, iface->fGetString, iface->fGetStringi, iface->fGetIntegerv);
+    GrGLExtensions() : fInitialized(false), fStrings(SkNEW(SkTArray<SkString>)) {}
+
+    GrGLExtensions(const GrGLExtensions&);
+
+    GrGLExtensions& operator=(const GrGLExtensions&);
+
+    void swap(GrGLExtensions* that) {
+        fStrings.swap(&that->fStrings);
+        SkTSwap(fInitialized, that->fInitialized);
     }
+
     /**
      * We sometimes need to use this class without having yet created a GrGLInterface. This version
      * of init expects that getString is always non-NULL while getIntegerv and getStringi are non-
      * NULL if on desktop GL with version 3.0 or higher. Otherwise it will fail.
      */
-    bool init(GrGLBinding binding,
+    bool init(GrGLStandard standard,
               GrGLGetStringProc getString,
               GrGLGetStringiProc getStringi,
               GrGLGetIntegervProc getIntegerv);
 
+    bool isInitialized() const { return fInitialized; }
+
     /**
      * Queries whether an extension is present. This will fail if init() has not been called.
      */
-    bool has(const char*) const;
+    bool has(const char[]) const;
 
-    void reset() { fStrings.reset(); }
+    /**
+     * Removes an extension if present. Returns true if the extension was present before the call.
+     */
+    bool remove(const char[]);
+
+    void reset() { fStrings->reset(); }
 
     void print(const char* sep = "\n") const;
 
 private:
-    SkTArray<SkString> fStrings;
+    bool                                fInitialized;
+    SkAutoTDelete<SkTArray<SkString> >  fStrings;
 };
 
 #endif

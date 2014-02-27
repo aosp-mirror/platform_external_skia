@@ -32,10 +32,8 @@ protected:
     }
 
     void make_bitmap() {
-        fBitmap.setConfig(SkBitmap::kARGB_8888_Config, 80, 80);
-        fBitmap.allocPixels();
-        SkBitmapDevice device(fBitmap);
-        SkCanvas canvas(&device);
+        fBitmap.allocN32Pixels(80, 80);
+        SkCanvas canvas(fBitmap);
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -46,10 +44,8 @@ protected:
     }
 
     void make_checkerboard(SkBitmap* bitmap, int w, int h) {
-        bitmap->setConfig(SkBitmap::kARGB_8888_Config, w, h);
-        bitmap->allocPixels();
-        SkBitmapDevice device(*bitmap);
-        SkCanvas canvas(&device);
+        bitmap->allocN32Pixels(w, h);
+        SkCanvas canvas(*bitmap);
         canvas.clear(0x00000000);
         SkPaint darkPaint;
         darkPaint.setColor(0xFF804020);
@@ -183,6 +179,7 @@ protected:
              40.0f, displ, NULL, &cropRect)))->unref();
         drawClippedBitmap(canvas, 400, 300, paint);
 
+        // Tests for images of different sizes
         displ.reset(SkNEW_ARGS(SkBitmapSource, (fSmall)));
         paint.setImageFilter(SkNEW_ARGS(SkDisplacementMapEffect,
             (SkDisplacementMapEffect::kR_ChannelSelectorType,
@@ -207,6 +204,15 @@ protected:
              SkDisplacementMapEffect::kA_ChannelSelectorType,
              40.0f, displ)))->unref();
         drawClippedBitmap(canvas, 300, 400, paint);
+
+        // Test for no given displacement input. In this case, both displacement
+        // and color should use the same bitmap, given to SkCanvas::drawBitmap()
+        // as an input argument.
+        paint.setImageFilter(SkNEW_ARGS(SkDisplacementMapEffect,
+            (SkDisplacementMapEffect::kG_ChannelSelectorType,
+             SkDisplacementMapEffect::kA_ChannelSelectorType,
+             40.0f, NULL)))->unref();
+        drawClippedBitmap(canvas, 400, 400, paint);
     }
 
 private:

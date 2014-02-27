@@ -76,7 +76,7 @@ static void testOne(skiatest::Reporter* reporter, int iIndex) {
     }
 }
 
-static void PathOpsCubicLineIntersectionTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsCubicLineIntersection, reporter) {
     for (size_t index = 0; index < lineCubicTests_count; ++index) {
         int iIndex = static_cast<int>(index);
         testOne(reporter, iIndex);
@@ -84,7 +84,7 @@ static void PathOpsCubicLineIntersectionTest(skiatest::Reporter* reporter) {
     }
 }
 
-static void PathOpsCubicLineIntersectionOneOffTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsCubicLineIntersectionOneOff, reporter) {
     int iIndex = 0;
     testOne(reporter, iIndex);
     const SkDCubic& cubic = lineCubicTests[iIndex].cubic;
@@ -108,8 +108,3 @@ static void PathOpsCubicLineIntersectionOneOffTest(skiatest::Reporter* reporter)
             sect.distance(i.pt(0)), cubic[3].distance(prevL));
 #endif
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsCubicLineIntersectionTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsCubicLineIntersectionOneOffTest)

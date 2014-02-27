@@ -10,8 +10,8 @@
 
 #include "GrContext.h"
 #include "GrContextFactory.h"
-#include "GrGpu.h"
 #include "GrDrawTargetCaps.h"
+#include "GrGpu.h"
 #include "Test.h"
 
 static void test_print(skiatest::Reporter*, const GrDrawTargetCaps* caps) {
@@ -20,7 +20,7 @@ static void test_print(skiatest::Reporter*, const GrDrawTargetCaps* caps) {
     SkASSERT(!result.isEmpty());
 }
 
-static void TestGrDrawTarget(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(GrDrawTarget, reporter, factory) {
     for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
         GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
 
@@ -32,8 +32,5 @@ static void TestGrDrawTarget(skiatest::Reporter* reporter, GrContextFactory* fac
         test_print(reporter, grContext->getGpu()->caps());
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("GrDrawTarget", TestGrDrawTargetClass, TestGrDrawTarget)
 
 #endif

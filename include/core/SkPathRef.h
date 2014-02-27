@@ -79,12 +79,12 @@ public:
          * requisite points & weights.
          * The return pointer points at the first new point (indexed normally [<i>]).
          * If 'verb' is kConic_Verb, 'weights' will return a pointer to the
-         * space for the conic weights (indexed normally). 
+         * space for the conic weights (indexed normally).
          */
-        SkPoint* growForRepeatedVerb(int /*SkPath::Verb*/ verb, 
-                                     int numVbs, 
-                                     SkScalar** weights = NULL) { 
-            return fPathRef->growForRepeatedVerb(verb, numVbs, weights); 
+        SkPoint* growForRepeatedVerb(int /*SkPath::Verb*/ verb,
+                                     int numVbs,
+                                     SkScalar** weights = NULL) {
+            return fPathRef->growForRepeatedVerb(verb, numVbs, weights);
         }
 
         /**
@@ -173,11 +173,7 @@ public:
                                       const SkPathRef& src,
                                       const SkMatrix& matrix);
 
-    static SkPathRef* CreateFromBuffer(SkRBuffer* buffer
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        , bool newFormat, int32_t oldPacked
-#endif
-        );
+    static SkPathRef* CreateFromBuffer(SkRBuffer* buffer);
 
     /**
      * Rollsback a path ref to zero verbs and points with the assumption that the path ref will be
@@ -353,8 +349,8 @@ private:
     }
 
     /**
-     * Increases the verb count by numVbs and point count by the required amount. 
-     * The new points are uninitialized. All the new verbs are set to the specified 
+     * Increases the verb count by numVbs and point count by the required amount.
+     * The new points are uninitialized. All the new verbs are set to the specified
      * verb. If 'verb' is kConic_Verb, 'weights' will return a pointer to the
      * uninitialized conic weights.
      */
@@ -422,14 +418,14 @@ private:
     /**
      * Called the first time someone calls CreateEmpty to actually create the singleton.
      */
-    static void CreateEmptyImpl(SkPathRef** empty);
+    static void CreateEmptyImpl(int/*unused*/);
 
     void setIsOval(bool isOval) { fIsOval = isOval; }
 
-    SkPoint* getPoints() { 
-        SkDEBUGCODE(this->validate();) 
+    SkPoint* getPoints() {
+        SkDEBUGCODE(this->validate();)
         fIsOval = false;
-        return fPoints; 
+        return fPoints;
     }
 
     enum {

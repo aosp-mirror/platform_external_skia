@@ -71,6 +71,7 @@
         '../bench/PicturePlaybackBench.cpp',
         '../bench/PictureRecordBench.cpp',
         '../bench/PremulAndUnpremulAlphaOpsBench.cpp',
+        '../bench/QuadTreeBench.cpp',
         '../bench/RTreeBench.cpp',
         '../bench/ReadPixBench.cpp',
         '../bench/RectBench.cpp',
@@ -83,6 +84,7 @@
         '../bench/ShaderMaskBench.cpp',
         '../bench/SkipZeroesBench.cpp',
         '../bench/SortBench.cpp',
+        '../bench/StackBench.cpp',
         '../bench/StrokeBench.cpp',
         '../bench/TableBench.cpp',
         '../bench/TextBench.cpp',
@@ -96,6 +98,9 @@
         '../bench/SkBenchLogger.h',
         '../bench/SkBenchmark.cpp',
         '../bench/SkBenchmark.h',
+        '../bench/SkGMBench.cpp',
+        '../bench/SkGMBench.h',
+
         '../bench/benchmain.cpp',
       ],
       'conditions': [
@@ -104,8 +109,14 @@
             'include_dirs' : [
               '../src/gpu',
             ],
+            'dependencies': [
+              'gputest.gyp:skgputest',
+            ],
           },
         ],
+      ],
+      'includes': [
+        'gmslides.gypi',
       ],
     },
     {

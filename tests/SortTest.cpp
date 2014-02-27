@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkRandom.h"
 #include "SkTSort.h"
+#include "Test.h"
 
 extern "C" {
     static int compare_int(const void* a, const void* b) {
@@ -26,9 +25,8 @@ static void check_sort(skiatest::Reporter* reporter, const char label[],
                        const int array[], const int reference[], int n) {
     for (int j = 0; j < n; ++j) {
         if (array[j] != reference[j]) {
-            SkString str;
-            str.printf("%sSort [%d] failed %d %d", label, n, array[j], reference[j]);
-            reporter->reportFailed(str);
+            ERRORF(reporter, "%sSort [%d] failed %d %d",
+                   label, n, array[j], reference[j]);
         }
     }
 }

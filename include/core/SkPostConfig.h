@@ -22,12 +22,6 @@
 #  error "can't have unittests without debug"
 #endif
 
-#if defined(SK_SCALAR_IS_FIXED) && defined(SK_SCALAR_IS_FLOAT)
-#  error "cannot define both SK_SCALAR_IS_FIXED and SK_SCALAR_IS_FLOAT"
-#elif !defined(SK_SCALAR_IS_FIXED) && !defined(SK_SCALAR_IS_FLOAT)
-#  define SK_SCALAR_IS_FLOAT
-#endif
-
 /**
  * Matrix calculations may be float or double.
  * The default is double, as that is faster given our impl uses doubles
@@ -126,28 +120,18 @@
  * SK_ENABLE_INST_COUNT controlls printing how many reference counted objects
  * are still held on exit.
  * Defaults to 1 in DEBUG and 0 in RELEASE.
- * FIXME: currently always 0, since it fails if multiple threads run at once
- * (see skbug.com/1219 ).
  */
 #ifndef SK_ENABLE_INST_COUNT
 #  ifdef SK_DEBUG
-#    define SK_ENABLE_INST_COUNT 0
+// Only enabled for static builds, because instance counting relies on static
+// variables in functions defined in header files.
+#    define SK_ENABLE_INST_COUNT !defined(SKIA_DLL)
 #  else
 #    define SK_ENABLE_INST_COUNT 0
 #  endif
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#if defined(SK_SOFTWARE_FLOAT) && defined(SK_SCALAR_IS_FLOAT)
-   // if this is defined, we convert floats to 2s compliment ints for compares.
-#  ifndef SK_SCALAR_SLOW_COMPARES
-#    define SK_SCALAR_SLOW_COMPARES
-#  endif
-#  ifndef SK_USE_FLOATBITS
-#    define SK_USE_FLOATBITS
-#  endif
-#endif
 
 #ifdef SK_BUILD_FOR_WIN
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -243,13 +227,13 @@
 
 //////////////////////////////////////////////////////////////////////
 
+// TODO: rebaseline as needed so we can remove this flag entirely.
+//  - all platforms have int64_t now
+//  - we have slightly different fixed math results because of this check
+//    since we don't define this for linux/android
 #if defined(SK_BUILD_FOR_WIN32) || defined(SK_BUILD_FOR_MAC)
 #  ifndef SkLONGLONG
-#    ifdef SK_BUILD_FOR_WIN32
-#      define SkLONGLONG __int64
-#    else
-#      define SkLONGLONG long long
-#    endif
+#    define SkLONGLONG int64_t
 #  endif
 #endif
 
@@ -385,6 +369,26 @@
 
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 #  define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
+#endif
+
+//////////////////////////////////////////////////////////////////////
+
+#ifndef SK_ATOMICS_PLATFORM_H
+#  if defined(SK_BUILD_FOR_WIN)
+#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_win.h"
+#  elif defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
+#  else
+#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
+#  endif
+#endif
+
+#ifndef SK_MUTEX_PLATFORM_H
+#  if defined(SK_BUILD_FOR_WIN)
+#    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_win.h"
+#  else
+#    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
+#  endif
 #endif
 
 #endif // SkPostConfig_DEFINED

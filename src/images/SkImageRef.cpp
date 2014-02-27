@@ -7,7 +7,8 @@
  */
 #include "SkImageRef.h"
 #include "SkBitmap.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkImageDecoder.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
@@ -15,12 +16,12 @@
 
 //#define DUMP_IMAGEREF_LIFECYCLE
 
-
 ///////////////////////////////////////////////////////////////////////////////
 
 SkImageRef::SkImageRef(const SkImageInfo& info, SkStreamRewindable* stream,
                        int sampleSize, SkBaseMutex* mutex)
-        : SkPixelRef(info, mutex), fErrorInDecoding(false) {
+        : INHERITED(info, mutex), fErrorInDecoding(false)
+{
     SkASSERT(stream);
     stream->ref();
     fStream = stream;
@@ -43,7 +44,7 @@ SkImageRef::~SkImageRef() {
 
 #ifdef DUMP_IMAGEREF_LIFECYCLE
     SkDebugf("delete ImageRef %p [%d] data=%d\n",
-              this, fConfig, (int)fStream->getLength());
+              this, this->info().fColorType, (int)fStream->getLength());
 #endif
 
     fStream->unref();
@@ -142,15 +143,18 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
     return false;
 }
 
-void* SkImageRef::onLockPixels(SkColorTable** ct) {
+bool SkImageRef::onNewLockPixels(LockRec* rec) {
     if (NULL == fBitmap.getPixels()) {
         (void)this->prepareBitmap(SkImageDecoder::kDecodePixels_Mode);
     }
 
-    if (ct) {
-        *ct = fBitmap.getColorTable();
+    if (NULL == fBitmap.getPixels()) {
+        return false;
     }
-    return fBitmap.getPixels();
+    rec->fPixels = fBitmap.getPixels();
+    rec->fColorTable = NULL;
+    rec->fRowBytes = fBitmap.rowBytes();
+    return true;
 }
 
 size_t SkImageRef::ramUsed() const {
@@ -167,14 +171,18 @@ size_t SkImageRef::ramUsed() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
+SkImageRef::SkImageRef(SkReadBuffer& buffer, SkBaseMutex* mutex)
         : INHERITED(buffer, mutex), fErrorInDecoding(false) {
     fSampleSize = buffer.readInt();
     fDoDither = buffer.readBool();
 
     size_t length = buffer.getArrayCount();
-    fStream = SkNEW_ARGS(SkMemoryStream, (length));
-    buffer.readByteArray((void*)fStream->getMemoryBase(), length);
+    if (buffer.validateAvailable(length)) {
+        fStream = SkNEW_ARGS(SkMemoryStream, (length));
+        buffer.readByteArray((void*)fStream->getMemoryBase(), length);
+    } else {
+        fStream = NULL;
+    }
 
     fPrev = fNext = NULL;
     fFactory = NULL;
@@ -184,7 +192,7 @@ SkImageRef::SkImageRef(SkFlattenableReadBuffer& buffer, SkBaseMutex* mutex)
     fBitmap.setConfig(this->info());
 }
 
-void SkImageRef::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkImageRef::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
     buffer.writeInt(fSampleSize);

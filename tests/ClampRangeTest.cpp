@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "gradients/SkClampRange.h"
 #include "SkRandom.h"
+#include "Test.h"
+#include "gradients/SkClampRange.h"
 
 static skiatest::Reporter* gReporter;
 

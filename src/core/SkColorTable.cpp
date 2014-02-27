@@ -8,7 +8,8 @@
 
 
 #include "SkColorTable.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkStream.h"
 #include "SkTemplates.h"
 
@@ -83,22 +84,29 @@ const uint16_t* SkColorTable::lock16BitCache() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkColorTable::SkColorTable(SkFlattenableReadBuffer& buffer) {
+SkColorTable::SkColorTable(SkReadBuffer& buffer) {
     f16BitCache = NULL;
     SkDEBUGCODE(fColorLockCount = 0;)
     SkDEBUGCODE(f16BitCacheLockCount = 0;)
 
     fAlphaType = SkToU8(buffer.readUInt());
     fCount = buffer.getArrayCount();
-    fColors = (SkPMColor*)sk_malloc_throw(fCount * sizeof(SkPMColor));
-    SkDEBUGCODE(bool success =) buffer.readColorArray(fColors, fCount);
+    size_t allocSize = fCount * sizeof(SkPMColor);
+    SkDEBUGCODE(bool success = false;)
+    if (buffer.validateAvailable(allocSize)) {
+        fColors = (SkPMColor*)sk_malloc_throw(allocSize);
+        SkDEBUGCODE(success =) buffer.readColorArray(fColors, fCount);
+    } else {
+        fCount = 0;
+        fColors = NULL;
+    }
 #ifdef SK_DEBUG
     SkASSERT((unsigned)fCount <= 256);
     SkASSERT(success);
 #endif
 }
 
-void SkColorTable::writeToBuffer(SkFlattenableWriteBuffer& buffer) const {
+void SkColorTable::writeToBuffer(SkWriteBuffer& buffer) const {
     buffer.writeUInt(fAlphaType);
     buffer.writeColorArray(fColors, fCount);
 }

@@ -8,7 +8,8 @@
 #include "SkDither.h"
 #include "SkPerlinNoiseShader.h"
 #include "SkColorFilter.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkShader.h"
 #include "SkUnPreMultiply.h"
 #include "SkString.h"
@@ -124,8 +125,9 @@ public:
     {
         static const SkScalar gInvBlockSizef = SkScalarInvert(SkIntToScalar(kBlockSize));
 
+        // According to the SVG spec, we must truncate (not round) the seed value.
+        fSeed = SkScalarTruncToInt(seed);
         // The seed value clamp to the range [1, kRandMaximum - 1].
-        fSeed = SkScalarRoundToInt(seed);
         if (fSeed <= 0) {
             fSeed = -(fSeed % (kRandMaximum - 1)) + 1;
         }
@@ -203,10 +205,10 @@ public:
         // When stitching tiled turbulence, the frequencies must be adjusted
         // so that the tile borders will be continuous.
         if (fBaseFrequency.fX) {
-            SkScalar lowFrequencx = SkScalarDiv(
-                SkScalarMulFloor(tileWidth, fBaseFrequency.fX), tileWidth);
-            SkScalar highFrequencx = SkScalarDiv(
-                SkScalarMulCeil(tileWidth, fBaseFrequency.fX), tileWidth);
+            SkScalar lowFrequencx =
+                SkScalarFloorToScalar(tileWidth * fBaseFrequency.fX) / tileWidth;
+            SkScalar highFrequencx =
+                SkScalarCeilToScalar(tileWidth * fBaseFrequency.fX) / tileWidth;
             // BaseFrequency should be non-negative according to the standard.
             if (SkScalarDiv(fBaseFrequency.fX, lowFrequencx) <
                 SkScalarDiv(highFrequencx, fBaseFrequency.fX)) {
@@ -216,10 +218,10 @@ public:
             }
         }
         if (fBaseFrequency.fY) {
-            SkScalar lowFrequency = SkScalarDiv(
-                SkScalarMulFloor(tileHeight, fBaseFrequency.fY), tileHeight);
-            SkScalar highFrequency = SkScalarDiv(
-                SkScalarMulCeil(tileHeight, fBaseFrequency.fY), tileHeight);
+            SkScalar lowFrequency =
+                SkScalarFloorToScalar(tileHeight * fBaseFrequency.fY) / tileHeight;
+            SkScalar highFrequency =
+                SkScalarCeilToScalar(tileHeight * fBaseFrequency.fY) / tileHeight;
             if (SkScalarDiv(fBaseFrequency.fY, lowFrequency) <
                 SkScalarDiv(highFrequency, fBaseFrequency.fY)) {
                 fBaseFrequency.fY = lowFrequency;
@@ -229,10 +231,10 @@ public:
         }
         // Set up TurbulenceInitial stitch values.
         fStitchDataInit.fWidth  =
-            SkScalarMulRound(tileWidth, fBaseFrequency.fX);
+            SkScalarRoundToInt(tileWidth * fBaseFrequency.fX);
         fStitchDataInit.fWrapX  = kPerlinNoise + fStitchDataInit.fWidth;
         fStitchDataInit.fHeight =
-            SkScalarMulRound(tileHeight, fBaseFrequency.fY);
+            SkScalarRoundToInt(tileHeight * fBaseFrequency.fY);
         fStitchDataInit.fWrapY  = kPerlinNoise + fStitchDataInit.fHeight;
     }
 
@@ -240,8 +242,7 @@ public:
     {
         if (!fPermutationsBitmap) {
             fPermutationsBitmap = SkNEW(SkBitmap);
-            fPermutationsBitmap->setConfig(SkBitmap::kA8_Config, kBlockSize, 1);
-            fPermutationsBitmap->allocPixels();
+            fPermutationsBitmap->allocPixels(SkImageInfo::MakeA8(kBlockSize, 1));
             uint8_t* bitmapPixels = fPermutationsBitmap->getAddr8(0, 0);
             memcpy(bitmapPixels, fLatticeSelector, sizeof(uint8_t) * kBlockSize);
         }
@@ -252,8 +253,7 @@ public:
     {
         if (!fNoiseBitmap) {
             fNoiseBitmap = SkNEW(SkBitmap);
-            fNoiseBitmap->setConfig(SkBitmap::kARGB_8888_Config, kBlockSize, 4);
-            fNoiseBitmap->allocPixels();
+            fNoiseBitmap->allocPixels(SkImageInfo::MakeN32Premul(kBlockSize, 4));
             uint32_t* bitmapPixels = fNoiseBitmap->getAddr32(0, 0);
             memcpy(bitmapPixels, fNoise[0][0], sizeof(uint16_t) * kBlockSize * 4 * 2);
         }
@@ -294,7 +294,7 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
     fMatrix.reset();
 }
 
-SkPerlinNoiseShader::SkPerlinNoiseShader(SkFlattenableReadBuffer& buffer) :
+SkPerlinNoiseShader::SkPerlinNoiseShader(SkReadBuffer& buffer) :
         INHERITED(buffer), fPaintingData(NULL) {
     fType           = (SkPerlinNoiseShader::Type) buffer.readInt();
     fBaseFrequencyX = buffer.readScalar();
@@ -315,7 +315,7 @@ SkPerlinNoiseShader::~SkPerlinNoiseShader() {
     SkDELETE(fPaintingData);
 }
 
-void SkPerlinNoiseShader::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkPerlinNoiseShader::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeInt((int) fType);
     buffer.writeScalar(fBaseFrequencyX);

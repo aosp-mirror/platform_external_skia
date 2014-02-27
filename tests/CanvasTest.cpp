@@ -61,9 +61,9 @@
 #include "SkRegion.h"
 #include "SkShader.h"
 #include "SkStream.h"
+#include "SkSurface.h"
 #include "SkTDArray.h"
 #include "Test.h"
-#include "TestClassDef.h"
 
 class Canvas2CanvasClipVisitor : public SkCanvas::ClipVisitor {
 public:
@@ -139,6 +139,12 @@ static void createBitmap(SkBitmap* bm, SkBitmap::Config config, SkColor color) {
     bm->setConfig(config, kWidth, kHeight);
     bm->allocPixels();
     bm->eraseColor(color);
+}
+
+static SkSurface* createSurface(SkColor color) {
+    SkSurface* surface = SkSurface::NewRasterPMColor(kWidth, kHeight);
+    surface->getCanvas()->clear(color);
+    return surface;
 }
 
 class CanvasTestStep;
@@ -670,27 +676,11 @@ private:
             referenceRecord->fBitmapHeap->count() ==
             testRecord->fBitmapHeap->count(), testStep->assertMessage());
         REPORTER_ASSERT_MESSAGE(reporter,
-            referenceRecord->fMatrices.count() ==
-            testRecord->fMatrices.count(), testStep->assertMessage());
-        for (int i = 0; i < referenceRecord->fMatrices.count(); ++i) {
-            REPORTER_ASSERT_MESSAGE(reporter,
-                EQ(referenceRecord->fMatrices[i], testRecord->fMatrices[i]),
-                testStep->assertMessage());
-        }
-        REPORTER_ASSERT_MESSAGE(reporter,
             referenceRecord->fPaints.count() ==
             testRecord->fPaints.count(), testStep->assertMessage());
         for (int i = 0; i < referenceRecord->fPaints.count(); ++i) {
             REPORTER_ASSERT_MESSAGE(reporter,
                 EQ(referenceRecord->fPaints[i], testRecord->fPaints[i]),
-                                    testStep->assertMessage());
-        }
-        REPORTER_ASSERT_MESSAGE(reporter,
-            referenceRecord->fRegions.count() ==
-            testRecord->fRegions.count(), testStep->assertMessage());
-        for (int i = 0; i < referenceRecord->fRegions.count(); ++i) {
-            REPORTER_ASSERT_MESSAGE(reporter,
-                EQ(referenceRecord->fRegions[i], testRecord->fRegions[i]),
                                     testStep->assertMessage());
         }
         REPORTER_ASSERT_MESSAGE(reporter,
@@ -766,10 +756,9 @@ public:
         CanvasTestStep* testStep,
         const SkCanvas& referenceCanvas, bool silent) {
 
-        SkBitmap deferredStore;
-        createBitmap(&deferredStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-        SkBitmapDevice deferredDevice(deferredStore);
-        SkAutoTUnref<SkDeferredCanvas> deferredCanvas(SkDeferredCanvas::Create(&deferredDevice));
+        SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
+        SkAutoTUnref<SkDeferredCanvas> deferredCanvas(SkDeferredCanvas::Create(surface.get()));
+
         testStep->setAssertMessageFormat(kDeferredDrawAssertMessageFormat);
         testStep->draw(deferredCanvas, reporter);
         testStep->setAssertMessageFormat(kDeferredPreFlushAssertMessageFormat);

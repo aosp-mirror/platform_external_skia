@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkCanvas.h"
 #include "SkDrawLooper.h"
+#include "Test.h"
 
 /*
  *  Subclass of looper that just draws once, with an offset in X.
@@ -41,13 +40,11 @@ public:
 
 static void test_drawBitmap(skiatest::Reporter* reporter) {
     SkBitmap src;
-    src.setConfig(SkBitmap::kARGB_8888_Config, 10, 10);
-    src.allocPixels();
+    src.allocN32Pixels(10, 10);
     src.eraseColor(SK_ColorWHITE);
 
     SkBitmap dst;
-    dst.setConfig(SkBitmap::kARGB_8888_Config, 10, 10);
-    dst.allocPixels();
+    dst.allocN32Pixels(10, 10);
     dst.eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas canvas(dst);

@@ -359,10 +359,13 @@ The test fails if:
   There's more than four changes of direction.
   There's a discontinuity on the line (e.g., a move in the middle)
   The line reverses direction.
-  The rectangle doesn't complete a cycle.
   The path contains a quadratic or cubic.
   The path contains fewer than four points.
-  The final point isn't equal to the first point.
+ *The rectangle doesn't complete a cycle.
+ *The final point isn't equal to the first point.
+
+  *These last two conditions we relax if we have a 3-edge path that would
+   form a rectangle if it were closed (as we do when we fill a path)
 
 It's OK if the path has:
   Several colinear line segments composing a rectangle side.
@@ -374,7 +377,18 @@ must travel in opposite directions.
 FIXME: Allow colinear quads and cubics to be treated like lines.
 FIXME: If the API passes fill-only, return true if the filled stroke
        is a rectangle, though the caller failed to close the path.
+
+ first,last,next direction state-machine:
+    0x1 is set if the segment is horizontal
+    0x2 is set if the segment is moving to the right or down
+ thus:
+    two directions are opposites iff (dirA ^ dirB) == 0x2
+    two directions are perpendicular iff (dirA ^ dirB) == 0x1
+
  */
+static int rect_make_dir(SkScalar dx, SkScalar dy) {
+    return ((0 != dx) << 0) | ((dx > 0 || dy > 0) << 1);
+}
 bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** ptsPtr,
         bool* isClosed, Direction* direction) const {
     int corners = 0;
@@ -407,8 +421,7 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
                 if (left == right && top == bottom) {
                     break; // single point on side OK
                 }
-                nextDirection = (left != right) << 0 |
-                    (left < right || top < bottom) << 1;
+                nextDirection = rect_make_dir(right - left, bottom - top);
                 if (0 == corners) {
                     firstDirection = nextDirection;
                     first = last;
@@ -460,6 +473,25 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
     }
     // Success if 4 corners and first point equals last
     bool result = 4 == corners && (first == last || autoClose);
+    if (!result) {
+        // check if we are just an incomplete rectangle, in which case we can
+        // return true, but not claim to be closed.
+        // e.g.
+        //    3 sided rectangle
+        //    4 sided but the last edge is not long enough to reach the start
+        //
+        SkScalar closeX = first.x() - last.x();
+        SkScalar closeY = first.y() - last.y();
+        if (closeX && closeY) {
+            return false;   // we're diagonal, abort (can we ever reach this?)
+        }
+        int closeDirection = rect_make_dir(closeX, closeY);
+        // make sure the close-segment doesn't double-back on itself
+        if (3 == corners || (4 == corners && closeDirection == lastDirection)) {
+            result = true;
+            autoClose = false;  // we are not closed
+        }
+    }
     if (savePts) {
         *ptsPtr = savePts;
     }
@@ -470,6 +502,14 @@ bool SkPath::isRectContour(bool allowPartial, int* currVerb, const SkPoint** pts
         *direction = firstDirection == ((lastDirection + 1) & 3) ? kCCW_Direction : kCW_Direction;
     }
     return result;
+}
+
+SkPath::PathAsRect SkPath::asRect(Direction* direction) const {
+    SK_COMPILE_ASSERT(0 == kNone_PathAsRect, path_as_rect_mismatch);
+    SK_COMPILE_ASSERT(1 == kFill_PathAsRect, path_as_rect_mismatch);
+    SK_COMPILE_ASSERT(2 == kStroke_PathAsRect, path_as_rect_mismatch);
+    bool isClosed = false;
+    return (PathAsRect) (isRect(&isClosed, direction) + isClosed);
 }
 
 bool SkPath::isRect(SkRect* rect) const {
@@ -1403,14 +1443,14 @@ void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkPath::addPath(const SkPath& path, SkScalar dx, SkScalar dy) {
+void SkPath::addPath(const SkPath& path, SkScalar dx, SkScalar dy, AddPathMode mode) {
     SkMatrix matrix;
 
     matrix.setTranslate(dx, dy);
-    this->addPath(path, matrix);
+    this->addPath(path, matrix, mode);
 }
 
-void SkPath::addPath(const SkPath& path, const SkMatrix& matrix) {
+void SkPath::addPath(const SkPath& path, const SkMatrix& matrix, AddPathMode mode) {
     SkPathRef::Editor(&fPathRef, path.countVerbs(), path.countPoints());
 
     RawIter iter(path);
@@ -1418,12 +1458,17 @@ void SkPath::addPath(const SkPath& path, const SkMatrix& matrix) {
     Verb    verb;
 
     SkMatrix::MapPtsProc proc = matrix.getMapPtsProc();
-
+    bool firstVerb = true;
     while ((verb = iter.next(pts)) != kDone_Verb) {
         switch (verb) {
             case kMove_Verb:
                 proc(matrix, &pts[0], &pts[0], 1);
-                this->moveTo(pts[0]);
+                if (firstVerb && mode == kExtend_AddPathMode && !isEmpty()) {
+                    injectMoveToIfNeeded(); // In case last contour is closed
+                    this->lineTo(pts[0]);
+                } else {
+                    this->moveTo(pts[0]);
+                }
                 break;
             case kLine_Verb:
                 proc(matrix, &pts[1], &pts[1], 1);
@@ -1447,6 +1492,7 @@ void SkPath::addPath(const SkPath& path, const SkMatrix& matrix) {
             default:
                 SkDEBUGFAIL("unknown verb");
         }
+        firstVerb = false;
     }
 }
 
@@ -2026,11 +2072,7 @@ size_t SkPath::writeToMemory(void* storage) const {
 
     int32_t packed = (fConvexity << kConvexity_SerializationShift) |
                      (fFillType << kFillType_SerializationShift) |
-                     (fDirection << kDirection_SerializationShift)
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-                     | (0x1 << kNewFormat_SerializationShift)
-#endif
-                     ;
+                     (fDirection << kDirection_SerializationShift);
 
     buffer.write32(packed);
 
@@ -2051,15 +2093,7 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
     fConvexity = (packed >> kConvexity_SerializationShift) & 0xFF;
     fFillType = (packed >> kFillType_SerializationShift) & 0xFF;
     fDirection = (packed >> kDirection_SerializationShift) & 0x3;
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-    bool newFormat = (packed >> kNewFormat_SerializationShift) & 1;
-#endif
-
-    SkPathRef* pathRef = SkPathRef::CreateFromBuffer(&buffer
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        , newFormat, packed
-#endif
-        );
+    SkPathRef* pathRef = SkPathRef::CreateFromBuffer(&buffer);
 
     size_t sizeRead = 0;
     if (buffer.isValid()) {

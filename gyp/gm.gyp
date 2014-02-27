@@ -30,29 +30,19 @@
       'include_dirs' : [
         '../src/core',
         '../src/images',
-        '../src/lazy',
         '../src/effects',
         '../src/pipe/utils/',
         '../src/utils/',
-        '../src/utils/debugger',
       ],
       'includes': [
         'gmslides.gypi',
       ],
       'sources': [
-        '../gm/gm.cpp',
         '../gm/gmmain.cpp',
         '../gm/system_preferences_default.cpp',
 
         '../src/pipe/utils/SamplePipeControllers.h',
         '../src/pipe/utils/SamplePipeControllers.cpp',
-
-        '../src/utils/debugger/SkDrawCommand.h',
-        '../src/utils/debugger/SkDrawCommand.cpp',
-        '../src/utils/debugger/SkDebugCanvas.h',
-        '../src/utils/debugger/SkDebugCanvas.cpp',
-        '../src/utils/debugger/SkObjectParser.h',
-        '../src/utils/debugger/SkObjectParser.cpp',
       ],
       'dependencies': [
         'skia_lib.gyp:skia_lib',
@@ -62,6 +52,11 @@
         'pdf.gyp:pdf',
       ],
       'conditions': [
+        ['skia_run_pdfviewer_in_gm or skia_poppler_enabled', {
+          'sources': [
+            '../src/utils/SkPDFRasterizer.cpp',
+          ],
+        }],
         ['skia_run_pdfviewer_in_gm', {
           'defines': [
             'SK_BUILD_NATIVE_PDF_RENDERER',
@@ -73,12 +68,9 @@
             'pdfviewer_lib.gyp:pdfviewer_lib',
           ],
         }],
-        ['skia_os in ["linux", "mac", "win"]', {
+        ['skia_poppler_enabled', {
           'dependencies': [
             'poppler.gyp:libpoppler-cpp-gpl',
-          ],
-          'sources': [
-            '../src/utils/SkPDFRasterizer.cpp',
           ],
           'defines': [
             'SK_BUILD_POPPLER',

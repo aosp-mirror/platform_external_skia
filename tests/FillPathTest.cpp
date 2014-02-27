@@ -5,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkRegion.h"
-#include "SkPath.h"
-#include "SkScan.h"
 #include "SkBlitter.h"
+#include "SkPath.h"
+#include "SkRegion.h"
+#include "SkScan.h"
+#include "Test.h"
 
 struct FakeBlitter : public SkBlitter {
   FakeBlitter()

@@ -1157,7 +1157,7 @@ noMatch:
                 }
                 SkOperand indexOperand;
                 fOperandStack.pop(&indexOperand);
-                int index = indexType == kScalar ? SkScalarFloor(indexOperand.fScalar) :
+                int index = indexType == kScalar ? SkScalarFloorToInt(indexOperand.fScalar) :
                     indexOperand.fS32;
                 SkOpType arrayType;
                 fTypeStack.pop(&arrayType);
@@ -1324,7 +1324,7 @@ bool SkScriptEngine::processOp() {
                 type1 = kScalar;
             }
             if (type1 == kScalar && (attributes->fLeftType == kInt || type2 == kInt)) {
-                operand1.fS32 = SkScalarFloor(operand1.fScalar);
+                operand1.fS32 = SkScalarFloorToInt(operand1.fScalar);
                 type1 = kInt;
             }
         }
@@ -1339,7 +1339,7 @@ bool SkScriptEngine::processOp() {
             type2 = kScalar;
         }
         if (type2 == kScalar && (attributes->fRightType == kInt || type1 == kInt)) {
-            operand2.fS32 = SkScalarFloor(operand2.fScalar);
+            operand2.fS32 = SkScalarFloorToInt(operand2.fScalar);
             type2 = kInt;
         }
     }
@@ -1503,7 +1503,7 @@ bool SkScriptEngine::ConvertTo(SkScriptEngine* engine, SkDisplayTypes toType, Sk
             if (type == SkType_Boolean)
                 break;
             if (type == SkType_Float)
-                operand.fS32 = SkScalarFloor(operand.fScalar);
+                operand.fS32 = SkScalarFloorToInt(operand.fScalar);
             else {
                 if (type != SkType_String) {
                     success = false;
@@ -1650,13 +1650,8 @@ bool SkScriptEngine::ValueToString(SkScriptValue value, SkString* string) {
 #define DEF_STRING_ANSWER   NULL
 
 #define testInt(expression) { #expression, SkType_Int, expression, DEF_SCALAR_ANSWER, DEF_STRING_ANSWER }
-#ifdef SK_SCALAR_IS_FLOAT
     #define testScalar(expression) { #expression, SkType_Float, 0, (float) expression, DEF_STRING_ANSWER }
     #define testRemainder(exp1, exp2) { #exp1 "%" #exp2, SkType_Float, 0, sk_float_mod(exp1, exp2), DEF_STRING_ANSWER }
-#else
-    #define testScalar(expression) { #expression, SkType_Float, 0, (int) ((expression) * 65536.0f), DEF_STRING_ANSWER }
-    #define testRemainder(exp1, exp2) { #exp1 "%" #exp2, SkType_Float, 0, (int) (sk_float_mod(exp1, exp2)  * 65536.0f), DEF_STRING_ANSWER }
-#endif
 #define testTrue(expression) { #expression, SkType_Int, 1, DEF_SCALAR_ANSWER, DEF_STRING_ANSWER }
 #define testFalse(expression) { #expression, SkType_Int, 0, DEF_SCALAR_ANSWER, DEF_STRING_ANSWER }
 

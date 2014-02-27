@@ -1,19 +1,20 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Test.h"
+
+#include "../src/image/SkImagePriv.h"
+#include "../src/image/SkSurface_Base.h"
 #include "SkBitmap.h"
 #include "SkBitmapDevice.h"
 #include "SkBitmapProcShader.h"
 #include "SkDeferredCanvas.h"
 #include "SkGradientShader.h"
 #include "SkShader.h"
-#include "../src/image/SkSurface_Base.h"
-#include "../src/image/SkImagePriv.h"
+#include "SkSurface.h"
+#include "Test.h"
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
 #else
@@ -29,20 +30,39 @@ static void create(SkBitmap* bm, SkBitmap::Config config, SkColor color) {
     bm->eraseColor(color);
 }
 
+static SkSurface* createSurface(SkColor color) {
+    SkSurface* surface = SkSurface::NewRasterPMColor(gWidth, gHeight);
+    surface->getCanvas()->clear(color);
+    return surface;
+}
+
+static SkPMColor read_pixel(SkSurface* surface, int x, int y) {
+    SkPMColor pixel = 0;
+    SkBitmap bitmap;
+    bitmap.installPixels(SkImageInfo::MakeN32Premul(1, 1), &pixel, 4, NULL, NULL);
+    SkCanvas canvas(bitmap);
+
+    SkPaint paint;
+    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    surface->draw(&canvas, -SkIntToScalar(x), -SkIntToScalar(y), &paint);
+    return pixel;
+}
+
 static void TestDeferredCanvasBitmapAccess(skiatest::Reporter* reporter) {
     SkBitmap store;
 
-    create(&store, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkBitmapDevice device(store);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+    SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
 
     canvas->clear(0x00000000);
 
-    SkAutoLockPixels alp(store);
-    REPORTER_ASSERT(reporter, store.getColor(0,0) == 0xFFFFFFFF); //verify that clear was deferred
+    // verify that the clear() was deferred
+    REPORTER_ASSERT(reporter, 0xFFFFFFFF == read_pixel(surface, 0, 0));
+
     SkBitmap accessed = canvas->getDevice()->accessBitmap(false);
-    REPORTER_ASSERT(reporter, store.getColor(0,0) == 0x00000000); //verify that clear was executed
-    REPORTER_ASSERT(reporter, accessed.pixelRef() == store.pixelRef());
+
+    // verify that clear was executed
+    REPORTER_ASSERT(reporter, 0 == read_pixel(surface, 0, 0));
 }
 
 class MockSurface : public SkSurface_Base {
@@ -256,31 +276,30 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
 }
 
 static void TestDeferredCanvasFlush(skiatest::Reporter* reporter) {
-    SkBitmap store;
-
-    create(&store, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkBitmapDevice device(store);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+    SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
 
     canvas->clear(0x00000000);
 
-    SkAutoLockPixels alp(store);
-    REPORTER_ASSERT(reporter, store.getColor(0,0) == 0xFFFFFFFF); //verify that clear was deferred
+    // verify that clear was deferred
+    REPORTER_ASSERT(reporter, 0xFFFFFFFF == read_pixel(surface, 0, 0));
+
     canvas->flush();
-    REPORTER_ASSERT(reporter, store.getColor(0,0) == 0x00000000); //verify that clear was executed
+
+    // verify that clear was executed
+    REPORTER_ASSERT(reporter, 0 == read_pixel(surface, 0, 0));
 }
 
 static void TestDeferredCanvasFreshFrame(skiatest::Reporter* reporter) {
-    SkBitmap store;
     SkRect fullRect;
     fullRect.setXYWH(SkIntToScalar(0), SkIntToScalar(0), SkIntToScalar(gWidth),
         SkIntToScalar(gHeight));
     SkRect partialRect;
     partialRect.setXYWH(SkIntToScalar(0), SkIntToScalar(0),
         SkIntToScalar(1), SkIntToScalar(1));
-    create(&store, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
-    SkBitmapDevice device(store);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+
+    SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
 
     // verify that frame is intially fresh
     REPORTER_ASSERT(reporter, canvas->isFreshFrame());
@@ -446,29 +465,6 @@ public:
     int fDrawBitmapCallCount;
 };
 
-// Verifies that the deferred canvas triggers a flush when its memory
-// limit is exceeded
-static void TestDeferredCanvasMemoryLimit(skiatest::Reporter* reporter) {
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
-    MockDevice mockDevice(store);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&mockDevice));
-    canvas->setMaxRecordingStorage(160000);
-
-    SkBitmap sourceImage;
-    // 100 by 100 image, takes 40,000 bytes in memory
-    sourceImage.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    sourceImage.allocPixels();
-
-    for (int i = 0; i < 5; i++) {
-        sourceImage.notifyPixelsChanged(); // to force re-serialization
-        canvas->drawBitmap(sourceImage, 0, 0, NULL);
-    }
-
-    REPORTER_ASSERT(reporter, mockDevice.fDrawBitmapCallCount == 4);
-}
-
 class NotificationCounter : public SkDeferredCanvas::NotificationClient {
 public:
     NotificationCounter() {
@@ -498,13 +494,35 @@ private:
     typedef SkDeferredCanvas::NotificationClient INHERITED;
 };
 
-static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
-    SkBitmapDevice device(store);
+// Verifies that the deferred canvas triggers a flush when its memory
+// limit is exceeded
+static void TestDeferredCanvasMemoryLimit(skiatest::Reporter* reporter) {
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
     NotificationCounter notificationCounter;
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+    canvas->setNotificationClient(&notificationCounter);
+
+    canvas->setMaxRecordingStorage(160000);
+
+    SkBitmap sourceImage;
+    // 100 by 100 image, takes 40,000 bytes in memory
+    sourceImage.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
+    sourceImage.allocPixels();
+
+    for (int i = 0; i < 5; i++) {
+        sourceImage.notifyPixelsChanged(); // to force re-serialization
+        canvas->drawBitmap(sourceImage, 0, 0, NULL);
+    }
+
+    REPORTER_ASSERT(reporter, 1 == notificationCounter.fFlushedDrawCommandsCount);
+}
+
+static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
+    NotificationCounter notificationCounter;
     canvas->setNotificationClient(&notificationCounter);
 
     const int imageCount = 2;
@@ -582,12 +600,10 @@ static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
 }
 
 static void TestDeferredCanvasSkip(skiatest::Reporter* reporter) {
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
-    SkBitmapDevice device(store);
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
     NotificationCounter notificationCounter;
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
     canvas->setNotificationClient(&notificationCounter);
     canvas->clear(0x0);
     REPORTER_ASSERT(reporter, 1 == notificationCounter.fSkippedPendingDrawCommandsCount);
@@ -603,11 +619,8 @@ static void TestDeferredCanvasBitmapShaderNoLeak(skiatest::Reporter* reporter) {
     // This test covers a code path that inserts bitmaps into the bitmap heap through the
     // flattening of SkBitmapProcShaders. The refcount in the bitmap heap is maintained through
     // the flattening and unflattening of the shader.
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
-    SkBitmapDevice device(store);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
     // test will fail if nbIterations is not in sync with
     // BITMAPS_TO_KEEP in SkGPipeWrite.cpp
     const int nbIterations = 5;
@@ -641,9 +654,7 @@ static void TestDeferredCanvasBitmapShaderNoLeak(skiatest::Reporter* reporter) {
 }
 
 static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) {
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
 
     SkBitmap sourceImage;
     // 100 by 100 image, takes 40,000 bytes in memory
@@ -652,8 +663,7 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
 
     // 1 under : should not store the image
     {
-        SkBitmapDevice device(store);
-        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
         canvas->setBitmapSizeThreshold(39999);
         canvas->drawBitmap(sourceImage, 0, 0, NULL);
         size_t newBytesAllocated = canvas->storageAllocatedForRecording();
@@ -662,8 +672,7 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
 
     // exact value : should store the image
     {
-        SkBitmapDevice device(store);
-        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
         canvas->setBitmapSizeThreshold(40000);
         canvas->drawBitmap(sourceImage, 0, 0, NULL);
         size_t newBytesAllocated = canvas->storageAllocatedForRecording();
@@ -672,8 +681,7 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
 
     // 1 over : should still store the image
     {
-        SkBitmapDevice device(store);
-        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
+        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
         canvas->setBitmapSizeThreshold(40001);
         canvas->drawBitmap(sourceImage, 0, 0, NULL);
         size_t newBytesAllocated = canvas->storageAllocatedForRecording();
@@ -811,28 +819,27 @@ static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContext
 }
 
 static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporter) {
-    SkBitmap store;
-    store.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    store.allocPixels();
-    SkBitmapDevice device(store);
+    SkAutoTUnref<SkSurface> surface(SkSurface::NewRasterPMColor(100, 100));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
     NotificationCounter notificationCounter;
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(&device));
     canvas->setNotificationClient(&notificationCounter);
-    SkAutoTUnref<SkBaseDevice> secondaryDevice(canvas->createCompatibleDevice(
-        SkBitmap::kARGB_8888_Config, 10, 10, device.isOpaque()));
-    SkCanvas secondaryCanvas(secondaryDevice.get());
+
+    SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
+    SkAutoTUnref<SkSurface> secondarySurface(canvas->newSurface(info));
+
     SkRect rect = SkRect::MakeWH(5, 5);
     SkPaint paint;
     // After spawning a compatible canvas:
     // 1) Verify that secondary canvas is usable and does not report to the notification client.
-    secondaryCanvas.drawRect(rect, paint);
+    surface->getCanvas()->drawRect(rect, paint);
     REPORTER_ASSERT(reporter, notificationCounter.fStorageAllocatedChangedCount == 0);
     // 2) Verify that original canvas is usable and still reports to the notification client.
     canvas->drawRect(rect, paint);
     REPORTER_ASSERT(reporter, notificationCounter.fStorageAllocatedChangedCount == 1);
 }
 
-static void TestDeferredCanvas(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(DeferredCanvas, reporter, factory) {
     TestDeferredCanvasBitmapAccess(reporter);
     TestDeferredCanvasFlush(reporter);
     TestDeferredCanvasFreshFrame(reporter);
@@ -850,6 +857,3 @@ static void TestDeferredCanvas(skiatest::Reporter* reporter, GrContextFactory* f
         TestDeferredCanvasSetSurface(reporter, factory);
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("DeferredCanvas", TestDeferredCanvasClass, TestDeferredCanvas)

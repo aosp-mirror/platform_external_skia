@@ -47,7 +47,6 @@ void SkScan::HairLineRgn(const SkPoint& pt0, const SkPoint& pt1,
     SkIRect clipR, ptsR;
     SkPoint pts[2] = { pt0, pt1 };
 
-#ifdef SK_SCALAR_IS_FLOAT
     // We have to pre-clip the line to fit in a SkFixed, so we just chop
     // the line. TODO find a way to actually draw beyond that range.
     {
@@ -58,7 +57,6 @@ void SkScan::HairLineRgn(const SkPoint& pt0, const SkPoint& pt1,
             return;
         }
     }
-#endif
 
     if (clip) {
         // Perform a clip in scalar space, so we catch huge values which might
@@ -202,8 +200,8 @@ static int compute_int_quad_dist(const SkPoint pts[3]) {
     dx = SkScalarAbs(dx);
     dy = SkScalarAbs(dy);
     // convert to whole pixel values (use ceiling to be conservative)
-    int idx = SkScalarCeil(dx);
-    int idy = SkScalarCeil(dy);
+    int idx = SkScalarCeilToInt(dx);
+    int idy = SkScalarCeilToInt(dy);
     // use the cheap approx for distance
     if (idx > idy) {
         return idx + (idy >> 1);

@@ -143,6 +143,10 @@ public:
         return obj;
     }
 
+    void swap(SkAutoTDelete* that) {
+        SkTSwap(fObj, that->fObj);
+    }
+
 private:
     T*  fObj;
 };
@@ -173,6 +177,13 @@ public:
     T*      get() const { return fArray; }
     void    free() { SkDELETE_ARRAY(fArray); fArray = NULL; }
     T*      detach() { T* array = fArray; fArray = NULL; return array; }
+
+    void reset(T array[]) {
+        if (fArray != array) {
+            SkDELETE_ARRAY(fArray);
+            fArray = array;
+        }
+    }
 
 private:
     T*  fArray;

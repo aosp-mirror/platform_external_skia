@@ -93,7 +93,7 @@ static void testC(skiatest::Reporter* reporter, const SkDCubic(* cubics)[2], con
     }
 }
 
-static void CubicToQuads_Test(skiatest::Reporter* reporter) {
+DEF_TEST(CubicToQuads, reporter) {
     enum {
         RunAll,
         RunPointDegenerates,
@@ -187,21 +187,12 @@ static void oneOff(skiatest::Reporter* reporter, size_t x) {
     if (false) SkDebugf("%s quads=%d\n", __FUNCTION__, quads.count());
 }
 
-static void CubicsToQuadratics_OneOffTests(skiatest::Reporter* reporter) {
+DEF_TEST(CubicsToQuadratics_OneOff_Loop, reporter) {
     for (size_t x = 0; x < localsCount; ++x) {
         oneOff(reporter, x);
     }
 }
 
-static void CubicsToQuadratics_OneOffTest(skiatest::Reporter* reporter) {
+DEF_TEST(CubicsToQuadratics_OneOff_Single, reporter) {
     oneOff(reporter, 0);
 }
-
-static void PathOpsCubicToQuadsTest(skiatest::Reporter* reporter) {
-    CubicToQuads_Test(reporter);
-    CubicsToQuadratics_OneOffTest(reporter);
-    CubicsToQuadratics_OneOffTests(reporter);
-}
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsCubicToQuadsTest)

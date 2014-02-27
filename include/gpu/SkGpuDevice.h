@@ -19,6 +19,7 @@
 
 struct SkDrawProcs;
 struct GrSkDrawProcs;
+
 class GrTextContext;
 
 /**
@@ -130,8 +131,8 @@ public:
      */
     virtual void makeRenderTargetCurrent();
 
-    virtual bool canHandleImageFilter(SkImageFilter*) SK_OVERRIDE;
-    virtual bool filterImage(SkImageFilter*, const SkBitmap&, const SkMatrix&,
+    virtual bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE;
+    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkMatrix&,
                              SkBitmap*, SkIPoint*) SK_OVERRIDE;
 
     class SkAutoCachedTexture; // used internally
@@ -149,6 +150,9 @@ private:
 
     GrClipData      fClipData;
 
+    GrTextContext*  fMainTextContext;
+    GrTextContext*  fFallbackTextContext;
+
     // state for our render-target
     GrRenderTarget*     fRenderTarget;
     bool                fNeedClear;
@@ -165,7 +169,7 @@ private:
                                                    bool isOpaque,
                                                    Usage usage) SK_OVERRIDE;
 
-    SkDrawProcs* initDrawForText(GrTextContext*);
+    virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
 
     // sets the render target, clip, and matrix on GrContext. Use forceIdenity to override
     // SkDraw's matrix and draw in device coords.
@@ -177,7 +181,7 @@ private:
     void drawBitmapCommon(const SkDraw&,
                           const SkBitmap& bitmap,
                           const SkRect* srcRectPtr,
-                          const SkMatrix&,
+                          const SkSize* dstSizePtr,      // ignored iff srcRectPtr == NULL
                           const SkPaint&,
                           SkCanvas::DrawBitmapRectFlags flags);
 
@@ -207,11 +211,6 @@ private:
                          SkCanvas::DrawBitmapRectFlags flags,
                          int tileSize,
                          bool bicubic);
-
-    /**
-     * Returns non-initialized instance.
-     */
-    GrTextContext* getTextContext();
 
     typedef SkBitmapDevice INHERITED;
 };

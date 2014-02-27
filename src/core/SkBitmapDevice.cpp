@@ -10,6 +10,7 @@
 #include "SkDraw.h"
 #include "SkRasterClip.h"
 #include "SkShader.h"
+#include "SkSurface.h"
 
 #define CHECK_FOR_ANNOTATION(paint) \
     do { if (paint.getAnnotation()) { return; } } while (0)
@@ -24,34 +25,37 @@ SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap, const SkDeviceProperties&
     , fBitmap(bitmap) {
 }
 
-SkBitmapDevice::SkBitmapDevice(SkBitmap::Config config, int width, int height, bool isOpaque) {
+void SkBitmapDevice::init(SkBitmap::Config config, int width, int height, bool isOpaque) {
     fBitmap.setConfig(config, width, height, 0, isOpaque ?
                       kOpaque_SkAlphaType : kPremul_SkAlphaType);
-    if (!fBitmap.allocPixels()) {
-        fBitmap.setConfig(config, 0, 0, 0, isOpaque ?
-                          kOpaque_SkAlphaType : kPremul_SkAlphaType);
+
+    if (SkBitmap::kNo_Config != config) {
+        if (!fBitmap.allocPixels()) {
+            // indicate failure by zeroing our bitmap
+            fBitmap.setConfig(config, 0, 0, 0, isOpaque ?
+                              kOpaque_SkAlphaType : kPremul_SkAlphaType);
+        } else if (!isOpaque) {
+            fBitmap.eraseColor(SK_ColorTRANSPARENT);
+        }
     }
-    if (!isOpaque) {
-        fBitmap.eraseColor(SK_ColorTRANSPARENT);
-    }
+}
+
+SkBitmapDevice::SkBitmapDevice(SkBitmap::Config config, int width, int height, bool isOpaque) {
+    this->init(config, width, height, isOpaque);
 }
 
 SkBitmapDevice::SkBitmapDevice(SkBitmap::Config config, int width, int height, bool isOpaque,
                                const SkDeviceProperties& deviceProperties)
-    : SkBaseDevice(deviceProperties) {
-
-    fBitmap.setConfig(config, width, height, 0, isOpaque ?
-                      kOpaque_SkAlphaType : kPremul_SkAlphaType);
-    if (!fBitmap.allocPixels()) {
-        fBitmap.setConfig(config, 0, 0, 0, isOpaque ?
-                          kOpaque_SkAlphaType : kPremul_SkAlphaType);
-    }
-    if (!isOpaque) {
-        fBitmap.eraseColor(SK_ColorTRANSPARENT);
-    }
+    : SkBaseDevice(deviceProperties)
+{
+    this->init(config, width, height, isOpaque);
 }
 
 SkBitmapDevice::~SkBitmapDevice() {
+}
+
+SkImageInfo SkBitmapDevice::imageInfo() const {
+    return fBitmap.info();
 }
 
 void SkBitmapDevice::replaceBitmapBackendForRasterSurface(const SkBitmap& bm) {
@@ -95,17 +99,17 @@ const SkBitmap& SkBitmapDevice::onAccessBitmap() {
     return fBitmap;
 }
 
-bool SkBitmapDevice::canHandleImageFilter(SkImageFilter*) {
+bool SkBitmapDevice::canHandleImageFilter(const SkImageFilter*) {
     return false;
 }
 
-bool SkBitmapDevice::filterImage(SkImageFilter* filter, const SkBitmap& src,
+bool SkBitmapDevice::filterImage(const SkImageFilter* filter, const SkBitmap& src,
                                  const SkMatrix& ctm, SkBitmap* result,
                                  SkIPoint* offset) {
     return false;
 }
 
-bool SkBitmapDevice::allowImageFilter(SkImageFilter*) {
+bool SkBitmapDevice::allowImageFilter(const SkImageFilter*) {
     return true;
 }
 
@@ -165,10 +169,8 @@ void SkBitmapDevice::writePixels(const SkBitmap& bitmap,
             drawSprite = false;
         } else {
             // we convert to a temporary bitmap and draw that as a sprite
-            dstBmp.setConfig(SkBitmap::kARGB_8888_Config,
-                             spriteRect.width(),
-                             spriteRect.height());
-            if (!dstBmp.allocPixels()) {
+            if (!dstBmp.allocPixels(SkImageInfo::MakeN32Premul(spriteRect.width(),
+                                                               spriteRect.height()))) {
                 return;
             }
             drawSprite = true;
@@ -382,6 +384,20 @@ void SkBitmapDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
                                 int x, int y, const SkPaint& paint) {
     const SkBitmap& src = device->accessBitmap(false);
     draw.drawSprite(src, x, y, paint);
+}
+
+SkSurface* SkBitmapDevice::newSurface(const SkImageInfo& info) {
+    return SkSurface::NewRaster(info);
+}
+
+const void* SkBitmapDevice::peekPixels(SkImageInfo* info, size_t* rowBytes) {
+    if (fBitmap.getPixels() && fBitmap.asImageInfo(info)) {
+        if (rowBytes) {
+            *rowBytes = fBitmap.rowBytes();
+        }
+        return fBitmap.getPixels();
+    }
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

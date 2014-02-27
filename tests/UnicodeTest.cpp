@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkPaint.h"
 #include "SkUtils.h"
+#include "Test.h"
 
 // Unicode Variation Selector ranges: inclusive
 #define UVS_MIN0    0x180B

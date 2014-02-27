@@ -18,6 +18,7 @@
 #include "GrStencilBuffer.h"
 #include "GrSWMaskHelper.h"
 #include "effects/GrTextureDomain.h"
+#include "effects/GrConvexPolyEffect.h"
 #include "SkRasterClip.h"
 #include "SkStrokeRec.h"
 #include "SkTLazy.h"
@@ -109,7 +110,8 @@ bool GrClipMaskManager::useSWOnlyPath(const ElementList& elements) {
 // sort out what kind of clip mask needs to be created: alpha, stencil,
 // scissor, or entirely software
 bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
-                                      GrDrawState::AutoRestoreEffects* are) {
+                                      GrDrawState::AutoRestoreEffects* are,
+                                      const SkRect* devBounds) {
     fCurrClipMaskType = kNone_ClipMaskType;
 
     ElementList elements(16);
@@ -153,9 +155,63 @@ bool GrClipMaskManager::setupClipping(const GrClipData* clipDataIn,
         return true;
     }
 
-#if GR_AA_CLIP
-    // TODO: catch isRect && requiresAA and use clip planes if available rather than a mask.
+    // If there is only one clip element we check whether the draw's bounds are contained
+    // fully within the clip. If not, we install an effect that handles the clip for some
+    // cases.
+    if (1 == elements.count() && SkRegion::kReplace_Op == elements.tail()->getOp()) {
+        if (NULL != devBounds) {
+            SkRect boundsInClipSpace = *devBounds;
+            boundsInClipSpace.offset(SkIntToScalar(clipDataIn->fOrigin.fX),
+                                     SkIntToScalar(clipDataIn->fOrigin.fY));
+            if (elements.tail()->contains(boundsInClipSpace)) {
+                fGpu->disableScissor();
+                this->setGpuStencil();
+                return true;
+            }
+        }
+        SkAutoTUnref<GrEffectRef> effect;
+        if (SkClipStack::Element::kPath_Type == elements.tail()->getType()) {
+            const SkPath& path = elements.tail()->getPath();
+            bool isAA = GR_AA_CLIP && elements.tail()->isAA();
+            if (rt->isMultisampled()) {
+                // A coverage effect for AA clipping won't play nicely with MSAA.
+                if (!isAA) {
+                    SkVector offset = { SkIntToScalar(-clipDataIn->fOrigin.fX),
+                                        SkIntToScalar(-clipDataIn->fOrigin.fY) };
+                    effect.reset(GrConvexPolyEffect::Create(GrConvexPolyEffect::kFillNoAA_EdgeType,
+                                                            path, &offset));
+                }
+            } else {
+                SkVector offset = { SkIntToScalar(-clipDataIn->fOrigin.fX),
+                                    SkIntToScalar(-clipDataIn->fOrigin.fY) };
+                GrConvexPolyEffect::EdgeType type = isAA ? GrConvexPolyEffect::kFillAA_EdgeType :
+                                                           GrConvexPolyEffect::kFillNoAA_EdgeType;
+                effect.reset(GrConvexPolyEffect::Create(type, path, &offset));
+            }
+        } else if (GR_AA_CLIP && elements.tail()->isAA() && !rt->isMultisampled()) {
+            // We only handle AA/non-MSAA rects here. Coverage effect AA isn't MSAA friendly and
+            // non-AA rect clips are handled by the scissor.
+            SkASSERT(SkClipStack::Element::kRect_Type == elements.tail()->getType());
+            SkRect rect = elements.tail()->getRect();
+            SkVector offset = { SkIntToScalar(-clipDataIn->fOrigin.fX),
+                SkIntToScalar(-clipDataIn->fOrigin.fY) };
+            rect.offset(offset);
+            effect.reset(GrConvexPolyEffect::CreateForAAFillRect(rect));
+            // This should never fail.
+            SkASSERT(effect);
+        }
+        if (effect) {
+            are->set(fGpu->drawState());
+            fGpu->drawState()->addCoverageEffect(effect);
+            SkIRect scissorSpaceIBounds(clipSpaceIBounds);
+            scissorSpaceIBounds.offset(-clipDataIn->fOrigin);
+            fGpu->enableScissor(scissorSpaceIBounds);
+            this->setGpuStencil();
+            return true;
+        }
+    }
 
+#if GR_AA_CLIP
     // If MSAA is enabled we can do everything in the stencil buffer.
     if (0 == rt->numSamples() && requiresAA) {
         GrTexture* result = NULL;

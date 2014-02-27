@@ -265,6 +265,7 @@ void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
 #include "SkStream.h"
 
 static const char kMagic[] = { 's', 'k', 'i', 'a', 'p', 'i', 'c', 't' };
+static const size_t kHeaderSize = sizeof(kMagic) + sizeof(SkPictInfo);
 
 bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (NULL == stream) {
@@ -273,8 +274,8 @@ bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
 
     // Check magic bytes.
     char magic[sizeof(kMagic)];
-    stream->read(magic, sizeof(kMagic));
-    if (0 != memcmp(magic, kMagic, sizeof(kMagic))) {
+    if (!stream->read(magic, sizeof(kMagic)) ||
+        (0 != memcmp(magic, kMagic, sizeof(kMagic)))) {
         return false;
     }
 
@@ -283,12 +284,31 @@ bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
         return false;
     }
 
-    if (PICTURE_VERSION != info.fVersion
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        // V16 is backwards compatible with V15
-        && PRIOR_PICTURE_VERSION != info.fVersion  // TODO: remove when .skps regenerated
-#endif
-        ) {
+    if (PICTURE_VERSION != info.fVersion) {
+        return false;
+    }
+
+    if (pInfo != NULL) {
+        *pInfo = info;
+    }
+    return true;
+}
+
+bool SkPicture::BufferIsSKP(SkReadBuffer& buffer, SkPictInfo* pInfo) {
+    // Check magic bytes.
+    char magic[sizeof(kMagic)];
+
+    if (!buffer.readByteArray(magic, sizeof(kMagic)) ||
+        (0 != memcmp(magic, kMagic, sizeof(kMagic)))) {
+        return false;
+    }
+
+    SkPictInfo info;
+    if (!buffer.readByteArray(&info, sizeof(SkPictInfo))) {
+        return false;
+    }
+
+    if (PICTURE_VERSION != info.fVersion) {
         return false;
     }
 
@@ -325,6 +345,46 @@ SkPicture* SkPicture::CreateFromStream(SkStream* stream, InstallPixelRefProc pro
     return SkNEW_ARGS(SkPicture, (playback, info.fWidth, info.fHeight));
 }
 
+SkPicture* SkPicture::CreateFromBuffer(SkReadBuffer& buffer) {
+    SkPictInfo info;
+
+    if (!BufferIsSKP(buffer, &info)) {
+        return NULL;
+    }
+
+    SkPicturePlayback* playback;
+    // Check to see if there is a playback to recreate.
+    if (buffer.readBool()) {
+        playback = SkPicturePlayback::CreateFromBuffer(buffer);
+        if (NULL == playback) {
+            return NULL;
+        }
+    } else {
+        playback = NULL;
+    }
+
+    return SkNEW_ARGS(SkPicture, (playback, info.fWidth, info.fHeight));
+}
+
+void SkPicture::createHeader(void* header) const {
+    // Copy magic bytes at the beginning of the header
+    SkASSERT(sizeof(kMagic) == 8);
+    memcpy(header, kMagic, sizeof(kMagic));
+
+    // Set piture info after magic bytes in the header
+    SkPictInfo* info = (SkPictInfo*)(((char*)header) + sizeof(kMagic));
+    info->fVersion = PICTURE_VERSION;
+    info->fWidth = fWidth;
+    info->fHeight = fHeight;
+    info->fFlags = SkPictInfo::kCrossProcess_Flag;
+    // TODO: remove this flag, since we're always float (now)
+    info->fFlags |= SkPictInfo::kScalarIsFloat_Flag;
+
+    if (8 == sizeof(void*)) {
+        info->fFlags |= SkPictInfo::kPtrIs64Bit_Flag;
+    }
+}
+
 void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     SkPicturePlayback* playback = fPlayback;
 
@@ -332,24 +392,9 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
         playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
     }
 
-    SkPictInfo info;
-
-    info.fVersion = PICTURE_VERSION;
-    info.fWidth = fWidth;
-    info.fHeight = fHeight;
-    info.fFlags = SkPictInfo::kCrossProcess_Flag;
-#ifdef SK_SCALAR_IS_FLOAT
-    info.fFlags |= SkPictInfo::kScalarIsFloat_Flag;
-#endif
-    if (8 == sizeof(void*)) {
-        info.fFlags |= SkPictInfo::kPtrIs64Bit_Flag;
-    }
-
-    // Write 8 magic bytes to ID this file format.
-    SkASSERT(sizeof(kMagic) == 8);
-    stream->write(kMagic, sizeof(kMagic));
-
-    stream->write(&info, sizeof(info));
+    char header[kHeaderSize];
+    createHeader(&header);
+    stream->write(header, kHeaderSize);
     if (playback) {
         stream->writeBool(true);
         playback->serialize(stream, encoder);
@@ -359,6 +404,28 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
         }
     } else {
         stream->writeBool(false);
+    }
+}
+
+void SkPicture::flatten(SkWriteBuffer& buffer) const {
+    SkPicturePlayback* playback = fPlayback;
+
+    if (NULL == playback && fRecord) {
+        playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
+    }
+
+    char header[kHeaderSize];
+    createHeader(&header);
+    buffer.writeByteArray(header, kHeaderSize);
+    if (playback) {
+        buffer.writeBool(true);
+        playback->flatten(buffer);
+        // delete playback if it is a local version (i.e. cons'd up just now)
+        if (playback != fPlayback) {
+            SkDELETE(playback);
+        }
+    } else {
+        buffer.writeBool(false);
     }
 }
 

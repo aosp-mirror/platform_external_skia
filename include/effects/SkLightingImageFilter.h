@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkLightingImageFilter_DEFINED
 #define SkLightingImageFilter_DEFINED
 
@@ -18,9 +17,7 @@ public:
     SkPoint3(SkScalar x, SkScalar y, SkScalar z)
       : fX(x), fY(y), fZ(z) {}
     SkScalar dot(const SkPoint3& other) const {
-        return SkScalarMul(fX, other.fX)
-             + SkScalarMul(fY, other.fY)
-             + SkScalarMul(fZ, other.fZ);
+        return fX * other.fX + fY * other.fY + fZ * other.fZ;
     }
     SkScalar maxComponent() const {
         return fX > fY ? (fX > fZ ? fX : fZ) : (fY > fZ ? fY : fZ);
@@ -28,14 +25,12 @@ public:
     void normalize() {
         // Small epsilon is added to prevent division by 0.
         SkScalar scale = SkScalarInvert(SkScalarSqrt(dot(*this)) + SK_ScalarNearlyZero);
-        fX = SkScalarMul(fX, scale);
-        fY = SkScalarMul(fY, scale);
-        fZ = SkScalarMul(fZ, scale);
+        fX = fX * scale;
+        fY = fY * scale;
+        fZ = fZ * scale;
     }
     SkPoint3 operator*(SkScalar scalar) const {
-        return SkPoint3(SkScalarMul(fX, scalar),
-                        SkScalarMul(fY, scalar),
-                        SkScalarMul(fZ, scalar));
+        return SkPoint3(fX * scalar, fY * scalar, fZ * scalar);
     }
     SkPoint3 operator-(const SkPoint3& other) const {
         return SkPoint3(fX - other.fX, fY - other.fY, fZ - other.fZ);
@@ -79,8 +74,8 @@ protected:
                           SkScalar surfaceScale,
                           SkImageFilter* input,
                           const CropRect* cropRect = NULL);
-    explicit SkLightingImageFilter(SkFlattenableReadBuffer& buffer);
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+    explicit SkLightingImageFilter(SkReadBuffer& buffer);
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     const SkLight* light() const { return fLight; }
     SkScalar surfaceScale() const { return fSurfaceScale; }
 

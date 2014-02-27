@@ -9,25 +9,18 @@
 #include "SkBitmapHeap.h"
 #include "SkColor.h"
 #include "SkFlattenable.h"
-#include "SkOrderedWriteBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkPictureFlat.h"
 #include "SkRefCnt.h"
 #include "SkShader.h"
 #include "Test.h"
-#include "TestClassDef.h"
 
-class FlatDictionary : public SkFlatDictionary<SkShader> {
-
-public:
-    FlatDictionary(SkFlatController* controller)
-    : SkFlatDictionary<SkShader>(controller) {
-        fFlattenProc = &flattenFlattenableProc;
-        // No need for an unflattenProc
-    }
-    static void flattenFlattenableProc(SkOrderedWriteBuffer& buffer, const void* obj) {
-        buffer.writeFlattenable((SkFlattenable*)obj);
+struct SkShaderTraits {
+    static void flatten(SkWriteBuffer& buffer, const SkShader& shader) {
+        buffer.writeFlattenable(&shader);
     }
 };
+typedef SkFlatDictionary<SkShader, SkShaderTraits> FlatDictionary;
 
 class SkBitmapHeapTester {
 

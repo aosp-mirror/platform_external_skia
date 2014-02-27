@@ -168,8 +168,11 @@ private:
         if (NULL == layerCanvas) {
             canvas->restore();
         } else {
-            SkBitmap bitmap = layerCanvas->getDevice()->accessBitmap(false);
-            canvas->drawBitmap(bitmap, 0, 0);
+            SkAutoROCanvasPixels ropixels(layerCanvas);
+            SkBitmap bitmap;
+            if (ropixels.asROBitmap(&bitmap)) {
+                canvas->drawBitmap(bitmap, 0, 0);
+            }
         }
 
         r.inset(-SK_ScalarHalf, -SK_ScalarHalf);
@@ -188,8 +191,7 @@ private:
             SkPackARGB32(0xFF, 0x40, 0x40, 0x40)
         };
         SkBitmap bg;
-        bg.setConfig(SkBitmap::kARGB_8888_Config, 2, 2, 0, kOpaque_SkAlphaType);
-        bg.allocPixels();
+        bg.allocN32Pixels(2, 2, true);
         SkAutoLockPixels bgAlp(bg);
         memcpy(bg.getPixels(), kCheckData, sizeof(kCheckData));
 
@@ -212,8 +214,7 @@ private:
                                                           SkShader::kRepeat_TileMode))->unref();
 
         SkBitmap bmp;
-        bmp.setConfig(SkBitmap::kARGB_8888_Config, kSize, kSize);
-        bmp.allocPixels();
+        bmp.allocN32Pixels(kSize, kSize);
         SkCanvas bmpCanvas(bmp);
 
         bmpCanvas.clear(SK_ColorTRANSPARENT);

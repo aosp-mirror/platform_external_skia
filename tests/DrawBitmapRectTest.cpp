@@ -5,26 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkDiscardableMemoryPool.h"
 #include "SkImageGenerator.h"
+#include "SkMatrixUtils.h"
 #include "SkPaint.h"
+#include "SkRandom.h"
 #include "SkShader.h"
 #include "SkSurface.h"
-#include "SkRandom.h"
-#include "SkMatrixUtils.h"
+#include "Test.h"
 
-namespace {
 // A BitmapFactory that always fails when asked to return pixels.
 class FailureImageGenerator : public SkImageGenerator {
 public:
     FailureImageGenerator() { }
     virtual ~FailureImageGenerator() { }
-    virtual bool getInfo(SkImageInfo* info) {
+    virtual bool getInfo(SkImageInfo* info) SK_OVERRIDE {
         info->fWidth = 100;
         info->fHeight = 100;
         info->fColorType = kPMColor_SkColorType;
@@ -39,7 +37,6 @@ public:
         return false;
     }
 };
-}  // namespace
 
 // crbug.com/295895
 // Crashing in skia when a pixelref fails in lockPixels
@@ -241,7 +238,6 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
  *  memory allocation limit).
  */
 static void test_giantrepeat_crbug118018(skiatest::Reporter* reporter) {
-#ifdef SK_SCALAR_IS_FLOAT
     static const struct {
         int fWidth;
         int fHeight;
@@ -258,7 +254,6 @@ static void test_giantrepeat_crbug118018(skiatest::Reporter* reporter) {
                                 gTests[i].fWidth, gTests[i].fHeight,
                                 gTests[i].fExpectedToDraw);
     }
-#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -80,13 +80,12 @@ static bool webp_parse_header(SkStream* stream, int* width, int* height, int* al
 
     // sanity check for image size that's about to be decoded.
     {
-        Sk64 size;
-        size.setMul(*width, *height);
-        if (size.isNeg() || !size.is32()) {
+        int64_t size = sk_64_mul(*width, *height);
+        if (!sk_64_isS32(size)) {
             return false;
         }
         // now check that if we are 4-bytes per pixel, we also don't overflow
-        if (size.get32() > (0x7FFFFFFF >> 2)) {
+        if (sk_64_asS32(size) > (0x7FFFFFFF >> 2)) {
             return false;
         }
     }
@@ -173,7 +172,13 @@ static WEBP_CSP_MODE webp_decode_mode(const SkBitmap* decodedBitmap, bool premul
     SkBitmap::Config config = decodedBitmap->config();
 
     if (config == SkBitmap::kARGB_8888_Config) {
-        mode = premultiply ? MODE_rgbA : MODE_RGBA;
+        #if SK_PMCOLOR_BYTE_ORDER(B,G,R,A)
+            mode = premultiply ? MODE_bgrA : MODE_BGRA;
+        #elif SK_PMCOLOR_BYTE_ORDER(R,G,B,A)
+            mode = premultiply ? MODE_rgbA : MODE_RGBA;
+        #else
+            #error "Skia uses BGRA or RGBA byte order"
+        #endif
     } else if (config == SkBitmap::kARGB_4444_Config) {
         mode = premultiply ? MODE_rgbA_4444 : MODE_RGBA_4444;
     } else if (config == SkBitmap::kRGB_565_Config) {

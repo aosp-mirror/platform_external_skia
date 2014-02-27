@@ -7,7 +7,8 @@
 
 #include "SkArithmeticMode.h"
 #include "SkColorPriv.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkString.h"
 #include "SkUnPreMultiply.h"
 #if SK_SUPPORT_GPU
@@ -40,14 +41,14 @@ public:
 #endif
 
 private:
-    SkArithmeticMode_scalar(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+    SkArithmeticMode_scalar(SkReadBuffer& buffer) : INHERITED(buffer) {
         fK[0] = buffer.readScalar();
         fK[1] = buffer.readScalar();
         fK[2] = buffer.readScalar();
         fK[3] = buffer.readScalar();
     }
 
-    virtual void flatten(SkFlattenableWriteBuffer& buffer) const SK_OVERRIDE {
+    virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         INHERITED::flatten(buffer);
         buffer.writeScalar(fK[0]);
         buffer.writeScalar(fK[1]);
@@ -184,25 +185,12 @@ void SkArithmeticMode_scalar::toString(SkString* str) const {
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool fitsInBits(SkScalar x, int bits) {
-#ifdef SK_SCALAR_IS_FIXED
-    x = SkAbs32(x);
-    x += 1 << 7;
-    x >>= 8;
-    return x < (1 << (bits - 1));
-#else
     return SkScalarAbs(x) < (1 << (bits - 1));
-#endif
 }
 
 #if 0 // UNUSED
 static int32_t toDot8(SkScalar x) {
-#ifdef SK_SCALAR_IS_FIXED
-    x += 1 << 7;
-    x >>= 8;
-    return x;
-#else
     return (int32_t)(x * 256);
-#endif
 }
 #endif
 

@@ -143,7 +143,7 @@ static uint32_t unpack_flags(uint32_t packed) {
     return packed >> 4;
 }
 
-SkGradientShaderBase::SkGradientShaderBase(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+SkGradientShaderBase::SkGradientShaderBase(SkReadBuffer& buffer) : INHERITED(buffer) {
     fCacheAlpha = 256;
 
     fMapper = buffer.readUnitMapper();
@@ -154,8 +154,13 @@ SkGradientShaderBase::SkGradientShaderBase(SkFlattenableReadBuffer& buffer) : IN
 
     int colorCount = fColorCount = buffer.getArrayCount();
     if (colorCount > kColorStorageCount) {
-        size_t size = sizeof(SkColor) + sizeof(SkPMColor) + sizeof(Rec);
-        fOrigColors = (SkColor*)sk_malloc_throw(size * colorCount);
+        size_t allocSize = (sizeof(SkColor) + sizeof(SkPMColor) + sizeof(Rec)) * colorCount;
+        if (buffer.validateAvailable(allocSize)) {
+            fOrigColors = reinterpret_cast<SkColor*>(sk_malloc_throw(allocSize));
+        } else {
+            fOrigColors =  NULL;
+            colorCount = fColorCount = 0;
+        }
     } else {
         fOrigColors = fStorage;
     }
@@ -200,7 +205,7 @@ void SkGradientShaderBase::initCommon() {
     fColorsAreOpaque = colorAlpha == 0xFF;
 }
 
-void SkGradientShaderBase::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkGradientShaderBase::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeFlattenable(fMapper);
     buffer.writeColorArray(fOrigColors, fColorCount);

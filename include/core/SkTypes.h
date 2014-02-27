@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkTypes_DEFINED
 #define SkTypes_DEFINED
@@ -219,6 +217,8 @@ typedef uint8_t SkBool8;
     SK_API uint16_t    SkToU16(uintmax_t);
     SK_API int32_t     SkToS32(intmax_t);
     SK_API uint32_t    SkToU32(uintmax_t);
+    SK_API int         SkToInt(intmax_t);
+    SK_API unsigned    SkToUInt(uintmax_t);
 #else
     #define SkToS8(x)   ((int8_t)(x))
     #define SkToU8(x)   ((uint8_t)(x))
@@ -226,6 +226,8 @@ typedef uint8_t SkBool8;
     #define SkToU16(x)  ((uint16_t)(x))
     #define SkToS32(x)  ((int32_t)(x))
     #define SkToU32(x)  ((uint32_t)(x))
+    #define SkToInt(x)  ((int)(x))
+    #define SkToUInt(x) ((unsigned)(x))
 #endif
 
 /** Returns 0 or 1 based on the condition

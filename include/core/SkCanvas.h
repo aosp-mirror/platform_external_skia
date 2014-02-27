@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkCanvas_DEFINED
 #define SkCanvas_DEFINED
@@ -27,6 +25,7 @@ class SkDrawFilter;
 class SkMetaData;
 class SkPicture;
 class SkRRect;
+class SkSurface;
 class SkSurface_Base;
 class GrContext;
 
@@ -49,7 +48,18 @@ class SK_API SkCanvas : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkCanvas)
 
+    /**
+     *  Creates an empty canvas with no backing device/pixels, and zero
+     *  dimensions.
+     */
     SkCanvas();
+
+    /**
+     *  Creates a canvas of the specified dimensions, but explicitly not backed
+     *  by any device/pixels. Typically this use used by subclasses who handle
+     *  the draw calls in some other way.
+     */
+    SkCanvas(int width, int height);
 
     /** Construct a canvas with the specified device to draw into.
 
@@ -66,6 +76,12 @@ public:
 
     SkMetaData& getMetaData();
 
+    /**
+     *  Return ImageInfo for this canvas. If the canvas is not backed by pixels
+     *  (cpu or gpu), then the info's ColorType will be kUnknown_SkColorType.
+     */
+    SkImageInfo imageInfo() const;
+
     ///////////////////////////////////////////////////////////////////////////
 
     /**
@@ -74,16 +90,19 @@ public:
     void flush();
 
     /**
+     *  DEPRECATED: call imageInfo() instead.
      *  Return the width/height of the underlying device. The current drawable
      *  area may be small (due to clipping or saveLayer). For a canvas with
      *  no device, 0,0 will be returned.
      */
     SkISize getDeviceSize() const;
 
-    /** Return the canvas' device object, which may be null. The device holds
-        the bitmap of the pixels that the canvas draws into. The reference count
-        of the returned device is not changed by this call.
-    */
+    /**
+     *  DEPRECATED.
+     *  Return the canvas' device object, which may be null. The device holds
+     *  the bitmap of the pixels that the canvas draws into. The reference count
+     *  of the returned device is not changed by this call.
+     */
     SkBaseDevice* getDevice() const;
 
     /**
@@ -102,12 +121,10 @@ public:
     SkBaseDevice* getTopDevice(bool updateMatrixClip = false) const;
 
     /**
-     *  Shortcut for getDevice()->createCompatibleDevice(...).
-     *  If getDevice() == NULL, this method does nothing, and returns NULL.
+     *  Create a new surface matching the specified info, one that attempts to
+     *  be maximally compatible when used with this canvas.
      */
-    SkBaseDevice* createCompatibleDevice(SkBitmap::Config config,
-                                         int width, int height,
-                                         bool isOpaque);
+    SkSurface* newSurface(const SkImageInfo&);
 
     /**
      * Return the GPU context of the device that is associated with the canvas.
@@ -116,6 +133,20 @@ public:
     GrContext* getGrContext();
 
     ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     *  If the canvas has pixels (and is not recording to a picture or other
+     *  non-raster target) and has direct access to its pixels (i.e. they are in
+     *  local RAM) return the const-address of those pixels, and if not null,
+     *  return the ImageInfo and rowBytes. The returned address is only valid
+     *  while the canvas object is in scope and unchanged. Any API calls made on
+     *  canvas (or its parent surface if any) will invalidate the
+     *  returned address (and associated information).
+     *
+     *  On failure, returns NULL and the info and rowBytes parameters are
+     *  ignored.
+     */
+    const void* peekPixels(SkImageInfo* info, size_t* rowBytes);
 
     /**
      * This enum can be used with read/writePixels to perform a pixel ops to or
@@ -294,13 +325,15 @@ public:
     virtual void restore();
 
     /** Returns the number of matrix/clip states on the SkCanvas' private stack.
-        This will equal # save() calls - # restore() calls.
+        This will equal # save() calls - # restore() calls + 1. The save count on
+        a new canvas is 1.
     */
     int getSaveCount() const;
 
     /** Efficient way to pop any calls to save() that happened after the save
-        count reached saveCount. It is an error for saveCount to be less than
-        getSaveCount()
+        count reached saveCount. It is an error for saveCount to be greater than
+        getSaveCount(). To pop all the way back to the initial matrix/clip context
+        pass saveCount == 1.
         @param saveCount    The number of save() levels to restore from
     */
     void restoreToCount(int saveCount);
@@ -1008,6 +1041,12 @@ public:
     };
 
 protected:
+    // default impl defers to getDevice()->newSurface(info)
+    virtual SkSurface* onNewSurface(const SkImageInfo&);
+
+    // default impl defers to its device
+    virtual const void* onPeekPixels(SkImageInfo*, size_t* rowBytes);
+
     // Returns the canvas to be used by DrawIter. Default implementation
     // returns this. Subclasses that encapsulate an indirect canvas may
     // need to overload this method. The impl must keep track of this, as it
@@ -1016,8 +1055,11 @@ protected:
 
     // Clip rectangle bounds. Called internally by saveLayer.
     // returns false if the entire rectangle is entirely clipped out
+    // If non-NULL, The imageFilter parameter will be used to expand the clip
+    // and offscreen bounds for any margin required by the filter DAG.
     bool clipRectBounds(const SkRect* bounds, SaveFlags flags,
-                        SkIRect* intersection);
+                        SkIRect* intersection,
+                        const SkImageFilter* imageFilter = NULL);
 
     // Called by child classes that override clipPath and clipRRect to only
     // track fast conservative clip bounds, rather than exact clips.
@@ -1191,5 +1233,48 @@ private:
     SkCanvas* fCanvas;
 };
 #define SkAutoCommentBlock(...) SK_REQUIRE_LOCAL_VAR(SkAutoCommentBlock)
+
+/**
+ *  If the caller wants read-only access to the pixels in a canvas, it can just
+ *  call canvas->peekPixels(), since that is the fastest way to "peek" at the
+ *  pixels on a raster-backed canvas.
+ *
+ *  If the canvas has pixels, but they are not readily available to the CPU
+ *  (e.g. gpu-backed), then peekPixels() will fail, but readPixels() will
+ *  succeed (though be slower, since it will return a copy of the pixels).
+ *
+ *  SkAutoROCanvasPixels encapsulates these two techniques, trying first to call
+ *  peekPixels() (for performance), but if that fails, calling readPixels() and
+ *  storing the copy locally.
+ *
+ *  The caller must respect the restrictions associated with peekPixels(), since
+ *  that may have been called: The returned information is invalidated if...
+ *      - any API is called on the canvas (or its parent surface if present)
+ *      - the canvas goes out of scope
+ */
+class SkAutoROCanvasPixels : SkNoncopyable {
+public:
+    SkAutoROCanvasPixels(SkCanvas* canvas);
+
+    // returns NULL on failure
+    const void* addr() const { return fAddr; }
+    
+    // undefined if addr() == NULL
+    size_t rowBytes() const { return fRowBytes; }
+    
+    // undefined if addr() == NULL
+    const SkImageInfo& info() const { return fInfo; }
+
+    // helper that, if returns true, installs the pixels into the bitmap. Note
+    // that the bitmap may reference the address returned by peekPixels(), so
+    // the caller must respect the restrictions associated with peekPixels().
+    bool asROBitmap(SkBitmap*) const;
+
+private:
+    SkBitmap    fBitmap;    // used if peekPixels() fails
+    const void* fAddr;      // NULL on failure
+    SkImageInfo fInfo;
+    size_t      fRowBytes;
+};
 
 #endif

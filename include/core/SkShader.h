@@ -359,17 +359,15 @@ protected:
 
     // These can be called by your subclass after setContext() has been called
     uint8_t             getPaintAlpha() const { return fPaintAlpha; }
-    SkBitmap::Config    getDeviceConfig() const { return (SkBitmap::Config)fDeviceConfig; }
     const SkMatrix&     getTotalInverse() const { return fTotalInverse; }
     MatrixClass         getInverseClass() const { return (MatrixClass)fTotalInverseClass; }
 
-    SkShader(SkFlattenableReadBuffer& );
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+    SkShader(SkReadBuffer& );
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 private:
     SkMatrix            fLocalMatrix;
     SkMatrix            fTotalInverse;
     uint8_t             fPaintAlpha;
-    uint8_t             fDeviceConfig;
     uint8_t             fTotalInverseClass;
     SkDEBUGCODE(SkBool8 fInSetContext;)
 
