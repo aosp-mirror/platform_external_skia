@@ -526,9 +526,6 @@ LOCAL_SRC_FILES += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
-else
-LOCAL_SRC_FILES += \
-	src/opts/SkMorphology_opts_none.cpp
 endif
 
 LOCAL_SRC_FILES += \
