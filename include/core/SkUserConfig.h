@@ -240,4 +240,6 @@
  */
 //#define SK_PDF_USE_PATHOPS
 
+#define SK_REF_CNT_MIXIN_INCLUDE "../ports/SkRefCnt_android.h"
+
 #endif
