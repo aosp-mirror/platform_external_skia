@@ -58,7 +58,11 @@
 // Optimizations for chromium (m30)
 #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
 #define IGNORE_ROT_AA_RECT_OPT
-#define SKIA_IGNORE_GPU_MIPMAPS
+
+// Needed for chromium (m33)
+#define SK_DISABLE_OFFSETIMAGEFILTER_OPTIMIZATION
+#define SK_IGNORE_BLURRED_RRECT_OPT
+#define SK_IGNORE_QUAD_RR_CORNERS_OPT
 
 // Disable this check because it is too strict for some chromium-specific
 // subclasses of SkPixelRef. See bug: crbug.com/171776.
