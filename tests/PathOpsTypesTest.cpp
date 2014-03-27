@@ -13,12 +13,9 @@ static const double roughlyTests[][2] = {
 
 static const size_t roughlyTestsCount = SK_ARRAY_COUNT(roughlyTests);
 
-static void PathOpsRoughlyTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsRoughly, reporter) {
     for (size_t index = 0; index < roughlyTestsCount; ++index) {
         bool equal = RoughlyEqualUlps(roughlyTests[index][0], roughlyTests[index][1]);
         REPORTER_ASSERT(reporter, equal);
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsRoughlyTest)

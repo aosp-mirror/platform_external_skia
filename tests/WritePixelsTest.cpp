@@ -5,15 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
 #include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkMathPriv.h"
 #include "SkRegion.h"
+#include "Test.h"
+
 #if SK_SUPPORT_GPU
-#include "SkGpuDevice.h"
 #include "GrContextFactory.h"
+#include "SkGpuDevice.h"
 #else
 class GrContext;
 class GrContextFactory;
@@ -297,7 +298,7 @@ struct CanvasConfig {
 static const CanvasConfig gCanvasConfigs[] = {
     {kRaster_DevType, true},
     {kRaster_DevType, false},
-#if SK_SUPPORT_GPU && defined(SK_SCALAR_IS_FLOAT)
+#if SK_SUPPORT_GPU
     {kGpu_BottomLeft_DevType, true}, // row bytes has no meaning on gpu devices
     {kGpu_TopLeft_DevType, true}, // row bytes has no meaning on gpu devices
 #endif
@@ -358,7 +359,7 @@ static bool setupBitmap(SkBitmap* bitmap,
     return true;
 }
 
-static void WritePixelsTest(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(WritePixels, reporter, factory) {
     SkCanvas canvas;
 
     const SkIRect testRects[] = {
@@ -469,6 +470,3 @@ static void WritePixelsTest(skiatest::Reporter* reporter, GrContextFactory* fact
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("WritePixels", WritePixelsTestClass, WritePixelsTest)

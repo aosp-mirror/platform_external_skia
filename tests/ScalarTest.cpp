@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkFloatingPoint.h"
 #include "SkMath.h"
 #include "SkPoint.h"
 #include "SkRandom.h"
 #include "SkRect.h"
+#include "Test.h"
 
 struct PointSet {
     const SkPoint* fPts;
@@ -20,7 +19,6 @@ struct PointSet {
 };
 
 static void test_isRectFinite(skiatest::Reporter* reporter) {
-#ifdef SK_SCALAR_IS_FLOAT
     static const SkPoint gF0[] = {
         { 0, 0 }, { 1, 1 }
     };
@@ -61,7 +59,6 @@ static void test_isRectFinite(skiatest::Reporter* reporter) {
         bool rectIsFinite = !r.isEmpty();
         REPORTER_ASSERT(reporter, gSets[i].fIsFinite == rectIsFinite);
     }
-#endif
 }
 
 static bool isFinite_int(float x) {

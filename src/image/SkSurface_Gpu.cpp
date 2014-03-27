@@ -15,7 +15,7 @@ public:
     SK_DECLARE_INST_COUNT(SkSurface_Gpu)
 
     SkSurface_Gpu(GrContext*, const SkImageInfo&, int sampleCount);
-    SkSurface_Gpu(GrContext*, GrRenderTarget*);
+    SkSurface_Gpu(GrRenderTarget*);
     virtual ~SkSurface_Gpu();
 
     virtual SkCanvas* onNewCanvas() SK_OVERRIDE;
@@ -45,9 +45,9 @@ SkSurface_Gpu::SkSurface_Gpu(GrContext* ctx, const SkImageInfo& info,
     }
 }
 
-SkSurface_Gpu::SkSurface_Gpu(GrContext* ctx, GrRenderTarget* renderTarget)
+SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget)
         : INHERITED(renderTarget->width(), renderTarget->height()) {
-    fDevice = SkNEW_ARGS(SkGpuDevice, (ctx, renderTarget));
+    fDevice = SkNEW_ARGS(SkGpuDevice, (renderTarget->getContext(), renderTarget));
 
     if (kRGB_565_GrPixelConfig != renderTarget->config()) {
         fDevice->clear(0x0);
@@ -85,10 +85,10 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
     // are we sharing our render target with the image?
     SkASSERT(NULL != this->getCachedImage());
     if (rt->asTexture() == SkTextureImageGetTexture(this->getCachedImage())) {
-        SkGpuDevice* newDevice = static_cast<SkGpuDevice*>(
-            fDevice->createCompatibleDevice(fDevice->config(), fDevice->width(),
-            fDevice->height(), fDevice->isOpaque()));
-        SkAutoTUnref<SkGpuDevice> aurd(newDevice);
+        SkAutoTUnref<SkGpuDevice> newDevice(SkNEW_ARGS(SkGpuDevice,
+            (fDevice->context(), fDevice->config(), fDevice->width(),
+             fDevice->height(), rt->numSamples())));
+
         if (kRetain_ContentChangeMode == mode) {
             fDevice->context()->copyTexture(rt->asTexture(),
                 reinterpret_cast<GrRenderTarget*>(newDevice->accessRenderTarget()));
@@ -96,19 +96,17 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
         SkASSERT(NULL != this->getCachedCanvas());
         SkASSERT(this->getCachedCanvas()->getDevice() == fDevice);
         this->getCachedCanvas()->setDevice(newDevice);
-        SkRefCnt_SafeAssign(fDevice, newDevice);
+        SkRefCnt_SafeAssign(fDevice, newDevice.get());
     }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface* SkSurface::NewRenderTargetDirect(GrContext* ctx,
-                                            GrRenderTarget* target) {
-    if (NULL == ctx || NULL == target) {
+SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target) {
+    if (NULL == target) {
         return NULL;
     }
-
-    return SkNEW_ARGS(SkSurface_Gpu, (ctx, target));
+    return SkNEW_ARGS(SkSurface_Gpu, (target));
 }
 
 SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, int sampleCount) {
@@ -130,5 +128,5 @@ SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, i
         return NULL;
     }
 
-    return SkNEW_ARGS(SkSurface_Gpu, (ctx, tex->asRenderTarget()));
+    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget()));
 }

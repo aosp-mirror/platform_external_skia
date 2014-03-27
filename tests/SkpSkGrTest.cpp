@@ -9,17 +9,17 @@
 #include "gl/GrGLDefines.h"
 
 #include "SkBitmap.h"
+#include "SkCanvas.h"
 #include "SkColor.h"
 #include "SkDevice.h"
-#include "SkCanvas.h"
 #include "SkGraphics.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
-#include "SkStream.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
 #include "SkRTConf.h"
 #include "SkRunnable.h"
+#include "SkStream.h"
 #include "SkString.h"
 #include "SkTArray.h"
 #include "SkTDArray.h"
@@ -36,7 +36,7 @@
     #define PATH_SLASH "/"
     #define IN_DIR "/usr/local/google/home/caryclark" PATH_SLASH "9-30-13-skp"
     #define OUT_DIR "/media/01CD75512A7F9EE0/4" PATH_SLASH
-    #define LINE_FEED \n"
+    #define LINE_FEED "\n"
 #endif
 
 #define PATH_STR_SIZE 512
@@ -425,8 +425,7 @@ void TestResult::testOne() {
         do {
             dim.fX = (pWidth + scale - 1) / scale;
             dim.fY = (pHeight + scale - 1) / scale;
-            bitmap.setConfig(SkBitmap::kARGB_8888_Config, dim.fX, dim.fY);
-            bool success = bitmap.allocPixels();
+            bool success = bitmap.allocN32Pixels(, dim.fX, dim.fY);
             if (success) {
                 break;
             }
@@ -454,7 +453,11 @@ void TestResult::testOne() {
         SkGpuDevice grDevice(context, texture.get());
         SkCanvas grCanvas(&grDevice);
         drawPict(pic, &grCanvas, fScaleOversized ? scale : 1);
-        const SkBitmap& grBitmap = grDevice.accessBitmap(false);
+
+        SkBitmap grBitmap;
+        grBitmap.allocPixels(grCanvas.imageInfo());
+        grCanvas.readPixels(&grBitmap, 0, 0);
+        
         if (fTestStep == kCompareBits) {
             fPixelError = similarBits(grBitmap, bitmap);
             int skTime = timePict(pic, &skCanvas);
@@ -572,7 +575,7 @@ static bool initTest() {
     return make_out_dirs();
 }
 
-static void SkpSkGrTest(skiatest::Reporter* reporter) {
+DEF_TEST(SkpSkGr, reporter) {
     SkTArray<TestResult, true> errors;
     if (!initTest()) {
         return;
@@ -628,8 +631,8 @@ static void SkpSkGrTest(skiatest::Reporter* reporter) {
                     SkDebugf("#%d\n", testCount);
                 }
             }
-    skipOver:
-            reporter->bumpTestCount();
+     skipOver:
+             reporter->bumpTestCount();
     checkEarlyExit:
             if (1 && testCount == 20) {
                 break;
@@ -669,7 +672,7 @@ static void testSkGrMain(SkpSkGrThreadState* data) {
     data->fReporter->bumpTestCount();
 }
 
-static void SkpSkGrThreadedTest(skiatest::Reporter* reporter) {
+DEF_TEST(SkpSkGrThreaded, reporter) {
     if (!initTest()) {
         return;
     }
@@ -736,7 +739,7 @@ static void SkpSkGrThreadedTest(skiatest::Reporter* reporter) {
     }
 }
 
-static void SkpSkGrOneOffTest(skiatest::Reporter* reporter) {
+DEF_TEST(SkpSkGrOneOff, reporter) {
     if (!initTest()) {
         return;
     }
@@ -750,10 +753,3 @@ static void SkpSkGrOneOffTest(skiatest::Reporter* reporter) {
     TestResult::Test(dirIndex, filename.c_str(), kCompareBits, reporter->verbose());
     TestResult::Test(dirIndex, filename.c_str(), kEncodeFiles, reporter->verbose());
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(SkpSkGrTest)
-
-DEFINE_TESTCLASS_SHORT(SkpSkGrOneOffTest)
-
-DEFINE_TESTCLASS_SHORT(SkpSkGrThreadedTest)

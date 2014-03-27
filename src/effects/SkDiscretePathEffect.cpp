@@ -8,7 +8,8 @@
 
 
 #include "SkDiscretePathEffect.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkPathMeasure.h"
 #include "SkRandom.h"
 
@@ -30,7 +31,7 @@ bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
     bool doFill = rec->isFillStyle();
 
     SkPathMeasure   meas(src, doFill);
-    uint32_t        seed = SkScalarRound(meas.getLength());
+    uint32_t        seed = SkScalarRoundToInt(meas.getLength());
     SkLCGRandom     rand(seed ^ ((seed << 16) | (seed >> 16)));
     SkScalar        scale = fPerterb;
     SkPoint         p;
@@ -42,7 +43,7 @@ bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
         if (fSegLength * (2 + doFill) > length) {
             meas.getSegment(0, length, dst, true);  // to short for us to mangle
         } else {
-            int         n = SkScalarRound(SkScalarDiv(length, fSegLength));
+            int         n = SkScalarRoundToInt(length / fSegLength);
             SkScalar    delta = length / n;
             SkScalar    distance = 0;
 
@@ -70,13 +71,13 @@ bool SkDiscretePathEffect::filterPath(SkPath* dst, const SkPath& src,
     return true;
 }
 
-void SkDiscretePathEffect::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkDiscretePathEffect::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeScalar(fSegLength);
     buffer.writeScalar(fPerterb);
 }
 
-SkDiscretePathEffect::SkDiscretePathEffect(SkFlattenableReadBuffer& buffer) {
+SkDiscretePathEffect::SkDiscretePathEffect(SkReadBuffer& buffer) {
     fSegLength = buffer.readScalar();
     fPerterb = buffer.readScalar();
 }

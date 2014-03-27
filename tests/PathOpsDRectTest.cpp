@@ -38,7 +38,7 @@ static const size_t lineTests_count = SK_ARRAY_COUNT(lineTests);
 static const size_t quadTests_count = SK_ARRAY_COUNT(quadTests);
 static const size_t cubicTests_count = SK_ARRAY_COUNT(cubicTests);
 
-static void PathOpsDRectTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsDRect, reporter) {
     size_t index;
     SkDRect rect, rect2;
     for (index = 0; index < lineTests_count; ++index) {
@@ -99,6 +99,3 @@ static void PathOpsDRectTest(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, rect.contains(rightBottom));
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsDRectTest)

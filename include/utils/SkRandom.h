@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,11 +5,9 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkRandom_DEFINED
 #define SkRandom_DEFINED
 
-#include "Sk64.h"
 #include "SkScalar.h"
 
 /** \class SkLCGRandom
@@ -104,7 +101,7 @@ public:
         in the range [min..max).
     */
     SkScalar nextRangeScalar(SkScalar min, SkScalar max) {
-        return SkScalarMul(this->nextUScalar1(), (max - min)) + min;
+        return this->nextUScalar1() * (max - min) + min;
     }
 
     /** Return the next pseudo random number expressed as a SkScalar
@@ -123,11 +120,12 @@ public:
         return this->nextUScalar1() <= fractionTrue;
     }
 
-    /** Return the next pseudo random number as a signed 64bit value.
-    */
-    void next64(Sk64* a) {
-        SkASSERT(a);
-        a->set(this->nextS(), this->nextU());
+    /**
+     *  Return the next pseudo random number as a signed 64bit value.
+     */
+    int64_t next64() {
+        int64_t hi = this->nextS();
+        return (hi << 32) | this->nextU();
     }
 
     /**
@@ -257,7 +255,7 @@ public:
      in the range [min..max).
      */
     SkScalar nextRangeScalar(SkScalar min, SkScalar max) {
-        return SkScalarMul(this->nextUScalar1(), (max - min)) + min;
+        return this->nextUScalar1() * (max - min) + min;
     }
 
     /** Return the next pseudo random number expressed as a SkScalar
@@ -276,11 +274,12 @@ public:
         return this->nextUScalar1() <= fractionTrue;
     }
 
-    /** Return the next pseudo random number as a signed 64bit value.
+    /**
+     *  Return the next pseudo random number as a signed 64bit value.
      */
-    void next64(Sk64* a) {
-        SkASSERT(a);
-        a->set(this->nextS(), this->nextU());
+    int64_t next64() {
+        int64_t hi = this->nextS();
+        return (hi << 32) | this->nextU();
     }
 
     /** Reset the random object.

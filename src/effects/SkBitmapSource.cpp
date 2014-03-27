@@ -8,7 +8,8 @@
 #include "SkBitmapSource.h"
 #include "SkDevice.h"
 #include "SkCanvas.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkValidationUtils.h"
 
 SkBitmapSource::SkBitmapSource(const SkBitmap& bitmap)
@@ -26,15 +27,15 @@ SkBitmapSource::SkBitmapSource(const SkBitmap& bitmap, const SkRect& srcRect, co
     fDstRect(dstRect) {
 }
 
-SkBitmapSource::SkBitmapSource(SkFlattenableReadBuffer& buffer)
+SkBitmapSource::SkBitmapSource(SkReadBuffer& buffer)
   : INHERITED(0, buffer) {
     fBitmap.unflatten(buffer);
     buffer.readRect(&fSrcRect);
     buffer.readRect(&fDstRect);
-    buffer.validate(SkIsValidRect(fSrcRect) && SkIsValidRect(fDstRect));
+    buffer.validate(buffer.isValid() && SkIsValidRect(fSrcRect) && SkIsValidRect(fDstRect));
 }
 
-void SkBitmapSource::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkBitmapSource::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     fBitmap.flatten(buffer);
     buffer.writeRect(fSrcRect);
@@ -42,13 +43,14 @@ void SkBitmapSource::flatten(SkFlattenableWriteBuffer& buffer) const {
 }
 
 bool SkBitmapSource::onFilterImage(Proxy* proxy, const SkBitmap&, const SkMatrix& matrix,
-                                   SkBitmap* result, SkIPoint* offset) {
+                                   SkBitmap* result, SkIPoint* offset) const {
     SkRect bounds, dstRect;
     fBitmap.getBounds(&bounds);
     matrix.mapRect(&dstRect, fDstRect);
     if (fSrcRect == bounds && dstRect == bounds) {
         // No regions cropped out or resized; return entire bitmap.
         *result = fBitmap;
+        offset->fX = offset->fY = 0;
         return true;
     }
     SkIRect dstIRect;
@@ -73,7 +75,17 @@ bool SkBitmapSource::onFilterImage(Proxy* proxy, const SkBitmap&, const SkMatrix
     canvas.drawBitmapRectToRect(fBitmap, &fSrcRect, dstRect, &paint);
 
     *result = device.get()->accessBitmap(false);
-    offset->fX += dstIRect.fLeft;
-    offset->fY += dstIRect.fTop;
+    offset->fX = dstIRect.fLeft;
+    offset->fY = dstIRect.fTop;
+    return true;
+}
+
+void SkBitmapSource::computeFastBounds(const SkRect&, SkRect* dst) const {
+    *dst = fDstRect;
+}
+
+bool SkBitmapSource::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
+                                    SkIRect* dst) const {
+    *dst = src;
     return true;
 }

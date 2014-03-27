@@ -15,18 +15,13 @@
 #include "SkGr.h"
 
 bool SkImageFilterUtils::WrapTexture(GrTexture* texture, int width, int height, SkBitmap* result) {
-    SkImageInfo info = {
-        width,
-        height,
-        kPMColor_SkColorType,
-        kPremul_SkAlphaType,
-    };
+    SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
     result->setConfig(info);
     result->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, texture)))->unref();
     return true;
 }
 
-bool SkImageFilterUtils::GetInputResultGPU(SkImageFilter* filter, SkImageFilter::Proxy* proxy,
+bool SkImageFilterUtils::GetInputResultGPU(const SkImageFilter* filter, SkImageFilter::Proxy* proxy,
                                            const SkBitmap& src, const SkMatrix& ctm,
                                            SkBitmap* result, SkIPoint* offset) {
     // Ensure that GrContext calls under filterImage and filterImageGPU below will see an identity
@@ -35,6 +30,7 @@ bool SkImageFilterUtils::GetInputResultGPU(SkImageFilter* filter, SkImageFilter:
     GrContext* context = src.getTexture()->getContext();
     GrContext::AutoWideOpenIdentityDraw awoid(context, NULL);
     if (!filter) {
+        offset->fX = offset->fY = 0;
         *result = src;
         return true;
     } else if (filter->canFilterImageGPU()) {

@@ -4,8 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkPathOps.h"
 #include "SkPath.h"
+#include "SkPathOps.h"
 #include "SkPoint.h"
 #include "Test.h"
 
@@ -91,7 +91,7 @@ static void dontFailOne(skiatest::Reporter* reporter, int index) {
     reporter->bumpTestCount();
 }
 
-static void PathOpsSimplifyFailTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSimplifyFail, reporter) {
     for (int index = 0; index < (int) (13 * nonFinitePtsCount * finitePtsCount); ++index) {
         failOne(reporter, index);
     }
@@ -100,19 +100,12 @@ static void PathOpsSimplifyFailTest(skiatest::Reporter* reporter) {
     }
 }
 
-static void PathOpsSimplifyFailOneTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSimplifyFailOne, reporter) {
     int index = 0;
     failOne(reporter, index);
 }
 
-static void PathOpsSimplifyDontFailOneTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSimplifyDontFailOne, reporter) {
     int index = 6;
     dontFailOne(reporter, index);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsSimplifyFailTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsSimplifyFailOneTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsSimplifyDontFailOneTest)

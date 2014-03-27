@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkThread.h"
 #include "SkThreadUtils.h"
 #include "SkTypes.h"
+#include "Test.h"
 
 struct AddInfo {
     int32_t valueToAdd;

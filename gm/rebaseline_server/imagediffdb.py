@@ -10,9 +10,13 @@ Calulate differences between image pairs, and store them in a database.
 """
 
 import contextlib
+import csv
 import logging
 import os
+import re
 import shutil
+import sys
+import tempfile
 import urllib
 try:
   from PIL import Image, ImageChops
@@ -20,9 +24,20 @@ except ImportError:
   raise ImportError('Requires PIL to be installed; see '
                     + 'http://www.pythonware.com/products/pil/')
 
-IMAGE_SUFFIX = '.png'
+# Set the PYTHONPATH to include the tools directory.
+sys.path.append(
+    os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), os.pardir, os.pardir,
+                        'tools'))
+import find_run_binary
 
-IMAGES_SUBDIR = 'images'
+SKPDIFF_BINARY_NAME = 'skpdiff'
+
+DEFAULT_IMAGE_SUFFIX = '.png'
+DEFAULT_IMAGES_SUBDIR = 'images'
+
+DISALLOWED_FILEPATH_CHAR_REGEX = re.compile('[^\w\-]')
+
 DIFFS_SUBDIR = 'diffs'
 WHITEDIFFS_SUBDIR = 'whitediffs'
 
@@ -34,7 +49,10 @@ class DiffRecord(object):
 
   def __init__(self, storage_root,
                expected_image_url, expected_image_locator,
-               actual_image_url, actual_image_locator):
+               actual_image_url, actual_image_locator,
+               expected_images_subdir=DEFAULT_IMAGES_SUBDIR,
+               actual_images_subdir=DEFAULT_IMAGES_SUBDIR,
+               image_suffix=DEFAULT_IMAGE_SUFFIX):
     """Download this pair of images (unless we already have them on local disk),
     and prepare a DiffRecord for them.
 
@@ -54,15 +72,24 @@ class DiffRecord(object):
       actual_image_locator: a unique ID string under which we will store the
           actual image within storage_root (probably including a checksum to
           guarantee uniqueness)
+      expected_images_subdir: the subdirectory expected images are stored in.
+      actual_images_subdir: the subdirectory actual images are stored in.
+      image_suffix: the suffix of images.
     """
+    expected_image_locator = _sanitize_locator(expected_image_locator)
+    actual_image_locator = _sanitize_locator(actual_image_locator)
+
     # Download the expected/actual images, if we don't have them already.
+    # TODO(rmistry): Add a parameter that makes _download_and_open_image raise
+    # an exception if images are not found locally (instead of trying to
+    # download them).
     expected_image = _download_and_open_image(
-        os.path.join(storage_root, IMAGES_SUBDIR,
-                     str(expected_image_locator) + IMAGE_SUFFIX),
+        os.path.join(storage_root, expected_images_subdir,
+                     str(expected_image_locator) + image_suffix),
         expected_image_url)
     actual_image = _download_and_open_image(
-        os.path.join(storage_root, IMAGES_SUBDIR,
-                     str(actual_image_locator) + IMAGE_SUFFIX),
+        os.path.join(storage_root, actual_images_subdir,
+                     str(actual_image_locator) + image_suffix),
         actual_image_url)
 
     # Generate the diff image (absolute diff at each pixel) and
@@ -84,6 +111,32 @@ class DiffRecord(object):
     whitediff_image = (graydiff_image.point(lambda p: p > 0 and VALUES_PER_BAND)
                                      .convert('1', dither=Image.NONE))
 
+    # Calculate the perceptual difference percentage.
+    skpdiff_csv_dir = tempfile.mkdtemp()
+    try:
+      skpdiff_csv_output = os.path.join(skpdiff_csv_dir, 'skpdiff-output.csv')
+      skpdiff_binary = find_run_binary.find_path_to_program(SKPDIFF_BINARY_NAME)
+      expected_img = os.path.join(storage_root, expected_images_subdir,
+                                  str(expected_image_locator) + image_suffix)
+      actual_img = os.path.join(storage_root, actual_images_subdir,
+                                str(actual_image_locator) + image_suffix)
+      find_run_binary.run_command(
+          [skpdiff_binary, '-p', expected_img, actual_img,
+           '--csv', skpdiff_csv_output, '-d', 'perceptual'])
+      with contextlib.closing(open(skpdiff_csv_output)) as csv_file:
+        for row in csv.DictReader(csv_file):
+          perceptual_similarity = float(row[' perceptual'].strip())
+          if not 0 <= perceptual_similarity <= 1:
+            # skpdiff outputs -1 if the images are different sizes. Treat any
+            # output that does not lie in [0, 1] as having 0% perceptual
+            # similarity.
+            perceptual_similarity = 0
+          # skpdiff returns the perceptual similarity, convert it to get the
+          # perceptual difference percentage.
+          self._perceptual_difference = 100 - (perceptual_similarity * 100)
+    finally:
+      shutil.rmtree(skpdiff_csv_dir)
+
     # Final touches on diff_image: use whitediff_image as an alpha mask.
     # Unchanged pixels are transparent; differing pixels are opaque.
     diff_image.putalpha(whitediff_image)
@@ -92,7 +145,7 @@ class DiffRecord(object):
     diff_image_locator = _get_difference_locator(
         expected_image_locator=expected_image_locator,
         actual_image_locator=actual_image_locator)
-    basename = str(diff_image_locator) + IMAGE_SUFFIX
+    basename = str(diff_image_locator) + image_suffix
     _save_image(diff_image, os.path.join(
         storage_root, DIFFS_SUBDIR, basename))
     _save_image(whitediff_image, os.path.join(
@@ -113,6 +166,10 @@ class DiffRecord(object):
     return ((float(self._num_pixels_differing) * 100) /
             (self._width * self._height))
 
+  def get_perceptual_difference(self):
+    """Returns the perceptual difference percentage."""
+    return self._perceptual_difference
+
   def get_weighted_diff_measure(self):
     """Returns a weighted measure of image diffs, as a float between 0 and 100
     (inclusive)."""
@@ -122,6 +179,16 @@ class DiffRecord(object):
     """Returns the maximum difference between the expected and actual images
     for each R/G/B channel, as a list."""
     return self._max_diff_per_channel
+
+  def as_dict(self):
+    """Returns a dictionary representation of this DiffRecord, as needed when
+    constructing the JSON representation."""
+    return {
+        'numDifferingPixels': self._num_pixels_differing,
+        'percentDifferingPixels': self.get_percent_pixels_differing(),
+        'weightedDiffMeasure': self.get_weighted_diff_measure(),
+        'maxDiffPerChannel': self._max_diff_per_channel,
+    }
 
 
 class ImageDiffDB(object):
@@ -165,6 +232,8 @@ class ImageDiffDB(object):
           actual image within storage_root (probably including a checksum to
           guarantee uniqueness)
     """
+    expected_image_locator = _sanitize_locator(expected_image_locator)
+    actual_image_locator = _sanitize_locator(actual_image_locator)
     key = (expected_image_locator, actual_image_locator)
     if not key in self._diff_dict:
       try:
@@ -174,7 +243,7 @@ class ImageDiffDB(object):
             expected_image_locator=expected_image_locator,
             actual_image_url=actual_image_url,
             actual_image_locator=actual_image_locator)
-      except:
+      except Exception:
         logging.exception('got exception while creating new DiffRecord')
         return
       self._diff_dict[key] = new_diff_record
@@ -184,7 +253,8 @@ class ImageDiffDB(object):
 
     Raises a KeyError if we don't have a DiffRecord for this image pair.
     """
-    key = (expected_image_locator, actual_image_locator)
+    key = (_sanitize_locator(expected_image_locator),
+           _sanitize_locator(actual_image_locator))
     return self._diff_dict[key]
 
 
@@ -313,6 +383,15 @@ def _mkdir_unless_exists(path):
   if not os.path.isdir(path):
     os.makedirs(path)
 
+def _sanitize_locator(locator):
+  """Returns a sanitized version of a locator (one in which we know none of the
+  characters will have special meaning in filenames).
+
+  Args:
+    locator: string, or something that can be represented as a string
+  """
+  return DISALLOWED_FILEPATH_CHAR_REGEX.sub('_', str(locator))
+
 def _get_difference_locator(expected_image_locator, actual_image_locator):
   """Returns the locator string used to look up the diffs between expected_image
   and actual_image.
@@ -321,7 +400,8 @@ def _get_difference_locator(expected_image_locator, actual_image_locator):
     expected_image_locator: locator string pointing at expected image
     actual_image_locator: locator string pointing at actual image
 
-  Returns: locator where the diffs between expected and actual images can be
-      found
+  Returns: already-sanitized locator where the diffs between expected and
+      actual images can be found
   """
-  return "%s-vs-%s" % (expected_image_locator, actual_image_locator)
+  return "%s-vs-%s" % (_sanitize_locator(expected_image_locator),
+                       _sanitize_locator(actual_image_locator))

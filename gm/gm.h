@@ -1,15 +1,14 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #ifndef skiagm_DEFINED
 #define skiagm_DEFINED
 
 #include "SkBitmap.h"
-#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
 #include "SkSize.h"
@@ -49,7 +48,18 @@ namespace skiagm {
             kSkipPDFRasterization_Flag  = 1 << 8,
 
             kGPUOnly_Flag               = 1 << 9,
+
+            kAsBench_Flag               = 1 << 10, // Run the GM as a benchmark in the bench tool
         };
+
+        enum Mode {
+            kGM_Mode,
+            kSample_Mode,
+            kBench_Mode,
+        };
+
+        void setMode(Mode mode) { fMode = mode; }
+        Mode getMode() const { return fMode; }
 
         void draw(SkCanvas*);
         void drawBackground(SkCanvas*);
@@ -99,10 +109,10 @@ namespace skiagm {
             fCanvasIsDeferred = isDeferred;
         }
 
-    const SkMatrix& getStarterMatrix() { return fStarterMatrix; }
-    void setStarterMatrix(const SkMatrix& matrix) {
-        fStarterMatrix = matrix;
-    }
+        const SkMatrix& getStarterMatrix() { return fStarterMatrix; }
+        void setStarterMatrix(const SkMatrix& matrix) {
+            fStarterMatrix = matrix;
+        }
 
     protected:
         static SkString gResourcePath;
@@ -116,6 +126,7 @@ namespace skiagm {
         virtual SkMatrix onGetInitialTransform() const { return SkMatrix::I(); }
 
     private:
+        Mode     fMode;
         SkString fShortName;
         SkColor  fBGColor;
         bool     fCanvasIsDeferred; // work-around problem in srcmode.cpp

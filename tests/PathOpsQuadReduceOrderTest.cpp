@@ -62,10 +62,7 @@ static void standardTestCases(skiatest::Reporter* reporter) {
     }
 }
 
-static void PathOpsReduceOrderQuadTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsReduceOrderQuad, reporter) {
     oneOffTest(reporter);
     standardTestCases(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsReduceOrderQuadTest)

@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkMath.h"
 #include "SkPoint.h"
 #include "SkScalar.h"
+#include "Test.h"
 
 /*
    Duplicates lots of code from gpu/src/GrPathUtils.cpp
@@ -27,8 +26,8 @@ static const uint32_t MAX_POINTS_PER_CURVE = 1 << MAX_COEFF_SHIFT;
 // For determining the maximum possible number of points to use in
 // drawing a quadratic, we want to err on the high side.
 static inline int cheap_distance(SkScalar dx, SkScalar dy) {
-    int idx = SkAbs32(SkScalarRound(dx));
-    int idy = SkAbs32(SkScalarRound(dy));
+    int idx = SkAbs32(SkScalarRoundToInt(dx));
+    int idy = SkAbs32(SkScalarRoundToInt(dy));
     if (idx > idy) {
         idx += idy >> 1;
     } else {
@@ -79,7 +78,7 @@ static uint32_t quadraticPointCount_EC(const SkPoint points[], SkScalar tol) {
 
 static uint32_t quadraticPointCount_CE(const SkPoint points[]) {
     SkScalar distance = compute_distance(points);
-    return estimate_pointCount(SkScalarRound(distance));
+    return estimate_pointCount(SkScalarRoundToInt(distance));
 }
 
 static uint32_t quadraticPointCount_CC(const SkPoint points[], SkScalar tol) {
@@ -137,14 +136,11 @@ static bool one_d_pe(const int* array, const unsigned int count,
             (estimatedCount <= 2 * computedCount);
 
         if (!isAccurate) {
-            SkString errorDescription;
-            errorDescription.printf(
-                "Curve from %.2f %.2f through %.2f %.2f to %.2f %.2f "
-                "computes %d, estimates %d\n",
-                path[0].fX, path[0].fY, path[1].fX, path[1].fY,
-                path[2].fX, path[2].fY, computedCount, estimatedCount);
+            ERRORF(reporter, "Curve from %.2f %.2f through %.2f %.2f to "
+                   "%.2f %.2f computes %d, estimates %d\n",
+                   path[0].fX, path[0].fY, path[1].fX, path[1].fY,
+                   path[2].fX, path[2].fY, computedCount, estimatedCount);
             numErrors++;
-            reporter->reportFailed(errorDescription);
         }
     }
 

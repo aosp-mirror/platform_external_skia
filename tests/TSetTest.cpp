@@ -5,9 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkTSet.h"
+#include "Test.h"
 
 // Tests the SkTSet<T> class template.
 // Functions that just call SkTDArray are not tested.

@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkString.h"
 #include "SkOSFile.h"
+#include "SkString.h"
+#include "Test.h"
 
 /**
  *  Test SkPathJoin and SkBasename.

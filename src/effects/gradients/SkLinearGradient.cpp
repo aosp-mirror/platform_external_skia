@@ -59,13 +59,13 @@ SkLinearGradient::SkLinearGradient(const SkPoint pts[2], const Descriptor& desc)
     pts_to_unit_matrix(pts, &fPtsToUnit);
 }
 
-SkLinearGradient::SkLinearGradient(SkFlattenableReadBuffer& buffer)
+SkLinearGradient::SkLinearGradient(SkReadBuffer& buffer)
     : INHERITED(buffer)
     , fStart(buffer.readPoint())
     , fEnd(buffer.readPoint()) {
 }
 
-void SkLinearGradient::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkLinearGradient::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writePoint(fStart);
     buffer.writePoint(fEnd);
@@ -196,6 +196,17 @@ void shadeSpan_linear_repeat(TileProc proc, SkFixed dx, SkFixed fx,
 
 }
 
+#ifdef SK_BUILD_FOR_ANDROID
+
+#define SK_FixedNearlyZero          (SK_Fixed1 >> 12)
+
+inline bool SkFixedNearlyZero(SkFixed x, SkFixed tolerance = SK_FixedNearlyZero)
+{
+    SkASSERT(tolerance > 0);
+    return SkAbs32(x) < tolerance;
+}
+#endif
+
 void SkLinearGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
                                 int count) {
     SkASSERT(count > 0);
@@ -221,7 +232,11 @@ void SkLinearGradient::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
         }
 
         LinearShadeProc shadeProc = shadeSpan_linear_repeat;
+#ifdef SK_BUILD_FOR_ANDROID
         if (SkFixedNearlyZero(dx)) {
+#else
+        if (0 == dx) {
+#endif
             shadeProc = shadeSpan_linear_vertical_lerp;
         } else if (SkShader::kClamp_TileMode == fTileMode) {
             shadeProc = shadeSpan_linear_clamp;
@@ -377,6 +392,10 @@ void shadeSpan16_linear_repeat(TileProc proc, SkFixed dx, SkFixed fx,
 }
 }
 
+static bool fixed_nearly_zero(SkFixed x) {
+    return SkAbs32(x) < (SK_Fixed1 >> 12);
+}
+
 void SkLinearGradient::shadeSpan16(int x, int y,
                                   uint16_t* SK_RESTRICT dstC, int count) {
     SkASSERT(count > 0);
@@ -402,7 +421,7 @@ void SkLinearGradient::shadeSpan16(int x, int y,
         }
 
         LinearShade16Proc shadeProc = shadeSpan16_linear_repeat;
-        if (SkFixedNearlyZero(dx)) {
+        if (fixed_nearly_zero(dx)) {
             shadeProc = shadeSpan16_linear_vertical;
         } else if (SkShader::kClamp_TileMode == fTileMode) {
             shadeProc = shadeSpan16_linear_clamp;

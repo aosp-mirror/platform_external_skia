@@ -5,14 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkData.h"
 #include "SkDataTable.h"
-#include "SkOrderedReadBuffer.h"
-#include "SkOrderedWriteBuffer.h"
 #include "SkOSFile.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkStream.h"
+#include "Test.h"
 
 static void test_is_equal(skiatest::Reporter* reporter,
                           const SkDataTable* a, const SkDataTable* b) {
@@ -186,9 +185,7 @@ static void test_files(skiatest::Reporter* reporter) {
     {
         SkFILEWStream writer(path.c_str());
         if (!writer.isValid()) {
-            SkString msg;
-            msg.printf("Failed to create tmp file %s\n", path.c_str());
-            reporter->reportFailed(msg);
+            ERRORF(reporter, "Failed to create tmp file %s\n", path.c_str());
             return;
         }
         writer.write(s, 26);

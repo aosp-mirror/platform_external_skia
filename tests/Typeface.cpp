@@ -5,9 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkTypeface.h"
+#include "Test.h"
 
 DEF_TEST(Typeface, reporter) {
 

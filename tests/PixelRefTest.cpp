@@ -1,8 +1,7 @@
 #include "Test.h"
-#include "TestClassDef.h"
 
-#include "SkPixelRef.h"
 #include "SkMallocPixelRef.h"
+#include "SkPixelRef.h"
 
 static void test_info(skiatest::Reporter* reporter) {
     static const struct {
@@ -31,27 +30,23 @@ static void test_info(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, success);
         success = bitmap.asImageInfo(&info);
         REPORTER_ASSERT(reporter, success == gRec[i].fExpectedSuccess);
-        if (gRec[i].fExpectedSuccess) {
+        if (success && gRec[i].fExpectedSuccess) {
             REPORTER_ASSERT(reporter, info.fAlphaType == gRec[i].fAlphaType);
             REPORTER_ASSERT(reporter, info.fColorType == gRec[i].fExpectedColorType);
         }
     }
 }
 
-namespace {
-
 class TestListener : public SkPixelRef::GenIDChangeListener {
 public:
     explicit TestListener(int* ptr) : fPtr(ptr) {}
-    void onChange() SK_OVERRIDE { (*fPtr)++; }
+    virtual void onChange() SK_OVERRIDE { (*fPtr)++; }
 private:
     int* fPtr;
 };
 
-}  // namespace
-
 DEF_TEST(PixelRef_GenIDChange, r) {
-    SkImageInfo info = { 10, 10, kPMColor_SkColorType, kPremul_SkAlphaType };
+    SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
 
     SkAutoTUnref<SkPixelRef> pixelRef(SkMallocPixelRef::NewAllocate(info, 0, NULL));
 

@@ -5,30 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkPath.h"
 #include "SkCanvas.h"
-
-static void appendStr(SkString* str, const SkPaint& paint) {
-    str->appendf(" style[%d] cap[%d] join[%d] antialias[%d]",
-                 paint.getStyle(), paint.getStrokeCap(),
-                 paint.getStrokeJoin(), paint.isAntiAlias());
-}
-
-static void appendStr(SkString* str, const SkPath& path) {
-    str->appendf(" filltype[%d] ptcount[%d]",
-                 path.getFillType(), path.countPoints());
-}
+#include "SkPath.h"
+#include "Test.h"
 
 #define DIMENSION   32
 
 static void drawAndTest(skiatest::Reporter* reporter, const SkPath& path,
                         const SkPaint& paint, bool shouldDraw) {
     SkBitmap bm;
-    // explicitly specify a trim rowbytes, so we have no padding on each row
-    bm.setConfig(SkBitmap::kARGB_8888_Config, DIMENSION, DIMENSION, DIMENSION*4);
-    bm.allocPixels();
+    bm.allocN32Pixels(DIMENSION, DIMENSION);
+    SkASSERT(DIMENSION*4 == bm.rowBytes()); // ensure no padding on each row
     bm.eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas canvas(bm);
@@ -52,16 +39,16 @@ static void drawAndTest(skiatest::Reporter* reporter, const SkPath& path,
     bool success = shouldDraw ? (~0U == andValue) : (0 == orValue);
 
     if (!success) {
-        SkString str;
+        const char* str;
         if (shouldDraw) {
-            str.set("Path expected to draw everywhere, but didn't. ");
+            str = "Path expected to draw everywhere, but didn't. ";
         } else {
-            str.set("Path expected to draw nowhere, but did. ");
+            str = "Path expected to draw nowhere, but did. ";
         }
-        appendStr(&str, paint);
-        appendStr(&str, path);
-        reporter->reportFailed(str);
-
+        ERRORF(reporter, "%s style[%d] cap[%d] join[%d] antialias[%d]"
+               " filltype[%d] ptcount[%d]", str, paint.getStyle(),
+               paint.getStrokeCap(), paint.getStrokeJoin(),
+               paint.isAntiAlias(), path.getFillType(), path.countPoints());
 // uncomment this if you want to step in to see the failure
 //        canvas.drawPath(path, p);
     }

@@ -157,8 +157,8 @@ class Server(object):
 
   @property
   def results(self):
-    """ Returns the most recently generated results, or None if update_results()
-    has not been called yet. """
+    """ Returns the most recently generated results, or None if we don't have
+    any valid results (update_results() has not completed yet). """
     return self._results
 
   @property
@@ -178,15 +178,22 @@ class Server(object):
     results. """
     return self._reload_seconds
 
-  def update_results(self):
+  def update_results(self, invalidate=False):
     """ Create or update self._results, based on the expectations in
     EXPECTATIONS_DIR and the latest actuals from skia-autogen.
 
     We hold self.results_rlock while we do this, to guarantee that no other
     thread attempts to update either self._results or the underlying files at
     the same time.
+
+    Args:
+      invalidate: if True, invalidate self._results immediately upon entry;
+                  otherwise, we will let readers see those results until we
+                  replace them
     """
     with self.results_rlock:
+      if invalidate:
+        self._results = None
       logging.info('Updating actual GM results in %s from SVN repo %s ...' % (
           self._actuals_dir, ACTUALS_SVN_REPO))
       self._actuals_repo.Update('.')
@@ -208,10 +215,6 @@ class Server(object):
             EXPECTATIONS_DIR)
         _run_command(['gclient', 'sync'], TRUNK_DIRECTORY)
 
-      logging.info(
-          ('Parsing results from actuals in %s and expectations in %s, '
-           + 'and generating pixel diffs (may take a while) ...') % (
-               self._actuals_dir, EXPECTATIONS_DIR))
       self._results = results.Results(
           actuals_root=self._actuals_dir,
           expected_root=EXPECTATIONS_DIR,
@@ -257,27 +260,36 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       how to handle (static HTML and Javascript, expected/actual results, etc.)
   """
   def do_GET(self):
-    """ Handles all GET requests, forwarding them to the appropriate
-        do_GET_* dispatcher. """
-    if self.path == '' or self.path == '/' or self.path == '/index.html' :
-      self.redirect_to('/static/index.html')
-      return
-    if self.path == '/favicon.ico' :
-      self.redirect_to('/static/favicon.ico')
-      return
+    """
+    Handles all GET requests, forwarding them to the appropriate
+    do_GET_* dispatcher.
 
-    # All requests must be of this form:
-    #   /dispatcher/remainder
-    # where 'dispatcher' indicates which do_GET_* dispatcher to run
-    # and 'remainder' is the remaining path sent to that dispatcher.
-    normpath = posixpath.normpath(self.path)
-    (dispatcher_name, remainder) = PATHSPLIT_RE.match(normpath).groups()
-    dispatchers = {
-      'results': self.do_GET_results,
-      'static': self.do_GET_static,
-    }
-    dispatcher = dispatchers[dispatcher_name]
-    dispatcher(remainder)
+    If we see any Exceptions, return a 404.  This fixes http://skbug.com/2147
+    """
+    try:
+      logging.debug('do_GET: path="%s"' % self.path)
+      if self.path == '' or self.path == '/' or self.path == '/index.html' :
+        self.redirect_to('/static/index.html')
+        return
+      if self.path == '/favicon.ico' :
+        self.redirect_to('/static/favicon.ico')
+        return
+
+      # All requests must be of this form:
+      #   /dispatcher/remainder
+      # where 'dispatcher' indicates which do_GET_* dispatcher to run
+      # and 'remainder' is the remaining path sent to that dispatcher.
+      normpath = posixpath.normpath(self.path)
+      (dispatcher_name, remainder) = PATHSPLIT_RE.match(normpath).groups()
+      dispatchers = {
+          'results': self.do_GET_results,
+          'static': self.do_GET_static,
+      }
+      dispatcher = dispatchers[dispatcher_name]
+      dispatcher(remainder)
+    except:
+      self.send_error(404)
+      raise
 
   def do_GET_results(self, type):
     """ Handle a GET request for GM results.
@@ -287,31 +299,27 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             must be one of the results.RESULTS_* constants
     """
     logging.debug('do_GET_results: sending results of type "%s"' % type)
-    try:
-      # Since we must make multiple calls to the Results object, grab a
-      # reference to it in case it is updated to point at a new Results
-      # object within another thread.
-      #
-      # TODO(epoger): Rather than using a global variable for the handler
-      # to refer to the Server object, make Server a subclass of
-      # HTTPServer, and then it could be available to the handler via
-      # the handler's .server instance variable.
-      results_obj = _SERVER.results
-      if results_obj:
-        response_dict = self.package_results(results_obj, type)
-      else:
-        now = int(time.time())
-        response_dict = {
-            'header': {
-                'resultsStillLoading': True,
-                'timeUpdated': now,
-                'timeNextUpdateAvailable': now + RELOAD_INTERVAL_UNTIL_READY,
-            },
-        }
-      self.send_json_dict(response_dict)
-    except:
-      self.send_error(404)
-      raise
+    # Since we must make multiple calls to the Results object, grab a
+    # reference to it in case it is updated to point at a new Results
+    # object within another thread.
+    #
+    # TODO(epoger): Rather than using a global variable for the handler
+    # to refer to the Server object, make Server a subclass of
+    # HTTPServer, and then it could be available to the handler via
+    # the handler's .server instance variable.
+    results_obj = _SERVER.results
+    if results_obj:
+      response_dict = self.package_results(results_obj, type)
+    else:
+      now = int(time.time())
+      response_dict = {
+          'header': {
+              'resultsStillLoading': True,
+              'timeUpdated': now,
+              'timeNextUpdateAvailable': now + RELOAD_INTERVAL_UNTIL_READY,
+          },
+      }
+    self.send_json_dict(response_dict)
 
   def package_results(self, results_obj, type):
     """ Given a nonempty "results" object, package it as a response_dict
@@ -380,6 +388,7 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     # All requests must be of this form:
     #   /dispatcher
     # where 'dispatcher' indicates which do_POST_* dispatcher to run.
+    logging.debug('do_POST: path="%s"' % self.path)
     normpath = posixpath.normpath(self.path)
     dispatchers = {
       '/edits': self.do_POST_edits,
@@ -445,8 +454,11 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                         'results and submit the modifications again.' %
                         oldResultsType)
       _SERVER.results.edit_expectations(data['modifications'])
-      # Read the updated results back from disk.
-      _SERVER.update_results()
+
+    # Read the updated results back from disk.
+    # We can do this in a separate thread; we should return our success message
+    # to the UI as soon as possible.
+    thread.start_new_thread(_SERVER.update_results, (True,))
 
   def redirect_to(self, url):
     """ Redirect the HTTP client to a different url.
@@ -497,7 +509,9 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
 def main():
-  logging.basicConfig(level=logging.INFO)
+  logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+                      datefmt='%m/%d/%Y %H:%M:%S',
+                      level=logging.INFO)
   parser = argparse.ArgumentParser()
   parser.add_argument('--actuals-dir',
                     help=('Directory into which we will check out the latest '

@@ -10,6 +10,7 @@ Repackage expected/actual GM results as needed by our HTML rebaseline viewer.
 """
 
 # System-level imports
+import argparse
 import fnmatch
 import json
 import logging
@@ -25,7 +26,8 @@ import time
 # written out by the GM tool.
 # Make sure that the 'gm' dir is in the PYTHONPATH, but add it at the *end*
 # so any dirs that are already in the PYTHONPATH will be preferred.
-GM_DIRECTORY = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+PARENT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+GM_DIRECTORY = os.path.dirname(PARENT_DIRECTORY)
 if GM_DIRECTORY not in sys.path:
   sys.path.append(GM_DIRECTORY)
 import gm_json
@@ -64,11 +66,14 @@ class Results(object):
       generated_images_root: directory within which to create all pixel diffs;
           if this directory does not yet exist, it will be created
     """
+    time_start = int(time.time())
     self._image_diff_db = imagediffdb.ImageDiffDB(generated_images_root)
     self._actuals_root = actuals_root
     self._expected_root = expected_root
     self._load_actual_and_expected()
     self._timestamp = int(time.time())
+    logging.info('Results complete; took %d seconds.' %
+                 (self._timestamp - time_start))
 
   def get_timestamp(self):
     """Return the time at which this object was created, in seconds past epoch
@@ -175,6 +180,26 @@ class Results(object):
     return self._results[type]
 
   @staticmethod
+  def _ignore_builder(builder):
+    """Returns True if we should ignore expectations and actuals for a builder.
+
+    This allows us to ignore builders for which we don't maintain expectations
+    (trybots, Valgrind, ASAN, TSAN), and avoid problems like
+    https://code.google.com/p/skia/issues/detail?id=2036 ('rebaseline_server
+    produces error when trying to add baselines for ASAN/TSAN builders')
+
+    Args:
+      builder: name of this builder, as a string
+
+    Returns:
+      True if we should ignore expectations and actuals for this builder.
+    """
+    return (builder.endswith('-Trybot') or
+            ('Valgrind' in builder) or
+            ('TSAN' in builder) or
+            ('ASAN' in builder))
+
+  @staticmethod
   def _read_dicts_from_root(root, pattern='*.json'):
     """Read all JSON dictionaries within a directory tree.
 
@@ -195,9 +220,7 @@ class Results(object):
     for dirpath, dirnames, filenames in os.walk(root):
       for matching_filename in fnmatch.filter(filenames, pattern):
         builder = os.path.basename(dirpath)
-        # If we are reading from the collection of actual results, skip over
-        # the Trybot results (we don't maintain baselines for them).
-        if builder.endswith('-Trybot'):
+        if Results._ignore_builder(builder):
           continue
         fullpath = os.path.join(dirpath, matching_filename)
         meta_dict[builder] = gm_json.LoadFromFile(fullpath)
@@ -231,11 +254,7 @@ class Results(object):
     for dirpath, dirnames, filenames in os.walk(root):
       for matching_filename in fnmatch.filter(filenames, pattern):
         builder = os.path.basename(dirpath)
-        # We should never encounter Trybot *expectations*, but if we are
-        # writing into the actual-results dir, skip the Trybot actuals.
-        # (I don't know why we would ever write into the actual-results dir,
-        # though.)
-        if builder.endswith('-Trybot'):
+        if Results._ignore_builder(builder):
           continue
         per_builder_dict = meta_dict.get(builder)
         if per_builder_dict is not None:
@@ -288,7 +307,11 @@ class Results(object):
     files within self._actuals_root and self._expected_root),
     and stores them in self._results.
     """
+    logging.info('Reading actual-results JSON files from %s...' %
+                 self._actuals_root)
     actual_builder_dicts = Results._read_dicts_from_root(self._actuals_root)
+    logging.info('Reading expected-results JSON files from %s...' %
+                 self._expected_root)
     expected_builder_dicts = Results._read_dicts_from_root(self._expected_root)
 
     categories_all = {}
@@ -310,7 +333,13 @@ class Results(object):
 
     data_all = []
     data_failures = []
-    for builder in sorted(actual_builder_dicts.keys()):
+    builders = sorted(actual_builder_dicts.keys())
+    num_builders = len(builders)
+    builder_num = 0
+    for builder in builders:
+      builder_num += 1
+      logging.info('Generating pixel diffs for builder #%d of %d, "%s"...' %
+                   (builder_num, num_builders, builder))
       actual_results_for_this_builder = (
           actual_builder_dicts[builder][gm_json.JSONKEY_ACTUALRESULTS])
       for result_type in sorted(actual_results_for_this_builder.keys()):
@@ -403,6 +432,7 @@ class Results(object):
             results_for_this_test['numDifferingPixels'] = 0
             results_for_this_test['percentDifferingPixels'] = 0
             results_for_this_test['weightedDiffMeasure'] = 0
+            results_for_this_test['perceptualDifference'] = 0
             results_for_this_test['maxDiffPerChannel'] = 0
           else:
             try:
@@ -415,6 +445,8 @@ class Results(object):
                   diff_record.get_percent_pixels_differing())
               results_for_this_test['weightedDiffMeasure'] = (
                   diff_record.get_weighted_diff_measure())
+              results_for_this_test['perceptualDifference'] = (
+                  diff_record.get_perceptual_difference())
               results_for_this_test['maxDiffPerChannel'] = (
                   diff_record.get_max_diff_per_channel())
             except KeyError:
@@ -483,3 +515,31 @@ class Results(object):
     for category_value in category_values:
       if not category_dict[category_name].get(category_value):
         category_dict[category_name][category_value] = 0
+
+
+def main():
+  logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+                      datefmt='%m/%d/%Y %H:%M:%S',
+                      level=logging.INFO)
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      '--actuals', required=True,
+      help='Directory containing all actual-result JSON files')
+  parser.add_argument(
+      '--expectations', required=True,
+      help='Directory containing all expected-result JSON files')
+  parser.add_argument(
+      '--outfile', required=True,
+      help='File to write result summary into, in JSON format')
+  parser.add_argument(
+      '--workdir', default='.workdir',
+      help='Directory within which to download images and generate diffs')
+  args = parser.parse_args()
+  results = Results(actuals_root=args.actuals,
+                    expected_root=args.expectations,
+                    generated_images_root=args.workdir)
+  gm_json.WriteToFile(results.get_results_of_type(RESULTS_ALL), args.outfile)
+
+
+if __name__ == '__main__':
+  main()

@@ -8,7 +8,8 @@
 #include "SkPictureImageFilter.h"
 #include "SkDevice.h"
 #include "SkCanvas.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkValidationUtils.h"
 
 SkPictureImageFilter::SkPictureImageFilter(SkPicture* picture)
@@ -30,22 +31,37 @@ SkPictureImageFilter::~SkPictureImageFilter() {
     SkSafeUnref(fPicture);
 }
 
-SkPictureImageFilter::SkPictureImageFilter(SkFlattenableReadBuffer& buffer)
+SkPictureImageFilter::SkPictureImageFilter(SkReadBuffer& buffer)
   : INHERITED(0, buffer),
     fPicture(NULL) {
-    // FIXME: unflatten picture here.
+#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
+    if (buffer.readBool()) {
+        fPicture = SkPicture::CreateFromBuffer(buffer);
+    }
+#else
+    buffer.readBool();
+#endif
     buffer.readRect(&fRect);
 }
 
-void SkPictureImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkPictureImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    // FIXME: flatten picture here.
+#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
+    bool hasPicture = (fPicture != NULL);
+    buffer.writeBool(hasPicture);
+    if (hasPicture) {
+        fPicture->flatten(buffer);
+    }
+#else
+    buffer.writeBool(false);
+#endif
     buffer.writeRect(fRect);
 }
 
 bool SkPictureImageFilter::onFilterImage(Proxy* proxy, const SkBitmap&, const SkMatrix& matrix,
-                                   SkBitmap* result, SkIPoint* offset) {
+                                   SkBitmap* result, SkIPoint* offset) const {
     if (!fPicture) {
+        offset->fX = offset->fY = 0;
         return true;
     }
 
@@ -55,6 +71,7 @@ bool SkPictureImageFilter::onFilterImage(Proxy* proxy, const SkBitmap&, const Sk
     floatBounds.roundOut(&bounds);
 
     if (bounds.isEmpty()) {
+        offset->fX = offset->fY = 0;
         return true;
     }
 
@@ -71,7 +88,7 @@ bool SkPictureImageFilter::onFilterImage(Proxy* proxy, const SkBitmap&, const Sk
     canvas.drawPicture(*fPicture);
 
     *result = device.get()->accessBitmap(false);
-    offset->fX += bounds.fLeft;
-    offset->fY += bounds.fTop;
+    offset->fX = bounds.fLeft;
+    offset->fY = bounds.fTop;
     return true;
 }

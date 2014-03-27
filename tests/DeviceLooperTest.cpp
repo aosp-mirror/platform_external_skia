@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkDeviceLooper.h"
 #include "SkRasterClip.h"
+#include "Test.h"
 
 static void make_bm(SkBitmap* bm, int w, int h) {
     bm->setConfig(SkBitmap::kA8_Config, w, h);

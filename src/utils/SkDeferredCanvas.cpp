@@ -140,7 +140,6 @@ void DeferredPipeController::playback(bool silent) {
 // FIXME: Derive from SkBaseDevice.
 class DeferredDevice : public SkBitmapDevice {
 public:
-    explicit DeferredDevice(SkBaseDevice* immediateDevice);
     explicit DeferredDevice(SkSurface* surface);
     ~DeferredDevice();
 
@@ -173,6 +172,8 @@ public:
 
     virtual void writePixels(const SkBitmap& bitmap, int x, int y,
                                 SkCanvas::Config8888 config8888) SK_OVERRIDE;
+
+    virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
 
 protected:
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE;
@@ -253,17 +254,6 @@ private:
     size_t fPreviousStorageAllocated;
     size_t fBitmapSizeThreshold;
 };
-
-DeferredDevice::DeferredDevice(SkBaseDevice* immediateDevice)
-    : SkBitmapDevice(SkBitmap::kNo_Config,
-                     immediateDevice->width(), immediateDevice->height(),
-                     immediateDevice->isOpaque(),
-                     immediateDevice->getDeviceProperties()) {
-    fSurface = NULL;
-    fImmediateCanvas = SkNEW_ARGS(SkCanvas, (immediateDevice));
-    fPipeController.setPlaybackCanvas(fImmediateCanvas);
-    this->init();
-}
 
 DeferredDevice::DeferredDevice(SkSurface* surface)
     : SkBitmapDevice(SkBitmap::kNo_Config,
@@ -507,6 +497,10 @@ SkBaseDevice* DeferredDevice::onCreateCompatibleDevice(
     return immediateDevice()->createCompatibleDevice(config, width, height, isOpaque);
 }
 
+SkSurface* DeferredDevice::newSurface(const SkImageInfo& info) {
+    return this->immediateDevice()->newSurface(info);
+}
+
 bool DeferredDevice::onReadPixels(
     const SkBitmap& bitmap, int x, int y, SkCanvas::Config8888 config8888) {
     this->flushPendingCommands(kNormal_PlaybackMode);
@@ -548,11 +542,6 @@ private:
 
 SkDeferredCanvas* SkDeferredCanvas::Create(SkSurface* surface) {
     SkAutoTUnref<DeferredDevice> deferredDevice(SkNEW_ARGS(DeferredDevice, (surface)));
-    return SkNEW_ARGS(SkDeferredCanvas, (deferredDevice));
-}
-
-SkDeferredCanvas* SkDeferredCanvas::Create(SkBaseDevice* device) {
-    SkAutoTUnref<DeferredDevice> deferredDevice(SkNEW_ARGS(DeferredDevice, (device)));
     return SkNEW_ARGS(SkDeferredCanvas, (deferredDevice));
 }
 

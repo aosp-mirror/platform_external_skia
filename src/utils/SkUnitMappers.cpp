@@ -6,7 +6,9 @@
  * found in the LICENSE file.
  */
 #include "SkUnitMappers.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
+
 
 SkDiscreteMapper::SkDiscreteMapper(int segments) {
     if (segments < 2) {
@@ -17,7 +19,7 @@ SkDiscreteMapper::SkDiscreteMapper(int segments) {
             segments = 0xFFFF;
         }
         fSegments = segments;
-        fScale = SK_Fract1 / (segments - 1);
+        fScale = (1 << 30) / (segments - 1);
     }
 }
 
@@ -28,13 +30,13 @@ uint16_t SkDiscreteMapper::mapUnit16(uint16_t input) {
     return SkToU16(x);
 }
 
-SkDiscreteMapper::SkDiscreteMapper(SkFlattenableReadBuffer& rb)
+SkDiscreteMapper::SkDiscreteMapper(SkReadBuffer& rb)
         : SkUnitMapper(rb) {
     fSegments = rb.readInt();
     fScale = rb.read32();
 }
 
-void SkDiscreteMapper::flatten(SkFlattenableWriteBuffer& wb) const {
+void SkDiscreteMapper::flatten(SkWriteBuffer& wb) const {
     this->INHERITED::flatten(wb);
 
     wb.writeInt(fSegments);
@@ -55,5 +57,5 @@ uint16_t SkCosineMapper::mapUnit16(uint16_t input)
     return SkToU16(x);
 }
 
-SkCosineMapper::SkCosineMapper(SkFlattenableReadBuffer& rb)
+SkCosineMapper::SkCosineMapper(SkReadBuffer& rb)
     : SkUnitMapper(rb) {}

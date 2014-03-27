@@ -69,6 +69,9 @@ public:
 #if SK_ANGLE
         kAngle_DeviceType,
 #endif
+#if SK_MESA
+        kMesa_DeviceType,
+#endif
         kBitmap_DeviceType,
 #if SK_SUPPORT_GPU
         kGPU_DeviceType,
@@ -77,6 +80,7 @@ public:
 
     enum BBoxHierarchyType {
         kNone_BBoxHierarchyType = 0,
+        kQuadTree_BBoxHierarchyType,
         kRTree_BBoxHierarchyType,
         kTileGrid_BBoxHierarchyType,
     };
@@ -148,6 +152,12 @@ public:
     void resetState(bool callFinish);
 
     /**
+     * Remove all decoded textures from the CPU caches and all uploaded textures
+     * from the GPU.
+     */
+    void purgeTextures();
+
+    /**
      * Set the backend type. Returns true on success and false on failure.
      */
     bool setDeviceType(SkDeviceTypes deviceType) {
@@ -169,6 +179,11 @@ public:
 #if SK_ANGLE
             case kAngle_DeviceType:
                 glContextType = GrContextFactory::kANGLE_GLContextType;
+                break;
+#endif
+#if SK_MESA
+            case kMesa_DeviceType:
+                glContextType = GrContextFactory::kMESA_GLContextType;
                 break;
 #endif
 #endif
@@ -228,8 +243,13 @@ public:
         if (!fViewport.isEmpty()) {
             config.appendf("_viewport_%ix%i", fViewport.width(), fViewport.height());
         }
+        if (fScaleFactor != SK_Scalar1) {
+            config.appendf("_scalar_%f", SkScalarToFloat(fScaleFactor));
+        }
         if (kRTree_BBoxHierarchyType == fBBoxHierarchyType) {
             config.append("_rtree");
+        } else if (kQuadTree_BBoxHierarchyType == fBBoxHierarchyType) {
+            config.append("_quadtree");
         } else if (kTileGrid_BBoxHierarchyType == fBBoxHierarchyType) {
             config.append("_grid");
         }
@@ -245,6 +265,11 @@ public:
 #if SK_ANGLE
             case kAngle_DeviceType:
                 config.append("_angle");
+                break;
+#endif
+#if SK_MESA
+            case kMesa_DeviceType:
+                config.append("_mesa");
                 break;
 #endif
             default:
@@ -263,6 +288,10 @@ public:
                 // fall through
 #if SK_ANGLE
             case kAngle_DeviceType:
+                // fall through
+#endif
+#if SK_MESA
+            case kMesa_DeviceType:
 #endif
                 return true;
             default:
@@ -280,6 +309,11 @@ public:
 #if SK_ANGLE
             case kAngle_DeviceType:
                 glContextType = GrContextFactory::kANGLE_GLContextType;
+                break;
+#endif
+#if SK_MESA
+            case kMesa_DeviceType:
+                glContextType = GrContextFactory::kMESA_GLContextType;
                 break;
 #endif
             default:

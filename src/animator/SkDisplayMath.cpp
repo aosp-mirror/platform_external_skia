@@ -21,7 +21,6 @@ enum SkDisplayMath_Properties {
 };
 
 const SkScalar SkDisplayMath::gConstants[] = {
-#ifdef SK_SCALAR_IS_FLOAT
     2.718281828f,   // E
     2.302585093f,   // LN10
     0.693147181f,   // LN2
@@ -30,16 +29,6 @@ const SkScalar SkDisplayMath::gConstants[] = {
     3.141592654f,   // PI
     0.707106781f,   // SQRT1_2
     1.414213562f        // SQRT2
-#else
-    0x2B7E1,    // E
-    0x24D76,    // LN10
-    0xB172,     // LN2
-    0x6F2E,     // LOG10E
-    0x17154,    // LOG2E
-    0x3243F,    // PI
-    0xB505,     // SQRT1_2
-    0x16A0A // SQRT2
-#endif
 };
 
 enum SkDisplayMath_Functions {
@@ -166,7 +155,7 @@ void SkDisplayMath::executeFunction(SkDisplayable* target, int index,
             scalarResult = SkScalarATan2(input, parameters[1].fOperand.fScalar);
             break;
         case SK_FUNCTION(ceil):
-            scalarResult = SkIntToScalar(SkScalarCeil(input));
+            scalarResult = SkScalarCeilToScalar(input);
             break;
         case SK_FUNCTION(cos):
             scalarResult = SkScalarCos(input);
@@ -175,7 +164,7 @@ void SkDisplayMath::executeFunction(SkDisplayable* target, int index,
             scalarResult = SkScalarExp(input);
             break;
         case SK_FUNCTION(floor):
-            scalarResult = SkIntToScalar(SkScalarFloor(input));
+            scalarResult = SkScalarFloorToScalar(input);
             break;
         case SK_FUNCTION(log):
             scalarResult = SkScalarLog(input);
@@ -204,7 +193,7 @@ void SkDisplayMath::executeFunction(SkDisplayable* target, int index,
             scalarResult = fRandom.nextUScalar1();
             break;
         case SK_FUNCTION(round):
-            scalarResult = SkIntToScalar(SkScalarRound(input));
+            scalarResult = SkScalarRoundToScalar(input);
             break;
         case SK_FUNCTION(sin):
             scalarResult = SkScalarSin(input);

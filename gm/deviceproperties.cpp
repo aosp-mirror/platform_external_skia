@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 #include "gm.h"
+#include "SkBitmapDevice.h"
 #include "SkTypeface.h"
 
 namespace skiagm {
@@ -38,8 +39,7 @@ protected:
     virtual void onDraw(SkCanvas* originalCanvas) {
         SkISize size = this->getISize();
         SkBitmap bitmap;
-        bitmap.setConfig(SkBitmap::kARGB_8888_Config, size.width(), size.height());
-        bitmap.allocPixels();
+        bitmap.allocN32Pixels(size.width(), size.height());
         SkDeviceProperties properties = SkDeviceProperties::Make(
             SkDeviceProperties::Geometry::Make(SkDeviceProperties::Geometry::kVertical_Orientation,
                                                SkDeviceProperties::Geometry::kBGR_Layout),

@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkCommandLineFlags.h"
 #include "SkFontMgr.h"
 #include "SkTypeface.h"
+#include "Test.h"
 
 /*
  *  If the font backend is going to "alias" some font names to other fonts

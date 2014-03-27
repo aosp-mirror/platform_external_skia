@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
-#include "SkTypes.h"
 #include "SkTFitsIn.h"
+#include "SkTypes.h"
+#include "Test.h"
 
 #include <limits>
 

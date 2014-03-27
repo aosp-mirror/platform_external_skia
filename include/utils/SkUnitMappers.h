@@ -23,12 +23,12 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDiscreteMapper)
 
 protected:
-    SkDiscreteMapper(SkFlattenableReadBuffer& );
-    virtual void flatten(SkFlattenableWriteBuffer&) const SK_OVERRIDE;
+    SkDiscreteMapper(SkReadBuffer& );
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
 private:
     int     fSegments;
-    SkFract fScale;    // computed from fSegments
+    int32_t fScale;    // computed from fSegments
 
     typedef SkUnitMapper INHERITED;
 };
@@ -45,7 +45,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkCosineMapper)
 
 protected:
-    SkCosineMapper(SkFlattenableReadBuffer&);
+    SkCosineMapper(SkReadBuffer&);
 
 private:
 

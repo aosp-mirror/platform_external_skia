@@ -28,7 +28,7 @@ static const SkDPoint outPoint[] = {
 
 static const size_t tests_count = SK_ARRAY_COUNT(tests);
 
-static void PathOpsTriangleUtilitiesTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsTriangleUtilities, reporter) {
     for (size_t index = 0; index < tests_count; ++index) {
         const SkDTriangle& triangle = tests[index];
         SkASSERT(ValidTriangle(triangle));
@@ -55,7 +55,7 @@ static const SkDTriangle oneOff[] = {
 
 static const size_t oneOff_count = SK_ARRAY_COUNT(oneOff);
 
-static void PathOpsTriangleOneOffTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsTriangleOneOff, reporter) {
     for (size_t index = 0; index < oneOff_count; ++index) {
         const SkDTriangle& triangle = oneOff[index];
         SkASSERT(ValidTriangle(triangle));
@@ -68,8 +68,3 @@ static void PathOpsTriangleOneOffTest(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsTriangleUtilitiesTest)
-
-DEFINE_TESTCLASS_SHORT(PathOpsTriangleOneOffTest)

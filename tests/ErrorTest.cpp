@@ -5,11 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkError.h"
 #include "SkPath.h"
 #include "SkRect.h"
+#include "Test.h"
 
 typedef struct {
     skiatest::Reporter *fReporter;

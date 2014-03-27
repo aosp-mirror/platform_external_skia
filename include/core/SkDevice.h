@@ -59,9 +59,7 @@ public:
     SkMetaData& getMetaData();
 
     enum Capabilities {
-        kGL_Capability     = 0x1,  //!< mask indicating GL support
-        kVector_Capability = 0x2,  //!< mask indicating a vector representation
-        kAll_Capabilities  = 0x3
+        kVector_Capability = 0x1,  //!< mask indicating a vector representation
     };
     virtual uint32_t getDeviceCapabilities() = 0;
 
@@ -77,6 +75,12 @@ public:
         //Currently, all the properties are leaky.
         return fLeakyProperties;
     }
+
+    /**
+     *  Return ImageInfo for this device. If the canvas is not backed by pixels
+     *  (cpu or gpu), then the info's ColorType will be kUnknown_SkColorType.
+     */
+    virtual SkImageInfo imageInfo() const;
 
     /**
      *  Return the bounds of the device in the coordinate space of the root
@@ -211,9 +215,7 @@ protected:
      */
     virtual void clear(SkColor color) = 0;
 
-    /**
-     * Deprecated name for clear.
-     */
+    SK_ATTR_DEPRECATED("use clear() instead")
     void eraseColor(SkColor eraseColor) { this->clear(eraseColor); }
 
     /** These are called inside the per-device-layer loop for each draw call.
@@ -283,11 +285,6 @@ protected:
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) = 0;
 
-    // DEPRECATED -- will remove this once the subclass stop overriding it
-    virtual void drawPosTextOnPath(const SkDraw&, const void* text, size_t len,
-                                   const SkPoint pos[], const SkPaint&,
-                                   const SkPath&, const SkMatrix*) {}
-
     /**
      *  On success (returns true), copy the device pixels into the bitmap.
      *  On failure, the bitmap parameter is left unchanged and false is
@@ -350,7 +347,7 @@ protected:
      *  some subclasses that do not support pixel manipulations after drawing
      *  has occurred (e.g. printing). The default implementation returns true.
      */
-    virtual bool allowImageFilter(SkImageFilter*) = 0;
+    virtual bool allowImageFilter(const SkImageFilter*) = 0;
 
     /**
      *  Override and return true for filters that the device can handle
@@ -359,7 +356,7 @@ protected:
      *  Returning false means the SkCanvas will have apply the filter itself,
      *  and just pass the resulting image to the device.
      */
-    virtual bool canHandleImageFilter(SkImageFilter*) = 0;
+    virtual bool canHandleImageFilter(const SkImageFilter*) = 0;
 
     /**
      *  Related (but not required) to canHandleImageFilter, this method returns
@@ -368,12 +365,27 @@ protected:
      *  If the device does not recognize or support this filter,
      *  it just returns false and leaves result and offset unchanged.
      */
-    virtual bool filterImage(SkImageFilter*, const SkBitmap&, const SkMatrix&,
+    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkMatrix&,
                              SkBitmap* result, SkIPoint* offset) = 0;
 
     // This is equal kBGRA_Premul_Config8888 or kRGBA_Premul_Config8888 if
     // either is identical to kNative_Premul_Config8888. Otherwise, -1.
     static const SkCanvas::Config8888 kPMColorAlias;
+
+protected:
+    // default impl returns NULL
+    virtual SkSurface* newSurface(const SkImageInfo&);
+    
+    // default impl returns NULL
+    virtual const void* peekPixels(SkImageInfo*, size_t* rowBytes);
+    
+    /**
+     *  Leaky properties are those which the device should be applying but it isn't.
+     *  These properties will be applied by the draw, when and as it can.
+     *  If the device does handle a property, that property should be set to the identity value
+     *  for that property, effectively making it non-leaky.
+     */
+    SkDeviceProperties fLeakyProperties;
 
 private:
     friend class SkCanvas;
@@ -382,6 +394,7 @@ private:
     friend class SkDrawIter;
     friend class SkDeviceFilteredPaint;
     friend class SkDeviceImageFilterProxy;
+    friend class DeferredDevice;    // for newSurface
 
     friend class SkSurface_Raster;
 
@@ -412,13 +425,6 @@ private:
 
     SkIPoint    fOrigin;
     SkMetaData* fMetaData;
-    /**
-     *  Leaky properties are those which the device should be applying but it isn't.
-     *  These properties will be applied by the draw, when and as it can.
-     *  If the device does handle a property, that property should be set to the identity value
-     *  for that property, effectively making it non-leaky.
-     */
-    SkDeviceProperties fLeakyProperties;
 
 #ifdef SK_DEBUG
     bool        fAttachedToCanvas;

@@ -26,7 +26,7 @@ static const SkDQuad quadratics[] = {
 
 static const size_t quadratics_count = SK_ARRAY_COUNT(quadratics);
 
-static void PathOpsQuadImplicitTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsQuadImplicit, reporter) {
     // split large quadratic
     // compare original, parts, to see if the are coincident
     for (size_t index = 0; index < quadratics_count; ++index) {
@@ -48,6 +48,3 @@ static void PathOpsQuadImplicitTest(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsQuadImplicitTest)

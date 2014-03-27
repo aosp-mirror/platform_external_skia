@@ -8,7 +8,8 @@
 #include "SkImageFilter.h"
 
 #include "SkBitmap.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkRect.h"
 #include "SkValidationUtils.h"
 #if SK_SUPPORT_GPU
@@ -51,7 +52,7 @@ SkImageFilter::~SkImageFilter() {
     delete[] fInputs;
 }
 
-SkImageFilter::SkImageFilter(int inputCount, SkFlattenableReadBuffer& buffer) {
+SkImageFilter::SkImageFilter(int inputCount, SkReadBuffer& buffer) {
     fInputCount = buffer.readInt();
     if (buffer.validate((fInputCount >= 0) && ((inputCount < 0) || (fInputCount == inputCount)))) {
         fInputs = new SkImageFilter*[fInputCount];
@@ -78,7 +79,7 @@ SkImageFilter::SkImageFilter(int inputCount, SkFlattenableReadBuffer& buffer) {
     }
 }
 
-void SkImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeInt(fInputCount);
     for (int i = 0; i < fInputCount; i++) {
         SkImageFilter* input = getInput(i);
@@ -93,26 +94,48 @@ void SkImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
 
 bool SkImageFilter::filterImage(Proxy* proxy, const SkBitmap& src,
                                 const SkMatrix& ctm,
-                                SkBitmap* result, SkIPoint* loc) {
+                                SkBitmap* result, SkIPoint* offset) const {
     SkASSERT(result);
-    SkASSERT(loc);
+    SkASSERT(offset);
     /*
      *  Give the proxy first shot at the filter. If it returns false, ask
      *  the filter to do it.
      */
-    return (proxy && proxy->filterImage(this, src, ctm, result, loc)) ||
-           this->onFilterImage(proxy, src, ctm, result, loc);
+    return (proxy && proxy->filterImage(this, src, ctm, result, offset)) ||
+           this->onFilterImage(proxy, src, ctm, result, offset);
 }
 
 bool SkImageFilter::filterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                 SkIRect* dst) {
+                                 SkIRect* dst) const {
     SkASSERT(&src);
     SkASSERT(dst);
     return this->onFilterBounds(src, ctm, dst);
 }
 
+void SkImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) const {
+    if (0 == fInputCount) {
+        *dst = src;
+        return;
+    }
+    if (this->getInput(0)) {
+        this->getInput(0)->computeFastBounds(src, dst);
+    } else {
+        *dst = src;
+    }
+    for (int i = 1; i < fInputCount; i++) {
+        SkImageFilter* input = this->getInput(i);
+        if (input) {
+            SkRect bounds;
+            input->computeFastBounds(src, &bounds);
+            dst->join(bounds);
+        } else {
+            dst->join(src);
+        }
+    }
+}
+
 bool SkImageFilter::onFilterImage(Proxy*, const SkBitmap&, const SkMatrix&,
-                                  SkBitmap*, SkIPoint*) {
+                                  SkBitmap*, SkIPoint*) const {
     return false;
 }
 
@@ -121,16 +144,18 @@ bool SkImageFilter::canFilterImageGPU() const {
 }
 
 bool SkImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const SkMatrix& ctm,
-                                   SkBitmap* result, SkIPoint* offset) {
+                                   SkBitmap* result, SkIPoint* offset) const {
 #if SK_SUPPORT_GPU
     SkBitmap input;
     SkASSERT(fInputCount == 1);
-    if (!SkImageFilterUtils::GetInputResultGPU(this->getInput(0), proxy, src, ctm, &input, offset)) {
+    SkIPoint srcOffset = SkIPoint::Make(0, 0);
+    if (!SkImageFilterUtils::GetInputResultGPU(this->getInput(0), proxy, src, ctm, &input, &srcOffset)) {
         return false;
     }
     GrTexture* srcTexture = input.getTexture();
     SkIRect bounds;
     src.getBounds(&bounds);
+    bounds.offset(srcOffset);
     if (!this->applyCropRect(&bounds, ctm)) {
         return false;
     }
@@ -150,6 +175,9 @@ bool SkImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const SkMa
     GrContext::AutoRenderTarget art(context, dst.texture()->asRenderTarget());
     GrContext::AutoClip acs(context, dstRect);
     GrEffectRef* effect;
+    offset->fX = bounds.left();
+    offset->fY = bounds.top();
+    bounds.offset(-srcOffset);
     SkMatrix matrix(ctm);
     matrix.postTranslate(SkIntToScalar(-bounds.left()), SkIntToScalar(-bounds.top()));
     this->asNewEffect(&effect, srcTexture, matrix, bounds);
@@ -161,8 +189,6 @@ bool SkImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const SkMa
 
     SkAutoTUnref<GrTexture> resultTex(dst.detach());
     SkImageFilterUtils::WrapTexture(resultTex, bounds.width(), bounds.height(), result);
-    offset->fX += bounds.left();
-    offset->fY += bounds.top();
     return true;
 #else
     return false;
@@ -184,8 +210,28 @@ bool SkImageFilter::applyCropRect(SkIRect* rect, const SkMatrix& matrix) const {
 }
 
 bool SkImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                   SkIRect* dst) {
-    *dst = src;
+                                   SkIRect* dst) const {
+    if (fInputCount < 1) {
+        return false;
+    }
+
+    SkIRect bounds;
+    for (int i = 0; i < fInputCount; ++i) {
+        SkImageFilter* filter = this->getInput(i);
+        SkIRect rect = src;
+        if (filter && !filter->filterBounds(src, ctm, &rect)) {
+            return false;
+        }
+        if (0 == i) {
+            bounds = rect;
+        } else {
+            bounds.join(rect);
+        }
+    }
+
+    // don't modify dst until now, so we don't accidentally change it in the
+    // loop, but then return false on the next filter.
+    *dst = bounds;
     return true;
 }
 

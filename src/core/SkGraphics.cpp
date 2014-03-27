@@ -9,7 +9,6 @@
 
 #include "SkGraphics.h"
 
-#include "Sk64.h"
 #include "SkBlitter.h"
 #include "SkCanvas.h"
 #include "SkFloat.h"
@@ -55,8 +54,10 @@ void SkGraphics::Init() {
 #ifdef SK_DEVELOPER
     skRTConfRegistry().possiblyDumpFile();
     skRTConfRegistry().validate();
-    SkDebugf("Non-default runtime configuration options:\n");
-    skRTConfRegistry().printNonDefault( );
+    if (skRTConfRegistry().hasNonDefault()) {
+        SkDebugf("Non-default runtime configuration options:\n");
+        skRTConfRegistry().printNonDefault();
+    }
 #endif
 
 #ifdef BUILD_EMBOSS_TABLE

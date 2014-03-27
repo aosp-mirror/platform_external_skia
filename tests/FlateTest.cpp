@@ -8,11 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkData.h"
 #include "SkFlate.h"
 #include "SkStream.h"
+#include "Test.h"
 
 // A memory stream that reports zero size with the standard call, like
 // an unseekable file stream would.

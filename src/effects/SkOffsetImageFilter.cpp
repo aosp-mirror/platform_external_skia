@@ -9,39 +9,41 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDevice.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkMatrix.h"
 #include "SkPaint.h"
 
 bool SkOffsetImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
                                         const SkMatrix& matrix,
                                         SkBitmap* result,
-                                        SkIPoint* loc) {
+                                        SkIPoint* offset) const {
     SkImageFilter* input = getInput(0);
     SkBitmap src = source;
+    SkIPoint srcOffset = SkIPoint::Make(0, 0);
 #ifdef SK_DISABLE_OFFSETIMAGEFILTER_OPTIMIZATION
     if (false) {
 #else
     if (!cropRectIsSet()) {
 #endif
-        if (input && !input->filterImage(proxy, source, matrix, &src, loc)) {
+        if (input && !input->filterImage(proxy, source, matrix, &src, &srcOffset)) {
             return false;
         }
 
         SkVector vec;
         matrix.mapVectors(&vec, &fOffset, 1);
 
-        loc->fX += SkScalarRoundToInt(vec.fX);
-        loc->fY += SkScalarRoundToInt(vec.fY);
+        offset->fX = srcOffset.fX + SkScalarRoundToInt(vec.fX);
+        offset->fY = srcOffset.fY + SkScalarRoundToInt(vec.fY);
         *result = src;
     } else {
-        SkIPoint srcOffset = SkIPoint::Make(0, 0);
         if (input && !input->filterImage(proxy, source, matrix, &src, &srcOffset)) {
             return false;
         }
 
         SkIRect bounds;
         src.getBounds(&bounds);
+        bounds.offset(srcOffset);
 
         if (!applyCropRect(&bounds, matrix)) {
             return false;
@@ -54,25 +56,39 @@ bool SkOffsetImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
         SkCanvas canvas(device);
         SkPaint paint;
         paint.setXfermodeMode(SkXfermode::kSrc_Mode);
-        canvas.drawBitmap(src, fOffset.fX - bounds.left(), fOffset.fY - bounds.top(), &paint);
+        canvas.translate(SkIntToScalar(srcOffset.fX - bounds.fLeft),
+                         SkIntToScalar(srcOffset.fY - bounds.fTop));
+        canvas.drawBitmap(src, fOffset.x(), fOffset.y(), &paint);
         *result = device->accessBitmap(false);
-        loc->fX += bounds.left();
-        loc->fY += bounds.top();
+        offset->fX = bounds.fLeft;
+        offset->fY = bounds.fTop;
     }
     return true;
 }
 
+void SkOffsetImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) const {
+    if (getInput(0)) {
+        getInput(0)->computeFastBounds(src, dst);
+    } else {
+        *dst = src;
+    }
+    SkRect copy = *dst;
+    dst->offset(fOffset.fX, fOffset.fY);
+    dst->join(copy);
+}
+
 bool SkOffsetImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                         SkIRect* dst) {
+                                         SkIRect* dst) const {
     SkVector vec;
     ctm.mapVectors(&vec, &fOffset, 1);
 
     *dst = src;
-    dst->offset(SkScalarRoundToInt(vec.fX), SkScalarRoundToInt(vec.fY));
+    dst->offset(-SkScalarCeilToInt(vec.fX), -SkScalarCeilToInt(vec.fY));
+    dst->join(src);
     return true;
 }
 
-void SkOffsetImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkOffsetImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writePoint(fOffset);
 }
@@ -82,7 +98,7 @@ SkOffsetImageFilter::SkOffsetImageFilter(SkScalar dx, SkScalar dy, SkImageFilter
     fOffset.set(dx, dy);
 }
 
-SkOffsetImageFilter::SkOffsetImageFilter(SkFlattenableReadBuffer& buffer)
+SkOffsetImageFilter::SkOffsetImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     buffer.readPoint(&fOffset);
     buffer.validate(SkScalarIsFinite(fOffset.fX) &&

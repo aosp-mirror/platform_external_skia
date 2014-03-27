@@ -5,10 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkColor.h"
 #include "SkXfermode.h"
+#include "Test.h"
 
 static SkPMColor bogusXfermodeProc(SkPMColor src, SkPMColor dst) {
     return 42;

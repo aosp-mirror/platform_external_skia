@@ -14,7 +14,7 @@
 SkValidatingReadBuffer::SkValidatingReadBuffer(const void* data, size_t size) :
     fError(false) {
     this->setMemory(data, size);
-    this->setFlags(SkFlattenableReadBuffer::kValidation_Flag);
+    this->setFlags(SkReadBuffer::kValidation_Flag);
 }
 
 SkValidatingReadBuffer::~SkValidatingReadBuffer() {
@@ -226,6 +226,10 @@ void SkValidatingReadBuffer::readBitmap(SkBitmap* bitmap) {
 SkTypeface* SkValidatingReadBuffer::readTypeface() {
     // TODO: Implement this (securely) when needed
     return NULL;
+}
+
+bool SkValidatingReadBuffer::validateAvailable(size_t size) {
+    return this->validate((size <= SK_MaxU32) && fReader.isAvailable(static_cast<uint32_t>(size)));
 }
 
 SkFlattenable* SkValidatingReadBuffer::readFlattenable(SkFlattenable::Type type) {

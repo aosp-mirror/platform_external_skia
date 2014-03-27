@@ -13,9 +13,9 @@
 #define GL_GLEXT_PROTOTYPES
 #include "osmesa_wrapper.h"
 
-#define GR_GL_GET_PROC(F) interface->f ## F = (GrGL ## F ## Proc) \
+#define GR_GL_GET_PROC(F) interface->fFunctions.f ## F = (GrGL ## F ## Proc) \
         OSMesaGetProcAddress("gl" #F);
-#define GR_GL_GET_PROC_SUFFIX(F, S) interface->f ## F = (GrGL ## F ## Proc) \
+#define GR_GL_GET_PROC_SUFFIX(F, S) interface->fFunctions.f ## F = (GrGL ## F ## Proc) \
         OSMesaGetProcAddress("gl" #F #S);
 
 // We use OSMesaGetProcAddress for every gl function to avoid accidentally using
@@ -30,7 +30,7 @@ const GrGLInterface* GrGLCreateMesaInterface() {
             (GrGLGetIntegervProc) OSMesaGetProcAddress("glGetIntegerv");
 
         GrGLExtensions extensions;
-        if (!extensions.init(kDesktop_GrGLBinding, getString, getStringi, getIntegerv)) {
+        if (!extensions.init(kGL_GrGLStandard, getString, getStringi, getIntegerv)) {
             return NULL;
         }
 
@@ -41,7 +41,7 @@ const GrGLInterface* GrGLCreateMesaInterface() {
             // We must have array and element_array buffer objects.
             return NULL;
         }
-        GrGLInterface* interface = new GrGLInterface();
+        GrGLInterface* interface = SkNEW(GrGLInterface());
 
         GR_GL_GET_PROC(ActiveTexture);
         GR_GL_GET_PROC(BeginQuery);
@@ -141,7 +141,7 @@ const GrGLInterface* GrGLCreateMesaInterface() {
         GR_GL_GET_PROC(TexParameteri);
         GR_GL_GET_PROC(TexParameteriv);
         GR_GL_GET_PROC(TexStorage2D);
-        if (NULL == interface->fTexStorage2D) {
+        if (NULL == interface->fFunctions.fTexStorage2D) {
             GR_GL_GET_PROC_SUFFIX(TexStorage2D, EXT);
         }
         GR_GL_GET_PROC(TexSubImage2D);
@@ -220,7 +220,10 @@ const GrGLInterface* GrGLCreateMesaInterface() {
             return NULL;
         }
         GR_GL_GET_PROC(BindFragDataLocationIndexed);
-        interface->fBindingsExported = kDesktop_GrGLBinding;
+
+        interface->fStandard = kGL_GrGLStandard;
+        interface->fExtensions.swap(&extensions);
+
         return interface;
     } else {
         return NULL;

@@ -142,6 +142,15 @@
               '-Werror',
             ],
           }],
+          # For profiling; reveals some costs, exaggerates others (e.g. trivial setters & getters).
+          [ 'skia_disable_inlining', {
+            'cflags': [
+              '-fno-inline',
+              '-fno-default-inline',
+              '-finline-limit=0',
+              '-fno-omit-frame-pointer',
+            ],
+          }],
           [ 'skia_arch_type == "arm" and arm_thumb == 1', {
             'cflags': [
               '-mthumb',
@@ -193,6 +202,28 @@
       },
     ],
 
+    ['skia_android_framework', {
+      'cflags': [
+        # Skia does not enforce this usage pattern so we disable it here to avoid
+        # unecessary log spew when building
+        '-Wno-unused-parameter',
+
+        # Android's -D_FORTIFY_SOURCE=2 extensions are incompatibile with SkString.
+        # Revert to -D_FORTIFY_SOURCE=1
+        '-U_FORTIFY_SOURCE',
+        '-D_FORTIFY_SOURCE=1',
+      ],
+      'defines': [
+        'DCT_IFAST_SUPPORTED',
+        # using freetype's embolden allows us to adjust fake bold settings at
+        # draw-time, at which point we know which SkTypeface is being drawn
+        'SK_USE_FREETYPE_EMBOLDEN',
+        # Android provides at least FreeType 2.4.0 at runtime.
+        'SK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400',
+        # Skia should not use dlopen on Android.
+        'SK_CAN_USE_DLOPEN=0',
+      ],
+    }],
 
     [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris", "nacl", "chromeos"]',
       {
@@ -300,9 +331,6 @@
 
     [ 'skia_os == "mac"',
       {
-        'variables': {
-          'mac_sdk%': '<!(python <(DEPTH)/tools/find_mac_sdk.py 10.6)',
-        },
         'defines': [
           'SK_BUILD_FOR_MAC',
         ],
@@ -324,14 +352,7 @@
                 '-Wall',
                 '-Wextra',
                 '-Wno-unused-parameter',
-              ],
-            },
-          }],
-# This old compiler is really bad at figuring out when things are uninitialized, so ignore it.
-          [ '<(mac_sdk)==10.6', {
-            'xcode_settings': {
-              'OTHER_CPLUSPLUSFLAGS': [
-                '-Wno-uninitialized',
+                '-Wno-uninitialized',  # Disabled because we think GCC 4.2 is bad at this.
               ],
             },
           }],
@@ -359,12 +380,12 @@
         'xcode_settings': {
           'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
           'conditions': [
-            [ 'skia_osx_sdkroot==""', {
-              'SDKROOT': 'macosx<(mac_sdk)',  # -isysroot
+            [ 'skia_osx_deployment_target==""', {
+              'MACOSX_DEPLOYMENT_TARGET': '10.6', # -mmacos-version-min, passed in environment to ld.
             }, {
-              'SDKROOT': '<(skia_osx_sdkroot)',  # -isysroot
+              'MACOSX_DEPLOYMENT_TARGET': '<(skia_osx_deployment_target)',
             }],
-           ],
+          ],
 # trying to get this to work, but it needs clang I think...
 #          'WARNING_CFLAGS': '-Wexit-time-destructors',
           'CLANG_WARN_CXX0X_EXTENSIONS': 'NO',
@@ -462,6 +483,12 @@
           '-fuse-ld=gold',
         ],
         'conditions': [
+          [ 'skia_android_framework', {
+            'libraries!': [
+              '-lstdc++',
+              '-lm',
+            ],
+          }],
           [ 'skia_shared_lib', {
             'cflags': [
               '-fPIC',

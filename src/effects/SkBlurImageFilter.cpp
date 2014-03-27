@@ -8,7 +8,8 @@
 #include "SkBitmap.h"
 #include "SkBlurImageFilter.h"
 #include "SkColorPriv.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkGpuBlurUtils.h"
 #include "SkBlurImage_opts.h"
 #if SK_SUPPORT_GPU
@@ -16,7 +17,7 @@
 #include "SkImageFilterUtils.h"
 #endif
 
-SkBlurImageFilter::SkBlurImageFilter(SkFlattenableReadBuffer& buffer)
+SkBlurImageFilter::SkBlurImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     fSigma.fWidth = buffer.readScalar();
     fSigma.fHeight = buffer.readScalar();
@@ -34,7 +35,7 @@ SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX,
     SkASSERT(sigmaX >= 0 && sigmaY >= 0);
 }
 
-void SkBlurImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkBlurImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeScalar(fSigma.fWidth);
     buffer.writeScalar(fSigma.fHeight);
@@ -135,9 +136,10 @@ static void getBox3Params(SkScalar s, int *kernelSize, int* kernelSize3, int *lo
 
 bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
                                       const SkBitmap& source, const SkMatrix& ctm,
-                                      SkBitmap* dst, SkIPoint* offset) {
+                                      SkBitmap* dst, SkIPoint* offset) const {
     SkBitmap src = source;
-    if (getInput(0) && !getInput(0)->filterImage(proxy, source, ctm, &src, offset)) {
+    SkIPoint srcOffset = SkIPoint::Make(0, 0);
+    if (getInput(0) && !getInput(0)->filterImage(proxy, source, ctm, &src, &srcOffset)) {
         return false;
     }
 
@@ -152,21 +154,24 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
 
     SkIRect srcBounds, dstBounds;
     src.getBounds(&srcBounds);
+    srcBounds.offset(srcOffset);
     if (!this->applyCropRect(&srcBounds, ctm)) {
         return false;
     }
 
     dst->setConfig(src.config(), srcBounds.width(), srcBounds.height());
     dst->getBounds(&dstBounds);
-    dst->allocPixels();
-    if (!dst->getPixels()) {
+    if (!dst->allocPixels()) {
         return false;
     }
 
+    SkVector sigma, localSigma = SkVector::Make(fSigma.width(), fSigma.height());
+    ctm.mapVectors(&sigma, &localSigma, 1);
+
     int kernelSizeX, kernelSizeX3, lowOffsetX, highOffsetX;
     int kernelSizeY, kernelSizeY3, lowOffsetY, highOffsetY;
-    getBox3Params(fSigma.width(), &kernelSizeX, &kernelSizeX3, &lowOffsetX, &highOffsetX);
-    getBox3Params(fSigma.height(), &kernelSizeY, &kernelSizeY3, &lowOffsetY, &highOffsetY);
+    getBox3Params(sigma.x(), &kernelSizeX, &kernelSizeX3, &lowOffsetX, &highOffsetX);
+    getBox3Params(sigma.y(), &kernelSizeY, &kernelSizeY3, &lowOffsetY, &highOffsetY);
 
     if (kernelSizeX < 0 || kernelSizeY < 0) {
         return false;
@@ -174,6 +179,8 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
 
     if (kernelSizeX == 0 && kernelSizeY == 0) {
         src.copyTo(dst, dst->config());
+        offset->fX = srcBounds.fLeft;
+        offset->fY = srcBounds.fTop;
         return true;
     }
 
@@ -183,6 +190,9 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
+    offset->fX = srcBounds.fLeft;
+    offset->fY = srcBounds.fTop;
+    srcBounds.offset(-srcOffset);
     const SkPMColor* s = src.getAddr32(srcBounds.left(), srcBounds.top());
     SkPMColor* t = temp.getAddr32(0, 0);
     SkPMColor* d = dst->getAddr32(0, 0);
@@ -212,33 +222,62 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
         boxBlurX(d,  h,  t, kernelSizeY,  highOffsetY, lowOffsetY,  h, w);
         boxBlurXY(t, h,  d, kernelSizeY3, highOffsetY, highOffsetY, h, w);
     }
-    offset->fX += srcBounds.fLeft;
-    offset->fY += srcBounds.fTop;
+    return true;
+}
+
+
+void SkBlurImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) const {
+    if (getInput(0)) {
+        getInput(0)->computeFastBounds(src, dst);
+    } else {
+        *dst = src;
+    }
+
+    dst->outset(SkScalarMul(fSigma.width(), SkIntToScalar(3)),
+                SkScalarMul(fSigma.height(), SkIntToScalar(3)));
+}
+
+bool SkBlurImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
+                                       SkIRect* dst) const {
+    SkIRect bounds = src;
+    if (getInput(0) && !getInput(0)->filterBounds(src, ctm, &bounds)) {
+        return false;
+    }
+    SkVector sigma, localSigma = SkVector::Make(fSigma.width(), fSigma.height());
+    ctm.mapVectors(&sigma, &localSigma, 1);
+    bounds.outset(SkScalarCeilToInt(SkScalarMul(sigma.x(), SkIntToScalar(3))),
+                  SkScalarCeilToInt(SkScalarMul(sigma.y(), SkIntToScalar(3))));
+    *dst = bounds;
     return true;
 }
 
 bool SkBlurImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const SkMatrix& ctm,
-                                       SkBitmap* result, SkIPoint* offset) {
+                                       SkBitmap* result, SkIPoint* offset) const {
 #if SK_SUPPORT_GPU
     SkBitmap input;
-    if (!SkImageFilterUtils::GetInputResultGPU(getInput(0), proxy, src, ctm, &input, offset)) {
+    SkIPoint srcOffset = SkIPoint::Make(0, 0);
+    if (!SkImageFilterUtils::GetInputResultGPU(getInput(0), proxy, src, ctm, &input, &srcOffset)) {
         return false;
     }
     GrTexture* source = input.getTexture();
     SkIRect rect;
     src.getBounds(&rect);
+    rect.offset(srcOffset);
     if (!this->applyCropRect(&rect, ctm)) {
         return false;
     }
+    SkVector sigma, localSigma = SkVector::Make(fSigma.width(), fSigma.height());
+    ctm.mapVectors(&sigma, &localSigma, 1);
+    offset->fX = rect.fLeft;
+    offset->fY = rect.fTop;
+    rect.offset(-srcOffset);
     SkAutoTUnref<GrTexture> tex(SkGpuBlurUtils::GaussianBlur(source->getContext(),
                                                              source,
                                                              false,
                                                              SkRect::Make(rect),
                                                              true,
-                                                             fSigma.width(),
-                                                             fSigma.height()));
-    offset->fX += rect.fLeft;
-    offset->fY += rect.fTop;
+                                                             sigma.x(),
+                                                             sigma.y()));
     return SkImageFilterUtils::WrapTexture(tex, rect.width(), rect.height(), result);
 #else
     SkDEBUGFAIL("Should not call in GPU-less build");

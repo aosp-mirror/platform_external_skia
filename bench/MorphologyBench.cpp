@@ -41,7 +41,7 @@ public:
         if (SkScalarFraction(rad) != 0) {
             fName.printf("morph_%.2f_%s", SkScalarToFloat(rad), name);
         } else {
-            fName.printf("morph_%d_%s", SkScalarRound(rad), name);
+            fName.printf("morph_%d_%s", SkScalarRoundToInt(rad), name);
         }
     }
 
@@ -84,9 +84,6 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-// Fixed point can be 100x slower than float on these tests, causing
-// bench to timeout.
-#ifndef SK_SCALAR_IS_FIXED
 DEF_BENCH( return new MorphologyBench(SMALL, kErode_MT); )
 DEF_BENCH( return new MorphologyBench(SMALL, kDilate_MT); )
 
@@ -97,4 +94,3 @@ DEF_BENCH( return new MorphologyBench(REAL, kErode_MT); )
 DEF_BENCH( return new MorphologyBench(REAL, kDilate_MT); )
 
 DEF_BENCH( return new MorphologyBench(0, kErode_MT); )
-#endif

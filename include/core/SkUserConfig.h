@@ -75,22 +75,6 @@
 
 #define SK_USE_POSIX_THREADS
 
-/*  Scalars (the fractional value type in skia) can be implemented either as
-    floats or 16.16 integers (fixed). Exactly one of these two symbols must be
-    defined.
-*/
-#define SK_SCALAR_IS_FLOAT
-#undef SK_SCALAR_IS_FIXED
-
-
-/*  For some performance-critical scalar operations, skia will optionally work
-    around the standard float operators if it knows that the CPU does not have
-    native support for floats. If your environment uses software floating point,
-    define this flag.
- */
-//#define SK_SOFTWARE_FLOAT
-
-
 /*  Skia has lots of debug-only code. Often this is just null checks or other
     parameter checking, but sometimes it can be quite intrusive (e.g. check that
     each 32bit pixel is in premultiplied form). This code can be very useful
@@ -235,6 +219,7 @@
  */
 //#define SK_SUPPORT_GPU 1
 
+
 /* The PDF generation code uses Path Ops to generate inverse fills and complex
  * clipping paths, but at this time, Path Ops is not release ready yet. So,
  * the code is hidden behind this #define guard. If you are feeling adventurous
@@ -244,6 +229,15 @@
  */
 //#define SK_PDF_USE_PATHOPS
 
-#define SK_REF_CNT_MIXIN_INCLUDE "../ports/SkRefCnt_android.h"
+/* Skia uses these defines as the target of include preprocessor directives.
+ * The header files pointed to by these defines provide declarations and
+ * possibly inline implementations of threading primitives.
+ *
+ * See SkThread.h for documentation on what these includes must contain.
+ */
+#define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
+#define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
+
+#define SK_SCALAR_IS_FLOAT
 
 #endif

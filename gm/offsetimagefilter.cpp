@@ -27,10 +27,8 @@ protected:
     }
 
     void make_bitmap() {
-        fBitmap.setConfig(SkBitmap::kARGB_8888_Config, 80, 80);
-        fBitmap.allocPixels();
-        SkBitmapDevice device(fBitmap);
-        SkCanvas canvas(&device);
+        fBitmap.allocN32Pixels(80, 80);
+        SkCanvas canvas(fBitmap);
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -41,10 +39,8 @@ protected:
     }
 
     void make_checkerboard() {
-        fCheckerboard.setConfig(SkBitmap::kARGB_8888_Config, 80, 80);
-        fCheckerboard.allocPixels();
-        SkBitmapDevice device(fCheckerboard);
-        SkCanvas canvas(&device);
+        fCheckerboard.allocN32Pixels(80, 80);
+        SkCanvas canvas(fCheckerboard);
         canvas.clear(0x00000000);
         SkPaint darkPaint;
         darkPaint.setColor(0xFF404040);
@@ -70,9 +66,10 @@ protected:
     void drawClippedBitmap(SkCanvas* canvas, const SkBitmap& bitmap, const SkPaint& paint,
                            SkScalar x, SkScalar y) {
         canvas->save();
-        canvas->clipRect(SkRect::MakeXYWH(x, y,
+        canvas->translate(x, y);
+        canvas->clipRect(SkRect::MakeXYWH(0, 0,
             SkIntToScalar(bitmap.width()), SkIntToScalar(bitmap.height())));
-        canvas->drawBitmap(bitmap, x, y, &paint);
+        canvas->drawBitmap(bitmap, 0, 0, &paint);
         canvas->restore();
     }
 
@@ -86,10 +83,10 @@ protected:
         SkPaint paint;
 
         int x = 0, y = 0;
-        for (size_t i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
             SkBitmap* bitmap = (i & 0x01) ? &fCheckerboard : &fBitmap;
-            SkIRect cropRect = SkIRect::MakeXYWH(x + i * 12,
-                                                 y + i * 8,
+            SkIRect cropRect = SkIRect::MakeXYWH(i * 12,
+                                                 i * 8,
                                                  bitmap->width() - i * 8,
                                                  bitmap->height() - i * 12);
             SkImageFilter::CropRect rect(SkRect::Make(cropRect));

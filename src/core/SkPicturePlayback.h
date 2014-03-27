@@ -14,7 +14,7 @@
 #include "SkBitmap.h"
 #include "SkData.h"
 #include "SkMatrix.h"
-#include "SkOrderedReadBuffer.h"
+#include "SkReadBuffer.h"
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkPathHeap.h"
@@ -64,12 +64,14 @@ public:
     explicit SkPicturePlayback(const SkPictureRecord& record, bool deepCopy = false);
     static SkPicturePlayback* CreateFromStream(SkStream*, const SkPictInfo&,
                                                SkPicture::InstallPixelRefProc);
+    static SkPicturePlayback* CreateFromBuffer(SkReadBuffer&);
 
     virtual ~SkPicturePlayback();
 
     void draw(SkCanvas& canvas, SkDrawPictureCallback*);
 
     void serialize(SkWStream*, SkPicture::EncodeBitmap) const;
+    void flatten(SkWriteBuffer&) const;
 
     void dumpSize() const;
 
@@ -84,6 +86,7 @@ public:
 protected:
     bool parseStream(SkStream*, const SkPictInfo&,
                      SkPicture::InstallPixelRefProc);
+    bool parseBuffer(SkReadBuffer& buffer);
 #ifdef SK_DEVELOPER
     virtual bool preDraw(int opIndex, int type);
     virtual void postDraw(int opIndex);
@@ -109,12 +112,8 @@ private:
         return (*fBitmaps)[index];
     }
 
-    const SkMatrix* getMatrix(SkReader32& reader) {
-        int index = reader.readInt();
-        if (index == 0) {
-            return NULL;
-        }
-        return &(*fMatrices)[index - 1];
+    void getMatrix(SkReader32& reader, SkMatrix* matrix) {
+        reader.readMatrix(matrix);
     }
 
     const SkPath& getPath(SkReader32& reader) {
@@ -151,9 +150,8 @@ private:
         }
     }
 
-    const SkRegion& getRegion(SkReader32& reader) {
-        int index = reader.readInt();
-        return (*fRegions)[index - 1];
+    void getRegion(SkReader32& reader, SkRegion* region) {
+        reader.readRegion(region);
     }
 
     void getText(SkReader32& reader, TextContainer* text) {
@@ -169,7 +167,6 @@ public:
     int bitmaps(size_t* size);
     int paints(size_t* size);
     int paths(size_t* size);
-    int regions(size_t* size);
 #endif
 
 #ifdef SK_DEBUG_DUMP
@@ -198,8 +195,8 @@ public:
 private:    // these help us with reading/writing
     bool parseStreamTag(SkStream*, const SkPictInfo&, uint32_t tag, size_t size,
                         SkPicture::InstallPixelRefProc);
-    bool parseBufferTag(SkOrderedReadBuffer&, uint32_t tag, size_t size);
-    void flattenToBuffer(SkOrderedWriteBuffer&) const;
+    bool parseBufferTag(SkReadBuffer&, uint32_t tag, size_t size);
+    void flattenToBuffer(SkWriteBuffer&) const;
 
 private:
     // Only used by getBitmap() if the passed in index is SkBitmapHeap::INVALID_SLOT. This empty
@@ -210,9 +207,7 @@ private:
     SkAutoTUnref<SkPathHeap> fPathHeap;
 
     SkTRefArray<SkBitmap>* fBitmaps;
-    SkTRefArray<SkMatrix>* fMatrices;
     SkTRefArray<SkPaint>* fPaints;
-    SkTRefArray<SkRegion>* fRegions;
 
     SkData* fOpData;    // opcodes and parameters
 

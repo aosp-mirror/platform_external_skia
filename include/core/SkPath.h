@@ -555,6 +555,25 @@ public:
         return computedDir == dir;
     }
 
+    enum PathAsRect {
+        /** The path can not draw the same as its bounds. */
+        kNone_PathAsRect,
+        /** The path draws the same as its bounds when filled. */
+        kFill_PathAsRect,
+        /** The path draws the same as its bounds when stroked or filled. */
+        kStroke_PathAsRect,
+    };
+
+    /** Returns kFill_PathAsRect or kStroke_PathAsRect if drawing the path (either filled or
+        stroked) will be equivalent to filling/stroking the path's bounding rect. If
+        either is true, and direction is not null, sets the direction of the contour. If the
+        path is not drawn equivalent to a rect, returns kNone_PathAsRect and ignores direction.
+
+        @param direction If not null, set to the contour's direction when it is drawn as a rect
+        @return the path's PathAsRect type
+     */
+    PathAsRect asRect(Direction* direction = NULL) const;
+
     /** Returns true if the path specifies a rectangle. If so, and if isClosed is
         not null, set isClosed to true if the path is closed. Also, if returning true
         and direction is not null, return the rect direction. If the path does not
@@ -683,25 +702,41 @@ public:
      */
     void addPoly(const SkPoint pts[], int count, bool close);
 
+    enum AddPathMode {
+        /** Source path contours are added as new contours.
+        */
+        kAppend_AddPathMode,
+        /** Path is added by extending the last contour of the destination path
+            with the first contour of the source path. If the last contour of
+            the destination path is closed, then it will not be extended.
+            Instead, the start of source path will be extended by a straight
+            line to the end point of the destination path.
+        */
+        kExtend_AddPathMode
+    };
+
     /** Add a copy of src to the path, offset by (dx,dy)
         @param src  The path to add as a new contour
         @param dx   The amount to translate the path in X as it is added
         @param dx   The amount to translate the path in Y as it is added
     */
-    void addPath(const SkPath& src, SkScalar dx, SkScalar dy);
+    void addPath(const SkPath& src, SkScalar dx, SkScalar dy,
+                 AddPathMode mode = kAppend_AddPathMode);
 
     /** Add a copy of src to the path
     */
-    void addPath(const SkPath& src) {
+    void addPath(const SkPath& src, AddPathMode mode = kAppend_AddPathMode) {
         SkMatrix m;
         m.reset();
-        this->addPath(src, m);
+        this->addPath(src, m, mode);
     }
 
     /** Add a copy of src to the path, transformed by matrix
         @param src  The path to add as a new contour
+        @param matrix  Transform applied to src
+        @param mode  Determines how path is added
     */
-    void addPath(const SkPath& src, const SkMatrix& matrix);
+    void addPath(const SkPath& src, const SkMatrix& matrix, AddPathMode mode = kAppend_AddPathMode);
 
     /**
      *  Same as addPath(), but reverses the src input
@@ -931,20 +966,14 @@ public:
 
 private:
     enum SerializationOffsets {
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        kNewFormat_SerializationShift = 29, // requires 1 bit
-#endif
+        // 1 free bit at 29
         kUnused1_SerializationShift = 28,    // 1 free bit
         kDirection_SerializationShift = 26, // requires 2 bits
         kUnused2_SerializationShift = 25,    // 1 free bit
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        kOldIsOval_SerializationShift = 24,    // requires 1 bit
-#endif
+        // 1 free bit at 24
         kConvexity_SerializationShift = 16, // requires 8 bits
         kFillType_SerializationShift = 8,   // requires 8 bits
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-        kOldSegmentMask_SerializationShift = 0 // requires 4 bits
-#endif
+        // 8 free bits at 0
     };
 
     SkAutoTUnref<SkPathRef> fPathRef;
@@ -1010,9 +1039,6 @@ private:
         ed.setBounds(rect);
     }
 
-#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
-    friend class SkPathRef;     // just for SerializationOffsets
-#endif
     friend class SkAutoPathBoundsUpdate;
     friend class SkAutoDisableOvalCheck;
     friend class SkAutoDisableDirectionCheck;

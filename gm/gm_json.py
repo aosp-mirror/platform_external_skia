@@ -12,6 +12,7 @@ __author__ = 'Elliot Poger'
 
 
 # system-level imports
+import io
 import json
 import os
 
@@ -90,7 +91,7 @@ SKIMAGE_ACTUALS_BASE_URL = (
 SKIMAGE_EXPECTATIONS_ROOT = os.path.join('expectations', 'skimage')
 
 # Pattern used to assemble each image's filename
-IMAGE_FILENAME_PATTERN = '(\S+)_(\S+)\.png'  # matches (testname, config)
+IMAGE_FILENAME_PATTERN = '(.+)_(.+)\.png'  # matches (testname, config)
 
 def CreateGmActualUrl(test_name, hash_type, hash_digest,
                       gm_actuals_root_url=GM_ACTUALS_ROOT_HTTP_URL):
@@ -103,6 +104,8 @@ def CreateGmActualUrl(test_name, hash_type, hash_digest,
   hash_digest: the hash digest of the image to retrieve
   gm_actuals_root_url: root url where actual images are stored
   """
+  # TODO(epoger): Maybe use url_or_path.join() so that, for testing, this can
+  # return either a URL or a local filepath?
   return '%s/%s/%s/%s.png' % (gm_actuals_root_url, hash_type, test_name,
                               hash_digest)
 
@@ -124,6 +127,10 @@ def LoadFromFile(file_path):
   return LoadFromString(file_contents)
 
 def WriteToFile(json_dict, file_path):
-  """Writes the JSON summary in json_dict out to file_path."""
-  with open(file_path, 'w') as outfile:
-    json.dump(json_dict, outfile, sort_keys=True, indent=2)
+  """Writes the JSON summary in json_dict out to file_path.
+
+  The file is written Unix-style (each line ends with just LF, not CRLF);
+  see https://code.google.com/p/skia/issues/detail?id=1815 for reasons."""
+  with io.open(file_path, mode='w', newline='', encoding='utf-8') as outfile:
+    outfile.write(unicode(json.dumps(json_dict, outfile, sort_keys=True,
+                                     indent=2)))

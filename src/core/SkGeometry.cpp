@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,9 +5,7 @@
  * found in the LICENSE file.
  */
 
-
 #include "SkGeometry.h"
-#include "Sk64.h"
 #include "SkMatrix.h"
 
 bool SkXRayCrossesLine(const SkXRay& pt, const SkPoint pts[2], bool* ambiguous) {
@@ -68,32 +65,18 @@ bool SkXRayCrossesLine(const SkXRay& pt, const SkPoint pts[2], bool* ambiguous) 
     involving integer multiplies by 2 or 3, but fewer calls to SkScalarMul.
     May also introduce overflow of fixed when we compute our setup.
 */
-#ifdef SK_SCALAR_IS_FIXED
-    #define DIRECT_EVAL_OF_POLYNOMIALS
-#endif
+//    #define DIRECT_EVAL_OF_POLYNOMIALS
 
 ////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_SCALAR_IS_FIXED
-    static int is_not_monotonic(int a, int b, int c, int d)
-    {
-        return (((a - b) | (b - c) | (c - d)) & ((b - a) | (c - b) | (d - c))) >> 31;
+static int is_not_monotonic(float a, float b, float c) {
+    float ab = a - b;
+    float bc = b - c;
+    if (ab < 0) {
+        bc = -bc;
     }
-
-    static int is_not_monotonic(int a, int b, int c)
-    {
-        return (((a - b) | (b - c)) & ((b - a) | (c - b))) >> 31;
-    }
-#else
-    static int is_not_monotonic(float a, float b, float c)
-    {
-        float ab = a - b;
-        float bc = b - c;
-        if (ab < 0)
-            bc = -bc;
-        return ab == 0 || bc < 0;
-    }
-#endif
+    return ab == 0 || bc < 0;
+}
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -141,23 +124,11 @@ int SkFindUnitQuadRoots(SkScalar A, SkScalar B, SkScalar C, SkScalar roots[2])
 
     SkScalar* r = roots;
 
-#ifdef SK_SCALAR_IS_FLOAT
     float R = B*B - 4*A*C;
     if (R < 0 || SkScalarIsNaN(R)) {  // complex roots
         return 0;
     }
     R = sk_float_sqrt(R);
-#else
-    Sk64    RR, tmp;
-
-    RR.setMul(B,B);
-    tmp.setMul(A,C);
-    tmp.shiftLeft(2);
-    RR.sub(tmp);
-    if (RR.isNeg())
-        return 0;
-    SkFixed R = RR.getSqrt();
-#endif
 
     SkScalar Q = (B < 0) ? -(B-R)/2 : -(B+R)/2;
     r += valid_unit_divide(Q, A, r);
@@ -172,25 +143,8 @@ int SkFindUnitQuadRoots(SkScalar A, SkScalar B, SkScalar C, SkScalar roots[2])
     return (int)(r - roots);
 }
 
-#ifdef SK_SCALAR_IS_FIXED
-/** Trim A/B/C down so that they are all <= 32bits
-    and then call SkFindUnitQuadRoots()
-*/
-static int Sk64FindFixedQuadRoots(const Sk64& A, const Sk64& B, const Sk64& C, SkFixed roots[2])
-{
-    int na = A.shiftToMake32();
-    int nb = B.shiftToMake32();
-    int nc = C.shiftToMake32();
-
-    int shift = SkMax32(na, SkMax32(nb, nc));
-    SkASSERT(shift >= 0);
-
-    return SkFindUnitQuadRoots(A.getShiftRight(shift), B.getShiftRight(shift), C.getShiftRight(shift), roots);
-}
-#endif
-
-/////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 static SkScalar eval_quad(const SkScalar src[], SkScalar t)
 {
@@ -297,11 +251,7 @@ int SkFindQuadExtrema(SkScalar a, SkScalar b, SkScalar c, SkScalar tValue[1])
     /*  At + B == 0
         t = -B / A
     */
-#ifdef SK_SCALAR_IS_FIXED
-    return is_not_monotonic(a, b, c) && valid_unit_divide(a - b, a - b - b + c, tValue);
-#else
     return valid_unit_divide(a - b, a - b - b + c, tValue);
-#endif
 }
 
 static inline void flatten_double_quad_extrema(SkScalar coords[14])
@@ -401,31 +351,7 @@ float SkFindQuadMaxCurvature(const SkPoint src[3]) {
     SkScalar    By = src[0].fY - src[1].fY - src[1].fY + src[2].fY;
     SkScalar    t = 0;  // 0 means don't chop
 
-#ifdef SK_SCALAR_IS_FLOAT
     (void)valid_unit_divide(-(Ax * Bx + Ay * By), Bx * Bx + By * By, &t);
-#else
-    // !!! should I use SkFloat here? seems like it
-    Sk64    numer, denom, tmp;
-
-    numer.setMul(Ax, -Bx);
-    tmp.setMul(Ay, -By);
-    numer.add(tmp);
-
-    if (numer.isPos())  // do nothing if numer <= 0
-    {
-        denom.setMul(Bx, Bx);
-        tmp.setMul(By, By);
-        denom.add(tmp);
-        SkASSERT(!denom.isNeg());
-        if (numer < denom)
-        {
-            t = numer.getFixedDiv(denom);
-            SkASSERT(t >= 0 && t <= SK_Fixed1);     // assert that we're numerically stable (ha!)
-            if ((unsigned)t >= SK_Fixed1)           // runtime check for numerical stability
-                t = 0;  // ignore the chop
-        }
-    }
-#endif
     return t;
 }
 
@@ -441,11 +367,7 @@ int SkChopQuadAtMaxCurvature(const SkPoint src[3], SkPoint dst[5])
     }
 }
 
-#ifdef SK_SCALAR_IS_FLOAT
-    #define SK_ScalarTwoThirds  (0.666666666f)
-#else
-    #define SK_ScalarTwoThirds  ((SkFixed)(43691))
-#endif
+#define SK_ScalarTwoThirds  (0.666666666f)
 
 void SkConvertQuadToCubic(const SkPoint src[3], SkPoint dst[4]) {
     const SkScalar scale = SK_ScalarTwoThirds;
@@ -553,11 +475,6 @@ void SkEvalCubicAt(const SkPoint src[4], SkScalar t, SkPoint* loc, SkVector* tan
 */
 int SkFindCubicExtrema(SkScalar a, SkScalar b, SkScalar c, SkScalar d, SkScalar tValues[2])
 {
-#ifdef SK_SCALAR_IS_FIXED
-    if (!is_not_monotonic(a, b, c, d))
-        return 0;
-#endif
-
     // we divide A,B,C by 3 to simplify
     SkScalar A = d - a + 3*(b - c);
     SkScalar B = 2*(a - b - b + c);
@@ -747,29 +664,8 @@ int SkFindCubicInflections(const SkPoint src[4], SkScalar tValues[])
     SkScalar    By = src[2].fY - 2 * src[1].fY + src[0].fY;
     SkScalar    Cx = src[3].fX + 3 * (src[1].fX - src[2].fX) - src[0].fX;
     SkScalar    Cy = src[3].fY + 3 * (src[1].fY - src[2].fY) - src[0].fY;
-    int         count;
 
-#ifdef SK_SCALAR_IS_FLOAT
-    count = SkFindUnitQuadRoots(Bx*Cy - By*Cx, Ax*Cy - Ay*Cx, Ax*By - Ay*Bx, tValues);
-#else
-    Sk64    A, B, C, tmp;
-
-    A.setMul(Bx, Cy);
-    tmp.setMul(By, Cx);
-    A.sub(tmp);
-
-    B.setMul(Ax, Cy);
-    tmp.setMul(Ay, Cx);
-    B.sub(tmp);
-
-    C.setMul(Ax, By);
-    tmp.setMul(Ay, Bx);
-    C.sub(tmp);
-
-    count = Sk64FindFixedQuadRoots(A, B, C, tValues);
-#endif
-
-    return count;
+    return SkFindUnitQuadRoots(Bx*Cy - By*Cx, Ax*Cy - Ay*Cx, Ax*By - Ay*Bx, tValues);
 }
 
 int SkChopCubicAtInflections(const SkPoint src[], SkPoint dst[10])
@@ -798,8 +694,6 @@ template <typename T> void bubble_sort(T array[], int count)
                 array[j-1] = tmp;
             }
 }
-
-#include "SkFP.h"
 
 // newton refinement
 #if 0
@@ -893,9 +787,9 @@ static void test_collaps_duplicates() {
 }
 #endif
 
-#if defined _WIN32 && _MSC_VER >= 1300  && defined SK_SCALAR_IS_FIXED // disable warning : unreachable code if building fixed point for windows desktop
-#pragma warning ( disable : 4702 )
-#endif
+static SkScalar SkScalarCubeRoot(SkScalar x) {
+    return sk_float_pow(x, 0.3333333f);
+}
 
 /*  Solve coeff(t) == 0, returning the number of roots that
     lie withing 0 < t < 1.
@@ -904,44 +798,35 @@ static void test_collaps_duplicates() {
     Eliminates repeated roots (so that all tValues are distinct, and are always
     in increasing order.
 */
-static int solve_cubic_polynomial(const SkFP coeff[4], SkScalar tValues[3])
+static int solve_cubic_polynomial(const SkScalar coeff[4], SkScalar tValues[3])
 {
-#ifndef SK_SCALAR_IS_FLOAT
-    return 0;   // this is not yet implemented for software float
-#endif
-
     if (SkScalarNearlyZero(coeff[0]))   // we're just a quadratic
     {
         return SkFindUnitQuadRoots(coeff[1], coeff[2], coeff[3], tValues);
     }
 
-    SkFP    a, b, c, Q, R;
+    SkScalar a, b, c, Q, R;
 
     {
         SkASSERT(coeff[0] != 0);
 
-        SkFP inva = SkFPInvert(coeff[0]);
-        a = SkFPMul(coeff[1], inva);
-        b = SkFPMul(coeff[2], inva);
-        c = SkFPMul(coeff[3], inva);
+        SkScalar inva = SkScalarInvert(coeff[0]);
+        a = coeff[1] * inva;
+        b = coeff[2] * inva;
+        c = coeff[3] * inva;
     }
-    Q = SkFPDivInt(SkFPSub(SkFPMul(a,a), SkFPMulInt(b, 3)), 9);
-//  R = (2*a*a*a - 9*a*b + 27*c) / 54;
-    R = SkFPMulInt(SkFPMul(SkFPMul(a, a), a), 2);
-    R = SkFPSub(R, SkFPMulInt(SkFPMul(a, b), 9));
-    R = SkFPAdd(R, SkFPMulInt(c, 27));
-    R = SkFPDivInt(R, 54);
+    Q = (a*a - b*3) / 9;
+    R = (2*a*a*a - 9*a*b + 27*c) / 54;
 
-    SkFP Q3 = SkFPMul(SkFPMul(Q, Q), Q);
-    SkFP R2MinusQ3 = SkFPSub(SkFPMul(R,R), Q3);
-    SkFP adiv3 = SkFPDivInt(a, 3);
+    SkScalar Q3 = Q * Q * Q;
+    SkScalar R2MinusQ3 = R * R - Q3;
+    SkScalar adiv3 = a / 3;
 
     SkScalar*   roots = tValues;
     SkScalar    r;
 
-    if (SkFPLT(R2MinusQ3, 0))   // we have 3 real roots
+    if (R2MinusQ3 < 0)   // we have 3 real roots
     {
-#ifdef SK_SCALAR_IS_FLOAT
         float theta = sk_float_acos(R / sk_float_sqrt(Q3));
         float neg2RootQ = -2 * sk_float_sqrt(Q);
 
@@ -965,18 +850,17 @@ static int solve_cubic_polynomial(const SkFP coeff[4], SkScalar tValues[3])
         bubble_sort(tValues, count);
         count = collaps_duplicates(tValues, count);
         roots = tValues + count;    // so we compute the proper count below
-#endif
     }
     else                // we have 1 real root
     {
-        SkFP A = SkFPAdd(SkFPAbs(R), SkFPSqrt(R2MinusQ3));
-        A = SkFPCubeRoot(A);
-        if (SkFPGT(R, 0))
-            A = SkFPNeg(A);
+        SkScalar A = SkScalarAbs(R) + SkScalarSqrt(R2MinusQ3);
+        A = SkScalarCubeRoot(A);
+        if (R > 0)
+            A = -A;
 
         if (A != 0)
-            A = SkFPAdd(A, SkFPDiv(Q, A));
-        r = SkFPToScalar(SkFPSub(A, adiv3));
+            A += Q / A;
+        r = A - adiv3;
         if (is_unit_interval(r))
             *roots++ = r;
     }
@@ -995,21 +879,16 @@ static int solve_cubic_polynomial(const SkFP coeff[4], SkScalar tValues[3])
 
     F' dot F'' -> CCt^3 + 3BCt^2 + (2BB + CA)t + AB
 */
-static void formulate_F1DotF2(const SkScalar src[], SkFP coeff[4])
+static void formulate_F1DotF2(const SkScalar src[], SkScalar coeff[4])
 {
     SkScalar    a = src[2] - src[0];
     SkScalar    b = src[4] - 2 * src[2] + src[0];
     SkScalar    c = src[6] + 3 * (src[2] - src[4]) - src[0];
 
-    SkFP    A = SkScalarToFP(a);
-    SkFP    B = SkScalarToFP(b);
-    SkFP    C = SkScalarToFP(c);
-
-    coeff[0] = SkFPMul(C, C);
-    coeff[1] = SkFPMulInt(SkFPMul(B, C), 3);
-    coeff[2] = SkFPMulInt(SkFPMul(B, B), 2);
-    coeff[2] = SkFPAdd(coeff[2], SkFPMul(C, A));
-    coeff[3] = SkFPMul(A, B);
+    coeff[0] = c * c;
+    coeff[1] = 3 * b * c;
+    coeff[2] = 2 * b * b + c * a;
+    coeff[3] = a * b;
 }
 
 // EXPERIMENTAL: can set this to zero to accept all t-values 0 < t < 1
@@ -1029,14 +908,14 @@ static void formulate_F1DotF2(const SkScalar src[], SkFP coeff[4])
 */
 int SkFindCubicMaxCurvature(const SkPoint src[4], SkScalar tValues[3])
 {
-    SkFP    coeffX[4], coeffY[4];
-    int     i;
+    SkScalar coeffX[4], coeffY[4];
+    int      i;
 
     formulate_F1DotF2(&src[0].fX, coeffX);
     formulate_F1DotF2(&src[0].fY, coeffY);
 
     for (i = 0; i < 4; i++)
-        coeffX[i] = SkFPAdd(coeffX[i],coeffY[i]);
+        coeffX[i] += coeffY[i];
 
     SkScalar    t[3];
     int         count = solve_cubic_polynomial(coeffX, t);
@@ -1457,9 +1336,8 @@ struct SkP3D {
     }
 };
 
-// we just return the middle 3 points, since the first and last are dups of src
-//
-static void p3d_interp(const SkScalar src[3], SkScalar dst[3], SkScalar t) {
+// We only interpolate one dimension at a time (the first, at +0, +3, +6).
+static void p3d_interp(const SkScalar src[7], SkScalar dst[7], SkScalar t) {
     SkScalar ab = SkScalarInterp(src[0], src[3], t);
     SkScalar bc = SkScalarInterp(src[3], src[6], t);
     dst[0] = ab;

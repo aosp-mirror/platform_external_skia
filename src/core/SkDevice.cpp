@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -18,6 +17,7 @@
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
 SkBaseDevice::SkBaseDevice()
     : fLeakyProperties(SkDeviceProperties::MakeDefault())
 #ifdef SK_DEBUG
@@ -65,6 +65,12 @@ SkMetaData& SkBaseDevice::getMetaData() {
     return *fMetaData;
 }
 
+// TODO: should make this guy pure-virtual.
+SkImageInfo SkBaseDevice::imageInfo() const {
+    return SkImageInfo::Make(this->width(), this->height(),
+                             kUnknown_SkColorType, kIgnore_SkAlphaType);
+}
+
 const SkBitmap& SkBaseDevice::accessBitmap(bool changePixels) {
     const SkBitmap& bitmap = this->onAccessBitmap();
     if (changePixels) {
@@ -92,9 +98,8 @@ bool SkBaseDevice::readPixels(SkBitmap* bitmap, int x, int y,
     SkBitmap tmp;
     SkBitmap* bmp;
     if (bitmap->isNull()) {
-        tmp.setConfig(SkBitmap::kARGB_8888_Config, bitmap->width(),
-                                                   bitmap->height());
-        if (!tmp.allocPixels()) {
+        if (!tmp.allocPixels(SkImageInfo::MakeN32Premul(bitmap->width(),
+                                                        bitmap->height()))) {
             return false;
         }
         bmp = &tmp;
@@ -116,3 +121,7 @@ bool SkBaseDevice::readPixels(SkBitmap* bitmap, int x, int y,
     }
     return result;
 }
+
+SkSurface* SkBaseDevice::newSurface(const SkImageInfo&) { return NULL; }
+
+const void* SkBaseDevice::peekPixels(SkImageInfo*, size_t*) { return NULL; }

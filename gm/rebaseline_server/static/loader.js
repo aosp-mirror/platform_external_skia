@@ -5,7 +5,7 @@
  */
 var Loader = angular.module(
     'Loader',
-    []
+    ['diff_viewer']
 );
 
 
@@ -55,7 +55,7 @@ Loader.controller(
       function(data, status, header, config) {
         if (data.header.resultsStillLoading) {
           $scope.loadingMessage =
-              "Server is still loading initial results; will retry at " +
+              "Server is still loading results; will retry at " +
               $scope.localTimeString(data.header.timeNextUpdateAvailable);
           $timeout(
               function(){location.reload();},
@@ -417,6 +417,15 @@ Loader.controller(
     }
 
     /**
+     * Update $scope.hiddenResultTypes so that ALL resultTypes are showing,
+     * and update the visible results.
+     */
+    $scope.showAllResultTypes = function() {
+      $scope.hiddenResultTypes = {};
+      $scope.updateResults();
+    }
+
+    /**
      * Update $scope.hiddenConfigs so that ONLY this config is showing,
      * and update the visible results.
      *
@@ -426,6 +435,15 @@ Loader.controller(
       $scope.hiddenConfigs = {};
       $scope.toggleValuesInSet($scope.allConfigs, $scope.hiddenConfigs);
       $scope.toggleValueInSet(config, $scope.hiddenConfigs);
+      $scope.updateResults();
+    }
+
+    /**
+     * Update $scope.hiddenConfigs so that ALL configs are showing,
+     * and update the visible results.
+     */
+    $scope.showAllConfigs = function() {
+      $scope.hiddenConfigs = {};
       $scope.updateResults();
     }
 
@@ -508,9 +526,13 @@ Loader.controller(
         alert("New baselines submitted successfully!\n\n" +
             "You still need to commit the updated expectations files on " +
             "the server side to the Skia repo.\n\n" +
-            "Also: in order to see the complete updated data, or to submit " +
-            "more baselines, you will need to reload your client.");
-        $scope.submitPending = false;
+            "When you click OK, your web UI will reload; after that " +
+            "completes, you will see the updated data (once the server has " +
+            "finished loading the update results into memory!) and you can " +
+            "submit more baselines if you want.");
+        // I don't know why, but if I just call reload() here it doesn't work.
+        // Making a timer call it fixes the problem.
+        $timeout(function(){location.reload();}, 1);
       }).error(function(data, status, headers, config) {
         alert("There was an error submitting your baselines.\n\n" +
             "Please see server-side log for details.");
@@ -526,6 +548,15 @@ Loader.controller(
     // possible.
     // TODO(epoger): move into a separate .js file?
     //
+
+    /**
+     * Returns the number of values present within set "set".
+     *
+     * @param set an Object which we use to mimic set semantics
+     */
+    $scope.setSize = function(set) {
+      return Object.keys(set).length;
+    }
 
     /**
      * Returns true if value "value" is present within set "set".
@@ -613,6 +644,42 @@ Loader.controller(
     $scope.localTimeString = function(secondsPastEpoch) {
       var d = new Date(secondsPastEpoch * 1000);
       return d.toString();
+    }
+
+    /**
+     * Returns a hex color string (such as "#aabbcc") for the given RGB values.
+     *
+     * @param r (numeric): red channel value, 0-255
+     * @param g (numeric): green channel value, 0-255
+     * @param b (numeric): blue channel value, 0-255
+     */
+    $scope.hexColorString = function(r, g, b) {
+      var rString = r.toString(16);
+      if (r < 16) {
+        rString = "0" + rString;
+      }
+      var gString = g.toString(16);
+      if (g < 16) {
+        gString = "0" + gString;
+      }
+      var bString = b.toString(16);
+      if (b < 16) {
+        bString = "0" + bString;
+      }
+      return '#' + rString + gString + bString;
+    }
+
+    /**
+     * Returns a hex color string (such as "#aabbcc") for the given brightness.
+     *
+     * @param brightnessString (string): 0-255, 0 is completely black
+     *
+     * TODO(epoger): It might be nice to tint the color when it's not completely
+     * black or completely white.
+     */
+    $scope.brightnessStringToHexColor = function(brightnessString) {
+      var v = parseInt(brightnessString);
+      return $scope.hexColorString(v, v, v);
     }
 
   }

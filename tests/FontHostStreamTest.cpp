@@ -5,8 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
@@ -18,6 +16,7 @@
 #include "SkStream.h"
 #include "SkTypeface.h"
 #include "SkTypes.h"
+#include "Test.h"
 
 static const SkColor bgColor = SK_ColorWHITE;
 

@@ -8,7 +8,8 @@
 #include "SkBlitRow.h"
 #include "SkColorFilter.h"
 #include "SkColorPriv.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkUtils.h"
 #include "SkString.h"
 #include "SkValidationUtils.h"
@@ -91,13 +92,13 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkModeColorFilter)
 
 protected:
-    virtual void flatten(SkFlattenableWriteBuffer& buffer) const SK_OVERRIDE {
+    virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->INHERITED::flatten(buffer);
         buffer.writeColor(fColor);
         buffer.writeUInt(fMode);
     }
 
-    SkModeColorFilter(SkFlattenableReadBuffer& buffer) {
+    SkModeColorFilter(SkReadBuffer& buffer) {
         fColor = buffer.readColor();
         fMode = (SkXfermode::Mode)buffer.readUInt();
         if (buffer.isValid()) {
@@ -445,7 +446,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(Src_SkModeColorFilter)
 
 protected:
-    Src_SkModeColorFilter(SkFlattenableReadBuffer& buffer)
+    Src_SkModeColorFilter(SkReadBuffer& buffer)
         : INHERITED(buffer) {}
 
 private:
@@ -481,7 +482,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SrcOver_SkModeColorFilter)
 
 protected:
-    SrcOver_SkModeColorFilter(SkFlattenableReadBuffer& buffer)
+    SrcOver_SkModeColorFilter(SkReadBuffer& buffer)
         : INHERITED(buffer) {
             fColor32Proc = SkBlitRow::ColorProcFactory();
         }

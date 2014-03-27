@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkPathUtils.h"
 #include "SkRandom.h"
 #include "SkTime.h"
+#include "Test.h"
 
 const int kNumIt = 100;
 
@@ -61,8 +60,7 @@ static void print_bmp( SkBitmap* bmp, int w, int h){
 static void binary_to_skbitmap(const char* bin_bmp, SkBitmap* sk_bmp,
                          int w, int h, int rowBytes){
     //init the SkBitmap
-    sk_bmp->setConfig(SkBitmap::kARGB_8888_Config, w, h);
-    sk_bmp->allocPixels();
+    sk_bmp->allocN32Pixels(w, h);
 
     for (int y = 0; y < h; ++y) { // for every row
 
@@ -99,8 +97,7 @@ static void test_path_eq(skiatest::Reporter* reporter, const SkPath* path,
 
     // make bmp
     SkBitmap bmp;
-    bmp.setConfig(SkBitmap::kARGB_8888_Config, w, h);
-    bmp.allocPixels();
+    bmp.allocN32Pixels(w, h);
     SkCanvas canvas(bmp);
     canvas.clear(SK_ColorWHITE);
     canvas.drawPath(*path, bmpPaint);

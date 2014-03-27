@@ -8,7 +8,6 @@
 #ifndef SkGLContextHelper_DEFINED
 #define SkGLContextHelper_DEFINED
 
-#include "GrGLExtensions.h"
 #include "GrGLInterface.h"
 
 /**
@@ -16,7 +15,7 @@
  * Provides a GrGLInterface struct of function pointers for the context.
  */
 
-class SkGLContextHelper : public SkRefCnt {
+class SK_API SkGLContextHelper : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkGLContextHelper)
 
@@ -48,7 +47,7 @@ public:
 
     bool hasExtension(const char* extensionName) const {
         SkASSERT(NULL != fGL);
-        return fExtensions.has(extensionName);
+        return fGL->hasExtension(extensionName);
     }
 
 protected:
@@ -66,7 +65,6 @@ protected:
     virtual void destroyGLContext() = 0;
 
 private:
-    GrGLExtensions fExtensions;
     GrGLuint fFBO;
     GrGLuint fColorBufferID;
     GrGLuint fDepthStencilBufferID;
@@ -79,11 +77,11 @@ private:
  * Helper macros for using the GL context through the GrGLInterface. Example:
  * SK_GL(glCtx, GenTextures(1, &texID));
  */
-#define SK_GL(ctx, X) (ctx).gl()->f ## X;    \
-                      SkASSERT(GR_GL_NO_ERROR == (ctx).gl()->fGetError())
-#define SK_GL_RET(ctx, RET, X) (RET) = (ctx).gl()->f ## X;    \
-                  SkASSERT(GR_GL_NO_ERROR == (ctx).gl()->fGetError())
-#define SK_GL_NOERRCHECK(ctx, X) (ctx).gl()->f ## X
-#define SK_GL_RET_NOERRCHECK(ctx, RET, X) (RET) = (ctx).gl()->f ## X
+#define SK_GL(ctx, X) (ctx).gl()->fFunctions.f ## X;    \
+                      SkASSERT(GR_GL_NO_ERROR == (ctx).gl()->fFunctions.fGetError())
+#define SK_GL_RET(ctx, RET, X) (RET) = (ctx).gl()->fFunctions.f ## X;    \
+                  SkASSERT(GR_GL_NO_ERROR == (ctx).gl()->fFunctions.fGetError())
+#define SK_GL_NOERRCHECK(ctx, X) (ctx).gl()->fFunctions.f ## X
+#define SK_GL_RET_NOERRCHECK(ctx, RET, X) (RET) = (ctx).gl()->fFunctions.f ## X
 
 #endif

@@ -23,18 +23,22 @@ SkROLockPixelsPixelRef::SkROLockPixelsPixelRef(const SkImageInfo& info)
 
 SkROLockPixelsPixelRef::~SkROLockPixelsPixelRef() {}
 
-void* SkROLockPixelsPixelRef::onLockPixels(SkColorTable** ctable) {
-    if (ctable) {
-        *ctable = NULL;
-    }
+bool SkROLockPixelsPixelRef::onNewLockPixels(LockRec* rec) {
     fBitmap.reset();
 //    SkDebugf("---------- calling readpixels in support of lockpixels\n");
     if (!this->onReadPixels(&fBitmap, NULL)) {
         SkDebugf("SkROLockPixelsPixelRef::onLockPixels failed!\n");
-        return NULL;
+        return false;
     }
     fBitmap.lockPixels();
-    return fBitmap.getPixels();
+    if (NULL == fBitmap.getPixels()) {
+        return false;
+    }
+
+    rec->fPixels = fBitmap.getPixels();
+    rec->fColorTable = NULL;
+    rec->fRowBytes = fBitmap.rowBytes();
+    return true;
 }
 
 void SkROLockPixelsPixelRef::onUnlockPixels() {
@@ -82,7 +86,7 @@ static SkGrPixelRef* copyToTexturePixelRef(GrTexture* texture, SkBitmap::Config 
     info.fWidth = desc.fWidth;
     info.fHeight = desc.fHeight;
     info.fAlphaType = kPremul_SkAlphaType;
-    
+
     GrTexture* dst = context->createUncachedTexture(desc, NULL, 0);
     if (NULL == dst) {
         return NULL;
@@ -123,6 +127,11 @@ SkGrPixelRef::SkGrPixelRef(const SkImageInfo& info, GrSurface* surface,
     }
     fUnlock = transferCacheLock;
     SkSafeRef(surface);
+
+    if (fSurface) {
+        SkASSERT(info.fWidth <= fSurface->width());
+        SkASSERT(info.fHeight <= fSurface->height());
+    }
 }
 
 SkGrPixelRef::~SkGrPixelRef() {
@@ -170,12 +179,11 @@ bool SkGrPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
         height = subset->height();
     } else {
         left = 0;
-        width = fSurface->width();
+        width = this->info().fWidth;
         top = 0;
-        height = fSurface->height();
+        height = this->info().fHeight;
     }
-    dst->setConfig(SkBitmap::kARGB_8888_Config, width, height);
-    if (!dst->allocPixels()) {
+    if (!dst->allocPixels(SkImageInfo::MakeN32Premul(width, height))) {
         SkDebugf("SkGrPixelRef::onReadPixels failed to alloc bitmap for result!\n");
         return false;
     }

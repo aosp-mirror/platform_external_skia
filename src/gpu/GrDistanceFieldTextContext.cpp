@@ -9,9 +9,12 @@
 #include "GrAtlas.h"
 #include "GrDrawTarget.h"
 #include "GrFontScaler.h"
+#include "SkGlyphCache.h"
 #include "GrIndexBuffer.h"
 #include "GrTextStrike.h"
 #include "GrTextStrike_impl.h"
+#include "SkDraw.h"
+#include "SkGpuDevice.h"
 #include "SkPath.h"
 #include "SkRTConf.h"
 #include "SkStrokeRec.h"
@@ -19,18 +22,14 @@
 
 static const int kGlyphCoordsAttributeIndex = 1;
 
+static const int kBaseDFFontSize = 32;
+
 SK_CONF_DECLARE(bool, c_DumpFontCache, "gpu.dumpFontCache", false,
                 "Dump the contents of the font cache before every purge.");
 
-
 GrDistanceFieldTextContext::GrDistanceFieldTextContext(GrContext* context,
-                                                       const GrPaint& paint,
-                                                       SkColor color,
-                                                       SkScalar textRatio)
-                                                     : GrTextContext(context, paint)
-                                                     , fTextRatio(textRatio) {
-    fSkPaintColor = color;
-
+                                                       const SkDeviceProperties& properties)
+                                                    : GrTextContext(context, properties) {
     fStrike = NULL;
 
     fCurrTexture = NULL;
@@ -42,6 +41,12 @@ GrDistanceFieldTextContext::GrDistanceFieldTextContext(GrContext* context,
 
 GrDistanceFieldTextContext::~GrDistanceFieldTextContext() {
     this->flushGlyphs();
+}
+
+bool GrDistanceFieldTextContext::canDraw(const SkPaint& paint) {
+    return !paint.getRasterizer() && !paint.getMaskFilter() &&
+           paint.getStyle() == SkPaint::kFill_Style &&
+           !SkDraw::ShouldDrawTextAsPaths(paint, fContext->getMatrix());
 }
 
 static inline GrColor skcolor_to_grcolor_nopremultiply(SkColor c) {
@@ -81,11 +86,11 @@ void GrDistanceFieldTextContext::flushGlyphs() {
             // alpha. Instead we feed in a non-premultiplied color, and multiply its alpha by
             // the mask texture color. The end result is that we get
             //            mask*paintAlpha*paintColor + (1-mask*paintAlpha)*dstColor
-            int a = SkColorGetA(fSkPaintColor);
+            int a = SkColorGetA(fSkPaint.getColor());
             // paintAlpha
             drawState->setColor(SkColorSetARGB(a, a, a, a));
             // paintColor
-            drawState->setBlendConstant(skcolor_to_grcolor_nopremultiply(fSkPaintColor));
+            drawState->setBlendConstant(skcolor_to_grcolor_nopremultiply(fSkPaint.getColor()));
             drawState->setBlendFunc(kConstC_GrBlendCoeff, kISC_GrBlendCoeff);
         } else {
             // set back to normal in case we took LCD path previously.
@@ -275,4 +280,169 @@ HAS_ATLAS:
                                           SkFixedToFloat(texture->normalizeFixedY(ty + th)),
                                           2 * sizeof(SkPoint));
     fCurrVertex += 4;
+}
+
+inline void GrDistanceFieldTextContext::init(const GrPaint& paint, const SkPaint& skPaint) {
+    GrTextContext::init(paint, skPaint);
+
+    fStrike = NULL;
+
+    fCurrTexture = NULL;
+    fCurrVertex = 0;
+
+    fVertices = NULL;
+    fMaxVertices = 0;
+
+    fTextRatio = fSkPaint.getTextSize()/kBaseDFFontSize;
+
+    fSkPaint.setTextSize(SkIntToScalar(kBaseDFFontSize));
+    fSkPaint.setLCDRenderText(false);
+    fSkPaint.setAutohinted(false);
+    fSkPaint.setSubpixelText(false);
+}
+
+inline void GrDistanceFieldTextContext::finish() {
+    flushGlyphs();
+
+    GrTextContext::finish();
+}
+
+void GrDistanceFieldTextContext::drawText(const GrPaint& paint, const SkPaint& skPaint,
+                                          const char text[], size_t byteLength,
+                                          SkScalar x, SkScalar y) {
+    SkASSERT(byteLength == 0 || text != NULL);
+
+    // nothing to draw or can't draw
+    if (text == NULL || byteLength == 0 /* no raster clip? || fRC->isEmpty()*/
+        || fSkPaint.getRasterizer()) {
+        return;
+    }
+
+    this->init(paint, skPaint);
+
+    SkScalar sizeRatio = fTextRatio;
+
+    SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
+
+    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, NULL);
+    SkGlyphCache*       cache = autoCache.getCache();
+    GrFontScaler*       fontScaler = GetGrFontScaler(cache);
+
+    // need to measure first
+    // TODO - generate positions and pre-load cache as well?
+    const char* stop = text + byteLength;
+    if (fSkPaint.getTextAlign() != SkPaint::kLeft_Align) {
+        SkFixed    stopX = 0;
+        SkFixed    stopY = 0;
+
+        const char* textPtr = text;
+        while (textPtr < stop) {
+            // don't need x, y here, since all subpixel variants will have the
+            // same advance
+            const SkGlyph& glyph = glyphCacheProc(cache, &textPtr, 0, 0);
+
+            stopX += glyph.fAdvanceX;
+            stopY += glyph.fAdvanceY;
+        }
+        SkASSERT(textPtr == stop);
+
+        SkScalar alignX = SkFixedToScalar(stopX)*sizeRatio;
+        SkScalar alignY = SkFixedToScalar(stopY)*sizeRatio;
+
+        if (fSkPaint.getTextAlign() == SkPaint::kCenter_Align) {
+            alignX = SkScalarHalf(alignX);
+            alignY = SkScalarHalf(alignY);
+        }
+
+        x -= alignX;
+        y -= alignY;
+    }
+
+    SkFixed fx = SkScalarToFixed(x) + SK_FixedHalf;
+    SkFixed fy = SkScalarToFixed(y) + SK_FixedHalf;
+    SkFixed fixedScale = SkScalarToFixed(sizeRatio);
+    while (text < stop) {
+        const SkGlyph& glyph = glyphCacheProc(cache, &text, fx, fy);
+
+        if (glyph.fWidth) {
+            this->drawPackedGlyph(GrGlyph::Pack(glyph.getGlyphID(),
+                                                glyph.getSubXFixed(),
+                                                glyph.getSubYFixed()),
+                                  SkFixedFloorToFixed(fx),
+                                  SkFixedFloorToFixed(fy),
+                                  fontScaler);
+        }
+
+        fx += SkFixedMul_portable(glyph.fAdvanceX, fixedScale);
+        fy += SkFixedMul_portable(glyph.fAdvanceY, fixedScale);
+    }
+
+    this->finish();
+}
+
+void GrDistanceFieldTextContext::drawPosText(const GrPaint& paint, const SkPaint& skPaint,
+                                             const char text[], size_t byteLength,
+                                             const SkScalar pos[], SkScalar constY,
+                                             int scalarsPerPosition) {
+
+    SkASSERT(byteLength == 0 || text != NULL);
+    SkASSERT(1 == scalarsPerPosition || 2 == scalarsPerPosition);
+
+    // nothing to draw
+    if (text == NULL || byteLength == 0 /* no raster clip? || fRC->isEmpty()*/) {
+        return;
+    }
+
+    this->init(paint, skPaint);
+
+    SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
+
+    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, NULL);
+    SkGlyphCache*       cache = autoCache.getCache();
+    GrFontScaler*       fontScaler = GetGrFontScaler(cache);
+
+    const char*        stop = text + byteLength;
+
+    if (SkPaint::kLeft_Align == fSkPaint.getTextAlign()) {
+        while (text < stop) {
+            // the last 2 parameters are ignored
+            const SkGlyph& glyph = glyphCacheProc(cache, &text, 0, 0);
+
+            if (glyph.fWidth) {
+                SkScalar x = pos[0];
+                SkScalar y = scalarsPerPosition == 1 ? constY : pos[1];
+
+                this->drawPackedGlyph(GrGlyph::Pack(glyph.getGlyphID(),
+                                                    glyph.getSubXFixed(),
+                                                    glyph.getSubYFixed()),
+                                      SkScalarToFixed(x) + SK_FixedHalf, //d1g.fHalfSampleX,
+                                      SkScalarToFixed(y) + SK_FixedHalf, //d1g.fHalfSampleY,
+                                      fontScaler);
+            }
+            pos += scalarsPerPosition;
+        }
+    } else {
+        int alignShift = SkPaint::kCenter_Align == fSkPaint.getTextAlign() ? 1 : 0;
+        while (text < stop) {
+            // the last 2 parameters are ignored
+            const SkGlyph& glyph = glyphCacheProc(cache, &text, 0, 0);
+
+            if (glyph.fWidth) {
+                SkScalar x = pos[0];
+                SkScalar y = scalarsPerPosition == 1 ? constY : pos[1];
+
+                this->drawPackedGlyph(GrGlyph::Pack(glyph.getGlyphID(),
+                                                    glyph.getSubXFixed(),
+                                                    glyph.getSubYFixed()),
+                                      SkScalarToFixed(x) - (glyph.fAdvanceX >> alignShift)
+                                        + SK_FixedHalf, //d1g.fHalfSampleX,
+                                      SkScalarToFixed(y) - (glyph.fAdvanceY >> alignShift)
+                                        + SK_FixedHalf, //d1g.fHalfSampleY,
+                                      fontScaler);
+            }
+            pos += scalarsPerPosition;
+        }
+    }
+
+    this->finish();
 }

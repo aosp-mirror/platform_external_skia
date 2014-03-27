@@ -37,7 +37,7 @@ static const double answers[][2] = {
 
 static const size_t tests_count = SK_ARRAY_COUNT(tests);
 
-static void PathOpsLineParametersTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsLineParameters, reporter) {
     for (size_t index = 0; index < tests_count; ++index) {
         SkLineParameters lineParameters;
         const SkDCubic& cubic = tests[index];
@@ -77,6 +77,3 @@ static void PathOpsLineParametersTest(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsLineParametersTest)

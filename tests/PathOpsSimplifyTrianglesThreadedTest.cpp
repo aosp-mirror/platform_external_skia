@@ -72,7 +72,7 @@ static void testSimplifyTrianglesMain(PathOpsThreadState* data) {
     }
 }
 
-static void PathOpsSimplifyTrianglesThreadedTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsSimplifyTrianglesThreaded, reporter) {
     int threadCount = initializeTests(reporter, "testTriangles");
     PathOpsThreadedTestRunner testRunner(reporter, threadCount);
     for (int a = 0; a < 15; ++a) {
@@ -99,6 +99,3 @@ static void PathOpsSimplifyTrianglesThreadedTest(skiatest::Reporter* reporter) {
 finish:
     testRunner.render();
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsSimplifyTrianglesThreadedTest)

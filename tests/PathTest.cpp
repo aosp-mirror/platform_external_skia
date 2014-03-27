@@ -5,21 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
-#include "SkPath.h"
 #include "SkParse.h"
 #include "SkParsePath.h"
+#include "SkPath.h"
 #include "SkPathEffect.h"
+#include "SkRRect.h"
 #include "SkRandom.h"
 #include "SkReader32.h"
-#include "SkRRect.h"
 #include "SkSize.h"
 #include "SkSurface.h"
 #include "SkTypes.h"
 #include "SkWriter32.h"
+#include "Test.h"
 
 static void make_path0(SkPath* path) {
     // from  *  https://code.google.com/p/skia/issues/detail?id=1706
@@ -830,7 +829,6 @@ static void test_direction(skiatest::Reporter* reporter) {
     path.addCircle(0, 0, SkIntToScalar(2), SkPath::kCCW_Direction);
     check_direction(reporter, path, SkPath::kCCW_Direction);
 
-#ifdef SK_SCALAR_IS_FLOAT
     // triangle with one point really far from the origin.
     path.reset();
     // the first point is roughly 1.05e10, 1.05e10
@@ -838,7 +836,6 @@ static void test_direction(skiatest::Reporter* reporter) {
     path.lineTo(110 * SK_Scalar1, -10 * SK_Scalar1);
     path.lineTo(-10 * SK_Scalar1, 60 * SK_Scalar1);
     check_direction(reporter, path, SkPath::kCCW_Direction);
-#endif
 
     path.reset();
     path.conicTo(20, 0, 20, 20, 0.5f);
@@ -1441,19 +1438,12 @@ static void test_isRect_open_close(skiatest::Reporter* reporter) {
     bool isClosed;
 
     path.moveTo(0, 0); path.lineTo(1, 0); path.lineTo(1, 1); path.lineTo(0, 1);
-
-    if (false) {
-        // I think these should pass, but isRect() doesn't behave
-        // this way... yet
-        REPORTER_ASSERT(reporter, path.isRect(NULL, NULL));
-        REPORTER_ASSERT(reporter, path.isRect(&isClosed, NULL));
-        REPORTER_ASSERT(reporter, !isClosed);
-    }
-
     path.close();
+
     REPORTER_ASSERT(reporter, path.isRect(NULL, NULL));
     REPORTER_ASSERT(reporter, path.isRect(&isClosed, NULL));
     REPORTER_ASSERT(reporter, isClosed);
+    REPORTER_ASSERT(reporter, SkPath::kStroke_PathAsRect == path.asRect(NULL));
 }
 
 // Simple isRect test is inline TestPath, below.
@@ -1491,9 +1481,16 @@ static void test_isRect(skiatest::Reporter* reporter) {
     SkPoint fa[] = {{1, 0}, {8, 0}, {8, 8}, {0, 8}, {0, -1}, {1, -1}}; // non colinear gap
     SkPoint fb[] = {{1, 0}, {8, 0}, {8, 8}, {0, 8}, {0, 1}}; // falls short
 
-    // failing, no close
-    SkPoint c1[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}}; // close doesn't match
-    SkPoint c2[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, 1}}; // ditto
+    // no close, but we should detect them as fillably the same as a rect
+    SkPoint c1[] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    SkPoint c2[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, 1}};
+    SkPoint c3[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, 1}, {0, 0}}; // hit the start
+
+    // like c2, but we double-back on ourselves
+    SkPoint d1[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, 1}, {0, 2}};
+    // like c2, but we overshoot the start point
+    SkPoint d2[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, -1}};
+    SkPoint d3[] = {{0, 0}, {1, 0}, {1, 2}, {0, 2}, {0, -1}, {0, 0}};
 
     struct IsRectTest {
         SkPoint *fPoints;
@@ -1529,8 +1526,13 @@ static void test_isRect(skiatest::Reporter* reporter) {
         { fa, SK_ARRAY_COUNT(fa), true, false },
         { fb, SK_ARRAY_COUNT(fb), true, false },
 
-        { c1, SK_ARRAY_COUNT(c1), false, false },
-        { c2, SK_ARRAY_COUNT(c2), false, false },
+        { c1, SK_ARRAY_COUNT(c1), false, true },
+        { c2, SK_ARRAY_COUNT(c2), false, true },
+        { c3, SK_ARRAY_COUNT(c3), false, true },
+
+        { d1, SK_ARRAY_COUNT(d1), false, false },
+        { d2, SK_ARRAY_COUNT(d2), false, false },
+        { d3, SK_ARRAY_COUNT(d3), false, false },
     };
 
     const size_t testCount = SK_ARRAY_COUNT(tests);
@@ -1559,6 +1561,15 @@ static void test_isRect(skiatest::Reporter* reporter) {
             REPORTER_ASSERT(reporter, path.isRect(&isClosed, &direction));
             REPORTER_ASSERT(reporter, isClosed == tests[testIndex].fClose);
             REPORTER_ASSERT(reporter, direction == cheapDirection);
+            direction = (SkPath::Direction) -1;
+            if (!tests[testIndex].fClose) {
+                REPORTER_ASSERT(reporter, SkPath::kFill_PathAsRect == path.asRect());
+                REPORTER_ASSERT(reporter, SkPath::kFill_PathAsRect == path.asRect(&direction));
+            } else {
+                REPORTER_ASSERT(reporter, SkPath::kStroke_PathAsRect == path.asRect());
+                REPORTER_ASSERT(reporter, SkPath::kStroke_PathAsRect == path.asRect(&direction));
+            }
+            REPORTER_ASSERT(reporter, direction == cheapDirection);
         } else {
             SkRect computed;
             computed.set(123, 456, 789, 1011);
@@ -1570,6 +1581,9 @@ static void test_isRect(skiatest::Reporter* reporter) {
             SkPath::Direction direction = (SkPath::Direction) -1;
             REPORTER_ASSERT(reporter, !path.isRect(&isClosed, &direction));
             REPORTER_ASSERT(reporter, isClosed == (bool) -1);
+            REPORTER_ASSERT(reporter, direction == (SkPath::Direction) -1);
+            REPORTER_ASSERT(reporter, SkPath::kNone_PathAsRect == path.asRect());
+            REPORTER_ASSERT(reporter, SkPath::kNone_PathAsRect == path.asRect(&direction));
             REPORTER_ASSERT(reporter, direction == (SkPath::Direction) -1);
         }
     }
@@ -1840,7 +1854,7 @@ static void test_isNestedRects(skiatest::Reporter* reporter) {
 
 static void write_and_read_back(skiatest::Reporter* reporter,
                                 const SkPath& p) {
-    SkWriter32 writer(100);
+    SkWriter32 writer;
     writer.writePath(p);
     size_t size = writer.bytesWritten();
     SkAutoMalloc storage(size);
@@ -3046,6 +3060,68 @@ static void test_addPath(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, p.getBounds() == reverseExpected);
 }
 
+static void test_addPathMode(skiatest::Reporter* reporter, bool explicitMoveTo, bool extend) {
+    SkPath p, q;
+    if (explicitMoveTo) {
+        p.moveTo(1, 1);
+    }
+    p.lineTo(1, 2);
+    if (explicitMoveTo) {
+        q.moveTo(2, 1);
+    }
+    q.lineTo(2, 2);
+    p.addPath(q, extend ? SkPath::kExtend_AddPathMode : SkPath::kAppend_AddPathMode);
+    uint8_t verbs[4];
+    int verbcount = p.getVerbs(verbs, 4);
+    REPORTER_ASSERT(reporter, verbcount == 4);
+    REPORTER_ASSERT(reporter, verbs[0] == SkPath::kMove_Verb);
+    REPORTER_ASSERT(reporter, verbs[1] == SkPath::kLine_Verb);
+    REPORTER_ASSERT(reporter, verbs[2] == (extend ? SkPath::kLine_Verb : SkPath::kMove_Verb));
+    REPORTER_ASSERT(reporter, verbs[3] == SkPath::kLine_Verb);
+}
+
+static void test_extendClosedPath(skiatest::Reporter* reporter) {
+    SkPath p, q;
+    p.moveTo(1, 1);
+    p.lineTo(1, 2);
+    p.lineTo(2, 2);
+    p.close();
+    q.moveTo(2, 1);
+    q.lineTo(2, 3);
+    p.addPath(q, SkPath::kExtend_AddPathMode);
+    uint8_t verbs[7];
+    int verbcount = p.getVerbs(verbs, 7);
+    REPORTER_ASSERT(reporter, verbcount == 7);
+    REPORTER_ASSERT(reporter, verbs[0] == SkPath::kMove_Verb);
+    REPORTER_ASSERT(reporter, verbs[1] == SkPath::kLine_Verb);
+    REPORTER_ASSERT(reporter, verbs[2] == SkPath::kLine_Verb);
+    REPORTER_ASSERT(reporter, verbs[3] == SkPath::kClose_Verb);
+    REPORTER_ASSERT(reporter, verbs[4] == SkPath::kMove_Verb);
+    REPORTER_ASSERT(reporter, verbs[5] == SkPath::kLine_Verb);
+    REPORTER_ASSERT(reporter, verbs[6] == SkPath::kLine_Verb);
+
+    SkPoint pt;
+    REPORTER_ASSERT(reporter, p.getLastPt(&pt));
+    REPORTER_ASSERT(reporter, pt == SkPoint::Make(2, 3));
+    REPORTER_ASSERT(reporter, p.getPoint(3) == SkPoint::Make(1, 1));
+}
+
+static void test_addEmptyPath(skiatest::Reporter* reporter, SkPath::AddPathMode mode) {
+    SkPath p, q, r;
+    // case 1: dst is empty
+    p.moveTo(2, 1);
+    p.lineTo(2, 3);
+    q.addPath(p, mode);
+    REPORTER_ASSERT(reporter, q == p);
+    // case 2: src is empty
+    p.addPath(r, mode);
+    REPORTER_ASSERT(reporter, q == p);
+    // case 3: src and dst are empty
+    q.reset();
+    q.addPath(r, mode);
+    REPORTER_ASSERT(reporter, q.isEmpty());
+}
+
 static void test_conicTo_special_case(skiatest::Reporter* reporter) {
     SkPath p;
     p.conicTo(1, 2, 3, 4, -1);
@@ -3249,7 +3325,7 @@ public:
     }
 };
 
-DEF_TEST(Path, reporter) {
+DEF_TEST(Paths, reporter) {
     SkTSize<SkScalar>::Make(3,4);
 
     SkPath  p, empty;
@@ -3363,6 +3439,13 @@ DEF_TEST(Path, reporter) {
     test_arc(reporter);
     test_arcTo(reporter);
     test_addPath(reporter);
+    test_addPathMode(reporter, false, false);
+    test_addPathMode(reporter, true, false);
+    test_addPathMode(reporter, false, true);
+    test_addPathMode(reporter, true, true);
+    test_extendClosedPath(reporter);
+    test_addEmptyPath(reporter, SkPath::kExtend_AddPathMode);
+    test_addEmptyPath(reporter, SkPath::kAppend_AddPathMode);
     test_conicTo_special_case(reporter);
     test_get_point(reporter);
     test_contains(reporter);

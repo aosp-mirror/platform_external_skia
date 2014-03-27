@@ -5,19 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "TestClassDef.h"
 #include "SamplePipeControllers.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkGPipe.h"
 #include "SkPaint.h"
 #include "SkShader.h"
+#include "Test.h"
 
 // Ensures that the pipe gracefully handles drawing an invalid bitmap.
 static void testDrawingBadBitmap(SkCanvas* pipeCanvas) {
     SkBitmap badBitmap;
-    badBitmap.setConfig(SkBitmap::kNo_Config, 5, 5);
+    badBitmap.setConfig(SkImageInfo::Make(5, 5, kUnknown_SkColorType,
+                                          kPremul_SkAlphaType));
     pipeCanvas->drawBitmap(badBitmap, 0, 0);
 }
 
@@ -30,8 +30,7 @@ static void testDrawingAfterEndRecording(SkCanvas* canvas) {
     writer.endRecording();
 
     SkBitmap bm;
-    bm.setConfig(SkBitmap::kARGB_8888_Config, 2, 2);
-    bm.allocPixels();
+    bm.allocN32Pixels(2, 2);
     bm.eraseColor(SK_ColorTRANSPARENT);
 
     SkShader* shader = SkShader::CreateBitmapShader(bm, SkShader::kClamp_TileMode,
@@ -45,7 +44,7 @@ static void testDrawingAfterEndRecording(SkCanvas* canvas) {
 
 DEF_TEST(Pipe, reporter) {
     SkBitmap bitmap;
-    bitmap.setConfig(SkBitmap::kARGB_8888_Config, 64, 64);
+    bitmap.setConfig(SkImageInfo::MakeN32Premul(64, 64));
     SkCanvas canvas(bitmap);
 
     PipeController pipeController(&canvas);

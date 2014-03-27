@@ -22,10 +22,8 @@ protected:
     }
 
     void makeBitmap() {
-        fBitmap.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-        fBitmap.allocPixels();
-        SkBitmapDevice device(fBitmap);
-        SkCanvas canvas(&device);
+        fBitmap.allocN32Pixels(100, 100);
+        SkCanvas canvas(fBitmap);
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);

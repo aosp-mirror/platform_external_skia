@@ -63,12 +63,17 @@ public:
      */
     virtual int getCount() const SK_OVERRIDE;
 
+    virtual int getDepth() const SK_OVERRIDE { return -1; }
+
     virtual void rewindInserts() SK_OVERRIDE;
 
     // Used by search() and in SkTileGridHelper implementations
     enum {
         kTileFinished = -1,
     };
+
+    int tileCount(int x, int y);  // For testing only.
+
 private:
     SkTDArray<void*>& tile(int x, int y);
 
@@ -79,7 +84,6 @@ private:
     SkIRect fGridBounds;
     SkTileGridNextDatumFunctionPtr fNextDatumFunction;
 
-    friend class TileGridTest;
     typedef SkBBoxHierarchy INHERITED;
 };
 

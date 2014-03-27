@@ -1,15 +1,18 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #ifndef SkPictureRecord_DEFINED
 #define SkPictureRecord_DEFINED
 
 #include "SkCanvas.h"
 #include "SkFlattenable.h"
+#ifdef SK_COLLAPSE_MATRIX_CLIP_STATE
+#include "SkMatrixClipStateMgr.h"
+#endif
 #include "SkPathHeap.h"
 #include "SkPicture.h"
 #include "SkPictureFlat.h"
@@ -108,15 +111,16 @@ public:
 
 private:
     void handleOptimization(int opt);
-    void recordRestoreOffsetPlaceholder(SkRegion::Op);
-    void fillRestoreOffsetPlaceholdersForCurrentStackLevel(
-        uint32_t restoreOffset);
+    int recordRestoreOffsetPlaceholder(SkRegion::Op);
+    void fillRestoreOffsetPlaceholdersForCurrentStackLevel(uint32_t restoreOffset);
 
+#ifndef SK_COLLAPSE_MATRIX_CLIP_STATE
     SkTDArray<int32_t> fRestoreOffsetStack;
     int fFirstSavedLayerIndex;
     enum {
         kNoSavedLayerIndex = -1
     };
+#endif
 
     /*
      * Write the 'drawType' operation and chunk size to the skp. 'size'
@@ -162,7 +166,6 @@ private:
 
     void addBitmap(const SkBitmap& bitmap);
     void addMatrix(const SkMatrix& matrix);
-    void addMatrixPtr(const SkMatrix* matrix);
     const SkFlatData* addPaint(const SkPaint& paint) { return this->addPaintPtr(&paint); }
     const SkFlatData* addPaintPtr(const SkPaint* paint);
     void addFlatPaint(const SkFlatData* flatPaint);
@@ -217,6 +220,11 @@ public:
 #endif
 
 protected:
+    virtual SkSurface* onNewSurface(const SkImageInfo&) SK_OVERRIDE;
+    const void* onPeekPixels(SkImageInfo*, size_t*) SK_OVERRIDE {
+        return NULL;
+    }
+
     // Return fontmetrics.fTop,fBottom in topbot[0,1], after they have been
     // tweaked by paint.computeFastBounds().
     static void ComputeFontMetricsTopBottom(const SkPaint& paint, SkScalar topbot[2]);
@@ -238,6 +246,20 @@ protected:
                           const SkScalar xpos[], SkScalar constY,
                           const SkPaint& paint, const SkFlatData* flatPaintData);
 
+    int addPathToHeap(const SkPath& path);  // does not write to ops stream
+
+    // These entry points allow the writing of matrices, clips, saves &
+    // restores to be deferred (e.g., if the MC state is being collapsed and
+    // only written out as needed).
+    void recordConcat(const SkMatrix& matrix);
+    int recordClipRect(const SkRect& rect, SkRegion::Op op, bool doAA);
+    int recordClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA);
+    int recordClipPath(int pathID, SkRegion::Op op, bool doAA);
+    int recordClipRegion(const SkRegion& region, SkRegion::Op op);
+    void recordSave(SaveFlags flags);
+    void recordSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags);
+    void recordRestore(bool fillInSkips = true);
+
     // These are set to NULL in our constructor, but may be changed by
     // subclasses, in which case they will be SkSafeUnref'd in our destructor.
     SkBBoxHierarchy* fBoundingHierarchy;
@@ -247,11 +269,12 @@ protected:
     SkBitmapHeap* fBitmapHeap;
 
 private:
+    friend class MatrixClipState; // for access to *Impl methods
+    friend class SkMatrixClipStateMgr; // for access to *Impl methods
+
     SkChunkFlatController fFlattenableHeap;
 
-    SkMatrixDictionary fMatrices;
     SkPaintDictionary fPaints;
-    SkRegionDictionary fRegions;
 
     SkPathHeap* fPathHeap;  // reference counted
     SkWriter32 fWriter;
@@ -264,6 +287,10 @@ private:
 
     friend class SkPicturePlayback;
     friend class SkPictureTester; // for unit testing
+
+#ifdef SK_COLLAPSE_MATRIX_CLIP_STATE
+    SkMatrixClipStateMgr fMCMgr;
+#endif
 
     typedef SkCanvas INHERITED;
 };

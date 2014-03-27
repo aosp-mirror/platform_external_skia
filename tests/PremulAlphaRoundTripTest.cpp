@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkConfig8888.h"
-#include "SkBitmapDevice.h"
+#include "Test.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
@@ -17,8 +17,7 @@
 
 static void fillCanvas(SkCanvas* canvas, SkCanvas::Config8888 unpremulConfig) {
     SkBitmap bmp;
-    bmp.setConfig(SkBitmap::kARGB_8888_Config, 256, 256);
-    bmp.allocPixels();
+    bmp.allocN32Pixels(256, 256);
     SkAutoLockPixels alp(bmp);
     uint32_t* pixels = reinterpret_cast<uint32_t*>(bmp.getPixels());
 
@@ -36,7 +35,7 @@ static const SkCanvas::Config8888 gUnpremulConfigs[] = {
     SkCanvas::kRGBA_Unpremul_Config8888,
 };
 
-static void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFactory* factory) {
+DEF_GPUTEST(PremulAlphaRoundTrip, reporter, factory) {
     SkAutoTUnref<SkBaseDevice> device;
     for (int dtype = 0; dtype < 2; ++dtype) {
 
@@ -72,11 +71,9 @@ static void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFact
             SkCanvas canvas(device);
 
             SkBitmap readBmp1;
-            readBmp1.setConfig(SkBitmap::kARGB_8888_Config, 256, 256);
-            readBmp1.allocPixels();
+            readBmp1.allocN32Pixels(256, 256);
             SkBitmap readBmp2;
-            readBmp2.setConfig(SkBitmap::kARGB_8888_Config, 256, 256);
-            readBmp2.allocPixels();
+            readBmp2.allocN32Pixels(256, 256);
 
             for (size_t upmaIdx = 0;
                  upmaIdx < SK_ARRAY_COUNT(gUnpremulConfigs);
@@ -110,6 +107,3 @@ static void PremulAlphaRoundTripTest(skiatest::Reporter* reporter, GrContextFact
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_GPUTESTCLASS("PremulAlphaRoundTripTest", PremulAlphaRoundTripTestClass, PremulAlphaRoundTripTest)

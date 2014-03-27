@@ -20,14 +20,14 @@
  */
 class SK_API SkROLockPixelsPixelRef : public SkPixelRef {
 public:
+    SK_DECLARE_INST_COUNT(SkROLockPixelsPixelRef)
     SkROLockPixelsPixelRef(const SkImageInfo&);
     virtual ~SkROLockPixelsPixelRef();
 
 protected:
-    // override from SkPixelRef
-    virtual void* onLockPixels(SkColorTable** ptr);
-    virtual void onUnlockPixels();
-    virtual bool onLockPixelsAreWritable() const;   // return false;
+    virtual bool onNewLockPixels(LockRec*) SK_OVERRIDE;
+    virtual void onUnlockPixels() SK_OVERRIDE;
+    virtual bool onLockPixelsAreWritable() const SK_OVERRIDE;   // return false;
 
 private:
     SkBitmap    fBitmap;
@@ -39,6 +39,7 @@ private:
  */
 class SK_API SkGrPixelRef : public SkROLockPixelsPixelRef {
 public:
+    SK_DECLARE_INST_COUNT(SkGrPixelRef)
     /**
      * Constructs a pixel ref around a GrSurface. If the caller has locked the GrSurface in the
      * cache and would like the pixel ref to unlock it in its destructor then transferCacheLock

@@ -9,7 +9,8 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkDevice.h"
-#include "SkFlattenableBuffers.h"
+#include "SkReadBuffer.h"
+#include "SkWriteBuffer.h"
 #include "SkShader.h"
 
 SkRectShaderImageFilter* SkRectShaderImageFilter::Create(SkShader* s, const SkRect& rect) {
@@ -34,12 +35,12 @@ SkRectShaderImageFilter::SkRectShaderImageFilter(SkShader* s, const CropRect* cr
     s->ref();
 }
 
-SkRectShaderImageFilter::SkRectShaderImageFilter(SkFlattenableReadBuffer& buffer)
+SkRectShaderImageFilter::SkRectShaderImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     fShader = buffer.readShader();
 }
 
-void SkRectShaderImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
+void SkRectShaderImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
 
     buffer.writeFlattenable(fShader);
@@ -53,7 +54,7 @@ bool SkRectShaderImageFilter::onFilterImage(Proxy* proxy,
                                             const SkBitmap& source,
                                             const SkMatrix& ctm,
                                             SkBitmap* result,
-                                            SkIPoint* offset) {
+                                            SkIPoint* offset) const {
     SkIRect bounds;
     source.getBounds(&bounds);
     if (!this->applyCropRect(&bounds, ctm)) {
@@ -74,7 +75,7 @@ bool SkRectShaderImageFilter::onFilterImage(Proxy* proxy,
     SkRect rect = SkRect::MakeWH(SkIntToScalar(bounds.width()), SkIntToScalar(bounds.height()));
     canvas.drawRect(rect, paint);
     *result = device.get()->accessBitmap(false);
-    offset->fX += bounds.fLeft;
-    offset->fY += bounds.fTop;
+    offset->fX = bounds.fLeft;
+    offset->fY = bounds.fTop;
     return true;
 }

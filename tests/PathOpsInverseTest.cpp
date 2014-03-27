@@ -6,7 +6,7 @@
  */
 #include "PathOpsExtendedTest.h"
 
-static void PathOpsInverseTest(skiatest::Reporter* reporter) {
+DEF_TEST(PathOpsInverse, reporter) {
     SkPath one, two;
     for (int op = kDifference_PathOp; op <= kReverseDifference_PathOp; ++op) {
         for (int oneFill = SkPath::kWinding_FillType; oneFill <= SkPath::kInverseEvenOdd_FillType;
@@ -29,6 +29,3 @@ static void PathOpsInverseTest(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS_SHORT(PathOpsInverseTest)
