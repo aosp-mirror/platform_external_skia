@@ -635,6 +635,18 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
+ifeq ($(TARGET_ARCH),arm64)
+    $(warning TODOArm64: Unlike arm32, arm64 has no inline assembly for performance critical code.)
+endif
+LOCAL_SRC_FILES_arm64 := \
+       src/opts/SkBitmapProcState_opts_none.cpp \
+       src/opts/SkBlitMask_opts_none.cpp \
+       src/opts/SkBlitRow_opts_none.cpp \
+       src/opts/SkBlurImage_opts_none.cpp \
+       src/opts/SkMorphology_opts_none.cpp \
+       src/opts/SkUtils_opts_none.cpp \
+       src/opts/SkXfermode_opts_none.cpp
+
 include external/stlport/libstlport.mk
 LOCAL_MODULE:= libskia
 include $(BUILD_SHARED_LIBRARY)
