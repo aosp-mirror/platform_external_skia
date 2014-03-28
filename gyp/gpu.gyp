@@ -1,3 +1,4 @@
+# GYP for building gpu
 {
   'target_defaults': {
     'conditions': [
@@ -81,9 +82,7 @@
       'type': 'static_library',
       'standalone_static_library': 1,
       'dependencies': [
-        'angle.gyp:*',
         'core.gyp:*',
-        'edtaa.gyp:*',
         'utils.gyp:*',
       ],
       'includes': [
@@ -93,9 +92,6 @@
         '../include/gpu',
         '../src/core',
         '../src/gpu',
-      ],
-      'export_dependent_settings': [
-        'angle.gyp:*',
       ],
       'sources': [
         '<@(skgpu_sources)',
@@ -135,17 +131,6 @@
           ],
           'defines': [
             'GR_CHROME_UTILS=1',
-          ],
-        }],
-        [ 'skia_distancefield_fonts', {
-          'sources': [
-            '<(skia_src_path)/gpu/GrDistanceFieldTextContext.h',
-            '<(skia_src_path)/gpu/GrDistanceFieldTextContext.cpp',
-            '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.cpp',
-            '<(skia_src_path)/gpu/effects/GrDistanceFieldTextureEffect.h',
-          ],
-          'defines': [
-            'GR_DISTANCEFIELD_FONTS=1',
           ],
         }],
         [ 'skia_os == "linux" or skia_os == "chromeos"', {
@@ -208,15 +193,16 @@
             '../src/gpu/gl/GrGLCreateNativeInterface_none.cpp',
           ],
         }],
-        [ 'not skia_angle', {
+        [ 'skia_angle', {
+          'dependencies': [
+            'angle.gyp:*',
+          ],
+          'export_dependent_settings': [
+            'angle.gyp:*',
+          ],
+        }, { # not skia_angle
           'sources!': [
             '<@(skgpu_angle_gl_sources)',
-          ],
-          'dependencies!': [
-            'angle.gyp:*',
-          ],
-          'export_dependent_settings!': [
-            'angle.gyp:*',
           ],
         }],
         [ 'skia_os == "android"', {

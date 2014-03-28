@@ -8,6 +8,7 @@
 #ifndef SkLua_DEFINED
 #define SkLua_DEFINED
 
+#include "SkClipStack.h"
 #include "SkColor.h"
 #include "SkScalar.h"
 #include "SkString.h"
@@ -44,6 +45,7 @@ public:
     void pushString(const char[], size_t len, const char tableKey[] = NULL);
     void pushString(const SkString&, const char tableKey[] = NULL);
     void pushArrayU16(const uint16_t[], int count, const char tableKey[] = NULL);
+    void pushArrayPoint(const SkPoint[], int count, const char key[] = NULL);
     void pushColor(SkColor, const char tableKey[] = NULL);
     void pushU32(uint32_t, const char tableKey[] = NULL);
     void pushScalar(SkScalar, const char tableKey[] = NULL);
@@ -53,6 +55,11 @@ public:
     void pushPaint(const SkPaint&, const char tableKey[] = NULL);
     void pushPath(const SkPath&, const char tableKey[] = NULL);
     void pushCanvas(SkCanvas*, const char tableKey[] = NULL);
+    void pushClipStack(const SkClipStack&, const char tableKey[] = NULL);
+    void pushClipStackElement(const SkClipStack::Element& element, const char tableKey[] = NULL);
+
+    // This SkCanvas lua methods is declared here to benefit from SkLua's friendship with SkCanvas.
+    static int lcanvas_getReducedClipStack(lua_State* L);
 
 private:
     lua_State*  fL;

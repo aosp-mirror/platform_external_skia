@@ -10,188 +10,149 @@
 #include <stdio.h>
 #include <vector>
 
-class SkQuadTree::QuadTreeNode {
-public:
-    struct Data {
-        Data(const SkIRect& bounds, void* data) : fBounds(bounds), fInnerBounds(bounds), fData(data) {}
-        SkIRect fBounds;
-        SkIRect fInnerBounds;
-        void* fData;
-    };
+static const int kSplitThreshold = 8;
 
-    QuadTreeNode(const SkIRect& bounds)
-     : fBounds(bounds)
-     , fTopLeft(NULL)
-     , fTopRight(NULL)
-     , fBottomLeft(NULL)
-     , fBottomRight(NULL)
-     , fCanSubdivide((fBounds.width() * fBounds.height()) > 0) {}
-
-    ~QuadTreeNode() {
-        clear();
-    }
-
-    void clear() {
-        SkDELETE(fTopLeft);
-        fTopLeft = NULL;
-        SkDELETE(fTopRight);
-        fTopRight = NULL;
-        SkDELETE(fBottomLeft);
-        fBottomLeft = NULL;
-        SkDELETE(fBottomRight);
-        fBottomRight = NULL;
-        fData.reset();
-    }
-
-    const SkIRect& getBounds() const { return fBounds; }
-
-    // Insert data into the QuadTreeNode
-    bool insert(Data& data) {
-        // Ignore objects which do not belong in this quad tree
-        return data.fInnerBounds.intersect(fBounds) && doInsert(data);
-    }
-
-    // Find all data which appear within a range
-    void queryRange(const SkIRect& range, SkTDArray<void*>* dataInRange) const {
-        // Automatically abort if the range does not collide with this quad
-        if (!SkIRect::Intersects(fBounds, range)) {
-            return; // nothing added to the list
-        }
-
-        // Check objects at this quad level
-        for (int i = 0; i < fData.count(); ++i) {
-            if (SkIRect::Intersects(fData[i].fBounds, range)) {
-                dataInRange->push(fData[i].fData);
-            }
-        }
-
-        // Terminate here, if there are no children
-        if (!hasChildren()) {
-            return;
-        }
-
-        // Otherwise, add the data from the children
-        fTopLeft->queryRange(range, dataInRange);
-        fTopRight->queryRange(range, dataInRange);
-        fBottomLeft->queryRange(range, dataInRange);
-        fBottomRight->queryRange(range, dataInRange);
-    }
-
-    int getDepth(int i = 1) const {
-        if (hasChildren()) {
-            int depthTL = fTopLeft->getDepth(++i);
-            int depthTR = fTopRight->getDepth(i);
-            int depthBL = fBottomLeft->getDepth(i);
-            int depthBR = fBottomRight->getDepth(i);
-            return SkTMax(SkTMax(depthTL, depthTR), SkTMax(depthBL, depthBR));
-        }
-        return i;
-    }
-
-    void rewindInserts(SkBBoxHierarchyClient* client) {
-        for (int i = fData.count() - 1; i >= 0; --i) {
-            if (client->shouldRewind(fData[i].fData)) {
-                fData.remove(i);
-            }
-        }
-        if (hasChildren()) {
-            fTopLeft->rewindInserts(client);
-            fTopRight->rewindInserts(client);
-            fBottomLeft->rewindInserts(client);
-            fBottomRight->rewindInserts(client);
-        }
-    }
-
-private:
-    // create four children which fully divide this quad into four quads of equal area
-    void subdivide() {
-        if (!hasChildren() && fCanSubdivide) {
-            SkIPoint center = SkIPoint::Make(fBounds.centerX(), fBounds.centerY());
-            fTopLeft = SkNEW_ARGS(QuadTreeNode, (SkIRect::MakeLTRB(
-                fBounds.fLeft, fBounds.fTop, center.fX, center.fY)));
-            fTopRight = SkNEW_ARGS(QuadTreeNode, (SkIRect::MakeLTRB(
-                center.fX, fBounds.fTop, fBounds.fRight, center.fY)));
-            fBottomLeft = SkNEW_ARGS(QuadTreeNode, (SkIRect::MakeLTRB(
-                fBounds.fLeft, center.fY, center.fX, fBounds.fBottom)));
-            fBottomRight = SkNEW_ARGS(QuadTreeNode, (SkIRect::MakeLTRB(
-                center.fX, center.fY, fBounds.fRight, fBounds.fBottom)));
-
-            // If any of the data can fit entirely into a subregion, move it down now
-            for (int i = fData.count() - 1; i >= 0; --i) {
-                // If the data fits entirely into one of the 4 subregions, move that data
-                // down to that subregion.
-                if (fTopLeft->doInsert(fData[i]) ||
-                    fTopRight->doInsert(fData[i]) ||
-                    fBottomLeft->doInsert(fData[i]) ||
-                    fBottomRight->doInsert(fData[i])) {
-                    fData.remove(i);
-                }
-            }
-        }
-    }
-
-    bool doInsert(const Data& data) {
-        if (!fBounds.contains(data.fInnerBounds)) {
-            return false;
-        }
-
-        if (fData.count() > kQuadTreeNodeCapacity) {
-            subdivide();
-        }
-
-        // If there is space in this quad tree, add the object here
-        // If this quadtree can't be subdivided, we have no choice but to add it here
-        if ((fData.count() <= kQuadTreeNodeCapacity) || !fCanSubdivide) {
-            if (fData.isEmpty()) {
-                fData.setReserve(kQuadTreeNodeCapacity);
-            }
-            fData.push(data);
-        } else if (!fTopLeft->doInsert(data) && !fTopRight->doInsert(data) &&
-                   !fBottomLeft->doInsert(data) && !fBottomRight->doInsert(data)) {
-            // Can't be pushed down to children ? keep it here
-            fData.push(data);
-        }
-
-        return true;
-    }
-
-    bool hasChildren() const {
-        return (NULL != fTopLeft);
-    }
-
-    // Arbitrary constant to indicate how many elements can be stored in this quad tree node
-    enum { kQuadTreeNodeCapacity = 4 };
-
-    // Bounds of this quad tree
-    SkIRect fBounds;
-
-    // Data in this quad tree node
-    SkTDArray<Data> fData;
-
-    // Children
-    QuadTreeNode* fTopLeft;
-    QuadTreeNode* fTopRight;
-    QuadTreeNode* fBottomLeft;
-    QuadTreeNode* fBottomRight;
-
-    // Whether or not this node can have children
-    bool fCanSubdivide;
+enum {
+    kTopLeft,
+    kTopRight,
+    kBottomLeft,
+    kBottomRight,
+};
+enum {
+    kTopLeft_Bit = 1 << kTopLeft,
+    kTopRight_Bit = 1 << kTopRight,
+    kBottomLeft_Bit = 1 << kBottomLeft,
+    kBottomRight_Bit = 1 << kBottomRight,
+};
+enum {
+    kMaskLeft = kTopLeft_Bit | kBottomLeft_Bit,
+    kMaskRight = kTopRight_Bit | kBottomRight_Bit,
+    kMaskTop = kTopLeft_Bit | kTopRight_Bit,
+    kMaskBottom = kBottomLeft_Bit | kBottomRight_Bit,
 };
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-SkQuadTree* SkQuadTree::Create(const SkIRect& bounds) {
-    return new SkQuadTree(bounds);
+static U8CPU child_intersect(const SkIRect& query, const SkIPoint& split) {
+    // fast quadrant test
+    U8CPU intersect = 0xf;
+    if (query.fRight <  split.fX) {
+        intersect &= ~kMaskRight;
+    } else if(query.fLeft >= split.fX) {
+        intersect &= ~kMaskLeft;
+    }
+    if (query.fBottom < split.fY) {
+        intersect &= ~kMaskBottom;
+    } else if(query.fTop >= split.fY) {
+        intersect &= ~kMaskTop;
+    }
+    return intersect;
 }
 
 SkQuadTree::SkQuadTree(const SkIRect& bounds)
-    : fCount(0)
-    , fRoot(SkNEW_ARGS(QuadTreeNode, (bounds))) {
+    : fRoot(NULL) {
     SkASSERT((bounds.width() * bounds.height()) > 0);
+    fRootBounds = bounds;
 }
 
 SkQuadTree::~SkQuadTree() {
-    SkDELETE(fRoot);
+}
+
+void SkQuadTree::insert(Node* node, Entry* entry) {
+    // does it belong in a child?
+    if (NULL != node->fChildren[0]) {
+        switch(child_intersect(entry->fBounds, node->fSplitPoint)) {
+            case kTopLeft_Bit:
+                this->insert(node->fChildren[kTopLeft], entry);
+                return;
+            case kTopRight_Bit:
+                this->insert(node->fChildren[kTopRight], entry);
+                return;
+            case kBottomLeft_Bit:
+                this->insert(node->fChildren[kBottomLeft], entry);
+                return;
+            case kBottomRight_Bit:
+                this->insert(node->fChildren[kBottomRight], entry);
+                return;
+            default:
+                node->fEntries.push(entry);
+                return;
+        }
+    }
+    // No children yet, add to this node
+    node->fEntries.push(entry);
+    // should I split?
+    if (node->fEntries.getCount() > kSplitThreshold) {
+        this->split(node);
+    }
+}
+
+void SkQuadTree::split(Node* node) {
+    // Build all the children
+    node->fSplitPoint = SkIPoint::Make(node->fBounds.centerX(),
+                                       node->fBounds.centerY());
+    for(int index=0; index<kChildCount; ++index) {
+        node->fChildren[index] = fNodePool.acquire();
+    }
+    node->fChildren[0]->fBounds = SkIRect::MakeLTRB(
+        node->fBounds.fLeft,    node->fBounds.fTop,
+        node->fSplitPoint.fX,   node->fSplitPoint.fY);
+    node->fChildren[1]->fBounds = SkIRect::MakeLTRB(
+        node->fSplitPoint.fX,   node->fBounds.fTop,
+        node->fBounds.fRight,   node->fSplitPoint.fY);
+    node->fChildren[2]->fBounds = SkIRect::MakeLTRB(
+        node->fBounds.fLeft,    node->fSplitPoint.fY,
+        node->fSplitPoint.fX,   node->fBounds.fBottom);
+    node->fChildren[3]->fBounds = SkIRect::MakeLTRB(
+        node->fSplitPoint.fX,   node->fSplitPoint.fY,
+        node->fBounds.fRight,   node->fBounds.fBottom);
+    // reinsert all the entries of this node to allow child trickle
+    SkTInternalSList<Entry> entries;
+    entries.pushAll(&node->fEntries);
+    while(!entries.isEmpty()) {
+        this->insert(node, entries.pop());
+    }
+}
+
+void SkQuadTree::search(Node* node, const SkIRect& query,
+                        SkTDArray<void*>* results) const {
+    for (Entry* entry = node->fEntries.head(); NULL != entry;
+        entry = entry->getSListNext()) {
+        if (SkIRect::IntersectsNoEmptyCheck(entry->fBounds, query)) {
+            results->push(entry->fData);
+        }
+    }
+    if (NULL == node->fChildren[0]) {
+        return;
+    }
+    U8CPU intersect = child_intersect(query, node->fSplitPoint);
+    for(int index=0; index<kChildCount; ++index) {
+        if (intersect & (1 << index)) {
+            this->search(node->fChildren[index], query, results);
+        }
+    }
+}
+
+void SkQuadTree::clear(Node* node) {
+    // first clear the entries of this node
+    fEntryPool.releaseAll(&node->fEntries);
+    // recurse into and clear all child nodes
+    for(int index=0; index<kChildCount; ++index) {
+        Node* child = node->fChildren[index];
+        node->fChildren[index] = NULL;
+        if (NULL != child) {
+            this->clear(child);
+            fNodePool.release(child);
+        }
+    }
+}
+
+int SkQuadTree::getDepth(Node* node) const {
+    int maxDepth = 0;
+    if (NULL != node) {
+        for(int index=0; index<kChildCount; ++index) {
+            maxDepth = SkMax32(maxDepth, getDepth(node->fChildren[index]));
+        }
+    }
+    return maxDepth + 1;
 }
 
 void SkQuadTree::insert(void* data, const SkIRect& bounds, bool) {
@@ -199,27 +160,59 @@ void SkQuadTree::insert(void* data, const SkIRect& bounds, bool) {
         SkASSERT(false);
         return;
     }
-
-    QuadTreeNode::Data quadTreeData(bounds, data);
-    fRoot->insert(quadTreeData);
-    ++fCount;
+    Entry* entry = fEntryPool.acquire();
+    entry->fData = data;
+    entry->fBounds = bounds;
+    if (NULL == fRoot) {
+        fDeferred.push(entry);
+    } else {
+        this->insert(fRoot, entry);
+    }
 }
 
 void SkQuadTree::search(const SkIRect& query, SkTDArray<void*>* results) {
+    SkASSERT(NULL != fRoot);
     SkASSERT(NULL != results);
-    fRoot->queryRange(query, results);
+    if (SkIRect::Intersects(fRootBounds, query)) {
+        this->search(fRoot, query, results);
+    }
 }
 
 void SkQuadTree::clear() {
-    fCount = 0;
-    fRoot->clear();
+    if (NULL != fRoot) {
+        this->clear(fRoot);
+        fNodePool.release(fRoot);
+        fRoot = NULL;
+    }
 }
 
 int SkQuadTree::getDepth() const {
-    return fRoot->getDepth();
+    return this->getDepth(fRoot);
 }
 
 void SkQuadTree::rewindInserts() {
     SkASSERT(fClient);
-    fRoot->rewindInserts(fClient);
+     // Currently only supports deferred inserts
+    SkASSERT(NULL == fRoot);
+    SkTInternalSList<Entry> entries;
+    entries.pushAll(&fDeferred);
+    while(!entries.isEmpty()) {
+        Entry* entry = entries.pop();
+        if (fClient->shouldRewind(entry->fData)) {
+            entry->fData = NULL;
+            fEntryPool.release(entry);
+        } else {
+            fDeferred.push(entry);
+        }
+    }
+}
+
+void SkQuadTree::flushDeferredInserts() {
+    if (NULL == fRoot) {
+        fRoot = fNodePool.acquire();
+        fRoot->fBounds = fRootBounds;
+    }
+    while(!fDeferred.isEmpty()) {
+        this->insert(fRoot, fDeferred.pop());
+    }
 }

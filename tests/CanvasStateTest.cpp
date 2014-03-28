@@ -16,6 +16,7 @@
 #include "Test.h"
 
 static void test_complex_layers(skiatest::Reporter* reporter) {
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
     const int WIDTH = 400;
     const int HEIGHT = 400;
     const int SPACER = 10;
@@ -24,10 +25,10 @@ static void test_complex_layers(skiatest::Reporter* reporter) {
                                    SkIntToScalar(WIDTH-(2*SPACER)),
                                    SkIntToScalar((HEIGHT-(2*SPACER)) / 7));
 
-    const SkBitmap::Config configs[] = { SkBitmap::kRGB_565_Config,
-                                         SkBitmap::kARGB_8888_Config
+    const SkColorType colorTypes[] = {
+        kRGB_565_SkColorType, kPMColor_SkColorType
     };
-    const int configCount = sizeof(configs) / sizeof(SkBitmap::Config);
+    const int configCount = sizeof(colorTypes) / sizeof(SkBitmap::Config);
 
     const int layerAlpha[] = { 255, 255, 0 };
     const SkCanvas::SaveFlags flags[] = { SkCanvas::kARGB_NoClipLayer_SaveFlag,
@@ -40,8 +41,9 @@ static void test_complex_layers(skiatest::Reporter* reporter) {
     for (int i = 0; i < configCount; ++i) {
         SkBitmap bitmaps[2];
         for (int j = 0; j < 2; ++j) {
-            bitmaps[j].setConfig(configs[i], WIDTH, HEIGHT);
-            bitmaps[j].allocPixels();
+            bitmaps[j].allocPixels(SkImageInfo::Make(WIDTH, HEIGHT,
+                                                     colorTypes[i],
+                                                     kPremul_SkAlphaType));
 
             SkCanvas canvas(bitmaps[j]);
 
@@ -86,12 +88,13 @@ static void test_complex_layers(skiatest::Reporter* reporter) {
                                           bitmaps[1].getPixels(),
                                           bitmaps[0].getSize()));
     }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void test_complex_clips(skiatest::Reporter* reporter) {
-
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
     const int WIDTH = 400;
     const int HEIGHT = 400;
     const int SPACER = 10;
@@ -127,8 +130,7 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
 
     SkBitmap bitmaps[2];
     for (int i = 0; i < 2; ++i) {
-        bitmaps[i].setConfig(SkBitmap::kARGB_8888_Config, WIDTH, HEIGHT);
-        bitmaps[i].allocPixels();
+        bitmaps[i].allocN32Pixels(WIDTH, HEIGHT);
 
         SkCanvas canvas(bitmaps[i]);
 
@@ -175,6 +177,7 @@ static void test_complex_clips(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, !memcmp(bitmaps[0].getPixels(),
                                       bitmaps[1].getPixels(),
                                       bitmaps[0].getSize()));
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -186,8 +189,9 @@ public:
 
 static void test_draw_filters(skiatest::Reporter* reporter) {
     TestDrawFilter drawFilter;
-    SkBitmapDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
-    SkCanvas canvas(&device);
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(10, 10);
+    SkCanvas canvas(bitmap);
 
     canvas.setDrawFilter(&drawFilter);
 
@@ -209,8 +213,9 @@ static void test_draw_filters(skiatest::Reporter* reporter) {
 static void error_callback(SkError code, void* ctx) {}
 
 static void test_soft_clips(skiatest::Reporter* reporter) {
-    SkBitmapDevice device(SkBitmap::kARGB_8888_Config, 10, 10);
-    SkCanvas canvas(&device);
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(10, 10);
+    SkCanvas canvas(bitmap);
 
     SkRRect roundRect;
     roundRect.setOval(SkRect::MakeWH(5, 5));
@@ -226,9 +231,45 @@ static void test_soft_clips(skiatest::Reporter* reporter) {
     SkClearLastError();
 }
 
+static void test_saveLayer_clip(skiatest::Reporter* reporter) {
+#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+    const int WIDTH = 100;
+    const int HEIGHT = 100;
+    const int LAYER_WIDTH = 50;
+    const int LAYER_HEIGHT = 50;
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(WIDTH, HEIGHT);
+    SkCanvas canvas(bitmap);
+
+    SkRect bounds = SkRect::MakeWH(SkIntToScalar(LAYER_WIDTH), SkIntToScalar(LAYER_HEIGHT));
+    canvas.clipRect(SkRect::MakeWH(SkIntToScalar(WIDTH), SkIntToScalar(HEIGHT)));
+
+    // Check that saveLayer without the kClipToLayer_SaveFlag leaves the
+    // clip stack unchanged.
+    canvas.saveLayer(&bounds, NULL, SkCanvas::kARGB_NoClipLayer_SaveFlag);
+    SkRect clipStackBounds;
+    SkClipStack::BoundsType boundsType;
+    canvas.getClipStack()->getBounds(&clipStackBounds, &boundsType);
+    REPORTER_ASSERT(reporter, clipStackBounds.width() == WIDTH);
+    REPORTER_ASSERT(reporter, clipStackBounds.height() == HEIGHT);
+    canvas.restore();
+
+    // Check that saveLayer with the kClipToLayer_SaveFlag sets the clip
+    // stack to the layer bounds.
+    canvas.saveLayer(&bounds, NULL, SkCanvas::kARGB_ClipLayer_SaveFlag);
+    canvas.getClipStack()->getBounds(&clipStackBounds, &boundsType);
+    REPORTER_ASSERT(reporter, clipStackBounds.width() == LAYER_WIDTH);
+    REPORTER_ASSERT(reporter, clipStackBounds.height() == LAYER_HEIGHT);
+
+    canvas.restore();
+#endif
+}
+
 DEF_TEST(CanvasState, reporter) {
     test_complex_layers(reporter);
     test_complex_clips(reporter);
     test_draw_filters(reporter);
     test_soft_clips(reporter);
+    test_saveLayer_clip(reporter);
 }

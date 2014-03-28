@@ -28,14 +28,14 @@ public:
         fSize.set(width, height);
         fPRCont = prCont;
         SkSafeRef(fPRCont);
-        fEmptyBitmap.setConfig(SkBitmap::kNo_Config, width, height);
+        fEmptyBitmap.setConfig(SkImageInfo::Make(width, height,
+                                                 kUnknown_SkColorType,
+                                                 kIgnore_SkAlphaType));
     }
 
     virtual ~SkGatherPixelRefsAndRectsDevice() {
         SkSafeUnref(fPRCont);
     }
-
-    virtual uint32_t getDeviceCapabilities() SK_OVERRIDE { return 0; }
 
     virtual int width() const SK_OVERRIDE { return fSize.width(); }
     virtual int height() const SK_OVERRIDE { return fSize.height(); }
@@ -43,10 +43,10 @@ public:
     virtual SkBitmap::Config config() const SK_OVERRIDE {
         return SkBitmap::kNo_Config;
     }
-    virtual void writePixels(const SkBitmap& bitmap, int x, int y,
-                             SkCanvas::Config8888 config8888) SK_OVERRIDE {
-        NotSupported();
+    virtual SkImageInfo imageInfo() const SK_OVERRIDE {
+        return fEmptyBitmap.info();
     }
+
     virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE { return NULL; }
 
 protected:
@@ -291,17 +291,11 @@ protected:
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE {
         return fEmptyBitmap;
     }
-    virtual bool onReadPixels(const SkBitmap& bitmap,
-                              int x, int y,
-                              SkCanvas::Config8888 config8888) SK_OVERRIDE {
-        NotSupported();
-        return false;
-    }
     virtual void lockPixels() SK_OVERRIDE { NothingToDo(); }
     virtual void unlockPixels() SK_OVERRIDE { NothingToDo(); }
     virtual bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
     virtual bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
-    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkMatrix&,
+    virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkImageFilter::Context&,
                              SkBitmap* result, SkIPoint* offset) SK_OVERRIDE {
         return false;
     }
@@ -326,13 +320,11 @@ private:
         NotSupported();
     }
 
-    virtual SkBaseDevice* onCreateCompatibleDevice(SkBitmap::Config config,
-                                                   int width, int height,
-                                                   bool isOpaque,
-                                                   Usage usage) SK_OVERRIDE {
+    virtual SkBaseDevice* onCreateDevice(const SkImageInfo& info, Usage usage) SK_OVERRIDE {
         // we expect to only get called via savelayer, in which case it is fine.
         SkASSERT(kSaveLayer_Usage == usage);
-        return SkNEW_ARGS(SkGatherPixelRefsAndRectsDevice, (width, height, fPRCont));
+        return SkNEW_ARGS(SkGatherPixelRefsAndRectsDevice,
+                          (info.width(), info.height(), fPRCont));
     }
 
     virtual void flush() SK_OVERRIDE {}

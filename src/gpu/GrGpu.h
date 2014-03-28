@@ -141,13 +141,6 @@ public:
     void resolveRenderTarget(GrRenderTarget* target);
 
     /**
-     * Ensures that the current render target is actually set in the
-     * underlying 3D API. Used when client wants to use 3D API to directly
-     * render to the RT.
-     */
-    void forceRenderTargetFlush();
-
-    /**
      * Gets a preferred 8888 config to use for writing/reading pixel data to/from a surface with
      * config surfaceConfig. The returned config must have at least as many bits per channel as the
      * readConfig or writeConfig param.
@@ -337,6 +330,7 @@ protected:
         kDrawTriangles_DrawType,
         kStencilPath_DrawType,
         kDrawPath_DrawType,
+        kDrawPaths_DrawType,
     };
 
     DrawType PrimTypeToDrawType(GrPrimitiveType type) {
@@ -438,9 +432,8 @@ private:
     // overridden by backend-specific derived class to perform the path stenciling.
     virtual void onGpuStencilPath(const GrPath*, SkPath::FillType) = 0;
     virtual void onGpuDrawPath(const GrPath*, SkPath::FillType) = 0;
-
-    // overridden by backend-specific derived class to perform flush
-    virtual void onForceRenderTargetFlush() = 0;
+    virtual void onGpuDrawPaths(size_t, const GrPath**, const SkMatrix*,
+                                SkPath::FillType, SkStrokeRec::Style) = 0;
 
     // overridden by backend-specific derived class to perform the read pixels.
     virtual bool onReadPixels(GrRenderTarget* target,
@@ -483,6 +476,9 @@ private:
     virtual void onStencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
     virtual void onDrawPath(const GrPath*, SkPath::FillType,
                             const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
+    virtual void onDrawPaths(size_t, const GrPath**, const SkMatrix*,
+                             SkPath::FillType, SkStrokeRec::Style,
+                             const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
 
     // readies the pools to provide vertex/index data.
     void prepareVertexPool();

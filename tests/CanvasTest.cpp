@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -65,14 +64,31 @@
 #include "SkTDArray.h"
 #include "Test.h"
 
+static bool equal_clips(const SkCanvas& a, const SkCanvas& b) {
+    if (a.isClipEmpty()) {
+        return b.isClipEmpty();
+    }
+    if (!a.isClipRect()) {
+        // this is liberally true, since we don't expose a way to know this exactly (for non-rects)
+        return !b.isClipRect();
+    }
+    SkIRect ar, br;
+    a.getClipDeviceBounds(&ar);
+    b.getClipDeviceBounds(&br);
+    return ar == br;
+}
+
 class Canvas2CanvasClipVisitor : public SkCanvas::ClipVisitor {
 public:
     Canvas2CanvasClipVisitor(SkCanvas* target) : fTarget(target) {}
 
-    virtual void clipRect(const SkRect& r, SkRegion::Op op, bool aa) {
+    virtual void clipRect(const SkRect& r, SkRegion::Op op, bool aa) SK_OVERRIDE {
         fTarget->clipRect(r, op, aa);
     }
-    virtual void clipPath(const SkPath& p, SkRegion::Op op, bool aa) {
+    virtual void clipRRect(const SkRRect& r, SkRegion::Op op, bool aa) SK_OVERRIDE {
+        fTarget->clipRRect(r, op, aa);
+    }
+    virtual void clipPath(const SkPath& p, SkRegion::Op op, bool aa) SK_OVERRIDE {
         fTarget->clipPath(p, op, aa);
     }
 
@@ -84,13 +100,13 @@ static void test_clipVisitor(skiatest::Reporter* reporter, SkCanvas* canvas) {
     SkISize size = canvas->getDeviceSize();
 
     SkBitmap bm;
-    bm.setConfig(SkBitmap::kARGB_8888_Config, size.width(), size.height());
+    bm.setConfig(SkImageInfo::MakeN32Premul(size.width(), size.height()));
     SkCanvas c(bm);
 
     Canvas2CanvasClipVisitor visitor(&c);
     canvas->replayClips(&visitor);
 
-    REPORTER_ASSERT(reporter, c.getTotalClip() == canvas->getTotalClip());
+    REPORTER_ASSERT(reporter, equal_clips(c, *canvas));
 }
 
 static const int kWidth = 2;
@@ -135,9 +151,8 @@ static const char* const kNWayIndirect2StateAssertMessageFormat =
 static const char* const kPdfAssertMessageFormat =
     "PDF sanity check failed %s";
 
-static void createBitmap(SkBitmap* bm, SkBitmap::Config config, SkColor color) {
-    bm->setConfig(config, kWidth, kHeight);
-    bm->allocPixels();
+static void createBitmap(SkBitmap* bm, SkColor color) {
+    bm->allocN32Pixels(kWidth, kHeight);
     bm->eraseColor(color);
 }
 
@@ -195,13 +210,26 @@ static SkMatrix testMatrix() {
     return matrix;
 }
 const SkMatrix kTestMatrix = testMatrix();
-static SkPath testPath() {
+static SkPath test_path() {
     SkPath path;
     path.addRect(SkRect::MakeXYWH(SkIntToScalar(0), SkIntToScalar(0),
                                   SkIntToScalar(2), SkIntToScalar(1)));
     return path;
 }
-const SkPath kTestPath = testPath();
+const SkPath kTestPath = test_path();
+static SkPath test_nearly_zero_length_path() {
+    SkPath path;
+    SkPoint pt1 = { 0, 0 };
+    SkPoint pt2 = { 0, SK_ScalarNearlyZero };
+    SkPoint pt3 = { SkIntToScalar(1), 0 };
+    SkPoint pt4 = { SkIntToScalar(1), SK_ScalarNearlyZero/2 };
+    path.moveTo(pt1);
+    path.lineTo(pt2);
+    path.lineTo(pt3);
+    path.lineTo(pt4);
+    return path;
+}
+const SkPath kNearlyZeroLengthPath = test_nearly_zero_length_path();
 static SkRegion testRegion() {
     SkRegion region;
     SkIRect rect = SkIRect::MakeXYWH(0, 0, 2, 1);
@@ -220,7 +248,7 @@ const SkPoint kTestPoints[3] = {
 const size_t kTestPointCount = 3;
 static SkBitmap testBitmap() {
     SkBitmap bitmap;
-    createBitmap(&bitmap, SkBitmap::kARGB_8888_Config, 0x05060708);
+    createBitmap(&bitmap, 0x05060708);
     return bitmap;
 }
 SkBitmap kTestBitmap; // cannot be created during static init
@@ -284,14 +312,11 @@ TEST_STEP(NAME, NAME##TestStep )
 // Basic test steps for most virtual methods in SkCanvas that draw or affect
 // the state of the canvas.
 
-SIMPLE_TEST_STEP_WITH_ASSERT(Translate,
-    translate(SkIntToScalar(1), SkIntToScalar(2)));
-SIMPLE_TEST_STEP_WITH_ASSERT(Scale,
-    scale(SkIntToScalar(1), SkIntToScalar(2)));
-SIMPLE_TEST_STEP_WITH_ASSERT(Rotate, rotate(SkIntToScalar(1)));
-SIMPLE_TEST_STEP_WITH_ASSERT(Skew,
-    skew(SkIntToScalar(1), SkIntToScalar(2)));
-SIMPLE_TEST_STEP_WITH_ASSERT(Concat, concat(kTestMatrix));
+SIMPLE_TEST_STEP(Translate, translate(SkIntToScalar(1), SkIntToScalar(2)));
+SIMPLE_TEST_STEP(Scale, scale(SkIntToScalar(1), SkIntToScalar(2)));
+SIMPLE_TEST_STEP(Rotate, rotate(SkIntToScalar(1)));
+SIMPLE_TEST_STEP(Skew, skew(SkIntToScalar(1), SkIntToScalar(2)));
+SIMPLE_TEST_STEP(Concat, concat(kTestMatrix));
 SIMPLE_TEST_STEP(SetMatrix, setMatrix(kTestMatrix));
 SIMPLE_TEST_STEP(ClipRect, clipRect(kTestRect));
 SIMPLE_TEST_STEP(ClipPath, clipPath(kTestPath));
@@ -355,8 +380,7 @@ static void SaveMatrixStep(SkCanvas* canvas,
         testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalMatrix().isIdentity(),
         testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() == kTestRegion,
-        testStep->assertMessage());
+//    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() == kTestRegion, testStep->assertMessage());
 }
 TEST_STEP(SaveMatrix, SaveMatrixStep);
 
@@ -372,8 +396,7 @@ static void SaveClipStep(SkCanvas* canvas,
         testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, !canvas->getTotalMatrix().isIdentity(),
         testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() != kTestRegion,
-        testStep->assertMessage());
+//    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() != kTestRegion, testStep->assertMessage());
 }
 TEST_STEP(SaveClip, SaveClipStep);
 
@@ -389,8 +412,7 @@ static void SaveMatrixClipStep(SkCanvas* canvas,
         testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalMatrix().isIdentity(),
         testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() != kTestRegion,
-        testStep->assertMessage());
+//    REPORTER_ASSERT_MESSAGE(reporter, canvas->getTotalClip() != kTestRegion, testStep->assertMessage());
 }
 TEST_STEP(SaveMatrixClip, SaveMatrixClipStep);
 
@@ -448,17 +470,7 @@ static void DrawNearlyZeroLengthPathTestStep(SkCanvas* canvas,
     paint.setStrokeWidth(SkIntToScalar(1));
     paint.setStyle(SkPaint::kStroke_Style);
 
-    SkPath path;
-    SkPoint pt1 = { 0, 0 };
-    SkPoint pt2 = { 0, SK_ScalarNearlyZero };
-    SkPoint pt3 = { SkIntToScalar(1), 0 };
-    SkPoint pt4 = { SkIntToScalar(1), SK_ScalarNearlyZero/2 };
-    path.moveTo(pt1);
-    path.lineTo(pt2);
-    path.lineTo(pt3);
-    path.lineTo(pt4);
-
-    canvas->drawPath(path, paint);
+    canvas->drawPath(kNearlyZeroLengthPath, paint);
 }
 TEST_STEP(DrawNearlyZeroLengthPath, DrawNearlyZeroLengthPathTestStep);
 
@@ -624,10 +636,7 @@ static void AssertCanvasStatesEqual(skiatest::Reporter* reporter,
         canvas2->getBounder(), testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, canvas1->getTotalMatrix() ==
         canvas2->getTotalMatrix(), testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas1->getClipType() ==
-        canvas2->getClipType(), testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas1->getTotalClip() ==
-        canvas2->getTotalClip(), testStep->assertMessage());
+    REPORTER_ASSERT_MESSAGE(reporter, equal_clips(*canvas1, *canvas2), testStep->assertMessage());
 
     // The following test code is commented out because the test fails when
     // the canvas is an SkPictureRecord or SkDeferredCanvas
@@ -798,7 +807,7 @@ static void TestProxyCanvasStateConsistency(
     const SkCanvas& referenceCanvas) {
 
     SkBitmap indirectStore;
-    createBitmap(&indirectStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+    createBitmap(&indirectStore, 0xFFFFFFFF);
     SkBitmapDevice indirectDevice(indirectStore);
     SkCanvas indirectCanvas(&indirectDevice);
     SkProxyCanvas proxyCanvas(&indirectCanvas);
@@ -821,12 +830,12 @@ static void TestNWayCanvasStateConsistency(
     const SkCanvas& referenceCanvas) {
 
     SkBitmap indirectStore1;
-    createBitmap(&indirectStore1, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+    createBitmap(&indirectStore1, 0xFFFFFFFF);
     SkBitmapDevice indirectDevice1(indirectStore1);
     SkCanvas indirectCanvas1(&indirectDevice1);
 
     SkBitmap indirectStore2;
-    createBitmap(&indirectStore2, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+    createBitmap(&indirectStore2, 0xFFFFFFFF);
     SkBitmapDevice indirectDevice2(indirectStore2);
     SkCanvas indirectCanvas2(&indirectDevice2);
 
@@ -859,7 +868,7 @@ static void TestNWayCanvasStateConsistency(
 static void TestOverrideStateConsistency(skiatest::Reporter* reporter,
                                          CanvasTestStep* testStep) {
     SkBitmap referenceStore;
-    createBitmap(&referenceStore, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+    createBitmap(&referenceStore, 0xFFFFFFFF);
     SkBitmapDevice referenceDevice(referenceStore);
     SkCanvas referenceCanvas(&referenceDevice);
     testStep->setAssertMessageFormat(kCanvasDrawAssertMessageFormat);
@@ -891,6 +900,45 @@ static void TestOverrideStateConsistency(skiatest::Reporter* reporter,
     }
 }
 
+static void test_newraster(skiatest::Reporter* reporter) {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
+    SkCanvas* canvas = SkCanvas::NewRaster(info);
+    REPORTER_ASSERT(reporter, canvas);
+
+    SkImageInfo info2;
+    size_t rowBytes;
+    const SkPMColor* addr = (const SkPMColor*)canvas->peekPixels(&info2, &rowBytes);
+    REPORTER_ASSERT(reporter, addr);
+    REPORTER_ASSERT(reporter, info == info2);
+    for (int y = 0; y < info.height(); ++y) {
+        for (int x = 0; x < info.width(); ++x) {
+            REPORTER_ASSERT(reporter, 0 == addr[x]);
+        }
+        addr = (const SkPMColor*)((const char*)addr + rowBytes);
+    }
+    SkDELETE(canvas);
+
+    // now try a deliberately bad info
+    info.fWidth = -1;
+    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRaster(info));
+
+    // too big
+    info.fWidth = 1 << 30;
+    info.fHeight = 1 << 30;
+    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRaster(info));
+
+    // not a valid pixel type
+    info.fWidth = info.fHeight = 10;
+    info.fColorType = kUnknown_SkColorType;
+    REPORTER_ASSERT(reporter, NULL == SkCanvas::NewRaster(info));
+
+    // We should succeed with a zero-sized valid info
+    info = SkImageInfo::MakeN32Premul(0, 0);
+    canvas = SkCanvas::NewRaster(info);
+    REPORTER_ASSERT(reporter, canvas);
+    SkDELETE(canvas);
+}
+
 DEF_TEST(Canvas, reporter) {
     // Init global here because bitmap pixels cannot be alocated during
     // static initialization
@@ -907,4 +955,6 @@ DEF_TEST(Canvas, reporter) {
 
     // Explicitly call reset(), so we don't leak the pixels (since kTestBitmap is a global)
     kTestBitmap.reset();
+
+    test_newraster(reporter);
 }

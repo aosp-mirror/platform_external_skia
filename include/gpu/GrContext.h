@@ -111,6 +111,11 @@ public:
      */
     size_t getGpuTextureCacheBytes() const;
 
+    /**
+     * Returns the number of resources hosted by the texture cache.
+     */
+    int getGpuTextureCacheResourceCount() const;
+
     ///////////////////////////////////////////////////////////////////////////
     // Textures
 
@@ -305,6 +310,19 @@ public:
      * is not supported.
      */
     int getMaxSampleCount() const;
+
+    /**
+     * Returns the recommended sample count for a render target when using this
+     * context.
+     *
+     * @param  config the configuration of the render target.
+     * @param  dpi the display density in dots per inch.
+     *
+     * @return sample count that should be perform well and have good enough
+     *         rendering quality for the display. Alternatively returns 0 if
+     *         MSAA is not supported or recommended to be used by default.
+     */
+    int getRecommendedSampleCount(GrPixelConfig config, SkScalar dpi) const;
 
     ///////////////////////////////////////////////////////////////////////////
     // Backend Surfaces
@@ -635,7 +653,13 @@ public:
      * perform a resolve to a GrTexture used as the source of a draw or before
      * reading pixels back from a GrTexture or GrRenderTarget.
      */
-    void resolveRenderTarget(GrRenderTarget* target);
+    void resolveRenderTarget(GrRenderTarget*);
+
+    /**
+     * Provides a perfomance hint that the render target's contents are allowed
+     * to become undefined.
+     */
+    void discardRenderTarget(GrRenderTarget*);
 
 #ifdef SK_DEVELOPER
     void dumpFontCache() const;
@@ -842,6 +866,11 @@ public:
     // Called by tests that draw directly to the context via GrDrawTarget
     void getTestTarget(GrTestTarget*);
 
+    // Functions for managing gpu trace markers
+    bool isGpuTracingEnabled() const { return fGpuTracingEnabled; }
+    void enableGpuTracing() { fGpuTracingEnabled = true; }
+    void disableGpuTracing() { fGpuTracingEnabled = false; }
+
     /**
      * Stencil buffers add themselves to the cache using addStencilBuffer. findStencilBuffer is
      * called to check the cache for a SB that matches an RT's criteria.
@@ -904,6 +933,8 @@ private:
     SkTDArray<CleanUpData>          fCleanUpData;
 
     int                             fMaxTextureSizeOverride;
+
+    bool                            fGpuTracingEnabled;
 
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext);

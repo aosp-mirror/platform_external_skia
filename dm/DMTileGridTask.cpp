@@ -12,7 +12,7 @@ DEFINE_bool(tileGrid, false, "If true, run picture replay tests with a tile grid
 namespace DM {
 
 TileGridTask::TileGridTask(const Task& parent, skiagm::GM* gm, SkBitmap reference, SkISize tileSize)
-    : Task(parent)
+    : CpuTask(parent)
     , fName(UnderJoin(parent.name().c_str(), "tilegrid"))
     , fGM(gm)
     , fReference(reference)
@@ -34,12 +34,12 @@ void TileGridTask::draw() {
     RecordPicture(fGM.get(), &recorded, SkPicture::kUsePathBoundsForClip_RecordingFlag);
 
     SkBitmap full;
-    SetupBitmap(fReference.config(), fGM.get(), &full);
+    SetupBitmap(fReference.colorType(), fGM.get(), &full);
     SkCanvas fullCanvas(full);
 
     SkBitmap tile;
-    tile.setConfig(fReference.config(), fTileSize.width(), fTileSize.height());
-    tile.allocPixels();
+    tile.allocPixels(SkImageInfo::Make(fTileSize.width(), fTileSize.height(),
+                                       fReference.colorType(), kPremul_SkAlphaType));
     SkCanvas tileCanvas(tile);
 
     SkPaint paint;

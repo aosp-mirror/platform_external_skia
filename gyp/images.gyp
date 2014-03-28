@@ -119,16 +119,14 @@
           ],
         }],
         [ 'skia_os in ["linux", "freebsd", "openbsd", "solaris"]', {
-          # Any targets that depend on this target should link in libpng, libgif, and
-          # our code that calls it.
-          # See http://code.google.com/p/gyp/wiki/InputFormatReference#Dependent_Settings
-          'link_settings': {
-            'libraries': [
-              '-lgif',
-              '-lpng',
-              '-lz',
-            ],
-          },
+          'export_dependent_settings': [
+            'libpng.gyp:libpng',
+            'giflib.gyp:giflib'
+          ],
+          'dependencies': [
+            'libpng.gyp:libpng',
+            'giflib.gyp:giflib'
+          ],
           # end libpng/libgif stuff
         }],
         # FIXME: NaCl should be just like linux, etc, above, but it currently is separated out
@@ -139,12 +137,6 @@
             '../src/images/SkImageDecoder_libgif.cpp',
             '../src/images/SkMovie_gif.cpp',
           ],
-          'link_settings': {
-            'libraries': [
-              '-lpng',
-              '-lz',
-            ],
-          },
         }],
         [ 'skia_os == "android"', {
           'include_dirs': [
@@ -170,12 +162,8 @@
         [ 'skia_os == "chromeos"', {
           'dependencies': [
              'chromeos_deps.gyp:gif',
+             'libpng.gyp:libpng',
           ],
-          'link_settings': {
-            'libraries': [
-              '-lpng',
-            ],
-          },
         }],
         [ 'skia_os == "ios"', {
            'include_dirs': [

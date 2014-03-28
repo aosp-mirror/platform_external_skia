@@ -49,34 +49,14 @@ ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
 endif
 
-# FIXME: These defines should go into SkUserConfig instead of here. For now it
-# is probably okay, since they are generally the same.
-# Current plan is to rewrite gyp_to_android.py to instead append these to the
-# upstream SkUserConfig, so we get the benefits of all worlds:
-# - We can auto generate from the gyp files.
-# - Other libraries that include our headers will have the right defines.
-# - We don't redefine things.
+ifeq ($(TARGET_ARCH),arm64)
+    $(warning TODOArm64: Unlike arm32, arm64 has no inline assembly for performance critical code.)
+endif
+
 LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
-	-D_FORTIFY_SOURCE=1 \
-	-DSK_GAMMA_SRGB \
-	-DSK_GAMMA_APPLY_TO_A8 \
-	-DSK_SCALAR_TO_FLOAT_EXCLUDED \
-	-DSK_ALLOW_STATIC_GLOBAL_INITIALIZERS=0 \
-	-DSK_SUPPORT_GPU=1 \
-	-DSK_SUPPORT_OPENCL=0 \
-	-DSK_DISTANCEFIELD_FONTS=0 \
-	-DSK_SCALAR_IS_FLOAT \
-	-DSK_CAN_USE_FLOAT \
-	-DDCT_IFAST_SUPPORTED \
-	-DSK_USE_FREETYPE_EMBOLDEN \
-	-DSK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400 \
-	-DSK_CAN_USE_DLOPEN=0 \
-	-DSK_BUILD_FOR_ANDROID \
-	-DSK_FONTHOST_DOES_NOT_USE_FONTMGR \
-	-DSK_USE_POSIX_THREADS \
-	-DSK_SUPPORT_PDF
+	-D_FORTIFY_SOURCE=1
 
 LOCAL_SRC_FILES := \
 	src/core/SkAAClip.cpp \
@@ -122,6 +102,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkDeviceProfile.cpp \
 	src/lazy/SkDiscardableMemoryPool.cpp \
 	src/lazy/SkDiscardablePixelRef.cpp \
+	src/core/SkDistanceFieldGen.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
 	src/core/SkDrawLooper.cpp \
@@ -143,7 +124,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkGraphics.cpp \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
-	src/core/SkImageFilterUtils.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -155,8 +135,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMatrixClipStateMgr.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
-	src/core/SkReadBuffer.cpp \
-	src/core/SkWriteBuffer.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintOptionsAndroid.cpp \
@@ -180,6 +158,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkQuadTreePicture.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
+	src/core/SkReadBuffer.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
@@ -212,6 +191,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
+	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
 	src/core/SkXfermode.cpp \
 	src/doc/SkDocument.cpp \
@@ -301,6 +281,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
+	src/effects/SkMatrixImageFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkBitmapCache.cpp \
@@ -353,6 +334,8 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
+	src/fonts/SkFontMgr_indirect.cpp \
+	src/fonts/SkRemotableFontMgr.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
@@ -372,7 +355,6 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkCondVar.cpp \
 	src/utils/SkCountdown.cpp \
-	src/utils/SkThreadPool.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitSet.cpp \
@@ -422,6 +404,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipData.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
+	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrEffect.cpp \
@@ -446,6 +429,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilBuffer.cpp \
+	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
@@ -459,6 +443,9 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
+	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
+	src/gpu/effects/GrOvalEffect.cpp \
+	src/gpu/effects/GrRRectEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomain.cpp \
@@ -544,10 +531,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/src/utils \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/images \
-	$(LOCAL_PATH)/src/utils \
 	external/webp/include \
 	external/giflib \
 	external/libpng \
@@ -570,7 +557,8 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/include/ports \
-	$(LOCAL_PATH)/include/utils
+	$(LOCAL_PATH)/include/utils \
+	$(LOCAL_PATH)/src/utils
 
 LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
@@ -583,11 +571,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkUtils_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm.cpp
 
-# FIXME: It may be possible to have this in code instead of in the makefile.
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
-LOCAL_CFLAGS_arm += \
-	-D__ARM_HAVE_NEON
-
 LOCAL_SRC_FILES_arm += \
 	src/opts/memset16_neon.S \
 	src/opts/memset32_neon.S \
@@ -598,6 +582,9 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
+
+LOCAL_CFLAGS_arm += \
+	-D__ARM_HAVE_NEON
 
 endif
 
@@ -626,6 +613,15 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_mips += \
+	src/opts/SkBitmapProcState_opts_none.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
+	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkXfermode_opts_none.cpp
+
+LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \

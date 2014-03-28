@@ -1,26 +1,29 @@
 #ifndef DMTaskRunner_DEFINED
 #define DMTaskRunner_DEFINED
 
+#include "DMGpuSupport.h"
 #include "SkThreadPool.h"
 #include "SkTypes.h"
 
-// TaskRunner runs Tasks on one of two threadpools depending on the Task's usesGpu() method.
-// This lets us drive the GPU with a small number of threads (e.g. 2 or 4 can be faster than 1)
-// while not swamping it with requests from the full fleet of threads that CPU-bound tasks run on.
+// TaskRunner runs Tasks on one of two threadpools depending on the need for a GrContextFactory.
+// It's typically a good idea to run fewer GPU threads than CPU threads (go nuts with those).
 
 namespace DM {
 
-class Task;
+class CpuTask;
+class GpuTask;
 
 class TaskRunner : SkNoncopyable {
 public:
-    TaskRunner(int cputhreads, int gpuThreads);
+    explicit TaskRunner(int cpuThreads, int gpuThreads);
 
-    void add(Task* task);
+    void add(CpuTask* task);
+    void add(GpuTask* task);
     void wait();
 
 private:
-    SkThreadPool fMain, fGpu;
+    SkTThreadPool<void> fCpu;
+    SkTThreadPool<GrContextFactory> fGpu;
 };
 
 }  // namespace DM

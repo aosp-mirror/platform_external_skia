@@ -1,5 +1,86 @@
 {
   "expected-results": {
+    "bezier_conic_effects_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          947503126928099687
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_conic_effects_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5255794082227421283
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_conic_effects_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11301477420946563570
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_cubic_effects_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          13327676768378365463
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_cubic_effects_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14464394233413738650
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_cubic_effects_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6647342900216802622
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_quad_effects_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          7453545016317079091
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_quad_effects_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14567047201700476907
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "bezier_quad_effects_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          18237014088098287347
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
     "bleed_565.png": {
       "allowed-digests": [
         [
@@ -13,7 +94,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          9820581677228187798
+          10874368221386742934
         ]
       ], 
       "reviewed-by-human": true
@@ -49,7 +130,304 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          5541967782360980927
+          17407313805298369905
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11609605102436644365
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6484021739759757221
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          15256308173777619343
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          12998983314972010761
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5546897073650908874
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "convex_poly_effect_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          15882849726405746866
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "convex_poly_effect_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          10421146383563303521
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "convex_poly_effect_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          8563391143232887802
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_aa_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14570932930676169469
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_aa_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6506138814340064770
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_aa_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5818314523166930041
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_aa_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          333950859715354210
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_aa_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5187364238498305648
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_bw_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          1500157245784304324
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_bw_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6810446943823350860
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_bw_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11653828811393066804
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_bw_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          7937694901542156855
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_bw_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          3950217830757055748
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_aa_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14570932930676169469
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_aa_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6506138814340064770
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_aa_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11609150877903439408
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_aa_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          333950859715354210
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_aa_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5187364238498305648
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_bw_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          1500157245784304324
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_bw_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6810446943823350860
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_bw_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11653828811393066804
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_bw_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          7937694901542156855
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "rrect_clip_bw_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5187364238498305648
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "simpleaaclip_rect_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          12156661720748789357
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "simpleaaclip_rect_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          12487569532344095714
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "simpleaaclip_rect_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          150390458074062736
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "simpleaaclip_rect_msaa16.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          16935588680543684757
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "simpleaaclip_rect_nvprmsaa4.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          13658232617732440524
         ]
       ], 
       "reviewed-by-human": true

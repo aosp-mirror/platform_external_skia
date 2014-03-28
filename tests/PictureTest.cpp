@@ -16,10 +16,12 @@
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkPictureUtils.h"
+#include "SkQuadTreePicture.h"
 #include "SkRRect.h"
 #include "SkRandom.h"
 #include "SkShader.h"
 #include "SkStream.h"
+#include "SkTileGrid.h"
 #include "Test.h"
 
 static const int gColorScale = 30;
@@ -416,25 +418,29 @@ static void gather_from_analytic(const SkPoint pos[], SkScalar w, SkScalar h,
     }
 }
 
-static const DrawBitmapProc gProcs[] = {
-        drawpaint_proc,
-        drawpoints_proc,
-        drawrect_proc,
-        drawoval_proc,
-        drawrrect_proc,
-        drawpath_proc,
-        drawbitmap_proc,
-        drawbitmap_withshader_proc,
-        drawsprite_proc,
+
+static const struct {
+    const DrawBitmapProc proc;
+    const char* const desc;
+} gProcs[] = {
+    {drawpaint_proc, "drawpaint"},
+    {drawpoints_proc, "drawpoints"},
+    {drawrect_proc, "drawrect"},
+    {drawoval_proc, "drawoval"},
+    {drawrrect_proc, "drawrrect"},
+    {drawpath_proc, "drawpath"},
+    {drawbitmap_proc, "drawbitmap"},
+    {drawbitmap_withshader_proc, "drawbitmap_withshader"},
+    {drawsprite_proc, "drawsprite"},
 #if 0
-        drawsprite_withshader_proc,
+    {drawsprite_withshader_proc, "drawsprite_withshader"},
 #endif
-        drawbitmaprect_proc,
-        drawbitmaprect_withshader_proc,
-        drawtext_proc,
-        drawpostext_proc,
-        drawtextonpath_proc,
-        drawverts_proc,
+    {drawbitmaprect_proc, "drawbitmaprect"},
+    {drawbitmaprect_withshader_proc, "drawbitmaprect_withshader"},
+    {drawtext_proc, "drawtext"},
+    {drawpostext_proc, "drawpostext"},
+    {drawtextonpath_proc, "drawtextonpath"},
+    {drawverts_proc, "drawverts"},
 };
 
 static void create_textures(SkBitmap* bm, SkPixelRef** refs, int num, int w, int h) {
@@ -477,7 +483,8 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
 
     SkRandom rand;
     for (size_t k = 0; k < SK_ARRAY_COUNT(gProcs); ++k) {
-        SkAutoTUnref<SkPicture> pic(record_bitmaps(bm, pos, analytic, N, gProcs[k]));
+        SkAutoTUnref<SkPicture> pic(
+            record_bitmaps(bm, pos, analytic, N, gProcs[k].proc));
 
         REPORTER_ASSERT(reporter, pic->willPlayBackBitmaps() || N == 0);
         // quick check for a small piece of each quadrant, which should just
@@ -487,18 +494,20 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
             r.set(2, 2, W - 2, H - 2);
             r.offset(pos[i].fX, pos[i].fY);
             SkAutoDataUnref data(SkPictureUtils::GatherPixelRefs(pic, r));
-            REPORTER_ASSERT(reporter, data);
-            if (data) {
-                SkPixelRef** gatheredRefs = (SkPixelRef**)data->data();
-                int count = static_cast<int>(data->size() / sizeof(SkPixelRef*));
-                REPORTER_ASSERT(reporter, 1 == count || 2 == count);
-                if (1 == count) {
-                    REPORTER_ASSERT(reporter, gatheredRefs[0] == refs[i]);
-                } else if (2 == count) {
-                    REPORTER_ASSERT(reporter,
-                        (gatheredRefs[0] == refs[i] && gatheredRefs[1] == refs[i+N]) ||
-                        (gatheredRefs[1] == refs[i] && gatheredRefs[0] == refs[i+N]));
-                }
+            if (!data) {
+                ERRORF(reporter, "SkPictureUtils::GatherPixelRefs returned "
+                       "NULL for %s.", gProcs[k].desc);
+                continue;
+            }
+            SkPixelRef** gatheredRefs = (SkPixelRef**)data->data();
+            int count = static_cast<int>(data->size() / sizeof(SkPixelRef*));
+            REPORTER_ASSERT(reporter, 1 == count || 2 == count);
+            if (1 == count) {
+                REPORTER_ASSERT(reporter, gatheredRefs[0] == refs[i]);
+            } else if (2 == count) {
+                REPORTER_ASSERT(reporter,
+                    (gatheredRefs[0] == refs[i] && gatheredRefs[1] == refs[i+N]) ||
+                    (gatheredRefs[1] == refs[i] && gatheredRefs[0] == refs[i+N]));
             }
         }
 
@@ -528,7 +537,10 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
             // but the analytic list may contain some pixelRefs that were not
             // seen in the image (e.g., A8 textures used as masks)
             for (int i = 0; i < fromImage.count(); ++i) {
-                REPORTER_ASSERT(reporter, -1 != fromAnalytic.find(fromImage[i]));
+                if (-1 == fromAnalytic.find(fromImage[i])) {
+                    ERRORF(reporter, "PixelRef missing %d %s",
+                           i, gProcs[k].desc);
+                }
             }
 
             /*
@@ -540,7 +552,10 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
              */
             for (int i = 0; i < fromAnalytic.count(); ++i) {
                 bool found = find(gatherRefs, fromAnalytic[i], gatherCount);
-                REPORTER_ASSERT(reporter, found);
+                if (!found) {
+                    ERRORF(reporter, "PixelRef missing %d %s",
+                           i, gProcs[k].desc);
+                }
 #if 0
                 // enable this block of code to debug failures, as it will rerun
                 // the case that failed.
@@ -573,7 +588,8 @@ static void test_gatherpixelrefsandrects(skiatest::Reporter* reporter) {
 
     SkRandom rand;
     for (size_t k = 0; k < SK_ARRAY_COUNT(gProcs); ++k) {
-        SkAutoTUnref<SkPicture> pic(record_bitmaps(bm, pos, analytic, N, gProcs[k]));
+        SkAutoTUnref<SkPicture> pic(
+            record_bitmaps(bm, pos, analytic, N, gProcs[k].proc));
 
         REPORTER_ASSERT(reporter, pic->willPlayBackBitmaps() || N == 0);
 
@@ -873,6 +889,54 @@ static void test_clone_empty(skiatest::Reporter* reporter) {
     }
 }
 
+static void test_draw_empty(skiatest::Reporter* reporter) {
+    SkBitmap result;
+    make_bm(&result, 2, 2, SK_ColorBLACK, false);
+
+    SkCanvas canvas(result);
+
+    {
+        // stock SkPicture
+        SkPicture picture;
+        picture.beginRecording(1, 1);
+        picture.endRecording();
+
+        canvas.drawPicture(picture);
+    }
+
+    {
+        // tile grid
+        SkTileGridPicture::TileGridInfo gridInfo;
+        gridInfo.fMargin.setEmpty();
+        gridInfo.fOffset.setZero();
+        gridInfo.fTileInterval.set(1, 1);
+
+        SkTileGridPicture picture(1, 1, gridInfo);
+        picture.beginRecording(1, 1, SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+        picture.endRecording();
+
+        canvas.drawPicture(picture);
+    }
+
+    {
+        // RTree
+        SkPicture picture;
+        picture.beginRecording(1, 1, SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+        picture.endRecording();
+
+        canvas.drawPicture(picture);
+    }
+
+    {
+        // quad tree
+        SkQuadTreePicture picture(SkIRect::MakeWH(1, 1));
+        picture.beginRecording(1, 1, SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+        picture.endRecording();
+
+        canvas.drawPicture(picture);
+    }
+}
+
 static void test_clip_bound_opt(skiatest::Reporter* reporter) {
     // Test for crbug.com/229011
     SkRect rect1 = SkRect::MakeXYWH(SkIntToScalar(4), SkIntToScalar(4),
@@ -982,22 +1046,30 @@ public:
         , fClipCount(0){
     }
 
-    virtual bool clipRect(const SkRect& r, SkRegion::Op op, bool doAA)
-        SK_OVERRIDE {
+    virtual void onClipRect(const SkRect& r,
+                            SkRegion::Op op,
+                            ClipEdgeStyle edgeStyle) SK_OVERRIDE {
         fClipCount += 1;
-        return this->INHERITED::clipRect(r, op, doAA);
+        this->INHERITED::onClipRect(r, op, edgeStyle);
     }
 
-    virtual bool clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA)
-        SK_OVERRIDE {
+    virtual void onClipRRect(const SkRRect& rrect,
+                             SkRegion::Op op,
+                             ClipEdgeStyle edgeStyle)SK_OVERRIDE {
         fClipCount += 1;
-        return this->INHERITED::clipRRect(rrect, op, doAA);
+        this->INHERITED::onClipRRect(rrect, op, edgeStyle);
     }
 
-    virtual bool clipPath(const SkPath& path, SkRegion::Op op, bool doAA)
-        SK_OVERRIDE {
+    virtual void onClipPath(const SkPath& path,
+                            SkRegion::Op op,
+                            ClipEdgeStyle edgeStyle) SK_OVERRIDE {
         fClipCount += 1;
-        return this->INHERITED::clipPath(path, op, doAA);
+        this->INHERITED::onClipPath(path, op, edgeStyle);
+    }
+
+    virtual void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE {
+        fClipCount += 1;
+        this->INHERITED::onClipRegion(deviceRgn, op);
     }
 
     unsigned getClipCount() const { return fClipCount; }
@@ -1083,6 +1155,7 @@ DEF_TEST(Picture, reporter) {
     test_gatherpixelrefsandrects(reporter);
     test_bitmap_with_encoded_data(reporter);
     test_clone_empty(reporter);
+    test_draw_empty(reporter);
     test_clip_bound_opt(reporter);
     test_clip_expansion(reporter);
     test_hierarchical(reporter);

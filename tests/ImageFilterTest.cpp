@@ -43,9 +43,9 @@ public:
       : SkImageFilter(0), fReporter(reporter), fExpectedMatrix(expectedMatrix) {
     }
 
-    virtual bool onFilterImage(Proxy*, const SkBitmap& src, const SkMatrix& ctm,
+    virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context& ctx,
                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
-        REPORTER_ASSERT(fReporter, ctm == fExpectedMatrix);
+        REPORTER_ASSERT(fReporter, ctx.ctm() == fExpectedMatrix);
         return true;
     }
 
@@ -108,7 +108,7 @@ static SkImageFilter* make_scale(float amount, SkImageFilter* input = NULL) {
                             0, s, 0, 0, 0,
                             0, 0, s, 0, 0,
                             0, 0, 0, s, 0 };
-    SkAutoTUnref<SkColorFilter> filter(new SkColorMatrixFilter(matrix));
+    SkAutoTUnref<SkColorFilter> filter(SkColorMatrixFilter::Create(matrix));
     return SkColorFilterImageFilter::Create(filter, input);
 }
 
@@ -119,7 +119,7 @@ static SkImageFilter* make_grayscale(SkImageFilter* input = NULL, const SkImageF
     matrix[1] = matrix[6] = matrix[11] = 0.7152f;
     matrix[2] = matrix[7] = matrix[12] = 0.0722f;
     matrix[18] = 1.0f;
-    SkAutoTUnref<SkColorFilter> filter(new SkColorMatrixFilter(matrix));
+    SkAutoTUnref<SkColorFilter> filter(SkColorMatrixFilter::Create(matrix));
     return SkColorFilterImageFilter::Create(filter, input, cropRect);
 }
 
@@ -168,7 +168,7 @@ DEF_TEST(ImageFilter, reporter) {
             // 3 ) large negative specular exponent value
             SkScalar specularExponent = -1000;
 
-            SkAutoTUnref<SkImageFilter> bmSrc(new SkBitmapSource(bitmap));
+            SkAutoTUnref<SkImageFilter> bmSrc(SkBitmapSource::Create(bitmap));
             SkPaint paint;
             paint.setImageFilter(SkLightingImageFilter::CreateSpotLitSpecular(
                     location, target, specularExponent, 180,
@@ -183,15 +183,16 @@ DEF_TEST(ImageFilter, reporter) {
         {
             // This tests for scale bringing width to 0
             SkSize scale = SkSize::Make(-0.001f, SK_Scalar1);
-            SkAutoTUnref<SkImageFilter> bmSrc(new SkBitmapSource(bitmap));
+            SkAutoTUnref<SkImageFilter> bmSrc(SkBitmapSource::Create(bitmap));
             SkAutoTUnref<SkBicubicImageFilter> bicubic(
                 SkBicubicImageFilter::CreateMitchell(scale, bmSrc));
             SkBitmapDevice device(bitmap);
             SkDeviceImageFilterProxy proxy(&device);
             SkIPoint loc = SkIPoint::Make(0, 0);
             // An empty input should early return and return false
+            SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeEmpty());
             REPORTER_ASSERT(reporter,
-                            !bicubic->filterImage(&proxy, bitmap, SkMatrix::I(), &result, &loc));
+                            !bicubic->filterImage(&proxy, bitmap, ctx, &result, &loc));
         }
     }
 }
@@ -222,21 +223,21 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
 
     SkImageFilter* filters[] = {
         SkColorFilterImageFilter::Create(cf.get(), input.get(), &cropRect),
-        new SkDisplacementMapEffect(SkDisplacementMapEffect::kR_ChannelSelectorType,
-                                    SkDisplacementMapEffect::kB_ChannelSelectorType,
-                                    40.0f, input.get(), input.get(), &cropRect),
-        new SkBlurImageFilter(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
-        new SkDropShadowImageFilter(SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN, input.get(), &cropRect),
+        SkDisplacementMapEffect::Create(SkDisplacementMapEffect::kR_ChannelSelectorType,
+                                        SkDisplacementMapEffect::kB_ChannelSelectorType,
+                                        40.0f, input.get(), input.get(), &cropRect),
+        SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
+        SkDropShadowImageFilter::Create(SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN, input.get(), &cropRect),
         SkLightingImageFilter::CreatePointLitDiffuse(location, SK_ColorGREEN, 0, 0, input.get(), &cropRect),
         SkLightingImageFilter::CreatePointLitSpecular(location, SK_ColorGREEN, 0, 0, 0, input.get(), &cropRect),
-        new SkMatrixConvolutionImageFilter(kernelSize, kernel, gain, bias, SkIPoint::Make(1, 1), SkMatrixConvolutionImageFilter::kRepeat_TileMode, false, input.get(), &cropRect),
-        new SkMergeImageFilter(input.get(), input.get(), SkXfermode::kSrcOver_Mode, &cropRect),
-        new SkOffsetImageFilter(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
-        new SkOffsetImageFilter(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
-        new SkDilateImageFilter(3, 2, input.get(), &cropRect),
-        new SkErodeImageFilter(2, 3, input.get(), &cropRect),
-        new SkTileImageFilter(inputCropRect.rect(), cropRect.rect(), input.get()),
-        new SkXfermodeImageFilter(SkXfermode::Create(SkXfermode::kSrcOver_Mode), input.get(), input.get(), &cropRect),
+        SkMatrixConvolutionImageFilter::Create(kernelSize, kernel, gain, bias, SkIPoint::Make(1, 1), SkMatrixConvolutionImageFilter::kRepeat_TileMode, false, input.get(), &cropRect),
+        SkMergeImageFilter::Create(input.get(), input.get(), SkXfermode::kSrcOver_Mode, &cropRect),
+        SkOffsetImageFilter::Create(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
+        SkOffsetImageFilter::Create(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
+        SkDilateImageFilter::Create(3, 2, input.get(), &cropRect),
+        SkErodeImageFilter::Create(2, 3, input.get(), &cropRect),
+        SkTileImageFilter::Create(inputCropRect.rect(), cropRect.rect(), input.get()),
+        SkXfermodeImageFilter::Create(SkXfermode::Create(SkXfermode::kSrcOver_Mode), input.get(), input.get(), &cropRect),
     };
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
@@ -245,7 +246,8 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
         SkIPoint offset;
         SkString str;
         str.printf("filter %d", static_cast<int>(i));
-        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, SkMatrix::I(), &result, &offset), str.c_str());
+        SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeLargest());
+        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, ctx, &result, &offset), str.c_str());
         REPORTER_ASSERT_MESSAGE(reporter, offset.fX == 20 && offset.fY == 30, str.c_str());
     }
 
@@ -293,10 +295,43 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
     canvas.drawPicture(picture);
 }
 
+static void test_huge_blur(SkBaseDevice* device, skiatest::Reporter* reporter) {
+    SkCanvas canvas(device);
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(100, 100);
+    bitmap.eraseARGB(0, 0, 0, 0);
+
+    // Check that a blur with an insane radius does not crash or assert.
+    SkAutoTUnref<SkImageFilter> blur(SkBlurImageFilter::Create(SkIntToScalar(1<<30), SkIntToScalar(1<<30)));
+
+    SkPaint paint;
+    paint.setImageFilter(blur);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+}
+
+DEF_TEST(HugeBlurImageFilter, reporter) {
+    SkBitmap temp;
+    temp.allocN32Pixels(100, 100);
+    SkBitmapDevice device(temp);
+    test_huge_blur(&device, reporter);
+}
+
+
 #if SK_SUPPORT_GPU
 DEF_GPUTEST(ImageFilterCropRectGPU, reporter, factory) {
     GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
-    SkGpuDevice device(context, SkBitmap::kARGB_8888_Config, 100, 100);
-    test_crop_rects(&device, reporter);
+    SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
+                                                         SkImageInfo::MakeN32Premul(100, 100),
+                                                         0));
+    test_crop_rects(device, reporter);
+}
+
+DEF_GPUTEST(HugeBlurImageFilterGPU, reporter, factory) {
+    GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
+                                                         SkImageInfo::MakeN32Premul(100, 100),
+                                                         0));
+    test_huge_blur(device, reporter);
 }
 #endif

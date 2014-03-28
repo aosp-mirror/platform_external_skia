@@ -13,7 +13,7 @@ namespace DM {
 SerializeTask::SerializeTask(const Task& parent,
                              skiagm::GM* gm,
                              SkBitmap reference)
-    : Task(parent)
+    : CpuTask(parent)
     , fName(UnderJoin(parent.name().c_str(), "serialize"))
     , fGM(gm)
     , fReference(reference)
@@ -29,7 +29,7 @@ void SerializeTask::draw() {
     SkAutoTUnref<SkPicture> reconstructed(SkPicture::CreateFromStream(rStream));
 
     SkBitmap bitmap;
-    SetupBitmap(fReference.config(), fGM.get(), &bitmap);
+    SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
     DrawPicture(reconstructed, &bitmap);
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();

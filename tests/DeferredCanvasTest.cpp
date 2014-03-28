@@ -15,6 +15,8 @@
 #include "SkShader.h"
 #include "SkSurface.h"
 #include "Test.h"
+#include "sk_tool_utils.h"
+
 #if SK_SUPPORT_GPU
 #include "GrContextFactory.h"
 #else
@@ -24,9 +26,8 @@ class GrContextFactory;
 static const int gWidth = 2;
 static const int gHeight = 2;
 
-static void create(SkBitmap* bm, SkBitmap::Config config, SkColor color) {
-    bm->setConfig(config, gWidth, gHeight);
-    bm->allocPixels();
+static void create(SkBitmap* bm, SkColor color) {
+    bm->allocN32Pixels(gWidth, gHeight);
     bm->eraseColor(color);
 }
 
@@ -69,8 +70,7 @@ class MockSurface : public SkSurface_Base {
 public:
     MockSurface(int width, int height) : SkSurface_Base(width, height) {
         clearCounts();
-        fBitmap.setConfig(SkBitmap::kARGB_8888_Config, width, height);
-        fBitmap.allocPixels();
+        fBitmap.allocN32Pixels(width, height);
     }
 
     virtual SkCanvas* onNewCanvas() SK_OVERRIDE {
@@ -107,8 +107,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
 
     SkBitmap srcBitmap;
-    srcBitmap.setConfig(SkBitmap::kARGB_8888_Config, 10, 10);
-    srcBitmap.allocPixels();
+    srcBitmap.allocPixels(SkImageInfo::Make(10, 10, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType));
     srcBitmap.eraseColor(SK_ColorGREEN);
     // Tests below depend on this bitmap being recognized as opaque
 
@@ -146,31 +145,11 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
-    surface->clearCounts();
-    canvas->writePixels(srcBitmap, 0, 0);
-    REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
-    REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
-
-    surface->clearCounts();
-    canvas->flush();
-    REPORTER_ASSERT(reporter, 1 == surface->fDiscardCount);
-    REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
-
     // Case 3: writePixels that partially covers the canvas
     surface->clearCounts();
     SkAutoTUnref<SkImage> image3(canvas->newImageSnapshot());
     REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
-
-    surface->clearCounts();
-    canvas->writePixels(srcBitmap, 5, 0);
-    REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
-    REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
-
-    surface->clearCounts();
-    canvas->flush();
-    REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
-    REPORTER_ASSERT(reporter, 1 == surface->fRetainCount);
 
     // Case 4: unpremultiplied opaque writePixels that entirely
     // covers the canvas
@@ -180,7 +159,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
     surface->clearCounts();
-    canvas->writePixels(srcBitmap, 0, 0, SkCanvas::kRGBA_Unpremul_Config8888);
+    canvas->writePixels(srcBitmap, 0, 0);
     REPORTER_ASSERT(reporter, 1 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
@@ -197,7 +176,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
     surface->clearCounts();
-    canvas->writePixels(srcBitmap, 5, 0, SkCanvas::kRGBA_Unpremul_Config8888);
+    canvas->writePixels(srcBitmap, 5, 0);
     REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 1 == surface->fRetainCount);
 
@@ -219,7 +198,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
     surface->clearCounts();
-    canvas->writePixels(srcBitmap, 0, 0, SkCanvas::kRGBA_Unpremul_Config8888);
+    canvas->writePixels(srcBitmap, 0, 0);
     REPORTER_ASSERT(reporter, 1 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
@@ -241,7 +220,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
     surface->clearCounts();
-    canvas->writePixels(srcBitmap, 5, 0, SkCanvas::kRGBA_Unpremul_Config8888);
+    canvas->writePixels(srcBitmap, 5, 0);
     REPORTER_ASSERT(reporter, 1 == surface->fDiscardCount); // because of the clear
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
@@ -265,7 +244,7 @@ static void TestDeferredCanvasWritePixelsToSurface(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, 0 == surface->fRetainCount);
 
     surface->clearCounts();
-    canvas->writePixels(srcBitmap, 5, 0, SkCanvas::kRGBA_Unpremul_Config8888);
+    canvas->writePixels(srcBitmap, 5, 0);
     REPORTER_ASSERT(reporter, 0 == surface->fDiscardCount);
     REPORTER_ASSERT(reporter, 1 == surface->fRetainCount);
 
@@ -351,7 +330,7 @@ static void TestDeferredCanvasFreshFrame(skiatest::Reporter* reporter) {
         SkPaint paint;
         paint.setStyle(SkPaint::kFill_Style);
         SkBitmap bmp;
-        create(&bmp, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+        create(&bmp, 0xFFFFFFFF);
         bmp.setAlphaType(kOpaque_SkAlphaType);
         SkShader* shader = SkShader::CreateBitmapShader(bmp,
             SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
@@ -389,7 +368,7 @@ static void TestDeferredCanvasFreshFrame(skiatest::Reporter* reporter) {
         SkPaint paint;
         paint.setStyle(SkPaint::kFill_Style);
         SkBitmap bmp;
-        create(&bmp, SkBitmap::kARGB_8888_Config, 0xFFFFFFFF);
+        create(&bmp, 0xFFFFFFFF);
         bmp.setAlphaType(kPremul_SkAlphaType);
         SkShader* shader = SkShader::CreateBitmapShader(bmp,
             SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
@@ -507,8 +486,7 @@ static void TestDeferredCanvasMemoryLimit(skiatest::Reporter* reporter) {
 
     SkBitmap sourceImage;
     // 100 by 100 image, takes 40,000 bytes in memory
-    sourceImage.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    sourceImage.allocPixels();
+    sourceImage.allocN32Pixels(100, 100);
 
     for (int i = 0; i < 5; i++) {
         sourceImage.notifyPixelsChanged(); // to force re-serialization
@@ -516,6 +494,19 @@ static void TestDeferredCanvasMemoryLimit(skiatest::Reporter* reporter) {
     }
 
     REPORTER_ASSERT(reporter, 1 == notificationCounter.fFlushedDrawCommandsCount);
+}
+
+static void TestDeferredCanvasSilentFlush(skiatest::Reporter* reporter) {
+    SkAutoTUnref<SkSurface> surface(createSurface(0));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+
+    NotificationCounter notificationCounter;
+    canvas->setNotificationClient(&notificationCounter);
+
+    canvas->silentFlush(); // will skip the initial clear that was recorded in createSurface
+
+    REPORTER_ASSERT(reporter, 0 == notificationCounter.fFlushedDrawCommandsCount);
+    REPORTER_ASSERT(reporter, 1 == notificationCounter.fSkippedPendingDrawCommandsCount);
 }
 
 static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
@@ -527,10 +518,8 @@ static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
 
     const int imageCount = 2;
     SkBitmap sourceImages[imageCount];
-    for (int i = 0; i < imageCount; i++)
-    {
-        sourceImages[i].setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-        sourceImages[i].allocPixels();
+    for (int i = 0; i < imageCount; i++) {
+        sourceImages[i].allocN32Pixels(100, 100);
     }
 
     size_t bitmapSize = sourceImages[0].getSize();
@@ -629,8 +618,7 @@ static void TestDeferredCanvasBitmapShaderNoLeak(skiatest::Reporter* reporter) {
         for(int i = 0; i < nbIterations; ++i) {
             SkPaint paint;
             SkBitmap paintPattern;
-            paintPattern.setConfig(SkBitmap::kARGB_8888_Config, 10, 10);
-            paintPattern.allocPixels();
+            paintPattern.allocN32Pixels(10, 10);
             paint.setShader(SkNEW_ARGS(SkBitmapProcShader,
                 (paintPattern, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode)))->unref();
             canvas->drawPaint(paint);
@@ -658,8 +646,7 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
 
     SkBitmap sourceImage;
     // 100 by 100 image, takes 40,000 bytes in memory
-    sourceImage.setConfig(SkBitmap::kARGB_8888_Config, 100, 100);
-    sourceImage.allocPixels();
+    sourceImage.allocN32Pixels(100, 100);
 
     // 1 under : should not store the image
     {
@@ -700,12 +687,7 @@ static PixelPtr getSurfacePixelPtr(SkSurface* surface, bool useGpu) {
 }
 
 static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFactory* factory) {
-    SkImageInfo imageSpec = {
-        10,  // width
-        10,  // height
-        kPMColor_SkColorType,
-        kPremul_SkAlphaType
-    };
+    SkImageInfo imageSpec = SkImageInfo::MakeN32Premul(10, 10);
     SkSurface* surface;
     bool useGpu = NULL != factory;
 #if SK_SUPPORT_GPU
@@ -771,12 +753,7 @@ static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFac
 }
 
 static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContextFactory* factory) {
-    SkImageInfo imageSpec = {
-        10,  // width
-        10,  // height
-        kPMColor_SkColorType,
-        kPremul_SkAlphaType
-    };
+    SkImageInfo imageSpec = SkImageInfo::MakeN32Premul(10, 10);
     SkSurface* surface;
     SkSurface* alternateSurface;
     bool useGpu = NULL != factory;
@@ -842,6 +819,7 @@ static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporte
 DEF_GPUTEST(DeferredCanvas, reporter, factory) {
     TestDeferredCanvasBitmapAccess(reporter);
     TestDeferredCanvasFlush(reporter);
+    TestDeferredCanvasSilentFlush(reporter);
     TestDeferredCanvasFreshFrame(reporter);
     TestDeferredCanvasMemoryLimit(reporter);
     TestDeferredCanvasBitmapCaching(reporter);

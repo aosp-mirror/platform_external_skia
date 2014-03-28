@@ -2,29 +2,24 @@
 #define DMTask_DEFINED
 
 #include "DMReporter.h"
+#include "DMGpuSupport.h"
 #include "SkRunnable.h"
-#include "SkThreadPool.h"
+#include "SkTime.h"
 
-// DM will run() these tasks on one of two threadpools, depending on the result
-// of usesGpu().  The subclasses can call fail() to mark this task as failed,
-// or make any number of spawnChild() calls to kick off dependent tasks.
+// DM will run() these tasks on one of two threadpools.
+// Subclasses can call fail() to mark this task as failed, or make any number of spawnChild() calls
+// to kick off dependent tasks.
 //
-// Task deletes itself when run.
+// Tasks delete themselves when run.
 
 namespace DM {
 
 class TaskRunner;
 
-class Task : public SkRunnable {
+class CpuTask;
+
+class Task {
 public:
-    Task(Reporter* reporter, TaskRunner* taskRunner);
-    Task(const Task& parent);
-    virtual ~Task();
-
-    void run() SK_OVERRIDE;
-
-    virtual void draw() = 0;
-    virtual bool usesGpu() const = 0;
     virtual bool shouldSkip() const = 0;
     virtual SkString name() const = 0;
 
@@ -33,16 +28,40 @@ public:
     int depth() const { return fDepth; }
 
 protected:
-    void spawnChild(Task* task);
-    void fail();
+    Task(Reporter* reporter, TaskRunner* taskRunner);
+    Task(const Task& parent);
+    virtual ~Task() {}
+
+    void start();
+    void fail(const char* msg = NULL);
+    void finish();
+
+    void spawnChild(CpuTask* task);  // For now we don't allow GPU child tasks.
 
 private:
-    // Both unowned.
-    Reporter* fReporter;
-    TaskRunner* fTaskRunner;
+    Reporter* fReporter;      // Unowned.
+    TaskRunner* fTaskRunner;  // Unowned.
     int fDepth;
+    SkMSec fStart;
+};
 
-    typedef SkRunnable INHERITED;
+class CpuTask : public Task, public SkRunnable {
+public:
+    CpuTask(Reporter* reporter, TaskRunner* taskRunner);
+    CpuTask(const Task& parent);
+    virtual ~CpuTask() {}
+
+    void run() SK_OVERRIDE;
+    virtual void draw() = 0;
+};
+
+class GpuTask : public Task, public SkTRunnable<GrContextFactory> {
+ public:
+    GpuTask(Reporter* reporter, TaskRunner* taskRunner);
+    virtual ~GpuTask() {}
+
+    void run(GrContextFactory&) SK_OVERRIDE;
+    virtual void draw(GrContextFactory*) = 0;
 };
 
 }  // namespace DM

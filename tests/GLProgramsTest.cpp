@@ -154,7 +154,7 @@ bool GrGpuGL::programUnitTest(int maxStages) {
 
         int currAttribIndex = 1;  // we need to always leave room for position
         int currTextureCoordSet = 0;
-        int attribIndices[2];
+        int attribIndices[2] = { 0, 0 };
         GrTexture* dummyTextures[] = {dummyTexture1.get(), dummyTexture2.get()};
 
         int numStages = random.nextULessThan(maxStages + 1);
@@ -257,13 +257,14 @@ void forceLinking();
 void forceLinking() {
     SkLightingImageFilter::CreateDistantLitDiffuse(SkPoint3(0,0,0), 0, 0, 0);
     SkAlphaThresholdFilter::Create(SkRegion(), .5f, .5f);
-    SkMagnifierImageFilter mag(SkRect::MakeWH(SK_Scalar1, SK_Scalar1), SK_Scalar1);
+    SkAutoTUnref<SkMagnifierImageFilter> mag(SkMagnifierImageFilter::Create(
+        SkRect::MakeWH(SK_Scalar1, SK_Scalar1), SK_Scalar1));
     GrConfigConversionEffect::Create(NULL,
                                      false,
                                      GrConfigConversionEffect::kNone_PMConversion,
                                      SkMatrix::I());
     SkScalar matrix[20];
-    SkColorMatrixFilter cmf(matrix);
+    SkAutoTUnref<SkColorMatrixFilter> cmf(SkColorMatrixFilter::Create(matrix));
 }
 
 #endif

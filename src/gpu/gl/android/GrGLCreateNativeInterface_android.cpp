@@ -18,7 +18,7 @@
 #include <EGL/egl.h>
 
 static GrGLInterface* create_es_interface(GrGLVersion version,
-                                          const GrGLExtensions& extensions) {
+                                          GrGLExtensions* extensions) {
     if (version < GR_GL_VER(2,0)) {
         return NULL;
     }
@@ -159,7 +159,7 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
 #endif
     }
 
-    if (extensions.has("GL_EXT_multisampled_render_to_texture")) {
+    if (extensions->has("GL_EXT_multisampled_render_to_texture")) {
 #if GL_EXT_multisampled_render_to_texture
         functions->fFramebufferTexture2DMultisample = glFramebufferTexture2DMultisampleEXT;
         functions->fRenderbufferStorageMultisampleES2EXT = glRenderbufferStorageMultisampleEXT;
@@ -167,7 +167,7 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
         functions->fFramebufferTexture2DMultisample = (GrGLFramebufferTexture2DMultisampleProc) eglGetProcAddress("glFramebufferTexture2DMultisampleEXT");
         functions->fRenderbufferStorageMultisampleES2EXT = (GrGLRenderbufferStorageMultisampleProc) eglGetProcAddress("glRenderbufferStorageMultisampleEXT");
 #endif
-    } else if (extensions.has("GL_IMG_multisampled_render_to_texture")) {
+    } else if (extensions->has("GL_IMG_multisampled_render_to_texture")) {
 #if GL_IMG_multisampled_render_to_texture
         functions->fFramebufferTexture2DMultisample = glFramebufferTexture2DMultisampleIMG;
         functions->fRenderbufferStorageMultisampleES2EXT = glRenderbufferStorageMultisampleIMG;
@@ -189,6 +189,19 @@ static GrGLInterface* create_es_interface(GrGLVersion version,
     functions->fMapBuffer = (GrGLMapBufferProc) eglGetProcAddress("glMapBufferOES");
     functions->fUnmapBuffer = (GrGLUnmapBufferProc) eglGetProcAddress("glUnmapBufferOES");
 #endif
+
+    if (extensions->has("GL_EXT_debug_marker")) {
+        functions->fInsertEventMarker = (GrGLInsertEventMarkerProc) eglGetProcAddress("glInsertEventMarker");
+        functions->fPushGroupMarker = (GrGLInsertEventMarkerProc) eglGetProcAddress("glPushGroupMarker");
+        functions->fPopGroupMarker = (GrGLPopGroupMarkerProc) eglGetProcAddress("glPopGroupMarker");
+        // The below check is here because a device has been found that has the extension string but
+        // returns NULL from the eglGetProcAddress for the functions
+        if (NULL == functions->fInsertEventMarker ||
+            NULL == functions->fPushGroupMarker ||
+            NULL == functions->fPopGroupMarker) {
+            extensions->remove("GL_EXT_debug_marker");
+        }
+    }
 
     return interface;
 }
@@ -225,7 +238,6 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fClear = (GrGLClearProc) eglGetProcAddress("glClear");
     functions->fClearColor = (GrGLClearColorProc) eglGetProcAddress("glClearColor");
     functions->fClearStencil = (GrGLClearStencilProc) eglGetProcAddress("glClearStencil");
-    functions->fClientActiveTexture = (GrGLClientActiveTextureProc) eglGetProcAddress("glClientActiveTexture");
     functions->fColorMask = (GrGLColorMaskProc) eglGetProcAddress("glColorMask");
     functions->fCompileShader = (GrGLCompileShaderProc) eglGetProcAddress("glCompileShader");
     functions->fCompressedTexImage2D = (GrGLCompressedTexImage2DProc) eglGetProcAddress("glCompressedTexImage2D");
@@ -243,14 +255,12 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fDeleteVertexArrays = (GrGLDeleteVertexArraysProc) eglGetProcAddress("glDeleteVertexArrays");
     functions->fDepthMask = (GrGLDepthMaskProc) eglGetProcAddress("glDepthMask");
     functions->fDisable = (GrGLDisableProc) eglGetProcAddress("glDisable");
-    functions->fDisableClientState = (GrGLDisableClientStateProc) eglGetProcAddress("glDisableClientState");
     functions->fDisableVertexAttribArray = (GrGLDisableVertexAttribArrayProc) eglGetProcAddress("glDisableVertexAttribArray");
     functions->fDrawArrays = (GrGLDrawArraysProc) eglGetProcAddress("glDrawArrays");
     functions->fDrawBuffer = (GrGLDrawBufferProc) eglGetProcAddress("glDrawBuffer");
     functions->fDrawBuffers = (GrGLDrawBuffersProc) eglGetProcAddress("glDrawBuffers");
     functions->fDrawElements = (GrGLDrawElementsProc) eglGetProcAddress("glDrawElements");
     functions->fEnable = (GrGLEnableProc) eglGetProcAddress("glEnable");
-    functions->fEnableClientState = (GrGLEnableClientStateProc) eglGetProcAddress("glEnableClientState");
     functions->fEnableVertexAttribArray = (GrGLEnableVertexAttribArrayProc) eglGetProcAddress("glEnableVertexAttribArray");
     functions->fEndQuery = (GrGLEndQueryProc) eglGetProcAddress("glEndQuery");
     functions->fFinish = (GrGLFinishProc) eglGetProcAddress("glFinish");
@@ -303,7 +313,6 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fStencilMaskSeparate = (GrGLStencilMaskSeparateProc) eglGetProcAddress("glStencilMaskSeparate");
     functions->fStencilOp = (GrGLStencilOpProc) eglGetProcAddress("glStencilOp");
     functions->fStencilOpSeparate = (GrGLStencilOpSeparateProc) eglGetProcAddress("glStencilOpSeparate");
-    functions->fTexGenf = (GrGLTexGenfProc) eglGetProcAddress("glTexGenf");
     functions->fTexGenfv = (GrGLTexGenfvProc) eglGetProcAddress("glTexGenfv");
     functions->fTexGeni = (GrGLTexGeniProc) eglGetProcAddress("glTexGeni");
     functions->fTexImage2D = (GrGLTexImage2DProc) eglGetProcAddress("glTexImage2D");
@@ -334,7 +343,6 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fUseProgram = (GrGLUseProgramProc) eglGetProcAddress("glUseProgram");
     functions->fVertexAttrib4fv = (GrGLVertexAttrib4fvProc) eglGetProcAddress("glVertexAttrib4fv");
     functions->fVertexAttribPointer = (GrGLVertexAttribPointerProc) eglGetProcAddress("glVertexAttribPointer");
-    functions->fVertexPointer = (GrGLVertexPointerProc) eglGetProcAddress("glVertexPointer");
     functions->fViewport = (GrGLViewportProc) eglGetProcAddress("glViewport");
 
     if (extensions.has("GL_NV_path_rendering")) {
@@ -389,6 +397,12 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
         functions->fPointAlongPath = (GrGLPointAlongPathProc) eglGetProcAddress("glPointAlongPathNV");
     }
 
+    if (extensions.has("GL_EXT_debug_marker")) {
+        functions->fInsertEventMarker = (GrGLInsertEventMarkerProc) eglGetProcAddress("glInsertEventMarkerEXT");
+        functions->fPushGroupMarker = (GrGLInsertEventMarkerProc) eglGetProcAddress("glPushGroupMarkerEXT");
+        functions->fPopGroupMarker = (GrGLPopGroupMarkerProc) eglGetProcAddress("glPopGroupMarkerEXT");
+    }
+
     return interface;
 }
 
@@ -407,7 +421,7 @@ const GrGLInterface* GrGLCreateNativeInterface() {
 
     GrGLInterface* interface = NULL;
     if (kGLES_GrGLStandard == standard) {
-        interface = create_es_interface(version, extensions);
+        interface = create_es_interface(version, &extensions);
     } else if (kGL_GrGLStandard == standard) {
         interface = create_desktop_interface(version, extensions);
     }

@@ -26,22 +26,21 @@
 // perform a draw and this one does.
 class SimpleOffsetFilter : public SkImageFilter {
 public:
-    SimpleOffsetFilter(SkScalar dx, SkScalar dy, SkImageFilter* input)
-    : SkImageFilter(input), fDX(dx), fDY(dy) {}
+    static SkImageFilter* Create(SkScalar dx, SkScalar dy, SkImageFilter* input) {
+        return SkNEW_ARGS(SimpleOffsetFilter, (dx, dy, input));
+    }
 
-    virtual bool onFilterImage(Proxy* proxy, const SkBitmap& src, const SkMatrix& ctm,
+    virtual bool onFilterImage(Proxy* proxy, const SkBitmap& src, const Context& ctx,
                                SkBitmap* dst, SkIPoint* offset) const SK_OVERRIDE {
         SkBitmap source = src;
         SkImageFilter* input = getInput(0);
         SkIPoint srcOffset = SkIPoint::Make(0, 0);
-        if (NULL != input && !input->filterImage(proxy, src, ctm, &source, &srcOffset)) {
+        if (NULL != input && !input->filterImage(proxy, src, ctx, &source, &srcOffset)) {
             return false;
         }
 
         SkIRect bounds;
-        source.getBounds(&bounds);
-
-        if (!this->applyCropRect(&bounds, ctm)) {
+        if (!this->applyCropRect(ctx, proxy, source, &srcOffset, &bounds, &source)) {
             return false;
         }
 
@@ -72,6 +71,9 @@ protected:
     }
 
 private:
+    SimpleOffsetFilter(SkScalar dx, SkScalar dy, SkImageFilter* input)
+    : SkImageFilter(input), fDX(dx), fDY(dy) {}
+
     SkScalar fDX, fDY;
 };
 
@@ -121,13 +123,13 @@ protected:
         }
         canvas->clear(0x00000000);
         {
-            SkAutoTUnref<SkImageFilter> bitmapSource(new SkBitmapSource(fBitmap));
+            SkAutoTUnref<SkImageFilter> bitmapSource(SkBitmapSource::Create(fBitmap));
             SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(SK_ColorRED,
                                                          SkXfermode::kSrcIn_Mode));
-            SkAutoTUnref<SkImageFilter> blur(new SkBlurImageFilter(4.0f, 4.0f, bitmapSource));
-            SkAutoTUnref<SkImageFilter> erode(new SkErodeImageFilter(4, 4, blur));
+            SkAutoTUnref<SkImageFilter> blur(SkBlurImageFilter::Create(4.0f, 4.0f, bitmapSource));
+            SkAutoTUnref<SkImageFilter> erode(SkErodeImageFilter::Create(4, 4, blur));
             SkAutoTUnref<SkImageFilter> color(SkColorFilterImageFilter::Create(cf, erode));
-            SkAutoTUnref<SkImageFilter> merge(new SkMergeImageFilter(blur, color));
+            SkAutoTUnref<SkImageFilter> merge(SkMergeImageFilter::Create(blur, color));
 
             SkPaint paint;
             paint.setImageFilter(merge);
@@ -135,17 +137,17 @@ protected:
             canvas->translate(SkIntToScalar(100), 0);
         }
         {
-            SkAutoTUnref<SkImageFilter> morph(new SkDilateImageFilter(5, 5));
+            SkAutoTUnref<SkImageFilter> morph(SkDilateImageFilter::Create(5, 5));
 
             SkScalar matrix[20] = { SK_Scalar1, 0, 0, 0, 0,
                                     0, SK_Scalar1, 0, 0, 0,
                                     0, 0, SK_Scalar1, 0, 0,
                                     0, 0, 0, 0.5f, 0 };
 
-            SkAutoTUnref<SkColorFilter> matrixFilter(new SkColorMatrixFilter(matrix));
+            SkAutoTUnref<SkColorFilter> matrixFilter(SkColorMatrixFilter::Create(matrix));
             SkAutoTUnref<SkImageFilter> colorMorph(SkColorFilterImageFilter::Create(matrixFilter, morph));
             SkAutoTUnref<SkXfermode> mode(SkXfermode::Create(SkXfermode::kSrcOver_Mode));
-            SkAutoTUnref<SkImageFilter> blendColor(new SkXfermodeImageFilter(mode, colorMorph));
+            SkAutoTUnref<SkImageFilter> blendColor(SkXfermodeImageFilter::Create(mode, colorMorph));
 
             SkPaint paint;
             paint.setImageFilter(blendColor);
@@ -157,25 +159,28 @@ protected:
                                     0, SK_Scalar1, 0, 0, 0,
                                     0, 0, SK_Scalar1, 0, 0,
                                     0, 0, 0, 0.5f, 0 };
-            SkColorMatrixFilter matrixCF(matrix);
-            SkAutoTUnref<SkImageFilter> matrixFilter(SkColorFilterImageFilter::Create(&matrixCF));
-            SimpleOffsetFilter offsetFilter(SkIntToScalar(10), SkIntToScalar(10), matrixFilter);
+            SkAutoTUnref<SkColorMatrixFilter> matrixCF(SkColorMatrixFilter::Create(matrix));
+            SkAutoTUnref<SkImageFilter> matrixFilter(SkColorFilterImageFilter::Create(matrixCF));
+            SkAutoTUnref<SkImageFilter> offsetFilter(
+                SimpleOffsetFilter::Create(10.0f, 10.f, matrixFilter));
 
             SkAutoTUnref<SkXfermode> arith(SkArithmeticMode::Create(0, SK_Scalar1, SK_Scalar1, 0));
-            SkXfermodeImageFilter arithFilter(arith, matrixFilter, &offsetFilter);
+            SkAutoTUnref<SkXfermodeImageFilter> arithFilter(
+                SkXfermodeImageFilter::Create(arith, matrixFilter, offsetFilter));
 
             SkPaint paint;
-            paint.setImageFilter(&arithFilter);
+            paint.setImageFilter(arithFilter);
             drawClippedBitmap(canvas, fBitmap, paint);
             canvas->translate(SkIntToScalar(100), 0);
         }
         {
-            SkAutoTUnref<SkImageFilter> blur(new SkBlurImageFilter(
+            SkAutoTUnref<SkImageFilter> blur(SkBlurImageFilter::Create(
               SkIntToScalar(10), SkIntToScalar(10)));
 
             SkAutoTUnref<SkXfermode> mode(SkXfermode::Create(SkXfermode::kSrcIn_Mode));
             SkImageFilter::CropRect cropRect(SkRect::MakeWH(SkIntToScalar(95), SkIntToScalar(100)));
-            SkAutoTUnref<SkImageFilter> blend(new SkXfermodeImageFilter(mode, blur, NULL, &cropRect));
+            SkAutoTUnref<SkImageFilter> blend(
+                SkXfermodeImageFilter::Create(mode, blur, NULL, &cropRect));
 
             SkPaint paint;
             paint.setImageFilter(blend);

@@ -106,10 +106,11 @@ static HRESULT create_id(wchar_t* buffer, size_t bufferSize,
 
 static SkBitmap make_fake_bitmap(int width, int height) {
     SkBitmap bitmap;
-    bitmap.setConfig(SkBitmap::kNo_Config, width, height);
+    bitmap.setConfig(SkImageInfo::MakeUnknown(width, height));
     return bitmap;
 }
 
+// TODO: should inherit from SkBaseDevice instead of SkBitmapDevice...
 SkXPSDevice::SkXPSDevice()
     : SkBitmapDevice(make_fake_bitmap(10000, 10000))
     , fCurrentPage(0) {
@@ -1159,10 +1160,6 @@ HRESULT SkXPSDevice::createXpsQuad(const SkPoint (&points)[4],
     return S_OK;
 }
 
-uint32_t SkXPSDevice::getDeviceCapabilities() {
-    return kVector_Capability;
-}
-
 void SkXPSDevice::clear(SkColor color) {
     //TODO: override this for XPS
     SkDEBUGF(("XPS clear not yet implemented."));
@@ -1699,9 +1696,7 @@ void SkXPSDevice::drawPath(const SkDraw& d,
             }
             platonicPath.transform(*prePathMatrix, skeletalPath);
         } else {
-            if (!matrix.preConcat(*prePathMatrix)) {
-                return;
-            }
+            matrix.preConcat(*prePathMatrix);
         }
     }
 
@@ -2413,16 +2408,7 @@ void SkXPSDevice::drawDevice(const SkDraw& d, SkBaseDevice* dev,
          "Could not add layer to current visuals.");
 }
 
-bool SkXPSDevice::onReadPixels(const SkBitmap& bitmap, int x, int y,
-                               SkCanvas::Config8888) {
-    return false;
-}
-
-SkBaseDevice* SkXPSDevice::onCreateCompatibleDevice(SkBitmap::Config config,
-                                                    int width, int height,
-                                                    bool isOpaque,
-                                                    Usage usage) {
-
+SkBaseDevice* SkXPSDevice::onCreateDevice(const SkImageInfo&, Usage) {
 //Conditional for bug compatibility with PDF device.
 #if 0
     if (SkBaseDevice::kGeneral_Usage == usage) {

@@ -13,7 +13,7 @@
 #include "GrGpuGL.h"
 #include "GrTexture.h"
 #include "SkRTConf.h"
-#include "SkTrace.h"
+#include "SkTraceEvent.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->gpu()->glInterface(), R, X)
@@ -404,14 +404,11 @@ const char* GrGLShaderBuilder::fragmentPosition() {
             return "";
         }
     }
+    // We only declare "gl_FragCoord" when we're in the case where we want to use layout qualifiers
+    // to reverse y. Otherwise it isn't necessary and whether the "in" qualifier appears in the
+    // declaration varies in earlier GLSL specs. So it is simpler to omit it.
     if (fTopLeftFragPosRead) {
-        if (!fSetupFragPosition) {
-            fFSInputs.push_back().set(kVec4f_GrSLType,
-                                      GrGLShaderVar::kIn_TypeModifier,
-                                      "gl_FragCoord",
-                                      GrGLShaderVar::kDefault_Precision);
-            fSetupFragPosition = true;
-        }
+        fSetupFragPosition = true;
         return "gl_FragCoord";
     } else if (fGpu->glCaps().fragCoordConventionsSupport()) {
         if (!fSetupFragPosition) {
@@ -572,17 +569,16 @@ const char* GrGLShaderBuilder::enableSecondaryOutput() {
     return dual_source_output_name();
 }
 
-
 bool GrGLShaderBuilder::finish(GrGLuint* outProgramId) {
-    SK_TRACE_EVENT0("GrGLShaderBuilder::finish");
-
     GrGLuint programId = 0;
     GL_CALL_RET(programId, CreateProgram());
     if (!programId) {
         return false;
     }
 
-    if (!this->compileAndAttachShaders(programId)) {
+    SkTDArray<GrGLuint> shadersToDelete;
+
+    if (!this->compileAndAttachShaders(programId, &shadersToDelete)) {
         GL_CALL(DeleteProgram(programId));
         return false;
     }
@@ -625,22 +621,27 @@ bool GrGLShaderBuilder::finish(GrGLuint* outProgramId) {
     if (!fUniformManager.isUsingBindUniform()) {
       fUniformManager.getUniformLocations(programId, fUniforms);
     }
+
+    for (int i = 0; i < shadersToDelete.count(); ++i) {
+      GL_CALL(DeleteShader(shadersToDelete[i]));
+    }
+
     *outProgramId = programId;
     return true;
 }
 
-// Compiles a GL shader, attaches it to a program, and releases the shader's reference.
-// (That way there's no need to hang on to the GL shader id and delete it later.)
-static bool attach_shader(const GrGLContext& glCtx,
-                          GrGLuint programId,
-                          GrGLenum type,
-                          const SkString& shaderSrc) {
+// Compiles a GL shader and attaches it to a program. Returns the shader ID if
+// successful, or 0 if not.
+static GrGLuint attach_shader(const GrGLContext& glCtx,
+                              GrGLuint programId,
+                              GrGLenum type,
+                              const SkString& shaderSrc) {
     const GrGLInterface* gli = glCtx.interface();
 
     GrGLuint shaderId;
     GR_GL_CALL_RET(gli, shaderId, CreateShader(type));
     if (0 == shaderId) {
-        return false;
+        return 0;
     }
 
     const GrGLchar* sourceStr = shaderSrc.c_str();
@@ -672,7 +673,7 @@ static bool attach_shader(const GrGLContext& glCtx,
             }
             SkDEBUGFAIL("Shader compilation failed!");
             GR_GL_CALL(gli, DeleteShader(shaderId));
-            return false;
+            return 0;
         }
     }
     if (c_PrintShaders) {
@@ -680,12 +681,16 @@ static bool attach_shader(const GrGLContext& glCtx,
         GrPrintf("\n");
     }
 
+    // Attach the shader, but defer deletion until after we have linked the program.
+    // This works around a bug in the Android emulator's GLES2 wrapper which
+    // will immediately delete the shader object and free its memory even though it's
+    // attached to a program, which then causes glLinkProgram to fail.
     GR_GL_CALL(gli, AttachShader(programId, shaderId));
-    GR_GL_CALL(gli, DeleteShader(shaderId));
-    return true;
+
+    return shaderId;
 }
 
-bool GrGLShaderBuilder::compileAndAttachShaders(GrGLuint programId) const {
+bool GrGLShaderBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) const {
     SkString fragShaderSrc(GrGetGLSLVersionDecl(this->ctxInfo()));
     fragShaderSrc.append(fFSExtensions);
     append_default_precision_qualifier(kDefaultFragmentPrecision,
@@ -700,9 +705,13 @@ bool GrGLShaderBuilder::compileAndAttachShaders(GrGLuint programId) const {
     fragShaderSrc.append("void main() {\n");
     fragShaderSrc.append(fFSCode);
     fragShaderSrc.append("}\n");
-    if (!attach_shader(fGpu->glContext(), programId, GR_GL_FRAGMENT_SHADER, fragShaderSrc)) {
+
+    GrGLuint fragShaderId = attach_shader(fGpu->glContext(), programId, GR_GL_FRAGMENT_SHADER, fragShaderSrc);
+    if (!fragShaderId) {
         return false;
     }
+
+    *shaderIds->append() = fragShaderId;
 
     return true;
 }
@@ -870,7 +879,7 @@ GrGLProgramEffects* GrGLFullShaderBuilder::createAndEmitEffects(
     return programEffectsBuilder.finish();
 }
 
-bool GrGLFullShaderBuilder::compileAndAttachShaders(GrGLuint programId) const {
+bool GrGLFullShaderBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) const {
     const GrGLContext& glCtx = this->gpu()->glContext();
     SkString vertShaderSrc(GrGetGLSLVersionDecl(this->ctxInfo()));
     this->appendUniformDecls(kVertex_Visibility, &vertShaderSrc);
@@ -879,9 +888,11 @@ bool GrGLFullShaderBuilder::compileAndAttachShaders(GrGLuint programId) const {
     vertShaderSrc.append("void main() {\n");
     vertShaderSrc.append(fVSCode);
     vertShaderSrc.append("}\n");
-    if (!attach_shader(glCtx, programId, GR_GL_VERTEX_SHADER, vertShaderSrc)) {
+    GrGLuint vertShaderId = attach_shader(glCtx, programId, GR_GL_VERTEX_SHADER, vertShaderSrc);
+    if (!vertShaderId) {
         return false;
     }
+    *shaderIds->append() = vertShaderId;
 
 #if GR_GL_EXPERIMENTAL_GS
     if (fDesc.getHeader().fExperimentalGS) {
@@ -907,13 +918,15 @@ bool GrGLFullShaderBuilder::compileAndAttachShaders(GrGLuint programId) const {
                              "\t}\n"
                              "\tEndPrimitive();\n");
         geomShaderSrc.append("}\n");
-        if (!attach_shader(glCtx, programId, GR_GL_GEOMETRY_SHADER, geomShaderSrc)) {
+        GrGLuint geomShaderId = attach_shader(glCtx, programId, GR_GL_GEOMETRY_SHADER, geomShaderSrc);
+        if (!geomShaderId) {
             return false;
         }
+        *shaderIds->append() = geomShaderId;
     }
 #endif
 
-    return this->INHERITED::compileAndAttachShaders(programId);
+    return this->INHERITED::compileAndAttachShaders(programId, shaderIds);
 }
 
 void GrGLFullShaderBuilder::bindProgramLocations(GrGLuint programId) const {

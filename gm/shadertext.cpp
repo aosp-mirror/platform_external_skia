@@ -12,8 +12,8 @@
 
 namespace skiagm {
 
-static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
-    bm->allocConfigPixels(config, w, h);
+static void makebm(SkBitmap* bm, int w, int h) {
+    bm->allocN32Pixels(w, h);
     bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
@@ -39,7 +39,7 @@ static SkShader* MakeBitmapShader(SkShader::TileMode tx, SkShader::TileMode ty,
                            int w, int h) {
     static SkBitmap bmp;
     if (bmp.isNull()) {
-        makebm(&bmp, SkBitmap::kARGB_8888_Config, w/2, h/4);
+        makebm(&bmp, w/2, h/4);
     }
     return SkShader::CreateBitmapShader(bmp, tx, ty);
 }
@@ -207,8 +207,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef SK_BUILD_FOR_ANDROID
 static GM* MyFactory(void*) { return new ShaderTextGM; }
 static GMRegistry reg(MyFactory);
-#endif
 }

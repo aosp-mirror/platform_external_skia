@@ -14,6 +14,10 @@
 #include "SkImageDecoder.h"
 #include "SkRefCnt.h"
 
+#if SK_SUPPORT_GPU
+class GrContext;
+#endif
+
 class SkBBoxHierarchy;
 class SkCanvas;
 class SkDrawPictureCallback;
@@ -34,6 +38,27 @@ class SK_API SkPicture : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkPicture)
 
+    // AccelData provides a base class for device-specific acceleration
+    // data. It is added to the picture via a call to a device's optimize
+    // method.
+    class AccelData : public SkRefCnt {
+    public:
+        typedef uint8_t Domain;
+        typedef uint32_t Key;
+
+        AccelData(Key key) : fKey(key) { }
+
+        const Key& getKey() const { return fKey; }
+
+        // This entry point allows user's to get a unique domain prefix
+        // for their keys
+        static Domain GenerateDomain();
+    private:
+        Key fKey;
+
+        typedef SkRefCnt INHERITED;
+    };
+
     /** The constructor prepares the picture to record.
         @param width the width of the virtual device the picture records.
         @param height the height of the virtual device the picture records.
@@ -43,6 +68,18 @@ public:
         this call, those elements will not appear in this picture.
     */
     SkPicture(const SkPicture& src);
+
+    /**  PRIVATE / EXPERIMENTAL -- do not call */
+    void EXPERIMENTAL_addAccelData(const AccelData* data) {
+        SkRefCnt_SafeAssign(fAccelData, data);
+    }
+    /**  PRIVATE / EXPERIMENTAL -- do not call */
+    const AccelData* EXPERIMENTAL_getAccelData(AccelData::Key key) const {
+        if (NULL != fAccelData && fAccelData->getKey() == key) {
+            return fAccelData;
+        }
+        return NULL;
+    }
 
     /**
      *  Function signature defining a function that sets up an SkBitmap from encoded data. On
@@ -125,15 +162,6 @@ public:
             discarded if you serialize into a stream and then deserialize.
         */
         kOptimizeForClippedPlayback_RecordingFlag = 0x02,
-        /*
-            This flag disables all the picture recording optimizations (i.e.,
-            those in SkPictureRecord). It is mainly intended for testing the
-            existing optimizations (i.e., to actually have the pattern
-            appear in an .skp we have to disable the optimization). This
-            option doesn't affect the optimizations controlled by
-            'kOptimizeForClippedPlayback_RecordingFlag'.
-         */
-        kDisableRecordOptimizations_RecordingFlag = 0x04
     };
 
     /** Returns the canvas that records the drawing commands.
@@ -217,6 +245,32 @@ public:
     void abortPlayback();
 #endif
 
+    /** Return true if the SkStream/Buffer represents a serialized picture, and
+        fills out SkPictInfo. After this function returns, the data source is not
+        rewound so it will have to be manually reset before passing to
+        CreateFromStream or CreateFromBuffer. Note, CreateFromStream and
+        CreateFromBuffer perform this check internally so these entry points are
+        intended for stand alone tools.
+        If false is returned, SkPictInfo is unmodified.
+    */
+    static bool InternalOnly_StreamIsSKP(SkStream*, SkPictInfo*);
+    static bool InternalOnly_BufferIsSKP(SkReadBuffer&, SkPictInfo*);
+
+    /** Enable/disable all the picture recording optimizations (i.e.,
+        those in SkPictureRecord). It is mainly intended for testing the
+        existing optimizations (i.e., to actually have the pattern
+        appear in an .skp we have to disable the optimization). Call right
+        after 'beginRecording'.
+    */
+    void internalOnly_EnableOpts(bool enableOpts);
+
+    /** Return true if the picture is suitable for rendering on the GPU.
+     */
+
+#if SK_SUPPORT_GPU
+    bool suitableForGpuRasterization(GrContext*) const;
+#endif
+
 protected:
     // V2 : adds SkPixelRef's generation ID.
     // V3 : PictInfo tag at beginning, and EOF tag at the end
@@ -239,14 +293,23 @@ protected:
     // V18: SkBitmap now records x,y for its pixelref origin, instead of offset.
     // V19: encode matrices and regions into the ops stream
     // V20: added bool to SkPictureImageFilter's serialization (to allow SkPicture serialization)
-    static const uint32_t PICTURE_VERSION = 20;
+    // V21: add pushCull, popCull
+    // V22: SK_PICT_FACTORY_TAG's size is now the chunk size in bytes
+
+    // Note: If the picture version needs to be increased then please follow the
+    // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
+
+    // Only SKPs within the min/current picture version range (inclusive) can be read.
+    static const uint32_t MIN_PICTURE_VERSION = 19;
+    static const uint32_t CURRENT_PICTURE_VERSION = 22;
 
     // fPlayback, fRecord, fWidth & fHeight are protected to allow derived classes to
     // install their own SkPicturePlayback-derived players,SkPictureRecord-derived
     // recorders and set the picture size
-    SkPicturePlayback* fPlayback;
-    SkPictureRecord* fRecord;
-    int fWidth, fHeight;
+    SkPicturePlayback*    fPlayback;
+    SkPictureRecord*      fRecord;
+    int                   fWidth, fHeight;
+    const AccelData*      fAccelData;
 
     // Create a new SkPicture from an existing SkPicturePlayback. Ref count of
     // playback is unchanged.
@@ -255,18 +318,50 @@ protected:
     // For testing. Derived classes may instantiate an alternate
     // SkBBoxHierarchy implementation
     virtual SkBBoxHierarchy* createBBoxHierarchy() const;
-
-    // Return true if the SkStream represents a serialized picture, and fills out
-    // SkPictInfo. After this function returns, the SkStream is not rewound; it
-    // will be ready to be parsed to create an SkPicturePlayback.
-    // If false is returned, SkPictInfo is unmodified.
-    static bool StreamIsSKP(SkStream*, SkPictInfo*);
-    static bool BufferIsSKP(SkReadBuffer&, SkPictInfo*);
 private:
-    void createHeader(void* header) const;
+    // An OperationList encapsulates a set of operation offsets into the picture byte
+    // stream along with the CTMs needed for those operation.
+    class OperationList : public SkNoncopyable {
+    public:
+        virtual ~OperationList() {}
+
+        // If valid returns false then there is no optimization data
+        // present. All the draw operations need to be issued.
+        virtual bool valid() const { return false; }
+
+        // The following three entry points should only be accessed if
+        // 'valid' returns true.
+        virtual int numOps() const { SkASSERT(false); return 0; };
+        // The offset in the picture of the operation to execute.
+        virtual uint32_t offset(int index) const { SkASSERT(false); return 0; };
+        // The CTM that must be installed for the operation to behave correctly
+        virtual const SkMatrix& matrix(int index) const { SkASSERT(false); return SkMatrix::I(); }
+
+        static const OperationList& InvalidList();
+
+    private:
+        typedef SkNoncopyable INHERITED;
+    };
+
+    /** PRIVATE / EXPERIMENTAL -- do not call
+        Return the operations required to render the content inside 'queryRect'.
+    */
+    const OperationList& EXPERIMENTAL_getActiveOps(const SkIRect& queryRect);
+
+    /** PRIVATE / EXPERIMENTAL -- do not call
+        Return the ID of the operation currently being executed when playing
+        back. 0 indicates no call is active.
+    */
+    size_t EXPERIMENTAL_curOpID() const;
+
+    void createHeader(SkPictInfo* info) const;
+    static bool IsValidPictInfo(const SkPictInfo& info);
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;
+    friend class SkGpuDevice;
+    friend class GrGatherDevice;
+    friend class SkDebugCanvas;
 
     typedef SkRefCnt INHERITED;
 };

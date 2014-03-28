@@ -40,6 +40,8 @@ public:
     GrGLSLGeneration glslGeneration() const { return fGLContext.glslGeneration(); }
     const GrGLCaps& glCaps() const { return *fGLContext.caps(); }
 
+    virtual void discard(GrRenderTarget*) SK_OVERRIDE;
+
     // Used by GrGLProgram and GrGLTexGenProgramEffects to configure OpenGL state.
     void bindTexture(int unitIdx, const GrTextureParams& params, GrGLTexture* texture);
     void setProjectionMatrix(const SkMatrix& matrix,
@@ -136,8 +138,6 @@ private:
 
     virtual void onClear(const SkIRect* rect, GrColor color, bool canIgnoreRect) SK_OVERRIDE;
 
-    virtual void onForceRenderTargetFlush() SK_OVERRIDE;
-
     virtual bool onReadPixels(GrRenderTarget* target,
                               int left, int top,
                               int width, int height,
@@ -156,11 +156,18 @@ private:
 
     virtual void onGpuStencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
     virtual void onGpuDrawPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
+    virtual void onGpuDrawPaths(size_t, const GrPath**, const SkMatrix*,
+                                SkPath::FillType,
+                                SkStrokeRec::Style) SK_OVERRIDE;
 
     virtual void clearStencil() SK_OVERRIDE;
     virtual void clearStencilClip(const SkIRect& rect,
                                   bool insideClip) SK_OVERRIDE;
     virtual bool flushGraphicsState(DrawType, const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
+
+    // GrDrawTarget ovverides
+    virtual void didAddGpuTraceMarker() SK_OVERRIDE;
+    virtual void didRemoveGpuTraceMarker() SK_OVERRIDE;
 
     // binds texture unit in GL
     void setTextureUnit(int unitIdx);
@@ -194,7 +201,7 @@ private:
         enum {
             // We may actually have kMaxEntries+1 shaders in the GL context because we create a new
             // shader before evicting from the cache.
-            kMaxEntries = 32,
+            kMaxEntries = 128,
             kHashBits = 6,
         };
 

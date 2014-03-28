@@ -25,6 +25,7 @@
         'skdiff',
         'skhello',
         'skpdiff',
+        'skpinfo',
         'skpmaker',
         'skimage',
         'test_image_decoder',
@@ -181,6 +182,21 @@
         'utils.gyp:utils',
       ],
     },
+    {
+      'target_name': 'skpinfo',
+      'type': 'executable',
+      'sources': [
+        '../tools/skpinfo.cpp',
+      ],
+      'include_dirs': [
+        '../tools/flags',
+        '../src/core/',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
 
     {
       'target_name': 'lua_app',
@@ -188,6 +204,11 @@
       'sources': [
         '../tools/lua/lua_app.cpp',
         '../src/utils/SkLua.cpp',
+      ],
+      'include_dirs': [
+        # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
+        '../src/gpu/',
+        '../src/core/',
       ],
       'dependencies': [
         'effects.gyp:effects',
@@ -206,6 +227,11 @@
         '../tools/lua/lua_pictures.cpp',
         '../src/utils/SkLuaCanvas.cpp',
         '../src/utils/SkLua.cpp',
+      ],
+      'include_dirs': [
+        # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
+        '../src/gpu/',
+        '../src/core/',
       ],
       'dependencies': [
         'effects.gyp:effects',
@@ -266,8 +292,15 @@
     {
       'target_name': 'bench_record',
       'type': 'executable',
-      'sources': ['../tools/bench_record.cpp'],
-      'include_dirs': [ '../src/core/' ],
+      'sources': [
+        '../tools/bench_record.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/lazy',
+      ],
       'dependencies': [
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
@@ -472,6 +505,9 @@
               '../src/utils/SkLua.cpp',
             ],
             'include_dirs': [
+              # Lua exposes GrReduceClip which in turn requires src/core for SkTLList
+              '../src/gpu/',
+              '../src/core/',
               '../third_party/lua/src/',
             ],
             'dependencies': [

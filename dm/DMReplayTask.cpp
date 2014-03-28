@@ -14,7 +14,7 @@ ReplayTask::ReplayTask(const Task& parent,
                        skiagm::GM* gm,
                        SkBitmap reference,
                        bool useRTree)
-    : Task(parent)
+    : CpuTask(parent)
     , fName(UnderJoin(parent.name().c_str(), useRTree ? "rtree" : "replay"))
     , fGM(gm)
     , fReference(reference)
@@ -27,7 +27,7 @@ void ReplayTask::draw() {
     RecordPicture(fGM.get(), &recorded, flags);
 
     SkBitmap bitmap;
-    SetupBitmap(fReference.config(), fGM.get(), &bitmap);
+    SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
     DrawPicture(&recorded, &bitmap);
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();
@@ -41,7 +41,7 @@ bool ReplayTask::shouldSkip() const {
     }
 
     if (FLAGS_rtree && fUseRTree) {
-        return false;
+        return (fGM->getFlags() & skiagm::GM::kSkipTiled_Flag) != 0;
     }
     if (FLAGS_replay && !fUseRTree) {
         return false;

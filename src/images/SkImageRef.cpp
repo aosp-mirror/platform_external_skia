@@ -121,11 +121,12 @@ bool SkImageRef::prepareBitmap(SkImageDecoder::Mode mode) {
 
         codec->setSampleSize(fSampleSize);
         codec->setDitherImage(fDoDither);
+        codec->setRequireUnpremultipliedColors(this->info().fAlphaType == kUnpremul_SkAlphaType);
         if (this->onDecode(codec, fStream, &fBitmap, fBitmap.config(), mode)) {
-            SkDEBUGCODE(SkImageInfo info;)
-            SkASSERT(!fBitmap.asImageInfo(&info) || this->info().fColorType == info.fColorType);
-            SkASSERT(this->info().fWidth == fBitmap.width());
-            SkASSERT(this->info().fHeight == fBitmap.height());
+            if (kOpaque_SkAlphaType == fBitmap.alphaType()) {
+                this->changeAlphaType(kOpaque_SkAlphaType);
+            }
+            SkASSERT(this->info() == fBitmap.info());
             return true;
         }
     }
