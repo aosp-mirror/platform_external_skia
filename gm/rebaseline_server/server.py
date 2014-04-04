@@ -40,13 +40,15 @@ if TOOLS_DIRECTORY not in sys.path:
 import svn
 
 # Imports from local dir
-import results
+#
+# Note: we import results under a different name, to avoid confusion with the
+# Server.results() property. See discussion at
+# https://codereview.chromium.org/195943004/diff/1/gm/rebaseline_server/server.py#newcode44
+import compare_to_expectations
+import imagepairset
+import results as results_mod
 
-ACTUALS_SVN_REPO = 'http://skia-autogen.googlecode.com/svn/gm-actual'
 PATHSPLIT_RE = re.compile('/([^/]+)/(.+)')
-EXPECTATIONS_DIR = os.path.join(TRUNK_DIRECTORY, 'expectations', 'gm')
-GENERATED_IMAGES_ROOT = os.path.join(PARENT_DIRECTORY, 'static',
-                                     'generated-images')
 
 # A simple dictionary of file name extensions to MIME types. The empty string
 # entry is used as the default when no extension was given or if the extension
@@ -59,8 +61,20 @@ MIME_TYPE_MAP = {'': 'application/octet-stream',
                  'json': 'application/json'
                  }
 
-DEFAULT_ACTUALS_DIR = '.gm-actuals'
+# Keys that server.py uses to create the toplevel content header.
+# NOTE: Keep these in sync with static/constants.js
+KEY__EDITS__MODIFICATIONS = 'modifications'
+KEY__EDITS__OLD_RESULTS_HASH = 'oldResultsHash'
+KEY__EDITS__OLD_RESULTS_TYPE = 'oldResultsType'
+
+DEFAULT_ACTUALS_DIR = compare_to_expectations.DEFAULT_ACTUALS_DIR
+DEFAULT_ACTUALS_REPO_REVISION = 'HEAD'
+DEFAULT_ACTUALS_REPO_URL = 'http://skia-autogen.googlecode.com/svn/gm-actual'
 DEFAULT_PORT = 8888
+
+# Directory within which the server will serve out static files.
+STATIC_CONTENTS_SUBDIR = 'static'  # within PARENT_DIR
+GENERATED_IMAGES_SUBDIR = 'generated-images'  # within STATIC_CONTENTS_SUBDIR
 
 # How often (in seconds) clients should reload while waiting for initial
 # results to load.
@@ -128,25 +142,34 @@ class Server(object):
 
   def __init__(self,
                actuals_dir=DEFAULT_ACTUALS_DIR,
+               actuals_repo_revision=DEFAULT_ACTUALS_REPO_REVISION,
+               actuals_repo_url=DEFAULT_ACTUALS_REPO_URL,
                port=DEFAULT_PORT, export=False, editable=True,
                reload_seconds=0):
     """
     Args:
       actuals_dir: directory under which we will check out the latest actual
-                   GM results
+          GM results
+      actuals_repo_revision: revision of actual-results.json files to process
+      actuals_repo_url: SVN repo to download actual-results.json files from;
+          if None or '', don't fetch new actual-results files at all,
+          just compare to whatever files are already in actuals_dir
       port: which TCP port to listen on for HTTP requests
       export: whether to allow HTTP clients on other hosts to access this server
       editable: whether HTTP clients are allowed to submit new baselines
       reload_seconds: polling interval with which to check for new results;
-                      if 0, don't check for new results at all
+          if 0, don't check for new results at all
     """
     self._actuals_dir = actuals_dir
+    self._actuals_repo_revision = actuals_repo_revision
+    self._actuals_repo_url = actuals_repo_url
     self._port = port
     self._export = export
     self._editable = editable
     self._reload_seconds = reload_seconds
-    self._actuals_repo = _create_svn_checkout(
-        dir_path=actuals_dir, repo_url=ACTUALS_SVN_REPO)
+    if actuals_repo_url:
+      self._actuals_repo = _create_svn_checkout(
+          dir_path=actuals_dir, repo_url=actuals_repo_url)
 
     # Reentrant lock that must be held whenever updating EITHER of:
     # 1. self._results
@@ -179,8 +202,8 @@ class Server(object):
     return self._reload_seconds
 
   def update_results(self, invalidate=False):
-    """ Create or update self._results, based on the expectations in
-    EXPECTATIONS_DIR and the latest actuals from skia-autogen.
+    """ Create or update self._results, based on the latest expectations and
+    actuals.
 
     We hold self.results_rlock while we do this, to guarantee that no other
     thread attempts to update either self._results or the underlying files at
@@ -194,9 +217,14 @@ class Server(object):
     with self.results_rlock:
       if invalidate:
         self._results = None
-      logging.info('Updating actual GM results in %s from SVN repo %s ...' % (
-          self._actuals_dir, ACTUALS_SVN_REPO))
-      self._actuals_repo.Update('.')
+      if self._actuals_repo_url:
+        logging.info(
+            'Updating actual GM results in %s to revision %s from repo %s ...'
+            % (
+                self._actuals_dir, self._actuals_repo_revision,
+                self._actuals_repo_url))
+        self._actuals_repo.Update(
+            path='.', revision=self._actuals_repo_revision)
 
       # We only update the expectations dir if the server was run with a
       # nonzero --reload argument; otherwise, we expect the user to maintain
@@ -212,13 +240,16 @@ class Server(object):
       if self._reload_seconds:
         logging.info(
             'Updating expected GM results in %s by syncing Skia repo ...' %
-            EXPECTATIONS_DIR)
+            compare_to_expectations.DEFAULT_EXPECTATIONS_DIR)
         _run_command(['gclient', 'sync'], TRUNK_DIRECTORY)
 
-      self._results = results.Results(
+      self._results = compare_to_expectations.Results(
           actuals_root=self._actuals_dir,
-          expected_root=EXPECTATIONS_DIR,
-          generated_images_root=GENERATED_IMAGES_ROOT)
+          generated_images_root=os.path.join(
+              PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR,
+              GENERATED_IMAGES_SUBDIR),
+          diff_base_url=posixpath.join(
+              os.pardir, STATIC_CONTENTS_SUBDIR, GENERATED_IMAGES_SUBDIR))
 
   def _result_loader(self, reload_seconds=0):
     """ Call self.update_results(), either once or periodically.
@@ -269,10 +300,10 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     try:
       logging.debug('do_GET: path="%s"' % self.path)
       if self.path == '' or self.path == '/' or self.path == '/index.html' :
-        self.redirect_to('/static/index.html')
+        self.redirect_to('/%s/index.html' % STATIC_CONTENTS_SUBDIR)
         return
       if self.path == '/favicon.ico' :
-        self.redirect_to('/static/favicon.ico')
+        self.redirect_to('/%s/favicon.ico' % STATIC_CONTENTS_SUBDIR)
         return
 
       # All requests must be of this form:
@@ -283,7 +314,7 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       (dispatcher_name, remainder) = PATHSPLIT_RE.match(normpath).groups()
       dispatchers = {
           'results': self.do_GET_results,
-          'static': self.do_GET_static,
+           STATIC_CONTENTS_SUBDIR: self.do_GET_static,
       }
       dispatcher = dispatchers[dispatcher_name]
       dispatcher(remainder)
@@ -291,14 +322,14 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_error(404)
       raise
 
-  def do_GET_results(self, type):
+  def do_GET_results(self, results_type):
     """ Handle a GET request for GM results.
 
     Args:
-      type: string indicating which set of results to return;
-            must be one of the results.RESULTS_* constants
+      results_type: string indicating which set of results to return;
+            must be one of the results_mod.RESULTS_* constants
     """
-    logging.debug('do_GET_results: sending results of type "%s"' % type)
+    logging.debug('do_GET_results: sending results of type "%s"' % results_type)
     # Since we must make multiple calls to the Results object, grab a
     # reference to it in case it is updated to point at a new Results
     # object within another thread.
@@ -309,70 +340,37 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     # the handler's .server instance variable.
     results_obj = _SERVER.results
     if results_obj:
-      response_dict = self.package_results(results_obj, type)
+      response_dict = results_obj.get_packaged_results_of_type(
+          results_type=results_type, reload_seconds=_SERVER.reload_seconds,
+          is_editable=_SERVER.is_editable, is_exported=_SERVER.is_exported)
     else:
       now = int(time.time())
       response_dict = {
-          'header': {
-              'resultsStillLoading': True,
-              'timeUpdated': now,
-              'timeNextUpdateAvailable': now + RELOAD_INTERVAL_UNTIL_READY,
+          results_mod.KEY__HEADER: {
+              results_mod.KEY__HEADER__SCHEMA_VERSION: (
+                  results_mod.REBASELINE_SERVER_SCHEMA_VERSION_NUMBER),
+              results_mod.KEY__HEADER__IS_STILL_LOADING: True,
+              results_mod.KEY__HEADER__TIME_UPDATED: now,
+              results_mod.KEY__HEADER__TIME_NEXT_UPDATE_AVAILABLE: (
+                  now + RELOAD_INTERVAL_UNTIL_READY),
           },
       }
     self.send_json_dict(response_dict)
 
-  def package_results(self, results_obj, type):
-    """ Given a nonempty "results" object, package it as a response_dict
-    as needed within do_GET_results.
-
-    Args:
-      results_obj: nonempty "results" object
-      type: string indicating which set of results to return;
-            must be one of the results.RESULTS_* constants
-    """
-    response_dict = results_obj.get_results_of_type(type)
-    time_updated = results_obj.get_timestamp()
-    response_dict['header'] = {
-        # Timestamps:
-        # 1. when this data was last updated
-        # 2. when the caller should check back for new data (if ever)
-        #
-        # We only return these timestamps if the --reload argument was passed;
-        # otherwise, we have no idea when the expectations were last updated
-        # (we allow the user to maintain her own expectations as she sees fit).
-        'timeUpdated': time_updated if _SERVER.reload_seconds else None,
-        'timeNextUpdateAvailable': (
-            (time_updated+_SERVER.reload_seconds) if _SERVER.reload_seconds
-            else None),
-
-        # The type we passed to get_results_of_type()
-        'type': type,
-
-        # Hash of testData, which the client must return with any edits--
-        # this ensures that the edits were made to a particular dataset.
-        'dataHash': str(hash(repr(response_dict['testData']))),
-
-        # Whether the server will accept edits back.
-        'isEditable': _SERVER.is_editable,
-
-        # Whether the service is accessible from other hosts.
-        'isExported': _SERVER.is_exported,
-    }
-    return response_dict
-
   def do_GET_static(self, path):
-    """ Handle a GET request for a file under the 'static' directory.
-    Only allow serving of files within the 'static' directory that is a
+    """ Handle a GET request for a file under STATIC_CONTENTS_SUBDIR .
+    Only allow serving of files within STATIC_CONTENTS_SUBDIR that is a
     filesystem sibling of this script.
 
     Args:
-      path: path to file (under static directory) to retrieve
+      path: path to file (within STATIC_CONTENTS_SUBDIR) to retrieve
     """
     # Strip arguments ('?resultsToLoad=all') from the path
     path = urlparse.urlparse(path).path
 
     logging.debug('do_GET_static: sending file "%s"' % path)
-    static_dir = os.path.realpath(os.path.join(PARENT_DIRECTORY, 'static'))
+    static_dir = os.path.realpath(os.path.join(
+        PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR))
     full_path = os.path.realpath(os.path.join(static_dir, path))
     if full_path.startswith(static_dir):
       self.send_file(full_path)
@@ -406,19 +404,15 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     format:
 
     {
-      'oldResultsType': 'all',    # type of results that the client loaded
-                                  # and then made modifications to
-      'oldResultsHash': 39850913, # hash of results when the client loaded them
-                                  # (ensures that the client and server apply
-                                  # modifications to the same base)
-      'modifications': [
-        {
-          'builder': 'Test-Android-Nexus10-MaliT604-Arm7-Debug',
-          'test': 'strokerect',
-          'config': 'gpu',
-          'expectedHashType': 'bitmap-64bitMD5',
-          'expectedHashDigest': '1707359671708613629',
-        },
+      KEY__EDITS__OLD_RESULTS_TYPE: 'all',  # type of results that the client
+                                            # loaded and then made
+                                            # modifications to
+      KEY__EDITS__OLD_RESULTS_HASH: 39850913, # hash of results when the client
+                                              # loaded them (ensures that the
+                                              # client and server apply
+                                              # modifications to the same base)
+      KEY__EDITS__MODIFICATIONS: [
+        # as needed by compare_to_expectations.edit_expectations()
         ...
       ],
     }
@@ -445,15 +439,15 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     # no other thread updates expectations (from the Skia repo) while we are
     # updating them (using the info we received from the client).
     with _SERVER.results_rlock:
-      oldResultsType = data['oldResultsType']
+      oldResultsType = data[KEY__EDITS__OLD_RESULTS_TYPE]
       oldResults = _SERVER.results.get_results_of_type(oldResultsType)
-      oldResultsHash = str(hash(repr(oldResults['testData'])))
-      if oldResultsHash != data['oldResultsHash']:
+      oldResultsHash = str(hash(repr(oldResults[imagepairset.KEY__IMAGEPAIRS])))
+      if oldResultsHash != data[KEY__EDITS__OLD_RESULTS_HASH]:
         raise Exception('results of type "%s" changed while the client was '
                         'making modifications. The client should reload the '
                         'results and submit the modifications again.' %
                         oldResultsType)
-      _SERVER.results.edit_expectations(data['modifications'])
+      _SERVER.results.edit_expectations(data[KEY__EDITS__MODIFICATIONS])
 
     # Read the updated results back from disk.
     # We can do this in a separate thread; we should return our success message
@@ -518,6 +512,18 @@ def main():
                           'actual GM results. If this directory does not '
                           'exist, it will be created. Defaults to %(default)s'),
                     default=DEFAULT_ACTUALS_DIR)
+  parser.add_argument('--actuals-repo',
+                    help=('URL of SVN repo to download actual-results.json '
+                          'files from. Defaults to %(default)s ; if set to '
+                          'empty string, just compare to actual-results '
+                          'already found in ACTUALS_DIR.'),
+                    default=DEFAULT_ACTUALS_REPO_URL)
+  parser.add_argument('--actuals-revision',
+                    help=('revision of actual-results.json files to process. '
+                          'Defaults to %(default)s .  Beware of setting this '
+                          'argument in conjunction with --editable; you '
+                          'probably only want to edit results at HEAD.'),
+                    default=DEFAULT_ACTUALS_REPO_REVISION)
   parser.add_argument('--editable', action='store_true',
                       help=('Allow HTTP clients to submit new baselines.'))
   parser.add_argument('--export', action='store_true',
@@ -541,6 +547,8 @@ def main():
   args = parser.parse_args()
   global _SERVER
   _SERVER = Server(actuals_dir=args.actuals_dir,
+                   actuals_repo_revision=args.actuals_revision,
+                   actuals_repo_url=args.actuals_repo,
                    port=args.port, export=args.export, editable=args.editable,
                    reload_seconds=args.reload)
   _SERVER.run()

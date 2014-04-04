@@ -4,6 +4,7 @@ Created on May 19, 2011
 @author: bungeman
 '''
 
+import os
 import re
 import math
 
@@ -38,19 +39,25 @@ TILE_LAYOUT_RE_COMPILED = re.compile(TILE_LAYOUT_RE)
 
 class BenchDataPoint:
     """A single data point produced by bench.
-
-    (str, str, str, float, {str:str}, str, [floats])"""
+    """
     def __init__(self, bench, config, time_type, time, settings,
-                 tile_layout='', per_tile_values=[]):
+                 tile_layout='', per_tile_values=[], per_iter_time=[]):
+        # string name of the benchmark to measure
         self.bench = bench
+        # string name of the configurations to run
         self.config = config
+        # type of the timer in string: '' (walltime), 'c' (cpu) or 'g' (gpu)
         self.time_type = time_type
+        # float number of the bench time value
         self.time = time
+        # dictionary of the run settings
         self.settings = settings
-        # how tiles cover the whole picture. '5x3' means 5 columns and 3 rows.
+        # how tiles cover the whole picture: '5x3' means 5 columns and 3 rows
         self.tile_layout = tile_layout
-        # list of per_tile bench values, if applicable
+        # list of float for per_tile bench values, if applicable
         self.per_tile_values = per_tile_values
+        # list of float for per-iteration bench time, if applicable
+        self.per_iter_time = per_iter_time
 
     def __repr__(self):
         return "BenchDataPoint(%s, %s, %s, %s, %s)" % (
@@ -109,7 +116,7 @@ class _ListAlgorithm(object):
         return self._rep
 
 def _ParseAndStoreTimes(config_re_compiled, is_per_tile, line, bench,
-                        value_dic, layout_dic, representation=None):
+                        value_dic, layout_dic):
     """Parses given bench time line with regex and adds data to value_dic.
 
     config_re_compiled: precompiled regular expression for parsing the config
@@ -120,7 +127,7 @@ def _ParseAndStoreTimes(config_re_compiled, is_per_tile, line, bench,
     bench: name of bench for the time values.
     value_dic: dictionary to store bench values. See bench_dic in parse() below.
     layout_dic: dictionary to store tile layouts. See parse() for descriptions.
-    representation: should match one of the ALGORITHM_XXX types."""
+    """
 
     for config in config_re_compiled.finditer(line):
         current_config = config.group(1)
@@ -137,9 +144,42 @@ def _ParseAndStoreTimes(config_re_compiled, is_per_tile, line, bench,
                      new_time.group(2).strip().split(',')]
             value_dic.setdefault(bench, {}).setdefault(
                 current_config, {}).setdefault(current_time_type, []).append(
-                    _ListAlgorithm(iters, representation).compute())
+                    iters)
             layout_dic.setdefault(bench, {}).setdefault(
                 current_config, {}).setdefault(current_time_type, tile_layout)
+
+def parse_skp_bench_data(directory, revision, rep, default_settings=None):
+    """Parses all the skp bench data in the given directory.
+
+    Args:
+      directory: string of path to input data directory.
+      revision: git hash revision that matches the data to process.
+      rep: bench representation algorithm, see bench_util.py.
+      default_settings: dictionary of other run settings. See writer.option() in
+          bench/benchmain.cpp.
+
+    Returns:
+      A list of BenchDataPoint objects.
+    """
+    revision_data_points = []
+    file_list = os.listdir(directory)
+    file_list.sort()
+    for bench_file in file_list:
+        scalar_type = None
+        # Scalar type, if any, is in the bench filename after 'scalar_'.
+        if (bench_file.startswith('bench_' + revision + '_data_')):
+            if bench_file.find('scalar_') > 0:
+                components = bench_file.split('_')
+                scalar_type = components[components.index('scalar') + 1]
+        else:  # Skips non skp bench files.
+            continue
+
+        with open('/'.join([directory, bench_file]), 'r') as file_handle:
+          settings = dict(default_settings or {})
+          settings['scalar'] = scalar_type
+          revision_data_points.extend(parse(settings, file_handle, rep))
+
+    return revision_data_points
 
 # TODO(bensong): switch to reading JSON output when available. This way we don't
 # need the RE complexities.
@@ -151,7 +191,11 @@ def parse(settings, lines, representation=None):
 
     benches = []
     current_bench = None
-    bench_dic = {}  # [bench][config][time_type] -> [list of bench values]
+    # [bench][config][time_type] -> [[per-iter values]] where per-tile config
+    # has per-iter value list for each tile [[<tile1_iter1>,<tile1_iter2>,...],
+    # [<tile2_iter1>,<tile2_iter2>,...],...], while non-per-tile config only
+    # contains one list of iterations [[iter1, iter2, ...]].
+    bench_dic = {}
     # [bench][config][time_type] -> tile_layout
     layout_dic = {}
 
@@ -176,30 +220,42 @@ def parse(settings, lines, representation=None):
         if current_bench:
             if line.startswith('  tile_') :
                 _ParseAndStoreTimes(TILE_RE_COMPILED, True, line, current_bench,
-                                    bench_dic, layout_dic, representation)
+                                    bench_dic, layout_dic)
             else:
                 _ParseAndStoreTimes(CONFIG_RE_COMPILED, False, line,
-                                    current_bench,
-                                    bench_dic, layout_dic, representation)
+                                    current_bench, bench_dic, layout_dic)
 
-    # append benches to list, use the total time as final bench value.
+    # append benches to list
     for bench in bench_dic:
         for config in bench_dic[bench]:
             for time_type in bench_dic[bench][config]:
                 tile_layout = ''
-                per_tile_values = []
+                per_tile_values = []  # empty for non-per-tile configs
+                per_iter_time = []  # empty for per-tile configs
+                bench_summary = None  # a single final bench value
                 if len(bench_dic[bench][config][time_type]) > 1:
-                    # per-tile values, extract tile_layout
-                    per_tile_values = bench_dic[bench][config][time_type]
+                    # per-tile config; compute representation for each tile
+                    per_tile_values = [
+                        _ListAlgorithm(iters, representation).compute()
+                            for iters in bench_dic[bench][config][time_type]]
+                    # use sum of each tile representation for total bench value
+                    bench_summary = sum(per_tile_values)
+                    # extract tile layout
                     tile_layout = layout_dic[bench][config][time_type]
+                else:
+                    # get the list of per-iteration values
+                    per_iter_time = bench_dic[bench][config][time_type][0]
+                    bench_summary = _ListAlgorithm(
+                        per_iter_time, representation).compute()
                 benches.append(BenchDataPoint(
                     bench,
                     config,
                     time_type,
-                    sum(bench_dic[bench][config][time_type]),
+                    bench_summary,
                     settings,
                     tile_layout,
-                    per_tile_values))
+                    per_tile_values,
+                    per_iter_time))
 
     return benches
 

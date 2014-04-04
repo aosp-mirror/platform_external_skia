@@ -50,6 +50,7 @@
 #include "SkOffsetImageFilter.h"
 #include "SkOnce.h"
 #include "SkPerlinNoiseShader.h"
+#include "SkPictureImageFilter.h"
 #include "SkPixelXorXfermode.h"
 #include "SkRectShaderImageFilter.h"
 #include "SkResizeImageFilter.h"
@@ -57,6 +58,7 @@
 #include "SkTableColorFilter.h"
 #include "SkTestImageFilters.h"
 #include "SkTileImageFilter.h"
+#include "SkMatrixImageFilter.h"
 #include "SkXfermodeImageFilter.h"
 
 static void InitializeFlattenables(int*) {
@@ -88,12 +90,14 @@ static void InitializeFlattenables(int*) {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLine2DPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPath2DPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPerlinNoiseShader)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPictureImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPixelXorXfermode)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkRectShaderImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkResizeImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkStippleMaskFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkSumPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkTileImageFilter)
+    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMatrixImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkXfermodeImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMagnifierImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMatrixConvolutionImageFilter)

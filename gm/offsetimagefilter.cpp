@@ -9,7 +9,7 @@
 #include "SkOffsetImageFilter.h"
 #include "SkBitmapSource.h"
 
-#define WIDTH 400
+#define WIDTH 600
 #define HEIGHT 100
 #define MARGIN 12
 
@@ -63,14 +63,26 @@ protected:
         return make_isize(WIDTH, HEIGHT);
     }
 
-    void drawClippedBitmap(SkCanvas* canvas, const SkBitmap& bitmap, const SkPaint& paint,
-                           SkScalar x, SkScalar y) {
+    void drawClippedBitmap(SkCanvas* canvas, const SkBitmap& bitmap, const SkPaint& paint, SkScalar scale, const SkIRect& cropRect) {
         canvas->save();
-        canvas->translate(x, y);
-        canvas->clipRect(SkRect::MakeXYWH(0, 0,
-            SkIntToScalar(bitmap.width()), SkIntToScalar(bitmap.height())));
+        SkRect clipRect = SkRect::MakeWH(
+            SkIntToScalar(bitmap.width()), SkIntToScalar(bitmap.height()));
+        canvas->clipRect(clipRect);
+        canvas->scale(scale, scale);
         canvas->drawBitmap(bitmap, 0, 0, &paint);
         canvas->restore();
+        SkPaint strokePaint;
+        strokePaint.setStyle(SkPaint::kStroke_Style);
+        strokePaint.setColor(SK_ColorRED);
+
+        // Draw a boundary rect around the intersection of the clip rect
+        // and crop rect.
+        SkMatrix scaleMatrix;
+        scaleMatrix.setScale(scale, scale);
+        SkRect cropRectFloat;
+        scaleMatrix.mapRect(&cropRectFloat, SkRect::Make(cropRect));
+        clipRect.intersect(cropRectFloat);
+        canvas->drawRect(clipRect, strokePaint);
     }
 
     virtual void onDraw(SkCanvas* canvas) {
@@ -82,7 +94,6 @@ protected:
         canvas->clear(0x00000000);
         SkPaint paint;
 
-        int x = 0, y = 0;
         for (int i = 0; i < 4; i++) {
             SkBitmap* bitmap = (i & 0x01) ? &fCheckerboard : &fBitmap;
             SkIRect cropRect = SkIRect::MakeXYWH(i * 12,
@@ -90,19 +101,22 @@ protected:
                                                  bitmap->width() - i * 8,
                                                  bitmap->height() - i * 12);
             SkImageFilter::CropRect rect(SkRect::Make(cropRect));
-            SkAutoTUnref<SkImageFilter> tileInput(SkNEW_ARGS(SkBitmapSource, (*bitmap)));
+            SkAutoTUnref<SkImageFilter> tileInput(SkBitmapSource::Create(*bitmap));
             SkScalar dx = SkIntToScalar(i*5);
             SkScalar dy = SkIntToScalar(i*10);
-            SkAutoTUnref<SkImageFilter> filter(SkNEW_ARGS(
-                SkOffsetImageFilter, (dx, dy, tileInput, &rect)));
+            SkAutoTUnref<SkImageFilter> filter(
+                SkOffsetImageFilter::Create(dx, dy, tileInput, &rect));
             paint.setImageFilter(filter);
-            drawClippedBitmap(canvas, *bitmap, paint, SkIntToScalar(x), SkIntToScalar(y));
-            x += bitmap->width() + MARGIN;
-            if (x + bitmap->width() > WIDTH) {
-                x = 0;
-                y += bitmap->height() + MARGIN;
-            }
+            drawClippedBitmap(canvas, *bitmap, paint, SK_Scalar1, cropRect);
+            canvas->translate(SkIntToScalar(bitmap->width() + MARGIN), 0);
         }
+
+        SkIRect cropRect = SkIRect::MakeXYWH(0, 0, 100, 100);
+        SkImageFilter::CropRect rect(SkRect::Make(cropRect));
+        SkAutoTUnref<SkImageFilter> filter(
+            SkOffsetImageFilter::Create(SkIntToScalar(-5), SkIntToScalar(-10), NULL, &rect));
+        paint.setImageFilter(filter);
+        drawClippedBitmap(canvas, fBitmap, paint, SkIntToScalar(2), cropRect);
     }
 private:
     typedef GM INHERITED;

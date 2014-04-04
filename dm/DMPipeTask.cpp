@@ -38,7 +38,7 @@ PipeTask::PipeTask(const Task& parent,
                    SkBitmap reference,
                    bool crossProcess,
                    bool sharedAddressSpace)
-    : Task(parent)
+    : CpuTask(parent)
     , fFlags(get_flags(crossProcess, sharedAddressSpace))
     , fName(UnderJoin(parent.name().c_str(), get_name(fFlags)))
     , fGM(gm)
@@ -47,7 +47,7 @@ PipeTask::PipeTask(const Task& parent,
 
 void PipeTask::draw() {
     SkBitmap bitmap;
-    SetupBitmap(fReference.config(), fGM.get(), &bitmap);
+    SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
 
     SkCanvas canvas(bitmap);
     PipeController pipeController(&canvas, &SkImageDecoder::DecodeMemory);

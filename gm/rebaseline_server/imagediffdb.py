@@ -31,7 +31,7 @@ sys.path.append(
                         'tools'))
 import find_run_binary
 
-SKPDIFF_BINARY_NAME = 'skpdiff'
+SKPDIFF_BINARY = find_run_binary.find_path_to_program('skpdiff')
 
 DEFAULT_IMAGE_SUFFIX = '.png'
 DEFAULT_IMAGES_SUBDIR = 'images'
@@ -42,6 +42,14 @@ DIFFS_SUBDIR = 'diffs'
 WHITEDIFFS_SUBDIR = 'whitediffs'
 
 VALUES_PER_BAND = 256
+
+# Keys used within DiffRecord dictionary representations.
+# NOTE: Keep these in sync with static/constants.js
+KEY__DIFFERENCE_DATA__MAX_DIFF_PER_CHANNEL = 'maxDiffPerChannel'
+KEY__DIFFERENCE_DATA__NUM_DIFF_PIXELS = 'numDifferingPixels'
+KEY__DIFFERENCE_DATA__PERCENT_DIFF_PIXELS = 'percentDifferingPixels'
+KEY__DIFFERENCE_DATA__PERCEPTUAL_DIFF = 'perceptualDifference'
+KEY__DIFFERENCE_DATA__WEIGHTED_DIFF = 'weightedDiffMeasure'
 
 
 class DiffRecord(object):
@@ -83,14 +91,26 @@ class DiffRecord(object):
     # TODO(rmistry): Add a parameter that makes _download_and_open_image raise
     # an exception if images are not found locally (instead of trying to
     # download them).
-    expected_image = _download_and_open_image(
-        os.path.join(storage_root, expected_images_subdir,
-                     str(expected_image_locator) + image_suffix),
-        expected_image_url)
-    actual_image = _download_and_open_image(
-        os.path.join(storage_root, actual_images_subdir,
-                     str(actual_image_locator) + image_suffix),
-        actual_image_url)
+    expected_image_file = os.path.join(
+        storage_root, expected_images_subdir,
+        str(expected_image_locator) + image_suffix)
+    actual_image_file = os.path.join(
+        storage_root, actual_images_subdir,
+        str(actual_image_locator) + image_suffix)
+    try:
+      expected_image = _download_and_open_image(
+          expected_image_file, expected_image_url)
+    except Exception:
+      logging.exception('unable to download expected_image_url %s to file %s' %
+                        (expected_image_url, expected_image_file))
+      raise
+    try:
+      actual_image = _download_and_open_image(
+          actual_image_file, actual_image_url)
+    except Exception:
+      logging.exception('unable to download actual_image_url %s to file %s' %
+                        (actual_image_url, actual_image_file))
+      raise
 
     # Generate the diff image (absolute diff at each pixel) and
     # max_diff_per_channel.
@@ -115,13 +135,12 @@ class DiffRecord(object):
     skpdiff_csv_dir = tempfile.mkdtemp()
     try:
       skpdiff_csv_output = os.path.join(skpdiff_csv_dir, 'skpdiff-output.csv')
-      skpdiff_binary = find_run_binary.find_path_to_program(SKPDIFF_BINARY_NAME)
       expected_img = os.path.join(storage_root, expected_images_subdir,
                                   str(expected_image_locator) + image_suffix)
       actual_img = os.path.join(storage_root, actual_images_subdir,
                                 str(actual_image_locator) + image_suffix)
       find_run_binary.run_command(
-          [skpdiff_binary, '-p', expected_img, actual_img,
+          [SKPDIFF_BINARY, '-p', expected_img, actual_img,
            '--csv', skpdiff_csv_output, '-d', 'perceptual'])
       with contextlib.closing(open(skpdiff_csv_output)) as csv_file:
         for row in csv.DictReader(csv_file):
@@ -172,7 +191,10 @@ class DiffRecord(object):
 
   def get_weighted_diff_measure(self):
     """Returns a weighted measure of image diffs, as a float between 0 and 100
-    (inclusive)."""
+    (inclusive).
+
+    TODO(epoger): Delete this function, now that we have perceptual diff?
+    """
     return self._weighted_diff_measure
 
   def get_max_diff_per_channel(self):
@@ -184,10 +206,12 @@ class DiffRecord(object):
     """Returns a dictionary representation of this DiffRecord, as needed when
     constructing the JSON representation."""
     return {
-        'numDifferingPixels': self._num_pixels_differing,
-        'percentDifferingPixels': self.get_percent_pixels_differing(),
-        'weightedDiffMeasure': self.get_weighted_diff_measure(),
-        'maxDiffPerChannel': self._max_diff_per_channel,
+        KEY__DIFFERENCE_DATA__NUM_DIFF_PIXELS: self._num_pixels_differing,
+        KEY__DIFFERENCE_DATA__PERCENT_DIFF_PIXELS:
+            self.get_percent_pixels_differing(),
+        KEY__DIFFERENCE_DATA__WEIGHTED_DIFF: self.get_weighted_diff_measure(),
+        KEY__DIFFERENCE_DATA__MAX_DIFF_PER_CHANNEL: self._max_diff_per_channel,
+        KEY__DIFFERENCE_DATA__PERCEPTUAL_DIFF: self._perceptual_difference,
     }
 
 
@@ -265,6 +289,8 @@ def _calculate_weighted_diff_metric(histogram, num_pixels):
   pixel between two images), calculate the weighted diff metric (a
   stab at how different the two images really are).
 
+  TODO(epoger): Delete this function, now that we have perceptual diff?
+
   Args:
     histogram: PIL histogram of a per-channel diff between two images
     num_pixels: integer; the total number of pixels in the diff image
@@ -274,8 +300,6 @@ def _calculate_weighted_diff_metric(histogram, num_pixels):
   # TODO(epoger): As a wild guess at an appropriate metric, weight each
   # different pixel by the square of its delta value.  (The more different
   # a pixel is from its expectation, the more we care about it.)
-  # In the long term, we will probably use some metric generated by
-  # skpdiff anyway.
   assert(len(histogram) % VALUES_PER_BAND == 0)
   num_bands = len(histogram) / VALUES_PER_BAND
   max_diff = num_pixels * num_bands * (VALUES_PER_BAND - 1)**2
@@ -283,6 +307,7 @@ def _calculate_weighted_diff_metric(histogram, num_pixels):
   for index in xrange(len(histogram)):
     total_diff += histogram[index] * (index % VALUES_PER_BAND)**2
   return float(100 * total_diff) / max_diff
+
 
 def _max_per_band(histogram):
   """Given the histogram of an image, return the maximum value of each band
@@ -310,6 +335,7 @@ def _max_per_band(histogram):
         break
   return max_per_band
 
+
 def _generate_image_diff(image1, image2):
   """Wrapper for ImageChops.difference(image1, image2) that will handle some
   errors automatically, or at least yield more useful error messages.
@@ -331,6 +357,7 @@ def _generate_image_diff(image1, image2):
         repr(image1), repr(image2)))
     raise
 
+
 def _download_and_open_image(local_filepath, url):
   """Open the image at local_filepath; if there is no file at that path,
   download it from url to that path and then open it.
@@ -348,6 +375,7 @@ def _download_and_open_image(local_filepath, url):
         shutil.copyfileobj(fsrc=url_handle, fdst=file_handle)
   return _open_image(local_filepath)
 
+
 def _open_image(filepath):
   """Wrapper for Image.open(filepath) that yields more useful error messages.
 
@@ -359,8 +387,12 @@ def _open_image(filepath):
   try:
     return Image.open(filepath)
   except IOError:
-    logging.error('IOError loading image file %s' % filepath)
+    # If we are unable to load an image from the file, delete it from disk
+    # and we will try to fetch it again next time.  Fixes http://skbug.com/2247
+    logging.error('IOError loading image file %s ; deleting it.' % filepath)
+    os.remove(filepath)
     raise
+
 
 def _save_image(image, filepath, format='PNG'):
   """Write an image to disk, creating any intermediate directories as needed.
@@ -374,6 +406,7 @@ def _save_image(image, filepath, format='PNG'):
   _mkdir_unless_exists(os.path.dirname(filepath))
   image.save(filepath, format)
 
+
 def _mkdir_unless_exists(path):
   """Unless path refers to an already-existing directory, create it.
 
@@ -382,6 +415,7 @@ def _mkdir_unless_exists(path):
   """
   if not os.path.isdir(path):
     os.makedirs(path)
+
 
 def _sanitize_locator(locator):
   """Returns a sanitized version of a locator (one in which we know none of the
@@ -392,9 +426,13 @@ def _sanitize_locator(locator):
   """
   return DISALLOWED_FILEPATH_CHAR_REGEX.sub('_', str(locator))
 
+
 def _get_difference_locator(expected_image_locator, actual_image_locator):
   """Returns the locator string used to look up the diffs between expected_image
   and actual_image.
+
+  We must keep this function in sync with getImageDiffRelativeUrl() in
+  static/loader.js
 
   Args:
     expected_image_locator: locator string pointing at expected image

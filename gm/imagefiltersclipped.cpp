@@ -14,7 +14,13 @@
 #include "SkGradientShader.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
+#include "SkPerlinNoiseShader.h"
+#include "SkRectShaderImageFilter.h"
+#include "SkMatrixImageFilter.h"
 #include "SkScalar.h"
+
+#define RESIZE_FACTOR_X SkIntToScalar(2)
+#define RESIZE_FACTOR_Y SkIntToScalar(5)
 
 namespace skiagm {
 
@@ -81,21 +87,27 @@ protected:
         }
         canvas->clear(0x00000000);
 
-        SkAutoTUnref<SkImageFilter> gradient(new SkBitmapSource(fGradientCircle));
-        SkAutoTUnref<SkImageFilter> checkerboard(new SkBitmapSource(fCheckerboard));
+        SkAutoTUnref<SkImageFilter> gradient(SkBitmapSource::Create(fGradientCircle));
+        SkAutoTUnref<SkImageFilter> checkerboard(SkBitmapSource::Create(fCheckerboard));
+        SkAutoTUnref<SkShader> noise(SkPerlinNoiseShader::CreateFractalNoise(
+            SkDoubleToScalar(0.1), SkDoubleToScalar(0.05), 1, 0));
+        SkMatrix resizeMatrix;
+        resizeMatrix.setScale(RESIZE_FACTOR_X, RESIZE_FACTOR_Y);
 
         SkImageFilter* filters[] = {
-            new SkBlurImageFilter(SkIntToScalar(12), SkIntToScalar(12)),
-            new SkDropShadowImageFilter(SkIntToScalar(10), SkIntToScalar(10), SkIntToScalar(3),
-                                        SK_ColorGREEN),
-            new SkDisplacementMapEffect(SkDisplacementMapEffect::kR_ChannelSelectorType,
-                                        SkDisplacementMapEffect::kR_ChannelSelectorType,
-                                        SkIntToScalar(12),
-                                        gradient.get(),
-                                        checkerboard.get()),
-            new SkDilateImageFilter(2, 2, checkerboard.get()),
-            new SkErodeImageFilter(2, 2, checkerboard.get()),
-            new SkOffsetImageFilter(SkIntToScalar(-16), SkIntToScalar(32)),
+            SkBlurImageFilter::Create(SkIntToScalar(12), SkIntToScalar(12)),
+            SkDropShadowImageFilter::Create(SkIntToScalar(10), SkIntToScalar(10), SkIntToScalar(3),
+                                            SK_ColorGREEN),
+            SkDisplacementMapEffect::Create(SkDisplacementMapEffect::kR_ChannelSelectorType,
+                                            SkDisplacementMapEffect::kR_ChannelSelectorType,
+                                            SkIntToScalar(12),
+                                            gradient.get(),
+                                            checkerboard.get()),
+            SkDilateImageFilter::Create(2, 2, checkerboard.get()),
+            SkErodeImageFilter::Create(2, 2, checkerboard.get()),
+            SkOffsetImageFilter::Create(SkIntToScalar(-16), SkIntToScalar(32)),
+            SkMatrixImageFilter::Create(resizeMatrix, SkPaint::kNone_FilterLevel),
+            SkRectShaderImageFilter::Create(noise),
         };
 
         SkRect r = SkRect::MakeWH(SkIntToScalar(64), SkIntToScalar(64));
@@ -113,8 +125,11 @@ protected:
                 paint.setAntiAlias(true);
                 canvas->save();
                 canvas->clipRect(bounds);
-                if (i == 5) {
+                if (5 == i) {
                     canvas->translate(SkIntToScalar(16), SkIntToScalar(-32));
+                } else if (6 == i) {
+                    canvas->scale(SkScalarInvert(RESIZE_FACTOR_X),
+                                  SkScalarInvert(RESIZE_FACTOR_Y));
                 }
                 canvas->drawCircle(r.centerX(), r.centerY(),
                                    SkScalarDiv(r.width()*2, SkIntToScalar(5)), paint);

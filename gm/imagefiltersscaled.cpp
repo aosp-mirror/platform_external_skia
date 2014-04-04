@@ -12,9 +12,15 @@
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkGradientShader.h"
+#include "SkLightingImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
+#include "SkPerlinNoiseShader.h"
+#include "SkRectShaderImageFilter.h"
+#include "SkMatrixImageFilter.h"
 #include "SkScalar.h"
+
+#define RESIZE_FACTOR SkIntToScalar(4)
 
 namespace skiagm {
 
@@ -30,7 +36,7 @@ protected:
     }
 
     virtual SkISize onISize() {
-        return make_isize(860, 500);
+        return make_isize(1428, 500);
     }
 
     void make_checkerboard() {
@@ -81,21 +87,39 @@ protected:
         }
         canvas->clear(0x00000000);
 
-        SkAutoTUnref<SkImageFilter> gradient(new SkBitmapSource(fGradientCircle));
-        SkAutoTUnref<SkImageFilter> checkerboard(new SkBitmapSource(fCheckerboard));
+        SkAutoTUnref<SkImageFilter> gradient(SkBitmapSource::Create(fGradientCircle));
+        SkAutoTUnref<SkImageFilter> checkerboard(SkBitmapSource::Create(fCheckerboard));
+        SkAutoTUnref<SkShader> noise(SkPerlinNoiseShader::CreateFractalNoise(
+            SkDoubleToScalar(0.1), SkDoubleToScalar(0.05), 1, 0));
+
+        SkPoint3 pointLocation(0, 0, SkIntToScalar(10));
+        SkPoint3 spotLocation(SkIntToScalar(-10), SkIntToScalar(-10), SkIntToScalar(20));
+        SkPoint3 spotTarget(SkIntToScalar(40), SkIntToScalar(40), 0);
+        SkScalar spotExponent = SK_Scalar1;
+        SkScalar cutoffAngle = SkIntToScalar(15);
+        SkScalar kd = SkIntToScalar(2);
+        SkScalar surfaceScale = SkIntToScalar(1);
+        SkColor white(0xFFFFFFFF);
+        SkMatrix resizeMatrix;
+        resizeMatrix.setScale(RESIZE_FACTOR, RESIZE_FACTOR);
 
         SkImageFilter* filters[] = {
-            new SkBlurImageFilter(SkIntToScalar(4), SkIntToScalar(4)),
-            new SkDropShadowImageFilter(SkIntToScalar(5), SkIntToScalar(10), SkIntToScalar(3),
-                                        SK_ColorYELLOW),
-            new SkDisplacementMapEffect(SkDisplacementMapEffect::kR_ChannelSelectorType,
-                                        SkDisplacementMapEffect::kR_ChannelSelectorType,
-                                        SkIntToScalar(12),
-                                        gradient.get(),
-                                        checkerboard.get()),
-            new SkDilateImageFilter(1, 1, checkerboard.get()),
-            new SkErodeImageFilter(1, 1, checkerboard.get()),
-            new SkOffsetImageFilter(SkIntToScalar(32), 0),
+            SkBlurImageFilter::Create(SkIntToScalar(4), SkIntToScalar(4)),
+            SkDropShadowImageFilter::Create(SkIntToScalar(5), SkIntToScalar(10), SkIntToScalar(3),
+                                            SK_ColorYELLOW),
+            SkDisplacementMapEffect::Create(SkDisplacementMapEffect::kR_ChannelSelectorType,
+                                            SkDisplacementMapEffect::kR_ChannelSelectorType,
+                                            SkIntToScalar(12),
+                                            gradient.get(),
+                                            checkerboard.get()),
+            SkDilateImageFilter::Create(1, 1, checkerboard.get()),
+            SkErodeImageFilter::Create(1, 1, checkerboard.get()),
+            SkOffsetImageFilter::Create(SkIntToScalar(32), 0),
+            SkMatrixImageFilter::Create(resizeMatrix, SkPaint::kNone_FilterLevel),
+            SkRectShaderImageFilter::Create(noise),
+            SkLightingImageFilter::CreatePointLitDiffuse(pointLocation, white, surfaceScale, kd),
+            SkLightingImageFilter::CreateSpotLitDiffuse(spotLocation, spotTarget, spotExponent,
+                                                        cutoffAngle, white, surfaceScale, kd),
         };
 
         SkVector scales[] = {
@@ -122,6 +146,9 @@ protected:
                 canvas->scale(scales[j].fX, scales[j].fY);
                 if (5 == i) {
                     canvas->translate(SkIntToScalar(-32), 0);
+                } else if (6 == i) {
+                    canvas->scale(SkScalarInvert(RESIZE_FACTOR),
+                                  SkScalarInvert(RESIZE_FACTOR));
                 }
                 canvas->drawCircle(r.centerX(), r.centerY(),
                                    SkScalarDiv(r.width()*2, SkIntToScalar(5)), paint);

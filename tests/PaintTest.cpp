@@ -11,8 +11,11 @@
 #include "SkPaint.h"
 #include "SkPath.h"
 #include "SkRandom.h"
+#include "SkReadBuffer.h"
 #include "SkTypeface.h"
 #include "SkUtils.h"
+#include "SkWriteBuffer.h"
+#include "SkXfermode.h"
 #include "Test.h"
 
 static size_t uni_to_utf8(const SkUnichar src[], void* dst, int count) {
@@ -56,7 +59,11 @@ static int find_first_zero(const uint16_t glyphs[], int count) {
     return count;
 }
 
-static void test_cmap(skiatest::Reporter* reporter) {
+DEF_TEST(Paint_cmap, reporter) {
+    // need to implement charsToGlyphs on other backends (e.g. linux, win)
+    // before we can run this tests everywhere
+    return;
+
     static const int NGLYPHS = 64;
 
     SkUnichar src[NGLYPHS];
@@ -98,8 +105,7 @@ static void test_cmap(skiatest::Reporter* reporter) {
 
             REPORTER_ASSERT(reporter, NGLYPHS == nglyphs);
             REPORTER_ASSERT(reporter, index == first);
-            REPORTER_ASSERT(reporter,
-                        !memcmp(glyphs0, glyphs1, NGLYPHS * sizeof(uint16_t)));
+            REPORTER_ASSERT(reporter, 0 == memcmp(glyphs0, glyphs1, NGLYPHS * sizeof(uint16_t)));
             if (contains) {
                 REPORTER_ASSERT(reporter, NGLYPHS == first);
             } else {
@@ -110,7 +116,7 @@ static void test_cmap(skiatest::Reporter* reporter) {
 }
 
 // temparary api for bicubic, just be sure we can set/clear it
-static void test_filterlevel(skiatest::Reporter* reporter) {
+DEF_TEST(Paint_filterlevel, reporter) {
     SkPaint p0, p1;
 
     REPORTER_ASSERT(reporter,
@@ -134,7 +140,7 @@ static void test_filterlevel(skiatest::Reporter* reporter) {
     }
 }
 
-static void test_copy(skiatest::Reporter* reporter) {
+DEF_TEST(Paint_copy, reporter) {
     SkPaint paint;
     // set a few member variables
     paint.setStyle(SkPaint::kStrokeAndFill_Style);
@@ -156,7 +162,7 @@ static void test_copy(skiatest::Reporter* reporter) {
     uint32_t paintGenID = paint.getGenerationID();
     uint32_t copiedPaintGenID = copiedPaint.getGenerationID();
     REPORTER_ASSERT(reporter, paintGenID == copiedPaintGenID);
-    REPORTER_ASSERT(reporter, !memcmp(&paint, &copiedPaint, sizeof(paint)));
+    REPORTER_ASSERT(reporter, paint == copiedPaint);
 #endif
 
     // copy the paint using the equal operator and check they are the same
@@ -168,7 +174,7 @@ static void test_copy(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, paint.getGenerationID() == paintGenID);
     REPORTER_ASSERT(reporter, copiedPaint.getGenerationID() != copiedPaintGenID);
     copiedPaintGenID = copiedPaint.getGenerationID(); // reset to the new value
-    REPORTER_ASSERT(reporter, memcmp(&paint, &copiedPaint, sizeof(paint)));
+    REPORTER_ASSERT(reporter, paint == copiedPaint);  // operator== ignores fGenerationID
 #endif
 
     // clean the paint and check they are back to their initial states
@@ -182,14 +188,15 @@ static void test_copy(skiatest::Reporter* reporter) {
     // the reset function should increment the Generation ID
     REPORTER_ASSERT(reporter, paint.getGenerationID() != paintGenID);
     REPORTER_ASSERT(reporter, copiedPaint.getGenerationID() != copiedPaintGenID);
-    REPORTER_ASSERT(reporter, memcmp(&cleanPaint, &paint, sizeof(cleanPaint)));
-    REPORTER_ASSERT(reporter, memcmp(&cleanPaint, &copiedPaint, sizeof(cleanPaint)));
+    // operator== ignores fGenerationID
+    REPORTER_ASSERT(reporter, cleanPaint == paint);
+    REPORTER_ASSERT(reporter, cleanPaint == copiedPaint);
 #endif
 }
 
 // found and fixed for webkit: mishandling when we hit recursion limit on
 // mostly degenerate cubic flatness test
-static void regression_cubic(skiatest::Reporter* reporter) {
+DEF_TEST(Paint_regression_cubic, reporter) {
     SkPath path, stroke;
     SkPaint paint;
 
@@ -222,7 +229,7 @@ static void regression_cubic(skiatest::Reporter* reporter) {
 }
 
 // found and fixed for android: not initializing rect for string's of length 0
-static void regression_measureText(skiatest::Reporter* reporter) {
+DEF_TEST(Paint_regression_measureText, reporter) {
 
     SkPaint paint;
     paint.setTextSize(12.0f);
@@ -235,19 +242,39 @@ static void regression_measureText(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, r.isEmpty());
 }
 
-DEF_TEST(Paint, reporter) {
-    // TODO add general paint tests
-    test_copy(reporter);
+#define ASSERT(expr) REPORTER_ASSERT(r, expr)
 
-    // regression tests
-    regression_cubic(reporter);
-    regression_measureText(reporter);
+DEF_TEST(Paint_FlatteningTraits, r) {
+    SkPaint paint;
+    paint.setColor(0x00AABBCC);
+    paint.setTextScaleX(1.0f);  // Encoded despite being the default value.
+    paint.setTextSize(19);
+    paint.setXfermode(SkXfermode::Create(SkXfermode::kModulate_Mode))->unref();
+    paint.setLooper(NULL);  // Ignored.
 
-    test_filterlevel(reporter);
+    SkWriteBuffer writer;
+    SkPaint::FlatteningTraits::Flatten(writer, paint);
+    const size_t expectedBytesWritten = sizeof(void*) == 8 ? 48 : 40;
+    ASSERT(expectedBytesWritten == writer.bytesWritten());
 
-    // need to implement charsToGlyphs on other backends (e.g. linux, win)
-    // before we can run this tests everywhere
-    if (false) {
-       test_cmap(reporter);
-    }
+    const uint32_t* written = writer.getWriter32()->contiguousArray();
+    SkASSERT(written != NULL);
+    ASSERT(*written == ((1<<0) | (1<<2) | (1<<3) | (1<<9)));  // Dirty bits for our 4.
+
+    SkReadBuffer reader(written, writer.bytesWritten());
+    SkPaint other;
+    SkPaint::FlatteningTraits::Unflatten(reader, &other);
+    ASSERT(reader.offset() == writer.bytesWritten());
+
+    // No matter the encoding, these must always hold.
+    ASSERT(other.getColor()      == paint.getColor());
+    ASSERT(other.getTextScaleX() == paint.getTextScaleX());
+    ASSERT(other.getTextSize()   == paint.getTextSize());
+    ASSERT(other.getLooper()     == paint.getLooper());
+
+    // We have to be a little looser and compare just the modes.  Pointers might not be the same.
+    SkXfermode::Mode otherMode, paintMode;
+    ASSERT(other.getXfermode()->asMode(&otherMode));
+    ASSERT(paint.getXfermode()->asMode(&paintMode));
+    ASSERT(otherMode == paintMode);
 }

@@ -101,17 +101,12 @@
                   '../third_party/externals/libjpeg',
                 ],
               },
-              'conditions': [
-                [ 'skia_os != "win"', {
-                  'product_name': 'jpeg',
-                  'cflags': [
-                   '-Wno-main', # supresses warnings about naming things "main"
-                  ],
-                }],
+              'cflags': [
+                '-w', # supresses warnings
               ],
             },
           ],
-        }, {
+        }, {  ## use_system_libjpeg != 0
           'targets': [
             {
               'target_name': 'libjpeg',

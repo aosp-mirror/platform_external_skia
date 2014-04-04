@@ -53,7 +53,7 @@ public:
     static const int32_t kIdentityWideOpenStateID = 0;
     static const int kIdentityMatID = 0;
 
-    class MatrixClipState {
+    class MatrixClipState : public SkNoncopyable {
     public:
         class MatrixInfo {
         public:
@@ -62,29 +62,29 @@ public:
                 fMatrix.reset();
             }
 
-            bool preTranslate(SkScalar dx, SkScalar dy) {
+            void preTranslate(SkScalar dx, SkScalar dy) {
                 fMatrixID = -1;
-                return fMatrix.preTranslate(dx, dy);
+                fMatrix.preTranslate(dx, dy);
             }
 
-            bool preScale(SkScalar sx, SkScalar sy) {
+            void preScale(SkScalar sx, SkScalar sy) {
                 fMatrixID = -1;
-                return fMatrix.preScale(sx, sy);
+                fMatrix.preScale(sx, sy);
             }
 
-            bool preRotate(SkScalar degrees) {
+            void preRotate(SkScalar degrees) {
                 fMatrixID = -1;
-                return fMatrix.preRotate(degrees);
+                fMatrix.preRotate(degrees);
             }
 
-            bool preSkew(SkScalar sx, SkScalar sy) {
+            void preSkew(SkScalar sx, SkScalar sy) {
                 fMatrixID = -1;
-                return fMatrix.preSkew(sx, sy);
+                fMatrix.preSkew(sx, sy);
             }
 
-            bool preConcat(const SkMatrix& matrix) {
+            void preConcat(const SkMatrix& matrix) {
                 fMatrixID = -1;
-                return fMatrix.preConcat(matrix);
+                fMatrix.preConcat(matrix);
             }
 
             void setMatrix(const SkMatrix& matrix) {
@@ -104,6 +104,8 @@ public:
         private:
             SkMatrix fMatrix;
             int      fMatrixID;
+
+            typedef SkNoncopyable INHERITED;
         };
 
         class ClipInfo : public SkNoncopyable {
@@ -120,7 +122,6 @@ public:
                 newClip->fOp = op;
                 newClip->fDoAA = doAA;
                 newClip->fMatrixID = matrixID;
-                newClip->fOffset = kInvalidJumpOffset;
                 return false;
             }
 
@@ -134,7 +135,6 @@ public:
                 newClip->fOp = op;
                 newClip->fDoAA = doAA;
                 newClip->fMatrixID = matrixID;
-                newClip->fOffset = kInvalidJumpOffset;
                 return false;
             }
 
@@ -147,19 +147,10 @@ public:
                             int regionID,
                             SkRegion::Op op,
                             int matrixID);
-            void writeClip(int* curMatID,
-                           SkMatrixClipStateMgr* mgr,
-                           bool* overrideFirstOp);
-            void fillInSkips(SkWriter32* writer, int32_t restoreOffset);
+            void writeClip(int* curMatID, SkMatrixClipStateMgr* mgr);
 
-#ifdef SK_DEBUG
-            void checkOffsetNotEqual(int32_t offset) {
-                for (int i = 0; i < fClips.count(); ++i) {
-                    ClipOp& curClip = fClips[i];
-                    SkASSERT(offset != curClip.fOffset);
-                }
-            }
-#endif
+            SkDEBUGCODE(int numClips() const { return fClips.count(); })
+
         private:
             enum ClipType {
                 kRect_ClipType,
@@ -168,14 +159,12 @@ public:
                 kRegion_ClipType
             };
 
-            static const int kInvalidJumpOffset = -1;
-
             class ClipOp {
             public:
                 ClipType     fClipType;
 
                 union {
-                    SkRRect fRRect;        // also stores clipRect
+                    SkRRect fRRect;        // also stores clip rect
                     int     fPathID;
                     int     fRegionID;
                 } fGeom;
@@ -185,10 +174,6 @@ public:
 
                 // The CTM in effect when this clip call was issued
                 int          fMatrixID;
-
-                // The offset of this clipOp's "jump-to-offset" location in the skp.
-                // -1 means the offset hasn't been written.
-                int32_t      fOffset;
             };
 
             SkTDArray<ClipOp> fClips;
@@ -197,10 +182,10 @@ public:
         };
 
         MatrixClipState(MatrixClipState* prev, int flags)
-#ifdef SK_DEBUG
             : fPrev(prev)
-#endif
         {
+            fHasOpen = false;
+
             if (NULL == prev) {
                 fLayerID = 0;
 
@@ -210,6 +195,9 @@ public:
 
                 // The identity/wide-open-clip state is current by default
                 fMCStateID = kIdentityWideOpenStateID;
+#ifdef SK_DEBUG
+                fExpectedDepth = 1;
+#endif
             }
             else {
                 fLayerID = prev->fLayerID;
@@ -231,6 +219,9 @@ public:
                 // Initially a new save/saveLayer represents the same MC state
                 // as its predecessor.
                 fMCStateID = prev->fMCStateID;
+#ifdef SK_DEBUG
+                fExpectedDepth = prev->fExpectedDepth;
+#endif
             }
 
             fIsSaveLayer = false;
@@ -247,12 +238,16 @@ public:
         // Does this MC state represent a saveLayer call?
         bool         fIsSaveLayer;
 
-        // The next two fields are only valid when fIsSaveLayer is set.
-        int32_t      fSaveLayerBaseStateID;
-        bool         fSaveLayerBracketed;
+        // The next field is only valid when fIsSaveLayer is set.
+        SkTDArray<int>* fSavedSkipOffsets;
+
+        // Does the MC state have an open block in the skp?
+        bool         fHasOpen;
+
+        MatrixClipState* fPrev;
 
 #ifdef SK_DEBUG
-        MatrixClipState* fPrev; // debugging aid
+        int              fExpectedDepth;    // debugging aid
 #endif
 
         int32_t     fMCStateID;
@@ -290,29 +285,29 @@ public:
 
     void restore();
 
-    bool translate(SkScalar dx, SkScalar dy) {
+    void translate(SkScalar dx, SkScalar dy) {
         this->call(kMatrix_CallType);
-        return fCurMCState->fMatrixInfo->preTranslate(dx, dy);
+        fCurMCState->fMatrixInfo->preTranslate(dx, dy);
     }
 
-    bool scale(SkScalar sx, SkScalar sy) {
+    void scale(SkScalar sx, SkScalar sy) {
         this->call(kMatrix_CallType);
-        return fCurMCState->fMatrixInfo->preScale(sx, sy);
+        fCurMCState->fMatrixInfo->preScale(sx, sy);
     }
 
-    bool rotate(SkScalar degrees) {
+    void rotate(SkScalar degrees) {
         this->call(kMatrix_CallType);
-        return fCurMCState->fMatrixInfo->preRotate(degrees);
+        fCurMCState->fMatrixInfo->preRotate(degrees);
     }
 
-    bool skew(SkScalar sx, SkScalar sy) {
+    void skew(SkScalar sx, SkScalar sy) {
         this->call(kMatrix_CallType);
-        return fCurMCState->fMatrixInfo->preSkew(sx, sy);
+        fCurMCState->fMatrixInfo->preSkew(sx, sy);
     }
 
-    bool concat(const SkMatrix& matrix) {
+    void concat(const SkMatrix& matrix) {
         this->call(kMatrix_CallType);
-        return fCurMCState->fMatrixInfo->preConcat(matrix);
+        fCurMCState->fMatrixInfo->preConcat(matrix);
     }
 
     void setMatrix(const SkMatrix& matrix) {
@@ -347,17 +342,7 @@ public:
 
     bool call(CallType callType);
 
-    void fillInSkips(SkWriter32* writer, int32_t restoreOffset) {
-        // Since we write out the entire clip stack at each block start we
-        // need to update the skips for the entire stack each time too.
-        SkDeque::F2BIter iter(fMatrixClipStack);
-
-        for (const MatrixClipState* state = (const MatrixClipState*) iter.next();
-             state != NULL;
-             state = (const MatrixClipState*) iter.next()) {
-            state->fClipInfo->fillInSkips(writer, restoreOffset);
-        }
-    }
+    void fillInSkips(SkWriter32* writer, int32_t restoreOffset);
 
     void finish();
 
@@ -379,8 +364,24 @@ protected:
 
     // The MCStateID of the state currently in effect in the byte stream. 0 if none.
     int32_t          fCurOpenStateID;
+    // The skip offsets for the current open state. These are the locations in the
+    // skp that must be filled in when the current open state is closed. These are
+    // here rather then distributed across the MatrixClipState's because saveLayers
+    // can cause MC states to be nested.
+    SkTDArray<int32_t>  *fSkipOffsets;
 
     SkDEBUGCODE(void validate();)
+
+    int MCStackPush(SkCanvas::SaveFlags flags);
+
+    void addClipOffset(int offset) {
+        SkASSERT(NULL != fSkipOffsets);
+        SkASSERT(kIdentityWideOpenStateID != fCurOpenStateID);
+        SkASSERT(fCurMCState->fHasOpen);
+        SkASSERT(!fCurMCState->fIsSaveLayer);
+
+        *fSkipOffsets->append() = offset;
+    }
 
     void writeDeltaMat(int currentMatID, int desiredMatID);
     static int32_t   NewMCStateID();
@@ -398,6 +399,16 @@ protected:
         SkASSERT(index >= 0 && index < fMatrixDict.count());
         return fMatrixDict[index];
     }
+
+    bool isNestingMCState(int stateID);
+
+#ifdef SK_DEBUG
+    int fActualDepth;
+#endif
+
+    // save layers are nested within a specific MC state. This stack tracks
+    // the nesting MC state's ID as save layers are pushed and popped.
+    SkTDArray<int> fStateIDStack;
 };
 
 #endif

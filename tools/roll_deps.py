@@ -365,7 +365,8 @@ def git_cl_uploader(config, message, file_list):
     if config.reviewers_list:
         git_cl.append('--reviewers=%s' % config.reviewers_list)
 
-    git_try = [git, 'cl', 'try', '--revision', svn_info]
+    git_try = [
+        git, 'cl', 'try', '-m', 'tryserver.chromium', '--revision', svn_info]
     git_try.extend([arg for bot in config.cl_bot_list for arg in ('-b', bot)])
 
     branch_name = git_utils.git_branch_name(vsp.verbose)
@@ -416,7 +417,7 @@ def roll_deps(config, revision, git_hash):
         assert old_revision
         if revision == int(old_revision):
             print 'DEPS is up to date!'
-            return None
+            return (None, None)
 
         master_hash = config.vsp.strip_output(
             [git, 'show-ref', 'origin/master', '--hash'])
@@ -506,12 +507,13 @@ def find_hash_and_roll_deps(config, revision=None, partial_hash=None):
 
     print 'revision=%r\nhash=%r\n' % (revision, git_hash)
 
-    roll = roll_deps(config, revision, git_hash)
+    deps_issue, whitespace_issue = roll_deps(config, revision, git_hash)
 
-    if roll:
-        deps_issue, whitespace_issue = roll
+    if deps_issue and whitespace_issue:
         print 'DEPS roll:\n    %s\n' % deps_issue
         print 'Whitespace change:\n    %s\n' % whitespace_issue
+    else:
+        print >> sys.stderr, 'No issues created.'
 
 
 def main(args):

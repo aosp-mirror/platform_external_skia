@@ -34,11 +34,22 @@ static void build_compressed_data(void* buffer, const SkBitmap& bitmap) {
     SkColorTable* ctable = bitmap.getColorTable();
     char* dst = (char*)buffer;
 
-    uint32_t* colorTableDst = reinterpret_cast<uint32_t*>(dst);
-    const uint32_t* colorTableSrc = reinterpret_cast<const uint32_t*>(ctable->lockColors());
-    SkConvertConfig8888Pixels(colorTableDst, 0, SkCanvas::kRGBA_Premul_Config8888,
-                              colorTableSrc, 0, SkCanvas::kNative_Premul_Config8888,
-                              ctable->count(), 1);
+    const int count = ctable->count();
+
+    SkDstPixelInfo dstPI;
+    dstPI.fColorType = kRGBA_8888_SkColorType;
+    dstPI.fAlphaType = kPremul_SkAlphaType;
+    dstPI.fPixels = buffer;
+    dstPI.fRowBytes = count * sizeof(SkPMColor);
+
+    SkSrcPixelInfo srcPI;
+    srcPI.fColorType = kPMColor_SkColorType;
+    srcPI.fAlphaType = kPremul_SkAlphaType;
+    srcPI.fPixels = ctable->lockColors();
+    srcPI.fRowBytes = count * sizeof(SkPMColor);
+
+    srcPI.convertPixelsTo(&dstPI, count, 1);
+
     ctable->unlockColors();
 
     // always skip a full 256 number of entries, even if we memcpy'd fewer
@@ -155,7 +166,7 @@ static GrTexture* sk_gr_create_bitmap_texture(GrContext* ctx,
                 return result;
             }
         } else {
-            origBitmap.copyTo(&tmpBitmap, SkBitmap::kARGB_8888_Config);
+            origBitmap.copyTo(&tmpBitmap, kPMColor_SkColorType);
             // now bitmap points to our temp, which has been promoted to 32bits
             bitmap = &tmpBitmap;
             desc.fConfig = SkBitmapConfig2GrPixelConfig(bitmap->config());
@@ -258,6 +269,29 @@ GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config config) {
             // kNo_Config, kA1_Config missing
             return kUnknown_GrPixelConfig;
     }
+}
+
+// alphatype is ignore for now, but if GrPixelConfig is expanded to encompass
+// alpha info, that will be considered.
+GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType ct, SkAlphaType) {
+    switch (ct) {
+        case kUnknown_SkColorType:
+            return kUnknown_GrPixelConfig;
+        case kAlpha_8_SkColorType:
+            return kAlpha_8_GrPixelConfig;
+        case kRGB_565_SkColorType:
+            return kRGB_565_GrPixelConfig;
+        case kARGB_4444_SkColorType:
+            return kRGBA_4444_GrPixelConfig;
+        case kRGBA_8888_SkColorType:
+            return kRGBA_8888_GrPixelConfig;
+        case kBGRA_8888_SkColorType:
+            return kBGRA_8888_GrPixelConfig;
+        case kIndex_8_SkColorType:
+            return kIndex_8_GrPixelConfig;
+    }
+    SkASSERT(0);    // shouldn't get here
+    return kUnknown_GrPixelConfig;
 }
 
 bool GrPixelConfig2ColorType(GrPixelConfig config, SkColorType* ctOut) {

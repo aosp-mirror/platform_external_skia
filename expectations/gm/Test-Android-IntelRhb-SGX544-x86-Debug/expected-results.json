@@ -258,31 +258,25 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          18063289957792240728
+          11753547281694642402
         ]
       ], 
-      "bugs": [
-        1759
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "bezier_cubic_effects_gpu.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14902165531185441255
+          12989453616557980490
         ]
       ], 
-      "bugs": [
-        1759
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "bezier_quad_effects_gpu.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          4902737483445835197
+          16976789512297453380
         ]
       ], 
       "reviewed-by-human": true
@@ -588,7 +582,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          1562528896245798343
+          6226246905855231596
         ]
       ], 
       "reviewed-by-human": true
@@ -597,7 +591,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          8816418386720454919
+          100603854537926261
         ]
       ], 
       "reviewed-by-human": true
@@ -606,7 +600,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          7551825176174713528
+          714131828266740061
         ]
       ], 
       "reviewed-by-human": true
@@ -2571,7 +2565,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          9179896739428124194
+          1575688773869978322
         ]
       ], 
       "bugs": [
@@ -2727,7 +2721,34 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          8388418022298889878
+          16628817470554933537
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11609605102436644365
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6484021739759757221
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
+    "complexclip2_rrect_aa_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          12795866211978733736
         ]
       ], 
       "reviewed-by-human": true
@@ -2875,6 +2896,15 @@
         1759
       ], 
       "reviewed-by-human": false
+    }, 
+    "convex_poly_effect_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          13562837227301896730
+        ]
+      ], 
+      "reviewed-by-human": true
     }, 
     "convexpaths_565.png": {
       "allowed-digests": [
@@ -3219,7 +3249,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          5121140232296501078
+          5173104365040570670
         ]
       ], 
       "bugs": [
@@ -3798,37 +3828,28 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          1536425950056721833
+          11559795738519917215
         ]
       ], 
-      "bugs": [
-        1578
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "extractbitmap_8888.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          1536425950056721833
+          11559795738519917215
         ]
       ], 
-      "bugs": [
-        1578
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "extractbitmap_gpu.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          1536425950056721833
+          11559795738519917215
         ]
       ], 
-      "bugs": [
-        1759
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "factory_565.png": {
       "allowed-digests": [
@@ -5438,6 +5459,30 @@
       ], 
       "reviewed-by-human": true
     }, 
+    "imageblurtiled_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          4631258918829734073
+        ]
+      ]
+    }, 
+    "imageblurtiled_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          8446004248652136594
+        ]
+      ]
+    }, 
+    "imageblurtiled_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14549028717901817720
+        ]
+      ]
+    }, 
     "imagefiltersbase_565.png": {
       "allowed-digests": [
         [
@@ -5474,6 +5519,30 @@
       ], 
       "ignore-failure": true, 
       "reviewed-by-human": true
+    }, 
+    "imagefiltersclipped_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14771974755728278127
+        ]
+      ]
+    }, 
+    "imagefiltersclipped_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          14537515405997069608
+        ]
+      ]
+    }, 
+    "imagefiltersclipped_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          8665802903094730049
+        ]
+      ]
     }, 
     "imagefilterscropped_565.png": {
       "allowed-digests": [
@@ -5542,7 +5611,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          4369239442135451408
+          15769177648683788265
         ]
       ]
     }, 
@@ -5550,7 +5619,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15898194960001320391
+          18437708945397499005
         ]
       ]
     }, 
@@ -5558,7 +5627,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          6881186986714925972
+          17667280750482645242
         ]
       ]
     }, 
@@ -5719,7 +5788,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          9012875021292567550
+          7219660952693292909
         ]
       ], 
       "reviewed-by-human": true
@@ -5728,7 +5797,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13024650345441263017
+          6514150196218900002
         ]
       ], 
       "reviewed-by-human": true
@@ -6154,7 +6223,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          3390281060957089068
+          8308602223419687887
         ]
       ], 
       "reviewed-by-human": true
@@ -6163,7 +6232,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          12135997902375719879
+          85546218777239105
         ]
       ], 
       "reviewed-by-human": true
@@ -6172,7 +6241,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          12135997902375719879
+          4242501944257631906
         ]
       ], 
       "reviewed-by-human": true
@@ -6826,7 +6895,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14523064803091187924
+          13783532124190227221
         ]
       ], 
       "reviewed-by-human": true
@@ -6835,7 +6904,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14873182360903767219
+          13792455863265377338
         ]
       ], 
       "reviewed-by-human": true
@@ -6844,7 +6913,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13644213809362073130
+          8162996231165662471
         ]
       ], 
       "reviewed-by-human": true
@@ -6853,7 +6922,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13395208235863950318
+          1500157245784304324
         ]
       ], 
       "reviewed-by-human": true
@@ -6862,7 +6931,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          6163509140920511378
+          6810446943823350860
         ]
       ], 
       "reviewed-by-human": true
@@ -6871,7 +6940,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          7354148078763277864
+          3764224183150533222
         ]
       ], 
       "reviewed-by-human": true
@@ -6880,7 +6949,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14523064803091187924
+          13783532124190227221
         ]
       ], 
       "reviewed-by-human": true
@@ -6889,7 +6958,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14873182360903767219
+          13792455863265377338
         ]
       ], 
       "reviewed-by-human": true
@@ -6898,7 +6967,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          12528090941113109465
+          11207755651710231134
         ]
       ], 
       "reviewed-by-human": true
@@ -6907,7 +6976,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13395208235863950318
+          1500157245784304324
         ]
       ], 
       "reviewed-by-human": true
@@ -6916,7 +6985,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          6163509140920511378
+          6810446943823350860
         ]
       ], 
       "reviewed-by-human": true
@@ -6925,7 +6994,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          7354148078763277864
+          3764224183150533222
         ]
       ], 
       "reviewed-by-human": true

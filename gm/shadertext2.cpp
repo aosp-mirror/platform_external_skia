@@ -11,8 +11,8 @@
 
 namespace skiagm {
 
-static void makebm(SkBitmap* bm, SkBitmap::Config config, int w, int h) {
-    bm->allocConfigPixels(config, w, h);
+static void makebm(SkBitmap* bm, int w, int h) {
+    bm->allocN32Pixels(w, h);
     bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
@@ -92,7 +92,7 @@ protected:
 
         static SkBitmap bmp;
         if (bmp.isNull()) {
-            makebm(&bmp, SkBitmap::kARGB_8888_Config, kPointSize / 2, kPointSize / 2);
+            makebm(&bmp, kPointSize / 2, kPointSize / 2);
         }
 
         SkAutoTUnref<SkShader> shader(SkShader::CreateBitmapShader(bmp,
@@ -214,8 +214,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef SK_BUILD_FOR_ANDROID
 static GM* MyFactory(void*) { return new ShaderText2GM; }
 static GMRegistry reg(MyFactory);
-#endif
 }

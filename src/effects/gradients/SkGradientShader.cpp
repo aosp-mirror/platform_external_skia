@@ -233,12 +233,7 @@ bool SkGradientShaderBase::setContext(const SkBitmap& device,
 
     const SkMatrix& inverse = this->getTotalInverse();
 
-    if (!fDstToIndex.setConcat(fPtsToUnit, inverse)) {
-        // need to keep our set/end context calls balanced.
-        this->INHERITED::endContext();
-        return false;
-    }
-
+    fDstToIndex.setConcat(fPtsToUnit, inverse);
     fDstToIndexProc = fDstToIndex.getMapXYProc();
     fDstToIndexClass = (uint8_t)SkShader::ComputeMatrixClass(fDstToIndex);
 
@@ -583,7 +578,7 @@ void SkGradientShaderBase::getGradientTableBitmap(SkBitmap* bitmap) const {
     if (fMapper) {
         // force our cahce32pixelref to be built
         (void)this->getCache32();
-        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kCache32Count, 1);
+        bitmap->setConfig(SkImageInfo::MakeN32Premul(kCache32Count, 1));
         bitmap->setPixelRef(fCache32PixelRef);
         return;
     }
@@ -624,7 +619,7 @@ void SkGradientShaderBase::getGradientTableBitmap(SkBitmap* bitmap) const {
     if (!gCache->find(storage.get(), size, bitmap)) {
         // force our cahce32pixelref to be built
         (void)this->getCache32();
-        bitmap->setConfig(SkBitmap::kARGB_8888_Config, kCache32Count, 1);
+        bitmap->setConfig(SkImageInfo::MakeN32Premul(kCache32Count, 1));
         bitmap->setPixelRef(fCache32PixelRef);
 
         gCache->add(storage.get(), size, *bitmap);
@@ -654,7 +649,7 @@ void SkGradientShaderBase::commonAsAGradient(GradientInfo* info) const {
     }
 }
 
-#ifdef SK_DEVELOPER
+#ifndef SK_IGNORE_TO_STRING
 void SkGradientShaderBase::toString(SkString* str) const {
 
     str->appendf("%d colors: ", fColorCount);
@@ -1043,7 +1038,7 @@ GrGradientEffect::GrGradientEffect(GrContext* ctx,
         desc.fHeight = 32;
         desc.fRowHeight = bitmap.height();
         desc.fContext = ctx;
-        desc.fConfig = SkBitmapConfig2GrPixelConfig(bitmap.config());
+        desc.fConfig = SkImageInfo2GrPixelConfig(bitmap.colorType(), bitmap.alphaType());
         fAtlas = GrTextureStripAtlas::GetAtlas(desc);
         SkASSERT(NULL != fAtlas);
 

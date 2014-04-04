@@ -23,12 +23,21 @@ public:
     SkDebugCanvas(int width, int height);
     virtual ~SkDebugCanvas();
 
-    void toggleFilter(bool toggle);
+    void toggleFilter(bool toggle) { fFilter = toggle; }
+
+    void setMegaVizMode(bool megaVizMode) { fMegaVizMode = megaVizMode; }
+    bool getMegaVizMode() const { return fMegaVizMode; }
 
     /**
      * Enable or disable overdraw visualization
      */
     void setOverdrawViz(bool overdrawViz) { fOverdrawViz = overdrawViz; }
+    bool getOverdrawViz() const { return fOverdrawViz; }
+
+    void setOutstandingSaveCount(int saveCount) { fOutstandingSaveCount = saveCount; }
+    int getOutstandingSaveCount() const { return fOutstandingSaveCount; }
+
+    void setPicture(SkPicture* picture) { fPicture = picture; }
 
     /**
      * Enable or disable texure filtering override
@@ -116,6 +125,11 @@ public:
     SkTArray<SkString>* getDrawCommandsAsStrings() const;
 
     /**
+     * Returns an array containing an offset (in the SkPicture) for each command
+     */
+    SkTDArray<size_t>* getDrawCommandOffsets() const;
+
+    /**
         Returns length of draw command vector.
      */
     int getSize() const {
@@ -142,18 +156,6 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
     virtual void clear(SkColor) SK_OVERRIDE;
-
-    virtual bool clipPath(const SkPath&, SkRegion::Op, bool) SK_OVERRIDE;
-
-    virtual bool clipRect(const SkRect&, SkRegion::Op, bool) SK_OVERRIDE;
-
-    virtual bool clipRRect(const SkRRect& rrect,
-                           SkRegion::Op op = SkRegion::kIntersect_Op,
-                           bool doAntiAlias = false) SK_OVERRIDE;
-
-    virtual bool clipRegion(const SkRegion& region, SkRegion::Op op) SK_OVERRIDE;
-
-    virtual bool concat(const SkMatrix& matrix) SK_OVERRIDE;
 
     virtual void drawBitmap(const SkBitmap&, SkScalar left, SkScalar top,
                             const SkPaint*) SK_OVERRIDE;
@@ -214,30 +216,57 @@ public:
                               const uint16_t indices[], int indexCount,
                               const SkPaint&) SK_OVERRIDE;
 
-    virtual void restore() SK_OVERRIDE;
-
-    virtual bool rotate(SkScalar degrees) SK_OVERRIDE;
-
-    virtual int save(SaveFlags) SK_OVERRIDE;
-
-    virtual int saveLayer(const SkRect* bounds, const SkPaint*, SaveFlags) SK_OVERRIDE;
-
-    virtual bool scale(SkScalar sx, SkScalar sy) SK_OVERRIDE;
-
-    virtual void setMatrix(const SkMatrix& matrix) SK_OVERRIDE;
-
-    virtual bool skew(SkScalar sx, SkScalar sy) SK_OVERRIDE;
-
-    virtual bool translate(SkScalar dx, SkScalar dy) SK_OVERRIDE;
-
     static const int kVizImageHeight = 256;
     static const int kVizImageWidth = 256;
 
+    virtual bool isClipEmpty() const SK_OVERRIDE { return false; }
+    virtual bool isClipRect() const SK_OVERRIDE { return true; }
+#ifdef SK_SUPPORT_LEGACY_GETCLIPTYPE
+    virtual ClipType getClipType() const SK_OVERRIDE {
+        return kRect_ClipType;
+    }
+#endif
+    virtual bool getClipBounds(SkRect* bounds) const SK_OVERRIDE {
+        if (NULL != bounds) {
+            bounds->setXYWH(0, 0,
+                            SkIntToScalar(this->imageInfo().fWidth),
+                            SkIntToScalar(this->imageInfo().fHeight));
+        }
+        return true;
+    }
+    virtual bool getClipDeviceBounds(SkIRect* bounds) const SK_OVERRIDE {
+        if (NULL != bounds) {
+            bounds->setLargest();
+        }
+        return true;
+    }
+
+protected:
+    virtual void willSave(SaveFlags) SK_OVERRIDE;
+    virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) SK_OVERRIDE;
+    virtual void willRestore() SK_OVERRIDE;
+
+    virtual void didConcat(const SkMatrix&) SK_OVERRIDE;
+    virtual void didSetMatrix(const SkMatrix&) SK_OVERRIDE;
+
+    virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) SK_OVERRIDE;
+    virtual void onPushCull(const SkRect& cullRect) SK_OVERRIDE;
+    virtual void onPopCull() SK_OVERRIDE;
+
+    virtual void onClipRect(const SkRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
+    virtual void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
+    virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
+    virtual void onClipRegion(const SkRegion& region, SkRegion::Op) SK_OVERRIDE;
+
+    void markActiveCommands(int index);
+
 private:
     SkTDArray<SkDrawCommand*> fCommandVector;
+    SkPicture* fPicture;
     int fWidth;
     int fHeight;
     bool fFilter;
+    bool fMegaVizMode;
     int fIndex;
     SkMatrix fUserMatrix;
     SkMatrix fMatrix;
@@ -258,6 +287,18 @@ private:
     int fOutstandingSaveCount;
 
     /**
+        The active saveLayer commands at a given point in the renderering.
+        Only used when "mega" visualization is enabled.
+    */
+    SkTDArray<SkDrawCommand*> fActiveLayers;
+
+    /**
+        The active cull commands at a given point in the rendering.
+        Only used when "mega" visualization is enabled.
+    */
+    SkTDArray<SkDrawCommand*> fActiveCulls;
+
+    /**
         Adds the command to the classes vector of commands.
         @param command  The draw command for execution
      */
@@ -268,6 +309,13 @@ private:
         drawing anything else into the canvas.
      */
     void applyUserTransform(SkCanvas* canvas);
+
+    size_t getOpID() const {
+        if (NULL != fPicture) {
+            return fPicture->EXPERIMENTAL_curOpID();
+        }
+        return 0;
+    }
 
     typedef SkCanvas INHERITED;
 };

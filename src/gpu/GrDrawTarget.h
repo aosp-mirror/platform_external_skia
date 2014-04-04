@@ -9,12 +9,15 @@
 #define GrDrawTarget_DEFINED
 
 #include "GrClipData.h"
+#include "GrContext.h"
 #include "GrDrawState.h"
 #include "GrIndexBuffer.h"
+#include "GrTraceMarker.h"
 
 #include "SkClipStack.h"
 #include "SkMatrix.h"
 #include "SkPath.h"
+#include "SkStrokeRec.h"
 #include "SkTArray.h"
 #include "SkTLazy.h"
 #include "SkTypes.h"
@@ -24,7 +27,6 @@ class GrClipData;
 class GrDrawTargetCaps;
 class GrPath;
 class GrVertexBuffer;
-class SkStrokeRec;
 
 class GrDrawTarget : public SkRefCnt {
 protected:
@@ -344,6 +346,19 @@ public:
     void drawPath(const GrPath*, SkPath::FillType fill);
 
     /**
+     * Draws many paths. It will respect the HW
+     * antialias flag on the draw state (if possible in the 3D API).
+     *
+     * @param transforms array of 2d affine transformations, one for each path.
+     * @param fill the fill type for drawing all the paths. Fill must not be a
+     *             hairline.
+     * @param stroke the stroke for drawing all the paths.
+     */
+    void drawPaths(size_t pathCount, const GrPath** paths,
+                   const SkMatrix* transforms, SkPath::FillType fill,
+                   SkStrokeRec::Style stroke);
+
+    /**
      * Helper function for drawing rects. It performs a geometry src push and pop
      * and thus will finalize any reserved geometry.
      *
@@ -423,6 +438,20 @@ public:
                        GrRenderTarget* renderTarget = NULL) = 0;
 
     /**
+     * Discards the contents render target. NULL indicates that the current render target should
+     * be discarded.
+     **/
+    virtual void discard(GrRenderTarget* = NULL) = 0;
+
+    /**
+     * Called at start and end of gpu trace marking
+     * GR_CREATE_GPU_TRACE_MARKER(marker_str, target) will automatically call these at the start
+     * and end of a code block respectively
+     */
+    void addGpuTraceMarker(GrGpuTraceMarker* marker);
+    void removeGpuTraceMarker(GrGpuTraceMarker* marker);
+
+    /**
      * Copies a pixel rectangle from one surface to another. This call may finalize
      * reserved vertex/index data (as though a draw call was made). The src pixels
      * copied are specified by srcRect. They are copied to a rect of the same
@@ -471,6 +500,20 @@ public:
     void executeDrawPath(const GrPath* path, SkPath::FillType fill,
                          const GrDeviceCoordTexture* dstCopy) {
         this->onDrawPath(path, fill, dstCopy);
+    }
+
+    /**
+     * For subclass internal use to invoke a call to onDrawPaths().
+     */
+    void executeDrawPaths(size_t pathCount, const GrPath** paths,
+                          const SkMatrix* transforms, SkPath::FillType fill,
+                          SkStrokeRec::Style stroke,
+                          const GrDeviceCoordTexture* dstCopy) {
+        this->onDrawPaths(pathCount, paths, transforms, fill, stroke, dstCopy);
+    }
+
+    inline bool isGpuTracingEnabled() const {
+        return this->getContext()->isGpuTracingEnabled();
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -749,6 +792,8 @@ protected:
     // Subclass must initialize this in its constructor.
     SkAutoTUnref<const GrDrawTargetCaps> fCaps;
 
+    const GrTraceMarkerSet& getActiveTraceMarkers() { return fActiveTraceMarkers; }
+
     /**
      * Used to communicate draws to subclass's onDraw function.
      */
@@ -853,6 +898,12 @@ private:
     virtual void onStencilPath(const GrPath*, SkPath::FillType) = 0;
     virtual void onDrawPath(const GrPath*, SkPath::FillType,
                             const GrDeviceCoordTexture* dstCopy) = 0;
+    virtual void onDrawPaths(size_t, const GrPath**, const SkMatrix*,
+                             SkPath::FillType, SkStrokeRec::Style,
+                             const GrDeviceCoordTexture* dstCopy) = 0;
+
+    virtual void didAddGpuTraceMarker() = 0;
+    virtual void didRemoveGpuTraceMarker() = 0;
 
     // helpers for reserving vertex and index space.
     bool reserveVertexSpace(size_t vertexSize,
@@ -888,6 +939,9 @@ private:
     GrDrawState                                                     fDefaultDrawState;
     // The context owns us, not vice-versa, so this ptr is not ref'ed by DrawTarget.
     GrContext*                                                      fContext;
+    // To keep track that we always have at least as many debug marker adds as removes
+    int                                                             fGpuTraceMarkerCount;
+    GrTraceMarkerSet                                                fActiveTraceMarkers;
 
     typedef SkRefCnt INHERITED;
 };

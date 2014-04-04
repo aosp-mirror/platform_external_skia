@@ -25,12 +25,14 @@
 #include "GrSoftwarePathRenderer.h"
 #include "GrStencilBuffer.h"
 #include "GrTextStrike.h"
+#include "GrTracing.h"
+#include "SkGr.h"
 #include "SkRTConf.h"
 #include "SkRRect.h"
 #include "SkStrokeRec.h"
 #include "SkTLazy.h"
 #include "SkTLS.h"
-#include "SkTrace.h"
+#include "SkTraceEvent.h"
 
 // It can be useful to set this to false to test whether a bug is caused by using the
 // InOrderDrawBuffer, to compare performance of using/not using InOrderDrawBuffer, or to make
@@ -101,6 +103,7 @@ GrContext::GrContext() {
     fOvalRenderer = NULL;
     fViewMatrix.reset();
     fMaxTextureSizeOverride = 1 << 20;
+    fGpuTracingEnabled = false;
 }
 
 bool GrContext::init(GrBackend backend, GrBackendContext backendContext) {
@@ -218,6 +221,10 @@ void GrContext::freeGpuResources() {
 
 size_t GrContext::getGpuTextureCacheBytes() const {
   return fTextureCache->getCachedResourceBytes();
+}
+
+int GrContext::getGpuTextureCacheResourceCount() const {
+  return fTextureCache->getCachedResourceCount();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -371,8 +378,6 @@ GrTexture* GrContext::createTexture(const GrTextureParams* params,
                                     void* srcData,
                                     size_t rowBytes,
                                     GrResourceKey* cacheKey) {
-    SK_TRACE_EVENT0("GrContext::createTexture");
-
     GrResourceKey resourceKey = GrTexture::ComputeKey(fGpu, params, desc, cacheID);
 
     GrTexture* texture;
@@ -764,11 +769,11 @@ void GrContext::drawRect(const GrPaint& paint,
                          const SkRect& rect,
                          const SkStrokeRec* stroke,
                          const SkMatrix* matrix) {
-    SK_TRACE_EVENT0("GrContext::drawRect");
-
     AutoRestoreEffects are;
     AutoCheckFlush acf(this);
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
+
+    GR_CREATE_TRACE_MARKER("GrContext::drawRect", target);
 
     SkScalar width = stroke == NULL ? -1 : stroke->getWidth();
     SkMatrix combinedMatrix = target->drawState()->getViewMatrix();
@@ -886,10 +891,11 @@ void GrContext::drawRectToRect(const GrPaint& paint,
                                const SkRect& localRect,
                                const SkMatrix* dstMatrix,
                                const SkMatrix* localMatrix) {
-    SK_TRACE_EVENT0("GrContext::drawRectToRect");
     AutoRestoreEffects are;
     AutoCheckFlush acf(this);
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
+
+    GR_CREATE_TRACE_MARKER("GrContext::drawRectToRect", target);
 
     target->drawRect(dstRect, dstMatrix, &localRect, localMatrix);
 }
@@ -940,13 +946,13 @@ void GrContext::drawVertices(const GrPaint& paint,
                              const GrColor colors[],
                              const uint16_t indices[],
                              int indexCount) {
-    SK_TRACE_EVENT0("GrContext::drawVertices");
-
     AutoRestoreEffects are;
     AutoCheckFlush acf(this);
     GrDrawTarget::AutoReleaseGeometry geo; // must be inside AutoCheckFlush scope
 
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
+
+    GR_CREATE_TRACE_MARKER("GrContext::drawVertices", target);
 
     GrDrawState* drawState = target->drawState();
 
@@ -1001,6 +1007,8 @@ void GrContext::drawRRect(const GrPaint& paint,
     AutoCheckFlush acf(this);
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
 
+    GR_CREATE_TRACE_MARKER("GrContext::drawRRect", target);
+
     if (!fOvalRenderer->drawSimpleRRect(target, this, paint.isAntiAlias(), rect, stroke)) {
         SkPath path;
         path.addRRect(rect);
@@ -1020,6 +1028,8 @@ void GrContext::drawOval(const GrPaint& paint,
     AutoRestoreEffects are;
     AutoCheckFlush acf(this);
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
+
+    GR_CREATE_TRACE_MARKER("GrContext::drawOval", target);
 
     if (!fOvalRenderer->drawOval(target, this, paint.isAntiAlias(), oval, stroke)) {
         SkPath path;
@@ -1102,6 +1112,8 @@ void GrContext::drawPath(const GrPaint& paint, const SkPath& path, const SkStrok
     GrDrawTarget* target = this->prepareToDraw(&paint, BUFFERED_DRAW, &are, &acf);
     GrDrawState* drawState = target->drawState();
 
+    GR_CREATE_TRACE_MARKER("GrContext::drawPath", target);
+
     bool useCoverageAA = paint.isAntiAlias() && !drawState->getRenderTarget()->isMultisampled();
 
     if (useCoverageAA && stroke.getWidth() < 0 && !path.isConvex()) {
@@ -1136,6 +1148,9 @@ void GrContext::drawPath(const GrPaint& paint, const SkPath& path, const SkStrok
 void GrContext::internalDrawPath(GrDrawTarget* target, bool useAA, const SkPath& path,
                                  const SkStrokeRec& origStroke) {
     SkASSERT(!path.isEmpty());
+
+    GR_CREATE_TRACE_MARKER("GrContext::internalDrawPath", target);
+
 
     // An Assumption here is that path renderer would use some form of tweaking
     // the src color (either the input alpha or in the frag shader) to implement
@@ -1202,7 +1217,6 @@ bool GrContext::writeTexturePixels(GrTexture* texture,
                                    int left, int top, int width, int height,
                                    GrPixelConfig config, const void* buffer, size_t rowBytes,
                                    uint32_t flags) {
-    SK_TRACE_EVENT0("GrContext::writeTexturePixels");
     ASSERT_OWNED_RESOURCE(texture);
 
     if ((kUnpremul_PixelOpsFlag & flags) || !fGpu->canWriteTexturePixels(texture, config)) {
@@ -1227,7 +1241,6 @@ bool GrContext::readTexturePixels(GrTexture* texture,
                                   int left, int top, int width, int height,
                                   GrPixelConfig config, void* buffer, size_t rowBytes,
                                   uint32_t flags) {
-    SK_TRACE_EVENT0("GrContext::readTexturePixels");
     ASSERT_OWNED_RESOURCE(texture);
 
     GrRenderTarget* target = texture->asRenderTarget();
@@ -1264,60 +1277,20 @@ bool GrContext::readTexturePixels(GrTexture* texture,
 
 #include "SkConfig8888.h"
 
-namespace {
-/**
- * Converts a GrPixelConfig to a SkCanvas::Config8888. Only byte-per-channel
- * formats are representable as Config8888 and so the function returns false
- * if the GrPixelConfig has no equivalent Config8888.
- */
-bool grconfig_to_config8888(GrPixelConfig config,
-                            bool unpremul,
-                            SkCanvas::Config8888* config8888) {
-    switch (config) {
-        case kRGBA_8888_GrPixelConfig:
-            if (unpremul) {
-                *config8888 = SkCanvas::kRGBA_Unpremul_Config8888;
-            } else {
-                *config8888 = SkCanvas::kRGBA_Premul_Config8888;
-            }
-            return true;
-        case kBGRA_8888_GrPixelConfig:
-            if (unpremul) {
-                *config8888 = SkCanvas::kBGRA_Unpremul_Config8888;
-            } else {
-                *config8888 = SkCanvas::kBGRA_Premul_Config8888;
-            }
-            return true;
-        default:
-            return false;
+// toggles between RGBA and BGRA
+static SkColorType toggle_colortype32(SkColorType ct) {
+    if (kRGBA_8888_SkColorType == ct) {
+        return kBGRA_8888_SkColorType;
+    } else {
+        SkASSERT(kBGRA_8888_SkColorType == ct);
+        return kRGBA_8888_SkColorType;
     }
-}
-
-// It returns a configuration with where the byte position of the R & B components are swapped in
-// relation to the input config. This should only be called with the result of
-// grconfig_to_config8888 as it will fail for other configs.
-SkCanvas::Config8888 swap_config8888_red_and_blue(SkCanvas::Config8888 config8888) {
-    switch (config8888) {
-        case SkCanvas::kBGRA_Premul_Config8888:
-            return SkCanvas::kRGBA_Premul_Config8888;
-        case SkCanvas::kBGRA_Unpremul_Config8888:
-            return SkCanvas::kRGBA_Unpremul_Config8888;
-        case SkCanvas::kRGBA_Premul_Config8888:
-            return SkCanvas::kBGRA_Premul_Config8888;
-        case SkCanvas::kRGBA_Unpremul_Config8888:
-            return SkCanvas::kBGRA_Unpremul_Config8888;
-        default:
-            GrCrash("Unexpected input");
-            return SkCanvas::kBGRA_Unpremul_Config8888;;
-    }
-}
 }
 
 bool GrContext::readRenderTargetPixels(GrRenderTarget* target,
                                        int left, int top, int width, int height,
                                        GrPixelConfig dstConfig, void* buffer, size_t rowBytes,
                                        uint32_t flags) {
-    SK_TRACE_EVENT0("GrContext::readRenderTargetPixels");
     ASSERT_OWNED_RESOURCE(target);
 
     if (NULL == target) {
@@ -1438,22 +1411,21 @@ bool GrContext::readRenderTargetPixels(GrRenderTarget* target,
     }
     // Perform any conversions we weren't able to perform using a scratch texture.
     if (unpremul || swapRAndB) {
-        // These are initialized to suppress a warning
-        SkCanvas::Config8888 srcC8888 = SkCanvas::kNative_Premul_Config8888;
-        SkCanvas::Config8888 dstC8888 = SkCanvas::kNative_Premul_Config8888;
-
-        SkDEBUGCODE(bool c8888IsValid =) grconfig_to_config8888(dstConfig, false, &srcC8888);
-        grconfig_to_config8888(dstConfig, unpremul, &dstC8888);
-
-        if (swapRAndB) {
-            SkASSERT(c8888IsValid); // we should only do r/b swap on 8888 configs
-            srcC8888 = swap_config8888_red_and_blue(srcC8888);
+        SkDstPixelInfo dstPI;
+        if (!GrPixelConfig2ColorType(dstConfig, &dstPI.fColorType)) {
+            return false;
         }
-        SkASSERT(c8888IsValid);
-        uint32_t* b32 = reinterpret_cast<uint32_t*>(buffer);
-        SkConvertConfig8888Pixels(b32, rowBytes, dstC8888,
-                                  b32, rowBytes, srcC8888,
-                                  width, height);
+        dstPI.fAlphaType = kUnpremul_SkAlphaType;
+        dstPI.fPixels = buffer;
+        dstPI.fRowBytes = rowBytes;
+
+        SkSrcPixelInfo srcPI;
+        srcPI.fColorType = swapRAndB ? toggle_colortype32(dstPI.fColorType) : dstPI.fColorType;
+        srcPI.fAlphaType = kPremul_SkAlphaType;
+        srcPI.fPixels = buffer;
+        srcPI.fRowBytes = rowBytes;
+
+        return srcPI.convertPixelsTo(&dstPI, width, height);
     }
     return true;
 }
@@ -1466,6 +1438,14 @@ void GrContext::resolveRenderTarget(GrRenderTarget* target) {
     // this to our clients, though.
     this->flush();
     fGpu->resolveRenderTarget(target);
+}
+
+void GrContext::discardRenderTarget(GrRenderTarget* target) {
+    SkASSERT(target);
+    ASSERT_OWNED_RESOURCE(target);
+    AutoRestoreEffects are;
+    AutoCheckFlush acf(this);
+    this->prepareToDraw(NULL, BUFFERED_DRAW, &are, &acf)->discard(target);
 }
 
 void GrContext::copyTexture(GrTexture* src, GrRenderTarget* dst, const SkIPoint* topLeft) {
@@ -1505,7 +1485,6 @@ bool GrContext::writeRenderTargetPixels(GrRenderTarget* target,
                                         const void* buffer,
                                         size_t rowBytes,
                                         uint32_t flags) {
-    SK_TRACE_EVENT0("GrContext::writeRenderTargetPixels");
     ASSERT_OWNED_RESOURCE(target);
 
     if (NULL == target) {
@@ -1574,18 +1553,26 @@ bool GrContext::writeRenderTargetPixels(GrRenderTarget* target,
         effect.reset(this->createUPMToPMEffect(texture, swapRAndB, textureMatrix));
         // handle the unpremul step on the CPU if we couldn't create an effect to do it.
         if (NULL == effect) {
-            SkCanvas::Config8888 srcConfig8888, dstConfig8888;
-            SkDEBUGCODE(bool success = )
-            grconfig_to_config8888(srcConfig, true, &srcConfig8888);
-            SkASSERT(success);
-            SkDEBUGCODE(success = )
-            grconfig_to_config8888(srcConfig, false, &dstConfig8888);
-            SkASSERT(success);
-            const uint32_t* src = reinterpret_cast<const uint32_t*>(buffer);
+            SkSrcPixelInfo srcPI;
+            if (!GrPixelConfig2ColorType(srcConfig, &srcPI.fColorType)) {
+                return false;
+            }
+            srcPI.fAlphaType = kUnpremul_SkAlphaType;
+            srcPI.fPixels = buffer;
+            srcPI.fRowBytes = rowBytes;
+
             tmpPixels.reset(width * height);
-            SkConvertConfig8888Pixels(tmpPixels.get(), 4 * width, dstConfig8888,
-                                      src, rowBytes, srcConfig8888,
-                                      width, height);
+
+            SkDstPixelInfo dstPI;
+            dstPI.fColorType = srcPI.fColorType;
+            dstPI.fAlphaType = kPremul_SkAlphaType;
+            dstPI.fPixels = tmpPixels.get();
+            dstPI.fRowBytes = 4 * width;
+
+            if (!srcPI.convertPixelsTo(&dstPI, width, height)) {
+                return false;
+            }
+
             buffer = tmpPixels.get();
             rowBytes = 4 * width;
         }
@@ -1701,6 +1688,23 @@ GrPathRenderer* GrContext::getPathRenderer(const SkPath& path,
 ////////////////////////////////////////////////////////////////////////////////
 bool GrContext::isConfigRenderable(GrPixelConfig config, bool withMSAA) const {
     return fGpu->caps()->isConfigRenderable(config, withMSAA);
+}
+
+int GrContext::getRecommendedSampleCount(GrPixelConfig config,
+                                         SkScalar dpi) const {
+    if (!this->isConfigRenderable(config, true)) {
+        return 0;
+    }
+    int chosenSampleCount = 0;
+    if (fGpu->caps()->pathRenderingSupport()) {
+        if (dpi >= 250.0f) {
+            chosenSampleCount = 4;
+        } else {
+            chosenSampleCount = 16;
+        }
+    }
+    return chosenSampleCount <= fGpu->caps()->maxSampleCount() ?
+        chosenSampleCount : 0;
 }
 
 void GrContext::setupDrawBuffer() {

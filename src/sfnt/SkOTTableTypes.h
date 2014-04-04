@@ -8,6 +8,7 @@
 #ifndef SkOTTableTypes_DEFINED
 #define SkOTTableTypes_DEFINED
 
+#include "SkTemplates.h"
 #include "SkTypes.h"
 #include "SkEndian.h"
 
@@ -43,6 +44,20 @@ public:
     static const SK_OT_ULONG value = SkTEndian_SwapBE32(
         SkSetFourByteTag(T::TAG0, T::TAG1, T::TAG2, T::TAG3)
     );
+};
+
+/** SkOTSetUSHORTBit<N>::value is an SK_OT_USHORT with the Nth BE bit set. */
+template <unsigned N> struct SkOTSetUSHORTBit {
+    SK_COMPILE_ASSERT(N < 16, NTooBig);
+    static const uint16_t bit = 1u << N;
+    static const SK_OT_USHORT value = SkTEndian_SwapBE16(bit);
+};
+
+/** SkOTSetULONGBit<N>::value is an SK_OT_ULONG with the Nth BE bit set. */
+template <unsigned N> struct SkOTSetULONGBit {
+    SK_COMPILE_ASSERT(N < 32, NTooBig);
+    static const uint32_t bit = 1u << N;
+    static const SK_OT_ULONG value = SkTEndian_SwapBE32(bit);
 };
 
 #endif

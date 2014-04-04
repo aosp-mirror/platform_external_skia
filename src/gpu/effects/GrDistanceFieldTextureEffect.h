@@ -21,27 +21,30 @@ class GrGLDistanceFieldTextureEffect;
  */
 class GrDistanceFieldTextureEffect : public GrVertexEffect {
 public:
-    static GrEffectRef* Create(GrTexture* tex, const GrTextureParams& p) {
-        AutoEffectUnref effect(SkNEW_ARGS(GrDistanceFieldTextureEffect, (tex, p)));
+    static GrEffectRef* Create(GrTexture* tex, const GrTextureParams& para, bool uniformScale) {
+        AutoEffectUnref effect(SkNEW_ARGS(GrDistanceFieldTextureEffect, (tex, para, uniformScale)));
         return CreateEffectRef(effect);
     }
 
     virtual ~GrDistanceFieldTextureEffect() {}
 
-    static const char* Name() { return "Texture"; }
+    static const char* Name() { return "DistanceFieldTexture"; }
 
     virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
+    bool isUniformScale() const { return fUniformScale; }
 
     typedef GrGLDistanceFieldTextureEffect GLEffect;
 
     virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
 
 private:
-    GrDistanceFieldTextureEffect(GrTexture* texture, const GrTextureParams& params);
+    GrDistanceFieldTextureEffect(GrTexture* texture, const GrTextureParams& params,
+                                 bool uniformScale);
 
     virtual bool onIsEqual(const GrEffect& other) const SK_OVERRIDE;
 
     GrTextureAccess fTextureAccess;
+    bool            fUniformScale;
 
     GR_DECLARE_EFFECT_TEST;
 

@@ -5,7 +5,7 @@
     'SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=<(skia_static_initializers)',
     'SK_SUPPORT_GPU=<(skia_gpu)',
     'SK_SUPPORT_OPENCL=<(skia_opencl)',
-    'SK_DISTANCEFIELD_FONTS=<(skia_distancefield_fonts)',
+    'SK_FORCE_DISTANCEFIELD_FONTS=<(skia_force_distancefield_fonts)',
   ],
   'conditions' : [
     [ 'skia_os == "win"',
@@ -130,13 +130,18 @@
           '-Wpointer-arith',
 
           '-Wno-unused-parameter',
-          '-Wno-c++11-extensions',
         ],
         'cflags_cc': [
           '-fno-rtti',
           '-Wnon-virtual-dtor',
         ],
         'conditions': [
+          [ 'skia_android_framework==0', {
+            'cflags': [
+              # This flag is not supported by Android build system.
+              '-Wno-c++11-extensions',
+            ],
+          }],
           [ 'skia_warnings_as_errors', {
             'cflags': [
               '-Werror',
@@ -213,15 +218,62 @@
         '-U_FORTIFY_SOURCE',
         '-D_FORTIFY_SOURCE=1',
       ],
+      # Remove flags which are either unnecessary or problematic for the
+      # Android framework build. Many of these flags are removed simply because
+      # they were not previously in the Android framework makefile, and we did
+      # did not intend to add them when generating the makefile.
+      # TODO (scroggo): Investigate whether any of these flags are actually
+      # needed/would be beneficial.
+      'cflags!': [
+        # Android has one makefile, used for both debugging (after manual
+        # modification) and release. Turn off debug info by default.
+        '-g',
+        '-march=armv7-a',
+        '-mthumb',
+        '-mfpu=neon',
+        '-mfloat-abi=softfp',
+        # This flag is not supported by Android build system.
+        '-Wno-c++11-extensions',
+        '-fno-exceptions',
+        '-fstrict-aliasing',
+        # Remove flags to turn on warnings, since most people building Android
+        # are not focused on Skia and do not need the extra warning info.
+        '-Wall',
+        '-Wextra',
+        '-Winit-self',
+        '-Wpointer-arith',
+      ],
+      'cflags_cc!': [
+        '-fno-rtti',
+        '-Wnon-virtual-dtor',
+      ],
       'defines': [
         'DCT_IFAST_SUPPORTED',
         # using freetype's embolden allows us to adjust fake bold settings at
         # draw-time, at which point we know which SkTypeface is being drawn
         'SK_USE_FREETYPE_EMBOLDEN',
         # Android provides at least FreeType 2.4.0 at runtime.
-        'SK_FONTHOST_FREETYPE_RUNTIME_VERSION=0x020400',
+        'SK_FONTHOST_FREETYPE_RUNTIME_VERSION 0x020400',
         # Skia should not use dlopen on Android.
-        'SK_CAN_USE_DLOPEN=0',
+        'SK_CAN_USE_DLOPEN 0',
+        'SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"',
+        # When built as part of the system image we can enable certian non-NDK
+        # compliant optimizations.
+        'SK_BUILD_FOR_ANDROID_FRAMEWORK',
+        # Android Text Tuning
+        'SK_GAMMA_APPLY_TO_A8',
+        'SK_GAMMA_EXPONENT 1.4',
+        'SK_GAMMA_CONTRAST 0.0',
+        # Optimizations for chromium (m30)
+        'GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"',
+        'IGNORE_ROT_AA_RECT_OPT',
+        # Disable this check because it is too strict for some chromium-specific
+        # subclasses of SkPixelRef. See bug: crbug.com/171776.
+        'SK_DISABLE_PIXELREF_LOCKCOUNT_BALANCE_CHECK',
+        'SkLONGLONG int64_t',
+        'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
+        'SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"',
+        'SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"',
       ],
     }],
 
@@ -259,12 +311,19 @@
             'defines': [
               'SK_BUILD_FOR_NACL',
             ],
+            'variables': {
+              'nacl_sdk_root': '<!(["echo", "${NACL_SDK_ROOT}"])',
+            },
             'link_settings': {
               'libraries': [
                 '-lppapi',
                 '-lppapi_cpp',
                 '-lnosys',
                 '-pthread',
+              ],
+              'ldflags': [
+                '-L<(nacl_sdk_root)/lib/newlib_x86_<(skia_arch_width)/Release',
+                '-L<(nacl_sdk_root)/ports/lib/newlib_x86_<(skia_arch_width)/Release',
               ],
             },
           }, { # skia_os != "nacl"
@@ -487,6 +546,9 @@
             'libraries!': [
               '-lstdc++',
               '-lm',
+            ],
+            'cflags!': [
+              '-fuse-ld=gold',
             ],
           }],
           [ 'skia_shared_lib', {

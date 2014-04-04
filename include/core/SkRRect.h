@@ -26,15 +26,9 @@ class SkMatrix;
 //      use growToInclude to fit skp round rects & generate stats (RRs vs. real paths)
 //      check on # of rectorus's the RRs could handle
 //   rendering work
-//      add entry points (clipRRect, drawRRect) - plumb down to SkBaseDevice
-//      update SkPath.addRRect() to take an SkRRect - only use quads
-//          -- alternatively add addRRectToPath here
+//      update SkPath.addRRect() to only use quads
 //      add GM and bench
-//   clipping opt
-//      update SkClipStack to perform logic with RRs
 //   further out
-//      add RR rendering shader to Ganesh (akin to cicle drawing code)
-//          - only for simple RRs
 //      detect and triangulate RRectorii rather than falling back to SW in Ganesh
 //
 
@@ -77,6 +71,14 @@ public:
         //!< the curves) nor a rect (i.e., both radii are non-zero)
         kSimple_Type,
 
+        //!< The RR is non-empty and the two left x radii are equal, the two top
+        //!< y radii are equal, and the same for the right and bottom but it is
+        //!< neither an rect, oval, nor a simple RR. It is called "nine patch"
+        //!< because the centers of the corner ellipses form an axis aligned
+        //!< rect with edges that divide the RR into an 9 rectangular patches:
+        //!< an interior patch, four edge patches, and four corner patches.
+        kNinePatch_Type,
+
         //!< A fully general (non-empty) RR. Some of the x and/or y radii are
         //!< different from the others and there must be one corner where
         //!< both radii are non-zero.
@@ -102,7 +104,13 @@ public:
     inline bool isRect() const { return kRect_Type == this->getType(); }
     inline bool isOval() const { return kOval_Type == this->getType(); }
     inline bool isSimple() const { return kSimple_Type == this->getType(); }
+    inline bool isSimpleCircular() const {
+        return this->isSimple() && fRadii[0].fX == fRadii[0].fY;
+    }
+    inline bool isNinePatch() const { return kNinePatch_Type == this->getType(); }
     inline bool isComplex() const { return kComplex_Type == this->getType(); }
+
+    bool allCornersCircular() const;
 
     SkScalar width() const { return fRect.width(); }
     SkScalar height() const { return fRect.height(); }
@@ -160,6 +168,12 @@ public:
      * Initialize the RR with the same radii for all four corners.
      */
     void setRectXY(const SkRect& rect, SkScalar xRad, SkScalar yRad);
+
+    /**
+     * Initialize the rr with one radius per-side.
+     */
+    void setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad,
+                      SkScalar rightRad, SkScalar bottomRad);
 
     /**
      * Initialize the RR with potentially different radii for all four corners.
@@ -226,6 +240,13 @@ public:
     }
     void outset(SkScalar dx, SkScalar dy) {
         this->inset(-dx, -dy, this);
+    }
+
+    /**
+     * Translate the rrect by (dx, dy).
+     */
+    void offset(SkScalar dx, SkScalar dy) {
+        fRect.offset(dx, dy);
     }
 
     /**
