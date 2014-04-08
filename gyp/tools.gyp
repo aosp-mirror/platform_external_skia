@@ -304,6 +304,7 @@
       'dependencies': [
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
+        'record.gyp:*',
       ],
     },
     {

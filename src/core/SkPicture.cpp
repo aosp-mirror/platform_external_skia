@@ -118,6 +118,7 @@ static void validateMatrix(const SkMatrix* matrix) {
 ///////////////////////////////////////////////////////////////////////////////
 
 SkPicture::SkPicture() {
+    this->needsNewGenID();
     fRecord = NULL;
     fPlayback = NULL;
     fWidth = fHeight = 0;
@@ -127,6 +128,7 @@ SkPicture::SkPicture() {
 SkPicture::SkPicture(const SkPicture& src)
     : INHERITED()
     , fAccelData(NULL) {
+    this->needsNewGenID();
     fWidth = src.fWidth;
     fHeight = src.fHeight;
     fRecord = NULL;
@@ -137,9 +139,13 @@ SkPicture::SkPicture(const SkPicture& src)
      */
     if (src.fPlayback) {
         fPlayback = SkNEW_ARGS(SkPicturePlayback, (*src.fPlayback));
+        SkASSERT(NULL == src.fRecord);
+        fUniqueID = src.uniqueID();     // need to call method to ensure != 0
     } else if (src.fRecord) {
+        SkPictInfo info;
+        this->createHeader(&info);
         // here we do a fake src.endRecording()
-        fPlayback = SkNEW_ARGS(SkPicturePlayback, (*src.fRecord));
+        fPlayback = SkNEW_ARGS(SkPicturePlayback, (*src.fRecord, info));
     } else {
         fPlayback = NULL;
     }
@@ -158,6 +164,7 @@ void SkPicture::internalOnly_EnableOpts(bool enableOpts) {
 }
 
 void SkPicture::swap(SkPicture& other) {
+    SkTSwap(fUniqueID, other.fUniqueID);
     SkTSwap(fRecord, other.fRecord);
     SkTSwap(fPlayback, other.fPlayback);
     SkTSwap(fAccelData, other.fAccelData);
@@ -167,16 +174,19 @@ void SkPicture::swap(SkPicture& other) {
 
 SkPicture* SkPicture::clone() const {
     SkPicture* clonedPicture = SkNEW(SkPicture);
-    clone(clonedPicture, 1);
+    this->clone(clonedPicture, 1);
     return clonedPicture;
 }
 
 void SkPicture::clone(SkPicture* pictures, int count) const {
     SkPictCopyInfo copyInfo;
+    SkPictInfo info;
+    this->createHeader(&info);
 
     for (int i = 0; i < count; i++) {
         SkPicture* clone = &pictures[i];
 
+        clone->needsNewGenID();
         clone->fWidth = fWidth;
         clone->fHeight = fHeight;
         SkSafeSetNull(clone->fRecord);
@@ -188,9 +198,11 @@ void SkPicture::clone(SkPicture* pictures, int count) const {
          */
         if (fPlayback) {
             clone->fPlayback = SkNEW_ARGS(SkPicturePlayback, (*fPlayback, &copyInfo));
+            SkASSERT(NULL == fRecord);
+            clone->fUniqueID = this->uniqueID(); // need to call method to ensure != 0
         } else if (fRecord) {
             // here we do a fake src.endRecording()
-            clone->fPlayback = SkNEW_ARGS(SkPicturePlayback, (*fRecord, true));
+            clone->fPlayback = SkNEW_ARGS(SkPicturePlayback, (*fRecord, info, true));
         } else {
             clone->fPlayback = NULL;
         }
@@ -218,6 +230,8 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
     }
     SkSafeUnref(fAccelData);
     SkSafeSetNull(fRecord);
+
+    this->needsNewGenID();
 
     // Must be set before calling createBBoxHierarchy
     fWidth = width;
@@ -261,7 +275,9 @@ void SkPicture::endRecording() {
     if (NULL == fPlayback) {
         if (NULL != fRecord) {
             fRecord->endRecording();
-            fPlayback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
+            SkPictInfo info;
+            this->createHeader(&info);
+            fPlayback = SkNEW_ARGS(SkPicturePlayback, (*fRecord, info));
             SkSafeSetNull(fRecord);
         }
     }
@@ -351,7 +367,9 @@ SkPicture::SkPicture(SkPicturePlayback* playback, int width, int height)
     , fRecord(NULL)
     , fWidth(width)
     , fHeight(height)
-    , fAccelData(NULL) {}
+    , fAccelData(NULL) {
+    this->needsNewGenID();
+}
 
 SkPicture* SkPicture::CreateFromStream(SkStream* stream, InstallPixelRefProc proc) {
     SkPictInfo info;
@@ -384,7 +402,7 @@ SkPicture* SkPicture::CreateFromBuffer(SkReadBuffer& buffer) {
     SkPicturePlayback* playback;
     // Check to see if there is a playback to recreate.
     if (buffer.readBool()) {
-        playback = SkPicturePlayback::CreateFromBuffer(buffer);
+        playback = SkPicturePlayback::CreateFromBuffer(buffer, info);
         if (NULL == playback) {
             return NULL;
         }
@@ -417,13 +435,13 @@ void SkPicture::createHeader(SkPictInfo* info) const {
 void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     SkPicturePlayback* playback = fPlayback;
 
+    SkPictInfo info;
+    this->createHeader(&info);
     if (NULL == playback && fRecord) {
-        playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
+        playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord, info));
     }
 
-    SkPictInfo header;
-    this->createHeader(&header);
-    stream->write(&header, sizeof(header));
+    stream->write(&info, sizeof(info));
     if (playback) {
         stream->writeBool(true);
         playback->serialize(stream, encoder);
@@ -439,13 +457,13 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
 void SkPicture::flatten(SkWriteBuffer& buffer) const {
     SkPicturePlayback* playback = fPlayback;
 
+    SkPictInfo info;
+    this->createHeader(&info);
     if (NULL == playback && fRecord) {
-        playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord));
+        playback = SkNEW_ARGS(SkPicturePlayback, (*fRecord, info));
     }
 
-    SkPictInfo header;
-    this->createHeader(&header);
-    buffer.writeByteArray(&header, sizeof(header));
+    buffer.writeByteArray(&info, sizeof(info));
     if (playback) {
         buffer.writeBool(true);
         playback->flatten(buffer);
@@ -480,3 +498,26 @@ void SkPicture::abortPlayback() {
     fPlayback->abort();
 }
 #endif
+
+static int32_t next_picture_generation_id() {
+    static int32_t  gPictureGenerationID = 0;
+    // do a loop in case our global wraps around, as we never want to
+    // return a 0
+    int32_t genID;
+    do {
+        genID = sk_atomic_inc(&gPictureGenerationID) + 1;
+    } while (SK_InvalidGenID == genID);
+    return genID;
+}
+
+uint32_t SkPicture::uniqueID() const {
+    if (NULL != fRecord) {
+        SkASSERT(NULL == fPlayback);
+        return SK_InvalidGenID;
+    }
+
+    if (SK_InvalidGenID == fUniqueID) {
+        fUniqueID = next_picture_generation_id();
+    }
+    return fUniqueID;
+}

@@ -193,21 +193,20 @@
 #ifndef SkUserConfig_Android_DEFINED
 #define SkUserConfig_Android_DEFINED
 #ifdef ANDROID
-	#include <utils/misc.h>
+    #include <utils/misc.h>
 #endif
 
 #if __BYTE_ORDER == __BIG_ENDIAN
-	#define SK_CPU_BENDIAN
-	#undef  SK_CPU_LENDIAN
+    #define SK_CPU_BENDIAN
+    #undef  SK_CPU_LENDIAN
 #else
-	#define SK_CPU_LENDIAN
-	#undef  SK_CPU_BENDIAN
+    #define SK_CPU_LENDIAN
+    #undef  SK_CPU_BENDIAN
 #endif
 
 #define SK_GAMMA_SRGB
 #define SK_GAMMA_APPLY_TO_A8
-// FIXME: b/13694396: Need to remove calls to SkFloatToScalar in frameworks.
-//#define SK_SCALAR_TO_FLOAT_EXCLUDED
+#define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 #define SK_SUPPORT_GPU 1
 #define SK_SUPPORT_OPENCL 0
@@ -229,19 +228,14 @@
 #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
 #define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
 #define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
+#define SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
+#define SK_SUPPORT_LEGACY_GETTOTALCLIP
+#define kNative_8888_SkColorType kPMColor_SkColorType
 #define SK_BUILD_FOR_ANDROID
 #define SK_FONTHOST_DOES_NOT_USE_FONTMGR
 #define SK_USE_POSIX_THREADS
 #define SK_FONTHOST_FREETYPE_RUNTIME_VERSION 0x020400
 #define SK_CAN_USE_DLOPEN 0
 #define SK_SUPPORT_PDF
-// FIXME: b/13729784: Need to rework LayerRasterizer.cpp
-#define SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
-// Temporary until https://googleplex-android-review.git.corp.google.com/#/c/442220/
-// lands.
-#define SK_SUPPORT_LEGACY_GETTOTALCLIP
-// Use a better name for kPMColor_SkColorType until
-// https://code.google.com/p/skia/issues/detail?id=2384 is fixed.
-#define kNative_8888_SkColorType kPMColor_SkColorType
 
 #endif // SkUserConfig_Android_DEFINED

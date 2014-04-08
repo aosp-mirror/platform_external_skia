@@ -116,6 +116,9 @@ struct SkScaledImageCache::Rec {
         SkSafeUnref(fMip);
     }
 
+    static const Key& GetKey(const Rec& rec) { return rec.fKey; }
+    static uint32_t Hash(const Key& key) { return key.fHash; }
+
     size_t bytesUsed() const {
         return fMip ? fMip->getSize() : fBitmap.getSize();
     }
@@ -135,25 +138,9 @@ struct SkScaledImageCache::Rec {
 
 #include "SkTDynamicHash.h"
 
-namespace { // can't use static functions w/ template parameters
-const SkScaledImageCache::Key& key_from_rec(const SkScaledImageCache::Rec& rec) {
-    return rec.fKey;
-}
+class SkScaledImageCache::Hash :
+    public SkTDynamicHash<SkScaledImageCache::Rec, SkScaledImageCache::Key> {};
 
-uint32_t hash_from_key(const SkScaledImageCache::Key& key) {
-    return key.fHash;
-}
-
-bool eq_rec_key(const SkScaledImageCache::Rec& rec, const SkScaledImageCache::Key& key) {
-    return rec.fKey == key;
-}
-}
-
-class SkScaledImageCache::Hash : public SkTDynamicHash<SkScaledImageCache::Rec,
-                                                       SkScaledImageCache::Key,
-                                                       key_from_rec,
-                                                       hash_from_key,
-                                                       eq_rec_key> {};
 
 ///////////////////////////////////////////////////////////////////////////////
 

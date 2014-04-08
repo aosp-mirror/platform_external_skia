@@ -23,6 +23,7 @@
     'flags.gyp:flags',
     'pdf.gyp:pdf',
     'tools.gyp:picture_utils',
+    'record.gyp:record',
   ],
   'sources': [
     '../tests/Test.cpp',
@@ -134,6 +135,8 @@
     '../tests/ReadPixelsTest.cpp',
     '../tests/ReadWriteAlphaTest.cpp',
     '../tests/Reader32Test.cpp',
+    '../tests/RecordTest.cpp',
+    '../tests/RecorderTest.cpp',
     '../tests/RefCntTest.cpp',
     '../tests/RefDictTest.cpp',
     '../tests/RegionTest.cpp',

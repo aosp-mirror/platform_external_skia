@@ -16,6 +16,15 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#define GR_ATLAS_TEXTURE_WIDTH 1024
+#define GR_ATLAS_TEXTURE_HEIGHT 2048
+
+#define GR_PLOT_WIDTH  256
+#define GR_PLOT_HEIGHT 256
+
+#define GR_NUM_PLOTS_X   (GR_ATLAS_TEXTURE_WIDTH / GR_PLOT_WIDTH)
+#define GR_NUM_PLOTS_Y   (GR_ATLAS_TEXTURE_HEIGHT / GR_PLOT_HEIGHT)
+
 #define FONT_CACHE_STATS 0
 #if FONT_CACHE_STATS
 static int g_PurgeCount = 0;
@@ -72,7 +81,12 @@ GrTextStrike* GrFontCache::generateStrike(GrFontScaler* scaler,
     GrPixelConfig config = mask_format_to_pixel_config(format);
     int atlasIndex = mask_format_to_atlas_index(format);
     if (NULL == fAtlasMgr[atlasIndex]) {
-        fAtlasMgr[atlasIndex] = SkNEW_ARGS(GrAtlasMgr, (fGpu, config));
+        SkISize textureSize = SkISize::Make(GR_ATLAS_TEXTURE_WIDTH,
+                                            GR_ATLAS_TEXTURE_HEIGHT);
+        fAtlasMgr[atlasIndex] = SkNEW_ARGS(GrAtlasMgr, (fGpu, config,
+                                                        textureSize,
+                                                        GR_NUM_PLOTS_X,
+                                                        GR_NUM_PLOTS_Y));
     }
     GrTextStrike* strike = SkNEW_ARGS(GrTextStrike,
                                       (this, scaler->getKey(), format, fAtlasMgr[atlasIndex]));
@@ -318,22 +332,9 @@ bool GrTextStrike::addGlyphToAtlas(GrGlyph* glyph, GrFontScaler* scaler) {
                                                     (unsigned char*)storage.get(),
                                                     width, height, DISTANCE_FIELD_RANGE);
         } else {
-            // TODO: Fix color emoji
-            // for now, copy glyph into distance field storage
-            // this is not correct, but it won't crash
-            sk_bzero(dfStorage.get(), dfSize);
-            unsigned char* ptr = (unsigned char*) storage.get();
-            unsigned char* dfPtr = (unsigned char*) dfStorage.get();
-            size_t dfStride = dfWidth*bytesPerPixel;
-            dfPtr += DISTANCE_FIELD_RANGE*dfStride;
-            dfPtr += DISTANCE_FIELD_RANGE*bytesPerPixel;
-
-            for (int i = 0; i < height; ++i) {
-                memcpy(dfPtr, ptr, stride);
-
-                dfPtr += dfStride;
-                ptr += stride;
-            }
+            // distance fields should only be used to represent alpha masks
+            SkASSERT(false);
+            return false;
         }
 
         // copy to atlas

@@ -256,7 +256,7 @@ SkShader* SkPerlinNoiseShader::CreateFractalNoise(SkScalar baseFrequencyX, SkSca
                                             numOctaves, seed, tileSize));
 }
 
-SkShader* SkPerlinNoiseShader::CreateTubulence(SkScalar baseFrequencyX, SkScalar baseFrequencyY,
+SkShader* SkPerlinNoiseShader::CreateTurbulence(SkScalar baseFrequencyX, SkScalar baseFrequencyY,
                                               int numOctaves, SkScalar seed,
                                               const SkISize* tileSize) {
     return SkNEW_ARGS(SkPerlinNoiseShader, (kTurbulence_Type, baseFrequencyX, baseFrequencyY,
@@ -410,20 +410,8 @@ SkScalar SkPerlinNoiseShader::calculateTurbulenceValueForPoint(int channel,
 }
 
 SkPMColor SkPerlinNoiseShader::shade(const SkPoint& point, StitchData& stitchData) const {
-    SkMatrix matrix = fMatrix;
-    matrix.postConcat(getLocalMatrix());
-    SkMatrix invMatrix;
-    if (!matrix.invert(&invMatrix)) {
-        invMatrix.reset();
-    } else {
-        invMatrix.postConcat(invMatrix); // Square the matrix
-    }
-    // This (1,1) translation is due to WebKit's 1 based coordinates for the noise
-    // (as opposed to 0 based, usually). The same adjustment is in the setData() function.
-    matrix.postTranslate(SK_Scalar1, SK_Scalar1);
     SkPoint newPoint;
-    matrix.mapPoints(&newPoint, &point, 1);
-    invMatrix.mapPoints(&newPoint, &newPoint, 1);
+    fMatrix.mapPoints(&newPoint, &point, 1);
     newPoint.fX = SkScalarRoundToScalar(newPoint.fX);
     newPoint.fY = SkScalarRoundToScalar(newPoint.fY);
 
@@ -437,7 +425,18 @@ SkPMColor SkPerlinNoiseShader::shade(const SkPoint& point, StitchData& stitchDat
 
 bool SkPerlinNoiseShader::setContext(const SkBitmap& device, const SkPaint& paint,
                                      const SkMatrix& matrix) {
-    fMatrix = matrix;
+    SkMatrix newMatrix = matrix;
+    newMatrix.postConcat(getLocalMatrix());
+    SkMatrix invMatrix;
+    if (!newMatrix.invert(&invMatrix)) {
+        invMatrix.reset();
+    }
+    // This (1,1) translation is due to WebKit's 1 based coordinates for the noise
+    // (as opposed to 0 based, usually). The same adjustment is in the setData() function.
+    newMatrix.postTranslate(SK_Scalar1, SK_Scalar1);
+    newMatrix.postConcat(invMatrix);
+    newMatrix.postConcat(invMatrix);
+    fMatrix = newMatrix;
     return INHERITED::setContext(device, paint, matrix);
 }
 
@@ -706,7 +705,7 @@ GrEffectRef* GrPerlinNoiseEffect::TestCreate(SkRandom* random,
     SkShader* shader = random->nextBool() ?
         SkPerlinNoiseShader::CreateFractalNoise(baseFrequencyX, baseFrequencyY, numOctaves, seed,
                                                 stitchTiles ? &tileSize : NULL) :
-        SkPerlinNoiseShader::CreateTubulence(baseFrequencyX, baseFrequencyY, numOctaves, seed,
+        SkPerlinNoiseShader::CreateTurbulence(baseFrequencyX, baseFrequencyY, numOctaves, seed,
                                              stitchTiles ? &tileSize : NULL);
 
     SkPaint paint;

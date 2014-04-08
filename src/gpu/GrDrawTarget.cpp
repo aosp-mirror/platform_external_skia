@@ -548,7 +548,7 @@ void GrDrawTarget::drawPath(const GrPath* path, SkPath::FillType fill) {
     this->onDrawPath(path, fill, dstCopy.texture() ? &dstCopy : NULL);
 }
 
-void GrDrawTarget::drawPaths(size_t pathCount, const GrPath** paths,
+void GrDrawTarget::drawPaths(int pathCount, const GrPath** paths,
                              const SkMatrix* transforms,
                              SkPath::FillType fill, SkStrokeRec::Style stroke) {
     SkASSERT(pathCount > 0);
@@ -560,7 +560,7 @@ void GrDrawTarget::drawPaths(size_t pathCount, const GrPath** paths,
     const GrDrawState* drawState = &getDrawState();
 
     SkRect devBounds;
-    for (size_t i = 0; i < pathCount; ++i) {
+    for (int i = 0; i < pathCount; ++i) {
         SkRect mappedPathBounds;
         transforms[i].mapRect(&mappedPathBounds, paths[i]->getBounds());
         devBounds.join(mappedPathBounds);
@@ -651,7 +651,7 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
     }
 
     while (instanceCount) {
-        info.fInstanceCount = GrMin(instanceCount, maxInstancesPerDraw);
+        info.fInstanceCount = SkTMin(instanceCount, maxInstancesPerDraw);
         info.fVertexCount = info.fInstanceCount * verticesPerInstance;
         info.fIndexCount = info.fInstanceCount * indicesPerInstance;
 
@@ -674,7 +674,7 @@ namespace {
 // position + (optional) texture coord
 extern const GrVertexAttrib gBWRectPosUVAttribs[] = {
     {kVec2f_GrVertexAttribType, 0,               kPosition_GrVertexAttribBinding},
-    {kVec2f_GrVertexAttribType, sizeof(GrPoint), kLocalCoord_GrVertexAttribBinding}
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint), kLocalCoord_GrVertexAttribBinding}
 };
 
 void set_vertex_attributes(GrDrawState* drawState, bool hasUVs) {
@@ -708,8 +708,8 @@ void GrDrawTarget::onDrawRect(const SkRect& rect,
     size_t vsize = this->drawState()->getVertexSize();
     geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vsize);
     if (NULL != localRect) {
-        GrPoint* coords = GrTCast<GrPoint*>(GrTCast<intptr_t>(geo.vertices()) +
-                                            sizeof(GrPoint));
+        SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) +
+                                            sizeof(SkPoint));
         coords->setRectFan(localRect->fLeft, localRect->fTop,
                            localRect->fRight, localRect->fBottom,
                            vsize);

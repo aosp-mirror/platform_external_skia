@@ -1191,7 +1191,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          2340610203136700441
+          11757117313039592414
         ]
       ], 
       "reviewed-by-human": true
@@ -8021,10 +8021,11 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          18011346157842112766
+          13296129019333738133
         ]
       ], 
-      "ignore-failure": false
+      "ignore-failure": false, 
+      "reviewed-by-human": true
     }, 
     "fontscaler_pdf-poppler.png": {
       "allowed-digests": [
@@ -12239,7 +12240,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          16061468794312122510
+          11574452324482789141
         ]
       ]
     }, 
@@ -12247,7 +12248,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13576043681950934704
+          15004076002839832883
         ]
       ]
     }, 
@@ -12255,7 +12256,15 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          3985523225564204304
+          16941137351142187530
+        ]
+      ]
+    }, 
+    "resizeimagefilter_pdf-mac.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          10377007836663606070
         ]
       ]
     }, 

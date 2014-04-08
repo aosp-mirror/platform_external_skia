@@ -116,6 +116,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
+	src/core/SkFont.cpp \
 	src/core/SkFontHost.cpp \
 	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontStream.cpp \
@@ -148,6 +149,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureFlat.cpp \
 	src/core/SkPicturePlayback.cpp \
 	src/core/SkPictureRecord.cpp \
+	src/core/SkPictureShader.cpp \
 	src/core/SkPictureStateTree.cpp \
 	src/core/SkPixelRef.cpp \
 	src/core/SkPoint.cpp \
@@ -275,7 +277,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
-	src/effects/SkResizeImageFilter.cpp \
 	src/effects/SkStippleMaskFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
@@ -291,6 +292,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
+	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
 	src/images/bmpdecoderhelper.cpp \
 	src/images/SkDecodingImageGenerator.cpp \
@@ -350,7 +352,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontConfigInterface_android.cpp \
 	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontHost_fontconfig.cpp \
-	src/ports/SkPurgeableMemoryBlock_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkCondVar.cpp \
@@ -413,6 +414,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
+	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
@@ -420,6 +422,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRendererChain.cpp \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathUtils.cpp \
+	src/gpu/GrPictureUtils.cpp \
 	src/gpu/GrRectanizer.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
@@ -621,6 +624,9 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
+LOCAL_CFLAGS_arm64 += \
+	-ffp-contract=off
+
 LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
@@ -628,7 +634,18 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp
+	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkBitmapProcState_arm_neon.cpp \
+	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm_neon.cpp \
+	src/opts/SkBlurImage_opts_arm.cpp \
+	src/opts/SkBlurImage_opts_neon.cpp \
+	src/opts/SkMorphology_opts_arm.cpp \
+	src/opts/SkMorphology_opts_neon.cpp \
+	src/opts/SkXfermode_opts_arm.cpp \
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 include external/stlport/libstlport.mk
 LOCAL_MODULE:= libskia

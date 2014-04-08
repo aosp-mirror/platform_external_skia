@@ -19,6 +19,7 @@
 #include "SkFlattenableBuffers.h"
 #include "SkLightingImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
+#include "SkMatrixImageFilter.h"
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
@@ -317,6 +318,109 @@ DEF_TEST(HugeBlurImageFilter, reporter) {
     test_huge_blur(&device, reporter);
 }
 
+static void test_xfermode_cropped_input(SkBaseDevice* device, skiatest::Reporter* reporter) {
+    SkCanvas canvas(device);
+    canvas.clear(0);
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(1, 1);
+    bitmap.eraseARGB(255, 255, 255, 255);
+
+    SkAutoTUnref<SkColorFilter> green(
+        SkColorFilter::CreateModeFilter(SK_ColorGREEN, SkXfermode::kSrcIn_Mode));
+    SkAutoTUnref<SkColorFilterImageFilter> greenFilter(
+        SkColorFilterImageFilter::Create(green.get()));
+    SkImageFilter::CropRect cropRect(SkRect::MakeEmpty());
+    SkAutoTUnref<SkColorFilterImageFilter> croppedOut(
+        SkColorFilterImageFilter::Create(green.get(), NULL, &cropRect));
+
+    // Check that an xfermode image filter whose input has been cropped out still draws the other
+    // input. Also check that drawing with both inputs cropped out doesn't cause a GPU warning.
+    SkXfermode* mode = SkXfermode::Create(SkXfermode::kSrcOver_Mode);
+    SkAutoTUnref<SkImageFilter> xfermodeNoFg(
+        SkXfermodeImageFilter::Create(mode, greenFilter, croppedOut));
+    SkAutoTUnref<SkImageFilter> xfermodeNoBg(
+        SkXfermodeImageFilter::Create(mode, croppedOut, greenFilter));
+    SkAutoTUnref<SkImageFilter> xfermodeNoFgNoBg(
+        SkXfermodeImageFilter::Create(mode, croppedOut, croppedOut));
+
+    SkPaint paint;
+    paint.setImageFilter(xfermodeNoFg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+
+    uint32_t pixel;
+    SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    paint.setImageFilter(xfermodeNoBg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    paint.setImageFilter(xfermodeNoFgNoBg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+}
+
+DEF_TEST(ImageFilterNestedSaveLayer, reporter) {
+    SkBitmap temp;
+    temp.allocN32Pixels(50, 50);
+    SkBitmapDevice device(temp);
+    SkCanvas canvas(&device);
+    canvas.clear(0x0);
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(10, 10);
+    bitmap.eraseColor(SK_ColorGREEN);
+
+    SkMatrix matrix;
+    matrix.setScale(SkIntToScalar(2), SkIntToScalar(2));
+    matrix.postTranslate(SkIntToScalar(-20), SkIntToScalar(-20));
+    SkAutoTUnref<SkImageFilter> matrixFilter(
+        SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel));
+
+    // Test that saveLayer() with a filter nested inside another saveLayer() applies the
+    // correct offset to the filter matrix.
+    SkRect bounds1 = SkRect::MakeXYWH(10, 10, 30, 30);
+    canvas.saveLayer(&bounds1, NULL);
+    SkPaint filterPaint;
+    filterPaint.setImageFilter(matrixFilter);
+    SkRect bounds2 = SkRect::MakeXYWH(20, 20, 10, 10);
+    canvas.saveLayer(&bounds2, &filterPaint);
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    canvas.drawRect(bounds2, greenPaint);
+    canvas.restore();
+    canvas.restore();
+    SkPaint strokePaint;
+    strokePaint.setStyle(SkPaint::kStroke_Style);
+    strokePaint.setColor(SK_ColorRED);
+
+    SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    uint32_t pixel;
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    // Test that drawSprite() with a filter nested inside a saveLayer() applies the
+    // correct offset to the filter matrix.
+    canvas.clear(0x0);
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    canvas.saveLayer(&bounds1, NULL);
+    canvas.drawSprite(bitmap, 20, 20, &filterPaint);
+    canvas.restore();
+
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+}
+
+DEF_TEST(XfermodeImageFilterCroppedInput, reporter) {
+    SkBitmap temp;
+    temp.allocN32Pixels(100, 100);
+    SkBitmapDevice device(temp);
+    test_xfermode_cropped_input(&device, reporter);
+}
 
 #if SK_SUPPORT_GPU
 DEF_GPUTEST(ImageFilterCropRectGPU, reporter, factory) {
@@ -333,5 +437,13 @@ DEF_GPUTEST(HugeBlurImageFilterGPU, reporter, factory) {
                                                          SkImageInfo::MakeN32Premul(100, 100),
                                                          0));
     test_huge_blur(device, reporter);
+}
+
+DEF_GPUTEST(XfermodeImageFilterCroppedInputGPU, reporter, factory) {
+    GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
+                                                         SkImageInfo::MakeN32Premul(1, 1),
+                                                         0));
+    test_xfermode_cropped_input(device, reporter);
 }
 #endif

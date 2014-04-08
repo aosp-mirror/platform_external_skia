@@ -315,6 +315,10 @@ typedef uint32_t SkMSec;
 */
 #define SkMSec_LE(a, b)     ((int32_t)(a) - (int32_t)(b) <= 0)
 
+/** The generation IDs in Skia reserve 0 has an invalid marker.
+ */
+#define SK_InvalidGenID     0
+
 /****************************************************************************
     The rest of these only build with C++
 */
@@ -486,7 +490,7 @@ private:
  *  the lifetime of the block, so the caller must not call sk_free() or delete
  *  on the block, unless detach() was called.
  */
-class SkAutoMalloc : public SkNoncopyable {
+class SkAutoMalloc : SkNoncopyable {
 public:
     explicit SkAutoMalloc(size_t size = 0) {
         fPtr = size ? sk_malloc_throw(size) : NULL;

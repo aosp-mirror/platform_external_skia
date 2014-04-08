@@ -122,9 +122,6 @@ public:
 
     static const GrResourceKey& GetKey(const GrResourceEntry& e) { return e.key(); }
     static uint32_t Hash(const GrResourceKey& key) { return key.getHash(); }
-    static bool Equal(const GrResourceEntry& a, const GrResourceKey& b) {
-        return a.key() == b;
-    }
 #ifdef SK_DEBUG
     void validate() const;
 #else
@@ -318,11 +315,7 @@ private:
 
     void removeInvalidResource(GrResourceEntry* entry);
 
-    GrTMultiMap<GrResourceEntry,
-                GrResourceKey,
-                GrResourceEntry::GetKey,
-                GrResourceEntry::Hash,
-                GrResourceEntry::Equal> fCache;
+    GrTMultiMap<GrResourceEntry, GrResourceKey> fCache;
 
     // We're an internal doubly linked list
     typedef SkTInternalLList<GrResourceEntry> EntryList;

@@ -14,6 +14,8 @@
 #include "GrContext.h"
 #include "GrBitmapTextContext.h"
 #include "GrDistanceFieldTextContext.h"
+#include "GrLayerCache.h"
+#include "GrPictureUtils.h"
 
 #include "SkGrTexturePixelRef.h"
 
@@ -247,70 +249,6 @@ SkGpuDevice* SkGpuDevice::Create(GrContext* context, const SkImageInfo& origInfo
 
     return SkNEW_ARGS(SkGpuDevice, (context, texture.get()));
 }
-
-#ifdef SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-static SkBitmap make_bitmap(SkBitmap::Config config, int width, int height) {
-    SkBitmap bm;
-    bm.setConfig(SkImageInfo::Make(width, height,
-                                   SkBitmapConfigToColorType(config),
-                                   kPremul_SkAlphaType));
-    return bm;
-}
-SkGpuDevice::SkGpuDevice(GrContext* context,
-                         SkBitmap::Config config,
-                         int width,
-                         int height,
-                         int sampleCount)
-    : SkBitmapDevice(make_bitmap(config, width, height))
-{
-    fDrawProcs = NULL;
-
-    fContext = context;
-    fContext->ref();
-
-    fMainTextContext = SkNEW_ARGS(GrDistanceFieldTextContext, (fContext, fLeakyProperties));
-    fFallbackTextContext = SkNEW_ARGS(GrBitmapTextContext, (fContext, fLeakyProperties));
-
-    fRenderTarget = NULL;
-    fNeedClear = false;
-
-    if (config != SkBitmap::kRGB_565_Config) {
-        config = SkBitmap::kARGB_8888_Config;
-    }
-
-    GrTextureDesc desc;
-    desc.fFlags = kRenderTarget_GrTextureFlagBit;
-    desc.fWidth = width;
-    desc.fHeight = height;
-    desc.fConfig = SkBitmapConfig2GrPixelConfig(config);
-    desc.fSampleCnt = sampleCount;
-
-    SkImageInfo info;
-    if (!GrPixelConfig2ColorType(desc.fConfig, &info.fColorType)) {
-        sk_throw();
-    }
-    info.fWidth = width;
-    info.fHeight = height;
-    info.fAlphaType = kPremul_SkAlphaType;
-
-    SkAutoTUnref<GrTexture> texture(fContext->createUncachedTexture(desc, NULL, 0));
-
-    if (NULL != texture) {
-        fRenderTarget = texture->asRenderTarget();
-        fRenderTarget->ref();
-
-        SkASSERT(NULL != fRenderTarget);
-
-        // wrap the bitmap with a pixelref to expose our texture
-        SkGrPixelRef* pr = SkNEW_ARGS(SkGrPixelRef, (info, texture));
-        this->setPixelRef(pr)->unref();
-    } else {
-        GrPrintf("--- failed to create gpu-offscreen [%d %d]\n",
-                 width, height);
-        SkASSERT(false);
-    }
-}
-#endif
 
 SkGpuDevice::~SkGpuDevice() {
     if (fDrawProcs) {
@@ -609,7 +547,7 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
     fContext->drawVertices(grPaint,
                            gPointMode2PrimtiveType[mode],
                            SkToS32(count),
-                           (GrPoint*)pts,
+                           (SkPoint*)pts,
                            NULL,
                            NULL,
                            NULL,
@@ -1797,8 +1735,8 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
     fContext->drawVertices(grPaint,
                            gVertexMode2PrimitiveType[vmode],
                            vertexCount,
-                           (GrPoint*) vertices,
-                           (GrPoint*) texs,
+                           vertices,
+                           texs,
                            colors,
                            indices,
                            indexCount);
@@ -1944,16 +1882,6 @@ SkSurface* SkGpuDevice::newSurface(const SkImageInfo& info) {
     return SkSurface::NewRenderTarget(fContext, info, fRenderTarget->numSamples());
 }
 
-class GPUAccelData : public SkPicture::AccelData {
-public:
-    GPUAccelData(Key key) : INHERITED(key) { }
-
-protected:
-
-private:
-    typedef SkPicture::AccelData INHERITED;
-};
-
 // In the future this may not be a static method if we need to incorporate the
 // clip and matrix state into the key
 SkPicture::AccelData::Key SkGpuDevice::ComputeAccelDataKey() {
@@ -1968,18 +1896,86 @@ void SkGpuDevice::EXPERIMENTAL_optimize(SkPicture* picture) {
     GPUAccelData* data = SkNEW_ARGS(GPUAccelData, (key));
 
     picture->EXPERIMENTAL_addAccelData(data);
+
+    GatherGPUInfo(picture, data);
 }
 
-bool SkGpuDevice::EXPERIMENTAL_drawPicture(const SkPicture& picture) {
+bool SkGpuDevice::EXPERIMENTAL_drawPicture(SkPicture* picture) {
+
     SkPicture::AccelData::Key key = ComputeAccelDataKey();
 
-    const SkPicture::AccelData* data = picture.EXPERIMENTAL_getAccelData(key);
+    const SkPicture::AccelData* data = picture->EXPERIMENTAL_getAccelData(key);
     if (NULL == data) {
         return false;
     }
 
-#if 0
     const GPUAccelData *gpuData = static_cast<const GPUAccelData*>(data);
+
+//#define SK_PRINT_PULL_FORWARD_INFO 1
+
+#ifdef SK_PRINT_PULL_FORWARD_INFO
+    static bool gPrintedAccelData = false;
+
+    if (!gPrintedAccelData) {
+        for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
+            const GPUAccelData::SaveLayerInfo& info = gpuData->saveLayerInfo(i);
+
+            SkDebugf("%d: Width: %d Height: %d SL: %d R: %d hasNestedLayers: %s\n",
+                                            i,
+                                            info.fSize.fWidth,
+                                            info.fSize.fHeight,
+                                            info.fSaveLayerOpID,
+                                            info.fRestoreOpID,
+                                            info.fHasNestedLayers ? "T" : "F");
+        }
+        gPrintedAccelData = true;
+    }
+#endif
+
+    SkAutoTArray<bool> pullForward(gpuData->numSaveLayers());
+    for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
+        pullForward[i] = false;
+    }
+
+    SkIRect clip;
+
+    fClipData.getConservativeBounds(this->width(), this->height(), &clip, NULL);
+
+    SkMatrix inv;
+    if (!fContext->getMatrix().invert(&inv)) {
+        return false;
+    }
+
+    SkRect r = SkRect::Make(clip);
+    inv.mapRect(&r);
+    r.roundOut(&clip);
+
+    const SkPicture::OperationList& ops = picture->EXPERIMENTAL_getActiveOps(clip);
+
+#ifdef SK_PRINT_PULL_FORWARD_INFO
+    SkDebugf("rect: %d %d %d %d\n", clip.fLeft, clip.fTop, clip.fRight, clip.fBottom);
+#endif
+
+    for (int i = 0; i < ops.numOps(); ++i) {
+        for (int j = 0; j < gpuData->numSaveLayers(); ++j) {
+            const GPUAccelData::SaveLayerInfo& info = gpuData->saveLayerInfo(j);
+
+            if (ops.offset(i) > info.fSaveLayerOpID && ops.offset(i) < info.fRestoreOpID) {
+                pullForward[j] = true;
+            }
+        }
+    }
+
+#ifdef SK_PRINT_PULL_FORWARD_INFO
+    SkDebugf("Need SaveLayers: ");
+    for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
+        if (pullForward[i]) {
+            const GrAtlasedLayer* layer = fContext->getLayerCache()->findLayerOrCreate(picture, i);
+
+            SkDebugf("%d (%d), ", i, layer->layerID());
+        }
+    }
+    SkDebugf("\n");
 #endif
 
     return false;

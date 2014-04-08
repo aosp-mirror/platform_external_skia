@@ -1616,13 +1616,10 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15307215214955785591
+          10134098955798538896
         ]
       ], 
-      "bugs": [
-        2325
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "bleed_msaa16.png": {
       "allowed-digests": [
@@ -1640,13 +1637,10 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15307215214955785591
+          10134098955798538896
         ]
       ], 
-      "bugs": [
-        2325
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "bleed_pdf-poppler.png": {
       "allowed-digests": [
@@ -10141,10 +10135,11 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          13620858907799896168
+          16934377745071084590
         ]
       ], 
-      "ignore-failure": false
+      "ignore-failure": false, 
+      "reviewed-by-human": true
     }, 
     "fontscaler_msaa16.png": {
       "allowed-digests": [
@@ -10162,13 +10157,10 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          4269393567780921605
+          8697757088511362489
         ]
       ], 
-      "bugs": [
-        2325
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "fontscaler_pdf-poppler.png": {
       "allowed-digests": [
@@ -13540,10 +13532,10 @@
           10769322296615755298
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_0x0_nvprmsaa4.png": {
@@ -13554,8 +13546,9 @@
         ]
       ], 
       "bugs": [
-        2325
+        2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_0x0_pdf-poppler.png": {
@@ -13613,10 +13606,10 @@
           10769322296615755298
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_1x4_nvprmsaa4.png": {
@@ -13627,8 +13620,9 @@
         ]
       ], 
       "bugs": [
-        2325
+        2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_1x4_pdf-poppler.png": {
@@ -13686,10 +13680,10 @@
           10769322296615755298
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_4x1_nvprmsaa4.png": {
@@ -13699,10 +13693,10 @@
           10769322296615755298
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
-      ],  
+      ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "megalooper_4x1_pdf-poppler.png": {
@@ -13754,10 +13748,10 @@
           7068817626419515805
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "mixed_xfermodes_nvprmsaa4.png": {
@@ -15194,10 +15188,10 @@
           12915657818379420968
         ]
       ], 
-      "ignore-failure": true,
       "bugs": [
         2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "poly2poly_nvprmsaa4.png": {
@@ -19632,8 +19626,9 @@
         ]
       ], 
       "bugs": [
-        2325
+        2354
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "verttext_nvprmsaa4.png": {

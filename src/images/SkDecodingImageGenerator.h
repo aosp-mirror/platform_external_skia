@@ -18,15 +18,7 @@ class SkStreamRewindable;
  *  An implementation of SkImageGenerator that calls into
  *  SkImageDecoder.
  */
-class SkDecodingImageGenerator : public SkImageGenerator {
-public:
-    virtual ~SkDecodingImageGenerator();
-    virtual SkData* refEncodedData() SK_OVERRIDE;
-    // This implementaion of getInfo() always returns true.
-    virtual bool getInfo(SkImageInfo* info) SK_OVERRIDE;
-    virtual bool getPixels(const SkImageInfo& info,
-                           void* pixels,
-                           size_t rowBytes) SK_OVERRIDE;
+namespace SkDecodingImageGenerator {
     /**
      *  These options will be passed on to the image decoder.  The
      *  defaults are sensible.
@@ -48,27 +40,42 @@ public:
      *         type.  If the decoder won't support this color type,
      *         SkDecodingImageGenerator::Create will return
      *         NULL. kIndex_8_SkColorType is not supported.
+     *
+     *  @param fRequireUnpremul If true, the decoder will attempt to
+     *         decode without premultiplying the alpha. If it cannot,
+     *         the pixels will be set to NULL.
      */
     struct Options {
         Options()
             : fSampleSize(1)
             , fDitherImage(true)
             , fUseRequestedColorType(false)
-            , fRequestedColorType() { }
+            , fRequestedColorType()
+            , fRequireUnpremul(false) { }
         Options(int sampleSize, bool dither)
             : fSampleSize(sampleSize)
             , fDitherImage(dither)
             , fUseRequestedColorType(false)
-            , fRequestedColorType() { }
+            , fRequestedColorType()
+            , fRequireUnpremul(false) { }
         Options(int sampleSize, bool dither, SkColorType colorType)
             : fSampleSize(sampleSize)
             , fDitherImage(dither)
             , fUseRequestedColorType(true)
-            , fRequestedColorType(colorType) { }
+            , fRequestedColorType(colorType)
+            , fRequireUnpremul(false) { }
+         Options(int sampleSize, bool dither, SkColorType colorType,
+                 bool requireUnpremul)
+            : fSampleSize(sampleSize)
+            , fDitherImage(dither)
+            , fUseRequestedColorType(true)
+            , fRequestedColorType(colorType)
+            , fRequireUnpremul(requireUnpremul) { }
         const int         fSampleSize;
         const bool        fDitherImage;
         const bool        fUseRequestedColorType;
         const SkColorType fRequestedColorType;
+        const bool        fRequireUnpremul;
     };
 
     /**
@@ -97,31 +104,15 @@ public:
      *
      *  @return NULL on failure, a new SkImageGenerator on success.
      */
-    static SkImageGenerator* Create(SkStreamRewindable* stream,
-                                    const Options& opt);
+    SkImageGenerator* Create(SkStreamRewindable* stream,
+                             const Options& opt);
 
     /**
      *  @param data Contains the encoded image data that will be used by
      *         the SkDecodingImageGenerator.  Will be ref()ed by the
      *         SkImageGenerator constructor and and unref()ed on deletion.
      */
-    static SkImageGenerator* Create(SkData* data, const Options& opt);
-
-private:
-    SkData*                fData;
-    SkStreamRewindable*    fStream;
-    const SkImageInfo      fInfo;
-    const int              fSampleSize;
-    const bool             fDitherImage;
-
-    SkDecodingImageGenerator(SkData* data,
-                             SkStreamRewindable* stream,
-                             const SkImageInfo& info,
-                             int sampleSize,
-                             bool ditherImage);
-    static SkImageGenerator* Create(SkData*, SkStreamRewindable*,
-                                    const Options&);
-    typedef SkImageGenerator INHERITED;
+    SkImageGenerator* Create(SkData* data, const Options& opt);
 };
 
 //  // Example of most basic use case:

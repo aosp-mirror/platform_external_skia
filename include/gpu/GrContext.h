@@ -28,6 +28,7 @@ class GrGpu;
 class GrIndexBuffer;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
+class GrLayerCache;
 class GrOvalRenderer;
 class GrPath;
 class GrPathRenderer;
@@ -488,8 +489,8 @@ public:
     void drawVertices(const GrPaint& paint,
                       GrPrimitiveType primitiveType,
                       int vertexCount,
-                      const GrPoint positions[],
-                      const GrPoint texs[],
+                      const SkPoint positions[],
+                      const SkPoint texs[],
                       const GrColor colors[],
                       const uint16_t indices[],
                       int indexCount);
@@ -860,6 +861,7 @@ public:
     GrGpu* getGpu() { return fGpu; }
     const GrGpu* getGpu() const { return fGpu; }
     GrFontCache* getFontCache() { return fFontCache; }
+    GrLayerCache* getLayerCache() { return fLayerCache.get(); }
     GrDrawTarget* getTextTarget();
     const GrIndexBuffer* getQuadIndexBuffer() const;
 
@@ -907,6 +909,7 @@ private:
 
     GrResourceCache*                fTextureCache;
     GrFontCache*                    fFontCache;
+    SkAutoTDelete<GrLayerCache>     fLayerCache;
 
     GrPathRendererChain*            fPathRendererChain;
     GrSoftwarePathRenderer*         fSoftwarePathRenderer;

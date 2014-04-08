@@ -52,7 +52,6 @@
     '<(skia_src_path)/effects/SkPixelXorXfermode.cpp',
     '<(skia_src_path)/effects/SkPorterDuff.cpp',
     '<(skia_src_path)/effects/SkRectShaderImageFilter.cpp',
-    '<(skia_src_path)/effects/SkResizeImageFilter.cpp',
     '<(skia_src_path)/effects/SkStippleMaskFilter.cpp',
     '<(skia_src_path)/effects/SkTableColorFilter.cpp',
     '<(skia_src_path)/effects/SkTableMaskFilter.cpp',
@@ -77,6 +76,8 @@
     '<(skia_src_path)/effects/gradients/SkTwoPointRadialGradient.h',
     '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient.cpp',
     '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient.h',
+    '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient_gpu.cpp',
+    '<(skia_src_path)/effects/gradients/SkTwoPointConicalGradient_gpu.h',
     '<(skia_src_path)/effects/gradients/SkSweepGradient.cpp',
     '<(skia_src_path)/effects/gradients/SkSweepGradient.h',
 

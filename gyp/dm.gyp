@@ -33,6 +33,7 @@
             '../dm/DMExpectationsTask.cpp',
             '../dm/DMGpuGMTask.cpp',
             '../dm/DMPipeTask.cpp',
+            '../dm/DMRecordTask.cpp',
             '../dm/DMReplayTask.cpp',
             '../dm/DMReporter.cpp',
             '../dm/DMSerializeTask.cpp',
@@ -55,6 +56,7 @@
             'flags.gyp:flags',
             'jsoncpp.gyp:jsoncpp',
             'gputest.gyp:skgputest',
+            'record.gyp:*',
         ],
     }]
 }

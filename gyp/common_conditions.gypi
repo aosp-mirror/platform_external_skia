@@ -8,6 +8,12 @@
     'SK_FORCE_DISTANCEFIELD_FONTS=<(skia_force_distancefield_fonts)',
   ],
   'conditions' : [
+    [ 'skia_arch_type == "arm64"', {
+      'cflags': [
+        '-ffp-contract=off',
+      ],
+    }],
+
     [ 'skia_os == "win"',
       {
         'defines': [
@@ -84,6 +90,22 @@
                 'LinkTimeCodeGeneration': 'true',   # useLinkTimeCodeGeneration /LTCG
               },
             },
+          },
+          # Gyp's ninja generator depends on these specially named
+          # configurations to build 64-bit on Windows.
+          # See http://skbug.com/2348
+          #
+          # We handle the 64- vs 32-bit variations elsewhere, so I think it's
+          # OK for us to just make these inherit non-archwidth-specific
+          # configurations without modification.
+          'Debug_x64': {
+            'inherit_from': ['Debug'],
+          },
+          'Release_x64': {
+            'inherit_from': ['Release'],
+          },
+          'Release_Developer_x64': {
+            'inherit_from': ['Release_Developer'],
           },
         },
         'conditions' : [
@@ -274,6 +296,14 @@
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
         'SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"',
         'SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"',
+        # FIXME: b/13729784: Need to rework LayerRasterizer.cpp
+        'SK_SUPPORT_LEGACY_LAYERRASTERIZER_API',
+        # Temporary until https:#googleplex-android-review.git.corp.google.com/#/c/442220/
+        # lands.
+        'SK_SUPPORT_LEGACY_GETTOTALCLIP',
+        # Use a better name for kPMColor_SkColorType until
+        # https://code.google.com/p/skia/issues/detail?id=2384 is fixed.
+        'kNative_8888_SkColorType kPMColor_SkColorType',
       ],
     }],
 
@@ -312,7 +342,7 @@
               'SK_BUILD_FOR_NACL',
             ],
             'variables': {
-              'nacl_sdk_root': '<!(["echo", "${NACL_SDK_ROOT}"])',
+              'nacl_sdk_root': '<!(echo ${NACL_SDK_ROOT})',
             },
             'link_settings': {
               'libraries': [
@@ -503,7 +533,7 @@
           },
         },
         'xcode_settings': {
-          'ARCHS': ['armv6', 'armv7'],
+          'ARCHS': ['armv7'],
           'CODE_SIGNING_REQUIRED': 'NO',
           'CODE_SIGN_IDENTITY[sdk=iphoneos*]': '',
           'IPHONEOS_DEPLOYMENT_TARGET': '<(ios_sdk_version)',
