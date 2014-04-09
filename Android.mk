@@ -49,10 +49,6 @@ ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
 endif
 
-ifeq ($(TARGET_ARCH),arm64)
-    $(warning TODOArm64: Unlike arm32, arm64 has no inline assembly for performance critical code.)
-endif
-
 LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
@@ -628,22 +624,17 @@ LOCAL_CFLAGS_arm64 += \
 	-ffp-contract=off
 
 LOCAL_SRC_FILES_arm64 += \
-	src/opts/SkBitmapProcState_opts_none.cpp \
-	src/opts/SkBlitMask_opts_none.cpp \
-	src/opts/SkBlitRow_opts_none.cpp \
-	src/opts/SkBlurImage_opts_none.cpp \
-	src/opts/SkMorphology_opts_none.cpp \
-	src/opts/SkUtils_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
 	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
+	src/opts/SkBlitRow_opts_none.cpp \
 	src/opts/SkBlurImage_opts_arm.cpp \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
+	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 
