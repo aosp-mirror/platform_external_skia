@@ -596,7 +596,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
@@ -608,7 +608,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_mips += \
