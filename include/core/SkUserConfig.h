@@ -204,7 +204,6 @@
 	#undef  SK_CPU_BENDIAN
 #endif
 
-#define SK_GAMMA_SRGB
 #define SK_GAMMA_APPLY_TO_A8
 // FIXME: b/13694396: Need to remove calls to SkFloatToScalar in frameworks.
 //#define SK_SCALAR_TO_FLOAT_EXCLUDED
