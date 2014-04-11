@@ -284,8 +284,6 @@
         'SK_BUILD_FOR_ANDROID_FRAMEWORK',
         # Android Text Tuning
         'SK_GAMMA_APPLY_TO_A8',
-        'SK_GAMMA_EXPONENT 1.4',
-        'SK_GAMMA_CONTRAST 0.0',
         # Optimizations for chromium (m30)
         'GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"',
         'IGNORE_ROT_AA_RECT_OPT',
@@ -553,6 +551,14 @@
         'defines': [
           'SK_BUILD_FOR_ANDROID',
           'SK_FONTHOST_DOES_NOT_USE_FONTMGR',
+
+          # Android Text Tuning
+          'SK_GAMMA_EXPONENT=1.4',
+          'SK_GAMMA_CONTRAST=0.0',
+        ],
+        # Android defines a fixed gamma exponent instead of using SRGB
+        'defines!': [
+          'SK_GAMMA_SRGB',
         ],
         'configurations': {
           'Debug': {

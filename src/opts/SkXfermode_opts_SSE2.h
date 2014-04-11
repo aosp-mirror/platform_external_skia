@@ -1,9 +1,10 @@
 #ifndef SkXfermode_opts_SSE2_DEFINED
 #define SkXfermode_opts_SSE2_DEFINED
 
+#include "SkTypes.h"
 #include "SkXfermode_proccoeff.h"
 
-class SkSSE2ProcCoeffXfermode : public SkProcCoeffXfermode {
+class SK_API SkSSE2ProcCoeffXfermode : public SkProcCoeffXfermode {
 public:
     SkSSE2ProcCoeffXfermode(const ProcCoeff& rec, SkXfermode::Mode mode,
                             void* procSIMD)
