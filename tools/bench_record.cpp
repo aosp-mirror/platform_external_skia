@@ -11,7 +11,8 @@
 #include "SkOSFile.h"
 #include "SkPicture.h"
 #include "SkQuadTreePicture.h"
-#include "SkRecorder.h"
+#include "SkRecording.h"
+#include "SkRTreePicture.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "SkTileGridPicture.h"
@@ -33,40 +34,45 @@ DEFINE_int32(tileGridSize, 512, "Set the tile grid size. Has no effect if bbh is
 DEFINE_string(bbh, "", "Turn on the bbh and select the type, one of rtree, tilegrid, quadtree");
 DEFINE_bool(skr, false, "Record SKR instead of SKP.");
 
-typedef SkPicture* (*PictureFactory)(const int width, const int height, int* recordingFlags);
+typedef SkPictureFactory* (*PictureFactory)();
 
-static SkPicture* vanilla_factory(const int width, const int height, int* recordingFlags) {
-    return SkNEW(SkPicture);
+static SkPictureFactory* vanilla_factory() {
+    return NULL;
 }
 
-static SkPicture* rtree_factory(const int width, const int height, int* recordingFlags) {
-    *recordingFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
-    return SkNEW(SkPicture);
+static SkPictureFactory* rtree_factory() {
+    return SkNEW(SkRTreePictureFactory);
 }
 
-static SkPicture* tilegrid_factory(const int width, const int height, int* recordingFlags) {
-    *recordingFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
+static SkPictureFactory* tilegrid_factory() {
     SkTileGridPicture::TileGridInfo info;
     info.fTileInterval.set(FLAGS_tileGridSize, FLAGS_tileGridSize);
     info.fMargin.setEmpty();
     info.fOffset.setZero();
-    return SkNEW_ARGS(SkTileGridPicture, (width, height, info));
+    return SkNEW_ARGS(SkTileGridPictureFactory, (info));
 }
 
-static SkPicture* quadtree_factory(const int width, const int height, int* recordingFlags) {
-    *recordingFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
-    return SkNEW_ARGS(SkQuadTreePicture, (SkIRect::MakeWH(width, height)));
+static SkPictureFactory* quadtree_factory() {
+    return SkNEW(SkQuadTreePictureFactory);
 }
 
 static PictureFactory parse_FLAGS_bbh() {
-    if (FLAGS_bbh.isEmpty()) { return &vanilla_factory; }
+    if (FLAGS_bbh.isEmpty()) {
+        return &vanilla_factory;
+    }
     if (FLAGS_bbh.count() != 1) {
         SkDebugf("Multiple bbh arguments supplied.\n");
         return NULL;
     }
-    if (FLAGS_bbh.contains("rtree")) { return rtree_factory; }
-    if (FLAGS_bbh.contains("tilegrid")) { return tilegrid_factory; }
-    if (FLAGS_bbh.contains("quadtree")) { return quadtree_factory; }
+    if (FLAGS_bbh.contains("rtree")) {
+        return rtree_factory;
+    }
+    if (FLAGS_bbh.contains("tilegrid")) {
+        return tilegrid_factory;
+    }
+    if (FLAGS_bbh.contains("quadtree")) {
+        return quadtree_factory;
+    }
     SkDebugf("Invalid bbh type %s, must be one of rtree, tilegrid, quadtree.\n", FLAGS_bbh[0]);
     return NULL;
 }
@@ -78,20 +84,22 @@ static void bench_record(SkPicture* src, const char* name, PictureFactory pictur
 
     for (int i = 0; i < FLAGS_loops; i++) {
         if (FLAGS_skr) {
-            SkRecord record;
-            SkRecorder canvas(SkRecorder::kWriteOnly_Mode, &record, width, height);
+            using EXPERIMENTAL::SkRecording;
+            SkRecording* recording = SkRecording::Create(width, height);
             if (NULL != src) {
-                src->draw(&canvas);
+                src->draw(recording->canvas());
             }
+            SkDELETE(SkRecording::Delete(recording));  // delete the SkPlayback*.
         } else {
             int recordingFlags = FLAGS_flags;
-            SkAutoTUnref<SkPicture> dst(pictureFactory(width, height, &recordingFlags));
-            SkCanvas* canvas = dst->beginRecording(width, height, recordingFlags);
+            SkAutoTUnref<SkPictureFactory> factory(pictureFactory());
+            SkPictureRecorder recorder(factory);
+            SkCanvas* canvas = recorder.beginRecording(width, height, recordingFlags);
             if (NULL != src) {
                 src->draw(canvas);
             }
             if (FLAGS_endRecording) {
-                dst->endRecording();
+                SkAutoTUnref<SkPicture> dst(recorder.endRecording());
             }
         }
     }

@@ -253,6 +253,10 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
 }
 
 SkBBoxHierarchy* SkPicture::createBBoxHierarchy() const {
+    // TODO: this code is now replicated in SkRTreePicture. Once all external
+    // clients have been weaned off of kOptimizeForClippedPlayback_RecordingFlag,
+    // this code can be removed.
+
     // These values were empirically determined to produce reasonable
     // performance in most cases.
     static const int kRTreeMinChildren = 6;
@@ -290,7 +294,7 @@ const SkPicture::OperationList& SkPicture::OperationList::InvalidList() {
 }
 
 const SkPicture::OperationList& SkPicture::EXPERIMENTAL_getActiveOps(const SkIRect& queryRect) {
-    this->endRecording();
+    this->endRecording();  // TODO: remove eventually
     if (NULL != fPlayback) {
         return fPlayback->getActiveOps(queryRect);
     }
@@ -305,7 +309,7 @@ size_t SkPicture::EXPERIMENTAL_curOpID() const {
 }
 
 void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
-    this->endRecording();
+    this->endRecording(); // TODO: remove eventually
     if (NULL != fPlayback) {
         fPlayback->draw(*surface, callback);
     }

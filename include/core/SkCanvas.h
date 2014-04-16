@@ -189,7 +189,8 @@ public:
 
     /**
      *  Create a new surface matching the specified info, one that attempts to
-     *  be maximally compatible when used with this canvas.
+     *  be maximally compatible when used with this canvas. If there is no matching Surface type,
+     *  NULL is returned.
      */
     SkSurface* newSurface(const SkImageInfo&);
 
@@ -931,6 +932,12 @@ public:
         @param picture The recorded drawing commands to analyze/optimize
     */
     void EXPERIMENTAL_optimize(SkPicture* picture);
+
+    /** PRIVATE / EXPERIMENTAL -- do not call
+        Purge all the discardable optimization information associated with
+        'picture'. If NULL is passed in, purge all discardable information.
+    */
+    void EXPERIMENTAL_purge(SkPicture* picture);
 
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state

@@ -1,0 +1,132 @@
+#!/bin/bash
+#
+# android_perf: utility for running perf on an android device
+# 
+# The basic usage sequence is to run...
+#  1) perf record [gm/tests/bench] # runs profiler on specified app
+#  2) perf report # prints profiler results
+#  3) perf clean # cleans the temporary directory used to store results
+#
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source $SCRIPT_DIR/android_setup.sh
+source $SCRIPT_DIR/utils/setup_adb.sh
+
+if [ $(uname) == "Linux" ]; then
+    PERFHOST=$SCRIPT_DIR/linux/perfhost
+elif [ $(uname) == "Darwin" ]; then
+    PERFHOST=$SCRIPT_DIR/mac/perfhost
+else
+    echo "Could not automatically determine OS!"
+    exit 1;
+fi
+
+# grab and remove the perf command from the input args
+PERF_CMD=${APP_ARGS[0]}
+unset APP_ARGS[0]
+
+configuration="Debug"
+
+for arg in ${APP_ARGS[@]}
+do
+  if [[ "${arg}" == "--release" ]];
+  then 
+    configuration="Release"
+  else
+    echo "${arg}"
+    runVars=("${runVars[@]}" "${arg}")
+  fi
+
+shift
+done
+
+# We need the debug symbols from these files
+PERF_TMP_DIR=$(pwd)/android_perf_tmp
+
+TMP_SYS_BIN=$PERF_TMP_DIR/system/bin
+TMP_SYS_LIB=$PERF_TMP_DIR/system/lib
+TMP_APP_LOC=$PERF_TMP_DIR/data/local/tmp
+
+perf_setup() {
+
+    mkdir -p $TMP_SYS_BIN
+    mkdir -p $TMP_SYS_LIB
+    mkdir -p $TMP_APP_LOC
+
+    echo "Copying symbol files"
+    adb_pull_if_needed /system/lib/libc.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libstlport.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libcutils.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libGLESv2.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libandroid.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libm.so $TMP_SYS_LIB
+    adb_pull_if_needed /system/lib/libz.so $TMP_SYS_LIB
+
+    if [ ! -f "${SKIA_OUT}/${configuration}/lib.target/lib${runVars[0]}.so" ];
+    then
+      echo "Unable to find the ${runVars[0]} library"
+      exit 1
+    fi
+
+    echo "Pushing app..."
+    adb_push_if_needed "${SKIA_OUT}/${configuration}/skia_launcher" /data/local/tmp
+    adb_push_if_needed "${SKIA_OUT}/${configuration}/lib.target/libskia_android.so" /data/local/tmp
+    adb_push_if_needed "${SKIA_OUT}/${configuration}/lib.target/lib${runVars[0]}.so" /data/local/tmp
+
+    cp "${SKIA_OUT}/${configuration}/skia_launcher" $TMP_APP_LOC
+    cp "${SKIA_OUT}/${configuration}/lib.target/libskia_android.so" $TMP_APP_LOC
+    cp "${SKIA_OUT}/${configuration}/lib.target/lib${runVars[0]}.so" $TMP_APP_LOC
+}
+
+perf_record() {
+
+    echo "Killing any running Skia processes."
+    $ADB shell ps | grep skia_launcher | awk '{print $2}' | xargs $ADB shell kill
+
+    echo "Starting application"
+    $ADB shell /data/local/tmp/skia_launcher ${runVars[@]} &
+
+    # WE REALLY REALLY WANT TO BE ABLE TO PASS THE SKIA_LAUNCHER APP DIRECTLY TO
+    # PERF, BUT AT THIS POINT THE DATA FILE WE GET WHEN GOING THAT ROUTE IS UNABLE
+    # TO BE READ BY THE REPORTING TOOL
+    echo "Starting profiler"
+    APP_PID=$($ADB shell ps | grep skia_launcher | awk '{print $2}')
+    $ADB shell perf record -p ${APP_PID} sleep 70
+
+    $ADB pull /data/perf.data $PERF_TMP_DIR/perf.data
+
+    exit 0;
+}
+
+perf_report() {
+    adb_pull_if_needed /data/perf.data $PERF_TMP_DIR/perf.data
+    $PERFHOST report -i $PERF_TMP_DIR/perf.data --symfs=$PERF_TMP_DIR ${runVars[@]}
+}
+
+# Clean up
+perf_clean() {
+    rm -rf $PERF_TMP_DIR
+}
+
+case $PERF_CMD in
+  setup)
+      perf_setup ${runVars[@]}
+      ;;
+  record)
+      perf_setup ${runVars[@]}
+      perf_record ${runVars[@]}
+      ;;
+  report)
+      perf_report
+      ;;
+  clean)
+      perf_clean
+      ;;
+    *)
+      echo -n "ERROR: unknown perf command ($PERF_CMD), valid values: "
+      echo "setup, record, report, clean"
+      exit 1;
+      ;;
+esac
+
+exit 0;

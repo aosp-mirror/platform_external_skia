@@ -1,3 +1,10 @@
+/*
+ * Copyright 2014 Google Inc.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
 #ifndef SkRecording_DEFINED
 #define SkRecording_DEFINED
 
@@ -59,7 +66,7 @@ private:
     ~SkRecording();
 
     SkRecorder* fRecorder;
-    const SkRecord* fRecord;
+    SkRecord* fRecord;
 };
 
 }  // namespace EXPERIMENTAL

@@ -34,7 +34,9 @@
 #include "SkOSFile.h"
 #include "SkPDFRasterizer.h"
 #include "SkPicture.h"
+#include "SkQuadTreePicture.h"
 #include "SkRefCnt.h"
+#include "SkRTreePicture.h"
 #include "SkScalar.h"
 #include "SkStream.h"
 #include "SkString.h"
@@ -139,6 +141,7 @@ enum BbhType {
     kNone_BbhType,
     kRTree_BbhType,
     kTileGrid_BbhType,
+    kQuadTree_BbhType
 };
 
 enum ConfigFlags {
@@ -268,7 +271,7 @@ public:
     static void force_all_opaque(const SkBitmap& bitmap) {
         SkColorType colorType = bitmap.colorType();
         switch (colorType) {
-        case kPMColor_SkColorType:
+        case kN32_SkColorType:
             force_all_opaque_8888(bitmap);
             break;
         case kRGB_565_SkColorType:
@@ -294,7 +297,7 @@ public:
         // from this method, we should be able to get rid of the
         // transformation to 8888 format also.
         SkBitmap copy;
-        bitmap.copyTo(&copy, kPMColor_SkColorType);
+        bitmap.copyTo(&copy, kN32_SkColorType);
         if (!SkImageEncoder::EncodeFile(path.c_str(), copy,
                                         SkImageEncoder::kPNG_Type,
                                         100)) {
@@ -740,8 +743,8 @@ public:
             return;
         }
 
-        if ((kPMColor_SkColorType != expectedBitmap.colorType()) ||
-            (kPMColor_SkColorType != actualBitmap.colorType())) {
+        if ((kN32_SkColorType != expectedBitmap.colorType()) ||
+            (kN32_SkColorType != actualBitmap.colorType())) {
             SkDebugf("---- %s: not computing max per-channel pixel mismatch because non-8888\n",
                      testName);
             return;
@@ -1008,29 +1011,26 @@ public:
 
     static SkPicture* generate_new_picture(GM* gm, BbhType bbhType, uint32_t recordFlags,
                                            SkScalar scale = SK_Scalar1) {
-        // Pictures are refcounted so must be on heap
-        SkPicture* pict;
         int width = SkScalarCeilToInt(SkScalarMul(SkIntToScalar(gm->getISize().width()), scale));
         int height = SkScalarCeilToInt(SkScalarMul(SkIntToScalar(gm->getISize().height()), scale));
 
+        SkAutoTUnref<SkPictureFactory> factory;
         if (kTileGrid_BbhType == bbhType) {
             SkTileGridPicture::TileGridInfo info;
             info.fMargin.setEmpty();
             info.fOffset.setZero();
             info.fTileInterval.set(16, 16);
-            pict = new SkTileGridPicture(width, height, info);
-        } else {
-            pict = new SkPicture;
+            factory.reset(SkNEW_ARGS(SkTileGridPictureFactory, (info)));
+        } else if (kQuadTree_BbhType == bbhType) {
+            factory.reset(SkNEW(SkQuadTreePictureFactory));
+        } else if (kRTree_BbhType == bbhType) {
+            factory.reset(SkNEW(SkRTreePictureFactory));
         }
-        if (kNone_BbhType != bbhType) {
-            recordFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
-        }
-        SkCanvas* cv = pict->beginRecording(width, height, recordFlags);
+        SkPictureRecorder recorder(factory);
+        SkCanvas* cv = recorder.beginRecording(width, height, recordFlags);
         cv->scale(scale, scale);
         invokeGM(gm, cv, false, false);
-        pict->endRecording();
-
-        return pict;
+        return recorder.endRecording();
     }
 
     static SkPicture* stream_to_new_picture(const SkPicture& src) {
@@ -1453,6 +1453,7 @@ DEFINE_string(mismatchPath, "", "Write images for tests that failed due to "
 DEFINE_string(modulo, "", "[--modulo <remainder> <divisor>]: only run tests for which "
               "testIndex %% divisor == remainder.");
 DEFINE_bool(pipe, false, "Exercise the SkGPipe replay test pass.");
+DEFINE_bool(quadtree, false, "Exercise the QuadTree variant of SkPicture test pass.");
 DEFINE_string2(readPath, r, "", "Read reference images from this dir, and report "
                "any differences between those and the newly generated ones.");
 DEFINE_bool(replay, false, "Exercise the SkPicture replay test pass.");
@@ -1611,14 +1612,29 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
 
     if (FLAGS_rtree) {
         const char renderModeDescriptor[] = "-rtree";
-        if ((gmFlags & GM::kSkipPicture_Flag) ||
-            (gmFlags & GM::kSkipTiled_Flag)) {
+        if ((gmFlags & GM::kSkipPicture_Flag) || (gmFlags & GM::kSkipTiled_Flag)) {
             gmmain.RecordTestResults(kIntentionallySkipped_ErrorType, shortNamePlusConfig,
                                      renderModeDescriptor);
             errorsForAllModes.add(kIntentionallySkipped_ErrorType);
         } else {
-            SkPicture* pict = gmmain.generate_new_picture(
-                gm, kRTree_BbhType, SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+            SkPicture* pict = gmmain.generate_new_picture(gm, kRTree_BbhType, 0);
+            SkAutoUnref aur(pict);
+            SkBitmap bitmap;
+            gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);
+            errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
+                gm->getName(), compareConfig.fName, renderModeDescriptor, bitmap,
+                &comparisonBitmap));
+        }
+    }
+
+    if (FLAGS_quadtree) {
+        const char renderModeDescriptor[] = "-quadtree";
+        if ((gmFlags & GM::kSkipPicture_Flag) || (gmFlags & GM::kSkipTiled_Flag)) {
+            gmmain.RecordTestResults(kIntentionallySkipped_ErrorType, shortNamePlusConfig,
+                                     renderModeDescriptor);
+            errorsForAllModes.add(kIntentionallySkipped_ErrorType);
+        } else {
+            SkPicture* pict = gmmain.generate_new_picture(gm, kQuadTree_BbhType, 0);
             SkAutoUnref aur(pict);
             SkBitmap bitmap;
             gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);

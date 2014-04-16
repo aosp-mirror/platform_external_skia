@@ -13,10 +13,8 @@
 #include "SkSize.h"
 
 /**
- * Subclass of SkPicture that override the behavior of the
- * kOptimizeForClippedPlayback_RecordingFlag by creating an SkTileGrid
- * structure rather than an R-Tree. The tile grid has lower recording
- * and playback costs, but is less effective at eliminating extraneous
+ * Subclass of SkPicture that creates an SkTileGrid. The tile grid has lower recording
+ * and playback costs then rTree, but is less effective at eliminating extraneous
  * primitives for arbitrary query rectangles. It is most effective for
  * tiled playback when the tile structure is known at record time.
  */
@@ -51,6 +49,23 @@ public:
 private:
     int fXTileCount, fYTileCount;
     TileGridInfo fInfo;
+
+    typedef SkPicture INHERITED;
+};
+
+class SkTileGridPictureFactory : public SkPictureFactory {
+public:
+    SkTileGridPictureFactory(const SkTileGridPicture::TileGridInfo& info) : fInfo(info) { }
+
+    virtual SkPicture* create(int width, int height) SK_OVERRIDE {
+        return SkNEW_ARGS(SkTileGridPicture, (width, height, fInfo));
+    }
+
+protected:
+    SkTileGridPicture::TileGridInfo fInfo;
+
+private:
+    typedef SkPictureFactory INHERITED;
 };
 
 #endif

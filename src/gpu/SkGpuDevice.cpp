@@ -229,7 +229,7 @@ SkGpuDevice* SkGpuDevice::Create(GrContext* context, const SkImageInfo& origInfo
     if (kRGB_565_SkColorType == info.colorType()) {
         info.fAlphaType = kOpaque_SkAlphaType;  // force this setting
     } else {
-        info.fColorType = kPMColor_SkColorType;
+        info.fColorType = kN32_SkColorType;
         if (kOpaque_SkAlphaType != info.alphaType()) {
             info.fAlphaType = kPremul_SkAlphaType;  // force this setting
         }
@@ -1536,7 +1536,9 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-left), SkIntToScalar(-top));
         SkIRect clipBounds = SkIRect::MakeWH(bitmap.width(), bitmap.height());
-        SkImageFilter::Context ctx(matrix, clipBounds);
+        SkImageFilter::Cache* cache = SkImageFilter::Cache::Create();
+        SkAutoUnref aur(cache);
+        SkImageFilter::Context ctx(matrix, clipBounds, cache);
         if (filter_texture(this, fContext, texture, filter, w, h, ctx, &filteredBitmap,
                            &offset)) {
             texture = (GrTexture*) filteredBitmap.getTexture();
@@ -1644,7 +1646,9 @@ void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
         SkMatrix matrix(*draw.fMatrix);
         matrix.postTranslate(SkIntToScalar(-x), SkIntToScalar(-y));
         SkIRect clipBounds = SkIRect::MakeWH(devTex->width(), devTex->height());
-        SkImageFilter::Context ctx(matrix, clipBounds);
+        SkImageFilter::Cache* cache = SkImageFilter::Cache::Create();
+        SkAutoUnref aur(cache);
+        SkImageFilter::Context ctx(matrix, clipBounds, cache);
         if (filter_texture(this, fContext, devTex, filter, w, h, ctx, &filteredBitmap,
                            &offset)) {
             devTex = filteredBitmap.getTexture();
@@ -1918,7 +1922,11 @@ void SkGpuDevice::EXPERIMENTAL_optimize(SkPicture* picture) {
     GatherGPUInfo(picture, data);
 }
 
-bool SkGpuDevice::EXPERIMENTAL_drawPicture(SkPicture* picture) {
+void SkGpuDevice::EXPERIMENTAL_purge(SkPicture* picture) {
+
+}
+
+bool SkGpuDevice::EXPERIMENTAL_drawPicture(SkCanvas* canvas, SkPicture* picture) {
 
     SkPicture::AccelData::Key key = ComputeAccelDataKey();
 
@@ -1988,7 +1996,7 @@ bool SkGpuDevice::EXPERIMENTAL_drawPicture(SkPicture* picture) {
     SkDebugf("Need SaveLayers: ");
     for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
         if (pullForward[i]) {
-            const GrAtlasedLayer* layer = fContext->getLayerCache()->findLayerOrCreate(picture, i);
+            const GrCachedLayer* layer = fContext->getLayerCache()->findLayerOrCreate(picture, i);
 
             SkDebugf("%d (%d), ", i, layer->layerID());
         }

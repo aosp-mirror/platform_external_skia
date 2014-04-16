@@ -139,7 +139,16 @@ public:
             clip-query calls will reflect the path's bounds, not the actual
             path.
          */
-        kUsePathBoundsForClip_RecordingFlag = 0x01,
+        kUsePathBoundsForClip_RecordingFlag = 0x01
+    };
+
+#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
+    // TODO: once kOptimizeForClippedPlayback_RecordingFlag is hidden from
+    // all external consumers, SkPicture::createBBoxHierarchy can also be
+    // cleaned up.
+private:
+#endif
+    enum Deprecated_RecordingFlags {
         /*  This flag causes the picture to compute bounding boxes and build
             up a spatial hierarchy (currently an R-Tree), plus a tree of Canvas'
             usually stack-based clip/etc state. This requires an increase in
@@ -159,6 +168,16 @@ public:
         */
         kOptimizeForClippedPlayback_RecordingFlag = 0x02,
     };
+#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
+public:
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
+private:
+    friend class SkPictureRecorder;
+    friend class SkImage_Picture;
+    friend class SkSurface_Picture;
+#endif
 
     /** Returns the canvas that records the drawing commands.
         @param width the base width for the picture, as if the recording
@@ -180,6 +199,10 @@ public:
         is drawn.
     */
     void endRecording();
+
+#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
+public:
+#endif
 
     /** Replays the drawing commands on the specified canvas. This internally
         calls endRecording() if that has not already been called.
@@ -298,13 +321,14 @@ protected:
     // V20: added bool to SkPictureImageFilter's serialization (to allow SkPicture serialization)
     // V21: add pushCull, popCull
     // V22: SK_PICT_FACTORY_TAG's size is now the chunk size in bytes
+    // V23: SkPaint::FilterLevel became a real enum
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 19;
-    static const uint32_t CURRENT_PICTURE_VERSION = 22;
+    static const uint32_t CURRENT_PICTURE_VERSION = 23;
 
     mutable uint32_t      fUniqueID;
 
@@ -325,6 +349,7 @@ protected:
     // For testing. Derived classes may instantiate an alternate
     // SkBBoxHierarchy implementation
     virtual SkBBoxHierarchy* createBBoxHierarchy() const;
+
 private:
     // An OperationList encapsulates a set of operation offsets into the picture byte
     // stream along with the CTMs needed for those operation.
@@ -386,6 +411,87 @@ public:
     virtual ~SkDrawPictureCallback() {}
 
     virtual bool abortDrawing() = 0;
+};
+
+class SkPictureFactory : public SkRefCnt {
+public:
+    /**
+     *  Allocate a new SkPicture. Return NULL on failure.
+     */
+    virtual SkPicture* create(int width, int height) = 0;
+
+private:
+    typedef SkRefCnt INHERITED;
+};
+
+class SK_API SkPictureRecorder : SkNoncopyable {
+public:
+    SkPictureRecorder(SkPictureFactory* factory = NULL) {
+        fFactory.reset(factory);
+        if (NULL != fFactory.get()) {
+            fFactory.get()->ref();
+        }
+    }
+
+    /** Returns the canvas that records the drawing commands.
+        @param width the base width for the picture, as if the recording
+                     canvas' bitmap had this width.
+        @param height the base width for the picture, as if the recording
+                     canvas' bitmap had this height.
+        @param recordFlags optional flags that control recording.
+        @return the canvas.
+    */
+    SkCanvas* beginRecording(int width, int height, uint32_t recordFlags = 0) {
+        if (NULL != fFactory) {
+            fPicture.reset(fFactory->create(width, height));
+            recordFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
+        } else {
+            fPicture.reset(SkNEW(SkPicture));
+        }
+
+        return fPicture->beginRecording(width, height, recordFlags);
+    }
+
+    /** Returns the recording canvas if one is active, or NULL if recording is
+        not active. This does not alter the refcnt on the canvas (if present).
+    */
+    SkCanvas* getRecordingCanvas() {
+        if (NULL != fPicture.get()) {
+            return fPicture->getRecordingCanvas();
+        }
+        return NULL;
+    }
+
+    /** Signal that the caller is done recording. This invalidates the canvas
+        returned by beginRecording/getRecordingCanvas, and returns the
+        created SkPicture. Note that the returned picture has its creation
+        ref which the caller must take ownership of.
+    */
+    SkPicture* endRecording() {
+        if (NULL != fPicture.get()) {
+            fPicture->endRecording();
+            return fPicture.detach();
+        }
+        return NULL;
+    }
+
+    /** Enable/disable all the picture recording optimizations (i.e.,
+        those in SkPictureRecord). It is mainly intended for testing the
+        existing optimizations (i.e., to actually have the pattern
+        appear in an .skp we have to disable the optimization). Call right
+        after 'beginRecording'.
+    */
+    void internalOnly_EnableOpts(bool enableOpts) {
+        if (NULL != fPicture.get()) {
+            fPicture->internalOnly_EnableOpts(enableOpts);
+        }
+    }
+
+private:
+    SkAutoTUnref<SkPictureFactory> fFactory;
+    SkAutoTUnref<SkPicture>        fPicture;
+
+    typedef SkNoncopyable INHERITED;
 };
 
 #endif

@@ -16,6 +16,7 @@
         'bbh_shootout',
         'bench_pictures',
         'bench_record',
+        'bench_playback',
         'filter',
         'lua_app',
         'lua_pictures',
@@ -300,6 +301,23 @@
         '../src/core/',
         '../src/images',
         '../src/lazy',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+        'record.gyp:*',
+      ],
+    },
+    {
+      'target_name': 'bench_playback',
+      'type': 'executable',
+      'sources': [
+        '../tools/bench_playback.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/record',
       ],
       'dependencies': [
         'flags.gyp:flags',

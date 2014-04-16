@@ -163,6 +163,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkRegion_path.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
+	src/core/SkRTreePicture.cpp \
 	src/core/SkScaledImageCache.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
@@ -196,10 +197,8 @@ LOCAL_SRC_FILES := \
 	src/image/SkImage.cpp \
 	src/image/SkImagePriv.cpp \
 	src/image/SkImage_Codec.cpp \
-	src/image/SkImage_Picture.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
-	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/pipe/SkGPipeRead.cpp \
 	src/pipe/SkGPipeWrite.cpp \
@@ -368,6 +367,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkGatherPixelRefsAndRects.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
+	src/utils/SkMatrix22.cpp \
 	src/utils/SkMatrix44.cpp \
 	src/utils/SkMD5.cpp \
 	src/utils/SkMeshUtils.cpp \

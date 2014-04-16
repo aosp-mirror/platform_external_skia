@@ -4,6 +4,7 @@
 
 #include "SkCommandLineFlags.h"
 #include "SkPicture.h"
+#include "SkRTreePicture.h"
 
 DEFINE_bool(replay, true, "If true, run picture replay tests.");
 DEFINE_bool(rtree,  true, "If true, run picture replay tests with an rtree.");
@@ -22,13 +23,15 @@ ReplayTask::ReplayTask(const Task& parent,
     {}
 
 void ReplayTask::draw() {
-    SkPicture recorded;
-    const uint32_t flags = fUseRTree ? SkPicture::kOptimizeForClippedPlayback_RecordingFlag : 0;
-    RecordPicture(fGM.get(), &recorded, flags);
+    SkAutoTUnref<SkPictureFactory> factory;
+    if (fUseRTree) {
+        factory.reset(SkNEW(SkRTreePictureFactory));
+    }
+    SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(), 0, factory));
 
     SkBitmap bitmap;
     SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
-    DrawPicture(&recorded, &bitmap);
+    DrawPicture(recorded, &bitmap);
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();
         this->spawnChild(SkNEW_ARGS(WriteTask, (*this, bitmap)));

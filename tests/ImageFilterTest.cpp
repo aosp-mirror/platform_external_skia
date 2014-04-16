@@ -24,6 +24,7 @@
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPicture.h"
+#include "SkRTreePicture.h"
 #include "SkRect.h"
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
@@ -191,7 +192,8 @@ DEF_TEST(ImageFilter, reporter) {
             SkDeviceImageFilterProxy proxy(&device);
             SkIPoint loc = SkIPoint::Make(0, 0);
             // An empty input should early return and return false
-            SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeEmpty());
+            SkAutoTUnref<SkImageFilter::Cache> cache(SkImageFilter::Cache::Create(2));
+            SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeEmpty(), cache.get());
             REPORTER_ASSERT(reporter,
                             !bicubic->filterImage(&proxy, bitmap, ctx, &result, &loc));
         }
@@ -247,8 +249,10 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
         SkIPoint offset;
         SkString str;
         str.printf("filter %d", static_cast<int>(i));
-        SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeLargest());
-        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, ctx, &result, &offset), str.c_str());
+        SkAutoTUnref<SkImageFilter::Cache> cache(SkImageFilter::Cache::Create(2));
+        SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeLargest(), cache.get());
+        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, ctx,
+                                &result, &offset), str.c_str());
         REPORTER_ASSERT_MESSAGE(reporter, offset.fX == 20 && offset.fY == 30, str.c_str());
     }
 
@@ -273,9 +277,9 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
 
     SkMatrix expectedMatrix = canvas.getTotalMatrix();
 
-    SkPicture picture;
-    SkCanvas* recordingCanvas = picture.beginRecording(100, 100,
-        SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+    SkAutoTUnref<SkPictureFactory> factory(SkNEW(SkRTreePictureFactory));
+    SkPictureRecorder recorder(factory);
+    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100);
 
     SkPaint paint;
     SkAutoTUnref<MatrixTestImageFilter> imageFilter(
@@ -291,9 +295,9 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
     recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeWH(100, 100)), solidPaint);
     recordingCanvas->restore(); // scale
     recordingCanvas->restore(); // saveLayer
-    picture.endRecording();
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-    canvas.drawPicture(picture);
+    canvas.drawPicture(*picture);
 }
 
 static void test_huge_blur(SkBaseDevice* device, skiatest::Reporter* reporter) {

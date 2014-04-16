@@ -1330,9 +1330,18 @@ void GrGpuGL::discard(GrRenderTarget* renderTarget) {
             }
             break;
         case GrGLCaps::kDiscard_InvalidateFBType: {
-            static const GrGLenum attachments[] = { GR_GL_COLOR };
-            GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
-                    attachments));
+            if (0 == glRT->renderFBOID()) {
+                //  When rendering to the default framebuffer the legal values for attachments
+                //  are GL_COLOR, GL_DEPTH, GL_STENCIL, ... rather than the various FBO attachment
+                //  types. See glDiscardFramebuffer() spec.
+                static const GrGLenum attachments[] = { GR_GL_COLOR };
+                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            } else {
+                static const GrGLenum attachments[] = { GR_GL_COLOR_ATTACHMENT0 };
+                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            }
             break;
         }
     }
@@ -2482,7 +2491,6 @@ bool GrGpuGL::configToGLFormats(GrPixelConfig config,
             break;
         case kIndex_8_GrPixelConfig:
             if (this->caps()->eightBitPaletteSupport()) {
-                *internalFormat = GR_GL_PALETTE8_RGBA8;
                 // glCompressedTexImage doesn't take external params
                 *externalFormat = GR_GL_PALETTE8_RGBA8;
                 // no sized/unsized internal format distinction here

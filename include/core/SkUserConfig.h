@@ -214,8 +214,6 @@
 #define SK_CAN_USE_FLOAT
 #define DCT_IFAST_SUPPORTED
 #define SK_USE_FREETYPE_EMBOLDEN
-#define SK_FONTHOST_FREETYPE_RUNTIME_VERSION 0x020400
-#define SK_CAN_USE_DLOPEN 0
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
 #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
@@ -227,7 +225,7 @@
 #define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
 #define SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
 #define SK_SUPPORT_LEGACY_GETTOTALCLIP
-#define kNative_8888_SkColorType kPMColor_SkColorType
+#define kNative_8888_SkColorType kN32_SkColorType
 #define SK_BUILD_FOR_ANDROID
 #define SK_FONTHOST_DOES_NOT_USE_FONTMGR
 #define SK_GAMMA_EXPONENT 1.4

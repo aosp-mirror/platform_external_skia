@@ -233,7 +233,7 @@ static void TestBitmapSerialization(const SkBitmap& validBitmap,
 
 static bool setup_bitmap_for_canvas(SkBitmap* bitmap) {
     SkImageInfo info = SkImageInfo::Make(
-        kBitmapSize, kBitmapSize, kPMColor_SkColorType, kPremul_SkAlphaType);
+        kBitmapSize, kBitmapSize, kN32_SkColorType, kPremul_SkAlphaType);
     return bitmap->allocPixels(info);
 }
 
@@ -369,11 +369,10 @@ DEF_TEST(Serialization, reporter) {
 
     // Test simple SkPicture serialization
     {
-        SkPicture* pict = new SkPicture;
-        SkAutoUnref aur(pict);
-        bool didDraw = drawSomething(pict->beginRecording(kBitmapSize, kBitmapSize));
+        SkPictureRecorder recorder;
+        bool didDraw = drawSomething(recorder.beginRecording(kBitmapSize, kBitmapSize));
         REPORTER_ASSERT(reporter, didDraw);
-        pict->endRecording();
+        SkAutoTUnref<SkPicture> pict(recorder.endRecording());
 
         // Serialize picture
         SkWriteBuffer writer(SkWriteBuffer::kValidation_Flag);
