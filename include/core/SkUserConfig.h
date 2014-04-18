@@ -242,5 +242,6 @@
 // Use a better name for kPMColor_SkColorType until
 // https://code.google.com/p/skia/issues/detail?id=2384 is fixed.
 #define kNative_8888_SkColorType kPMColor_SkColorType
+#define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 
 #endif // SkUserConfig_Android_DEFINED
