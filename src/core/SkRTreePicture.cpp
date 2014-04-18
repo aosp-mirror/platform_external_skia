@@ -5,10 +5,11 @@
  * found in the LICENSE file.
  */
 
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
+
 #include "SkRTreePicture.h"
 
 #include "SkRTree.h"
-
 
 SkBBoxHierarchy* SkRTreePicture::createBBoxHierarchy() const {
     // These values were empirically determined to produce reasonable
@@ -23,3 +24,5 @@ SkBBoxHierarchy* SkRTreePicture::createBBoxHierarchy() const {
     return SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
                            aspectRatio, sortDraws);
 }
+
+#endif

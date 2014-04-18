@@ -59,6 +59,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
+	src/core/SkBBHFactory.cpp \
 	src/core/SkBBoxRecord.cpp \
 	src/core/SkBBoxHierarchyRecord.cpp \
 	src/core/SkBitmap.cpp \
@@ -145,6 +146,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureFlat.cpp \
 	src/core/SkPicturePlayback.cpp \
 	src/core/SkPictureRecord.cpp \
+	src/core/SkPictureRecorder.cpp \
 	src/core/SkPictureShader.cpp \
 	src/core/SkPictureStateTree.cpp \
 	src/core/SkPixelRef.cpp \

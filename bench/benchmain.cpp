@@ -20,6 +20,7 @@
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkString.h"
 #include "SkSurface.h"
 
@@ -506,13 +507,16 @@ int tool_main(int argc, char** argv) {
                         canvas.reset(SkDeferredCanvas::Create(surface.get()));
                         break;
                     case kRecord_BenchMode:
-                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                         break;
                     case kPictureRecord_BenchMode: {
                         SkPictureRecorder recorderFrom;
-                        bench->draw(1, recorderFrom.beginRecording(dim.fX, dim.fY, kRecordFlags));
+                        bench->draw(1, recorderFrom.beginRecording(dim.fX, dim.fY,
+                                                                   NULL, kRecordFlags));
                         recordFrom.reset(recorderFrom.endRecording());
-                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                         break;
                     }
                     case kNormal_BenchMode:
@@ -578,7 +582,8 @@ int tool_main(int argc, char** argv) {
 
                     if ((benchMode == kRecord_BenchMode || benchMode == kPictureRecord_BenchMode)) {
                         // Clear the recorded commands so that they do not accumulate.
-                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                     }
 
                     timer.start();

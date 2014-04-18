@@ -24,16 +24,13 @@
 #include "SkMatrix.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
-#include "SkQuadTree.h"
-#include "SkQuadTreePicture.h"
-#include "SkRTreePicture.h"
 #include "SkScalar.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "SkTemplates.h"
-#include "SkTileGridPicture.h"
 #include "SkTDArray.h"
 #include "SkThreadUtils.h"
 #include "SkTypes.h"
@@ -274,9 +271,10 @@ int PictureRenderer::getViewHeight() {
 void PictureRenderer::buildBBoxHierarchy() {
     SkASSERT(NULL != fPicture);
     if (kNone_BBoxHierarchyType != fBBoxHierarchyType && NULL != fPicture) {
-        SkAutoTUnref<SkPictureFactory> factory(this->getFactory());
-        SkPictureRecorder recorder(factory);
+        SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
+        SkPictureRecorder recorder;
         SkCanvas* canvas = recorder.beginRecording(fPicture->width(), fPicture->height(),
+                                                   factory.get(),
                                                    this->recordFlags());
         fPicture->draw(canvas);
         fPicture.reset(recorder.endRecording());
@@ -435,9 +433,10 @@ static SkData* encode_bitmap_to_data(size_t*, const SkBitmap& bm) {
 }
 
 bool RecordPictureRenderer::render(SkBitmap** out) {
-    SkAutoTUnref<SkPictureFactory> factory(this->getFactory());
-    SkPictureRecorder recorder(factory);
+    SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
+    SkPictureRecorder recorder;
     SkCanvas* canvas = recorder.beginRecording(this->getViewWidth(), this->getViewHeight(),
+                                               factory.get(),
                                                this->recordFlags());
     this->scaleToScaleFactor(canvas);
     fPicture->draw(canvas);
@@ -954,9 +953,10 @@ SkString MultiCorePictureRenderer::getConfigNameInternal() {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 void PlaybackCreationRenderer::setup() {
-    SkAutoTUnref<SkPictureFactory> factory(this->getFactory());
-    fRecorder.reset(SkNEW_ARGS(SkPictureRecorder, (factory)));
+    SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
+    fRecorder.reset(SkNEW(SkPictureRecorder));
     SkCanvas* canvas = fRecorder->beginRecording(this->getViewWidth(), this->getViewHeight(),
+                                                 factory.get(),
                                                  this->recordFlags());
     this->scaleToScaleFactor(canvas);
     canvas->drawPicture(*fPicture);
@@ -975,16 +975,16 @@ SkString PlaybackCreationRenderer::getConfigNameInternal() {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // SkPicture variants for each BBoxHierarchy type
 
-SkPictureFactory* PictureRenderer::getFactory() {
+SkBBHFactory* PictureRenderer::getFactory() {
     switch (fBBoxHierarchyType) {
         case kNone_BBoxHierarchyType:
             return NULL;
         case kQuadTree_BBoxHierarchyType:
-            return SkNEW(SkQuadTreePictureFactory);
+            return SkNEW(SkQuadTreeFactory);
         case kRTree_BBoxHierarchyType:
-            return SkNEW(SkRTreePictureFactory);
+            return SkNEW(SkRTreeFactory);
         case kTileGrid_BBoxHierarchyType:
-            return new SkTileGridPictureFactory(fGridInfo);
+            return SkNEW_ARGS(SkTileGridFactory, (fGridInfo));
     }
     SkASSERT(0); // invalid bbhType
     return NULL;

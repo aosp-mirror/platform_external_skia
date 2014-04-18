@@ -2,9 +2,9 @@
 #include "DMWriteTask.h"
 #include "DMUtil.h"
 
+#include "SkBBHFactory.h"
 #include "SkCommandLineFlags.h"
 #include "SkPicture.h"
-#include "SkRTreePicture.h"
 
 DEFINE_bool(replay, true, "If true, run picture replay tests.");
 DEFINE_bool(rtree,  true, "If true, run picture replay tests with an rtree.");
@@ -23,11 +23,11 @@ ReplayTask::ReplayTask(const Task& parent,
     {}
 
 void ReplayTask::draw() {
-    SkAutoTUnref<SkPictureFactory> factory;
+    SkAutoTDelete<SkBBHFactory> factory;
     if (fUseRTree) {
-        factory.reset(SkNEW(SkRTreePictureFactory));
+        factory.reset(SkNEW(SkRTreeFactory));
     }
-    SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(), 0, factory));
+    SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(), 0, factory.get()));
 
     SkBitmap bitmap;
     SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);

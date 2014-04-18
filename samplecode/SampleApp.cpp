@@ -14,6 +14,7 @@
 #include "SkImageEncoder.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkStream.h"
 #include "SkTSort.h"
 #include "SkTime.h"
@@ -1376,7 +1377,7 @@ SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
         pdfDevice->unref();
         canvas = fPdfCanvas;
     } else if (kPicture_DeviceType == fDeviceType) {
-        canvas = fRecorder.beginRecording(9999, 9999);
+        canvas = fRecorder.beginRecording(9999, 9999, NULL, 0);
     } else {
 #if SK_SUPPORT_GPU
         if (kNullGPU_DeviceType != fDeviceType)

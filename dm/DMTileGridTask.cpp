@@ -2,9 +2,9 @@
 #include "DMWriteTask.h"
 #include "DMUtil.h"
 
+#include "SkBBHFactory.h"
 #include "SkCommandLineFlags.h"
 #include "SkPicture.h"
-#include "SkTileGridPicture.h"
 
 // TODO(mtklein): Tile grid tests are currently failing.  (Skia issue 1198).  When fixed, -> true.
 DEFINE_bool(tileGrid, false, "If true, run picture replay tests with a tile grid.");
@@ -24,15 +24,15 @@ static int tiles_needed(int fullDimension, int tileDimension) {
 }
 
 void TileGridTask::draw() {
-    const SkTileGridPicture::TileGridInfo info = {
+    const SkTileGridFactory::TileGridInfo info = {
         fTileSize,
-        SkISize::Make(0,0),   // Overlap between adjacent tiles.
-        SkIPoint::Make(0,0),  // Offset.
+        SkISize::Make(0,0),    // Overlap between adjacent tiles.
+        SkIPoint::Make(0,0),   // Offset.
     };
-    SkAutoTUnref<SkPictureFactory> factory(SkNEW_ARGS(SkTileGridPictureFactory, (info)));
+    SkTileGridFactory factory(info);
     SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(),
                                                    SkPicture::kUsePathBoundsForClip_RecordingFlag,
-                                                   factory));
+                                                   &factory));
 
     SkBitmap full;
     SetupBitmap(fReference.colorType(), fGM.get(), &full);

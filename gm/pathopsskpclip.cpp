@@ -13,6 +13,7 @@
 #include "SkPath.h"
 #include "SkPathOps.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 
 namespace skiagm {
@@ -33,7 +34,7 @@ protected:
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkPictureRecorder recorder;
-        SkCanvas* rec = recorder.beginRecording(1200, 900);
+        SkCanvas* rec = recorder.beginRecording(1200, 900, NULL, 0);
         SkPath p;
         SkRect r = {
             SkIntToScalar(100),

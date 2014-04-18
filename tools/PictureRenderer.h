@@ -15,13 +15,13 @@
 #include "SkMath.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
 #include "SkRunnable.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkThreadPool.h"
-#include "SkTileGridPicture.h"
 #include "SkTypes.h"
 
 #if SK_SUPPORT_GPU
@@ -409,7 +409,7 @@ protected:
     SkString               fDrawFiltersConfig;
     SkString               fOutputDir;
     SkString               fInputFilename;
-    SkTileGridPicture::TileGridInfo fGridInfo; // used when fBBoxHierarchyType is TileGrid
+    SkTileGridFactory::TileGridInfo fGridInfo; // used when fBBoxHierarchyType is TileGrid
 
     void buildBBoxHierarchy();
 
@@ -430,7 +430,7 @@ protected:
      */
     void scaleToScaleFactor(SkCanvas*);
 
-    SkPictureFactory* getFactory();
+    SkBBHFactory* getFactory();
     uint32_t recordFlags();
     SkCanvas* setupCanvas();
     virtual SkCanvas* setupCanvas(int width, int height);

@@ -10,6 +10,7 @@
 #include "SkBitmap.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkShader.h"
 
 namespace skiagm {
@@ -33,7 +34,8 @@ public:
         // Build the picture.
         SkPictureRecorder recorder;
         SkCanvas* pictureCanvas = recorder.beginRecording(SkScalarRoundToInt(tileSize),
-                                                          SkScalarRoundToInt(tileSize));
+                                                          SkScalarRoundToInt(tileSize),
+                                                          NULL, 0);
         this->drawTile(pictureCanvas);
         SkAutoTUnref<SkPicture> p(recorder.endRecording());
 

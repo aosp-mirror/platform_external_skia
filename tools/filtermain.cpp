@@ -15,6 +15,7 @@
 #include "SkPicture.h"
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
+#include "SkPictureRecorder.h"
 #include "SkStream.h"
 #include "picture_utils.h"
 #include "path_utils.h"
@@ -718,7 +719,7 @@ static int filter_picture(const SkString& inFile, const SkString& outFile) {
 
     if (!outFile.isEmpty()) {
         SkPictureRecorder recorder;
-        SkCanvas* canvas = recorder.beginRecording(inPicture->width(), inPicture->height());
+        SkCanvas* canvas = recorder.beginRecording(inPicture->width(), inPicture->height(), NULL, 0);
         debugCanvas.draw(canvas);
         SkAutoTUnref<SkPicture> outPicture(recorder.endRecording());
 

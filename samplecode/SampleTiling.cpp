@@ -10,6 +10,7 @@
 #include "SkCanvas.h"
 #include "SkPaint.h"
 #include "SkPath.h"
+#include "SkPictureRecorder.h"
 #include "SkRegion.h"
 #include "SkShader.h"
 #include "SkUtils.h"
@@ -106,7 +107,7 @@ protected:
         SkPictureRecorder recorder;
         SkCanvas* textCanvas = NULL;
         if (NULL == fTextPicture) {
-            textCanvas = recorder.beginRecording(1000, 1000);
+            textCanvas = recorder.beginRecording(1000, 1000, NULL, 0);
         }
 
         if (NULL != textCanvas) {

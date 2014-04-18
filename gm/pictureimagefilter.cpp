@@ -8,6 +8,7 @@
 #include "gm.h"
 
 #include "SkPictureImageFilter.h"
+#include "SkPictureRecorder.h"
 
 // This GM exercises the SkPictureImageFilter ImageFilter class.
 
@@ -23,7 +24,7 @@ protected:
 
     void makePicture() {
         SkPictureRecorder recorder;
-        SkCanvas* canvas = recorder.beginRecording(100, 100);
+        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
         canvas->clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);

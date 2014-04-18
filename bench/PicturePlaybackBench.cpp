@@ -9,6 +9,7 @@
 #include "SkColor.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkPoint.h"
 #include "SkRect.h"
 #include "SkString.h"
@@ -38,7 +39,7 @@ protected:
     virtual void onDraw(const int loops, SkCanvas* canvas) {
 
         SkPictureRecorder recorder;
-        SkCanvas* pCanvas = recorder.beginRecording(PICTURE_WIDTH, PICTURE_HEIGHT);
+        SkCanvas* pCanvas = recorder.beginRecording(PICTURE_WIDTH, PICTURE_HEIGHT, NULL, 0);
         this->recordCanvas(pCanvas);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 

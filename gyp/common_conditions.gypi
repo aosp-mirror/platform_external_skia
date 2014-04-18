@@ -22,7 +22,6 @@
           'GR_GL_FUNCTION_TYPE=__stdcall',
         ],
         'msvs_cygwin_shell': 0,
-        'msvs_disabled_warnings': [4275],
         'msvs_settings': {
           'VCCLCompilerTool': {
             'WarningLevel': '3',
@@ -298,6 +297,8 @@
         'kNative_8888_SkColorType kN32_SkColorType',
         'SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD',
         'SK_SUPPORT_DEPRECATED_RECORD_FLAGS',
+        'SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES',
+        'SK_SUPPORT_LEGACY_PICTURE_HEADERS',
         'SK_SUPPORT_LEGACY_BLURDRAWLOOPERCONSTRUCTORS',
       ],
     }],

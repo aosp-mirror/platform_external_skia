@@ -1,6 +1,7 @@
 #include "DMUtil.h"
 
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 
 namespace DM {
 
@@ -10,10 +11,10 @@ SkString UnderJoin(const char* a, const char* b) {
     return s;
 }
 
-SkPicture* RecordPicture(skiagm::GM* gm, uint32_t recordFlags, SkPictureFactory* factory) {
+SkPicture* RecordPicture(skiagm::GM* gm, uint32_t recordFlags, SkBBHFactory* factory) {
     const SkISize size = gm->getISize();
-    SkPictureRecorder recorder(factory);
-    SkCanvas* canvas = recorder.beginRecording(size.width(), size.height(), recordFlags);
+    SkPictureRecorder recorder;
+    SkCanvas* canvas = recorder.beginRecording(size.width(), size.height(), factory, recordFlags);
     canvas->concat(gm->getInitialTransform());
     gm->draw(canvas);
     canvas->flush();

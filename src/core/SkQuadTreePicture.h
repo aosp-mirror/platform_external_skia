@@ -8,6 +8,12 @@
 #ifndef SkQuadTreePicture_DEFINED
 #define SkQuadTreePicture_DEFINED
 
+#ifdef SK_SUPPORT_LEGACY_PICTURE_HEADERS
+#include "SkBBHFactory.h"
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
+
 #include "SkPicture.h"
 #include "SkRect.h"
 
@@ -38,5 +44,7 @@ public:
 private:
     typedef SkPictureFactory INHERITED;
 };
+
+#endif
 
 #endif

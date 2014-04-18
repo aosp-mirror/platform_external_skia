@@ -18,6 +18,7 @@
 class GrContext;
 #endif
 
+class SkBBHFactory;
 class SkBBoxHierarchy;
 class SkCanvas;
 class SkDrawPictureCallback;
@@ -174,10 +175,9 @@ public:
 
 #ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
 private:
-    friend class SkPictureRecorder;
-    friend class SkImage_Picture;
-    friend class SkSurface_Picture;
 #endif
+
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
 
     /** Returns the canvas that records the drawing commands.
         @param width the base width for the picture, as if the recording
@@ -188,6 +188,7 @@ private:
         @return the picture canvas.
     */
     SkCanvas* beginRecording(int width, int height, uint32_t recordFlags = 0);
+#endif
 
     /** Returns the recording canvas if one is active, or NULL if recording is
         not active. This does not alter the refcnt on the canvas (if present).
@@ -346,9 +347,13 @@ protected:
     // playback is unchanged.
     SkPicture(SkPicturePlayback*, int width, int height);
 
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
     // For testing. Derived classes may instantiate an alternate
     // SkBBoxHierarchy implementation
     virtual SkBBoxHierarchy* createBBoxHierarchy() const;
+#endif
+
+    SkCanvas* beginRecording(int width, int height, SkBBHFactory* factory, uint32_t recordFlags);
 
 private:
     // An OperationList encapsulates a set of operation offsets into the picture byte
@@ -388,6 +393,7 @@ private:
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;
+    friend class SkPictureRecorder;
     friend class SkGpuDevice;
     friend class GrGatherDevice;
     friend class SkDebugCanvas;
@@ -413,6 +419,8 @@ public:
     virtual bool abortDrawing() = 0;
 };
 
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
+
 class SkPictureFactory : public SkRefCnt {
 public:
     /**
@@ -424,74 +432,10 @@ private:
     typedef SkRefCnt INHERITED;
 };
 
-class SK_API SkPictureRecorder : SkNoncopyable {
-public:
-    SkPictureRecorder(SkPictureFactory* factory = NULL) {
-        fFactory.reset(factory);
-        if (NULL != fFactory.get()) {
-            fFactory.get()->ref();
-        }
-    }
+#endif
 
-    /** Returns the canvas that records the drawing commands.
-        @param width the base width for the picture, as if the recording
-                     canvas' bitmap had this width.
-        @param height the base width for the picture, as if the recording
-                     canvas' bitmap had this height.
-        @param recordFlags optional flags that control recording.
-        @return the canvas.
-    */
-    SkCanvas* beginRecording(int width, int height, uint32_t recordFlags = 0) {
-        if (NULL != fFactory) {
-            fPicture.reset(fFactory->create(width, height));
-            recordFlags |= SkPicture::kOptimizeForClippedPlayback_RecordingFlag;
-        } else {
-            fPicture.reset(SkNEW(SkPicture));
-        }
-
-        return fPicture->beginRecording(width, height, recordFlags);
-    }
-
-    /** Returns the recording canvas if one is active, or NULL if recording is
-        not active. This does not alter the refcnt on the canvas (if present).
-    */
-    SkCanvas* getRecordingCanvas() {
-        if (NULL != fPicture.get()) {
-            return fPicture->getRecordingCanvas();
-        }
-        return NULL;
-    }
-
-    /** Signal that the caller is done recording. This invalidates the canvas
-        returned by beginRecording/getRecordingCanvas, and returns the
-        created SkPicture. Note that the returned picture has its creation
-        ref which the caller must take ownership of.
-    */
-    SkPicture* endRecording() {
-        if (NULL != fPicture.get()) {
-            fPicture->endRecording();
-            return fPicture.detach();
-        }
-        return NULL;
-    }
-
-    /** Enable/disable all the picture recording optimizations (i.e.,
-        those in SkPictureRecord). It is mainly intended for testing the
-        existing optimizations (i.e., to actually have the pattern
-        appear in an .skp we have to disable the optimization). Call right
-        after 'beginRecording'.
-    */
-    void internalOnly_EnableOpts(bool enableOpts) {
-        if (NULL != fPicture.get()) {
-            fPicture->internalOnly_EnableOpts(enableOpts);
-        }
-    }
-
-private:
-    SkAutoTUnref<SkPictureFactory> fFactory;
-    SkAutoTUnref<SkPicture>        fPicture;
-
-    typedef SkNoncopyable INHERITED;
-};
+#ifdef SK_SUPPORT_LEGACY_PICTURE_HEADERS
+#include "SkPictureRecorder.h"
+#endif
 
 #endif

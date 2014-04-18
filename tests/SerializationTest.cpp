@@ -9,6 +9,7 @@
 #include "SkBitmapSource.h"
 #include "SkCanvas.h"
 #include "SkMallocPixelRef.h"
+#include "SkPictureRecorder.h"
 #include "SkTemplates.h"
 #include "SkWriteBuffer.h"
 #include "SkValidatingReadBuffer.h"
@@ -370,7 +371,7 @@ DEF_TEST(Serialization, reporter) {
     // Test simple SkPicture serialization
     {
         SkPictureRecorder recorder;
-        bool didDraw = drawSomething(recorder.beginRecording(kBitmapSize, kBitmapSize));
+        bool didDraw = drawSomething(recorder.beginRecording(kBitmapSize, kBitmapSize, NULL, 0));
         REPORTER_ASSERT(reporter, didDraw);
         SkAutoTUnref<SkPicture> pict(recorder.endRecording());
 

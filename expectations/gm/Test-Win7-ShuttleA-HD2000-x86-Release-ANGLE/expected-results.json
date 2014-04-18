@@ -6787,6 +6787,15 @@
         ]
       ]
     }, 
+    "drrect_angle.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          10282477647296347296
+        ]
+      ], 
+      "reviewed-by-human": true
+    }, 
     "emptypath_565.png": {
       "allowed-digests": [
         [
@@ -7091,7 +7100,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          9828591029983786714
+          15516850164582258821
         ]
       ], 
       "reviewed-by-human": true
@@ -12157,7 +12166,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          7122851922257225236
+          2291209229174506914
         ]
       ], 
       "reviewed-by-human": true
@@ -12202,7 +12211,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          3764224183150533222
+          2639533157784794570
         ]
       ], 
       "reviewed-by-human": true

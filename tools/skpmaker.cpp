@@ -12,6 +12,7 @@
 #include "SkCommandLineFlags.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkScalar.h"
 #include "SkStream.h"
 
@@ -27,7 +28,7 @@ DEFINE_string(writePath, "", "Filepath to write the SKP into.");
 static void skpmaker(int width, int height, int border, SkColor color,
                      const char *writePath) {
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(width, height);
+    SkCanvas* canvas = recorder.beginRecording(width, height, NULL, 0);
     SkPaint paint;
     paint.setStyle(SkPaint::kFill_Style);
     paint.setColor(SK_ColorBLACK);

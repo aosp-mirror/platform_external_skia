@@ -24,7 +24,7 @@
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPicture.h"
-#include "SkRTreePicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
@@ -277,17 +277,15 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
 
     SkMatrix expectedMatrix = canvas.getTotalMatrix();
 
-    SkAutoTUnref<SkPictureFactory> factory(SkNEW(SkRTreePictureFactory));
-    SkPictureRecorder recorder(factory);
-    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100);
+    SkRTreeFactory factory;
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100, &factory, 0);
 
     SkPaint paint;
     SkAutoTUnref<MatrixTestImageFilter> imageFilter(
         new MatrixTestImageFilter(reporter, expectedMatrix));
     paint.setImageFilter(imageFilter.get());
-    SkCanvas::SaveFlags saveFlags = static_cast<SkCanvas::SaveFlags>(
-        SkCanvas::kHasAlphaLayer_SaveFlag | SkCanvas::kFullColorLayer_SaveFlag);
-    recordingCanvas->saveLayer(NULL, &paint, saveFlags);
+    recordingCanvas->saveLayer(NULL, &paint);
     SkPaint solidPaint;
     solidPaint.setColor(0xFFFFFFFF);
     recordingCanvas->save();
