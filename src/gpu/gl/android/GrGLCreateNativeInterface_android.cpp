@@ -307,10 +307,11 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fGetUniformLocation = (GrGLGetUniformLocationProc) eglGetProcAddress("glGetUniformLocation");
     functions->fLineWidth = (GrGLLineWidthProc) eglGetProcAddress("glLineWidth");
     functions->fLinkProgram = (GrGLLinkProgramProc) eglGetProcAddress("glLinkProgram");
-    functions->fLoadIdentity = (GrGLLoadIdentityProc) eglGetProcAddress("glLoadIdentity");
-    functions->fLoadMatrixf = (GrGLLoadMatrixfProc) eglGetProcAddress("glLoadMatrixf");
     functions->fMapBuffer = (GrGLMapBufferProc) eglGetProcAddress("glMapBuffer");
-    functions->fMatrixMode = (GrGLMatrixModeProc) eglGetProcAddress("glMatrixMode");
+    if (extensions.has("GL_EXT_direct_state_access")) {
+        functions->fMatrixLoadf = (GrGLMatrixLoadfProc) eglGetProcAddress("glMatrixLoadfEXT");
+        functions->fMatrixLoadIdentity = (GrGLMatrixLoadIdentityProc) eglGetProcAddress("glMatrixLoadIdentityEXT");
+    }
     functions->fPixelStorei = (GrGLPixelStoreiProc) eglGetProcAddress("glPixelStorei");
     functions->fQueryCounter = (GrGLQueryCounterProc) eglGetProcAddress("glQueryCounter");
     functions->fReadBuffer = (GrGLReadBufferProc) eglGetProcAddress("glReadBuffer");
@@ -325,8 +326,6 @@ static GrGLInterface* create_desktop_interface(GrGLVersion version,
     functions->fStencilMaskSeparate = (GrGLStencilMaskSeparateProc) eglGetProcAddress("glStencilMaskSeparate");
     functions->fStencilOp = (GrGLStencilOpProc) eglGetProcAddress("glStencilOp");
     functions->fStencilOpSeparate = (GrGLStencilOpSeparateProc) eglGetProcAddress("glStencilOpSeparate");
-    functions->fTexGenfv = (GrGLTexGenfvProc) eglGetProcAddress("glTexGenfv");
-    functions->fTexGeni = (GrGLTexGeniProc) eglGetProcAddress("glTexGeni");
     functions->fTexImage2D = (GrGLTexImage2DProc) eglGetProcAddress("glTexImage2D");
     functions->fTexParameteri = (GrGLTexParameteriProc) eglGetProcAddress("glTexParameteri");
     functions->fTexParameteriv = (GrGLTexParameterivProc) eglGetProcAddress("glTexParameteriv");

@@ -1,6 +1,67 @@
 # Valgrind suppressions for bench --config 8888 GPU NONRENDERING --runOnce
 # Pass this file to Valgrind with "--suppressions=bench/valgrind.supp"
 {
+    ATI driver 1
+    Memcheck:Param
+    ioctl(generic)
+    fun:ioctl
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 2
+    Memcheck:Cond
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 3
+    Memcheck:Addr8
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 4
+    Memcheck:Addr4
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 5
+    Memcheck:Addr2
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 6
+    Memcheck:Addr1
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 7
+    Memcheck:Leak
+    fun:malloc
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 8
+    Memcheck:Overlap
+    fun:strcpy
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 9
+    Memcheck:Leak
+    fun:calloc
+    obj:/usr/lib/x86_64-linux-gnu/dri/fglrx_dri.so
+}
+{
+    ATI driver 10
+    Memcheck:Leak
+    fun:malloc
+    obj:/usr/lib/fglrx/fglrx-libGL.so.1.2
+}
+{
    NV driver 1
    Memcheck:Cond
    obj:/usr/lib/nvidia-current/libnvidia-glcore.so.319.32
@@ -46,150 +107,3 @@
    fun:_Z9tool_mainiPPc
    fun:(below main)
 }
-{
-   shadermask_LCD_* http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL16SkMulDiv255Roundjj
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 2 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL8SkMulS16ii
-   fun:_ZL16SkMulDiv255Roundjj
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 3 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL23SkPremultiplyARGBInlinejjjj
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 4 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL16SkMulDiv255Roundjj
-   fun:_ZL23SkPremultiplyARGBInlinejjjj
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 5 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL16SkMulDiv255Roundjj
-   fun:_ZL23SkPremultiplyARGBInlinejjjj
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 6 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL8SkMulS16ii
-   fun:_ZL16SkMulDiv255Roundjj
-   fun:_ZL23SkPremultiplyARGBInlinejjjj
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-}
-{
-   shadermask_LCD_* 7 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL12SkPackARGB32jjjj
-   fun:_ZL23SkPremultiplyARGBInlinejjjj
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* 8 http://skbug.com/2453
-   Memcheck:Cond
-   fun:_ZL15GrColorPackRGBAjjjj
-   fun:_ZL15SkColor2GrColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   shadermask_LCD_* Release http://skbug.com/2453
-   Memcheck:Cond
-   fun:_Z18SkPreMultiplyColorj
-   fun:_ZN12_GLOBAL__N_123skPaint2GrPaintNoShaderEP11SkGpuDeviceRK7SkPaintbbP7GrPaint
-   fun:_ZN12_GLOBAL__N_121skPaint2GrPaintShaderEP11SkGpuDeviceRK7SkPaintbP7GrPaint.constprop.127
-   fun:_ZN11SkGpuDevice8drawTextERK6SkDrawPKvmffRK7SkPaint
-   fun:_ZN8SkCanvas8drawTextEPKvmffRK7SkPaint
-   fun:_ZN15ShaderMaskBench6onDrawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:(below main)
-}
-{
-   rtree_(unsorted)* http://skbug.com/2455
-   Memcheck:Cond
-   fun:_ZN14BBoxQueryBench6onDrawEiP8SkCanvas
-   fun:_ZN11SkBenchmark4drawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:main
-}
-{
-   rtree_(unsorted)* 2 http://skbug.com/2455
-   Memcheck:Cond
-   fun:_ZN14BBoxQueryBench6onDrawEiP8SkCanvas
-   fun:_Z9tool_mainiPPc
-   fun:(below main)
-}
-
-

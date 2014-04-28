@@ -124,10 +124,11 @@ const GrGLInterface* GrGLCreateNativeInterface() {
     GET_PROC(GetUniformLocation);
     GET_PROC(LineWidth);
     GET_PROC(LinkProgram);
-    GET_PROC(LoadIdentity);
-    GET_PROC(LoadMatrixf);
     GET_PROC(MapBuffer);
-    GET_PROC(MatrixMode);
+    if (extensions.has("GL_EXT_direct_state_access")) {
+        GET_PROC_SUFFIX(MatrixLoadf, EXT);
+        GET_PROC_SUFFIX(MatrixLoadIdentity, EXT);
+    }
     GET_PROC(PixelStorei);
     GET_PROC(ReadBuffer);
     GET_PROC(ReadPixels);
@@ -139,8 +140,6 @@ const GrGLInterface* GrGLCreateNativeInterface() {
     GET_PROC(StencilMaskSeparate);
     GET_PROC(StencilOp);
     GET_PROC(StencilOpSeparate);
-    GET_PROC(TexGenfv);
-    GET_PROC(TexGeni);
     GET_PROC(TexImage2D);
     GET_PROC(TexParameteri);
     GET_PROC(TexParameteriv);

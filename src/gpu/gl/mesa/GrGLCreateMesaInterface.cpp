@@ -118,10 +118,11 @@ const GrGLInterface* GrGLCreateMesaInterface() {
     GR_GL_GET_PROC(GetUniformLocation);
     GR_GL_GET_PROC(LineWidth);
     GR_GL_GET_PROC(LinkProgram);
-    GR_GL_GET_PROC(LoadIdentity);
-    GR_GL_GET_PROC(LoadMatrixf);
-    GR_GL_GET_PROC(MatrixMode);
     GR_GL_GET_PROC(MapBuffer);
+    if (extensions.has("GL_EXT_direct_state_access")) {
+        GR_GL_GET_PROC_SUFFIX(MatrixLoadf, EXT);
+        GR_GL_GET_PROC_SUFFIX(MatrixLoadIdentity, EXT);
+    }
     GR_GL_GET_PROC(PixelStorei);
     GR_GL_GET_PROC(ReadBuffer);
     GR_GL_GET_PROC(ReadPixels);
@@ -133,8 +134,6 @@ const GrGLInterface* GrGLCreateMesaInterface() {
     GR_GL_GET_PROC(StencilMaskSeparate);
     GR_GL_GET_PROC(StencilOp);
     GR_GL_GET_PROC(StencilOpSeparate);
-    GR_GL_GET_PROC(TexGenfv);
-    GR_GL_GET_PROC(TexGeni);
     GR_GL_GET_PROC(TexImage2D)
     GR_GL_GET_PROC(TexParameteri);
     GR_GL_GET_PROC(TexParameteriv);

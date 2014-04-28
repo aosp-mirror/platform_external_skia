@@ -119,6 +119,10 @@ const GrGLInterface* GrGLCreateNativeInterface() {
     functions->fLineWidth = glLineWidth;
     GR_GL_GET_PROC(LinkProgram);
     GR_GL_GET_PROC(MapBuffer);
+    if (extensions.has("GL_EXT_direct_state_access")) {
+        GR_GL_GET_PROC_SUFFIX(MatrixLoadf, EXT);
+        GR_GL_GET_PROC_SUFFIX(MatrixLoadIdentity, EXT);
+    }
     functions->fPixelStorei = glPixelStorei;
     functions->fReadBuffer = glReadBuffer;
     functions->fReadPixels = glReadPixels;
@@ -131,8 +135,6 @@ const GrGLInterface* GrGLCreateNativeInterface() {
     functions->fStencilOp = glStencilOp;
     GR_GL_GET_PROC(StencilOpSeparate);
     functions->fTexImage2D = glTexImage2D;
-    functions->fTexGenfv = glTexGenfv;
-    functions->fTexGeni = glTexGeni;
     functions->fTexParameteri = glTexParameteri;
     functions->fTexParameteriv = glTexParameteriv;
     if (glVer >= GR_GL_VER(4,2) || extensions.has("GL_ARB_texture_storage")) {
@@ -215,10 +217,6 @@ const GrGLInterface* GrGLCreateNativeInterface() {
         delete interface;
         return NULL;
     }
-
-    GR_GL_GET_PROC(LoadIdentity);
-    GR_GL_GET_PROC(LoadMatrixf);
-    GR_GL_GET_PROC(MatrixMode);
 
     if (extensions.has("GL_NV_path_rendering")) {
         GR_GL_GET_PROC_SUFFIX(PathCommands, NV);

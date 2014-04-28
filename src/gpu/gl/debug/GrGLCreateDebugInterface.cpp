@@ -848,11 +848,8 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     functions->fGetTexLevelParameteriv = noOpGLGetTexLevelParameteriv;
     functions->fGetUniformLocation = noOpGLGetUniformLocation;
     functions->fGenVertexArrays = debugGLGenVertexArrays;
-    functions->fLoadIdentity = noOpGLLoadIdentity;
-    functions->fLoadMatrixf = noOpGLLoadMatrixf;
     functions->fLineWidth = noOpGLLineWidth;
     functions->fLinkProgram = noOpGLLinkProgram;
-    functions->fMatrixMode = noOpGLMatrixMode;
     functions->fPixelStorei = debugGLPixelStorei;
     functions->fQueryCounter = noOpGLQueryCounter;
     functions->fReadBuffer = noOpGLReadBuffer;
@@ -865,8 +862,6 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     functions->fStencilMaskSeparate = noOpGLStencilMaskSeparate;
     functions->fStencilOp = noOpGLStencilOp;
     functions->fStencilOpSeparate = noOpGLStencilOpSeparate;
-    functions->fTexGenfv = noOpGLTexGenfv;
-    functions->fTexGeni = noOpGLTexGeni;
     functions->fTexImage2D = noOpGLTexImage2D;
     functions->fTexParameteri = noOpGLTexParameteri;
     functions->fTexParameteriv = noOpGLTexParameteriv;
@@ -915,6 +910,8 @@ const GrGLInterface* GrGLCreateDebugInterface() {
     functions->fResolveMultisampleFramebuffer =
                                     noOpGLResolveMultisampleFramebuffer;
     functions->fMapBuffer = debugGLMapBuffer;
+    functions->fMatrixLoadf = noOpGLMatrixLoadf;
+    functions->fMatrixLoadIdentity = noOpGLMatrixLoadIdentity;
     functions->fUnmapBuffer = debugGLUnmapBuffer;
     functions->fBindFragDataLocationIndexed =
                                     noOpGLBindFragDataLocationIndexed;

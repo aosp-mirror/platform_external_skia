@@ -27,7 +27,7 @@ static const uint32_t kSaveSize = 2 * kUInt32Size;
 static const uint32_t kSaveLayerNoBoundsSize = 4 * kUInt32Size;
 static const uint32_t kSaveLayerWithBoundsSize = 4 * kUInt32Size + sizeof(SkRect);
 
-SkPictureRecord::SkPictureRecord(const SkISize& dimensions, uint32_t flags)
+SkPictureRecord::SkPictureRecord(SkPicture* picture, const SkISize& dimensions, uint32_t flags)
     : INHERITED(dimensions.width(), dimensions.height())
     , fBoundingHierarchy(NULL)
     , fStateTree(NULL)
@@ -40,9 +40,9 @@ SkPictureRecord::SkPictureRecord(const SkISize& dimensions, uint32_t flags)
     fPointWrites = fRectWrites = fTextWrites = 0;
 #endif
 
+    fPicture = picture;
     fBitmapHeap = SkNEW(SkBitmapHeap);
     fFlattenableHeap.setBitmapStorage(fBitmapHeap);
-    fPathHeap = NULL;   // lazy allocate
 
 #ifndef SK_COLLAPSE_MATRIX_CLIP_STATE
     fFirstSavedLayerIndex = kNoSavedLayerIndex;
@@ -57,7 +57,6 @@ SkPictureRecord::SkPictureRecord(const SkISize& dimensions, uint32_t flags)
 
 SkPictureRecord::~SkPictureRecord() {
     SkSafeUnref(fBitmapHeap);
-    SkSafeUnref(fPathHeap);
     SkSafeUnref(fBoundingHierarchy);
     SkSafeUnref(fStateTree);
     fFlattenableHeap.setBitmapStorage(NULL);
@@ -1066,6 +1065,15 @@ void SkPictureRecord::onDrawDRRect(const SkRRect& outer, const SkRRect& inner,
 
 void SkPictureRecord::drawPath(const SkPath& path, const SkPaint& paint) {
 
+    if (paint.isAntiAlias() && !path.isConvex()) {
+        fPicture->incAAConcavePaths();
+
+        if (SkPaint::kStroke_Style == paint.getStyle() &&
+            0 == paint.getStrokeWidth()) {
+            fPicture->incAAHairlineConcavePaths();
+        }
+    }
+
 #ifdef SK_COLLAPSE_MATRIX_CLIP_STATE
     fMCMgr.call(SkMatrixClipStateMgr::kOther_CallType);
 #endif
@@ -1579,6 +1587,10 @@ const SkFlatData* SkPictureRecord::getFlatPaintData(const SkPaint& paint) {
 }
 
 const SkFlatData* SkPictureRecord::addPaintPtr(const SkPaint* paint) {
+    if (NULL != paint && NULL != paint->getPathEffect()) {
+        fPicture->incPaintWithPathEffectUses();
+    }
+
     const SkFlatData* data = paint ? getFlatPaintData(*paint) : NULL;
     this->addFlatPaint(data);
     return data;
@@ -1590,14 +1602,7 @@ void SkPictureRecord::addFlatPaint(const SkFlatData* flatPaint) {
 }
 
 int SkPictureRecord::addPathToHeap(const SkPath& path) {
-    if (NULL == fPathHeap) {
-        fPathHeap = SkNEW(SkPathHeap);
-    }
-#ifdef SK_DEDUP_PICTURE_PATHS
-    return fPathHeap->insert(path);
-#else
-    return fPathHeap->append(path);
-#endif
+    return fPicture->addPathToHeap(path);
 }
 
 void SkPictureRecord::addPath(const SkPath& path) {

@@ -23,6 +23,7 @@ class SkBBoxHierarchy;
 class SkCanvas;
 class SkDrawPictureCallback;
 class SkData;
+class SkPathHeap;
 class SkPicturePlayback;
 class SkPictureRecord;
 class SkStream;
@@ -325,13 +326,14 @@ protected:
     // V23: SkPaint::FilterLevel became a real enum
     // V24: SkTwoPointConicalGradient now has fFlipped flag for gradient flipping
     // V25: SkDashPathEffect now only writes phase and interval array when flattening
+    // V26: Removed boolean from SkColorShader for inheriting color from SkPaint.
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 19;
-    static const uint32_t CURRENT_PICTURE_VERSION = 25;
+    static const uint32_t CURRENT_PICTURE_VERSION = 26;
 
     mutable uint32_t      fUniqueID;
 
@@ -358,6 +360,84 @@ protected:
     SkCanvas* beginRecording(int width, int height, SkBBHFactory* factory, uint32_t recordFlags);
 
 private:
+    friend class SkPictureRecord;
+    friend class SkPictureTester;   // for unit testing
+
+    SkAutoTUnref<SkPathHeap> fPathHeap;  // reference counted
+
+    // ContentInfo is not serialized! It is intended solely for use
+    // with suitableForGpuRasterization.
+    class ContentInfo {
+    public:
+        ContentInfo() { this->reset(); }
+
+        ContentInfo(const ContentInfo& src) { this->set(src); }
+
+        void set(const ContentInfo& src) {
+            fNumPaintWithPathEffectUses = src.fNumPaintWithPathEffectUses;
+            fNumAAConcavePaths = src.fNumAAConcavePaths;
+            fNumAAHairlineConcavePaths = src.fNumAAHairlineConcavePaths;
+        }
+
+        void reset() {
+            fNumPaintWithPathEffectUses = 0;
+            fNumAAConcavePaths = 0;
+            fNumAAHairlineConcavePaths = 0;
+        }
+
+        void swap(ContentInfo* other) {
+            SkTSwap(fNumPaintWithPathEffectUses, other->fNumPaintWithPathEffectUses);
+            SkTSwap(fNumAAConcavePaths, other->fNumAAConcavePaths);
+            SkTSwap(fNumAAHairlineConcavePaths, other->fNumAAHairlineConcavePaths);
+        }
+
+        // This field is incremented every time a paint with a path effect is
+        // used (i.e., it is not a de-duplicated count)
+        int fNumPaintWithPathEffectUses;
+        // This field is incremented every time an anti-aliased drawPath call is
+        // issued with a concave path
+        int fNumAAConcavePaths;
+        // This field is incremented every time a drawPath call is
+        // issued for a hairline stroked concave path.
+        int fNumAAHairlineConcavePaths;
+    };
+
+    ContentInfo fContentInfo;
+
+    void incPaintWithPathEffectUses() {
+        ++fContentInfo.fNumPaintWithPathEffectUses;
+    }
+    int numPaintWithPathEffectUses() const {
+        return fContentInfo.fNumPaintWithPathEffectUses;
+    }
+
+    void incAAConcavePaths() {
+        ++fContentInfo.fNumAAConcavePaths;
+    }
+    int numAAConcavePaths() const {
+        return fContentInfo.fNumAAConcavePaths;
+    }
+
+    void incAAHairlineConcavePaths() {
+        ++fContentInfo.fNumAAHairlineConcavePaths;
+        SkASSERT(fContentInfo.fNumAAHairlineConcavePaths <= fContentInfo.fNumAAConcavePaths);
+    }
+    int numAAHairlineConcavePaths() const {
+        return fContentInfo.fNumAAHairlineConcavePaths;
+    }
+
+    const SkPath& getPath(int index) const;
+    int addPathToHeap(const SkPath& path);
+
+    void flattenToBuffer(SkWriteBuffer& buffer) const;
+    bool parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t size);
+
+    static void WriteTagSize(SkWriteBuffer& buffer, uint32_t tag, size_t size);
+    static void WriteTagSize(SkWStream* stream, uint32_t tag, size_t size);
+
+    void initForPlayback() const;
+    void dumpSize() const;
+
     // An OperationList encapsulates a set of operation offsets into the picture byte
     // stream along with the CTMs needed for those operation.
     class OperationList : ::SkNoncopyable {

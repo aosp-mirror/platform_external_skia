@@ -230,12 +230,11 @@ public:
         GLPtr<GrGLInvalidateTexSubImageProc> fInvalidateTexSubImage;
         GLPtr<GrGLLineWidthProc> fLineWidth;
         GLPtr<GrGLLinkProgramProc> fLinkProgram;
-        GLPtr<GrGLLoadIdentityProc> fLoadIdentity;
-        GLPtr<GrGLLoadMatrixfProc> fLoadMatrixf;
         GLPtr<GrGLMapBufferProc> fMapBuffer;
         GLPtr<GrGLMapBufferSubDataProc> fMapBufferSubData;
         GLPtr<GrGLMapTexSubImage2DProc> fMapTexSubImage2D;
-        GLPtr<GrGLMatrixModeProc> fMatrixMode;
+        GLPtr<GrGLMatrixLoadfProc> fMatrixLoadf;
+        GLPtr<GrGLMatrixLoadIdentityProc> fMatrixLoadIdentity;
         GLPtr<GrGLPixelStoreiProc> fPixelStorei;
         GLPtr<GrGLPopGroupMarkerProc> fPopGroupMarker;
         GLPtr<GrGLPushGroupMarkerProc> fPushGroupMarker;
@@ -279,8 +278,6 @@ public:
         GLPtr<GrGLStencilMaskSeparateProc> fStencilMaskSeparate;
         GLPtr<GrGLStencilOpProc> fStencilOp;
         GLPtr<GrGLStencilOpSeparateProc> fStencilOpSeparate;
-        GLPtr<GrGLTexGenfvProc> fTexGenfv;
-        GLPtr<GrGLTexGeniProc> fTexGeni;
         GLPtr<GrGLTexImage2DProc> fTexImage2D;
         GLPtr<GrGLTexParameteriProc> fTexParameteri;
         GLPtr<GrGLTexParameterivProc> fTexParameteriv;
