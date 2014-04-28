@@ -208,17 +208,6 @@ void shadeSpan_linear_repeat(TileProc proc, SkFixed dx, SkFixed fx,
 
 }
 
-#ifdef SK_BUILD_FOR_ANDROID
-
-#define SK_FixedNearlyZero          (SK_Fixed1 >> 12)
-
-inline bool SkFixedNearlyZero(SkFixed x, SkFixed tolerance = SK_FixedNearlyZero)
-{
-    SkASSERT(tolerance > 0);
-    return SkAbs32(x) < tolerance;
-}
-#endif
-
 void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor* SK_RESTRICT dstC,
                                                         int count) {
     SkASSERT(count > 0);
@@ -246,11 +235,7 @@ void SkLinearGradient::LinearGradientContext::shadeSpan(int x, int y, SkPMColor*
         }
 
         LinearShadeProc shadeProc = shadeSpan_linear_repeat;
-#ifdef SK_BUILD_FOR_ANDROID
-        if (SkFixedNearlyZero(dx)) {
-#else
         if (0 == dx) {
-#endif
             shadeProc = shadeSpan_linear_vertical_lerp;
         } else if (SkShader::kClamp_TileMode == linearGradient.fTileMode) {
             shadeProc = shadeSpan_linear_clamp;
