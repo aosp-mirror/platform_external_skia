@@ -8,7 +8,6 @@
 #include "SkPDFDeviceFlattener.h"
 
 #include "SkDraw.h"
-#include "SkShader.h"
 
 static SkISize SkSizeToISize(const SkSize& size) {
     return SkISize::Make(SkScalarRoundToInt(size.width()), SkScalarRoundToInt(size.height()));
@@ -44,7 +43,7 @@ void SkPDFDeviceFlattener::drawPoints(const SkDraw& d, SkCanvas::PointMode mode,
     flattenPaint(d, &paintFlatten);
 
     SkPoint* flattenedPoints = SkNEW_ARRAY(SkPoint, count);
-    d.fMatrix->mapPoints(flattenedPoints, points, count);
+    d.fMatrix->mapPoints(flattenedPoints, points, SkToS32(count));
     SkDraw draw(d);
     SkMatrix identity = SkMatrix::I();
     draw.fMatrix = &identity;

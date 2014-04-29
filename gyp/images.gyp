@@ -18,10 +18,13 @@
       'include_dirs': [
         '../include/images',
         '../include/lazy',
+        '../src/lazy',
         # for access to SkErrorInternals.h
         '../src/core/',
         # for access to SkImagePriv.h
         '../src/image/',
+        # So src/ports/SkImageDecoder_CG can access SkStreamHelpers.h
+        '../src/images/',
       ],
       'sources': [
         '../include/images/SkForceLinking.h',
@@ -34,6 +37,8 @@
         '../src/images/bmpdecoderhelper.cpp',
         '../src/images/bmpdecoderhelper.h',
 
+        '../src/images/SkDecodingImageGenerator.cpp',
+        '../src/images/SkDecodingImageGenerator.h',
         '../src/images/SkForceLinking.cpp',
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_FactoryDefault.cpp',
@@ -80,7 +85,7 @@
           ],
           'link_settings': {
             'libraries': [
-              'windowscodecs.lib',
+              '-lwindowscodecs.lib',
             ],
           },
         },{ #else if skia_os != win
@@ -170,9 +175,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

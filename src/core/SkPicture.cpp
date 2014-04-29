@@ -11,9 +11,9 @@
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
 
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkChunkAlloc.h"
-#include "SkDevice.h"
 #include "SkPicture.h"
 #include "SkRegion.h"
 #include "SkStream.h"
@@ -25,8 +25,6 @@
 #include "SkWriter32.h"
 #include "SkRTree.h"
 #include "SkBBoxHierarchyRecord.h"
-
-SK_DEFINE_INST_COUNT(SkPicture)
 
 #define DUMP_BUFFER_SIZE 65536
 
@@ -205,7 +203,7 @@ SkCanvas* SkPicture::beginRecording(int width, int height,
 
     SkBitmap bm;
     bm.setConfig(SkBitmap::kNo_Config, width, height);
-    SkAutoTUnref<SkDevice> dev(SkNEW_ARGS(SkDevice, (bm)));
+    SkAutoTUnref<SkBaseDevice> dev(SkNEW_ARGS(SkBitmapDevice, (bm)));
 
     // Must be set before calling createBBoxHierarchy
     fWidth = width;
@@ -232,8 +230,10 @@ SkBBoxHierarchy* SkPicture::createBBoxHierarchy() const {
 
     SkScalar aspectRatio = SkScalarDiv(SkIntToScalar(fWidth),
                                        SkIntToScalar(fHeight));
+    bool sortDraws = false;  // Do not sort draw calls when bulk loading.
+
     return SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
-                           aspectRatio);
+                           aspectRatio, sortDraws);
 }
 
 SkCanvas* SkPicture::getRecordingCanvas() const {
@@ -264,8 +264,17 @@ void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
 
 #include "SkStream.h"
 
+static const char kMagic[] = { 's', 'k', 'i', 'a', 'p', 'i', 'c', 't' };
+
 bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (NULL == stream) {
+        return false;
+    }
+
+    // Check magic bytes.
+    char magic[sizeof(kMagic)];
+    stream->read(magic, sizeof(kMagic));
+    if (0 != memcmp(magic, kMagic, sizeof(kMagic))) {
         return false;
     }
 
@@ -273,7 +282,13 @@ bool SkPicture::StreamIsSKP(SkStream* stream, SkPictInfo* pInfo) {
     if (!stream->read(&info, sizeof(SkPictInfo))) {
         return false;
     }
-    if (PICTURE_VERSION != info.fVersion) {
+
+    if (PICTURE_VERSION != info.fVersion
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+        // V16 is backwards compatible with V15
+        && PRIOR_PICTURE_VERSION != info.fVersion  // TODO: remove when .skps regenerated
+#endif
+        ) {
         return false;
     }
 
@@ -299,7 +314,10 @@ SkPicture* SkPicture::CreateFromStream(SkStream* stream, InstallPixelRefProc pro
     SkPicturePlayback* playback;
     // Check to see if there is a playback to recreate.
     if (stream->readBool()) {
-        playback = SkNEW_ARGS(SkPicturePlayback, (stream, info, proc));
+        playback = SkPicturePlayback::CreateFromStream(stream, info, proc);
+        if (NULL == playback) {
+            return NULL;
+        }
     } else {
         playback = NULL;
     }
@@ -327,6 +345,10 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
         info.fFlags |= SkPictInfo::kPtrIs64Bit_Flag;
     }
 
+    // Write 8 magic bytes to ID this file format.
+    SkASSERT(sizeof(kMagic) == 8);
+    stream->write(kMagic, sizeof(kMagic));
+
     stream->write(&info, sizeof(info));
     if (playback) {
         stream->writeBool(true);
@@ -338,6 +360,11 @@ void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     } else {
         stream->writeBool(false);
     }
+}
+
+bool SkPicture::willPlayBackBitmaps() const {
+    if (!fPlayback) return false;
+    return fPlayback->containsBitmaps();
 }
 
 #ifdef SK_BUILD_FOR_ANDROID

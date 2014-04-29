@@ -11,13 +11,12 @@
 #include "GrDrawTarget.h"
 #include "GrContext.h"
 #include "GrDrawTargetCaps.h"
+#include "GrPath.h"
 #include "GrRenderTarget.h"
 #include "GrTexture.h"
 #include "GrVertexBuffer.h"
 
 #include "SkStrokeRec.h"
-
-SK_DEFINE_INST_COUNT(GrDrawTarget)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,7 +32,7 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
     fIndicesPerInstance     = di.fIndicesPerInstance;
 
     if (NULL != di.fDevBounds) {
-        GrAssert(di.fDevBounds == &di.fDevBoundsStorage);
+        SkASSERT(di.fDevBounds == &di.fDevBoundsStorage);
         fDevBoundsStorage = di.fDevBoundsStorage;
         fDevBounds = &fDevBoundsStorage;
     } else {
@@ -45,27 +44,27 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
     return *this;
 }
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
 bool GrDrawTarget::DrawInfo::isInstanced() const {
     if (fInstanceCount > 0) {
-        GrAssert(0 == fIndexCount % fIndicesPerInstance);
-        GrAssert(0 == fVertexCount % fVerticesPerInstance);
-        GrAssert(fIndexCount / fIndicesPerInstance == fInstanceCount);
-        GrAssert(fVertexCount / fVerticesPerInstance == fInstanceCount);
+        SkASSERT(0 == fIndexCount % fIndicesPerInstance);
+        SkASSERT(0 == fVertexCount % fVerticesPerInstance);
+        SkASSERT(fIndexCount / fIndicesPerInstance == fInstanceCount);
+        SkASSERT(fVertexCount / fVerticesPerInstance == fInstanceCount);
         // there is no way to specify a non-zero start index to drawIndexedInstances().
-        GrAssert(0 == fStartIndex);
+        SkASSERT(0 == fStartIndex);
         return true;
     } else {
-        GrAssert(!fVerticesPerInstance);
-        GrAssert(!fIndicesPerInstance);
+        SkASSERT(!fVerticesPerInstance);
+        SkASSERT(!fIndicesPerInstance);
         return false;
     }
 }
 #endif
 
 void GrDrawTarget::DrawInfo::adjustInstanceCount(int instanceOffset) {
-    GrAssert(this->isInstanced());
-    GrAssert(instanceOffset + fInstanceCount >= 0);
+    SkASSERT(this->isInstanced());
+    SkASSERT(instanceOffset + fInstanceCount >= 0);
     fInstanceCount += instanceOffset;
     fVertexCount = fVerticesPerInstance * fInstanceCount;
     fIndexCount = fIndicesPerInstance * fInstanceCount;
@@ -73,13 +72,13 @@ void GrDrawTarget::DrawInfo::adjustInstanceCount(int instanceOffset) {
 
 void GrDrawTarget::DrawInfo::adjustStartVertex(int vertexOffset) {
     fStartVertex += vertexOffset;
-    GrAssert(fStartVertex >= 0);
+    SkASSERT(fStartVertex >= 0);
 }
 
 void GrDrawTarget::DrawInfo::adjustStartIndex(int indexOffset) {
-    GrAssert(this->isIndexed());
+    SkASSERT(this->isIndexed());
     fStartIndex += indexOffset;
-    GrAssert(fStartIndex >= 0);
+    SkASSERT(fStartIndex >= 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -90,13 +89,13 @@ void GrDrawTarget::DrawInfo::adjustStartIndex(int indexOffset) {
 GrDrawTarget::GrDrawTarget(GrContext* context)
     : fClip(NULL)
     , fContext(context) {
-    GrAssert(NULL != context);
+    SkASSERT(NULL != context);
 
     fDrawState = &fDefaultDrawState;
     // We assume that fDrawState always owns a ref to the object it points at.
     fDefaultDrawState.ref();
     GeometrySrcState& geoSrc = fGeoSrcStateStack.push_back();
-#if GR_DEBUG
+#ifdef SK_DEBUG
     geoSrc.fVertexCount = DEBUG_INVAL_START_IDX;
     geoSrc.fVertexBuffer = (GrVertexBuffer*)DEBUG_INVAL_BUFFER;
     geoSrc.fIndexCount = DEBUG_INVAL_START_IDX;
@@ -107,10 +106,10 @@ GrDrawTarget::GrDrawTarget(GrContext* context)
 }
 
 GrDrawTarget::~GrDrawTarget() {
-    GrAssert(1 == fGeoSrcStateStack.count());
+    SkASSERT(1 == fGeoSrcStateStack.count());
     SkDEBUGCODE(GeometrySrcState& geoSrc = fGeoSrcStateStack.back());
-    GrAssert(kNone_GeometrySrcType == geoSrc.fIndexSrc);
-    GrAssert(kNone_GeometrySrcType == geoSrc.fVertexSrc);
+    SkASSERT(kNone_GeometrySrcType == geoSrc.fIndexSrc);
+    SkASSERT(kNone_GeometrySrcType == geoSrc.fVertexSrc);
     fDrawState->unref();
 }
 
@@ -134,7 +133,7 @@ const GrClipData* GrDrawTarget::getClip() const {
 }
 
 void GrDrawTarget::setDrawState(GrDrawState*  drawState) {
-    GrAssert(NULL != fDrawState);
+    SkASSERT(NULL != fDrawState);
     if (NULL == drawState) {
         drawState = &fDefaultDrawState;
     }
@@ -151,7 +150,7 @@ bool GrDrawTarget::reserveVertexSpace(size_t vertexSize,
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     bool acquired = false;
     if (vertexCount > 0) {
-        GrAssert(NULL != vertices);
+        SkASSERT(NULL != vertices);
         this->releasePreviousVertexSource();
         geoSrc.fVertexSrc = kNone_GeometrySrcType;
 
@@ -174,7 +173,7 @@ bool GrDrawTarget::reserveIndexSpace(int indexCount,
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     bool acquired = false;
     if (indexCount > 0) {
-        GrAssert(NULL != indices);
+        SkASSERT(NULL != indices);
         this->releasePreviousIndexSource();
         geoSrc.fIndexSrc = kNone_GeometrySrcType;
 
@@ -239,7 +238,7 @@ void GrDrawTarget::releasePreviousVertexSource() {
             break;
         case kBuffer_GeometrySrcType:
             geoSrc.fVertexBuffer->unref();
-#if GR_DEBUG
+#ifdef SK_DEBUG
             geoSrc.fVertexBuffer = (GrVertexBuffer*)DEBUG_INVAL_BUFFER;
 #endif
             break;
@@ -262,7 +261,7 @@ void GrDrawTarget::releasePreviousIndexSource() {
             break;
         case kBuffer_GeometrySrcType:
             geoSrc.fIndexBuffer->unref();
-#if GR_DEBUG
+#ifdef SK_DEBUG
             geoSrc.fIndexBuffer = (GrIndexBuffer*)DEBUG_INVAL_BUFFER;
 #endif
             break;
@@ -325,7 +324,7 @@ void GrDrawTarget::pushGeometrySource() {
     GeometrySrcState& newState = fGeoSrcStateStack.push_back();
     newState.fIndexSrc = kNone_GeometrySrcType;
     newState.fVertexSrc = kNone_GeometrySrcType;
-#if GR_DEBUG
+#ifdef SK_DEBUG
     newState.fVertexCount  = ~0;
     newState.fVertexBuffer = (GrVertexBuffer*)~0;
     newState.fIndexCount   = ~0;
@@ -335,7 +334,7 @@ void GrDrawTarget::pushGeometrySource() {
 
 void GrDrawTarget::popGeometrySource() {
     // if popping last element then pops are unbalanced with pushes
-    GrAssert(fGeoSrcStateStack.count() > 1);
+    SkASSERT(fGeoSrcStateStack.count() > 1);
 
     this->geometrySourceWillPop(fGeoSrcStateStack.fromBack(1));
     this->releasePreviousVertexSource();
@@ -349,7 +348,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
                              int startIndex, int vertexCount,
                              int indexCount) const {
     const GrDrawState& drawState = this->getDrawState();
-#if GR_DEBUG
+#ifdef SK_DEBUG
     const GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     int maxVertex = startVertex + vertexCount;
     int maxValidVertex;
@@ -361,7 +360,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
             maxValidVertex = geoSrc.fVertexCount;
             break;
         case kBuffer_GeometrySrcType:
-            maxValidVertex = geoSrc.fVertexBuffer->sizeInBytes() / geoSrc.fVertexSize;
+            maxValidVertex = static_cast<int>(geoSrc.fVertexBuffer->sizeInBytes() / geoSrc.fVertexSize);
             break;
     }
     if (maxVertex > maxValidVertex) {
@@ -378,7 +377,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
                 maxValidIndex = geoSrc.fIndexCount;
                 break;
             case kBuffer_GeometrySrcType:
-                maxValidIndex = geoSrc.fIndexBuffer->sizeInBytes() / sizeof(uint16_t);
+                maxValidIndex = static_cast<int>(geoSrc.fIndexBuffer->sizeInBytes() / sizeof(uint16_t));
                 break;
         }
         if (maxIndex > maxValidIndex) {
@@ -386,14 +385,14 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
         }
     }
 
-    GrAssert(NULL != drawState.getRenderTarget());
+    SkASSERT(NULL != drawState.getRenderTarget());
 
     for (int s = 0; s < drawState.numColorStages(); ++s) {
         const GrEffectRef& effect = *drawState.getColorStage(s).getEffect();
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
-            GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
+            SkASSERT(texture->asRenderTarget() != drawState.getRenderTarget());
         }
     }
     for (int s = 0; s < drawState.numCoverageStages(); ++s) {
@@ -401,11 +400,11 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
-            GrAssert(texture->asRenderTarget() != drawState.getRenderTarget());
+            SkASSERT(texture->asRenderTarget() != drawState.getRenderTarget());
         }
     }
 
-    GrAssert(drawState.validateVertexAttribs());
+    SkASSERT(drawState.validateVertexAttribs());
 #endif
     if (NULL == drawState.getRenderTarget()) {
         return false;
@@ -413,25 +412,26 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
     return true;
 }
 
-bool GrDrawTarget::setupDstReadIfNecessary(DrawInfo* info) {
+bool GrDrawTarget::setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const SkRect* drawBounds) {
     if (this->caps()->dstReadInShaderSupport() || !this->getDrawState().willEffectReadDstColor()) {
         return true;
     }
     GrRenderTarget* rt = this->drawState()->getRenderTarget();
-
-    const GrClipData* clip = this->getClip();
     SkIRect copyRect;
-    clip->getConservativeBounds(this->getDrawState().getRenderTarget(), &copyRect);
-    SkIRect drawIBounds;
-    if (info->getDevIBounds(&drawIBounds)) {
+    const GrClipData* clip = this->getClip();
+    clip->getConservativeBounds(rt, &copyRect);
+
+    if (NULL != drawBounds) {
+        SkIRect drawIBounds;
+        drawBounds->roundOut(&drawIBounds);
         if (!copyRect.intersect(drawIBounds)) {
-#if GR_DEBUG
+#ifdef SK_DEBUG
             GrPrintf("Missed an early reject. Bailing on draw from setupDstReadIfNecessary.\n");
 #endif
             return false;
         }
     } else {
-#if GR_DEBUG
+#ifdef SK_DEBUG
         //GrPrintf("No dev bounds when dst copy is made.\n");
 #endif
     }
@@ -451,8 +451,8 @@ bool GrDrawTarget::setupDstReadIfNecessary(DrawInfo* info) {
     }
     SkIPoint dstPoint = {0, 0};
     if (this->copySurface(ast.texture(), rt, copyRect, dstPoint)) {
-        info->fDstCopy.setTexture(ast.texture());
-        info->fDstCopy.setOffset(copyRect.fLeft, copyRect.fTop);
+        dstCopy->setTexture(ast.texture());
+        dstCopy->setOffset(copyRect.fLeft, copyRect.fTop);
         return true;
     } else {
         return false;
@@ -515,13 +515,36 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
     }
 }
 
-void GrDrawTarget::stencilPath(const GrPath* path, const SkStrokeRec& stroke, SkPath::FillType fill) {
+void GrDrawTarget::stencilPath(const GrPath* path, SkPath::FillType fill) {
     // TODO: extract portions of checkDraw that are relevant to path stenciling.
-    GrAssert(NULL != path);
-    GrAssert(this->caps()->pathStencilingSupport());
-    GrAssert(!stroke.isHairlineStyle());
-    GrAssert(!SkPath::IsInverseFillType(fill));
-    this->onStencilPath(path, stroke, fill);
+    SkASSERT(NULL != path);
+    SkASSERT(this->caps()->pathRenderingSupport());
+    SkASSERT(!SkPath::IsInverseFillType(fill));
+    this->onStencilPath(path, fill);
+}
+
+void GrDrawTarget::drawPath(const GrPath* path, SkPath::FillType fill) {
+    // TODO: extract portions of checkDraw that are relevant to path rendering.
+    SkASSERT(NULL != path);
+    SkASSERT(this->caps()->pathRenderingSupport());
+    const GrDrawState* drawState = &getDrawState();
+
+    SkRect devBounds;
+    if (SkPath::IsInverseFillType(fill)) {
+        devBounds = SkRect::MakeWH(SkIntToScalar(drawState->getRenderTarget()->width()),
+                                   SkIntToScalar(drawState->getRenderTarget()->height()));
+    } else {
+        devBounds = path->getBounds();
+    }
+    SkMatrix viewM = drawState->getViewMatrix();
+    viewM.mapRect(&devBounds);
+
+    GrDeviceCoordTexture dstCopy;
+    if (!this->setupDstReadIfNecessary(&dstCopy, &devBounds)) {
+        return;
+    }
+
+    this->onDrawPath(path, fill, dstCopy.texture() ? &dstCopy : NULL);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -678,10 +701,10 @@ GrDrawTarget::AutoStateRestore::~AutoStateRestore() {
 }
 
 void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init, const SkMatrix* vm) {
-    GrAssert(NULL == fDrawTarget);
+    SkASSERT(NULL == fDrawTarget);
     fDrawTarget = target;
     fSavedState = target->drawState();
-    GrAssert(fSavedState);
+    SkASSERT(fSavedState);
     fSavedState->ref();
     if (kReset_ASRInit == init) {
         if (NULL == vm) {
@@ -691,7 +714,7 @@ void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init, con
             SkNEW_IN_TLAZY(&fTempState, GrDrawState, (*vm));
         }
     } else {
-        GrAssert(kPreserve_ASRInit == init);
+        SkASSERT(kPreserve_ASRInit == init);
         if (NULL == vm) {
             fTempState.set(*fSavedState);
         } else {
@@ -702,16 +725,16 @@ void GrDrawTarget::AutoStateRestore::set(GrDrawTarget* target, ASRInit init, con
 }
 
 bool GrDrawTarget::AutoStateRestore::setIdentity(GrDrawTarget* target, ASRInit init) {
-    GrAssert(NULL == fDrawTarget);
+    SkASSERT(NULL == fDrawTarget);
     fDrawTarget = target;
     fSavedState = target->drawState();
-    GrAssert(fSavedState);
+    SkASSERT(fSavedState);
     fSavedState->ref();
     if (kReset_ASRInit == init) {
         // calls the default cons
         fTempState.init();
     } else {
-        GrAssert(kPreserve_ASRInit == init);
+        SkASSERT(kPreserve_ASRInit == init);
         // calls the copy cons
         fTempState.set(*fSavedState);
         if (!fTempState.get()->setIdentityViewMatrix()) {
@@ -762,7 +785,7 @@ bool GrDrawTarget::AutoReleaseGeometry::set(GrDrawTarget*  target,
             this->reset();
         }
     }
-    GrAssert(success == (NULL != fTarget));
+    SkASSERT(success == (NULL != fTarget));
     return success;
 }
 
@@ -846,8 +869,8 @@ bool GrDrawTarget::copySurface(GrSurface* dst,
                                GrSurface* src,
                                const SkIRect& srcRect,
                                const SkIPoint& dstPoint) {
-    GrAssert(NULL != dst);
-    GrAssert(NULL != src);
+    SkASSERT(NULL != dst);
+    SkASSERT(NULL != src);
 
     SkIRect clippedSrcRect;
     SkIPoint clippedDstPoint;
@@ -858,12 +881,12 @@ bool GrDrawTarget::copySurface(GrSurface* dst,
                                    dstPoint,
                                    &clippedSrcRect,
                                    &clippedDstPoint)) {
-        GrAssert(this->canCopySurface(dst, src, srcRect, dstPoint));
+        SkASSERT(this->canCopySurface(dst, src, srcRect, dstPoint));
         return true;
     }
 
     bool result = this->onCopySurface(dst, src, clippedSrcRect, clippedDstPoint);
-    GrAssert(result == this->canCopySurface(dst, src, clippedSrcRect, clippedDstPoint));
+    SkASSERT(result == this->canCopySurface(dst, src, clippedSrcRect, clippedDstPoint));
     return result;
 }
 
@@ -871,8 +894,8 @@ bool GrDrawTarget::canCopySurface(GrSurface* dst,
                                   GrSurface* src,
                                   const SkIRect& srcRect,
                                   const SkIPoint& dstPoint) {
-    GrAssert(NULL != dst);
-    GrAssert(NULL != src);
+    SkASSERT(NULL != dst);
+    SkASSERT(NULL != src);
 
     SkIRect clippedSrcRect;
     SkIPoint clippedDstPoint;
@@ -893,10 +916,10 @@ bool GrDrawTarget::onCanCopySurface(GrSurface* dst,
                                     const SkIRect& srcRect,
                                     const SkIPoint& dstPoint) {
     // Check that the read/write rects are contained within the src/dst bounds.
-    GrAssert(!srcRect.isEmpty());
-    GrAssert(SkIRect::MakeWH(src->width(), src->height()).contains(srcRect));
-    GrAssert(dstPoint.fX >= 0 && dstPoint.fY >= 0);
-    GrAssert(dstPoint.fX + srcRect.width() <= dst->width() &&
+    SkASSERT(!srcRect.isEmpty());
+    SkASSERT(SkIRect::MakeWH(src->width(), src->height()).contains(srcRect));
+    SkASSERT(dstPoint.fX >= 0 && dstPoint.fY >= 0);
+    SkASSERT(dstPoint.fX + srcRect.width() <= dst->width() &&
              dstPoint.fY + srcRect.height() <= dst->height());
 
     return !dst->isSameAs(src) && NULL != dst->asRenderTarget() && NULL != src->asTexture();
@@ -937,8 +960,6 @@ void GrDrawTarget::initCopySurfaceDstDesc(const GrSurface* src, GrTextureDesc* d
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SK_DEFINE_INST_COUNT(GrDrawTargetCaps)
-
 void GrDrawTargetCaps::reset() {
     f8BitPaletteSupport = false;
     fNPOTTextureTileSupport = false;
@@ -949,13 +970,15 @@ void GrDrawTargetCaps::reset() {
     fGeometryShaderSupport = false;
     fDualSourceBlendingSupport = false;
     fBufferLockSupport = false;
-    fPathStencilingSupport = false;
+    fPathRenderingSupport = false;
     fDstReadInShaderSupport = false;
     fReuseScratchTextures = true;
 
     fMaxRenderTargetSize = 0;
     fMaxTextureSize = 0;
     fMaxSampleCount = 0;
+
+    memset(fConfigRenderSupport, 0, sizeof(fConfigRenderSupport));
 }
 
 GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
@@ -968,7 +991,7 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     fGeometryShaderSupport = other.fGeometryShaderSupport;
     fDualSourceBlendingSupport = other.fDualSourceBlendingSupport;
     fBufferLockSupport = other.fBufferLockSupport;
-    fPathStencilingSupport = other.fPathStencilingSupport;
+    fPathRenderingSupport = other.fPathRenderingSupport;
     fDstReadInShaderSupport = other.fDstReadInShaderSupport;
     fReuseScratchTextures = other.fReuseScratchTextures;
 
@@ -976,24 +999,57 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     fMaxTextureSize = other.fMaxTextureSize;
     fMaxSampleCount = other.fMaxSampleCount;
 
+    memcpy(fConfigRenderSupport, other.fConfigRenderSupport, sizeof(fConfigRenderSupport));
+
     return *this;
 }
 
-void GrDrawTargetCaps::print() const {
+SkString GrDrawTargetCaps::dump() const {
+    SkString r;
     static const char* gNY[] = {"NO", "YES"};
-    GrPrintf("8 Bit Palette Support       : %s\n", gNY[f8BitPaletteSupport]);
-    GrPrintf("NPOT Texture Tile Support   : %s\n", gNY[fNPOTTextureTileSupport]);
-    GrPrintf("Two Sided Stencil Support   : %s\n", gNY[fTwoSidedStencilSupport]);
-    GrPrintf("Stencil Wrap Ops  Support   : %s\n", gNY[fStencilWrapOpsSupport]);
-    GrPrintf("HW AA Lines Support         : %s\n", gNY[fHWAALineSupport]);
-    GrPrintf("Shader Derivative Support   : %s\n", gNY[fShaderDerivativeSupport]);
-    GrPrintf("Geometry Shader Support     : %s\n", gNY[fGeometryShaderSupport]);
-    GrPrintf("Dual Source Blending Support: %s\n", gNY[fDualSourceBlendingSupport]);
-    GrPrintf("Buffer Lock Support         : %s\n", gNY[fBufferLockSupport]);
-    GrPrintf("Path Stenciling Support     : %s\n", gNY[fPathStencilingSupport]);
-    GrPrintf("Dst Read In Shader Support  : %s\n", gNY[fDstReadInShaderSupport]);
-    GrPrintf("Reuse Scratch Textures      : %s\n", gNY[fReuseScratchTextures]);
-    GrPrintf("Max Texture Size            : %d\n", fMaxTextureSize);
-    GrPrintf("Max Render Target Size      : %d\n", fMaxRenderTargetSize);
-    GrPrintf("Max Sample Count            : %d\n", fMaxSampleCount);
+    r.appendf("8 Bit Palette Support       : %s\n", gNY[f8BitPaletteSupport]);
+    r.appendf("NPOT Texture Tile Support   : %s\n", gNY[fNPOTTextureTileSupport]);
+    r.appendf("Two Sided Stencil Support   : %s\n", gNY[fTwoSidedStencilSupport]);
+    r.appendf("Stencil Wrap Ops  Support   : %s\n", gNY[fStencilWrapOpsSupport]);
+    r.appendf("HW AA Lines Support         : %s\n", gNY[fHWAALineSupport]);
+    r.appendf("Shader Derivative Support   : %s\n", gNY[fShaderDerivativeSupport]);
+    r.appendf("Geometry Shader Support     : %s\n", gNY[fGeometryShaderSupport]);
+    r.appendf("Dual Source Blending Support: %s\n", gNY[fDualSourceBlendingSupport]);
+    r.appendf("Buffer Lock Support         : %s\n", gNY[fBufferLockSupport]);
+    r.appendf("Path Rendering Support      : %s\n", gNY[fPathRenderingSupport]);
+    r.appendf("Dst Read In Shader Support  : %s\n", gNY[fDstReadInShaderSupport]);
+    r.appendf("Reuse Scratch Textures      : %s\n", gNY[fReuseScratchTextures]);
+    r.appendf("Max Texture Size            : %d\n", fMaxTextureSize);
+    r.appendf("Max Render Target Size      : %d\n", fMaxRenderTargetSize);
+    r.appendf("Max Sample Count            : %d\n", fMaxSampleCount);
+
+    static const char* kConfigNames[] = {
+        "Unknown",  // kUnknown_GrPixelConfig
+        "Alpha8",   // kAlpha_8_GrPixelConfig,
+        "Index8",   // kIndex_8_GrPixelConfig,
+        "RGB565",   // kRGB_565_GrPixelConfig,
+        "RGBA444",  // kRGBA_4444_GrPixelConfig,
+        "RGBA8888", // kRGBA_8888_GrPixelConfig,
+        "BGRA8888", // kBGRA_8888_GrPixelConfig,
+    };
+    GR_STATIC_ASSERT(0 == kUnknown_GrPixelConfig);
+    GR_STATIC_ASSERT(1 == kAlpha_8_GrPixelConfig);
+    GR_STATIC_ASSERT(2 == kIndex_8_GrPixelConfig);
+    GR_STATIC_ASSERT(3 == kRGB_565_GrPixelConfig);
+    GR_STATIC_ASSERT(4 == kRGBA_4444_GrPixelConfig);
+    GR_STATIC_ASSERT(5 == kRGBA_8888_GrPixelConfig);
+    GR_STATIC_ASSERT(6 == kBGRA_8888_GrPixelConfig);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kConfigNames) == kGrPixelConfigCnt);
+
+    SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig][0]);
+    SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig][1]);
+    for (size_t i = 0; i < SK_ARRAY_COUNT(kConfigNames); ++i)  {
+        if (i != kUnknown_GrPixelConfig) {
+            r.appendf("%s is renderable: %s, with MSAA: %s\n",
+                     kConfigNames[i],
+                     gNY[fConfigRenderSupport[i][0]],
+                     gNY[fConfigRenderSupport[i][1]]);
+        }
+    }
+    return r;
 }

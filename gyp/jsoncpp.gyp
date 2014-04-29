@@ -49,19 +49,9 @@
           '../third_party/externals/jsoncpp/include/',
         ],
       },
-      'conditions': [
-        [ 'skia_os == "android"', {
-          'cflags!': [
-            '-Wall',
-          ],
-        }],
+      'cflags': [
+        '-w',
       ],
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

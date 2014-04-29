@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 Google Inc.
  *
@@ -6,20 +5,19 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef GrDrawTarget_DEFINED
 #define GrDrawTarget_DEFINED
 
 #include "GrClipData.h"
 #include "GrDrawState.h"
 #include "GrIndexBuffer.h"
-#include "SkMatrix.h"
-#include "GrRefCnt.h"
 
 #include "SkClipStack.h"
+#include "SkMatrix.h"
 #include "SkPath.h"
-#include "SkTLazy.h"
 #include "SkTArray.h"
+#include "SkTLazy.h"
+#include "SkTypes.h"
 #include "SkXfermode.h"
 
 class GrClipData;
@@ -28,7 +26,7 @@ class GrPath;
 class GrVertexBuffer;
 class SkStrokeRec;
 
-class GrDrawTarget : public GrRefCnt {
+class GrDrawTarget : public SkRefCnt {
 protected:
     class DrawInfo;
 
@@ -101,6 +99,15 @@ public:
      *       it will be at draw time.
      */
     bool canApplyCoverage() const;
+
+    /** When we're using coverage AA but the blend is incompatible (given gpu
+     * limitations) we should disable AA. */
+    bool shouldDisableCoverageAAForBlend() {
+        // Enable below if we should draw with AA even when it produces
+        // incorrect blending.
+        // return false;
+        return !this->canApplyCoverage();
+    }
 
     /**
      * Given the current draw state and hw support, will HW AA lines be used (if
@@ -328,7 +335,13 @@ public:
      * winding (not inverse or hairline). It will respect the HW antialias flag
      * on the draw state (if possible in the 3D API).
      */
-    void stencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill);
+    void stencilPath(const GrPath*, SkPath::FillType fill);
+
+    /**
+     * Draws a path. Fill must not be a hairline. It will respect the HW
+     * antialias flag on the draw state (if possible in the 3D API).
+     */
+    void drawPath(const GrPath*, SkPath::FillType fill);
 
     /**
      * Helper function for drawing rects. It performs a geometry src push and pop
@@ -358,7 +371,7 @@ public:
         this->drawRect(rect, matrix, NULL, NULL);
     }
     void drawSimpleRect(const SkIRect& irect, const SkMatrix* matrix = NULL) {
-        SkRect rect = SkRect::MakeFromIRect(irect);
+        SkRect rect = SkRect::Make(irect);
         this->drawRect(rect, matrix, NULL, NULL);
     }
 
@@ -401,10 +414,12 @@ public:
     /**
      * Clear the current render target if one isn't passed in. Ignores the
      * clip and all other draw state (blend mode, stages, etc). Clears the
-     * whole thing if rect is NULL, otherwise just the rect.
+     * whole thing if rect is NULL, otherwise just the rect. If canIgnoreRect
+     * is set then the entire render target can be optionally cleared.
      */
     virtual void clear(const SkIRect* rect,
                        GrColor color,
+                       bool canIgnoreRect,
                        GrRenderTarget* renderTarget = NULL) = 0;
 
     /**
@@ -450,6 +465,14 @@ public:
      */
     void executeDraw(const DrawInfo& info) { this->onDraw(info); }
 
+    /**
+     * For subclass internal use to invoke a call to onDrawPath().
+     */
+    void executeDrawPath(const GrPath* path, SkPath::FillType fill,
+                         const GrDeviceCoordTexture* dstCopy) {
+        this->onDrawPath(path, fill, dstCopy);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -475,7 +498,7 @@ public:
      *                             // destructor rather than target's current
      *                             // GrDrawState.
      */
-    class AutoStateRestore : ::GrNoncopyable {
+    class AutoStateRestore : public ::SkNoncopyable {
     public:
         /**
          * Default ASR will have no effect unless set() is subsequently called.
@@ -528,7 +551,7 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////
 
-    class AutoReleaseGeometry : ::GrNoncopyable {
+    class AutoReleaseGeometry : public ::SkNoncopyable {
     public:
         AutoReleaseGeometry(GrDrawTarget*  target,
                             int            vertexCount,
@@ -539,8 +562,8 @@ public:
                  int            vertexCount,
                  int            indexCount);
         bool succeeded() const { return NULL != fTarget; }
-        void* vertices() const { GrAssert(this->succeeded()); return fVertices; }
-        void* indices() const { GrAssert(this->succeeded()); return fIndices; }
+        void* vertices() const { SkASSERT(this->succeeded()); return fVertices; }
+        void* indices() const { SkASSERT(this->succeeded()); return fIndices; }
         GrPoint* positions() const {
             return static_cast<GrPoint*>(this->vertices());
         }
@@ -555,7 +578,7 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////
 
-    class AutoClipRestore : ::GrNoncopyable {
+    class AutoClipRestore : public ::SkNoncopyable {
     public:
         AutoClipRestore(GrDrawTarget* target) {
             fTarget = target;
@@ -580,11 +603,11 @@ public:
      * Saves the geometry src state at construction and restores in the destructor. It also saves
      * and then restores the vertex attrib state.
      */
-    class AutoGeometryPush : ::GrNoncopyable {
+    class AutoGeometryPush : public ::SkNoncopyable {
     public:
         AutoGeometryPush(GrDrawTarget* target)
             : fAttribRestore(target->drawState()) {
-            GrAssert(NULL != target);
+            SkASSERT(NULL != target);
             fTarget = target;
             target->pushGeometrySource();
         }
@@ -600,13 +623,13 @@ public:
      * Combination of AutoGeometryPush and AutoStateRestore. The vertex attribs will be in default
      * state regardless of ASRInit value.
      */
-    class AutoGeometryAndStatePush : ::GrNoncopyable {
+    class AutoGeometryAndStatePush : public ::SkNoncopyable {
     public:
         AutoGeometryAndStatePush(GrDrawTarget* target,
                                  ASRInit init,
                                  const SkMatrix* viewMatrix = NULL)
             : fState(target, init, viewMatrix) {
-            GrAssert(NULL != target);
+            SkASSERT(NULL != target);
             fTarget = target;
             target->pushGeometrySource();
             if (kPreserve_ASRInit == init) {
@@ -620,6 +643,23 @@ public:
         AutoStateRestore fState;
         GrDrawTarget*    fTarget;
     };
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Draw execution tracking (for font atlases and other resources)
+    class DrawToken {
+    public:
+        DrawToken(GrDrawTarget* drawTarget, uint32_t drawID) :
+                  fDrawTarget(drawTarget), fDrawID(drawID) {}
+
+        bool isIssued() { return NULL != fDrawTarget && fDrawTarget->isIssued(fDrawID); }
+
+    private:
+        GrDrawTarget*  fDrawTarget;
+        uint32_t       fDrawID;   // this may wrap, but we're doing direct comparison
+                                  // so that should be okay
+    };
+
+    virtual DrawToken getCurrentDrawToken() { return DrawToken(this, 0); }
 
 protected:
 
@@ -659,7 +699,7 @@ protected:
             case kArray_GeometrySrcType:
                 return src.fIndexCount;
             case kBuffer_GeometrySrcType:
-                return src.fIndexBuffer->sizeInBytes() / sizeof(uint16_t);
+                return static_cast<int>(src.fIndexBuffer->sizeInBytes() / sizeof(uint16_t));
             default:
                 GrCrash("Unexpected Index Source.");
                 return 0;
@@ -702,7 +742,7 @@ protected:
     // it is preferable to call this rather than getGeomSrc()->fVertexSize because of the assert.
     size_t getVertexSize() const {
         // the vertex layout is only valid if a vertex source has been specified.
-        GrAssert(this->getGeomSrc().fVertexSrc != kNone_GeometrySrcType);
+        SkASSERT(this->getGeomSrc().fVertexSrc != kNone_GeometrySrcType);
         return this->getGeomSrc().fVertexSize;
     }
 
@@ -727,7 +767,7 @@ protected:
         int instanceCount() const { return fInstanceCount; }
 
         bool isIndexed() const { return fIndexCount > 0; }
-#if GR_DEBUG
+#ifdef SK_DEBUG
         bool isInstanced() const; // this version is longer because of asserts
 #else
         bool isInstanced() const { return fInstanceCount > 0; }
@@ -745,15 +785,6 @@ protected:
             fDevBounds = &fDevBoundsStorage;
         }
         const SkRect* getDevBounds() const { return fDevBounds; }
-
-        bool getDevIBounds(SkIRect* bounds) const {
-            if (NULL != fDevBounds) {
-                fDevBounds->roundOut(bounds);
-                return true;
-            } else {
-                return false;
-            }
-        }
 
         // NULL if no copy of the dst is needed for the draw.
         const GrDeviceCoordTexture* getDstCopy() const {
@@ -818,7 +849,10 @@ private:
                             const SkMatrix* matrix,
                             const SkRect* localRect,
                             const SkMatrix* localMatrix);
-    virtual void onStencilPath(const GrPath*, const SkStrokeRec& stroke, SkPath::FillType fill) = 0;
+
+    virtual void onStencilPath(const GrPath*, SkPath::FillType) = 0;
+    virtual void onDrawPath(const GrPath*, SkPath::FillType,
+                            const GrDeviceCoordTexture* dstCopy) = 0;
 
     // helpers for reserving vertex and index space.
     bool reserveVertexSpace(size_t vertexSize,
@@ -837,7 +871,13 @@ private:
 
     // Makes a copy of the dst if it is necessary for the draw. Returns false if a copy is required
     // but couldn't be made. Otherwise, returns true.
-    bool setupDstReadIfNecessary(DrawInfo* info);
+    bool setupDstReadIfNecessary(DrawInfo* info) {
+        return this->setupDstReadIfNecessary(&info->fDstCopy, info->getDevBounds());
+    }
+    bool setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const SkRect* drawBounds);
+
+    // Check to see if this set of draw commands has been sent out
+    virtual bool       isIssued(uint32_t drawID) { return true; }
 
     enum {
         kPreallocGeoSrcStateStackCnt = 4,
@@ -849,7 +889,7 @@ private:
     // The context owns us, not vice-versa, so this ptr is not ref'ed by DrawTarget.
     GrContext*                                                      fContext;
 
-    typedef GrRefCnt INHERITED;
+    typedef SkRefCnt INHERITED;
 };
 
 #endif

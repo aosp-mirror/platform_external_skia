@@ -1,11 +1,12 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkRandom.h"
 #include "SkRefCnt.h"
 #include "SkTSearch.h"
@@ -24,8 +25,6 @@ private:
 
     typedef SkRefCnt INHERITED;
 };
-
-SK_DEFINE_INST_COUNT(RefClass)
 
 static void test_autounref(skiatest::Reporter* reporter) {
     RefClass obj(0);
@@ -123,7 +122,7 @@ static void test_autostarray(skiatest::Reporter* reporter) {
 
 static void test_search(skiatest::Reporter* reporter) {
     int         i, array[kSEARCH_COUNT];
-    SkMWCRandom    rand;
+    SkRandom    rand;
 
     for (i = 0; i < kSEARCH_COUNT; i++) {
         array[i] = rand.nextS();
@@ -185,7 +184,7 @@ static void test_utf16(skiatest::Reporter* reporter) {
     }
 }
 
-static void TestUTF(skiatest::Reporter* reporter) {
+DEF_TEST(Utils, reporter) {
     static const struct {
         const char* fUtf8;
         SkUnichar   fUni;
@@ -221,6 +220,3 @@ static void TestUTF(skiatest::Reporter* reporter) {
     test_autounref(reporter);
     test_autostarray(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Utils", UtfTestClass, TestUTF)

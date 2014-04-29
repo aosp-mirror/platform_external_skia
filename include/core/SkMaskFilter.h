@@ -14,6 +14,7 @@
 #include "SkMask.h"
 #include "SkPaint.h"
 
+class GrContext;
 class SkBitmap;
 class SkBlitter;
 class SkBounder;
@@ -125,6 +126,7 @@ public:
     virtual void computeFastBounds(const SkRect& src, SkRect* dest) const;
 
     SkDEVCODE(virtual void toString(SkString* str) const = 0;)
+    SK_DEFINE_FLATTENABLE_TYPE(SkMaskFilter)
 
 protected:
     // empty for now, but lets get our subclass to remember to init us for the future

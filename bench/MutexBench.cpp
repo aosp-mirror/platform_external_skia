@@ -8,26 +8,21 @@
 #include "SkThread.h"
 
 class MutexBench : public SkBenchmark {
-    enum {
-        N = SkBENCHLOOP(80),
-        M = SkBENCHLOOP(200)
-    };
 public:
-    MutexBench(void* param) : INHERITED(param) {
-        fIsRendering = false;
+    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+        return backend == kNonRendering_Backend;
     }
+
 protected:
     virtual const char* onGetName() {
         return "mutex";
     }
 
-    virtual void onDraw(SkCanvas*) {
-        for (int i = 0; i < N; i++) {
-            SK_DECLARE_STATIC_MUTEX(mu);
-            for (int j = 0; j < M; j++) {
-                mu.acquire();
-                mu.release();
-            }
+    virtual void onDraw(const int loops, SkCanvas*) {
+        SK_DECLARE_STATIC_MUTEX(mu);
+        for (int i = 0; i < loops; i++) {
+            mu.acquire();
+            mu.release();
         }
     }
 
@@ -37,6 +32,4 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* Fact(void* p) { return new MutexBench(p); }
-
-static BenchRegistry gReg01(Fact);
+DEF_BENCH( return new MutexBench(); )

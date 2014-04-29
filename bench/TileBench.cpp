@@ -34,28 +34,24 @@ class ConstXTileBench : public SkBenchmark {
     bool                fDoFilter;
     bool                fDoTrans;
     bool                fDoScale;
-    enum { N = SkBENCHLOOP(20) };
     static const int kWidth = 1;
     static const int kHeight = 300;
 
 public:
-    ConstXTileBench(void* param,
-                    SkShader::TileMode xTile,
+    ConstXTileBench(SkShader::TileMode xTile,
                     SkShader::TileMode yTile,
                     bool doFilter,
                     bool doTrans,
                     bool doScale)
-        : INHERITED(param)
-        , fDoFilter(doFilter)
+        : fDoFilter(doFilter)
         , fDoTrans(doTrans)
         , fDoScale(doScale) {
         SkBitmap bm;
 
-        bm.setConfig(SkBitmap::kARGB_8888_Config, kWidth, kHeight);
-
+        bm.setConfig(SkBitmap::kARGB_8888_Config, kWidth, kHeight, 0,
+                     kOpaque_SkAlphaType);
         bm.allocPixels();
         bm.eraseColor(SK_ColorWHITE);
-        bm.setIsOpaque(true);
 
         create_gradient(&bm);
 
@@ -86,10 +82,11 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         SkPaint paint(fPaint);
         this->setupPaint(&paint);
-        paint.setFilterBitmap(fDoFilter);
+        paint.setFilterLevel(fDoFilter ? SkPaint::kLow_FilterLevel
+                                       : SkPaint::kNone_FilterLevel);
         if (fDoTrans) {
             paint.setColor(SkColorSetARGBMacro(0x80, 0xFF, 0xFF, 0xFF));
         }
@@ -106,7 +103,7 @@ protected:
         SkPaint bgPaint;
         bgPaint.setColor(SK_ColorWHITE);
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < loops; i++) {
             if (fDoTrans) {
                 canvas->drawRect(r, bgPaint);
             }
@@ -119,18 +116,18 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, false, false, true))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, false, false, false))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, false, false, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, false, false, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, false, false, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, false, false, true))
 
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, true, false, false))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, true, false, true))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, true, false, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, true, false, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, true, false, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, true, false, false))
 
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, false, true, true))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, false, true, false))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, false, true, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, false, true, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, false, true, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, false, true, true))
 
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, true, true, false))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, true, true, true))
-DEF_BENCH(return new ConstXTileBench(p, SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, true, true, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, true, true, false))
+DEF_BENCH(return new ConstXTileBench(SkShader::kClamp_TileMode, SkShader::kClamp_TileMode, true, true, true))
+DEF_BENCH(return new ConstXTileBench(SkShader::kMirror_TileMode, SkShader::kMirror_TileMode, true, true, false))

@@ -19,6 +19,7 @@ TODO(epoger): Fix indentation in this file (2-space indents, not 4-space).
 # common Python modules
 import optparse
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -87,8 +88,15 @@ def FindPathToSkDiff(user_set_path=None):
         raise Exception('unable to find skdiff at user-set path %s' %
                         user_set_path)
     trunk_path = os.path.join(os.path.dirname(__file__), os.pardir)
-    possible_paths = [os.path.join(trunk_path, 'out', 'Release', 'skdiff'),
-                      os.path.join(trunk_path, 'out', 'Debug', 'skdiff')]
+
+    extension = ''
+    if os.name is 'nt':
+        extension = '.exe'
+        
+    possible_paths = [os.path.join(trunk_path, 'out', 'Release',
+                                    'skdiff' + extension),
+                      os.path.join(trunk_path, 'out', 'Debug',
+                                   'skdiff' + extension)]
     for try_path in possible_paths:
         if os.path.isfile(try_path):
             return try_path
@@ -202,7 +210,9 @@ def _GitExportBaseVersionOfFile(file_within_repo, dest_path):
     # For now, though, "git show" is the most straightforward implementation
     # I could come up with.  I tried using "git cat-file", but I had trouble
     # getting it to work as desired.
-    args = ['git', 'show', os.path.join('HEAD:.', file_within_repo)]
+    # Note that git expects / rather than \ as a path separator even on
+    # windows.
+    args = ['git', 'show', posixpath.join('HEAD:.', file_within_repo)]
     with open(dest_path, 'wb') as outfile:
         proc = subprocess.Popen(args, stdout=outfile)
         proc.communicate()
@@ -223,7 +233,12 @@ def SvnDiff(path_to_skdiff, dest_dir, source_dir):
     dest_dir = os.path.abspath(dest_dir)
 
     os.chdir(source_dir)
-    using_svn = os.path.isdir('.svn')
+    svn_repo = svn.Svn('.')
+    using_svn = True
+    try:
+      svn_repo.GetInfo()
+    except:
+      using_svn = False
 
     # Prepare temporary directories.
     modified_flattened_dir = os.path.join(dest_dir, 'modified_flattened')
@@ -236,7 +251,6 @@ def SvnDiff(path_to_skdiff, dest_dir, source_dir):
     # Get a list of all locally modified (including added/deleted) files,
     # descending subdirectories.
     if using_svn:
-        svn_repo = svn.Svn('.')
         modified_file_paths = svn_repo.GetFilesWithStatus(
             svn.STATUS_ADDED | svn.STATUS_DELETED | svn.STATUS_MODIFIED)
     else:
@@ -249,23 +263,26 @@ def SvnDiff(path_to_skdiff, dest_dir, source_dir):
         if modified_file_path.endswith('.json'):
             # Special handling for JSON files, in the hopes that they
             # contain GM result summaries.
-            (_unused, original_file_path) = tempfile.mkstemp()
+            original_file = tempfile.NamedTemporaryFile(delete = False)
+            original_file.close()
             if using_svn:
                 svn_repo.ExportBaseVersionOfFile(
-                    modified_file_path, original_file_path)
+                    modified_file_path, original_file.name)
             else:
                 _GitExportBaseVersionOfFile(
-                    modified_file_path, original_file_path)
-            platform_prefix = re.sub(os.sep, '__',
-                                     os.path.dirname(modified_file_path)) + '__'
-            _CallJsonDiff(old_json_path=original_file_path,
+                    modified_file_path, original_file.name)
+            modified_dir = os.path.dirname(modified_file_path)
+            platform_prefix = (re.sub(re.escape(os.sep), '__',
+                                      os.path.splitdrive(modified_dir)[1])
+                              + '__')
+            _CallJsonDiff(old_json_path=original_file.name,
                           new_json_path=modified_file_path,
                           old_flattened_dir=original_flattened_dir,
                           new_flattened_dir=modified_flattened_dir,
                           filename_prefix=platform_prefix)
-            os.remove(original_file_path)
+            os.remove(original_file.name)
         else:
-            dest_filename = re.sub(os.sep, '__', modified_file_path)
+            dest_filename = re.sub(re.escape(os.sep), '__', modified_file_path)
             # If the file had STATUS_DELETED, it won't exist anymore...
             if os.path.isfile(modified_file_path):
                 shutil.copyfile(modified_file_path,

@@ -27,7 +27,8 @@ protected:
         return false;
     }
 
-    FailImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {}
+    FailImageFilter(SkFlattenableReadBuffer& buffer)
+      : INHERITED(1, buffer) {}
 
 private:
     typedef SkImageFilter INHERITED;
@@ -35,7 +36,8 @@ private:
 
 // register the filter with the flattenable registry
 static SkFlattenable::Registrar gFailImageFilterReg("FailImageFilter",
-                                                    FailImageFilter::CreateProc);
+                                                    FailImageFilter::CreateProc,
+                                                    FailImageFilter::GetFlattenableType());
 
 class IdentityImageFilter : public SkImageFilter {
 public:
@@ -49,7 +51,8 @@ protected:
         return true;
     }
 
-    IdentityImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {}
+    IdentityImageFilter(SkFlattenableReadBuffer& buffer)
+      : INHERITED(1, buffer) {}
 
 private:
     typedef SkImageFilter INHERITED;
@@ -57,7 +60,8 @@ private:
 
 // register the filter with the flattenable registry
 static SkFlattenable::Registrar gIdentityImageFilterReg("IdentityImageFilter",
-                                                        IdentityImageFilter::CreateProc);
+                                                        IdentityImageFilter::CreateProc,
+                                                        IdentityImageFilter::GetFlattenableType());
 
 
 ///////////////////////////////////////////////////////////////////////////////

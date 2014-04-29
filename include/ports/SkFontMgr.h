@@ -41,6 +41,10 @@ public:
     void getFamilyName(int index, SkString* familyName);
     SkFontStyleSet* createStyleSet(int index);
 
+    /**
+     *  The caller must call unref() on the returned object.
+     *  Never returns NULL; will return an empty set if the name is not found.
+     */
     SkFontStyleSet* matchFamily(const char familyName[]);
 
     /**
@@ -89,6 +93,7 @@ protected:
     virtual void onGetFamilyName(int index, SkString* familyName) = 0;
     virtual SkFontStyleSet* onCreateStyleSet(int index) = 0;
 
+    /** May return NULL if the name is not found. */
     virtual SkFontStyleSet* onMatchFamily(const char familyName[]) = 0;
 
     virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
@@ -100,11 +105,11 @@ protected:
     virtual SkTypeface* onCreateFromStream(SkStream*, int ttcIndex) = 0;
     virtual SkTypeface* onCreateFromFile(const char path[], int ttcIndex) = 0;
 
-    // TODO: make this pure-virtual once all ports know about it
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
-                                               unsigned styleBits);
+                                               unsigned styleBits) = 0;
 private:
     static SkFontMgr* Factory();    // implemented by porting layer
+    friend void set_up_default(SkFontMgr** singleton);
 
     typedef SkRefCnt INHERITED;
 };

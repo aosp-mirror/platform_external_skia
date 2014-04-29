@@ -683,7 +683,7 @@ public:
 
 protected:
     Sk3DShader(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
-        fProxy = buffer.readFlattenableT<SkShader>();
+        fProxy = buffer.readShader();
         fPMColor = buffer.readColor();
         fMask = NULL;
     }
@@ -780,6 +780,7 @@ private:
     void*   fObj;
     Proc    fProc;
 };
+#define SkAutoCallProc(...) SK_REQUIRE_LOCAL_VAR(SkAutoCallProc)
 
 static void destroy_blitter(void* blitter) {
     ((SkBlitter*)blitter)->~SkBlitter();
@@ -850,14 +851,16 @@ static XferInterp interpret_xfermode(const SkPaint& paint, SkXfermode* xfer,
 SkBlitter* SkBlitter::Choose(const SkBitmap& device,
                              const SkMatrix& matrix,
                              const SkPaint& origPaint,
-                             void* storage, size_t storageSize) {
+                             void* storage, size_t storageSize,
+                             bool drawCoverage) {
     SkASSERT(storageSize == 0 || storage != NULL);
 
     SkBlitter*  blitter = NULL;
 
     // which check, in case we're being called by a client with a dummy device
     // (e.g. they have a bounder that always aborts the draw)
-    if (SkBitmap::kNo_Config == device.getConfig()) {
+    if (SkBitmap::kNo_Config == device.config() ||
+            (drawCoverage && (SkBitmap::kA8_Config != device.config()))) {
         SK_PLACEMENT_NEW(blitter, SkNullBlitter, storage, storageSize);
         return blitter;
     }
@@ -940,14 +943,15 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
         return blitter;
     }
 
-    switch (device.getConfig()) {
-        case SkBitmap::kA1_Config:
-            SK_PLACEMENT_NEW_ARGS(blitter, SkA1_Blitter,
-                                  storage, storageSize, (device, *paint));
-            break;
 
+    switch (device.config()) {
         case SkBitmap::kA8_Config:
-            if (shader) {
+            if (drawCoverage) {
+                SkASSERT(NULL == shader);
+                SkASSERT(NULL == paint->getXfermode());
+                SK_PLACEMENT_NEW_ARGS(blitter, SkA8_Coverage_Blitter,
+                                      storage, storageSize, (device, *paint));
+            } else if (shader) {
                 SK_PLACEMENT_NEW_ARGS(blitter, SkA8_Shader_Blitter,
                                       storage, storageSize, (device, *paint));
             } else {

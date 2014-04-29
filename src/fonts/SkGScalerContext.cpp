@@ -176,6 +176,8 @@ SkScalerContext* SkGTypeface::onCreateScalerContext(
 
 void SkGTypeface::onFilterRec(SkScalerContextRec* rec) const {
     fProxy->filterRec(rec);
+    rec->setHinting(SkPaint::kNo_Hinting);
+    rec->fMaskFormat = SkMask::kARGB32_Format;
 }
 
 SkAdvancedTypefaceMetrics* SkGTypeface::onGetAdvancedTypefaceMetrics(
@@ -192,6 +194,11 @@ SkStream* SkGTypeface::onOpenStream(int* ttcIndex) const {
 void SkGTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
                                       bool* isLocal) const {
     fProxy->getFontDescriptor(desc, isLocal);
+}
+
+int SkGTypeface::onCharsToGlyphs(const void* chars, Encoding encoding,
+                                 uint16_t glyphs[], int glyphCount) const {
+    return fProxy->charsToGlyphs(chars, encoding, glyphs, glyphCount);
 }
 
 int SkGTypeface::onCountGlyphs() const {
@@ -213,15 +220,6 @@ int SkGTypeface::onGetTableTags(SkFontTableTag tags[]) const {
 size_t SkGTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
                                     size_t length, void* data) const {
     return fProxy->getTableData(tag, offset, length, data);
-}
-
-SkTypeface* SkGTypeface::onRefMatchingStyle(Style style) const {
-    if (this->style() == style) {
-        return const_cast<SkGTypeface*>(SkRef(this));
-    }
-
-    SkAutoTUnref<SkTypeface> other(fProxy->refMatchingStyle(style));
-    return SkNEW_ARGS(SkGTypeface, (other, fPaint));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

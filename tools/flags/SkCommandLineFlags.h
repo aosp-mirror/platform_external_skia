@@ -108,15 +108,6 @@ public:
      */
     static void Parse(int argc, char** argv);
 
-    /* Takes a list of the form [~][^]match[$]
-     ~ causes a matching test to always be skipped
-     ^ requires the start of the test to match
-     $ requires the end of the test to match
-     ^ and $ requires an exact match
-     If a test does not match any list entry, it is skipped unless some list entry starts with ~
-    */
-    static bool ShouldSkip(const SkTDArray<const char*>& strings, const char* name);
-
     /**
      *  Custom class for holding the arguments for a string flag.
      *  Publicly only has accessors so the strings cannot be modified.
@@ -134,6 +125,18 @@ public:
 
         bool isEmpty() const { return this->count() == 0; }
 
+        /**
+         * Returns true iff string is equal to one of the strings in this array.
+         */
+        bool contains(const char* string) const {
+            for (int i = 0; i < fStrings.count(); i++) {
+                if (fStrings[i].equals(string)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
     private:
         void reset() { fStrings.reset(); }
 
@@ -149,6 +152,16 @@ public:
 
         friend class SkFlagInfo;
     };
+
+    /* Takes a list of the form [~][^]match[$]
+     ~ causes a matching test to always be skipped
+     ^ requires the start of the test to match
+     $ requires the end of the test to match
+     ^ and $ requires an exact match
+     If a test does not match any list entry, it is skipped unless some list entry starts with ~
+    */
+    static bool ShouldSkip(const SkTDArray<const char*>& strings, const char* name);
+    static bool ShouldSkip(const StringArray& strings, const char* name);
 
 private:
     static SkFlagInfo* gHead;
@@ -304,7 +317,7 @@ public:
         if (kString_FlagType == fFlagType) {
             fStrings->reset();
         } else {
-            SkASSERT(!"Can only call resetStrings on kString_FlagType");
+            SkDEBUGFAIL("Can only call resetStrings on kString_FlagType");
         }
     }
 
@@ -312,7 +325,7 @@ public:
         if (kString_FlagType == fFlagType) {
             fStrings->append(string);
         } else {
-            SkASSERT(!"Can only append to kString_FlagType");
+            SkDEBUGFAIL("Can only append to kString_FlagType");
         }
     }
 
@@ -320,7 +333,7 @@ public:
         if (kInt_FlagType == fFlagType) {
             *fIntValue = value;
         } else {
-            SkASSERT(!"Can only call setInt on kInt_FlagType");
+            SkDEBUGFAIL("Can only call setInt on kInt_FlagType");
         }
     }
 
@@ -328,7 +341,7 @@ public:
         if (kDouble_FlagType == fFlagType) {
             *fDoubleValue = value;
         } else {
-            SkASSERT(!"Can only call setDouble on kDouble_FlagType");
+            SkDEBUGFAIL("Can only call setDouble on kDouble_FlagType");
         }
     }
 
@@ -336,7 +349,7 @@ public:
         if (kBool_FlagType == fFlagType) {
             *fBoolValue = value;
         } else {
-            SkASSERT(!"Can only call setBool on kBool_FlagType");
+            SkDEBUGFAIL("Can only call setBool on kBool_FlagType");
         }
     }
 
@@ -363,7 +376,7 @@ public:
                 result.printf("%2.2f", fDefaultDouble);
                 break;
             default:
-                SkASSERT(!"Invalid flag type");
+                SkDEBUGFAIL("Invalid flag type");
         }
         return result;
     }
@@ -379,7 +392,7 @@ public:
             case SkFlagInfo::kDouble_FlagType:
                 return SkString("double");
             default:
-                SkASSERT(!"Invalid flag type");
+                SkDEBUGFAIL("Invalid flag type");
                 return SkString();
         }
     }

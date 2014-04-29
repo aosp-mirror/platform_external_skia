@@ -55,7 +55,8 @@ public:
      * can provide an optional aspect ratio parameter. This allows the bulk-load algorithm to create
      * better proportioned tiles of rectangles.
      */
-    static SkRTree* Create(int minChildren, int maxChildren, SkScalar aspectRatio = 1);
+    static SkRTree* Create(int minChildren, int maxChildren, SkScalar aspectRatio = 1,
+            bool orderWhenBulkLoading = true);
     virtual ~SkRTree();
 
     /**
@@ -144,7 +145,7 @@ private:
         }
     };
 
-    SkRTree(int minChildren, int maxChildren, SkScalar aspectRatio);
+    SkRTree(int minChildren, int maxChildren, SkScalar aspectRatio, bool orderWhenBulkLoading);
 
     /**
      * Recursively descend the tree to find an insertion position for 'branch', updates
@@ -178,12 +179,13 @@ private:
     const size_t fNodeSize;
 
     // This is the count of data elements (rather than total nodes in the tree)
-    size_t fCount;
+    int fCount;
 
     Branch fRoot;
     SkChunkAlloc fNodes;
     SkTDArray<Branch> fDeferredInserts;
     SkScalar fAspectRatio;
+    bool fSortWhenBulkLoading;
 
     Node* allocateNode(uint16_t level);
 

@@ -108,7 +108,7 @@ protected:
         return SkString("gradients");
     }
 
-    virtual SkISize onISize() { return make_isize(640, 615); }
+    virtual SkISize onISize() { return SkISize::Make(840, 815); }
 
     virtual void onDraw(SkCanvas* canvas) {
 
@@ -161,7 +161,7 @@ protected:
         return SkString("gradients_local_perspective");
     }
 
-    virtual SkISize onISize() { return make_isize(640, 615); }
+    virtual SkISize onISize() { return SkISize::Make(840, 815); }
 
     virtual void onDraw(SkCanvas* canvas) {
 
@@ -212,7 +212,7 @@ protected:
         return SkString("gradients_view_perspective");
     }
 
-    virtual SkISize onISize() { return make_isize(640, 400); }
+    virtual SkISize onISize() { return SkISize::Make(840, 500); }
 
     virtual void onDraw(SkCanvas* canvas) {
         SkMatrix perspective;
@@ -252,7 +252,7 @@ protected:
         return SkString("gradients_degenerate_2pt");
     }
 
-    virtual SkISize onISize() { return make_isize(320, 320); }
+    virtual SkISize onISize() { return SkISize::Make(320, 320); }
 
     void drawBG(SkCanvas* canvas) {
         canvas->drawColor(SK_ColorBLUE);
@@ -262,7 +262,7 @@ protected:
         this->drawBG(canvas);
 
         SkColor colors[] = { SK_ColorRED, SK_ColorGREEN, SK_ColorGREEN, SK_ColorRED };
-        SkScalar pos[] = { 0, SkFloatToScalar(0.01f), SkFloatToScalar(0.99f), SK_Scalar1 };
+        SkScalar pos[] = { 0, 0.01f, 0.99f, SK_Scalar1 };
         SkPoint c0;
         c0.iset(-80, 25);
         SkScalar r0 = SkIntToScalar(70);
@@ -290,7 +290,7 @@ public:
 protected:
     SkString onShortName() { return SkString("clamped_gradients"); }
 
-    virtual SkISize onISize() { return make_isize(640, 510); }
+    virtual SkISize onISize() { return SkISize::Make(640, 510); }
 
     void drawBG(SkCanvas* canvas) {
         canvas->drawColor(0xFFDDDDDD);
@@ -328,7 +328,7 @@ public:
 
 protected:
     SkString onShortName() { return SkString("radial_gradient"); }
-    virtual SkISize onISize() { return make_isize(1280, 1280); }
+    virtual SkISize onISize() { return SkISize::Make(1280, 1280); }
     void drawBG(SkCanvas* canvas) {
         canvas->drawColor(0xFF000000);
     }
@@ -343,9 +343,9 @@ protected:
         center.set(SkIntToScalar(dim.width())/2, SkIntToScalar(dim.height())/2);
         SkScalar radius = SkIntToScalar(dim.width())/2;
         const SkColor colors[] = { 0x7f7f7f7f, 0x7f7f7f7f, 0xb2000000 };
-        const SkScalar pos[] = { SkFloatToScalar(0.0f),
-                             SkFloatToScalar(0.35f),
-                             SkFloatToScalar(1.0f) };
+        const SkScalar pos[] = { 0.0f,
+                             0.35f,
+                             1.0f };
         SkShader* shader =
             SkGradientShader::CreateRadial(center, radius, colors,
                                            pos, SK_ARRAY_COUNT(pos),
@@ -361,6 +361,67 @@ private:
 };
 
 
+class RadialGradient2GM : public GM {
+public:
+    RadialGradient2GM() {}
+
+protected:
+    SkString onShortName() { return SkString("radial_gradient2"); }
+    virtual SkISize onISize() { return SkISize::Make(800, 400); }
+    void drawBG(SkCanvas* canvas) {
+        canvas->drawColor(0xFF000000);
+    }
+
+    // Reproduces the example given in bug 7671058.
+    virtual void onDraw(SkCanvas* canvas) {
+        SkPaint paint1, paint2, paint3;
+        paint1.setStyle(SkPaint::kFill_Style);
+        paint2.setStyle(SkPaint::kFill_Style);
+        paint3.setStyle(SkPaint::kFill_Style);
+
+        const SkColor sweep_colors[] =
+            { 0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000 };
+        const SkColor colors1[] = { 0xFFFFFFFF, 0x00000000 };
+        const SkColor colors2[] = { 0xFF000000, 0x00000000 };
+
+        const SkScalar cx = 200, cy = 200, radius = 150;
+        SkPoint center;
+        center.set(cx, cy);
+
+        // We can either interpolate endpoints and premultiply each point (default, more precision),
+        // or premultiply the endpoints first, avoiding the need to premultiply each point (cheap).
+        const uint32_t flags[] = { 0, SkGradientShader::kInterpolateColorsInPremul_Flag };
+
+        for (size_t i = 0; i < SK_ARRAY_COUNT(flags); i++) {
+            SkAutoTUnref<SkShader> sweep(
+                    SkGradientShader::CreateSweep(cx, cy, sweep_colors,
+                                                  NULL, SK_ARRAY_COUNT(sweep_colors),
+                                                  NULL, flags[i]));
+            SkAutoTUnref<SkShader> radial1(
+                    SkGradientShader::CreateRadial(center, radius, colors1,
+                                                   NULL, SK_ARRAY_COUNT(colors1),
+                                                   SkShader::kClamp_TileMode,
+                                                   NULL, flags[i]));
+            SkAutoTUnref<SkShader> radial2(
+                    SkGradientShader::CreateRadial(center, radius, colors2,
+                                                   NULL, SK_ARRAY_COUNT(colors2),
+                                                   SkShader::kClamp_TileMode,
+                                                   NULL, flags[i]));
+            paint1.setShader(sweep);
+            paint2.setShader(radial1);
+            paint3.setShader(radial2);
+
+            canvas->drawCircle(cx, cy, radius, paint1);
+            canvas->drawCircle(cx, cy, radius, paint3);
+            canvas->drawCircle(cx, cy, radius, paint2);
+
+            canvas->translate(400, 0);
+        }
+    }
+
+private:
+    typedef GM INHERITED;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -381,4 +442,7 @@ static GMRegistry reg5(MyFactory5);
 
 static GM* MyFactory6(void*) { return new GradientsViewPerspectiveGM; }
 static GMRegistry reg6(MyFactory6);
+
+static GM* MyFactory7(void*) { return new RadialGradient2GM; }
+static GMRegistry reg7(MyFactory7);
 }

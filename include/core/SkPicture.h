@@ -186,6 +186,13 @@ public:
      */
     void serialize(SkWStream*, EncodeBitmap encoder = NULL) const;
 
+    /**
+     * Returns true if any bitmaps may be produced when this SkPicture
+     * is replayed.
+     * Returns false if called while still recording.
+     */
+    bool willPlayBackBitmaps() const;
+
 #ifdef SK_BUILD_FOR_ANDROID
     /** Signals that the caller is prematurely done replaying the drawing
         commands. This can be called from a canvas virtual while the picture
@@ -208,7 +215,16 @@ protected:
     // V10: add drawRRect, drawOval, clipRRect
     // V11: modify how readBitmap and writeBitmap store their info.
     // V12: add conics to SkPath, use new SkPathRef flattening
-    static const uint32_t PICTURE_VERSION = 12;
+    // V13: add flag to drawBitmapRectToRect
+    //      parameterize blurs by sigma rather than radius
+    // V14: Add flags word to PathRef serialization
+    // V15: Remove A1 bitmpa config (and renumber remaining configs)
+    // V16: Move SkPath's isOval flag to SkPathRef
+    // V17: SkPixelRef now writes SkImageInfo
+#ifndef DELETE_THIS_CODE_WHEN_SKPS_ARE_REBUILT_AT_V16_AND_ALL_OTHER_INSTANCES_TOO
+    static const uint32_t PRIOR_PICTURE_VERSION = 15;  // TODO: remove when .skps regenerated
+#endif
+    static const uint32_t PICTURE_VERSION = 17;
 
     // fPlayback, fRecord, fWidth & fHeight are protected to allow derived classes to
     // install their own SkPicturePlayback-derived players,SkPictureRecord-derived
@@ -235,26 +251,6 @@ private:
     friend class SkPicturePlayback;
 
     typedef SkRefCnt INHERITED;
-};
-
-class SkAutoPictureRecord : SkNoncopyable {
-public:
-    SkAutoPictureRecord(SkPicture* pict, int width, int height,
-                        uint32_t recordingFlags = 0) {
-        fPicture = pict;
-        fCanvas = pict->beginRecording(width, height, recordingFlags);
-    }
-    ~SkAutoPictureRecord() {
-        fPicture->endRecording();
-    }
-
-    /** Return the canvas to draw into for recording into the picture.
-    */
-    SkCanvas* getRecordingCanvas() const { return fCanvas; }
-
-private:
-    SkPicture*  fPicture;
-    SkCanvas*   fCanvas;
 };
 
 /**

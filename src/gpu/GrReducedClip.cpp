@@ -17,6 +17,7 @@ namespace GrReducedClip {
 void reduced_stack_walker(const SkClipStack& stack,
                           const SkRect& queryBounds,
                           ElementList* result,
+                          int32_t* resultGenID,
                           InitialState* initialState,
                           bool* requiresAA);
 
@@ -30,10 +31,16 @@ take a rect in case the caller knows a bound on what is to be drawn through this
 void ReduceClipStack(const SkClipStack& stack,
                      const SkIRect& queryBounds,
                      ElementList* result,
+                     int32_t* resultGenID,
                      InitialState* initialState,
                      SkIRect* tighterBounds,
                      bool* requiresAA) {
     result->reset();
+
+    // The clip established by the element list might be cached based on the last
+    // generation id. When we make early returns, we do not know what was the generation
+    // id that lead to the state. Make a conservative guess.
+    *resultGenID = stack.getTopmostGenID();
 
     if (stack.isWideOpen()) {
         *initialState = kAllIn_InitialState;
@@ -51,7 +58,7 @@ void ReduceClipStack(const SkClipStack& stack,
 
     const SkIRect* bounds = &queryBounds;
 
-    SkRect scalarQueryBounds = SkRect::MakeFromIRect(queryBounds);
+    SkRect scalarQueryBounds = SkRect::Make(queryBounds);
 
     if (iior) {
         SkASSERT(SkClipStack::kNormal_BoundsType == stackBoundsType);
@@ -67,10 +74,12 @@ void ReduceClipStack(const SkClipStack& stack,
         } else if (isectRect.intersect(stackBounds, scalarQueryBounds)) {
             if (NULL != tighterBounds) {
                 isectRect.roundOut(tighterBounds);
-                SkRect scalarTighterBounds = SkRect::MakeFromIRect(*tighterBounds);
+                SkRect scalarTighterBounds = SkRect::Make(*tighterBounds);
                 if (scalarTighterBounds == isectRect) {
                     // the round-out didn't add any area outside the clip rect.
-                    *requiresAA = false;
+                    if (NULL != requiresAA) {
+                        *requiresAA = false;
+                    }
                     *initialState = kAllIn_InitialState;
                     return;
                 }
@@ -119,16 +128,21 @@ void ReduceClipStack(const SkClipStack& stack,
         }
     }
 
-    SkRect scalarBounds = SkRect::MakeFromIRect(*bounds);
+    SkRect scalarBounds = SkRect::Make(*bounds);
 
     // Now that we have determined the bounds to use and filtered out the trivial cases, call the
     // helper that actually walks the stack.
-    reduced_stack_walker(stack, scalarBounds, result, initialState, requiresAA);
+    reduced_stack_walker(stack, scalarBounds, result, resultGenID, initialState, requiresAA);
+
+    // The list that was computed in this function may be cached based on the gen id of the last
+    // element.
+    SkASSERT(SkClipStack::kInvalidGenID != *resultGenID);
 }
 
 void reduced_stack_walker(const SkClipStack& stack,
                           const SkRect& queryBounds,
                           ElementList* result,
+                          int32_t* resultGenID,
                           InitialState* initialState,
                           bool* requiresAA) {
 
@@ -312,6 +326,11 @@ void reduced_stack_walker(const SkClipStack& stack,
                 break;
         }
         if (!skippable) {
+            if (0 == result->count()) {
+                // This will be the last element. Record the stricter genID.
+                *resultGenID = element->getGenID();
+            }
+
             // if it is a flip, change it to a bounds-filling rect
             if (isFlip) {
                 SkASSERT(SkRegion::kXOR_Op == element->getOp() ||
@@ -355,7 +374,13 @@ void reduced_stack_walker(const SkClipStack& stack,
                     break;
                 case SkRegion::kIntersect_Op:
                     // intersecting with the empty set yields the empty set
-                    skippable = kAllOut_InitialState == *initialState;
+                    if (kAllOut_InitialState == *initialState) {
+                        skippable = true;
+                    } else {
+                        // We can clear to zero and then simply draw the clip element.
+                        *initialState = kAllOut_InitialState;
+                        element->setOp(SkRegion::kReplace_Op);
+                    }
                     break;
                 case SkRegion::kUnion_Op:
                     if (kAllIn_InitialState == *initialState) {
@@ -410,6 +435,14 @@ void reduced_stack_walker(const SkClipStack& stack,
     }
     if (NULL != requiresAA) {
         *requiresAA = numAAElements > 0;
+    }
+
+    if (0 == result->count()) {
+        if (*initialState == kAllIn_InitialState) {
+            *resultGenID = SkClipStack::kWideOpenGenID;
+        } else {
+            *resultGenID = SkClipStack::kEmptyGenID;
+        }
     }
 }
 } // namespace GrReducedClip

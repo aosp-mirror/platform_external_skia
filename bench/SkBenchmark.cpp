@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -9,17 +8,17 @@
 #include "SkPaint.h"
 #include "SkParse.h"
 
-SK_DEFINE_INST_COUNT(SkBenchmark)
+const char* SkTriState::Name[] = { "default", "true", "false" };
 
 template BenchRegistry* BenchRegistry::gHead;
 
-SkBenchmark::SkBenchmark(void* defineDict) {
-    fDict = reinterpret_cast<const SkTDict<const char*>*>(defineDict);
+SkString SkBenchmark::gResourcePath;
+
+SkBenchmark::SkBenchmark() {
     fForceAlpha = 0xFF;
     fForceAA = true;
+    fForceFilter = false;
     fDither = SkTriState::kDefault;
-    fHasStrokeWidth = false;
-    fIsRendering = true;
     fOrMask = fClearMask = 0;
 }
 
@@ -35,8 +34,8 @@ void SkBenchmark::preDraw() {
     this->onPreDraw();
 }
 
-void SkBenchmark::draw(SkCanvas* canvas) {
-    this->onDraw(canvas);
+void SkBenchmark::draw(const int loops, SkCanvas* canvas) {
+    this->onDraw(loops, canvas);
 }
 
 void SkBenchmark::postDraw() {
@@ -46,7 +45,8 @@ void SkBenchmark::postDraw() {
 void SkBenchmark::setupPaint(SkPaint* paint) {
     paint->setAlpha(fForceAlpha);
     paint->setAntiAlias(fForceAA);
-    paint->setFilterBitmap(fForceFilter);
+    paint->setFilterLevel(fForceFilter ? SkPaint::kLow_FilterLevel
+                                       : SkPaint::kNone_FilterLevel);
 
     paint->setFlags((paint->getFlags() & ~fClearMask) | fOrMask);
 
@@ -55,33 +55,6 @@ void SkBenchmark::setupPaint(SkPaint* paint) {
     }
 }
 
-const char* SkBenchmark::findDefine(const char* key) const {
-    if (fDict) {
-        const char* value;
-        if (fDict->find(key, &value)) {
-            return value;
-        }
-    }
-    return NULL;
-}
-
-bool SkBenchmark::findDefine32(const char* key, int32_t* value) const {
-    const char* valueStr = this->findDefine(key);
-    if (valueStr) {
-        SkParse::FindS32(valueStr, value);
-        return true;
-    }
-    return false;
-}
-
-bool SkBenchmark::findDefineScalar(const char* key, SkScalar* value) const {
-    const char* valueStr = this->findDefine(key);
-    if (valueStr) {
-        SkParse::FindScalar(valueStr, value);
-        return true;
-    }
-    return false;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 

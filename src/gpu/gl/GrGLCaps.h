@@ -28,23 +28,6 @@ public:
     typedef GrGLStencilBuffer::Format StencilFormat;
 
     /**
-     * Represents a supported multisampling/coverage-sampling mode.
-     */
-    struct MSAACoverageMode {
-        // "Coverage samples" includes samples that actually have color, depth,
-        // stencil, ... as well as those that don't (coverage only). All samples
-        // are coverage samples. (We're using the word "coverage sample" to
-        // match the NV extension language.)
-        int fCoverageSampleCnt;
-
-        // Color samples are samples that store data values (color, stencil,
-        // depth) rather than just representing coverage. They are a subset
-        // of coverage samples. (Again the wording was chosen to match the
-        // extension.)
-        int fColorSampleCnt;
-    };
-
-    /**
      * The type of MSAA for FBOs supported. Different extensions have different
      * semantics of how / when a resolve is performed.
      */
@@ -54,13 +37,17 @@ public:
          */
         kNone_MSFBOType = 0,
         /**
-         * GL3.0-style MSAA FBO (GL_ARB_framebuffer_object)
+         * GL3.0-style MSAA FBO (GL_ARB_framebuffer_object).
          */
         kDesktop_ARB_MSFBOType,
         /**
          * earlier GL_EXT_framebuffer* extensions
          */
         kDesktop_EXT_MSFBOType,
+        /**
+         * Similar to kDesktop_ARB but with additional restrictions on glBlitFramebuffer.
+         */
+        kES_3_0_MSFBOType,
         /**
          * GL_APPLE_framebuffer_multisample ES extension
          */
@@ -89,18 +76,6 @@ public:
         kNV_FBFetchType,
 
         kLast_FBFetchType = kNV_FBFetchType,
-    };
-
-    enum CoverageAAType {
-        /**
-         * No coverage sample support
-         */
-        kNone_CoverageAAType,
-
-        /**
-         * GL_NV_framebuffer_multisample_coverage
-         */
-        kNVDesktop_CoverageAAType,
     };
 
     /**
@@ -182,26 +157,12 @@ public:
                kES_EXT_MsToTexture_MSFBOType == fMSFBOType;
     }
 
-    /**
-     * Reports the type of coverage sample AA support.
-     */
-    CoverageAAType coverageAAType() const { return fCoverageAAType; }
-
-    /**
-     * Chooses a supported coverage mode based on a desired sample count. The
-     * desired sample count is rounded up the next supported coverage sample
-     * count unless a it is larger than the max in which case it is rounded
-     * down. Once a coverage sample count is decided, the supported mode with
-     * the fewest color samples is chosen.
-     */
-    const MSAACoverageMode& getMSAACoverageMode(int desiredSampleCount) const;
-
     FBFetchType fbFetchType() const { return fFBFetchType; }
 
     /**
-     * Prints the caps info using GrPrintf.
+     * Returs a string containeng the caps info.
      */
-    virtual void print() const SK_OVERRIDE;
+    virtual SkString dump() const SK_OVERRIDE;
 
     /**
      * Gets an array of legal stencil formats. These formats are not guaranteed
@@ -220,6 +181,9 @@ public:
 
     /// maximum number of texture units accessible in the fragment shader.
     int maxFragmentTextureUnits() const { return fMaxFragmentTextureUnits; }
+
+    /// maximum number of fixed-function texture coords, or zero if no fixed-function.
+    int maxFixedFunctionTextureCoords() const { return fMaxFixedFunctionTextureCoords; }
 
     /// ES requires an extension to support RGBA8 in RenderBufferStorage
     bool rgba8RenderbufferSupport() const { return fRGBA8RenderbufferSupport; }
@@ -279,8 +243,12 @@ public:
 
     bool isCoreProfile() const { return fIsCoreProfile; }
 
+    bool fixedFunctionSupport() const { return fFixedFunctionSupport; }
+
     /// Is there support for discarding the frame buffer
     bool discardFBSupport() const { return fDiscardFBSupport; }
+
+    bool fullClearIsFree() const { return fFullClearIsFree; }
 
 private:
     /**
@@ -320,8 +288,10 @@ private:
         }
     };
 
-    void initFSAASupport(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli);
-    void initStencilFormats(const GrGLContextInfo& ctxInfo);
+    void initFSAASupport(const GrGLContextInfo&, const GrGLInterface*);
+    void initStencilFormats(const GrGLContextInfo&);
+    // This must be called after initFSAASupport().
+    void initConfigRenderableTable(const GrGLContextInfo&);
 
     // tracks configs that have been verified to pass the FBO completeness when
     // used as a color attachment
@@ -336,10 +306,9 @@ private:
     int fMaxFragmentUniformVectors;
     int fMaxVertexAttributes;
     int fMaxFragmentTextureUnits;
+    int fMaxFixedFunctionTextureCoords;
 
     MSFBOType fMSFBOType;
-    CoverageAAType fCoverageAAType;
-    SkTDArray<MSAACoverageMode> fMSAACoverageModes;
 
     FBFetchType fFBFetchType;
 
@@ -360,7 +329,9 @@ private:
     bool fVertexArrayObjectSupport : 1;
     bool fUseNonVBOVertexAndIndexDynamicData : 1;
     bool fIsCoreProfile : 1;
+    bool fFixedFunctionSupport : 1;
     bool fDiscardFBSupport : 1;
+    bool fFullClearIsFree : 1;
 
     typedef GrDrawTargetCaps INHERITED;
 };

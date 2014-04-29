@@ -12,6 +12,7 @@
     '<(skia_src_path)/effects/SkArithmeticMode.cpp',
     '<(skia_src_path)/effects/SkAvoidXfermode.cpp',
     '<(skia_src_path)/effects/SkBicubicImageFilter.cpp',
+    '<(skia_src_path)/effects/SkBitmapAlphaThresholdShader.cpp',
     '<(skia_src_path)/effects/SkBitmapSource.cpp',
     '<(skia_src_path)/effects/SkBlurDrawLooper.cpp',
     '<(skia_src_path)/effects/SkBlurMask.cpp',
@@ -39,6 +40,7 @@
     '<(skia_src_path)/effects/SkLayerRasterizer.cpp',
     '<(skia_src_path)/effects/SkLerpXfermode.cpp',
     '<(skia_src_path)/effects/SkLightingImageFilter.cpp',
+    '<(skia_src_path)/effects/SkLumaColorFilter.cpp',
     '<(skia_src_path)/effects/SkMagnifierImageFilter.cpp',
     '<(skia_src_path)/effects/SkMatrixConvolutionImageFilter.cpp',
     '<(skia_src_path)/effects/SkMergeImageFilter.cpp',
@@ -46,6 +48,7 @@
     '<(skia_src_path)/effects/SkOffsetImageFilter.cpp',
     '<(skia_src_path)/effects/SkPaintFlagsDrawFilter.cpp',
     '<(skia_src_path)/effects/SkPerlinNoiseShader.cpp',
+    '<(skia_src_path)/effects/SkPictureImageFilter.cpp',
     '<(skia_src_path)/effects/SkPixelXorXfermode.cpp',
     '<(skia_src_path)/effects/SkPorterDuff.cpp',
     '<(skia_src_path)/effects/SkRectShaderImageFilter.cpp',
@@ -53,6 +56,7 @@
     '<(skia_src_path)/effects/SkTableColorFilter.cpp',
     '<(skia_src_path)/effects/SkTableMaskFilter.cpp',
     '<(skia_src_path)/effects/SkTestImageFilters.cpp',
+    '<(skia_src_path)/effects/SkTileImageFilter.cpp',
     '<(skia_src_path)/effects/SkTransparentShader.cpp',
     '<(skia_src_path)/effects/SkXfermodeImageFilter.cpp',
 
@@ -79,6 +83,7 @@
     '<(skia_include_path)/effects/SkXfermodeImageFilter.h',
     '<(skia_include_path)/effects/SkArithmeticMode.h',
     '<(skia_include_path)/effects/SkAvoidXfermode.h',
+    '<(skia_include_path)/effects/SkBitmapAlphaThresholdShader.h',
     '<(skia_include_path)/effects/SkBitmapSource.h',
     '<(skia_include_path)/effects/SkBlurDrawLooper.h',
     '<(skia_include_path)/effects/SkBlurImageFilter.h',
@@ -99,6 +104,7 @@
     '<(skia_include_path)/effects/SkLayerRasterizer.h',
     '<(skia_include_path)/effects/SkLerpXfermode.h',
     '<(skia_include_path)/effects/SkLightingImageFilter.h',
+    '<(skia_include_path)/effects/SkLumaColorFilter.h',
     '<(skia_include_path)/effects/SkOffsetImageFilter.h',
     '<(skia_include_path)/effects/SkMorphologyImageFilter.h',
     '<(skia_include_path)/effects/SkPaintFlagsDrawFilter.h',
@@ -109,13 +115,8 @@
     '<(skia_include_path)/effects/SkStippleMaskFilter.h',
     '<(skia_include_path)/effects/SkTableColorFilter.h',
     '<(skia_include_path)/effects/SkTableMaskFilter.h',
+    '<(skia_include_path)/effects/SkTileImageFilter.h',
     '<(skia_include_path)/effects/SkTransparentShader.h',
     '<(skia_include_path)/effects/SkMagnifierImageFilter.h',
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

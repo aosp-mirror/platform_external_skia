@@ -6,7 +6,7 @@
  */
 
 #include "Test.h"
-
+#include "TestClassDef.h"
 #include "SkCommandLineFlags.h"
 #include "SkFontMgr.h"
 #include "SkTypeface.h"
@@ -16,19 +16,28 @@
  *  (e.g. sans -> Arial) then we want to at least get the same typeface back
  *  if we request the alias name multiple times.
  */
-static void test_badnames(skiatest::Reporter* reporter) {
-    const char* inName = "sans";
-    SkAutoTUnref<SkTypeface> first(SkTypeface::CreateFromName(inName, SkTypeface::kNormal));
-    
-    SkString name;
-    for (int i = 0; i < 10; ++i) {
-        SkAutoTUnref<SkTypeface> face(SkTypeface::CreateFromName(inName, SkTypeface::kNormal));
-#if 0
-        face->getFamilyName(&name);
-        printf("request %s, received %s, first id %x received %x\n",
-               inName, name.c_str(), first->uniqueID(), face->uniqueID());
-#endif
-        REPORTER_ASSERT(reporter, first->uniqueID() == face->uniqueID());
+static void test_alias_names(skiatest::Reporter* reporter) {
+    const char* inNames[] = {
+        "sans", "sans-serif", "serif", "monospace", "times", "helvetica"
+    };
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(inNames); ++i) {
+        SkAutoTUnref<SkTypeface> first(SkTypeface::CreateFromName(inNames[i],
+                                                          SkTypeface::kNormal));
+        if (NULL == first.get()) {
+            continue;
+        }
+        for (int j = 0; j < 10; ++j) {
+            SkAutoTUnref<SkTypeface> face(SkTypeface::CreateFromName(inNames[i],
+                                                         SkTypeface::kNormal));
+    #if 0
+            SkString name;
+            face->getFamilyName(&name);
+            printf("request %s, received %s, first id %x received %x\n",
+                   inNames[i], name.c_str(), first->uniqueID(), face->uniqueID());
+    #endif
+            REPORTER_ASSERT(reporter, first->uniqueID() == face->uniqueID());
+        }
     }
 }
 
@@ -68,10 +77,7 @@ static void test_fontiter(skiatest::Reporter* reporter, bool verbose) {
 
 DEFINE_bool(verboseFontMgr, false, "run verbose fontmgr tests.");
 
-static void TestFontMgr(skiatest::Reporter* reporter) {
+DEF_TEST(FontMgr, reporter) {
     test_fontiter(reporter, FLAGS_verboseFontMgr);
-    test_badnames(reporter);
+    test_alias_names(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("FontMgr", FontMgrClass, TestFontMgr)

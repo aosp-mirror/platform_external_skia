@@ -34,7 +34,6 @@
       'gpu/GrTypes.h',
       'gpu/GrFontScaler.h',
       'gpu/GrResource.h',
-      'gpu/GrRefCnt.h',
       'gpu/GrKey.h',
       'gpu/GrOvalRenderer.h',
       'gpu/GrEffectUnitTest.h',
@@ -45,7 +44,6 @@
       'gpu/GrDrawEffect.h',
       'gpu/GrTextContext.h',
       'gpu/GrEffect.h',
-      'gpu/GrNoncopyable.h',
       'gpu/SkGrTexturePixelRef.h',
       'gpu/GrTextureAccess.h',
       'gpu/GrRect.h',
@@ -78,6 +76,7 @@
       'effects/SkMergeImageFilter.h',
       'effects/SkPerlinNoiseShader.h',
       'effects/SkLerpXfermode.h',
+      'effects/SkLumaColorFilter.h',
       'effects/SkRectShaderImageFilter.h',
       'effects/SkMagnifierImageFilter.h',
       'effects/SkBicubicImageFilter.h',
@@ -208,7 +207,6 @@
       'core/SkCanvas.h',
       'core/SkPicture.h',
       'core/SkClipStack.h',
-      'core/SkTScopedPtr.h',
       'core/SkXfermode.h',
       'core/SkColorFilter.h',
       'core/SkRegion.h',
@@ -220,8 +218,6 @@
       'core/SkStrokeRec.h',
       'core/SkImageDecoder.h',
       'core/SkTime.h',
-      'core/SkImageTypes.h',
-      'core/SkScalarCompare.h',
       'core/SkPathMeasure.h',
       'core/SkMaskFilter.h',
       'core/SkBounder.h',
@@ -254,7 +250,6 @@
       'core/SkPreConfig.h',
       'core/SkImageFilterUtils.h',
       'core/SkLineClipper.h',
-      'core/SkDataSet.h',
       'core/SkPathEffect.h',
       'core/SkString.h',
       'core/SkPixelRef.h',
@@ -301,16 +296,6 @@
       'views/SkOSWindow_Unix.h',
       'views/SkWidget.h',
       'views/SkOSWindow_Win.h',
-      'lazy/SkBitmapFactory.h',
-      'lazy/SkImageCache.h',
-      'lazy/SkPurgeableImageCache.h',
-      'lazy/SkLruImageCache.h',
     ],
   },
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

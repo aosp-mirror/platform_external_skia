@@ -13,12 +13,11 @@ class ImageCacheBench : public SkBenchmark {
     SkBitmap            fBM;
 
     enum {
-        N = SkBENCHLOOP(1000),
         DIM = 1,
         CACHE_COUNT = 500
     };
 public:
-    ImageCacheBench(void* param) : INHERITED(param) , fCache(CACHE_COUNT * 100) {
+    ImageCacheBench()  : fCache(CACHE_COUNT * 100) {
         fBM.setConfig(SkBitmap::kARGB_8888_Config, DIM, DIM);
         fBM.allocPixels();
     }
@@ -39,14 +38,14 @@ protected:
         return "imagecache";
     }
 
-    virtual void onDraw(SkCanvas*) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas*) SK_OVERRIDE {
         if (fCache.getBytesUsed() == 0) {
             this->populateCache();
         }
 
         SkBitmap tmp;
         // search for a miss (-1 scale)
-        for (int i = 0; i < N; ++i) {
+        for (int i = 0; i < loops; ++i) {
             (void)fCache.findAndLock(fBM, -1, -1, &tmp);
         }
     }
@@ -57,4 +56,4 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return new ImageCacheBench(p); )
+DEF_BENCH( return new ImageCacheBench(); )

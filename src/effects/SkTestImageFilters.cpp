@@ -9,11 +9,11 @@
 // with the following:
 //
 //  SkCanvas canvas(device);
-//  SkAutoTUnref<SkDevice> aur(device);
+//  SkAutoTUnref<SkBaseDevice> aur(device);
 //
 class OwnDeviceCanvas : public SkCanvas {
 public:
-    OwnDeviceCanvas(SkDevice* device) : SkCanvas(device) {
+    OwnDeviceCanvas(SkBaseDevice* device) : SkCanvas(device) {
         SkSafeUnref(device);
     }
 };
@@ -41,14 +41,14 @@ bool SkDownSampleImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
 
     // downsample
     {
-        SkDevice* dev = proxy->createDevice(dstW, dstH);
+        SkBaseDevice* dev = proxy->createDevice(dstW, dstH);
         if (NULL == dev) {
             return false;
         }
         OwnDeviceCanvas canvas(dev);
         SkPaint paint;
 
-        paint.setFilterBitmap(true);
+        paint.setFilterLevel(SkPaint::kLow_FilterLevel);
         canvas.scale(scale, scale);
         canvas.drawBitmap(src, 0, 0, &paint);
         tmp = dev->accessBitmap(false);
@@ -56,7 +56,7 @@ bool SkDownSampleImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& src,
 
     // upscale
     {
-        SkDevice* dev = proxy->createDevice(src.width(), src.height());
+        SkBaseDevice* dev = proxy->createDevice(src.width(), src.height());
         if (NULL == dev) {
             return false;
         }
@@ -76,6 +76,8 @@ void SkDownSampleImageFilter::flatten(SkFlattenableWriteBuffer& buffer) const {
     buffer.writeScalar(fScale);
 }
 
-SkDownSampleImageFilter::SkDownSampleImageFilter(SkFlattenableReadBuffer& buffer) : INHERITED(buffer) {
+SkDownSampleImageFilter::SkDownSampleImageFilter(SkFlattenableReadBuffer& buffer)
+  : INHERITED(1, buffer) {
     fScale = buffer.readScalar();
+    buffer.validate(SkScalarIsFinite(fScale));
 }

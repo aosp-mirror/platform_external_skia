@@ -8,9 +8,9 @@
 #ifndef GrEffectUnitTest_DEFINED
 #define GrEffectUnitTest_DEFINED
 
-#include "GrNoncopyable.h"
 #include "SkRandom.h"
 #include "SkTArray.h"
+#include "SkTypes.h"
 
 class SkMatrix;
 class GrDrawTargetCaps;
@@ -25,7 +25,7 @@ enum {
 /**
  * A helper for use in GrEffect::TestCreate functions.
  */
-const SkMatrix& TestMatrix(SkMWCRandom*);
+const SkMatrix& TestMatrix(SkRandom*);
 
 }
 
@@ -35,10 +35,10 @@ class GrContext;
 class GrEffectRef;
 class GrTexture;
 
-class GrEffectTestFactory : GrNoncopyable {
+class GrEffectTestFactory : public SkNoncopyable {
 public:
 
-    typedef GrEffectRef* (*CreateProc)(SkMWCRandom*,
+    typedef GrEffectRef* (*CreateProc)(SkRandom*,
                                        GrContext*,
                                        const GrDrawTargetCaps& caps,
                                        GrTexture* dummyTextures[]);
@@ -48,7 +48,7 @@ public:
         GetFactories()->push_back(this);
     }
 
-    static GrEffectRef* CreateStage(SkMWCRandom* random,
+    static GrEffectRef* CreateStage(SkRandom* random,
                                     GrContext* context,
                                     const GrDrawTargetCaps& caps,
                                     GrTexture* dummyTextures[]) {
@@ -67,14 +67,14 @@ private:
  */
 #define GR_DECLARE_EFFECT_TEST                                                      \
     static GrEffectTestFactory gTestFactory;                                        \
-    static GrEffectRef* TestCreate(SkMWCRandom*,                                    \
+    static GrEffectRef* TestCreate(SkRandom*,                                    \
                                    GrContext*,                                      \
                                    const GrDrawTargetCaps&,                         \
                                    GrTexture* dummyTextures[2])
 
 /** GrEffect subclasses should insert this macro in their implementation file. They must then
  *  also implement this static function:
- *      GrEffect* TestCreate(SkMWCRandom*,
+ *      GrEffect* TestCreate(SkRandom*,
  *                           GrContext*,
  *                           const GrDrawTargetCaps&,
  *                           GrTexture* dummyTextures[2]);
@@ -91,7 +91,7 @@ private:
 // The unit test relies on static initializers. Just declare the TestCreate function so that
 // its definitions will compile.
 #define GR_DECLARE_EFFECT_TEST                                                      \
-    static GrEffectRef* TestCreate(SkMWCRandom*,                                    \
+    static GrEffectRef* TestCreate(SkRandom*,                                    \
                                    GrContext*,                                      \
                                    const GrDrawTargetCaps&,                         \
                                    GrTexture* dummyTextures[2])

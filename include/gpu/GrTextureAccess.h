@@ -8,9 +8,9 @@
 #ifndef GrTextureAccess_DEFINED
 #define GrTextureAccess_DEFINED
 
-#include "GrNoncopyable.h"
 #include "SkRefCnt.h"
 #include "SkShader.h"
+#include "SkTypes.h"
 
 class GrTexture;
 
@@ -18,7 +18,7 @@ class GrTexture;
  * Represents the filtering and tile modes used to access a texture. It is mostly used with
  * GrTextureAccess (defined below). Also, some of the texture cache methods require knowledge about
  * filtering and tiling to perform a cache lookup. If it wasn't for this latter usage this would
- * be folded into GrTextureAccess.
+ * be folded into GrTextureAccess. The default is clamp tile modes and no filtering.
  */
 class GrTextureParams {
 public:
@@ -36,7 +36,7 @@ public:
         this->reset(tileXAndY, filterMode);
     }
 
-    GrTextureParams(SkShader::TileMode tileModes[2], FilterMode filterMode) {
+    GrTextureParams(const SkShader::TileMode tileModes[2], FilterMode filterMode) {
         this->reset(tileModes, filterMode);
     }
 
@@ -60,7 +60,7 @@ public:
         fFilterMode = filterMode;
     }
 
-    void reset(SkShader::TileMode tileModes[2], FilterMode filterMode) {
+    void reset(const SkShader::TileMode tileModes[2], FilterMode filterMode) {
         fTileModes[0] = tileModes[0];
         fTileModes[1] = tileModes[1];
         fFilterMode = filterMode;
@@ -112,7 +112,7 @@ private:
  *  key. However, if a GrEffect uses different swizzles based on its input then it must
  *  consider that variation in its key-generation.
  */
-class GrTextureAccess : GrNoncopyable {
+class GrTextureAccess : public SkNoncopyable {
 public:
     /**
      * A default GrTextureAccess must have reset() called on it in a GrEffect subclass's
@@ -149,9 +149,9 @@ public:
                SkShader::TileMode tileXAndY = SkShader::kClamp_TileMode);
 
     bool operator== (const GrTextureAccess& other) const {
-#if GR_DEBUG
+#ifdef SK_DEBUG
         // below assumes all chars in fSwizzle are initialized even if string is < 4 chars long.
-        GrAssert(memcmp(fSwizzle, other.fSwizzle, sizeof(fSwizzle)-1) ==
+        SkASSERT(memcmp(fSwizzle, other.fSwizzle, sizeof(fSwizzle)-1) ==
                  strcmp(fSwizzle, other.fSwizzle));
 #endif
         return fParams == other.fParams &&
@@ -182,7 +182,7 @@ private:
     uint32_t                fSwizzleMask;
     char                    fSwizzle[5];
 
-    typedef GrNoncopyable INHERITED;
+    typedef SkNoncopyable INHERITED;
 };
 
 #endif

@@ -1134,9 +1134,9 @@ bool SkXRayCrossesMonotonicCubic(const SkXRay& pt, const SkPoint cubic[4], bool*
     // instead of down
     if (cubic[3].fY > cubic[0].fY) {
         upper_t = SK_Scalar1;
-        lower_t = SkFloatToScalar(0);
+        lower_t = 0;
     } else {
-        upper_t = SkFloatToScalar(0);
+        upper_t = 0;
         lower_t = SK_Scalar1;
     }
     do {
@@ -1205,8 +1205,7 @@ static SkScalar quad_solve(SkScalar a, SkScalar b, SkScalar c, SkScalar d)
 }
 
 /*  given a quad-curve and a point (x,y), chop the quad at that point and place
-    the new off-curve point and endpoint into 'dest'. The new end point is used
-    (rather than (x,y)) to compensate for numerical inaccuracies.
+    the new off-curve point and endpoint into 'dest'.
     Should only return false if the computed pos is the start of the curve
     (i.e. root == 0)
 */
@@ -1232,7 +1231,7 @@ static bool truncate_last_curve(const SkPoint quad[3], SkScalar x, SkScalar y, S
         SkPoint tmp[5];
         SkChopQuadAt(quad, tmp, t);
         dest[0] = tmp[1];
-        dest[1] = tmp[2];
+        dest[1].set(x, y);
         return true;
     } else {
         /*  t == 0 means either the value triggered a root outside of [0, 1)
@@ -1257,49 +1256,34 @@ static bool truncate_last_curve(const SkPoint quad[3], SkScalar x, SkScalar y, S
     return false;
 }
 
-#ifdef SK_SCALAR_IS_FLOAT
-
-// Due to floating point issues (i.e., 1.0f - SK_ScalarRoot2Over2 !=
-// SK_ScalarRoot2Over2 - SK_ScalarTanPIOver8) a cruder root2over2
-// approximation is required to make the quad circle points convex. The
-// root of the problem is that with the root2over2 value in SkScalar.h
-// the arcs really are ever so slightly concave. Some alternative fixes
-// to this problem (besides just arbitrarily pushing out the mid-point as
-// is done here) are:
-//    Adjust all the points (not just the middle) to both better approximate
-//             the curve and remain convex
-//    Switch over to using cubics rather then quads
-//    Use a different method to create the mid-point (e.g., compute
-//             the two side points, average them, then move it out as needed
-#define SK_ScalarRoot2Over2_QuadCircle    0.7072f
-
-#else
-    #define SK_ScalarRoot2Over2_QuadCircle    SK_FixedRoot2Over2
-#endif
-
-
 static const SkPoint gQuadCirclePts[kSkBuildQuadArcStorage] = {
-    { SK_Scalar1,                      0                                  },
-    { SK_Scalar1,                      SK_ScalarTanPIOver8                },
-    { SK_ScalarRoot2Over2_QuadCircle,  SK_ScalarRoot2Over2_QuadCircle     },
-    { SK_ScalarTanPIOver8,             SK_Scalar1                         },
+// The mid point of the quadratic arc approximation is half way between the two
+// control points. The float epsilon adjustment moves the on curve point out by
+// two bits, distributing the convex test error between the round rect approximation
+// and the convex cross product sign equality test.
+#define SK_MID_RRECT_OFFSET (SK_Scalar1 + SK_ScalarTanPIOver8 + FLT_EPSILON * 4) / 2
+    { SK_Scalar1,            0                      },
+    { SK_Scalar1,            SK_ScalarTanPIOver8    },
+    { SK_MID_RRECT_OFFSET,   SK_MID_RRECT_OFFSET    },
+    { SK_ScalarTanPIOver8,   SK_Scalar1             },
 
-    { 0,                               SK_Scalar1                         },
-    { -SK_ScalarTanPIOver8,            SK_Scalar1                         },
-    { -SK_ScalarRoot2Over2_QuadCircle, SK_ScalarRoot2Over2_QuadCircle     },
-    { -SK_Scalar1,                     SK_ScalarTanPIOver8                },
+    { 0,                     SK_Scalar1             },
+    { -SK_ScalarTanPIOver8,  SK_Scalar1             },
+    { -SK_MID_RRECT_OFFSET,  SK_MID_RRECT_OFFSET    },
+    { -SK_Scalar1,           SK_ScalarTanPIOver8    },
 
-    { -SK_Scalar1,                     0                                  },
-    { -SK_Scalar1,                     -SK_ScalarTanPIOver8               },
-    { -SK_ScalarRoot2Over2_QuadCircle, -SK_ScalarRoot2Over2_QuadCircle    },
-    { -SK_ScalarTanPIOver8,            -SK_Scalar1                        },
+    { -SK_Scalar1,           0                      },
+    { -SK_Scalar1,           -SK_ScalarTanPIOver8   },
+    { -SK_MID_RRECT_OFFSET,  -SK_MID_RRECT_OFFSET   },
+    { -SK_ScalarTanPIOver8,  -SK_Scalar1            },
 
-    { 0,                               -SK_Scalar1                        },
-    { SK_ScalarTanPIOver8,             -SK_Scalar1                        },
-    { SK_ScalarRoot2Over2_QuadCircle,  -SK_ScalarRoot2Over2_QuadCircle    },
-    { SK_Scalar1,                      -SK_ScalarTanPIOver8               },
+    { 0,                     -SK_Scalar1            },
+    { SK_ScalarTanPIOver8,   -SK_Scalar1            },
+    { SK_MID_RRECT_OFFSET,   -SK_MID_RRECT_OFFSET   },
+    { SK_Scalar1,            -SK_ScalarTanPIOver8   },
 
-    { SK_Scalar1,                      0                                  }
+    { SK_Scalar1,            0                      }
+#undef SK_MID_RRECT_OFFSET
 };
 
 int SkBuildQuadArc(const SkVector& uStart, const SkVector& uStop,

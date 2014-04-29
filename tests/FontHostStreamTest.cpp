@@ -4,9 +4,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkTypes.h"
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
@@ -15,9 +15,9 @@
 #include "SkPaint.h"
 #include "SkPoint.h"
 #include "SkRect.h"
+#include "SkStream.h"
 #include "SkTypeface.h"
-
-///////////////////////////////////////////////////////////////////////////////
+#include "SkTypes.h"
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -65,8 +65,7 @@ static bool compare(const SkBitmap& ref, const SkIRect& iref,
     return true;
 }
 
-static void test_fontHostStream(skiatest::Reporter* reporter) {
-
+DEF_TEST(FontHostStream, reporter) {
     {
         SkPaint paint;
         paint.setColor(SK_ColorGRAY);
@@ -99,7 +98,7 @@ static void test_fontHostStream(skiatest::Reporter* reporter) {
         }
 
         int ttcIndex;
-        SkStream* fontData = origTypeface->openStream(&ttcIndex);
+        SkAutoTUnref<SkStream> fontData(origTypeface->openStream(&ttcIndex));
         SkTypeface* streamTypeface = SkTypeface::CreateFromStream(fontData);
         SkSafeUnref(paint.setTypeface(streamTypeface));
         drawBG(&streamCanvas);
@@ -111,6 +110,3 @@ static void test_fontHostStream(skiatest::Reporter* reporter) {
     //Make sure the typeface is deleted and removed.
     SkGraphics::PurgeFontCache();
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("FontHost::CreateTypefaceFromStream", FontHostStreamTestClass, test_fontHostStream)

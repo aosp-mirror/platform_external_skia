@@ -14,8 +14,6 @@
 #include "GrDrawTargetCaps.h"
 #include "GrGpu.h"
 
-SK_DEFINE_INST_COUNT(GrPathRendererChain)
-
 GrPathRendererChain::GrPathRendererChain(GrContext* context)
     : fInit(false)
     , fOwner(context) {
@@ -78,7 +76,7 @@ GrPathRenderer* GrPathRendererChain::getPathRenderer(const SkPath& path,
 }
 
 void GrPathRendererChain::init() {
-    GrAssert(!fInit);
+    SkASSERT(!fInit);
     GrGpu* gpu = fOwner->getGpu();
     bool twoSided = gpu->caps()->twoSidedStencilSupport();
     bool wrapOp = gpu->caps()->stencilWrapOpsSupport();

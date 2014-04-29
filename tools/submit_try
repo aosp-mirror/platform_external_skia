@@ -21,14 +21,7 @@ import subprocess
 import svn
 import sys
 
-
-GLOBAL_VARIABLES = json.loads(svn.Cat('http://skia.googlecode.com/svn/'
-                                      'buildbot/site_config/'
-                                      'global_variables.json'))
-
-
-def GetGlobalVariable(var_name):
-  return GLOBAL_VARIABLES[var_name]['value']
+import buildbot_globals
 
 
 # Alias which can be used to run a try on every builder.
@@ -43,8 +36,8 @@ REGEX = 'regex'
 ALL_ALIASES = [ALL_BUILDERS, COMPILE_BUILDERS, CQ_BUILDERS, REGEX]
 
 # Contact information for the build master.
-SKIA_BUILD_MASTER_HOST = str(GetGlobalVariable('master_host'))
-SKIA_BUILD_MASTER_PORT = str(GetGlobalVariable('external_port'))
+SKIA_BUILD_MASTER_HOST = str(buildbot_globals.Get('public_master_host'))
+SKIA_BUILD_MASTER_PORT = str(buildbot_globals.Get('public_external_port'))
 
 # All try builders have this suffix.
 TRYBOT_SUFFIX = '-Trybot'
@@ -179,7 +172,7 @@ submit_try %s--bot <buildername> [<buildername> ...]
     if arg == '-h' or arg == '--help':
       Error()
     elif arg == '-l' or arg == '--list_bots':
-      format_args = ['\n  '.join(trybots)] + ALL_ALIASES
+      format_args = ['\n  '.join(sorted(trybots))] + ALL_ALIASES
       print (
 """
 submit_try: Available builders:\n  %s
@@ -283,7 +276,8 @@ def SubmitTryRequest(args, is_svn=True):
     try_args = ['--use_svn',
                 '--svn_repo', GetTryRepo(),
                 '--root', GetCheckoutRoot(is_svn),
-                '--bot', botlist]
+                '--bot', botlist,
+                '--patchlevel', '0']
     if args.revision:
       try_args.extend(['-r', args.revision])
     trychange.TryChange(try_args, None, False)

@@ -9,8 +9,6 @@
 #include "SkCanvas.h"
 #include "SkPaint.h"
 
-SK_DEFINE_INST_COUNT(SkMovie)
-
 // We should never see this in normal operation since our time values are
 // 0-based. So we use it as a sentinal.
 #define UNINITIALIZED_MSEC ((SkMSec)-1)
@@ -92,6 +90,6 @@ SkMovie* SkMovie::DecodeMemory(const void* data, size_t length) {
 }
 
 SkMovie* SkMovie::DecodeFile(const char path[]) {
-    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
+    SkAutoTUnref<SkStreamRewindable> stream(SkStream::NewFromFile(path));
     return stream.get() ? SkMovie::DecodeStream(stream) : NULL;
 }

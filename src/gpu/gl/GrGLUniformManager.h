@@ -14,7 +14,7 @@
 
 #include "SkTArray.h"
 
-class GrGLContext;
+class GrGpuGL;
 class SkMatrix;
 
 /** Manages a program's uniforms.
@@ -22,31 +22,52 @@ class SkMatrix;
 class GrGLUniformManager {
 public:
     // Opaque handle to a uniform
-    typedef int UniformHandle;
-    static const UniformHandle kInvalidUniformHandle = 0;
+    class UniformHandle {
+    public:
+        static UniformHandle CreateFromUniformIndex(int i);
 
-    GrGLUniformManager(const GrGLContext& context) : fContext(context) {}
+        bool isValid() const { return 0 != fValue; }
+
+        bool operator==(const UniformHandle& other) const { return other.fValue == fValue; }
+
+        UniformHandle()
+            : fValue(0) {
+        }
+
+    private:
+        UniformHandle(int value)
+            : fValue(~value) {
+            SkASSERT(isValid());
+        }
+
+        int toUniformIndex() const { SkASSERT(isValid()); return ~fValue; }
+
+        int fValue;
+        friend class GrGLUniformManager; // For accessing toUniformIndex().
+    };
+
+    GrGLUniformManager(GrGpuGL* gpu);
 
     UniformHandle appendUniform(GrSLType type, int arrayCount = GrGLShaderVar::kNonArray);
 
     /** Functions for uploading uniform values. The varities ending in v can be used to upload to an
-     *  array of uniforms. offset + arrayCount must be <= the array count of the uniform.
+     *  array of uniforms. arrayCount must be <= the array count of the uniform.
      */
     void setSampler(UniformHandle, GrGLint texUnit) const;
     void set1f(UniformHandle, GrGLfloat v0) const;
-    void set1fv(UniformHandle, int offset, int arrayCount, const GrGLfloat v[]) const;
+    void set1fv(UniformHandle, int arrayCount, const GrGLfloat v[]) const;
     void set2f(UniformHandle, GrGLfloat, GrGLfloat) const;
-    void set2fv(UniformHandle, int offset, int arrayCount, const GrGLfloat v[]) const;
+    void set2fv(UniformHandle, int arrayCount, const GrGLfloat v[]) const;
     void set3f(UniformHandle, GrGLfloat, GrGLfloat, GrGLfloat) const;
-    void set3fv(UniformHandle, int offset, int arrayCount, const GrGLfloat v[]) const;
+    void set3fv(UniformHandle, int arrayCount, const GrGLfloat v[]) const;
     void set4f(UniformHandle, GrGLfloat, GrGLfloat, GrGLfloat, GrGLfloat) const;
-    void set4fv(UniformHandle, int offset, int arrayCount, const GrGLfloat v[]) const;
+    void set4fv(UniformHandle, int arrayCount, const GrGLfloat v[]) const;
     // matrices are column-major, the first three upload a single matrix, the latter three upload
     // arrayCount matrices into a uniform array.
     void setMatrix3f(UniformHandle, const GrGLfloat matrix[]) const;
     void setMatrix4f(UniformHandle, const GrGLfloat matrix[]) const;
-    void setMatrix3fv(UniformHandle, int offset, int arrayCount, const GrGLfloat matrices[]) const;
-    void setMatrix4fv(UniformHandle, int offset, int arrayCount, const GrGLfloat matrices[]) const;
+    void setMatrix3fv(UniformHandle, int arrayCount, const GrGLfloat matrices[]) const;
+    void setMatrix4fv(UniformHandle, int arrayCount, const GrGLfloat matrices[]) const;
 
     // convenience method for uploading a SkMatrix to a 3x3 matrix uniform
     void setSkMatrix(UniformHandle, const SkMatrix&) const;
@@ -61,9 +82,21 @@ public:
     typedef GrTAllocator<BuilderUniform> BuilderUniformArray;
 
     /**
+     * Called by the GrGLShaderBuilder to know if the manager is using
+     * BindUniformLocation. In that case getUniformLocations must be called
+     * before the program is linked.
+     */
+    bool isUsingBindUniform() const { return fUsingBindUniform; }
+
+    /**
      * Called by the GrGLShaderBuilder to get GL locations for all uniforms.
      */
     void getUniformLocations(GrGLuint programID, const BuilderUniformArray& uniforms);
+
+    /**
+     * Called by the GrGLShaderBuilder to access the array by the handle (index).
+     */
+    const BuilderUniform& getBuilderUniform(const BuilderUniformArray&, GrGLUniformManager::UniformHandle) const;
 
 private:
     enum {
@@ -77,8 +110,9 @@ private:
         int         fArrayCount;
     };
 
+    bool fUsingBindUniform;
     SkTArray<Uniform, true> fUniforms;
-    const GrGLContext&  fContext;
+    GrGpuGL* fGpu;
 };
 
 #endif

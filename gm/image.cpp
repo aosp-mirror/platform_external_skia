@@ -13,10 +13,6 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-
-namespace skiagm {
-extern GrContext* GetGr();
-};
 #endif
 
 static SkData* fileToData(const char path[]) {
@@ -182,18 +178,15 @@ protected:
         // since we draw into this directly, we need to start fresh
         sk_bzero(fBuffer, fBufferSize);
 
-        SkImage::Info info;
-
-        info.fWidth = W;
-        info.fHeight = H;
-        info.fColorType = SkImage::kPMColor_ColorType;
-        info.fAlphaType = SkImage::kPremul_AlphaType;
+        SkImageInfo info = {
+            W, H, kPMColor_SkColorType, kPremul_SkAlphaType
+        };
         SkAutoTUnref<SkSurface> surf0(SkSurface::NewRasterDirect(info, fBuffer, RB));
         SkAutoTUnref<SkSurface> surf1(SkSurface::NewRaster(info));
         SkAutoTUnref<SkSurface> surf2(SkSurface::NewPicture(info.fWidth, info.fHeight));
         SkAutoTUnref<SkSurface> surf3(SkSurface::NewPicture(info.fWidth, info.fHeight));
 #if SK_SUPPORT_GPU
-        GrContext* ctx = skiagm::GetGr();
+        GrContext* ctx = canvas->getGrContext();
 
         SkAutoTUnref<SkSurface> surf4(SkSurface::NewRenderTarget(ctx, info, 0));
 #endif

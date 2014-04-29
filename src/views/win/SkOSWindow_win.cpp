@@ -124,15 +124,18 @@ bool SkOSWindow::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         } break;
         case WM_UNICHAR:
-            this->handleChar(wParam);
+            this->handleChar((SkUnichar) wParam);
             return true;
         case WM_CHAR: {
             this->handleChar(SkUTF8_ToUnichar((char*)&wParam));
             return true;
         } break;
-        case WM_SIZE:
-            this->resize(lParam & 0xFFFF, lParam >> 16);
+        case WM_SIZE: {
+            INT width = LOWORD(lParam);
+            INT height = HIWORD(lParam);
+            this->resize(width, height);
             break;
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);

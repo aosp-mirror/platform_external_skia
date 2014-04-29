@@ -16,6 +16,8 @@
       ],
       'include_dirs': [
         '../include/effects',
+        '../src/effects',
+        '../src/opts',
         '../src/core',
       ],
       'direct_dependent_settings': {
@@ -37,9 +39,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

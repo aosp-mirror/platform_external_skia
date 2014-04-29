@@ -13,6 +13,7 @@
 #include "Sk64.h"
 #include "SkColor.h"
 #include "SkColorTable.h"
+#include "SkImageInfo.h"
 #include "SkPoint.h"
 #include "SkRefCnt.h"
 
@@ -37,16 +38,10 @@ class GrTexture;
 */
 class SK_API SkBitmap {
 public:
-    class Allocator;
+    class SK_API Allocator;
 
     enum Config {
         kNo_Config,         //!< bitmap has not been configured
-        /**
-         *  1-bit per pixel, (0 is transparent, 1 is opaque)
-         *  Valid as a destination (target of a canvas), but not valid as a src.
-         *  i.e. you can draw into a 1-bit bitmap, but you cannot draw from one.
-         */
-        kA1_Config,
         kA8_Config,         //!< 8-bits per pixel, with only alpha specified (0 is transparent, 0xFF is opaque)
         kIndex8_Config,     //!< 8-bits per pixel, using SkColorTable to specify the colors
         kRGB_565_Config,    //!< 16-bits per pixel, (see SkColorPriv.h for packing)
@@ -95,20 +90,19 @@ public:
     */
     bool isNull() const { return NULL == fPixelRef; }
 
-    /** Return the config for the bitmap.
-    */
+    /** Return the config for the bitmap. */
     Config  config() const { return (Config)fConfig; }
-    /** DEPRECATED, use config()
-    */
+
+    SK_ATTR_DEPRECATED("use config()")
     Config  getConfig() const { return this->config(); }
-    /** Return the bitmap's width, in pixels.
-    */
+
+    /** Return the bitmap's width, in pixels. */
     int width() const { return fWidth; }
-    /** Return the bitmap's height, in pixels.
-    */
+
+    /** Return the bitmap's height, in pixels. */
     int height() const { return fHeight; }
-    /** Return the number of bytes between subsequent rows of the bitmap.
-    */
+
+    /** Return the number of bytes between subsequent rows of the bitmap. */
     size_t rowBytes() const { return fRowBytes; }
 
     /** Return the shift amount per pixel (i.e. 0 for 1-byte per pixel, 1 for
@@ -129,6 +123,15 @@ public:
         than 1-byte per pixel (e.g. kA1_Config)
     */
     int rowBytesAsPixels() const { return fRowBytes >> (fBytesPerPixel >> 1); }
+
+    SkAlphaType alphaType() const { return (SkAlphaType)fAlphaType; }
+
+    /**
+     *  Set the bitmap's alphaType, returning true on success. If false is
+     *  returned, then the specified new alphaType is incompatible with the
+     *  Config, and the current alphaType is unchanged.
+     */
+    bool setAlphaType(SkAlphaType);
 
     /** Return the address of the pixels for this SkBitmap.
     */
@@ -175,12 +178,9 @@ public:
 
     /** Returns true if the bitmap is opaque (has no translucent/transparent pixels).
     */
-    bool isOpaque() const;
-
-    /** Specify if this bitmap's pixels are all opaque or not. Is only meaningful for configs
-        that support per-pixel alpha (RGB32, A1, A8).
-    */
-    void setIsOpaque(bool);
+    bool isOpaque() const {
+        return SkAlphaTypeIsOpaque(this->alphaType());
+    }
 
     /** Returns true if the bitmap is volatile (i.e. should not be cached by devices.)
     */
@@ -226,17 +226,10 @@ public:
      *  it will return false.
      *
      *  Since this can be an expensive operation, the bitmap stores a flag for
-     *  this (isOpaque, setIsOpaque). Only call this if you need to compute this
-     *  value from "unknown" pixels.
+     *  this (isOpaque). Only call this if you need to compute this value from
+     *  "unknown" pixels.
      */
     static bool ComputeIsOpaque(const SkBitmap&);
-
-    /**
-     *  Calls ComputeIsOpaque, and passes its result to setIsOpaque().
-     */
-    void computeAndSetOpaquePredicate() {
-        this->setIsOpaque(ComputeIsOpaque(*this));
-    }
 
     /**
      *  Return the bitmap's bounds [0, 0, width, height] as an SkRect
@@ -248,7 +241,22 @@ public:
         ComputeRowBytes() is called to compute the optimal value. This resets
         any pixel/colortable ownership, just like reset().
     */
-    void setConfig(Config, int width, int height, size_t rowBytes = 0);
+    bool setConfig(Config, int width, int height, size_t rowBytes, SkAlphaType);
+
+    bool setConfig(Config config, int width, int height, size_t rowBytes = 0) {
+        return this->setConfig(config, width, height, rowBytes,
+                               kPremul_SkAlphaType);
+    }
+
+    bool setConfig(const SkImageInfo& info, size_t rowBytes = 0);
+
+    /**
+     *  If the bitmap's config can be represented as SkImageInfo, return true,
+     *  and if info is not-null, set it to the bitmap's info. If it cannot be
+     *  represented as SkImageInfo, return false and ignore the info parameter.
+     */
+    bool asImageInfo(SkImageInfo* info) const;
+
     /** Use this to assign a new pixel address for an existing bitmap. This
         will automatically release any pixelref previously installed. Only call
         this if you are handling ownership/lifetime of the pixel memory.
@@ -405,7 +413,7 @@ public:
      */
     void eraseARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b) const;
 
-    // DEPRECATED -- call eraseColor or eraseARGB
+    SK_ATTR_DEPRECATED("use eraseARGB or eraseColor")
     void eraseRGB(U8CPU r, U8CPU g, U8CPU b) const {
         this->eraseARGB(0xFF, r, g, b);
     }
@@ -482,14 +490,6 @@ public:
      */
     inline uint8_t* getAddr8(int x, int y) const;
 
-    /** Returns the address of the byte containing the pixel specified by x,y
-     *  for 1bit pixels.
-     *  In debug build, this asserts that the pixels are allocated and locked,
-     *  and that the config is 1-bit, however none of these checks are performed
-     *  in the release build.
-     */
-    inline uint8_t* getAddr1(int x, int y) const;
-
     /** Returns the color corresponding to the pixel specified by x,y for
      *  colortable based bitmaps.
      *  In debug build, this asserts that the pixels are allocated and locked,
@@ -539,9 +539,7 @@ public:
      */
     bool canCopyTo(Config newConfig) const;
 
-    /**
-     *  DEPRECATED -- will be replaced with API on SkPaint
-     */
+    SK_ATTR_DEPRECATED("use setFilterLevel on SkPaint")
     void buildMipMap(bool forceRebuild = false);
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -672,6 +670,7 @@ private:
     uint32_t    fWidth;
     uint32_t    fHeight;
     uint8_t     fConfig;
+    uint8_t     fAlphaType;
     uint8_t     fFlags;
     uint8_t     fBytesPerPixel; // based on config
 
@@ -724,6 +723,8 @@ private:
     const SkBitmap& fBitmap;
     bool            fDidLock;
 };
+//TODO(mtklein): uncomment when 71713004 lands and Chromium's fixed.
+//#define SkAutoLockPixels(...) SK_REQUIRE_LOCAL_VAR(SkAutoLockPixels)
 
 /** Helper class that performs the lock/unlockColors calls on a colortable.
     The destructor will call unlockColors(false) if it has a bitmap's colortable
@@ -748,7 +749,7 @@ public:
     }
     ~SkAutoLockColors() {
         if (fCTable) {
-            fCTable->unlockColors(false);
+            fCTable->unlockColors();
         }
     }
 
@@ -762,7 +763,7 @@ public:
      */
     const SkPMColor* lockColors(SkColorTable* ctable) {
         if (fCTable) {
-            fCTable->unlockColors(false);
+            fCTable->unlockColors();
         }
         fCTable = ctable;
         fColors = ctable ? ctable->lockColors() : NULL;
@@ -777,6 +778,7 @@ private:
     SkColorTable*    fCTable;
     const SkPMColor* fColors;
 };
+#define SkAutoLockColors(...) SK_REQUIRE_LOCAL_VAR(SkAutoLockColors)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -807,14 +809,6 @@ inline SkPMColor SkBitmap::getIndex8Color(int x, int y) const {
     SkASSERT((unsigned)x < fWidth && (unsigned)y < fHeight);
     SkASSERT(fColorTable);
     return (*fColorTable)[*((const uint8_t*)fPixels + y * fRowBytes + x)];
-}
-
-// returns the address of the byte that contains the x coordinate
-inline uint8_t* SkBitmap::getAddr1(int x, int y) const {
-    SkASSERT(fPixels);
-    SkASSERT(fConfig == kA1_Config);
-    SkASSERT((unsigned)x < fWidth && (unsigned)y < fHeight);
-    return (uint8_t*)fPixels + y * fRowBytes + (x >> 3);
 }
 
 #endif

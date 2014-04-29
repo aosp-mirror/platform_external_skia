@@ -1,17 +1,18 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkCanvas.h"
 #include "SkShader.h"
 #include "SkRectShaderImageFilter.h"
 #include "SkGradientShader.h"
 
-static void test_asShaderMode(skiatest::Reporter* reporter) {
+DEF_TEST(ShaderImageFilter, reporter) {
     int w = 10, h = 10;
     SkRect r = SkRect::MakeWH(SkIntToScalar(w), SkIntToScalar(h)); // Make small 10x10 gradient
 
@@ -37,7 +38,8 @@ static void test_asShaderMode(skiatest::Reporter* reporter) {
         SkShader* s = SkGradientShader::CreateRadial(
             center, radius, colors, pos, SK_ARRAY_COUNT(colors), SkShader::kClamp_TileMode);
         SkPaint paint;
-        paint.setImageFilter(SkRectShaderImageFilter::Create(s, r))->unref();
+        SkImageFilter::CropRect cr(r);
+        paint.setImageFilter(SkRectShaderImageFilter::Create(s, &cr))->unref();
         canvasFilter.drawRect(r, paint);
         s->unref();
     }
@@ -60,6 +62,3 @@ static void test_asShaderMode(skiatest::Reporter* reporter) {
         }
     }
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("ShaderImageFilter", ShaderImageFilterTestClass, test_asShaderMode)

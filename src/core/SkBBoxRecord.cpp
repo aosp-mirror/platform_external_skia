@@ -32,7 +32,7 @@ void SkBBoxRecord::drawPath(const SkPath& path, const SkPaint& paint) {
         // path's device-space bounding box.
         SkIRect clipBounds;
         if (this->getClipDeviceBounds(&clipBounds)) {
-            this->handleBBox(SkRect::MakeFromIRect(clipBounds));
+            this->handleBBox(SkRect::Make(clipBounds));
             INHERITED::drawPath(path, paint);
         }
     } else if (this->transformBounds(path.getBounds(), &paint)) {
@@ -53,7 +53,7 @@ void SkBBoxRecord::drawPoints(PointMode mode, size_t count, const SkPoint pts[],
     // Note: The device coordinate outset in SkBBoxHierarchyRecord::handleBBox is currently
     // done in the recording coordinate space, which is wrong.
     // http://code.google.com/p/skia/issues/detail?id=1021
-    static const SkScalar kMinWidth = SkFloatToScalar(0.01f);
+    static const SkScalar kMinWidth = 0.01f;
     SkScalar halfStrokeWidth = SkMaxScalar(paint.getStrokeWidth(), kMinWidth) / 2;
     bbox.outset(halfStrokeWidth, halfStrokeWidth);
     if (this->transformBounds(bbox, &paint)) {
@@ -134,9 +134,10 @@ void SkBBoxRecord::drawBitmap(const SkBitmap& bitmap, SkScalar left, SkScalar to
 }
 
 void SkBBoxRecord::drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
-                                  const SkRect& dst, const SkPaint* paint) {
+                                        const SkRect& dst, const SkPaint* paint,
+                                        DrawBitmapRectFlags flags) {
     if (this->transformBounds(dst, paint)) {
-        INHERITED::drawBitmapRectToRect(bitmap, src, dst, paint);
+        INHERITED::drawBitmapRectToRect(bitmap, src, dst, paint, flags);
     }
 }
 
@@ -178,35 +179,45 @@ void SkBBoxRecord::drawPosText(const void* text, size_t byteLength,
 
 void SkBBoxRecord::drawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
                                 SkScalar constY, const SkPaint& paint) {
-    SkRect bbox;
     size_t numChars = paint.countText(text, byteLength);
-    if (numChars > 0) {
-        bbox.fLeft  = xpos[0];
-        bbox.fRight = xpos[numChars - 1];
-        // if we had a guarantee that these will be monotonically increasing, this could be sped up
-        for (size_t i = 1; i < numChars; ++i) {
-            if (xpos[i] < bbox.fLeft) {
-                bbox.fLeft = xpos[i];
-            }
-            if (xpos[i] > bbox.fRight) {
-                bbox.fRight = xpos[i];
-            }
+    if (numChars == 0) {
+        return;
+    }
+
+    const SkFlatData* flatPaintData = this->getFlatPaintData(paint);
+    WriteTopBot(paint, *flatPaintData);
+
+    SkScalar top = flatPaintData->topBot()[0];
+    SkScalar bottom = flatPaintData->topBot()[1];
+    SkScalar pad = top - bottom;
+
+    SkRect bbox;
+    bbox.fLeft = SK_ScalarMax;
+    bbox.fRight = SK_ScalarMin;
+
+    for (size_t i = 0; i < numChars; ++i) {
+        if (xpos[i] < bbox.fLeft) {
+            bbox.fLeft = xpos[i];
         }
-        SkPaint::FontMetrics metrics;
-        paint.getFontMetrics(&metrics);
-
-        // pad horizontally by max glyph height
-        SkScalar pad = (metrics.fTop - metrics.fBottom);
-        bbox.fLeft  += pad;
-        bbox.fRight -= pad;
-
-        bbox.fTop    = metrics.fTop + constY;
-        bbox.fBottom = metrics.fBottom + constY;
-        if (!this->transformBounds(bbox, &paint)) {
-            return;
+        if (xpos[i] > bbox.fRight) {
+            bbox.fRight = xpos[i];
         }
     }
-    INHERITED::drawPosTextH(text, byteLength, xpos, constY, paint);
+
+    // pad horizontally by max glyph height
+    bbox.fLeft  += pad;
+    bbox.fRight -= pad;
+
+    bbox.fTop    = top + constY;
+    bbox.fBottom = bottom + constY;
+
+    if (!this->transformBounds(bbox, &paint)) {
+        return;
+    }
+    // This is the equivalent of calling:
+    //  INHERITED::drawPosTextH(text, byteLength, xpos, constY, paint);
+    // but we filled our flat paint beforehand so that we could get font metrics.
+    drawPosTextHImpl(text, byteLength, xpos, constY, paint, flatPaintData);
 }
 
 void SkBBoxRecord::drawSprite(const SkBitmap& bitmap, int left, int top,

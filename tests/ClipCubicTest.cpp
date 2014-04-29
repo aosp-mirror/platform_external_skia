@@ -1,12 +1,12 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Test.h"
 
+#include "Test.h"
+#include "TestClassDef.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
 #include "SkCubicClipper.h"
@@ -30,7 +30,7 @@ static void test_giantClip() {
 }
 
 static void PrintCurve(const char *name, const SkPoint crv[4]) {
-    printf("%s: %.10g, %.10g, %.10g, %.10g, %.10g, %.10g, %.10g, %.10g\n",
+    SkDebugf("%s: %.10g, %.10g, %.10g, %.10g, %.10g, %.10g, %.10g, %.10g\n",
             name,
             (float)crv[0].fX, (float)crv[0].fY,
             (float)crv[1].fX, (float)crv[1].fY,
@@ -44,8 +44,8 @@ static bool CurvesAreEqual(const SkPoint c0[4],
                            const SkPoint c1[4],
                            float tol) {
     for (int i = 0; i < 4; i++) {
-        if (SkScalarAbs(c0[i].fX - c1[i].fX) > SkFloatToScalar(tol) ||
-            SkScalarAbs(c0[i].fY - c1[i].fY) > SkFloatToScalar(tol)
+        if (SkScalarAbs(c0[i].fX - c1[i].fX) > tol ||
+            SkScalarAbs(c0[i].fY - c1[i].fY) > tol
         ) {
             PrintCurve("c0", c0);
             PrintCurve("c1", c1);
@@ -61,15 +61,15 @@ static SkPoint* SetCurve(float x0, float y0,
                          float x2, float y2,
                          float x3, float y3,
                          SkPoint crv[4]) {
-    crv[0].fX = SkFloatToScalar(x0);   crv[0].fY = SkFloatToScalar(y0);
-    crv[1].fX = SkFloatToScalar(x1);   crv[1].fY = SkFloatToScalar(y1);
-    crv[2].fX = SkFloatToScalar(x2);   crv[2].fY = SkFloatToScalar(y2);
-    crv[3].fX = SkFloatToScalar(x3);   crv[3].fY = SkFloatToScalar(y3);
+    crv[0].fX = x0;   crv[0].fY = y0;
+    crv[1].fX = x1;   crv[1].fY = y1;
+    crv[2].fX = x2;   crv[2].fY = y2;
+    crv[3].fX = x3;   crv[3].fY = y3;
     return crv;
 }
 
 
-static void TestCubicClipping(skiatest::Reporter* reporter) {
+DEF_TEST(ClipCubic, reporter) {
     static SkPoint crv[4] = {
         { SkIntToScalar(0), SkIntToScalar(0)  },
         { SkIntToScalar(2), SkIntToScalar(3)  },
@@ -81,7 +81,7 @@ static void TestCubicClipping(skiatest::Reporter* reporter) {
     SkPoint clipped[4], shouldbe[4];
     SkIRect clipRect;
     bool success;
-    const float tol = SkFloatToScalar(1e-4f);
+    const float tol = 1e-4f;
 
     // Test no clip, with plenty of room.
     clipRect.set(-2, -2, 6, 14);
@@ -163,9 +163,3 @@ static void TestCubicClipping(skiatest::Reporter* reporter) {
 
     test_giantClip();
 }
-
-
-
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("CubicClipper", CubicClippingTestClass, TestCubicClipping)

@@ -17,12 +17,11 @@
 
 class DeferredSurfaceCopyBench : public SkBenchmark {
     enum {
-        N = SkBENCHLOOP(5),
         kSurfaceWidth = 1000,
         kSurfaceHeight = 1000,
     };
 public:
-    DeferredSurfaceCopyBench(void* param, bool discardableContents) : SkBenchmark(param) {
+    DeferredSurfaceCopyBench(bool discardableContents) {
         fDiscardableContents = discardableContents;
     }
 
@@ -32,14 +31,14 @@ protected:
             "DeferredSurfaceCopy_nonDiscardable";
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         // The canvas is not actually used for this test except to provide
         // configuration information: gpu, multisampling, size, etc?
-        SkImage::Info info;
+        SkImageInfo info;
         info.fWidth = kSurfaceWidth;
         info.fHeight = kSurfaceHeight;
-        info.fColorType = SkImage::kPMColor_ColorType;
-        info.fAlphaType = SkImage::kPremul_AlphaType;
+        info.fColorType = kPMColor_SkColorType;
+        info.fAlphaType = kPremul_SkAlphaType;
         const SkRect fullCanvasRect = SkRect::MakeWH(
             SkIntToScalar(kSurfaceWidth), SkIntToScalar(kSurfaceHeight));
         SkSurface* surface;
@@ -56,7 +55,7 @@ protected:
         SkAutoTUnref<SkDeferredCanvas> drawingCanvas(SkDeferredCanvas::Create(surface));
         surface->unref();
 
-        for (int iteration = 0; iteration < N; iteration++) {
+        for (int iteration = 0; iteration < loops; iteration++) {
             drawingCanvas->clear(0);
             SkAutoTUnref<SkImage> image(drawingCanvas->newImageSnapshot());
             SkPaint paint;
@@ -79,8 +78,5 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* Fact0(void* p) { return new DeferredSurfaceCopyBench(p, false); }
-static SkBenchmark* Fact1(void* p) { return new DeferredSurfaceCopyBench(p, true); }
-
-static BenchRegistry gReg0(Fact0);
-static BenchRegistry gReg1(Fact1);
+DEF_BENCH( return new DeferredSurfaceCopyBench(false); )
+DEF_BENCH( return new DeferredSurfaceCopyBench(true); )

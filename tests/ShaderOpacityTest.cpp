@@ -1,11 +1,12 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkShader.h"
 #include "SkGradientShader.h"
 #include "SkColorShader.h"
@@ -32,7 +33,7 @@ static void test_bitmap(skiatest::Reporter* reporter) {
     shader->unref();
 
     // test 3: explicitly opaque
-    bmp.setIsOpaque(true);
+    bmp.setAlphaType(kOpaque_SkAlphaType);
     shader = SkShader::CreateBitmapShader(bmp,
         SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
     REPORTER_ASSERT(reporter, shader);
@@ -40,7 +41,7 @@ static void test_bitmap(skiatest::Reporter* reporter) {
     shader->unref();
 
     // test 4: explicitly not opaque
-    bmp.setIsOpaque(false);
+    bmp.setAlphaType(kPremul_SkAlphaType);
     shader = SkShader::CreateBitmapShader(bmp,
         SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
     REPORTER_ASSERT(reporter, shader);
@@ -108,12 +109,8 @@ static void test_color(skiatest::Reporter* reporter)
     REPORTER_ASSERT(reporter, colorShader4.isOpaque());
 }
 
-static void test_shader_opacity(skiatest::Reporter* reporter)
-{
+DEF_TEST(ShaderOpacity, reporter) {
     test_gradient(reporter);
     test_color(reporter);
     test_bitmap(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("ShaderOpacity", ShaderOpacityTestClass, test_shader_opacity)

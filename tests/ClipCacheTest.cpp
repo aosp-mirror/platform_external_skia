@@ -58,7 +58,7 @@ static void test_clip_bounds(skiatest::Reporter* reporter, GrContext* context) {
         return;
     }
 
-    GrAutoUnref au(texture);
+    SkAutoUnref au(texture);
 
     SkIRect intScreen = SkIRect::MakeWH(kXSize, kYSize);
     SkRect screen;
@@ -106,7 +106,6 @@ static void check_state(skiatest::Reporter* reporter,
                         const SkClipStack& clip,
                         GrTexture* mask,
                         const SkIRect& bound) {
-    SkClipStack cacheClip;
     REPORTER_ASSERT(reporter, clip.getTopmostGenID() == cache.getLastClipGenID());
 
     REPORTER_ASSERT(reporter, mask == cache.getLastMask());
@@ -114,6 +113,19 @@ static void check_state(skiatest::Reporter* reporter,
     SkIRect cacheBound;
     cache.getLastBound(&cacheBound);
     REPORTER_ASSERT(reporter, bound == cacheBound);
+}
+
+static void check_empty_state(skiatest::Reporter* reporter,
+                              const GrClipMaskCache& cache) {
+    REPORTER_ASSERT(reporter, SkClipStack::kInvalidGenID == cache.getLastClipGenID());
+    REPORTER_ASSERT(reporter, NULL == cache.getLastMask());
+
+    SkIRect emptyBound;
+    emptyBound.setEmpty();
+
+    SkIRect cacheBound;
+    cache.getLastBound(&cacheBound);
+    REPORTER_ASSERT(reporter, emptyBound == cacheBound);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,14 +140,8 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
 
     cache.setContext(context);
 
-    SkClipStack emptyClip;
-    emptyClip.reset();
-
-    SkIRect emptyBound;
-    emptyBound.setEmpty();
-
     // check initial state
-    check_state(reporter, cache, emptyClip, NULL, emptyBound);
+    check_empty_state(reporter, cache);
 
     // set the current state
     SkIRect bound1;
@@ -165,7 +171,7 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
     cache.push();
 
     // verify that the pushed state is initially empty
-    check_state(reporter, cache, emptyClip, NULL, emptyBound);
+    check_empty_state(reporter, cache);
     REPORTER_ASSERT(reporter, texture1->getRefCnt());
 
     // modify the new state
@@ -197,15 +203,12 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
     // verify that the old state is restored
     check_state(reporter, cache, clip1, texture1, bound1);
     REPORTER_ASSERT(reporter, texture1->getRefCnt());
-    REPORTER_ASSERT(reporter, texture2->getRefCnt());
 
     // manually clear the state
     cache.reset();
 
     // verify it is now empty
-    check_state(reporter, cache, emptyClip, NULL, emptyBound);
-    REPORTER_ASSERT(reporter, texture1->getRefCnt());
-    REPORTER_ASSERT(reporter, texture2->getRefCnt());
+    check_empty_state(reporter, cache);
 
     // pop again - so there is no state
     cache.pop();
@@ -213,10 +216,8 @@ static void test_cache(skiatest::Reporter* reporter, GrContext* context) {
 #if !defined(SK_DEBUG)
     // verify that the getters don't crash
     // only do in release since it generates asserts in debug
-    check_state(reporter, cache, emptyClip, NULL, emptyBound);
+    check_empty_state(reporter, cache);
 #endif
-    REPORTER_ASSERT(reporter, texture1->getRefCnt());
-    REPORTER_ASSERT(reporter, texture2->getRefCnt());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1532,11 +1532,11 @@ bool SkScriptEngine::ConvertTo(SkScriptEngine* engine, SkDisplayTypes toType, Sk
             SkString* strPtr = new SkString();
             SkASSERT(engine);
             engine->track(strPtr);
-            if (type == SkType_Int)
+            if (type == SkType_Int) {
                 strPtr->appendS32(operand.fS32);
-            else if (type == SkType_Displayable)
+            } else if (type == SkType_Displayable) {
                 SkASSERT(0); // must call through instance version instead of static version
-            else {
+            } else {
                 if (type != SkType_Float) {
                     success = false;
                     break;
@@ -1840,12 +1840,12 @@ static const SkScriptNAnswer scriptTests[]  = {
     // logic
     testInt(1?2:3),
     testInt(0?2:3),
-    testInt(1&&2||3),
-    testInt(1&&0||3),
-    testInt(1&&0||0),
-    testInt(1||0&&3),
-    testInt(0||0&&3),
-    testInt(0||1&&3),
+    testInt((1&&2)||3),
+    testInt((1&&0)||3),
+    testInt((1&&0)||0),
+    testInt(1||(0&&3)),
+    testInt(0||(0&&3)),
+    testInt(0||(1&&3)),
     testInt(1?(2?3:4):5),
     testInt(0?(2?3:4):5),
     testInt(1?(0?3:4):5),

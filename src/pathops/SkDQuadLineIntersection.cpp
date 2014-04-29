@@ -99,6 +99,7 @@ public:
         , fLine(l)
         , fIntersections(i)
         , fAllowNear(true) {
+        i->setMax(2);
     }
 
     void allowNear(bool allow) {
@@ -137,18 +138,22 @@ public:
 
     int intersect() {
         addExactEndPoints();
-        double rootVals[2];
-        int roots = intersectRay(rootVals);
-        for (int index = 0; index < roots; ++index) {
-            double quadT = rootVals[index];
-            double lineT = findLineT(quadT);
-            SkDPoint pt;
-            if (pinTs(&quadT, &lineT, &pt, kPointUninitialized)) {
-                fIntersections->insert(quadT, lineT, pt);
-            }
-        }
         if (fAllowNear) {
             addNearEndPoints();
+        }
+        if (fIntersections->used() == 2) {
+            // FIXME : need sharable code that turns spans into coincident if middle point is on
+        } else {
+            double rootVals[2];
+            int roots = intersectRay(rootVals);
+            for (int index = 0; index < roots; ++index) {
+                double quadT = rootVals[index];
+                double lineT = findLineT(quadT);
+                SkDPoint pt;
+                if (pinTs(&quadT, &lineT, &pt, kPointUninitialized)) {
+                    fIntersections->insert(quadT, lineT, pt);
+                }
+            }
         }
         return fIntersections->used();
     }
@@ -165,6 +170,9 @@ public:
 
     int horizontalIntersect(double axisIntercept, double left, double right, bool flipped) {
         addExactHorizontalEndPoints(left, right, axisIntercept);
+        if (fAllowNear) {
+            addNearHorizontalEndPoints(left, right, axisIntercept);
+        }
         double rootVals[2];
         int roots = horizontalIntersect(axisIntercept, rootVals);
         for (int index = 0; index < roots; ++index) {
@@ -174,9 +182,6 @@ public:
             if (pinTs(&quadT, &lineT, &pt, kPointInitialized)) {
                 fIntersections->insert(quadT, lineT, pt);
             }
-        }
-        if (fAllowNear) {
-            addNearHorizontalEndPoints(left, right, axisIntercept);
         }
         if (flipped) {
             fIntersections->flip();
@@ -196,6 +201,9 @@ public:
 
     int verticalIntersect(double axisIntercept, double top, double bottom, bool flipped) {
         addExactVerticalEndPoints(top, bottom, axisIntercept);
+        if (fAllowNear) {
+            addNearVerticalEndPoints(top, bottom, axisIntercept);
+        }
         double rootVals[2];
         int roots = verticalIntersect(axisIntercept, rootVals);
         for (int index = 0; index < roots; ++index) {
@@ -205,9 +213,6 @@ public:
             if (pinTs(&quadT, &lineT, &pt, kPointInitialized)) {
                 fIntersections->insert(quadT, lineT, pt);
             }
-        }
-        if (fAllowNear) {
-            addNearVerticalEndPoints(top, bottom, axisIntercept);
         }
         if (flipped) {
             fIntersections->flip();
@@ -299,15 +304,10 @@ protected:
         SkDPoint xy = fQuad.ptAtT(t);
         double dx = fLine[1].fX - fLine[0].fX;
         double dy = fLine[1].fY - fLine[0].fY;
-        double dxT = (xy.fX - fLine[0].fX) / dx;
-        double dyT = (xy.fY - fLine[0].fY) / dy;
-        if (!between(FLT_EPSILON, dxT, 1 - FLT_EPSILON) && between(0, dyT, 1)) {
-            return dyT;
+        if (fabs(dx) > fabs(dy)) {
+            return (xy.fX - fLine[0].fX) / dx;
         }
-        if (!between(FLT_EPSILON, dyT, 1 - FLT_EPSILON) && between(0, dxT, 1)) {
-            return dxT;
-        }
-        return fabs(dx) > fabs(dy) ? dxT : dyT;
+        return (xy.fY - fLine[0].fY) / dy;
     }
 
     bool pinTs(double* quadT, double* lineT, SkDPoint* pt, PinTPoint ptSet) {
@@ -323,6 +323,17 @@ protected:
             *pt = fLine.ptAtT(lT);
         } else if (ptSet == kPointUninitialized) {
             *pt = fQuad.ptAtT(qT);
+        }
+        SkPoint gridPt = pt->asSkPoint();
+        if (gridPt == fLine[0].asSkPoint()) {
+            *lineT = 0;
+        } else if (gridPt == fLine[1].asSkPoint()) {
+            *lineT = 1;
+        }
+        if (gridPt == fQuad[0].asSkPoint()) {
+            *quadT = 0;
+        } else if (gridPt == fQuad[2].asSkPoint()) {
+            *quadT = 1;
         }
         return true;
     }

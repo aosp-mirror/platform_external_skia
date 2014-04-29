@@ -8,8 +8,6 @@
 #include "GrGLTexture.h"
 #include "GrGpuGL.h"
 
-SK_DEFINE_INST_COUNT(GrGLTexID)
-
 #define GPUGL static_cast<GrGpuGL*>(getGpu())
 
 #define GL_CALL(X) GR_GL_CALL(GPUGL->glInterface(), X)
@@ -18,7 +16,7 @@ void GrGLTexture::init(GrGpuGL* gpu,
                        const Desc& textureDesc,
                        const GrGLRenderTarget::Desc* rtDesc) {
 
-    GrAssert(0 != textureDesc.fTextureID);
+    SkASSERT(0 != textureDesc.fTextureID);
 
     fTexParams.invalidate();
     fTexParamsTimestamp = GrGpu::kExpiredTimestamp;

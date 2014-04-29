@@ -6,9 +6,11 @@
  */
 
 #include "SkCanvasStateUtils.h"
+
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
-#include "SkDevice.h"
 #include "SkCanvasStack.h"
+#include "SkErrorInternals.h"
 #include "SkWriter32.h"
 
 #define CANVAS_STATE_VERSION 1
@@ -58,7 +60,7 @@ struct SkCanvasLayerState {
     union {
         struct {
             RasterConfig config; // pixel format: a value from RasterConfigs.
-            uint32_t rowBytes;   // Number of bytes from start of one line to next.
+            size_t rowBytes;     // Number of bytes from start of one line to next.
             void* pixels;        // The pixels, all (height * rowBytes) of them.
         } raster;
         struct {
@@ -169,7 +171,7 @@ static void setup_MC_state(SkMCState* state, const SkMatrix& matrix, const SkReg
     }
 
     // allocate memory for the clip then and copy them to the struct
-    state->clipRects = (ClipRect*) sk_malloc_throw(clipWriter.size());
+    state->clipRects = (ClipRect*) sk_malloc_throw(clipWriter.bytesWritten());
     clipWriter.flatten(state->clipRects);
 }
 
@@ -182,7 +184,8 @@ SkCanvasState* SkCanvasStateUtils::CaptureCanvasState(SkCanvas* canvas) {
     ClipValidator validator;
     canvas->replayClips(&validator);
     if (validator.failed()) {
-        SkDEBUGF(("CaptureCanvasState does not support canvases with antialiased clips.\n"));
+        SkErrorInternals::SetError(kInvalidOperation_SkError,
+                "CaptureCanvasState does not support canvases with antialiased clips.\n");
         return NULL;
     }
 
@@ -236,14 +239,14 @@ SkCanvasState* SkCanvasStateUtils::CaptureCanvasState(SkCanvas* canvas) {
     }
 
     // allocate memory for the layers and then and copy them to the struct
-    SkASSERT(layerWriter.size() == layerCount * sizeof(SkCanvasLayerState));
+    SkASSERT(layerWriter.bytesWritten() == layerCount * sizeof(SkCanvasLayerState));
     canvasState->layerCount = layerCount;
-    canvasState->layers = (SkCanvasLayerState*) sk_malloc_throw(layerWriter.size());
+    canvasState->layers = (SkCanvasLayerState*) sk_malloc_throw(layerWriter.bytesWritten());
     layerWriter.flatten(canvasState->layers);
 
     // for now, just ignore any client supplied DrawFilter.
     if (canvas->getDrawFilter()) {
-        SkDEBUGF(("CaptureCanvasState will ignore the canvases draw filter.\n"));
+//        SkDEBUGF(("CaptureCanvasState will ignore the canvases draw filter.\n"));
     }
 
     return canvasState.detach();
@@ -293,7 +296,7 @@ static SkCanvas* create_canvas_from_canvas_layer(const SkCanvasLayerState& layer
     SkASSERT(!bitmap.isNull());
 
     // create a device & canvas
-    SkAutoTUnref<SkDevice> device(SkNEW_ARGS(SkDevice, (bitmap)));
+    SkAutoTUnref<SkBitmapDevice> device(SkNEW_ARGS(SkBitmapDevice, (bitmap)));
     SkAutoTUnref<SkCanvas> canvas(SkNEW_ARGS(SkCanvas, (device.get())));
 
     // setup the matrix and clip

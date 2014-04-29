@@ -9,10 +9,15 @@
 
 #include "GrEffect.h"
 #include "GrGLEffect.h"
+#include "SkRTConf.h"
 #include "SkTSearch.h"
 
+#ifdef PROGRAM_CACHE_STATS
+SK_CONF_DECLARE(bool, c_DisplayCache, "gpu.displayCache", false,
+                "Display program cache usage.");
+#endif
+
 typedef GrGLUniformManager::UniformHandle UniformHandle;
-static const UniformHandle kInvalidUniformHandle = GrGLUniformManager::kInvalidUniformHandle;
 
 struct GrGpuGL::ProgramCache::Entry {
     SK_DECLARE_INST_COUNT_ROOT(Entry);
@@ -22,24 +27,22 @@ struct GrGpuGL::ProgramCache::Entry {
     unsigned int                fLRUStamp;
 };
 
-SK_DEFINE_INST_COUNT(GrGpuGL::ProgramCache::Entry);
-
 struct GrGpuGL::ProgramCache::ProgDescLess {
     bool operator() (const GrGLProgramDesc& desc, const Entry* entry) {
-        GrAssert(NULL != entry->fProgram.get());
+        SkASSERT(NULL != entry->fProgram.get());
         return GrGLProgramDesc::Less(desc, entry->fProgram->getDesc());
     }
 
     bool operator() (const Entry* entry, const GrGLProgramDesc& desc) {
-        GrAssert(NULL != entry->fProgram.get());
+        SkASSERT(NULL != entry->fProgram.get());
         return GrGLProgramDesc::Less(entry->fProgram->getDesc(), desc);
     }
 };
 
-GrGpuGL::ProgramCache::ProgramCache(const GrGLContext& gl)
+GrGpuGL::ProgramCache::ProgramCache(GrGpuGL* gpu)
     : fCount(0)
     , fCurrLRUStamp(0)
-    , fGL(gl)
+    , fGpu(gpu)
 #ifdef PROGRAM_CACHE_STATS
     , fTotalRequests(0)
     , fCacheMisses(0)
@@ -57,21 +60,23 @@ GrGpuGL::ProgramCache::~ProgramCache() {
     }
     // dump stats
 #ifdef PROGRAM_CACHE_STATS
-    SkDebugf("--- Program Cache ---\n");
-    SkDebugf("Total requests: %d\n", fTotalRequests);
-    SkDebugf("Cache misses: %d\n", fCacheMisses);
-    SkDebugf("Cache miss %%: %f\n", (fTotalRequests > 0) ?
-                                        100.f * fCacheMisses / fTotalRequests :
-                                        0.f);
-    int cacheHits = fTotalRequests - fCacheMisses;
-    SkDebugf("Hash miss %%: %f\n", (cacheHits > 0) ? 100.f * fHashMisses / cacheHits : 0.f);
-    SkDebugf("---------------------\n");
+    if (c_DisplayCache) {
+        SkDebugf("--- Program Cache ---\n");
+        SkDebugf("Total requests: %d\n", fTotalRequests);
+        SkDebugf("Cache misses: %d\n", fCacheMisses);
+        SkDebugf("Cache miss %%: %f\n", (fTotalRequests > 0) ?
+                                            100.f * fCacheMisses / fTotalRequests :
+                                            0.f);
+        int cacheHits = fTotalRequests - fCacheMisses;
+        SkDebugf("Hash miss %%: %f\n", (cacheHits > 0) ? 100.f * fHashMisses / cacheHits : 0.f);
+        SkDebugf("---------------------\n");
+    }
 #endif
 }
 
 void GrGpuGL::ProgramCache::abandon() {
     for (int i = 0; i < fCount; ++i) {
-        GrAssert(NULL != fEntries[i]->fProgram.get());
+        SkASSERT(NULL != fEntries[i]->fProgram.get());
         fEntries[i]->fProgram->abandon();
         fEntries[i]->fProgram.reset(NULL);
     }
@@ -100,7 +105,7 @@ GrGLProgram* GrGpuGL::ProgramCache::getProgram(const GrGLProgramDesc& desc,
     hashIdx &=((1 << kHashBits) - 1);
     Entry* hashedEntry = fHashTable[hashIdx];
     if (NULL != hashedEntry && hashedEntry->fProgram->getDesc() == desc) {
-        GrAssert(NULL != hashedEntry->fProgram);
+        SkASSERT(NULL != hashedEntry->fProgram);
         entry = hashedEntry;
     }
 
@@ -120,7 +125,7 @@ GrGLProgram* GrGpuGL::ProgramCache::getProgram(const GrGLProgramDesc& desc,
 #ifdef PROGRAM_CACHE_STATS
         ++fCacheMisses;
 #endif
-        GrGLProgram* program = GrGLProgram::Create(fGL, desc, colorStages, coverageStages);
+        GrGLProgram* program = GrGLProgram::Create(fGpu, desc, colorStages, coverageStages);
         if (NULL == program) {
             return NULL;
         }
@@ -130,7 +135,7 @@ GrGLProgram* GrGpuGL::ProgramCache::getProgram(const GrGLProgramDesc& desc,
             purgeIdx = fCount++;
             fEntries[purgeIdx] = entry;
         } else {
-            GrAssert(fCount == kMaxEntries);
+            SkASSERT(fCount == kMaxEntries);
             purgeIdx = 0;
             for (int i = 1; i < kMaxEntries; ++i) {
                 if (fEntries[i]->fLRUStamp < fEntries[purgeIdx]->fLRUStamp) {
@@ -143,7 +148,7 @@ GrGLProgram* GrGpuGL::ProgramCache::getProgram(const GrGLProgramDesc& desc,
                 fHashTable[purgedHashIdx] = NULL;
             }
         }
-        GrAssert(fEntries[purgeIdx] == entry);
+        SkASSERT(fEntries[purgeIdx] == entry);
         entry->fProgram.reset(program);
         // We need to shift fEntries around so that the entry currently at purgeIdx is placed
         // just before the entry at ~entryIdx (in order to keep fEntries sorted by descriptor).
@@ -166,14 +171,14 @@ GrGLProgram* GrGpuGL::ProgramCache::getProgram(const GrGLProgramDesc& desc,
             memmove(fEntries + purgeIdx, fEntries + purgeIdx + 1, copySize);
             fEntries[entryIdx - 1] = entry;
         }
-#if GR_DEBUG
-        GrAssert(NULL != fEntries[0]->fProgram.get());
+#ifdef SK_DEBUG
+        SkASSERT(NULL != fEntries[0]->fProgram.get());
         for (int i = 0; i < fCount - 1; ++i) {
-            GrAssert(NULL != fEntries[i + 1]->fProgram.get());
+            SkASSERT(NULL != fEntries[i + 1]->fProgram.get());
             const GrGLProgramDesc& a = fEntries[i]->fProgram->getDesc();
             const GrGLProgramDesc& b = fEntries[i + 1]->fProgram->getDesc();
-            GrAssert(GrGLProgramDesc::Less(a, b));
-            GrAssert(!GrGLProgramDesc::Less(b, a));
+            SkASSERT(GrGLProgramDesc::Less(a, b));
+            SkASSERT(!GrGLProgramDesc::Less(b, a));
         }
 #endif
     }
@@ -203,67 +208,17 @@ void GrGpuGL::abandonResources(){
 
 #define GL_CALL(X) GR_GL_CALL(this->glInterface(), X)
 
-void GrGpuGL::flushPathStencilMatrix() {
-    const SkMatrix& viewMatrix = this->getDrawState().getViewMatrix();
-    const GrRenderTarget* rt = this->getDrawState().getRenderTarget();
-    SkISize size;
-    size.set(rt->width(), rt->height());
-    const SkMatrix& vm = this->getDrawState().getViewMatrix();
-
-    if (fHWPathStencilMatrixState.fRenderTargetOrigin != rt->origin() ||
-        !fHWPathStencilMatrixState.fViewMatrix.cheapEqualTo(viewMatrix) ||
-        fHWPathStencilMatrixState.fRenderTargetSize!= size) {
-        // rescale the coords from skia's "device" coords to GL's normalized coords,
-        // and perform a y-flip if required.
-        SkMatrix m;
-        if (kBottomLeft_GrSurfaceOrigin == rt->origin()) {
-            m.setScale(SkIntToScalar(2) / rt->width(), SkIntToScalar(-2) / rt->height());
-            m.postTranslate(-SK_Scalar1, SK_Scalar1);
-        } else {
-            m.setScale(SkIntToScalar(2) / rt->width(), SkIntToScalar(2) / rt->height());
-            m.postTranslate(-SK_Scalar1, -SK_Scalar1);
-        }
-        m.preConcat(vm);
-
-        // GL wants a column-major 4x4.
-        GrGLfloat mv[]  = {
-            // col 0
-            SkScalarToFloat(m[SkMatrix::kMScaleX]),
-            SkScalarToFloat(m[SkMatrix::kMSkewY]),
-            0,
-            SkScalarToFloat(m[SkMatrix::kMPersp0]),
-
-            // col 1
-            SkScalarToFloat(m[SkMatrix::kMSkewX]),
-            SkScalarToFloat(m[SkMatrix::kMScaleY]),
-            0,
-            SkScalarToFloat(m[SkMatrix::kMPersp1]),
-
-            // col 2
-            0, 0, 0, 0,
-
-            // col3
-            SkScalarToFloat(m[SkMatrix::kMTransX]),
-            SkScalarToFloat(m[SkMatrix::kMTransY]),
-            0.0f,
-            SkScalarToFloat(m[SkMatrix::kMPersp2])
-        };
-        GL_CALL(MatrixMode(GR_GL_PROJECTION));
-        GL_CALL(LoadMatrixf(mv));
-        fHWPathStencilMatrixState.fViewMatrix = vm;
-        fHWPathStencilMatrixState.fRenderTargetSize = size;
-        fHWPathStencilMatrixState.fRenderTargetOrigin = rt->origin();
-    }
-}
-
 bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstCopy) {
     const GrDrawState& drawState = this->getDrawState();
 
     // GrGpu::setupClipAndFlushState should have already checked this and bailed if not true.
-    GrAssert(NULL != drawState.getRenderTarget());
+    SkASSERT(NULL != drawState.getRenderTarget());
 
     if (kStencilPath_DrawType == type) {
-        this->flushPathStencilMatrix();
+        const GrRenderTarget* rt = this->getDrawState().getRenderTarget();
+        SkISize size;
+        size.set(rt->width(), rt->height());
+        this->setProjectionMatrix(drawState.getViewMatrix(), size, rt->origin());
     } else {
         this->flushMiscFixedFunctionState();
 
@@ -292,9 +247,12 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
                                                         colorStages.begin(),
                                                         coverageStages.begin()));
         if (NULL == fCurrentProgram.get()) {
-            GrAssert(!"Failed to create program!");
+            SkDEBUGFAIL("Failed to create program!");
             return false;
         }
+
+        SkASSERT(kDrawPath_DrawType != type || !fCurrentProgram->hasVertexShader());
+
         fCurrentProgram.get()->ref();
 
         GrGLuint programID = fCurrentProgram->programID();
@@ -306,8 +264,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
         fCurrentProgram->overrideBlend(&srcCoeff, &dstCoeff);
         this->flushBlend(kDrawLines_DrawType == type, srcCoeff, dstCoeff);
 
-        fCurrentProgram->setData(this,
-                                 blendOpts,
+        fCurrentProgram->setData(blendOpts,
                                  colorStages.begin(),
                                  coverageStages.begin(),
                                  dstCopy,
@@ -332,7 +289,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
 
 void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
 
-    GrGLsizei stride = this->getDrawState().getVertexSize();
+    GrGLsizei stride = static_cast<GrGLsizei>(this->getDrawState().getVertexSize());
 
     size_t vertexOffsetInBytes = stride * info.startVertex();
 
@@ -354,13 +311,13 @@ void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
             GrCrash("Unknown geometry src type!");
     }
 
-    GrAssert(NULL != vbuf);
-    GrAssert(!vbuf->isLocked());
+    SkASSERT(NULL != vbuf);
+    SkASSERT(!vbuf->isLocked());
     vertexOffsetInBytes += vbuf->baseOffset();
 
     GrGLIndexBuffer* ibuf = NULL;
     if (info.isIndexed()) {
-        GrAssert(NULL != indexOffsetInBytes);
+        SkASSERT(NULL != indexOffsetInBytes);
 
         switch (this->getGeomSrc().fIndexSrc) {
         case kBuffer_GeometrySrcType:
@@ -378,31 +335,47 @@ void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
             GrCrash("Unknown geometry src type!");
         }
 
-        GrAssert(NULL != ibuf);
-        GrAssert(!ibuf->isLocked());
+        SkASSERT(NULL != ibuf);
+        SkASSERT(!ibuf->isLocked());
         *indexOffsetInBytes += ibuf->baseOffset();
     }
     GrGLAttribArrayState* attribState =
         fHWGeometryState.bindArrayAndBuffersToDraw(this, vbuf, ibuf);
 
-    uint32_t usedAttribArraysMask = 0;
-    const GrVertexAttrib* vertexAttrib = this->getDrawState().getVertexAttribs();
-    int vertexAttribCount = this->getDrawState().getVertexAttribCount();
-    for (int vertexAttribIndex = 0; vertexAttribIndex < vertexAttribCount;
-         ++vertexAttribIndex, ++vertexAttrib) {
+    if (!fCurrentProgram->hasVertexShader()) {
+        int posIdx = this->getDrawState().positionAttributeIndex();
+        const GrVertexAttrib* vertexArray = this->getDrawState().getVertexAttribs() + posIdx;
+        GrVertexAttribType vertexArrayType = vertexArray->fType;
+        SkASSERT(!GrGLAttribTypeToLayout(vertexArrayType).fNormalized);
+        SkASSERT(GrGLAttribTypeToLayout(vertexArrayType).fCount == 2);
+        attribState->setFixedFunctionVertexArray(this,
+                                                 vbuf,
+                                                 2,
+                                                 GrGLAttribTypeToLayout(vertexArrayType).fType,
+                                                 stride,
+                                                 reinterpret_cast<GrGLvoid*>(
+                                                 vertexOffsetInBytes + vertexArray->fOffset));
+        attribState->disableUnusedArrays(this, 0, true);
+    } else {
+        uint32_t usedAttribArraysMask = 0;
+        const GrVertexAttrib* vertexAttrib = this->getDrawState().getVertexAttribs();
+        int vertexAttribCount = this->getDrawState().getVertexAttribCount();
+        for (int vertexAttribIndex = 0; vertexAttribIndex < vertexAttribCount;
+             ++vertexAttribIndex, ++vertexAttrib) {
 
-        usedAttribArraysMask |= (1 << vertexAttribIndex);
-        GrVertexAttribType attribType = vertexAttrib->fType;
-        attribState->set(this,
-                         vertexAttribIndex,
-                         vbuf,
-                         GrGLAttribTypeToLayout(attribType).fCount,
-                         GrGLAttribTypeToLayout(attribType).fType,
-                         GrGLAttribTypeToLayout(attribType).fNormalized,
-                         stride,
-                         reinterpret_cast<GrGLvoid*>(
-                         vertexOffsetInBytes + vertexAttrib->fOffset));
+            usedAttribArraysMask |= (1 << vertexAttribIndex);
+            GrVertexAttribType attribType = vertexAttrib->fType;
+            attribState->set(this,
+                             vertexAttribIndex,
+                             vbuf,
+                             GrGLAttribTypeToLayout(attribType).fCount,
+                             GrGLAttribTypeToLayout(attribType).fType,
+                             GrGLAttribTypeToLayout(attribType).fNormalized,
+                             stride,
+                             reinterpret_cast<GrGLvoid*>(
+                             vertexOffsetInBytes + vertexAttrib->fOffset));
+        }
+
+        attribState->disableUnusedArrays(this, usedAttribArraysMask, false);
     }
-
-    attribState->disableUnusedAttribArrays(this, usedAttribArraysMask);
 }

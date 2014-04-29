@@ -19,7 +19,7 @@ class FontScalerBench : public SkBenchmark {
     SkString fText;
     bool     fDoLCD;
 public:
-    FontScalerBench(void* param, bool doLCD) : INHERITED(param) {
+    FontScalerBench(bool doLCD)  {
         fName.printf("fontscaler_%s", doLCD ? "lcd" : "aa");
         fText.set("abcdefghijklmnopqrstuvwxyz01234567890");
         fDoLCD = doLCD;
@@ -27,7 +27,7 @@ public:
 
 protected:
     virtual const char* onGetName() { return fName.c_str(); }
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
         paint.setLCDRenderText(fDoLCD);
@@ -35,14 +35,16 @@ protected:
         bool prev = gSkSuppressFontCachePurgeSpew;
         gSkSuppressFontCachePurgeSpew = true;
 
-        // this is critical - we want to time the creation process, so we
-        // explicitly flush our cache before each run
-        SkGraphics::PurgeFontCache();
+        for (int i = 0; i < loops; i++) {
+            // this is critical - we want to time the creation process, so we
+            // explicitly flush our cache before each run
+            SkGraphics::PurgeFontCache();
 
-        for (int ps = 9; ps <= 24; ps += 2) {
-            paint.setTextSize(SkIntToScalar(ps));
-            canvas->drawText(fText.c_str(), fText.size(),
-                             0, SkIntToScalar(20), paint);
+            for (int ps = 9; ps <= 24; ps += 2) {
+                paint.setTextSize(SkIntToScalar(ps));
+                canvas->drawText(fText.c_str(), fText.size(),
+                        0, SkIntToScalar(20), paint);
+            }
         }
 
         gSkSuppressFontCachePurgeSpew = prev;
@@ -53,8 +55,5 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static SkBenchmark* Fact0(void* p) { return SkNEW_ARGS(FontScalerBench, (p, false)); }
-static SkBenchmark* Fact1(void* p) { return SkNEW_ARGS(FontScalerBench, (p, true)); }
-
-static BenchRegistry gReg0(Fact0);
-static BenchRegistry gReg1(Fact1);
+DEF_BENCH( return SkNEW_ARGS(FontScalerBench, (false)); )
+DEF_BENCH( return SkNEW_ARGS(FontScalerBench, (true)); )

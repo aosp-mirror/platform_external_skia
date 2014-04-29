@@ -68,7 +68,8 @@ static uint16_t UnicodeFromMacRoman[0x80] = {
 static void SkStringFromMacRoman(const uint8_t* macRoman, size_t length, SkString& utf8) {
     utf8.reset();
     for (size_t i = 0; i < length; ++i) {
-        utf8.appendUnichar(macRoman[i] < 0x80 ? macRoman[i] : UnicodeFromMacRoman[macRoman[i]]);
+        utf8.appendUnichar(macRoman[i] < 0x80 ? macRoman[i]
+                                              : UnicodeFromMacRoman[macRoman[i] - 0x80]);
     }
 }
 
@@ -528,7 +529,6 @@ bool SkOTTableName::Iterator::next(SkOTTableName::Iterator::Record& record) {
     }
 
     // Unknown language, return the BCP 47 code 'und' for 'undetermined'.
-    SkASSERT(false);
     record.language = "und";
     return true;
 }

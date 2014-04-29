@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 #include "SkBenchmark.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
-#include "SkDevice.h"
 #include "SkMagnifierImageFilter.h"
 #include "SkRandom.h"
 
@@ -17,8 +17,8 @@
 
 class MagnifierBench : public SkBenchmark {
 public:
-    MagnifierBench(void* param, bool small) :
-        INHERITED(param), fIsSmall(small), fInitialized(false) {
+    MagnifierBench(bool small) :
+        fIsSmall(small), fInitialized(false) {
     }
 
 protected:
@@ -33,7 +33,7 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         const int w = fIsSmall ? FILTER_WIDTH_SMALL : FILTER_WIDTH_LARGE;
         const int h = fIsSmall ? FILTER_HEIGHT_SMALL : FILTER_HEIGHT_LARGE;
         SkPaint paint;
@@ -43,7 +43,10 @@ protected:
                                  SkIntToScalar(h / 4),
                                  SkIntToScalar(w / 2),
                                  SkIntToScalar(h / 2)), 100))->unref();
-        canvas->drawBitmap(fCheckerboard, 0, 0, &paint);
+
+        for (int i = 0; i < loops; i++) {
+            canvas->drawBitmap(fCheckerboard, 0, 0, &paint);
+        }
     }
 
 private:
@@ -52,7 +55,7 @@ private:
         const int h = fIsSmall ? FILTER_HEIGHT_LARGE : FILTER_HEIGHT_LARGE;
         fCheckerboard.setConfig(SkBitmap::kARGB_8888_Config, w, h);
         fCheckerboard.allocPixels();
-        SkDevice device(fCheckerboard);
+        SkBitmapDevice device(fCheckerboard);
         SkCanvas canvas(&device);
         canvas.clear(0x00000000);
         SkPaint darkPaint;
@@ -80,5 +83,5 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DEF_BENCH( return new MagnifierBench(p, true); )
-DEF_BENCH( return new MagnifierBench(p, false); )
+DEF_BENCH( return new MagnifierBench(true); )
+DEF_BENCH( return new MagnifierBench(false); )

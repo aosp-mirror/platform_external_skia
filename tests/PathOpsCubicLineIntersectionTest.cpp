@@ -15,6 +15,17 @@ static struct lineCubic {
     SkDCubic cubic;
     SkDLine line;
 } lineCubicTests[] = {
+    {{{{154,715}, {151.238571,715}, {149,712.761414}, {149,710}}},
+            {{{149,675}, {149,710.001465}}}},
+
+    {{{{0,1}, {1,6}, {4,1}, {4,3}}},
+            {{{6,1}, {1,4}}}},
+
+    {{{{0,1}, {2,6}, {4,1}, {5,4}}},
+            {{{6,2}, {1,4}}}},
+
+    {{{{0,4}, {3,4}, {6,2}, {5,2}}},
+            {{{4,3}, {2,6}}}},
 #if 0
     {{{{258, 122}, {260.761414, 122}, { 263, 124.238579}, {263, 127}}},
             {{{259.82843, 125.17157}, {261.535522, 123.46447}}}},
@@ -38,8 +49,7 @@ static void testOne(skiatest::Reporter* reporter, int iIndex) {
     SkASSERT(ValidLine(line));
     SkReduceOrder reduce1;
     SkReduceOrder reduce2;
-    int order1 = reduce1.reduce(cubic, SkReduceOrder::kNo_Quadratics,
-            SkReduceOrder::kFill_Style);
+    int order1 = reduce1.reduce(cubic, SkReduceOrder::kNo_Quadratics);
     int order2 = reduce2.reduce(line);
     if (order1 < 4) {
         SkDebugf("[%d] cubic order=%d\n", iIndex, order1);

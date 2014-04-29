@@ -10,6 +10,7 @@
 
 #include "GrBackendEffectFactory.h"
 #include "GrDrawEffect.h"
+#include "gl/GrGLProgramEffects.h"
 
 /**
  * Implements GrBackendEffectFactory for a GrEffect subclass as a singleton.
@@ -32,22 +33,32 @@ public:
         GLSL code generation. */
     virtual EffectKey glEffectKey(const GrDrawEffect& drawEffect,
                                   const GrGLCaps& caps) const SK_OVERRIDE {
-        GrAssert(kIllegalEffectClassID != fEffectClassID);
+        SkASSERT(kIllegalEffectClassID != fEffectClassID);
         EffectKey effectKey = GLEffect::GenKey(drawEffect, caps);
-        EffectKey textureKey = GLEffect::GenTextureKey(drawEffect, caps);
-        EffectKey attribKey = GLEffect::GenAttribKey(drawEffect);
-#if GR_DEBUG
-        static const EffectKey kIllegalIDMask = (uint16_t) (~((1U << kEffectKeyBits) - 1));
-        GrAssert(!(kIllegalIDMask & effectKey));
+        EffectKey textureKey = GrGLProgramEffects::GenTextureKey(drawEffect, caps);
+        EffectKey transformKey = GrGLProgramEffects::GenTransformKey(drawEffect);
+        EffectKey attribKey = GrGLProgramEffects::GenAttribKey(drawEffect);
+#ifdef SK_DEBUG
+        static const EffectKey kIllegalEffectKeyMask = (uint16_t) (~((1U << kEffectKeyBits) - 1));
+        SkASSERT(!(kIllegalEffectKeyMask & effectKey));
 
         static const EffectKey kIllegalTextureKeyMask = (uint16_t) (~((1U << kTextureKeyBits) - 1));
-        GrAssert(!(kIllegalTextureKeyMask & textureKey));
+        SkASSERT(!(kIllegalTextureKeyMask & textureKey));
+
+        static const EffectKey kIllegalTransformKeyMask = (uint16_t) (~((1U << kTransformKeyBits) - 1));
+        SkASSERT(!(kIllegalTransformKeyMask & transformKey));
 
         static const EffectKey kIllegalAttribKeyMask = (uint16_t) (~((1U << kAttribKeyBits) - 1));
-        GrAssert(!(kIllegalAttribKeyMask & textureKey));
+        SkASSERT(!(kIllegalAttribKeyMask & textureKey));
+
+        static const EffectKey kIllegalClassIDMask = (uint16_t) (~((1U << kClassIDBits) - 1));
+        SkASSERT(!(kIllegalClassIDMask & fEffectClassID));
 #endif
-        return fEffectClassID | (attribKey << (kEffectKeyBits+kTextureKeyBits)) |
-               (textureKey << kEffectKeyBits) | effectKey;
+        return (fEffectClassID << (kEffectKeyBits+kTextureKeyBits+kTransformKeyBits+kAttribKeyBits)) |
+               (attribKey << (kEffectKeyBits+kTextureKeyBits+kTransformKeyBits)) |
+               (transformKey << (kEffectKeyBits+kTextureKeyBits)) |
+               (textureKey << kEffectKeyBits) |
+               (effectKey);
     }
 
     /** Returns a new instance of the appropriate *GL* implementation class
@@ -71,7 +82,7 @@ public:
 
 protected:
     GrTBackendEffectFactory() {
-        fEffectClassID = GenID() << (kAttribKeyBits + kEffectKeyBits + kTextureKeyBits) ;
+        fEffectClassID = GenID();
     }
 };
 

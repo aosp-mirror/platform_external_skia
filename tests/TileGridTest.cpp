@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -7,10 +6,10 @@
  */
 
 #include "Test.h"
+#include "SkBitmapDevice.h"
+#include "SkCanvas.h"
 #include "SkTileGrid.h"
 #include "SkTileGridPicture.h"
-#include "SkCanvas.h"
-#include "SkDevice.h"
 
 enum Tile {
     kTopLeft_Tile = 0x1,
@@ -21,10 +20,9 @@ enum Tile {
     kAll_Tile = kTopLeft_Tile | kTopRight_Tile | kBottomLeft_Tile | kBottomRight_Tile,
 };
 
-namespace {
 class MockCanvas : public SkCanvas {
 public:
-    MockCanvas(SkDevice* device) : SkCanvas(device)
+    MockCanvas(SkBaseDevice* device) : SkCanvas(device)
     {}
 
     virtual void drawRect(const SkRect& rect, const SkPaint&)
@@ -35,7 +33,6 @@ public:
 
     SkTDArray<SkRect> fRects;
 };
-}
 
 class TileGridTest {
 public:
@@ -80,25 +77,25 @@ public:
 
         // Test parts of top-left tile
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
         }
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-7.99f), SkFloatToScalar(-7.99f));
+            mockCanvas.translate(-7.99f, -7.99f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
         }
         // Corner overlap
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-9.5f), SkFloatToScalar(-9.5f));
+            mockCanvas.translate(-9.5f, -9.5f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 2 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
@@ -106,42 +103,42 @@ public:
         }
         // Intersect bottom right tile, but does not overlap rect 2
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-16.0f), SkFloatToScalar(-16.0f));
+            mockCanvas.translate(-16.0f, -16.0f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
         }
         // Out of bounds queries, snap to border tiles
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(2.0f), SkFloatToScalar(0.0f));
+            mockCanvas.translate(2.0f, 0.0f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
         }
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(0.0f), SkFloatToScalar(2.0f));
+            mockCanvas.translate(0.0f, 2.0f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
         }
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-22.0f), SkFloatToScalar(-16.0f));
+            mockCanvas.translate(-22.0f, -16.0f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
         }
         {
-            SkDevice device(store);
+            SkBitmapDevice device(store);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-16.0f), SkFloatToScalar(-22.0f));
+            mockCanvas.translate(-16.0f, -22.0f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
@@ -185,7 +182,7 @@ public:
         {
             // The offset should cancel the top and left borders of the top left tile
             // So a look-up at interval 0-10 should be grid aligned,
-            SkDevice device(tileBitmap);
+            SkBitmapDevice device(tileBitmap);
             MockCanvas mockCanvas(&device);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 1 == mockCanvas.fRects.count());
@@ -193,7 +190,7 @@ public:
         }
         {
             // Encroaching border by one pixel
-            SkDevice device(moreThanATileBitmap);
+            SkBitmapDevice device(moreThanATileBitmap);
             MockCanvas mockCanvas(&device);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 2 == mockCanvas.fRects.count());
@@ -204,7 +201,7 @@ public:
             // Tile stride is 8 (tileWidth - 2 * border pixels
             // so translating by 8, should make query grid-aligned
             // with middle tile.
-            SkDevice device(tileBitmap);
+            SkBitmapDevice device(tileBitmap);
             MockCanvas mockCanvas(&device);
             mockCanvas.translate(SkIntToScalar(-8), SkIntToScalar(-8));
             picture.draw(&mockCanvas);
@@ -212,18 +209,18 @@ public:
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
         }
         {
-            SkDevice device(tileBitmap);
+            SkBitmapDevice device(tileBitmap);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-7.9f), SkFloatToScalar(-7.9f));
+            mockCanvas.translate(-7.9f, -7.9f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 2 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect1 == mockCanvas.fRects[0]);
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[1]);
         }
         {
-            SkDevice device(tileBitmap);
+            SkBitmapDevice device(tileBitmap);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-8.1f), SkFloatToScalar(-8.1f));
+            mockCanvas.translate(-8.1f, -8.1f);
             picture.draw(&mockCanvas);
             REPORTER_ASSERT(reporter, 2 == mockCanvas.fRects.count());
             REPORTER_ASSERT(reporter, rect2 == mockCanvas.fRects[0]);
@@ -233,9 +230,9 @@ public:
             // Regression test for crbug.com/234688
             // Once the 2x2 device region is inset by margin, it yields an empty
             // adjusted region, sitting right on top of the tile boundary.
-            SkDevice device(tinyBitmap);
+            SkBitmapDevice device(tinyBitmap);
             MockCanvas mockCanvas(&device);
-            mockCanvas.translate(SkFloatToScalar(-8.0f), SkFloatToScalar(-8.0f));
+            mockCanvas.translate(-8.0f, -8.0f);
             picture.draw(&mockCanvas);
             // This test passes by not asserting. We do not validate the rects recorded
             // because the result is numerically unstable (floating point equality).
@@ -277,7 +274,6 @@ public:
         TestOverlapOffsetQueryAlignment(reporter);
     }
 };
-
 
 #include "TestClassDef.h"
 DEFINE_TESTCLASS("TileGrid", TileGridTestClass, TileGridTest::Test)

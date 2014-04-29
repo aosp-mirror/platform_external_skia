@@ -12,9 +12,6 @@
 #include "SkFlattenableBuffers.h"
 #include "SkTSearch.h"
 
-SK_DEFINE_INST_COUNT(SkBitmapHeapReader)
-SK_DEFINE_INST_COUNT(SkBitmapHeap::ExternalStorage)
-
 SkBitmapHeapEntry::SkBitmapHeapEntry()
     : fSlot(-1)
     , fRefCount(0)
@@ -259,7 +256,7 @@ bool SkBitmapHeap::copyBitmap(const SkBitmap& originalBitmap, SkBitmap& copiedBi
 //        copiedBitmap.setPixelRef(sharedPixelRef, originalBitmap.pixelRefOffset());
     } else if (originalBitmap.empty()) {
         copiedBitmap.reset();
-    } else if (!originalBitmap.deepCopyTo(&copiedBitmap, originalBitmap.getConfig())) {
+    } else if (!originalBitmap.deepCopyTo(&copiedBitmap, originalBitmap.config())) {
         return false;
     }
     copiedBitmap.setImmutable();

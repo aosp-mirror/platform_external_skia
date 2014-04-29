@@ -8,17 +8,17 @@
 #ifndef GrContext_DEFINED
 #define GrContext_DEFINED
 
-#include "GrColor.h"
-#include "GrAARectRenderer.h"
 #include "GrClipData.h"
-#include "SkMatrix.h"
+#include "GrColor.h"
 #include "GrPaint.h"
 #include "GrPathRendererChain.h"
 #include "GrPoint.h"
 #include "GrRenderTarget.h"
-#include "GrRefCnt.h"
 #include "GrTexture.h"
+#include "SkMatrix.h"
+#include "SkTypes.h"
 
+class GrAARectRenderer;
 class GrAutoScratchTexture;
 class GrDrawState;
 class GrDrawTarget;
@@ -29,17 +29,19 @@ class GrIndexBuffer;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
 class GrOvalRenderer;
+class GrPath;
 class GrPathRenderer;
 class GrResourceEntry;
 class GrResourceCache;
 class GrStencilBuffer;
+class GrTestTarget;
 class GrTextureParams;
 class GrVertexBuffer;
 class GrVertexBufferAllocPool;
 class GrSoftwarePathRenderer;
 class SkStrokeRec;
 
-class GR_API GrContext : public GrRefCnt {
+class SK_API GrContext : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrContext)
 
@@ -47,11 +49,6 @@ public:
      * Creates a GrContext for a backend context.
      */
     static GrContext* Create(GrBackend, GrBackendContext);
-
-    /**
-     * Returns the number of GrContext instances for the current thread.
-     */
-    static int GetThreadInstanceCount();
 
     virtual ~GrContext();
 
@@ -130,11 +127,14 @@ public:
      * @param srcData   Pointer to the pixel values.
      * @param rowBytes  The number of bytes between rows of the texture. Zero
      *                  implies tightly packed rows.
+     * @param cacheKey  (optional) If non-NULL, we'll write the cache key we used to cacheKey.
      */
     GrTexture* createTexture(const GrTextureParams* params,
                              const GrTextureDesc& desc,
                              const GrCacheID& cacheID,
-                             void* srcData, size_t rowBytes);
+                             void* srcData,
+                             size_t rowBytes,
+                             GrResourceKey* cacheKey = NULL);
 
     /**
      * Search for an entry based on key and dimensions. If found, ref it and return it. The return
@@ -285,7 +285,7 @@ public:
     /**
      * Can the provided configuration act as a color render target?
      */
-    bool isConfigRenderable(GrPixelConfig config) const;
+    bool isConfigRenderable(GrPixelConfig config, bool withMSAA) const;
 
     /**
      * Return the max width or height of a render target supported by the
@@ -375,10 +375,12 @@ public:
      * Clear the entire or rect of the render target, ignoring any clips.
      * @param rect  the rect to clear or the whole thing if rect is NULL.
      * @param color the color to clear to.
+     * @param canIgnoreRect allows partial clears to be converted to whole
+     *                      clears on platforms for which that is cheap
      * @param target if non-NULL, the render target to clear otherwise clear
      *               the current render target
      */
-    void clear(const SkIRect* rect, GrColor color,
+    void clear(const SkIRect* rect, GrColor color, bool canIgnoreRect,
                GrRenderTarget* target = NULL);
 
     /**
@@ -389,17 +391,18 @@ public:
     /**
      *  Draw the rect using a paint.
      *  @param paint        describes how to color pixels.
-     *  @param strokeWidth  If strokeWidth < 0, then the rect is filled, else
-     *                      the rect is mitered stroked based on strokeWidth. If
-     *                      strokeWidth == 0, then the stroke is always a single
-     *                      pixel thick.
+     *  @param stroke       the stroke information (width, join, cap).
+     *                      If stroke == NULL, then the rect is filled.
+     *                      Otherwise, if stroke width == 0, then the stroke
+     *                      is always a single pixel thick, else the rect is
+     *                      mitered/beveled stroked based on stroke width.
      *  @param matrix       Optional matrix applied to the rect. Applied before
      *                      context's matrix or the paint's matrix.
      *  The rects coords are used to access the paint (through texture matrix)
      */
     void drawRect(const GrPaint& paint,
                   const SkRect&,
-                  SkScalar strokeWidth = -1,
+                  const SkStrokeRec* stroke = NULL,
                   const SkMatrix* matrix = NULL);
 
     /**
@@ -627,27 +630,31 @@ public:
      */
     void resolveRenderTarget(GrRenderTarget* target);
 
+#ifdef SK_DEVELOPER
+    void dumpFontCache() const;
+#endif
+
     ///////////////////////////////////////////////////////////////////////////
     // Helpers
 
-    class AutoRenderTarget : public ::GrNoncopyable {
+    class AutoRenderTarget : public ::SkNoncopyable {
     public:
         AutoRenderTarget(GrContext* context, GrRenderTarget* target) {
             fPrevTarget = context->getRenderTarget();
-            GrSafeRef(fPrevTarget);
+            SkSafeRef(fPrevTarget);
             context->setRenderTarget(target);
             fContext = context;
         }
         AutoRenderTarget(GrContext* context) {
             fPrevTarget = context->getRenderTarget();
-            GrSafeRef(fPrevTarget);
+            SkSafeRef(fPrevTarget);
             fContext = context;
         }
         ~AutoRenderTarget() {
             if (NULL != fContext) {
                 fContext->setRenderTarget(fPrevTarget);
             }
-            GrSafeUnref(fPrevTarget);
+            SkSafeUnref(fPrevTarget);
         }
     private:
         GrContext*      fContext;
@@ -668,7 +675,7 @@ public:
      * paint if necessary. Hint: use SkTCopyOnFirstWrite if the AutoMatrix is conditionally
      * initialized.
      */
-    class AutoMatrix : GrNoncopyable {
+    class AutoMatrix : public ::SkNoncopyable {
     public:
         AutoMatrix() : fContext(NULL) {}
 
@@ -678,7 +685,7 @@ public:
          * Initializes by pre-concat'ing the context's current matrix with the preConcat param.
          */
         void setPreConcat(GrContext* context, const SkMatrix& preConcat, GrPaint* paint = NULL) {
-            GrAssert(NULL != context);
+            SkASSERT(NULL != context);
 
             this->restore();
 
@@ -692,7 +699,7 @@ public:
          * update a paint but the matrix cannot be inverted.
          */
         bool setIdentity(GrContext* context, GrPaint* paint = NULL) {
-            GrAssert(NULL != context);
+            SkASSERT(NULL != context);
 
             this->restore();
 
@@ -761,7 +768,7 @@ public:
         SkMatrix    fMatrix;
     };
 
-    class AutoClip : GrNoncopyable {
+    class AutoClip : public ::SkNoncopyable {
     public:
         // This enum exists to require a caller of the constructor to acknowledge that the clip will
         // initially be wide open. It also could be extended if there are other desirable initial
@@ -772,7 +779,7 @@ public:
 
         AutoClip(GrContext* context, InitialClip initialState)
         : fContext(context) {
-            GrAssert(kWideOpen_InitialClip == initialState);
+            SkASSERT(kWideOpen_InitialClip == initialState);
             fNewClipData.fClipStack = &fNewClipStack;
 
             fOldClip = context->getClip();
@@ -808,7 +815,7 @@ public:
             , fAutoRT(ctx, rt) {
             fAutoMatrix.setIdentity(ctx);
             // should never fail with no paint param.
-            GrAssert(fAutoMatrix.succeeded());
+            SkASSERT(fAutoMatrix.succeeded());
         }
 
     private:
@@ -825,6 +832,9 @@ public:
     GrDrawTarget* getTextTarget();
     const GrIndexBuffer* getQuadIndexBuffer() const;
 
+    // Called by tests that draw directly to the context via GrDrawTarget
+    void getTestTarget(GrTestTarget*);
+
     /**
      * Stencil buffers add themselves to the cache using addStencilBuffer. findStencilBuffer is
      * called to check the cache for a SB that matches an RT's criteria.
@@ -839,6 +849,7 @@ public:
                     bool allowSW,
                     GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
                     GrPathRendererChain::StencilSupport* stencilSupport = NULL);
+
 
 #if GR_CACHE_STATS
     void printCacheStats() const;
@@ -868,6 +879,9 @@ private:
     GrIndexBufferAllocPool*         fDrawBufferIBAllocPool;
     GrInOrderDrawBuffer*            fDrawBuffer;
 
+    // Set by OverbudgetCB() to request that GrContext flush before exiting a draw.
+    bool                            fFlushToReduceCacheSize;
+
     GrAARectRenderer*               fAARectRenderer;
     GrOvalRenderer*                 fOvalRenderer;
 
@@ -890,9 +904,10 @@ private:
     void setupDrawBuffer();
 
     class AutoRestoreEffects;
+    class AutoCheckFlush;
     /// Sets the paint and returns the target to draw into. The paint can be NULL in which case the
     /// draw state is left unmodified.
-    GrDrawTarget* prepareToDraw(const GrPaint*, BufferedDraw, AutoRestoreEffects*);
+    GrDrawTarget* prepareToDraw(const GrPaint*, BufferedDraw, AutoRestoreEffects*, AutoCheckFlush*);
 
     void internalDrawPath(GrDrawTarget* target, bool useAA, const SkPath& path,
                           const SkStrokeRec& stroke);
@@ -906,6 +921,7 @@ private:
     // Needed so GrTexture's returnToCache helper function can call
     // addExistingTextureToCache
     friend class GrTexture;
+    friend class GrStencilAndCoverPathRenderer;
 
     // Add an existing texture to the texture cache. This is intended solely
     // for use with textures released from an GrAutoScratchTexture.
@@ -929,14 +945,23 @@ private:
      */
     static bool OverbudgetCB(void* data);
 
-    typedef GrRefCnt INHERITED;
+    /** Creates a new gpu path, based on the specified path and stroke and returns it.
+     * The caller owns a ref on the returned path which must be balanced by a call to unref.
+     *
+     * @param skPath the path geometry.
+     * @param stroke the path stroke.
+     * @return a new path or NULL if the operation is not supported by the backend.
+     */
+    GrPath* createPath(const SkPath& skPath, const SkStrokeRec& stroke);
+
+    typedef SkRefCnt INHERITED;
 };
 
 /**
  * Gets and locks a scratch texture from a descriptor using either exact or approximate criteria.
  * Unlocks texture in the destructor.
  */
-class GrAutoScratchTexture : ::GrNoncopyable {
+class GrAutoScratchTexture : public ::SkNoncopyable {
 public:
     GrAutoScratchTexture()
         : fContext(NULL)
@@ -986,10 +1011,10 @@ public:
         // The cache also has a ref which we are lending to the caller of detach(). When the caller
         // lets go of the ref and the ref count goes to 0 internal_dispose will see this flag is
         // set and re-ref the texture, thereby restoring the cache's ref.
-        GrAssert(texture->getRefCnt() > 1);
+        SkASSERT(texture->getRefCnt() > 1);
         texture->setFlag((GrTextureFlags) GrTexture::kReturnToCache_FlagBit);
         texture->unref();
-        GrAssert(NULL != texture->getCacheEntry());
+        SkASSERT(NULL != texture->getCacheEntry());
 
         return texture;
     }

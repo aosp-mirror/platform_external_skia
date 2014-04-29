@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -12,8 +11,6 @@
 #include "SkFlattenableBuffers.h"
 #include "SkPaint.h"
 #include "SkMallocPixelRef.h"
-
-SK_DEFINE_INST_COUNT(SkShader)
 
 SkShader::SkShader() {
     fLocalMatrix.reset();
@@ -52,7 +49,7 @@ bool SkShader::setContext(const SkBitmap& device,
     const SkMatrix* m = &matrix;
     SkMatrix        total;
 
-    fDeviceConfig = SkToU8(device.getConfig());
+    fDeviceConfig = SkToU8(device.config());
     fPaintAlpha = paint.getAlpha();
     if (this->hasLocalMatrix()) {
         total.setConcat(matrix, this->getLocalMatrix());

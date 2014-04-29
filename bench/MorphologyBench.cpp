@@ -4,6 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SkBenchmark.h"
 #include "SkCanvas.h"
 #include "SkPaint.h"
@@ -13,17 +14,13 @@
 #include "SkMorphologyImageFilter.h"
 
 #define SMALL   SkIntToScalar(2)
-#define REAL    SkFloatToScalar(1.5f)
+#define REAL    1.5f
 #define BIG     SkIntToScalar(10)
-
-namespace {
 
 enum MorphologyType {
     kErode_MT,
     kDilate_MT
 };
-
-}
 
 static const char* gStyleName[] = {
     "erode",
@@ -36,8 +33,8 @@ class MorphologyBench : public SkBenchmark {
     SkString       fName;
 
 public:
-    MorphologyBench(void* param, SkScalar rad, MorphologyType style)
-        :  INHERITED(param) {
+    MorphologyBench(SkScalar rad, MorphologyType style)
+         {
         fRadius = rad;
         fStyle = style;
         const char* name = rad > 0 ? gStyleName[style] : "none";
@@ -53,14 +50,14 @@ protected:
         return fName.c_str();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(const int loops, SkCanvas* canvas) {
         SkPaint paint;
         this->setupPaint(&paint);
 
         paint.setAntiAlias(true);
 
         SkRandom rand;
-        for (int i = 0; i < SkBENCHLOOP(3); i++) {
+        for (int i = 0; i < loops; i++) {
             SkRect r = SkRect::MakeWH(rand.nextUScalar1() * 400,
                                       rand.nextUScalar1() * 400);
             r.offset(fRadius, fRadius);
@@ -87,30 +84,17 @@ private:
     typedef SkBenchmark INHERITED;
 };
 
-static SkBenchmark* Fact00(void* p) { return new MorphologyBench(p, SMALL, kErode_MT); }
-static SkBenchmark* Fact01(void* p) { return new MorphologyBench(p, SMALL, kDilate_MT); }
-
-static SkBenchmark* Fact10(void* p) { return new MorphologyBench(p, BIG, kErode_MT); }
-static SkBenchmark* Fact11(void* p) { return new MorphologyBench(p, BIG, kDilate_MT); }
-
-static SkBenchmark* Fact20(void* p) { return new MorphologyBench(p, REAL, kErode_MT); }
-static SkBenchmark* Fact21(void* p) { return new MorphologyBench(p, REAL, kDilate_MT); }
-
-static SkBenchmark* FactNone(void* p) { return new MorphologyBench(p, 0, kErode_MT); }
-
 // Fixed point can be 100x slower than float on these tests, causing
 // bench to timeout.
 #ifndef SK_SCALAR_IS_FIXED
+DEF_BENCH( return new MorphologyBench(SMALL, kErode_MT); )
+DEF_BENCH( return new MorphologyBench(SMALL, kDilate_MT); )
 
-static BenchRegistry gReg00(Fact00);
-static BenchRegistry gReg01(Fact01);
+DEF_BENCH( return new MorphologyBench(BIG, kErode_MT); )
+DEF_BENCH( return new MorphologyBench(BIG, kDilate_MT); )
 
-static BenchRegistry gReg10(Fact10);
-static BenchRegistry gReg11(Fact11);
+DEF_BENCH( return new MorphologyBench(REAL, kErode_MT); )
+DEF_BENCH( return new MorphologyBench(REAL, kDilate_MT); )
 
-static BenchRegistry gReg20(Fact20);
-static BenchRegistry gReg21(Fact21);
-
-static BenchRegistry gRegNone(FactNone);
-
+DEF_BENCH( return new MorphologyBench(0, kErode_MT); )
 #endif

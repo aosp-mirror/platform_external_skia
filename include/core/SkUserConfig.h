@@ -44,7 +44,11 @@
 // When built as part of the system image we can enable certian non-NDK compliant
 // optimizations.
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
+#define SK_FONTHOST_DOES_NOT_USE_FONTMGR
 #define SK_SUPPORT_GPU 1
+
+// temporary define until we can update the callers to the new convention
+#define SK_SUPPORT_LEGACY_PIXELREF_CONSTRUCTOR
 
 // Android Text Tuning
 #define SK_GAMMA_APPLY_TO_A8
@@ -54,7 +58,11 @@
 // Optimizations for chromium (m30)
 #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
 #define IGNORE_ROT_AA_RECT_OPT
-#define SKIA_IGNORE_GPU_MIPMAPS
+
+// Needed for chromium (m33)
+#define SK_DISABLE_OFFSETIMAGEFILTER_OPTIMIZATION
+#define SK_IGNORE_BLURRED_RRECT_OPT
+#define SK_IGNORE_QUAD_RR_CORNERS_OPT
 
 // Disable this check because it is too strict for some chromium-specific
 // subclasses of SkPixelRef. See bug: crbug.com/171776.
@@ -235,5 +243,7 @@
  * define should be removed entirely.
  */
 //#define SK_PDF_USE_PATHOPS
+
+#define SK_REF_CNT_MIXIN_INCLUDE "../ports/SkRefCnt_android.h"
 
 #endif

@@ -8,7 +8,7 @@
 
 
 #define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <windows.h>
 #include <ole2.h>
 #include "SkIStream.h"
 #include "SkStream.h"
@@ -122,6 +122,9 @@ HRESULT SkIStream::CreateFromSkStream(SkStream* stream
                                     , bool unrefOnRelease
                                     , IStream ** ppStream)
 {
+    if (NULL == stream) {
+        return E_INVALIDARG;
+    }
     *ppStream = new SkIStream(stream, unrefOnRelease);
     return S_OK;
 }
@@ -176,6 +179,8 @@ HRESULT STDMETHODCALLTYPE SkIStream::Seek(LARGE_INTEGER liDistanceToMove
         if (!this->fSkStream->rewind()) {
             hr = E_FAIL;
         } else {
+            // FIXME: Should not depend on getLength.
+            // See https://code.google.com/p/skia/issues/detail?id=1570
             LONGLONG skip = this->fSkStream->getLength()
                           + liDistanceToMove.QuadPart;
             size_t skipped = this->fSkStream->skip(static_cast<size_t>(skip));
@@ -204,6 +209,8 @@ HRESULT STDMETHODCALLTYPE SkIStream::Stat(STATSTG* pStatstg
         return STG_E_INVALIDFLAG;
     }
     pStatstg->pwcsName = NULL;
+    // FIXME: Should not depend on getLength
+    // See https://code.google.com/p/skia/issues/detail?id=1570
     pStatstg->cbSize.QuadPart = this->fSkStream->getLength();
     pStatstg->clsid = CLSID_NULL;
     pStatstg->type = STGTY_STREAM;

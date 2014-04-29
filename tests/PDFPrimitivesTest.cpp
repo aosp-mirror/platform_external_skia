@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2010 The Android Open Source Project
  *
@@ -7,6 +6,7 @@
  */
 
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkData.h"
@@ -39,9 +39,11 @@ private:
     SkTDArray<SkPDFObject*> fResources;
 };
 
-static bool encode_to_dct_stream(SkWStream* stream, const SkBitmap& bitmap, const SkIRect& rect) {
-    stream->writeText("DCT compessed stream.");
-    return true;
+#define DUMMY_TEXT "DCT compessed stream."
+
+static SkData* encode_to_dct_data(size_t* pixelRefOffset, const SkBitmap& bitmap) {
+    *pixelRefOffset = 0;
+    return SkData::NewWithProc(DUMMY_TEXT, sizeof(DUMMY_TEXT) - 1, NULL, NULL);
 }
 
 static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
@@ -250,10 +252,10 @@ static void setup_bitmap(SkBitmap* bitmap, int width, int height) {
 static void TestImage(skiatest::Reporter* reporter, const SkBitmap& bitmap,
                       const char* expected, bool useDCTEncoder) {
     SkISize pageSize = SkISize::Make(bitmap.width(), bitmap.height());
-    SkPDFDevice* dev = new SkPDFDevice(pageSize, pageSize, SkMatrix::I());
+    SkAutoTUnref<SkPDFDevice> dev(new SkPDFDevice(pageSize, pageSize, SkMatrix::I()));
 
     if (useDCTEncoder) {
-        dev->setDCTEncoder(encode_to_dct_stream);
+        dev->setDCTEncoder(encode_to_dct_data);
     }
 
     SkCanvas c(dev);
@@ -344,7 +346,7 @@ static void test_issue1083() {
     doc.emitPDF(&stream);
 }
 
-static void TestPDFPrimitives(skiatest::Reporter* reporter) {
+DEF_TEST(PDFPrimitives, reporter) {
     SkAutoTUnref<SkPDFInt> int42(new SkPDFInt(42));
     SimpleCheckObjectOutput(reporter, int42.get(), "42");
 
@@ -430,6 +432,3 @@ static void TestPDFPrimitives(skiatest::Reporter* reporter) {
 
     TestImages(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("PDFPrimitives", PDFPrimitivesTestClass, TestPDFPrimitives)

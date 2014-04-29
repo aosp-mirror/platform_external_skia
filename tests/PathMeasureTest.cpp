@@ -1,11 +1,12 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
 #include "SkPathMeasure.h"
 
 static void test_small_segment3() {
@@ -51,7 +52,7 @@ static void test_small_segment() {
     const SkPoint pts[] = {
         { 100000, 100000},
         // big jump between these points, makes a big segment
-        { SkFloatToScalar(1.0005f), SkFloatToScalar(0.9999f) },
+        { 1.0005f, 0.9999f },
         // tiny (non-zero) jump between these points
         { SK_Scalar1, SK_Scalar1 },
     };
@@ -79,7 +80,7 @@ static void test_small_segment() {
 #endif
 }
 
-static void TestPathMeasure(skiatest::Reporter* reporter) {
+DEF_TEST(PathMeasure, reporter) {
     SkPath  path;
 
     path.moveTo(0, 0);
@@ -123,7 +124,7 @@ static void TestPathMeasure(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fX,
                             -SK_ScalarHalf,
-                            SkFloatToScalar(0.0001f)));
+                            0.0001f));
     REPORTER_ASSERT(reporter, position.fY == 0);
     REPORTER_ASSERT(reporter, tangent.fX == -SK_Scalar1);
     REPORTER_ASSERT(reporter, tangent.fY == 0);
@@ -148,26 +149,26 @@ static void TestPathMeasure(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fX,
                             SK_ScalarHalf,
-                            SkFloatToScalar(0.0001f)));
+                            0.0001f));
     REPORTER_ASSERT(reporter, position.fY == 0);
     REPORTER_ASSERT(reporter, tangent.fX == SK_Scalar1);
     REPORTER_ASSERT(reporter, tangent.fY == 0);
-    REPORTER_ASSERT(reporter, meas.getPosTan(SkFloatToScalar(2.5f), &position, &tangent));
+    REPORTER_ASSERT(reporter, meas.getPosTan(2.5f, &position, &tangent));
     REPORTER_ASSERT(reporter,
-        SkScalarNearlyEqual(position.fX, SK_Scalar1, SkFloatToScalar(0.0001f)));
+        SkScalarNearlyEqual(position.fX, SK_Scalar1, 0.0001f));
     REPORTER_ASSERT(reporter,
-        SkScalarNearlyEqual(position.fY, SkFloatToScalar(1.5f)));
+        SkScalarNearlyEqual(position.fY, 1.5f));
     REPORTER_ASSERT(reporter, tangent.fX == 0);
     REPORTER_ASSERT(reporter, tangent.fY == SK_Scalar1);
-    REPORTER_ASSERT(reporter, meas.getPosTan(SkFloatToScalar(4.5f), &position, &tangent));
+    REPORTER_ASSERT(reporter, meas.getPosTan(4.5f, &position, &tangent));
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fX,
-                            SkFloatToScalar(2.5f),
-                            SkFloatToScalar(0.0001f)));
+                            2.5f,
+                            0.0001f));
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fY,
-                            SkFloatToScalar(2.0f),
-                            SkFloatToScalar(0.0001f)));
+                            2.0f,
+                            0.0001f));
     REPORTER_ASSERT(reporter, tangent.fX == SK_Scalar1);
     REPORTER_ASSERT(reporter, tangent.fY == 0);
 
@@ -184,7 +185,7 @@ static void TestPathMeasure(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fX,
                             SK_ScalarHalf,
-                            SkFloatToScalar(0.0001f)));
+                            0.0001f));
     REPORTER_ASSERT(reporter, position.fY == 0);
     REPORTER_ASSERT(reporter, tangent.fX == SK_Scalar1);
     REPORTER_ASSERT(reporter, tangent.fY == 0);
@@ -194,12 +195,12 @@ static void TestPathMeasure(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, meas.getPosTan(SK_ScalarHalf, &position, &tangent));
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fX,
-                            SkFloatToScalar(1.5f),
-                            SkFloatToScalar(0.0001f)));
+                            1.5f,
+                            0.0001f));
     REPORTER_ASSERT(reporter,
         SkScalarNearlyEqual(position.fY,
-                            SkFloatToScalar(2.0f),
-                            SkFloatToScalar(0.0001f)));
+                            2.0f,
+                            0.0001f));
     REPORTER_ASSERT(reporter, tangent.fX == -SK_Scalar1);
     REPORTER_ASSERT(reporter, tangent.fY == 0);
 
@@ -207,6 +208,3 @@ static void TestPathMeasure(skiatest::Reporter* reporter) {
     test_small_segment2();
     test_small_segment3();
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("PathMeasure", PathMeasureTestClass, TestPathMeasure)

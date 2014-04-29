@@ -4,19 +4,23 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "Test.h"
+#include "TestClassDef.h"
+#include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkData.h"
+#include "SkDecodingImageGenerator.h"
 #include "SkError.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureUtils.h"
 #include "SkRandom.h"
 #include "SkRRect.h"
 #include "SkShader.h"
 #include "SkStream.h"
 
-#include "SkPictureUtils.h"
 
 static void make_bm(SkBitmap* bm, int w, int h, SkColor color, bool immutable) {
     bm->setConfig(SkBitmap::kARGB_8888_Config, w, h);
@@ -74,7 +78,7 @@ static SkPicture* record_bitmaps(const SkBitmap bm[], const SkPoint pos[],
     return pic;
 }
 
-static void rand_rect(SkRect* rect, SkMWCRandom& rand, SkScalar W, SkScalar H) {
+static void rand_rect(SkRect* rect, SkRandom& rand, SkScalar W, SkScalar H) {
     rect->fLeft   = rand.nextRangeScalar(-W, 2*W);
     rect->fTop    = rand.nextRangeScalar(-H, 2*H);
     rect->fRight  = rect->fLeft + rand.nextRangeScalar(0, W);
@@ -177,10 +181,11 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
         drawbitmap_proc, drawbitmaprect_proc, drawshader_proc
     };
 
-    SkMWCRandom rand;
+    SkRandom rand;
     for (size_t k = 0; k < SK_ARRAY_COUNT(procs); ++k) {
         SkAutoTUnref<SkPicture> pic(record_bitmaps(bm, pos, N, procs[k]));
 
+        REPORTER_ASSERT(reporter, pic->willPlayBackBitmaps() || N == 0);
         // quick check for a small piece of each quadrant, which should just
         // contain 1 bitmap.
         for (size_t  i = 0; i < SK_ARRAY_COUNT(pos); ++i) {
@@ -190,7 +195,7 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
             SkAutoDataUnref data(SkPictureUtils::GatherPixelRefs(pic, r));
             REPORTER_ASSERT(reporter, data);
             if (data) {
-                int count = data->size() / sizeof(SkPixelRef*);
+                int count = static_cast<int>(data->size() / sizeof(SkPixelRef*));
                 REPORTER_ASSERT(reporter, 1 == count);
                 REPORTER_ASSERT(reporter, *(SkPixelRef**)data->data() == refs[i]);
             }
@@ -208,7 +213,7 @@ static void test_gatherpixelrefs(skiatest::Reporter* reporter) {
 
             SkData* data = SkPictureUtils::GatherPixelRefs(pic, r);
             size_t dataSize = data ? data->size() : 0;
-            int gatherCount = dataSize / sizeof(SkPixelRef*);
+            int gatherCount = static_cast<int>(dataSize / sizeof(SkPixelRef*));
             SkASSERT(gatherCount * sizeof(SkPixelRef*) == dataSize);
             SkPixelRef** gatherRefs = data ? (SkPixelRef**)(data->data()) : NULL;
             SkAutoDataUnref adu(data);
@@ -262,7 +267,7 @@ static void test_serializing_empty_picture() {
 }
 #endif
 
-static void rand_op(SkCanvas* canvas, SkMWCRandom& rand) {
+static void rand_op(SkCanvas* canvas, SkRandom& rand) {
     SkPaint paint;
     SkRect rect = SkRect::MakeWH(50, 50);
 
@@ -283,10 +288,10 @@ static void rand_op(SkCanvas* canvas, SkMWCRandom& rand) {
 }
 
 static void test_peephole() {
-    SkMWCRandom rand;
+    SkRandom rand;
 
     for (int j = 0; j < 100; j++) {
-        SkMWCRandom rand2(rand); // remember the seed
+        SkRandom rand2(rand); // remember the seed
 
         SkPicture picture;
         SkCanvas* canvas = picture.beginRecording(100, 100);
@@ -333,32 +338,6 @@ static void test_bad_bitmap() {
 }
 #endif
 
-#include "SkData.h"
-#include "SkImageRef_GlobalPool.h"
-// Class to test SkPixelRef::onRefEncodedData, since there are currently no implementations in skia.
-class SkDataImageRef : public SkImageRef_GlobalPool {
-
-public:
-    SkDataImageRef(SkMemoryStream* stream)
-        : SkImageRef_GlobalPool(stream, SkBitmap::kNo_Config) {
-        SkASSERT(stream != NULL);
-        fData = stream->copyToData();
-        this->setImmutable();
-    }
-
-    ~SkDataImageRef() {
-        fData->unref();
-    }
-
-    virtual SkData* onRefEncodedData() SK_OVERRIDE {
-        fData->ref();
-        return fData;
-    }
-
-private:
-    SkData* fData;
-};
-
 #include "SkImageEncoder.h"
 
 static SkData* encode_bitmap_to_data(size_t* offset, const SkBitmap& bm) {
@@ -400,14 +379,10 @@ static void test_bitmap_with_encoded_data(skiatest::Reporter* reporter) {
         return;
     }
     SkAutoDataUnref data(wStream.copyToData());
-    SkMemoryStream memStream;
-    memStream.setData(data);
 
-    // Use the encoded bitmap as the data for an image ref.
     SkBitmap bm;
-    SkAutoTUnref<SkDataImageRef> imageRef(SkNEW_ARGS(SkDataImageRef, (&memStream)));
-    imageRef->getInfo(&bm);
-    bm.setPixelRef(imageRef);
+    bool installSuccess = SkDecodingImageGenerator::Install(data, &bm);
+    REPORTER_ASSERT(reporter, installSuccess);
 
     // Write both bitmaps to pictures, and ensure that the resulting data streams are the same.
     // Flattening original will follow the old path of performing an encode, while flattening bm
@@ -550,7 +525,106 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
     }
 }
 
-static void TestPicture(skiatest::Reporter* reporter) {
+/**
+ * A canvas that records the number of clip commands.
+ */
+class ClipCountingCanvas : public SkCanvas {
+public:
+    explicit ClipCountingCanvas(SkBaseDevice* device)
+        : SkCanvas(device)
+        , fClipCount(0){
+    }
+
+    virtual bool clipRect(const SkRect& r, SkRegion::Op op, bool doAA)
+        SK_OVERRIDE {
+        fClipCount += 1;
+        return this->INHERITED::clipRect(r, op, doAA);
+    }
+
+    virtual bool clipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA)
+        SK_OVERRIDE {
+        fClipCount += 1;
+        return this->INHERITED::clipRRect(rrect, op, doAA);
+    }
+
+    virtual bool clipPath(const SkPath& path, SkRegion::Op op, bool doAA)
+        SK_OVERRIDE {
+        fClipCount += 1;
+        return this->INHERITED::clipPath(path, op, doAA);
+    }
+
+    unsigned getClipCount() const { return fClipCount; }
+
+private:
+    unsigned fClipCount;
+
+    typedef SkCanvas INHERITED;
+};
+
+static void test_clip_expansion(skiatest::Reporter* reporter) {
+    SkPicture picture;
+    SkCanvas* canvas = picture.beginRecording(10, 10, 0);
+
+    canvas->clipRect(SkRect::MakeEmpty(), SkRegion::kReplace_Op);
+    // The following expanding clip should not be skipped.
+    canvas->clipRect(SkRect::MakeXYWH(4, 4, 3, 3), SkRegion::kUnion_Op);
+    // Draw something so the optimizer doesn't just fold the world.
+    SkPaint p;
+    p.setColor(SK_ColorBLUE);
+    canvas->drawPaint(p);
+
+    SkBitmapDevice testDevice(SkBitmap::kNo_Config, 10, 10);
+    ClipCountingCanvas testCanvas(&testDevice);
+    picture.draw(&testCanvas);
+
+    // Both clips should be present on playback.
+    REPORTER_ASSERT(reporter, testCanvas.getClipCount() == 2);
+}
+
+static void test_hierarchical(skiatest::Reporter* reporter) {
+    SkBitmap bm;
+    make_bm(&bm, 10, 10, SK_ColorRED, true);
+
+    SkCanvas* canvas;
+
+    SkPicture childPlain;
+    childPlain.beginRecording(10, 10);
+    childPlain.endRecording();
+    REPORTER_ASSERT(reporter, !childPlain.willPlayBackBitmaps()); // 0
+
+    SkPicture childWithBitmap;
+    childWithBitmap.beginRecording(10, 10)->drawBitmap(bm, 0, 0);
+    childWithBitmap.endRecording();
+    REPORTER_ASSERT(reporter, childWithBitmap.willPlayBackBitmaps()); // 1
+
+    SkPicture parentPP;
+    canvas = parentPP.beginRecording(10, 10);
+    canvas->drawPicture(childPlain);
+    parentPP.endRecording();
+    REPORTER_ASSERT(reporter, !parentPP.willPlayBackBitmaps()); // 0
+
+    SkPicture parentPWB;
+    canvas = parentPWB.beginRecording(10, 10);
+    canvas->drawPicture(childWithBitmap);
+    parentPWB.endRecording();
+    REPORTER_ASSERT(reporter, parentPWB.willPlayBackBitmaps()); // 1
+
+    SkPicture parentWBP;
+    canvas = parentWBP.beginRecording(10, 10);
+    canvas->drawBitmap(bm, 0, 0);
+    canvas->drawPicture(childPlain);
+    parentWBP.endRecording();
+    REPORTER_ASSERT(reporter, parentWBP.willPlayBackBitmaps()); // 1
+
+    SkPicture parentWBWB;
+    canvas = parentWBWB.beginRecording(10, 10);
+    canvas->drawBitmap(bm, 0, 0);
+    canvas->drawPicture(childWithBitmap);
+    parentWBWB.endRecording();
+    REPORTER_ASSERT(reporter, parentWBWB.willPlayBackBitmaps()); // 2
+}
+
+DEF_TEST(Picture, reporter) {
 #ifdef SK_DEBUG
     test_deleting_empty_playback();
     test_serializing_empty_picture();
@@ -562,7 +636,6 @@ static void TestPicture(skiatest::Reporter* reporter) {
     test_bitmap_with_encoded_data(reporter);
     test_clone_empty(reporter);
     test_clip_bound_opt(reporter);
+    test_clip_expansion(reporter);
+    test_hierarchical(reporter);
 }
-
-#include "TestClassDef.h"
-DEFINE_TESTCLASS("Pictures", PictureTestClass, TestPicture)

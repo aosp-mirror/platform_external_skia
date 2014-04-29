@@ -10,28 +10,22 @@
 
 #include "SkRefCnt.h"
 #include "SkPoint.h"
-#include "SkTDict.h"
+#include "SkString.h"
 #include "SkTRegistry.h"
 
 #define DEF_BENCH(code) \
-static SkBenchmark* SK_MACRO_APPEND_LINE(F_)(void* p) { code; } \
+static SkBenchmark* SK_MACRO_APPEND_LINE(F_)() { code; } \
 static BenchRegistry SK_MACRO_APPEND_LINE(R_)(SK_MACRO_APPEND_LINE(F_));
 
 /*
  *  With the above macros, you can register benches as follows (at the bottom
  *  of your .cpp)
  *
- *  DEF_BENCH(new MyBenchmark(p, ...))
- *  DEF_BENCH(new MyBenchmark(p, ...))
- *  DEF_BENCH(new MyBenchmark(p, ...))
+ *  DEF_BENCH(return new MyBenchmark(...))
+ *  DEF_BENCH(return new MyBenchmark(...))
+ *  DEF_BENCH(return new MyBenchmark(...))
  */
 
-
-#ifdef SK_DEBUG
-    #define SkBENCHLOOP(n) 1
-#else
-    #define SkBENCHLOOP(n) n
-#endif
 
 class SkCanvas;
 class SkPaint;
@@ -43,23 +37,38 @@ public:
         kTrue,
         kFalse
     };
+    static const char* Name[];
 };
 
 class SkBenchmark : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkBenchmark)
 
-    SkBenchmark(void* defineDict);
+    SkBenchmark();
 
     const char* getName();
     SkIPoint getSize();
+
+    enum Backend {
+        kNonRendering_Backend,
+        kRaster_Backend,
+        kGPU_Backend,
+        kPDF_Backend,
+    };
+
+    // Call to determine whether the benchmark is intended for
+    // the rendering mode.
+    virtual bool isSuitableFor(Backend backend) {
+        return backend != kNonRendering_Backend;
+    }
 
     // Call before draw, allows the benchmark to do setup work outside of the
     // timer. When a benchmark is repeatedly drawn, this should be called once
     // before the initial draw.
     void preDraw();
 
-    void draw(SkCanvas*);
+    // Bench framework can tune loops to be large enough for stable timing.
+    void draw(const int loops, SkCanvas*);
 
     // Call after draw, allows the benchmark to do cleanup work outside of the
     // timer. When a benchmark is repeatedly drawn, this is only called once
@@ -82,30 +91,6 @@ public:
         fDither = state;
     }
 
-    void setStrokeWidth(SkScalar width) {
-      strokeWidth = width;
-      fHasStrokeWidth = true;
-    }
-
-    SkScalar getStrokeWidth() {
-      return strokeWidth;
-    }
-
-    bool hasStrokeWidth() {
-      return fHasStrokeWidth;
-    }
-
-    /** If true; the benchmark does rendering; if false, the benchmark
-        doesn't, and so need not be re-run in every different rendering
-        mode. */
-    bool isRendering() {
-        return fIsRendering;
-    }
-
-    const char* findDefine(const char* key) const;
-    bool findDefine32(const char* key, int32_t* value) const;
-    bool findDefineScalar(const char* key, SkScalar* value) const;
-
     /** Assign masks for paint-flags. These will be applied when setupPaint()
      *  is called.
      *
@@ -120,40 +105,33 @@ public:
         fClearMask = clearMask;
     }
 
-    float getDurationScale() { return this->onGetDurationScale(); }
+    static void SetResourcePath(const char* resPath) { gResourcePath.set(resPath); }
+
+    static SkString& GetResourcePath() { return gResourcePath; }
 
 protected:
     virtual void setupPaint(SkPaint* paint);
 
     virtual const char* onGetName() = 0;
     virtual void onPreDraw() {}
-    virtual void onDraw(SkCanvas*) = 0;
+    // Each bench should do its main work in a loop like this:
+    //   for (int i = 0; i < loops; i++) { <work here> }
+    virtual void onDraw(const int loops, SkCanvas*) = 0;
     virtual void onPostDraw() {}
-    // the caller will scale the computed duration by this value. It allows a
-    // slow bench to run fewer inner loops, but return the corresponding scale
-    // so that its reported duration can be compared against other benches.
-    // e.g.
-    //      if I run 10x slower, I can run 1/10 the number of inner-loops, but
-    //      return 10.0 for my durationScale, so I "report" the honest duration.
-    virtual float onGetDurationScale() { return 1; }
 
     virtual SkIPoint onGetSize();
-    /// Defaults to true.
-    bool    fIsRendering;
 
 private:
-    const SkTDict<const char*>* fDict;
     int     fForceAlpha;
     bool    fForceAA;
     bool    fForceFilter;
     SkTriState::State  fDither;
-    bool    fHasStrokeWidth;
-    SkScalar strokeWidth;
     uint32_t    fOrMask, fClearMask;
+    static  SkString gResourcePath;
 
     typedef SkRefCnt INHERITED;
 };
 
-typedef SkTRegistry<SkBenchmark*, void*> BenchRegistry;
+typedef SkTRegistry<SkBenchmark*(*)()> BenchRegistry;
 
 #endif

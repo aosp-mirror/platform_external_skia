@@ -214,6 +214,11 @@
             '../src/utils/android/ashmem.cpp',
           ],
         }],
+        ['skia_run_pdfviewer_in_gm', {
+          'defines': [
+            'SK_BUILD_NATIVE_PDF_RENDERER',
+          ],
+        }],
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -223,9 +228,3 @@
     },
   ],
 }
-
-# Local Variables:
-# tab-width:2
-# indent-tabs-mode:nil
-# End:
-# vim: set expandtab tabstop=2 shiftwidth=2:

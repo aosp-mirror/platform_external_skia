@@ -18,6 +18,14 @@ class SkBitmap;
 class GrEffectRef;
 class GrContext;
 
+/**
+ *  ColorFilters are optional objects in the drawing pipeline. When present in
+ *  a paint, they are called with the "src" colors, and return new colors, which
+ *  are then passed onto the next stage (either ImageFilter or Xfermode).
+ *
+ *  All subclasses are required to be reentrant-safe : it must be legal to share
+ *  the same instance between several threads.
+ */
 class SK_API SkColorFilter : public SkFlattenable {
 public:
     SK_DECLARE_INST_COUNT(SkColorFilter)
@@ -123,6 +131,8 @@ public:
     SkDEVCODE(virtual void toString(SkString* str) const = 0;)
 
     SK_DECLARE_FLATTENABLE_REGISTRAR_GROUP()
+    SK_DEFINE_FLATTENABLE_TYPE(SkColorFilter)
+
 protected:
     SkColorFilter() {}
     SkColorFilter(SkFlattenableReadBuffer& rb) : INHERITED(rb) {}

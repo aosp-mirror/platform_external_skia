@@ -100,11 +100,11 @@ public:
      * only.
      */
     GrFixed normalizeFixedX(GrFixed x) const {
-        GrAssert(GrIsPow2(fDesc.fWidth));
+        SkASSERT(GrIsPow2(fDesc.fWidth));
         return x >> fShiftFixedX;
     }
     GrFixed normalizeFixedY(GrFixed y) const {
-        GrAssert(GrIsPow2(fDesc.fHeight));
+        SkASSERT(GrIsPow2(fDesc.fHeight));
         return y >> fShiftFixedY;
     }
 
@@ -120,15 +120,14 @@ public:
      */
     virtual void invalidateCachedState() = 0;
 
-#if GR_DEBUG
+#ifdef SK_DEBUG
     void validate() const {
         this->INHERITED::validate();
 
         this->validateDesc();
     }
-#else
-    void validate() const {}
 #endif
+
     static GrResourceKey ComputeKey(const GrGpu* gpu,
                                     const GrTextureParams* params,
                                     const GrTextureDesc& desc,

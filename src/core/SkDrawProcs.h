@@ -57,7 +57,26 @@ struct SkDraw1Glyph {
 
 struct SkDrawProcs {
     SkDraw1Glyph::Proc  fD1GProc;
+#if SK_DISTANCEFIELD_FONTS
+    uint32_t            fFlags;
+
+    enum Flags {
+        /**
+         * Disable baked glyph transforms
+         */
+        kSkipBakedGlyphTransform_Flag = 0x1,
+        /**
+         * Scale glyphs to get different point sizes
+         */
+        kUseScaledGlyphs_Flag         = 0x2,
+    };
+
+    static const int kBaseDFFontSize = 32;
+#endif
 };
+
+bool SkDrawTreatAAStrokeAsHairline(SkScalar strokeWidth, const SkMatrix&,
+                                   SkScalar* coverage);
 
 /**
  *  If the current paint is set to stroke and the stroke-width when applied to
@@ -65,6 +84,23 @@ struct SkDrawProcs {
  *  a stroke by drawing a hairline with partial coverage). If any of these
  *  conditions are false, then this returns false and coverage is ignored.
  */
-bool SkDrawTreatAsHairline(const SkPaint&, const SkMatrix&, SkScalar* coverage);
+inline bool SkDrawTreatAsHairline(const SkPaint& paint, const SkMatrix& matrix,
+                                  SkScalar* coverage) {
+    if (SkPaint::kStroke_Style != paint.getStyle()) {
+        return false;
+    }
+
+    SkScalar strokeWidth = paint.getStrokeWidth();
+    if (0 == strokeWidth) {
+        *coverage = SK_Scalar1;
+        return true;
+    }
+
+    if (!paint.isAntiAlias()) {
+        return false;
+    }
+
+    return SkDrawTreatAAStrokeAsHairline(strokeWidth, matrix, coverage);
+}
 
 #endif

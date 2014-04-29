@@ -19,10 +19,8 @@ static void standardTestCases(skiatest::Reporter* reporter) {
         const SkDCubic& cubic1 = tests[index][0];
         const SkDCubic& cubic2 = tests[index][1];
         SkReduceOrder reduce1, reduce2;
-        int order1 = reduce1.reduce(cubic1, SkReduceOrder::kNo_Quadratics,
-            SkReduceOrder::kFill_Style);
-        int order2 = reduce2.reduce(cubic2, SkReduceOrder::kNo_Quadratics,
-            SkReduceOrder::kFill_Style);
+        int order1 = reduce1.reduce(cubic1, SkReduceOrder::kNo_Quadratics);
+        int order2 = reduce2.reduce(cubic2, SkReduceOrder::kNo_Quadratics);
         const bool showSkipped = false;
         if (order1 < 4) {
             if (showSkipped) {
@@ -61,6 +59,7 @@ static void standardTestCases(skiatest::Reporter* reporter) {
             }
             REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
         }
+        reporter->bumpTestCount();
     }
 }
 
@@ -163,6 +162,31 @@ static const SkDCubic testSet[] = {
 const size_t testSetCount = SK_ARRAY_COUNT(testSet);
 
 static const SkDCubic newTestSet[] = {
+{{{275,532}, {277.209137,532}, {279,530.209106}, {279,528}}},
+{{{278,529}, {278,530.65686}, {276.65686,532}, {275,532}}},
+
+#if 0  // FIXME: asserts coincidence, not working yet
+{{{195, 785}, {124.30755615234375, 785}, {67, 841.85986328125}, {67, 912}}},
+{{{67, 913}, {67, 842.30755615234375}, {123.85984039306641, 785}, {194, 785}}},
+#endif
+
+{{{149,710.001465}, {149.000809,712.209961}, {150.791367,714}, {153,714}}},
+{{{154,715}, {151.238571,715}, {149,712.761414}, {149,710}}},
+
+{{{1,2}, {1,2}, {2,0}, {6,0}}},
+{{{0,2}, {0,6}, {2,1}, {2,1}}},
+
+{{{0,1}, {2,3}, {5,1}, {4,3}}},
+{{{1,5}, {3,4}, {1,0}, {3,2}}},
+
+{{{399,657}, {399,661.970581}, {403.029449,666}, {408,666}}},
+{{{406,666}, {402.686279,666}, {400,663.313721}, {400,660}}},
+
+{{{0,5}, {3,5}, {3,0}, {3,2}}},
+{{{0,3}, {2,3}, {5,0}, {5,3}}},
+
+{{{132, 11419}, {130.89543151855469, 11419}, {130, 11418.1044921875}, {130, 11417}}},
+
 {{{3, 4}, {1, 5}, {4, 3}, {6, 4}}},
 {{{3, 4}, {4, 6}, {4, 3}, {5, 1}}},
 
@@ -280,7 +304,8 @@ static const SkDCubic newTestSet[] = {
 
 const size_t newTestSetCount = SK_ARRAY_COUNT(newTestSet);
 
-static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const SkDCubic& cubic2) {
+static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const SkDCubic& cubic2,
+        bool coin) {
     SkASSERT(ValidCubic(cubic1));
     SkASSERT(ValidCubic(cubic2));
 #if ONE_OFF_DEBUG
@@ -314,6 +339,7 @@ static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const S
 #endif
     SkIntersections intersections;
     intersections.intersect(cubic1, cubic2);
+    REPORTER_ASSERT(reporter, !coin || intersections.used() == 2);
     double tt1, tt2;
     SkDPoint xy1, xy2;
     for (int pt3 = 0; pt3 < intersections.used(); ++pt3) {
@@ -331,18 +357,19 @@ static void oneOff(skiatest::Reporter* reporter, const SkDCubic& cubic1, const S
        REPORTER_ASSERT(reporter, xy2.approximatelyEqual(iPt));
        REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
     }
+    reporter->bumpTestCount();
 }
 
 static void oneOff(skiatest::Reporter* reporter, int outer, int inner) {
     const SkDCubic& cubic1 = testSet[outer];
     const SkDCubic& cubic2 = testSet[inner];
-    oneOff(reporter, cubic1, cubic2);
+    oneOff(reporter, cubic1, cubic2, false);
 }
 
 static void newOneOff(skiatest::Reporter* reporter, int outer, int inner) {
     const SkDCubic& cubic1 = newTestSet[outer];
     const SkDCubic& cubic2 = newTestSet[inner];
-    oneOff(reporter, cubic1, cubic2);
+    oneOff(reporter, cubic1, cubic2, false);
 }
 
 static void oneOffTests(skiatest::Reporter* reporter) {
@@ -409,6 +436,7 @@ static void CubicIntersection_RandTest(skiatest::Reporter* reporter) {
             SkDPoint xy2 = cubic2.ptAtT(tt2);
             REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
         }
+        reporter->bumpTestCount();
     }
 }
 
@@ -556,6 +584,7 @@ static void selfOneOff(skiatest::Reporter* reporter, int index) {
     SkDPoint pt1 = cubic.ptAtT(i[0][0]);
     SkDPoint pt2 = cubic.ptAtT(i[1][0]);
     REPORTER_ASSERT(reporter, pt1.approximatelyEqual(pt2));
+    reporter->bumpTestCount();
 }
 
 static void cubicIntersectionSelfTest(skiatest::Reporter* reporter) {
@@ -563,6 +592,34 @@ static void cubicIntersectionSelfTest(skiatest::Reporter* reporter) {
     for (size_t index = firstFail; index < selfSetCount; ++index) {
         selfOneOff(reporter, index);
     }
+}
+
+static const SkDCubic coinSet[] = {
+    {{{317, 711}, {322.52285766601562, 711}, {327, 715.4771728515625}, {327, 721}}},
+    {{{324.07107543945312, 713.928955078125}, {324.4051513671875, 714.26300048828125},
+            {324.71566772460937, 714.62060546875}, {325, 714.9990234375}}},
+
+    {{{2, 3}, {0, 4}, {3, 2}, {5, 3}}},
+    {{{2, 3}, {0, 4}, {3, 2}, {5, 3}}},
+};
+
+size_t coinSetCount = SK_ARRAY_COUNT(coinSet);
+
+static void coinOneOff(skiatest::Reporter* reporter, int index) {
+    const SkDCubic& cubic1 = coinSet[index];
+    const SkDCubic& cubic2 = coinSet[index + 1];
+    oneOff(reporter, cubic1, cubic2, true);
+}
+
+static void cubicIntersectionCoinTest(skiatest::Reporter* reporter) {
+    size_t firstFail = 0;
+    for (size_t index = firstFail; index < coinSetCount; index += 2) {
+        coinOneOff(reporter, index);
+    }
+}
+
+static void PathOpsCubicCoinOneOffTest(skiatest::Reporter* reporter) {
+    coinOneOff(reporter, 0);
 }
 
 static void PathOpsCubicIntersectionOneOffTest(skiatest::Reporter* reporter) {
@@ -576,6 +633,7 @@ static void PathOpsCubicSelfOneOffTest(skiatest::Reporter* reporter) {
 static void PathOpsCubicIntersectionTest(skiatest::Reporter* reporter) {
     oneOffTests(reporter);
     cubicIntersectionSelfTest(reporter);
+    cubicIntersectionCoinTest(reporter);
     standardTestCases(reporter);
     if (false) CubicIntersection_IntersectionFinder();
     if (false) CubicIntersection_RandTest(reporter);
@@ -587,3 +645,5 @@ DEFINE_TESTCLASS_SHORT(PathOpsCubicIntersectionTest)
 DEFINE_TESTCLASS_SHORT(PathOpsCubicIntersectionOneOffTest)
 
 DEFINE_TESTCLASS_SHORT(PathOpsCubicSelfOneOffTest)
+
+DEFINE_TESTCLASS_SHORT(PathOpsCubicCoinOneOffTest)

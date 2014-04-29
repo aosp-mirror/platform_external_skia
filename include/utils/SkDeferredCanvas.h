@@ -25,7 +25,7 @@ class SkSurface;
 */
 class SK_API SkDeferredCanvas : public SkCanvas {
 public:
-    class NotificationClient;
+    class SK_API NotificationClient;
 
     /** Construct a canvas with the specified surface to draw into.
         This factory must be used for newImageSnapshot to work.
@@ -33,7 +33,7 @@ public:
      */
     static SkDeferredCanvas* Create(SkSurface* surface);
 
-    static SkDeferredCanvas* Create(SkDevice* device);
+    static SkDeferredCanvas* Create(SkBaseDevice* device);
 
     virtual ~SkDeferredCanvas();
 
@@ -170,8 +170,8 @@ public:
                             SkScalar top, const SkPaint* paint)
                             SK_OVERRIDE;
     virtual void drawBitmapRectToRect(const SkBitmap& bitmap, const SkRect* src,
-                                const SkRect& dst, const SkPaint* paint)
-                                SK_OVERRIDE;
+                                      const SkRect& dst, const SkPaint* paint,
+                                      DrawBitmapRectFlags flags) SK_OVERRIDE;
 
     virtual void drawBitmapMatrix(const SkBitmap& bitmap, const SkMatrix& m,
                                   const SkPaint* paint) SK_OVERRIDE;
