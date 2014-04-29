@@ -561,6 +561,9 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
+LOCAL_MODULE := \
+	libskia
+
 LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
 	src/opts/memset.arm.S \
@@ -641,7 +644,6 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 
 include external/stlport/libstlport.mk
-LOCAL_MODULE:= libskia
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################
@@ -655,7 +657,4 @@ include $(BUILD_SHARED_LIBRARY)
 #include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
-#include $(BASE_PATH)/tests/Android.mk
-
-# pathOps unit-tests
-# TODO include those sources!
+include $(BASE_PATH)/tests/Android.mk
