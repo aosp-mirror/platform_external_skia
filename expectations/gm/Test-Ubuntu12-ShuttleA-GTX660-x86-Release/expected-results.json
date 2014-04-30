@@ -11845,37 +11845,37 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          11878536843140250894
+          1014548276109378105
         ]
       ], 
       "bugs": [
-        2325
+        2497
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "image-surface_msaa16.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14065909299837309787
+          1480176884302113864
         ]
       ], 
       "bugs": [
-        2325
+        2497
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "image-surface_nvprmsaa4.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          3085939995935547736
+          1014548276109378105
         ]
       ], 
       "bugs": [
-        2325
+        2497
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "image-surface_pdf-poppler.png": {
       "allowed-digests": [
@@ -18693,7 +18693,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          4918340983894124854
+          126344850819174936
         ]
       ]
     }, 
@@ -18701,7 +18701,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          17449166622021029708
+          10116568998534667241
         ]
       ]
     }, 
@@ -18709,7 +18709,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          17449166622021029708
+          10116568998534667241
         ]
       ]
     }, 
@@ -18717,7 +18717,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          17449166622021029708
+          10116568998534667241
         ]
       ], 
       "bugs": [
@@ -18729,7 +18729,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          17449166622021029708
+          10116568998534667241
         ]
       ], 
       "bugs": [
@@ -18741,7 +18741,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          18394610359902888238
+          5814251851586099649
         ]
       ], 
       "bugs": [
