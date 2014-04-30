@@ -594,7 +594,7 @@ LOCAL_CFLAGS_arm += \
 endif
 
 LOCAL_SRC_FILES_x86 += \
-	src/opts/opts_check_SSE2.cpp \
+	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
@@ -606,7 +606,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
-	src/opts/opts_check_SSE2.cpp \
+	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
