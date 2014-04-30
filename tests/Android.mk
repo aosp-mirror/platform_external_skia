@@ -163,8 +163,8 @@ LOCAL_SRC_FILES := \
 	ReadPixelsTest.cpp \
 	ReadWriteAlphaTest.cpp \
 	Reader32Test.cpp \
-	RecordCullingTest.cpp \
 	RecordDrawTest.cpp \
+	RecordOptsTest.cpp \
 	RecordTest.cpp \
 	RecorderTest.cpp \
 	RecordingTest.cpp \
