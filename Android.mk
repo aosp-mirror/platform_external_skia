@@ -410,6 +410,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrGpu.cpp \
+	src/gpu/GrGpuObject.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
@@ -425,7 +426,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
-	src/gpu/GrResource.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
