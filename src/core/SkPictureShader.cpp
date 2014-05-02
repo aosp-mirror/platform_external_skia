@@ -41,7 +41,7 @@ SkPictureShader* SkPictureShader::Create(SkPicture* picture, TileMode tmx, TileM
     if (!picture || 0 == picture->width() || 0 == picture->height()) {
         return NULL;
     }
-    return SkNEW_ARGS(SkPictureShader, (picture, tmx, tmy));
+    return SkNEW_ARGS(SkPictureShader, (picture, tmx, tmy, localMatrix));
 }
 
 void SkPictureShader::flatten(SkWriteBuffer& buffer) const {
