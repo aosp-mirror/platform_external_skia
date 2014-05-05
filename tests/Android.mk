@@ -165,6 +165,7 @@ LOCAL_SRC_FILES := \
 	Reader32Test.cpp \
 	RecordDrawTest.cpp \
 	RecordOptsTest.cpp \
+	RecordPatternTest.cpp \
 	RecordTest.cpp \
 	RecorderTest.cpp \
 	RecordingTest.cpp \
