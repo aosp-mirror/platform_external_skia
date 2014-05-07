@@ -37,16 +37,14 @@ LOCAL_ARM_MODE := thumb
 # need a flag to tell the C side when we're on devices with large memory
 # budgets (i.e. larger than the low-end devices that initially shipped)
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
-	LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
-endif
-
-ifeq ($(TARGET_ARCH),x86)
-	LOCAL_CFLAGS += -DANDROID_LARGE_MEMORY_DEVICE
+	LOCAL_CFLAGS_arm += -DANDROID_LARGE_MEMORY_DEVICE
 endif
 
 ifeq ($(ARCH_ARM_HAVE_NEON),true)
-	LOCAL_CFLAGS += -D__ARM_HAVE_NEON
+	LOCAL_CFLAGS_arm += -D__ARM_HAVE_NEON
 endif
+
+LOCAL_CFLAGS_x86 += -DANDROID_LARGE_MEMORY_DEVICE
 
 LOCAL_CFLAGS += -DDCT_IFAST_SUPPORTED
 
@@ -513,10 +511,8 @@ LOCAL_SRC_FILES += \
 	src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp
 
 
-ifeq ($(TARGET_ARCH),arm)
-
 ifeq ($(ARCH_ARM_HAVE_NEON),true)
-LOCAL_SRC_FILES += \
+LOCAL_SRC_FILES_arm += \
 	src/opts/memset16_neon.S \
 	src/opts/memset32_neon.S \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
@@ -528,7 +524,7 @@ LOCAL_SRC_FILES += \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 endif
 
-LOCAL_SRC_FILES += \
+LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
 	src/opts/opts_check_arm.cpp \
 	src/opts/memset.arm.S \
@@ -537,8 +533,7 @@ LOCAL_SRC_FILES += \
 	src/opts/SkBlitRow_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm.cpp
 
-else
-LOCAL_SRC_FILES += \
+LOCAL_SRC_FILES_mips += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
@@ -546,7 +541,24 @@ LOCAL_SRC_FILES += \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
-endif
+
+LOCAL_SRC_FILES_x86 += \
+	src/opts/SkBitmapProcState_opts_none.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
+	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkXfermode_opts_none.cpp
+
+LOCAL_SRC_FILES_x86_64 += \
+	src/opts/SkBitmapProcState_opts_none.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
+	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkXfermode_opts_none.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
