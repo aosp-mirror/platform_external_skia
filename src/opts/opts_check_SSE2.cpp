@@ -89,6 +89,13 @@ static inline bool hasSSE2() {
 static inline bool hasSSSE3() {
     return true;
 }
+#elif defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
+/* For the Android framework, if the device does not support SSSE3, the
+   compiler will not supply the required -mssse3 option.  Thus, we return
+   false here.  */
+static inline bool hasSSSE3() {
+    return false;
+}
 #else
 
 static inline bool hasSSSE3() {
