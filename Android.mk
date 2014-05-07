@@ -123,6 +123,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
+	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
