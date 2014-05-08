@@ -636,8 +636,6 @@ LOCAL_CFLAGS += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1
 
 LOCAL_CFLAGS += -Wno-unused-parameter
 
-LOCAL_LDLIBS += -lpthread
-
 LOCAL_MODULE:= libskia
 
 #include stlport headers
