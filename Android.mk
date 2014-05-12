@@ -258,7 +258,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkEmbossMask.cpp \
 	src/effects/SkEmbossMaskFilter.cpp \
 	src/effects/SkGpuBlurUtils.cpp \
-	src/effects/SkKernel33MaskFilter.cpp \
 	src/effects/SkLayerDrawLooper.cpp \
 	src/effects/SkLayerRasterizer.cpp \
 	src/effects/SkLerpXfermode.cpp \
