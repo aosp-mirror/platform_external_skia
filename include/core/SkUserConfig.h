@@ -224,7 +224,6 @@
 #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
 #define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
 #define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
-#define SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
 #define kNative_8888_SkColorType kN32_SkColorType
 #define SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
 #define SK_SUPPORT_DEPRECATED_RECORD_FLAGS
