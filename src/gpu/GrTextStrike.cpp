@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "GrAtlas.h"
 #include "GrGpu.h"
 #include "GrRectanizer.h"
 #include "GrTextStrike.h"
@@ -86,7 +85,8 @@ GrTextStrike* GrFontCache::generateStrike(GrFontScaler* scaler,
         fAtlasMgr[atlasIndex] = SkNEW_ARGS(GrAtlasMgr, (fGpu, config,
                                                         textureSize,
                                                         GR_NUM_PLOTS_X,
-                                                        GR_NUM_PLOTS_Y));
+                                                        GR_NUM_PLOTS_Y,
+                                                        true));
     }
     GrTextStrike* strike = SkNEW_ARGS(GrTextStrike,
                                       (this, scaler->getKey(), format, fAtlasMgr[atlasIndex]));
@@ -187,7 +187,6 @@ void GrFontCache::validate() const {
 }
 #endif
 
-#ifdef SK_DEVELOPER
 void GrFontCache::dump() const {
     static int gDumpCount = 0;
     for (int i = 0; i < kAtlasCount; ++i) {
@@ -206,7 +205,6 @@ void GrFontCache::dump() const {
     }
     ++gDumpCount;
 }
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
