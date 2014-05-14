@@ -92,15 +92,25 @@
 //////////////////////////////////////////////////////////////////////
 
 #if !defined(SK_CPU_BENDIAN) && !defined(SK_CPU_LENDIAN)
-    #if defined (__ppc__) || defined(__PPC__) || defined(__ppc64__) \
-        || defined(__PPC64__)
-        #define SK_CPU_BENDIAN
+    #if defined(__sparc) || defined(__sparc__) || \
+      defined(_POWER) || defined(__powerpc__) || \
+      defined(__ppc__) || defined(__hppa) || \
+      defined(__PPC__) || defined(__PPC64__) || \
+      defined(_MIPSEB) || defined(__ARMEB__) || \
+      defined(__s390__) || \
+      (defined(__sh__) && defined(__BIG_ENDIAN__)) || \
+      (defined(__ia64) && defined(__BIG_ENDIAN__))
+         #define SK_CPU_BENDIAN
     #else
         #define SK_CPU_LENDIAN
     #endif
 #endif
 
 //////////////////////////////////////////////////////////////////////
+
+#if defined(__i386) || defined(_M_IX86) ||  defined(__x86_64__) || defined(_M_X64)
+  #define SK_CPU_X86 1
+#endif
 
 /**
  *  SK_CPU_SSE_LEVEL
@@ -172,6 +182,11 @@
             #define SK_ARM_HAS_EDSP
         #endif
     #endif
+#endif
+
+// Disable ARM64 optimizations for iOS due to complications regarding gyp and iOS.
+#if defined(__aarch64__) && !defined(SK_BUILD_FOR_IOS)
+    #define SK_CPU_ARM64
 #endif
 
 //////////////////////////////////////////////////////////////////////

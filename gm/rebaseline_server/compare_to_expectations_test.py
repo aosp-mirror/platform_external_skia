@@ -31,8 +31,8 @@ import gm_json  # must import results first, so that gm_json will be in sys.path
 class CompareToExpectationsTest(base_unittest.TestCase):
 
   def test_gm(self):
-    """Process results of a GM run with the Results object."""
-    results_obj = compare_to_expectations.Results(
+    """Process results of a GM run with the ExpectationComparisons object."""
+    results_obj = compare_to_expectations.ExpectationComparisons(
         actuals_root=os.path.join(self._input_dir, 'gm-actuals'),
         expected_root=os.path.join(self._input_dir, 'gm-expectations'),
         generated_images_root=self._temp_dir,
@@ -45,7 +45,7 @@ class CompareToExpectationsTest(base_unittest.TestCase):
 
 
 def mock_get_timestamp():
-  """Mock version of Results.get_timestamp() for testing."""
+  """Mock version of BaseComparisons.get_timestamp() for testing."""
   return 12345678
 
 

@@ -32,6 +32,7 @@ public:
     enum Flags {
         kNeedClear_Flag = 1 << 0,  //!< Surface requires an initial clear
         kCached_Flag    = 1 << 1,  //!< Surface is cached and needs to be unlocked when released
+        kDFFonts_Flag   = 1 << 2,  //!< Surface should render fonts using signed distance fields
     };
 
     /**
@@ -49,16 +50,6 @@ public:
      *  will be uninitialized. On failure, returns NULL.
      */
     static SkGpuDevice* Create(GrContext*, const SkImageInfo&, int sampleCount);
-
-#ifdef SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-    /**
-     *  New device that will create an offscreen renderTarget based on the
-     *  config, width, height, and sampleCount. The device's storage will not
-     *  count against the GrContext's texture cache budget. The device's pixels
-     *  will be uninitialized. TODO: This can fail, replace with a factory function.
-     */
-    SkGpuDevice(GrContext*, SkBitmap::Config, int width, int height, int sampleCount = 0);
-#endif
 
     /**
      *  DEPRECATED -- need to make this private, call Create(surface)
@@ -101,6 +92,8 @@ public:
                           const SkPaint& paint) SK_OVERRIDE;
     virtual void drawRRect(const SkDraw&, const SkRRect& r,
                            const SkPaint& paint) SK_OVERRIDE;
+    virtual void drawDRRect(const SkDraw& draw, const SkRRect& outer,
+                            const SkRRect& inner, const SkPaint& paint) SK_OVERRIDE;
     virtual void drawOval(const SkDraw&, const SkRect& oval,
                           const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPath(const SkDraw&, const SkPath& path,
@@ -159,7 +152,9 @@ protected:
     /**  PRIVATE / EXPERIMENTAL -- do not call */
     virtual void EXPERIMENTAL_optimize(SkPicture* picture) SK_OVERRIDE;
     /**  PRIVATE / EXPERIMENTAL -- do not call */
-    virtual bool EXPERIMENTAL_drawPicture(const SkPicture& picture) SK_OVERRIDE;
+    virtual void EXPERIMENTAL_purge(SkPicture* picture) SK_OVERRIDE;
+    /**  PRIVATE / EXPERIMENTAL -- do not call */
+    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, SkPicture* picture) SK_OVERRIDE;
 
 private:
     GrContext*      fContext;

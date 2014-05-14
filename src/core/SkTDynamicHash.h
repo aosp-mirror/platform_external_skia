@@ -12,11 +12,13 @@
 #include "SkTemplates.h"
 #include "SkTypes.h"
 
+// Traits requires:
+//   static const Key& GetKey(const T&) { ... }
+//   static uint32_t Hash(const Key&) { ... }
+// We'll look on T for these by default, or you can pass a custom Traits type.
 template <typename T,
           typename Key,
-          const Key& (GetKey)(const T&),
-          uint32_t (Hash)(const Key&),
-          bool (Equal)(const T&, const Key&),
+          typename Traits = T,
           int kGrowPercent = 75>  // Larger -> more memory efficient, but slower.
 class SkTDynamicHash {
 public:
@@ -65,7 +67,7 @@ public:
             if (Empty() == candidate) {
                 return NULL;
             }
-            if (Deleted() != candidate && Equal(*candidate, key)) {
+            if (Deleted() != candidate && GetKey(*candidate) == key) {
                 return candidate;
             }
             index = this->nextIndex(index, round);
@@ -99,7 +101,7 @@ protected:
         int index = this->firstIndex(key);
         for (int round = 0; round < fCapacity; round++) {
             const T* candidate = fArray[index];
-            if (Empty() == candidate || Deleted() == candidate || Equal(*candidate, key)) {
+            if (Empty() == candidate || Deleted() == candidate || GetKey(*candidate) == key) {
                 return round;
             }
             index = this->nextIndex(index, round);
@@ -149,8 +151,7 @@ private:
                         continue;
                     }
                     SKTDYNAMICHASH_CHECK(fArray[i] != fArray[j]);
-                    SKTDYNAMICHASH_CHECK(!Equal(*fArray[i], GetKey(*fArray[j])));
-                    SKTDYNAMICHASH_CHECK(!Equal(*fArray[j], GetKey(*fArray[i])));
+                    SKTDYNAMICHASH_CHECK(!(GetKey(*fArray[i]) == GetKey(*fArray[j])));
                 }
             }
         }
@@ -181,7 +182,7 @@ private:
         int index = firstIndex;
         for (int round = 0; round < fCapacity; round++) {
             const T* candidate = fArray[index];
-            if (Deleted() != candidate && Equal(*candidate, key)) {
+            if (Deleted() != candidate && GetKey(*candidate) == key) {
                 fDeleted++;
                 fCount--;
                 fArray[index] = Deleted();
@@ -228,6 +229,9 @@ private:
         // This will search a power-of-two array fully without repeating an index.
         return (index + round + 1) & this->hashMask();
     }
+
+    static const Key& GetKey(const T& t) { return Traits::GetKey(t); }
+    static uint32_t Hash(const Key& key) { return Traits::Hash(key); }
 
     int fCount;     // Number of non Empty(), non Deleted() entries in fArray.
     int fDeleted;   // Number of Deleted() entries in fArray.

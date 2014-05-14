@@ -76,6 +76,12 @@ int SkIntersections::intersectRay(const SkDLine& a, const SkDLine& b) {
     SkDVector ab0 = a[0] - b[0];
     double numerA = ab0.fY * bLen.fX - bLen.fY * ab0.fX;
     double numerB = ab0.fY * aLen.fX - aLen.fY * ab0.fX;
+#if 0
+    if (!between(0, numerA, denom) || !between(0, numerB, denom)) {
+        fUsed = 0;
+        return 0;
+    }
+#endif
     numerA /= denom;
     numerB /= denom;
     int used;
@@ -198,7 +204,7 @@ int SkIntersections::horizontal(const SkDLine& line, double y) {
 
 int SkIntersections::horizontal(const SkDLine& line, double left, double right,
                                 double y, bool flipped) {
-    fMax = 2;
+    fMax = 3;  // clean up parallel at the end will limit the result to 2 at the most
     // see if end points intersect the opposite line
     double t;
     const SkDPoint leftPt = { left, y };
@@ -286,7 +292,7 @@ int SkIntersections::vertical(const SkDLine& line, double x) {
 
 int SkIntersections::vertical(const SkDLine& line, double top, double bottom,
                               double x, bool flipped) {
-    fMax = 2;
+    fMax = 3;  // cleanup parallel lines will bring this back line
     // see if end points intersect the opposite line
     double t;
     SkDPoint topPt = { x, top };
@@ -338,6 +344,7 @@ int SkIntersections::vertical(const SkDLine& line, double top, double bottom,
         }
     }
     cleanUpParallelLines(result == 2);
+    SkASSERT(fUsed <= 2);
     return fUsed;
 }
 

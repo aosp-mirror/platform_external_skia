@@ -96,15 +96,13 @@ GrGLvoid GR_GL_FUNCTION_TYPE noOpGLFlush();
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLFrontFace(GrGLenum mode);
 
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLLoadIdentity();
+GrGLvoid GR_GL_FUNCTION_TYPE noOpGLMatrixLoadf(GrGLenum, const GrGLfloat*);
 
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLLoadMatrixf(const GrGLfloat*);
+GrGLvoid GR_GL_FUNCTION_TYPE noOpGLMatrixLoadIdentity(GrGLenum);
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLLineWidth(GrGLfloat width);
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLLinkProgram(GrGLuint program);
-
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLMatrixMode(GrGLenum);
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLQueryCounter(GrGLuint id,
                                                 GrGLenum target);
@@ -164,12 +162,6 @@ GrGLvoid GR_GL_FUNCTION_TYPE noOpGLTexStorage2D(GrGLenum target,
                                                 GrGLenum internalformat,
                                                 GrGLsizei width,
                                                 GrGLsizei height);
-
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLTexGenf(GrGLenum, GrGLenum, GrGLfloat);
-
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLTexGenfv(GrGLenum, GrGLenum, const GrGLfloat*);
-
-GrGLvoid GR_GL_FUNCTION_TYPE noOpGLTexGeni(GrGLenum, GrGLenum, GrGLint);
 
 GrGLvoid GR_GL_FUNCTION_TYPE noOpGLDiscardFramebuffer(GrGLenum target,
                                                       GrGLsizei numAttachments,

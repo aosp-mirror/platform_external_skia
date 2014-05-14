@@ -10,6 +10,10 @@
 #include "SkOpSegment.h"
 #include "SkTArray.h"
 
+#if defined(SK_DEBUG) || !FORCE_RELEASE
+#include "SkThread.h"
+#endif
+
 class SkIntersections;
 class SkOpContour;
 class SkPathWriter;
@@ -25,8 +29,8 @@ class SkOpContour {
 public:
     SkOpContour() {
         reset();
-#ifdef SK_DEBUG
-        fID = ++SkPathOpsDebug::gContourID;
+#if defined(SK_DEBUG) || !FORCE_RELEASE
+        fID = sk_atomic_inc(&SkPathOpsDebug::gContourID);
 #endif
     }
 
@@ -77,17 +81,28 @@ public:
         return fSegments[segIndex].addT(&other->fSegments[otherIndex], pt, newT);
     }
 
-    int addSelfT(int segIndex, SkOpContour* other, int otherIndex, const SkPoint& pt, double newT) {
+    int addSelfT(int segIndex, const SkPoint& pt, double newT) {
         setContainsIntercepts();
-        return fSegments[segIndex].addSelfT(&other->fSegments[otherIndex], pt, newT);
+        return fSegments[segIndex].addSelfT(pt, newT);
     }
 
     const SkPathOpsBounds& bounds() const {
         return fBounds;
     }
 
+    bool calcAngles();
     void calcCoincidentWinding();
     void calcPartialCoincidentWinding();
+
+    void checkDuplicates() {
+        int segmentCount = fSegments.count();
+        for (int sIndex = 0; sIndex < segmentCount; ++sIndex) {
+            SkOpSegment& segment = fSegments[sIndex];
+            if (segment.count() > 2) {
+                segment.checkDuplicates();
+            }
+        }
+    }
 
     void checkEnds() {
         if (!fContainsCurves) {
@@ -106,6 +121,26 @@ public:
         }
     }
 
+    void checkMultiples() {
+        int segmentCount = fSegments.count();
+        for (int sIndex = 0; sIndex < segmentCount; ++sIndex) {
+            SkOpSegment& segment = fSegments[sIndex];
+            if (segment.count() > 2) {
+                segment.checkMultiples();
+            }
+        }
+    }
+
+    void checkSmall() {
+        int segmentCount = fSegments.count();
+        for (int sIndex = 0; sIndex < segmentCount; ++sIndex) {
+            SkOpSegment& segment = fSegments[sIndex];
+            if (segment.hasSmall()) {
+                segment.checkSmall();
+            }
+        }
+    }
+
     // if same point has different T values, choose a common T
     void checkTiny() {
         int segmentCount = fSegments.count();
@@ -113,7 +148,10 @@ public:
             return;
         }
         for (int sIndex = 0; sIndex < segmentCount; ++sIndex) {
-            fSegments[sIndex].checkTiny();
+            SkOpSegment& segment = fSegments[sIndex];
+            if (segment.hasTiny()) {
+                segment.checkTiny();
+            }
         }
     }
 
@@ -192,6 +230,7 @@ public:
         fXor = isXor;
     }
 
+    void sortAngles();
     void sortSegments();
 
     const SkPoint& start() const {
@@ -242,6 +281,12 @@ public:
     static void debugShowWindingValues(const SkTArray<SkOpContour*, true>& contourList);
 #endif
 
+    // available to test routines only
+    void dump() const;
+    void dumpAngles() const;
+    void dumpPts() const;
+    void dumpSpans() const;
+
 private:
     void calcCommonCoincidentWinding(const SkCoincidence& );
     void joinCoincidence(const SkTArray<SkCoincidence, true>& , bool partial);
@@ -261,8 +306,11 @@ private:
     bool fOperand;  // true for the second argument to a binary operator
     bool fXor;
     bool fOppXor;
-#ifdef SK_DEBUG
+#if defined(SK_DEBUG) || !FORCE_RELEASE
+    int debugID() const { return fID; }
     int fID;
+#else
+    int debugID() const { return -1; }
 #endif
 };
 

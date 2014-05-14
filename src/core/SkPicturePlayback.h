@@ -31,7 +31,6 @@ class SkStream;
 class SkWStream;
 class SkBBoxHierarchy;
 class SkPictureStateTree;
-class SkOffsetTable;
 
 struct SkPictInfo {
     enum Flags {
@@ -76,12 +75,17 @@ struct SkPictCopyInfo {
 
 class SkPicturePlayback {
 public:
-    SkPicturePlayback();
-    SkPicturePlayback(const SkPicturePlayback& src, SkPictCopyInfo* deepCopyInfo = NULL);
-    explicit SkPicturePlayback(const SkPictureRecord& record, bool deepCopy = false);
-    static SkPicturePlayback* CreateFromStream(SkStream*, const SkPictInfo&,
+    SkPicturePlayback(const SkPicture* picture, const SkPicturePlayback& src,
+                      SkPictCopyInfo* deepCopyInfo = NULL);
+    SkPicturePlayback(const SkPicture* picture, const SkPictureRecord& record, const SkPictInfo&,
+                      bool deepCopy = false);
+    static SkPicturePlayback* CreateFromStream(SkPicture* picture,
+                                               SkStream*,
+                                               const SkPictInfo&,
                                                SkPicture::InstallPixelRefProc);
-    static SkPicturePlayback* CreateFromBuffer(SkReadBuffer&);
+    static SkPicturePlayback* CreateFromBuffer(SkPicture* picture,
+                                               SkReadBuffer&,
+                                               const SkPictInfo&);
 
     virtual ~SkPicturePlayback();
 
@@ -106,15 +110,14 @@ public:
     void resetOpID() { fCurOffset = 0; }
 
 protected:
-    bool parseStream(SkStream*, const SkPictInfo&,
-                     SkPicture::InstallPixelRefProc);
-    bool parseBuffer(SkReadBuffer& buffer);
+    explicit SkPicturePlayback(const SkPicture* picture, const SkPictInfo& info);
+
+    bool parseStream(SkPicture* picture, SkStream*, SkPicture::InstallPixelRefProc);
+    bool parseBuffer(SkPicture* picture, SkReadBuffer& buffer);
 #ifdef SK_DEVELOPER
     virtual bool preDraw(int opIndex, int type);
     virtual void postDraw(int opIndex);
 #endif
-
-    void preLoadBitmaps(const SkTDArray<void*>* results);
 
 private:
     class TextContainer {
@@ -141,7 +144,7 @@ private:
     }
 
     const SkPath& getPath(SkReader32& reader) {
-        return (*fPathHeap)[reader.readInt() - 1];
+        return fPicture->getPath(reader.readInt() - 1);
     }
 
     SkPicture& getPicture(SkReader32& reader) {
@@ -217,24 +220,27 @@ public:
 #endif
 
 private:    // these help us with reading/writing
-    bool parseStreamTag(SkStream*, const SkPictInfo&, uint32_t tag, size_t size,
+    bool parseStreamTag(SkPicture* picture, SkStream*, uint32_t tag, uint32_t size,
                         SkPicture::InstallPixelRefProc);
-    bool parseBufferTag(SkReadBuffer&, uint32_t tag, size_t size);
+    bool parseBufferTag(SkPicture* picture, SkReadBuffer&, uint32_t tag, uint32_t size);
     void flattenToBuffer(SkWriteBuffer&) const;
 
 private:
+    friend class SkPicture;
+
+    // The picture that owns this SkPicturePlayback object
+    const SkPicture* fPicture;
+
     // Only used by getBitmap() if the passed in index is SkBitmapHeap::INVALID_SLOT. This empty
     // bitmap allows playback to draw nothing and move on.
     SkBitmap fBadBitmap;
 
     SkAutoTUnref<SkBitmapHeap> fBitmapHeap;
-    SkAutoTUnref<SkPathHeap> fPathHeap;
 
     SkTRefArray<SkBitmap>* fBitmaps;
     SkTRefArray<SkPaint>* fPaints;
 
     SkData* fOpData;    // opcodes and parameters
-    SkAutoTUnref<SkOffsetTable> fBitmapUseOffsets;
 
     SkPicture** fPictureRefs;
     int fPictureCount;
@@ -270,6 +276,11 @@ private:
 
     // The offset of the current operation when within the draw method
     size_t fCurOffset;
+
+    const SkPictInfo fInfo;
+
+    static void WriteFactories(SkWStream* stream, const SkFactorySet& rec);
+    static void WriteTypefaces(SkWStream* stream, const SkRefCntSet& rec);
 
 #ifdef SK_BUILD_FOR_ANDROID
     SkMutex fDrawMutex;

@@ -256,7 +256,7 @@ SkShader* SkPerlinNoiseShader::CreateFractalNoise(SkScalar baseFrequencyX, SkSca
                                             numOctaves, seed, tileSize));
 }
 
-SkShader* SkPerlinNoiseShader::CreateTubulence(SkScalar baseFrequencyX, SkScalar baseFrequencyY,
+SkShader* SkPerlinNoiseShader::CreateTurbulence(SkScalar baseFrequencyX, SkScalar baseFrequencyY,
                                               int numOctaves, SkScalar seed,
                                               const SkISize* tileSize) {
     return SkNEW_ARGS(SkPerlinNoiseShader, (kTurbulence_Type, baseFrequencyX, baseFrequencyY,
@@ -278,7 +278,6 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
   , fStitchTiles(!fTileSize.isEmpty())
 {
     SkASSERT(numOctaves >= 0 && numOctaves < 256);
-    fMatrix.reset();
     fPaintingData = SkNEW_ARGS(PaintingData, (fTileSize, fSeed, fBaseFrequencyX, fBaseFrequencyY));
 }
 
@@ -293,7 +292,6 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkReadBuffer& buffer)
     fStitchTiles    = buffer.readBool();
     fTileSize.fWidth  = buffer.readInt();
     fTileSize.fHeight = buffer.readInt();
-    fMatrix.reset();
     fPaintingData = SkNEW_ARGS(PaintingData, (fTileSize, fSeed, fBaseFrequencyX, fBaseFrequencyY));
     buffer.validate(perlin_noise_type_is_valid(fType) &&
                     (fNumOctaves >= 0) && (fNumOctaves <= 255) &&
@@ -317,9 +315,9 @@ void SkPerlinNoiseShader::flatten(SkWriteBuffer& buffer) const {
     buffer.writeInt(fTileSize.fHeight);
 }
 
-SkScalar SkPerlinNoiseShader::noise2D(int channel, const PaintingData& paintingData,
-                                      const StitchData& stitchData,
-                                      const SkPoint& noiseVector) const {
+SkScalar SkPerlinNoiseShader::PerlinNoiseShaderContext::noise2D(
+        int channel, const PaintingData& paintingData,
+        const StitchData& stitchData, const SkPoint& noiseVector) const {
     struct Noise {
         int noisePositionIntegerValue;
         SkScalar noisePositionFractionValue;
@@ -333,8 +331,9 @@ SkScalar SkPerlinNoiseShader::noise2D(int channel, const PaintingData& paintingD
     Noise noiseX(noiseVector.x());
     Noise noiseY(noiseVector.y());
     SkScalar u, v;
+    const SkPerlinNoiseShader& perlinNoiseShader = static_cast<const SkPerlinNoiseShader&>(fShader);
     // If stitching, adjust lattice points accordingly.
-    if (fStitchTiles) {
+    if (perlinNoiseShader.fStitchTiles) {
         noiseX.noisePositionIntegerValue =
             checkNoise(noiseX.noisePositionIntegerValue, stitchData.fWrapX, stitchData.fWidth);
         noiseY.noisePositionIntegerValue =
@@ -365,11 +364,11 @@ SkScalar SkPerlinNoiseShader::noise2D(int channel, const PaintingData& paintingD
     return SkScalarInterp(a, b, sy);
 }
 
-SkScalar SkPerlinNoiseShader::calculateTurbulenceValueForPoint(int channel,
-                                                               const PaintingData& paintingData,
-                                                               StitchData& stitchData,
-                                                               const SkPoint& point) const {
-    if (fStitchTiles) {
+SkScalar SkPerlinNoiseShader::PerlinNoiseShaderContext::calculateTurbulenceValueForPoint(
+        int channel, const PaintingData& paintingData,
+        StitchData& stitchData, const SkPoint& point) const {
+    const SkPerlinNoiseShader& perlinNoiseShader = static_cast<const SkPerlinNoiseShader&>(fShader);
+    if (perlinNoiseShader.fStitchTiles) {
         // Set up TurbulenceInitial stitch values.
         stitchData = paintingData.fStitchDataInit;
     }
@@ -377,14 +376,14 @@ SkScalar SkPerlinNoiseShader::calculateTurbulenceValueForPoint(int channel,
     SkPoint noiseVector(SkPoint::Make(SkScalarMul(point.x(), paintingData.fBaseFrequency.fX),
                                       SkScalarMul(point.y(), paintingData.fBaseFrequency.fY)));
     SkScalar ratio = SK_Scalar1;
-    for (int octave = 0; octave < fNumOctaves; ++octave) {
+    for (int octave = 0; octave < perlinNoiseShader.fNumOctaves; ++octave) {
         SkScalar noise = noise2D(channel, paintingData, stitchData, noiseVector);
         turbulenceFunctionResult += SkScalarDiv(
-            (fType == kFractalNoise_Type) ? noise : SkScalarAbs(noise), ratio);
+            (perlinNoiseShader.fType == kFractalNoise_Type) ? noise : SkScalarAbs(noise), ratio);
         noiseVector.fX *= 2;
         noiseVector.fY *= 2;
         ratio *= 2;
-        if (fStitchTiles) {
+        if (perlinNoiseShader.fStitchTiles) {
             // Update stitch values
             stitchData.fWidth  *= 2;
             stitchData.fWrapX   = stitchData.fWidth + kPerlinNoise;
@@ -395,7 +394,7 @@ SkScalar SkPerlinNoiseShader::calculateTurbulenceValueForPoint(int channel,
 
     // The value of turbulenceFunctionResult comes from ((turbulenceFunctionResult) + 1) / 2
     // by fractalNoise and (turbulenceFunctionResult) by turbulence.
-    if (fType == kFractalNoise_Type) {
+    if (perlinNoiseShader.fType == kFractalNoise_Type) {
         turbulenceFunctionResult =
             SkScalarMul(turbulenceFunctionResult, SK_ScalarHalf) + SK_ScalarHalf;
     }
@@ -409,39 +408,52 @@ SkScalar SkPerlinNoiseShader::calculateTurbulenceValueForPoint(int channel,
     return SkScalarPin(turbulenceFunctionResult, 0, SK_Scalar1);
 }
 
-SkPMColor SkPerlinNoiseShader::shade(const SkPoint& point, StitchData& stitchData) const {
-    SkMatrix matrix = fMatrix;
-    matrix.postConcat(getLocalMatrix());
-    SkMatrix invMatrix;
-    if (!matrix.invert(&invMatrix)) {
-        invMatrix.reset();
-    } else {
-        invMatrix.postConcat(invMatrix); // Square the matrix
-    }
-    // This (1,1) translation is due to WebKit's 1 based coordinates for the noise
-    // (as opposed to 0 based, usually). The same adjustment is in the setData() function.
-    matrix.postTranslate(SK_Scalar1, SK_Scalar1);
+SkPMColor SkPerlinNoiseShader::PerlinNoiseShaderContext::shade(
+        const SkPoint& point, StitchData& stitchData) const {
+    const SkPerlinNoiseShader& perlinNoiseShader = static_cast<const SkPerlinNoiseShader&>(fShader);
     SkPoint newPoint;
-    matrix.mapPoints(&newPoint, &point, 1);
-    invMatrix.mapPoints(&newPoint, &newPoint, 1);
+    fMatrix.mapPoints(&newPoint, &point, 1);
     newPoint.fX = SkScalarRoundToScalar(newPoint.fX);
     newPoint.fY = SkScalarRoundToScalar(newPoint.fY);
 
     U8CPU rgba[4];
     for (int channel = 3; channel >= 0; --channel) {
         rgba[channel] = SkScalarFloorToInt(255 *
-            calculateTurbulenceValueForPoint(channel, *fPaintingData, stitchData, newPoint));
+            calculateTurbulenceValueForPoint(channel, *perlinNoiseShader.fPaintingData,
+                                             stitchData, newPoint));
     }
     return SkPreMultiplyARGB(rgba[3], rgba[0], rgba[1], rgba[2]);
 }
 
-bool SkPerlinNoiseShader::setContext(const SkBitmap& device, const SkPaint& paint,
-                                     const SkMatrix& matrix) {
-    fMatrix = matrix;
-    return INHERITED::setContext(device, paint, matrix);
+SkShader::Context* SkPerlinNoiseShader::onCreateContext(const ContextRec& rec,
+                                                        void* storage) const {
+    return SkNEW_PLACEMENT_ARGS(storage, PerlinNoiseShaderContext, (*this, rec));
 }
 
-void SkPerlinNoiseShader::shadeSpan(int x, int y, SkPMColor result[], int count) {
+size_t SkPerlinNoiseShader::contextSize() const {
+    return sizeof(PerlinNoiseShaderContext);
+}
+
+SkPerlinNoiseShader::PerlinNoiseShaderContext::PerlinNoiseShaderContext(
+        const SkPerlinNoiseShader& shader, const ContextRec& rec)
+    : INHERITED(shader, rec)
+{
+    SkMatrix newMatrix = *rec.fMatrix;
+    newMatrix.postConcat(shader.getLocalMatrix());
+    SkMatrix invMatrix;
+    if (!newMatrix.invert(&invMatrix)) {
+        invMatrix.reset();
+    }
+    // This (1,1) translation is due to WebKit's 1 based coordinates for the noise
+    // (as opposed to 0 based, usually). The same adjustment is in the setData() function.
+    newMatrix.postTranslate(SK_Scalar1, SK_Scalar1);
+    newMatrix.postConcat(invMatrix);
+    newMatrix.postConcat(invMatrix);
+    fMatrix = newMatrix;
+}
+
+void SkPerlinNoiseShader::PerlinNoiseShaderContext::shadeSpan(
+        int x, int y, SkPMColor result[], int count) {
     SkPoint point = SkPoint::Make(SkIntToScalar(x), SkIntToScalar(y));
     StitchData stitchData;
     for (int i = 0; i < count; ++i) {
@@ -450,7 +462,8 @@ void SkPerlinNoiseShader::shadeSpan(int x, int y, SkPMColor result[], int count)
     }
 }
 
-void SkPerlinNoiseShader::shadeSpan16(int x, int y, uint16_t result[], int count) {
+void SkPerlinNoiseShader::PerlinNoiseShaderContext::shadeSpan16(
+        int x, int y, uint16_t result[], int count) {
     SkPoint point = SkPoint::Make(SkIntToScalar(x), SkIntToScalar(y));
     StitchData stitchData;
     DITHER_565_SCAN(y);
@@ -706,7 +719,7 @@ GrEffectRef* GrPerlinNoiseEffect::TestCreate(SkRandom* random,
     SkShader* shader = random->nextBool() ?
         SkPerlinNoiseShader::CreateFractalNoise(baseFrequencyX, baseFrequencyY, numOctaves, seed,
                                                 stitchTiles ? &tileSize : NULL) :
-        SkPerlinNoiseShader::CreateTubulence(baseFrequencyX, baseFrequencyY, numOctaves, seed,
+        SkPerlinNoiseShader::CreateTurbulence(baseFrequencyX, baseFrequencyY, numOctaves, seed,
                                              stitchTiles ? &tileSize : NULL);
 
     SkPaint paint;

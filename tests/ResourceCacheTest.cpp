@@ -56,13 +56,15 @@ static void test_cache(skiatest::Reporter* reporter,
     context->setTextureCacheLimits(oldMaxNum, oldMaxBytes);
 }
 
-class TestResource : public GrResource {
+class TestResource : public GrCacheable {
+    static const size_t kDefaultSize = 100;
+
 public:
     SK_DECLARE_INST_COUNT(TestResource);
-    explicit TestResource(GrGpu* gpu)
-        : INHERITED(gpu, false)
-        , fCache(NULL)
-        , fToDelete(NULL) {
+    TestResource(size_t size = kDefaultSize)
+        : fCache(NULL)
+        , fToDelete(NULL)
+        , fSize(size) {
         ++fAlive;
     }
 
@@ -73,10 +75,16 @@ public:
             fToDelete->setDeleteWhenDestroyed(NULL, NULL);
             fCache->deleteResource(fToDelete->getCacheEntry());
         }
-        this->release();
     }
 
-    size_t sizeInBytes() const SK_OVERRIDE { return 100; }
+    void setSize(size_t size) {
+        fSize = size;
+        this->didChangeGpuMemorySize();
+    }
+
+    size_t gpuMemorySize() const SK_OVERRIDE { return fSize; }
+
+    bool isValidOnGpu() const SK_OVERRIDE { return true; }
 
     static int alive() { return fAlive; }
 
@@ -88,9 +96,10 @@ public:
 private:
     GrResourceCache* fCache;
     TestResource* fToDelete;
+    size_t fSize;
     static int fAlive;
 
-    typedef GrResource INHERITED;
+    typedef GrCacheable INHERITED;
 };
 int TestResource::fAlive = 0;
 
@@ -105,8 +114,8 @@ static void test_purge_invalidated(skiatest::Reporter* reporter, GrContext* cont
     GrResourceCache cache(5, 30000);
 
     // Add two resources with the same key that delete each other from the cache when destroyed.
-    TestResource* a = new TestResource(context->getGpu());
-    TestResource* b = new TestResource(context->getGpu());
+    TestResource* a = new TestResource();
+    TestResource* b = new TestResource();
     cache.addResource(key, a);
     cache.addResource(key, b);
     // Circle back.
@@ -116,7 +125,7 @@ static void test_purge_invalidated(skiatest::Reporter* reporter, GrContext* cont
     b->unref();
 
     // Add a third independent resource also with the same key.
-    GrResource* r = new TestResource(context->getGpu());
+    GrCacheable* r = new TestResource();
     cache.addResource(key, r);
     r->unref();
 
@@ -141,8 +150,8 @@ static void test_cache_delete_on_destruction(skiatest::Reporter* reporter,
     {
         {
             GrResourceCache cache(3, 30000);
-            TestResource* a = new TestResource(context->getGpu());
-            TestResource* b = new TestResource(context->getGpu());
+            TestResource* a = new TestResource();
+            TestResource* b = new TestResource();
             cache.addResource(key, a);
             cache.addResource(key, b);
 
@@ -157,8 +166,8 @@ static void test_cache_delete_on_destruction(skiatest::Reporter* reporter,
     }
     {
         GrResourceCache cache(3, 30000);
-        TestResource* a = new TestResource(context->getGpu());
-        TestResource* b = new TestResource(context->getGpu());
+        TestResource* a = new TestResource();
+        TestResource* b = new TestResource();
         cache.addResource(key, a);
         cache.addResource(key, b);
 
@@ -171,6 +180,99 @@ static void test_cache_delete_on_destruction(skiatest::Reporter* reporter,
         cache.deleteResource(a->getCacheEntry());
 
         REPORTER_ASSERT(reporter, 0 == TestResource::alive());
+    }
+}
+
+static void test_resource_size_changed(skiatest::Reporter* reporter,
+                                       GrContext* context) {
+    GrCacheID::Domain domain = GrCacheID::GenerateDomain();
+    GrResourceKey::ResourceType t = GrResourceKey::GenerateResourceType();
+
+    GrCacheID::Key key1Data;
+    key1Data.fData64[0] = 0;
+    key1Data.fData64[1] = 0;
+    GrResourceKey key1(GrCacheID(domain, key1Data), t, 0);
+
+    GrCacheID::Key key2Data;
+    key2Data.fData64[0] = 1;
+    key2Data.fData64[1] = 0;
+    GrResourceKey key2(GrCacheID(domain, key2Data), t, 0);
+
+    // Test changing resources sizes (both increase & decrease).
+    {
+        GrResourceCache cache(2, 300);
+
+        TestResource* a = new TestResource(0);
+        a->setSize(100); // Test didChangeGpuMemorySize() when not in the cache.
+        cache.addResource(key1, a);
+        a->unref();
+
+        TestResource* b = new TestResource(0);
+        b->setSize(100);
+        cache.addResource(key2, b);
+        b->unref();
+
+        REPORTER_ASSERT(reporter, 200 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+
+        static_cast<TestResource*>(cache.find(key2))->setSize(200);
+        static_cast<TestResource*>(cache.find(key1))->setSize(50);
+
+        REPORTER_ASSERT(reporter, 250 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+    }
+
+    // Test increasing a resources size beyond the cache budget.
+    {
+        GrResourceCache cache(2, 300);
+
+        TestResource* a = new TestResource(100);
+        cache.addResource(key1, a);
+        a->unref();
+
+        TestResource* b = new TestResource(100);
+        cache.addResource(key2, b);
+        b->unref();
+
+        REPORTER_ASSERT(reporter, 200 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+
+        static_cast<TestResource*>(cache.find(key2))->setSize(201);
+        REPORTER_ASSERT(reporter, NULL == cache.find(key1));
+
+        REPORTER_ASSERT(reporter, 201 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 1 == cache.getCachedResourceCount());
+    }
+
+    // Test changing the size of an exclusively-held resource.
+    {
+        GrResourceCache cache(2, 300);
+
+        TestResource* a = new TestResource(100);
+        cache.addResource(key1, a);
+        cache.makeExclusive(a->getCacheEntry());
+
+        TestResource* b = new TestResource(100);
+        cache.addResource(key2, b);
+        b->unref();
+
+        REPORTER_ASSERT(reporter, 200 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+        REPORTER_ASSERT(reporter, NULL == cache.find(key1));
+
+        a->setSize(200);
+
+        REPORTER_ASSERT(reporter, 300 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+        // Internal resource cache validation will test the detached size (debug mode only).
+
+        cache.makeNonExclusive(a->getCacheEntry());
+        a->unref();
+
+        REPORTER_ASSERT(reporter, 300 == cache.getCachedResourceBytes());
+        REPORTER_ASSERT(reporter, 2 == cache.getCachedResourceCount());
+        REPORTER_ASSERT(reporter, NULL != cache.find(key1));
+        // Internal resource cache validation will test the detached size (debug mode only).
     }
 }
 
@@ -199,6 +301,7 @@ DEF_GPUTEST(ResourceCache, reporter, factory) {
         test_cache(reporter, context, &canvas);
         test_purge_invalidated(reporter, context);
         test_cache_delete_on_destruction(reporter, context);
+        test_resource_size_changed(reporter, context);
     }
 }
 

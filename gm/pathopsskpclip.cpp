@@ -13,6 +13,7 @@
 #include "SkPath.h"
 #include "SkPathOps.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 
 namespace skiagm {
@@ -23,6 +24,10 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkString onShortName() SK_OVERRIDE {
         return SkString("pathopsskpclip");
     }
@@ -32,8 +37,8 @@ protected:
     }
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
-        SkPicture* pict = SkNEW(SkPicture);
-        SkCanvas* rec = pict->beginRecording(1200, 900);
+        SkPictureRecorder recorder;
+        SkCanvas* rec = recorder.beginRecording(1200, 900, NULL, 0);
         SkPath p;
         SkRect r = {
             SkIntToScalar(100),
@@ -46,7 +51,7 @@ protected:
         rec->translate(SkIntToScalar(250), SkIntToScalar(250));
         rec->clipPath(p, SkRegion::kIntersect_Op, true);
         rec->drawColor(0xffff0000);
-        pict->endRecording();
+        SkAutoTUnref<SkPicture> pict(recorder.endRecording());
 
         canvas->setAllowSimplifyClip(true);
         canvas->save();
@@ -58,7 +63,6 @@ protected:
         canvas->translate(SkIntToScalar(1200 / 2), 0);
         canvas->drawPicture(*pict);
         canvas->restore();
-        SkSafeUnref(pict);
     }
 
 private:

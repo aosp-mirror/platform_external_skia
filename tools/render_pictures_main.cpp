@@ -16,6 +16,7 @@
 #include "SkMath.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkStream.h"
 #include "SkString.h"
 #include "PictureRenderer.h"
@@ -34,10 +35,8 @@ DEFINE_bool(writeChecksumBasedFilenames, false,
 DEFINE_bool(writeEncodedImages, false, "Any time the skp contains an encoded image, write it to a "
             "file rather than decoding it. Requires writePath to be set. Skips drawing the full "
             "skp to a file. Not compatible with deferImageDecoding.");
-DEFINE_string(writeJsonSummaryPath, "", "File to write a JSON summary of image results to. "
-              "TODO(epoger): Currently, this only works if --writePath is also specified. "
-              "See https://code.google.com/p/skia/issues/detail?id=2043 .");
-DEFINE_string2(writePath, w, "", "Directory to write the rendered images.");
+DEFINE_string(writeJsonSummaryPath, "", "File to write a JSON summary of image results to.");
+DEFINE_string2(writePath, w, "", "Directory to write the rendered images into.");
 DEFINE_bool(writeWholeImage, false, "In tile mode, write the entire rendered image to a "
             "file, instead of an image for each tile.");
 DEFINE_bool(validate, false, "Verify that the rendered image contains the same pixels as "
@@ -47,13 +46,6 @@ DEFINE_bool(validate, false, "Verify that the rendered image contains the same p
 DEFINE_bool(bench_record, false, "If true, drop into an infinite loop of recording the picture.");
 
 DEFINE_bool(preprocess, false, "If true, perform device specific preprocessing before rendering.");
-
-static void make_output_filepath(SkString* path, const SkString& dir,
-                                 const SkString& name) {
-    sk_tools::make_filepath(path, dir, name);
-    // Remove ".skp"
-    path->remove(path->size() - 4, 4);
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -180,10 +172,9 @@ static bool render_picture_internal(const SkString& inputPath, const SkString* o
     }
 
     while (FLAGS_bench_record) {
-        const int kRecordFlags = 0;
-        SkPicture other;
-        picture->draw(other.beginRecording(picture->width(), picture->height(), kRecordFlags));
-        other.endRecording();
+        SkPictureRecorder recorder;
+        picture->draw(recorder.beginRecording(picture->width(), picture->height(), NULL, 0));
+        SkAutoTUnref<SkPicture> other(recorder.endRecording());
     }
 
     for (int i = 0; i < FLAGS_clone; ++i) {
@@ -199,7 +190,7 @@ static bool render_picture_internal(const SkString& inputPath, const SkString* o
 
     if (FLAGS_preprocess) {
         if (NULL != renderer.getCanvas()) {
-            renderer.getCanvas()->EXPERIMENTAL_optimize(picture);
+            renderer.getCanvas()->EXPERIMENTAL_optimize(renderer.getPicture());
         }
     }
 
@@ -348,28 +339,19 @@ static bool render_picture(const SkString& inputPath, const SkString* outputDir,
     if (FLAGS_writeWholeImage) {
         sk_tools::force_all_opaque(*bitmap);
 
+        SkString inputFilename, outputPath;
+        sk_tools::get_basename(&inputFilename, inputPath);
+        sk_tools::make_filepath(&outputPath, *outputDir, inputFilename);
+        sk_tools::replace_char(&outputPath, '.', '_');
+        outputPath.append(".png");
+
         if (NULL != jsonSummaryPtr) {
-            // TODO(epoger): This is a hacky way of constructing the filename associated with the
-            // image checksum; we basically are repeating the logic of make_output_filepath()
-            // and code below here, within here.
-            // It would be better for the filename (without outputDir) to be passed in here,
-            // and used both for the checksum file and writing into outputDir.
-            //
-            // TODO(epoger): what about including the config type within hashFilename?  That way,
-            // we could combine results of different config types without conflicting filenames.
-            SkString hashFilename;
-            sk_tools::get_basename(&hashFilename, inputPath);
-            hashFilename.remove(hashFilename.size() - 4, 4); // Remove ".skp"
-            hashFilename.append(".png");
-            jsonSummaryPtr->add(hashFilename.c_str(), *bitmap);
+            SkString outputFileBasename;
+            sk_tools::get_basename(&outputFileBasename, outputPath);
+            jsonSummaryPtr->add(inputFilename.c_str(), outputFileBasename.c_str(), *bitmap);
         }
 
         if (NULL != outputDir) {
-            SkString inputFilename;
-            sk_tools::get_basename(&inputFilename, inputPath);
-            SkString outputPath;
-            make_output_filepath(&outputPath, *outputDir, inputFilename);
-            outputPath.append(".png");
             if (!SkImageEncoder::EncodeFile(outputPath.c_str(), *bitmap,
                                             SkImageEncoder::kPNG_Type, 100)) {
                 SkDebugf("Failed to draw the picture.\n");

@@ -8,13 +8,18 @@
 #ifndef SkQuadTreePicture_DEFINED
 #define SkQuadTreePicture_DEFINED
 
+#ifdef SK_SUPPORT_LEGACY_PICTURE_HEADERS
+#include "SkBBHFactory.h"
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
+
 #include "SkPicture.h"
 #include "SkRect.h"
 
 /**
- * Subclass of SkPicture that override the behavior of the
- * kOptimizeForClippedPlayback_RecordingFlag by creating an SkQuadGrid
- * structure rather than an R-Tree. The quad tree has generally faster
+ * Subclass of SkPicture that creates an SkQuadGrid
+ * structure. The quad tree has generally faster
  * tree creation time, but slightly slower query times, as compared to
  * R-Tree, so some cases may be faster and some cases slower.
  */
@@ -24,6 +29,22 @@ public:
     virtual SkBBoxHierarchy* createBBoxHierarchy() const SK_OVERRIDE;
 private:
     SkIRect fBounds;
+
+    typedef SkPicture INHERITED;
 };
+
+class SkQuadTreePictureFactory : public SkPictureFactory {
+public:
+    SkQuadTreePictureFactory() {}
+
+    virtual SkPicture* create(int width, int height) SK_OVERRIDE {
+        return SkNEW_ARGS(SkQuadTreePicture, (SkIRect::MakeWH(width, height)));
+    }
+
+private:
+    typedef SkPictureFactory INHERITED;
+};
+
+#endif
 
 #endif

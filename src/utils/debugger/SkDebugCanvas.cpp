@@ -92,37 +92,43 @@ int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
     return layer;
 }
 
-static SkPMColor OverdrawXferModeProc(SkPMColor src, SkPMColor dst) {
-    // This table encodes the color progression of the overdraw visualization
-    static const SkPMColor gTable[] = {
-        SkPackARGB32(0x00, 0x00, 0x00, 0x00),
-        SkPackARGB32(0xFF, 128, 158, 255),
-        SkPackARGB32(0xFF, 170, 185, 212),
-        SkPackARGB32(0xFF, 213, 195, 170),
-        SkPackARGB32(0xFF, 255, 192, 127),
-        SkPackARGB32(0xFF, 255, 185, 85),
-        SkPackARGB32(0xFF, 255, 165, 42),
-        SkPackARGB32(0xFF, 255, 135, 0),
-        SkPackARGB32(0xFF, 255,  95, 0),
-        SkPackARGB32(0xFF, 255,  50, 0),
-        SkPackARGB32(0xFF, 255,  0, 0)
-    };
+class OverdrawXfermode : public SkXfermode {
+public:
+    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst) const SK_OVERRIDE {
+        // This table encodes the color progression of the overdraw visualization
+        static const SkPMColor gTable[] = {
+            SkPackARGB32(0x00, 0x00, 0x00, 0x00),
+            SkPackARGB32(0xFF, 128, 158, 255),
+            SkPackARGB32(0xFF, 170, 185, 212),
+            SkPackARGB32(0xFF, 213, 195, 170),
+            SkPackARGB32(0xFF, 255, 192, 127),
+            SkPackARGB32(0xFF, 255, 185, 85),
+            SkPackARGB32(0xFF, 255, 165, 42),
+            SkPackARGB32(0xFF, 255, 135, 0),
+            SkPackARGB32(0xFF, 255,  95, 0),
+            SkPackARGB32(0xFF, 255,  50, 0),
+            SkPackARGB32(0xFF, 255,  0, 0)
+        };
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(gTable)-1; ++i) {
-        if (gTable[i] == dst) {
-            return gTable[i+1];
+        for (size_t i = 0; i < SK_ARRAY_COUNT(gTable)-1; ++i) {
+            if (gTable[i] == dst) {
+                return gTable[i+1];
+            }
         }
+
+        return gTable[SK_ARRAY_COUNT(gTable)-1];
     }
 
-    return gTable[SK_ARRAY_COUNT(gTable)-1];
-}
+    virtual Factory getFactory() const SK_OVERRIDE { return NULL; }
+#ifndef SK_IGNORE_TO_STRING
+    virtual void toString(SkString* str) const { str->set("OverdrawXfermode"); }
+#endif
+};
 
-// The OverdrawFilter modifies every paint to use an SkProcXfermode which
-// in turn invokes OverdrawXferModeProc
 class SkOverdrawFilter : public SkDrawFilter {
 public:
     SkOverdrawFilter() {
-        fXferMode = SkProcXfermode::Create(OverdrawXferModeProc);
+        fXferMode = SkNEW(OverdrawXfermode);
     }
 
     virtual ~SkOverdrawFilter() {
@@ -498,13 +504,13 @@ void SkDebugCanvas::drawPoints(PointMode mode, size_t count,
     this->addDrawCommand(new SkDrawPointsCommand(mode, count, pts, paint));
 }
 
-void SkDebugCanvas::drawPosText(const void* text, size_t byteLength,
-        const SkPoint pos[], const SkPaint& paint) {
+void SkDebugCanvas::onDrawPosText(const void* text, size_t byteLength, const SkPoint pos[],
+                                  const SkPaint& paint) {
     this->addDrawCommand(new SkDrawPosTextCommand(text, byteLength, pos, paint));
 }
 
-void SkDebugCanvas::drawPosTextH(const void* text, size_t byteLength,
-        const SkScalar xpos[], SkScalar constY, const SkPaint& paint) {
+void SkDebugCanvas::onDrawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
+                                   SkScalar constY, const SkPaint& paint) {
     this->addDrawCommand(
         new SkDrawPosTextHCommand(text, byteLength, xpos, constY, paint));
 }
@@ -528,13 +534,13 @@ void SkDebugCanvas::drawSprite(const SkBitmap& bitmap, int left, int top,
     this->addDrawCommand(new SkDrawSpriteCommand(bitmap, left, top, paint));
 }
 
-void SkDebugCanvas::drawText(const void* text, size_t byteLength, SkScalar x,
-        SkScalar y, const SkPaint& paint) {
+void SkDebugCanvas::onDrawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
+                               const SkPaint& paint) {
     this->addDrawCommand(new SkDrawTextCommand(text, byteLength, x, y, paint));
 }
 
-void SkDebugCanvas::drawTextOnPath(const void* text, size_t byteLength,
-        const SkPath& path, const SkMatrix* matrix, const SkPaint& paint) {
+void SkDebugCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
+                                     const SkMatrix* matrix, const SkPaint& paint) {
     this->addDrawCommand(
         new SkDrawTextOnPathCommand(text, byteLength, path, matrix, paint));
 }

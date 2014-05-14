@@ -2,6 +2,7 @@
 #include "DMWriteTask.h"
 #include "DMUtil.h"
 
+#include "SkBBHFactory.h"
 #include "SkCommandLineFlags.h"
 #include "SkPicture.h"
 
@@ -22,13 +23,15 @@ ReplayTask::ReplayTask(const Task& parent,
     {}
 
 void ReplayTask::draw() {
-    SkPicture recorded;
-    const uint32_t flags = fUseRTree ? SkPicture::kOptimizeForClippedPlayback_RecordingFlag : 0;
-    RecordPicture(fGM.get(), &recorded, flags);
+    SkAutoTDelete<SkBBHFactory> factory;
+    if (fUseRTree) {
+        factory.reset(SkNEW(SkRTreeFactory));
+    }
+    SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(), 0, factory.get()));
 
     SkBitmap bitmap;
     SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
-    DrawPicture(&recorded, &bitmap);
+    DrawPicture(recorded, &bitmap);
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();
         this->spawnChild(SkNEW_ARGS(WriteTask, (*this, bitmap)));
@@ -41,7 +44,7 @@ bool ReplayTask::shouldSkip() const {
     }
 
     if (FLAGS_rtree && fUseRTree) {
-        return (fGM->getFlags() & skiagm::GM::kSkipTiled_Flag) != 0;
+        return false;
     }
     if (FLAGS_replay && !fUseRTree) {
         return false;

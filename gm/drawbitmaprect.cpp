@@ -55,19 +55,21 @@ static void makebm(SkBitmap* bm, int w, int h) {
                          SK_Scalar1};
 
     SkPaint     paint;
-    paint.setShader(SkGradientShader::CreateRadial(
-                    pt, radius,
-                    colors, pos,
-                    SK_ARRAY_COUNT(colors),
-                    SkShader::kRepeat_TileMode))->unref();
     SkRect rect = SkRect::MakeWH(wScalar, hScalar);
     SkMatrix mat = SkMatrix::I();
     for (int i = 0; i < 4; ++i) {
-        paint.getShader()->setLocalMatrix(mat);
+        paint.setShader(SkGradientShader::CreateRadial(
+                        pt, radius,
+                        colors, pos,
+                        SK_ARRAY_COUNT(colors),
+                        SkShader::kRepeat_TileMode,
+                        NULL, 0, &mat))->unref();
         canvas.drawRect(rect, paint);
         rect.inset(wScalar / 8, hScalar / 8);
         mat.postScale(SK_Scalar1 / 4, SK_Scalar1 / 4);
     }
+    // Let backends know we won't change this, so they don't have to deep copy it defensively.
+    bm->setImmutable();
 }
 
 static const int gSize = 1024;
@@ -163,7 +165,7 @@ protected:
 
             srcRect.setXYWH(1, 1, 3, 3);
             SkMaskFilter* mf = SkBlurMaskFilter::Create(
-                SkBlurMaskFilter::kNormal_BlurStyle,
+                kNormal_SkBlurStyle,
                 SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(5)),
                 SkBlurMaskFilter::kHighQuality_BlurFlag |
                 SkBlurMaskFilter::kIgnoreTransform_BlurFlag);

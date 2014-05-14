@@ -12,8 +12,11 @@ import re
 import sys
 
 # Parameters for calculating bench ranges.
-RANGE_RATIO = 1.0  # Ratio of range for upper and lower bounds.
-ABS_ERR = 1.0  # Additional allowed error in milliseconds.
+RANGE_RATIO_UPPER = 1.5  # Ratio of range for upper bounds.
+RANGE_RATIO_LOWER = 2.0  # Ratio of range for lower bounds.
+ERR_RATIO = 0.08  # Further widens the range by the ratio of average value.
+ERR_UB = 1.0  # Adds an absolute upper error to cope with small benches.
+ERR_LB = 1.5
 
 # List of bench configs to monitor. Ignore all other configs.
 CONFIGS_TO_INCLUDE = ['simple_viewport_1000x1000',
@@ -21,6 +24,10 @@ CONFIGS_TO_INCLUDE = ['simple_viewport_1000x1000',
                       'simple_viewport_1000x1000_scalar_1.100000',
                       'simple_viewport_1000x1000_scalar_1.100000_gpu',
                      ]
+
+# List of flaky SKPs that should be excluded.
+SKPS_TO_EXCLUDE = [
+                  ]
 
 
 def compute_ranges(benches):
@@ -35,9 +42,10 @@ def compute_ranges(benches):
   minimum = min(benches)
   maximum = max(benches)
   diff = maximum - minimum
+  avg = sum(benches) / len(benches)
 
-  return [minimum - diff * RANGE_RATIO - ABS_ERR,
-          maximum + diff * RANGE_RATIO + ABS_ERR]
+  return [minimum - diff * RANGE_RATIO_LOWER - avg * ERR_RATIO - ERR_LB,
+          maximum + diff * RANGE_RATIO_UPPER + avg * ERR_RATIO + ERR_UB]
 
 
 def create_expectations_dict(revision_data_points):
@@ -54,7 +62,8 @@ def create_expectations_dict(revision_data_points):
   bench_dict = {}
   for point in revision_data_points:
     if (point.time_type or  # Not walltime which has time_type ''
-        not point.config in CONFIGS_TO_INCLUDE):
+        not point.config in CONFIGS_TO_INCLUDE or
+        point.bench in SKPS_TO_EXCLUDE):
       continue
     key = (point.config, point.bench)
     if key in bench_dict:

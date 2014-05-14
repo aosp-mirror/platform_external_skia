@@ -55,6 +55,7 @@
 #include "SkPath.h"
 #include "SkPicture.h"
 #include "SkPictureRecord.h"
+#include "SkPictureRecorder.h"
 #include "SkProxyCanvas.h"
 #include "SkRect.h"
 #include "SkRegion.h"
@@ -495,12 +496,13 @@ TEST_STEP_NO_PDF(DrawVerticesShader, DrawVerticesShaderTestStep);
 static void DrawPictureTestStep(SkCanvas* canvas,
                                 skiatest::Reporter*,
                                 CanvasTestStep*) {
-    SkPicture* testPicture = SkNEW_ARGS(SkPicture, ());
-    SkAutoUnref aup(testPicture);
-    SkCanvas* testCanvas = testPicture->beginRecording(kWidth, kHeight);
+    SkPictureRecorder recorder;
+    SkCanvas* testCanvas = recorder.beginRecording(kWidth, kHeight, NULL, 0);
     testCanvas->scale(SkIntToScalar(2), SkIntToScalar(1));
     testCanvas->clipRect(kTestRect);
     testCanvas->drawRect(kTestRect, kTestPaint);
+    SkAutoTUnref<SkPicture> testPicture(recorder.endRecording());
+
     canvas->drawPicture(*testPicture);
 }
 TEST_STEP(DrawPicture, DrawPictureTestStep);
@@ -693,8 +695,8 @@ private:
                                     testStep->assertMessage());
         }
         REPORTER_ASSERT_MESSAGE(reporter,
-            !referenceRecord->fPathHeap ==
-            !testRecord->fPathHeap,
+            !referenceRecord->fPicture->fPathHeap ==
+            !testRecord->fPicture->fPathHeap,
             testStep->assertMessage());
         // The following tests are commented out because they currently
         // fail. Issue: http://code.google.com/p/skia/issues/detail?id=507
@@ -722,24 +724,23 @@ public:
         // Verify that when a test step is executed twice, no extra resources
         // are flattened during the second execution
         testStep->setAssertMessageFormat(kPictureDrawAssertMessageFormat);
-        SkPicture referencePicture;
-        SkCanvas* referenceCanvas = referencePicture.beginRecording(kWidth,
-            kHeight, recordFlags);
+        SkPictureRecorder referenceRecorder;
+        SkCanvas* referenceCanvas = referenceRecorder.beginRecording(kWidth, kHeight,
+                                                                     NULL, recordFlags);
         testStep->draw(referenceCanvas, reporter);
-        SkPicture testPicture;
-        SkCanvas* testCanvas = testPicture.beginRecording(kWidth,
-            kHeight, recordFlags);
+
+        SkPictureRecorder testRecorder;
+        SkCanvas* testCanvas = testRecorder.beginRecording(kWidth, kHeight,
+                                                           NULL, recordFlags);
         testStep->draw(testCanvas, reporter);
         testStep->setAssertMessageFormat(kPictureSecondDrawAssertMessageFormat);
         testStep->draw(testCanvas, reporter);
 
-        SkPictureRecord* referenceRecord = static_cast<SkPictureRecord*>(
-            referenceCanvas);
-        SkPictureRecord* testRecord = static_cast<SkPictureRecord*>(
-            testCanvas);
+        SkPictureRecord* referenceRecord = static_cast<SkPictureRecord*>(referenceCanvas);
+        SkPictureRecord* testRecord = static_cast<SkPictureRecord*>(testCanvas);
         testStep->setAssertMessageFormat(kPictureResourceReuseMessageFormat);
         AssertFlattenedObjectsEqual(referenceRecord, testRecord,
-            reporter, testStep);
+                                    reporter, testStep);
     }
 };
 

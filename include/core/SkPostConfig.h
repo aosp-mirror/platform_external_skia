@@ -154,8 +154,8 @@
 #    undef NOMINMAX
 #  endif
 #
-#  ifndef SK_DEBUGBREAK
-#    define SK_DEBUGBREAK(p) do { if (!(p)) { SkNO_RETURN_HINT(); __debugbreak(); }} while (false)
+#  ifndef SK_ALWAYSBREAK
+#    define SK_ALWAYSBREAK(p) do { if (!(p)) { SkNO_RETURN_HINT(); __debugbreak(); }} while (false)
 #  endif
 #
 #  ifndef SK_A32_SHIFT
@@ -166,12 +166,14 @@
 #  endif
 #
 #else
-#  ifdef SK_DEBUG
-#    include <stdio.h>
-#    ifndef SK_DEBUGBREAK
-#      define SK_DEBUGBREAK(cond) do { if (cond) break; \
+#  ifndef SK_ALWAYSBREAK
+#    ifdef SK_DEBUG
+#      include <stdio.h>
+#      define SK_ALWAYSBREAK(cond) do { if (cond) break; \
                 SkDebugf("%s:%d: failed assertion \"%s\"\n", \
                 __FILE__, __LINE__, #cond); SK_CRASH(); } while (false)
+#    else
+#      define SK_ALWAYSBREAK(cond) do { if (cond) break; SK_CRASH(); } while (false)
 #    endif
 #  endif
 #endif
@@ -321,6 +323,14 @@
 #  define SK_ATTR_DEPRECATED(msg) SK_ATTRIBUTE(deprecated)
 #endif
 
+#if !defined(SK_ATTR_EXTERNALLY_DEPRECATED)
+#  if !defined(SK_INTERNAL)
+#    define SK_ATTR_EXTERNALLY_DEPRECATED(msg) SK_ATTR_DEPRECATED(msg)
+#  else
+#    define SK_ATTR_EXTERNALLY_DEPRECATED(msg)
+#  endif
+#endif
+
 /**
  * If your judgment is better than the compiler's (i.e. you've profiled it),
  * you can use SK_ALWAYS_INLINE to force inlining. E.g.
@@ -389,6 +399,17 @@
 #  else
 #    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
 #  endif
+#endif
+
+
+//////////////////////////////////////////////////////////////////////
+
+#if defined(SK_GAMMA_EXPONENT) && defined(SK_GAMMA_SRGB)
+#  error "cannot define both SK_GAMMA_EXPONENT and SK_GAMMA_SRGB"
+#elif defined(SK_GAMMA_SRGB)
+#  define SK_GAMMA_EXPONENT (0.0f)
+#elif !defined(SK_GAMMA_EXPONENT)
+#  define SK_GAMMA_EXPONENT (2.2f)
 #endif
 
 #endif // SkPostConfig_DEFINED

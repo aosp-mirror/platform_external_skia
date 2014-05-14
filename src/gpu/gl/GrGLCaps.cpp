@@ -23,6 +23,8 @@ void GrGLCaps::reset() {
     fStencilVerifiedColorConfigs.reset();
     fMSFBOType = kNone_MSFBOType;
     fFBFetchType = kNone_FBFetchType;
+    fInvalidateFBType = kNone_InvalidateFBType;
+    fMapBufferType = kNone_MapBufferType;
     fMaxFragmentUniformVectors = 0;
     fMaxVertexAttributes = 0;
     fMaxFragmentTextureUnits = 0;
@@ -44,7 +46,6 @@ void GrGLCaps::reset() {
     fVertexArrayObjectSupport = false;
     fUseNonVBOVertexAndIndexDynamicData = false;
     fIsCoreProfile = false;
-    fFixedFunctionSupport = false;
     fFullClearIsFree = false;
     fDropsTileOnZeroDivide = false;
 }
@@ -53,7 +54,7 @@ GrGLCaps::GrGLCaps(const GrGLCaps& caps) : GrDrawTargetCaps() {
     *this = caps;
 }
 
-GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
+GrGLCaps& GrGLCaps::operator= (const GrGLCaps& caps) {
     INHERITED::operator=(caps);
     fVerifiedColorConfigs = caps.fVerifiedColorConfigs;
     fStencilFormats = caps.fStencilFormats;
@@ -64,6 +65,8 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fMaxFixedFunctionTextureCoords = caps.fMaxFixedFunctionTextureCoords;
     fMSFBOType = caps.fMSFBOType;
     fFBFetchType = caps.fFBFetchType;
+    fInvalidateFBType = caps.fInvalidateFBType;
+    fMapBufferType = caps.fMapBufferType;
     fRGBA8RenderbufferSupport = caps.fRGBA8RenderbufferSupport;
     fBGRAFormatSupport = caps.fBGRAFormatSupport;
     fBGRAIsInternalFormat = caps.fBGRAIsInternalFormat;
@@ -81,18 +84,17 @@ GrGLCaps& GrGLCaps::operator = (const GrGLCaps& caps) {
     fVertexArrayObjectSupport = caps.fVertexArrayObjectSupport;
     fUseNonVBOVertexAndIndexDynamicData = caps.fUseNonVBOVertexAndIndexDynamicData;
     fIsCoreProfile = caps.fIsCoreProfile;
-    fFixedFunctionSupport = caps.fFixedFunctionSupport;
     fFullClearIsFree = caps.fFullClearIsFree;
     fDropsTileOnZeroDivide = caps.fDropsTileOnZeroDivide;
 
     return *this;
 }
 
-void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
+bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
 
     this->reset();
     if (!ctxInfo.isInitialized()) {
-        return;
+        return false;
     }
 
     GrGLStandard standard = ctxInfo.standard();
@@ -116,7 +118,6 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
             fIsCoreProfile = SkToBool(profileMask & GR_GL_CONTEXT_CORE_PROFILE_BIT);
         }
         if (!fIsCoreProfile) {
-            fFixedFunctionSupport = true;
             GR_GL_GetIntegerv(gli, GR_GL_MAX_TEXTURE_COORDS, &fMaxFixedFunctionTextureCoords);
             // Sanity check
             SkASSERT(fMaxFixedFunctionTextureCoords > 0 && fMaxFixedFunctionTextureCoords < 128);
@@ -222,7 +223,15 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fUseNonVBOVertexAndIndexDynamicData = true;
     }
 
-    fDiscardRenderTargetSupport = ctxInfo.hasExtension("GL_EXT_discard_framebuffer");
+    if ((kGL_GrGLStandard == standard && version >= GR_GL_VER(4,3)) ||
+        (kGLES_GrGLStandard == standard && version >= GR_GL_VER(3,0)) ||
+        ctxInfo.hasExtension("GL_ARB_invalidate_subdata")) {
+        fDiscardRenderTargetSupport = true;
+        fInvalidateFBType = kInvalidate_InvalidateFBType;
+    } else if (ctxInfo.hasExtension("GL_EXT_discard_framebuffer")) {
+        fDiscardRenderTargetSupport = true;
+        fInvalidateFBType = kDiscard_InvalidateFBType;
+    }
 
     if (kARM_GrGLVendor == ctxInfo.vendor() || kImagination_GrGLVendor == ctxInfo.vendor()) {
         fFullClearIsFree = true;
@@ -281,10 +290,27 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     }
 
     if (kGL_GrGLStandard == standard) {
-        fBufferLockSupport = true; // we require VBO support and the desktop VBO extension includes
-                                   // glMapBuffer.
+        fMapBufferFlags = kCanMap_MapFlag; // we require VBO support and the desktop VBO
+                                            // extension includes glMapBuffer.
+        if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_ARB_map_buffer_range")) {
+            fMapBufferFlags |= kSubset_MapFlag;
+            fMapBufferType = kMapBufferRange_MapBufferType;
+        } else {
+            fMapBufferType = kMapBuffer_MapBufferType;
+        }
     } else {
-        fBufferLockSupport = ctxInfo.hasExtension("GL_OES_mapbuffer");
+        // Unextended GLES2 doesn't have any buffer mapping.
+        fMapBufferFlags = kNone_MapBufferType;
+        if (ctxInfo.hasExtension("GL_CHROMIUM_map_sub")) {
+            fMapBufferFlags = kCanMap_MapFlag | kSubset_MapFlag;
+            fMapBufferType = kChromium_MapBufferType;
+        } else if (version >= GR_GL_VER(3, 0) || ctxInfo.hasExtension("GL_EXT_map_buffer_range")) {
+            fMapBufferFlags = kCanMap_MapFlag | kSubset_MapFlag;
+            fMapBufferType = kMapBufferRange_MapBufferType;
+        } else if (ctxInfo.hasExtension("GL_OES_mapbuffer")) {
+            fMapBufferFlags = kCanMap_MapFlag;
+            fMapBufferType = kMapBuffer_MapBufferType;
+        }
     }
 
     if (kGL_GrGLStandard == standard) {
@@ -310,10 +336,10 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     GR_GL_GetIntegerv(gli, GR_GL_MAX_RENDERBUFFER_SIZE, &fMaxRenderTargetSize);
     // Our render targets are always created with textures as the color
     // attachment, hence this min:
-    fMaxRenderTargetSize = GrMin(fMaxTextureSize, fMaxRenderTargetSize);
+    fMaxRenderTargetSize = SkTMin(fMaxTextureSize, fMaxRenderTargetSize);
 
-    fPathRenderingSupport = ctxInfo.hasExtension("GL_NV_path_rendering");
-    SkASSERT(!fPathRenderingSupport || fFixedFunctionSupport);
+    fPathRenderingSupport = ctxInfo.hasExtension("GL_NV_path_rendering") &&
+        ctxInfo.hasExtension("GL_EXT_direct_state_access");
 
     fGpuTracingSupport = ctxInfo.hasExtension("GL_EXT_debug_marker");
 
@@ -342,6 +368,8 @@ void GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     }
 
     this->initConfigRenderableTable(ctxInfo);
+
+    return true;
 }
 
 void GrGLCaps::initConfigRenderableTable(const GrGLContextInfo& ctxInfo) {
@@ -566,7 +594,7 @@ void GrGLCaps::markColorConfigAndStencilFormatAsVerified(
             return;
         }
     }
-    GrCrash("Why are we seeing a stencil format that "
+    SkFAIL("Why are we seeing a stencil format that "
             "GrGLCaps doesn't know about.");
 }
 
@@ -587,7 +615,7 @@ bool GrGLCaps::isColorConfigAndStencilFormatVerified(
             return fStencilVerifiedColorConfigs[i].isVerified(config);
         }
     }
-    GrCrash("Why are we seeing a stencil format that "
+    SkFAIL("Why are we seeing a stencil format that "
             "GLCaps doesn't know about.");
     return false;
 }
@@ -620,7 +648,7 @@ SkString GrGLCaps::dump() const {
     GR_STATIC_ASSERT(4 == kES_Apple_MSFBOType);
     GR_STATIC_ASSERT(5 == kES_IMG_MsToTexture_MSFBOType);
     GR_STATIC_ASSERT(6 == kES_EXT_MsToTexture_MSFBOType);
-    GR_STATIC_ASSERT(GR_ARRAY_COUNT(kMSFBOExtStr) == kLast_MSFBOType + 1);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kMSFBOExtStr) == kLast_MSFBOType + 1);
 
     static const char* kFBFetchTypeStr[] = {
         "None",
@@ -630,16 +658,38 @@ SkString GrGLCaps::dump() const {
     GR_STATIC_ASSERT(0 == kNone_FBFetchType);
     GR_STATIC_ASSERT(1 == kEXT_FBFetchType);
     GR_STATIC_ASSERT(2 == kNV_FBFetchType);
-    GR_STATIC_ASSERT(GR_ARRAY_COUNT(kFBFetchTypeStr) == kLast_FBFetchType + 1);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kFBFetchTypeStr) == kLast_FBFetchType + 1);
 
+    static const char* kInvalidateFBTypeStr[] = {
+        "None",
+        "Discard",
+        "Invalidate",
+    };
+    GR_STATIC_ASSERT(0 == kNone_InvalidateFBType);
+    GR_STATIC_ASSERT(1 == kDiscard_InvalidateFBType);
+    GR_STATIC_ASSERT(2 == kInvalidate_InvalidateFBType);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kInvalidateFBTypeStr) == kLast_InvalidateFBType + 1);
+
+    static const char* kMapBufferTypeStr[] = {
+        "None",
+        "MapBuffer",
+        "MapBufferRange",
+        "Chromium",
+    };
+    GR_STATIC_ASSERT(0 == kNone_MapBufferType);
+    GR_STATIC_ASSERT(1 == kMapBuffer_MapBufferType);
+    GR_STATIC_ASSERT(2 == kMapBufferRange_MapBufferType);
+    GR_STATIC_ASSERT(3 == kChromium_MapBufferType);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(kMapBufferTypeStr) == kLast_MapBufferType + 1);
 
     r.appendf("Core Profile: %s\n", (fIsCoreProfile ? "YES" : "NO"));
-    r.appendf("Fixed Function Support: %s\n", (fFixedFunctionSupport ? "YES" : "NO"));
     r.appendf("MSAA Type: %s\n", kMSFBOExtStr[fMSFBOType]);
     r.appendf("FB Fetch Type: %s\n", kFBFetchTypeStr[fFBFetchType]);
+    r.appendf("Invalidate FB Type: %s\n", kInvalidateFBTypeStr[fInvalidateFBType]);
+    r.appendf("Map Buffer Type: %s\n", kMapBufferTypeStr[fMapBufferType]);
     r.appendf("Max FS Uniform Vectors: %d\n", fMaxFragmentUniformVectors);
     r.appendf("Max FS Texture Units: %d\n", fMaxFragmentTextureUnits);
-    if (fFixedFunctionSupport) {
+    if (!fIsCoreProfile) {
         r.appendf("Max Fixed Function Texture Coords: %d\n", fMaxFixedFunctionTextureCoords);
     }
     r.appendf("Max Vertex Attributes: %d\n", fMaxVertexAttributes);

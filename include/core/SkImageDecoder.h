@@ -24,7 +24,7 @@ class SkStreamRewindable;
 
     Base class for decoding compressed images into a SkBitmap
 */
-class SkImageDecoder : public SkNoncopyable {
+class SkImageDecoder : SkNoncopyable {
 public:
     virtual ~SkImageDecoder();
 
@@ -287,11 +287,6 @@ public:
      * Return false if the index is never built or failing in decoding.
      */
     bool decodeSubset(SkBitmap* bm, const SkIRect& subset, SkBitmap::Config pref);
-
-    SK_ATTR_DEPRECATED("use decodeSubset() instead")
-    bool decodeRegion(SkBitmap* bitmap, const SkIRect& rect, SkBitmap::Config pref) {
-        return this->decodeSubset(bitmap, rect, pref);
-    }
 
     /** Given a stream, this will try to find an appropriate decoder object.
         If none is found, the method returns NULL.

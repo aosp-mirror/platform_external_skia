@@ -113,8 +113,7 @@ private:
     SkMaskFilter* createBlur() {
         static const SkScalar kBlurSigma = SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(25));
 
-        return SkBlurMaskFilter::Create(SkBlurMaskFilter::kNormal_BlurStyle,
-                                        kBlurSigma,
+        return SkBlurMaskFilter::Create(kNormal_SkBlurStyle, kBlurSigma,
                                         SkBlurMaskFilter::kHighQuality_BlurFlag);
     }
 
@@ -163,7 +162,7 @@ private:
 
     // Create a 1-tier drawlooper
     SkLayerDrawLooper* create1Looper(SkScalar xOff, SkScalar yOff, SkColor color) {
-        SkLayerDrawLooper* looper = new SkLayerDrawLooper;
+        SkLayerDrawLooper::Builder looperBuilder;
         SkLayerDrawLooper::LayerInfo info;
 
         info.fPaintBits = SkLayerDrawLooper::kColorFilter_Bit |
@@ -172,14 +171,14 @@ private:
         info.fOffset.set(xOff, yOff);
         info.fPostTranslate = false;
 
-        SkPaint* paint = looper->addLayer(info);
+        SkPaint* paint = looperBuilder.addLayer(info);
 
         paint->setMaskFilter(this->createBlur())->unref();
 
         SkColorFilter* cf = SkColorFilter::CreateModeFilter(color, SkXfermode::kSrcIn_Mode);
         paint->setColorFilter(cf)->unref();
 
-        return looper;
+        return looperBuilder.detachLooper();
     }
 
     void draw1x4(SkCanvas* canvas, SkScalar x, SkScalar y) {
@@ -207,7 +206,7 @@ private:
 
     // Create a 4-tier draw looper
     SkLayerDrawLooper* create4Looper(SkScalar xOff, SkScalar yOff) {
-        SkLayerDrawLooper* looper = new SkLayerDrawLooper;
+        SkLayerDrawLooper::Builder looperBuilder;
         SkLayerDrawLooper::LayerInfo info;
 
         info.fPaintBits = SkLayerDrawLooper::kColorFilter_Bit |
@@ -219,7 +218,7 @@ private:
 
         for (int i = 3; i >= 0; --i) {
             info.fOffset.set(xOff+gBlurOffsets[i].fX, yOff+gBlurOffsets[i].fY);
-            paint = looper->addLayer(info);
+            paint = looperBuilder.addLayer(info);
 
             paint->setMaskFilter(this->createBlur())->unref();
 
@@ -227,7 +226,7 @@ private:
             paint->setColorFilter(cf)->unref();
         }
 
-        return looper;
+        return looperBuilder.detachLooper();
     }
 
     typedef GM INHERITED;

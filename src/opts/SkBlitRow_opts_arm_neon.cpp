@@ -14,7 +14,6 @@
 #include "SkMathPriv.h"
 #include "SkUtils.h"
 
-#include "SkCachePreload_arm.h"
 #include "SkColor_opts_neon.h"
 #include <arm_neon.h>
 
@@ -50,6 +49,90 @@ void S32_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
         dst++;
         count--;
     };
+}
+
+void S32_D565_Blend_neon(uint16_t* SK_RESTRICT dst,
+                          const SkPMColor* SK_RESTRICT src, int count,
+                          U8CPU alpha, int /*x*/, int /*y*/) {
+    SkASSERT(255 > alpha);
+
+    uint16x8_t vmask_blue, vscale;
+
+    // prepare constants
+    vscale = vdupq_n_u16(SkAlpha255To256(alpha));
+    vmask_blue = vmovq_n_u16(0x1F);
+
+    while (count >= 8) {
+        uint16x8_t vdst, vdst_r, vdst_g, vdst_b;
+        uint16x8_t vres_r, vres_g, vres_b;
+        uint8x8_t vsrc_r, vsrc_g, vsrc_b;
+
+        // Load src
+        {
+        register uint8x8_t d0 asm("d0");
+        register uint8x8_t d1 asm("d1");
+        register uint8x8_t d2 asm("d2");
+        register uint8x8_t d3 asm("d3");
+
+        asm (
+            "vld4.8    {d0-d3},[%[src]]!"
+            : "=w" (d0), "=w" (d1), "=w" (d2), "=w" (d3), [src] "+&r" (src)
+            :
+        );
+        vsrc_g = d1;
+#if SK_PMCOLOR_BYTE_ORDER(B,G,R,A)
+        vsrc_r = d2; vsrc_b = d0;
+#elif SK_PMCOLOR_BYTE_ORDER(R,G,B,A)
+        vsrc_r = d0; vsrc_b = d2;
+#endif
+        }
+
+        // Load and unpack dst
+        vdst = vld1q_u16(dst);
+        vdst_g = vshlq_n_u16(vdst, 5);        // shift green to top of lanes
+        vdst_b = vandq_u16(vdst, vmask_blue); // extract blue
+        vdst_r = vshrq_n_u16(vdst, 6+5);      // extract red
+        vdst_g = vshrq_n_u16(vdst_g, 5+5);    // extract green
+
+        // Shift src to 565
+        vsrc_r = vshr_n_u8(vsrc_r, 3);    // shift red to 565 range
+        vsrc_g = vshr_n_u8(vsrc_g, 2);    // shift green to 565 range
+        vsrc_b = vshr_n_u8(vsrc_b, 3);    // shift blue to 565 range
+
+        // Scale src - dst
+        vres_r = vmovl_u8(vsrc_r) - vdst_r;
+        vres_g = vmovl_u8(vsrc_g) - vdst_g;
+        vres_b = vmovl_u8(vsrc_b) - vdst_b;
+
+        vres_r = vshrq_n_u16(vres_r * vscale, 8);
+        vres_g = vshrq_n_u16(vres_g * vscale, 8);
+        vres_b = vshrq_n_u16(vres_b * vscale, 8);
+
+        vres_r += vdst_r;
+        vres_g += vdst_g;
+        vres_b += vdst_b;
+
+        // Combine
+        vres_b = vsliq_n_u16(vres_b, vres_g, 5);    // insert green into blue
+        vres_b = vsliq_n_u16(vres_b, vres_r, 6+5);  // insert red into green/blue
+
+        // Store
+        vst1q_u16(dst, vres_b);
+        dst += 8;
+        count -= 8;
+    }
+    if (count > 0) {
+        int scale = SkAlpha255To256(alpha);
+        do {
+            SkPMColor c = *src++;
+            SkPMColorAssert(c);
+            uint16_t d = *dst;
+            *dst++ = SkPackRGB16(
+                    SkAlphaBlend(SkPacked32ToR16(c), SkGetPackedR16(d), scale),
+                    SkAlphaBlend(SkPacked32ToG16(c), SkGetPackedG16(d), scale),
+                    SkAlphaBlend(SkPacked32ToB16(c), SkGetPackedB16(d), scale));
+        } while (--count != 0);
+    }
 }
 
 void S32A_D565_Opaque_neon(uint16_t* SK_RESTRICT dst,
@@ -1300,84 +1383,88 @@ void Color32_arm_neon(SkPMColor* dst, const SkPMColor* src, int count,
     unsigned colorA = SkGetPackedA32(color);
     if (255 == colorA) {
         sk_memset32(dst, color, count);
-    } else {
-        unsigned scale = 256 - SkAlpha255To256(colorA);
+        return;
+    }
 
-        if (count >= 8) {
-            // at the end of this assembly, count will have been decremented
-            // to a negative value. That is, if count mod 8 = x, it will be
-            // -8 +x coming out.
-            asm volatile (
-                PLD128(src, 0)
+    unsigned scale = 256 - SkAlpha255To256(colorA);
 
-                "vdup.32    q0, %[color]                \n\t"
+    if (count >= 8) {
+        uint32x4_t vcolor;
+        uint8x8_t vscale;
 
-                PLD128(src, 128)
+        vcolor = vdupq_n_u32(color);
 
-                // scale numerical interval [0-255], so load as 8 bits
-                "vdup.8     d2, %[scale]                \n\t"
+        // scale numerical interval [0-255], so load as 8 bits
+        vscale = vdup_n_u8(scale);
 
-                PLD128(src, 256)
+        do {
+            // load src color, 8 pixels, 4 64 bit registers
+            // (and increment src).
+            uint32x2x4_t vsrc;
+#if (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6))
+            asm (
+                "vld1.32    %h[vsrc], [%[src]]!"
+                : [vsrc] "=w" (vsrc), [src] "+r" (src)
+                : :
+            );
+#else // (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6))
+            vsrc.val[0] = vld1_u32(src);
+            vsrc.val[1] = vld1_u32(src+2);
+            vsrc.val[2] = vld1_u32(src+4);
+            vsrc.val[3] = vld1_u32(src+6);
+            src += 8;
+#endif
 
-                "subs       %[count], %[count], #8      \n\t"
+            // multiply long by scale, 64 bits at a time,
+            // destination into a 128 bit register.
+            uint16x8x4_t vtmp;
+            vtmp.val[0] = vmull_u8(vreinterpret_u8_u32(vsrc.val[0]), vscale);
+            vtmp.val[1] = vmull_u8(vreinterpret_u8_u32(vsrc.val[1]), vscale);
+            vtmp.val[2] = vmull_u8(vreinterpret_u8_u32(vsrc.val[2]), vscale);
+            vtmp.val[3] = vmull_u8(vreinterpret_u8_u32(vsrc.val[3]), vscale);
 
-                PLD128(src, 384)
+            // shift the 128 bit registers, containing the 16
+            // bit scaled values back to 8 bits, narrowing the
+            // results to 64 bit registers.
+            uint8x16x2_t vres;
+            vres.val[0] = vcombine_u8(
+                            vshrn_n_u16(vtmp.val[0], 8),
+                            vshrn_n_u16(vtmp.val[1], 8));
+            vres.val[1] = vcombine_u8(
+                            vshrn_n_u16(vtmp.val[2], 8),
+                            vshrn_n_u16(vtmp.val[3], 8));
 
-                "Loop_Color32:                          \n\t"
+            // adding back the color, using 128 bit registers.
+            uint32x4x2_t vdst;
+            vdst.val[0] = vreinterpretq_u32_u8(vres.val[0] +
+                                               vreinterpretq_u8_u32(vcolor));
+            vdst.val[1] = vreinterpretq_u32_u8(vres.val[1] +
+                                               vreinterpretq_u8_u32(vcolor));
 
-                // load src color, 8 pixels, 4 64 bit registers
-                // (and increment src).
-                "vld1.32    {d4-d7}, [%[src]]!          \n\t"
+            // store back the 8 calculated pixels (2 128 bit
+            // registers), and increment dst.
+#if (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6))
+            asm (
+                "vst1.32    %h[vdst], [%[dst]]!"
+                : [dst] "+r" (dst)
+                : [vdst] "w" (vdst)
+                : "memory"
+            );
+#else // (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 6))
+            vst1q_u32(dst, vdst.val[0]);
+            vst1q_u32(dst+4, vdst.val[1]);
+            dst += 8;
+#endif
+            count -= 8;
 
-                PLD128(src, 384)
+        } while (count >= 8);
+    }
 
-                // multiply long by scale, 64 bits at a time,
-                // destination into a 128 bit register.
-                "vmull.u8   q4, d4, d2                  \n\t"
-                "vmull.u8   q5, d5, d2                  \n\t"
-                "vmull.u8   q6, d6, d2                  \n\t"
-                "vmull.u8   q7, d7, d2                  \n\t"
-
-                // shift the 128 bit registers, containing the 16
-                // bit scaled values back to 8 bits, narrowing the
-                // results to 64 bit registers.
-                "vshrn.i16  d8, q4, #8                  \n\t"
-                "vshrn.i16  d9, q5, #8                  \n\t"
-                "vshrn.i16  d10, q6, #8                 \n\t"
-                "vshrn.i16  d11, q7, #8                 \n\t"
-
-                // adding back the color, using 128 bit registers.
-                "vadd.i8    q6, q4, q0                  \n\t"
-                "vadd.i8    q7, q5, q0                  \n\t"
-
-                // store back the 8 calculated pixels (2 128 bit
-                // registers), and increment dst.
-                "vst1.32    {d12-d15}, [%[dst]]!        \n\t"
-
-                "subs       %[count], %[count], #8      \n\t"
-                "bge        Loop_Color32                \n\t"
-                : [src] "+r" (src), [dst] "+r" (dst), [count] "+r" (count)
-                : [color] "r" (color), [scale] "r" (scale)
-                : "cc", "memory",
-                  "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
-                  "d8", "d9", "d10", "d11", "d12", "d13", "d14", "d15"
-                          );
-            // At this point, if we went through the inline assembly, count is
-            // a negative value:
-            // if the value is -8, there is no pixel left to process.
-            // if the value is -7, there is one pixel left to process
-            // ...
-            // And'ing it with 7 will give us the number of pixels
-            // left to process.
-            count = count & 0x7;
-        }
-
-        while (count > 0) {
-            *dst = color + SkAlphaMulQ(*src, scale);
-            src += 1;
-            dst += 1;
-            count--;
-        }
+    while (count > 0) {
+        *dst = color + SkAlphaMulQ(*src, scale);
+        src += 1;
+        dst += 1;
+        count--;
     }
 }
 
@@ -1385,11 +1472,8 @@ void Color32_arm_neon(SkPMColor* dst, const SkPMColor* src, int count,
 
 const SkBlitRow::Proc sk_blitrow_platform_565_procs_arm_neon[] = {
     // no dither
-    // NOTE: For the S32_D565_Blend function below, we don't have a special
-    //       version that assumes that each source pixel is opaque. But our
-    //       S32A is still faster than the default, so use it.
     S32_D565_Opaque_neon,
-    S32A_D565_Blend_neon,   // really S32_D565_Blend
+    S32_D565_Blend_neon,
     S32A_D565_Opaque_neon,
     S32A_D565_Blend_neon,
 

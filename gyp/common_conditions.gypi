@@ -8,6 +8,12 @@
     'SK_FORCE_DISTANCEFIELD_FONTS=<(skia_force_distancefield_fonts)',
   ],
   'conditions' : [
+    [ 'skia_arch_type == "arm64"', {
+      'cflags': [
+        '-ffp-contract=off',
+      ],
+    }],
+
     [ 'skia_os == "win"',
       {
         'defines': [
@@ -25,6 +31,7 @@
             'AdditionalOptions': [ '/MP', ],
           },
           'VCLinkerTool': {
+            'LargeAddressAware': 2,  # 2 means "Yes, please let me use more RAM on 32-bit builds."
             'AdditionalDependencies': [
               'OpenGL32.lib',
               'usp10.lib',
@@ -87,6 +94,29 @@
           },
         },
         'conditions' : [
+          # Gyp's ninja generator depends on these specially named
+          # configurations to build 64-bit on Windows.
+          # See http://skbug.com/2348
+          #
+          # We handle the 64- vs 32-bit variations elsewhere, so I think it's
+          # OK for us to just make these inherit non-archwidth-specific
+          # configurations without modification.
+          #
+          # See http://skbug.com/2442 : These targets cause problems in the
+          # MSVS build, so only include them if gyp is generating a ninja build.
+          [ '"ninja" in "<!(echo %GYP_GENERATORS%)"', {
+            'configurations': {
+              'Debug_x64': {
+                'inherit_from': ['Debug'],
+              },
+              'Release_x64': {
+                'inherit_from': ['Release'],
+              },
+              'Release_Developer_x64': {
+                'inherit_from': ['Release_Developer'],
+              },
+            },
+          }],
           [ 'skia_arch_width == 64', {
             'msvs_configuration_platform': 'x64',
           }],
@@ -252,18 +282,10 @@
         # using freetype's embolden allows us to adjust fake bold settings at
         # draw-time, at which point we know which SkTypeface is being drawn
         'SK_USE_FREETYPE_EMBOLDEN',
-        # Android provides at least FreeType 2.4.0 at runtime.
-        'SK_FONTHOST_FREETYPE_RUNTIME_VERSION 0x020400',
-        # Skia should not use dlopen on Android.
-        'SK_CAN_USE_DLOPEN 0',
         'SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"',
         # When built as part of the system image we can enable certian non-NDK
         # compliant optimizations.
         'SK_BUILD_FOR_ANDROID_FRAMEWORK',
-        # Android Text Tuning
-        'SK_GAMMA_APPLY_TO_A8',
-        'SK_GAMMA_EXPONENT 1.4',
-        'SK_GAMMA_CONTRAST 0.0',
         # Optimizations for chromium (m30)
         'GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"',
         'IGNORE_ROT_AA_RECT_OPT',
@@ -274,6 +296,23 @@
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
         'SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"',
         'SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"',
+        # FIXME: b/13729784: Need to rework LayerRasterizer.cpp
+        'SK_SUPPORT_LEGACY_LAYERRASTERIZER_API',
+        # Temporary until https:#googleplex-android-review.git.corp.google.com/#/c/442220/
+        # lands.
+        'SK_SUPPORT_LEGACY_GETTOTALCLIP',
+        # Still need to switch Android to the new name for N32.
+        'kNative_8888_SkColorType kN32_SkColorType',
+        'SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD',
+        'SK_SUPPORT_DEPRECATED_RECORD_FLAGS',
+        'SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES',
+        'SK_SUPPORT_LEGACY_PICTURE_HEADERS',
+        'SK_SUPPORT_LEGACY_BLURDRAWLOOPERCONSTRUCTORS',
+        'SK_SUPPORT_LEGACY_BLURMASKFILTER_STYLE',
+        # Needed until we fix skbug.com/2440.
+        'SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG',
+        # Transitional, for deprecated SkCanvas::SaveFlags methods.
+        'SK_ATTR_DEPRECATED=SK_NOTHING_ARG1',
       ],
     }],
 
@@ -312,7 +351,7 @@
               'SK_BUILD_FOR_NACL',
             ],
             'variables': {
-              'nacl_sdk_root': '<!(["echo", "${NACL_SDK_ROOT}"])',
+              'nacl_sdk_root': '<!(echo ${NACL_SDK_ROOT})',
             },
             'link_settings': {
               'libraries': [
@@ -366,6 +405,16 @@
               [ 'skia_sanitizer == "thread"', {
                 'defines': [ 'DYNAMIC_ANNOTATIONS_ENABLED=1' ],
                 'cflags': [ '-fPIC' ],
+                'target_conditions': [
+                  [ '_type == "executable"', {
+                    'cflags': [ '-fPIE' ],
+                    'ldflags': [ '-pie' ],
+                  }],
+                ],
+              }],
+              [ 'skia_sanitizer == "undefined"', {
+                'cflags': [ '-fPIC' ],
+                'cflags_cc!': ['-fno-rtti'],
                 'target_conditions': [
                   [ '_type == "executable"', {
                     'cflags': [ '-fPIE' ],
@@ -503,7 +552,7 @@
           },
         },
         'xcode_settings': {
-          'ARCHS': ['armv6', 'armv7'],
+          'ARCHS': ['armv7'],
           'CODE_SIGNING_REQUIRED': 'NO',
           'CODE_SIGN_IDENTITY[sdk=iphoneos*]': '',
           'IPHONEOS_DEPLOYMENT_TARGET': '<(ios_sdk_version)',
@@ -523,6 +572,14 @@
         'defines': [
           'SK_BUILD_FOR_ANDROID',
           'SK_FONTHOST_DOES_NOT_USE_FONTMGR',
+
+          # Android Text Tuning
+          'SK_GAMMA_EXPONENT=1.4',
+          'SK_GAMMA_CONTRAST=0.0',
+        ],
+        # Android defines a fixed gamma exponent instead of using SRGB
+        'defines!': [
+          'SK_GAMMA_SRGB',
         ],
         'configurations': {
           'Debug': {

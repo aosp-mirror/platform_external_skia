@@ -46,8 +46,10 @@ DEFINE_bool(purgeDecodedTex, false, "Purge decoded and GPU-uploaded textures "
 DEFINE_string(timers, "c", "[wcgWC]*: Display wall, cpu, gpu, truncated wall or truncated cpu time"
               " for each picture.");
 DEFINE_bool(trackDeferredCaching, false, "Only meaningful with --deferImageDecoding and "
-            "LAZY_CACHE_STATS set to true. Report percentage of cache hits when using deferred "
-            "image decoding.");
+            "SK_LAZY_CACHE_STATS set to true. Report percentage of cache hits when using "
+            "deferred image decoding.");
+
+DEFINE_bool(preprocess, false, "If true, perform device specific preprocessing before timing.");
 
 static char const * const gFilterTypes[] = {
     "paint",
@@ -142,7 +144,7 @@ static SkString filterFlagsUsage() {
     return result;
 }
 
-#if LAZY_CACHE_STATS
+#if SK_LAZY_CACHE_STATS
 static int32_t gTotalCacheHits;
 static int32_t gTotalCacheMisses;
 #endif
@@ -192,11 +194,11 @@ static bool run_single_benchmark(const SkString& inputPath,
 
     benchmark.run(picture);
 
-#if LAZY_CACHE_STATS
+#if SK_LAZY_CACHE_STATS
     if (FLAGS_trackDeferredCaching) {
-        int32_t cacheHits = pool->fCacheHits;
-        int32_t cacheMisses = pool->fCacheMisses;
-        pool->fCacheHits = pool->fCacheMisses = 0;
+        int cacheHits = pool->getCacheHits();
+        int cacheMisses = pool->getCacheMisses();
+        pool->resetCacheHitsAndMisses();
         SkString hitString;
         hitString.printf("Cache hit rate: %f\n", (double) cacheHits / (cacheHits + cacheMisses));
         gLogger.logProgress(hitString);
@@ -341,6 +343,7 @@ static void setup_benchmark(sk_tools::PictureBenchmark* benchmark) {
     }
 
     benchmark->setPurgeDecodedTex(FLAGS_purgeDecodedTex);
+    benchmark->setPreprocess(FLAGS_preprocess);
 
     if (FLAGS_readPath.count() < 1) {
         gLogger.logError(".skp files or directories are required.\n");
@@ -435,7 +438,7 @@ int tool_main(int argc, char** argv) {
         gLogger.logError(err);
         return 1;
     }
-#if LAZY_CACHE_STATS
+#if SK_LAZY_CACHE_STATS
     if (FLAGS_trackDeferredCaching) {
         SkDebugf("Total cache hit rate: %f\n",
                  (double) gTotalCacheHits / (gTotalCacheHits + gTotalCacheMisses));

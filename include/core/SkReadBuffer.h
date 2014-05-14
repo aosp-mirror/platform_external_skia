@@ -41,6 +41,15 @@ public:
     SkReadBuffer(SkStream* stream);
     virtual ~SkReadBuffer();
 
+    /** Return the version of the serialized picture this buffer holds, or 0 if unset. */
+    int pictureVersion() const { return fPictureVersion; }
+
+    /** This may be called at most once; most clients of SkReadBuffer should not mess with it. */
+    void setPictureVersion(int version) {
+        SkASSERT(0 == fPictureVersion || version == fPictureVersion);
+        fPictureVersion = version;
+    }
+
     enum Flags {
         kCrossProcess_Flag  = 1 << 0,
         kScalarIsFloat_Flag = 1 << 1,
@@ -60,10 +69,11 @@ public:
 
     SkReader32* getReader32() { return &fReader; }
 
-    uint32_t size() { return fReader.size(); }
-    uint32_t offset() { return fReader.offset(); }
+    size_t size() { return fReader.size(); }
+    size_t offset() { return fReader.offset(); }
     bool eof() { return fReader.eof(); }
     const void* skip(size_t size) { return fReader.skip(size); }
+    void* readFunctionPtr() { return fReader.readPtr(); }
 
     // primitives
     virtual bool readBool();
@@ -73,12 +83,6 @@ public:
     virtual SkScalar readScalar();
     virtual uint32_t readUInt();
     virtual int32_t read32();
-
-    void* readFunctionPtr() {
-        void* ptr;
-        this->readByteArray(&ptr, sizeof(ptr));
-        return ptr;
-    }
 
     // strings -- the caller is responsible for freeing the string contents
     virtual void readString(SkString* string);
@@ -184,6 +188,7 @@ private:
     bool readArray(void* value, size_t size, size_t elementSize);
 
     uint32_t fFlags;
+    int fPictureVersion;
 
     void* fMemoryPtr;
 

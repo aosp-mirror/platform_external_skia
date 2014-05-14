@@ -71,7 +71,7 @@ private:
     };
 
     SkLayerDrawLooper* createLooper(SkScalar xOff, SkScalar sigma) {
-        SkLayerDrawLooper* looper = new SkLayerDrawLooper;
+        SkLayerDrawLooper::Builder looperBuilder;
 
         //-----------------------------------------------
         SkLayerDrawLooper::LayerInfo info;
@@ -83,9 +83,9 @@ private:
         info.fOffset.set(xOff, 0);
         info.fPostTranslate = false;
 
-        SkPaint* paint = looper->addLayer(info);
+        SkPaint* paint = looperBuilder.addLayer(info);
 
-        SkMaskFilter* mf = SkBlurMaskFilter::Create(SkBlurMaskFilter::kNormal_BlurStyle,
+        SkMaskFilter* mf = SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                                     sigma,
                                                     SkBlurMaskFilter::kHighQuality_BlurFlag);
         paint->setMaskFilter(mf)->unref();
@@ -94,8 +94,8 @@ private:
         info.fPaintBits = 0;
         info.fOffset.set(0, 0);
 
-        paint = looper->addLayer(info);
-        return looper;
+        paint = looperBuilder.addLayer(info);
+        return looperBuilder.detachLooper();
     }
 
     typedef SkBenchmark INHERITED;

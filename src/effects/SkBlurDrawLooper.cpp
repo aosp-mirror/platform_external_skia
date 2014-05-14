@@ -17,10 +17,12 @@
 #include "SkString.h"
 #include "SkStringUtils.h"
 
+#ifdef SK_SUPPORT_LEGACY_BLURDRAWLOOPERCONSTRUCTORS
 SkBlurDrawLooper::SkBlurDrawLooper(SkScalar radius, SkScalar dx, SkScalar dy,
                                    SkColor color, uint32_t flags) {
     this->init(SkBlurMask::ConvertRadiusToSigma(radius), dx, dy, color, flags);
 }
+#endif
 
 SkBlurDrawLooper::SkBlurDrawLooper(SkColor color, SkScalar sigma,
                                    SkScalar dx, SkScalar dy, uint32_t flags) {
@@ -34,16 +36,16 @@ void SkBlurDrawLooper::initEffects() {
         uint32_t flags = fBlurFlags & kIgnoreTransform_BlurFlag ?
                             SkBlurMaskFilter::kIgnoreTransform_BlurFlag :
                             SkBlurMaskFilter::kNone_BlurFlag;
-        
+
         flags |= fBlurFlags & kHighQuality_BlurFlag ?
                     SkBlurMaskFilter::kHighQuality_BlurFlag :
                     SkBlurMaskFilter::kNone_BlurFlag;
-        
+
         fBlur = SkBlurMaskFilter::Create(kNormal_SkBlurStyle, fSigma, flags);
     } else {
         fBlur = NULL;
     }
-    
+
     if (fBlurFlags & kOverrideColor_BlurFlag) {
         // Set alpha to 1 for the override since transparency will already
         // be baked into the blurred mask.
@@ -139,7 +141,7 @@ bool SkBlurDrawLooper::BlurDrawLooperContext::next(SkCanvas* canvas,
 #endif
             paint->setMaskFilter(fLooper->fBlur);
             paint->setColorFilter(fLooper->fColorFilter);
-            canvas->save(SkCanvas::kMatrix_SaveFlag);
+            canvas->save();
             if (fLooper->fBlurFlags & kIgnoreTransform_BlurFlag) {
                 SkMatrix transform(canvas->getTotalMatrix());
                 transform.postTranslate(fLooper->fDx, fLooper->fDy);

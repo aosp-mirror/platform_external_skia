@@ -15,13 +15,13 @@
 #include "SkMath.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
 #include "SkRunnable.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 #include "SkThreadPool.h"
-#include "SkTileGridPicture.h"
 #include "SkTypes.h"
 
 #if SK_SUPPORT_GPU
@@ -44,20 +44,26 @@ class TiledPictureRenderer;
 class ImageResultsSummary {
 public:
     /**
-     * Adds this bitmap hash to the summary of results.
+     * Adds this image to the summary of results.
      *
-     * @param testName name of the test
+     * @param sourceName name of the source file that generated this result
+     * @param fileName relative path to the image output file on local disk
      * @param hash hash to store
+     * @param tileNumber if not NULL, ptr to tile number
      */
-    void add(const char *testName, uint64_t hash);
+    void add(const char *sourceName, const char *fileName, uint64_t hash,
+             const int *tileNumber=NULL);
 
     /**
-     * Adds this bitmap's hash to the summary of results.
+     * Adds this image to the summary of results.
      *
-     * @param testName name of the test
+     * @param sourceName name of the source file that generated this result
+     * @param fileName relative path to the image output file on local disk
      * @param bitmap bitmap to store the hash of
+     * @param tileNumber if not NULL, ptr to tile number
      */
-    void add(const char *testName, const SkBitmap& bitmap);
+    void add(const char *sourceName, const char *fileName, const SkBitmap& bitmap,
+             const int *tileNumber=NULL);
 
     /**
      * Writes the summary (as constructed so far) to a file.
@@ -67,7 +73,7 @@ public:
     void writeToFile(const char *filename);
 
 private:
-    Json::Value fActualResultsNoComparison;
+    Json::Value fActualResults;
 };
 
 class PictureRenderer : public SkRefCnt {
@@ -365,9 +371,12 @@ public:
         return fCanvas;
     }
 
+    SkPicture* getPicture() {
+        return fPicture;
+    }
+
     PictureRenderer()
-        : fPicture(NULL)
-        , fJsonSummaryPtr(NULL)
+        : fJsonSummaryPtr(NULL)
         , fDeviceType(kBitmap_DeviceType)
         , fBBoxHierarchyType(kNone_BBoxHierarchyType)
         , fScaleFactor(SK_Scalar1)
@@ -391,7 +400,7 @@ public:
 
 protected:
     SkAutoTUnref<SkCanvas> fCanvas;
-    SkPicture*             fPicture;
+    SkAutoTUnref<SkPicture> fPicture;
     bool                   fUseChecksumBasedFilenames;
     ImageResultsSummary*   fJsonSummaryPtr;
     SkDeviceTypes          fDeviceType;
@@ -400,7 +409,7 @@ protected:
     SkString               fDrawFiltersConfig;
     SkString               fOutputDir;
     SkString               fInputFilename;
-    SkTileGridPicture::TileGridInfo fGridInfo; // used when fBBoxHierarchyType is TileGrid
+    SkTileGridFactory::TileGridInfo fGridInfo; // used when fBBoxHierarchyType is TileGrid
 
     void buildBBoxHierarchy();
 
@@ -421,7 +430,7 @@ protected:
      */
     void scaleToScaleFactor(SkCanvas*);
 
-    SkPicture* createPicture();
+    SkBBHFactory* getFactory();
     uint32_t recordFlags();
     SkCanvas* setupCanvas();
     virtual SkCanvas* setupCanvas(int width, int height);
@@ -655,7 +664,7 @@ public:
     virtual SkString getNormalTimeFormat() SK_OVERRIDE { return SkString("%6.4f"); }
 
 private:
-    SkAutoTUnref<SkPicture> fReplayer;
+    SkAutoTDelete<SkPictureRecorder> fRecorder;
 
     virtual SkString getConfigNameInternal() SK_OVERRIDE;
 

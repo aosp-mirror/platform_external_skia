@@ -37,8 +37,8 @@ public:
         Note: only affects stroked paths.
     */
     static SkDashPathEffect* Create(const SkScalar intervals[], int count,
-                                    SkScalar phase, bool scaleToFit = false) {
-        return SkNEW_ARGS(SkDashPathEffect, (intervals, count, phase, scaleToFit));
+                                    SkScalar phase) {
+        return SkNEW_ARGS(SkDashPathEffect, (intervals, count, phase));
     }
     virtual ~SkDashPathEffect();
 
@@ -48,6 +48,8 @@ public:
     virtual bool asPoints(PointData* results, const SkPath& src,
                           const SkStrokeRec&, const SkMatrix&,
                           const SkRect*) const SK_OVERRIDE;
+
+    virtual DashType asADash(DashInfo* info) const SK_OVERRIDE;
 
     virtual Factory getFactory() const SK_OVERRIDE;
 
@@ -60,17 +62,18 @@ protected:
 #ifdef SK_SUPPORT_LEGACY_PUBLICEFFECTCONSTRUCTORS
 public:
 #endif
-    SkDashPathEffect(const SkScalar intervals[], int count, SkScalar phase,
-                     bool scaleToFit = false);
+    SkDashPathEffect(const SkScalar intervals[], int count, SkScalar phase);
 
 private:
+    void setInternalMembers(SkScalar phase);
+
     SkScalar*   fIntervals;
     int32_t     fCount;
+    SkScalar    fPhase;
     // computed from phase
     SkScalar    fInitialDashLength;
     int32_t     fInitialDashIndex;
     SkScalar    fIntervalLength;
-    bool        fScaleToFit;
 
     typedef SkPathEffect INHERITED;
 };

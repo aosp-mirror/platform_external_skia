@@ -1,14 +1,23 @@
 Skia Quickstart Guide
 =====================
 
-This guide assumes you've got `gclient`, `git`, and `ninja` on your path.
 
-1. First, create a directory to hold Skia:
-    * `mkdir skia`
+WARNING: Several steps in this guide are out of sync with our automatically-
+tested, officially-supported processes for checking out and building Skia.
+The officially supported processes are the ones documented in skiadocs; see
+https://sites.google.com/site/skiadocs/user-documentation/quick-start-guides
+
+The steps documented within this file are more experimental in nature.
+
+
+This guide assumes you've got `git`, `ninja`, and `python` on your path.
+
+1. First, checkout Skia:
+    * `git clone https://skia.googlesource.com/skia.git`
     * `cd skia`
-2. Then checkout Skia:
-    * `gclient config --name . https://skia.googlesource.com/skia.git`
-    * `gclient sync`
+2. Then download the dependencies.  You only need to rerun this when
+   the dependencies change.
+    * `python tools/git-sync-deps`
 3. Create our Ninja build files from our Gyp meta-build files.  You only need
    to rerun this when you sync or change a `.gyp` file.
     * `GYP_GENERATORS=ninja ./gyp_skia`

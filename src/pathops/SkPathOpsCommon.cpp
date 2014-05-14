@@ -111,75 +111,62 @@ SkOpSegment* FindUndone(SkTArray<SkOpContour*, true>& contourList, int* start, i
     return NULL;
 }
 
-SkOpSegment* FindChase(SkTDArray<SkOpSpan*>& chase, int& tIndex, int& endIndex) {
-    while (chase.count()) {
+SkOpSegment* FindChase(SkTDArray<SkOpSpan*>* chase, int* tIndex, int* endIndex) {
+    while (chase->count()) {
         SkOpSpan* span;
-        chase.pop(&span);
+        chase->pop(&span);
         const SkOpSpan& backPtr = span->fOther->span(span->fOtherIndex);
         SkOpSegment* segment = backPtr.fOther;
-        tIndex = backPtr.fOtherIndex;
-        SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle, true> angles;
-        int done = 0;
-        if (segment->activeAngle(tIndex, &done, &angles)) {
-            SkOpAngle* last = angles.end() - 1;
-            tIndex = last->start();
-            endIndex = last->end();
-   #if TRY_ROTATE
-            *chase.insert(0) = span;
-   #else
-            *chase.append() = span;
-   #endif
+        *tIndex = backPtr.fOtherIndex;
+        bool sortable = true;
+        bool done = true;
+        *endIndex = -1;
+        if (const SkOpAngle* last = segment->activeAngle(*tIndex, tIndex, endIndex, &done,
+                &sortable)) {
+            *tIndex = last->start();
+            *endIndex = last->end();
+    #if TRY_ROTATE
+            *chase->insert(0) = span;
+    #else
+            *chase->append() = span;
+    #endif
             return last->segment();
         }
-        if (done == angles.count()) {
+        if (done) {
             continue;
         }
-        SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle*, true> sorted;
-        bool sortable = SkOpSegment::SortAngles(angles, &sorted,
-                SkOpSegment::kMayBeUnordered_SortAngleKind);
-        int angleCount = sorted.count();
-#if DEBUG_SORT
-        sorted[0]->segment()->debugShowSort(__FUNCTION__, sorted, 0, 0, 0, sortable);
-#endif
         if (!sortable) {
             continue;
         }
         // find first angle, initialize winding to computed fWindSum
-        int firstIndex = -1;
-        const SkOpAngle* angle;
+        const SkOpAngle* angle = segment->spanToAngle(*tIndex, *endIndex);
+        const SkOpAngle* firstAngle;
+        SkDEBUGCODE(firstAngle = angle);
+        SkDEBUGCODE(bool loop = false);
         int winding;
         do {
-            angle = sorted[++firstIndex];
+            angle = angle->next();
+            SkASSERT(angle != firstAngle || !loop);
+            SkDEBUGCODE(loop |= angle == firstAngle);
             segment = angle->segment();
             winding = segment->windSum(angle);
         } while (winding == SK_MinS32);
         int spanWinding = segment->spanSign(angle->start(), angle->end());
     #if DEBUG_WINDING
-        SkDebugf("%s winding=%d spanWinding=%d\n",
-                __FUNCTION__, winding, spanWinding);
+        SkDebugf("%s winding=%d spanWinding=%d\n", __FUNCTION__, winding, spanWinding);
     #endif
         // turn span winding into contour winding
         if (spanWinding * winding < 0) {
             winding += spanWinding;
         }
-    #if DEBUG_SORT
-        segment->debugShowSort(__FUNCTION__, sorted, firstIndex, winding, 0, sortable);
-    #endif
         // we care about first sign and whether wind sum indicates this
         // edge is inside or outside. Maybe need to pass span winding
         // or first winding or something into this function?
         // advance to first undone angle, then return it and winding
         // (to set whether edges are active or not)
-        int nextIndex = firstIndex + 1;
-        int lastIndex = firstIndex != 0 ? firstIndex : angleCount;
-        angle = sorted[firstIndex];
-        winding -= angle->segment()->spanSign(angle);
-        do {
-            SkASSERT(nextIndex != firstIndex);
-            if (nextIndex == angleCount) {
-                nextIndex = 0;
-            }
-            angle = sorted[nextIndex];
+        firstAngle = angle;
+        winding -= firstAngle->segment()->spanSign(firstAngle);
+        while ((angle = angle->next()) != firstAngle) {
             segment = angle->segment();
             int maxWinding = winding;
             winding -= segment->spanSign(angle);
@@ -187,9 +174,9 @@ SkOpSegment* FindChase(SkTDArray<SkOpSpan*>& chase, int& tIndex, int& endIndex) 
             SkDebugf("%s id=%d maxWinding=%d winding=%d sign=%d\n", __FUNCTION__,
                     segment->debugID(), maxWinding, winding, angle->sign());
     #endif
-            tIndex = angle->start();
-            endIndex = angle->end();
-            int lesser = SkMin32(tIndex, endIndex);
+            *tIndex = angle->start();
+            *endIndex = angle->end();
+            int lesser = SkMin32(*tIndex, *endIndex);
             const SkOpSpan& nextSpan = segment->span(lesser);
             if (!nextSpan.fDone) {
             // FIXME: this be wrong? assign startWinding if edge is in
@@ -201,8 +188,8 @@ SkOpSegment* FindChase(SkTDArray<SkOpSpan*>& chase, int& tIndex, int& endIndex) 
                 segment->markAndChaseWinding(angle, maxWinding, 0);
                 break;
             }
-        } while (++nextIndex != lastIndex);
-        *chase.insert(0) = span;
+        }
+        *chase->insert(0) = span;
         return segment;
     }
     return NULL;
@@ -219,8 +206,10 @@ void DebugShowActiveSpans(SkTArray<SkOpContour*, true>& contourList) {
 
 static SkOpSegment* findSortableTop(const SkTArray<SkOpContour*, true>& contourList,
                                     int* index, int* endIndex, SkPoint* topLeft, bool* unsortable,
-                                    bool* done, bool onlySortable) {
+                                    bool* done, bool firstPass) {
     SkOpSegment* result;
+    const SkOpSegment* lastTopStart = NULL;
+    int lastIndex = -1, lastEndIndex = -1;
     do {
         SkPoint bestXY = {SK_ScalarMax, SK_ScalarMax};
         int contourCount = contourList.count();
@@ -249,11 +238,22 @@ static SkOpSegment* findSortableTop(const SkTArray<SkOpContour*, true>& contourL
             return NULL;
         }
         *topLeft = bestXY;
-        result = topStart->findTop(index, endIndex, unsortable, onlySortable);
+        result = topStart->findTop(index, endIndex, unsortable, firstPass);
+        if (!result) {
+            if (lastTopStart == topStart && lastIndex == *index && lastEndIndex == *endIndex) {
+                *done = true;
+                return NULL;
+            }
+            lastTopStart = topStart;
+            lastIndex = *index;
+            lastEndIndex = *endIndex;
+        }
     } while (!result);
+#if 0
     if (result) {
         *unsortable = false;
     }
+#endif
     return result;
 }
 
@@ -285,25 +285,27 @@ static void skipVertical(const SkTArray<SkOpContour*, true>& contourList,
         if (contour->done()) {
             continue;
         }
-        *current = contour->nonVerticalSegment(index, endIndex);
-        if (*current) {
+        SkOpSegment* nonVertical = contour->nonVerticalSegment(index, endIndex);
+        if (nonVertical) {
+            *current = nonVertical;
             return;
         }
     }
+    return;
 }
 
 SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList,
         SkOpAngle::IncludeType angleIncludeType, bool* firstContour, int* indexPtr,
-        int* endIndexPtr, SkPoint* topLeft, bool* unsortable, bool* done) {
+        int* endIndexPtr, SkPoint* topLeft, bool* unsortable, bool* done, bool firstPass) {
     SkOpSegment* current = findSortableTop(contourList, indexPtr, endIndexPtr, topLeft, unsortable,
-            done, true);
+            done, firstPass);
     if (!current) {
         return NULL;
     }
     const int index = *indexPtr;
     const int endIndex = *endIndexPtr;
     if (*firstContour) {
-        current->initWinding(index, endIndex);
+        current->initWinding(index, endIndex, angleIncludeType);
         *firstContour = false;
         return current;
     }
@@ -313,9 +315,11 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList,
         return current;
     }
     SkASSERT(current->windSum(SkMin32(index, endIndex)) == SK_MinS32);
-    SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle, true> angles;
-    SkSTArray<SkOpAngle::kStackBasedCount, SkOpAngle*, true> sorted;
-    sumWinding = current->computeSum(index, endIndex, angleIncludeType, &angles, &sorted);
+    const SkOpSpan& span = current->span(endIndex);
+    if ((index < endIndex ? span.fFromAngleIndex : span.fToAngleIndex) < 0) {
+        current->addSimpleAngle(endIndex);
+    }
+    sumWinding = current->computeSum(index, endIndex, angleIncludeType);
     if (sumWinding != SK_MinS32 && sumWinding != SK_NaN32) {
         return current;
     }
@@ -332,7 +336,7 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList,
         // if only remaining candidates are vertical, then they can be marked done
         SkASSERT(*indexPtr != *endIndexPtr && *indexPtr >= 0 && *endIndexPtr >= 0);
         skipVertical(contourList, &current, indexPtr, endIndexPtr);
-
+        SkASSERT(current);  // FIXME: if null, all remaining are vertical
         SkASSERT(*indexPtr != *endIndexPtr && *indexPtr >= 0 && *endIndexPtr >= 0);
         tryAgain = false;
         contourWinding = rightAngleWinding(contourList, &current, indexPtr, endIndexPtr, &tHit,
@@ -348,7 +352,29 @@ SkOpSegment* FindSortableTop(const SkTArray<SkOpContour*, true>& contourList,
     } while (tryAgain);
     current->initWinding(*indexPtr, *endIndexPtr, tHit, contourWinding, hitDx, oppContourWinding,
             hitOppDx);
+    if (current->done()) {
+        return NULL;
+    }
     return current;
+}
+
+static bool calcAngles(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        if (!contour->calcAngles()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void checkDuplicates(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->checkDuplicates();
+    }
 }
 
 static void checkEnds(SkTArray<SkOpContour*, true>* contourList) {
@@ -358,6 +384,25 @@ static void checkEnds(SkTArray<SkOpContour*, true>* contourList) {
     for (int cTest = 0; cTest < contourCount; ++cTest) {
         SkOpContour* contour = (*contourList)[cTest];
         contour->checkEnds();
+    }
+}
+
+static void checkMultiples(SkTArray<SkOpContour*, true>* contourList) {
+    // it's hard to determine if the end of a cubic or conic nearly intersects another curve.
+    // instead, look to see if the connecting curve intersected at that same end.
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->checkMultiples();
+    }
+}
+
+// A small interval of a pair of curves may collapse to lines for each, triggering coincidence
+static void checkSmall(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->checkSmall();
     }
 }
 
@@ -383,6 +428,14 @@ static void joinCoincidence(SkTArray<SkOpContour*, true>* contourList) {
     for (int cTest = 0; cTest < contourCount; ++cTest) {
         SkOpContour* contour = (*contourList)[cTest];
         contour->joinCoincidence();
+    }
+}
+
+static void sortAngles(SkTArray<SkOpContour*, true>* contourList) {
+    int contourCount = (*contourList).count();
+    for (int cTest = 0; cTest < contourCount; ++cTest) {
+        SkOpContour* contour = (*contourList)[cTest];
+        contour->sortAngles();
     }
 }
 
@@ -613,7 +666,7 @@ void Assemble(const SkPathWriter& path, SkPathWriter* simple) {
 #endif
 }
 
-void HandleCoincidence(SkTArray<SkOpContour*, true>* contourList, int total) {
+bool HandleCoincidence(SkTArray<SkOpContour*, true>* contourList, int total) {
 #if DEBUG_SHOW_WINDING
     SkOpContour::debugShowWindingValues(contourList);
 #endif
@@ -623,10 +676,18 @@ void HandleCoincidence(SkTArray<SkOpContour*, true>* contourList, int total) {
 #endif
     fixOtherTIndex(contourList);
     checkEnds(contourList);
+    checkMultiples(contourList);
+    checkDuplicates(contourList);
     checkTiny(contourList);
+    checkSmall(contourList);
     joinCoincidence(contourList);
     sortSegments(contourList);
+    if (!calcAngles(contourList)) {
+        return false;
+    }
+    sortAngles(contourList);
 #if DEBUG_ACTIVE_SPANS || DEBUG_ACTIVE_SPANS_FIRST_ONLY
     DebugShowActiveSpans(*contourList);
 #endif
+    return true;
 }

@@ -164,7 +164,7 @@ static bool write_bitmap(const char outDir[], const char src[],
         return true;
     }
 
-    if (bm.colorType() == kPMColor_SkColorType) {
+    if (bm.colorType() == kN32_SkColorType) {
         // First attempt at encoding failed, and the bitmap was already 8888. Making
         // a copy is not going to help.
         return false;
@@ -172,7 +172,7 @@ static bool write_bitmap(const char outDir[], const char src[],
 
     // Encoding failed. Copy to 8888 and try again.
     SkBitmap bm8888;
-    if (!bm.copyTo(&bm8888, kPMColor_SkColorType)) {
+    if (!bm.copyTo(&bm8888, kN32_SkColorType)) {
         return false;
     }
     return SkImageEncoder::EncodeFile(filename.c_str(), bm8888, SkImageEncoder::kPNG_Type, 100);
@@ -464,8 +464,11 @@ static void test_stream_without_length(const char srcPath[], SkImageDecoder* cod
 #endif // defined(SK_BUILD_FOR_ANDROID) || defined(SK_BUILD_FOR_UNIX)
 
 /**
- *  Replace all instances of oldChar with newChar in str.
- *  TODO: Add this function to SkString and write tests for it.
+ * Replaces all instances of oldChar with newChar in str.
+ *
+ * TODO: This function appears here and in picture_utils.[cpp|h] ;
+ * we should add the implementation to src/core/SkString.cpp, write tests for it,
+ * and remove it from elsewhere.
  */
 static void replace_char(SkString* str, const char oldChar, const char newChar) {
     if (NULL == str) {

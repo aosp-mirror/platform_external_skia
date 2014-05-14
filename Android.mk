@@ -49,10 +49,6 @@ ifeq ($(NO_FALLBACK_FONT),true)
 	LOCAL_CFLAGS += -DNO_FALLBACK_FONT
 endif
 
-ifeq ($(TARGET_ARCH),arm64)
-    $(warning TODOArm64: Unlike arm32, arm64 has no inline assembly for performance critical code.)
-endif
-
 LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
@@ -63,6 +59,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
 	src/core/SkAlphaRuns.cpp \
+	src/core/SkBBHFactory.cpp \
 	src/core/SkBBoxRecord.cpp \
 	src/core/SkBBoxHierarchyRecord.cpp \
 	src/core/SkBitmap.cpp \
@@ -116,6 +113,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkFlattenableSerialization.cpp \
 	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
+	src/core/SkFont.cpp \
 	src/core/SkFontHost.cpp \
 	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontStream.cpp \
@@ -148,6 +146,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureFlat.cpp \
 	src/core/SkPicturePlayback.cpp \
 	src/core/SkPictureRecord.cpp \
+	src/core/SkPictureRecorder.cpp \
+	src/core/SkPictureShader.cpp \
 	src/core/SkPictureStateTree.cpp \
 	src/core/SkPixelRef.cpp \
 	src/core/SkPoint.cpp \
@@ -165,6 +165,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkRegion_path.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
+	src/core/SkRTreePicture.cpp \
 	src/core/SkScaledImageCache.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
@@ -198,10 +199,8 @@ LOCAL_SRC_FILES := \
 	src/image/SkImage.cpp \
 	src/image/SkImagePriv.cpp \
 	src/image/SkImage_Codec.cpp \
-	src/image/SkImage_Picture.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
-	src/image/SkSurface_Picture.cpp \
 	src/image/SkSurface_Raster.cpp \
 	src/pipe/SkGPipeRead.cpp \
 	src/pipe/SkGPipeWrite.cpp \
@@ -275,7 +274,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkPixelXorXfermode.cpp \
 	src/effects/SkPorterDuff.cpp \
 	src/effects/SkRectShaderImageFilter.cpp \
-	src/effects/SkResizeImageFilter.cpp \
 	src/effects/SkStippleMaskFilter.cpp \
 	src/effects/SkTableColorFilter.cpp \
 	src/effects/SkTableMaskFilter.cpp \
@@ -291,6 +289,7 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
+	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
 	src/images/bmpdecoderhelper.cpp \
 	src/images/SkDecodingImageGenerator.cpp \
@@ -350,7 +349,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkFontConfigInterface_android.cpp \
 	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontHost_fontconfig.cpp \
-	src/ports/SkPurgeableMemoryBlock_android.cpp \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkCondVar.cpp \
@@ -371,6 +369,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkGatherPixelRefsAndRects.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
+	src/utils/SkMatrix22.cpp \
 	src/utils/SkMatrix44.cpp \
 	src/utils/SkMD5.cpp \
 	src/utils/SkMeshUtils.cpp \
@@ -411,8 +410,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrGpu.cpp \
+	src/gpu/GrGpuObject.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
+	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrMemoryPool.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
@@ -420,11 +421,11 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRendererChain.cpp \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathUtils.cpp \
+	src/gpu/GrPictureUtils.cpp \
 	src/gpu/GrRectanizer.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
-	src/gpu/GrResource.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
@@ -450,6 +451,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomain.cpp \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
+	src/gpu/gl/GrGLAssembleInterface.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
@@ -561,6 +563,9 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils
 
+LOCAL_MODULE := \
+	libskia
+
 LOCAL_SRC_FILES_arm += \
 	src/core/SkUtilsArm.cpp \
 	src/opts/memset.arm.S \
@@ -590,7 +595,7 @@ LOCAL_CFLAGS_arm += \
 endif
 
 LOCAL_SRC_FILES_x86 += \
-	src/opts/opts_check_SSE2.cpp \
+	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
@@ -598,11 +603,11 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_x86_64 += \
-	src/opts/opts_check_SSE2.cpp \
+	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
 	src/opts/SkBlitRow_opts_SSE2.cpp \
@@ -610,7 +615,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
-	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
 LOCAL_SRC_FILES_mips += \
@@ -622,17 +627,25 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
+LOCAL_CFLAGS_arm64 += \
+	-ffp-contract=off
+
 LOCAL_SRC_FILES_arm64 += \
-	src/opts/SkBitmapProcState_opts_none.cpp \
-	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBitmapProcState_arm_neon.cpp \
+	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
-	src/opts/SkBlurImage_opts_none.cpp \
-	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkBlurImage_opts_arm.cpp \
+	src/opts/SkBlurImage_opts_neon.cpp \
+	src/opts/SkMorphology_opts_arm.cpp \
+	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkUtils_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp
+	src/opts/SkXfermode_opts_arm.cpp \
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 include external/stlport/libstlport.mk
-LOCAL_MODULE:= libskia
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################
@@ -646,7 +659,4 @@ include $(BUILD_SHARED_LIBRARY)
 #include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
-#include $(BASE_PATH)/tests/Android.mk
-
-# pathOps unit-tests
-# TODO include those sources!
+include $(BASE_PATH)/tests/Android.mk

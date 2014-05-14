@@ -1,5 +1,9 @@
 #include "DMTask.h"
 #include "DMTaskRunner.h"
+#include "SkCommandLineFlags.h"
+
+DEFINE_bool(cpu, true, "Master switch for running CPU-bound work.");
+DEFINE_bool(gpu, true, "Master switch for running GPU-bound work.");
 
 namespace DM {
 
@@ -33,8 +37,8 @@ void Task::finish() {
     fReporter->finish(this->name(), SkTime::GetMSecs() - fStart);
 }
 
-void Task::spawnChild(CpuTask* task) {
-    fTaskRunner->add(task);
+void Task::spawnChildNext(CpuTask* task) {
+    fTaskRunner->addNext(task);
 }
 
 CpuTask::CpuTask(Reporter* reporter, TaskRunner* taskRunner) : Task(reporter, taskRunner) {}
@@ -42,24 +46,35 @@ CpuTask::CpuTask(const Task& parent) : Task(parent) {}
 
 void CpuTask::run() {
     this->start();
-    if (!this->shouldSkip()) {
+    if (FLAGS_cpu && !this->shouldSkip()) {
         this->draw();
     }
     this->finish();
     SkDELETE(this);
 }
 
+void CpuTask::spawnChild(CpuTask* task) {
+    // Run children serially on this (CPU) thread.  This tends to save RAM and is usually no slower.
+    // Calling spawnChildNext() is nearly equivalent, but it'd pointlessly contend on the
+    // threadpool; spawnChildNext() is most useful when you want to change threadpools.
+    task->run();
+}
+
 GpuTask::GpuTask(Reporter* reporter, TaskRunner* taskRunner) : Task(reporter, taskRunner) {}
 
 void GpuTask::run(GrContextFactory& factory) {
     this->start();
-    if (!this->shouldSkip()) {
+    if (FLAGS_gpu && !this->shouldSkip()) {
         this->draw(&factory);
     }
     this->finish();
     SkDELETE(this);
 }
 
-
+void GpuTask::spawnChild(CpuTask* task) {
+    // Really spawn a new task so it runs on the CPU threadpool instead of the GPU one we're on now.
+    // It goes on the front of the queue to minimize the time we must hold reference bitmaps in RAM.
+    this->spawnChildNext(task);
+}
 
 }  // namespace DM

@@ -54,7 +54,7 @@ protected:
             SkRect r = SkRect::MakeWH(w, h);
             canvas->drawRect(r, p);
 
-            canvas->saveLayer(&r, NULL, SkCanvas::kARGB_ClipLayer_SaveFlag);
+            canvas->saveLayer(&r, NULL);
 
             p.setShader(fDst);
             canvas->drawRect(r, p);
@@ -96,12 +96,12 @@ private:
         bg.allocN32Pixels(2, 2, true);
         memcpy(bg.getPixels(), kCheckData, sizeof(kCheckData));
 
-        fBG.reset(SkShader::CreateBitmapShader(bg,
-                                               SkShader::kRepeat_TileMode,
-                                               SkShader::kRepeat_TileMode));
         SkMatrix lm;
         lm.setScale(SkIntToScalar(16), SkIntToScalar(16));
-        fBG->setLocalMatrix(lm);
+        fBG.reset(SkShader::CreateBitmapShader(bg,
+                                               SkShader::kRepeat_TileMode,
+                                               SkShader::kRepeat_TileMode,
+                                               &lm));
 
         SkBitmap dstBmp;
         dstBmp.allocN32Pixels(kSize, kSize);

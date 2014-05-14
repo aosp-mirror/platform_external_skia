@@ -112,7 +112,7 @@ class XfermodesGM : public GM {
                 break;
             }
             case kRectangleWithMask_SrcType: {
-                canvas->save(SkCanvas::kClip_SaveFlag);
+                canvas->save();
                 restoreNeeded = true;
                 SkScalar w = SkIntToScalar(W);
                 SkScalar h = SkIntToScalar(H);
@@ -216,12 +216,12 @@ protected:
 
         const SkScalar w = SkIntToScalar(W);
         const SkScalar h = SkIntToScalar(H);
-        SkShader* s = SkShader::CreateBitmapShader(fBG,
-                                                   SkShader::kRepeat_TileMode,
-                                                   SkShader::kRepeat_TileMode);
         SkMatrix m;
         m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-        s->setLocalMatrix(m);
+        SkShader* s = SkShader::CreateBitmapShader(fBG,
+                                                   SkShader::kRepeat_TileMode,
+                                                   SkShader::kRepeat_TileMode,
+                                                   &m);
 
         SkPaint labelP;
         labelP.setAntiAlias(true);
@@ -247,7 +247,7 @@ protected:
                 p.setShader(s);
                 canvas->drawRect(r, p);
 
-                canvas->saveLayer(&r, NULL, SkCanvas::kARGB_ClipLayer_SaveFlag);
+                canvas->saveLayer(&r, NULL);
                 draw_mode(canvas, mode, static_cast<SrcType>(sourceType),
                           r.fLeft, r.fTop);
                 canvas->restore();

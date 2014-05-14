@@ -26,7 +26,7 @@ public:
 protected:
     FailImageFilter() : INHERITED(0) {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
-                               SkBitmap* result, SkIPoint* offset) const {
+                               SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
         return false;
     }
 
@@ -52,8 +52,9 @@ public:
 protected:
     IdentityImageFilter() : INHERITED(0) {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
-                               SkBitmap* result, SkIPoint* offset) const {
+                               SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
         *result = src;
+        offset->set(0, 0);
         return true;
     }
 
@@ -160,7 +161,6 @@ public:
     ImageFiltersBaseGM () {}
 
 protected:
-
     virtual SkString onShortName() {
         return SkString("imagefiltersbase");
     }
@@ -179,7 +179,7 @@ protected:
         // from scaled replay tests because drawSprite ignores the
         // reciprocal scale that is applied at record time, which is
         // the intended behavior of drawSprite.
-        return kSkipScaledReplay_Flag;
+        return kSkipScaledReplay_Flag | kSkipTiled_Flag;
     }
 
     virtual void onDraw(SkCanvas* canvas) {

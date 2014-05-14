@@ -20,7 +20,6 @@
 #include "SkWriter32.h"
 
 class SkBBoxHierarchy;
-class SkOffsetTable;
 class SkPictureStateTree;
 
 // These macros help with packing and unpacking a single byte value and
@@ -34,7 +33,7 @@ class SkPictureStateTree;
 
 class SkPictureRecord : public SkCanvas {
 public:
-    SkPictureRecord(const SkISize& dimensions, uint32_t recordFlags);
+    SkPictureRecord(SkPicture* picture, const SkISize& dimensions, uint32_t recordFlags);
     virtual ~SkPictureRecord();
 
     virtual void clear(SkColor) SK_OVERRIDE;
@@ -56,15 +55,6 @@ public:
                                 const SkRect& dst, const SkPaint*) SK_OVERRIDE;
     virtual void drawSprite(const SkBitmap&, int left, int top,
                             const SkPaint*) SK_OVERRIDE;
-    virtual void drawText(const void* text, size_t byteLength, SkScalar x,
-                          SkScalar y, const SkPaint&) SK_OVERRIDE;
-    virtual void drawPosText(const void* text, size_t byteLength,
-                             const SkPoint pos[], const SkPaint&) SK_OVERRIDE;
-    virtual void drawPosTextH(const void* text, size_t byteLength,
-                      const SkScalar xpos[], SkScalar constY, const SkPaint&) SK_OVERRIDE;
-    virtual void drawTextOnPath(const void* text, size_t byteLength,
-                            const SkPath& path, const SkMatrix* matrix,
-                                const SkPaint&) SK_OVERRIDE;
     virtual void drawPicture(SkPicture& picture) SK_OVERRIDE;
     virtual void drawVertices(VertexMode, int vertexCount,
                           const SkPoint vertices[], const SkPoint texs[],
@@ -101,7 +91,7 @@ public:
 
 private:
     void handleOptimization(int opt);
-    int recordRestoreOffsetPlaceholder(SkRegion::Op);
+    size_t recordRestoreOffsetPlaceholder(SkRegion::Op);
     void fillRestoreOffsetPlaceholdersForCurrentStackLevel(uint32_t restoreOffset);
 
 #ifndef SK_COLLAPSE_MATRIX_CLIP_STATE
@@ -126,7 +116,7 @@ private:
      * end of blocks could go unused). Possibly add a second addDraw that
      * operates in this manner.
      */
-    size_t addDraw(DrawType drawType, uint32_t* size) {
+    size_t addDraw(DrawType drawType, size_t* size) {
         size_t offset = fWriter.bytesWritten();
 
         this->predrawNotify();
@@ -141,9 +131,9 @@ private:
         if (0 != (*size & ~MASK_24) || *size == MASK_24) {
             fWriter.writeInt(PACK_8_24(drawType, MASK_24));
             *size += 1;
-            fWriter.writeInt(*size);
+            fWriter.writeInt(SkToU32(*size));
         } else {
-            fWriter.writeInt(PACK_8_24(drawType, *size));
+            fWriter.writeInt(PACK_8_24(drawType, SkToU32(*size)));
         }
 
         return offset;
@@ -157,7 +147,6 @@ private:
     }
 
     // The command at 'offset' in the skp uses the specified bitmap
-    void trackBitmapUse(int bitmapID, size_t offset);
     int addBitmap(const SkBitmap& bitmap);
     void addMatrix(const SkMatrix& matrix);
     const SkFlatData* addPaint(const SkPaint& paint) { return this->addPaintPtr(&paint); }
@@ -208,7 +197,7 @@ private:
     void validateRegions() const;
 #else
 public:
-    void validate(size_t initialOffset, uint32_t size) const {
+    void validate(size_t initialOffset, size_t size) const {
         SkASSERT(fWriter.bytesWritten() == initialOffset + size);
     }
 #endif
@@ -229,6 +218,15 @@ protected:
     virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) SK_OVERRIDE;
     virtual void onPushCull(const SkRect&) SK_OVERRIDE;
     virtual void onPopCull() SK_OVERRIDE;
+
+    virtual void onDrawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
+                            const SkPaint&) SK_OVERRIDE;
+    virtual void onDrawPosText(const void* text, size_t byteLength, const SkPoint pos[],
+                               const SkPaint&) SK_OVERRIDE;
+    virtual void onDrawPosTextH(const void* text, size_t byteLength, const SkScalar xpos[],
+                                SkScalar constY, const SkPaint&) SK_OVERRIDE;
+    virtual void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
+                                  const SkMatrix* matrix, const SkPaint&) SK_OVERRIDE;
 
     virtual void onClipRect(const SkRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
     virtual void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
@@ -264,10 +262,10 @@ protected:
     void recordConcat(const SkMatrix& matrix);
     void recordTranslate(const SkMatrix& matrix);
     void recordScale(const SkMatrix& matrix);
-    int recordClipRect(const SkRect& rect, SkRegion::Op op, bool doAA);
-    int recordClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA);
-    int recordClipPath(int pathID, SkRegion::Op op, bool doAA);
-    int recordClipRegion(const SkRegion& region, SkRegion::Op op);
+    size_t recordClipRect(const SkRect& rect, SkRegion::Op op, bool doAA);
+    size_t recordClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA);
+    size_t recordClipPath(int pathID, SkRegion::Op op, bool doAA);
+    size_t recordClipRegion(const SkRegion& region, SkRegion::Op op);
     void recordSave(SaveFlags flags);
     void recordSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags);
     void recordRestore(bool fillInSkips = true);
@@ -281,6 +279,9 @@ protected:
     SkBitmapHeap* fBitmapHeap;
 
 private:
+    // The owning SkPicture
+    SkPicture* fPicture;
+
     friend class MatrixClipState; // for access to *Impl methods
     friend class SkMatrixClipStateMgr; // for access to *Impl methods
 
@@ -288,7 +289,6 @@ private:
 
     SkPaintDictionary fPaints;
 
-    SkPathHeap* fPathHeap;  // reference counted
     SkWriter32 fWriter;
 
     // we ref each item in these arrays
@@ -297,8 +297,6 @@ private:
     uint32_t fRecordFlags;
     bool     fOptsEnabled;
     int      fInitialSaveCount;
-
-    SkAutoTUnref<SkOffsetTable> fBitmapUseOffsets;
 
     friend class SkPicturePlayback;
     friend class SkPictureTester; // for unit testing

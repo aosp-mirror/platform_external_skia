@@ -164,7 +164,7 @@ public:
         quad.set(a);
         SkDLine line;
         line.set(b);
-        fMax = 2;
+        fMax = 3; // 2;  permit small coincident segment + non-coincident intersection
         return intersect(quad, line);
     }
 
@@ -210,7 +210,6 @@ public:
     }
 
     void append(const SkIntersections& );
-    static double Axial(const SkDQuad& , const SkDPoint& , bool vertical);
     void cleanUpCoincidence();
     int coincidentUsed() const;
     int cubicRay(const SkPoint pts[4], const SkDLine& line);
@@ -266,8 +265,6 @@ private:
     void cubicNearEnd(const SkDCubic& cubic1, bool start, const SkDCubic& cubic2, const SkDRect& );
     void cleanUpParallelLines(bool parallel);
     void computePoints(const SkDLine& line, int used);
-    // used by addCoincident to remove ordinary intersections in range
- //   void remove(double one, double two, const SkDPoint& startPt, const SkDPoint& endPt);
 
     SkDPoint fPt[9];  // FIXME: since scans store points as SkPoint, this should also
     double fT[2][9];

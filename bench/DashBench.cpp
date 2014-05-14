@@ -263,7 +263,7 @@ public:
         fDoAA = doAA;
 
         SkScalar vals[] = { SkIntToScalar(dashLength), SkIntToScalar(dashLength) };
-        fPathEffect.reset(SkDashPathEffect::Create(vals, 2, SK_Scalar1, false));
+        fPathEffect.reset(SkDashPathEffect::Create(vals, 2, SK_Scalar1));
     }
 
 protected:
@@ -322,7 +322,7 @@ public:
 
         // deliberately pick intervals that won't be caught by asPoints(), so
         // we can test the filterPath code-path.
-        const SkScalar intervals[] = { 2, 1, 1, 1 };
+        const SkScalar intervals[] = { 20, 10, 10, 10 };
         fPathEffect.reset(SkDashPathEffect::Create(intervals,
                                                    SK_ARRAY_COUNT(intervals), 0));
 

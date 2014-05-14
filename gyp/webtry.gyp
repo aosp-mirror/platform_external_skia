@@ -4,13 +4,14 @@
     {
       'target_name': 'webtry',
       'type': 'executable',
-      'mac_bundle' : 1,
       'include_dirs' : [
         '../src/core',
         '../src/images',
+        '../src/pathops',
         ],
        'sources': [
          '../experimental/webtry/result.cpp',
+         '../experimental/webtry/main.cpp',
        ],
        'dependencies': [
          'flags.gyp:flags',

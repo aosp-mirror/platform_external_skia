@@ -71,6 +71,13 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        if (fDoFilter && fDoRotate && fMode != SkShader::kClamp_TileMode) {
+            return kSkipTiled_Flag;
+        }
+        return 0;
+    }
+
     virtual SkString onShortName() {
         SkString str("giantbitmap_");
         switch (fMode) {
@@ -95,7 +102,6 @@ protected:
 
     virtual void onDraw(SkCanvas* canvas) {
         SkPaint paint;
-        SkShader* s = SkShader::CreateBitmapShader(getBitmap(), fMode, fMode);
 
         SkMatrix m;
         if (fDoRotate) {
@@ -106,7 +112,7 @@ protected:
             SkScalar scale = 11*SK_Scalar1/12;
             m.setScale(scale, scale);
         }
-        s->setLocalMatrix(m);
+        SkShader* s = SkShader::CreateBitmapShader(getBitmap(), fMode, fMode, &m);
 
         paint.setShader(s)->unref();
         paint.setFilterLevel(fDoFilter ? SkPaint::kLow_FilterLevel : SkPaint::kNone_FilterLevel);

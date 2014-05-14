@@ -95,14 +95,10 @@ protected:
             makebm(&bmp, kPointSize / 2, kPointSize / 2);
         }
 
-        SkAutoTUnref<SkShader> shader(SkShader::CreateBitmapShader(bmp,
-                                                                   SkShader::kMirror_TileMode,
-                                                                   SkShader::kRepeat_TileMode));
         SkPaint fillPaint;
         fillPaint.setAntiAlias(true);
         fillPaint.setTextSize(SkIntToScalar(kPointSize));
         fillPaint.setFilterLevel(SkPaint::kLow_FilterLevel);
-        fillPaint.setShader(shader);
 
         SkPaint outlinePaint;
         outlinePaint.setAntiAlias(true);
@@ -158,7 +154,11 @@ protected:
                 canvas->translate(0, kPadY / 2 + kPointSize);
                 columnH += kPadY / 2 + kPointSize;
                 for (int lm = 0; lm < localMatrices.count(); ++lm) {
-                    shader->setLocalMatrix(localMatrices[lm].fMatrix);
+                    paint.setShader(
+                            SkShader::CreateBitmapShader(bmp,
+                                                         SkShader::kMirror_TileMode,
+                                                         SkShader::kRepeat_TileMode,
+                                                         &localMatrices[lm].fMatrix))->unref();
 
                     canvas->save();
                         canvas->concat(matrices[m].fMatrix);
@@ -205,7 +205,7 @@ protected:
 
     virtual uint32_t onGetFlags() const SK_OVERRIDE {
         // disable 565 for now, til mike fixes the debug assert
-        return this->INHERITED::onGetFlags() | kSkip565_Flag;
+        return kSkip565_Flag | kSkipTiled_Flag;
     }
 
 private:

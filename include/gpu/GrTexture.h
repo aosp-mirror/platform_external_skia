@@ -44,22 +44,16 @@ public:
         return 0 != (fDesc.fFlags & flags);
     }
 
-    void dirtyMipMaps(bool mipMapsDirty) {
-        fMipMapsDirty = mipMapsDirty;
-    }
+    void dirtyMipMaps(bool mipMapsDirty);
 
     bool mipMapsAreDirty() const {
-        return fMipMapsDirty;
+        return kValid_MipMapsStatus != fMipMapsStatus;
     }
 
     /**
      *  Approximate number of bytes used by the texture
      */
-    virtual size_t sizeInBytes() const SK_OVERRIDE {
-        return (size_t) fDesc.fWidth *
-                        fDesc.fHeight *
-                        GrBytesPerPixel(fDesc.fConfig);
-    }
+    virtual size_t gpuMemorySize() const SK_OVERRIDE;
 
     // GrSurface overrides
     virtual bool readPixels(int left, int top, int width, int height,
@@ -99,11 +93,11 @@ public:
      * Convert from texels to normalized texture coords for POT textures
      * only.
      */
-    GrFixed normalizeFixedX(GrFixed x) const {
+    SkFixed normalizeFixedX(SkFixed x) const {
         SkASSERT(GrIsPow2(fDesc.fWidth));
         return x >> fShiftFixedX;
     }
-    GrFixed normalizeFixedY(GrFixed y) const {
+    SkFixed normalizeFixedY(SkFixed y) const {
         SkASSERT(GrIsPow2(fDesc.fHeight));
         return y >> fShiftFixedY;
     }
@@ -144,7 +138,7 @@ protected:
     GrTexture(GrGpu* gpu, bool isWrapped, const GrTextureDesc& desc)
     : INHERITED(gpu, isWrapped, desc)
     , fRenderTarget(NULL)
-    , fMipMapsDirty(true) {
+    , fMipMapsStatus(kNotAllocated_MipMapsStatus) {
 
         // only make sense if alloc size is pow2
         fShiftFixedX = 31 - SkCLZ(fDesc.fWidth);
@@ -159,12 +153,18 @@ protected:
     void validateDesc() const;
 
 private:
+    enum MipMapsStatus {
+        kNotAllocated_MipMapsStatus,
+        kAllocated_MipMapsStatus,
+        kValid_MipMapsStatus
+    };
+
     // these two shift a fixed-point value into normalized coordinates
     // for this texture if the texture is power of two sized.
     int                 fShiftFixedX;
     int                 fShiftFixedY;
 
-    bool                fMipMapsDirty;
+    MipMapsStatus       fMipMapsStatus;
 
     virtual void internal_dispose() const SK_OVERRIDE;
 

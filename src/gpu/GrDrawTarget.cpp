@@ -244,7 +244,7 @@ void GrDrawTarget::releasePreviousVertexSource() {
 #endif
             break;
         default:
-            GrCrash("Unknown Vertex Source Type.");
+            SkFAIL("Unknown Vertex Source Type.");
             break;
     }
 }
@@ -267,7 +267,7 @@ void GrDrawTarget::releasePreviousIndexSource() {
 #endif
             break;
         default:
-            GrCrash("Unknown Index Source Type.");
+            SkFAIL("Unknown Index Source Type.");
             break;
     }
 }
@@ -355,34 +355,34 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
     int maxValidVertex;
     switch (geoSrc.fVertexSrc) {
         case kNone_GeometrySrcType:
-            GrCrash("Attempting to draw without vertex src.");
+            SkFAIL("Attempting to draw without vertex src.");
         case kReserved_GeometrySrcType: // fallthrough
         case kArray_GeometrySrcType:
             maxValidVertex = geoSrc.fVertexCount;
             break;
         case kBuffer_GeometrySrcType:
-            maxValidVertex = static_cast<int>(geoSrc.fVertexBuffer->sizeInBytes() / geoSrc.fVertexSize);
+            maxValidVertex = static_cast<int>(geoSrc.fVertexBuffer->gpuMemorySize() / geoSrc.fVertexSize);
             break;
     }
     if (maxVertex > maxValidVertex) {
-        GrCrash("Drawing outside valid vertex range.");
+        SkFAIL("Drawing outside valid vertex range.");
     }
     if (indexCount > 0) {
         int maxIndex = startIndex + indexCount;
         int maxValidIndex;
         switch (geoSrc.fIndexSrc) {
             case kNone_GeometrySrcType:
-                GrCrash("Attempting to draw indexed geom without index src.");
+                SkFAIL("Attempting to draw indexed geom without index src.");
             case kReserved_GeometrySrcType: // fallthrough
             case kArray_GeometrySrcType:
                 maxValidIndex = geoSrc.fIndexCount;
                 break;
             case kBuffer_GeometrySrcType:
-                maxValidIndex = static_cast<int>(geoSrc.fIndexBuffer->sizeInBytes() / sizeof(uint16_t));
+                maxValidIndex = static_cast<int>(geoSrc.fIndexBuffer->gpuMemorySize() / sizeof(uint16_t));
                 break;
         }
         if (maxIndex > maxValidIndex) {
-            GrCrash("Index reads outside valid index range.");
+            SkFAIL("Index reads outside valid index range.");
         }
     }
 
@@ -548,7 +548,7 @@ void GrDrawTarget::drawPath(const GrPath* path, SkPath::FillType fill) {
     this->onDrawPath(path, fill, dstCopy.texture() ? &dstCopy : NULL);
 }
 
-void GrDrawTarget::drawPaths(size_t pathCount, const GrPath** paths,
+void GrDrawTarget::drawPaths(int pathCount, const GrPath** paths,
                              const SkMatrix* transforms,
                              SkPath::FillType fill, SkStrokeRec::Style stroke) {
     SkASSERT(pathCount > 0);
@@ -560,7 +560,7 @@ void GrDrawTarget::drawPaths(size_t pathCount, const GrPath** paths,
     const GrDrawState* drawState = &getDrawState();
 
     SkRect devBounds;
-    for (size_t i = 0; i < pathCount; ++i) {
+    for (int i = 0; i < pathCount; ++i) {
         SkRect mappedPathBounds;
         transforms[i].mapRect(&mappedPathBounds, paths[i]->getBounds());
         devBounds.join(mappedPathBounds);
@@ -651,7 +651,7 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
     }
 
     while (instanceCount) {
-        info.fInstanceCount = GrMin(instanceCount, maxInstancesPerDraw);
+        info.fInstanceCount = SkTMin(instanceCount, maxInstancesPerDraw);
         info.fVertexCount = info.fInstanceCount * verticesPerInstance;
         info.fIndexCount = info.fInstanceCount * indicesPerInstance;
 
@@ -674,7 +674,7 @@ namespace {
 // position + (optional) texture coord
 extern const GrVertexAttrib gBWRectPosUVAttribs[] = {
     {kVec2f_GrVertexAttribType, 0,               kPosition_GrVertexAttribBinding},
-    {kVec2f_GrVertexAttribType, sizeof(GrPoint), kLocalCoord_GrVertexAttribBinding}
+    {kVec2f_GrVertexAttribType, sizeof(SkPoint), kLocalCoord_GrVertexAttribBinding}
 };
 
 void set_vertex_attributes(GrDrawState* drawState, bool hasUVs) {
@@ -708,8 +708,8 @@ void GrDrawTarget::onDrawRect(const SkRect& rect,
     size_t vsize = this->drawState()->getVertexSize();
     geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vsize);
     if (NULL != localRect) {
-        GrPoint* coords = GrTCast<GrPoint*>(GrTCast<intptr_t>(geo.vertices()) +
-                                            sizeof(GrPoint));
+        SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) +
+                                            sizeof(SkPoint));
         coords->setRectFan(localRect->fLeft, localRect->fTop,
                            localRect->fRight, localRect->fBottom,
                            vsize);
@@ -1016,12 +1016,13 @@ void GrDrawTargetCaps::reset() {
     fShaderDerivativeSupport = false;
     fGeometryShaderSupport = false;
     fDualSourceBlendingSupport = false;
-    fBufferLockSupport = false;
     fPathRenderingSupport = false;
     fDstReadInShaderSupport = false;
     fDiscardRenderTargetSupport = false;
     fReuseScratchTextures = true;
     fGpuTracingSupport = false;
+
+    fMapBufferFlags = kNone_MapFlags;
 
     fMaxRenderTargetSize = 0;
     fMaxTextureSize = 0;
@@ -1040,12 +1041,13 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     fShaderDerivativeSupport = other.fShaderDerivativeSupport;
     fGeometryShaderSupport = other.fGeometryShaderSupport;
     fDualSourceBlendingSupport = other.fDualSourceBlendingSupport;
-    fBufferLockSupport = other.fBufferLockSupport;
     fPathRenderingSupport = other.fPathRenderingSupport;
     fDstReadInShaderSupport = other.fDstReadInShaderSupport;
     fDiscardRenderTargetSupport = other.fDiscardRenderTargetSupport;
     fReuseScratchTextures = other.fReuseScratchTextures;
     fGpuTracingSupport = other.fGpuTracingSupport;
+
+    fMapBufferFlags = other.fMapBufferFlags;
 
     fMaxRenderTargetSize = other.fMaxRenderTargetSize;
     fMaxTextureSize = other.fMaxTextureSize;
@@ -1054,6 +1056,26 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     memcpy(fConfigRenderSupport, other.fConfigRenderSupport, sizeof(fConfigRenderSupport));
 
     return *this;
+}
+
+static SkString map_flags_to_string(uint32_t flags) {
+    SkString str;
+    if (GrDrawTargetCaps::kNone_MapFlags == flags) {
+        str = "none";
+    } else {
+        SkASSERT(GrDrawTargetCaps::kCanMap_MapFlag & flags);
+        SkDEBUGCODE(flags &= ~GrDrawTargetCaps::kCanMap_MapFlag);
+        str = "can_map";
+
+        if (GrDrawTargetCaps::kSubset_MapFlag & flags) {
+            str.append(" partial");
+        } else {
+            str.append(" full");
+        }
+        SkDEBUGCODE(flags &= ~GrDrawTargetCaps::kSubset_MapFlag);
+    }
+    SkASSERT(0 == flags); // Make sure we handled all the flags.
+    return str;
 }
 
 SkString GrDrawTargetCaps::dump() const {
@@ -1068,7 +1090,6 @@ SkString GrDrawTargetCaps::dump() const {
     r.appendf("Shader Derivative Support    : %s\n", gNY[fShaderDerivativeSupport]);
     r.appendf("Geometry Shader Support      : %s\n", gNY[fGeometryShaderSupport]);
     r.appendf("Dual Source Blending Support : %s\n", gNY[fDualSourceBlendingSupport]);
-    r.appendf("Buffer Lock Support          : %s\n", gNY[fBufferLockSupport]);
     r.appendf("Path Rendering Support       : %s\n", gNY[fPathRenderingSupport]);
     r.appendf("Dst Read In Shader Support   : %s\n", gNY[fDstReadInShaderSupport]);
     r.appendf("Discard Render Target Support: %s\n", gNY[fDiscardRenderTargetSupport]);
@@ -1077,6 +1098,8 @@ SkString GrDrawTargetCaps::dump() const {
     r.appendf("Max Texture Size             : %d\n", fMaxTextureSize);
     r.appendf("Max Render Target Size       : %d\n", fMaxRenderTargetSize);
     r.appendf("Max Sample Count             : %d\n", fMaxSampleCount);
+
+    r.appendf("Map Buffer Support           : %s\n", map_flags_to_string(fMapBufferFlags).c_str());
 
     static const char* kConfigNames[] = {
         "Unknown",  // kUnknown_GrPixelConfig

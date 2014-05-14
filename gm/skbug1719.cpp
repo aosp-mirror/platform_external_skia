@@ -24,6 +24,10 @@ public:
     SkBug1719GM() {}
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkString onShortName() SK_OVERRIDE {
         return SkString("skbug1719");
     }
@@ -80,7 +84,7 @@ protected:
         paint.setAntiAlias(true);
         paint.setColor(0xFF000000);
         paint.setMaskFilter(
-            SkBlurMaskFilter::Create(SkBlurMaskFilter::kNormal_BlurStyle,
+            SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                      0.78867501f,
                                      SkBlurMaskFilter::kHighQuality_BlurFlag))->unref();
         paint.setColorFilter(

@@ -20,6 +20,7 @@
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkString.h"
 #include "SkSurface.h"
 
@@ -122,7 +123,7 @@ static void saveFile(const char name[], const char config[], const char dir[],
     stream.write(data->data(), data->size());
 }
 
-static void performClip(SkCanvas* canvas, int w, int h) {
+static void perform_clip(SkCanvas* canvas, int w, int h) {
     SkRect r;
 
     r.set(SkIntToScalar(10), SkIntToScalar(10),
@@ -134,7 +135,7 @@ static void performClip(SkCanvas* canvas, int w, int h) {
     canvas->clipRect(r, SkRegion::kXOR_Op);
 }
 
-static void performRotate(SkCanvas* canvas, int w, int h) {
+static void perform_rotate(SkCanvas* canvas, int w, int h) {
     const SkScalar x = SkIntToScalar(w) / 2;
     const SkScalar y = SkIntToScalar(h) / 2;
 
@@ -143,7 +144,7 @@ static void performRotate(SkCanvas* canvas, int w, int h) {
     canvas->translate(-x, -y);
 }
 
-static void performScale(SkCanvas* canvas, int w, int h) {
+static void perform_scale(SkCanvas* canvas, int w, int h) {
     const SkScalar x = SkIntToScalar(w) / 2;
     const SkScalar y = SkIntToScalar(h) / 2;
 
@@ -207,20 +208,20 @@ static const struct Config {
     GLContextType       contextType;
     bool                runByDefault;
 } gConfigs[] = {
-    { kPMColor_SkColorType, "NONRENDERING", 0, SkBenchmark::kNonRendering_Backend, kNative, true},
-    { kPMColor_SkColorType, "8888",         0, SkBenchmark::kRaster_Backend,       kNative, true},
+    { kN32_SkColorType,     "NONRENDERING", 0, SkBenchmark::kNonRendering_Backend, kNative, true},
+    { kN32_SkColorType,     "8888",         0, SkBenchmark::kRaster_Backend,       kNative, true},
     { kRGB_565_SkColorType, "565",          0, SkBenchmark::kRaster_Backend,       kNative, true},
 #if SK_SUPPORT_GPU
-    { kPMColor_SkColorType, "GPU",          0, SkBenchmark::kGPU_Backend,          kNative, true},
-    { kPMColor_SkColorType, "MSAA4",        4, SkBenchmark::kGPU_Backend,          kNative, false},
-    { kPMColor_SkColorType, "MSAA16",      16, SkBenchmark::kGPU_Backend,          kNative, false},
-    { kPMColor_SkColorType, "NVPRMSAA4",    4, SkBenchmark::kGPU_Backend,          kNVPR,   true},
-    { kPMColor_SkColorType, "NVPRMSAA16",  16, SkBenchmark::kGPU_Backend,          kNVPR,   false},
+    { kN32_SkColorType,     "GPU",          0, SkBenchmark::kGPU_Backend,          kNative, true},
+    { kN32_SkColorType,     "MSAA4",        4, SkBenchmark::kGPU_Backend,          kNative, false},
+    { kN32_SkColorType,     "MSAA16",      16, SkBenchmark::kGPU_Backend,          kNative, false},
+    { kN32_SkColorType,     "NVPRMSAA4",    4, SkBenchmark::kGPU_Backend,          kNVPR,   true},
+    { kN32_SkColorType,     "NVPRMSAA16",  16, SkBenchmark::kGPU_Backend,          kNVPR,   false},
 #if SK_ANGLE
-    { kPMColor_SkColorType, "ANGLE",        0, SkBenchmark::kGPU_Backend,          kANGLE,  true},
+    { kN32_SkColorType,     "ANGLE",        0, SkBenchmark::kGPU_Backend,          kANGLE,  true},
 #endif // SK_ANGLE
-    { kPMColor_SkColorType, "Debug",        0, SkBenchmark::kGPU_Backend,          kDebug,  kIsDebug},
-    { kPMColor_SkColorType, "NULLGPU",      0, SkBenchmark::kGPU_Backend,          kNull,   true},
+    { kN32_SkColorType,     "Debug",        0, SkBenchmark::kGPU_Backend,          kDebug,  kIsDebug},
+    { kN32_SkColorType,     "NULLGPU",      0, SkBenchmark::kGPU_Backend,          kNull,   true},
 #endif // SK_SUPPORT_GPU
 };
 
@@ -260,6 +261,7 @@ DEFINE_string(config, kDefaultsConfigStr,
 DEFINE_string(logFile, "", "Also write stdout here.");
 DEFINE_int32(minMs, 20,  "Shortest time we'll allow a benchmark to run.");
 DEFINE_int32(maxMs, 4000, "Longest time we'll allow a benchmark to run.");
+DEFINE_bool(runOnce, kIsDebug, "Run each bench exactly once and don't report timings.");
 DEFINE_double(error, 0.01,
               "Ratio of subsequent bench measurements must drop within 1±error to converge.");
 DEFINE_string(timeFormat, "%9.2f", "Format to print results, in milliseconds per 1000 loops.");
@@ -366,17 +368,16 @@ int tool_main(int argc, char** argv) {
         if (SkBenchmark::kGPU_Backend == config.backend) {
             GrContext* context = gContextFactory.get(config.contextType);
             if (NULL == context) {
-                logger.logError(SkStringPrintf(
-                    "Error creating GrContext for config %s. Config will be skipped.\n",
-                    config.name));
+                SkDebugf("GrContext could not be created for config %s. Config will be skipped.\n",
+                    config.name);
                 configs.remove(i);
                 --i;
                 continue;
             }
             if (config.sampleCount > context->getMaxSampleCount()){
-                logger.logError(SkStringPrintf(
-                    "Sample count (%d) for config %s is unsupported. Config will be skipped.\n",
-                    config.sampleCount, config.name));
+                SkDebugf(
+                    "Sample count (%d) for config %s is not supported. Config will be skipped.\n",
+                    config.sampleCount, config.name);
                 configs.remove(i);
                 --i;
                 continue;
@@ -386,9 +387,9 @@ int tool_main(int argc, char** argv) {
 #endif
 
     // All flags should be parsed now.  Report our settings.
-    if (kIsDebug) {
-        logger.logError("bench was built in Debug mode, so we're going to hide the times."
-                        "  It's for your own good!\n");
+    if (FLAGS_runOnce) {
+        logger.logError("bench was run with --runOnce, so we're going to hide the times."
+                        " It's for your own good!\n");
     }
     writer.option("mode", FLAGS_mode[0]);
     writer.option("alpha", SkStringPrintf("0x%02X", alpha).c_str());
@@ -480,7 +481,8 @@ int tool_main(int argc, char** argv) {
 #endif
 
             SkAutoTUnref<SkCanvas> canvas;
-            SkPicture recordFrom, recordTo;
+            SkAutoTUnref<SkPicture> recordFrom;
+            SkPictureRecorder recorderTo;
             const SkIPoint dim = bench->getSize();
 
             const SkPicture::RecordingFlags kRecordFlags =
@@ -505,13 +507,18 @@ int tool_main(int argc, char** argv) {
                         canvas.reset(SkDeferredCanvas::Create(surface.get()));
                         break;
                     case kRecord_BenchMode:
-                        canvas.reset(SkRef(recordTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                         break;
-                    case kPictureRecord_BenchMode:
-                        bench->draw(1, recordFrom.beginRecording(dim.fX, dim.fY, kRecordFlags));
-                        recordFrom.endRecording();
-                        canvas.reset(SkRef(recordTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                    case kPictureRecord_BenchMode: {
+                        SkPictureRecorder recorderFrom;
+                        bench->draw(1, recorderFrom.beginRecording(dim.fX, dim.fY,
+                                                                   NULL, kRecordFlags));
+                        recordFrom.reset(recorderFrom.endRecording());
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                         break;
+                    }
                     case kNormal_BenchMode:
                         canvas.reset(SkRef(surface->getCanvas()));
                         break;
@@ -522,9 +529,15 @@ int tool_main(int argc, char** argv) {
 
             if (NULL != canvas) {
                 canvas->clear(SK_ColorWHITE);
-                if (FLAGS_clip)   {   performClip(canvas, dim.fX, dim.fY); }
-                if (FLAGS_scale)  {  performScale(canvas, dim.fX, dim.fY); }
-                if (FLAGS_rotate) { performRotate(canvas, dim.fX, dim.fY); }
+                if (FLAGS_clip)   {
+                    perform_clip(canvas, dim.fX, dim.fY);
+                }
+                if (FLAGS_scale)  {
+                    perform_scale(canvas, dim.fX, dim.fY);
+                }
+                if (FLAGS_rotate) {
+                    perform_rotate(canvas, dim.fX, dim.fY);
+                }
             }
 
             if (!loggedBenchName) {
@@ -569,7 +582,8 @@ int tool_main(int argc, char** argv) {
 
                     if ((benchMode == kRecord_BenchMode || benchMode == kPictureRecord_BenchMode)) {
                         // Clear the recorded commands so that they do not accumulate.
-                        canvas.reset(SkRef(recordTo.beginRecording(dim.fX, dim.fY, kRecordFlags)));
+                        canvas.reset(SkRef(recorderTo.beginRecording(dim.fX, dim.fY,
+                                                                     NULL, kRecordFlags)));
                     }
 
                     timer.start();
@@ -591,7 +605,7 @@ int tool_main(int argc, char** argv) {
                         }
 
                         if (benchMode == kPictureRecord_BenchMode) {
-                            recordFrom.draw(canvas);
+                            recordFrom->draw(canvas);
                         } else {
                             bench->draw(loops, canvas);
                         }
@@ -645,7 +659,7 @@ int tool_main(int argc, char** argv) {
                     if (FLAGS_verbose) { SkDebugf("%.3g ", current); }
                     converged = HasConverged(previous, current, timer.fWall);
                     previous = current;
-                } while (!kIsDebug && !converged);
+                } while (!FLAGS_runOnce && !converged);
             }
             if (FLAGS_verbose) { SkDebugf("\n"); }
 
@@ -657,8 +671,8 @@ int tool_main(int argc, char** argv) {
                 }
             }
 
-            if (kIsDebug) {
-                // Let's not mislead ourselves by looking at Debug build bench times!
+            if (FLAGS_runOnce) {
+                // Let's not mislead ourselves by looking at Debug build or single iteration bench times!
                 continue;
             }
 

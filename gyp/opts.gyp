@@ -48,7 +48,7 @@
             'opts_ssse3',
           ],
           'sources': [
-            '../src/opts/opts_check_SSE2.cpp',
+            '../src/opts/opts_check_x86.cpp',
             '../src/opts/SkBitmapProcState_opts_SSE2.cpp',
             '../src/opts/SkBitmapFilter_opts_SSE2.cpp',
             '../src/opts/SkBlitRow_opts_SSE2.cpp',
@@ -56,7 +56,7 @@
             '../src/opts/SkBlurImage_opts_SSE2.cpp',
             '../src/opts/SkMorphology_opts_SSE2.cpp',
             '../src/opts/SkUtils_opts_SSE2.cpp',
-            '../src/opts/SkXfermode_opts_none.cpp',
+            '../src/opts/SkXfermode_opts_SSE2.cpp',
           ],
         }],
         [ 'skia_arch_type == "arm" and arm_version >= 7', {
@@ -103,7 +103,7 @@
         }],
         [ '(skia_arch_type == "mips") or (skia_arch_type == "arm" and arm_version < 7) \
             or (skia_os == "ios") \
-            or (skia_os == "android" and skia_arch_type not in ["x86", "arm", "mips"])', {
+            or (skia_os == "android" and skia_arch_type not in ["x86", "arm", "mips", "arm64"])', {
           'sources': [
             '../src/opts/SkBitmapProcState_opts_none.cpp',
             '../src/opts/SkBlitMask_opts_none.cpp',
@@ -121,6 +121,23 @@
             '-fomit-frame-pointer',
             '-mno-apcs-frame',
           ]
+        }],
+        [ 'skia_arch_type == "arm64"', {
+          'sources': [
+            '../src/opts/SkBitmapProcState_arm_neon.cpp',
+            '../src/opts/SkBitmapProcState_matrixProcs_neon.cpp',
+            '../src/opts/SkBitmapProcState_opts_arm.cpp',
+            '../src/opts/SkBlitMask_opts_arm.cpp',
+            '../src/opts/SkBlitMask_opts_arm_neon.cpp',
+            '../src/opts/SkBlitRow_opts_none.cpp',
+            '../src/opts/SkBlurImage_opts_arm.cpp',
+            '../src/opts/SkBlurImage_opts_neon.cpp',
+            '../src/opts/SkMorphology_opts_arm.cpp',
+            '../src/opts/SkMorphology_opts_neon.cpp',
+            '../src/opts/SkUtils_opts_none.cpp',
+            '../src/opts/SkXfermode_opts_arm.cpp',
+            '../src/opts/SkXfermode_opts_arm_neon.cpp',
+          ],
         }],
       ],
     },

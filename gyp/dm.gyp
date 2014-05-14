@@ -33,13 +33,14 @@
             '../dm/DMExpectationsTask.cpp',
             '../dm/DMGpuGMTask.cpp',
             '../dm/DMPipeTask.cpp',
+            '../dm/DMQuiltTask.cpp',
+            '../dm/DMRecordTask.cpp',
             '../dm/DMReplayTask.cpp',
             '../dm/DMReporter.cpp',
             '../dm/DMSerializeTask.cpp',
             '../dm/DMTask.cpp',
             '../dm/DMTaskRunner.cpp',
             '../dm/DMTestTask.cpp',
-            '../dm/DMTileGridTask.cpp',
             '../dm/DMUtil.cpp',
             '../dm/DMWriteTask.cpp',
             '../gm/gm.cpp',
@@ -55,6 +56,7 @@
             'flags.gyp:flags',
             'jsoncpp.gyp:jsoncpp',
             'gputest.gyp:skgputest',
+            'record.gyp:*',
         ],
     }]
 }

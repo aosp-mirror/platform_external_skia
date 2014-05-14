@@ -20,6 +20,7 @@
 
 class GrAARectRenderer;
 class GrAutoScratchTexture;
+class GrCacheable;
 class GrDrawState;
 class GrDrawTarget;
 class GrEffect;
@@ -28,6 +29,7 @@ class GrGpu;
 class GrIndexBuffer;
 class GrIndexBufferAllocPool;
 class GrInOrderDrawBuffer;
+class GrLayerCache;
 class GrOvalRenderer;
 class GrPath;
 class GrPathRenderer;
@@ -86,8 +88,8 @@ public:
      * buffer, etc. references/IDs are now invalid. Should be called even when
      * GrContext is no longer going to be used for two reasons:
      *  1) ~GrContext will not try to free the objects in the 3D API.
-     *  2) If you've created GrResources that outlive the GrContext they will
-     *     be marked as invalid (GrResource::isValid()) and won't attempt to
+     *  2) If you've created GrGpuObjects that outlive the GrContext they will
+     *     be marked as invalid (GrGpuObjects::isValid()) and won't attempt to
      *     free their underlying resource in the 3D API.
      * Content drawn since the last GrContext::flush() may be lost.
      */
@@ -456,9 +458,19 @@ public:
      *  @param rrect        the roundrect to draw
      *  @param stroke       the stroke information (width, join, cap)
      */
-    void drawRRect(const GrPaint& paint,
-                   const SkRRect& rrect,
-                   const SkStrokeRec& stroke);
+    void drawRRect(const GrPaint& paint, const SkRRect& rrect, const SkStrokeRec& stroke);
+
+    /**
+     *  Shortcut for drawing an SkPath consisting of nested rrects using a paint.
+     *  Does not support stroking. The result is undefined if outer does not contain
+     *  inner.
+     *
+     *  @param paint        describes how to color pixels.
+     *  @param outer        the outer roundrect
+     *  @param inner        the inner roundrect
+     */
+    void drawDRRect(const GrPaint& paint, const SkRRect& outer, const SkRRect& inner);
+
 
     /**
      * Draws a path.
@@ -488,8 +500,8 @@ public:
     void drawVertices(const GrPaint& paint,
                       GrPrimitiveType primitiveType,
                       int vertexCount,
-                      const GrPoint positions[],
-                      const GrPoint texs[],
+                      const SkPoint positions[],
+                      const SkPoint texs[],
                       const GrColor colors[],
                       const uint16_t indices[],
                       int indexCount);
@@ -860,6 +872,7 @@ public:
     GrGpu* getGpu() { return fGpu; }
     const GrGpu* getGpu() const { return fGpu; }
     GrFontCache* getFontCache() { return fFontCache; }
+    GrLayerCache* getLayerCache() { return fLayerCache.get(); }
     GrDrawTarget* getTextTarget();
     const GrIndexBuffer* getQuadIndexBuffer() const;
 
@@ -886,6 +899,17 @@ public:
                     GrPathRendererChain::DrawType drawType = GrPathRendererChain::kColor_DrawType,
                     GrPathRendererChain::StencilSupport* stencilSupport = NULL);
 
+    /**
+     * Stores a custom resource in the cache, based on the specified key.
+     */
+    void addResourceToCache(const GrResourceKey&, GrCacheable*);
+
+    /**
+     * Finds a resource in the cache, based on the specified key. This is intended for use in
+     * conjunction with addResourceToCache(). The return value will be NULL if not found. The
+     * caller must balance with a call to unref().
+     */
+    GrCacheable* findAndRefCachedResource(const GrResourceKey&);
 
 #if GR_CACHE_STATS
     void printCacheStats() const;
@@ -907,6 +931,7 @@ private:
 
     GrResourceCache*                fTextureCache;
     GrFontCache*                    fFontCache;
+    SkAutoTDelete<GrLayerCache>     fLayerCache;
 
     GrPathRendererChain*            fPathRendererChain;
     GrSoftwarePathRenderer*         fSoftwarePathRenderer;

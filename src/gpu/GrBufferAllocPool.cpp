@@ -28,7 +28,7 @@ GrBufferAllocPool::GrBufferAllocPool(GrGpu* gpu,
                                      bool frequentResetHint,
                                      size_t blockSize,
                                      int preallocBufferCnt) :
-        fBlocks(GrMax(8, 2*preallocBufferCnt)) {
+        fBlocks(SkTMax(8, 2*preallocBufferCnt)) {
 
     SkASSERT(NULL != gpu);
     fGpu = gpu;
@@ -38,7 +38,7 @@ GrBufferAllocPool::GrBufferAllocPool(GrGpu* gpu,
     fBufferType = bufferType;
     fFrequentResetHint = frequentResetHint;
     fBufferPtr = NULL;
-    fMinBlockSize = GrMax(GrBufferAllocPool_MIN_BLOCK_SIZE, blockSize);
+    fMinBlockSize = SkTMax(GrBufferAllocPool_MIN_BLOCK_SIZE, blockSize);
 
     fBytesInUse = 0;
 
@@ -109,7 +109,7 @@ void GrBufferAllocPool::unlock() {
         if (block.fBuffer->isLocked()) {
             block.fBuffer->unlock();
         } else {
-            size_t flushSize = block.fBuffer->sizeInBytes() - block.fBytesFree;
+            size_t flushSize = block.fBuffer->gpuMemorySize() - block.fBytesFree;
             flushCpuData(fBlocks.back().fBuffer, flushSize);
         }
         fBufferPtr = NULL;
@@ -135,7 +135,7 @@ void GrBufferAllocPool::validate(bool unusedBlockAllowed) const {
         SkASSERT(!fBlocks[i].fBuffer->isLocked());
     }
     for (int i = 0; i < fBlocks.count(); ++i) {
-        size_t bytes = fBlocks[i].fBuffer->sizeInBytes() - fBlocks[i].fBytesFree;
+        size_t bytes = fBlocks[i].fBuffer->gpuMemorySize() - fBlocks[i].fBytesFree;
         bytesInUse += bytes;
         SkASSERT(bytes || unusedBlockAllowed);
     }
@@ -161,7 +161,7 @@ void* GrBufferAllocPool::makeSpace(size_t size,
 
     if (NULL != fBufferPtr) {
         BufferBlock& back = fBlocks.back();
-        size_t usedBytes = back.fBuffer->sizeInBytes() - back.fBytesFree;
+        size_t usedBytes = back.fBuffer->gpuMemorySize() - back.fBytesFree;
         size_t pad = GrSizeAlignUpPad(usedBytes,
                                       alignment);
         if ((size + pad) <= back.fBytesFree) {
@@ -201,7 +201,7 @@ int GrBufferAllocPool::currentBufferItems(size_t itemSize) const {
     VALIDATE();
     if (NULL != fBufferPtr) {
         const BufferBlock& back = fBlocks.back();
-        size_t usedBytes = back.fBuffer->sizeInBytes() - back.fBytesFree;
+        size_t usedBytes = back.fBuffer->gpuMemorySize() - back.fBytesFree;
         size_t pad = GrSizeAlignUpPad(usedBytes, itemSize);
         return static_cast<int>((back.fBytesFree - pad) / itemSize);
     } else if (fPreallocBuffersInUse < fPreallocBuffers.count()) {
@@ -231,7 +231,7 @@ void GrBufferAllocPool::putBack(size_t bytes) {
         // caller shouldnt try to put back more than they've taken
         SkASSERT(!fBlocks.empty());
         BufferBlock& block = fBlocks.back();
-        size_t bytesUsed = block.fBuffer->sizeInBytes() - block.fBytesFree;
+        size_t bytesUsed = block.fBuffer->gpuMemorySize() - block.fBytesFree;
         if (bytes >= bytesUsed) {
             bytes -= bytesUsed;
             fBytesInUse -= bytesUsed;
@@ -258,7 +258,7 @@ void GrBufferAllocPool::putBack(size_t bytes) {
 
 bool GrBufferAllocPool::createBlock(size_t requestSize) {
 
-    size_t size = GrMax(requestSize, fMinBlockSize);
+    size_t size = SkTMax(requestSize, fMinBlockSize);
     SkASSERT(size >= GrBufferAllocPool_MIN_BLOCK_SIZE);
 
     VALIDATE();
@@ -290,7 +290,7 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
             prev.fBuffer->unlock();
         } else {
             flushCpuData(prev.fBuffer,
-                         prev.fBuffer->sizeInBytes() - prev.fBytesFree);
+                         prev.fBuffer->gpuMemorySize() - prev.fBytesFree);
         }
         fBufferPtr = NULL;
     }
@@ -303,7 +303,7 @@ bool GrBufferAllocPool::createBlock(size_t requestSize) {
     //      threshold (since we don't expect it is likely that we will see more vertex data)
     //      b) If the hint is not set we lock if the buffer size is greater than the threshold.
     bool attemptLock = block.fBuffer->isCPUBacked();
-    if (!attemptLock && fGpu->caps()->bufferLockSupport()) {
+    if (!attemptLock && GrDrawTargetCaps::kNone_MapFlags != fGpu->caps()->mapBufferFlags()) {
         if (fFrequentResetHint) {
             attemptLock = requestSize > GR_GEOM_BUFFER_LOCK_THRESHOLD;
         } else {
@@ -348,10 +348,10 @@ void GrBufferAllocPool::flushCpuData(GrGeometryBuffer* buffer,
     SkASSERT(NULL != buffer);
     SkASSERT(!buffer->isLocked());
     SkASSERT(fCpuData.get() == fBufferPtr);
-    SkASSERT(flushSize <= buffer->sizeInBytes());
+    SkASSERT(flushSize <= buffer->gpuMemorySize());
     VALIDATE(true);
 
-    if (fGpu->caps()->bufferLockSupport() &&
+    if (GrDrawTargetCaps::kNone_MapFlags != fGpu->caps()->mapBufferFlags() &&
         flushSize > GR_GEOM_BUFFER_LOCK_THRESHOLD) {
         void* data = buffer->lock();
         if (NULL != data) {

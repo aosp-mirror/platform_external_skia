@@ -14,7 +14,7 @@ class SkSurface_Gpu : public SkSurface_Base {
 public:
     SK_DECLARE_INST_COUNT(SkSurface_Gpu)
 
-    SkSurface_Gpu(GrRenderTarget*, bool cached);
+    SkSurface_Gpu(GrRenderTarget*, bool cached, TextRenderMode trm);
     virtual ~SkSurface_Gpu();
 
     virtual SkCanvas* onNewCanvas() SK_OVERRIDE;
@@ -33,9 +33,12 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget, bool cached)
+SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget, bool cached, TextRenderMode trm)
         : INHERITED(renderTarget->width(), renderTarget->height()) {
-    fDevice = SkGpuDevice::Create(renderTarget, cached ? SkGpuDevice::kCached_Flag : 0);
+    int flags = 0;
+    flags |= cached ? SkGpuDevice::kCached_Flag : 0;
+    flags |= (kDistanceField_TextRenderMode == trm) ? SkGpuDevice::kDFFonts_Flag : 0;
+    fDevice = SkGpuDevice::Create(renderTarget, flags);
 
     if (kRGB_565_GrPixelConfig != renderTarget->config()) {
         fDevice->clear(0x0);
@@ -98,25 +101,24 @@ void SkSurface_Gpu::onDiscard() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target) {
+SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target, TextRenderMode trm) {
     if (NULL == target) {
         return NULL;
     }
-    return SkNEW_ARGS(SkSurface_Gpu, (target, false));
+    return SkNEW_ARGS(SkSurface_Gpu, (target, false, trm));
 }
 
-SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, int sampleCount) {
+SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, int sampleCount,
+                                      TextRenderMode trm) {
     if (NULL == ctx) {
         return NULL;
     }
 
-    SkBitmap::Config config = SkImageInfoToBitmapConfig(info);
-
     GrTextureDesc desc;
     desc.fFlags = kRenderTarget_GrTextureFlagBit | kCheckAllocation_GrTextureFlagBit;
-    desc.fWidth = info.fWidth;
-    desc.fHeight = info.fHeight;
-    desc.fConfig = SkBitmapConfig2GrPixelConfig(config);
+    desc.fWidth = info.width();
+    desc.fHeight = info.height();
+    desc.fConfig = SkImageInfo2GrPixelConfig(info);
     desc.fSampleCnt = sampleCount;
 
     SkAutoTUnref<GrTexture> tex(ctx->createUncachedTexture(desc, NULL, 0));
@@ -124,21 +126,20 @@ SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, i
         return NULL;
     }
 
-    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), false));
+    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), false, trm));
 }
 
-SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& info, int sampleCount) {
+SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& info,
+                                             int sampleCount, TextRenderMode trm) {
     if (NULL == ctx) {
         return NULL;
     }
 
-    SkBitmap::Config config = SkImageInfoToBitmapConfig(info);
-
     GrTextureDesc desc;
     desc.fFlags = kRenderTarget_GrTextureFlagBit | kCheckAllocation_GrTextureFlagBit;
-    desc.fWidth = info.fWidth;
-    desc.fHeight = info.fHeight;
-    desc.fConfig = SkBitmapConfig2GrPixelConfig(config);
+    desc.fWidth = info.width();
+    desc.fHeight = info.height();
+    desc.fConfig = SkImageInfo2GrPixelConfig(info);
     desc.fSampleCnt = sampleCount;
 
     SkAutoTUnref<GrTexture> tex(ctx->lockAndRefScratchTexture(desc, GrContext::kExact_ScratchTexMatch));
@@ -147,5 +148,5 @@ SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& 
         return NULL;
     }
 
-    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), true));
+    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), true, trm));
 }

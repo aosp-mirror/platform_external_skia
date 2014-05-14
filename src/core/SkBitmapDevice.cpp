@@ -45,7 +45,7 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
         case kRGB_565_SkColorType:
             canonicalAlphaType = kOpaque_SkAlphaType;
             break;
-        case kPMColor_SkColorType:
+        case kN32_SkColorType:
             break;
         default:
             return false;
@@ -68,33 +68,6 @@ SkBitmapDevice::SkBitmapDevice(const SkBitmap& bitmap, const SkDeviceProperties&
     SkASSERT(valid_for_bitmap_device(bitmap.info(), NULL));
 }
 
-#ifdef SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-void SkBitmapDevice::init(SkBitmap::Config config, int width, int height, bool isOpaque) {
-    fBitmap.setConfig(config, width, height, 0, isOpaque ?
-                      kOpaque_SkAlphaType : kPremul_SkAlphaType);
-
-    if (SkBitmap::kNo_Config != config) {
-        if (!fBitmap.allocPixels()) {
-            // indicate failure by zeroing our bitmap
-            fBitmap.setConfig(config, 0, 0, 0, isOpaque ?
-                              kOpaque_SkAlphaType : kPremul_SkAlphaType);
-        } else if (!isOpaque) {
-            fBitmap.eraseColor(SK_ColorTRANSPARENT);
-        }
-    }
-}
-
-SkBitmapDevice::SkBitmapDevice(SkBitmap::Config config, int width, int height, bool isOpaque) {
-    this->init(config, width, height, isOpaque);
-}
-
-SkBitmapDevice::SkBitmapDevice(SkBitmap::Config config, int width, int height, bool isOpaque,
-                               const SkDeviceProperties& deviceProperties)
-    : SkBaseDevice(deviceProperties)
-{
-    this->init(config, width, height, isOpaque);
-}
-#endif
 SkBitmapDevice* SkBitmapDevice::Create(const SkImageInfo& origInfo,
                                        const SkDeviceProperties* props) {
     SkImageInfo info = origInfo;
@@ -408,11 +381,11 @@ void SkBitmapDevice::drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
     // construct a shader, so we can call drawRect with the dst
     SkShader* s = SkShader::CreateBitmapShader(*bitmapPtr,
                                                SkShader::kClamp_TileMode,
-                                               SkShader::kClamp_TileMode);
+                                               SkShader::kClamp_TileMode,
+                                               &matrix);
     if (NULL == s) {
         return;
     }
-    s->setLocalMatrix(matrix);
 
     SkPaint paintWithShader(paint);
     paintWithShader.setStyle(SkPaint::kFill_Style);

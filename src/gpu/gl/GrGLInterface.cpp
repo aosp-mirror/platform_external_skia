@@ -116,9 +116,15 @@ GrGLInterface* GrGLInterface::NewClone(const GrGLInterface* interface) {
     return clone;
 }
 
-#define RETURN_FALSE_INTERFACE                             \
-    GrDebugCrash("GrGLInterface::validate() failed.");     \
-    return false;                                          \
+#ifdef SK_DEBUG
+    static int kIsDebug = 1;
+#else
+    static int kIsDebug = 0;
+#endif
+
+#define RETURN_FALSE_INTERFACE                                                                   \
+    if (kIsDebug) { SkDebugf("%s:%d GrGLInterface::validate() failed.\n", __FILE__, __LINE__); } \
+    return false;
 
 bool GrGLInterface::validate() const {
 
@@ -227,12 +233,8 @@ bool GrGLInterface::validate() const {
     }
 
     GrGLVersion glVer = GrGLGetVersion(this);
-
-    bool isCoreProfile = false;
-    if (kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,2)) {
-        GrGLint profileMask;
-        GR_GL_GetIntegerv(this, GR_GL_CONTEXT_PROFILE_MASK, &profileMask);
-        isCoreProfile = SkToBool(profileMask & GR_GL_CONTEXT_CORE_PROFILE_BIT);
+    if (GR_GL_INVALID_VER == glVer) {
+        RETURN_FALSE_INTERFACE
     }
 
     // Now check that baseline ES/Desktop fns not covered above are present
@@ -290,12 +292,9 @@ bool GrGLInterface::validate() const {
                 RETURN_FALSE_INTERFACE
             }
         }
-        if (!isCoreProfile) {
-            if (NULL == fFunctions.fLoadIdentity ||
-                NULL == fFunctions.fLoadMatrixf ||
-                NULL == fFunctions.fMatrixMode ||
-                NULL == fFunctions.fTexGenfv ||
-                NULL == fFunctions.fTexGeni) {
+        if (fExtensions.has("GL_EXT_direct_state_access")) {
+            if (NULL == fFunctions.fMatrixLoadf ||
+                NULL == fFunctions.fMatrixLoadIdentity) {
                 RETURN_FALSE_INTERFACE
             }
         }
@@ -484,6 +483,43 @@ bool GrGLInterface::validate() const {
             NULL == fFunctions.fPushGroupMarker ||
             NULL == fFunctions.fPopGroupMarker) {
             RETURN_FALSE_INTERFACE
+        }
+    }
+
+    if ((kGL_GrGLStandard == fStandard && glVer >= GR_GL_VER(4,3)) ||
+        fExtensions.has("GL_ARB_invalidate_subdata")) {
+        if (NULL == fFunctions.fInvalidateBufferData ||
+            NULL == fFunctions.fInvalidateBufferSubData ||
+            NULL == fFunctions.fInvalidateFramebuffer ||
+            NULL == fFunctions.fInvalidateSubFramebuffer ||
+            NULL == fFunctions.fInvalidateTexImage ||
+            NULL == fFunctions.fInvalidateTexSubImage) {
+            RETURN_FALSE_INTERFACE;
+        }
+    } else if (kGLES_GrGLStandard == fStandard && glVer >= GR_GL_VER(3,0)) {
+        // ES 3.0 adds the framebuffer functions but not the others.
+        if (NULL == fFunctions.fInvalidateFramebuffer ||
+            NULL == fFunctions.fInvalidateSubFramebuffer) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_CHROMIUM_map_sub")) {
+        if (NULL == fFunctions.fMapBufferSubData ||
+            NULL == fFunctions.fMapTexSubImage2D ||
+            NULL == fFunctions.fUnmapBufferSubData ||
+            NULL == fFunctions.fUnmapTexSubImage2D) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    // These functions are added to the 3.0 version of both GLES and GL.
+    if (glVer >= GR_GL_VER(3,0) ||
+        (kGLES_GrGLStandard == fStandard && fExtensions.has("GL_EXT_map_buffer_range")) ||
+        (kGL_GrGLStandard == fStandard && fExtensions.has("GL_ARB_map_buffer_range"))) {
+        if (NULL == fFunctions.fMapBufferRange ||
+            NULL == fFunctions.fFlushMappedBufferRange) {
+            RETURN_FALSE_INTERFACE;
         }
     }
     return true;

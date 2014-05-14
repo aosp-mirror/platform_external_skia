@@ -152,7 +152,7 @@ private:
 
         SkCanvas* modeCanvas;
         if (NULL == layerCanvas) {
-            canvas->saveLayer(&r, NULL, SkCanvas::kARGB_ClipLayer_SaveFlag);
+            canvas->saveLayer(&r, NULL);
             modeCanvas = canvas;
         } else {
             modeCanvas = layerCanvas;
@@ -195,12 +195,12 @@ private:
         SkAutoLockPixels bgAlp(bg);
         memcpy(bg.getPixels(), kCheckData, sizeof(kCheckData));
 
-        fBGShader.reset(SkShader::CreateBitmapShader(bg,
-                                                     SkShader::kRepeat_TileMode,
-                                                     SkShader::kRepeat_TileMode));
         SkMatrix lm;
         lm.setScale(SkIntToScalar(kCheckSize), SkIntToScalar(kCheckSize));
-        fBGShader->setLocalMatrix(lm);
+        fBGShader.reset(SkShader::CreateBitmapShader(bg,
+                                                     SkShader::kRepeat_TileMode,
+                                                     SkShader::kRepeat_TileMode,
+                                                     &lm));
 
         SkPaint bmpPaint;
         static const SkPoint kCenter = { SkIntToScalar(kSize) / 2, SkIntToScalar(kSize) / 2 };

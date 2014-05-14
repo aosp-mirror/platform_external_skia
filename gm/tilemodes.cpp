@@ -50,7 +50,7 @@ static void setup(SkPaint* paint, const SkBitmap& bm, bool filter,
 }
 
 static const SkColorType gColorTypes[] = {
-    kPMColor_SkColorType,
+    kN32_SkColorType,
     kRGB_565_SkColorType,
 };
 
@@ -166,7 +166,7 @@ static const int gHeight = 32;
 
 static SkShader* make_bm(SkShader::TileMode tx, SkShader::TileMode ty) {
     SkBitmap bm;
-    makebm(&bm, kPMColor_SkColorType, gWidth, gHeight);
+    makebm(&bm, kN32_SkColorType, gWidth, gHeight);
     return SkShader::CreateBitmapShader(bm, tx, ty);
 }
 
@@ -200,6 +200,10 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     SkString onShortName() {
         return fName;
     }

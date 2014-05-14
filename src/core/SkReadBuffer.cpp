@@ -25,6 +25,7 @@ static uint32_t default_flags() {
 
 SkReadBuffer::SkReadBuffer() {
     fFlags = default_flags();
+    fPictureVersion = 0;
     fMemoryPtr = NULL;
 
     fBitmapStorage = NULL;
@@ -42,6 +43,7 @@ SkReadBuffer::SkReadBuffer() {
 
 SkReadBuffer::SkReadBuffer(const void* data, size_t size) {
     fFlags = default_flags();
+    fPictureVersion = 0;
     fReader.setMemory(data, size);
     fMemoryPtr = NULL;
 
@@ -60,6 +62,7 @@ SkReadBuffer::SkReadBuffer(const void* data, size_t size) {
 
 SkReadBuffer::SkReadBuffer(SkStream* stream) {
     fFlags = default_flags();
+    fPictureVersion = 0;
     const size_t length = stream->getLength();
     fMemoryPtr = sk_malloc_throw(length);
     stream->read(fMemoryPtr, length);
@@ -318,10 +321,10 @@ SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
     SkFlattenable* obj = NULL;
     uint32_t sizeRecorded = fReader.readU32();
     if (factory) {
-        uint32_t offset = fReader.offset();
+        size_t offset = fReader.offset();
         obj = (*factory)(*this);
         // check that we read the amount we expected
-        uint32_t sizeRead = fReader.offset() - offset;
+        size_t sizeRead = fReader.offset() - offset;
         if (sizeRecorded != sizeRead) {
             // we could try to fix up the offset...
             sk_throw();

@@ -21,7 +21,7 @@ class SkPaint;
 class SkPDFCatalog;
 class SkPDFFont;
 
-class SkPDFGlyphSet : public SkNoncopyable {
+class SkPDFGlyphSet : SkNoncopyable {
 public:
     SkPDFGlyphSet();
 
@@ -34,7 +34,7 @@ private:
     SkBitSet fBitSet;
 };
 
-class SkPDFGlyphSetMap : public SkNoncopyable {
+class SkPDFGlyphSetMap : SkNoncopyable {
 public:
     struct FontGlyphSetPair {
         FontGlyphSetPair(SkPDFFont* font, SkPDFGlyphSet* glyphSet);
@@ -111,7 +111,7 @@ public:
      *  @param numGlyphs      The number of input glyphs.
      *  @return               Returns the number of glyphs consumed.
      */
-    size_t glyphsToPDFFontEncoding(uint16_t* glyphIDs, size_t numGlyphs);
+    int glyphsToPDFFontEncoding(uint16_t* glyphIDs, int numGlyphs);
 
     /** Get the font resource for the passed typeface and glyphID. The
      *  reference count of the object is incremented and it is the caller's

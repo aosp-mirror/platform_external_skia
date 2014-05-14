@@ -8,6 +8,7 @@
 #include "gm.h"
 
 #include "SkPictureImageFilter.h"
+#include "SkPictureRecorder.h"
 
 // This GM exercises the SkPictureImageFilter ImageFilter class.
 
@@ -22,7 +23,8 @@ protected:
     }
 
     void makePicture() {
-        SkCanvas* canvas = fPicture.beginRecording(100, 100);
+        SkPictureRecorder recorder;
+        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
         canvas->clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
@@ -30,7 +32,7 @@ protected:
         paint.setTextSize(SkIntToScalar(96));
         const char* str = "e";
         canvas->drawText(str, strlen(str), SkIntToScalar(20), SkIntToScalar(70), paint);
-        fPicture.endRecording();
+        fPicture.reset(recorder.endRecording());
     }
 
     virtual SkISize onISize() SK_OVERRIDE { return SkISize::Make(500, 150); }
@@ -54,9 +56,9 @@ protected:
             SkRect srcRect = SkRect::MakeXYWH(20, 20, 30, 30);
             SkRect emptyRect = SkRect::MakeXYWH(20, 20, 0, 0);
             SkRect bounds = SkRect::MakeXYWH(0, 0, 100, 100);
-            SkAutoTUnref<SkImageFilter> pictureSource(SkPictureImageFilter::Create(&fPicture));
-            SkAutoTUnref<SkImageFilter> pictureSourceSrcRect(SkPictureImageFilter::Create(&fPicture, srcRect));
-            SkAutoTUnref<SkImageFilter> pictureSourceEmptyRect(SkPictureImageFilter::Create(&fPicture, emptyRect));
+            SkAutoTUnref<SkImageFilter> pictureSource(SkPictureImageFilter::Create(fPicture));
+            SkAutoTUnref<SkImageFilter> pictureSourceSrcRect(SkPictureImageFilter::Create(fPicture, srcRect));
+            SkAutoTUnref<SkImageFilter> pictureSourceEmptyRect(SkPictureImageFilter::Create(fPicture, emptyRect));
 
             // Draw the picture unscaled.
             fillRectFiltered(canvas, bounds, pictureSource);
@@ -82,7 +84,7 @@ protected:
     }
 
 private:
-    SkPicture fPicture;
+    SkAutoTUnref<SkPicture> fPicture;
     typedef GM INHERITED;
 };
 

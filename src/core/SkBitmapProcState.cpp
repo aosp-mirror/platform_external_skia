@@ -263,6 +263,7 @@ bool SkBitmapProcState::possiblyScaleImage() {
             if (mip) {
                 fScaledCacheID = SkScaledImageCache::AddAndLockMip(fOrigBitmap,
                                                                    mip);
+                SkASSERT(mip->getRefCnt() > 1);
                 mip->unref();   // the cache took a ref
                 SkASSERT(fScaledCacheID);
             }
@@ -359,17 +360,6 @@ bool SkBitmapProcState::lockBaseBitmap() {
     return true;
 }
 
-void SkBitmapProcState::endContext() {
-    SkDELETE(fBitmapFilter);
-    fBitmapFilter = NULL;
-    fScaledBitmap.reset();
-
-    if (fScaledCacheID) {
-        SkScaledImageCache::Unlock(fScaledCacheID);
-        fScaledCacheID = NULL;
-    }
-}
-
 SkBitmapProcState::~SkBitmapProcState() {
     if (fScaledCacheID) {
         SkScaledImageCache::Unlock(fScaledCacheID);
@@ -398,8 +388,15 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     }
     // The above logic should have always assigned fBitmap, but in case it
     // didn't, we check for that now...
+    // TODO(dominikg): Ask humper@ if we can just use an SkASSERT(fBitmap)?
     if (NULL == fBitmap) {
         return false;
+    }
+
+    // If we are "still" kMedium_FilterLevel, then the request was not fulfilled by possiblyScale,
+    // so we downgrade to kLow (so the rest of the sniffing code can assume that)
+    if (SkPaint::kMedium_FilterLevel == fFilterLevel) {
+        fFilterLevel = SkPaint::kLow_FilterLevel;
     }
 
     bool trivialMatrix = (fInvMatrix.getType() & ~SkMatrix::kTranslate_Mask) == 0;
@@ -480,6 +477,7 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     // shader will perform.
 
     fMatrixProc = this->chooseMatrixProc(trivialMatrix);
+    // TODO(dominikg): SkASSERT(fMatrixProc) instead? chooseMatrixProc never returns NULL.
     if (NULL == fMatrixProc) {
         return false;
     }
@@ -521,6 +519,7 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
                 fPaintPMColor = SkPreMultiplyColor(paint.getColor());
                 break;
             default:
+                // TODO(dominikg): Should we ever get here? SkASSERT(false) instead?
                 return false;
         }
 

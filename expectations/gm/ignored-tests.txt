@@ -33,38 +33,7 @@
 ## epoger will rebaseline by 25 Dec 2013
 #gradtext
 
-# This GM has probably always drawn incorrectly. We need to clarify the API
-# http://skbug.com/2222 : Inverse filled paths get inverse stroked
-inverse_paths
-
-# bsalomon: Additional test cases were added to these GMs
-# https://codereview.chromium.org/193263002/
-# The rrect_clip_aa and rrect_effect tests were additionally modified by:
-# https://codereview.chromium.org/194603004
-rrect_effect
-rrect_draw_bw
-rrect_draw_aa
-rrect_clip_bw
-rrect_clip_aa
-
-# bsalomon: This test changed imperceptibly on my windows laptop with an intel gpu
-# https://codereview.chromium.org/204983003/
-filltypespersp
-
 # reed: https://codereview.chromium.org/190723004/
 # This change removes an API that this GM was testing. If/when it lands and sticks,
 # I will likely just delete the GM.
 canvas-layer-state
-
-# sugoi: https://codereview.chromium.org/208303002/
-# This path fixes a double offset with the resize filter and adds a gm case to test it
-resizeimagefilter
-
-# yunchao: https://codereview.chromium.org/204143004/
-# This change add some cases to bitmapshader to avoid potential drawing error for kA8_Config
-bitmapshaders
-
-# fmalita: https://codereview.chromium.org/203203004
-# A couple of tests changed imperceptibly due to different rounding.
-fontscaler
-bleed

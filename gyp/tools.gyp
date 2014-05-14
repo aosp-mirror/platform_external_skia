@@ -16,7 +16,9 @@
         'bbh_shootout',
         'bench_pictures',
         'bench_record',
+        'bench_playback',
         'filter',
+        'gpuveto',
         'lua_app',
         'lua_pictures',
         'pinspect',
@@ -197,7 +199,24 @@
         'skia_lib.gyp:skia_lib',
       ],
     },
-
+    {
+      'target_name': 'gpuveto',
+      'type': 'executable',
+      'sources': [
+        '../tools/gpuveto.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/lazy',
+        '../tools/flags',
+      ],
+      'dependencies': [
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
     {
       'target_name': 'lua_app',
       'type': 'executable',
@@ -302,8 +321,28 @@
         '../src/lazy',
       ],
       'dependencies': [
+        'bench.gyp:bench_timer',
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
+        'record.gyp:*',
+      ],
+    },
+    {
+      'target_name': 'bench_playback',
+      'type': 'executable',
+      'sources': [
+        '../tools/bench_playback.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/record',
+      ],
+      'dependencies': [
+        'bench.gyp:bench_timer',
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+        'record.gyp:*',
       ],
     },
     {

@@ -81,7 +81,7 @@ bool GrGpuGL::BlendCoeffReferencesConstant(GrBlendCoeff coeff) {
     };
     return gCoeffReferencesBlendConst[coeff];
     GR_STATIC_ASSERT(kTotalGrBlendCoeffCount ==
-                     GR_ARRAY_COUNT(gCoeffReferencesBlendConst));
+                     SK_ARRAY_COUNT(gCoeffReferencesBlendConst));
 
     GR_STATIC_ASSERT(0 == kZero_GrBlendCoeff);
     GR_STATIC_ASSERT(1 == kOne_GrBlendCoeff);
@@ -105,7 +105,7 @@ bool GrGpuGL::BlendCoeffReferencesConstant(GrBlendCoeff coeff) {
 
     // assertion for gXfermodeCoeff2Blend have to be in GrGpu scope
     GR_STATIC_ASSERT(kTotalGrBlendCoeffCount ==
-                     GR_ARRAY_COUNT(gXfermodeCoeff2Blend));
+                     SK_ARRAY_COUNT(gXfermodeCoeff2Blend));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -120,7 +120,7 @@ GrGpuGL::GrGpuGL(const GrGLContext& ctx, GrContext* context)
     fCaps.reset(SkRef(ctx.caps()));
 
     fHWBoundTextures.reset(this->glCaps().maxFragmentTextureUnits());
-    fHWTexGenSettings.reset(this->glCaps().maxFixedFunctionTextureCoords());
+    fHWPathTexGenSettings.reset(this->glCaps().maxFixedFunctionTextureCoords());
 
     GrGLClearErr(fGLContext.interface());
     if (gPrintStartupSpew) {
@@ -300,30 +300,20 @@ void GrGpuGL::onResetContext(uint32_t resetBits) {
         fHWBoundRenderTarget = NULL;
     }
 
-    if (resetBits & (kFixedFunction_GrGLBackendState | kPathRendering_GrGLBackendState)) {
-        if (this->glCaps().fixedFunctionSupport()) {
+    if (resetBits & kPathRendering_GrGLBackendState) {
+        if (this->caps()->pathRenderingSupport()) {
             fHWProjectionMatrixState.invalidate();
             // we don't use the model view matrix.
-            GL_CALL(MatrixMode(GR_GL_MODELVIEW));
-            GL_CALL(LoadIdentity());
+            GL_CALL(MatrixLoadIdentity(GR_GL_MODELVIEW));
 
             for (int i = 0; i < this->glCaps().maxFixedFunctionTextureCoords(); ++i) {
-                GL_CALL(ActiveTexture(GR_GL_TEXTURE0 + i));
-                GL_CALL(Disable(GR_GL_TEXTURE_GEN_S));
-                GL_CALL(Disable(GR_GL_TEXTURE_GEN_T));
-                GL_CALL(Disable(GR_GL_TEXTURE_GEN_Q));
-                GL_CALL(Disable(GR_GL_TEXTURE_GEN_R));
-                if (this->caps()->pathRenderingSupport()) {
-                    GL_CALL(PathTexGen(GR_GL_TEXTURE0 + i, GR_GL_NONE, 0, NULL));
-                }
-                fHWTexGenSettings[i].fMode = GR_GL_NONE;
-                fHWTexGenSettings[i].fNumComponents = 0;
+                GL_CALL(PathTexGen(GR_GL_TEXTURE0 + i, GR_GL_NONE, 0, NULL));
+                fHWPathTexGenSettings[i].fMode = GR_GL_NONE;
+                fHWPathTexGenSettings[i].fNumComponents = 0;
             }
-            fHWActiveTexGenSets = 0;
+            fHWActivePathTexGenSets = 0;
         }
-        if (this->caps()->pathRenderingSupport()) {
-            fHWPathStencilSettings.invalidate();
-        }
+        fHWPathStencilSettings.invalidate();
     }
 
     // we assume these values
@@ -740,7 +730,7 @@ static bool renderbuffer_storage_msaa(GrGLContext& ctx,
                                                                 width, height));
             break;
         case GrGLCaps::kNone_MSFBOType:
-            GrCrash("Shouldn't be here if we don't support multisampled renderbuffers.");
+            SkFAIL("Shouldn't be here if we don't support multisampled renderbuffers.");
             break;
     }
     return (GR_GL_NO_ERROR == CHECK_ALLOC_ERROR(ctx.interface()));;
@@ -879,7 +869,7 @@ GrTexture* GrGpuGL::onCreateTexture(const GrTextureDesc& desc,
         return return_null_texture();
     }
     // If the sample count exceeds the max then we clamp it.
-    glTexDesc.fSampleCnt = GrMin(desc.fSampleCnt, this->caps()->maxSampleCount());
+    glTexDesc.fSampleCnt = SkTMin(desc.fSampleCnt, this->caps()->maxSampleCount());
 
     glTexDesc.fFlags  = desc.fFlags;
     glTexDesc.fWidth  = desc.fWidth;
@@ -1296,6 +1286,9 @@ void GrGpuGL::onClear(const SkIRect* rect, GrColor color, bool canIgnoreRect) {
 }
 
 void GrGpuGL::discard(GrRenderTarget* renderTarget) {
+    if (!this->caps()->discardRenderTargetSupport()) {
+        return;
+    }
     if (NULL == renderTarget) {
         renderTarget = this->drawState()->getRenderTarget();
         if (NULL == renderTarget) {
@@ -1308,8 +1301,40 @@ void GrGpuGL::discard(GrRenderTarget* renderTarget) {
         fHWBoundRenderTarget = NULL;
         GL_CALL(BindFramebuffer(GR_GL_FRAMEBUFFER, glRT->renderFBOID()));
     }
-    GrGLenum attachments[] = { GR_GL_COLOR };
-    GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments), attachments));
+    switch (this->glCaps().invalidateFBType()) {
+        case GrGLCaps::kNone_FBFetchType:
+            SkFAIL("Should never get here.");
+            break;
+        case GrGLCaps::kInvalidate_InvalidateFBType:
+            if (0 == glRT->renderFBOID()) {
+                //  When rendering to the default framebuffer the legal values for attachments
+                //  are GL_COLOR, GL_DEPTH, GL_STENCIL, ... rather than the various FBO attachment
+                //  types.
+                static const GrGLenum attachments[] = { GR_GL_COLOR };
+                GL_CALL(InvalidateFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            } else {
+                static const GrGLenum attachments[] = { GR_GL_COLOR_ATTACHMENT0 };
+                GL_CALL(InvalidateFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            }
+            break;
+        case GrGLCaps::kDiscard_InvalidateFBType: {
+            if (0 == glRT->renderFBOID()) {
+                //  When rendering to the default framebuffer the legal values for attachments
+                //  are GL_COLOR, GL_DEPTH, GL_STENCIL, ... rather than the various FBO attachment
+                //  types. See glDiscardFramebuffer() spec.
+                static const GrGLenum attachments[] = { GR_GL_COLOR };
+                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            } else {
+                static const GrGLenum attachments[] = { GR_GL_COLOR_ATTACHMENT0 };
+                GL_CALL(DiscardFramebuffer(GR_GL_FRAMEBUFFER, SK_ARRAY_COUNT(attachments),
+                        attachments));
+            }
+            break;
+        }
+    }
     renderTarget->flagAsResolved();
 }
 
@@ -1438,7 +1463,7 @@ bool GrGpuGL::onReadPixels(GrRenderTarget* target,
                                     tgt->textureFBOID()));
             break;
         default:
-            GrCrash("Unknown resolve type");
+            SkFAIL("Unknown resolve type");
     }
 
     const GrGLIRect& glvp = tgt->getViewport();
@@ -1598,7 +1623,7 @@ void GrGpuGL::onGpuDraw(const DrawInfo& info) {
     size_t indexOffsetInBytes;
     this->setupGeometry(info, &indexOffsetInBytes);
 
-    SkASSERT((size_t)info.primitiveType() < GR_ARRAY_COUNT(gPrimitiveType2GLMode));
+    SkASSERT((size_t)info.primitiveType() < SK_ARRAY_COUNT(gPrimitiveType2GLMode));
 
     if (info.isIndexed()) {
         GrGLvoid* indices =
@@ -1631,7 +1656,7 @@ void GrGpuGL::onGpuDraw(const DrawInfo& info) {
 static GrGLenum gr_stencil_op_to_gl_path_rendering_fill_mode(GrStencilOp op) {
     switch (op) {
         default:
-            GrCrash("Unexpected path fill.");
+            SkFAIL("Unexpected path fill.");
             /* fallthrough */;
         case kIncClamp_StencilOp:
             return GR_GL_COUNT_UP;
@@ -1710,7 +1735,7 @@ void GrGpuGL::onGpuDrawPath(const GrPath* path, SkPath::FillType fill) {
     }
 }
 
-void GrGpuGL::onGpuDrawPaths(size_t pathCount, const GrPath** paths,
+void GrGpuGL::onGpuDrawPaths(int pathCount, const GrPath** paths,
                              const SkMatrix* transforms,
                              SkPath::FillType fill,
                              SkStrokeRec::Style stroke) {
@@ -1726,7 +1751,7 @@ void GrGpuGL::onGpuDrawPaths(size_t pathCount, const GrPath** paths,
         reinterpret_cast<GrGLfloat*>(transformData.get());
     GrGLuint* pathIDs = reinterpret_cast<GrGLuint*>(pathData.get());
 
-    for (size_t i = 0; i < pathCount; ++i) {
+    for (int i = 0; i < pathCount; ++i) {
         SkASSERT(transforms[i].asAffine(NULL));
         const SkMatrix& m = transforms[i];
         transformValues[i * 6] = m.getScaleX();
@@ -1859,7 +1884,7 @@ GrGLenum gr_to_gl_stencil_func(GrStencilFunc basicFunc) {
         GR_GL_EQUAL,            // kEqual_StencilFunc,
         GR_GL_NOTEQUAL,         // kNotEqual_StencilFunc,
     };
-    GR_STATIC_ASSERT(GR_ARRAY_COUNT(gTable) == kBasicStencilFuncCount);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(gTable) == kBasicStencilFuncCount);
     GR_STATIC_ASSERT(0 == kAlways_StencilFunc);
     GR_STATIC_ASSERT(1 == kNever_StencilFunc);
     GR_STATIC_ASSERT(2 == kGreater_StencilFunc);
@@ -1884,7 +1909,7 @@ GrGLenum gr_to_gl_stencil_op(GrStencilOp op) {
         GR_GL_ZERO,        // kZero_StencilOp
         GR_GL_INVERT,      // kInvert_StencilOp
     };
-    GR_STATIC_ASSERT(GR_ARRAY_COUNT(gTable) == kStencilOpCount);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(gTable) == kStencilOpCount);
     GR_STATIC_ASSERT(0 == kKeep_StencilOp);
     GR_STATIC_ASSERT(1 == kReplace_StencilOp);
     GR_STATIC_ASSERT(2 == kIncWrap_StencilOp);
@@ -2195,7 +2220,7 @@ void GrGpuGL::setProjectionMatrix(const SkMatrix& matrix,
                                   const SkISize& renderTargetSize,
                                   GrSurfaceOrigin renderTargetOrigin) {
 
-    SkASSERT(this->glCaps().fixedFunctionSupport());
+    SkASSERT(this->glCaps().pathRenderingSupport());
 
     if (renderTargetOrigin == fHWProjectionMatrixState.fRenderTargetOrigin &&
         renderTargetSize == fHWProjectionMatrixState.fRenderTargetSize &&
@@ -2209,113 +2234,84 @@ void GrGpuGL::setProjectionMatrix(const SkMatrix& matrix,
 
     GrGLfloat glMatrix[4 * 4];
     fHWProjectionMatrixState.getGLMatrix<4>(glMatrix);
-    GL_CALL(MatrixMode(GR_GL_PROJECTION));
-    GL_CALL(LoadMatrixf(glMatrix));
+    GL_CALL(MatrixLoadf(GR_GL_PROJECTION, glMatrix));
 }
 
-void GrGpuGL::enableTexGen(int unitIdx,
-                           TexGenComponents components,
-                           const GrGLfloat* coefficients) {
-    SkASSERT(this->glCaps().fixedFunctionSupport());
-    SkASSERT(components >= kS_TexGenComponents && components <= kSTR_TexGenComponents);
+void GrGpuGL::enablePathTexGen(int unitIdx,
+                               PathTexGenComponents components,
+                               const GrGLfloat* coefficients) {
+    SkASSERT(this->glCaps().pathRenderingSupport());
+    SkASSERT(components >= kS_PathTexGenComponents &&
+             components <= kSTR_PathTexGenComponents);
     SkASSERT(this->glCaps().maxFixedFunctionTextureCoords() >= unitIdx);
 
-    if (GR_GL_OBJECT_LINEAR == fHWTexGenSettings[unitIdx].fMode &&
-        components == fHWTexGenSettings[unitIdx].fNumComponents &&
-        !memcmp(coefficients, fHWTexGenSettings[unitIdx].fCoefficients,
+    if (GR_GL_OBJECT_LINEAR == fHWPathTexGenSettings[unitIdx].fMode &&
+        components == fHWPathTexGenSettings[unitIdx].fNumComponents &&
+        !memcmp(coefficients, fHWPathTexGenSettings[unitIdx].fCoefficients,
                 3 * components * sizeof(GrGLfloat))) {
         return;
     }
 
     this->setTextureUnit(unitIdx);
 
-    if (GR_GL_OBJECT_LINEAR != fHWTexGenSettings[unitIdx].fMode) {
-        for (int i = 0; i < 4; i++) {
-            GL_CALL(TexGeni(GR_GL_S + i, GR_GL_TEXTURE_GEN_MODE, GR_GL_OBJECT_LINEAR));
-        }
-        fHWTexGenSettings[unitIdx].fMode = GR_GL_OBJECT_LINEAR;
-    }
+    fHWPathTexGenSettings[unitIdx].fNumComponents = components;
+    GL_CALL(PathTexGen(GR_GL_TEXTURE0 + unitIdx,
+                       GR_GL_OBJECT_LINEAR,
+                       components,
+                       coefficients));
 
-    for (int i = fHWTexGenSettings[unitIdx].fNumComponents; i < components; i++) {
-        GL_CALL(Enable(GR_GL_TEXTURE_GEN_S + i));
-    }
-    for (int i = components; i < fHWTexGenSettings[unitIdx].fNumComponents; i++) {
-        GL_CALL(Disable(GR_GL_TEXTURE_GEN_S + i));
-    }
-    fHWTexGenSettings[unitIdx].fNumComponents = components;
-
-    for (int i = 0; i < components; i++) {
-        GrGLfloat plane[] = {coefficients[0 + 3 * i],
-                             coefficients[1 + 3 * i],
-                             0,
-                             coefficients[2 + 3 * i]};
-        GL_CALL(TexGenfv(GR_GL_S + i, GR_GL_OBJECT_PLANE, plane));
-    }
-
-    if (this->caps()->pathRenderingSupport()) {
-        GL_CALL(PathTexGen(GR_GL_TEXTURE0 + unitIdx,
-                           GR_GL_OBJECT_LINEAR,
-                           components,
-                           coefficients));
-    }
-
-    memcpy(fHWTexGenSettings[unitIdx].fCoefficients, coefficients,
+    memcpy(fHWPathTexGenSettings[unitIdx].fCoefficients, coefficients,
            3 * components * sizeof(GrGLfloat));
 }
 
-void GrGpuGL::enableTexGen(int unitIdx, TexGenComponents components, const SkMatrix& matrix) {
+void GrGpuGL::enablePathTexGen(int unitIdx, PathTexGenComponents components,
+                               const SkMatrix& matrix) {
     GrGLfloat coefficients[3 * 3];
-    SkASSERT(this->glCaps().fixedFunctionSupport());
-    SkASSERT(components >= kS_TexGenComponents && components <= kSTR_TexGenComponents);
+    SkASSERT(this->glCaps().pathRenderingSupport());
+    SkASSERT(components >= kS_PathTexGenComponents &&
+             components <= kSTR_PathTexGenComponents);
 
     coefficients[0] = SkScalarToFloat(matrix[SkMatrix::kMScaleX]);
     coefficients[1] = SkScalarToFloat(matrix[SkMatrix::kMSkewX]);
     coefficients[2] = SkScalarToFloat(matrix[SkMatrix::kMTransX]);
 
-    if (components >= kST_TexGenComponents) {
+    if (components >= kST_PathTexGenComponents) {
         coefficients[3] = SkScalarToFloat(matrix[SkMatrix::kMSkewY]);
         coefficients[4] = SkScalarToFloat(matrix[SkMatrix::kMScaleY]);
         coefficients[5] = SkScalarToFloat(matrix[SkMatrix::kMTransY]);
     }
 
-    if (components >= kSTR_TexGenComponents) {
+    if (components >= kSTR_PathTexGenComponents) {
         coefficients[6] = SkScalarToFloat(matrix[SkMatrix::kMPersp0]);
         coefficients[7] = SkScalarToFloat(matrix[SkMatrix::kMPersp1]);
         coefficients[8] = SkScalarToFloat(matrix[SkMatrix::kMPersp2]);
     }
 
-    enableTexGen(unitIdx, components, coefficients);
+    enablePathTexGen(unitIdx, components, coefficients);
 }
 
-void GrGpuGL::flushTexGenSettings(int numUsedTexCoordSets) {
-    SkASSERT(this->glCaps().fixedFunctionSupport());
+void GrGpuGL::flushPathTexGenSettings(int numUsedTexCoordSets) {
+    SkASSERT(this->glCaps().pathRenderingSupport());
     SkASSERT(this->glCaps().maxFixedFunctionTextureCoords() >= numUsedTexCoordSets);
 
-    // Only write the inactive tex gens, since active tex gens were written
-    // when they were enabled.
+    // Only write the inactive path tex gens, since active path tex gens were
+    // written when they were enabled.
 
     SkDEBUGCODE(
         for (int i = 0; i < numUsedTexCoordSets; i++) {
-            SkASSERT(0 != fHWTexGenSettings[i].fNumComponents);
+            SkASSERT(0 != fHWPathTexGenSettings[i].fNumComponents);
         }
     );
 
-    for (int i = numUsedTexCoordSets; i < fHWActiveTexGenSets; i++) {
-        SkASSERT(0 != fHWTexGenSettings[i].fNumComponents);
+    for (int i = numUsedTexCoordSets; i < fHWActivePathTexGenSets; i++) {
+        SkASSERT(0 != fHWPathTexGenSettings[i].fNumComponents);
 
         this->setTextureUnit(i);
-        for (int j = 0; j < fHWTexGenSettings[i].fNumComponents; j++) {
-            GL_CALL(Disable(GR_GL_TEXTURE_GEN_S + j));
-        }
-
-        if (this->caps()->pathRenderingSupport()) {
-            GL_CALL(PathTexGen(GR_GL_TEXTURE0 + i, GR_GL_NONE, 0, NULL));
-        }
-
-        fHWTexGenSettings[i].fNumComponents = 0;
+        GL_CALL(PathTexGen(GR_GL_TEXTURE0 + i, GR_GL_NONE, 0, NULL));
+        fHWPathTexGenSettings[i].fNumComponents = 0;
     }
 
-    fHWActiveTexGenSets = numUsedTexCoordSets;
+    fHWActivePathTexGenSets = numUsedTexCoordSets;
 }
 
 void GrGpuGL::flushMiscFixedFunctionState() {
@@ -2361,7 +2357,7 @@ void GrGpuGL::flushMiscFixedFunctionState() {
                 GL_CALL(Disable(GR_GL_CULL_FACE));
                 break;
             default:
-                GrCrash("Unknown draw face.");
+                SkFAIL("Unknown draw face.");
         }
         fHWDrawFace = drawState.getDrawFace();
     }
@@ -2456,7 +2452,6 @@ bool GrGpuGL::configToGLFormats(GrPixelConfig config,
             break;
         case kIndex_8_GrPixelConfig:
             if (this->caps()->eightBitPaletteSupport()) {
-                *internalFormat = GR_GL_PALETTE8_RGBA8;
                 // glCompressedTexImage doesn't take external params
                 *externalFormat = GR_GL_PALETTE8_RGBA8;
                 // no sized/unsized internal format distinction here
@@ -2793,7 +2788,7 @@ GrGLAttribArrayState* GrGpuGL::HWGeometryState::bindArrayAndBuffersToDraw(
 
     // We use a vertex array if we're on a core profile and the verts are in a VBO.
     if (gpu->glCaps().isCoreProfile() && !vbuffer->isCPUBacked()) {
-        if (NULL == fVBOVertexArray || !fVBOVertexArray->isValid()) {
+        if (NULL == fVBOVertexArray || fVBOVertexArray->wasDestroyed()) {
             SkSafeUnref(fVBOVertexArray);
             GrGLuint arrayID;
             GR_GL_CALL(gpu->glInterface(), GenVertexArrays(1, &arrayID));

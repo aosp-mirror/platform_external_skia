@@ -51,6 +51,11 @@ GR_STATIC_ASSERT((int)kIDA_GrBlendCoeff  == (int)SkXfermode::kIDA_Coeff);
  */
 GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config);
 GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType, SkAlphaType);
+
+static inline GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info) {
+    return SkImageInfo2GrPixelConfig(info.colorType(), info.alphaType());
+}
+
 bool GrPixelConfig2ColorType(GrPixelConfig, SkColorType*);
 
 static inline GrColor SkColor2GrColor(SkColor c) {
@@ -83,9 +88,12 @@ public:
     // overrides
     virtual const GrKey* getKey();
     virtual GrMaskFormat getMaskFormat();
-    virtual bool getPackedGlyphBounds(GrGlyph::PackedID, SkIRect* bounds);
+    virtual bool getPackedGlyphBounds(GrGlyph::PackedID, SkIRect* bounds) SK_OVERRIDE;
     virtual bool getPackedGlyphImage(GrGlyph::PackedID, int width, int height,
-                                     int rowBytes, void* image);
+                                     int rowBytes, void* image) SK_OVERRIDE;
+    virtual bool getPackedGlyphDFBounds(GrGlyph::PackedID, SkIRect* bounds) SK_OVERRIDE;
+    virtual bool getPackedGlyphDFImage(GrGlyph::PackedID, int width, int height,
+                                       void* image) SK_OVERRIDE;
     virtual bool getGlyphPath(uint16_t glyphID, SkPath*);
 
 private:

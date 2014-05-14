@@ -9,6 +9,7 @@
 #include "SkBitmapSource.h"
 #include "SkCanvas.h"
 #include "SkMallocPixelRef.h"
+#include "SkPictureRecorder.h"
 #include "SkTemplates.h"
 #include "SkWriteBuffer.h"
 #include "SkValidatingReadBuffer.h"
@@ -65,6 +66,15 @@ template<> struct SerializationUtils<SkRegion> {
     }
 };
 
+template<> struct SerializationUtils<SkString> {
+    static void Write(SkWriteBuffer& writer, const SkString* string) {
+        writer.writeString(string->c_str());
+    }
+    static void Read(SkValidatingReadBuffer& reader, SkString* string) {
+        reader.readString(string);
+    }
+};
+
 template<> struct SerializationUtils<unsigned char> {
     static void Write(SkWriteBuffer& writer, unsigned char* data, uint32_t arraySize) {
         writer.writeByteArray(data, arraySize);
@@ -110,8 +120,18 @@ template<> struct SerializationUtils<SkScalar> {
     }
 };
 
-template<typename T>
-static void TestObjectSerialization(T* testObj, skiatest::Reporter* reporter) {
+template<typename T, bool testInvalid> struct SerializationTestUtils {
+    static void InvalidateData(unsigned char* data) {}
+};
+
+template<> struct SerializationTestUtils<SkString, true> {
+    static void InvalidateData(unsigned char* data) {
+        data[3] |= 0x80; // Reverse sign of 1st integer
+    }
+};
+
+template<typename T, bool testInvalid>
+static void TestObjectSerializationNoAlign(T* testObj, skiatest::Reporter* reporter) {
     SkWriteBuffer writer(SkWriteBuffer::kValidation_Flag);
     SerializationUtils<T>::Write(writer, testObj);
     size_t bytesWritten = writer.bytesWritten();
@@ -119,6 +139,8 @@ static void TestObjectSerialization(T* testObj, skiatest::Reporter* reporter) {
 
     unsigned char dataWritten[1024];
     writer.writeToMemory(dataWritten);
+
+    SerializationTestUtils<T, testInvalid>::InvalidateData(dataWritten);
 
     // Make sure this fails when it should (test with smaller size, but still multiple of 4)
     SkValidatingReadBuffer buffer(dataWritten, bytesWritten - 4);
@@ -133,9 +155,15 @@ static void TestObjectSerialization(T* testObj, skiatest::Reporter* reporter) {
     SerializationUtils<T>::Read(buffer2, &obj2);
     const unsigned char* peekAfter = static_cast<const unsigned char*>(buffer2.skip(0));
     // This should have succeeded, since there are enough bytes to read this
-    REPORTER_ASSERT(reporter, buffer2.isValid());
+    REPORTER_ASSERT(reporter, buffer2.isValid() == !testInvalid);
+    // Note: This following test should always succeed, regardless of whether the buffer is valid,
+    // since if it is invalid, it will simply skip to the end, as if it had read the whole buffer.
     REPORTER_ASSERT(reporter, static_cast<size_t>(peekAfter - peekBefore) == bytesWritten);
+}
 
+template<typename T>
+static void TestObjectSerialization(T* testObj, skiatest::Reporter* reporter) {
+    TestObjectSerializationNoAlign<T, false>(testObj, reporter);
     TestAlignment(testObj, reporter);
 }
 
@@ -233,7 +261,7 @@ static void TestBitmapSerialization(const SkBitmap& validBitmap,
 
 static bool setup_bitmap_for_canvas(SkBitmap* bitmap) {
     SkImageInfo info = SkImageInfo::Make(
-        kBitmapSize, kBitmapSize, kPMColor_SkColorType, kPremul_SkAlphaType);
+        kBitmapSize, kBitmapSize, kN32_SkColorType, kPremul_SkAlphaType);
     return bitmap->allocPixels(info);
 }
 
@@ -308,6 +336,13 @@ DEF_TEST(Serialization, reporter) {
         TestObjectSerialization(&region, reporter);
     }
 
+    // Test string serialization
+    {
+        SkString string("string");
+        TestObjectSerializationNoAlign<SkString, false>(&string, reporter);
+        TestObjectSerializationNoAlign<SkString, true>(&string, reporter);
+    }
+
     // Test rrect serialization
     {
         // SkRRect does not initialize anything.
@@ -369,11 +404,10 @@ DEF_TEST(Serialization, reporter) {
 
     // Test simple SkPicture serialization
     {
-        SkPicture* pict = new SkPicture;
-        SkAutoUnref aur(pict);
-        bool didDraw = drawSomething(pict->beginRecording(kBitmapSize, kBitmapSize));
+        SkPictureRecorder recorder;
+        bool didDraw = drawSomething(recorder.beginRecording(kBitmapSize, kBitmapSize, NULL, 0));
         REPORTER_ASSERT(reporter, didDraw);
-        pict->endRecording();
+        SkAutoTUnref<SkPicture> pict(recorder.endRecording());
 
         // Serialize picture
         SkWriteBuffer writer(SkWriteBuffer::kValidation_Flag);

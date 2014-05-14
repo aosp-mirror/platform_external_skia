@@ -24,6 +24,10 @@ public:
     DrawBitmapMatrixGM() {}
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkString onShortName() SK_OVERRIDE {
         return SkString("drawbitmapmatrix");
     }
@@ -84,7 +88,7 @@ protected:
             paint.setFilterLevel(SkPaint::kLow_FilterLevel);
 
             SkMaskFilter* mf = SkBlurMaskFilter::Create(
-                SkBlurMaskFilter::kNormal_BlurStyle,
+                kNormal_SkBlurStyle,
                 SkBlurMask::ConvertRadiusToSigma(5),
                 SkBlurMaskFilter::kHighQuality_BlurFlag |
                 SkBlurMaskFilter::kIgnoreTransform_BlurFlag);

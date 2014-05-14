@@ -34,20 +34,10 @@ static SkScalar FindFirstInterval(const SkScalar intervals[], SkScalar phase,
     return intervals[0];
 }
 
-SkDashPathEffect::SkDashPathEffect(const SkScalar intervals[], int count,
-                                   SkScalar phase, bool scaleToFit)
-        : fScaleToFit(scaleToFit) {
-    SkASSERT(intervals);
-    SkASSERT(count > 1 && SkAlign2(count) == count);
-
-    fIntervals = (SkScalar*)sk_malloc_throw(sizeof(SkScalar) * count);
-    fCount = count;
-
+void SkDashPathEffect::setInternalMembers(SkScalar phase) {
     SkScalar len = 0;
-    for (int i = 0; i < count; i++) {
-        SkASSERT(intervals[i] >= 0);
-        fIntervals[i] = intervals[i];
-        len += intervals[i];
+    for (int i = 0; i < fCount; i++) {
+        len += fIntervals[i];
     }
     fIntervalLength = len;
 
@@ -75,14 +65,31 @@ SkDashPathEffect::SkDashPathEffect(const SkScalar intervals[], int count,
         }
         SkASSERT(phase >= 0 && phase < len);
 
-        fInitialDashLength = FindFirstInterval(intervals, phase,
-                                               &fInitialDashIndex, count);
+        fPhase = phase;
+
+        fInitialDashLength = FindFirstInterval(fIntervals, fPhase,
+                                               &fInitialDashIndex, fCount);
 
         SkASSERT(fInitialDashLength >= 0);
         SkASSERT(fInitialDashIndex >= 0 && fInitialDashIndex < fCount);
     } else {
         fInitialDashLength = -1;    // signal bad dash intervals
     }
+}
+
+SkDashPathEffect::SkDashPathEffect(const SkScalar intervals[], int count,
+                                   SkScalar phase) {
+    SkASSERT(intervals);
+    SkASSERT(count > 1 && SkAlign2(count) == count);
+
+    fIntervals = (SkScalar*)sk_malloc_throw(sizeof(SkScalar) * count);
+    fCount = count;
+    for (int i = 0; i < count; i++) {
+        SkASSERT(intervals[i] >= 0);
+        fIntervals[i] = intervals[i];
+    }
+
+    this->setInternalMembers(phase);
 }
 
 SkDashPathEffect::~SkDashPathEffect() {
@@ -256,7 +263,6 @@ bool SkDashPathEffect::filterPath(SkPath* dst, const SkPath& src,
         bool        addedSegment = false;
         SkScalar    length = meas.getLength();
         int         index = fInitialDashIndex;
-        SkScalar    scale = SK_Scalar1;
 
         // Since the path length / dash length ratio may be arbitrarily large, we can exert
         // significant memory pressure while attempting to build the filtered path. To avoid this,
@@ -273,20 +279,10 @@ bool SkDashPathEffect::filterPath(SkPath* dst, const SkPath& src,
             return false;
         }
 
-        if (fScaleToFit) {
-            if (fIntervalLength >= length) {
-                scale = SkScalarDiv(length, fIntervalLength);
-            } else {
-                SkScalar div = SkScalarDiv(length, fIntervalLength);
-                int n = SkScalarFloorToInt(div);
-                scale = SkScalarDiv(length, n * fIntervalLength);
-            }
-        }
-
         // Using double precision to avoid looping indefinitely due to single precision rounding
         // (for extreme path_length/dash_length ratios). See test_infinite_dash() unittest.
         double  distance = 0;
-        double  dlen = SkScalarMul(fInitialDashLength, scale);
+        double  dlen = fInitialDashLength;
 
         while (distance < length) {
             SkASSERT(dlen >= 0);
@@ -318,13 +314,13 @@ bool SkDashPathEffect::filterPath(SkPath* dst, const SkPath& src,
             }
 
             // fetch our next dlen
-            dlen = SkScalarMul(intervals[index], scale);
+            dlen = intervals[index];
         }
 
         // extend if we ended on a segment and we need to join up with the (skipped) initial segment
         if (meas.isClosed() && is_even(fInitialDashIndex) &&
                 fInitialDashLength > 0) {
-            meas.getSegment(0, SkScalarMul(fInitialDashLength, scale), dst, !addedSegment);
+            meas.getSegment(0, fInitialDashLength, dst, !addedSegment);
             ++segCount;
         }
     } while (meas.nextContour());
@@ -359,13 +355,6 @@ bool SkDashPathEffect::asPoints(PointData* results,
         !SkScalarNearlyEqual(fIntervals[0], fIntervals[1]) ||
         !SkScalarIsInt(fIntervals[0]) ||
         !SkScalarIsInt(fIntervals[1])) {
-        return false;
-    }
-
-    // TODO: this next test could be eased up. The rescaling should not impact
-    // the equality of the ons & offs. However, we would need to remove the
-    // integer intervals restriction first
-    if (fScaleToFit) {
         return false;
     }
 
@@ -529,16 +518,24 @@ bool SkDashPathEffect::asPoints(PointData* results,
     return true;
 }
 
+SkPathEffect::DashType SkDashPathEffect::asADash(DashInfo* info) const {
+    if (info) {
+        if (info->fCount >= fCount && NULL != info->fIntervals) {
+            memcpy(info->fIntervals, fIntervals, fCount * sizeof(SkScalar));
+        }
+        info->fCount = fCount;
+        info->fPhase = fPhase;
+    }
+    return kDash_DashType;
+}
+
 SkFlattenable::Factory SkDashPathEffect::getFactory() const {
     return CreateProc;
 }
 
 void SkDashPathEffect::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    buffer.writeInt(fInitialDashIndex);
-    buffer.writeScalar(fInitialDashLength);
-    buffer.writeScalar(fIntervalLength);
-    buffer.writeBool(fScaleToFit);
+    buffer.writeScalar(fPhase);
     buffer.writeScalarArray(fIntervals, fCount);
 }
 
@@ -547,10 +544,15 @@ SkFlattenable* SkDashPathEffect::CreateProc(SkReadBuffer& buffer) {
 }
 
 SkDashPathEffect::SkDashPathEffect(SkReadBuffer& buffer) : INHERITED(buffer) {
-    fInitialDashIndex = buffer.readInt();
-    fInitialDashLength = buffer.readScalar();
-    fIntervalLength = buffer.readScalar();
-    fScaleToFit = buffer.readBool();
+    bool useOldPic = buffer.pictureVersion() < 25 && 0 != buffer.pictureVersion();
+    if (useOldPic) {
+        fInitialDashIndex = buffer.readInt();
+        fInitialDashLength = buffer.readScalar();
+        fIntervalLength = buffer.readScalar();
+        buffer.readBool(); // Dummy for old ScalarToFit field
+    } else {
+        fPhase = buffer.readScalar();
+    }
 
     fCount = buffer.getArrayCount();
     size_t allocSize = sizeof(SkScalar) * fCount;
@@ -559,5 +561,15 @@ SkDashPathEffect::SkDashPathEffect(SkReadBuffer& buffer) : INHERITED(buffer) {
         buffer.readScalarArray(fIntervals, fCount);
     } else {
         fIntervals = NULL;
+    }
+
+    if (useOldPic) {
+        fPhase = 0;
+        for (int i = 0; i < fInitialDashIndex; ++i) {
+            fPhase += fIntervals[i];
+        }
+        fPhase += fInitialDashLength;
+    } else {
+        this->setInternalMembers(fPhase);
     }
 }

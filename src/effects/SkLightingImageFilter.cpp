@@ -943,7 +943,7 @@ bool SkDiffuseLightingImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    if (src.colorType() != kPMColor_SkColorType) {
+    if (src.colorType() != kN32_SkColorType) {
         return false;
     }
     SkIRect bounds;
@@ -1034,7 +1034,7 @@ bool SkSpecularLightingImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    if (src.colorType() != kPMColor_SkColorType) {
+    if (src.colorType() != kN32_SkColorType) {
         return false;
     }
 
@@ -1115,7 +1115,7 @@ SkLight* create_random_light(SkRandom* random) {
                                             random->nextU()));
         }
         default:
-            GrCrash();
+            SkFAIL("Unexpected value.");
             return NULL;
     }
 }

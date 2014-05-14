@@ -17,12 +17,15 @@
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkFlattenableBuffers.h"
+#include "SkGradientShader.h"
 #include "SkLightingImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
+#include "SkMatrixImageFilter.h"
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPicture.h"
+#include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
@@ -190,7 +193,8 @@ DEF_TEST(ImageFilter, reporter) {
             SkDeviceImageFilterProxy proxy(&device);
             SkIPoint loc = SkIPoint::Make(0, 0);
             // An empty input should early return and return false
-            SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeEmpty());
+            SkAutoTUnref<SkImageFilter::Cache> cache(SkImageFilter::Cache::Create(2));
+            SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeEmpty(), cache.get());
             REPORTER_ASSERT(reporter,
                             !bicubic->filterImage(&proxy, bitmap, ctx, &result, &loc));
         }
@@ -246,14 +250,184 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
         SkIPoint offset;
         SkString str;
         str.printf("filter %d", static_cast<int>(i));
-        SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeLargest());
-        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, ctx, &result, &offset), str.c_str());
+        SkAutoTUnref<SkImageFilter::Cache> cache(SkImageFilter::Cache::Create(2));
+        SkImageFilter::Context ctx(SkMatrix::I(), SkIRect::MakeLargest(), cache.get());
+        REPORTER_ASSERT_MESSAGE(reporter, filter->filterImage(&proxy, bitmap, ctx,
+                                &result, &offset), str.c_str());
         REPORTER_ASSERT_MESSAGE(reporter, offset.fX == 20 && offset.fY == 30, str.c_str());
     }
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
         SkSafeUnref(filters[i]);
     }
+}
+
+static SkBitmap make_gradient_circle(int width, int height) {
+    SkBitmap bitmap;
+    SkScalar x = SkIntToScalar(width / 2);
+    SkScalar y = SkIntToScalar(height / 2);
+    SkScalar radius = SkMinScalar(x, y) * 0.8f;
+    bitmap.allocN32Pixels(width, height);
+    SkCanvas canvas(bitmap);
+    canvas.clear(0x00000000);
+    SkColor colors[2];
+    colors[0] = SK_ColorWHITE;
+    colors[1] = SK_ColorBLACK;
+    SkAutoTUnref<SkShader> shader(
+        SkGradientShader::CreateRadial(SkPoint::Make(x, y), radius, colors, NULL, 2,
+                                       SkShader::kClamp_TileMode)
+    );
+    SkPaint paint;
+    paint.setShader(shader);
+    canvas.drawCircle(x, y, radius, paint);
+    return bitmap;
+}
+
+DEF_TEST(ImageFilterDrawTiled, reporter) {
+    // Check that all filters when drawn tiled (with subsequent clip rects) exactly
+    // match the same filters drawn with a single full-canvas bitmap draw.
+    // Tests pass by not asserting.
+
+    SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(SK_ColorRED, SkXfermode::kSrcIn_Mode));
+    SkPoint3 location(0, 0, SK_Scalar1);
+    SkPoint3 target(SK_Scalar1, SK_Scalar1, SK_Scalar1);
+    SkScalar kernel[9] = {
+        SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
+        SkIntToScalar( 1), SkIntToScalar(-7), SkIntToScalar( 1),
+        SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
+    };
+    SkISize kernelSize = SkISize::Make(3, 3);
+    SkScalar gain = SK_Scalar1, bias = 0;
+
+    SkAutoTUnref<SkImageFilter> gradient_source(SkBitmapSource::Create(make_gradient_circle(64, 64)));
+
+    struct {
+        const char*    fName;
+        SkImageFilter* fFilter;
+    } filters[] = {
+        { "color filter", SkColorFilterImageFilter::Create(cf.get()) },
+        { "displacement map", SkDisplacementMapEffect::Create(
+              SkDisplacementMapEffect::kR_ChannelSelectorType,
+              SkDisplacementMapEffect::kB_ChannelSelectorType,
+              40.0f, gradient_source.get()) },
+        { "blur", SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1) },
+        { "drop shadow", SkDropShadowImageFilter::Create(
+              SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN) },
+        { "diffuse lighting", SkLightingImageFilter::CreatePointLitDiffuse(
+              location, SK_ColorGREEN, 0, 0) },
+        { "specular lighting",
+              SkLightingImageFilter::CreatePointLitSpecular(location, SK_ColorGREEN, 0, 0, 0) },
+        { "matrix convolution",
+              SkMatrixConvolutionImageFilter::Create(
+                  kernelSize, kernel, gain, bias, SkIPoint::Make(1, 1),
+                  SkMatrixConvolutionImageFilter::kRepeat_TileMode, false) },
+        { "merge", SkMergeImageFilter::Create(NULL, NULL, SkXfermode::kSrcOver_Mode) },
+        { "offset", SkOffsetImageFilter::Create(SK_Scalar1, SK_Scalar1) },
+        { "dilate", SkDilateImageFilter::Create(3, 2) },
+        { "erode", SkErodeImageFilter::Create(2, 3) },
+        { "tile", SkTileImageFilter::Create(SkRect::MakeXYWH(0, 0, 50, 50),
+                                            SkRect::MakeXYWH(0, 0, 100, 100), NULL) },
+    };
+
+    SkBitmap untiledResult, tiledResult;
+    int width = 64, height = 64;
+    untiledResult.allocN32Pixels(width, height);
+    tiledResult.allocN32Pixels(width, height);
+    SkCanvas tiledCanvas(tiledResult);
+    SkCanvas untiledCanvas(untiledResult);
+    tiledCanvas.clear(0);
+    untiledCanvas.clear(0);
+    int tileSize = 16;
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
+        SkPaint paint;
+        paint.setImageFilter(filters[i].fFilter);
+        paint.setTextSize(SkIntToScalar(height));
+        paint.setColor(SK_ColorWHITE);
+        SkString str;
+        const char* text = "ABC";
+        SkScalar ypos = SkIntToScalar(height);
+        untiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
+        for (int y = 0; y < height; y += tileSize) {
+            for (int x = 0; x < width; x += tileSize) {
+                tiledCanvas.save();
+                tiledCanvas.clipRect(SkRect::Make(SkIRect::MakeXYWH(x, y, tileSize, tileSize)));
+                tiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
+                tiledCanvas.restore();
+            }
+        }
+        untiledCanvas.flush();
+        tiledCanvas.flush();
+        for (int y = 0; y < height; y++) {
+            int diffs = memcmp(untiledResult.getAddr32(0, y), tiledResult.getAddr32(0, y), untiledResult.rowBytes());
+            REPORTER_ASSERT_MESSAGE(reporter, !diffs, filters[i].fName);
+            if (diffs) {
+                break;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
+        SkSafeUnref(filters[i].fFilter);
+    }
+}
+
+DEF_TEST(ImageFilterMatrixConvolution, reporter) {
+    // Check that a 1x3 filter does not cause a spurious assert.
+    SkScalar kernel[3] = {
+        SkIntToScalar( 1), SkIntToScalar( 1), SkIntToScalar( 1),
+    };
+    SkISize kernelSize = SkISize::Make(1, 3);
+    SkScalar gain = SK_Scalar1, bias = 0;
+    SkIPoint kernelOffset = SkIPoint::Make(0, 0);
+
+    SkAutoTUnref<SkImageFilter> filter(
+        SkMatrixConvolutionImageFilter::Create(
+            kernelSize, kernel, gain, bias, kernelOffset,
+            SkMatrixConvolutionImageFilter::kRepeat_TileMode, false));
+
+    SkBitmap result;
+    int width = 16, height = 16;
+    result.allocN32Pixels(width, height);
+    SkCanvas canvas(result);
+    canvas.clear(0);
+
+    SkPaint paint;
+    paint.setImageFilter(filter);
+    SkRect rect = SkRect::Make(SkIRect::MakeWH(width, height));
+    canvas.drawRect(rect, paint);
+}
+
+DEF_TEST(ImageFilterMatrixConvolutionBorder, reporter) {
+    // Check that a filter with borders outside the target bounds
+    // does not crash.
+    SkScalar kernel[3] = {
+        0, 0, 0,
+    };
+    SkISize kernelSize = SkISize::Make(3, 1);
+    SkScalar gain = SK_Scalar1, bias = 0;
+    SkIPoint kernelOffset = SkIPoint::Make(2, 0);
+
+    SkAutoTUnref<SkImageFilter> filter(
+        SkMatrixConvolutionImageFilter::Create(
+            kernelSize, kernel, gain, bias, kernelOffset,
+            SkMatrixConvolutionImageFilter::kClamp_TileMode, true));
+
+    SkBitmap result;
+
+    int width = 10, height = 10;
+    result.allocN32Pixels(width, height);
+    SkCanvas canvas(result);
+    canvas.clear(0);
+
+    SkPaint filterPaint;
+    filterPaint.setImageFilter(filter);
+    SkRect bounds = SkRect::MakeWH(1, 10);
+    SkRect rect = SkRect::Make(SkIRect::MakeWH(width, height));
+    SkPaint rectPaint;
+    canvas.saveLayer(&bounds, &filterPaint);
+    canvas.drawRect(rect, rectPaint);
+    canvas.restore();
 }
 
 DEF_TEST(ImageFilterCropRect, reporter) {
@@ -272,17 +446,15 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
 
     SkMatrix expectedMatrix = canvas.getTotalMatrix();
 
-    SkPicture picture;
-    SkCanvas* recordingCanvas = picture.beginRecording(100, 100,
-        SkPicture::kOptimizeForClippedPlayback_RecordingFlag);
+    SkRTreeFactory factory;
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100, &factory, 0);
 
     SkPaint paint;
     SkAutoTUnref<MatrixTestImageFilter> imageFilter(
         new MatrixTestImageFilter(reporter, expectedMatrix));
     paint.setImageFilter(imageFilter.get());
-    SkCanvas::SaveFlags saveFlags = static_cast<SkCanvas::SaveFlags>(
-        SkCanvas::kHasAlphaLayer_SaveFlag | SkCanvas::kFullColorLayer_SaveFlag);
-    recordingCanvas->saveLayer(NULL, &paint, saveFlags);
+    recordingCanvas->saveLayer(NULL, &paint);
     SkPaint solidPaint;
     solidPaint.setColor(0xFFFFFFFF);
     recordingCanvas->save();
@@ -290,9 +462,9 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
     recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeWH(100, 100)), solidPaint);
     recordingCanvas->restore(); // scale
     recordingCanvas->restore(); // saveLayer
-    picture.endRecording();
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-    canvas.drawPicture(picture);
+    canvas.drawPicture(*picture);
 }
 
 static void test_huge_blur(SkBaseDevice* device, skiatest::Reporter* reporter) {
@@ -317,6 +489,109 @@ DEF_TEST(HugeBlurImageFilter, reporter) {
     test_huge_blur(&device, reporter);
 }
 
+static void test_xfermode_cropped_input(SkBaseDevice* device, skiatest::Reporter* reporter) {
+    SkCanvas canvas(device);
+    canvas.clear(0);
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(1, 1);
+    bitmap.eraseARGB(255, 255, 255, 255);
+
+    SkAutoTUnref<SkColorFilter> green(
+        SkColorFilter::CreateModeFilter(SK_ColorGREEN, SkXfermode::kSrcIn_Mode));
+    SkAutoTUnref<SkColorFilterImageFilter> greenFilter(
+        SkColorFilterImageFilter::Create(green.get()));
+    SkImageFilter::CropRect cropRect(SkRect::MakeEmpty());
+    SkAutoTUnref<SkColorFilterImageFilter> croppedOut(
+        SkColorFilterImageFilter::Create(green.get(), NULL, &cropRect));
+
+    // Check that an xfermode image filter whose input has been cropped out still draws the other
+    // input. Also check that drawing with both inputs cropped out doesn't cause a GPU warning.
+    SkXfermode* mode = SkXfermode::Create(SkXfermode::kSrcOver_Mode);
+    SkAutoTUnref<SkImageFilter> xfermodeNoFg(
+        SkXfermodeImageFilter::Create(mode, greenFilter, croppedOut));
+    SkAutoTUnref<SkImageFilter> xfermodeNoBg(
+        SkXfermodeImageFilter::Create(mode, croppedOut, greenFilter));
+    SkAutoTUnref<SkImageFilter> xfermodeNoFgNoBg(
+        SkXfermodeImageFilter::Create(mode, croppedOut, croppedOut));
+
+    SkPaint paint;
+    paint.setImageFilter(xfermodeNoFg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+
+    uint32_t pixel;
+    SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    paint.setImageFilter(xfermodeNoBg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    paint.setImageFilter(xfermodeNoFgNoBg);
+    canvas.drawSprite(bitmap, 0, 0, &paint);
+    canvas.readPixels(info, &pixel, 4, 0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+}
+
+DEF_TEST(ImageFilterNestedSaveLayer, reporter) {
+    SkBitmap temp;
+    temp.allocN32Pixels(50, 50);
+    SkBitmapDevice device(temp);
+    SkCanvas canvas(&device);
+    canvas.clear(0x0);
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(10, 10);
+    bitmap.eraseColor(SK_ColorGREEN);
+
+    SkMatrix matrix;
+    matrix.setScale(SkIntToScalar(2), SkIntToScalar(2));
+    matrix.postTranslate(SkIntToScalar(-20), SkIntToScalar(-20));
+    SkAutoTUnref<SkImageFilter> matrixFilter(
+        SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel));
+
+    // Test that saveLayer() with a filter nested inside another saveLayer() applies the
+    // correct offset to the filter matrix.
+    SkRect bounds1 = SkRect::MakeXYWH(10, 10, 30, 30);
+    canvas.saveLayer(&bounds1, NULL);
+    SkPaint filterPaint;
+    filterPaint.setImageFilter(matrixFilter);
+    SkRect bounds2 = SkRect::MakeXYWH(20, 20, 10, 10);
+    canvas.saveLayer(&bounds2, &filterPaint);
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    canvas.drawRect(bounds2, greenPaint);
+    canvas.restore();
+    canvas.restore();
+    SkPaint strokePaint;
+    strokePaint.setStyle(SkPaint::kStroke_Style);
+    strokePaint.setColor(SK_ColorRED);
+
+    SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
+    uint32_t pixel;
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    // Test that drawSprite() with a filter nested inside a saveLayer() applies the
+    // correct offset to the filter matrix.
+    canvas.clear(0x0);
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    canvas.saveLayer(&bounds1, NULL);
+    canvas.drawSprite(bitmap, 20, 20, &filterPaint);
+    canvas.restore();
+
+    canvas.readPixels(info, &pixel, 4, 25, 25);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+}
+
+DEF_TEST(XfermodeImageFilterCroppedInput, reporter) {
+    SkBitmap temp;
+    temp.allocN32Pixels(100, 100);
+    SkBitmapDevice device(temp);
+    test_xfermode_cropped_input(&device, reporter);
+}
 
 #if SK_SUPPORT_GPU
 DEF_GPUTEST(ImageFilterCropRectGPU, reporter, factory) {
@@ -333,5 +608,13 @@ DEF_GPUTEST(HugeBlurImageFilterGPU, reporter, factory) {
                                                          SkImageInfo::MakeN32Premul(100, 100),
                                                          0));
     test_huge_blur(device, reporter);
+}
+
+DEF_GPUTEST(XfermodeImageFilterCroppedInputGPU, reporter, factory) {
+    GrContext* context = factory->get(static_cast<GrContextFactory::GLContextType>(0));
+    SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(context,
+                                                         SkImageInfo::MakeN32Premul(1, 1),
+                                                         0));
+    test_xfermode_cropped_input(device, reporter);
 }
 #endif

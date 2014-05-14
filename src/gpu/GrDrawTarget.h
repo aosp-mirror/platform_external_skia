@@ -354,7 +354,7 @@ public:
      *             hairline.
      * @param stroke the stroke for drawing all the paths.
      */
-    void drawPaths(size_t pathCount, const GrPath** paths,
+    void drawPaths(int pathCount, const GrPath** paths,
                    const SkMatrix* transforms, SkPath::FillType fill,
                    SkStrokeRec::Style stroke);
 
@@ -505,7 +505,7 @@ public:
     /**
      * For subclass internal use to invoke a call to onDrawPaths().
      */
-    void executeDrawPaths(size_t pathCount, const GrPath** paths,
+    void executeDrawPaths(int pathCount, const GrPath** paths,
                           const SkMatrix* transforms, SkPath::FillType fill,
                           SkStrokeRec::Style stroke,
                           const GrDeviceCoordTexture* dstCopy) {
@@ -607,8 +607,8 @@ public:
         bool succeeded() const { return NULL != fTarget; }
         void* vertices() const { SkASSERT(this->succeeded()); return fVertices; }
         void* indices() const { SkASSERT(this->succeeded()); return fIndices; }
-        GrPoint* positions() const {
-            return static_cast<GrPoint*>(this->vertices());
+        SkPoint* positions() const {
+            return static_cast<SkPoint*>(this->vertices());
         }
 
     private:
@@ -742,9 +742,9 @@ protected:
             case kArray_GeometrySrcType:
                 return src.fIndexCount;
             case kBuffer_GeometrySrcType:
-                return static_cast<int>(src.fIndexBuffer->sizeInBytes() / sizeof(uint16_t));
+                return static_cast<int>(src.fIndexBuffer->gpuMemorySize() / sizeof(uint16_t));
             default:
-                GrCrash("Unexpected Index Source.");
+                SkFAIL("Unexpected Index Source.");
                 return 0;
         }
     }
@@ -898,7 +898,7 @@ private:
     virtual void onStencilPath(const GrPath*, SkPath::FillType) = 0;
     virtual void onDrawPath(const GrPath*, SkPath::FillType,
                             const GrDeviceCoordTexture* dstCopy) = 0;
-    virtual void onDrawPaths(size_t, const GrPath**, const SkMatrix*,
+    virtual void onDrawPaths(int, const GrPath**, const SkMatrix*,
                              SkPath::FillType, SkStrokeRec::Style,
                              const GrDeviceCoordTexture* dstCopy) = 0;
 

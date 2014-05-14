@@ -13,29 +13,29 @@ static bool bridgeWinding(SkTArray<SkOpContour*, true>& contourList, SkPathWrite
     bool firstContour = true;
     bool unsortable = false;
     bool topUnsortable = false;
+    bool firstPass = true;
+    SkPoint lastTopLeft;
     SkPoint topLeft = {SK_ScalarMin, SK_ScalarMin};
     do {
         int index, endIndex;
         bool topDone;
+        lastTopLeft = topLeft;
         SkOpSegment* current = FindSortableTop(contourList, SkOpAngle::kUnaryWinding, &firstContour,
-                &index, &endIndex, &topLeft, &topUnsortable, &topDone);
+                &index, &endIndex, &topLeft, &topUnsortable, &topDone, firstPass);
         if (!current) {
-            if (topUnsortable || !topDone) {
-                topUnsortable = false;
+            if ((!topUnsortable || firstPass) && !topDone) {
                 SkASSERT(topLeft.fX != SK_ScalarMin && topLeft.fY != SK_ScalarMin);
                 topLeft.fX = topLeft.fY = SK_ScalarMin;
                 continue;
             }
             break;
         }
+        firstPass = !topUnsortable || lastTopLeft != topLeft;
         SkTDArray<SkOpSpan*> chaseArray;
         do {
             if (current->activeWinding(index, endIndex)) {
                 do {
                     if (!unsortable && current->done()) {
-            #if DEBUG_ACTIVE_SPANS
-                        DebugShowActiveSpans(contourList);
-            #endif
                         if (simple->isEmpty()) {
                             simple->init();
                             break;
@@ -77,11 +77,15 @@ static bool bridgeWinding(SkTArray<SkOpContour*, true>& contourList, SkPathWrite
                 simple->close();
             } else {
                 SkOpSpan* last = current->markAndChaseDoneUnary(index, endIndex);
-                if (last && !last->fLoop) {
+                if (last && !last->fChased && !last->fLoop) {
+                    last->fChased = true;
+                    SkASSERT(!SkPathOpsDebug::ChaseContains(chaseArray, last));
+                    // assert that last isn't already in array
                     *chaseArray.append() = last;
                 }
             }
-            current = FindChase(chaseArray, index, endIndex);
+            SkTDArray<SkOpSpan *>* chaseArrayPtr = &chaseArray;
+            current = FindChase(chaseArrayPtr, &index, &endIndex);
         #if DEBUG_ACTIVE_SPANS
             DebugShowActiveSpans(contourList);
         #endif
@@ -182,7 +186,9 @@ bool Simplify(const SkPath& path, SkPath* result) {
             next = *nextPtr++;
         } while (AddIntersectTs(current, next) && nextPtr != listEnd);
     } while (currentPtr != listEnd);
-    HandleCoincidence(&contourList, 0);
+    if (!HandleCoincidence(&contourList, 0)) {
+        return false;
+    }
     // construct closed contours
     SkPathWriter simple(*result);
     if (builder.xorMask() == kWinding_PathOpsMask ? bridgeWinding(contourList, &simple)

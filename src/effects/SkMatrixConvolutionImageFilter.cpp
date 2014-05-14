@@ -151,8 +151,12 @@ public:
 template<class PixelFetcher, bool convolveAlpha>
 void SkMatrixConvolutionImageFilter::filterPixels(const SkBitmap& src,
                                                   SkBitmap* result,
-                                                  const SkIRect& rect,
+                                                  const SkIRect& r,
                                                   const SkIRect& bounds) const {
+    SkIRect rect(r);
+    if (!rect.intersect(bounds)) {
+        return;
+    }
     for (int y = rect.fTop; y < rect.fBottom; ++y) {
         SkPMColor* dptr = result->getAddr32(rect.fLeft - bounds.fLeft, y - bounds.fTop);
         for (int x = rect.fLeft; x < rect.fRight; ++x) {
@@ -260,7 +264,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    if (src.colorType() != kPMColor_SkColorType) {
+    if (src.colorType() != kN32_SkColorType) {
         return false;
     }
 
@@ -303,6 +307,19 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
     filterInteriorPixels(src, result, interior, bounds);
     filterBorderPixels(src, result, right, bounds);
     filterBorderPixels(src, result, bottom, bounds);
+    return true;
+}
+
+bool SkMatrixConvolutionImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
+                                                    SkIRect* dst) const {
+    SkIRect bounds = src;
+    bounds.fRight += fKernelSize.width() - 1;
+    bounds.fBottom += fKernelSize.height() - 1;
+    bounds.offset(-fKernelOffset);
+    if (getInput(0) && !getInput(0)->filterBounds(bounds, ctm, &bounds)) {
+        return false;
+    }
+    *dst = bounds;
     return true;
 }
 

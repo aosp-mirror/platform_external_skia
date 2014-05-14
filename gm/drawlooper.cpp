@@ -27,6 +27,10 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkISize onISize() {
         return SkISize::Make(520, 160);
     }
@@ -72,7 +76,7 @@ private:
             { 0x88000000, SkPaint::kFill_Style, 0, SkIntToScalar(10), SkIntToScalar(3) }
         };
 
-        fLooper = new SkLayerDrawLooper;
+        SkLayerDrawLooper::Builder looperBuilder;
 
         SkLayerDrawLooper::LayerInfo info;
         info.fPaintBits = SkLayerDrawLooper::kStyle_Bit | SkLayerDrawLooper::kMaskFilter_Bit;
@@ -80,16 +84,17 @@ private:
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(gParams); i++) {
             info.fOffset.set(gParams[i].fOffset, gParams[i].fOffset);
-            SkPaint* paint = fLooper->addLayer(info);
+            SkPaint* paint = looperBuilder.addLayer(info);
             paint->setColor(gParams[i].fColor);
             paint->setStyle(gParams[i].fStyle);
             paint->setStrokeWidth(gParams[i].fWidth);
             if (gParams[i].fBlur > 0) {
-                SkMaskFilter* mf = SkBlurMaskFilter::Create(SkBlurMaskFilter::kNormal_BlurStyle,
+                SkMaskFilter* mf = SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                          SkBlurMask::ConvertRadiusToSigma(gParams[i].fBlur));
                 paint->setMaskFilter(mf)->unref();
             }
         }
+        fLooper = looperBuilder.detachLooper();
     }
 
     typedef GM INHERITED;

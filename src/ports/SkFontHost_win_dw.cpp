@@ -22,7 +22,10 @@
 #include "SkGlyph.h"
 #include "SkHRESULT.h"
 #include "SkMaskGamma.h"
+#include "SkMatrix22.h"
 #include "SkOnce.h"
+#include "SkOTTable_EBLC.h"
+#include "SkOTTable_EBSC.h"
 #include "SkOTTable_head.h"
 #include "SkOTTable_hhea.h"
 #include "SkOTTable_OS_2.h"
@@ -50,19 +53,19 @@ class StreamFontFileLoader;
 class SkFontMgr_DirectWrite : public SkFontMgr {
 public:
     /** localeNameLength must include the null terminator. */
-    SkFontMgr_DirectWrite(IDWriteFontCollection* fontCollection,
+    SkFontMgr_DirectWrite(IDWriteFactory* factory, IDWriteFontCollection* fontCollection,
                           WCHAR* localeName, int localeNameLength)
-        : fFontCollection(SkRefComPtr(fontCollection))
+        : fFactory(SkRefComPtr(factory))
+        , fFontCollection(SkRefComPtr(fontCollection))
         , fLocaleName(localeNameLength)
     {
         memcpy(fLocaleName.get(), localeName, localeNameLength * sizeof(WCHAR));
     }
 
+    /** Creates a typeface using a typeface cache. */
     SkTypeface* createTypefaceFromDWriteFont(IDWriteFontFace* fontFace,
                                              IDWriteFont* font,
-                                             IDWriteFontFamily* fontFamily,
-                                             StreamFontFileLoader* = NULL,
-                                             IDWriteFontCollectionLoader* = NULL) const;
+                                             IDWriteFontFamily* fontFamily) const;
 
 protected:
     virtual int onCountFamilies() const SK_OVERRIDE;
@@ -94,6 +97,7 @@ private:
         return typeface;
     }
 
+    SkTScopedComPtr<IDWriteFactory> fFactory;
     SkTScopedComPtr<IDWriteFontCollection> fFontCollection;
     SkSMallocWCHAR fLocaleName;
     mutable SkMutex fTFCacheMutex;
@@ -119,104 +123,6 @@ private:
     SkAutoTUnref<const SkFontMgr_DirectWrite> fFontMgr;
     SkTScopedComPtr<IDWriteFontFamily> fFontFamily;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-
-class DWriteOffscreen {
-public:
-    DWriteOffscreen() : fWidth(0), fHeight(0) {
-    }
-
-    void init(IDWriteFontFace* fontFace, const DWRITE_MATRIX& xform, FLOAT fontSize) {
-        fFontFace = fontFace;
-        fFontSize = fontSize;
-        fXform = xform;
-    }
-
-    const void* draw(const SkGlyph&, bool isBW);
-
-private:
-    uint16_t fWidth;
-    uint16_t fHeight;
-    IDWriteFontFace* fFontFace;
-    FLOAT fFontSize;
-    DWRITE_MATRIX fXform;
-    SkTDArray<uint8_t> fBits;
-};
-
-const void* DWriteOffscreen::draw(const SkGlyph& glyph, bool isBW) {
-    IDWriteFactory* factory = sk_get_dwrite_factory();
-    SkASSERT(factory != NULL);
-
-    if (fWidth < glyph.fWidth || fHeight < glyph.fHeight) {
-        fWidth = SkMax32(fWidth, glyph.fWidth);
-        fHeight = SkMax32(fHeight, glyph.fHeight);
-
-        if (isBW) {
-            fBits.setCount(fWidth * fHeight);
-        } else {
-            fBits.setCount(fWidth * fHeight * 3);
-        }
-    }
-
-    // erase
-    memset(fBits.begin(), 0, fBits.count());
-
-    fXform.dx = SkFixedToFloat(glyph.getSubXFixed());
-    fXform.dy = SkFixedToFloat(glyph.getSubYFixed());
-
-    FLOAT advance = 0.0f;
-
-    UINT16 index = glyph.getGlyphID();
-
-    DWRITE_GLYPH_OFFSET offset;
-    offset.advanceOffset = 0.0f;
-    offset.ascenderOffset = 0.0f;
-
-    DWRITE_GLYPH_RUN run;
-    run.glyphCount = 1;
-    run.glyphAdvances = &advance;
-    run.fontFace = fFontFace;
-    run.fontEmSize = fFontSize;
-    run.bidiLevel = 0;
-    run.glyphIndices = &index;
-    run.isSideways = FALSE;
-    run.glyphOffsets = &offset;
-
-    DWRITE_RENDERING_MODE renderingMode;
-    DWRITE_TEXTURE_TYPE textureType;
-    if (isBW) {
-        renderingMode = DWRITE_RENDERING_MODE_ALIASED;
-        textureType = DWRITE_TEXTURE_ALIASED_1x1;
-    } else {
-        renderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
-        textureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
-    }
-    SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
-    HRNM(factory->CreateGlyphRunAnalysis(&run,
-                                         1.0f, // pixelsPerDip,
-                                         &fXform,
-                                         renderingMode,
-                                         DWRITE_MEASURING_MODE_NATURAL,
-                                         0.0f, // baselineOriginX,
-                                         0.0f, // baselineOriginY,
-                                         &glyphRunAnalysis),
-         "Could not create glyph run analysis.");
-
-    //NOTE: this assumes that the glyph has already been measured
-    //with an exact same glyph run analysis.
-    RECT bbox;
-    bbox.left = glyph.fLeft;
-    bbox.top = glyph.fTop;
-    bbox.right = glyph.fLeft + glyph.fWidth;
-    bbox.bottom = glyph.fTop + glyph.fHeight;
-    HRNM(glyphRunAnalysis->CreateAlphaTexture(textureType,
-                                              &bbox,
-                                              fBits.begin(),
-                                              fBits.count()),
-         "Could not draw mask.");
-    return fBits.begin();
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -458,12 +364,14 @@ static SkTypeface::Style get_style(IDWriteFont* font) {
 class DWriteFontTypeface : public SkTypeface {
 private:
     DWriteFontTypeface(SkTypeface::Style style, SkFontID fontID,
+                       IDWriteFactory* factory,
                        IDWriteFontFace* fontFace,
                        IDWriteFont* font,
                        IDWriteFontFamily* fontFamily,
                        StreamFontFileLoader* fontFileLoader = NULL,
                        IDWriteFontCollectionLoader* fontCollectionLoader = NULL)
         : SkTypeface(style, fontID, false)
+        , fFactory(SkRefComPtr(factory))
         , fDWriteFontCollectionLoader(SkSafeRefComPtr(fontCollectionLoader))
         , fDWriteFontFileLoader(SkSafeRefComPtr(fontFileLoader))
         , fDWriteFontFamily(SkRefComPtr(fontFamily))
@@ -472,13 +380,15 @@ private:
     { }
 
 public:
+    SkTScopedComPtr<IDWriteFactory> fFactory;
     SkTScopedComPtr<IDWriteFontCollectionLoader> fDWriteFontCollectionLoader;
     SkTScopedComPtr<StreamFontFileLoader> fDWriteFontFileLoader;
     SkTScopedComPtr<IDWriteFontFamily> fDWriteFontFamily;
     SkTScopedComPtr<IDWriteFont> fDWriteFont;
     SkTScopedComPtr<IDWriteFontFace> fDWriteFontFace;
 
-    static DWriteFontTypeface* Create(IDWriteFontFace* fontFace,
+    static DWriteFontTypeface* Create(IDWriteFactory* factory,
+                                      IDWriteFontFace* fontFace,
                                       IDWriteFont* font,
                                       IDWriteFontFamily* fontFamily,
                                       StreamFontFileLoader* fontFileLoader = NULL,
@@ -486,18 +396,18 @@ public:
         SkTypeface::Style style = get_style(font);
         SkFontID fontID = SkTypefaceCache::NewFontID();
         return SkNEW_ARGS(DWriteFontTypeface, (style, fontID,
-                                               fontFace, font, fontFamily,
+                                               factory, fontFace, font, fontFamily,
                                                fontFileLoader, fontCollectionLoader));
     }
 
 protected:
     virtual void weak_dispose() const SK_OVERRIDE {
-        if (fDWriteFontCollectionLoader.get() == NULL) return;
-
-        IDWriteFactory* factory = sk_get_dwrite_factory();
-        SkASSERT(factory != NULL);
-        HRV(factory->UnregisterFontCollectionLoader(fDWriteFontCollectionLoader.get()));
-        HRV(factory->UnregisterFontFileLoader(fDWriteFontFileLoader.get()));
+        if (fDWriteFontCollectionLoader.get()) {
+            HRV(fFactory->UnregisterFontCollectionLoader(fDWriteFontCollectionLoader.get()));
+        }
+        if (fDWriteFontFileLoader.get()) {
+            HRV(fFactory->UnregisterFontFileLoader(fDWriteFontFileLoader.get()));
+        }
 
         //SkTypefaceCache::Remove(this);
         INHERITED::weak_dispose();
@@ -539,10 +449,30 @@ protected:
                                      SkPaint::FontMetrics* mY) SK_OVERRIDE;
 
 private:
-    DWriteOffscreen fOffscreen;
+    const void* drawDWMask(const SkGlyph& glyph);
+
+    SkTDArray<uint8_t> fBits;
+    /** The total matrix without the text height scale. */
+    SkMatrix fSkXform;
+    /** The total matrix without the text height scale. */
     DWRITE_MATRIX fXform;
+    /** The non-rotational part of total matrix without the text height scale.
+     *  This is used to find the magnitude of gdi compatible advances.
+     */
+    DWRITE_MATRIX fGsA;
+    /** The inverse of the rotational part of the total matrix.
+     *  This is used to find the direction of gdi compatible advances.
+     */
+    SkMatrix fG_inv;
+    /** The text size to render with. */
+    SkScalar fTextSizeRender;
+    /** The text size to measure with. */
+    SkScalar fTextSizeMeasure;
     SkAutoTUnref<DWriteFontTypeface> fTypeface;
     int fGlyphCount;
+    DWRITE_RENDERING_MODE fRenderingMode;
+    DWRITE_TEXTURE_TYPE fTextureType;
+    DWRITE_MEASURING_MODE fMeasuringMode;
 };
 
 static bool are_same(IUnknown* a, IUnknown* b) {
@@ -658,20 +588,224 @@ static bool FindByDWriteFont(SkTypeface* face, SkTypeface::Style requestedStyle,
            wcscmp(dwFaceFontNameChar.get(), dwFontNameChar.get()) == 0;
 }
 
+class AutoDWriteTable {
+public:
+    AutoDWriteTable(IDWriteFontFace* fontFace, UINT32 beTag) : fFontFace(fontFace), fExists(FALSE) {
+        // Any errors are ignored, user must check fExists anyway.
+        fontFace->TryGetFontTable(beTag,
+            reinterpret_cast<const void **>(&fData), &fSize, &fLock, &fExists);
+    }
+    ~AutoDWriteTable() {
+        if (fExists) {
+            fFontFace->ReleaseFontTable(fLock);
+        }
+    }
+
+    const uint8_t* fData;
+    UINT32 fSize;
+    BOOL fExists;
+private:
+    // Borrowed reference, the user must ensure the fontFace stays alive.
+    IDWriteFontFace* fFontFace;
+    void* fLock;
+};
+template<typename T> class AutoTDWriteTable : public AutoDWriteTable {
+public:
+    static const UINT32 tag = DWRITE_MAKE_OPENTYPE_TAG(T::TAG0, T::TAG1, T::TAG2, T::TAG3);
+    AutoTDWriteTable(IDWriteFontFace* fontFace) : AutoDWriteTable(fontFace, tag) { }
+
+    const T* get() const { return reinterpret_cast<const T*>(fData); }
+    const T* operator->() const { return reinterpret_cast<const T*>(fData); }
+};
+
+static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
+    {
+        AutoTDWriteTable<SkOTTableEmbeddedBitmapLocation> eblc(typeface->fDWriteFontFace.get());
+        if (!eblc.fExists) {
+            return false;
+        }
+        if (eblc.fSize < sizeof(SkOTTableEmbeddedBitmapLocation)) {
+            return false;
+        }
+        if (eblc->version != SkOTTableEmbeddedBitmapLocation::version_initial) {
+            return false;
+        }
+
+        uint32_t numSizes = SkEndianSwap32(eblc->numSizes);
+        if (eblc.fSize < sizeof(SkOTTableEmbeddedBitmapLocation) +
+                         sizeof(SkOTTableEmbeddedBitmapLocation::BitmapSizeTable) * numSizes)
+        {
+            return false;
+        }
+
+        const SkOTTableEmbeddedBitmapLocation::BitmapSizeTable* sizeTable =
+                SkTAfter<const SkOTTableEmbeddedBitmapLocation::BitmapSizeTable>(eblc.get());
+        for (uint32_t i = 0; i < numSizes; ++i, ++sizeTable) {
+            if (sizeTable->ppemX == size && sizeTable->ppemY == size) {
+                // TODO: determine if we should dig through IndexSubTableArray/IndexSubTable
+                // to determine the actual number of glyphs with bitmaps.
+
+                // TODO: Ensure that the bitmaps actually cover a significant portion of the strike.
+
+                //TODO: Endure that the bitmaps are bi-level.
+                if (sizeTable->endGlyphIndex >= sizeTable->startGlyphIndex + 3) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    {
+        AutoTDWriteTable<SkOTTableEmbeddedBitmapScaling> ebsc(typeface->fDWriteFontFace.get());
+        if (!ebsc.fExists) {
+            return false;
+        }
+        if (ebsc.fSize < sizeof(SkOTTableEmbeddedBitmapScaling)) {
+            return false;
+        }
+        if (ebsc->version != SkOTTableEmbeddedBitmapScaling::version_initial) {
+            return false;
+        }
+
+        uint32_t numSizes = SkEndianSwap32(ebsc->numSizes);
+        if (ebsc.fSize < sizeof(SkOTTableEmbeddedBitmapScaling) +
+                         sizeof(SkOTTableEmbeddedBitmapScaling::BitmapScaleTable) * numSizes)
+        {
+            return false;
+        }
+
+        const SkOTTableEmbeddedBitmapScaling::BitmapScaleTable* scaleTable =
+                SkTAfter<const SkOTTableEmbeddedBitmapScaling::BitmapScaleTable>(ebsc.get());
+        for (uint32_t i = 0; i < numSizes; ++i, ++scaleTable) {
+            if (scaleTable->ppemX == size && scaleTable->ppemY == size) {
+                // EBSC tables are normally only found in bitmap only fonts.
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool bothZero(SkScalar a, SkScalar b) {
+    return 0 == a && 0 == b;
+}
+
+// returns false if there is any non-90-rotation or skew
+static bool isAxisAligned(const SkScalerContext::Rec& rec) {
+    return 0 == rec.fPreSkewX &&
+           (bothZero(rec.fPost2x2[0][1], rec.fPost2x2[1][0]) ||
+            bothZero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
+}
+
 SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
-                                                 const SkDescriptor* desc)
+                                       const SkDescriptor* desc)
         : SkScalerContext(typeface, desc)
         , fTypeface(SkRef(typeface))
         , fGlyphCount(-1) {
 
-    fXform.m11 = SkScalarToFloat(fRec.fPost2x2[0][0]);
-    fXform.m12 = SkScalarToFloat(fRec.fPost2x2[1][0]);
-    fXform.m21 = SkScalarToFloat(fRec.fPost2x2[0][1]);
-    fXform.m22 = SkScalarToFloat(fRec.fPost2x2[1][1]);
+    // In general, all glyphs should use CLEARTYPE_NATURAL_SYMMETRIC
+    // except when bi-level rendering is requested or there are embedded
+    // bi-level bitmaps (and the embedded bitmap flag is set and no rotation).
+    //
+    // DirectWrite's IDWriteFontFace::GetRecommendedRenderingMode does not do
+    // this. As a result, determine the actual size of the text and then see if
+    // there are any embedded bi-level bitmaps of that size. If there are, then
+    // force bitmaps by requesting bi-level rendering.
+    //
+    // FreeType allows for separate ppemX and ppemY, but DirectWrite assumes
+    // square pixels and only uses ppemY. Therefore the transform must track any
+    // non-uniform x-scale.
+    //
+    // Also, rotated glyphs should have the same absolute advance widths as
+    // horizontal glyphs and the subpixel flag should not affect glyph shapes.
+
+    // A is the total matrix.
+    SkMatrix A;
+    fRec.getSingleMatrix(&A);
+
+    // h is where A maps the horizontal baseline.
+    SkPoint h = SkPoint::Make(SK_Scalar1, 0);
+    A.mapPoints(&h, 1);
+
+    // G is the Givens Matrix for A (rotational matrix where GA[0][1] == 0).
+    SkMatrix G;
+    SkComputeGivensRotation(h, &G);
+
+    // GA is the matrix A with rotation removed.
+    SkMatrix GA(G);
+    GA.preConcat(A);
+
+    // realTextSize is the actual device size we want (as opposed to the size the user requested).
+    // gdiTextSize is the size we request when GDI compatible.
+    // If the scale is negative, this means the matrix will do the flip anyway.
+    SkScalar realTextSize = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
+    // Due to floating point math, the lower bits are suspect. Round carefully.
+    SkScalar roundedTextSize = SkScalarRoundToScalar(realTextSize * 64.0f) / 64.0f;
+    SkScalar gdiTextSize = SkScalarFloorToScalar(roundedTextSize);
+    if (gdiTextSize == 0) {
+        gdiTextSize = SK_Scalar1;
+    }
+
+    bool hasBitmap = fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag &&
+                     hasBitmapStrike(typeface, SkScalarTruncToInt(gdiTextSize));
+    bool axisAligned = isAxisAligned(fRec);
+    bool isBiLevel = SkMask::kBW_Format == fRec.fMaskFormat || (hasBitmap && axisAligned);
+
+    if (isBiLevel) {
+        fTextSizeRender = gdiTextSize;
+        fRenderingMode = DWRITE_RENDERING_MODE_ALIASED;
+        fTextureType = DWRITE_TEXTURE_ALIASED_1x1;
+        fTextSizeMeasure = gdiTextSize;
+        fMeasuringMode = DWRITE_MEASURING_MODE_GDI_CLASSIC;
+    } else if (hasBitmap) {
+        // If rotated but the horizontal text would have used a bitmap,
+        // render high quality rotated glyphs using the bitmap metrics.
+        fTextSizeRender = gdiTextSize;
+        fRenderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
+        fTextureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
+        fTextSizeMeasure = gdiTextSize;
+        fMeasuringMode = DWRITE_MEASURING_MODE_GDI_CLASSIC;
+    } else {
+        fTextSizeRender = realTextSize;
+        fRenderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
+        fTextureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
+        fTextSizeMeasure = realTextSize;
+        fMeasuringMode = DWRITE_MEASURING_MODE_NATURAL;
+    }
+
+    if (this->isSubpixel()) {
+        fTextSizeMeasure = realTextSize;
+        fMeasuringMode = DWRITE_MEASURING_MODE_NATURAL;
+    }
+
+    // Remove the realTextSize, as that is the text height scale currently in A.
+    SkScalar scale = SkScalarInvert(realTextSize);
+
+    // fSkXform is the total matrix A without the text height scale.
+    fSkXform = A;
+    fSkXform.preScale(scale, scale); //remove the text height scale.
+
+    fXform.m11 = SkScalarToFloat(fSkXform.getScaleX());
+    fXform.m12 = SkScalarToFloat(fSkXform.getSkewY());
+    fXform.m21 = SkScalarToFloat(fSkXform.getSkewX());
+    fXform.m22 = SkScalarToFloat(fSkXform.getScaleY());
     fXform.dx = 0;
     fXform.dy = 0;
 
-    fOffscreen.init(fTypeface->fDWriteFontFace.get(), fXform, SkScalarToFloat(fRec.fTextSize));
+    // GsA is the non-rotational part of A without the text height scale.
+    SkMatrix GsA(GA);
+    GsA.preScale(scale, scale); //remove text height scale, G is rotational so reorders with scale.
+
+    fGsA.m11 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleX));
+    fGsA.m12 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewY)); // This should be ~0.
+    fGsA.m21 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewX));
+    fGsA.m22 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleY));
+
+    // fG_inv is G inverse, which is fairly simple since G is 2x2 rotational.
+    fG_inv.setAll(G.get(SkMatrix::kMScaleX), -G.get(SkMatrix::kMSkewX), G.get(SkMatrix::kMTransX),
+                  -G.get(SkMatrix::kMSkewY), G.get(SkMatrix::kMScaleY), G.get(SkMatrix::kMTransY),
+                  G.get(SkMatrix::kMPersp0), G.get(SkMatrix::kMPersp1), G.get(SkMatrix::kMPersp2));
 }
 
 SkScalerContext_DW::~SkScalerContext_DW() {
@@ -702,24 +836,41 @@ void SkScalerContext_DW::generateAdvance(SkGlyph* glyph) {
 
     uint16_t glyphId = glyph->getGlyphID();
     DWRITE_GLYPH_METRICS gm;
-    HRVM(fTypeface->fDWriteFontFace->GetDesignGlyphMetrics(&glyphId, 1, &gm),
-         "Could not get design metrics.");
+
+    if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
+        DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode)
+    {
+        HRVM(fTypeface->fDWriteFontFace->GetGdiCompatibleGlyphMetrics(
+                 fTextSizeMeasure,
+                 1.0f, // pixelsPerDip
+                 &fGsA,
+                 DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode,
+                 &glyphId, 1,
+                 &gm),
+             "Could not get gdi compatible glyph metrics.");
+    } else {
+        HRVM(fTypeface->fDWriteFontFace->GetDesignGlyphMetrics(&glyphId, 1, &gm),
+             "Could not get design metrics.");
+    }
 
     DWRITE_FONT_METRICS dwfm;
     fTypeface->fDWriteFontFace->GetMetrics(&dwfm);
-
-    SkScalar advanceX = SkScalarMulDiv(fRec.fTextSize,
+    SkScalar advanceX = SkScalarMulDiv(fTextSizeMeasure,
                                        SkIntToScalar(gm.advanceWidth),
                                        SkIntToScalar(dwfm.designUnitsPerEm));
 
-    if (!(fRec.fFlags & kSubpixelPositioning_Flag)) {
+    if (!this->isSubpixel()) {
         advanceX = SkScalarRoundToScalar(advanceX);
     }
 
     SkVector vecs[1] = { { advanceX, 0 } };
-    SkMatrix mat;
-    fRec.getMatrixFrom2x2(&mat);
-    mat.mapVectors(vecs, SK_ARRAY_COUNT(vecs));
+    if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
+        DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode)
+    {
+        fG_inv.mapVectors(vecs, SK_ARRAY_COUNT(vecs));
+    } else {
+        fSkXform.mapVectors(vecs, SK_ARRAY_COUNT(vecs));
+    }
 
     glyph->fAdvanceX = SkScalarToFixed(vecs[0].fX);
     glyph->fAdvanceY = SkScalarToFixed(vecs[0].fY);
@@ -746,39 +897,26 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     run.glyphCount = 1;
     run.glyphAdvances = &advance;
     run.fontFace = fTypeface->fDWriteFontFace.get();
-    run.fontEmSize = SkScalarToFloat(fRec.fTextSize);
+    run.fontEmSize = SkScalarToFloat(fTextSizeRender);
     run.bidiLevel = 0;
     run.glyphIndices = &glyphId;
     run.isSideways = FALSE;
     run.glyphOffsets = &offset;
 
-    IDWriteFactory* factory = sk_get_dwrite_factory();
-    SkASSERT(factory != NULL);
-
-    const bool isBW = SkMask::kBW_Format == fRec.fMaskFormat;
-    DWRITE_RENDERING_MODE renderingMode;
-    DWRITE_TEXTURE_TYPE textureType;
-    if (isBW) {
-        renderingMode = DWRITE_RENDERING_MODE_ALIASED;
-        textureType = DWRITE_TEXTURE_ALIASED_1x1;
-    } else {
-        renderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
-        textureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
-    }
-
     SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
-    HRVM(factory->CreateGlyphRunAnalysis(&run,
-                                         1.0f, // pixelsPerDip,
-                                         &fXform,
-                                         renderingMode,
-                                         DWRITE_MEASURING_MODE_NATURAL,
-                                         0.0f, // baselineOriginX,
-                                         0.0f, // baselineOriginY,
-                                         &glyphRunAnalysis),
+    HRVM(fTypeface->fFactory->CreateGlyphRunAnalysis(
+             &run,
+             1.0f, // pixelsPerDip,
+             &fXform,
+             fRenderingMode,
+             fMeasuringMode,
+             0.0f, // baselineOriginX,
+             0.0f, // baselineOriginY,
+             &glyphRunAnalysis),
          "Could not create glyph run analysis.");
 
     RECT bbox;
-    HRVM(glyphRunAnalysis->GetAlphaTextureBounds(textureType, &bbox),
+    HRVM(glyphRunAnalysis->GetAlphaTextureBounds(fTextureType, &bbox),
          "Could not get texture bounds.");
 
     glyph->fWidth = SkToU16(bbox.right - bbox.left);
@@ -788,7 +926,7 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
 }
 
 void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* mx,
-                                                  SkPaint::FontMetrics* my) {
+                                             SkPaint::FontMetrics* my) {
     if (!(mx || my))
       return;
 
@@ -800,32 +938,42 @@ void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* mx,
     }
 
     DWRITE_FONT_METRICS dwfm;
-    fTypeface->fDWriteFontFace->GetMetrics(&dwfm);
+    if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
+        DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode)
+    {
+        fTypeface->fDWriteFontFace->GetGdiCompatibleMetrics(
+             fTextSizeRender,
+             1.0f, // pixelsPerDip
+             &fXform,
+             &dwfm);
+    } else {
+        fTypeface->fDWriteFontFace->GetMetrics(&dwfm);
+    }
 
     SkScalar upem = SkIntToScalar(dwfm.designUnitsPerEm);
     if (mx) {
-        mx->fTop = -fRec.fTextSize * SkIntToScalar(dwfm.ascent) / upem;
+        mx->fTop = -fTextSizeRender * SkIntToScalar(dwfm.ascent) / upem;
         mx->fAscent = mx->fTop;
-        mx->fDescent = fRec.fTextSize * SkIntToScalar(dwfm.descent) / upem;
+        mx->fDescent = fTextSizeRender * SkIntToScalar(dwfm.descent) / upem;
         mx->fBottom = mx->fDescent;
-        mx->fLeading = fRec.fTextSize * SkIntToScalar(dwfm.lineGap) / upem;
-        mx->fXHeight = fRec.fTextSize * SkIntToScalar(dwfm.xHeight) / upem;
-        mx->fUnderlineThickness = fRec.fTextSize * SkIntToScalar(dwfm.underlinePosition) / upem;
-        mx->fUnderlinePosition = -(fRec.fTextSize * SkIntToScalar(dwfm.underlineThickness) / upem);
+        mx->fLeading = fTextSizeRender * SkIntToScalar(dwfm.lineGap) / upem;
+        mx->fXHeight = fTextSizeRender * SkIntToScalar(dwfm.xHeight) / upem;
+        mx->fUnderlineThickness = fTextSizeRender * SkIntToScalar(dwfm.underlinePosition) / upem;
+        mx->fUnderlinePosition = -(fTextSizeRender * SkIntToScalar(dwfm.underlineThickness) / upem);
 
         mx->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
         mx->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
     }
 
     if (my) {
-        my->fTop = -fRec.fTextSize * SkIntToScalar(dwfm.ascent) / upem;
+        my->fTop = -fTextSizeRender * SkIntToScalar(dwfm.ascent) / upem;
         my->fAscent = my->fTop;
-        my->fDescent = fRec.fTextSize * SkIntToScalar(dwfm.descent) / upem;
+        my->fDescent = fTextSizeRender * SkIntToScalar(dwfm.descent) / upem;
         my->fBottom = my->fDescent;
-        my->fLeading = fRec.fTextSize * SkIntToScalar(dwfm.lineGap) / upem;
-        my->fXHeight = fRec.fTextSize * SkIntToScalar(dwfm.xHeight) / upem;
-        my->fUnderlineThickness = fRec.fTextSize * SkIntToScalar(dwfm.underlinePosition) / upem;
-        my->fUnderlinePosition = -(fRec.fTextSize * SkIntToScalar(dwfm.underlineThickness) / upem);
+        my->fLeading = fTextSizeRender * SkIntToScalar(dwfm.lineGap) / upem;
+        my->fXHeight = fTextSizeRender * SkIntToScalar(dwfm.xHeight) / upem;
+        my->fUnderlineThickness = fTextSizeRender * SkIntToScalar(dwfm.underlinePosition) / upem;
+        my->fUnderlinePosition = -(fTextSizeRender * SkIntToScalar(dwfm.underlineThickness) / upem);
 
         my->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
         my->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
@@ -927,12 +1075,68 @@ static void rgb_to_lcd32(const uint8_t* SK_RESTRICT src, const SkGlyph& glyph,
     }
 }
 
-void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
-    const bool isBW = SkMask::kBW_Format == fRec.fMaskFormat;
-    const bool isAA = !isLCD(fRec);
+const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph) {
+    int sizeNeeded = glyph.fWidth * glyph.fHeight;
+    if (DWRITE_RENDERING_MODE_ALIASED != fRenderingMode) {
+        sizeNeeded *= 3;
+    }
+    if (sizeNeeded > fBits.count()) {
+        fBits.setCount(sizeNeeded);
+    }
 
+    // erase
+    memset(fBits.begin(), 0, sizeNeeded);
+
+    fXform.dx = SkFixedToFloat(glyph.getSubXFixed());
+    fXform.dy = SkFixedToFloat(glyph.getSubYFixed());
+
+    FLOAT advance = 0.0f;
+
+    UINT16 index = glyph.getGlyphID();
+
+    DWRITE_GLYPH_OFFSET offset;
+    offset.advanceOffset = 0.0f;
+    offset.ascenderOffset = 0.0f;
+
+    DWRITE_GLYPH_RUN run;
+    run.glyphCount = 1;
+    run.glyphAdvances = &advance;
+    run.fontFace = fTypeface->fDWriteFontFace.get();
+    run.fontEmSize = SkScalarToFloat(fTextSizeRender);
+    run.bidiLevel = 0;
+    run.glyphIndices = &index;
+    run.isSideways = FALSE;
+    run.glyphOffsets = &offset;
+
+    SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
+    HRNM(fTypeface->fFactory->CreateGlyphRunAnalysis(&run,
+                                          1.0f, // pixelsPerDip,
+                                          &fXform,
+                                          fRenderingMode,
+                                          fMeasuringMode,
+                                          0.0f, // baselineOriginX,
+                                          0.0f, // baselineOriginY,
+                                          &glyphRunAnalysis),
+         "Could not create glyph run analysis.");
+
+    //NOTE: this assumes that the glyph has already been measured
+    //with an exact same glyph run analysis.
+    RECT bbox;
+    bbox.left = glyph.fLeft;
+    bbox.top = glyph.fTop;
+    bbox.right = glyph.fLeft + glyph.fWidth;
+    bbox.bottom = glyph.fTop + glyph.fHeight;
+    HRNM(glyphRunAnalysis->CreateAlphaTexture(fTextureType,
+                                              &bbox,
+                                              fBits.begin(),
+                                              sizeNeeded),
+         "Could not draw mask.");
+    return fBits.begin();
+}
+
+void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
     //Create the mask.
-    const void* bits = fOffscreen.draw(glyph, isBW);
+    const void* bits = this->drawDWMask(glyph);
     if (!bits) {
         sk_bzero(glyph.fImage, glyph.computeImageSize());
         return;
@@ -940,9 +1144,10 @@ void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
 
     //Copy the mask into the glyph.
     const uint8_t* src = (const uint8_t*)bits;
-    if (isBW) {
+    if (DWRITE_RENDERING_MODE_ALIASED == fRenderingMode) {
         bilevel_to_bw(src, glyph);
-    } else if (isAA) {
+        const_cast<SkGlyph&>(glyph).fMaskFormat = SkMask::kBW_Format;
+    } else if (!isLCD(fRec)) {
         if (fPreBlend.isApplicable()) {
             rgb_to_a8<true>(src, glyph, fPreBlend.fG);
         } else {
@@ -975,7 +1180,7 @@ void SkScalerContext_DW::generatePath(const SkGlyph& glyph, SkPath* path) {
     uint16_t glyphId = glyph.getGlyphID();
     //TODO: convert to<->from DIUs? This would make a difference if hinting.
     //It may not be needed, it appears that DirectWrite only hints at em size.
-    HRVM(fTypeface->fDWriteFontFace->GetGlyphRunOutline(SkScalarToFloat(fRec.fTextSize),
+    HRVM(fTypeface->fDWriteFontFace->GetGlyphRunOutline(SkScalarToFloat(fTextSizeRender),
                                        &glyphId,
                                        NULL, //advances
                                        NULL, //offsets
@@ -985,9 +1190,7 @@ void SkScalerContext_DW::generatePath(const SkGlyph& glyph, SkPath* path) {
                                        geometryToPath.get()),
          "Could not create glyph outline.");
 
-    SkMatrix mat;
-    fRec.getMatrixFrom2x2(&mat);
-    path->transform(mat);
+    path->transform(fSkXform);
 }
 
 void DWriteFontTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
@@ -1155,28 +1358,6 @@ int DWriteFontTypeface::onGetTableTags(SkFontTableTag tags[]) const {
     return stream.get() ? SkFontStream::GetTableTags(stream, ttcIndex, tags) : 0;
 }
 
-class AutoDWriteTable {
-public:
-    AutoDWriteTable(IDWriteFontFace* fontFace, UINT32 beTag) : fFontFace(fontFace), fExists(FALSE) {
-        // Any errors are ignored, user must check fExists anyway.
-        fontFace->TryGetFontTable(beTag,
-            reinterpret_cast<const void **>(&fData), &fSize, &fLock, &fExists);
-    }
-    ~AutoDWriteTable() {
-        if (fExists) {
-            fFontFace->ReleaseFontTable(fLock);
-        }
-    }
-
-    const uint8_t* fData;
-    UINT32 fSize;
-    BOOL fExists;
-private:
-    // Borrowed reference, the user must ensure the fontFace stays alive.
-    IDWriteFontFace* fFontFace;
-    void* fLock;
-};
-
 size_t DWriteFontTypeface::onGetTableData(SkFontTableTag tag, size_t offset,
                                           size_t length, void* data) const
 {
@@ -1227,56 +1408,6 @@ private:
     T* fUnregister;
 };
 
-static SkTypeface* create_from_stream(SkStream* stream, int ttcIndex) {
-    IDWriteFactory* factory = sk_get_dwrite_factory();
-    if (NULL == factory) {
-        return NULL;
-    }
-
-    SkTScopedComPtr<StreamFontFileLoader> fontFileLoader;
-    HRN(StreamFontFileLoader::Create(stream, &fontFileLoader));
-    HRN(factory->RegisterFontFileLoader(fontFileLoader.get()));
-    SkAutoIDWriteUnregister<StreamFontFileLoader> autoUnregisterFontFileLoader(
-        factory, fontFileLoader.get());
-
-    SkTScopedComPtr<StreamFontCollectionLoader> fontCollectionLoader;
-    HRN(StreamFontCollectionLoader::Create(fontFileLoader.get(), &fontCollectionLoader));
-    HRN(factory->RegisterFontCollectionLoader(fontCollectionLoader.get()));
-    SkAutoIDWriteUnregister<StreamFontCollectionLoader> autoUnregisterFontCollectionLoader(
-        factory, fontCollectionLoader.get());
-
-    SkTScopedComPtr<IDWriteFontCollection> fontCollection;
-    HRN(factory->CreateCustomFontCollection(fontCollectionLoader.get(), NULL, 0, &fontCollection));
-
-    // Find the first non-simulated font which has the given ttc index.
-    UINT32 familyCount = fontCollection->GetFontFamilyCount();
-    for (UINT32 familyIndex = 0; familyIndex < familyCount; ++familyIndex) {
-        SkTScopedComPtr<IDWriteFontFamily> fontFamily;
-        HRN(fontCollection->GetFontFamily(familyIndex, &fontFamily));
-
-        UINT32 fontCount = fontFamily->GetFontCount();
-        for (UINT32 fontIndex = 0; fontIndex < fontCount; ++fontIndex) {
-            SkTScopedComPtr<IDWriteFont> font;
-            HRN(fontFamily->GetFont(fontIndex, &font));
-            if (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) {
-                continue;
-            }
-
-            SkTScopedComPtr<IDWriteFontFace> fontFace;
-            HRN(font->CreateFontFace(&fontFace));
-
-            UINT32 faceIndex = fontFace->GetIndex();
-            if (faceIndex == ttcIndex) {
-                return DWriteFontTypeface::Create(fontFace.get(), font.get(), fontFamily.get(),
-                                                  autoUnregisterFontFileLoader.detatch(),
-                                                  autoUnregisterFontCollectionLoader.detatch());
-            }
-        }
-    }
-
-    return NULL;
-}
-
 SkStream* DWriteFontTypeface::onOpenStream(int* ttcIndex) const {
     *ttcIndex = fDWriteFontFace->GetIndex();
 
@@ -1319,7 +1450,6 @@ void DWriteFontTypeface::onFilterRec(SkScalerContext::Rec* rec) const {
 
     unsigned flagsWeDontSupport = SkScalerContext::kDevKernText_Flag |
                                   SkScalerContext::kForceAutohinting_Flag |
-                                  SkScalerContext::kEmbeddedBitmapText_Flag |
                                   SkScalerContext::kEmbolden_Flag |
                                   SkScalerContext::kLCD_BGROrder_Flag |
                                   SkScalerContext::kLCD_Vertical_Flag;
@@ -1420,14 +1550,6 @@ static bool getWidthAdvance(IDWriteFontFace* fontFace, int gId, int16_t* advance
     *advance = gm.advanceWidth;
     return true;
 }
-
-template<typename T> class AutoTDWriteTable : public AutoDWriteTable {
-public:
-    static const UINT32 tag = DWRITE_MAKE_OPENTYPE_TAG(T::TAG0, T::TAG1, T::TAG2, T::TAG3);
-    AutoTDWriteTable(IDWriteFontFace* fontFace) : AutoDWriteTable(fontFace, tag) { }
-
-    const T* operator->() const { return reinterpret_cast<const T*>(fData); }
-};
 
 SkAdvancedTypefaceMetrics* DWriteFontTypeface::onGetAdvancedTypefaceMetrics(
         SkAdvancedTypefaceMetrics::PerGlyphInfo perGlyphInfo,
@@ -1587,15 +1709,12 @@ SkAdvancedTypefaceMetrics* DWriteFontTypeface::onGetAdvancedTypefaceMetrics(
 SkTypeface* SkFontMgr_DirectWrite::createTypefaceFromDWriteFont(
         IDWriteFontFace* fontFace,
         IDWriteFont* font,
-        IDWriteFontFamily* fontFamily,
-        StreamFontFileLoader* fontFileLoader,
-        IDWriteFontCollectionLoader* fontCollectionLoader) const {
+        IDWriteFontFamily* fontFamily) const {
     SkTypeface* face = FindByProcAndRef(FindByDWriteFont, font);
     if (NULL == face) {
-        face = DWriteFontTypeface::Create(fontFace, font, fontFamily,
-                                          fontFileLoader, fontCollectionLoader);
+        face = DWriteFontTypeface::Create(fFactory.get(), fontFace, font, fontFamily);
         if (face) {
-            Add(face, get_style(font), fontCollectionLoader != NULL);
+            Add(face, get_style(font), true);
         }
     }
     return face;
@@ -1653,7 +1772,49 @@ SkTypeface* SkFontMgr_DirectWrite::onMatchFaceStyle(const SkTypeface* familyMemb
 }
 
 SkTypeface* SkFontMgr_DirectWrite::onCreateFromStream(SkStream* stream, int ttcIndex) const {
-    return create_from_stream(stream, ttcIndex);
+    SkTScopedComPtr<StreamFontFileLoader> fontFileLoader;
+    HRN(StreamFontFileLoader::Create(stream, &fontFileLoader));
+    HRN(fFactory->RegisterFontFileLoader(fontFileLoader.get()));
+    SkAutoIDWriteUnregister<StreamFontFileLoader> autoUnregisterFontFileLoader(
+        fFactory.get(), fontFileLoader.get());
+
+    SkTScopedComPtr<StreamFontCollectionLoader> fontCollectionLoader;
+    HRN(StreamFontCollectionLoader::Create(fontFileLoader.get(), &fontCollectionLoader));
+    HRN(fFactory->RegisterFontCollectionLoader(fontCollectionLoader.get()));
+    SkAutoIDWriteUnregister<StreamFontCollectionLoader> autoUnregisterFontCollectionLoader(
+        fFactory.get(), fontCollectionLoader.get());
+
+    SkTScopedComPtr<IDWriteFontCollection> fontCollection;
+    HRN(fFactory->CreateCustomFontCollection(fontCollectionLoader.get(), NULL, 0, &fontCollection));
+
+    // Find the first non-simulated font which has the given ttc index.
+    UINT32 familyCount = fontCollection->GetFontFamilyCount();
+    for (UINT32 familyIndex = 0; familyIndex < familyCount; ++familyIndex) {
+        SkTScopedComPtr<IDWriteFontFamily> fontFamily;
+        HRN(fontCollection->GetFontFamily(familyIndex, &fontFamily));
+
+        UINT32 fontCount = fontFamily->GetFontCount();
+        for (UINT32 fontIndex = 0; fontIndex < fontCount; ++fontIndex) {
+            SkTScopedComPtr<IDWriteFont> font;
+            HRN(fontFamily->GetFont(fontIndex, &font));
+            if (font->GetSimulations() != DWRITE_FONT_SIMULATIONS_NONE) {
+                continue;
+            }
+
+            SkTScopedComPtr<IDWriteFontFace> fontFace;
+            HRN(font->CreateFontFace(&fontFace));
+
+            UINT32 faceIndex = fontFace->GetIndex();
+            if (faceIndex == ttcIndex) {
+                return DWriteFontTypeface::Create(fFactory.get(),
+                                                  fontFace.get(), font.get(), fontFamily.get(),
+                                                  autoUnregisterFontFileLoader.detatch(),
+                                                  autoUnregisterFontCollectionLoader.detatch());
+            }
+        }
+    }
+
+    return NULL;
 }
 
 SkTypeface* SkFontMgr_DirectWrite::onCreateFromData(SkData* data, int ttcIndex) const {
@@ -1808,10 +1969,12 @@ SkTypeface* SkFontStyleSet_DirectWrite::matchStyle(const SkFontStyle& pattern) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkFontMgr* SkFontMgr_New_DirectWrite() {
-    IDWriteFactory* factory = sk_get_dwrite_factory();
+SkFontMgr* SkFontMgr_New_DirectWrite(IDWriteFactory* factory) {
     if (NULL == factory) {
-        return NULL;
+        factory = sk_get_dwrite_factory();
+        if (NULL == factory) {
+            return NULL;
+        }
     }
 
     SkTScopedComPtr<IDWriteFontCollection> sysFontCollection;
@@ -1834,7 +1997,8 @@ SkFontMgr* SkFontMgr_New_DirectWrite() {
         };
     }
 
-    return SkNEW_ARGS(SkFontMgr_DirectWrite, (sysFontCollection.get(), localeName, localeNameLen));
+    return SkNEW_ARGS(SkFontMgr_DirectWrite, (factory, sysFontCollection.get(),
+                                              localeName, localeNameLen));
 }
 
 #include "SkFontMgr_indirect.h"

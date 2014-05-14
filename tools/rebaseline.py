@@ -74,13 +74,12 @@ TEST_BUILDERS = [
     'Test-Mac10.8-MacMini4.1-GeForce320M-x86-Release',
     'Test-Mac10.8-MacMini4.1-GeForce320M-x86_64-Debug',
     'Test-Mac10.8-MacMini4.1-GeForce320M-x86_64-Release',
-    'Test-Ubuntu12-ShuttleA-ATI5770-x86-Debug',
-    'Test-Ubuntu12-ShuttleA-ATI5770-x86-Release',
-    'Test-Ubuntu12-ShuttleA-ATI5770-x86_64-Debug',
-    'Test-Ubuntu12-ShuttleA-ATI5770-x86_64-Release',
     'Test-Ubuntu12-ShuttleA-HD2000-x86_64-Release-Valgrind',
-    'Test-Ubuntu12-ShuttleA-NoGPU-x86_64-Debug',
-    'Test-Ubuntu13-ShuttleA-HD2000-x86_64-Debug-ASAN',
+    'Test-Ubuntu12-ShuttleA-GTX660-x86-Debug',
+    'Test-Ubuntu12-ShuttleA-GTX660-x86-Release',
+    'Test-Ubuntu12-ShuttleA-GTX660-x86_64-Debug',
+    'Test-Ubuntu12-ShuttleA-GTX660-x86_64-Release',
+    'Test-Ubuntu13.10-ShuttleA-NoGPU-x86_64-Debug',
     'Test-Win7-ShuttleA-HD2000-x86-Debug',
     'Test-Win7-ShuttleA-HD2000-x86-Debug-ANGLE',
     'Test-Win7-ShuttleA-HD2000-x86-Debug-DirectWrite',
@@ -91,7 +90,6 @@ TEST_BUILDERS = [
     'Test-Win7-ShuttleA-HD2000-x86_64-Release',
     'Test-Win8-ShuttleA-GTX660-x86-Debug',
     'Test-Win8-ShuttleA-GTX660-x86-Release',
-    'Test-Win8-ShuttleA-GTX660-x86-Release-NVPR',
     'Test-Win8-ShuttleA-GTX660-x86_64-Debug',
     'Test-Win8-ShuttleA-GTX660-x86_64-Release',
     'Test-Win8-ShuttleA-HD7770-x86-Debug',
@@ -398,6 +396,10 @@ parser.add_argument('--configs', metavar='CONFIG', nargs='+',
                           '"--configs 565 8888", as a filter over the full set '
                           'of results in ACTUALS_FILENAME; if unspecified, '
                           'rebaseline *all* configs that are available.'))
+parser.add_argument('--deprecated', action='store_true',
+                    help=('run the tool even though it has been deprecated; '
+                          'see http://tinyurl.com/SkiaRebaselineServer for '
+                          'the recommended/supported process'))
 parser.add_argument('--expectations-filename',
                     help=('filename (under EXPECTATIONS_ROOT) to read '
                           'current expectations from, and to write new '
@@ -448,6 +450,11 @@ parser.add_argument('--skimage', action='store_true',
                           'and ACTUALS_BASE_URL and EXPECTATIONS_ROOT are set '
                           'to alternate defaults, specific to skimage.'))
 args = parser.parse_args()
+if not args.deprecated:
+  raise Exception(
+      'This tool has been deprecated; see'
+      ' http://tinyurl.com/SkiaRebaselineServer for the recommended/supported'
+      ' process, or re-run with the --deprecated option to press on.')
 exception_handler = ExceptionHandler(
     keep_going_on_failure=args.keep_going_on_failure)
 if args.builders:

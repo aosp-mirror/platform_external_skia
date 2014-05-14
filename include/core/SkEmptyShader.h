@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -6,35 +5,36 @@
  * found in the LICENSE file.
  */
 
-
-
 #ifndef SkEmptyShader_DEFINED
 #define SkEmptyShader_DEFINED
 
 #include "SkShader.h"
 
+// TODO: move this to private, as there is a public factory on SkShader
+
 /**
  *  \class SkEmptyShader
- *  A Shader that always draws nothing. Its setContext always returns false,
- *  so it never expects that its shadeSpan() methods will get called.
+ *  A Shader that always draws nothing. Its createContext always returns NULL.
  */
 class SK_API SkEmptyShader : public SkShader {
 public:
     SkEmptyShader() {}
 
-    virtual uint32_t getFlags() SK_OVERRIDE;
-    virtual uint8_t getSpan16Alpha() const SK_OVERRIDE;
-    virtual bool setContext(const SkBitmap&, const SkPaint&,
-                            const SkMatrix&) SK_OVERRIDE;
-    virtual void shadeSpan(int x, int y, SkPMColor span[], int count) SK_OVERRIDE;
-    virtual void shadeSpan16(int x, int y, uint16_t span[], int count) SK_OVERRIDE;
-    virtual void shadeSpanAlpha(int x, int y, uint8_t alpha[], int count) SK_OVERRIDE;
+    virtual size_t contextSize() const SK_OVERRIDE {
+        // Even though createContext returns NULL we have to return a value of at least
+        // sizeof(SkShader::Context) to satisfy SkSmallAllocator.
+        return sizeof(SkShader::Context);
+    }
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkEmptyShader)
 
 protected:
     SkEmptyShader(SkReadBuffer& buffer) : INHERITED(buffer) {}
+
+    virtual SkShader::Context* onCreateContext(const ContextRec&, void*) const SK_OVERRIDE {
+        return NULL;
+    }
 
 private:
     typedef SkShader INHERITED;

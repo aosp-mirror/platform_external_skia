@@ -13,13 +13,13 @@ namespace {
 struct Entry {
     int key;
     double value;
+
+    static const int& GetKey(const Entry& entry) { return entry.key; }
+    static uint32_t Hash(const int& key) { return key; }
 };
 
-const int& GetKey(const Entry& entry) { return entry.key; }
-uint32_t GetHash(const int& key) { return key; }
-bool AreEqual(const Entry& entry, const int& key) { return entry.key == key; }
 
-class Hash : public SkTDynamicHash<Entry, int, GetKey, GetHash, AreEqual> {
+class Hash : public SkTDynamicHash<Entry, int> {
 public:
     Hash() : INHERITED() {}
 
@@ -28,7 +28,7 @@ public:
     int countCollisions(const int& key) const { return this->INHERITED::countCollisions(key); }
 
 private:
-    typedef SkTDynamicHash<Entry, int, GetKey, GetHash, AreEqual> INHERITED;
+    typedef SkTDynamicHash<Entry, int> INHERITED;
 };
 
 }  // namespace

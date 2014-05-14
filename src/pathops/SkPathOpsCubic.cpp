@@ -94,6 +94,11 @@ bool SkDCubic::monotonicInY() const {
 }
 
 bool SkDCubic::serpentine() const {
+#if 0  // FIXME: enabling this fixes cubicOp114 but breaks cubicOp58d and cubicOp53d
+    double tValues[2];
+    // OPTIMIZATION : another case where caching the present of cubic inflections would be useful
+    return findInflections(tValues) > 1;
+#endif
     if (!controlsContainedByEnds()) {
         return false;
     }
@@ -455,16 +460,16 @@ void SkDCubic::subDivide(const SkDPoint& a, const SkDPoint& d,
     if (t1 == 1 || t2 == 1) {
         align(3, 2, t1 == 1 ? &dst[0] : &dst[1]);
     }
-    if (precisely_subdivide_equal(dst[0].fX, a.fX)) {
+    if (AlmostBequalUlps(dst[0].fX, a.fX)) {
         dst[0].fX = a.fX;
     }
-    if (precisely_subdivide_equal(dst[0].fY, a.fY)) {
+    if (AlmostBequalUlps(dst[0].fY, a.fY)) {
         dst[0].fY = a.fY;
     }
-    if (precisely_subdivide_equal(dst[1].fX, d.fX)) {
+    if (AlmostBequalUlps(dst[1].fX, d.fX)) {
         dst[1].fX = d.fX;
     }
-    if (precisely_subdivide_equal(dst[1].fY, d.fY)) {
+    if (AlmostBequalUlps(dst[1].fY, d.fY)) {
         dst[1].fY = d.fY;
     }
 }
@@ -508,16 +513,3 @@ SkDCubicPair SkDCubic::chopAt(double t) const {
     interp_cubic_coords(&fPts[0].fY, &dst.pts[0].fY, t);
     return dst;
 }
-
-#ifdef SK_DEBUG
-void SkDCubic::dump() {
-    SkDebugf("{{");
-    int index = 0;
-    do {
-        fPts[index].dump();
-        SkDebugf(", ");
-    } while (++index < 3);
-    fPts[index].dump();
-    SkDebugf("}}\n");
-}
-#endif

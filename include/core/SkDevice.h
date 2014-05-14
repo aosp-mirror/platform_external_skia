@@ -17,13 +17,6 @@
 #include "SkDeviceProperties.h"
 #include "SkImageFilter.h"
 
-// getDeviceCapabilities() is not called by skia, but this flag keeps it around
-// for clients that have "override" annotations on their subclass. These overrides
-// should be deleted.
-//#define SK_SUPPORT_LEGACY_GETDEVICECAPABILITIES
-
-//#define SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-
 class SkClipStack;
 class SkDraw;
 struct SkIRect;
@@ -49,32 +42,9 @@ public:
 
     virtual ~SkBaseDevice();
 
-#ifdef SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-    /**
-     *  Creates a device that is of the same type as this device (e.g. SW-raster,
-     *  GPU, or PDF). The backing store for this device is created automatically
-     *  (e.g. offscreen pixels or FBO or whatever is appropriate).
-     *
-     *  @param width    width of the device to create
-     *  @param height   height of the device to create
-     *  @param isOpaque performance hint, set to true if you know that you will
-     *                  draw into this device such that all of the pixels will
-     *                  be opaque.
-     */
-    SkBaseDevice* createCompatibleDevice(SkBitmap::Config config,
-                                         int width, int height,
-                                         bool isOpaque);
-#endif
     SkBaseDevice* createCompatibleDevice(const SkImageInfo&);
 
     SkMetaData& getMetaData();
-
-#ifdef SK_SUPPORT_LEGACY_GETDEVICECAPABILITIES
-    enum Capabilities {
-        kVector_Capability = 0x1,
-    };
-    virtual uint32_t getDeviceCapabilities() { return 0; }
-#endif
 
     /** Return the width of the device (in pixels).
     */
@@ -375,6 +345,13 @@ protected:
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
+     *  Purge all discardable optimization information for 'picture'. If
+     *  picture is NULL then purge discardable information for all pictures.
+     */
+    virtual void EXPERIMENTAL_purge(SkPicture* picture);
+
+    /**
+     *  PRIVATE / EXPERIMENTAL -- do not call
      *  This entry point gives the backend an opportunity to take over the rendering
      *  of 'picture'. If optimization data is available (due to an earlier
      *  'optimize' call) this entry point should make use of it and return true
@@ -383,7 +360,7 @@ protected:
      *  to perform some device-specific warm up tasks and then let SkCanvas
      *  perform the main rendering loop (by return false from here).
      */
-    virtual bool EXPERIMENTAL_drawPicture(const SkPicture& picture);
+    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, SkPicture* picture);
 
 private:
     friend class SkCanvas;
@@ -407,18 +384,6 @@ private:
     // just called by SkCanvas for saveLayer
     SkBaseDevice* createCompatibleDeviceForSaveLayer(const SkImageInfo&);
 
-#ifdef SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG
-    /**
-     * Justs exists during the period where clients still "override" this
-     *  signature. They are supported by our base-impl calling this old
-     *  signature from the new one (using ImageInfo).
-     */
-    virtual SkBaseDevice* onCreateCompatibleDevice(SkBitmap::Config config,
-                                                   int width, int height,
-                                                   bool isOpaque, Usage) {
-        return NULL;
-    }
-#endif
     virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) {
         return NULL;
     }

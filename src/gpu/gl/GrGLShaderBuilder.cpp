@@ -187,7 +187,7 @@ bool GrGLShaderBuilder::enableFeature(GLSLFeature feature) {
             }
             return true;
         default:
-            GrCrash("Unexpected GLSLFeature requested.");
+            SkFAIL("Unexpected GLSLFeature requested.");
             return false;
     }
 }
@@ -218,7 +218,7 @@ bool GrGLShaderBuilder::enablePrivateFeature(GLSLPrivateFeature feature) {
                                "GL_NV_shader_framebuffer_fetch");
             return true;
         default:
-            GrCrash("Unexpected GLSLPrivateFeature requested.");
+            SkFAIL("Unexpected GLSLPrivateFeature requested.");
             return false;
     }
 }
@@ -249,7 +249,7 @@ const char* GrGLShaderBuilder::dstColor() {
     if (fCodeStage.inStageCode()) {
         const GrEffectRef& effect = *fCodeStage.effectStage()->getEffect();
         if (!effect->willReadDstColor()) {
-            GrDebugCrash("GrGLEffect asked for dst color but its generating GrEffect "
+            SkDEBUGFAIL("GrGLEffect asked for dst color but its generating GrEffect "
                          "did not request access.");
             return "";
         }
@@ -399,7 +399,7 @@ const char* GrGLShaderBuilder::fragmentPosition() {
     if (fCodeStage.inStageCode()) {
         const GrEffectRef& effect = *fCodeStage.effectStage()->getEffect();
         if (!effect->willReadFragmentPosition()) {
-            GrDebugCrash("GrGLEffect asked for frag position but its generating GrEffect "
+            SkDEBUGFAIL("GrGLEffect asked for frag position but its generating GrEffect "
                          "did not request access.");
             return "";
         }
@@ -483,9 +483,9 @@ inline void append_default_precision_qualifier(GrGLShaderVar::Precision p,
                 str->append("precision lowp float;\n");
                 break;
             case GrGLShaderVar::kDefault_Precision:
-                GrCrash("Default precision now allowed.");
+                SkFAIL("Default precision now allowed.");
             default:
-                GrCrash("Unknown precision value.");
+                SkFAIL("Unknown precision value.");
         }
     }
 }
@@ -970,7 +970,6 @@ GrGLFragmentOnlyShaderBuilder::GrGLFragmentOnlyShaderBuilder(GrGpuGL* gpu,
     , fNumTexCoordSets(0) {
 
     SkASSERT(!desc.getHeader().fHasVertexCode);
-    SkASSERT(gpu->glCaps().fixedFunctionSupport());
     SkASSERT(gpu->glCaps().pathRenderingSupport());
     SkASSERT(GrGLProgramDesc::kAttribute_ColorInput != desc.getHeader().fColorInput);
     SkASSERT(GrGLProgramDesc::kAttribute_ColorInput != desc.getHeader().fCoverageInput);
@@ -989,11 +988,12 @@ GrGLProgramEffects* GrGLFragmentOnlyShaderBuilder::createAndEmitEffects(
         int effectCnt,
         GrGLSLExpr4* inOutFSColor) {
 
-    GrGLTexGenProgramEffectsBuilder texGenEffectsBuilder(this, effectCnt);
-    this->INHERITED::createAndEmitEffects(&texGenEffectsBuilder,
+    GrGLPathTexGenProgramEffectsBuilder pathTexGenEffectsBuilder(this,
+                                                                 effectCnt);
+    this->INHERITED::createAndEmitEffects(&pathTexGenEffectsBuilder,
                                           effectStages,
                                           effectKeys,
                                           effectCnt,
                                           inOutFSColor);
-    return texGenEffectsBuilder.finish();
+    return pathTexGenEffectsBuilder.finish();
 }

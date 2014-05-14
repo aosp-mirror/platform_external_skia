@@ -93,7 +93,7 @@ inline void operator delete(void* p) {
 #endif
 
 #ifdef SK_DEBUG
-    #define SkASSERT(cond)              SK_DEBUGBREAK(cond)
+    #define SkASSERT(cond)              SK_ALWAYSBREAK(cond)
     #define SkDEBUGFAIL(message)        SkASSERT(false && message)
     #define SkDEBUGCODE(code)           code
     #define SkDECLAREPARAM(type, var)   , type var
@@ -112,6 +112,8 @@ inline void operator delete(void* p) {
     // unlike SkASSERT, this guy executes its condition in the non-debug build
     #define SkAssertResult(cond)        cond
 #endif
+
+#define SkFAIL(message)                 SK_ALWAYSBREAK(false && message)
 
 #ifdef SK_DEVELOPER
     #define SkDEVCODE(code)             code
@@ -315,6 +317,10 @@ typedef uint32_t SkMSec;
 */
 #define SkMSec_LE(a, b)     ((int32_t)(a) - (int32_t)(b) <= 0)
 
+/** The generation IDs in Skia reserve 0 has an invalid marker.
+ */
+#define SK_InvalidGenID     0
+
 /****************************************************************************
     The rest of these only build with C++
 */
@@ -486,7 +492,7 @@ private:
  *  the lifetime of the block, so the caller must not call sk_free() or delete
  *  on the block, unless detach() was called.
  */
-class SkAutoMalloc : public SkNoncopyable {
+class SkAutoMalloc : SkNoncopyable {
 public:
     explicit SkAutoMalloc(size_t size = 0) {
         fPtr = size ? sk_malloc_throw(size) : NULL;

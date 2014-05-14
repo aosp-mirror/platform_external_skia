@@ -18,10 +18,12 @@
 class GrContext;
 #endif
 
+class SkBBHFactory;
 class SkBBoxHierarchy;
 class SkCanvas;
 class SkDrawPictureCallback;
 class SkData;
+class SkPathHeap;
 class SkPicturePlayback;
 class SkPictureRecord;
 class SkStream;
@@ -59,10 +61,6 @@ public:
         typedef SkRefCnt INHERITED;
     };
 
-    /** The constructor prepares the picture to record.
-        @param width the width of the virtual device the picture records.
-        @param height the height of the virtual device the picture records.
-    */
     SkPicture();
     /** Make a copy of the contents of src. If src records more drawing after
         this call, those elements will not appear in this picture.
@@ -143,7 +141,16 @@ public:
             clip-query calls will reflect the path's bounds, not the actual
             path.
          */
-        kUsePathBoundsForClip_RecordingFlag = 0x01,
+        kUsePathBoundsForClip_RecordingFlag = 0x01
+    };
+
+#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
+    // TODO: once kOptimizeForClippedPlayback_RecordingFlag is hidden from
+    // all external consumers, SkPicture::createBBoxHierarchy can also be
+    // cleaned up.
+private:
+#endif
+    enum Deprecated_RecordingFlags {
         /*  This flag causes the picture to compute bounding boxes and build
             up a spatial hierarchy (currently an R-Tree), plus a tree of Canvas'
             usually stack-based clip/etc state. This requires an increase in
@@ -163,6 +170,15 @@ public:
         */
         kOptimizeForClippedPlayback_RecordingFlag = 0x02,
     };
+#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
+public:
+#endif
+
+#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
+private:
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
 
     /** Returns the canvas that records the drawing commands.
         @param width the base width for the picture, as if the recording
@@ -173,6 +189,7 @@ public:
         @return the picture canvas.
     */
     SkCanvas* beginRecording(int width, int height, uint32_t recordFlags = 0);
+#endif
 
     /** Returns the recording canvas if one is active, or NULL if recording is
         not active. This does not alter the refcnt on the canvas (if present).
@@ -184,6 +201,10 @@ public:
         is drawn.
     */
     void endRecording();
+
+#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
+public:
+#endif
 
     /** Replays the drawing commands on the specified canvas. This internally
         calls endRecording() if that has not already been called.
@@ -204,6 +225,13 @@ public:
         @return the height of the picture's recording canvas
     */
     int height() const { return fHeight; }
+
+    /** Return a non-zero, unique value representing the picture. This call is
+        only valid when not recording. Between a beginRecording/endRecording
+        pair it will just return 0 (the invalid ID). Each beginRecording/
+        endRecording pair will cause a different generation ID to be returned.
+    */
+    uint32_t uniqueID() const;
 
     /**
      *  Function to encode an SkBitmap to an SkData. A function with this
@@ -287,7 +315,7 @@ protected:
     // V13: add flag to drawBitmapRectToRect
     //      parameterize blurs by sigma rather than radius
     // V14: Add flags word to PathRef serialization
-    // V15: Remove A1 bitmpa config (and renumber remaining configs)
+    // V15: Remove A1 bitmap config (and renumber remaining configs)
     // V16: Move SkPath's isOval flag to SkPathRef
     // V17: SkPixelRef now writes SkImageInfo
     // V18: SkBitmap now records x,y for its pixelref origin, instead of offset.
@@ -295,13 +323,19 @@ protected:
     // V20: added bool to SkPictureImageFilter's serialization (to allow SkPicture serialization)
     // V21: add pushCull, popCull
     // V22: SK_PICT_FACTORY_TAG's size is now the chunk size in bytes
+    // V23: SkPaint::FilterLevel became a real enum
+    // V24: SkTwoPointConicalGradient now has fFlipped flag for gradient flipping
+    // V25: SkDashPathEffect now only writes phase and interval array when flattening
+    // V26: Removed boolean from SkColorShader for inheriting color from SkPaint.
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 19;
-    static const uint32_t CURRENT_PICTURE_VERSION = 22;
+    static const uint32_t CURRENT_PICTURE_VERSION = 26;
+
+    mutable uint32_t      fUniqueID;
 
     // fPlayback, fRecord, fWidth & fHeight are protected to allow derived classes to
     // install their own SkPicturePlayback-derived players,SkPictureRecord-derived
@@ -311,17 +345,102 @@ protected:
     int                   fWidth, fHeight;
     const AccelData*      fAccelData;
 
+    void needsNewGenID() { fUniqueID = SK_InvalidGenID; }
+
     // Create a new SkPicture from an existing SkPicturePlayback. Ref count of
     // playback is unchanged.
     SkPicture(SkPicturePlayback*, int width, int height);
 
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
     // For testing. Derived classes may instantiate an alternate
     // SkBBoxHierarchy implementation
     virtual SkBBoxHierarchy* createBBoxHierarchy() const;
+#endif
+
+    SkCanvas* beginRecording(int width, int height, SkBBHFactory* factory, uint32_t recordFlags);
+
 private:
+    friend class SkPictureRecord;
+    friend class SkPictureTester;   // for unit testing
+
+    SkAutoTUnref<SkPathHeap> fPathHeap;  // reference counted
+
+    // ContentInfo is not serialized! It is intended solely for use
+    // with suitableForGpuRasterization.
+    class ContentInfo {
+    public:
+        ContentInfo() { this->reset(); }
+
+        ContentInfo(const ContentInfo& src) { this->set(src); }
+
+        void set(const ContentInfo& src) {
+            fNumPaintWithPathEffectUses = src.fNumPaintWithPathEffectUses;
+            fNumAAConcavePaths = src.fNumAAConcavePaths;
+            fNumAAHairlineConcavePaths = src.fNumAAHairlineConcavePaths;
+        }
+
+        void reset() {
+            fNumPaintWithPathEffectUses = 0;
+            fNumAAConcavePaths = 0;
+            fNumAAHairlineConcavePaths = 0;
+        }
+
+        void swap(ContentInfo* other) {
+            SkTSwap(fNumPaintWithPathEffectUses, other->fNumPaintWithPathEffectUses);
+            SkTSwap(fNumAAConcavePaths, other->fNumAAConcavePaths);
+            SkTSwap(fNumAAHairlineConcavePaths, other->fNumAAHairlineConcavePaths);
+        }
+
+        // This field is incremented every time a paint with a path effect is
+        // used (i.e., it is not a de-duplicated count)
+        int fNumPaintWithPathEffectUses;
+        // This field is incremented every time an anti-aliased drawPath call is
+        // issued with a concave path
+        int fNumAAConcavePaths;
+        // This field is incremented every time a drawPath call is
+        // issued for a hairline stroked concave path.
+        int fNumAAHairlineConcavePaths;
+    };
+
+    ContentInfo fContentInfo;
+
+    void incPaintWithPathEffectUses() {
+        ++fContentInfo.fNumPaintWithPathEffectUses;
+    }
+    int numPaintWithPathEffectUses() const {
+        return fContentInfo.fNumPaintWithPathEffectUses;
+    }
+
+    void incAAConcavePaths() {
+        ++fContentInfo.fNumAAConcavePaths;
+    }
+    int numAAConcavePaths() const {
+        return fContentInfo.fNumAAConcavePaths;
+    }
+
+    void incAAHairlineConcavePaths() {
+        ++fContentInfo.fNumAAHairlineConcavePaths;
+        SkASSERT(fContentInfo.fNumAAHairlineConcavePaths <= fContentInfo.fNumAAConcavePaths);
+    }
+    int numAAHairlineConcavePaths() const {
+        return fContentInfo.fNumAAHairlineConcavePaths;
+    }
+
+    const SkPath& getPath(int index) const;
+    int addPathToHeap(const SkPath& path);
+
+    void flattenToBuffer(SkWriteBuffer& buffer) const;
+    bool parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t size);
+
+    static void WriteTagSize(SkWriteBuffer& buffer, uint32_t tag, size_t size);
+    static void WriteTagSize(SkWStream* stream, uint32_t tag, size_t size);
+
+    void initForPlayback() const;
+    void dumpSize() const;
+
     // An OperationList encapsulates a set of operation offsets into the picture byte
     // stream along with the CTMs needed for those operation.
-    class OperationList : public SkNoncopyable {
+    class OperationList : ::SkNoncopyable {
     public:
         virtual ~OperationList() {}
 
@@ -338,9 +457,6 @@ private:
         virtual const SkMatrix& matrix(int index) const { SkASSERT(false); return SkMatrix::I(); }
 
         static const OperationList& InvalidList();
-
-    private:
-        typedef SkNoncopyable INHERITED;
     };
 
     /** PRIVATE / EXPERIMENTAL -- do not call
@@ -359,6 +475,7 @@ private:
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;
+    friend class SkPictureRecorder;
     friend class SkGpuDevice;
     friend class GrGatherDevice;
     friend class SkDebugCanvas;
@@ -383,5 +500,24 @@ public:
 
     virtual bool abortDrawing() = 0;
 };
+
+#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
+
+class SkPictureFactory : public SkRefCnt {
+public:
+    /**
+     *  Allocate a new SkPicture. Return NULL on failure.
+     */
+    virtual SkPicture* create(int width, int height) = 0;
+
+private:
+    typedef SkRefCnt INHERITED;
+};
+
+#endif
+
+#ifdef SK_SUPPORT_LEGACY_PICTURE_HEADERS
+#include "SkPictureRecorder.h"
+#endif
 
 #endif

@@ -85,6 +85,10 @@ public:
     BleedGM() {}
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkString onShortName() SK_OVERRIDE {
         return SkString("bleed");
     }
@@ -162,7 +166,7 @@ protected:
 
         SkPaint paint;
         paint.setFilterLevel(filter);
-        SkMaskFilter* mf = SkBlurMaskFilter::Create(SkBlurMaskFilter::kNormal_BlurStyle,
+        SkMaskFilter* mf = SkBlurMaskFilter::Create(kNormal_SkBlurStyle,
                                          SkBlurMask::ConvertRadiusToSigma(SkIntToScalar(3)));
         paint.setMaskFilter(mf)->unref();
 

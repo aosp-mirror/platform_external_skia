@@ -26,6 +26,13 @@
 //#define SK_SUPPORT_LEGACY_GETTOTALCLIP
 //#define SK_SUPPORT_LEGACY_GETTOPDEVICE
 
+//#define SK_SUPPORT_LEGACY_DRAWTEXT_VIRTUAL
+#ifdef SK_SUPPORT_LEGACY_DRAWTEXT_VIRTUAL
+    #define SK_LEGACY_DRAWTEXT_VIRTUAL  virtual
+#else
+    #define SK_LEGACY_DRAWTEXT_VIRTUAL
+#endif
+
 class SkBounder;
 class SkBaseDevice;
 class SkDraw;
@@ -189,7 +196,8 @@ public:
 
     /**
      *  Create a new surface matching the specified info, one that attempts to
-     *  be maximally compatible when used with this canvas.
+     *  be maximally compatible when used with this canvas. If there is no matching Surface type,
+     *  NULL is returned.
      */
     SkSurface* newSurface(const SkImageInfo&);
 
@@ -205,15 +213,14 @@ public:
      *  If the canvas has writable pixels in its top layer (and is not recording to a picture
      *  or other non-raster target) and has direct access to its pixels (i.e. they are in
      *  local RAM) return the address of those pixels, and if not null,
-     *  return the ImageInfo and rowBytes. The returned address is only valid
+     *  return the ImageInfo, rowBytes and origin. The returned address is only valid
      *  while the canvas object is in scope and unchanged. Any API calls made on
      *  canvas (or its parent surface if any) will invalidate the
      *  returned address (and associated information).
      *
-     *  On failure, returns NULL and the info and rowBytes parameters are
-     *  ignored.
+     *  On failure, returns NULL and the info, rowBytes, and origin parameters are ignored.
      */
-    void* accessTopLayerPixels(SkImageInfo* info, size_t* rowBytes);
+    void* accessTopLayerPixels(SkImageInfo* info, size_t* rowBytes, SkIPoint* origin = NULL);
 
     /**
      *  If the canvas has readable pixels in its base layer (and is not recording to a picture
@@ -323,6 +330,16 @@ public:
         operate on this copy.
         When the balancing call to restore() is made, the previous matrix, clip,
         and drawFilter are restored.
+
+        @return The value to pass to restoreToCount() to balance this save()
+    */
+    int save();
+
+    /** DEPRECATED - use save() instead.
+
+        This behaves the same as save(), but it allows fine-grained control of
+        which state bits to be saved (and subsequently restored).
+
         @param flags The flags govern what portion of the Matrix/Clip/drawFilter
                      state the save (and matching restore) effect. For example,
                      if only kMatrix is specified, then only the matrix state
@@ -331,7 +348,8 @@ public:
                      by calls to save/restore.
         @return The value to pass to restoreToCount() to balance this save()
     */
-    int save(SaveFlags flags = kMatrixClip_SaveFlag);
+    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
+    int save(SaveFlags flags);
 
     /** This behaves the same as save(), but in addition it allocates an
         offscreen bitmap. All drawing calls are directed there, and only when
@@ -343,11 +361,27 @@ public:
                       happen. If exact clipping is desired, use clipRect().
         @param paint (may be null) This is copied, and is applied to the
                      offscreen when restore() is called
+        @return The value to pass to restoreToCount() to balance this save()
+    */
+    int saveLayer(const SkRect* bounds, const SkPaint* paint);
+
+    /** DEPRECATED - use saveLayer(const SkRect*, const SkPaint*) instead.
+
+        This behaves the same as saveLayer(const SkRect*, const SkPaint*),
+        but it allows fine-grained control of which state bits to be saved
+        (and subsequently restored).
+
+        @param bounds (may be null) This rect, if non-null, is used as a hint to
+                      limit the size of the offscreen, and thus drawing may be
+                      clipped to it, though that clipping is not guaranteed to
+                      happen. If exact clipping is desired, use clipRect().
+        @param paint (may be null) This is copied, and is applied to the
+                     offscreen when restore() is called
         @param flags  LayerFlags
         @return The value to pass to restoreToCount() to balance this save()
     */
-    int saveLayer(const SkRect* bounds, const SkPaint* paint,
-                  SaveFlags flags = kARGB_ClipLayer_SaveFlag);
+    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
+    int saveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags);
 
     /** This behaves the same as save(), but in addition it allocates an
         offscreen bitmap. All drawing calls are directed there, and only when
@@ -358,11 +392,26 @@ public:
                       clipped to it, though that clipping is not guaranteed to
                       happen. If exact clipping is desired, use clipRect().
         @param alpha  This is applied to the offscreen when restore() is called.
+        @return The value to pass to restoreToCount() to balance this save()
+    */
+    int saveLayerAlpha(const SkRect* bounds, U8CPU alpha);
+
+    /** DEPRECATED - use saveLayerAlpha(const SkRect*, U8CPU) instead.
+
+        This behaves the same as saveLayerAlpha(const SkRect*, U8CPU),
+        but it allows fine-grained control of which state bits to be saved
+        (and subsequently restored).
+
+        @param bounds (may be null) This rect, if non-null, is used as a hint to
+                      limit the size of the offscreen, and thus drawing may be
+                      clipped to it, though that clipping is not guaranteed to
+                      happen. If exact clipping is desired, use clipRect().
+        @param alpha  This is applied to the offscreen when restore() is called.
         @param flags  LayerFlags
         @return The value to pass to restoreToCount() to balance this save()
     */
-    int saveLayerAlpha(const SkRect* bounds, U8CPU alpha,
-                       SaveFlags flags = kARGB_ClipLayer_SaveFlag);
+    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
+    int saveLayerAlpha(const SkRect* bounds, U8CPU alpha, SaveFlags flags);
 
     /** This call balances a previous call to save(), and is used to remove all
         modifications to the matrix/clip/drawFilter state since the last save
@@ -868,7 +917,7 @@ public:
         @param y        The y-coordinate of the origin of the text being drawn
         @param paint    The paint used for the text (e.g. color, size, style)
     */
-    virtual void drawText(const void* text, size_t byteLength, SkScalar x,
+    SK_LEGACY_DRAWTEXT_VIRTUAL void drawText(const void* text, size_t byteLength, SkScalar x,
                           SkScalar y, const SkPaint& paint);
 
     /** Draw the text, with each character/glyph origin specified by the pos[]
@@ -878,7 +927,7 @@ public:
         @param pos      Array of positions, used to position each character
         @param paint    The paint used for the text (e.g. color, size, style)
         */
-    virtual void drawPosText(const void* text, size_t byteLength,
+    SK_LEGACY_DRAWTEXT_VIRTUAL void drawPosText(const void* text, size_t byteLength,
                              const SkPoint pos[], const SkPaint& paint);
 
     /** Draw the text, with each character/glyph origin specified by the x
@@ -890,7 +939,7 @@ public:
         @param constY   The shared Y coordinate for all of the positions
         @param paint    The paint used for the text (e.g. color, size, style)
         */
-    virtual void drawPosTextH(const void* text, size_t byteLength,
+    SK_LEGACY_DRAWTEXT_VIRTUAL void drawPosTextH(const void* text, size_t byteLength,
                               const SkScalar xpos[], SkScalar constY,
                               const SkPaint& paint);
 
@@ -920,7 +969,7 @@ public:
                             mapped onto the path
         @param paint        The paint used for the text
         */
-    virtual void drawTextOnPath(const void* text, size_t byteLength,
+    SK_LEGACY_DRAWTEXT_VIRTUAL void drawTextOnPath(const void* text, size_t byteLength,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint);
 
@@ -931,6 +980,12 @@ public:
         @param picture The recorded drawing commands to analyze/optimize
     */
     void EXPERIMENTAL_optimize(SkPicture* picture);
+
+    /** PRIVATE / EXPERIMENTAL -- do not call
+        Purge all the discardable optimization information associated with
+        'picture'. If NULL is passed in, purge all discardable information.
+    */
+    void EXPERIMENTAL_purge(SkPicture* picture);
 
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state
@@ -1179,6 +1234,20 @@ protected:
     virtual void didSetMatrix(const SkMatrix&);
 
     virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&);
+
+    virtual void onDrawText(const void* text, size_t byteLength, SkScalar x,
+                            SkScalar y, const SkPaint& paint);
+
+    virtual void onDrawPosText(const void* text, size_t byteLength,
+                               const SkPoint pos[], const SkPaint& paint);
+
+    virtual void onDrawPosTextH(const void* text, size_t byteLength,
+                                const SkScalar xpos[], SkScalar constY,
+                                const SkPaint& paint);
+
+    virtual void onDrawTextOnPath(const void* text, size_t byteLength,
+                                  const SkPath& path, const SkMatrix* matrix,
+                                  const SkPaint& paint);
 
     enum ClipEdgeStyle {
         kHard_ClipEdgeStyle,

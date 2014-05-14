@@ -145,7 +145,7 @@ static inline ColorExpr blend_term(SkXfermode::Coeff coeff,
                                    const ColorExpr& value) {
     switch (coeff) {
     default:
-        GrCrash("Unexpected xfer coeff.");
+        SkFAIL("Unexpected xfer coeff.");
     case SkXfermode::kZero_Coeff:    /** 0 */
         return ColorExpr(0);
     case SkXfermode::kOne_Coeff:     /** 1 */
@@ -305,7 +305,7 @@ namespace {
  * to which direction the 0.5 goes.
  */
 static inline int color_component_to_int(float value) {
-    return sk_float_round2int(GrMax(0.f, GrMin(1.f, value)) * 255.f);
+    return sk_float_round2int(SkTMax(0.f, SkTMin(1.f, value)) * 255.f);
 }
 
 /** MaskedColorExpr is used to evaluate the color and valid color component flags through the

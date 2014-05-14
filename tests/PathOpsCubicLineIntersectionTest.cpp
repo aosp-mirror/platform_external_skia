@@ -11,10 +11,51 @@
 #include "SkReduceOrder.h"
 #include "Test.h"
 
-static struct lineCubic {
+struct lineCubic {
     SkDCubic cubic;
     SkDLine line;
-} lineCubicTests[] = {
+};
+
+static lineCubic failLineCubicTests[] = {
+    {{{{37.5273438,-1.44140625}, {37.8736992,-1.69921875}, {38.1640625,-2.140625},
+            {38.3984375,-2.765625}}},
+            {{{40.625,-5.7890625}, {37.7109375,1.3515625}}}},
+};
+
+static const size_t failLineCubicTests_count = SK_ARRAY_COUNT(failLineCubicTests);
+
+static void testFail(skiatest::Reporter* reporter, int iIndex) {
+    const SkDCubic& cubic = failLineCubicTests[iIndex].cubic;
+    SkASSERT(ValidCubic(cubic));
+    const SkDLine& line = failLineCubicTests[iIndex].line;
+    SkASSERT(ValidLine(line));
+    SkReduceOrder reduce1;
+    SkReduceOrder reduce2;
+    int order1 = reduce1.reduce(cubic, SkReduceOrder::kNo_Quadratics);
+    int order2 = reduce2.reduce(line);
+    if (order1 < 4) {
+        SkDebugf("[%d] cubic order=%d\n", iIndex, order1);
+        REPORTER_ASSERT(reporter, 0);
+    }
+    if (order2 < 2) {
+        SkDebugf("[%d] line order=%d\n", iIndex, order2);
+        REPORTER_ASSERT(reporter, 0);
+    }
+    if (order1 == 4 && order2 == 2) {
+        SkIntersections i;
+        int roots = i.intersect(cubic, line);
+        REPORTER_ASSERT(reporter, roots == 0);
+    }
+}
+
+static lineCubic lineCubicTests[] = {
+
+    {{{{421, 378}, {421, 380.209137f}, {418.761414f, 382}, {416, 382}}},
+            {{{320, 378}, {421, 378.000031f}}}},
+
+    {{{{416, 383}, {418.761414f, 383}, {421, 380.761414f}, {421, 378}}},
+            {{{320, 378}, {421, 378.000031f}}}},
+
     {{{{154,715}, {151.238571,715}, {149,712.761414}, {149,710}}},
             {{{149,675}, {149,710.001465}}}},
 
@@ -73,6 +114,29 @@ static void testOne(skiatest::Reporter* reporter, int iIndex) {
             }
             REPORTER_ASSERT(reporter, xy1.approximatelyEqual(xy2));
         }
+#if ONE_OFF_DEBUG
+        double cubicT = i[0][0];
+        SkDPoint prev = cubic.ptAtT(cubicT * 2 - 1);
+        SkDPoint sect = cubic.ptAtT(cubicT);
+        double left[3] = { line.isLeft(prev), line.isLeft(sect), line.isLeft(cubic[3]) };
+        SkDebugf("cubic=(%1.9g, %1.9g, %1.9g)\n", left[0], left[1], left[2]);
+        SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", prev.fX, prev.fY, sect.fX, sect.fY);
+        SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", sect.fX, sect.fY, cubic[3].fX, cubic[3].fY);
+        SkDPoint prevL = line.ptAtT(i[1][0] - 0.0000007);
+        SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", prevL.fX, prevL.fY, i.pt(0).fX, i.pt(0).fY);
+        SkDPoint nextL = line.ptAtT(i[1][0] + 0.0000007);
+        SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", i.pt(0).fX, i.pt(0).fY, nextL.fX, nextL.fY);
+        SkDebugf("prevD=%1.9g dist=%1.9g nextD=%1.9g\n", prev.distance(nextL),
+                sect.distance(i.pt(0)), cubic[3].distance(prevL));
+#endif
+    }
+}
+
+DEF_TEST(PathOpsFailCubicLineIntersection, reporter) {
+    for (size_t index = 0; index < failLineCubicTests_count; ++index) {
+        int iIndex = static_cast<int>(index);
+        testFail(reporter, iIndex);
+        reporter->bumpTestCount();
     }
 }
 
@@ -92,19 +156,4 @@ DEF_TEST(PathOpsCubicLineIntersectionOneOff, reporter) {
     SkIntersections i;
     i.intersect(cubic, line);
     SkASSERT(i.used() == 1);
-#if ONE_OFF_DEBUG
-    double cubicT = i[0][0];
-    SkDPoint prev = cubic.ptAtT(cubicT * 2 - 1);
-    SkDPoint sect = cubic.ptAtT(cubicT);
-    double left[3] = { line.isLeft(prev), line.isLeft(sect), line.isLeft(cubic[3]) };
-    SkDebugf("cubic=(%1.9g, %1.9g, %1.9g)\n", left[0], left[1], left[2]);
-    SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", prev.fX, prev.fY, sect.fX, sect.fY);
-    SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", sect.fX, sect.fY, cubic[3].fX, cubic[3].fY);
-    SkDPoint prevL = line.ptAtT(i[1][0] - 0.0000007);
-    SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", prevL.fX, prevL.fY, i.pt(0).fX, i.pt(0).fY);
-    SkDPoint nextL = line.ptAtT(i[1][0] + 0.0000007);
-    SkDebugf("{{%1.9g,%1.9g}, {%1.9g,%1.9g}},\n", i.pt(0).fX, i.pt(0).fY, nextL.fX, nextL.fY);
-    SkDebugf("prevD=%1.9g dist=%1.9g nextD=%1.9g\n", prev.distance(nextL),
-            sect.distance(i.pt(0)), cubic[3].distance(prevL));
-#endif
 }
