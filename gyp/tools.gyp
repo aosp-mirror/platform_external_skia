@@ -17,6 +17,7 @@
         'bench_pictures',
         'bench_record',
         'bench_playback',
+        'dump_record',
         'filter',
         'gpuveto',
         'lua_app',
@@ -181,7 +182,6 @@
         'gm.gyp:gm_expectations',
         'jsoncpp.gyp:jsoncpp',
         'skia_lib.gyp:skia_lib',
-        'utils.gyp:utils',
       ],
     },
     {
@@ -236,7 +236,6 @@
         'pdf.gyp:pdf',
         'ports.gyp:ports',
         'skia_lib.gyp:skia_lib',
-        'utils.gyp:utils',
       ],
     },
     {
@@ -262,7 +261,6 @@
         'pdf.gyp:pdf',
         'ports.gyp:ports',
         'skia_lib.gyp:skia_lib',
-        'utils.gyp:utils',
       ],
     },
     {
@@ -346,9 +344,31 @@
       ],
     },
     {
+      'target_name': 'dump_record',
+      'type': 'executable',
+      'sources': [
+        '../tools/dump_record.cpp',
+        '../tools/LazyDecodeBitmap.cpp',
+      ],
+      'include_dirs': [
+        '../src/core/',
+        '../src/images',
+        '../src/lazy',
+        '../src/record',
+      ],
+      'dependencies': [
+        'bench.gyp:bench_timer',
+        'flags.gyp:flags',
+        'record.gyp:*',
+        'skia_lib.gyp:skia_lib',
+      ],
+    },
+    {
       'target_name': 'picture_renderer',
       'type': 'static_library',
       'sources': [
+        '../tools/image_expectations.h',
+        '../tools/image_expectations.cpp',
         '../tools/LazyDecodeBitmap.cpp',
         '../tools/PictureRenderer.h',
         '../tools/PictureRenderer.cpp',
@@ -368,7 +388,7 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [
-          # needed for JSON headers used within PictureRenderer.h
+          # needed for JSON headers used within image_expectations.h
           '../third_party/externals/jsoncpp-chromium/overrides/include/',
           '../third_party/externals/jsoncpp/include/',
         ],

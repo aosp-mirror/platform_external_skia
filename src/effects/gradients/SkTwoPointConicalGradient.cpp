@@ -380,16 +380,18 @@ void SkTwoPointConicalGradient::flatten(
 
 #if SK_SUPPORT_GPU
 
-GrEffectRef* SkTwoPointConicalGradient::asNewEffect(GrContext* context, const SkPaint&) const {
+GrEffectRef* SkTwoPointConicalGradient::asNewEffect(GrContext* context, const SkPaint&,
+                                                    const SkMatrix* localMatrix) const {
     SkASSERT(NULL != context);
     SkASSERT(fPtsToUnit.isIdentity());
 
-    return Gr2PtConicalGradientEffect::Create(context, *this, fTileMode);
+    return Gr2PtConicalGradientEffect::Create(context, *this, fTileMode, localMatrix);
 }
 
 #else
 
-GrEffectRef* SkTwoPointConicalGradient::asNewEffect(GrContext*, const SkPaint&) const {
+GrEffectRef* SkTwoPointConicalGradient::asNewEffect(GrContext*, const SkPaint&,
+                                                    const SkMatrix*) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return NULL;
 }

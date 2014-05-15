@@ -48,67 +48,6 @@ enum {
     kDefaultTileHeight = 256
 };
 
-/*
- * TODO(epoger): Make constant strings consistent instead of mixing hypenated and camel-caps.
- *
- * TODO(epoger): Similar constants are already maintained in 2 other places:
- * gm/gm_json.py and gm/gm_expectations.cpp. We shouldn't add yet a third place.
- * Figure out a way to share the definitions instead.
- *
- * Note that, as of https://codereview.chromium.org/226293002 , the JSON
- * schema used here has started to differ from the one in gm_expectations.cpp .
- * TODO(epoger): Consider getting GM and render_pictures to use the same JSON
- * output module.
- */
-const static char kJsonKey_ActualResults[] = "actual-results";
-const static char kJsonKey_Header[] = "header";
-const static char kJsonKey_Header_Type[] = "type";
-const static char kJsonKey_Header_Revision[] = "revision";  // unique within Type
-const static char kJsonKey_Image_ChecksumAlgorithm[] = "checksumAlgorithm";
-const static char kJsonKey_Image_ChecksumValue[] = "checksumValue";
-const static char kJsonKey_Image_ComparisonResult[] = "comparisonResult";
-const static char kJsonKey_Image_Filepath[] = "filepath";
-const static char kJsonKey_Source_TiledImages[] = "tiled-images";
-const static char kJsonKey_Source_WholeImage[] = "whole-image";
-// Values (not keys) that are written out by this JSON generator
-const static char kJsonValue_Header_Type[] = "ChecksummedImages";
-const static int kJsonValue_Header_Revision = 1;
-const static char kJsonValue_Image_ChecksumAlgorithm_Bitmap64bitMD5[] = "bitmap-64bitMD5";
-const static char kJsonValue_Image_ComparisonResult_NoComparison[] = "no-comparison";
-
-void ImageResultsSummary::add(const char *sourceName, const char *fileName, uint64_t hash,
-                              const int *tileNumber) {
-    Json::Value image;
-    image[kJsonKey_Image_ChecksumAlgorithm] = kJsonValue_Image_ChecksumAlgorithm_Bitmap64bitMD5;
-    image[kJsonKey_Image_ChecksumValue] = Json::UInt64(hash);
-    image[kJsonKey_Image_ComparisonResult] = kJsonValue_Image_ComparisonResult_NoComparison;
-    image[kJsonKey_Image_Filepath] = fileName;
-    if (NULL == tileNumber) {
-        fActualResults[sourceName][kJsonKey_Source_WholeImage] = image;
-    } else {
-        fActualResults[sourceName][kJsonKey_Source_TiledImages][*tileNumber] = image;
-    }
-}
-
-void ImageResultsSummary::add(const char *sourceName, const char *fileName, const SkBitmap& bitmap,
-                              const int *tileNumber) {
-    uint64_t hash;
-    SkAssertResult(SkBitmapHasher::ComputeDigest(bitmap, &hash));
-    this->add(sourceName, fileName, hash, tileNumber);
-}
-
-void ImageResultsSummary::writeToFile(const char *filename) {
-    Json::Value header;
-    header[kJsonKey_Header_Type] = kJsonValue_Header_Type;
-    header[kJsonKey_Header_Revision] = kJsonValue_Header_Revision;
-    Json::Value root;
-    root[kJsonKey_Header] = header;
-    root[kJsonKey_ActualResults] = fActualResults;
-    std::string jsonStdString = root.toStyledString();
-    SkFILEWStream stream(filename);
-    stream.write(jsonStdString.c_str(), jsonStdString.length());
-}
-
 void PictureRenderer::init(SkPicture* pict, const SkString* outputDir,
                            const SkString* inputFilename, bool useChecksumBasedFilenames) {
     this->CopyString(&fOutputDir, outputDir);
@@ -336,7 +275,7 @@ uint32_t PictureRenderer::recordFlags() {
  * @return bool True if the operation completed successfully.
  */
 static bool write(SkCanvas* canvas, const SkString& outputDir, const SkString& inputFilename,
-                  ImageResultsSummary *jsonSummaryPtr, bool useChecksumBasedFilenames,
+                  ImageResultsAndExpectations *jsonSummaryPtr, bool useChecksumBasedFilenames,
                   const int* tileNumberPtr=NULL) {
     SkASSERT(canvas != NULL);
     if (NULL == canvas) {
@@ -345,14 +284,11 @@ static bool write(SkCanvas* canvas, const SkString& outputDir, const SkString& i
 
     SkBitmap bitmap;
     SkISize size = canvas->getDeviceSize();
-    sk_tools::setup_bitmap(&bitmap, size.width(), size.height());
-
-    // Make sure we only compute the bitmap hash once (at most).
-    uint64_t hash;
-    bool generatedHash = false;
+    setup_bitmap(&bitmap, size.width(), size.height());
 
     canvas->readPixels(&bitmap, 0, 0);
-    sk_tools::force_all_opaque(bitmap);
+    force_all_opaque(bitmap);
+    BitmapAndDigest bitmapAndDigest(bitmap);
 
     SkString escapedInputFilename(inputFilename);
     replace_char(&escapedInputFilename, '.', '_');
@@ -360,16 +296,13 @@ static bool write(SkCanvas* canvas, const SkString& outputDir, const SkString& i
     // TODO(epoger): what about including the config type within outputFilename?  That way,
     // we could combine results of different config types without conflicting filenames.
     SkString outputFilename;
+    const ImageDigest *imageDigestPtr = bitmapAndDigest.getImageDigestPtr();
     const char *outputSubdirPtr = NULL;
     if (useChecksumBasedFilenames) {
-        SkASSERT(!generatedHash);
-        SkAssertResult(SkBitmapHasher::ComputeDigest(bitmap, &hash));
-        generatedHash = true;
-
         outputSubdirPtr = escapedInputFilename.c_str();
-        outputFilename.set(kJsonValue_Image_ChecksumAlgorithm_Bitmap64bitMD5);
+        outputFilename.set(imageDigestPtr->getHashType());
         outputFilename.append("_");
-        outputFilename.appendU64(hash);
+        outputFilename.appendU64(imageDigestPtr->getHashValue());
     } else {
         outputFilename.set(escapedInputFilename);
         if (NULL != tileNumberPtr) {
@@ -380,11 +313,7 @@ static bool write(SkCanvas* canvas, const SkString& outputDir, const SkString& i
     outputFilename.append(".png");
 
     if (NULL != jsonSummaryPtr) {
-        if (!generatedHash) {
-            SkAssertResult(SkBitmapHasher::ComputeDigest(bitmap, &hash));
-            generatedHash = true;
-        }
-
+        const ImageDigest *imageDigestPtr = bitmapAndDigest.getImageDigestPtr();
         SkString outputRelativePath;
         if (outputSubdirPtr) {
             outputRelativePath.set(outputSubdirPtr);
@@ -395,7 +324,7 @@ static bool write(SkCanvas* canvas, const SkString& outputDir, const SkString& i
         }
 
         jsonSummaryPtr->add(inputFilename.c_str(), outputRelativePath.c_str(),
-                            hash, tileNumberPtr);
+                            *imageDigestPtr, tileNumberPtr);
     }
 
     if (outputDir.isEmpty()) {
@@ -766,7 +695,8 @@ class CloneData : public SkRunnable {
 
 public:
     CloneData(SkPicture* clone, SkCanvas* canvas, SkTDArray<SkRect>& rects, int start, int end,
-              SkRunnable* done, ImageResultsSummary* jsonSummaryPtr, bool useChecksumBasedFilenames)
+              SkRunnable* done, ImageResultsAndExpectations* jsonSummaryPtr,
+              bool useChecksumBasedFilenames)
         : fClone(clone)
         , fCanvas(canvas)
         , fRects(rects)
@@ -837,7 +767,7 @@ private:
                                     // and only set to false upon failure to write to a PNG.
     SkRunnable*        fDone;
     SkBitmap*          fBitmap;
-    ImageResultsSummary* fJsonSummaryPtr;
+    ImageResultsAndExpectations* fJsonSummaryPtr;
     bool               fUseChecksumBasedFilenames;
 };
 

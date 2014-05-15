@@ -17,13 +17,13 @@ public:
     typedef T type;
     type* get() { return fPtr; }
 
-    bool match(T* ptr) {
+    bool operator()(T* ptr) {
         fPtr = ptr;
         return true;
     }
 
     template <typename U>
-    bool match(U*) {
+    bool operator()(U*) {
         fPtr = NULL;
         return false;
     }
@@ -42,13 +42,19 @@ public:
     type* get() { return fPaint; }
 
     template <typename T>
-    SK_WHEN(HasMember_paint<T>, bool) match(T* draw) {
+    SK_WHEN(HasMember_paint<T>, bool) operator()(T* draw) {
         fPaint = AsPtr(draw->paint);
         return true;
     }
 
     template <typename T>
-    SK_WHEN(!HasMember_paint<T>, bool) match(T*) {
+    SK_WHEN(!HasMember_paint<T>, bool) operator()(T*) {
+        fPaint = NULL;
+        return false;
+    }
+
+    // SaveLayer has an SkPaint named paint, but it's not a draw.
+    bool operator()(SaveLayer*) {
         fPaint = NULL;
         return false;
     }
@@ -65,57 +71,26 @@ private:
 template <typename Matcher>
 struct Not {
     template <typename T>
-    bool match(T* ptr) { return !Matcher().match(ptr); }
+    bool operator()(T* ptr) { return !Matcher()(ptr); }
 };
 
 // Matches if either of A or B does.  Stores nothing.
 template <typename A, typename B>
 struct Or {
     template <typename T>
-    bool match(T* ptr) { return A().match(ptr) || B().match(ptr); }
+    bool operator()(T* ptr) { return A()(ptr) || B()(ptr); }
 };
 
 // Matches if any of A, B or C does.  Stores nothing.
 template <typename A, typename B, typename C>
 struct Or3 : Or<A, Or<B, C> > {};
 
-// We'll use this to choose which implementation of Star suits each Matcher.
-SK_CREATE_TYPE_DETECTOR(type);
-
-// Star is a special matcher that matches Matcher 0 or more times _greedily_ in the SkRecord.
-// This version stores nothing.  It's enabled when Matcher stores nothing.
-template <typename Matcher, typename = void>
-class Star {
-public:
-    void reset() {}
-
-    template <typename T>
-    bool match(T* ptr) { return Matcher().match(ptr); }
-};
-
-// This version stores a list of matches.  It's enabled if Matcher stores something.
+// Star is a special matcher that greedily matches Matcher 0 or more times.  Stores nothing.
 template <typename Matcher>
-class Star<Matcher, SK_WHEN(HasType_type<Matcher>, void)> {
-public:
-    typedef SkTDArray<typename Matcher::type*> type;
-    type* get() { return &fMatches; }
-
-    void reset() { fMatches.rewind(); }
-
+struct Star {
     template <typename T>
-    bool match(T* ptr) {
-        Matcher matcher;
-        if (matcher.match(ptr)) {
-            fMatches.push(matcher.get());
-            return true;
-        }
-        return false;
-    }
-
-private:
-    type fMatches;
+    bool operator()(T* ptr) { return Matcher()(ptr); }
 };
-
 
 // Cons builds a list of Matchers.
 // It first matches Matcher (something from above), then Pattern (another Cons or Nil).
@@ -155,16 +130,11 @@ public:
     template <typename T> T* third()  { return fTail.fTail.fHead.get(); }
 
 private:
-    template <typename T>
-    void operator()(T* r) { fHeadMatched = fHead.match(r); }
-
     // If head isn't a Star, try to match at i once.
     template <typename T>
     unsigned matchHead(T*, SkRecord* record, unsigned i) {
         if (i < record->count()) {
-            fHeadMatched = false;
-            record->mutate(i, *this);
-            if (fHeadMatched) {
+            if (record->mutate<bool>(i, fHead)) {
                 return i+1;
             }
         }
@@ -174,11 +144,8 @@ private:
     // If head is a Star, walk i until it doesn't match.
     template <typename T>
     unsigned matchHead(Star<T>*, SkRecord* record, unsigned i) {
-        fHead.reset();
         while (i < record->count()) {
-            fHeadMatched = false;
-            record->mutate(i, *this);
-            if (!fHeadMatched) {
+            if (!record->mutate<bool>(i, fHead)) {
                 return i;
             }
             i++;
@@ -188,9 +155,6 @@ private:
 
     Matcher fHead;
     Pattern fTail;
-    bool fHeadMatched;
-
-    friend class ::SkRecord;  // So operator() can otherwise stay private.
 
     // All Cons are friends with each other.  This lets first, second, and third work.
     template <typename, typename> friend class Cons;

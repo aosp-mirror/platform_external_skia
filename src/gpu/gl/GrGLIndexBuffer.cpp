@@ -26,29 +26,21 @@ void GrGLIndexBuffer::onAbandon() {
     INHERITED::onAbandon();
 }
 
-void* GrGLIndexBuffer::lock() {
+void* GrGLIndexBuffer::onMap() {
     if (!this->wasDestroyed()) {
-        return fImpl.lock(this->getGpuGL());
+        return fImpl.map(this->getGpuGL());
     } else {
         return NULL;
     }
 }
 
-void* GrGLIndexBuffer::lockPtr() const {
-    return fImpl.lockPtr();
-}
-
-void GrGLIndexBuffer::unlock() {
+void GrGLIndexBuffer::onUnmap() {
     if (!this->wasDestroyed()) {
-        fImpl.unlock(this->getGpuGL());
+        fImpl.unmap(this->getGpuGL());
     }
 }
 
-bool GrGLIndexBuffer::isLocked() const {
-    return fImpl.isLocked();
-}
-
-bool GrGLIndexBuffer::updateData(const void* src, size_t srcSizeInBytes) {
+bool GrGLIndexBuffer::onUpdateData(const void* src, size_t srcSizeInBytes) {
     if (!this->wasDestroyed()) {
         return fImpl.updateData(this->getGpuGL(), src, srcSizeInBytes);
     } else {

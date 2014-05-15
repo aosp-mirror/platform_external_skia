@@ -12,31 +12,32 @@
 #include "SkRecorder.h"
 #include "SkRecords.h"
 
+#include "SkXfermode.h"
+
 static const int W = 1920, H = 1080;
 
 // If the command we're reading is a U, set ptr to it, otherwise set it to NULL.
 template <typename U>
 struct ReadAs {
-    explicit ReadAs(const U** ptr) : ptr(ptr), type(SkRecords::Type(~0)) {}
+    ReadAs() : ptr(NULL), type(SkRecords::Type(~0)) {}
 
-    const U** ptr;
+    const U* ptr;
     SkRecords::Type type;
 
-    void operator()(const U& r) { *ptr = &r; type = U::kType; }
+    void operator()(const U& r) { ptr = &r; type = U::kType; }
 
     template <typename T>
-    void operator()(const T&) { *ptr = NULL; type = U::kType; }
+    void operator()(const T&) { type = U::kType; }
 };
 
 // Assert that the ith command in record is of type T, and return it.
 template <typename T>
 static const T* assert_type(skiatest::Reporter* r, const SkRecord& record, unsigned index) {
-    const T* ptr = NULL;
-    ReadAs<T> reader(&ptr);
-    record.visit(index, reader);
+    ReadAs<T> reader;
+    record.visit<void>(index, reader);
     REPORTER_ASSERT(r, T::kType == reader.type);
-    REPORTER_ASSERT(r, ptr != NULL);
-    return ptr;
+    REPORTER_ASSERT(r, NULL != reader.ptr);
+    return reader.ptr;
 }
 
 DEF_TEST(RecordOpts_Culling, r) {
@@ -57,6 +58,35 @@ DEF_TEST(RecordOpts_Culling, r) {
 
     REPORTER_ASSERT(r, 6 == assert_type<SkRecords::PairedPushCull>(r, record, 1)->skip);
     REPORTER_ASSERT(r, 2 == assert_type<SkRecords::PairedPushCull>(r, record, 4)->skip);
+}
+
+DEF_TEST(RecordOpts_NoopCulls, r) {
+    SkRecord record;
+    SkRecorder recorder(SkRecorder::kWriteOnly_Mode, &record, W, H);
+
+    // All should be nooped.
+    recorder.pushCull(SkRect::MakeWH(200, 200));
+        recorder.pushCull(SkRect::MakeWH(100, 100));
+        recorder.popCull();
+    recorder.popCull();
+
+    // Kept for now.  We could peel off a layer of culling.
+    recorder.pushCull(SkRect::MakeWH(5, 5));
+        recorder.pushCull(SkRect::MakeWH(5, 5));
+            recorder.drawRect(SkRect::MakeWH(1, 1), SkPaint());
+        recorder.popCull();
+    recorder.popCull();
+
+    SkRecordNoopCulls(&record);
+
+    for (unsigned i = 0; i < 4; i++) {
+        assert_type<SkRecords::NoOp>(r, record, i);
+    }
+    assert_type<SkRecords::PushCull>(r, record, 4);
+    assert_type<SkRecords::PushCull>(r, record, 5);
+    assert_type<SkRecords::DrawRect>(r, record, 6);
+    assert_type<SkRecords::PopCull>(r, record, 7);
+    assert_type<SkRecords::PopCull>(r, record, 8);
 }
 
 static void draw_pos_text(SkCanvas* canvas, const char* text, bool constantY) {
@@ -106,6 +136,28 @@ DEF_TEST(RecordOpts_TextBounding, r) {
     REPORTER_ASSERT(r, bounded->maxY >= SK_Scalar1 + defaults.getTextSize());
 }
 
+DEF_TEST(RecordOpts_NoopDrawSaveRestore, r) {
+    SkRecord record;
+    SkRecorder recorder(SkRecorder::kWriteOnly_Mode, &record, W, H);
+
+    // The save and restore are pointless if there's only draw commands in the middle.
+    recorder.save();
+        recorder.drawRect(SkRect::MakeWH(200, 200), SkPaint());
+        recorder.drawRect(SkRect::MakeWH(300, 300), SkPaint());
+        recorder.drawRect(SkRect::MakeWH(100, 100), SkPaint());
+    recorder.restore();
+
+    record.replace<SkRecords::NoOp>(2);  // NoOps should be allowed.
+
+    SkRecordNoopSaveRestores(&record);
+
+    assert_type<SkRecords::NoOp>(r, record, 0);
+    assert_type<SkRecords::DrawRect>(r, record, 1);
+    assert_type<SkRecords::NoOp>(r, record, 2);
+    assert_type<SkRecords::DrawRect>(r, record, 3);
+    assert_type<SkRecords::NoOp>(r, record, 4);
+}
+
 DEF_TEST(RecordOpts_SingleNoopSaveRestore, r) {
     SkRecord record;
     SkRecorder recorder(SkRecorder::kWriteOnly_Mode, &record, W, H);
@@ -137,17 +189,81 @@ DEF_TEST(RecordOpts_NoopSaveRestores, r) {
         recorder.restore();
     recorder.restore();
 
-    // These will be kept (though some future optimization might noop the save and restore).
-    recorder.save();
-        recorder.drawRect(SkRect::MakeWH(200, 200), SkPaint());
-    recorder.restore();
-
     SkRecordNoopSaveRestores(&record);
-
     for (unsigned index = 0; index < 8; index++) {
         assert_type<SkRecords::NoOp>(r, record, index);
     }
-    assert_type<SkRecords::Save>(r, record, 8);
-    assert_type<SkRecords::DrawRect>(r, record, 9);
-    assert_type<SkRecords::Restore>(r, record, 10);
+}
+
+static void assert_savelayer_restore(skiatest::Reporter* r,
+                                     SkRecord* record,
+                                     unsigned i,
+                                     bool shouldBeNoOped) {
+    SkRecordNoopSaveLayerDrawRestores(record);
+    if (shouldBeNoOped) {
+        assert_type<SkRecords::NoOp>(r, *record, i);
+        assert_type<SkRecords::NoOp>(r, *record, i+2);
+    } else {
+        assert_type<SkRecords::SaveLayer>(r, *record, i);
+        assert_type<SkRecords::Restore>(r, *record, i+2);
+    }
+}
+
+DEF_TEST(RecordOpts_NoopSaveLayerDrawRestore, r) {
+    SkRecord record;
+    SkRecorder recorder(SkRecorder::kWriteOnly_Mode, &record, W, H);
+
+    SkRect bounds = SkRect::MakeWH(100, 200);
+    SkRect   draw = SkRect::MakeWH(50, 60);
+
+    SkPaint goodLayerPaint, badLayerPaint, worseLayerPaint;
+    goodLayerPaint.setColor(0x03000000);  // Only alpha.
+    badLayerPaint.setColor( 0x03040506);  // Not only alpha.
+    worseLayerPaint.setXfermodeMode(SkXfermode::kDstIn_Mode);  // Any effect will do.
+
+    SkPaint goodDrawPaint, badDrawPaint;
+    goodDrawPaint.setColor(0xFF020202);  // Opaque.
+    badDrawPaint.setColor( 0x0F020202);  // Not opaque.
+
+    // No change: optimization can't handle bounds.
+    recorder.saveLayer(&bounds, NULL);
+        recorder.drawRect(draw, goodDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 0, false);
+
+    // SaveLayer/Restore removed: no bounds + no paint = no point.
+    recorder.saveLayer(NULL, NULL);
+        recorder.drawRect(draw, goodDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 3, true);
+
+    // TODO(mtklein): test case with null draw paint
+
+    // No change: layer paint isn't alpha-only.
+    recorder.saveLayer(NULL, &badLayerPaint);
+        recorder.drawRect(draw, goodDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 6, false);
+
+    // No change: layer paint has an effect.
+    recorder.saveLayer(NULL, &worseLayerPaint);
+        recorder.drawRect(draw, goodDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 9, false);
+
+    // No change: draw paint isn't opaque.
+    recorder.saveLayer(NULL, &goodLayerPaint);
+        recorder.drawRect(draw, badDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 12, false);
+
+    // SaveLayer/Restore removed: we can fold in the alpha!
+    recorder.saveLayer(NULL, &goodLayerPaint);
+        recorder.drawRect(draw, goodDrawPaint);
+    recorder.restore();
+    assert_savelayer_restore(r, &record, 15, true);
+
+    const SkRecords::DrawRect* drawRect = assert_type<SkRecords::DrawRect>(r, record, 16);
+    REPORTER_ASSERT(r, drawRect != NULL);
+    REPORTER_ASSERT(r, drawRect->paint.getColor() == 0x03020202);
 }

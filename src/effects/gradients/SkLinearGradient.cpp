@@ -527,7 +527,7 @@ GrEffectRef* GrLinearGradient::TestCreate(SkRandom* random,
                                                                  colors, stops, colorCount,
                                                                  tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint);
+    return shader->asNewEffect(context, paint, NULL);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -547,11 +547,19 @@ void GrGLLinearGradient::emitCode(GrGLShaderBuilder* builder,
 
 /////////////////////////////////////////////////////////////////////
 
-GrEffectRef* SkLinearGradient::asNewEffect(GrContext* context, const SkPaint&) const {
+GrEffectRef* SkLinearGradient::asNewEffect(GrContext* context, const SkPaint&,
+                                           const SkMatrix* localMatrix) const {
     SkASSERT(NULL != context);
     SkMatrix matrix;
     if (!this->getLocalMatrix().invert(&matrix)) {
         return NULL;
+    }
+    if (localMatrix) {
+        SkMatrix inv;
+        if (!localMatrix->invert(&inv)) {
+            return NULL;
+        }
+        matrix.postConcat(inv);
     }
     matrix.postConcat(fPtsToUnit);
     return GrLinearGradient::Create(context, *this, matrix, fTileMode);
@@ -559,7 +567,7 @@ GrEffectRef* SkLinearGradient::asNewEffect(GrContext* context, const SkPaint&) c
 
 #else
 
-GrEffectRef* SkLinearGradient::asNewEffect(GrContext*, const SkPaint&) const {
+GrEffectRef* SkLinearGradient::asNewEffect(GrContext*, const SkPaint&, const SkMatrix*) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return NULL;
 }

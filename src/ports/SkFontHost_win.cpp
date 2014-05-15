@@ -646,7 +646,7 @@ SkScalerContext_GDI::SkScalerContext_GDI(SkTypeface* rawTypeface,
     GA.preConcat(A);
 
     // realTextSize is the actual device size we want (as opposed to the size the user requested).
-    // gdiTextSide is the size we request from GDI.
+    // gdiTextSize is the size we request from GDI.
     // If the scale is negative, this means the matrix will do the flip anyway.
     SkScalar realTextSize = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
     SkScalar gdiTextSize = SkScalarRoundToScalar(realTextSize);
@@ -1055,6 +1055,8 @@ void SkScalerContext_GDI::generateFontMetrics(SkPaint::FontMetrics* mx, SkPaint:
         my->fMaxCharWidth = SkIntToScalar(otm.otmTextMetrics.tmMaxCharWidth);
         my->fXMin = SkIntToScalar(otm.otmrcFontBox.left);
         my->fXMax = SkIntToScalar(otm.otmrcFontBox.right);
+#endif
+#ifndef SK_IGNORE_UNDERLINE_POSITION_FIX
         my->fUnderlineThickness = SkIntToScalar(otm.otmsUnderscoreSize);
         my->fUnderlinePosition = -SkIntToScalar(otm.otmsUnderscorePosition);
 

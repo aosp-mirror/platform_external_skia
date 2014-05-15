@@ -15,7 +15,10 @@ using namespace SkRecords;
 
 void SkRecordOptimize(SkRecord* record) {
     // TODO(mtklein): fuse independent optimizations to reduce number of passes?
+    SkRecordNoopCulls(record);
     SkRecordNoopSaveRestores(record);
+    SkRecordNoopSaveLayerDrawRestores(record);
+
     SkRecordAnnotateCullingPairs(record);
     SkRecordReduceDrawPosTextStrength(record);  // Helpful to run this before BoundDrawPosTextH.
     SkRecordBoundDrawPosTextH(record);
@@ -41,8 +44,36 @@ static bool apply(Pass* pass, SkRecord* record) {
     return changed;
 }
 
+struct CullNooper {
+    typedef Pattern3<Is<PushCull>, Star<Is<NoOp> >, Is<PopCull> > Pattern;
+
+    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
+        record->replace<NoOp>(begin);  // PushCull
+        record->replace<NoOp>(end-1);  // PopCull
+        return true;
+    }
+};
+
+void SkRecordNoopCulls(SkRecord* record) {
+    CullNooper pass;
+    while (apply(&pass, record));
+}
+
+// Turns the logical NoOp Save and Restore in Save-Draw*-Restore patterns into actual NoOps.
+struct SaveOnlyDrawsRestoreNooper {
+    typedef Pattern3<Is<Save>,
+                     Star<Or<Is<NoOp>, IsDraw> >,
+                     Is<Restore> >
+        Pattern;
+
+    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
+        record->replace<NoOp>(begin);  // Save
+        record->replace<NoOp>(end-1);  // Restore
+        return true;
+    }
+};
 // Turns logical no-op Save-[non-drawing command]*-Restore patterns into actual no-ops.
-struct SaveRestoreNooper {
+struct SaveNoDrawsRestoreNooper {
     // Star matches greedily, so we also have to exclude Save and Restore.
     typedef Pattern3<Is<Save>,
                      Star<Not<Or3<Is<Save>,
@@ -65,9 +96,79 @@ struct SaveRestoreNooper {
     }
 };
 void SkRecordNoopSaveRestores(SkRecord* record) {
-    SaveRestoreNooper pass;
-    while (apply(&pass, record));  // Run until it stops changing things.
+    SaveOnlyDrawsRestoreNooper onlyDraws;
+    SaveNoDrawsRestoreNooper noDraws;
+
+    // Run until they stop changing things.
+    while (apply(&onlyDraws, record) || apply(&noDraws, record));
 }
+
+// For some SaveLayer-[drawing command]-Restore patterns, merge the SaveLayer's alpha into the
+// draw, and no-op the SaveLayer and Restore.
+struct SaveLayerDrawRestoreNooper {
+    typedef Pattern3<Is<SaveLayer>, IsDraw, Is<Restore> > Pattern;
+
+    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
+        SaveLayer* saveLayer = pattern->first<SaveLayer>();
+        if (saveLayer->bounds != NULL) {
+            // SaveLayer with bounds is too tricky for us.
+            return false;
+        }
+
+        SkPaint* layerPaint = saveLayer->paint;
+        if (NULL == layerPaint) {
+            // There wasn't really any point to this SaveLayer at all.
+            return KillSaveLayerAndRestore(record, begin);
+        }
+
+        SkPaint* drawPaint = pattern->second<SkPaint>();
+        if (drawPaint == NULL) {
+            // We can just give the draw the SaveLayer's paint.
+            // TODO(mtklein): figure out how to do this clearly
+            return false;
+        }
+
+        const uint32_t layerColor = layerPaint->getColor();
+        const uint32_t  drawColor =  drawPaint->getColor();
+        if (!IsOnlyAlpha(layerColor) || !IsOpaque(drawColor) || HasAnyEffect(*layerPaint)) {
+            // Too fancy for us.  Actually, as long as layerColor is just an alpha
+            // we can blend it into drawColor's alpha; drawColor doesn't strictly have to be opaque.
+            return false;
+        }
+
+        drawPaint->setColor(SkColorSetA(drawColor, SkColorGetA(layerColor)));
+        return KillSaveLayerAndRestore(record, begin);
+    }
+
+    static bool KillSaveLayerAndRestore(SkRecord* record, unsigned saveLayerIndex) {
+        record->replace<NoOp>(saveLayerIndex);    // SaveLayer
+        record->replace<NoOp>(saveLayerIndex+2);  // Restore
+        return true;
+    }
+
+    static bool HasAnyEffect(const SkPaint& paint) {
+        return paint.getPathEffect()  ||
+               paint.getShader()      ||
+               paint.getXfermode()    ||
+               paint.getMaskFilter()  ||
+               paint.getColorFilter() ||
+               paint.getRasterizer()  ||
+               paint.getLooper()      ||
+               paint.getImageFilter();
+    }
+
+    static bool IsOpaque(SkColor color) {
+        return SkColorGetA(color) == SK_AlphaOPAQUE;
+    }
+    static bool IsOnlyAlpha(SkColor color) {
+        return SK_ColorTRANSPARENT == SkColorSetA(color, SK_AlphaTRANSPARENT);
+    }
+};
+void SkRecordNoopSaveLayerDrawRestores(SkRecord* record) {
+    SaveLayerDrawRestoreNooper pass;
+    apply(&pass, record);
+}
+
 
 // Replaces DrawPosText with DrawPosTextH when all Y coordinates are equal.
 struct StrengthReducer {
@@ -103,7 +204,7 @@ struct StrengthReducer {
         Adopted<DrawPosText> adopted(draw);
         SkNEW_PLACEMENT_ARGS(record->replace<DrawPosTextH>(begin, adopted),
                              DrawPosTextH,
-                             (draw->text, draw->byteLength, scalars, firstY, draw->paint));
+                             (draw->paint, draw->text, draw->byteLength, scalars, firstY));
         return true;
     }
 };
@@ -180,7 +281,7 @@ public:
 
     void apply(SkRecord* record) {
         for (fRecord = record, fIndex = 0; fIndex < record->count(); fIndex++) {
-            fRecord->mutate(fIndex, *this);
+            fRecord->mutate<void>(fIndex, *this);
         }
     }
 

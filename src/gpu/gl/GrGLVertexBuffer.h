@@ -31,19 +31,15 @@ public:
         }
     }
 
-    // overrides of GrVertexBuffer
-    virtual void* lock();
-    virtual void* lockPtr() const;
-    virtual void unlock();
-    virtual bool isLocked() const;
-    virtual bool updateData(const void* src, size_t srcSizeInBytes);
-
 protected:
-    // overrides of GrResource
     virtual void onAbandon() SK_OVERRIDE;
     virtual void onRelease() SK_OVERRIDE;
 
 private:
+    virtual void* onMap() SK_OVERRIDE;
+    virtual void onUnmap() SK_OVERRIDE;
+    virtual bool onUpdateData(const void* src, size_t srcSizeInBytes) SK_OVERRIDE;
+
     GrGpuGL* getGpuGL() const {
         SkASSERT(!this->wasDestroyed());
         return (GrGpuGL*)(this->getGpu());

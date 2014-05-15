@@ -13,10 +13,10 @@
     # If these become 'permanent', they should be moved into skia_common.gypi
     #
     'skia_for_chromium_defines': [
-      'SK_SUPPORT_LEGACY_PUBLICEFFECTCONSTRUCTORS=1',
       'SK_SUPPORT_LEGACY_GETTOPDEVICE',
       'SK_SUPPORT_LEGACY_N32_NAME',
-      'SK_SUPPORT_LEGACY_BLURMASKFILTER_STYLE',
+      'SK_SUPPORT_LEGACY_BUILDMIPMAP',
+      'SK_SUPPORT_LEGACY_SHADER_LOCALMATRIX',
     ],
   },
 }

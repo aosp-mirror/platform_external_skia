@@ -9,6 +9,7 @@
 #include "SkDevice.h"
 #include "SkDraw.h"
 #include "SkPaintPriv.h"
+#include "SkPicturePlayback.h"
 
 SkPicture::AccelData::Key GPUAccelData::ComputeAccelDataKey() {
     static const SkPicture::AccelData::Key gGPUID = SkPicture::AccelData::GenerateDomain();
@@ -136,16 +137,7 @@ protected:
         device->fInfo.fCTM.postTranslate(SkIntToScalar(-device->getOrigin().fX),
                                          SkIntToScalar(-device->getOrigin().fY));
 
-        // We need the x & y values that will yield 'getOrigin' when transformed
-        // by 'draw.fMatrix'.
-        device->fInfo.fOffset.iset(device->getOrigin());
-
-        SkMatrix invMatrix;
-        if (draw.fMatrix->invert(&invMatrix)) {
-            invMatrix.mapPoints(&device->fInfo.fOffset, 1);
-        } else {
-            device->fInfo.fValid = false;
-        }
+        device->fInfo.fOffset = device->getOrigin();
 
         if (NeedsDeepCopy(paint)) {
             // This NULL acts as a signal that the paint was uncopyable (for now)
@@ -207,7 +199,7 @@ private:
         SkASSERT(kSaveLayer_Usage == usage);
 
         fInfo.fHasNestedLayers = true;
-        return SkNEW_ARGS(GrGatherDevice, (info.width(), info.height(), fPicture, 
+        return SkNEW_ARGS(GrGatherDevice, (info.width(), info.height(), fPicture,
                                            fAccelData, fSaveLayerDepth+1));
     }
 
@@ -249,7 +241,15 @@ public:
     }
 
     virtual void drawPicture(SkPicture& picture) SK_OVERRIDE {
+        // BBH-based rendering doesn't re-issue many of the operations the gather
+        // process cares about (e.g., saves and restores) so it must be disabled.
+        if (NULL != picture.fPlayback) {
+            picture.fPlayback->setUseBBH(false);
+        }
         picture.draw(this);
+        if (NULL != picture.fPlayback) {
+            picture.fPlayback->setUseBBH(true);
+        }
     }
 protected:
     // disable aa for speed

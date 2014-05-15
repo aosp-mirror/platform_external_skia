@@ -28,6 +28,7 @@
 #include "SkMaskFilter.h"
 #include "SkPathEffect.h"
 #include "SkPicture.h"
+#include "SkPicturePlayback.h"
 #include "SkRRect.h"
 #include "SkStroke.h"
 #include "SkSurface.h"
@@ -462,7 +463,7 @@ inline bool skPaint2GrPaintShader(SkGpuDevice* dev,
     GrContext::AutoWideOpenIdentityDraw awo(dev->context(), NULL);
 
     // setup the shader as the first color effect on the paint
-    SkAutoTUnref<GrEffectRef> effect(shader->asNewEffect(dev->context(), skPaint));
+    SkAutoTUnref<GrEffectRef> effect(shader->asNewEffect(dev->context(), skPaint, NULL));
     if (NULL != effect.get()) {
         grPaint->addColorEffect(effect);
         // Now setup the rest of the paint.
@@ -1079,7 +1080,7 @@ bool SkGpuDevice::shouldTileBitmap(const SkBitmap& bitmap,
     // a texture
     size_t bmpSize = bitmap.getSize();
     size_t cacheSize;
-    fContext->getTextureCacheLimits(NULL, &cacheSize);
+    fContext->getResourceCacheLimits(NULL, &cacheSize);
     if (bmpSize < cacheSize / 2) {
         return false;
     }
@@ -1137,6 +1138,74 @@ static inline void clamped_outset_with_offset(SkIRect* iRect,
     if (iRect->fBottom > clamp.fBottom) {
         iRect->fBottom = clamp.fBottom;
     }
+}
+
+static bool has_aligned_samples(const SkRect& srcRect,
+                                const SkRect& transformedRect) {
+    // detect pixel disalignment
+    if (SkScalarAbs(SkScalarRoundToScalar(transformedRect.left()) -
+            transformedRect.left()) < COLOR_BLEED_TOLERANCE &&
+        SkScalarAbs(SkScalarRoundToScalar(transformedRect.top()) -
+            transformedRect.top()) < COLOR_BLEED_TOLERANCE &&
+        SkScalarAbs(transformedRect.width() - srcRect.width()) <
+            COLOR_BLEED_TOLERANCE &&
+        SkScalarAbs(transformedRect.height() - srcRect.height()) <
+            COLOR_BLEED_TOLERANCE) {
+        return true;
+    }
+    return false;
+}
+
+static bool may_color_bleed(const SkRect& srcRect,
+                            const SkRect& transformedRect,
+                            const SkMatrix& m) {
+    // Only gets called if has_aligned_samples returned false.
+    // So we can assume that sampling is axis aligned but not texel aligned.
+    SkASSERT(!has_aligned_samples(srcRect, transformedRect));
+    SkRect innerSrcRect(srcRect), innerTransformedRect,
+        outerTransformedRect(transformedRect);
+    innerSrcRect.inset(SK_ScalarHalf, SK_ScalarHalf);
+    m.mapRect(&innerTransformedRect, innerSrcRect);
+
+    // The gap between outerTransformedRect and innerTransformedRect
+    // represents the projection of the source border area, which is
+    // problematic for color bleeding.  We must check whether any
+    // destination pixels sample the border area.
+    outerTransformedRect.inset(COLOR_BLEED_TOLERANCE, COLOR_BLEED_TOLERANCE);
+    innerTransformedRect.outset(COLOR_BLEED_TOLERANCE, COLOR_BLEED_TOLERANCE);
+    SkIRect outer, inner;
+    outerTransformedRect.round(&outer);
+    innerTransformedRect.round(&inner);
+    // If the inner and outer rects round to the same result, it means the
+    // border does not overlap any pixel centers. Yay!
+    return inner != outer;
+}
+
+static bool needs_texture_domain(const SkBitmap& bitmap,
+                                 const SkRect& srcRect,
+                                 GrTextureParams &params,
+                                 const SkMatrix& contextMatrix,
+                                 bool bicubic) {
+    bool needsTextureDomain = false;
+
+    if (bicubic || params.filterMode() != GrTextureParams::kNone_FilterMode) {
+        // Need texture domain if drawing a sub rect
+        needsTextureDomain = srcRect.width() < bitmap.width() ||
+                             srcRect.height() < bitmap.height();
+        if (!bicubic && needsTextureDomain && contextMatrix.rectStaysRect()) {
+            // sampling is axis-aligned
+            SkRect transformedRect;
+            contextMatrix.mapRect(&transformedRect, srcRect);
+
+            if (has_aligned_samples(srcRect, transformedRect)) {
+                params.setFilterMode(GrTextureParams::kNone_FilterMode);
+                needsTextureDomain = false;
+            } else {
+                needsTextureDomain = may_color_bleed(srcRect, transformedRect, contextMatrix);
+            }
+        }
+    }
+    return needsTextureDomain;
 }
 
 void SkGpuDevice::drawBitmapCommon(const SkDraw& draw,
@@ -1277,7 +1346,18 @@ void SkGpuDevice::drawBitmapCommon(const SkDraw& draw,
                               doBicubic);
     } else {
         // take the simple case
-        this->internalDrawBitmap(bitmap, srcRect, params, paint, flags, doBicubic);
+        bool needsTextureDomain = needs_texture_domain(bitmap,
+                                                       srcRect,
+                                                       params,
+                                                       fContext->getMatrix(),
+                                                       doBicubic);
+        this->internalDrawBitmap(bitmap,
+                                 srcRect,
+                                 params,
+                                 paint,
+                                 flags,
+                                 doBicubic,
+                                 needsTextureDomain);
     }
 }
 
@@ -1348,52 +1428,22 @@ void SkGpuDevice::drawTiledBitmap(const SkBitmap& bitmap,
             if (bitmap.extractSubset(&tmpB, iTileR)) {
                 // now offset it to make it "local" to our tmp bitmap
                 tileR.offset(-offset.fX, -offset.fY);
-
-                this->internalDrawBitmap(tmpB, tileR, params, paint, flags, bicubic);
+                GrTextureParams paramsTemp = params;
+                bool needsTextureDomain = needs_texture_domain(bitmap,
+                                                               srcRect,
+                                                               paramsTemp,
+                                                               fContext->getMatrix(),
+                                                               bicubic);
+                this->internalDrawBitmap(tmpB,
+                                         tileR,
+                                         paramsTemp,
+                                         paint,
+                                         flags,
+                                         bicubic,
+                                         needsTextureDomain);
             }
         }
     }
-}
-
-static bool has_aligned_samples(const SkRect& srcRect,
-                                const SkRect& transformedRect) {
-    // detect pixel disalignment
-    if (SkScalarAbs(SkScalarRoundToScalar(transformedRect.left()) -
-            transformedRect.left()) < COLOR_BLEED_TOLERANCE &&
-        SkScalarAbs(SkScalarRoundToScalar(transformedRect.top()) -
-            transformedRect.top()) < COLOR_BLEED_TOLERANCE &&
-        SkScalarAbs(transformedRect.width() - srcRect.width()) <
-            COLOR_BLEED_TOLERANCE &&
-        SkScalarAbs(transformedRect.height() - srcRect.height()) <
-            COLOR_BLEED_TOLERANCE) {
-        return true;
-    }
-    return false;
-}
-
-static bool may_color_bleed(const SkRect& srcRect,
-                            const SkRect& transformedRect,
-                            const SkMatrix& m) {
-    // Only gets called if has_aligned_samples returned false.
-    // So we can assume that sampling is axis aligned but not texel aligned.
-    SkASSERT(!has_aligned_samples(srcRect, transformedRect));
-    SkRect innerSrcRect(srcRect), innerTransformedRect,
-        outerTransformedRect(transformedRect);
-    innerSrcRect.inset(SK_ScalarHalf, SK_ScalarHalf);
-    m.mapRect(&innerTransformedRect, innerSrcRect);
-
-    // The gap between outerTransformedRect and innerTransformedRect
-    // represents the projection of the source border area, which is
-    // problematic for color bleeding.  We must check whether any
-    // destination pixels sample the border area.
-    outerTransformedRect.inset(COLOR_BLEED_TOLERANCE, COLOR_BLEED_TOLERANCE);
-    innerTransformedRect.outset(COLOR_BLEED_TOLERANCE, COLOR_BLEED_TOLERANCE);
-    SkIRect outer, inner;
-    outerTransformedRect.round(&outer);
-    innerTransformedRect.round(&inner);
-    // If the inner and outer rects round to the same result, it means the
-    // border does not overlap any pixel centers. Yay!
-    return inner != outer;
 }
 
 
@@ -1409,7 +1459,8 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
                                      const GrTextureParams& params,
                                      const SkPaint& paint,
                                      SkCanvas::DrawBitmapRectFlags flags,
-                                     bool bicubic) {
+                                     bool bicubic,
+                                     bool needsTextureDomain) {
     SkASSERT(bitmap.width() <= fContext->getMaxTextureSize() &&
              bitmap.height() <= fContext->getMaxTextureSize());
 
@@ -1428,31 +1479,9 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
                       SkScalarMul(srcRect.fRight,  wInv),
                       SkScalarMul(srcRect.fBottom, hInv));
 
-    bool needsTextureDomain = false;
-    if (!(flags & SkCanvas::kBleed_DrawBitmapRectFlag) &&
-        (bicubic || params.filterMode() != GrTextureParams::kNone_FilterMode)) {
-        // Need texture domain if drawing a sub rect
-        needsTextureDomain = srcRect.width() < bitmap.width() ||
-                             srcRect.height() < bitmap.height();
-        if (!bicubic && needsTextureDomain && fContext->getMatrix().rectStaysRect()) {
-            const SkMatrix& matrix = fContext->getMatrix();
-            // sampling is axis-aligned
-            SkRect transformedRect;
-            matrix.mapRect(&transformedRect, srcRect);
-
-            if (has_aligned_samples(srcRect, transformedRect)) {
-                // We could also turn off filtering here (but we already did a cache lookup with
-                // params).
-                needsTextureDomain = false;
-            } else {
-                needsTextureDomain = may_color_bleed(srcRect, transformedRect, matrix);
-            }
-        }
-    }
-
     SkRect textureDomain = SkRect::MakeEmpty();
     SkAutoTUnref<GrEffectRef> effect;
-    if (needsTextureDomain) {
+    if (needsTextureDomain && !(flags & SkCanvas::kBleed_DrawBitmapRectFlag)) {
         // Use a constrained texture domain to avoid color bleeding
         SkScalar left, top, right, bottom;
         if (srcRect.width() > SK_Scalar1) {
@@ -1913,11 +1942,22 @@ SkSurface* SkGpuDevice::newSurface(const SkImageInfo& info) {
 void SkGpuDevice::EXPERIMENTAL_optimize(SkPicture* picture) {
     SkPicture::AccelData::Key key = GPUAccelData::ComputeAccelDataKey();
 
+    const SkPicture::AccelData* existing = picture->EXPERIMENTAL_getAccelData(key);
+    if (NULL != existing) {
+        return;
+    }
+
     SkAutoTUnref<GPUAccelData> data(SkNEW_ARGS(GPUAccelData, (key)));
 
     picture->EXPERIMENTAL_addAccelData(data);
 
     GatherGPUInfo(picture, data);
+}
+
+static void wrap_texture(GrTexture* texture, int width, int height, SkBitmap* result) {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
+    result->setConfig(info);
+    result->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, texture)))->unref();
 }
 
 void SkGpuDevice::EXPERIMENTAL_purge(SkPicture* picture) {
@@ -1935,35 +1975,164 @@ bool SkGpuDevice::EXPERIMENTAL_drawPicture(SkCanvas* canvas, SkPicture* picture)
 
     const GPUAccelData *gpuData = static_cast<const GPUAccelData*>(data);
 
+    if (0 == gpuData->numSaveLayers()) {
+        return false;
+    }
+
     SkAutoTArray<bool> pullForward(gpuData->numSaveLayers());
     for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
         pullForward[i] = false;
     }
 
-    SkIRect clip;
-
-    fClipData.getConservativeBounds(this->width(), this->height(), &clip, NULL);
-
-    SkMatrix inv;
-    if (!fContext->getMatrix().invert(&inv)) {
-        return false;
+    SkRect clipBounds;
+    if (!canvas->getClipBounds(&clipBounds)) {
+        return true;
     }
+    SkIRect query;
+    clipBounds.roundOut(&query);
 
-    SkRect r = SkRect::Make(clip);
-    inv.mapRect(&r);
-    r.roundOut(&clip);
+    const SkPicture::OperationList& ops = picture->EXPERIMENTAL_getActiveOps(query);
 
-    const SkPicture::OperationList& ops = picture->EXPERIMENTAL_getActiveOps(clip);
+    // This code pre-renders the entire layer since it will be cached and potentially
+    // reused with different clips (e.g., in different tiles). Because of this the
+    // clip will not be limiting the size of the pre-rendered layer. kSaveLayerMaxSize
+    // is used to limit which clips are pre-rendered.
+    static const int kSaveLayerMaxSize = 256;
 
-    for (int i = 0; i < ops.numOps(); ++i) {
+    if (ops.valid()) {
+        // In this case the picture has been generated with a BBH so we use
+        // the BBH to limit the pre-rendering to just the layers needed to cover
+        // the region being drawn
+        for (int i = 0; i < ops.numOps(); ++i) {
+            uint32_t offset = ops.offset(i);
+
+            // For now we're saving all the layers in the GPUAccelData so they
+            // can be nested. Additionally, the nested layers appear before
+            // their parent in the list.
+            for (int j = 0 ; j < gpuData->numSaveLayers(); ++j) {
+                const GPUAccelData::SaveLayerInfo& info = gpuData->saveLayerInfo(j);
+
+                if (pullForward[j]) {
+                    continue;            // already pulling forward
+                }
+
+                if (offset < info.fSaveLayerOpID || offset > info.fRestoreOpID) {
+                    continue;            // the op isn't in this range
+                }
+
+                // TODO: once this code is more stable unsuitable layers can
+                // just be omitted during the optimization stage
+                if (!info.fValid ||
+                    kSaveLayerMaxSize < info.fSize.fWidth ||
+                    kSaveLayerMaxSize < info.fSize.fHeight ||
+                    info.fIsNested) {
+                    continue;            // this layer is unsuitable
+                }
+
+                pullForward[j] = true;
+            }
+        }
+    } else {
+        // In this case there is no BBH associated with the picture. Pre-render
+        // all the layers that intersect the drawn region
         for (int j = 0; j < gpuData->numSaveLayers(); ++j) {
             const GPUAccelData::SaveLayerInfo& info = gpuData->saveLayerInfo(j);
 
-            if (ops.offset(i) > info.fSaveLayerOpID && ops.offset(i) < info.fRestoreOpID) {
-                pullForward[j] = true;
+            SkIRect layerRect = SkIRect::MakeXYWH(info.fOffset.fX,
+                                                  info.fOffset.fY,
+                                                  info.fSize.fWidth,
+                                                  info.fSize.fHeight);
+
+            if (!SkIRect::Intersects(query, layerRect)) {
+                continue;
+            }
+
+            // TODO: once this code is more stable unsuitable layers can
+            // just be omitted during the optimization stage
+            if (!info.fValid ||
+                kSaveLayerMaxSize < info.fSize.fWidth ||
+                kSaveLayerMaxSize < info.fSize.fHeight ||
+                info.fIsNested) {
+                continue;
+            }
+
+            pullForward[j] = true;
+        }
+    }
+
+    SkPicturePlayback::PlaybackReplacements replacements;
+
+    for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
+        if (pullForward[i]) {
+            GrCachedLayer* layer = fContext->getLayerCache()->findLayerOrCreate(picture, i);
+
+            const GPUAccelData::SaveLayerInfo& info = gpuData->saveLayerInfo(i);
+
+            if (NULL != picture->fPlayback) {
+                SkPicturePlayback::PlaybackReplacements::ReplacementInfo* layerInfo =
+                                                                        replacements.push();
+                layerInfo->fStart = info.fSaveLayerOpID;
+                layerInfo->fStop = info.fRestoreOpID;
+                layerInfo->fPos = info.fOffset;
+
+                GrTextureDesc desc;
+                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fWidth = info.fSize.fWidth;
+                desc.fHeight = info.fSize.fHeight;
+                desc.fConfig = kSkia8888_GrPixelConfig;
+                // TODO: need to deal with sample count
+
+                bool bNeedsRendering = true;
+
+                // This just uses scratch textures and doesn't cache the texture.
+                // This can yield a lot of re-rendering
+                if (NULL == layer->getTexture()) {
+                    layer->setTexture(fContext->lockAndRefScratchTexture(desc,
+                                                        GrContext::kApprox_ScratchTexMatch));
+                    if (NULL == layer->getTexture()) {
+                        continue;
+                    }
+                } else {
+                    bNeedsRendering = false;
+                }
+
+                layerInfo->fBM = SkNEW(SkBitmap);
+                wrap_texture(layer->getTexture(), desc.fWidth, desc.fHeight, layerInfo->fBM);
+
+                SkASSERT(info.fPaint);
+                layerInfo->fPaint = info.fPaint;
+
+                if (bNeedsRendering) {
+                    SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTargetDirect(
+                                                        layer->getTexture()->asRenderTarget()));
+
+                    SkCanvas* canvas = surface->getCanvas();
+
+                    canvas->setMatrix(info.fCTM);
+                    canvas->clear(SK_ColorTRANSPARENT);
+
+                    picture->fPlayback->setDrawLimits(info.fSaveLayerOpID, info.fRestoreOpID);
+                    picture->fPlayback->draw(*canvas, NULL);
+                    picture->fPlayback->setDrawLimits(0, 0);
+                    canvas->flush();
+                }
             }
         }
     }
 
-    return false;
+    // Playback using new layers
+    picture->fPlayback->setReplacements(&replacements);
+    picture->fPlayback->draw(*canvas, NULL);
+    picture->fPlayback->setReplacements(NULL);
+
+    for (int i = 0; i < gpuData->numSaveLayers(); ++i) {
+        GrCachedLayer* layer = fContext->getLayerCache()->findLayerOrCreate(picture, i);
+
+        if (NULL != layer->getTexture()) {
+            fContext->unlockScratchTexture(layer->getTexture());
+            layer->setTexture(NULL);
+        }
+    }
+
+    return true;
 }

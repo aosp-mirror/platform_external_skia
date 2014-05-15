@@ -547,7 +547,7 @@ static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
     canvas->drawBitmap(sourceImages[0], 0, 0, NULL);
     REPORTER_ASSERT(reporter, 2 == notificationCounter.fStorageAllocatedChangedCount);
     canvas->drawBitmap(sourceImages[0], 0, 0, NULL);
-    REPORTER_ASSERT(reporter, 2 == notificationCounter.fStorageAllocatedChangedCount);
+    REPORTER_ASSERT(reporter, 3 == notificationCounter.fStorageAllocatedChangedCount);
     REPORTER_ASSERT(reporter, 1 == notificationCounter.fFlushedDrawCommandsCount);
     REPORTER_ASSERT(reporter, canvas->storageAllocatedForRecording() < 2 * bitmapSize);
 
@@ -816,7 +816,7 @@ static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporte
     REPORTER_ASSERT(reporter, notificationCounter.fStorageAllocatedChangedCount == 1);
 }
 
-DEF_GPUTEST(DeferredCanvas, reporter, factory) {
+DEF_TEST(DeferredCanvas_CPU, reporter) {
     TestDeferredCanvasBitmapAccess(reporter);
     TestDeferredCanvasFlush(reporter);
     TestDeferredCanvasSilentFlush(reporter);
@@ -830,7 +830,10 @@ DEF_GPUTEST(DeferredCanvas, reporter, factory) {
     TestDeferredCanvasWritePixelsToSurface(reporter);
     TestDeferredCanvasSurface(reporter, NULL);
     TestDeferredCanvasSetSurface(reporter, NULL);
-    if (NULL != factory) {
+}
+
+DEF_GPUTEST(DeferredCanvas_GPU, reporter, factory) {
+    if (factory != NULL) {
         TestDeferredCanvasSurface(reporter, factory);
         TestDeferredCanvasSetSurface(reporter, factory);
     }

@@ -14,9 +14,30 @@
 #include "SkPictureShader.h"
 #include "SkScalar.h"
 #include "SkShader.h"
+#include "SkThread.h"
 #include "SkWriteBuffer.h"
 
+//#define SK_TRACK_SHADER_LIFETIME
+
+#ifdef SK_TRACK_SHADER_LIFETIME
+    static int32_t gShaderCounter;
+#endif
+
+static inline void inc_shader_counter() {
+#ifdef SK_TRACK_SHADER_LIFETIME
+    int32_t prev = sk_atomic_inc(&gShaderCounter);
+    SkDebugf("+++ shader counter %d\n", prev + 1);
+#endif
+}
+static inline void dec_shader_counter() {
+#ifdef SK_TRACK_SHADER_LIFETIME
+    int32_t prev = sk_atomic_dec(&gShaderCounter);
+    SkDebugf("--- shader counter %d\n", prev - 1);
+#endif
+}
+
 SkShader::SkShader(const SkMatrix* localMatrix) {
+    inc_shader_counter();
     if (localMatrix) {
         fLocalMatrix = *localMatrix;
     } else {
@@ -24,8 +45,8 @@ SkShader::SkShader(const SkMatrix* localMatrix) {
     }
 }
 
-SkShader::SkShader(SkReadBuffer& buffer)
-        : INHERITED(buffer) {
+SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
+    inc_shader_counter();
     if (buffer.readBool()) {
         buffer.readMatrix(&fLocalMatrix);
     } else {
@@ -34,11 +55,12 @@ SkShader::SkShader(SkReadBuffer& buffer)
 }
 
 SkShader::~SkShader() {
+    dec_shader_counter();
 }
 
 void SkShader::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-    bool hasLocalM = this->hasLocalMatrix();
+    bool hasLocalM = !fLocalMatrix.isIdentity();
     buffer.writeBool(hasLocalM);
     if (hasLocalM) {
         buffer.writeMatrix(fLocalMatrix);
@@ -46,13 +68,10 @@ void SkShader::flatten(SkWriteBuffer& buffer) const {
 }
 
 bool SkShader::computeTotalInverse(const ContextRec& rec, SkMatrix* totalInverse) const {
-    const SkMatrix* m = rec.fMatrix;
-    SkMatrix        total;
+    SkMatrix total;
+    total.setConcat(*rec.fMatrix, fLocalMatrix);
 
-    if (this->hasLocalMatrix()) {
-        total.setConcat(*m, this->getLocalMatrix());
-        m = &total;
-    }
+    const SkMatrix* m = &total;
     if (rec.fLocalMatrix) {
         total.setConcat(*m, *rec.fLocalMatrix);
         m = &total;
@@ -189,7 +208,11 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
 }
 
-GrEffectRef* SkShader::asNewEffect(GrContext*, const SkPaint&) const {
+GrEffectRef* SkShader::asNewEffect(GrContext*, const SkPaint&, const SkMatrix*) const {
+    return NULL;
+}
+
+SkShader* SkShader::refAsALocalMatrixShader(SkMatrix*) const {
     return NULL;
 }
 
@@ -209,9 +232,9 @@ SkShader* SkShader::CreatePictureShader(SkPicture* src, TileMode tmx, TileMode t
 
 #ifndef SK_IGNORE_TO_STRING
 void SkShader::toString(SkString* str) const {
-    if (this->hasLocalMatrix()) {
+    if (!fLocalMatrix.isIdentity()) {
         str->append(" ");
-        this->getLocalMatrix().toString(str);
+        fLocalMatrix.toString(str);
     }
 }
 #endif

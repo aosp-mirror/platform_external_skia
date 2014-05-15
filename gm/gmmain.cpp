@@ -69,7 +69,6 @@ typedef int GLContextType;
 
 #define DEBUGFAIL_SEE_STDERR SkDEBUGFAIL("see stderr for message")
 
-extern bool gSkSuppressFontCachePurgeSpew;
 DECLARE_bool(useDocumentInsteadOfDevice);
 
 #ifdef SK_SUPPORT_PDF
@@ -1320,6 +1319,8 @@ static const ConfigData gRec[] = {
 #endif // SK_SUPPORT_PDF
 };
 
+static bool SkNoRasterizePDF(SkStream*, SkBitmap*) { return false; }
+
 static const PDFRasterizerData kPDFRasterizers[] = {
 #ifdef SK_BUILD_FOR_MAC
     { &SkPDFDocumentToBitmap, "mac",     true },
@@ -1330,6 +1331,8 @@ static const PDFRasterizerData kPDFRasterizers[] = {
 #ifdef SK_BUILD_NATIVE_PDF_RENDERER
     { &SkNativeRasterizePDF,  "native",  true },
 #endif  // SK_BUILD_NATIVE_PDF_RENDERER
+    // The following exists so that this array is never zero length.
+    { &SkNoRasterizePDF,      "none",    false},
 };
 
 static const char kDefaultsConfigStr[] = "defaults";
@@ -1774,14 +1777,14 @@ ErrorCombination run_multiple_configs(GMMain &gmmain, GM *gm,
                     // Set the user specified cache limits if non-default.
                     size_t bytes;
                     int count;
-                    gr->getTextureCacheLimits(&count, &bytes);
+                    gr->getResourceCacheLimits(&count, &bytes);
                     if (DEFAULT_CACHE_VALUE != gGpuCacheSizeBytes) {
                         bytes = static_cast<size_t>(gGpuCacheSizeBytes);
                     }
                     if (DEFAULT_CACHE_VALUE != gGpuCacheSizeCount) {
                         count = gGpuCacheSizeCount;
                     }
-                    gr->setTextureCacheLimits(count, bytes);
+                    gr->setResourceCacheLimits(count, bytes);
                 }
             }
             if (!grSuccess) {
@@ -2234,8 +2237,6 @@ int tool_main(int argc, char** argv) {
 #endif
 
     SkGraphics::Init();
-    // we don't need to see this during a run
-    gSkSuppressFontCachePurgeSpew = true;
 
     setSystemPreferences();
     GMMain gmmain;

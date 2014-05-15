@@ -794,7 +794,7 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
     //      Restore
     // 2)
     //      SaveLayer
-    //          Translate 
+    //          Translate
     //          SaveLayer w/ bound
     //          Restore
     //      Restore
@@ -852,7 +852,7 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
 
         SkAutoTUnref<SkSurface> surface(SkSurface::NewScratchRenderTarget(context, info));
 
-        SkCanvas* canvas = surface->getCanvas();   
+        SkCanvas* canvas = surface->getCanvas();
 
         canvas->EXPERIMENTAL_optimize(pict);
 
@@ -886,10 +886,11 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
         REPORTER_ASSERT(reporter, !info1.fIsNested && info1.fHasNestedLayers); // has a nested SL
 
         REPORTER_ASSERT(reporter, info2.fValid);
-        REPORTER_ASSERT(reporter, kWidth/2 == info2.fSize.fWidth && 
+        REPORTER_ASSERT(reporter, kWidth/2 == info2.fSize.fWidth &&
                                   kHeight/2 == info2.fSize.fHeight); // bound reduces size
         REPORTER_ASSERT(reporter, info2.fCTM.isIdentity());         // translated
-        REPORTER_ASSERT(reporter, 0 == info2.fOffset.fX && 0 == info2.fOffset.fY);
+        REPORTER_ASSERT(reporter, kWidth/2 == info2.fOffset.fX &&
+                                  kHeight/2 == info2.fOffset.fY);
         REPORTER_ASSERT(reporter, NULL != info1.fPaint);
         REPORTER_ASSERT(reporter, info2.fIsNested && !info2.fHasNestedLayers); // is nested
 
@@ -901,7 +902,7 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
         REPORTER_ASSERT(reporter, !info3.fIsNested && !info3.fHasNestedLayers);
 
         REPORTER_ASSERT(reporter, !info4.fValid);                 // paint is/was uncopyable
-        REPORTER_ASSERT(reporter, kWidth == info4.fSize.fWidth && kHeight == info4.fSize.fHeight); 
+        REPORTER_ASSERT(reporter, kWidth == info4.fSize.fWidth && kHeight == info4.fSize.fHeight);
         REPORTER_ASSERT(reporter, 0 == info4.fOffset.fX && 0 == info4.fOffset.fY);
         REPORTER_ASSERT(reporter, info4.fCTM.isIdentity());
         REPORTER_ASSERT(reporter, NULL == info4.fPaint);     // paint is/was uncopyable

@@ -21,6 +21,9 @@
           '_CRT_SECURE_NO_WARNINGS',
           'GR_GL_FUNCTION_TYPE=__stdcall',
         ],
+        'msvs_disabled_warnings': [
+            4345,  # This is an FYI about a behavior change from long ago.  Chrome stifles it too.
+        ],
         'msvs_cygwin_shell': 0,
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -296,11 +299,6 @@
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
         'SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"',
         'SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"',
-        # FIXME: b/13729784: Need to rework LayerRasterizer.cpp
-        'SK_SUPPORT_LEGACY_LAYERRASTERIZER_API',
-        # Temporary until https:#googleplex-android-review.git.corp.google.com/#/c/442220/
-        # lands.
-        'SK_SUPPORT_LEGACY_GETTOTALCLIP',
         # Still need to switch Android to the new name for N32.
         'kNative_8888_SkColorType kN32_SkColorType',
         'SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD',
@@ -313,6 +311,7 @@
         'SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG',
         # Transitional, for deprecated SkCanvas::SaveFlags methods.
         'SK_ATTR_DEPRECATED=SK_NOTHING_ARG1',
+        'SK_SUPPORT_LEGACY_SHADER_LOCALMATRIX',
       ],
     }],
 
@@ -631,6 +630,15 @@
         'SK_USE_POSIX_THREADS',
       ],
     }],
+
+    [ 'skia_moz2d', {
+      'defines': [
+        'SK_SUPPORT_LEGACY_LAYERRASTERIZER_API=1',
+        'SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG=1',
+        'SK_SUPPORT_LEGACY_GETTOTALCLIP=1',
+      ],
+    }],
+
   ], # end 'conditions'
   # The Xcode SYMROOT must be at the root. See build/common.gypi in chromium for more details
   'xcode_settings': {

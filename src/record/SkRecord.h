@@ -10,6 +10,7 @@
 
 #include "SkChunkAlloc.h"
 #include "SkRecords.h"
+#include "SkTLogic.h"
 #include "SkTemplates.h"
 
 // SkRecord (REC-ord) represents a sequence of SkCanvas calls, saved for future use.
@@ -32,7 +33,7 @@ public:
     ~SkRecord() {
         Destroyer destroyer;
         for (unsigned i = 0; i < this->count(); i++) {
-            this->mutate(i, destroyer);
+            this->mutate<void>(i, destroyer);
         }
     }
 
@@ -41,23 +42,24 @@ public:
 
     // Visit the i-th canvas command with a functor matching this interface:
     //   template <typename T>
-    //   void operator()(const T& record) { ... }
+    //   R operator()(const T& record) { ... }
     // This operator() must be defined for at least all SkRecords::*.
-    template <typename F>
-    void visit(unsigned i, F& f) const {
+    template <typename R, typename F>
+    R visit(unsigned i, F& f) const {
         SkASSERT(i < this->count());
-        fRecords[i].visit(fTypes[i], f);
+        return fRecords[i].visit<R>(fTypes[i], f);
     }
 
     // Mutate the i-th canvas command with a functor matching this interface:
     //   template <typename T>
-    //   void operator()(T* record) { ... }
+    //   R operator()(T* record) { ... }
     // This operator() must be defined for at least all SkRecords::*.
-    template <typename F>
-    void mutate(unsigned i, F& f) {
+    template <typename R, typename F>
+    R mutate(unsigned i, F& f) {
         SkASSERT(i < this->count());
-        fRecords[i].mutate(fTypes[i], f);
+        return fRecords[i].mutate<R>(fTypes[i], f);
     }
+    // TODO: It'd be nice to infer R from F for visit and mutate if we ever get std::result_of.
 
     // Allocate contiguous space for count Ts, to be freed when the SkRecord is destroyed.
     // Here T can be any class, not just those from SkRecords.  Throws on failure.
@@ -77,7 +79,7 @@ public:
         }
 
         fTypes[fCount] = T::kType;
-        return fRecords[fCount++].set(this->alloc<T>());
+        return fRecords[fCount++].set(this->allocCommand<T>());
     }
 
     // Replace the i-th command with a new command of type T.
@@ -88,10 +90,10 @@ public:
         SkASSERT(i < this->count());
 
         Destroyer destroyer;
-        this->mutate(i, destroyer);
+        this->mutate<void>(i, destroyer);
 
         fTypes[i] = T::kType;
-        return fRecords[i].set(this->alloc<T>());
+        return fRecords[i].set(this->allocCommand<T>());
     }
 
     // Replace the i-th command with a new command of type T.
@@ -105,7 +107,7 @@ public:
         SkASSERT(proofOfAdoption == fRecords[i].ptr<Existing>());
 
         fTypes[i] = T::kType;
-        return fRecords[i].set(this->alloc<T>());
+        return fRecords[i].set(this->allocCommand<T>());
     }
 
 private:
@@ -162,6 +164,17 @@ private:
         uint8_t fType;
     };
 
+    // No point in allocating any more than one of an empty struct.
+    // We could just return NULL but it's sort of confusing to return NULL on success.
+    template <typename T>
+    SK_WHEN(SkTIsEmpty<T>, T*) allocCommand() {
+        static T singleton = {};
+        return &singleton;
+    }
+
+    template <typename T>
+    SK_WHEN(!SkTIsEmpty<T>, T*) allocCommand() { return this->alloc<T>(); }
+
     // An untyped pointer to some bytes in fAlloc.  This is the interface for polymorphic dispatch:
     // visit() and mutate() work with the parallel fTypes array to do the work of a vtable.
     struct Record {
@@ -179,20 +192,24 @@ private:
 
         // Visit this record with functor F (see public API above) assuming the record we're
         // pointing to has this type.
-        template <typename F>
-        void visit(Type8 type, F& f) const {
+        template <typename R, typename F>
+        R visit(Type8 type, F& f) const {
         #define CASE(T) case SkRecords::T##_Type: return f(*this->ptr<SkRecords::T>());
             switch(type) { SK_RECORD_TYPES(CASE) }
         #undef CASE
+            SkDEBUGFAIL("Unreachable");
+            return R();
         }
 
         // Mutate this record with functor F (see public API above) assuming the record we're
         // pointing to has this type.
-        template <typename F>
-        void mutate(Type8 type, F& f) {
+        template <typename R, typename F>
+        R mutate(Type8 type, F& f) {
         #define CASE(T) case SkRecords::T##_Type: return f(this->ptr<SkRecords::T>());
             switch(type) { SK_RECORD_TYPES(CASE) }
         #undef CASE
+            SkDEBUGFAIL("Unreachable");
+            return R();
         }
 
     private:

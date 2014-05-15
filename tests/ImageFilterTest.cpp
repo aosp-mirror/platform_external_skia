@@ -300,6 +300,9 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
     SkScalar gain = SK_Scalar1, bias = 0;
 
     SkAutoTUnref<SkImageFilter> gradient_source(SkBitmapSource::Create(make_gradient_circle(64, 64)));
+    SkMatrix matrix;
+    matrix.setTranslate(SK_Scalar1, SK_Scalar1);
+    matrix.postRotate(SkIntToScalar(45), SK_Scalar1, SK_Scalar1);
 
     struct {
         const char*    fName;
@@ -309,7 +312,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
         { "displacement map", SkDisplacementMapEffect::Create(
               SkDisplacementMapEffect::kR_ChannelSelectorType,
               SkDisplacementMapEffect::kB_ChannelSelectorType,
-              40.0f, gradient_source.get()) },
+              20.0f, gradient_source.get()) },
         { "blur", SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1) },
         { "drop shadow", SkDropShadowImageFilter::Create(
               SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN) },
@@ -327,6 +330,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
         { "erode", SkErodeImageFilter::Create(2, 3) },
         { "tile", SkTileImageFilter::Create(SkRect::MakeXYWH(0, 0, 50, 50),
                                             SkRect::MakeXYWH(0, 0, 100, 100), NULL) },
+        { "matrix", SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel) },
     };
 
     SkBitmap untiledResult, tiledResult;
@@ -335,34 +339,40 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
     tiledResult.allocN32Pixels(width, height);
     SkCanvas tiledCanvas(tiledResult);
     SkCanvas untiledCanvas(untiledResult);
-    tiledCanvas.clear(0);
-    untiledCanvas.clear(0);
-    int tileSize = 16;
+    int tileSize = 8;
 
-    for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
-        SkPaint paint;
-        paint.setImageFilter(filters[i].fFilter);
-        paint.setTextSize(SkIntToScalar(height));
-        paint.setColor(SK_ColorWHITE);
-        SkString str;
-        const char* text = "ABC";
-        SkScalar ypos = SkIntToScalar(height);
-        untiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
-        for (int y = 0; y < height; y += tileSize) {
-            for (int x = 0; x < width; x += tileSize) {
-                tiledCanvas.save();
-                tiledCanvas.clipRect(SkRect::Make(SkIRect::MakeXYWH(x, y, tileSize, tileSize)));
-                tiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
-                tiledCanvas.restore();
+    for (int scale = 1; scale <= 2; ++scale) {
+        for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
+            tiledCanvas.clear(0);
+            untiledCanvas.clear(0);
+            SkPaint paint;
+            paint.setImageFilter(filters[i].fFilter);
+            paint.setTextSize(SkIntToScalar(height));
+            paint.setColor(SK_ColorWHITE);
+            SkString str;
+            const char* text = "ABC";
+            SkScalar ypos = SkIntToScalar(height);
+            untiledCanvas.save();
+            untiledCanvas.scale(SkIntToScalar(scale), SkIntToScalar(scale));
+            untiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
+            untiledCanvas.restore();
+            for (int y = 0; y < height; y += tileSize) {
+                for (int x = 0; x < width; x += tileSize) {
+                    tiledCanvas.save();
+                    tiledCanvas.clipRect(SkRect::Make(SkIRect::MakeXYWH(x, y, tileSize, tileSize)));
+                    tiledCanvas.scale(SkIntToScalar(scale), SkIntToScalar(scale));
+                    tiledCanvas.drawText(text, strlen(text), 0, ypos, paint);
+                    tiledCanvas.restore();
+                }
             }
-        }
-        untiledCanvas.flush();
-        tiledCanvas.flush();
-        for (int y = 0; y < height; y++) {
-            int diffs = memcmp(untiledResult.getAddr32(0, y), tiledResult.getAddr32(0, y), untiledResult.rowBytes());
-            REPORTER_ASSERT_MESSAGE(reporter, !diffs, filters[i].fName);
-            if (diffs) {
-                break;
+            untiledCanvas.flush();
+            tiledCanvas.flush();
+            for (int y = 0; y < height; y++) {
+                int diffs = memcmp(untiledResult.getAddr32(0, y), tiledResult.getAddr32(0, y), untiledResult.rowBytes());
+                REPORTER_ASSERT_MESSAGE(reporter, !diffs, filters[i].fName);
+                if (diffs) {
+                    break;
+                }
             }
         }
     }
@@ -465,6 +475,61 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
     canvas.drawPicture(*picture);
+}
+
+DEF_TEST(ImageFilterEmptySaveLayerTest, reporter) {
+
+    // Even when there's an empty saveLayer()/restore(), ensure that an image
+    // filter or color filter which affects transparent black still draws.
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(10, 10);
+    SkBitmapDevice device(bitmap);
+    SkCanvas canvas(&device);
+
+    SkRTreeFactory factory;
+    SkPictureRecorder recorder;
+
+    SkAutoTUnref<SkColorFilter> green(
+        SkColorFilter::CreateModeFilter(SK_ColorGREEN, SkXfermode::kSrc_Mode));
+    SkAutoTUnref<SkColorFilterImageFilter> imageFilter(
+        SkColorFilterImageFilter::Create(green.get()));
+    SkPaint imageFilterPaint;
+    imageFilterPaint.setImageFilter(imageFilter.get());
+    SkPaint colorFilterPaint;
+    colorFilterPaint.setColorFilter(green.get());
+
+    SkRect bounds = SkRect::MakeWH(10, 10);
+
+    SkCanvas* recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
+    recordingCanvas->saveLayer(&bounds, &imageFilterPaint);
+    recordingCanvas->restore();
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
+
+    canvas.clear(0);
+    canvas.drawPicture(*picture);
+    uint32_t pixel = *bitmap.getAddr32(0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
+    recordingCanvas->saveLayer(NULL, &imageFilterPaint);
+    recordingCanvas->restore();
+    SkAutoTUnref<SkPicture> picture2(recorder.endRecording());
+
+    canvas.clear(0);
+    canvas.drawPicture(*picture2);
+    pixel = *bitmap.getAddr32(0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    recordingCanvas = recorder.beginRecording(10, 10, &factory, 0);
+    recordingCanvas->saveLayer(&bounds, &colorFilterPaint);
+    recordingCanvas->restore();
+    SkAutoTUnref<SkPicture> picture3(recorder.endRecording());
+
+    canvas.clear(0);
+    canvas.drawPicture(*picture3);
+    pixel = *bitmap.getAddr32(0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 }
 
 static void test_huge_blur(SkBaseDevice* device, skiatest::Reporter* reporter) {

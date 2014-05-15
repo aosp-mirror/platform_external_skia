@@ -74,7 +74,13 @@ public:
      */
     class Iterator {
     public:
-        /** Returns the next offset into the picture stream, or kDrawComplete if complete. */
+        /** Returns the next op offset needed to create the drawing state
+            required by the queued up draw operation or the offset of the queued
+            up draw operation itself. In the latter case, the next draw operation
+            will move into the queued up slot.
+            It retuns kDrawComplete when done.
+            TODO: this might be better named nextOp
+        */
         uint32_t nextDraw();
         static const uint32_t kDrawComplete = SK_MaxU32;
         Iterator() : fPlaybackMatrix(), fValid(false) { }
@@ -110,6 +116,8 @@ public:
 
         // Whether or not this is a valid iterator (the default public constructor sets this false)
         bool fValid;
+
+        uint32_t finish();
 
         friend class SkPictureStateTree;
     };

@@ -329,8 +329,9 @@
         ]
       ], 
       "bugs": [
-        2146
+        2528
       ], 
+      "ignore-failure": true, 
       "reviewed-by-human": false
     }, 
     "bigmatrix_565.png": {
@@ -699,6 +700,33 @@
       ], 
       "bugs": [
         2146
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "blurcircles_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          17148910878401545731
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "blurcircles_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          6067714883605508534
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "blurcircles_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11635423331580981373
+        ]
       ], 
       "reviewed-by-human": false
     }, 
@@ -2137,25 +2165,19 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          8656374752057403712
+          12670698167582780333
         ]
       ], 
-      "bugs": [
-        2146
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "canvas-layer-state_8888.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          8656374752057403712
+          12670698167582780333
         ]
       ], 
-      "bugs": [
-        2146
-      ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "canvas-state_565.png": {
       "allowed-digests": [
@@ -3095,6 +3117,33 @@
         ]
       ], 
       "reviewed-by-human": true
+    }, 
+    "composeshader_alpha_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          2785143308349902483
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "composeshader_alpha_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          3069347792056802140
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "composeshader_alpha_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          13415066704472475041
+        ]
+      ], 
+      "reviewed-by-human": false
     }, 
     "composeshader_gpu.png": {
       "allowed-digests": [
@@ -9166,6 +9215,33 @@
       ], 
       "bugs": [
         2146
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "vertices_80_565.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          11220339642934269879
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "vertices_80_8888.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          5116617595194840746
+        ]
+      ], 
+      "reviewed-by-human": false
+    }, 
+    "vertices_80_gpu.png": {
+      "allowed-digests": [
+        [
+          "bitmap-64bitMD5", 
+          9747017168179419934
+        ]
       ], 
       "reviewed-by-human": false
     }, 
