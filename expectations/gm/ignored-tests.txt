@@ -42,15 +42,9 @@ canvas-layer-state
 # bsalomon@ will rebaseline this test
 ninepatch-stretch
 
-
-# These are part of picture-version 27 -- removal of SkUnitMapp
-# just need to be rebaselined
-scaled_tilemode_bitmap
-scaled_tilemodes_npot
-scaled_tilemodes
-tilemode_bitmap
-tilemodes_npot
-tilemodes
-shadertext3
-shadertext
-shadertext2
+# egdaniel: https://codereview.chromium.org/274673004/
+# dashing effects will change slightly on GPU, will rebaseline after patch lands
+dashing
+dashing2
+dashing3
+dashcubics

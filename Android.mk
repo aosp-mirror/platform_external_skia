@@ -387,6 +387,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
+	src/utils/SkUnitMappers.cpp \
 	src/fonts/SkGScalerContext.cpp \
 	src/utils/android/ashmem.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
@@ -443,6 +444,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
+	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
@@ -648,7 +650,10 @@ include $(BUILD_SHARED_LIBRARY)
 include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
-#include $(BASE_PATH)/gm/Android.mk
+include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk
+
+# diamond-master (one test to rule them all)
+include $(BASE_PATH)/dm/Android.mk
