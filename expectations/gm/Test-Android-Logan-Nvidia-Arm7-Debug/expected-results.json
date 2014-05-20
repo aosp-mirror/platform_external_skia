@@ -4513,10 +4513,10 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          1968311162567272920
+          8744019120027344709
         ]
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "dashing3_msaa16.png": {
       "allowed-digests": [
@@ -4558,10 +4558,10 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          11137490508568328458
+          484770861362799750
         ]
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "dashing_msaa16.png": {
       "allowed-digests": [
@@ -9931,7 +9931,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15881700783330850304
+          10380483174533663495
         ]
       ], 
       "reviewed-by-human": true
@@ -9940,7 +9940,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          16068130794510825896
+          14694612130825938684
         ]
       ], 
       "reviewed-by-human": true
@@ -9949,7 +9949,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15881700783330850304
+          10380483174533663495
         ]
       ], 
       "reviewed-by-human": true

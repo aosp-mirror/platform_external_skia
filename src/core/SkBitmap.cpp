@@ -315,7 +315,14 @@ SkPixelRef* SkBitmap::setPixelRef(SkPixelRef* pr, int dx, int dy) {
             const SkImageInfo& prInfo = pr->info();
             SkASSERT(info.fWidth <= prInfo.fWidth);
             SkASSERT(info.fHeight <= prInfo.fHeight);
-            SkASSERT(info.fColorType == prInfo.fColorType);
+            // We can't always assert that the two colortypes are the same, since ganesh is free
+            // to change the 32bit swizzles as needed (e.g. RGBA <--> BGRA), so we have a softer
+            // check.
+            //
+            // TODO: perhaps setPixelRef should just overwrite the values in the the bitmap anyway.
+            if (info.fColorType != prInfo.fColorType) {
+                SkASSERT(4 == info.bytesPerPixel() && 4 == prInfo.bytesPerPixel());
+            }
             switch (prInfo.fAlphaType) {
                 case kIgnore_SkAlphaType:
                     SkASSERT(fInfo.fAlphaType == kIgnore_SkAlphaType);
@@ -1094,18 +1101,13 @@ bool SkBitmap::deepCopyTo(SkBitmap* dst) const {
     // If we have a PixelRef, and it supports deep copy, use it.
     // Currently supported only by texture-backed bitmaps.
     if (fPixelRef) {
-        SkPixelRef* pixelRef = fPixelRef->deepCopy();
-        if (pixelRef) {
-            // Since there is no subset to pass to deepCopy, and deepCopy
-            // succeeded, the new pixel ref must be identical.
-            SkASSERT(fPixelRef->info() == pixelRef->info());
+        SkAutoTUnref<SkPixelRef> pixelRef(fPixelRef->deepCopy());
+        if (pixelRef.get()) {
             pixelRef->cloneGenID(*fPixelRef);
-
-            SkImageInfo info = fInfo;
-            if (!dst->setConfig(info, fRowBytes)) {
+            if (!dst->setConfig(pixelRef->info(), fRowBytes)) {
                 return false;
             }
-            dst->setPixelRef(pixelRef, fPixelRefOrigin)->unref();
+            dst->setPixelRef(pixelRef, fPixelRefOrigin);
             return true;
         }
     }

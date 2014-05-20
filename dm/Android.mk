@@ -78,6 +78,7 @@ LOCAL_SRC_FILES := \
 	../bench/Matrix44Bench.cpp \
 	../bench/MatrixBench.cpp \
 	../bench/MatrixConvolutionBench.cpp \
+	../bench/MemcpyBench.cpp \
 	../bench/MemoryBench.cpp \
 	../bench/MemsetBench.cpp \
 	../bench/MergeBench.cpp \

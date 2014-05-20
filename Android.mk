@@ -594,6 +594,10 @@ LOCAL_CFLAGS_arm += \
 
 endif
 
+LOCAL_CFLAGS_x86 += \
+	-msse2 \
+	-mfpmath=sse
+
 LOCAL_SRC_FILES_x86 += \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
@@ -605,6 +609,10 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
+
+LOCAL_CFLAGS_x86_64 += \
+	-msse2 \
+	-mfpmath=sse
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/opts_check_x86.cpp \
