@@ -70,6 +70,7 @@ LOCAL_SRC_FILES := \
 	drawlooper.cpp \
 	dropshadowimagefilter.cpp \
 	drrect.cpp \
+	etc1bitmap.cpp \
 	extractbitmap.cpp \
 	emptypath.cpp \
 	fatpathfill.cpp \

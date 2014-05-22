@@ -148,6 +148,7 @@ LOCAL_SRC_FILES := \
 	../gm/drawlooper.cpp \
 	../gm/dropshadowimagefilter.cpp \
 	../gm/drrect.cpp \
+	../gm/etc1bitmap.cpp \
 	../gm/extractbitmap.cpp \
 	../gm/emptypath.cpp \
 	../gm/fatpathfill.cpp \
