@@ -387,7 +387,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
-	src/utils/SkUnitMappers.cpp \
 	src/fonts/SkGScalerContext.cpp \
 	src/utils/android/ashmem.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
