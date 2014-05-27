@@ -77,10 +77,11 @@ private:
     const char* fTimeFormat;
 };
 
+#ifdef SK_BUILD_JSON_WRITER
 /**
  * This ResultsWriter handles writing out the results in JSON.
  *
- * The output looks like:
+ * The output looks like (except compressed to a single line):
  *
  *  {
  *   "options" : {
@@ -89,15 +90,37 @@ private:
  *      ...
  *      "system" : "UNIX"
  *   },
- *   "results" : {
- *      "Xfermode_Luminosity_640_480" : {
- *         "565" : {
+ *   "results" : [
+ *      {
+ *      "name" : "Xfermode_Luminosity_640_480",
+ *      "results" : [
+ *         {
+ *            "name": "565",
  *            "cmsecs" : 143.188128906250,
  *            "msecs" : 143.835957031250
  *         },
  *         ...
  */
 class JSONResultsWriter : public ResultsWriter {
+private:
+    Json::Value* find_named_node(Json::Value* root, const char name[]) {
+        Json::Value* search_results = NULL;
+        for(Json::Value::iterator iter = root->begin();
+                iter!= root->end(); ++iter) {
+            if(SkString(name).equals((*iter)["name"].asCString())) {
+                search_results = &(*iter);
+                break;
+            }
+        }
+
+        if(search_results != NULL) {
+            return search_results;
+        } else {
+            Json::Value* new_val = &(root->append(Json::Value()));
+            (*new_val)["name"] = name;
+            return new_val;
+        }
+    }
 public:
     explicit JSONResultsWriter(const char filename[])
         : fFilename(filename)
@@ -110,11 +133,17 @@ public:
         fRoot["options"][name] = value;
     }
     virtual void bench(const char name[], int32_t x, int32_t y) {
-        fBench = &fResults[SkStringPrintf( "%s_%d_%d", name, x, y).c_str()];
+        SkString sk_name(name);
+        sk_name.append("_");
+        sk_name.appendS32(x);
+        sk_name.append("_");
+        sk_name.appendS32(y);
+        Json::Value* bench_node = find_named_node(&fResults, sk_name.c_str());
+        fBench = &(*bench_node)["results"];
     }
     virtual void config(const char name[]) {
         SkASSERT(NULL != fBench);
-        fConfig = &(*fBench)[name];
+        fConfig = find_named_node(fBench, name);
     }
     virtual void timer(const char name[], double ms) {
         SkASSERT(NULL != fConfig);
@@ -122,10 +151,11 @@ public:
     }
     virtual void end() {
         SkFILEWStream stream(fFilename.c_str());
-        stream.writeText(fRoot.toStyledString().c_str());
+        stream.writeText(Json::FastWriter().write(fRoot).c_str());
         stream.flush();
     }
 private:
+
     SkString fFilename;
     Json::Value fRoot;
     Json::Value& fResults;
@@ -133,6 +163,7 @@ private:
     Json::Value* fConfig;
 };
 
+#endif // SK_BUILD_JSON_WRITER
 /**
  * This ResultsWriter writes out to multiple ResultsWriters.
  */

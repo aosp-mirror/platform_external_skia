@@ -8,6 +8,7 @@
 #include "SkGpuDevice.h"
 
 #include "effects/GrBicubicEffect.h"
+#include "effects/GrDashingEffect.h"
 #include "effects/GrTextureDomain.h"
 #include "effects/GrSimpleTextureEffect.h"
 
@@ -20,7 +21,6 @@
 #include "SkGrTexturePixelRef.h"
 
 #include "SkBounder.h"
-#include "SkColorFilter.h"
 #include "SkDeviceImageFilterProxy.h"
 #include "SkDrawProcs.h"
 #include "SkGlyphCache.h"
@@ -377,119 +377,6 @@ SK_COMPILE_ASSERT(SkShader::kTwoPointConical_BitmapType == 5,
 SK_COMPILE_ASSERT(SkShader::kLinear_BitmapType == 6, shader_type_mismatch);
 SK_COMPILE_ASSERT(SkShader::kLast_BitmapType == 6, shader_type_mismatch);
 
-namespace {
-
-// converts a SkPaint to a GrPaint, ignoring the skPaint's shader
-// justAlpha indicates that skPaint's alpha should be used rather than the color
-// Callers may subsequently modify the GrPaint. Setting constantColor indicates
-// that the final paint will draw the same color at every pixel. This allows
-// an optimization where the the color filter can be applied to the skPaint's
-// color once while converting to GrPaint and then ignored.
-inline bool skPaint2GrPaintNoShader(SkGpuDevice* dev,
-                                    const SkPaint& skPaint,
-                                    bool justAlpha,
-                                    bool constantColor,
-                                    GrPaint* grPaint) {
-
-    grPaint->setDither(skPaint.isDither());
-    grPaint->setAntiAlias(skPaint.isAntiAlias());
-
-    SkXfermode::Coeff sm;
-    SkXfermode::Coeff dm;
-
-    SkXfermode* mode = skPaint.getXfermode();
-    GrEffectRef* xferEffect = NULL;
-    if (SkXfermode::AsNewEffectOrCoeff(mode, &xferEffect, &sm, &dm)) {
-        if (NULL != xferEffect) {
-            grPaint->addColorEffect(xferEffect)->unref();
-            sm = SkXfermode::kOne_Coeff;
-            dm = SkXfermode::kZero_Coeff;
-        }
-    } else {
-        //SkDEBUGCODE(SkDebugf("Unsupported xfer mode.\n");)
-#if 0
-        return false;
-#else
-        // Fall back to src-over
-        sm = SkXfermode::kOne_Coeff;
-        dm = SkXfermode::kISA_Coeff;
-#endif
-    }
-    grPaint->setBlendFunc(sk_blend_to_grblend(sm), sk_blend_to_grblend(dm));
-
-    if (justAlpha) {
-        uint8_t alpha = skPaint.getAlpha();
-        grPaint->setColor(GrColorPackRGBA(alpha, alpha, alpha, alpha));
-        // justAlpha is currently set to true only if there is a texture,
-        // so constantColor should not also be true.
-        SkASSERT(!constantColor);
-    } else {
-        grPaint->setColor(SkColor2GrColor(skPaint.getColor()));
-    }
-
-    SkColorFilter* colorFilter = skPaint.getColorFilter();
-    if (NULL != colorFilter) {
-        // if the source color is a constant then apply the filter here once rather than per pixel
-        // in a shader.
-        if (constantColor) {
-            SkColor filtered = colorFilter->filterColor(skPaint.getColor());
-            grPaint->setColor(SkColor2GrColor(filtered));
-        } else {
-            SkAutoTUnref<GrEffectRef> effect(colorFilter->asNewEffect(dev->context()));
-            if (NULL != effect.get()) {
-                grPaint->addColorEffect(effect);
-            }
-        }
-    }
-
-    return true;
-}
-
-// This function is similar to skPaint2GrPaintNoShader but also converts
-// skPaint's shader to a GrTexture/GrEffectStage if possible. The texture to
-// be used is set on grPaint and returned in param act. constantColor has the
-// same meaning as in skPaint2GrPaintNoShader.
-inline bool skPaint2GrPaintShader(SkGpuDevice* dev,
-                                  const SkPaint& skPaint,
-                                  bool constantColor,
-                                  GrPaint* grPaint) {
-    SkShader* shader = skPaint.getShader();
-    if (NULL == shader) {
-        return skPaint2GrPaintNoShader(dev, skPaint, false, constantColor, grPaint);
-    }
-
-    // SkShader::asNewEffect() may do offscreen rendering. Setup default drawing state and require
-    // the shader to set a render target .
-    GrContext::AutoWideOpenIdentityDraw awo(dev->context(), NULL);
-
-    // setup the shader as the first color effect on the paint
-    SkAutoTUnref<GrEffectRef> effect(shader->asNewEffect(dev->context(), skPaint, NULL));
-    if (NULL != effect.get()) {
-        grPaint->addColorEffect(effect);
-        // Now setup the rest of the paint.
-        return skPaint2GrPaintNoShader(dev, skPaint, true, false, grPaint);
-    } else {
-        // We still don't have SkColorShader::asNewEffect() implemented.
-        SkShader::GradientInfo info;
-        SkColor                color;
-
-        info.fColors = &color;
-        info.fColorOffsets = NULL;
-        info.fColorCount = 1;
-        if (SkShader::kColor_GradientType == shader->asAGradient(&info)) {
-            SkPaint copy(skPaint);
-            copy.setShader(NULL);
-            // modulate the paint alpha by the shader's solid color alpha
-            U8CPU newA = SkMulDiv255Round(SkColorGetA(color), copy.getAlpha());
-            copy.setColor(SkColorSetA(color, newA));
-            return skPaint2GrPaintNoShader(dev, copy, false, constantColor, grPaint);
-        } else {
-            return false;
-        }
-    }
-}
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 SkBitmap::Config SkGpuDevice::config() const {
@@ -511,9 +398,7 @@ void SkGpuDevice::drawPaint(const SkDraw& draw, const SkPaint& paint) {
     CHECK_SHOULD_DRAW(draw, false);
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     fContext->drawPaint(grPaint);
 }
@@ -535,6 +420,12 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
         return;
     }
 
+    if (paint.getPathEffect() && 2 == count && SkCanvas::kLines_PointMode == mode) {
+        if (GrDashingEffect::DrawDashLine(pts, paint, this->context())) {
+            return;
+        }
+    }
+
     // we only handle hairlines and paints without path effects or mask filters,
     // else we let the SkDraw call our drawPath()
     if (width > 0 || paint.getPathEffect() || paint.getMaskFilter()) {
@@ -543,9 +434,7 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
     }
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     fContext->drawVertices(grPaint,
                            gPointMode2PrimtiveType[mode],
@@ -602,9 +491,7 @@ void SkGpuDevice::drawRect(const SkDraw& draw, const SkRect& rect,
     }
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     if (!doStroke) {
         fContext->drawRect(grPaint, rect);
@@ -622,9 +509,7 @@ void SkGpuDevice::drawRRect(const SkDraw& draw, const SkRRect& rect,
     CHECK_SHOULD_DRAW(draw, false);
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     SkStrokeRec stroke(paint);
     if (paint.getMaskFilter()) {
@@ -678,9 +563,7 @@ void SkGpuDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
         CHECK_SHOULD_DRAW(draw, false);
 
         GrPaint grPaint;
-        if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
         if (NULL == paint.getMaskFilter() && NULL == paint.getPathEffect()) {
             fContext->drawDRRect(grPaint, outer, inner);
@@ -718,9 +601,7 @@ void SkGpuDevice::drawOval(const SkDraw& draw, const SkRect& oval,
     }
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
     SkStrokeRec stroke(paint);
 
     fContext->drawOval(grPaint, oval, stroke);
@@ -871,9 +752,7 @@ void SkGpuDevice::drawPath(const SkDraw& draw, const SkPath& origSrcPath,
     CHECK_SHOULD_DRAW(draw, false);
 
     GrPaint grPaint;
-    if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
     // If we have a prematrix, apply it to the path, optimizing for the case
     // where the original path can in fact be modified in place (even though
@@ -1291,21 +1170,17 @@ void SkGpuDevice::drawBitmapCommon(const SkDraw& draw,
     SkPaint::FilterLevel paintFilterLevel = paint.getFilterLevel();
     GrTextureParams::FilterMode textureFilterMode;
 
-    int tileFilterPad;
     bool doBicubic = false;
 
     switch(paintFilterLevel) {
         case SkPaint::kNone_FilterLevel:
-            tileFilterPad = 0;
             textureFilterMode = GrTextureParams::kNone_FilterMode;
             break;
         case SkPaint::kLow_FilterLevel:
-            tileFilterPad = 1;
             textureFilterMode = GrTextureParams::kBilerp_FilterMode;
             break;
         case SkPaint::kMedium_FilterLevel:
-            tileFilterPad = 1;
-            if (fContext->getMatrix().getMinStretch() < SK_Scalar1) {
+            if (fContext->getMatrix().getMinScale() < SK_Scalar1) {
                 textureFilterMode = GrTextureParams::kMipMap_FilterMode;
             } else {
                 // Don't trigger MIP level generation unnecessarily.
@@ -1314,26 +1189,26 @@ void SkGpuDevice::drawBitmapCommon(const SkDraw& draw,
             break;
         case SkPaint::kHigh_FilterLevel:
             // Minification can look bad with the bicubic effect.
-            if (fContext->getMatrix().getMinStretch() >= SK_Scalar1) {
-                // We will install an effect that does the filtering in the shader.
-                textureFilterMode = GrTextureParams::kNone_FilterMode;
-                tileFilterPad = GrBicubicEffect::kFilterTexelPad;
-                doBicubic = true;
-            } else {
-                textureFilterMode = GrTextureParams::kMipMap_FilterMode;
-                tileFilterPad = 1;
-            }
+            doBicubic =
+                GrBicubicEffect::ShouldUseBicubic(fContext->getMatrix(), &textureFilterMode);
             break;
         default:
             SkErrorInternals::SetError( kInvalidPaint_SkError,
                                         "Sorry, I don't understand the filtering "
                                         "mode you asked for.  Falling back to "
                                         "MIPMaps.");
-            tileFilterPad = 1;
             textureFilterMode = GrTextureParams::kMipMap_FilterMode;
             break;
     }
 
+    int tileFilterPad;
+    if (doBicubic) {
+        tileFilterPad = GrBicubicEffect::kFilterTexelPad;
+    } else if (GrTextureParams::kNone_FilterMode == textureFilterMode) {
+        tileFilterPad = 0;
+    } else {
+        tileFilterPad = 1;
+    }
     params.setFilterMode(textureFilterMode);
 
     int maxTileSize = fContext->getMaxTextureSize() - 2 * tileFilterPad;
@@ -1521,9 +1396,7 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
     GrPaint grPaint;
     grPaint.addColorEffect(effect);
     bool alphaOnly = !(SkBitmap::kA8_Config == bitmap.config());
-    if (!skPaint2GrPaintNoShader(this, paint, alphaOnly, false, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintNoShader(this->context(), paint, alphaOnly, false, &grPaint);
 
     fContext->drawRectToRect(grPaint, dstRect, paintRect, NULL);
 }
@@ -1589,9 +1462,7 @@ void SkGpuDevice::drawSprite(const SkDraw& draw, const SkBitmap& bitmap,
     GrPaint grPaint;
     grPaint.addColorTextureEffect(texture, SkMatrix::I());
 
-    if(!skPaint2GrPaintNoShader(this, paint, true, false, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintNoShader(this->context(), paint, true, false, &grPaint);
 
     fContext->drawRectToRect(grPaint,
                              SkRect::MakeXYWH(SkIntToScalar(left),
@@ -1699,9 +1570,7 @@ void SkGpuDevice::drawDevice(const SkDraw& draw, SkBaseDevice* device,
     GrPaint grPaint;
     grPaint.addColorTextureEffect(devTex, SkMatrix::I());
 
-    if (!skPaint2GrPaintNoShader(this, paint, true, false, &grPaint)) {
-        return;
-    }
+    SkPaint2GrPaintNoShader(this->context(), paint, true, false, &grPaint);
 
     SkRect dstRect = SkRect::MakeXYWH(SkIntToScalar(x),
                                       SkIntToScalar(y),
@@ -1762,13 +1631,9 @@ void SkGpuDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,
     GrPaint grPaint;
     // we ignore the shader if texs is null.
     if (NULL == texs) {
-        if (!skPaint2GrPaintNoShader(this, paint, false, NULL == colors, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintNoShader(this->context(), paint, false, NULL == colors, &grPaint);
     } else {
-        if (!skPaint2GrPaintShader(this, paint, NULL == colors, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, NULL == colors, &grPaint);
     }
 
     if (NULL != xmode && NULL != texs && NULL != colors) {
@@ -1808,18 +1673,14 @@ void SkGpuDevice::drawText(const SkDraw& draw, const void* text,
 
     if (fMainTextContext->canDraw(paint)) {
         GrPaint grPaint;
-        if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
         SkDEBUGCODE(this->validate();)
 
         fMainTextContext->drawText(grPaint, paint, (const char *)text, byteLength, x, y);
     } else if (fFallbackTextContext && fFallbackTextContext->canDraw(paint)) {
         GrPaint grPaint;
-        if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
         SkDEBUGCODE(this->validate();)
 
@@ -1838,9 +1699,7 @@ void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text,
 
     if (fMainTextContext->canDraw(paint)) {
         GrPaint grPaint;
-        if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
         SkDEBUGCODE(this->validate();)
 
@@ -1848,9 +1707,7 @@ void SkGpuDevice::drawPosText(const SkDraw& draw, const void* text,
                                       constY, scalarsPerPos);
     } else if (fFallbackTextContext && fFallbackTextContext->canDraw(paint)) {
         GrPaint grPaint;
-        if (!skPaint2GrPaintShader(this, paint, true, &grPaint)) {
-            return;
-        }
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
 
         SkDEBUGCODE(this->validate();)
 

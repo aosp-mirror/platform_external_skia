@@ -298,6 +298,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
 	src/images/SkImageDecoder_FactoryRegistrar.cpp \
 	src/images/SkImageDecoder_wbmp.cpp \
+	src/images/SkImageDecoder_pkm.cpp \
 	src/images/SkImageDecoder_libbmp.cpp \
 	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libico.cpp \
@@ -387,7 +388,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
-	src/utils/SkUnitMappers.cpp \
 	src/fonts/SkGScalerContext.cpp \
 	src/utils/android/ashmem.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
@@ -444,6 +444,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
+	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
@@ -496,6 +497,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
+	third_party/etc1/etc1.cpp \
 	src/core/SkFlate.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -537,6 +539,7 @@ LOCAL_C_INCLUDES := \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/images \
+	$(LOCAL_PATH)/third_party/etc1 \
 	external/webp/include \
 	external/giflib \
 	external/libpng \
@@ -594,6 +597,10 @@ LOCAL_CFLAGS_arm += \
 
 endif
 
+LOCAL_CFLAGS_x86 += \
+	-msse2 \
+	-mfpmath=sse
+
 LOCAL_SRC_FILES_x86 += \
 	src/opts/opts_check_x86.cpp \
 	src/opts/SkBitmapProcState_opts_SSE2.cpp \
@@ -605,6 +612,10 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
+
+LOCAL_CFLAGS_x86_64 += \
+	-msse2 \
+	-mfpmath=sse
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/opts_check_x86.cpp \
@@ -631,13 +642,19 @@ LOCAL_CFLAGS_arm64 += \
 	-ffp-contract=off
 
 LOCAL_SRC_FILES_arm64 += \
-	src/opts/SkBitmapProcState_opts_none.cpp \
-	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBitmapProcState_arm_neon.cpp \
+	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
+	src/opts/SkBitmapProcState_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm.cpp \
+	src/opts/SkBlitMask_opts_arm_neon.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
-	src/opts/SkBlurImage_opts_none.cpp \
-	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkBlurImage_opts_arm.cpp \
+	src/opts/SkBlurImage_opts_neon.cpp \
+	src/opts/SkMorphology_opts_arm.cpp \
+	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkUtils_opts_none.cpp \
-	src/opts/SkXfermode_opts_none.cpp
+	src/opts/SkXfermode_opts_arm.cpp \
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 include external/stlport/libstlport.mk
 include $(BUILD_SHARED_LIBRARY)
@@ -647,10 +664,13 @@ include $(BUILD_SHARED_LIBRARY)
 #
 
 # benchmark (timings)
-#include $(BASE_PATH)/bench/Android.mk
+include $(BASE_PATH)/bench/Android.mk
 
 # golden-master (fidelity / regression test)
-#include $(BASE_PATH)/gm/Android.mk
+include $(BASE_PATH)/gm/Android.mk
 
 # unit-tests
 include $(BASE_PATH)/tests/Android.mk
+
+# diamond-master (one test to rule them all)
+include $(BASE_PATH)/dm/Android.mk

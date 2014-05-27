@@ -20,13 +20,16 @@ SkPicture* RecordPicture(skiagm::GM* gm,
                          uint32_t recordFlags = 0,
                          SkBBHFactory* factory = NULL);
 
-// Prepare bitmap to have gm or bench draw into it with this config.
-// TODO(mtklein): make SkBenchmark::getSize()/GM::getISize() const.
-void SetupBitmap(const SkColorType, skiagm::GM* gm, SkBitmap* bitmap);
-void SetupBitmap(const SkColorType, SkBenchmark* bench, SkBitmap* bitmap);
+// Allocate an empty bitmap with this size and depth.
+void AllocatePixels(SkColorType, int w, int h, SkBitmap* bitmap);
+// Allocate an empty bitmap the same size and depth as reference.
+void AllocatePixels(const SkBitmap& reference, SkBitmap* bitmap);
 
 // Draw picture to bitmap.
 void DrawPicture(SkPicture* picture, SkBitmap* bitmap);
+
+// What is the maximum component difference in these bitmaps?
+unsigned MaxComponentDifference(const SkBitmap& a, const SkBitmap& b);
 
 // Are these identical bitmaps?
 bool BitmapsEqual(const SkBitmap& a, const SkBitmap& b);

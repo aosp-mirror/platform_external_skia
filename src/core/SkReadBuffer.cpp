@@ -25,7 +25,7 @@ static uint32_t default_flags() {
 
 SkReadBuffer::SkReadBuffer() {
     fFlags = default_flags();
-    fPictureVersion = 0;
+    fVersion = 0;
     fMemoryPtr = NULL;
 
     fBitmapStorage = NULL;
@@ -43,7 +43,7 @@ SkReadBuffer::SkReadBuffer() {
 
 SkReadBuffer::SkReadBuffer(const void* data, size_t size) {
     fFlags = default_flags();
-    fPictureVersion = 0;
+    fVersion = 0;
     fReader.setMemory(data, size);
     fMemoryPtr = NULL;
 
@@ -62,7 +62,7 @@ SkReadBuffer::SkReadBuffer(const void* data, size_t size) {
 
 SkReadBuffer::SkReadBuffer(SkStream* stream) {
     fFlags = default_flags();
-    fPictureVersion = 0;
+    fVersion = 0;
     const size_t length = stream->getLength();
     fMemoryPtr = sk_malloc_throw(length);
     stream->read(fMemoryPtr, length);
@@ -334,4 +334,26 @@ SkFlattenable* SkReadBuffer::readFlattenable(SkFlattenable::Type ft) {
         fReader.skip(sizeRecorded);
     }
     return obj;
+}
+
+/**
+ *  Needs to follow the same pattern as readFlattenable(), but explicitly skip whatever data
+ *  has been written.
+ */
+void SkReadBuffer::skipFlattenable() {
+    if (fFactoryCount > 0) {
+        if (0 == fReader.readU32()) {
+            return;
+        }
+    } else if (fFactoryTDArray) {
+        if (0 == fReader.readU32()) {
+            return;
+        }
+    } else {
+        if (NULL == this->readFunctionPtr()) {
+            return;
+        }
+    }
+    uint32_t sizeRecorded = fReader.readU32();
+    fReader.skip(sizeRecorded);
 }

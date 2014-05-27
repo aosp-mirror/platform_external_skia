@@ -38,6 +38,7 @@
             '../dm/DMReplayTask.cpp',
             '../dm/DMReporter.cpp',
             '../dm/DMSerializeTask.cpp',
+            '../dm/DMSKPTask.cpp',
             '../dm/DMTask.cpp',
             '../dm/DMTaskRunner.cpp',
             '../dm/DMTestTask.cpp',
@@ -57,6 +58,16 @@
             'jsoncpp.gyp:jsoncpp',
             'gputest.gyp:skgputest',
             'record.gyp:*',
+        ],
+        'conditions': [
+          ['skia_android_framework',
+            {
+              'libraries': [
+                '-lskia',
+                '-lcutils',
+              ],
+            },
+          ],
         ],
     }]
 }

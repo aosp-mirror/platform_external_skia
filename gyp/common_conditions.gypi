@@ -14,6 +14,14 @@
       ],
     }],
 
+    # As of M35, Chrome requires SSE2 on x86 (and SSSE3 on Mac).
+    [ 'skia_arch_type == "x86"', {
+      'cflags': [
+        '-msse2',
+        '-mfpmath=sse',
+      ],
+    }],
+
     [ 'skia_os == "win"',
       {
         'defines': [
@@ -305,7 +313,6 @@
         'SK_SUPPORT_DEPRECATED_RECORD_FLAGS',
         'SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES',
         'SK_SUPPORT_LEGACY_PICTURE_HEADERS',
-        'SK_SUPPORT_LEGACY_BLURDRAWLOOPERCONSTRUCTORS',
         'SK_SUPPORT_LEGACY_BLURMASKFILTER_STYLE',
         # Needed until we fix skbug.com/2440.
         'SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG',
@@ -427,6 +434,9 @@
             'cflags': [
               # Extra warnings we like but that only Clang knows about.
               '-Wstring-conversion',
+            ],
+            'cflags!': [
+                '-mfpmath=sse',  # Clang doesn't need to be told this, and sometimes gets confused.
             ],
           }],
           [ 'skia_keep_frame_pointer', {
@@ -637,6 +647,12 @@
         'SK_SUPPORT_LEGACY_COMPATIBLEDEVICE_CONFIG=1',
         'SK_SUPPORT_LEGACY_GETTOTALCLIP=1',
       ],
+    }],
+
+    [ 'skia_build_json_writer', {
+      'defines': [
+        'SK_BUILD_JSON_WRITER',
+      ]
     }],
 
   ], # end 'conditions'

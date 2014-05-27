@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
@@ -24,7 +23,6 @@
 #include "SkReader32.h"
 #include "SkRefCnt.h"
 #include "SkShader.h"
-#include "SkUnitMapper.h"
 #include "SkWriteBuffer.h"
 #include "SkXfermode.h"
 
@@ -41,13 +39,26 @@ public:
     SkReadBuffer(SkStream* stream);
     virtual ~SkReadBuffer();
 
-    /** Return the version of the serialized picture this buffer holds, or 0 if unset. */
-    int pictureVersion() const { return fPictureVersion; }
+    enum Version {
+        kFilterLevelIsEnum_Version         = 23,
+        kGradientFlippedFlag_Version       = 24,
+        kDashWritesPhaseIntervals_Version  = 25,
+        kColorShaderNoBool_Version         = 26,
+        kNoUnitMappers_Version             = 27,
+    };
+
+    /**
+     *  Returns true IFF the version is older than the specified version.
+     */
+    bool isVersionLT(Version targetVersion) const {
+        SkASSERT(targetVersion > 0);
+        return fVersion > 0 && fVersion < targetVersion;
+    }
 
     /** This may be called at most once; most clients of SkReadBuffer should not mess with it. */
-    void setPictureVersion(int version) {
-        SkASSERT(0 == fPictureVersion || version == fPictureVersion);
-        fPictureVersion = version;
+    void setVersion(int version) {
+        SkASSERT(0 == fVersion || version == fVersion);
+        fVersion = version;
     }
 
     enum Flags {
@@ -110,9 +121,13 @@ public:
     SkPixelRef*    readPixelRef()    { return this->readFlattenable<SkPixelRef>(); }
     SkRasterizer*  readRasterizer()  { return this->readFlattenable<SkRasterizer>(); }
     SkShader*      readShader()      { return this->readFlattenable<SkShader>(); }
-    SkUnitMapper*  readUnitMapper()  { return this->readFlattenable<SkUnitMapper>(); }
     SkXfermode*    readXfermode()    { return this->readFlattenable<SkXfermode>(); }
 
+    /**
+     *  Like readFlattenable() but explicitly just skips the data that was written for the
+     *  flattenable (or the sentinel that there wasn't one).
+     */
+    virtual void skipFlattenable();
 
     // binary data and arrays
     virtual bool readByteArray(void* value, size_t size);
@@ -188,7 +203,7 @@ private:
     bool readArray(void* value, size_t size, size_t elementSize);
 
     uint32_t fFlags;
-    int fPictureVersion;
+    int fVersion;
 
     void* fMemoryPtr;
 

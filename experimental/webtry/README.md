@@ -85,3 +85,10 @@ Do this step only once, but only after running webtry_setup.sh the first time
 
     sudo debootstrap --variant=minbase wheezy /srv/chroot/webtry
 
+
+Third Party Code
+----------------
+
+  * res/js/polyfill.js - Various JS polyfill libraries. To rebuild or update
+    see polyfill/README.md.
+

@@ -14,12 +14,12 @@ namespace DM {
 ReplayTask::ReplayTask(const Task& parent,
                        skiagm::GM* gm,
                        SkBitmap reference,
-                       bool useRTree)
+                       Mode mode)
     : CpuTask(parent)
-    , fName(UnderJoin(parent.name().c_str(), useRTree ? "rtree" : "replay"))
+    , fUseRTree(mode == kRTree_Mode)
+    , fName(UnderJoin(parent.name().c_str(), fUseRTree ? "rtree" : "replay"))
     , fGM(gm)
     , fReference(reference)
-    , fUseRTree(useRTree)
     {}
 
 void ReplayTask::draw() {
@@ -30,7 +30,7 @@ void ReplayTask::draw() {
     SkAutoTUnref<SkPicture> recorded(RecordPicture(fGM.get(), 0, factory.get()));
 
     SkBitmap bitmap;
-    SetupBitmap(fReference.colorType(), fGM.get(), &bitmap);
+    AllocatePixels(fReference, &bitmap);
     DrawPicture(recorded, &bitmap);
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();

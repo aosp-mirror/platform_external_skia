@@ -17,7 +17,8 @@ void SkRecordOptimize(SkRecord* record) {
     // TODO(mtklein): fuse independent optimizations to reduce number of passes?
     SkRecordNoopCulls(record);
     SkRecordNoopSaveRestores(record);
-    SkRecordNoopSaveLayerDrawRestores(record);
+    // TODO(mtklein): figure out why we draw differently and reenable
+    //SkRecordNoopSaveLayerDrawRestores(record);
 
     SkRecordAnnotateCullingPairs(record);
     SkRecordReduceDrawPosTextStrength(record);  // Helpful to run this before BoundDrawPosTextH.
@@ -130,7 +131,8 @@ struct SaveLayerDrawRestoreNooper {
 
         const uint32_t layerColor = layerPaint->getColor();
         const uint32_t  drawColor =  drawPaint->getColor();
-        if (!IsOnlyAlpha(layerColor) || !IsOpaque(drawColor) || HasAnyEffect(*layerPaint)) {
+        if (!IsOnlyAlpha(layerColor)  || !IsOpaque(drawColor) ||
+            HasAnyEffect(*layerPaint) || HasAnyEffect(*drawPaint)) {
             // Too fancy for us.  Actually, as long as layerColor is just an alpha
             // we can blend it into drawColor's alpha; drawColor doesn't strictly have to be opaque.
             return false;

@@ -534,7 +534,7 @@ bool SkPicturePlayback::parseStreamTag(SkPicture* picture,
 
             SkReadBuffer buffer(storage.get(), size);
             buffer.setFlags(pictInfoFlagsToReadBufferFlags(fInfo.fFlags));
-            buffer.setPictureVersion(fInfo.fVersion);
+            buffer.setVersion(fInfo.fVersion);
 
             fFactoryPlayback->setupBuffer(buffer);
             fTFPlayback.setupBuffer(buffer);
@@ -634,7 +634,7 @@ SkPicturePlayback* SkPicturePlayback::CreateFromBuffer(SkPicture* picture,
                                                        SkReadBuffer& buffer,
                                                        const SkPictInfo& info) {
     SkAutoTDelete<SkPicturePlayback> playback(SkNEW_ARGS(SkPicturePlayback, (picture, info)));
-    buffer.setPictureVersion(info.fVersion);
+    buffer.setVersion(info.fVersion);
 
     if (!playback->parseBuffer(picture, buffer)) {
         return NULL;
@@ -859,7 +859,8 @@ void SkPicturePlayback::draw(SkCanvas& canvas, SkDrawPictureCallback* callback) 
 
     // Record this, so we can concat w/ it if we encounter a setMatrix()
     SkMatrix initialMatrix = canvas.getTotalMatrix();
-    int originalSaveCount = canvas.getSaveCount();
+
+    SkAutoCanvasRestore acr(&canvas, false);
 
 #ifdef SK_BUILD_FOR_ANDROID
     fAbortCurrentPlayback = false;
@@ -871,7 +872,6 @@ void SkPicturePlayback::draw(SkCanvas& canvas, SkDrawPictureCallback* callback) 
 
     while (!reader.eof()) {
         if (callback && callback->abortDrawing()) {
-            canvas.restoreToCount(originalSaveCount);
             return;
         }
 #ifdef SK_BUILD_FOR_ANDROID

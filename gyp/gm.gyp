@@ -52,6 +52,12 @@
         'pdf.gyp:pdf',
       ],
       'conditions': [
+        ['skia_android_framework', {
+          'libraries': [
+            '-lskia',
+            '-lcutils',
+          ],
+        }],
         ['skia_run_pdfviewer_in_gm or skia_poppler_enabled', {
           'sources': [
             '../src/utils/SkPDFRasterizer.cpp',
@@ -70,7 +76,7 @@
         }],
         ['skia_poppler_enabled', {
           'dependencies': [
-            'poppler.gyp:libpoppler-cpp-gpl',
+            'poppler.gyp:*',
           ],
           'defines': [
             'SK_BUILD_POPPLER',

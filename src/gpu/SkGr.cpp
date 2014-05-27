@@ -6,6 +6,7 @@
  */
 
 #include "SkGr.h"
+#include "SkColorFilter.h"
 #include "SkConfig8888.h"
 #include "SkMessageBus.h"
 #include "SkPixelRef.h"
@@ -322,4 +323,119 @@ bool GrPixelConfig2ColorType(GrPixelConfig config, SkColorType* ctOut) {
         *ctOut = ct;
     }
     return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void SkPaint2GrPaintNoShader(GrContext* context, const SkPaint& skPaint, bool justAlpha,
+                             bool constantColor, GrPaint* grPaint) {
+
+    grPaint->setDither(skPaint.isDither());
+    grPaint->setAntiAlias(skPaint.isAntiAlias());
+
+    SkXfermode::Coeff sm;
+    SkXfermode::Coeff dm;
+
+    SkXfermode* mode = skPaint.getXfermode();
+    GrEffectRef* xferEffect = NULL;
+    if (SkXfermode::AsNewEffectOrCoeff(mode, &xferEffect, &sm, &dm)) {
+        if (NULL != xferEffect) {
+            grPaint->addColorEffect(xferEffect)->unref();
+            sm = SkXfermode::kOne_Coeff;
+            dm = SkXfermode::kZero_Coeff;
+        }
+    } else {
+        //SkDEBUGCODE(SkDebugf("Unsupported xfer mode.\n");)
+        // Fall back to src-over
+        sm = SkXfermode::kOne_Coeff;
+        dm = SkXfermode::kISA_Coeff;
+    }
+    grPaint->setBlendFunc(sk_blend_to_grblend(sm), sk_blend_to_grblend(dm));
+
+    if (justAlpha) {
+        uint8_t alpha = skPaint.getAlpha();
+        grPaint->setColor(GrColorPackRGBA(alpha, alpha, alpha, alpha));
+        // justAlpha is currently set to true only if there is a texture,
+        // so constantColor should not also be true.
+        SkASSERT(!constantColor);
+    } else {
+        grPaint->setColor(SkColor2GrColor(skPaint.getColor()));
+    }
+
+    SkColorFilter* colorFilter = skPaint.getColorFilter();
+    if (NULL != colorFilter) {
+        // if the source color is a constant then apply the filter here once rather than per pixel
+        // in a shader.
+        if (constantColor) {
+            SkColor filtered = colorFilter->filterColor(skPaint.getColor());
+            grPaint->setColor(SkColor2GrColor(filtered));
+        } else {
+            SkAutoTUnref<GrEffectRef> effect(colorFilter->asNewEffect(context));
+            if (NULL != effect.get()) {
+                grPaint->addColorEffect(effect);
+            }
+        }
+    }
+}
+
+/**
+ * Unlike GrContext::AutoMatrix, this doesn't require setting a new matrix. GrContext::AutoMatrix
+ * likes to set the new matrix in its constructor because it is usually necessary to simulataneously
+ * update a GrPaint. This AutoMatrix is used while initially setting up GrPaint, however.
+ */
+class AutoMatrix {
+public:
+    AutoMatrix(GrContext* context) {
+        fMatrix = context->getMatrix();
+        fContext = context;
+    }
+    ~AutoMatrix() {
+        SkASSERT(NULL != fContext);
+        fContext->setMatrix(fMatrix);
+    }
+private:
+    GrContext* fContext;
+    SkMatrix fMatrix;
+};
+
+void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
+                           bool constantColor, GrPaint* grPaint) {
+    SkShader* shader = skPaint.getShader();
+    if (NULL == shader) {
+        SkPaint2GrPaintNoShader(context, skPaint, false, constantColor, grPaint);
+        return;
+    }
+
+    // SkShader::asNewEffect() may do offscreen rendering. Save off the current RT, clip, and
+    // matrix. We don't reset the matrix on the context because SkShader::asNewEffect may use
+    // GrContext::getMatrix() to know the transformation from local coords to device space.
+    GrContext::AutoRenderTarget art(context, NULL);
+    GrContext::AutoClip ac(context, GrContext::AutoClip::kWideOpen_InitialClip);
+    AutoMatrix am(context);
+
+    // setup the shader as the first color effect on the paint
+    SkAutoTUnref<GrEffectRef> effect(shader->asNewEffect(context, skPaint, NULL));
+    if (NULL != effect.get()) {
+        grPaint->addColorEffect(effect);
+        // Now setup the rest of the paint.
+        SkPaint2GrPaintNoShader(context, skPaint, true, false, grPaint);
+    } else {
+        // We still don't have SkColorShader::asNewEffect() implemented.
+        SkShader::GradientInfo info;
+        SkColor                color;
+
+        info.fColors = &color;
+        info.fColorOffsets = NULL;
+        info.fColorCount = 1;
+        if (SkShader::kColor_GradientType == shader->asAGradient(&info)) {
+            SkPaint copy(skPaint);
+            copy.setShader(NULL);
+            // modulate the paint alpha by the shader's solid color alpha
+            U8CPU newA = SkMulDiv255Round(SkColorGetA(color), copy.getAlpha());
+            copy.setColor(SkColorSetA(color, newA));
+            SkPaint2GrPaintNoShader(context, copy, false, constantColor, grPaint);
+        } else {
+            SkPaint2GrPaintNoShader(context, skPaint, false, constantColor, grPaint);
+        }
+    }
 }

@@ -6,9 +6,7 @@
  */
 
 #include "SkBitmapDevice.h"
-#if SK_SUPPORT_GPU
 #include "SkBlurImageFilter.h"
-#endif
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkDashPathEffect.h"
@@ -35,6 +33,9 @@
 #include "GrPictureUtils.h"
 #endif
 #include "Test.h"
+
+#include "SkLumaColorFilter.h"
+#include "SkColorFilterImageFilter.h"
 
 static const int gColorScale = 30;
 static const int gColorOffset = 60;
@@ -831,14 +832,8 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
         // TODO: this case will need to be removed once the paint's are immutable
         {
             SkPaint p;
-            SkBitmap bmp;
-            bmp.allocN32Pixels(10, 10);
-            bmp.eraseColor(SK_ColorGREEN);
-            bmp.setAlphaType(kOpaque_SkAlphaType);
-            SkShader* shader = SkShader::CreateBitmapShader(bmp,
-                                    SkShader::kClamp_TileMode, SkShader::kClamp_TileMode);
-            p.setShader(shader)->unref();
-
+            SkAutoTUnref<SkColorFilter> cf(SkLumaColorFilter::Create());
+            p.setImageFilter(SkColorFilterImageFilter::Create(cf.get()))->unref();
             c->saveLayer(NULL, &p);
             c->restore();
         }
@@ -869,7 +864,7 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
         const GPUAccelData::SaveLayerInfo& info1 = gpuData->saveLayerInfo(2);
         const GPUAccelData::SaveLayerInfo& info2 = gpuData->saveLayerInfo(1);
         const GPUAccelData::SaveLayerInfo& info3 = gpuData->saveLayerInfo(3);
-        const GPUAccelData::SaveLayerInfo& info4 = gpuData->saveLayerInfo(4);
+//        const GPUAccelData::SaveLayerInfo& info4 = gpuData->saveLayerInfo(4);
 
         REPORTER_ASSERT(reporter, info0.fValid);
         REPORTER_ASSERT(reporter, kWidth == info0.fSize.fWidth && kHeight == info0.fSize.fHeight);
@@ -901,12 +896,14 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
         REPORTER_ASSERT(reporter, NULL != info3.fPaint);
         REPORTER_ASSERT(reporter, !info3.fIsNested && !info3.fHasNestedLayers);
 
+#if 0 // needs more though for GrGatherCanvas
         REPORTER_ASSERT(reporter, !info4.fValid);                 // paint is/was uncopyable
         REPORTER_ASSERT(reporter, kWidth == info4.fSize.fWidth && kHeight == info4.fSize.fHeight);
         REPORTER_ASSERT(reporter, 0 == info4.fOffset.fX && 0 == info4.fOffset.fY);
         REPORTER_ASSERT(reporter, info4.fCTM.isIdentity());
         REPORTER_ASSERT(reporter, NULL == info4.fPaint);     // paint is/was uncopyable
         REPORTER_ASSERT(reporter, !info4.fIsNested && !info4.fHasNestedLayers);
+#endif
     }
 }
 
@@ -978,6 +975,48 @@ static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
         REPORTER_ASSERT(reporter, testCanvas.getTotalMatrix().isIdentity());
     }
+
+#if defined(SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD) && \
+    defined(SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES)
+    set_canvas_to_save_count_4(&testCanvas);
+
+    // Due to "fake" endRecording, the old SkPicture recording interface
+    // allowed unbalanced saves/restores to leak out. This sub-test checks
+    // that the situation has been remedied.
+    {
+        SkPicture p;
+
+        SkCanvas* canvas = p.beginRecording(100, 100);
+        for (int i = 0; i < 4; ++i) {
+           canvas->save();
+        }
+        SkRect r = SkRect::MakeWH(50, 50);
+        SkPaint paint;
+        canvas->drawRect(r, paint);
+
+        // Copying a mid-recording picture could result in unbalanced saves/restores
+        SkPicture p2(p);
+
+        testCanvas.drawPicture(p2);
+        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
+        set_canvas_to_save_count_4(&testCanvas);
+
+        // Cloning a mid-recording picture could result in unbalanced saves/restores
+        SkAutoTUnref<SkPicture> p3(p.clone());
+        testCanvas.drawPicture(*p3);
+        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
+        set_canvas_to_save_count_4(&testCanvas);
+
+        // Serializing a mid-recording picture could result in unbalanced saves/restores
+        SkDynamicMemoryWStream wStream;
+        p.serialize(&wStream);
+        SkAutoDataUnref data(wStream.copyToData());
+        SkMemoryStream stream(data);
+        SkAutoTUnref<SkPicture> p4(SkPicture::CreateFromStream(&stream, NULL));
+        testCanvas.drawPicture(*p4);
+        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
+    }
+#endif
 }
 
 static void test_peephole() {

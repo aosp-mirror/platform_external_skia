@@ -38,7 +38,7 @@ DRAW(PopCull, popCull());
 DRAW(PushCull, pushCull(r.rect));
 DRAW(Clear, clear(r.color));
 DRAW(Concat, concat(r.matrix));
-DRAW(SetMatrix, setMatrix(r.matrix));
+DRAW(SetMatrix, setMatrix(SkMatrix::Concat(fInitialCTM, r.matrix)));
 
 DRAW(ClipPath, clipPath(r.path, r.op, r.doAA));
 DRAW(ClipRRect, clipRRect(r.rrect, r.op, r.doAA));

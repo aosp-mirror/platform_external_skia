@@ -15,8 +15,8 @@ namespace DM {
 class WriteTask : public CpuTask {
 
 public:
-    WriteTask(const Task& parent,  // WriteTask must be a child Task.  Pass its parent here.
-              SkBitmap bitmap);    // Bitmap to write.
+    WriteTask(const Task& parent,    // WriteTask must be a child Task.  Pass its parent here.
+              SkBitmap bitmap);      // Bitmap to write.
 
     virtual void draw() SK_OVERRIDE;
     virtual bool shouldSkip() const SK_OVERRIDE;
