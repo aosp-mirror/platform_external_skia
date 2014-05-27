@@ -14,7 +14,6 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1
 
 LOCAL_SRC_FILES := \
-	ResultsWriter.cpp \
 	SkBenchLogger.cpp \
 	SkGMBench.cpp \
 	benchmain.cpp \
