@@ -222,7 +222,7 @@
 #define SK_DISABLE_PIXELREF_LOCKCOUNT_BALANCE_CHECK
 #define SkLONGLONG int64_t
 #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
-#define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
+#define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
 #define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
 #define kNative_8888_SkColorType kN32_SkColorType
 #define SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD

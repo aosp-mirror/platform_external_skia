@@ -505,7 +505,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libcutils \
 	libjpeg \
 	libpng \
 	libicuuc \
