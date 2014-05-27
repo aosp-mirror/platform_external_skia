@@ -78,7 +78,6 @@ LOCAL_SRC_FILES := \
 	filltypes.cpp \
 	filltypespersp.cpp \
 	filterbitmap.cpp \
-	filterindiabox.cpp \
 	fontcache.cpp \
 	fontmgr.cpp \
 	fontscaler.cpp \
