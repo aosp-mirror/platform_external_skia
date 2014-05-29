@@ -186,6 +186,7 @@
  */
 //#define SK_ATOMICS_PLATFORM_H "SkAtomics_xxx.h"
 //#define SK_MUTEX_PLATFORM_H "SkMutex_xxx.h"
+//#define SK_BARRIERS_PLATFORM_H "SkBarriers_xxx.h"
 
 #endif
 
