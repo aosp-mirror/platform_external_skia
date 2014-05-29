@@ -123,6 +123,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
+	src/core/SkImageGenerator.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -308,7 +309,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkImageEncoder_argb.cpp \
-	src/images/SkImageGenerator.cpp \
 	src/images/SkImageRef.cpp \
 	src/images/SkImageRefPool.cpp \
 	src/images/SkImageRef_ashmem.cpp \
