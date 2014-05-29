@@ -110,6 +110,7 @@ LOCAL_SRC_FILES := \
 	GifTest.cpp \
 	GpuColorFilterTest.cpp \
 	GpuDrawPathTest.cpp \
+	GpuRectanizerTest.cpp \
 	GrBinHashKeyTest.cpp \
 	GrContextFactoryTest.cpp \
 	GrDrawTargetTest.cpp \

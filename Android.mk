@@ -423,7 +423,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrPictureUtils.cpp \
-	src/gpu/GrRectanizer.cpp \
+	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
