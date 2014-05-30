@@ -101,6 +101,7 @@ LOCAL_SRC_FILES := \
 	FlateTest.cpp \
 	FontHostStreamTest.cpp \
 	FontHostTest.cpp \
+	FontObjTest.cpp \
 	FontMgrTest.cpp \
 	FontNamesTest.cpp \
 	FrontBufferedStreamTest.cpp \
