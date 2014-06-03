@@ -157,7 +157,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkQuadTree.cpp \
-	src/core/SkQuadTreePicture.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
@@ -167,7 +166,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkRegion_path.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
-	src/core/SkRTreePicture.cpp \
 	src/core/SkScaledImageCache.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
@@ -186,7 +184,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkTileGrid.cpp \
-	src/core/SkTileGridPicture.cpp \
 	src/core/SkTLS.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
