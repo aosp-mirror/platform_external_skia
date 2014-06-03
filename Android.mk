@@ -644,7 +644,8 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
-	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlitRow_opts_arm.cpp \
+	src/opts/SkBlitRow_opts_arm_neon.cpp \
 	src/opts/SkBlurImage_opts_arm.cpp \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \
