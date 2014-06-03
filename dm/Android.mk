@@ -484,7 +484,6 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libcutils \
 	libskia \
 	libGLESv2 \
 	libEGL \
