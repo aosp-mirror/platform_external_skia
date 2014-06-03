@@ -18,13 +18,15 @@ LOCAL_SRC_FILES := \
 	DMCpuGMTask.cpp \
 	DMExpectationsTask.cpp \
 	DMGpuGMTask.cpp \
+	DMPDFRasterizeTask.cpp \
+	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
 	DMRecordTask.cpp \
 	DMReplayTask.cpp \
 	DMReporter.cpp \
-	DMSerializeTask.cpp \
 	DMSKPTask.cpp \
+	DMSerializeTask.cpp \
 	DMTask.cpp \
 	DMTaskRunner.cpp \
 	DMTestTask.cpp \
@@ -482,8 +484,8 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
-	libskia \
 	libcutils \
+	libskia \
 	libGLESv2 \
 	libEGL \
 	libz
