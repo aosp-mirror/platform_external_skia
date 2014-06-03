@@ -298,6 +298,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageDecoder_FactoryRegistrar.cpp \
 	src/images/SkImageDecoder_wbmp.cpp \
 	src/images/SkImageDecoder_pkm.cpp \
+	src/images/SkImageDecoder_ktx.cpp \
 	src/images/SkImageDecoder_libbmp.cpp \
 	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libico.cpp \
@@ -497,6 +498,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	third_party/etc1/etc1.cpp \
+	third_party/ktx/ktx.cpp \
 	src/core/SkFlate.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -538,6 +540,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/images \
 	$(LOCAL_PATH)/third_party/etc1 \
+	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
 	external/giflib \
 	external/libpng \
