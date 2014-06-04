@@ -520,11 +520,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
-	optional
+	tests
 
 LOCAL_MODULE := \
 	skia_dm

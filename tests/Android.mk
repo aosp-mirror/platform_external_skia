@@ -261,7 +261,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
-	eng \
 	tests
 
 LOCAL_MODULE := \

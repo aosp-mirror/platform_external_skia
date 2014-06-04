@@ -212,10 +212,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../include/pdf
+	$(LOCAL_PATH)/../include/pdf \
+	$(LOCAL_PATH)/../third_party/etc1
 
 LOCAL_MODULE_TAGS := \
-	optional
+	tests
 
 LOCAL_MODULE := \
 	skia_gm

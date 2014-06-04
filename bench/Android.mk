@@ -293,7 +293,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../tools/flags
+	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../third_party/etc1
 
 LOCAL_MODULE_TAGS := \
 	tests
