@@ -41,6 +41,7 @@ LOCAL_SRC_FILES := \
 	DeferredCanvasBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
+	ETCBitmapBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
