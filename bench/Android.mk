@@ -79,6 +79,7 @@ LOCAL_SRC_FILES := \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
 	RectBench.cpp \
+	RectanizerBench.cpp \
 	RectoriBench.cpp \
 	RefCntBench.cpp \
 	RegionBench.cpp \
