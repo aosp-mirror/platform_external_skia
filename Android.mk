@@ -335,13 +335,13 @@ LOCAL_SRC_FILES := \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkDiscardableMemory_none.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
 	src/ports/SkXMLParser_empty.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkDebug_android.cpp \
-	src/ports/SkDiscardableMemory_ashmem.cpp \
 	src/ports/SkFontConfigInterface_android.cpp \
 	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontHost_fontconfig.cpp \
@@ -384,7 +384,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/fonts/SkGScalerContext.cpp \
-	src/utils/android/ashmem.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
