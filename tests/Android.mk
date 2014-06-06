@@ -127,6 +127,7 @@ LOCAL_SRC_FILES := \
 	ImageFilterTest.cpp \
 	InfRectTest.cpp \
 	JpegTest.cpp \
+	KtxTest.cpp \
 	LListTest.cpp \
 	LayerDrawLooperTest.cpp \
 	LayerRasterizerTest.cpp \
