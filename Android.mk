@@ -623,6 +623,9 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
+LOCAL_CFLAGS_mips += \
+	-EL
+
 LOCAL_SRC_FILES_mips += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
