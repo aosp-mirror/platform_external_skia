@@ -405,6 +405,7 @@ LOCAL_SRC_FILES := \
 	../tests/MessageBusTest.cpp \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
+	../tests/NameAllocatorTest.cpp \
 	../tests/ObjectPoolTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \

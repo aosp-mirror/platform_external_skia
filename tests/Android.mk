@@ -142,6 +142,7 @@ LOCAL_SRC_FILES := \
 	MessageBusTest.cpp \
 	MetaDataTest.cpp \
 	MipMapTest.cpp \
+	NameAllocatorTest.cpp \
 	ObjectPoolTest.cpp \
 	OSPathTest.cpp \
 	OnceTest.cpp \
