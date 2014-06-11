@@ -18,22 +18,13 @@
 #include "SkRegion.h"
 #include "SkXfermode.h"
 
-// if not defined, we always assume ClipToLayer for saveLayer()
-//#define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-
-
-//#define SK_SUPPORT_LEGACY_GETCLIPTYPE
-//#define SK_SUPPORT_LEGACY_GETTOTALCLIP
-//#define SK_SUPPORT_LEGACY_GETTOPDEVICE
-
-//#define SK_SUPPORT_LEGACY_DRAWTEXT_VIRTUAL
 #ifdef SK_SUPPORT_LEGACY_DRAWTEXT_VIRTUAL
     #define SK_LEGACY_DRAWTEXT_VIRTUAL  virtual
 #else
     #define SK_LEGACY_DRAWTEXT_VIRTUAL
 #endif
 
-class SkBounder;
+class SkCanvasClipVisitor;
 class SkBaseDevice;
 class SkDraw;
 class SkDrawFilter;
@@ -979,13 +970,13 @@ public:
         drawPicture call.
         @param picture The recorded drawing commands to analyze/optimize
     */
-    void EXPERIMENTAL_optimize(SkPicture* picture);
+    void EXPERIMENTAL_optimize(const SkPicture* picture);
 
     /** PRIVATE / EXPERIMENTAL -- do not call
         Purge all the discardable optimization information associated with
         'picture'. If NULL is passed in, purge all discardable information.
     */
-    void EXPERIMENTAL_purge(SkPicture* picture);
+    void EXPERIMENTAL_purge(const SkPicture* picture);
 
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state
@@ -993,7 +984,7 @@ public:
         @param picture The recorded drawing commands to playback into this
                        canvas.
     */
-    virtual void drawPicture(SkPicture& picture);
+    void drawPicture(const SkPicture* picture);
 
     enum VertexMode {
         kTriangles_VertexMode,
@@ -1002,6 +993,11 @@ public:
     };
 
     /** Draw the array of vertices, interpreted as triangles (based on mode).
+
+        If both textures and vertex-colors are NULL, it strokes hairlines with
+        the paint's color. This behavior is a useful debugging mode to visualize
+        the mesh.
+
         @param vmode How to interpret the array of vertices
         @param vertexCount The number of points in the vertices array (and
                     corresponding texs and colors arrays if non-null)
@@ -1063,22 +1059,6 @@ public:
     void popCull();
 
     //////////////////////////////////////////////////////////////////////////
-
-    /** Get the current bounder object.
-        The bounder's reference count is unchaged.
-        @return the canva's bounder (or NULL).
-    */
-    SkBounder*  getBounder() const { return fBounder; }
-
-    /** Set a new bounder (or NULL).
-        Pass NULL to clear any previous bounder.
-        As a convenience, the parameter passed is also returned.
-        If a previous bounder exists, its reference count is decremented.
-        If bounder is not NULL, its reference count is incremented.
-        @param bounder the new bounder (or NULL) to be installed in the canvas
-        @return the set bounder object
-    */
-    virtual SkBounder* setBounder(SkBounder* bounder);
 
     /** Get the current filter object. The filter's reference count is not
         affected. The filter is saved/restored, just like the matrix and clip.
@@ -1149,14 +1129,7 @@ public:
         return &fClipStack;
     }
 
-    class ClipVisitor {
-    public:
-        virtual ~ClipVisitor();
-        virtual void clipRect(const SkRect&, SkRegion::Op, bool antialias) = 0;
-        virtual void clipRRect(const SkRRect&, SkRegion::Op, bool antialias) = 0;
-        virtual void clipPath(const SkPath&, SkRegion::Op, bool antialias) = 0;
-    };
-
+    typedef SkCanvasClipVisitor ClipVisitor;
     /**
      *  Replays the clip operations, back to front, that have been applied to
      *  the canvas, calling the appropriate method on the visitor for each
@@ -1263,6 +1236,8 @@ protected:
 
     virtual void onDiscard();
 
+    virtual void onDrawPicture(const SkPicture* picture);
+
     // Returns the canvas to be used by DrawIter. Default implementation
     // returns this. Subclasses that encapsulate an indirect canvas may
     // need to overload this method. The impl must keep track of this, as it
@@ -1299,7 +1274,6 @@ private:
     // the first N recs that can fit here mean we won't call malloc
     uint32_t    fMCRecStorage[32];
 
-    SkBounder*  fBounder;
     int         fSaveLayerCount;    // number of successful saveLayer calls
     int         fCullCount;         // number of active culls
 
@@ -1505,6 +1479,25 @@ private:
     const void* fAddr;      // NULL on failure
     SkImageInfo fInfo;
     size_t      fRowBytes;
+};
+
+static inline SkCanvas::SaveFlags operator|(const SkCanvas::SaveFlags lhs,
+                                            const SkCanvas::SaveFlags rhs) {
+    return static_cast<SkCanvas::SaveFlags>(static_cast<int>(lhs) | static_cast<int>(rhs));
+}
+
+static inline SkCanvas::SaveFlags& operator|=(SkCanvas::SaveFlags& lhs,
+                                              const SkCanvas::SaveFlags rhs) {
+    lhs = lhs | rhs;
+    return lhs;
+}
+
+class SkCanvasClipVisitor {
+public:
+    virtual ~SkCanvasClipVisitor();
+    virtual void clipRect(const SkRect&, SkRegion::Op, bool antialias) = 0;
+    virtual void clipRRect(const SkRRect&, SkRegion::Op, bool antialias) = 0;
+    virtual void clipPath(const SkPath&, SkRegion::Op, bool antialias) = 0;
 };
 
 #endif

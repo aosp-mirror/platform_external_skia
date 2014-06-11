@@ -86,7 +86,9 @@ SkMatrixConvolutionImageFilter::SkMatrixConvolutionImageFilter(SkReadBuffer& buf
     buffer.validate((fKernel != 0) &&
                     SkScalarIsFinite(fGain) &&
                     SkScalarIsFinite(fBias) &&
-                    tile_mode_is_valid(fTileMode));
+                    tile_mode_is_valid(fTileMode) &&
+                    (fKernelOffset.fX >= 0) && (fKernelOffset.fX < fKernelSize.fWidth) &&
+                    (fKernelOffset.fY >= 0) && (fKernelOffset.fY < fKernelSize.fHeight));
 }
 
 void SkMatrixConvolutionImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -238,9 +240,7 @@ static SkBitmap unpremultiplyBitmap(const SkBitmap& src)
         return SkBitmap();
     }
     SkBitmap result;
-    result.setConfig(src.config(), src.width(), src.height());
-    result.allocPixels();
-    if (!result.getPixels()) {
+    if (!result.allocPixels(src.info())) {
         return SkBitmap();
     }
     for (int y = 0; y < src.height(); ++y) {
@@ -282,9 +282,7 @@ bool SkMatrixConvolutionImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    result->setConfig(src.config(), bounds.width(), bounds.height());
-    result->allocPixels();
-    if (!result->getPixels()) {
+    if (!result->allocPixels(src.info().makeWH(bounds.width(), bounds.height()))) {
         return false;
     }
 

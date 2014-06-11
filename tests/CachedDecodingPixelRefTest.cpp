@@ -12,6 +12,7 @@
 #include "SkDecodingImageGenerator.h"
 #include "SkDiscardableMemoryPool.h"
 #include "SkImageDecoder.h"
+#include "SkImageGeneratorPriv.h"
 #include "SkScaledImageCache.h"
 #include "SkStream.h"
 #include "SkUtils.h"
@@ -22,10 +23,8 @@
  * Fill this bitmap with some color.
  */
 static void make_test_image(SkBitmap* bm) {
-    static const int W = 50, H = 50;
-    static const SkBitmap::Config config = SkBitmap::kARGB_8888_Config;
-    bm->setConfig(config, W, H);
-    bm->allocPixels();
+    const int W = 50, H = 50;
+    bm->allocN32Pixels(W, H);
     bm->eraseColor(SK_ColorBLACK);
     SkCanvas canvas(*bm);
     SkPaint paint;
@@ -152,7 +151,7 @@ static bool install_skDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
     // Use system-default discardable memory.
     return SkInstallDiscardablePixelRef(
         SkDecodingImageGenerator::Create(
-            encoded, SkDecodingImageGenerator::Options()), dst, NULL);
+            encoded, SkDecodingImageGenerator::Options()), dst);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -182,7 +181,9 @@ public:
         SkASSERT((fType <= kLast_TestType) && (fType >= 0));
     }
     virtual ~TestImageGenerator() { }
-    virtual bool getInfo(SkImageInfo* info) SK_OVERRIDE {
+
+protected:
+    virtual bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
         REPORTER_ASSERT(fReporter, NULL != info);
         if ((NULL == info) || (kFailGetInfo_TestType == fType)) {
             return false;
@@ -193,9 +194,9 @@ public:
         info->fAlphaType = kOpaque_SkAlphaType;
         return true;
     }
-    virtual bool getPixels(const SkImageInfo& info,
-                           void* pixels,
-                           size_t rowBytes) SK_OVERRIDE {
+
+    virtual bool onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
+                             SkPMColor ctable[], int* ctableCount) SK_OVERRIDE {
         REPORTER_ASSERT(fReporter, pixels != NULL);
         size_t minRowBytes
             = static_cast<size_t>(info.fWidth * info.bytesPerPixel());
@@ -276,7 +277,7 @@ static void test_newlockdelete(skiatest::Reporter* reporter) {
     SkBitmap bm;
     SkImageGenerator* ig = new TestImageGenerator(
         TestImageGenerator::kSucceedGetPixels_TestType, reporter);
-    SkInstallDiscardablePixelRef(ig, &bm, NULL);
+    SkInstallDiscardablePixelRef(ig, &bm);
     bm.pixelRef()->lockPixels();
 }
 

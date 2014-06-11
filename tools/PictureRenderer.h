@@ -260,6 +260,10 @@ public:
             config.append("_quadtree");
         } else if (kTileGrid_BBoxHierarchyType == fBBoxHierarchyType) {
             config.append("_grid");
+            config.append("_");
+            config.appendS32(fGridInfo.fTileInterval.width());
+            config.append("x");
+            config.appendS32(fGridInfo.fTileInterval.height());
         }
 #if SK_SUPPORT_GPU
         switch (fDeviceType) {
@@ -409,7 +413,7 @@ protected:
     void scaleToScaleFactor(SkCanvas*);
 
     SkBBHFactory* getFactory();
-    uint32_t recordFlags();
+    uint32_t recordFlags() const { return 0; }
     SkCanvas* setupCanvas();
     virtual SkCanvas* setupCanvas(int width, int height);
 

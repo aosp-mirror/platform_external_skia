@@ -13,7 +13,6 @@
 #include "GrColor.h"
 #include "GrEffectStage.h"
 #include "GrPaint.h"
-#include "GrPoint.h"
 #include "GrRenderTarget.h"
 #include "GrStencil.h"
 #include "GrTemplates.h"
@@ -411,6 +410,8 @@ public:
                 SkDEBUGCODE(++ds->fBlockEffectRemovalCnt;)
             }
         }
+
+        bool isSet() const { return NULL != fDrawState; }
 
     private:
         GrDrawState* fDrawState;

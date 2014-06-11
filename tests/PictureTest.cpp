@@ -315,7 +315,7 @@ static SkPicture* record_bitmaps(const SkBitmap bm[],
                                  int count,
                                  DrawBitmapProc proc) {
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(1000, 1000, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(1000, 1000);
     for (int i = 0; i < count; ++i) {
         analytic[i].rewind();
         canvas->save();
@@ -346,7 +346,7 @@ static void draw(SkPicture* pic, int width, int height, SkBitmap* result) {
     make_bm(result, width, height, SK_ColorBLACK, false);
 
     SkCanvas canvas(*result);
-    canvas.drawPicture(*pic);
+    canvas.drawPicture(pic);
 }
 
 template <typename T> int find_index(const T* array, T elem, int count) {
@@ -671,17 +671,17 @@ static void test_gatherpixelrefsandrects(skiatest::Reporter* reporter) {
 static void test_deleting_empty_playback() {
     SkPictureRecorder recorder;
     // Creates an SkPictureRecord
-    recorder.beginRecording(0, 0, NULL, 0);
+    recorder.beginRecording(0, 0);
     // Turns that into an SkPicturePlayback
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
     // Deletes the old SkPicturePlayback, and creates a new SkPictureRecord
-    recorder.beginRecording(0, 0, NULL, 0);
+    recorder.beginRecording(0, 0);
 }
 
 // Ensure that serializing an empty picture does not assert. Likewise only runs in debug mode.
 static void test_serializing_empty_picture() {
     SkPictureRecorder recorder;
-    recorder.beginRecording(0, 0, NULL, 0);
+    recorder.beginRecording(0, 0);
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
     SkDynamicMemoryWStream stream;
     picture->serialize(&stream);
@@ -713,7 +713,7 @@ static void test_gpu_veto(skiatest::Reporter* reporter) {
 
     SkPictureRecorder recorder;
 
-    SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(100, 100);
     {
         SkPath path;
         path.moveTo(0, 0);
@@ -730,9 +730,12 @@ static void test_gpu_veto(skiatest::Reporter* reporter) {
     }
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
     // path effects currently render an SkPicture undesireable for GPU rendering
-    REPORTER_ASSERT(reporter, !picture->suitableForGpuRasterization(NULL));
 
-    canvas = recorder.beginRecording(100, 100, NULL, 0);
+    const char *reason = NULL;
+    REPORTER_ASSERT(reporter, !picture->suitableForGpuRasterization(NULL, &reason));
+    REPORTER_ASSERT(reporter, NULL != reason);
+
+    canvas = recorder.beginRecording(100, 100);
     {
         SkPath path;
 
@@ -754,7 +757,7 @@ static void test_gpu_veto(skiatest::Reporter* reporter) {
     // A lot of AA concave paths currently render an SkPicture undesireable for GPU rendering
     REPORTER_ASSERT(reporter, !picture->suitableForGpuRasterization(NULL));
 
-    canvas = recorder.beginRecording(100, 100, NULL, 0);
+    canvas = recorder.beginRecording(100, 100);
     {
         SkPath path;
 
@@ -808,7 +811,7 @@ static void test_gpu_picture_optimization(skiatest::Reporter* reporter,
     {
         SkPictureRecorder recorder;
 
-        SkCanvas* c = recorder.beginRecording(kWidth, kHeight, NULL, 0);
+        SkCanvas* c = recorder.beginRecording(kWidth, kHeight);
         // 1)
         c->saveLayer(NULL, NULL);
         c->restore();
@@ -916,6 +919,187 @@ static void set_canvas_to_save_count_4(SkCanvas* canvas) {
     canvas->save();
 }
 
+/**
+ * A canvas that records the number of saves, saveLayers and restores.
+ */
+class SaveCountingCanvas : public SkCanvas {
+public:
+    SaveCountingCanvas(int width, int height)
+        : INHERITED(width, height)
+        , fSaveCount(0)
+        , fSaveLayerCount(0)
+        , fRestoreCount(0){
+    }
+
+    virtual SaveLayerStrategy willSaveLayer(const SkRect* bounds, const SkPaint* paint,
+                                            SaveFlags flags) SK_OVERRIDE {
+        ++fSaveLayerCount;
+        return this->INHERITED::willSaveLayer(bounds, paint, flags);
+    }
+
+    virtual void willSave(SaveFlags flags) SK_OVERRIDE {
+        ++fSaveCount;
+        this->INHERITED::willSave(flags);
+    }
+
+    virtual void willRestore() SK_OVERRIDE {
+        ++fRestoreCount;
+        this->INHERITED::willRestore();
+    }
+
+    unsigned int getSaveCount() const { return fSaveCount; }
+    unsigned int getSaveLayerCount() const { return fSaveLayerCount; }
+    unsigned int getRestoreCount() const { return fRestoreCount; }
+
+private:
+    unsigned int fSaveCount;
+    unsigned int fSaveLayerCount;
+    unsigned int fRestoreCount;
+
+    typedef SkCanvas INHERITED;
+};
+
+void check_save_state(skiatest::Reporter* reporter, SkPicture* picture,
+                      unsigned int numSaves, unsigned int numSaveLayers,
+                      unsigned int numRestores) {
+    SaveCountingCanvas canvas(picture->width(), picture->height());
+
+    picture->draw(&canvas);
+
+    REPORTER_ASSERT(reporter, numSaves == canvas.getSaveCount());
+    REPORTER_ASSERT(reporter, numSaveLayers == canvas.getSaveLayerCount());
+    REPORTER_ASSERT(reporter, numRestores == canvas.getRestoreCount());
+}
+
+// This class exists so SkPicture can friend it and give it access to
+// the 'partialReplay' method.
+class SkPictureRecorderReplayTester {
+public:
+    static SkPicture* Copy(SkPictureRecorder* recorder) {
+        SkPictureRecorder recorder2;
+
+        SkCanvas* canvas = recorder2.beginRecording(10, 10);
+
+        recorder->partialReplay(canvas);
+
+        return recorder2.endRecording();
+    }
+};
+
+static void create_imbalance(SkCanvas* canvas) {
+    SkRect clipRect = SkRect::MakeWH(2, 2);
+    SkRect drawRect = SkRect::MakeWH(10, 10);
+    canvas->save();
+        canvas->clipRect(clipRect, SkRegion::kReplace_Op);
+        canvas->translate(1.0f, 1.0f);
+        SkPaint p;
+        p.setColor(SK_ColorGREEN);
+        canvas->drawRect(drawRect, p);
+    // no restore
+}
+
+// This tests that replaying a potentially unbalanced picture into a canvas
+// doesn't affect the canvas' save count or matrix/clip state.
+static void check_balance(skiatest::Reporter* reporter, SkPicture* picture) {
+    SkBitmap bm;
+    bm.allocN32Pixels(4, 3);
+    SkCanvas canvas(bm);
+
+    int beforeSaveCount = canvas.getSaveCount();
+
+    SkMatrix beforeMatrix = canvas.getTotalMatrix();
+
+    SkRect beforeClip;
+
+    canvas.getClipBounds(&beforeClip);
+
+    canvas.drawPicture(picture);
+
+    REPORTER_ASSERT(reporter, beforeSaveCount == canvas.getSaveCount());
+    REPORTER_ASSERT(reporter, beforeMatrix == canvas.getTotalMatrix());
+
+    SkRect afterClip;
+
+    canvas.getClipBounds(&afterClip);
+
+    REPORTER_ASSERT(reporter, afterClip == beforeClip);
+}
+
+// Test out SkPictureRecorder::partialReplay
+DEF_TEST(PictureRecorder_replay, reporter) {
+    // check save/saveLayer state
+    {
+        SkPictureRecorder recorder;
+
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
+
+        canvas->saveLayer(NULL, NULL);
+
+        SkAutoTUnref<SkPicture> copy(SkPictureRecorderReplayTester::Copy(&recorder));
+
+        // The extra save and restore comes from the Copy process.
+        check_save_state(reporter, copy, 2, 1, 3);
+
+        canvas->saveLayer(NULL, NULL);
+
+        SkAutoTUnref<SkPicture> final(recorder.endRecording());
+
+        check_save_state(reporter, final, 1, 2, 3);
+
+        // The copy shouldn't pick up any operations added after it was made
+        check_save_state(reporter, copy, 2, 1, 3);
+    }
+
+    // (partially) check leakage of draw ops
+    {
+        SkPictureRecorder recorder;
+
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
+
+        SkRect r = SkRect::MakeWH(5, 5);
+        SkPaint p;
+
+        canvas->drawRect(r, p);
+
+        SkAutoTUnref<SkPicture> copy(SkPictureRecorderReplayTester::Copy(&recorder));
+
+        REPORTER_ASSERT(reporter, !copy->willPlayBackBitmaps());
+
+        SkBitmap bm;
+        make_bm(&bm, 10, 10, SK_ColorRED, true);
+
+        r.offset(5.0f, 5.0f);
+        canvas->drawBitmapRectToRect(bm, NULL, r);
+
+        SkAutoTUnref<SkPicture> final(recorder.endRecording());
+        REPORTER_ASSERT(reporter, final->willPlayBackBitmaps());
+
+        REPORTER_ASSERT(reporter, copy->uniqueID() != final->uniqueID());
+
+        // The snapshot shouldn't pick up any operations added after it was made
+        REPORTER_ASSERT(reporter, !copy->willPlayBackBitmaps());
+    }
+
+    // Recreate the Android partialReplay test case
+    {
+        SkPictureRecorder recorder;
+
+        SkCanvas* canvas = recorder.beginRecording(4, 3, NULL, 0);
+        create_imbalance(canvas);
+
+        int expectedSaveCount = canvas->getSaveCount();
+
+        SkAutoTUnref<SkPicture> copy(SkPictureRecorderReplayTester::Copy(&recorder));
+        check_balance(reporter, copy);
+
+        REPORTER_ASSERT(reporter, expectedSaveCount = canvas->getSaveCount());
+
+        // End the recording of source to test the picture finalization
+        // process isn't complicated by the partialReplay step
+        SkAutoTUnref<SkPicture> final(recorder.endRecording());
+    }
+}
+
 static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
     SkCanvas testCanvas(100, 100);
     set_canvas_to_save_count_4(&testCanvas);
@@ -929,7 +1113,7 @@ static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
 
     {
         // Create picture with 2 unbalanced saves
-        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100);
         canvas->save();
         canvas->translate(10, 10);
         canvas->drawRect(rect, paint);
@@ -938,7 +1122,7 @@ static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
         canvas->drawRect(rect, paint);
         SkAutoTUnref<SkPicture> extraSavePicture(recorder.endRecording());
 
-        testCanvas.drawPicture(*extraSavePicture);
+        testCanvas.drawPicture(extraSavePicture);
         REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
     }
 
@@ -946,7 +1130,7 @@ static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
 
     {
         // Create picture with 2 unbalanced restores
-        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100);
         canvas->save();
         canvas->translate(10, 10);
         canvas->drawRect(rect, paint);
@@ -959,64 +1143,22 @@ static void test_unbalanced_save_restores(skiatest::Reporter* reporter) {
         canvas->restore();
         SkAutoTUnref<SkPicture> extraRestorePicture(recorder.endRecording());
 
-        testCanvas.drawPicture(*extraRestorePicture);
+        testCanvas.drawPicture(extraRestorePicture);
         REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
     }
 
     set_canvas_to_save_count_4(&testCanvas);
 
     {
-        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100);
         canvas->translate(10, 10);
         canvas->drawRect(rect, paint);
         SkAutoTUnref<SkPicture> noSavePicture(recorder.endRecording());
 
-        testCanvas.drawPicture(*noSavePicture);
+        testCanvas.drawPicture(noSavePicture);
         REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
         REPORTER_ASSERT(reporter, testCanvas.getTotalMatrix().isIdentity());
     }
-
-#if defined(SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD) && \
-    defined(SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES)
-    set_canvas_to_save_count_4(&testCanvas);
-
-    // Due to "fake" endRecording, the old SkPicture recording interface
-    // allowed unbalanced saves/restores to leak out. This sub-test checks
-    // that the situation has been remedied.
-    {
-        SkPicture p;
-
-        SkCanvas* canvas = p.beginRecording(100, 100);
-        for (int i = 0; i < 4; ++i) {
-           canvas->save();
-        }
-        SkRect r = SkRect::MakeWH(50, 50);
-        SkPaint paint;
-        canvas->drawRect(r, paint);
-
-        // Copying a mid-recording picture could result in unbalanced saves/restores
-        SkPicture p2(p);
-
-        testCanvas.drawPicture(p2);
-        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
-        set_canvas_to_save_count_4(&testCanvas);
-
-        // Cloning a mid-recording picture could result in unbalanced saves/restores
-        SkAutoTUnref<SkPicture> p3(p.clone());
-        testCanvas.drawPicture(*p3);
-        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
-        set_canvas_to_save_count_4(&testCanvas);
-
-        // Serializing a mid-recording picture could result in unbalanced saves/restores
-        SkDynamicMemoryWStream wStream;
-        p.serialize(&wStream);
-        SkAutoDataUnref data(wStream.copyToData());
-        SkMemoryStream stream(data);
-        SkAutoTUnref<SkPicture> p4(SkPicture::CreateFromStream(&stream, NULL));
-        testCanvas.drawPicture(*p4);
-        REPORTER_ASSERT(reporter, 4 == testCanvas.getSaveCount());
-    }
-#endif
 }
 
 static void test_peephole() {
@@ -1027,7 +1169,7 @@ static void test_peephole() {
     for (int j = 0; j < 100; j++) {
         SkRandom rand2(rand); // remember the seed
 
-        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100);
 
         for (int i = 0; i < 1000; ++i) {
             rand_op(canvas, rand);
@@ -1038,7 +1180,7 @@ static void test_peephole() {
     }
 
     {
-        SkCanvas* canvas = recorder.beginRecording(100, 100, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(100, 100);
         SkRect rect = SkRect::MakeWH(50, 50);
 
         for (int i = 0; i < 100; ++i) {
@@ -1059,14 +1201,14 @@ static void test_bad_bitmap() {
     // This bitmap has a width and height but no pixels. As a result, attempting to record it will
     // fail.
     SkBitmap bm;
-    bm.setConfig(SkImageInfo::MakeN32Premul(100, 100));
+    bm.setInfo(SkImageInfo::MakeN32Premul(100, 100));
     SkPictureRecorder recorder;
-    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100, NULL, 0);
+    SkCanvas* recordingCanvas = recorder.beginRecording(100, 100);
     recordingCanvas->drawBitmap(bm, 0, 0);
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
     SkCanvas canvas;
-    canvas.drawPicture(*picture);
+    canvas.drawPicture(picture);
 }
 #endif
 
@@ -1076,7 +1218,7 @@ static SkData* encode_bitmap_to_data(size_t*, const SkBitmap& bm) {
 
 static SkData* serialized_picture_from_bitmap(const SkBitmap& bitmap) {
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(bitmap.width(), bitmap.height(), NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(bitmap.width(), bitmap.height());
     canvas->drawBitmap(bitmap, 0, 0);
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
@@ -1113,7 +1255,7 @@ static void test_bitmap_with_encoded_data(skiatest::Reporter* reporter) {
 
     SkBitmap bm;
     bool installSuccess = SkInstallDiscardablePixelRef(
-         SkDecodingImageGenerator::Create(data, SkDecodingImageGenerator::Options()), &bm, NULL);
+         SkDecodingImageGenerator::Create(data, SkDecodingImageGenerator::Options()), &bm);
     REPORTER_ASSERT(reporter, installSuccess);
 
     // Write both bitmaps to pictures, and ensure that the resulting data streams are the same.
@@ -1142,7 +1284,7 @@ static void test_clone_empty(skiatest::Reporter* reporter) {
     // had a picture with no paints. This test passes by not crashing.
     {
         SkPictureRecorder recorder;
-        recorder.beginRecording(1, 1, NULL, 0);
+        recorder.beginRecording(1, 1);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
         SkAutoTUnref<SkPicture> destPicture(picture->clone());
         REPORTER_ASSERT(reporter, NULL != destPicture);
@@ -1158,10 +1300,10 @@ static void test_draw_empty(skiatest::Reporter* reporter) {
     {
         // stock SkPicture
         SkPictureRecorder recorder;
-        recorder.beginRecording(1, 1, NULL, 0);
+        recorder.beginRecording(1, 1);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-        canvas.drawPicture(*picture);
+        canvas.drawPicture(picture);
     }
 
     {
@@ -1173,30 +1315,30 @@ static void test_draw_empty(skiatest::Reporter* reporter) {
 
         SkTileGridFactory factory(gridInfo);
         SkPictureRecorder recorder;
-        recorder.beginRecording(1, 1, &factory, 0);
+        recorder.beginRecording(1, 1, &factory);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-        canvas.drawPicture(*picture);
+        canvas.drawPicture(picture);
     }
 
     {
         // RTree
         SkRTreeFactory factory;
         SkPictureRecorder recorder;
-        recorder.beginRecording(1, 1, &factory, 0);
+        recorder.beginRecording(1, 1, &factory);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-        canvas.drawPicture(*picture);
+        canvas.drawPicture(picture);
     }
 
     {
         // quad tree
         SkQuadTreeFactory factory;
         SkPictureRecorder recorder;
-        recorder.beginRecording(1, 1, &factory, 0);
+        recorder.beginRecording(1, 1, &factory);
         SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-        canvas.drawPicture(*picture);
+        canvas.drawPicture(picture);
     }
 }
 
@@ -1221,8 +1363,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
     // Minimalist test set for 100% code coverage of
     // SkPictureRecord::updateClipConservativelyUsingBounds
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(invPath, SkRegion::kIntersect_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
         REPORTER_ASSERT(reporter, true == nonEmpty);
@@ -1232,8 +1373,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 10 == clipBounds.fRight);
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(path, SkRegion::kIntersect_Op);
         canvas->clipPath(invPath, SkRegion::kIntersect_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
@@ -1244,8 +1384,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 8 == clipBounds.fRight);
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(path, SkRegion::kIntersect_Op);
         canvas->clipPath(invPath, SkRegion::kUnion_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
@@ -1256,8 +1395,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 10 == clipBounds.fRight);
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(path, SkRegion::kDifference_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
         REPORTER_ASSERT(reporter, true == nonEmpty);
@@ -1267,8 +1405,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 10 == clipBounds.fRight);
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(path, SkRegion::kReverseDifference_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
         // True clip is actually empty in this case, but the best
@@ -1281,8 +1418,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
         REPORTER_ASSERT(reporter, 8 == clipBounds.fRight);
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL,
-            SkPicture::kUsePathBoundsForClip_RecordingFlag);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->clipPath(path, SkRegion::kIntersect_Op);
         canvas->clipPath(path2, SkRegion::kXOR_Op);
         bool nonEmpty = canvas->getClipDeviceBounds(&clipBounds);
@@ -1299,7 +1435,7 @@ static void test_clip_bound_opt(skiatest::Reporter* reporter) {
  */
 class ClipCountingCanvas : public SkCanvas {
 public:
-    explicit ClipCountingCanvas(int width, int height)
+    ClipCountingCanvas(int width, int height)
         : INHERITED(width, height)
         , fClipCount(0){
     }
@@ -1340,7 +1476,7 @@ private:
 
 static void test_clip_expansion(skiatest::Reporter* reporter) {
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(10, 10, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(10, 10);
 
     canvas->clipRect(SkRect::MakeEmpty(), SkRegion::kReplace_Op);
     // The following expanding clip should not be skipped.
@@ -1364,37 +1500,37 @@ static void test_hierarchical(skiatest::Reporter* reporter) {
 
     SkPictureRecorder recorder;
 
-    recorder.beginRecording(10, 10, NULL, 0);
+    recorder.beginRecording(10, 10);
     SkAutoTUnref<SkPicture> childPlain(recorder.endRecording());
     REPORTER_ASSERT(reporter, !childPlain->willPlayBackBitmaps()); // 0
 
-    recorder.beginRecording(10, 10, NULL, 0)->drawBitmap(bm, 0, 0);
+    recorder.beginRecording(10, 10)->drawBitmap(bm, 0, 0);
     SkAutoTUnref<SkPicture> childWithBitmap(recorder.endRecording());
     REPORTER_ASSERT(reporter, childWithBitmap->willPlayBackBitmaps()); // 1
 
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL, 0);
-        canvas->drawPicture(*childPlain);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
+        canvas->drawPicture(childPlain);
         SkAutoTUnref<SkPicture> parentPP(recorder.endRecording());
         REPORTER_ASSERT(reporter, !parentPP->willPlayBackBitmaps()); // 0
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL, 0);
-        canvas->drawPicture(*childWithBitmap);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
+        canvas->drawPicture(childWithBitmap);
         SkAutoTUnref<SkPicture> parentPWB(recorder.endRecording());
         REPORTER_ASSERT(reporter, parentPWB->willPlayBackBitmaps()); // 1
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->drawBitmap(bm, 0, 0);
-        canvas->drawPicture(*childPlain);
+        canvas->drawPicture(childPlain);
         SkAutoTUnref<SkPicture> parentWBP(recorder.endRecording());
         REPORTER_ASSERT(reporter, parentWBP->willPlayBackBitmaps()); // 1
     }
     {
-        SkCanvas* canvas = recorder.beginRecording(10, 10, NULL, 0);
+        SkCanvas* canvas = recorder.beginRecording(10, 10);
         canvas->drawBitmap(bm, 0, 0);
-        canvas->drawPicture(*childWithBitmap);
+        canvas->drawPicture(childWithBitmap);
         SkAutoTUnref<SkPicture> parentWBWB(recorder.endRecording());
         REPORTER_ASSERT(reporter, parentWBWB->willPlayBackBitmaps()); // 2
     }
@@ -1409,7 +1545,7 @@ static void test_gen_id(skiatest::Reporter* reporter) {
 
     SkPictureRecorder recorder;
 
-    SkCanvas* canvas = recorder.beginRecording(1, 1, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(1, 1);
     canvas->drawARGB(255, 255, 255, 255);
     SkAutoTUnref<SkPicture> hasData(recorder.endRecording());
     // picture should have a non-zero id after recording
@@ -1490,13 +1626,13 @@ static void draw_bitmaps(const SkBitmap bitmap, SkCanvas* canvas) {
 static void test_draw_bitmaps(SkCanvas* canvas) {
     SkBitmap empty;
     draw_bitmaps(empty, canvas);
-    empty.setConfig(SkImageInfo::MakeN32Premul(10, 10));
+    empty.setInfo(SkImageInfo::MakeN32Premul(10, 10));
     draw_bitmaps(empty, canvas);
 }
 
 DEF_TEST(Picture_EmptyBitmap, r) {
     SkPictureRecorder recorder;
-    test_draw_bitmaps(recorder.beginRecording(10, 10, NULL, 0));
+    test_draw_bitmaps(recorder.beginRecording(10, 10));
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 }
 

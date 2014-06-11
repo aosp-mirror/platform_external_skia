@@ -7,11 +7,14 @@
 
 #include "GrDistanceFieldTextContext.h"
 #include "GrAtlas.h"
+#include "SkColorFilter.h"
 #include "GrDrawTarget.h"
 #include "GrDrawTargetCaps.h"
 #include "GrFontScaler.h"
 #include "SkGlyphCache.h"
+#include "GrGpu.h"
 #include "GrIndexBuffer.h"
+#include "GrStrokeInfo.h"
 #include "GrTextStrike.h"
 #include "GrTextStrike_impl.h"
 #include "SkDistanceFieldGen.h"
@@ -43,6 +46,7 @@ GrDistanceFieldTextContext::GrDistanceFieldTextContext(GrContext* context,
     fEnableDFRendering = enable;
 #endif
     fStrike = NULL;
+    fGammaTexture = NULL;
 
     fCurrTexture = NULL;
     fCurrVertex = 0;
@@ -53,6 +57,7 @@ GrDistanceFieldTextContext::GrDistanceFieldTextContext(GrContext* context,
 
 GrDistanceFieldTextContext::~GrDistanceFieldTextContext() {
     this->flushGlyphs();
+    SkSafeSetNull(fGammaTexture);
 }
 
 bool GrDistanceFieldTextContext::canDraw(const SkPaint& paint) {
@@ -107,14 +112,26 @@ void GrDistanceFieldTextContext::flushGlyphs() {
         SkASSERT(SkIsAlign4(fCurrVertex));
         SkASSERT(fCurrTexture);
         GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kBilerp_FilterMode);
+        GrTextureParams gammaParams(SkShader::kClamp_TileMode, GrTextureParams::kNone_FilterMode);
 
         // Effects could be stored with one of the cache objects (atlas?)
+        SkColor filteredColor;
+        SkColorFilter* colorFilter = fSkPaint.getColorFilter();
+        if (NULL != colorFilter) {
+            filteredColor = colorFilter->filterColor(fSkPaint.getColor());
+        } else {
+            filteredColor = fSkPaint.getColor();
+        }
         if (fUseLCDText) {
+            GrColor colorNoPreMul = skcolor_to_grcolor_nopremultiply(filteredColor);
             bool useBGR = SkDeviceProperties::Geometry::kBGR_Layout ==
                                                             fDeviceProperties.fGeometry.getLayout();
             drawState->addCoverageEffect(GrDistanceFieldLCDTextureEffect::Create(
                                                             fCurrTexture,
                                                             params,
+                                                            fGammaTexture,
+                                                            gammaParams,
+                                                            colorNoPreMul,
                                                             fContext->getMatrix().rectStaysRect() &&
                                                             fContext->getMatrix().isSimilarity(),
                                                             useBGR),
@@ -133,13 +150,24 @@ void GrDistanceFieldTextContext::flushGlyphs() {
             // paintAlpha
             drawState->setColor(SkColorSetARGB(a, a, a, a));
             // paintColor
-            drawState->setBlendConstant(skcolor_to_grcolor_nopremultiply(fSkPaint.getColor()));
+            drawState->setBlendConstant(colorNoPreMul);
             drawState->setBlendFunc(kConstC_GrBlendCoeff, kISC_GrBlendCoeff);
         } else {
-            drawState->addCoverageEffect(GrDistanceFieldTextureEffect::Create(fCurrTexture, params,
+#ifdef SK_GAMMA_APPLY_TO_A8
+            U8CPU lum = SkColorSpaceLuminance::computeLuminance(fDeviceProperties.fGamma,
+                                                                filteredColor);
+            drawState->addCoverageEffect(GrDistanceFieldTextureEffect::Create(
+                                                              fCurrTexture, params,
+                                                              fGammaTexture, gammaParams,
+                                                              lum/255.f,
                                                               fContext->getMatrix().isSimilarity()),
                                          kGlyphCoordsAttributeIndex)->unref();
-
+#else
+            drawState->addCoverageEffect(GrDistanceFieldTextureEffect::Create(
+                                                              fCurrTexture, params,
+                                                              fContext->getMatrix().isSimilarity()),
+                                         kGlyphCoordsAttributeIndex)->unref();
+#endif
             // set back to normal in case we took LCD path previously.
             drawState->setBlendFunc(fPaint.getSrcBlendCoeff(), fPaint.getDstBlendCoeff());
             drawState->setColor(fPaint.getColor());
@@ -247,8 +275,8 @@ void GrDistanceFieldTextContext::drawPackedGlyph(GrGlyph::PackedID packed,
         ctm.postTranslate(sx, sy);
         GrPaint tmpPaint(fPaint);
         am.setPreConcat(fContext, ctm, &tmpPaint);
-        SkStrokeRec stroke(SkStrokeRec::kFill_InitStyle);
-        fContext->drawPath(tmpPaint, *glyph->fPath, stroke);
+        GrStrokeInfo strokeInfo(SkStrokeRec::kFill_InitStyle);
+        fContext->drawPath(tmpPaint, *glyph->fPath, strokeInfo);
         return;
     }
 
@@ -356,13 +384,55 @@ inline void GrDistanceFieldTextContext::init(const GrPaint& paint, const SkPaint
 
     fSkPaint.setLCDRenderText(false);
     fSkPaint.setAutohinted(false);
+    fSkPaint.setHinting(SkPaint::kNormal_Hinting);
     fSkPaint.setSubpixelText(true);
+
 }
 
 inline void GrDistanceFieldTextContext::finish() {
     flushGlyphs();
 
     GrTextContext::finish();
+}
+
+static void setup_gamma_texture(GrContext* context, const SkGlyphCache* cache,
+                                const SkDeviceProperties& deviceProperties,
+                                GrTexture** gammaTexture) {
+    if (NULL == *gammaTexture) {
+        int width, height;
+        size_t size;
+
+#ifdef SK_GAMMA_CONTRAST
+        SkScalar contrast = SK_GAMMA_CONTRAST;
+#else
+        SkScalar contrast = 0.5f;
+#endif
+        SkScalar paintGamma = deviceProperties.fGamma;
+        SkScalar deviceGamma = deviceProperties.fGamma;
+
+        size = SkScalerContext::GetGammaLUTSize(contrast, paintGamma, deviceGamma,
+                                                &width, &height);
+
+        SkAutoTArray<uint8_t> data((int)size);
+        SkScalerContext::GetGammaLUTData(contrast, paintGamma, deviceGamma, data.get());
+
+        // TODO: Update this to use the cache rather than directly creating a texture.
+        GrTextureDesc desc;
+        desc.fFlags = kDynamicUpdate_GrTextureFlagBit;
+        desc.fWidth = width;
+        desc.fHeight = height;
+        desc.fConfig = kAlpha_8_GrPixelConfig;
+
+        *gammaTexture = context->getGpu()->createTexture(desc, NULL, 0);
+        if (NULL == *gammaTexture) {
+            return;
+        }
+
+        context->writeTexturePixels(*gammaTexture,
+                                    0, 0, width, height,
+                                    (*gammaTexture)->config(), data.get(), 0,
+                                    GrContext::kDontFlush_PixelOpsFlag);
+    }
 }
 
 void GrDistanceFieldTextContext::drawText(const GrPaint& paint, const SkPaint& skPaint,
@@ -382,9 +452,11 @@ void GrDistanceFieldTextContext::drawText(const GrPaint& paint, const SkPaint& s
 
     SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
 
-    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, NULL);
-    SkGlyphCache*       cache = autoCache.getCache();
-    GrFontScaler*       fontScaler = GetGrFontScaler(cache);
+    SkAutoGlyphCacheNoGamma    autoCache(fSkPaint, &fDeviceProperties, NULL);
+    SkGlyphCache*              cache = autoCache.getCache();
+    GrFontScaler*              fontScaler = GetGrFontScaler(cache);
+
+    setup_gamma_texture(fContext, cache, fDeviceProperties, &fGammaTexture);
 
     // need to measure first
     // TODO - generate positions and pre-load cache as well?
@@ -455,9 +527,11 @@ void GrDistanceFieldTextContext::drawPosText(const GrPaint& paint, const SkPaint
 
     SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
 
-    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, NULL);
-    SkGlyphCache*       cache = autoCache.getCache();
-    GrFontScaler*       fontScaler = GetGrFontScaler(cache);
+    SkAutoGlyphCacheNoGamma    autoCache(fSkPaint, &fDeviceProperties, NULL);
+    SkGlyphCache*              cache = autoCache.getCache();
+    GrFontScaler*              fontScaler = GetGrFontScaler(cache);
+
+    setup_gamma_texture(fContext, cache, fDeviceProperties, &fGammaTexture);
 
     const char*        stop = text + byteLength;
 

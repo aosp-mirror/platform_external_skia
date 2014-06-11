@@ -15,6 +15,7 @@
 #endif
 #include "SkPathHeap.h"
 #include "SkPicture.h"
+#include "SkPicturePlayback.h"
 #include "SkPictureFlat.h"
 #include "SkTemplates.h"
 #include "SkWriter32.h"
@@ -33,7 +34,7 @@ class SkPictureStateTree;
 
 class SkPictureRecord : public SkCanvas {
 public:
-    SkPictureRecord(SkPicture* picture, const SkISize& dimensions, uint32_t recordFlags);
+    SkPictureRecord(const SkISize& dimensions, uint32_t recordFlags);
     virtual ~SkPictureRecord();
 
     virtual void clear(SkColor) SK_OVERRIDE;
@@ -55,7 +56,6 @@ public:
                                 const SkRect& dst, const SkPaint*) SK_OVERRIDE;
     virtual void drawSprite(const SkBitmap&, int left, int top,
                             const SkPaint*) SK_OVERRIDE;
-    virtual void drawPicture(SkPicture& picture) SK_OVERRIDE;
     virtual void drawVertices(VertexMode, int vertexCount,
                           const SkPoint vertices[], const SkPoint texs[],
                           const SkColor colors[], SkXfermode*,
@@ -70,8 +70,30 @@ public:
     void addFontMetricsTopBottom(const SkPaint& paint, const SkFlatData&,
                                  SkScalar minY, SkScalar maxY);
 
-    const SkTDArray<SkPicture* >& getPictureRefs() const {
+    const SkTDArray<const SkPicture* >& getPictureRefs() const {
         return fPictureRefs;
+    }
+
+    SkData* opData(bool deepCopy) const {
+        this->validate(fWriter.bytesWritten(), 0);
+
+        if (fWriter.bytesWritten() == 0) {
+            return SkData::NewEmpty();
+        }
+
+        if (deepCopy) {
+            return SkData::NewWithCopy(fWriter.contiguousArray(), fWriter.bytesWritten());
+        }
+
+        return fWriter.snapshotAsData();
+    }
+
+    SkPathHeap* pathHeap() {
+        return fPathHeap;
+    }
+
+    const SkPictureContentInfo& contentInfo() const {
+        return fContentInfo;
     }
 
     void setFlags(uint32_t recordFlags) {
@@ -156,7 +178,7 @@ private:
     const SkFlatData* addPaintPtr(const SkPaint* paint);
     void addFlatPaint(const SkFlatData* flatPaint);
     void addPath(const SkPath& path);
-    void addPicture(SkPicture& picture);
+    void addPicture(const SkPicture* picture);
     void addPoint(const SkPoint& point);
     void addPoints(const SkPoint pts[], int count);
     void addRect(const SkRect& rect);
@@ -236,6 +258,8 @@ protected:
     virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
     virtual void onClipRegion(const SkRegion&, SkRegion::Op) SK_OVERRIDE;
 
+    virtual void onDrawPicture(const SkPicture* picture) SK_OVERRIDE;
+
     // Return fontmetrics.fTop,fBottom in topbot[0,1], after they have been
     // tweaked by paint.computeFastBounds().
     static void ComputeFontMetricsTopBottom(const SkPaint& paint, SkScalar topbot[2]);
@@ -282,11 +306,11 @@ protected:
     SkBitmapHeap* fBitmapHeap;
 
 private:
-    // The owning SkPicture
-    SkPicture* fPicture;
-
     friend class MatrixClipState; // for access to *Impl methods
     friend class SkMatrixClipStateMgr; // for access to *Impl methods
+
+    SkPictureContentInfo fContentInfo;
+    SkAutoTUnref<SkPathHeap> fPathHeap;
 
     SkChunkFlatController fFlattenableHeap;
 
@@ -295,7 +319,7 @@ private:
     SkWriter32 fWriter;
 
     // we ref each item in these arrays
-    SkTDArray<SkPicture*> fPictureRefs;
+    SkTDArray<const SkPicture*> fPictureRefs;
 
     uint32_t fRecordFlags;
     bool     fOptsEnabled;

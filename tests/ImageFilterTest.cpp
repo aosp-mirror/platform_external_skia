@@ -17,6 +17,7 @@
 #include "SkDisplacementMapEffect.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkFlattenableBuffers.h"
+#include "SkFlattenableSerialization.h"
 #include "SkGradientShader.h"
 #include "SkLightingImageFilter.h"
 #include "SkMatrixConvolutionImageFilter.h"
@@ -25,6 +26,7 @@
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPicture.h"
+#include "SkPictureImageFilter.h"
 #include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkTileImageFilter.h"
@@ -298,11 +300,24 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
     };
     SkISize kernelSize = SkISize::Make(3, 3);
     SkScalar gain = SK_Scalar1, bias = 0;
+    SkScalar five = SkIntToScalar(5);
 
     SkAutoTUnref<SkImageFilter> gradient_source(SkBitmapSource::Create(make_gradient_circle(64, 64)));
+    SkAutoTUnref<SkImageFilter> blur(SkBlurImageFilter::Create(five, five));
     SkMatrix matrix;
+
     matrix.setTranslate(SK_Scalar1, SK_Scalar1);
     matrix.postRotate(SkIntToScalar(45), SK_Scalar1, SK_Scalar1);
+
+    SkRTreeFactory factory;
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(64, 64, &factory, 0);
+
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeXYWH(10, 10, 30, 20)), greenPaint);
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
+    SkAutoTUnref<SkImageFilter> pictureFilter(SkPictureImageFilter::Create(picture.get()));
 
     struct {
         const char*    fName;
@@ -331,6 +346,8 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
         { "tile", SkTileImageFilter::Create(SkRect::MakeXYWH(0, 0, 50, 50),
                                             SkRect::MakeXYWH(0, 0, 100, 100), NULL) },
         { "matrix", SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel) },
+        { "blur and offset", SkOffsetImageFilter::Create(five, five, blur.get()) },
+        { "picture and blur", SkBlurImageFilter::Create(five, five, pictureFilter.get()) },
     };
 
     SkBitmap untiledResult, tiledResult;
@@ -474,7 +491,67 @@ DEF_TEST(ImageFilterMatrixTest, reporter) {
     recordingCanvas->restore(); // saveLayer
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
-    canvas.drawPicture(*picture);
+    canvas.drawPicture(picture);
+}
+
+DEF_TEST(ImageFilterPictureImageFilterTest, reporter) {
+
+    SkRTreeFactory factory;
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(1, 1, &factory, 0);
+
+    // Create an SkPicture which simply draws a green 1x1 rectangle.
+    SkPaint greenPaint;
+    greenPaint.setColor(SK_ColorGREEN);
+    recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeWH(1, 1)), greenPaint);
+    SkAutoTUnref<SkPicture> picture(recorder.endRecording());
+
+    // Wrap that SkPicture in an SkPictureImageFilter.
+    SkAutoTUnref<SkImageFilter> imageFilter(
+        SkPictureImageFilter::Create(picture.get()));
+
+    // Check that SkPictureImageFilter successfully serializes its contained
+    // SkPicture when not in cross-process mode.
+    SkPaint paint;
+    paint.setImageFilter(imageFilter.get());
+    SkPictureRecorder outerRecorder;
+    SkCanvas* outerCanvas = outerRecorder.beginRecording(1, 1, &factory, 0);
+    SkPaint redPaintWithFilter;
+    redPaintWithFilter.setColor(SK_ColorRED);
+    redPaintWithFilter.setImageFilter(imageFilter.get());
+    outerCanvas->drawRect(SkRect::Make(SkIRect::MakeWH(1, 1)), redPaintWithFilter);
+    SkAutoTUnref<SkPicture> outerPicture(outerRecorder.endRecording());
+
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(1, 1);
+    SkBitmapDevice device(bitmap);
+    SkCanvas canvas(&device);
+
+    // The result here should be green, since the filter replaces the primitive's red interior.
+    canvas.clear(0x0);
+    canvas.drawPicture(outerPicture);
+    uint32_t pixel = *bitmap.getAddr32(0, 0);
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+
+    // Check that, for now, SkPictureImageFilter does not serialize or
+    // deserialize its contained picture when the filter is serialized
+    // cross-process. Do this by "laundering" it through SkValidatingReadBuffer.
+    SkAutoTUnref<SkData> data(SkValidatingSerializeFlattenable(imageFilter.get()));
+    SkAutoTUnref<SkFlattenable> flattenable(SkValidatingDeserializeFlattenable(
+        data->data(), data->size(), SkImageFilter::GetFlattenableType()));
+    SkImageFilter* unflattenedFilter = static_cast<SkImageFilter*>(flattenable.get());
+
+    redPaintWithFilter.setImageFilter(unflattenedFilter);
+    SkPictureRecorder crossProcessRecorder;
+    SkCanvas* crossProcessCanvas = crossProcessRecorder.beginRecording(1, 1, &factory, 0);
+    crossProcessCanvas->drawRect(SkRect::Make(SkIRect::MakeWH(1, 1)), redPaintWithFilter);
+    SkAutoTUnref<SkPicture> crossProcessPicture(crossProcessRecorder.endRecording());
+
+    canvas.clear(0x0);
+    canvas.drawPicture(crossProcessPicture);
+    pixel = *bitmap.getAddr32(0, 0);
+    // The result here should not be green, since the filter draws nothing.
+    REPORTER_ASSERT(reporter, pixel != SK_ColorGREEN);
 }
 
 DEF_TEST(ImageFilterEmptySaveLayerTest, reporter) {
@@ -507,7 +584,7 @@ DEF_TEST(ImageFilterEmptySaveLayerTest, reporter) {
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
     canvas.clear(0);
-    canvas.drawPicture(*picture);
+    canvas.drawPicture(picture);
     uint32_t pixel = *bitmap.getAddr32(0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
@@ -517,7 +594,7 @@ DEF_TEST(ImageFilterEmptySaveLayerTest, reporter) {
     SkAutoTUnref<SkPicture> picture2(recorder.endRecording());
 
     canvas.clear(0);
-    canvas.drawPicture(*picture2);
+    canvas.drawPicture(picture2);
     pixel = *bitmap.getAddr32(0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 
@@ -527,7 +604,7 @@ DEF_TEST(ImageFilterEmptySaveLayerTest, reporter) {
     SkAutoTUnref<SkPicture> picture3(recorder.endRecording());
 
     canvas.clear(0);
-    canvas.drawPicture(*picture3);
+    canvas.drawPicture(picture3);
     pixel = *bitmap.getAddr32(0, 0);
     REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
 }

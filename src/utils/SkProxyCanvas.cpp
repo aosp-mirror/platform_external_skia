@@ -136,7 +136,7 @@ void SkProxyCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const 
     fProxy->drawTextOnPath(text, byteLength, path, matrix, paint);
 }
 
-void SkProxyCanvas::drawPicture(SkPicture& picture) {
+void SkProxyCanvas::onDrawPicture(const SkPicture* picture) {
     fProxy->drawPicture(picture);
 }
 
@@ -163,10 +163,6 @@ void SkProxyCanvas::addComment(const char* kywd, const char* value) {
 
 void SkProxyCanvas::endCommentGroup() {
     fProxy->endCommentGroup();
-}
-
-SkBounder* SkProxyCanvas::setBounder(SkBounder* bounder) {
-    return fProxy->setBounder(bounder);
 }
 
 SkDrawFilter* SkProxyCanvas::setDrawFilter(SkDrawFilter* filter) {

@@ -47,7 +47,6 @@ public:
                                 const SkRect& dst, const SkPaint* paint = NULL) SK_OVERRIDE {}
     virtual void drawSprite(const SkBitmap& bitmap, int left, int top,
                             const SkPaint* paint = NULL) SK_OVERRIDE {}
-    virtual void drawPicture(SkPicture& picture) SK_OVERRIDE {}
     virtual void drawVertices(VertexMode vmode, int vertexCount,
                               const SkPoint vertices[], const SkPoint texs[],
                               const SkColor colors[], SkXfermode* xmode,
@@ -57,7 +56,6 @@ public:
     virtual void beginCommentGroup(const char* description) SK_OVERRIDE {}
     virtual void addComment(const char* kywd, const char* value) SK_OVERRIDE {}
     virtual void endCommentGroup() SK_OVERRIDE {}
-    virtual SkBounder* setBounder(SkBounder* bounder) SK_OVERRIDE {return NULL;}
     virtual SkDrawFilter* setDrawFilter(SkDrawFilter* filter) SK_OVERRIDE {return NULL;}
 
     virtual bool isClipEmpty() const SK_OVERRIDE { return false; }
@@ -105,6 +103,8 @@ protected:
     virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE {}
     virtual void onClipRegion(const SkRegion&, SkRegion::Op)  SK_OVERRIDE {}
 
+    virtual void onDrawPicture(const SkPicture* picture) SK_OVERRIDE {}
+    
 private:
     typedef SkCanvas INHERITED;
 };

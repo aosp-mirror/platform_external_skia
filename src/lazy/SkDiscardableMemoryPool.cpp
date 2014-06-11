@@ -7,7 +7,7 @@
 
 #include "SkDiscardableMemory.h"
 #include "SkDiscardableMemoryPool.h"
-#include "SkOnce.h"
+#include "SkLazyPtr.h"
 #include "SkTInternalLList.h"
 #include "SkThread.h"
 
@@ -145,9 +145,9 @@ DiscardableMemoryPool::~DiscardableMemoryPool() {
 }
 
 void DiscardableMemoryPool::dumpDownTo(size_t budget) {
-    // assert((NULL = fMutex) || fMutex->isLocked());
-    // TODO(halcanary) implement bool fMutex::isLocked().
-    // WARNING: only call this function after aquiring lock.
+    if (fMutex != NULL) {
+        fMutex->assertHeld();
+    }
     if (fUsed <= budget) {
         return;
     }
@@ -248,27 +248,24 @@ void DiscardableMemoryPool::dumpPool() {
 
 ////////////////////////////////////////////////////////////////////////////////
 SK_DECLARE_STATIC_MUTEX(gMutex);
-SkDiscardableMemoryPool* gPool = NULL;
-void create_global_pool(int) {
-    SkASSERT(NULL == gPool);
-    gPool = SkDiscardableMemoryPool::Create(
-            SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE, &gMutex);
+SkDiscardableMemoryPool* create_global_pool() {
+    return SkDiscardableMemoryPool::Create(SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE,
+                                           &gMutex);
 }
-void cleanup_global_pool() {
-    gPool->unref();
-}
+
 }  // namespace
 
-SkDiscardableMemoryPool* SkDiscardableMemoryPool::Create(
-        size_t size, SkBaseMutex* mutex) {
+SkDiscardableMemoryPool* SkDiscardableMemoryPool::Create(size_t size, SkBaseMutex* mutex) {
     return SkNEW_ARGS(DiscardableMemoryPool, (size, mutex));
 }
 
 SkDiscardableMemoryPool* SkGetGlobalDiscardableMemoryPool() {
-    SK_DECLARE_STATIC_ONCE(create_pool_once);
-    SkOnce(&create_pool_once, create_global_pool, 0, &cleanup_global_pool);
-    SkASSERT(NULL != gPool);
-    return gPool;
+    SK_DECLARE_STATIC_LAZY_PTR(SkDiscardableMemoryPool, global, create_global_pool);
+    return global.get();
 }
 
+// defined in SkImageGenerator.h
+void SkPurgeGlobalDiscardableMemoryPool() {
+    SkGetGlobalDiscardableMemoryPool()->dumpPool();
+}
 ////////////////////////////////////////////////////////////////////////////////

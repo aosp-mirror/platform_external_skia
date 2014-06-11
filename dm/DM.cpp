@@ -14,12 +14,20 @@
 #include "DMCpuGMTask.h"
 #include "DMGpuGMTask.h"
 #include "DMGpuSupport.h"
+#include "DMPDFTask.h"
 #include "DMReporter.h"
 #include "DMSKPTask.h"
 #include "DMTask.h"
 #include "DMTaskRunner.h"
 #include "DMTestTask.h"
 #include "DMWriteTask.h"
+
+#ifdef SK_BUILD_POPPLER
+#  include "SkPDFRasterizer.h"
+#  define RASTERIZE_PDF_PROC SkPopplerRasterizePDF
+#else
+#  define RASTERIZE_PDF_PROC NULL
+#endif
 
 #include <ctype.h>
 
@@ -49,14 +57,19 @@ DEFINE_string(match, "",  "[~][^]substring[$] [...] of GM name to run.\n"
                           "^ and $ requires an exact match\n"
                           "If a GM does not match any list entry,\n"
                           "it is skipped unless some list entry starts with ~");
-DEFINE_string(config, "565 8888 gpu nonrendering",
-              "Options: 565 8888 gpu nonrendering msaa4 msaa16 nvprmsaa4 nvprmsaa16 gpunull gpudebug angle mesa");
+DEFINE_string(config, "565 8888 pdf gpu nonrendering",
+              "Options: 565 8888 pdf gpu nonrendering msaa4 msaa16 nvprmsaa4 nvprmsaa16 "
+              "gpunull gpudebug angle mesa");
+DEFINE_bool(dryRun, false,
+            "Just print the tests that would be run, without actually running them.");
 DEFINE_bool(leaks, false, "Print leaked instance-counted objects at exit?");
 DEFINE_string(skps, "", "Directory to read skps from.");
 
 DEFINE_bool(gms, true, "Run GMs?");
 DEFINE_bool(benches, true, "Run benches?  Does not run GMs-as-benches.");
 DEFINE_bool(tests, true, "Run tests?");
+
+DECLARE_bool(verbose);
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
@@ -90,24 +103,24 @@ static void kick_off_gms(const SkTDArray<GMRegistry::Factory>& gms,
                          const DM::Expectations& expectations,
                          DM::Reporter* reporter,
                          DM::TaskRunner* tasks) {
-#define START(name, type, ...)                                                        \
-    if (lowercase(configs[j]).equals(name)) {                                         \
-        tasks->add(SkNEW_ARGS(DM::type,                                               \
-                    (name, reporter, tasks, expectations, gms[i], ## __VA_ARGS__)));  \
+#define START(name, type, ...)                                                              \
+    if (lowercase(configs[j]).equals(name)) {                                               \
+        tasks->add(SkNEW_ARGS(DM::type, (name, reporter, tasks, gms[i], ## __VA_ARGS__)));  \
     }
     for (int i = 0; i < gms.count(); i++) {
         for (int j = 0; j < configs.count(); j++) {
-            START("565",      CpuGMTask, kRGB_565_SkColorType);
-            START("8888",     CpuGMTask, kN32_SkColorType);
-            START("gpu",      GpuGMTask, native, 0);
-            START("msaa4",    GpuGMTask, native, 4);
-            START("msaa16",   GpuGMTask, native, 16);
-            START("nvprmsaa4", GpuGMTask, nvpr,  4);
-            START("nvprmsaa16", GpuGMTask, nvpr, 16);
-            START("gpunull",  GpuGMTask, null,   0);
-            START("gpudebug", GpuGMTask, debug,  0);
-            START("angle",    GpuGMTask, angle,  0);
-            START("mesa",     GpuGMTask, mesa,   0);
+            START("565",        CpuGMTask, expectations, kRGB_565_SkColorType);
+            START("8888",       CpuGMTask, expectations, kN32_SkColorType);
+            START("gpu",        GpuGMTask, expectations, native, 0);
+            START("msaa4",      GpuGMTask, expectations, native, 4);
+            START("msaa16",     GpuGMTask, expectations, native, 16);
+            START("nvprmsaa4",  GpuGMTask, expectations, nvpr,   4);
+            START("nvprmsaa16", GpuGMTask, expectations, nvpr,   16);
+            START("gpunull",    GpuGMTask, expectations, null,   0);
+            START("gpudebug",   GpuGMTask, expectations, debug,  0);
+            START("angle",      GpuGMTask, expectations, angle,  0);
+            START("mesa",       GpuGMTask, expectations, mesa,   0);
+            START("pdf",        PDFTask,   RASTERIZE_PDF_PROC);
         }
     }
 #undef START
@@ -178,14 +191,13 @@ static void kick_off_skps(DM::Reporter* reporter, DM::TaskRunner* tasks) {
             exit(1);
         }
 
-        tasks->add(SkNEW_ARGS(DM::SKPTask, (reporter, tasks, pic.detach(), filename)));
+        tasks->add(SkNEW_ARGS(DM::SKPTask, (reporter, tasks, pic->clone(), filename)));
+        tasks->add(SkNEW_ARGS(DM::PDFTask, (reporter, tasks, pic->clone(), filename,
+                                            RASTERIZE_PDF_PROC)));
     }
 }
 
-static void report_failures(const DM::Reporter& reporter) {
-    SkTArray<SkString> failures;
-    reporter.getFailures(&failures);
-
+static void report_failures(const SkTArray<SkString>& failures) {
     if (failures.count() == 0) {
         return;
     }
@@ -194,6 +206,7 @@ static void report_failures(const DM::Reporter& reporter) {
     for (int i = 0; i < failures.count(); i++) {
         SkDebugf("  %s\n", failures[i].c_str());
     }
+    SkDebugf("%d failures.\n", failures.count());
 }
 
 template <typename T, typename Registry>
@@ -208,8 +221,12 @@ static void append_matching_factories(Registry* head, SkTDArray<typename Registr
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
-    SkGraphics::Init();
+    SkAutoGraphics ag;
     SkCommandLineFlags::Parse(argc, argv);
+
+    if (FLAGS_dryRun) {
+        FLAGS_verbose = true;
+    }
 #if SK_ENABLE_INST_COUNT
     gPrintInstCount = FLAGS_leaks;
 #endif
@@ -260,11 +277,11 @@ int tool_main(int argc, char** argv) {
     tasks.wait();
 
     SkDebugf("\n");
-    report_failures(reporter);
 
-    SkGraphics::Term();
-
-    return reporter.failed() > 0;
+    SkTArray<SkString> failures;
+    reporter.getFailures(&failures);
+    report_failures(failures);
+    return failures.count() > 0;
 }
 
 #if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)

@@ -23,8 +23,8 @@ LOCAL_PATH:= $(call my-dir)
 #       needed since your sources and libskia have been built with SK_DEBUG.
 # (2) You're building libskia in debug mode.
 #   (a) RECOMMENDED: You can build the entire system in debug mode. Do this by
-#       updating your build/config.mk to include -DSK_DEBUG on the line that
-#       defines COMMON_GLOBAL_CFLAGS
+#       updating your build/core/config.mk to include -DSK_DEBUG on the line
+#       that defines COMMON_GLOBAL_CFLAGS
 #   (b) You can update all the users of libskia to define SK_DEBUG when they are
 #       building their sources.
 #
@@ -123,6 +123,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
+	src/core/SkImageGenerator.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -156,7 +157,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkQuadTree.cpp \
-	src/core/SkQuadTreePicture.cpp \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
@@ -166,7 +166,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkRegion_path.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
-	src/core/SkRTreePicture.cpp \
 	src/core/SkScaledImageCache.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
@@ -185,7 +184,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkTileGrid.cpp \
-	src/core/SkTileGridPicture.cpp \
 	src/core/SkTLS.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
@@ -193,6 +191,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
+	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
 	src/core/SkXfermode.cpp \
@@ -299,6 +298,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageDecoder_FactoryRegistrar.cpp \
 	src/images/SkImageDecoder_wbmp.cpp \
 	src/images/SkImageDecoder_pkm.cpp \
+	src/images/SkImageDecoder_ktx.cpp \
 	src/images/SkImageDecoder_libbmp.cpp \
 	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libico.cpp \
@@ -308,11 +308,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageEncoder.cpp \
 	src/images/SkImageEncoder_Factory.cpp \
 	src/images/SkImageEncoder_argb.cpp \
-	src/images/SkImageRef.cpp \
-	src/images/SkImageRefPool.cpp \
-	src/images/SkImageRef_ashmem.cpp \
-	src/images/SkImageRef_GlobalPool.cpp \
-	src/images/SkImages.cpp \
 	src/images/SkJpegUtility.cpp \
 	src/images/SkMovie.cpp \
 	src/images/SkMovie_gif.cpp \
@@ -340,13 +335,13 @@ LOCAL_SRC_FILES := \
 	src/ports/SkMemory_malloc.cpp \
 	src/ports/SkOSFile_posix.cpp \
 	src/ports/SkOSFile_stdio.cpp \
+	src/ports/SkDiscardableMemory_none.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
 	src/ports/SkXMLParser_empty.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkDebug_android.cpp \
-	src/ports/SkDiscardableMemory_ashmem.cpp \
 	src/ports/SkFontConfigInterface_android.cpp \
 	src/ports/SkFontConfigParser_android.cpp \
 	src/ports/SkFontHost_fontconfig.cpp \
@@ -364,6 +359,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkCanvasStateUtils.cpp \
 	src/utils/SkCubicInterval.cpp \
 	src/utils/SkCullPoints.cpp \
+	src/utils/SkDashPath.cpp \
 	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
@@ -386,10 +382,10 @@ LOCAL_SRC_FILES := \
 	src/utils/SkProxyCanvas.cpp \
 	src/utils/SkSHA1.cpp \
 	src/utils/SkRTConf.cpp \
+	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkThreadUtils_pthread.cpp \
 	src/utils/SkThreadUtils_pthread_other.cpp \
 	src/fonts/SkGScalerContext.cpp \
-	src/utils/android/ashmem.cpp \
 	src/gpu/GrAAHairLinePathRenderer.cpp \
 	src/gpu/GrAAConvexPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
@@ -422,7 +418,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrPictureUtils.cpp \
-	src/gpu/GrRectanizer.cpp \
+	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
@@ -459,6 +455,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
+	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
@@ -498,6 +495,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	third_party/etc1/etc1.cpp \
+	third_party/ktx/ktx.cpp \
 	src/core/SkFlate.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -505,7 +503,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libcutils \
 	libjpeg \
 	libpng \
 	libicuuc \
@@ -540,6 +537,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/images \
 	$(LOCAL_PATH)/third_party/etc1 \
+	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
 	external/giflib \
 	external/libpng \
@@ -629,7 +627,19 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp
 
+LOCAL_CFLAGS_mips += \
+	-EL
+
 LOCAL_SRC_FILES_mips += \
+	src/opts/SkBitmapProcState_opts_none.cpp \
+	src/opts/SkBlitMask_opts_none.cpp \
+	src/opts/SkBlurImage_opts_none.cpp \
+	src/opts/SkMorphology_opts_none.cpp \
+	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkXfermode_opts_none.cpp \
+	src/opts/SkBlitRow_opts_none.cpp
+
+LOCAL_SRC_FILES_mips64 += \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitMask_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp \
@@ -647,7 +657,8 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm.cpp \
 	src/opts/SkBlitMask_opts_arm_neon.cpp \
-	src/opts/SkBlitRow_opts_none.cpp \
+	src/opts/SkBlitRow_opts_arm.cpp \
+	src/opts/SkBlitRow_opts_arm_neon.cpp \
 	src/opts/SkBlurImage_opts_arm.cpp \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \

@@ -86,7 +86,7 @@ static SkShader* Make2Radial(const SkPoint pts[2], const GradData& data, SkShade
 }
 
 typedef SkShader* (*GradMaker)(const SkPoint pts[2], const GradData& data, SkShader::TileMode tm);
-    
+
 static const GradMaker gGradMakers[] = {
     MakeLinear, MakeRadial, MakeSweep, Make2Radial
 };
@@ -108,7 +108,7 @@ protected:
         return SkString("shadertext");
     }
 
-    SkISize onISize() { return make_isize(1450, 500); }
+    SkISize onISize() { return SkISize::Make(1450, 500); }
 
     virtual void onDraw(SkCanvas* canvas) {
         const char text[] = "Shaded Text";

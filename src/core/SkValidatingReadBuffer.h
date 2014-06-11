@@ -23,7 +23,7 @@ public:
     SkValidatingReadBuffer(const void* data, size_t size);
     virtual ~SkValidatingReadBuffer();
 
-    const void* skip(size_t size);
+    virtual const void* skip(size_t size) SK_OVERRIDE;
 
     // primitives
     virtual bool readBool() SK_OVERRIDE;
@@ -58,7 +58,6 @@ public:
     // helpers to get info about arrays and binary data
     virtual uint32_t getArrayCount() SK_OVERRIDE;
 
-    virtual void readBitmap(SkBitmap* bitmap) SK_OVERRIDE;
     // TODO: Implement this (securely) when needed
     virtual SkTypeface* readTypeface() SK_OVERRIDE;
 

@@ -18,13 +18,15 @@ LOCAL_SRC_FILES := \
 	DMCpuGMTask.cpp \
 	DMExpectationsTask.cpp \
 	DMGpuGMTask.cpp \
+	DMPDFRasterizeTask.cpp \
+	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
 	DMRecordTask.cpp \
 	DMReplayTask.cpp \
 	DMReporter.cpp \
-	DMSerializeTask.cpp \
 	DMSKPTask.cpp \
+	DMSerializeTask.cpp \
 	DMTask.cpp \
 	DMTaskRunner.cpp \
 	DMTestTask.cpp \
@@ -58,6 +60,7 @@ LOCAL_SRC_FILES := \
 	../bench/DeferredCanvasBench.cpp \
 	../bench/DeferredSurfaceCopyBench.cpp \
 	../bench/DisplacementBench.cpp \
+	../bench/ETCBitmapBench.cpp \
 	../bench/FSRectBench.cpp \
 	../bench/FontCacheBench.cpp \
 	../bench/FontScalerBench.cpp \
@@ -95,6 +98,7 @@ LOCAL_SRC_FILES := \
 	../bench/RTreeBench.cpp \
 	../bench/ReadPixBench.cpp \
 	../bench/RectBench.cpp \
+	../bench/RectanizerBench.cpp \
 	../bench/RectoriBench.cpp \
 	../bench/RefCntBench.cpp \
 	../bench/RegionBench.cpp \
@@ -173,6 +177,7 @@ LOCAL_SRC_FILES := \
 	../gm/filltypes.cpp \
 	../gm/filltypespersp.cpp \
 	../gm/filterbitmap.cpp \
+	../gm/filterindiabox.cpp \
 	../gm/fontcache.cpp \
 	../gm/fontmgr.cpp \
 	../gm/fontscaler.cpp \
@@ -256,6 +261,7 @@ LOCAL_SRC_FILES := \
 	../gm/texteffects.cpp \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
+	../gm/variedtext.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
@@ -359,6 +365,7 @@ LOCAL_SRC_FILES := \
 	../tests/FlateTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
+	../tests/FontObjTest.cpp \
 	../tests/FontMgrTest.cpp \
 	../tests/FontNamesTest.cpp \
 	../tests/FrontBufferedStreamTest.cpp \
@@ -368,6 +375,7 @@ LOCAL_SRC_FILES := \
 	../tests/GifTest.cpp \
 	../tests/GpuColorFilterTest.cpp \
 	../tests/GpuDrawPathTest.cpp \
+	../tests/GpuRectanizerTest.cpp \
 	../tests/GrBinHashKeyTest.cpp \
 	../tests/GrContextFactoryTest.cpp \
 	../tests/GrDrawTargetTest.cpp \
@@ -383,6 +391,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageFilterTest.cpp \
 	../tests/InfRectTest.cpp \
 	../tests/JpegTest.cpp \
+	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
 	../tests/LayerRasterizerTest.cpp \
@@ -397,6 +406,7 @@ LOCAL_SRC_FILES := \
 	../tests/MessageBusTest.cpp \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
+	../tests/NameAllocatorTest.cpp \
 	../tests/ObjectPoolTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \
@@ -451,6 +461,7 @@ LOCAL_SRC_FILES := \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
 	../tests/TestSize.cpp \
+	../tests/TextureCompressionTest.cpp \
 	../tests/TileGridTest.cpp \
 	../tests/ToUnicodeTest.cpp \
 	../tests/TracingTest.cpp \
@@ -480,7 +491,6 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
-	libcutils \
 	libGLESv2 \
 	libEGL \
 	libz
@@ -516,11 +526,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
-	optional
+	tests
 
 LOCAL_MODULE := \
 	skia_dm

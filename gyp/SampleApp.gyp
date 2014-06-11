@@ -90,6 +90,7 @@
         '../samplecode/SamplePictFile.cpp',
         '../samplecode/SamplePoints.cpp',
         '../samplecode/SamplePolyToPoly.cpp',
+        '../samplecode/SampleRectanizer.cpp',
         '../samplecode/SampleRegion.cpp',
         '../samplecode/SampleRepeatTile.cpp',
         '../samplecode/SampleRotateCircles.cpp',
@@ -99,6 +100,7 @@
         '../samplecode/SampleSlides.cpp',
         '../samplecode/SampleStringArt.cpp',
         '../samplecode/SampleStrokePath.cpp',
+        '../samplecode/SampleSubpixelTranslate.cpp',
         '../samplecode/SampleText.cpp',
         '../samplecode/SampleTextAlpha.cpp',
         '../samplecode/SampleTextBox.cpp',
@@ -147,6 +149,7 @@
         'pdf.gyp:pdf',
         'views_animated.gyp:views_animated',
         'lua.gyp:lua',
+        'etc1.gyp:libetc1',
       ],
      'conditions' : [
        [ 'sample_pdf_file_viewer == 1', {

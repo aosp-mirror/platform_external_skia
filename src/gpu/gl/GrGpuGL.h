@@ -26,6 +26,8 @@
 #define PROGRAM_CACHE_STATS
 #endif
 
+class GrGLNameAllocator;
+
 class GrGpuGL : public GrGpu {
 public:
     GrGpuGL(const GrGLContext& ctx, GrContext* context);
@@ -106,6 +108,11 @@ public:
     void notifyTextureDelete(GrGLTexture* texture);
     void notifyRenderTargetDelete(GrRenderTarget* renderTarget);
 
+    // These functions should be used to generate and delete GL path names. They have their own
+    // allocator that runs on the client side, so they are much faster than going through GenPaths.
+    GrGLuint createGLPathObject();
+    void deleteGLPathObject(GrGLuint);
+
 protected:
     virtual bool onCopySurface(GrSurface* dst,
                                GrSurface* src,
@@ -124,6 +131,8 @@ private:
     virtual GrTexture* onCreateTexture(const GrTextureDesc& desc,
                                        const void* srcData,
                                        size_t rowBytes) SK_OVERRIDE;
+    virtual GrTexture* onCreateCompressedTexture(const GrTextureDesc& desc,
+                                                 const void* srcData) SK_OVERRIDE;
     virtual GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) SK_OVERRIDE;
     virtual GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) SK_OVERRIDE;
     virtual GrPath* onCreatePath(const SkPath&, const SkStrokeRec&) SK_OVERRIDE;
@@ -264,6 +273,10 @@ private:
                        GrPixelConfig dataConfig,
                        const void* data,
                        size_t rowBytes);
+
+    // helper for onCreateCompressedTexture
+    bool uploadCompressedTexData(const GrGLTexture::Desc& desc,
+                                 const void* data);
 
     bool createRenderTargetObjects(int width, int height,
                                    GrGLuint texID,
@@ -458,6 +471,8 @@ private:
     // we record what stencil format worked last time to hopefully exit early
     // from our loop that tries stencil formats and calls check fb status.
     int fLastSuccessfulStencilFmtIdx;
+
+    SkAutoTDelete<GrGLNameAllocator> fPathNameAllocator;
 
     typedef GrGpu INHERITED;
 };

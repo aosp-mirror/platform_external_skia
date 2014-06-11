@@ -34,27 +34,27 @@ SkPictureImageFilter::~SkPictureImageFilter() {
 SkPictureImageFilter::SkPictureImageFilter(SkReadBuffer& buffer)
   : INHERITED(0, buffer),
     fPicture(NULL) {
-#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
-    if (buffer.readBool()) {
-        fPicture = SkPicture::CreateFromBuffer(buffer);
+    if (!buffer.isCrossProcess()) {
+        if (buffer.readBool()) {
+            fPicture = SkPicture::CreateFromBuffer(buffer);
+        }
+    } else {
+        buffer.validate(!buffer.readBool());
     }
-#else
-    buffer.readBool();
-#endif
     buffer.readRect(&fCropRect);
 }
 
 void SkPictureImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
-    bool hasPicture = (fPicture != NULL);
-    buffer.writeBool(hasPicture);
-    if (hasPicture) {
-        fPicture->flatten(buffer);
+    if (!buffer.isCrossProcess()) {
+        bool hasPicture = (fPicture != NULL);
+        buffer.writeBool(hasPicture);
+        if (hasPicture) {
+            fPicture->flatten(buffer);
+        }
+    } else {
+        buffer.writeBool(false);
     }
-#else
-    buffer.writeBool(false);
-#endif
     buffer.writeRect(fCropRect);
 }
 
@@ -85,10 +85,17 @@ bool SkPictureImageFilter::onFilterImage(Proxy* proxy, const SkBitmap&, const Co
 
     canvas.translate(-SkIntToScalar(bounds.fLeft), -SkIntToScalar(bounds.fTop));
     canvas.concat(ctx.ctm());
-    canvas.drawPicture(*fPicture);
+    canvas.drawPicture(fPicture);
 
     *result = device.get()->accessBitmap(false);
     offset->fX = bounds.fLeft;
     offset->fY = bounds.fTop;
     return true;
 }
+
+bool SkPictureImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
+                                          SkIRect* dst) const {
+    *dst = src;
+    return true;
+}
+

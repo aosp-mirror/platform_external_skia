@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 #include "SampleCode.h"
+#include "SkAlphaThresholdFilter.h"
 #include "SkBicubicImageFilter.h"
 #include "SkBitmapDevice.h"
 #include "SkBitmapSource.h"
@@ -19,13 +20,17 @@
 #include "SkFlattenableSerialization.h"
 #include "SkLightingImageFilter.h"
 #include "SkMagnifierImageFilter.h"
+#include "SkMatrixImageFilter.h"
+#include "SkMatrixConvolutionImageFilter.h"
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
 #include "SkPerlinNoiseShader.h"
 #include "SkPictureImageFilter.h"
+#include "SkPictureRecorder.h"
 #include "SkRandom.h"
 #include "SkRectShaderImageFilter.h"
+#include "SkTestImageFilters.h"
 #include "SkTileImageFilter.h"
 #include "SkView.h"
 #include "SkXfermodeImageFilter.h"
@@ -93,6 +98,22 @@ static SkScalar make_scalar(bool positiveOnly = false) {
 static SkRect make_rect() {
     return SkRect::MakeWH(SkIntToScalar(R(static_cast<float>(kBitmapSize))),
                           SkIntToScalar(R(static_cast<float>(kBitmapSize))));
+}
+
+static SkRegion make_region() {
+    SkIRect iRegion = SkIRect::MakeXYWH(R(static_cast<float>(kBitmapSize)),
+                                        R(static_cast<float>(kBitmapSize)),
+                                        R(static_cast<float>(kBitmapSize)),
+                                        R(static_cast<float>(kBitmapSize)));
+    return SkRegion(iRegion);
+}
+
+static SkMatrix make_matrix() {
+    SkMatrix m;
+    for (int i = 0; i < 9; ++i) {
+        m[i] = make_scalar();
+    }
+    return m;
 }
 
 static SkXfermode::Mode make_xfermode() {
@@ -186,7 +207,6 @@ static const SkBitmap& make_bitmap() {
     return bitmap[R(2)];
 }
 
-#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
 static void drawSomething(SkCanvas* canvas) {
     SkPaint paint;
 
@@ -208,7 +228,6 @@ static void drawSomething(SkCanvas* canvas) {
     paint.setTextSize(SkIntToScalar(kBitmapSize/3));
     canvas->drawText("Picture", 7, SkIntToScalar(kBitmapSize/2), SkIntToScalar(kBitmapSize/4), paint);
 }
-#endif
 
 static SkImageFilter* make_image_filter(bool canBeNull = true) {
     SkImageFilter* filter = 0;
@@ -216,11 +235,15 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     // Add a 1 in 3 chance to get a NULL input
     if (canBeNull && (R(3) == 1)) { return filter; }
 
-    enum { BICUBIC, MERGE, COLOR, BLUR, MAGNIFIER, XFERMODE, OFFSET, COMPOSE,
+    enum { ALPHA_THRESHOLD, BICUBIC, MERGE, COLOR, BLUR, MAGNIFIER,
+           DOWN_SAMPLE, XFERMODE, OFFSET, MATRIX, MATRIX_CONVOLUTION, COMPOSE,
            DISTANT_LIGHT, POINT_LIGHT, SPOT_LIGHT, NOISE, DROP_SHADOW,
            MORPHOLOGY, BITMAP, DISPLACE, TILE, PICTURE, NUM_FILTERS };
 
     switch (R(NUM_FILTERS)) {
+    case ALPHA_THRESHOLD:
+        filter = SkAlphaThresholdFilter::Create(make_region(), make_scalar(), make_scalar());
+        break;
     case BICUBIC:
         // Scale is set to 1 here so that it can fit in the DAG without resizing the output
         filter = SkBicubicImageFilter::CreateMitchell(SkSize::Make(1, 1), make_image_filter());
@@ -242,6 +265,9 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     case MAGNIFIER:
         filter = SkMagnifierImageFilter::Create(make_rect(), make_scalar(true));
         break;
+    case DOWN_SAMPLE:
+        filter = SkDownSampleImageFilter::Create(make_scalar());
+        break;
     case XFERMODE:
     {
         SkAutoTUnref<SkXfermode> mode(SkXfermode::Create(make_xfermode()));
@@ -250,6 +276,34 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
         break;
     case OFFSET:
         filter = SkOffsetImageFilter::Create(make_scalar(), make_scalar(), make_image_filter());
+        break;
+    case MATRIX:
+        filter = SkMatrixImageFilter::Create(make_matrix(),
+                                             (SkPaint::FilterLevel)R(4),
+                                             make_image_filter());
+        break;
+    case MATRIX_CONVOLUTION:
+    {
+        SkImageFilter::CropRect cropR(SkRect::MakeWH(SkIntToScalar(kBitmapSize),
+                                                     SkIntToScalar(kBitmapSize)));
+        SkISize size = SkISize::Make(R(10)+1, R(10)+1);
+        int arraySize = size.width() * size.height();
+        SkTArray<SkScalar> kernel(arraySize);
+        for (int i = 0; i < arraySize; ++i) {
+            kernel.push_back() = make_scalar();
+        }
+        SkIPoint kernelOffset = SkIPoint::Make(R(SkIntToScalar(size.width())),
+                                               R(SkIntToScalar(size.height())));
+        filter = SkMatrixConvolutionImageFilter::Create(size,
+                                                        kernel.begin(),
+                                                        make_scalar(),
+                                                        make_scalar(),
+                                                        kernelOffset,
+                                                        (SkMatrixConvolutionImageFilter::TileMode)R(3),
+                                                        R(2) == 1,
+                                                        make_image_filter(),
+                                                        &cropR);
+    }
         break;
     case COMPOSE:
         filter = SkComposeImageFilter::Create(make_image_filter(), make_image_filter());
@@ -321,14 +375,12 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
         break;
     case PICTURE:
     {
-        SkPicture* pict = NULL;
-#ifdef SK_ALLOW_PICTUREIMAGEFILTER_SERIALIZATION
-        pict = new SkPicture;
-        SkAutoUnref aur(pict);
-        drawSomething(pict->beginRecording(kBitmapSize, kBitmapSize));
-        pict->endRecording();
-#endif
-        filter = SkPictureImageFilter::Create(pict, make_rect());
+        SkRTreeFactory factory;
+        SkPictureRecorder recorder;
+        SkCanvas* recordingCanvas = recorder.beginRecording(kBitmapSize, kBitmapSize, &factory, 0);
+        drawSomething(recordingCanvas);
+        SkAutoTUnref<SkPicture> pict(recorder.endRecording());
+        filter = SkPictureImageFilter::Create(pict.get(), make_rect());
     }
         break;
     default:

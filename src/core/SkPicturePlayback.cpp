@@ -59,7 +59,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture, const SkPictInfo&
 SkPicturePlayback::SkPicturePlayback(const SkPicture* picture,
                                      const SkPictureRecord& record,
                                      const SkPictInfo& info,
-                                     bool deepCopy)
+                                     bool deepCopyOps)
     : fPicture(picture)
     , fInfo(info) {
 #ifdef SK_DEBUG_SIZE
@@ -99,21 +99,16 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture,
     record.dumpPaints();
 #endif
 
-    record.validate(record.writeStream().bytesWritten(), 0);
-    const SkWriter32& writer = record.writeStream();
     this->init();
-    SkASSERT(!fOpData);
-    if (writer.bytesWritten() == 0) {
-        fOpData = SkData::NewEmpty();
-        return;
-    }
-    fOpData = writer.snapshotAsData();
+
+    fOpData = record.opData(deepCopyOps);
 
     fBoundingHierarchy = record.fBoundingHierarchy;
     fStateTree = record.fStateTree;
 
     SkSafeRef(fBoundingHierarchy);
     SkSafeRef(fStateTree);
+    fContentInfo.set(record.fContentInfo);
 
     if (NULL != fBoundingHierarchy) {
         fBoundingHierarchy->flushDeferredInserts();
@@ -129,17 +124,13 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture,
 
     picture->initForPlayback();
 
-    const SkTDArray<SkPicture* >& pictures = record.getPictureRefs();
+    const SkTDArray<const SkPicture* >& pictures = record.getPictureRefs();
     fPictureCount = pictures.count();
     if (fPictureCount > 0) {
-        fPictureRefs = SkNEW_ARRAY(SkPicture*, fPictureCount);
+        fPictureRefs = SkNEW_ARRAY(const SkPicture*, fPictureCount);
         for (int i = 0; i < fPictureCount; i++) {
-            if (deepCopy) {
-                fPictureRefs[i] = pictures[i]->clone();
-            } else {
-                fPictureRefs[i] = pictures[i];
-                fPictureRefs[i]->ref();
-            }
+            fPictureRefs[i] = pictures[i];
+            fPictureRefs[i]->ref();
         }
     }
 
@@ -165,7 +156,8 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture,
 #endif
 }
 
-SkPicturePlayback::SkPicturePlayback(const SkPicture* picture, const SkPicturePlayback& src,
+SkPicturePlayback::SkPicturePlayback(const SkPicture* picture, 
+                                     const SkPicturePlayback& src,
                                      SkPictCopyInfo* deepCopyInfo)
     : fPicture(picture)
     , fInfo(src.fInfo) {
@@ -177,6 +169,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture, const SkPicturePl
 
     fBoundingHierarchy = src.fBoundingHierarchy;
     fStateTree = src.fStateTree;
+    fContentInfo.set(src.fContentInfo);
 
     SkSafeRef(fBoundingHierarchy);
     SkSafeRef(fStateTree);
@@ -210,7 +203,7 @@ SkPicturePlayback::SkPicturePlayback(const SkPicture* picture, const SkPicturePl
     }
 
     fPictureCount = src.fPictureCount;
-    fPictureRefs = SkNEW_ARRAY(SkPicture*, fPictureCount);
+    fPictureRefs = SkNEW_ARRAY(const SkPicture*, fPictureCount);
     for (int i = 0; i < fPictureCount; i++) {
         if (deepCopyInfo) {
             fPictureRefs[i] = src.fPictureRefs[i]->clone();
@@ -505,7 +498,7 @@ bool SkPicturePlayback::parseStreamTag(SkPicture* picture,
         } break;
         case SK_PICT_PICTURE_TAG: {
             fPictureCount = size;
-            fPictureRefs = SkNEW_ARRAY(SkPicture*, fPictureCount);
+            fPictureRefs = SkNEW_ARRAY(const SkPicture*, fPictureCount);
             bool success = true;
             int i = 0;
             for ( ; i < fPictureCount; i++) {
@@ -590,7 +583,7 @@ bool SkPicturePlayback::parseBufferTag(SkPicture* picture,
                 return false;
             }
             fPictureCount = size;
-            fPictureRefs = SkNEW_ARRAY(SkPicture*, fPictureCount);
+            fPictureRefs = SkNEW_ARRAY(const SkPicture*, fPictureCount);
             bool success = true;
             int i = 0;
             for ( ; i < fPictureCount; i++) {
@@ -1334,6 +1327,30 @@ void SkPicturePlayback::draw(SkCanvas& canvas, SkDrawPictureCallback* callback) 
 //    this->dumpSize();
 }
 
+
+#if SK_SUPPORT_GPU
+bool SkPicturePlayback::suitableForGpuRasterization(GrContext* context, const char **reason) const {
+    // TODO: the heuristic used here needs to be refined
+    static const int kNumPaintWithPathEffectUsesTol = 1;
+    static const int kNumAAConcavePaths = 5;
+
+    SkASSERT(fContentInfo.numAAHairlineConcavePaths() <= fContentInfo.numAAConcavePaths());
+
+    bool ret = fContentInfo.numPaintWithPathEffectUses() < kNumPaintWithPathEffectUsesTol &&
+                    (fContentInfo.numAAConcavePaths() - fContentInfo.numAAHairlineConcavePaths()) 
+                    < kNumAAConcavePaths;
+    if (!ret && NULL != reason) {
+        if (fContentInfo.numPaintWithPathEffectUses() >= kNumPaintWithPathEffectUsesTol)
+            *reason = "Too many path effects.";
+        else if ((fContentInfo.numAAConcavePaths() - fContentInfo.numAAHairlineConcavePaths()) 
+                 >= kNumAAConcavePaths)
+            *reason = "Too many anti-aliased concave paths.";
+        else
+            *reason = "Unknown reason for GPU unsuitability.";
+    }
+    return ret;
+}
+#endif
 ///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_DEBUG_SIZE

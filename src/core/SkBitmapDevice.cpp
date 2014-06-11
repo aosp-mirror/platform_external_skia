@@ -78,7 +78,7 @@ SkBitmapDevice* SkBitmapDevice::Create(const SkImageInfo& origInfo,
     SkBitmap bitmap;
 
     if (kUnknown_SkColorType == info.colorType()) {
-        if (!bitmap.setConfig(info)) {
+        if (!bitmap.setInfo(info)) {
             return NULL;
         }
     } else {
@@ -440,7 +440,11 @@ SkSurface* SkBitmapDevice::newSurface(const SkImageInfo& info) {
 }
 
 const void* SkBitmapDevice::peekPixels(SkImageInfo* info, size_t* rowBytes) {
-    if (fBitmap.getPixels() && fBitmap.asImageInfo(info)) {
+    const SkImageInfo bmInfo = fBitmap.info();
+    if (fBitmap.getPixels() && (kUnknown_SkColorType != bmInfo.colorType())) {
+        if (info) {
+            *info = bmInfo;
+        }
         if (rowBytes) {
             *rowBytes = fBitmap.rowBytes();
         }
@@ -457,7 +461,7 @@ bool SkBitmapDevice::filterTextFlags(const SkPaint& paint, TextFlags* flags) {
         return false;
     }
 
-    if (SkBitmap::kARGB_8888_Config != fBitmap.config() ||
+    if (kN32_SkColorType != fBitmap.colorType() ||
         paint.getRasterizer() ||
         paint.getPathEffect() ||
         paint.isFakeBoldText() ||

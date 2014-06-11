@@ -16,7 +16,7 @@
 #include "SkGradientShader.h"
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
-#include "SkImageGenerator.h"
+#include "SkImageGeneratorPriv.h"
 #include "SkImagePriv.h"
 #include "SkOSFile.h"
 #include "SkPoint.h"
@@ -54,6 +54,9 @@ static bool skip_image_format(SkImageDecoder::Format format) {
         // decoders do not, so skip them as well.
         case SkImageDecoder::kICO_Format:
         case SkImageDecoder::kBMP_Format:
+        // KTX is a Texture format so it's not particularly clear how to 
+        // decode the alpha from it.
+        case SkImageDecoder::kKTX_Format:
         // The rest of these are opaque.
         case SkImageDecoder::kPKM_Format:
         case SkImageDecoder::kWBMP_Format:
@@ -455,7 +458,7 @@ DEF_TEST(WebP, reporter) {
 
     bool success = SkInstallDiscardablePixelRef(
         SkDecodingImageGenerator::Create(encoded,
-            SkDecodingImageGenerator::Options()), &bm, NULL);
+            SkDecodingImageGenerator::Options()), &bm);
 
     REPORTER_ASSERT(reporter, success);
     if (!success) {
@@ -491,18 +494,8 @@ static SkPixelRef* install_pixel_ref(SkBitmap* bitmap,
     SkASSERT(stream->unique());
     SkColorType colorType = bitmap->colorType();
     SkDecodingImageGenerator::Options opts(sampleSize, ditherImage, colorType);
-    SkAutoTDelete<SkImageGenerator> gen(
-        SkDecodingImageGenerator::Create(stream, opts));
-    SkImageInfo info;
-    if ((NULL == gen.get()) || !gen->getInfo(&info)) {
-        return NULL;
-    }
-    SkDiscardableMemory::Factory* factory = NULL;
-    if (info.getSafeSize(info.minRowBytes()) < (32 * 1024)) {
-        // only use ashmem for large images, since mmaps come at a price
-        factory = SkGetGlobalDiscardableMemoryPool();
-    }
-    if (SkInstallDiscardablePixelRef(gen.detach(), bitmap, factory)) {
+    if (SkInstallDiscardablePixelRef(
+                SkDecodingImageGenerator::Create(stream, opts), bitmap)) {
         return bitmap->pixelRef();
     }
     return NULL;
@@ -519,7 +512,7 @@ DEF_TEST(ImprovedBitmapFactory, reporter) {
         SkStream::NewFromFile(path.c_str()));
     if (sk_exists(path.c_str())) {
         SkBitmap bm;
-        SkAssertResult(bm.setConfig(SkImageInfo::MakeN32Premul(1, 1)));
+        SkAssertResult(bm.setInfo(SkImageInfo::MakeN32Premul(1, 1)));
         REPORTER_ASSERT(reporter,
             NULL != install_pixel_ref(&bm, stream.detach(), 1, true));
         SkAutoLockPixels alp(bm);
@@ -594,14 +587,13 @@ static void test_options(skiatest::Reporter* reporter,
             return;
         }
         success = SkInstallDiscardablePixelRef(
-            SkDecodingImageGenerator::Create(encodedData, opts), &bm, NULL);
+            SkDecodingImageGenerator::Create(encodedData, opts), &bm);
     } else {
         if (NULL == encodedStream) {
             return;
         }
         success = SkInstallDiscardablePixelRef(
-            SkDecodingImageGenerator::Create(encodedStream->duplicate(), opts),
-            &bm, NULL);
+            SkDecodingImageGenerator::Create(encodedStream->duplicate(), opts), &bm);
     }
     if (!success) {
         if (opts.fUseRequestedColorType

@@ -12,8 +12,8 @@ namespace DM {
 GpuGMTask::GpuGMTask(const char* config,
                      Reporter* reporter,
                      TaskRunner* taskRunner,
-                     const Expectations& expectations,
                      skiagm::GMRegistry::Factory gmFactory,
+                     const Expectations& expectations,
                      GrContextFactory::GLContextType contextType,
                      int sampleCount)
     : GpuTask(reporter, taskRunner)
@@ -37,7 +37,7 @@ void GpuGMTask::draw(GrContextFactory* grFactory) {
     canvas->flush();
 
     SkBitmap bitmap;
-    bitmap.setConfig(info);
+    bitmap.setInfo(info);
     canvas->readPixels(&bitmap, 0, 0);
 
     this->spawnChild(SkNEW_ARGS(ExpectationsTask, (*this, fExpectations, bitmap)));

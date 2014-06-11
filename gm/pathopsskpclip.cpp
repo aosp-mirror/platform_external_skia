@@ -33,7 +33,7 @@ protected:
     }
 
     virtual SkISize onISize() SK_OVERRIDE {
-        return make_isize(1200, 900);
+        return SkISize::Make(1200, 900);
     }
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
@@ -55,13 +55,13 @@ protected:
 
         canvas->setAllowSimplifyClip(true);
         canvas->save();
-        canvas->drawPicture(*pict);
+        canvas->drawPicture(pict);
         canvas->restore();
 
         canvas->setAllowSimplifyClip(false);
         canvas->save();
         canvas->translate(SkIntToScalar(1200 / 2), 0);
-        canvas->drawPicture(*pict);
+        canvas->drawPicture(pict);
         canvas->restore();
     }
 

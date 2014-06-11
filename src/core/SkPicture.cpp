@@ -126,30 +126,31 @@ static void validateMatrix(const SkMatrix* matrix) {
 SkPicture::SkPicture()
     : fAccelData(NULL) {
     this->needsNewGenID();
-    fRecord = NULL;
     fPlayback = NULL;
     fWidth = fHeight = 0;
 }
 
-// This method makes a SkPicturePlayback object from an in-progress recording.
-// Unfortunately, it does not include the restoreToCount of a real endRecording
-// call.
-SkPicturePlayback* SkPicture::FakeEndRecording(const SkPicture* resourceSrc,
-                                               const SkPictureRecord& record,
-                                               bool deepCopy) {
+SkPicture::SkPicture(int width, int height,
+                     SkPictureRecord& record,
+                     bool deepCopyOps)
+    : fWidth(width)
+    , fHeight(height)
+    , fAccelData(NULL) {
+    this->needsNewGenID();
+
+    fPathHeap.reset(SkSafeRef(record.pathHeap()));
+
     SkPictInfo info;
-    resourceSrc->createHeader(&info);
-    return SkNEW_ARGS(SkPicturePlayback, (resourceSrc, record, info, deepCopy));
+    this->createHeader(&info);
+    fPlayback = SkNEW_ARGS(SkPicturePlayback, (this, record, info, deepCopyOps));
 }
 
 SkPicture::SkPicture(const SkPicture& src)
     : INHERITED()
-    , fAccelData(NULL)
-    , fContentInfo(src.fContentInfo) {
+    , fAccelData(NULL) {
     this->needsNewGenID();
     fWidth = src.fWidth;
     fHeight = src.fHeight;
-    fRecord = NULL;
 
     /*  We want to copy the src's playback. However, if that hasn't been built
         yet, we need to fake a call to endRecording() without actually calling
@@ -157,10 +158,7 @@ SkPicture::SkPicture(const SkPicture& src)
      */
     if (src.fPlayback) {
         fPlayback = SkNEW_ARGS(SkPicturePlayback, (this, *src.fPlayback));
-        SkASSERT(NULL == src.fRecord);
         fUniqueID = src.uniqueID();     // need to call method to ensure != 0
-    } else if (src.fRecord) {
-        fPlayback = FakeEndRecording(this, *src.fRecord, false);
     } else {
         fPlayback = NULL;
     }
@@ -198,26 +196,17 @@ void SkPicture::dumpSize() const {
 }
 
 SkPicture::~SkPicture() {
-    SkSafeUnref(fRecord);
     SkDELETE(fPlayback);
     SkSafeUnref(fAccelData);
 }
 
-void SkPicture::internalOnly_EnableOpts(bool enableOpts) {
-    if (NULL != fRecord) {
-        fRecord->internalOnly_EnableOpts(enableOpts);
-    }
-}
-
 void SkPicture::swap(SkPicture& other) {
     SkTSwap(fUniqueID, other.fUniqueID);
-    SkTSwap(fRecord, other.fRecord);
     SkTSwap(fPlayback, other.fPlayback);
     SkTSwap(fAccelData, other.fAccelData);
     SkTSwap(fWidth, other.fWidth);
     SkTSwap(fHeight, other.fHeight);
     fPathHeap.swap(&other.fPathHeap);
-    fContentInfo.swap(&other.fContentInfo);
 }
 
 SkPicture* SkPicture::clone() const {
@@ -235,9 +224,7 @@ void SkPicture::clone(SkPicture* pictures, int count) const {
         clone->needsNewGenID();
         clone->fWidth = fWidth;
         clone->fHeight = fHeight;
-        SkSafeSetNull(clone->fRecord);
         SkDELETE(clone->fPlayback);
-        clone->fContentInfo.set(fContentInfo);
 
         /*  We want to copy the src's playback. However, if that hasn't been built
             yet, we need to fake a call to endRecording() without actually calling
@@ -287,10 +274,7 @@ void SkPicture::clone(SkPicture* pictures, int count) const {
             }
 
             clone->fPlayback = SkNEW_ARGS(SkPicturePlayback, (clone, *fPlayback, &copyInfo));
-            SkASSERT(NULL == fRecord);
             clone->fUniqueID = this->uniqueID(); // need to call method to ensure != 0
-        } else if (fRecord) {
-            clone->fPlayback = FakeEndRecording(clone, *fRecord, true);
         } else {
             clone->fPlayback = NULL;
         }
@@ -312,123 +296,13 @@ SkPicture::AccelData::Domain SkPicture::AccelData::GenerateDomain() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
-
-SkCanvas* SkPicture::beginRecording(int width, int height,
-                                    uint32_t recordingFlags) {
-    if (fPlayback) {
-        SkDELETE(fPlayback);
-        fPlayback = NULL;
-    }
-    SkSafeUnref(fAccelData);
-    SkSafeSetNull(fRecord);
-    fContentInfo.reset();
-
-    this->needsNewGenID();
-
-    // Must be set before calling createBBoxHierarchy
-    fWidth = width;
-    fHeight = height;
-
-    const SkISize size = SkISize::Make(width, height);
-
-    if (recordingFlags & kOptimizeForClippedPlayback_RecordingFlag) {
-        SkBBoxHierarchy* tree = this->createBBoxHierarchy();
-        SkASSERT(NULL != tree);
-        fRecord = SkNEW_ARGS(SkBBoxHierarchyRecord, (this, size, recordingFlags, tree));
-        tree->unref();
-    } else {
-        fRecord = SkNEW_ARGS(SkPictureRecord, (this, size, recordingFlags));
-    }
-    fRecord->beginRecording();
-
-    return fRecord;
-}
-
-#endif
-
-SkCanvas* SkPicture::beginRecording(int width, int height,
-                                    SkBBHFactory* bbhFactory,
-                                    uint32_t recordingFlags) {
-    if (fPlayback) {
-        SkDELETE(fPlayback);
-        fPlayback = NULL;
-    }
-    SkSafeUnref(fAccelData);
-    SkSafeSetNull(fRecord);
-    SkASSERT(NULL == fPathHeap);
-    fContentInfo.reset();
-
-    this->needsNewGenID();
-
-    fWidth = width;
-    fHeight = height;
-
-    const SkISize size = SkISize::Make(width, height);
-
-    if (NULL != bbhFactory) {
-        SkAutoTUnref<SkBBoxHierarchy> tree((*bbhFactory)(width, height));
-        SkASSERT(NULL != tree);
-        fRecord = SkNEW_ARGS(SkBBoxHierarchyRecord, (this, size,
-                                                     recordingFlags|
-                                                     kOptimizeForClippedPlayback_RecordingFlag,
-                                                     tree.get()));
-    } else {
-        fRecord = SkNEW_ARGS(SkPictureRecord, (this, size, recordingFlags));
-    }
-    fRecord->beginRecording();
-
-    return fRecord;
-}
-
-
-#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
-
-SkBBoxHierarchy* SkPicture::createBBoxHierarchy() const {
-    // TODO: this code is now replicated in SkRTreePicture. Once all external
-    // clients have been weaned off of kOptimizeForClippedPlayback_RecordingFlag,
-    // this code can be removed.
-
-    // These values were empirically determined to produce reasonable
-    // performance in most cases.
-    static const int kRTreeMinChildren = 6;
-    static const int kRTreeMaxChildren = 11;
-
-    SkScalar aspectRatio = SkScalarDiv(SkIntToScalar(fWidth),
-                                       SkIntToScalar(fHeight));
-    bool sortDraws = false;  // Do not sort draw calls when bulk loading.
-
-    return SkRTree::Create(kRTreeMinChildren, kRTreeMaxChildren,
-                           aspectRatio, sortDraws);
-}
-
-#endif
-
-SkCanvas* SkPicture::getRecordingCanvas() const {
-    // will be null if we are not recording
-    return fRecord;
-}
-
-void SkPicture::endRecording() {
-    if (NULL == fPlayback) {
-        if (NULL != fRecord) {
-            fRecord->endRecording();
-            SkPictInfo info;
-            this->createHeader(&info);
-            fPlayback = SkNEW_ARGS(SkPicturePlayback, (this, *fRecord, info));
-            SkSafeSetNull(fRecord);
-        }
-    }
-    SkASSERT(NULL == fRecord);
-}
-
 const SkPicture::OperationList& SkPicture::OperationList::InvalidList() {
     static OperationList gInvalid;
     return gInvalid;
 }
 
-const SkPicture::OperationList& SkPicture::EXPERIMENTAL_getActiveOps(const SkIRect& queryRect) {
-    this->endRecording();  // TODO: remove eventually
+const SkPicture::OperationList& SkPicture::EXPERIMENTAL_getActiveOps(const SkIRect& queryRect) const {
+    SkASSERT(NULL != fPlayback);
     if (NULL != fPlayback) {
         return fPlayback->getActiveOps(queryRect);
     }
@@ -442,8 +316,8 @@ size_t SkPicture::EXPERIMENTAL_curOpID() const {
     return 0;
 }
 
-void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) {
-    this->endRecording(); // TODO: remove eventually
+void SkPicture::draw(SkCanvas* surface, SkDrawPictureCallback* callback) const {
+    SkASSERT(NULL != fPlayback);
     if (NULL != fPlayback) {
         fPlayback->draw(*surface, callback);
     }
@@ -502,7 +376,6 @@ bool SkPicture::InternalOnly_BufferIsSKP(SkReadBuffer& buffer, SkPictInfo* pInfo
 
 SkPicture::SkPicture(SkPicturePlayback* playback, int width, int height)
     : fPlayback(playback)
-    , fRecord(NULL)
     , fWidth(width)
     , fHeight(height)
     , fAccelData(NULL) {
@@ -576,10 +449,6 @@ void SkPicture::createHeader(SkPictInfo* info) const {
 void SkPicture::serialize(SkWStream* stream, EncodeBitmap encoder) const {
     SkPicturePlayback* playback = fPlayback;
 
-    if (NULL == playback && fRecord) {
-        playback = FakeEndRecording(this, *fRecord, false);
-    }
-
     SkPictInfo info;
     this->createHeader(&info);
     stream->write(&info, sizeof(info));
@@ -634,10 +503,6 @@ void SkPicture::flattenToBuffer(SkWriteBuffer& buffer) const {
 void SkPicture::flatten(SkWriteBuffer& buffer) const {
     SkPicturePlayback* playback = fPlayback;
 
-    if (NULL == playback && fRecord) {
-        playback = FakeEndRecording(this, *fRecord, false);
-    }
-
     SkPictInfo info;
     this->createHeader(&info);
     buffer.writeByteArray(&info, sizeof(info));
@@ -654,15 +519,15 @@ void SkPicture::flatten(SkWriteBuffer& buffer) const {
 }
 
 #if SK_SUPPORT_GPU
-bool SkPicture::suitableForGpuRasterization(GrContext* context) const {
-    // TODO: the heuristic used here needs to be refined
-    static const int kNumPaintWithPathEffectUsesTol = 1;
-    static const int kNumAAConcavePaths = 5;
+bool SkPicture::suitableForGpuRasterization(GrContext* context, const char **reason) const {
+    if (NULL == fPlayback) {
+        if (NULL != reason) {
+            *reason = "Missing playback object.";
+        }
+        return false;
+    }
 
-    SkASSERT(this->numAAHairlineConcavePaths() <= this->numAAConcavePaths());
-
-    return this->numPaintWithPathEffectUses() < kNumPaintWithPathEffectUsesTol &&
-           (this->numAAConcavePaths()-this->numAAHairlineConcavePaths()) < kNumAAConcavePaths;
+    return fPlayback->suitableForGpuRasterization(context, reason);
 }
 #endif
 
@@ -694,11 +559,6 @@ static int32_t next_picture_generation_id() {
 }
 
 uint32_t SkPicture::uniqueID() const {
-    if (NULL != fRecord) {
-        SkASSERT(NULL == fPlayback);
-        return SK_InvalidGenID;
-    }
-
     if (SK_InvalidGenID == fUniqueID) {
         fUniqueID = next_picture_generation_id();
     }

@@ -18,7 +18,7 @@
 #include "SkBlurDrawLooper.h"
 #include "SkBlurImageFilter.h"
 #include "SkBlurMaskFilter.h"
-#include "SkBounder.h"
+#include "SkBlurTypes.h"
 #include "SkCanvas.h"
 #include "SkChecksum.h"
 #include "SkChunkAlloc.h"
@@ -121,7 +121,6 @@
 #include "SkRefCnt.h"
 #include "SkRegion.h"
 #include "SkRRect.h"
-#include "SkRTreePicture.h"
 #include "SkScalar.h"
 #include "SkShader.h"
 #include "SkSize.h"
@@ -140,7 +139,6 @@
 #include "SkTemplates.h"
 #include "SkTestImageFilters.h"
 #include "SkThread.h"
-#include "SkTileGridPicture.h"
 #include "SkTileImageFilter.h"
 #include "SkTime.h"
 #include "SkTInternalLList.h"
@@ -152,10 +150,13 @@
 #include "SkTypes.h"
 #include "SkUnPreMultiply.h"
 #include "SkUtils.h"
+#include "SkVertState.h"
 #include "SkWeakRefCnt.h"
 #include "SkWriteBuffer.h"
 #include "SkWriter32.h"
 #include "SkXfermode.h"
 #include "SkXfermodeImageFilter.h"
+
+SkBitmap source;
 
 {{.Code}}

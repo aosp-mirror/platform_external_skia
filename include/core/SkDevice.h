@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2010 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkDevice_DEFINED
 #define SkDevice_DEFINED
@@ -76,15 +74,10 @@ public:
         bounds->setXYWH(origin.x(), origin.y(), this->width(), this->height());
     }
 
-
     /** Returns true if the device's bitmap's config treats every pixel as
         implicitly opaque.
     */
     virtual bool isOpaque() const = 0;
-
-    /** Return the bitmap config of the device's pixels
-     */
-    virtual SkBitmap::Config config() const = 0;
 
     /** Return the bitmap associated with this device. Call this each time you need
         to access the bitmap, as it notifies the subclass to perform any flushing
@@ -341,14 +334,14 @@ protected:
      *  PRIVATE / EXPERIMENTAL -- do not call
      *  Construct an acceleration object and attach it to 'picture'
      */
-    virtual void EXPERIMENTAL_optimize(SkPicture* picture);
+    virtual void EXPERIMENTAL_optimize(const SkPicture* picture);
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
      *  Purge all discardable optimization information for 'picture'. If
      *  picture is NULL then purge discardable information for all pictures.
      */
-    virtual void EXPERIMENTAL_purge(SkPicture* picture);
+    virtual void EXPERIMENTAL_purge(const SkPicture* picture);
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
@@ -360,7 +353,7 @@ protected:
      *  to perform some device-specific warm up tasks and then let SkCanvas
      *  perform the main rendering loop (by return false from here).
      */
-    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, SkPicture* picture);
+    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture);
 
 private:
     friend class SkCanvas;

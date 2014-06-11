@@ -265,7 +265,7 @@ void SkNWayCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const S
     }
 }
 
-void SkNWayCanvas::drawPicture(SkPicture& picture) {
+void SkNWayCanvas::onDrawPicture(const SkPicture* picture) {
     Iter iter(fList);
     while (iter.next()) {
         iter->drawPicture(picture);
@@ -289,14 +289,6 @@ void SkNWayCanvas::drawData(const void* data, size_t length) {
     while (iter.next()) {
         iter->drawData(data, length);
     }
-}
-
-SkBounder* SkNWayCanvas::setBounder(SkBounder* bounder) {
-    Iter iter(fList);
-    while (iter.next()) {
-        iter->setBounder(bounder);
-    }
-    return this->INHERITED::setBounder(bounder);
 }
 
 SkDrawFilter* SkNWayCanvas::setDrawFilter(SkDrawFilter* filter) {

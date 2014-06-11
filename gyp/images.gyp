@@ -10,6 +10,7 @@
         'core.gyp:*',
         'libjpeg.gyp:*',
         'etc1.gyp:libetc1',
+        'ktx.gyp:libSkKTX',
         'libwebp.gyp:libwebp',
         'utils.gyp:utils',
       ],
@@ -31,9 +32,8 @@
         '../src/images/',
       ],
       'sources': [
+        '../include/images/SkDecodingImageGenerator.h',
         '../include/images/SkForceLinking.h',
-        '../include/images/SkImageRef.h',
-        '../include/images/SkImageRef_GlobalPool.h',
         '../src/images/SkJpegUtility.h',
         '../include/images/SkMovie.h',
         '../include/images/SkPageFlipper.h',
@@ -42,7 +42,6 @@
         '../src/images/bmpdecoderhelper.h',
 
         '../src/images/SkDecodingImageGenerator.cpp',
-        '../src/images/SkDecodingImageGenerator.h',
         '../src/images/SkForceLinking.cpp',
         '../src/images/SkImageDecoder.cpp',
         '../src/images/SkImageDecoder_FactoryDefault.cpp',
@@ -61,6 +60,7 @@
         # alphabetical order.
         '../src/images/SkImageDecoder_wbmp.cpp',
         '../src/images/SkImageDecoder_pkm.cpp',
+        '../src/images/SkImageDecoder_ktx.cpp',
         '../src/images/SkImageDecoder_libbmp.cpp',
         '../src/images/SkImageDecoder_libgif.cpp',
         '../src/images/SkImageDecoder_libico.cpp',
@@ -71,13 +71,6 @@
         '../src/images/SkImageEncoder.cpp',
         '../src/images/SkImageEncoder_Factory.cpp',
         '../src/images/SkImageEncoder_argb.cpp',
-        '../src/images/SkImageRef.cpp',
-        '../src/images/SkImageRefPool.cpp',
-        '../src/images/SkImageRefPool.h',
-        '../src/images/SkImageRef_ashmem.h',
-        '../src/images/SkImageRef_ashmem.cpp',
-        '../src/images/SkImageRef_GlobalPool.cpp',
-        '../src/images/SkImages.cpp',
         '../src/images/SkJpegUtility.cpp',
         '../src/images/SkMovie.cpp',
         '../src/images/SkMovie_gif.cpp',
@@ -154,11 +147,6 @@
                 'android_deps.gyp:png'
               ],
             }],
-          ],
-        },{ #else if skia_os != android
-          'sources!': [
-            '../src/images/SkImageRef_ashmem.h',
-            '../src/images/SkImageRef_ashmem.cpp',
           ],
         }],
         [ 'skia_os == "chromeos"', {

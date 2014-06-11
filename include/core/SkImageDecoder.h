@@ -38,8 +38,9 @@ public:
         kWBMP_Format,
         kWEBP_Format,
         kPKM_Format,
+        kKTX_Format,
 
-        kLastKnownFormat = kWEBP_Format,
+        kLastKnownFormat = kKTX_Format,
     };
 
     /** Return the format of image this decoder can decode. If this decoder can decode multiple
@@ -136,6 +137,7 @@ public:
     Peeker* getPeeker() const { return fPeeker; }
     Peeker* setPeeker(Peeker*);
 
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     /** \class Chooser
 
         Base class for optional callbacks to choose an image from a format that
@@ -157,6 +159,7 @@ public:
 
     Chooser* getChooser() const { return fChooser; }
     Chooser* setChooser(Chooser*);
+#endif
 
     /**
      *  Optional table describing the caller's preferred config based on
@@ -435,9 +438,11 @@ public:
 protected:
     SkImageDecoder();
 
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     // helper function for decoders to handle the (common) case where there is only
     // once choice available in the image file.
-    bool chooseFromOneChoice(SkBitmap::Config config, int width, int height) const;
+    bool chooseFromOneChoice(SkColorType, int width, int height) const;
+#endif
 
     /*  Helper for subclasses. Call this to allocate the pixel memory given the bitmap's
         width/height/rowbytes/config. Returns true on success. This method handles checking
@@ -456,19 +461,21 @@ protected:
         // 8 bits per component. Used for 24 bit if there is no alpha.
         k32Bit_SrcDepth,
     };
-    /** The subclass, inside onDecode(), calls this to determine the config of
+    /** The subclass, inside onDecode(), calls this to determine the colorType of
         the returned bitmap. SrcDepth and hasAlpha reflect the raw data of the
         src image. This routine returns the caller's preference given
-        srcDepth and hasAlpha, or kNo_Config if there is no preference.
+        srcDepth and hasAlpha, or kUnknown_SkColorType if there is no preference.
 
         Note: this also takes into account GetDeviceConfig(), so the subclass
         need not call that.
      */
-    SkBitmap::Config getPrefConfig(SrcDepth, bool hasAlpha) const;
+    SkColorType getPrefColorType(SrcDepth, bool hasAlpha) const;
 
 private:
     Peeker*                 fPeeker;
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     Chooser*                fChooser;
+#endif
     SkBitmap::Allocator*    fAllocator;
     int                     fSampleSize;
     SkBitmap::Config        fDefaultPref;   // use if fUsePrefTable is false
@@ -527,7 +534,7 @@ DECLARE_DECODER_CREATOR(PNGImageDecoder);
 DECLARE_DECODER_CREATOR(WBMPImageDecoder);
 DECLARE_DECODER_CREATOR(WEBPImageDecoder);
 DECLARE_DECODER_CREATOR(PKMImageDecoder);
-
+DECLARE_DECODER_CREATOR(KTXImageDecoder);
 
 // Typedefs to make registering decoder and formatter callbacks easier.
 // These have to be defined outside SkImageDecoder. :(

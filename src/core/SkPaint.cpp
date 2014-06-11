@@ -106,11 +106,6 @@ SkPaint::SkPaint() {
 }
 
 SkPaint::SkPaint(const SkPaint& src) {
-    // Diagnoistic. May remove later. See crbug.com/364224
-    if (NULL == &src) {
-        sk_throw();
-    }
-
 #define COPY(field) field = src.field
 #define REF_COPY(field) field = SkSafeRef(src.field)
 
@@ -1753,6 +1748,7 @@ static SkScalar gDeviceGamma = SK_ScalarMin;
  * the returned SkMaskGamma pointer is refed or forgotten.
  */
 static const SkMaskGamma& cachedMaskGamma(SkScalar contrast, SkScalar paintGamma, SkScalar deviceGamma) {
+    gMaskGammaCacheMutex.assertHeld();
     if (0 == contrast && SK_Scalar1 == paintGamma && SK_Scalar1 == deviceGamma) {
         if (NULL == gLinearMaskGamma) {
             gLinearMaskGamma = SkNEW(SkMaskGamma);
@@ -1830,10 +1826,8 @@ void SkScalerContext::PostMakeRec(const SkPaint&, SkScalerContext::Rec* rec) {
 
 /*
  *  ignoreGamma tells us that the caller just wants metrics that are unaffected
- *  by gamma correction, so we jam the luminance field to 0 (most common value
- *  for black text) in hopes that we get a cache hit easier. A better solution
- *  would be for the fontcache lookup to know to ignore the luminance field
- *  entirely, but not sure how to do that and keep it fast.
+ *  by gamma correction, so we set the rec to ignore preblend: i.e. gamma = 1,
+ *  contrast = 0, luminanceColor = transparent black.
  */
 void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
                              const SkMatrix* deviceMatrix,
@@ -1843,7 +1837,7 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
 
     SkScalerContext::MakeRec(*this, deviceProperties, deviceMatrix, &rec);
     if (ignoreGamma) {
-        rec.setLuminanceColor(0);
+        rec.ignorePreBlend();
     }
 
     size_t          descSize = sizeof(rec);
@@ -1967,9 +1961,10 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
 }
 
 SkGlyphCache* SkPaint::detachCache(const SkDeviceProperties* deviceProperties,
-                                   const SkMatrix* deviceMatrix) const {
+                                   const SkMatrix* deviceMatrix,
+                                   bool ignoreGamma) const {
     SkGlyphCache* cache;
-    this->descriptorProc(deviceProperties, deviceMatrix, DetachDescProc, &cache, false);
+    this->descriptorProc(deviceProperties, deviceMatrix, DetachDescProc, &cache, ignoreGamma);
     return cache;
 }
 
@@ -1984,6 +1979,33 @@ SkMaskGamma::PreBlend SkScalerContext::GetMaskPreBlend(const SkScalerContext::Re
                                                    rec.getDeviceGamma());
     return maskGamma.preBlend(rec.getLuminanceColor());
 }
+
+size_t SkScalerContext::GetGammaLUTSize(SkScalar contrast, SkScalar paintGamma,
+                                        SkScalar deviceGamma, int* width, int* height) {
+    SkAutoMutexAcquire ama(gMaskGammaCacheMutex);
+    const SkMaskGamma& maskGamma = cachedMaskGamma(contrast,
+                                                   paintGamma,
+                                                   deviceGamma);
+
+    maskGamma.getGammaTableDimensions(width, height);
+    size_t size = (*width)*(*height)*sizeof(uint8_t);
+
+    return size;
+}
+
+void SkScalerContext::GetGammaLUTData(SkScalar contrast, SkScalar paintGamma, SkScalar deviceGamma,
+                                      void* data) {
+    SkAutoMutexAcquire ama(gMaskGammaCacheMutex);
+    const SkMaskGamma& maskGamma = cachedMaskGamma(contrast,
+                                                   paintGamma,
+                                                   deviceGamma);
+    int width, height;
+    maskGamma.getGammaTableDimensions(&width, &height);
+    size_t size = width*height*sizeof(uint8_t);
+    const uint8_t* gammaTables = maskGamma.getGammaTables();
+    memcpy(data, gammaTables, size);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -2573,7 +2595,7 @@ SkTextToPathIter::SkTextToPathIter( const char text[], size_t length,
         fPaint.setPathEffect(NULL);
     }
 
-    fCache = fPaint.detachCache(NULL, NULL);
+    fCache = fPaint.detachCache(NULL, NULL, false);
 
     SkPaint::Style  style = SkPaint::kFill_Style;
     SkPathEffect*   pe = NULL;

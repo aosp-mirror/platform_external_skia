@@ -101,6 +101,7 @@ LOCAL_SRC_FILES := \
 	FlateTest.cpp \
 	FontHostStreamTest.cpp \
 	FontHostTest.cpp \
+	FontObjTest.cpp \
 	FontMgrTest.cpp \
 	FontNamesTest.cpp \
 	FrontBufferedStreamTest.cpp \
@@ -110,6 +111,7 @@ LOCAL_SRC_FILES := \
 	GifTest.cpp \
 	GpuColorFilterTest.cpp \
 	GpuDrawPathTest.cpp \
+	GpuRectanizerTest.cpp \
 	GrBinHashKeyTest.cpp \
 	GrContextFactoryTest.cpp \
 	GrDrawTargetTest.cpp \
@@ -125,6 +127,7 @@ LOCAL_SRC_FILES := \
 	ImageFilterTest.cpp \
 	InfRectTest.cpp \
 	JpegTest.cpp \
+	KtxTest.cpp \
 	LListTest.cpp \
 	LayerDrawLooperTest.cpp \
 	LayerRasterizerTest.cpp \
@@ -139,6 +142,7 @@ LOCAL_SRC_FILES := \
 	MessageBusTest.cpp \
 	MetaDataTest.cpp \
 	MipMapTest.cpp \
+	NameAllocatorTest.cpp \
 	ObjectPoolTest.cpp \
 	OSPathTest.cpp \
 	OnceTest.cpp \
@@ -193,6 +197,7 @@ LOCAL_SRC_FILES := \
 	TLSTest.cpp \
 	TSetTest.cpp \
 	TestSize.cpp \
+	TextureCompressionTest.cpp \
 	TileGridTest.cpp \
 	ToUnicodeTest.cpp \
 	TracingTest.cpp \
@@ -223,7 +228,6 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
-	libcutils \
 	libGLESv2 \
 	libEGL \
 	liblog
@@ -260,7 +264,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
-	eng \
 	tests
 
 LOCAL_MODULE := \

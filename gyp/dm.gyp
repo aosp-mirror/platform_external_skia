@@ -32,13 +32,15 @@
             '../dm/DMCpuGMTask.cpp',
             '../dm/DMExpectationsTask.cpp',
             '../dm/DMGpuGMTask.cpp',
+            '../dm/DMPDFRasterizeTask.cpp',
+            '../dm/DMPDFTask.cpp',
             '../dm/DMPipeTask.cpp',
             '../dm/DMQuiltTask.cpp',
             '../dm/DMRecordTask.cpp',
             '../dm/DMReplayTask.cpp',
             '../dm/DMReporter.cpp',
-            '../dm/DMSerializeTask.cpp',
             '../dm/DMSKPTask.cpp',
+            '../dm/DMSerializeTask.cpp',
             '../dm/DMTask.cpp',
             '../dm/DMTaskRunner.cpp',
             '../dm/DMTestTask.cpp',
@@ -58,16 +60,17 @@
             'jsoncpp.gyp:jsoncpp',
             'gputest.gyp:skgputest',
             'record.gyp:*',
+            'etc1.gyp:libetc1',
         ],
         'conditions': [
-          ['skia_android_framework',
-            {
-              'libraries': [
-                '-lskia',
-                '-lcutils',
-              ],
-            },
-          ],
+          ['skia_android_framework', {
+              'libraries': [ '-lskia' ],
+          }],
+          ['skia_poppler_enabled', {
+              'sources':      [ '../src/utils/SkPDFRasterizer.cpp' ],
+              'defines':      [ 'SK_BUILD_POPPLER' ],
+              'dependencies': [ 'poppler.gyp:*' ],
+          }],
         ],
     }]
 }

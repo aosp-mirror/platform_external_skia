@@ -16,17 +16,8 @@
 
 class SkRecorder : public SkCanvas {
 public:
-    // SkRecorder can work in two modes:
-    //   write-only: only a core subset of SkCanvas operations (save/restore, clip, transform, draw)
-    //   are supported, and all of the readback methods on SkCanvas will probably fail or lie.
-    //
-    //   read-write: all methods should behave with similar semantics to SkCanvas.
-    //
-    // Write-only averages 10-20% faster, but you can't sensibly inspect the canvas while recording.
-    enum Mode { kWriteOnly_Mode, kReadWrite_Mode };
-
     // Does not take ownership of the SkRecord.
-    SkRecorder(Mode mode, SkRecord*, int width, int height);
+    SkRecorder(SkRecord*, int width, int height);
 
     // Make SkRecorder forget entirely about its SkRecord*; all calls to SkRecorder will fail.
     void forgetRecord();
@@ -61,7 +52,6 @@ public:
                     int left,
                     int top,
                     const SkPaint* paint = NULL) SK_OVERRIDE;
-    void drawPicture(SkPicture& picture) SK_OVERRIDE;
     void drawVertices(VertexMode vmode,
                       int vertexCount,
                       const SkPoint vertices[],
@@ -104,6 +94,8 @@ public:
     void onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edgeStyle) SK_OVERRIDE;
     void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE;
 
+    void onDrawPicture(const SkPicture* picture) SK_OVERRIDE;
+
     void onPushCull(const SkRect& cullRect) SK_OVERRIDE;
     void onPopCull() SK_OVERRIDE;
 
@@ -114,7 +106,6 @@ private:
     template <typename T>
     T* copy(const T[], unsigned count);
 
-    const Mode fMode;
     SkRecord* fRecord;
 };
 

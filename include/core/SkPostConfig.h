@@ -386,8 +386,6 @@
 #ifndef SK_ATOMICS_PLATFORM_H
 #  if defined(_MSC_VER)
 #    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_win.h"
-#  elif defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
-#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_android.h"
 #  else
 #    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
 #  endif
@@ -398,6 +396,16 @@
 #    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_win.h"
 #  else
 #    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
+#  endif
+#endif
+
+#ifndef SK_BARRIERS_PLATFORM_H
+#  if SK_HAS_COMPILER_FEATURE(thread_sanitizer)
+#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_tsan.h"
+#  elif defined(SK_CPU_ARM32) || defined(SK_CPU_ARM64)
+#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_arm.h"
+#  else
+#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_x86.h"
 #  endif
 #endif
 

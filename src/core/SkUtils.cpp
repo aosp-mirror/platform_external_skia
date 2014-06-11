@@ -8,7 +8,7 @@
 
 
 #include "SkUtils.h"
-#include "SkOnce.h"
+#include "SkLazyFnPtr.h"
 
 #if 0
 #define assign_16_longs(dst, value)             \
@@ -33,18 +33,6 @@
         *(dst)++ = value;   *(dst)++ = value;   \
         *(dst)++ = value;   *(dst)++ = value;   \
         *(dst)++ = value;   *(dst)++ = value;   \
-    } while (0)
-
-#define copy_16_longs(dst, src)                       \
-    do {                                              \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
-        *(dst)++ = *(src)++;   *(dst)++ = *(src)++;   \
     } while (0)
 #endif
 
@@ -122,69 +110,43 @@ static void sk_memset32_portable(uint32_t dst[], uint32_t value, int count) {
 }
 
 static void sk_memcpy32_portable(uint32_t dst[], const uint32_t src[], int count) {
-    SkASSERT(dst != NULL && count >= 0);
-
-    int sixteenlongs = count >> 4;
-    if (sixteenlongs) {
-        do {
-            copy_16_longs(dst, src);
-        } while (--sixteenlongs != 0);
-        count &= 15;
-    }
-
-    if (count) {
-        do {
-            *dst++ = *src++;
-        } while (--count != 0);
-    }
+    memcpy(dst, src, count * sizeof(uint32_t));
 }
 
-static void choose_memset16(SkMemset16Proc* proc) {
-    *proc = SkMemset16GetPlatformProc();
-    if (NULL == *proc) {
-        *proc = &sk_memset16_portable;
-    }
+namespace {
+// These three methods technically need external linkage to be passed as template parameters.
+// Since they can't be static, we hide them in an anonymous namespace instead.
+
+SkMemset16Proc choose_memset16() {
+    SkMemset16Proc proc = SkMemset16GetPlatformProc();
+    return proc ? proc : sk_memset16_portable;
 }
+
+SkMemset32Proc choose_memset32() {
+    SkMemset32Proc proc = SkMemset32GetPlatformProc();
+    return proc ? proc : sk_memset32_portable;
+}
+
+SkMemcpy32Proc choose_memcpy32() {
+    SkMemcpy32Proc proc = SkMemcpy32GetPlatformProc();
+    return proc ? proc : sk_memcpy32_portable;
+}
+
+}  // namespace
 
 void sk_memset16(uint16_t dst[], uint16_t value, int count) {
-    SK_DECLARE_STATIC_ONCE(once);
-    static SkMemset16Proc proc = NULL;
-    SkOnce(&once, choose_memset16, &proc);
-    SkASSERT(proc != NULL);
-
-    return proc(dst, value, count);
-}
-
-static void choose_memset32(SkMemset32Proc* proc) {
-    *proc = SkMemset32GetPlatformProc();
-    if (NULL == *proc) {
-        *proc = &sk_memset32_portable;
-    }
+    SK_DECLARE_STATIC_LAZY_FN_PTR(SkMemset16Proc, proc, choose_memset16);
+    proc.get()(dst, value, count);
 }
 
 void sk_memset32(uint32_t dst[], uint32_t value, int count) {
-    SK_DECLARE_STATIC_ONCE(once);
-    static SkMemset32Proc proc = NULL;
-    SkOnce(&once, choose_memset32, &proc);
-    SkASSERT(proc != NULL);
-
-    return proc(dst, value, count);
-}
-
-static void choose_memcpy32(SkMemcpy32Proc* proc) {
-    *proc = SkMemcpy32GetPlatformProc();
-    if (NULL == *proc) {
-        *proc = &sk_memcpy32_portable;
-    }
+    SK_DECLARE_STATIC_LAZY_FN_PTR(SkMemset32Proc, proc, choose_memset32);
+    proc.get()(dst, value, count);
 }
 
 void sk_memcpy32(uint32_t dst[], const uint32_t src[], int count) {
-    SK_DECLARE_STATIC_ONCE(once);
-    static SkMemcpy32Proc proc = NULL;
-    SkOnce(&once, choose_memcpy32, &proc);
-    SkASSERT(proc != NULL);
-
-    return proc(dst, src, count);
+    SK_DECLARE_STATIC_LAZY_FN_PTR(SkMemcpy32Proc, proc, choose_memcpy32);
+    proc.get()(dst, src, count);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

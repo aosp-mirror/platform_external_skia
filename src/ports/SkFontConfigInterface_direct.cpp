@@ -15,7 +15,7 @@
 
 #include "SkBuffer.h"
 #include "SkFontConfigInterface.h"
-#include "SkOnce.h"
+#include "SkLazyPtr.h"
 #include "SkStream.h"
 
 size_t SkFontConfigInterface::FontIdentity::writeToMemory(void* addr) const {
@@ -124,14 +124,9 @@ private:
     SkMutex mutex_;
 };
 
-static void create_singleton_direct_interface(SkFontConfigInterface** singleton) {
-    *singleton = new SkFontConfigInterfaceDirect;
-}
 SkFontConfigInterface* SkFontConfigInterface::GetSingletonDirectInterface() {
-    static SkFontConfigInterface* gDirect;
-    SK_DECLARE_STATIC_ONCE(once);
-    SkOnce(&once, create_singleton_direct_interface, &gDirect);
-    return gDirect;
+    SK_DECLARE_STATIC_LAZY_PTR(SkFontConfigInterfaceDirect, direct);
+    return direct.get();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

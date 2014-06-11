@@ -7,6 +7,7 @@
 
 #include "SkColorPriv.h"
 #include "SkImageDecoder.h"
+#include "SkScaledBitmapSampler.h"
 #include "SkStream.h"
 #include "SkStreamHelpers.h"
 #include "SkTypes.h"
@@ -38,54 +39,64 @@ bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     }
 
     unsigned char* buf = (unsigned char*)autoMal.get();
-    
+
     // Make sure original PKM header is there...
     SkASSERT(etc1_pkm_is_valid(buf));
 
     const unsigned short width = etc1_pkm_get_width(buf);
     const unsigned short height = etc1_pkm_get_height(buf);
 
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     // should we allow the Chooser (if present) to pick a config for us???
-    if (!this->chooseFromOneChoice(SkBitmap::kARGB_8888_Config, width, height)) {
+    if (!this->chooseFromOneChoice(kN32_SkColorType, width, height)) {
         return false;
     }
-    
-    bm->setConfig(SkBitmap::kARGB_8888_Config, width, height, 0, kOpaque_SkAlphaType);
+#endif
+
+    // Setup the sampler...
+    SkScaledBitmapSampler sampler(width, height, this->getSampleSize());
+
+    // Set the config...
+    bm->setInfo(SkImageInfo::MakeN32(sampler.scaledWidth(), sampler.scaledHeight(),
+                                     kOpaque_SkAlphaType));
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return true;
     }
-    
+
     if (!this->allocPixelRef(bm, NULL)) {
         return false;
     }
-    
+
     // Lock the pixels, since we're about to write to them...
     SkAutoLockPixels alp(*bm);
-    
+
+    if (!sampler.begin(bm, SkScaledBitmapSampler::kRGB, *this)) {
+        return false;
+    }
+
     // Advance buffer past the header
     buf += ETC_PKM_HEADER_SIZE;
-    
+
     // ETC1 Data is encoded as RGB pixels, so we should extract it as such
     int nPixels = width * height;
     SkAutoMalloc outRGBData(nPixels * 3);
     etc1_byte *outRGBDataPtr = reinterpret_cast<etc1_byte *>(outRGBData.get());
-    
+
     // Decode ETC1
     if (etc1_decode_image(buf, outRGBDataPtr, width, height, 3, width*3)) {
         return false;
     }
 
     // Set each of the pixels...
-    const uint8_t *src = reinterpret_cast<uint8_t *>(outRGBDataPtr);
-    uint8_t *dst = reinterpret_cast<uint8_t *>(bm->getPixels());
-    for (int i = 0; i < width*height; ++i) {
-        *dst++ = src[2]; // B
-        *dst++ = src[1]; // G
-        *dst++ = src[0]; // R
-        *dst++ = 0xFF; // Opaque alpha...
-        src += 3;
+    const int srcRowBytes = width * 3;
+    const int dstHeight = sampler.scaledHeight();
+    const uint8_t *srcRow = reinterpret_cast<uint8_t *>(outRGBDataPtr);
+    srcRow += sampler.srcY0() * srcRowBytes;
+    for (int y = 0; y < dstHeight; ++y) {
+        sampler.next(srcRow);
+        srcRow += sampler.srcDY() * srcRowBytes;
     }
-    
+
     return true;
 }
 

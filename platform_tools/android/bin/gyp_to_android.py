@@ -103,6 +103,9 @@ def main(target_dir=None, require_sk_user_config=False):
 
     mips_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'mips', False)
 
+    mips64_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'mips64',
+                                        False)
+
     arm64_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'arm64',
                                        False)
 
@@ -110,7 +113,8 @@ def main(target_dir=None, require_sk_user_config=False):
     # should be part of the makefile always. Each dict will now contain trimmed
     # lists containing only variable definitions specific to that configuration.
     var_dict_list = [default_var_dict, arm_var_dict, arm_neon_var_dict,
-                     x86_var_dict, mips_var_dict, arm64_var_dict]
+                     x86_var_dict, mips_var_dict, mips64_var_dict,
+                     arm64_var_dict]
     common = vars_dict_lib.intersect(var_dict_list)
 
     common.LOCAL_MODULE.add('libskia')
@@ -133,7 +137,7 @@ def main(target_dir=None, require_sk_user_config=False):
                                        dest_dir='tests',
                                        skia_lib_var_dict=common,
                                        local_module_name='skia_test',
-                                       local_module_tags=['eng', 'tests'])
+                                       local_module_tags=['tests'])
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
                                        target_file='bench.gyp',
@@ -150,7 +154,7 @@ def main(target_dir=None, require_sk_user_config=False):
                                        dest_dir='gm',
                                        skia_lib_var_dict=common,
                                        local_module_name='skia_gm',
-                                       local_module_tags=['optional'])
+                                       local_module_tags=['tests'])
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
                                        target_file='dm.gyp',
@@ -158,7 +162,7 @@ def main(target_dir=None, require_sk_user_config=False):
                                        dest_dir='dm',
                                        skia_lib_var_dict=common,
                                        local_module_name='skia_dm',
-                                       local_module_tags=['optional'])
+                                       local_module_tags=['tests'])
 
     # Now that the defines have been written to SkUserConfig and they've been
     # used to skip adding them to the tools makefiles, they are not needed in
@@ -185,6 +189,9 @@ def main(target_dir=None, require_sk_user_config=False):
 
     deviations_from_common.append(makefile_writer.VarsDictData(mips_var_dict,
                                                                'mips'))
+
+    deviations_from_common.append(makefile_writer.VarsDictData(mips64_var_dict,
+                                                               'mips64'))
 
     deviations_from_common.append(makefile_writer.VarsDictData(arm64_var_dict,
                                                                'arm64'))

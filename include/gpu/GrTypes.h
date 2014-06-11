@@ -151,13 +151,6 @@ static inline size_t GrSizeAlignDown(size_t x, uint32_t alignment) {
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
- *  Return true if n is a power of 2
- */
-static inline bool GrIsPow2(unsigned n) {
-    return n && 0 == (n & (n - 1));
-}
-
-/**
  *  Return the next power of 2 >= n.
  */
 static inline uint32_t GrNextPow2(uint32_t n) {
@@ -281,8 +274,16 @@ enum GrPixelConfig {
      * Premultiplied. Byte order is b,g,r,a.
      */
     kBGRA_8888_GrPixelConfig,
+    /** 
+     * ETC1 Compressed Data
+     */
+    kETC1_GrPixelConfig,
+    /**
+     * LATC/RGTC/3Dc/BC4 Compressed Data
+     */
+    kLATC_GrPixelConfig,
 
-    kLast_GrPixelConfig = kBGRA_8888_GrPixelConfig
+    kLast_GrPixelConfig = kLATC_GrPixelConfig
 };
 static const int kGrPixelConfigCnt = kLast_GrPixelConfig + 1;
 
@@ -297,6 +298,18 @@ static const int kGrPixelConfigCnt = kLast_GrPixelConfig + 1;
 #else
     #error "SK_*32_SHIFT values must correspond to GL_BGRA or GL_RGBA format."
 #endif
+
+// Returns true if the pixel config is a GPU-specific compressed format
+// representation.
+static inline bool GrPixelConfigIsCompressed(GrPixelConfig config) {
+    switch (config) {
+        case kETC1_GrPixelConfig:
+        case kLATC_GrPixelConfig:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // Returns true if the pixel config is 32 bits per pixel
 static inline bool GrPixelConfigIs8888(GrPixelConfig config) {
@@ -340,6 +353,7 @@ static inline size_t GrBytesPerPixel(GrPixelConfig config) {
 
 static inline bool GrPixelConfigIsOpaque(GrPixelConfig config) {
     switch (config) {
+        case kETC1_GrPixelConfig:
         case kRGB_565_GrPixelConfig:
             return true;
         default:
@@ -349,6 +363,7 @@ static inline bool GrPixelConfigIsOpaque(GrPixelConfig config) {
 
 static inline bool GrPixelConfigIsAlphaOnly(GrPixelConfig config) {
     switch (config) {
+        case kLATC_GrPixelConfig:
         case kAlpha_8_GrPixelConfig:
             return true;
         default:
@@ -618,6 +633,26 @@ enum GrGLBackendState {
     kPathRendering_GrGLBackendState    = 1 << 11,
     kALL_GrGLBackendState              = 0xffff
 };
+
+/**
+ * Returns the data size for the given compressed pixel config
+ */ 
+static inline size_t GrCompressedFormatDataSize(GrPixelConfig config,
+                                                int width, int height) {
+    SkASSERT(GrPixelConfigIsCompressed(config));
+
+    switch (config) {
+        case kLATC_GrPixelConfig:
+        case kETC1_GrPixelConfig:
+            SkASSERT((width & 3) == 0);
+            SkASSERT((height & 3) == 0);
+            return (width >> 2) * (height >> 2) * 8;
+
+        default:
+            SkFAIL("Unknown compressed pixel config");
+            return 4 * width * height;
+    }
+}
 
 /**
  * This value translates to reseting all the context state for any backend.

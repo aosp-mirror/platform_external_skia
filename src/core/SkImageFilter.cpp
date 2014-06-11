@@ -309,7 +309,7 @@ SkImageFilter::Cache* SkImageFilter::GetExternalCache() {
 
 void SkImageFilter::WrapTexture(GrTexture* texture, int width, int height, SkBitmap* result) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
-    result->setConfig(info);
+    result->setInfo(info);
     result->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, texture)))->unref();
 }
 
@@ -326,8 +326,8 @@ bool SkImageFilter::getInputResultGPU(SkImageFilter::Proxy* proxy,
     } else {
         if (this->filterImage(proxy, src, ctx, result, offset)) {
             if (!result->getTexture()) {
-                SkImageInfo info;
-                if (!result->asImageInfo(&info)) {
+                const SkImageInfo info = result->info();
+                if (kUnknown_SkColorType == info.colorType()) {
                     return false;
                 }
                 GrTexture* resultTex = GrLockAndRefCachedBitmapTexture(context, *result, NULL);

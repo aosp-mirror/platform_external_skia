@@ -68,7 +68,7 @@ public:
     SkPicture(const SkPicture& src);
 
     /**  PRIVATE / EXPERIMENTAL -- do not call */
-    void EXPERIMENTAL_addAccelData(const AccelData* data) {
+    void EXPERIMENTAL_addAccelData(const AccelData* data) const {
         SkRefCnt_SafeAssign(fAccelData, data);
     }
     /**  PRIVATE / EXPERIMENTAL -- do not call */
@@ -132,6 +132,10 @@ public:
      */
     void clone(SkPicture* pictures, int count) const;
 
+#ifdef SK_SUPPORT_LEGACY_RECORDING_FLAG
+    // TODO: kUsePathBoundsForClip_RecordingFlag no longer belongs in
+    // SkPicture. It should be moved to SkPictureRecorder (or just made
+    // the default behavior).
     enum RecordingFlags {
         /*  This flag specifies that when clipPath() is called, the path will
             be faithfully recorded, but the recording canvas' current clip will
@@ -143,74 +147,12 @@ public:
          */
         kUsePathBoundsForClip_RecordingFlag = 0x01
     };
-
-#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
-    // TODO: once kOptimizeForClippedPlayback_RecordingFlag is hidden from
-    // all external consumers, SkPicture::createBBoxHierarchy can also be
-    // cleaned up.
-private:
-#endif
-    enum Deprecated_RecordingFlags {
-        /*  This flag causes the picture to compute bounding boxes and build
-            up a spatial hierarchy (currently an R-Tree), plus a tree of Canvas'
-            usually stack-based clip/etc state. This requires an increase in
-            recording time (often ~2x; likely more for very complex pictures),
-            but allows us to perform much faster culling at playback time, and
-            completely avoid some unnecessary clips and other operations. This
-            is ideal for tiled rendering, or any other situation where you're
-            drawing a fraction of a large scene into a smaller viewport.
-
-            In most cases the record cost is offset by the playback improvement
-            after a frame or two of tiled rendering (and complex pictures that
-            induce the worst record times will generally get the largest
-            speedups at playback time).
-
-            Note: Currently this is not serializable, the bounding data will be
-            discarded if you serialize into a stream and then deserialize.
-        */
-        kOptimizeForClippedPlayback_RecordingFlag = 0x02,
-    };
-#ifndef SK_SUPPORT_DEPRECATED_RECORD_FLAGS
-public:
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
-private:
-#endif
-
-#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
-
-    /** Returns the canvas that records the drawing commands.
-        @param width the base width for the picture, as if the recording
-                     canvas' bitmap had this width.
-        @param height the base width for the picture, as if the recording
-                     canvas' bitmap had this height.
-        @param recordFlags optional flags that control recording.
-        @return the picture canvas.
-    */
-    SkCanvas* beginRecording(int width, int height, uint32_t recordFlags = 0);
-#endif
-
-    /** Returns the recording canvas if one is active, or NULL if recording is
-        not active. This does not alter the refcnt on the canvas (if present).
-    */
-    SkCanvas* getRecordingCanvas() const;
-    /** Signal that the caller is done recording. This invalidates the canvas
-        returned by beginRecording/getRecordingCanvas, and prepares the picture
-        for drawing. Note: this happens implicitly the first time the picture
-        is drawn.
-    */
-    void endRecording();
-
-#ifndef SK_SUPPORT_LEGACY_PICTURE_CAN_RECORD
-public:
-#endif
-
-    /** Replays the drawing commands on the specified canvas. This internally
-        calls endRecording() if that has not already been called.
+    /** Replays the drawing commands on the specified canvas.
         @param canvas the canvas receiving the drawing commands.
     */
-    void draw(SkCanvas* canvas, SkDrawPictureCallback* = NULL);
+    void draw(SkCanvas* canvas, SkDrawPictureCallback* = NULL) const;
 
     /** Return the width of the picture's recording canvas. This
         value reflects what was passed to setSize(), and does not necessarily
@@ -284,19 +226,11 @@ public:
     static bool InternalOnly_StreamIsSKP(SkStream*, SkPictInfo*);
     static bool InternalOnly_BufferIsSKP(SkReadBuffer&, SkPictInfo*);
 
-    /** Enable/disable all the picture recording optimizations (i.e.,
-        those in SkPictureRecord). It is mainly intended for testing the
-        existing optimizations (i.e., to actually have the pattern
-        appear in an .skp we have to disable the optimization). Call right
-        after 'beginRecording'.
-    */
-    void internalOnly_EnableOpts(bool enableOpts);
-
     /** Return true if the picture is suitable for rendering on the GPU.
      */
 
 #if SK_SUPPORT_GPU
-    bool suitableForGpuRasterization(GrContext*) const;
+    bool suitableForGpuRasterization(GrContext*, const char ** = NULL) const;
 #endif
 
 protected:
@@ -328,13 +262,14 @@ protected:
     // V25: SkDashPathEffect now only writes phase and interval array when flattening
     // V26: Removed boolean from SkColorShader for inheriting color from SkPaint.
     // V27: Remove SkUnitMapper from gradients (and skia).
+    // V28: No longer call bitmap::flatten inside SkWriteBuffer::writeBitmap.
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 19;
-    static const uint32_t CURRENT_PICTURE_VERSION = 27;
+    static const uint32_t CURRENT_PICTURE_VERSION = 28;
 
     mutable uint32_t      fUniqueID;
 
@@ -342,9 +277,8 @@ protected:
     // install their own SkPicturePlayback-derived players,SkPictureRecord-derived
     // recorders and set the picture size
     SkPicturePlayback*    fPlayback;
-    SkPictureRecord*      fRecord;
     int                   fWidth, fHeight;
-    const AccelData*      fAccelData;
+    mutable const AccelData* fAccelData;
 
     void needsNewGenID() { fUniqueID = SK_InvalidGenID; }
 
@@ -352,80 +286,10 @@ protected:
     // playback is unchanged.
     SkPicture(SkPicturePlayback*, int width, int height);
 
-#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
-    // For testing. Derived classes may instantiate an alternate
-    // SkBBoxHierarchy implementation
-    virtual SkBBoxHierarchy* createBBoxHierarchy() const;
-#endif
-
-    SkCanvas* beginRecording(int width, int height, SkBBHFactory* factory, uint32_t recordFlags);
+    SkPicture(int width, int height, SkPictureRecord& record, bool deepCopyOps);
 
 private:
-    friend class SkPictureRecord;
-    friend class SkPictureTester;   // for unit testing
-
     SkAutoTUnref<SkPathHeap> fPathHeap;  // reference counted
-
-    // ContentInfo is not serialized! It is intended solely for use
-    // with suitableForGpuRasterization.
-    class ContentInfo {
-    public:
-        ContentInfo() { this->reset(); }
-
-        ContentInfo(const ContentInfo& src) { this->set(src); }
-
-        void set(const ContentInfo& src) {
-            fNumPaintWithPathEffectUses = src.fNumPaintWithPathEffectUses;
-            fNumAAConcavePaths = src.fNumAAConcavePaths;
-            fNumAAHairlineConcavePaths = src.fNumAAHairlineConcavePaths;
-        }
-
-        void reset() {
-            fNumPaintWithPathEffectUses = 0;
-            fNumAAConcavePaths = 0;
-            fNumAAHairlineConcavePaths = 0;
-        }
-
-        void swap(ContentInfo* other) {
-            SkTSwap(fNumPaintWithPathEffectUses, other->fNumPaintWithPathEffectUses);
-            SkTSwap(fNumAAConcavePaths, other->fNumAAConcavePaths);
-            SkTSwap(fNumAAHairlineConcavePaths, other->fNumAAHairlineConcavePaths);
-        }
-
-        // This field is incremented every time a paint with a path effect is
-        // used (i.e., it is not a de-duplicated count)
-        int fNumPaintWithPathEffectUses;
-        // This field is incremented every time an anti-aliased drawPath call is
-        // issued with a concave path
-        int fNumAAConcavePaths;
-        // This field is incremented every time a drawPath call is
-        // issued for a hairline stroked concave path.
-        int fNumAAHairlineConcavePaths;
-    };
-
-    ContentInfo fContentInfo;
-
-    void incPaintWithPathEffectUses() {
-        ++fContentInfo.fNumPaintWithPathEffectUses;
-    }
-    int numPaintWithPathEffectUses() const {
-        return fContentInfo.fNumPaintWithPathEffectUses;
-    }
-
-    void incAAConcavePaths() {
-        ++fContentInfo.fNumAAConcavePaths;
-    }
-    int numAAConcavePaths() const {
-        return fContentInfo.fNumAAConcavePaths;
-    }
-
-    void incAAHairlineConcavePaths() {
-        ++fContentInfo.fNumAAHairlineConcavePaths;
-        SkASSERT(fContentInfo.fNumAAHairlineConcavePaths <= fContentInfo.fNumAAConcavePaths);
-    }
-    int numAAHairlineConcavePaths() const {
-        return fContentInfo.fNumAAHairlineConcavePaths;
-    }
 
     const SkPath& getPath(int index) const;
     int addPathToHeap(const SkPath& path);
@@ -463,7 +327,7 @@ private:
     /** PRIVATE / EXPERIMENTAL -- do not call
         Return the operations required to render the content inside 'queryRect'.
     */
-    const OperationList& EXPERIMENTAL_getActiveOps(const SkIRect& queryRect);
+    const OperationList& EXPERIMENTAL_getActiveOps(const SkIRect& queryRect) const;
 
     /** PRIVATE / EXPERIMENTAL -- do not call
         Return the ID of the operation currently being executed when playing
@@ -473,13 +337,10 @@ private:
 
     void createHeader(SkPictInfo* info) const;
     static bool IsValidPictInfo(const SkPictInfo& info);
-    static SkPicturePlayback* FakeEndRecording(const SkPicture* resourceSrc,
-                                               const SkPictureRecord& record,
-                                               bool deepCopy);
 
     friend class SkFlatPicture;
     friend class SkPicturePlayback;
-    friend class SkPictureRecorder;
+    friend class SkPictureRecorder; // just for SkPicture-based constructor
     friend class SkGpuDevice;
     friend class GrGatherCanvas;
     friend class GrGatherDevice;
@@ -505,24 +366,5 @@ public:
 
     virtual bool abortDrawing() = 0;
 };
-
-#ifdef SK_SUPPORT_LEGACY_DERIVED_PICTURE_CLASSES
-
-class SkPictureFactory : public SkRefCnt {
-public:
-    /**
-     *  Allocate a new SkPicture. Return NULL on failure.
-     */
-    virtual SkPicture* create(int width, int height) = 0;
-
-private:
-    typedef SkRefCnt INHERITED;
-};
-
-#endif
-
-#ifdef SK_SUPPORT_LEGACY_PICTURE_HEADERS
-#include "SkPictureRecorder.h"
-#endif
 
 #endif

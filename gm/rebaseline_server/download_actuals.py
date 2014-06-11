@@ -10,39 +10,23 @@ Download actual GM results for a particular builder.
 """
 
 # System-level imports
-import contextlib
 import optparse
 import os
 import posixpath
 import re
-import shutil
-import sys
-import urllib
 import urllib2
-import urlparse
 
 # Imports from within Skia
-#
-# We need to add the 'gm' and 'tools' directories, so that we can import
-# gm_json.py and buildbot_globals.py.
-#
-# Make sure that these dirs are in the PYTHONPATH, but add them at the *end*
-# so any dirs that are already in the PYTHONPATH will be preferred.
-#
-# TODO(epoger): Is it OK for this to depend on the 'tools' dir, given that
-# the tools dir is dependent on the 'gm' dir (to import gm_json.py)?
-TRUNK_DIRECTORY = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-GM_DIRECTORY = os.path.join(TRUNK_DIRECTORY, 'gm')
-TOOLS_DIRECTORY = os.path.join(TRUNK_DIRECTORY, 'tools')
-if GM_DIRECTORY not in sys.path:
-  sys.path.append(GM_DIRECTORY)
-if TOOLS_DIRECTORY not in sys.path:
-  sys.path.append(TOOLS_DIRECTORY)
+import fix_pythonpath  # must do this first
+from pyutils import gs_utils
+from pyutils import url_utils
 import buildbot_globals
 import gm_json
 
-DEFAULT_ACTUALS_BASE_URL = posixpath.join(
-    buildbot_globals.Get('autogen_svn_url'), 'gm-actual')
+
+GM_SUMMARIES_BUCKET = buildbot_globals.Get('gm_summaries_bucket')
+DEFAULT_ACTUALS_BASE_URL = (
+    'http://storage.googleapis.com/%s' % GM_SUMMARIES_BUCKET)
 DEFAULT_JSON_FILENAME = 'actual-results.json'
 
 
@@ -96,59 +80,19 @@ class Download(object):
             test_name=test, hash_type=hash_type, hash_digest=hash_digest,
             gm_actuals_root_url=self._gm_actuals_root_url)
         dest_path = os.path.join(dest_dir, config, test + '.png')
-        copy_contents(source_url=source_url, dest_path=dest_path,
-                      create_subdirs_if_needed=True)
+        url_utils.copy_contents(source_url=source_url, dest_path=dest_path,
+                                create_subdirs_if_needed=True)
 
 
-def create_filepath_url(filepath):
-  """ Returns a file:/// URL pointing at the given filepath on local disk.
-
-  For now, this is only used by unittests, but I anticipate it being useful
-  in production, as a way for developers to run rebaseline_server over locally
-  generated images.
-
-  TODO(epoger): Move this function, and copy_contents(), into a shared
-  utility module.  They are generally useful.
+def get_builders_list(summaries_bucket=GM_SUMMARIES_BUCKET):
+  """ Returns the list of builders we have actual results for.
 
   Args:
-    filepath: string; path to a file on local disk (may be absolute or relative,
-        and the file does not need to exist)
-
-  Returns:
-    A file:/// URL pointing at the file.  Regardless of whether filepath was
-        specified as a relative or absolute path, the URL will contain an
-        absolute path to the file.
-
-  Raises:
-    An Exception, if filepath is already a URL.
+    summaries_bucket: Google Cloud Storage bucket containing the summary
+        JSON files
   """
-  if urlparse.urlparse(filepath).scheme:
-    raise Exception('"%s" is already a URL' % filepath)
-  return urlparse.urljoin(
-      'file:', urllib.pathname2url(os.path.abspath(filepath)))
-
-
-def copy_contents(source_url, dest_path, create_subdirs_if_needed=False):
-  """ Copies the full contents of the URL 'source_url' into
-  filepath 'dest_path'.
-
-  Args:
-    source_url: string; complete URL to read from
-    dest_path: string; complete filepath to write to (may be absolute or
-        relative)
-    create_subdirs_if_needed: boolean; whether to create subdirectories as
-        needed to create dest_path
-
-  Raises:
-    Some subclass of Exception if unable to read source_url or write dest_path.
-  """
-  if create_subdirs_if_needed:
-    dest_dir = os.path.dirname(dest_path)
-    if not os.path.exists(dest_dir):
-      os.makedirs(dest_dir)
-  with contextlib.closing(urllib.urlopen(source_url)) as source_handle:
-    with open(dest_path, 'wb') as dest_handle:
-      shutil.copyfileobj(fsrc=source_handle, fdst=dest_handle)
+  dirs, _ = gs_utils.list_bucket_contents(bucket=GM_SUMMARIES_BUCKET)
+  return dirs
 
 
 def main():
@@ -159,16 +103,17 @@ def main():
                     default=DEFAULT_ACTUALS_BASE_URL,
                     help=('Base URL from which to read files containing JSON '
                           'summaries of actual GM results; defaults to '
-                          '"%default". To get a specific revision (useful for '
-                          'trybots) replace "svn" with "svn-history/r123".'))
-  # TODO(epoger): Rather than telling the user to run "svn ls" to get the list
-  # of builders, add a --list-builders option that will print the list.
+                          '"%default".'))
   required_params.append('builder')
+  # TODO(epoger): Before https://codereview.chromium.org/309653005 , when this
+  # tool downloaded the JSON summaries from skia-autogen, it had the ability
+  # to get results as of a specific revision number.  We should add similar
+  # functionality when retrieving the summaries from Google Storage.
   parser.add_option('--builder',
                     action='store', type='string',
                     help=('REQUIRED: Which builder to download results for. '
-                          'To see a list of builders, run "svn ls %s".' %
-                          DEFAULT_ACTUALS_BASE_URL))
+                          'To see a list of builders, run with the '
+                          '--list-builders option set.'))
   required_params.append('dest_dir')
   parser.add_option('--dest-dir',
                     action='store', type='string',
@@ -180,7 +125,13 @@ def main():
                     default=DEFAULT_JSON_FILENAME,
                     help=('JSON summary filename to read for each builder; '
                           'defaults to "%default".'))
+  parser.add_option('--list-builders', action='store_true',
+                    help=('List all available builders.'))
   (params, remaining_args) = parser.parse_args()
+
+  if params.list_builders:
+    print '\n'.join(get_builders_list())
+    return
 
   # Make sure all required options were set,
   # and that there were no items left over in the command line.

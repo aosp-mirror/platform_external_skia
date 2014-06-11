@@ -36,7 +36,7 @@ static const uint32_t kSaveSize = 2 * kUInt32Size;
 static const uint32_t kSaveLayerNoBoundsSize = 4 * kUInt32Size;
 static const uint32_t kSaveLayerWithBoundsSize = 4 * kUInt32Size + sizeof(SkRect);
 
-SkPictureRecord::SkPictureRecord(SkPicture* picture, const SkISize& dimensions, uint32_t flags)
+SkPictureRecord::SkPictureRecord(const SkISize& dimensions, uint32_t flags)
     : INHERITED(dimensions.width(), dimensions.height())
     , fBoundingHierarchy(NULL)
     , fStateTree(NULL)
@@ -49,7 +49,6 @@ SkPictureRecord::SkPictureRecord(SkPicture* picture, const SkISize& dimensions, 
     fPointWrites = fRectWrites = fTextWrites = 0;
 #endif
 
-    fPicture = picture;
     fBitmapHeap = SkNEW(SkBitmapHeap);
     fFlattenableHeap.setBitmapStorage(fBitmapHeap);
 
@@ -863,11 +862,7 @@ void SkPictureRecord::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdg
 #else
     this->recordClipRRect(rrect, op, kSoft_ClipEdgeStyle == edgeStyle);
 #endif
-    if (fRecordFlags & SkPicture::kUsePathBoundsForClip_RecordingFlag) {
-        this->updateClipConservativelyUsingBounds(rrect.getBounds(), op, false);
-    } else {
-        this->INHERITED::onClipRRect(rrect, op, edgeStyle);
-    }
+    this->updateClipConservativelyUsingBounds(rrect.getBounds(), op, false);
 }
 
 size_t SkPictureRecord::recordClipRRect(const SkRRect& rrect, SkRegion::Op op, bool doAA) {
@@ -899,12 +894,8 @@ void SkPictureRecord::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeSt
     this->recordClipPath(pathID, op, kSoft_ClipEdgeStyle == edgeStyle);
 #endif
 
-    if (fRecordFlags & SkPicture::kUsePathBoundsForClip_RecordingFlag) {
-        this->updateClipConservativelyUsingBounds(path.getBounds(), op,
-                                                  path.isInverseFillType());
-    } else {
-        this->INHERITED::onClipPath(path, op, edgeStyle);
-    }
+    this->updateClipConservativelyUsingBounds(path.getBounds(), op,
+                                              path.isInverseFillType());
 }
 
 size_t SkPictureRecord::recordClipPath(int pathID, SkRegion::Op op, bool doAA) {
@@ -1074,11 +1065,11 @@ void SkPictureRecord::onDrawDRRect(const SkRRect& outer, const SkRRect& inner,
 void SkPictureRecord::drawPath(const SkPath& path, const SkPaint& paint) {
 
     if (paint.isAntiAlias() && !path.isConvex()) {
-        fPicture->incAAConcavePaths();
+        fContentInfo.incAAConcavePaths();
 
         if (SkPaint::kStroke_Style == paint.getStyle() &&
             0 == paint.getStrokeWidth()) {
-            fPicture->incAAHairlineConcavePaths();
+            fContentInfo.incAAHairlineConcavePaths();
         }
     }
 
@@ -1411,7 +1402,7 @@ void SkPictureRecord::onDrawTextOnPath(const void* text, size_t byteLength, cons
     this->validate(initialOffset, size);
 }
 
-void SkPictureRecord::drawPicture(SkPicture& picture) {
+void SkPictureRecord::onDrawPicture(const SkPicture* picture) {
 
 #ifdef SK_COLLAPSE_MATRIX_CLIP_STATE
     fMCMgr.call(SkMatrixClipStateMgr::kOther_CallType);
@@ -1597,7 +1588,7 @@ const SkFlatData* SkPictureRecord::getFlatPaintData(const SkPaint& paint) {
 
 const SkFlatData* SkPictureRecord::addPaintPtr(const SkPaint* paint) {
     if (NULL != paint && NULL != paint->getPathEffect()) {
-        fPicture->incPaintWithPathEffectUses();
+        fContentInfo.incPaintWithPathEffectUses();
     }
 
     const SkFlatData* data = paint ? getFlatPaintData(*paint) : NULL;
@@ -1611,19 +1602,26 @@ void SkPictureRecord::addFlatPaint(const SkFlatData* flatPaint) {
 }
 
 int SkPictureRecord::addPathToHeap(const SkPath& path) {
-    return fPicture->addPathToHeap(path);
+    if (NULL == fPathHeap) {
+        fPathHeap.reset(SkNEW(SkPathHeap));
+    }
+#ifdef SK_DEDUP_PICTURE_PATHS
+    return fPathHeap->insert(path);
+#else
+    return fPathHeap->append(path);
+#endif
 }
 
 void SkPictureRecord::addPath(const SkPath& path) {
     this->addInt(this->addPathToHeap(path));
 }
 
-void SkPictureRecord::addPicture(SkPicture& picture) {
-    int index = fPictureRefs.find(&picture);
+void SkPictureRecord::addPicture(const SkPicture* picture) {
+    int index = fPictureRefs.find(picture);
     if (index < 0) {    // not found
         index = fPictureRefs.count();
-        *fPictureRefs.append() = &picture;
-        picture.ref();
+        *fPictureRefs.append() = picture;
+        picture->ref();
     }
     // follow the convention of recording a 1-based index
     this->addInt(index + 1);

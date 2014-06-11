@@ -4,6 +4,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SampleApp.h"
 
 #include "SkData.h"
@@ -16,6 +17,7 @@
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkStream.h"
+#include "SkSurface.h"
 #include "SkTSort.h"
 #include "SkTime.h"
 #include "SkWindow.h"
@@ -1192,27 +1194,33 @@ void SampleWindow::draw(SkCanvas* canvas) {
     } else {
         SkSize tile = this->tileSize();
 
-        for (SkScalar y = 0; y < height(); y += tile.height()) {
-            for (SkScalar x = 0; x < width(); x += tile.width()) {
-                SkAutoCanvasRestore acr(canvas, true);
-                canvas->clipRect(SkRect::MakeXYWH(x, y,
-                                                  tile.width(),
-                                                  tile.height()));
-                this->INHERITED::draw(canvas);
-            }
-        }
+        if (kNo_Tiling == fTilingMode) {
+            this->INHERITED::draw(canvas); // no looping or surfaces needed
+        } else {
+            const int w = SkScalarRoundToInt(tile.width());
+            const int h = SkScalarRoundToInt(tile.height());
+            SkImageInfo info = SkImageInfo::MakeN32Premul(w, h);
+            SkAutoTUnref<SkSurface> surface(canvas->newSurface(info));
+            SkCanvas* tileCanvas = surface->getCanvas();
 
-        if (fTilingMode != kNo_Tiling) {
+            for (SkScalar y = 0; y < height(); y += tile.height()) {
+                for (SkScalar x = 0; x < width(); x += tile.width()) {
+                    SkAutoCanvasRestore acr(tileCanvas, true);
+                    tileCanvas->translate(-x, -y);
+                    tileCanvas->clear(0);
+                    this->INHERITED::draw(tileCanvas);
+                    surface->draw(canvas, x, y, NULL);
+                }
+            }
+
+            // for drawing the borders between tiles
             SkPaint paint;
             paint.setColor(0x60FF00FF);
             paint.setStyle(SkPaint::kStroke_Style);
 
             for (SkScalar y = 0; y < height(); y += tile.height()) {
                 for (SkScalar x = 0; x < width(); x += tile.width()) {
-                    canvas->drawRect(SkRect::MakeXYWH(x, y,
-                                                      tile.width(),
-                                                      tile.height()),
-                                     paint);
+                    canvas->drawRect(SkRect::MakeXYWH(x, y, tile.width(), tile.height()), paint);
                 }
             }
         }
@@ -1462,7 +1470,7 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
         if (true) {
             SkPicture* pict = new SkPicture(*picture);
             this->installDrawFilter(orig);
-            orig->drawPicture(*pict);
+            orig->drawPicture(pict);
             pict->unref();
         } else if (true) {
             SkDynamicMemoryWStream ostream;
@@ -1472,7 +1480,7 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
             SkMemoryStream istream(data->data(), data->size());
             SkAutoTUnref<SkPicture> pict(SkPicture::CreateFromStream(&istream));
             if (pict.get() != NULL) {
-                orig->drawPicture(*pict.get());
+                orig->drawPicture(pict.get());
             }
         } else {
             picture->draw(orig);
@@ -2263,14 +2271,6 @@ bool SampleView::onEvent(const SkEvent& evt) {
         return true;
     }
 
-    if (evt.isType("debug-hit-test")) {
-        fDebugHitTest = true;
-        evt.findS32("debug-hit-test-x", &fDebugHitTestLoc.fX);
-        evt.findS32("debug-hit-test-y", &fDebugHitTestLoc.fY);
-        this->inval(NULL);
-        return true;
-    }
-
     return this->INHERITED::onEvent(evt);
 }
 
@@ -2378,45 +2378,13 @@ void SampleView::draw(SkCanvas* canvas) {
     }
 }
 
-#include "SkBounder.h"
-
-class DebugHitTestBounder : public SkBounder {
-public:
-    DebugHitTestBounder(int x, int y) {
-        fLoc.set(x, y);
-    }
-
-    virtual bool onIRect(const SkIRect& bounds) SK_OVERRIDE {
-        if (bounds.contains(fLoc.x(), fLoc.y())) {
-            //
-            // Set a break-point here to see what was being drawn under
-            // the click point (just needed a line of code to stop the debugger)
-            //
-            bounds.centerX();
-        }
-        return true;
-    }
-
-private:
-    SkIPoint fLoc;
-    typedef SkBounder INHERITED;
-};
-
 void SampleView::onDraw(SkCanvas* canvas) {
     this->onDrawBackground(canvas);
-
-    DebugHitTestBounder bounder(fDebugHitTestLoc.x(), fDebugHitTestLoc.y());
-    if (fDebugHitTest) {
-        canvas->setBounder(&bounder);
-    }
 
     for (int i = 0; i < fRepeatCount; i++) {
         SkAutoCanvasRestore acr(canvas, true);
         this->onDrawContent(canvas);
     }
-
-    fDebugHitTest = false;
-    canvas->setBounder(NULL);
 }
 
 void SampleView::onDrawBackground(SkCanvas* canvas) {

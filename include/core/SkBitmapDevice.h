@@ -45,10 +45,6 @@ public:
     */
     virtual bool isOpaque() const SK_OVERRIDE { return fBitmap.isOpaque(); }
 
-    /** Return the bitmap config of the device's pixels
-    */
-    virtual SkBitmap::Config config() const SK_OVERRIDE { return fBitmap.config(); }
-
     virtual SkImageInfo imageInfo() const SK_OVERRIDE;
 
     /**

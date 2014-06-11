@@ -157,6 +157,20 @@ struct SK_API SkIRect {
         fRight = fBottom = SK_MinS32;
     }
 
+    /**
+     *  Return a new IRect, built as an offset of this rect.
+     */
+    SkIRect makeOffset(int dx, int dy) const {
+        return MakeLTRB(fLeft + dx, fTop + dy, fRight + dx, fBottom + dy);
+    }
+
+    /**
+     *  Return a new IRect, built as an inset of this rect.
+     */
+    SkIRect makeInset(int dx, int dy) const {
+        return MakeLTRB(fLeft + dx, fTop + dy, fRight - dx, fBottom - dy);
+    }
+
     /** Offset set the rectangle by adding dx to its left and right,
         and adding dy to its top and bottom.
     */
@@ -577,6 +591,20 @@ struct SK_API SkRect {
         fRight = fBottom = SK_ScalarMin;
     }
 
+    /**
+     *  Return a new Rect, built as an offset of this rect.
+     */
+    SkRect makeOffset(SkScalar dx, SkScalar dy) const {
+        return MakeLTRB(fLeft + dx, fTop + dy, fRight + dx, fBottom + dy);
+    }
+
+    /**
+     *  Return a new Rect, built as an inset of this rect.
+     */
+    SkRect makeInset(SkScalar dx, SkScalar dy) const {
+        return MakeLTRB(fLeft + dx, fTop + dy, fRight - dx, fBottom - dy);
+    }
+
     /** Offset set the rectangle by adding dx to its left and right,
         and adding dy to its top and bottom.
     */
@@ -805,6 +833,17 @@ struct SK_API SkRect {
      *  cast-safe way to treat the rect as an array of (4) SkScalars.
      */
     const SkScalar* asScalars() const { return &fLeft; }
+
+#ifdef SK_DEVELOPER
+    /**
+     * Dumps the rect using SkDebugf. This is intended for Skia development debugging. Don't
+     * rely on the existence of this function or the formatting of its output.
+     */
+    void dump() const {
+        SkDebugf("{ l: %f, t: %f, r: %f, b: %f }", fLeft, fTop, fRight, fBottom);
+    }
+#endif
+
 };
 
 #endif

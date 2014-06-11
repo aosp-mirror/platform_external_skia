@@ -14,6 +14,7 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1
 
 LOCAL_SRC_FILES := \
+	ResultsWriter.cpp \
 	SkBenchLogger.cpp \
 	SkGMBench.cpp \
 	benchmain.cpp \
@@ -40,6 +41,7 @@ LOCAL_SRC_FILES := \
 	DeferredCanvasBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
+	ETCBitmapBench.cpp \
 	FSRectBench.cpp \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
@@ -77,6 +79,7 @@ LOCAL_SRC_FILES := \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
 	RectBench.cpp \
+	RectanizerBench.cpp \
 	RectoriBench.cpp \
 	RefCntBench.cpp \
 	RegionBench.cpp \
@@ -156,6 +159,7 @@ LOCAL_SRC_FILES := \
 	../gm/filltypes.cpp \
 	../gm/filltypespersp.cpp \
 	../gm/filterbitmap.cpp \
+	../gm/filterindiabox.cpp \
 	../gm/fontcache.cpp \
 	../gm/fontmgr.cpp \
 	../gm/fontscaler.cpp \
@@ -239,6 +243,7 @@ LOCAL_SRC_FILES := \
 	../gm/texteffects.cpp \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
+	../gm/variedtext.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
@@ -268,7 +273,6 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
-	libcutils \
 	libGLESv2 \
 	libEGL
 
@@ -292,7 +296,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../tools/flags
+	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../third_party/etc1
 
 LOCAL_MODULE_TAGS := \
 	tests

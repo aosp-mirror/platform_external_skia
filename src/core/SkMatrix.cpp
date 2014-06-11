@@ -7,8 +7,9 @@
 
 #include "SkMatrix.h"
 #include "SkFloatBits.h"
-#include "SkOnce.h"
 #include "SkString.h"
+
+#include <stddef.h>
 
 // In a few places, we performed the following
 //      a * b + c * d + e
@@ -1558,29 +1559,40 @@ bool SkMatrix::getMinMaxScales(SkScalar scaleFactors[2]) const {
     return get_scale_factor<kBoth_MinMaxOrBoth>(this->getType(), fMat, scaleFactors);
 }
 
-static void reset_identity_matrix(SkMatrix* identity) {
-    identity->reset();
-}
+namespace {
+
+struct PODMatrix {
+    SkScalar matrix[9];
+    uint32_t typemask;
+
+    const SkMatrix& asSkMatrix() const { return *reinterpret_cast<const SkMatrix*>(this); }
+};
+SK_COMPILE_ASSERT(sizeof(PODMatrix) == sizeof(SkMatrix), PODMatrixSizeMismatch);
+
+}  // namespace
 
 const SkMatrix& SkMatrix::I() {
-    // If you can use C++11 now, you might consider replacing this with a constexpr constructor.
-    static SkMatrix gIdentity;
-    SK_DECLARE_STATIC_ONCE(once);
-    SkOnce(&once, reset_identity_matrix, &gIdentity);
-    return gIdentity;
+    SK_COMPILE_ASSERT(offsetof(SkMatrix, fMat)      == offsetof(PODMatrix, matrix),   BadfMat);
+    SK_COMPILE_ASSERT(offsetof(SkMatrix, fTypeMask) == offsetof(PODMatrix, typemask), BadfTypeMask);
+
+    static const PODMatrix identity = { {SK_Scalar1, 0, 0,
+                                         0, SK_Scalar1, 0,
+                                         0, 0, SK_Scalar1 },
+                                       kIdentity_Mask | kRectStaysRect_Mask};
+    SkASSERT(identity.asSkMatrix().isIdentity());
+    return identity.asSkMatrix();
 }
 
 const SkMatrix& SkMatrix::InvalidMatrix() {
-    static SkMatrix gInvalid;
-    static bool gOnce;
-    if (!gOnce) {
-        gInvalid.setAll(SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
-                        SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
-                        SK_ScalarMax, SK_ScalarMax, SK_ScalarMax);
-        gInvalid.getType(); // force the type to be computed
-        gOnce = true;
-    }
-    return gInvalid;
+    SK_COMPILE_ASSERT(offsetof(SkMatrix, fMat)      == offsetof(PODMatrix, matrix),   BadfMat);
+    SK_COMPILE_ASSERT(offsetof(SkMatrix, fTypeMask) == offsetof(PODMatrix, typemask), BadfTypeMask);
+
+    static const PODMatrix invalid =
+        { {SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
+           SK_ScalarMax, SK_ScalarMax, SK_ScalarMax,
+           SK_ScalarMax, SK_ScalarMax, SK_ScalarMax },
+         kTranslate_Mask | kScale_Mask | kAffine_Mask | kPerspective_Mask };
+    return invalid.asSkMatrix();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

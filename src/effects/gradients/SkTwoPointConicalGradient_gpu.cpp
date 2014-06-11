@@ -16,6 +16,7 @@
 typedef GrGLUniformManager::UniformHandle UniformHandle;
 
 static const SkScalar kErrorTol = 0.00001f;
+static const SkScalar kEdgeErrorTol = 5.f * kErrorTol;
 
 /**
  * We have three general cases for 2pt conical gradients. First we always assume that
@@ -96,7 +97,10 @@ private:
         fRadius0(shader.getStartRadius()),
         fDiffRadius(shader.getDiffRadius()){
         // We should only be calling this shader if we are degenerate case with touching circles
-        SkASSERT(SkScalarAbs(fDiffRadius) - SkScalarAbs(fCenterX1) < kErrorTol) ;
+        // When deciding if we are in edge case, we scaled by the end radius for cases when the
+        // start radius was close to zero, otherwise we scaled by the start radius
+        SkASSERT(SkScalarAbs(SkScalarAbs(fDiffRadius) - SkScalarAbs(fCenterX1)) <
+                 kEdgeErrorTol * (fRadius0 < kErrorTol ? shader.getEndRadius() : fRadius0));
 
         // We pass the linear part of the quadratic as a varying.
         //    float b = -2.0 * (fCenterX1 * x + fRadius0 * fDiffRadius * z)
@@ -199,7 +203,10 @@ GrEffectRef* Edge2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint, NULL);
+    GrEffectRef* effect;
+    GrColor grColor;
+    shader->asNewEffect(context, paint, NULL, &grColor, &effect);
+    return effect;
 }
 
 GLEdge2PtConicalEffect::GLEdge2PtConicalEffect(const GrBackendEffectFactory& factory,
@@ -328,9 +335,9 @@ static ConicalType set_matrix_focal_conical(const SkTwoPointConicalGradient& sha
 
     // If the focal point is touching the edge of the circle it will
     // cause a degenerate case that must be handled separately
-    // 5 * kErrorTol was picked after manual testing the stability trade off
-    // versus the linear approx used in the Edge Shader
-    if (SkScalarAbs(1.f - (*focalX)) < 5 *  kErrorTol) {
+    // kEdgeErrorTol = 5 * kErrorTol was picked after manual testing the
+    // stability trade off versus the linear approx used in the Edge Shader
+    if (SkScalarAbs(1.f - (*focalX)) < kEdgeErrorTol) {
         return kEdge_ConicalType;
     }
 
@@ -470,7 +477,10 @@ GrEffectRef* FocalOutside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint, NULL);
+    GrEffectRef* effect;
+    GrColor grColor;
+    shader->asNewEffect(context, paint, NULL, &grColor, &effect);
+    return effect;
 }
 
 GLFocalOutside2PtConicalEffect::GLFocalOutside2PtConicalEffect(const GrBackendEffectFactory& factory,
@@ -679,7 +689,10 @@ GrEffectRef* FocalInside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint, NULL);
+    GrColor grColor;
+    GrEffectRef* grEffect;
+    shader->asNewEffect(context, paint, NULL, &grColor, &grEffect);
+    return grEffect;
 }
 
 GLFocalInside2PtConicalEffect::GLFocalInside2PtConicalEffect(const GrBackendEffectFactory& factory,
@@ -771,9 +784,10 @@ static ConicalType set_matrix_circle_conical(const SkTwoPointConicalGradient& sh
 
     // Check to see if start circle is inside end circle with edges touching.
     // If touching we return that it is of kEdge_ConicalType, and leave the matrix setting
-    // to the edge shader. 5 * kErrorTol was picked after manual testing so that C = 1 / A
-    // is stable, and the linear approximation used in the Edge shader is still accurate.
-    if (SkScalarAbs(A) < 5 * kErrorTol) {
+    // to the edge shader. kEdgeErrorTol = 5 * kErrorTol was picked after manual testing
+    // so that C = 1 / A is stable, and the linear approximation used in the Edge shader is
+    // still accurate.
+    if (SkScalarAbs(A) < kEdgeErrorTol) {
         return kEdge_ConicalType;
     }
 
@@ -920,7 +934,10 @@ GrEffectRef* CircleInside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint, NULL);
+    GrColor grColor;
+    GrEffectRef* grEffect;
+    shader->asNewEffect(context, paint, NULL, &grColor, &grEffect);
+    return grEffect;
 }
 
 GLCircleInside2PtConicalEffect::GLCircleInside2PtConicalEffect(const GrBackendEffectFactory& factory,
@@ -1148,7 +1165,10 @@ GrEffectRef* CircleOutside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    return shader->asNewEffect(context, paint, NULL);
+    GrColor grColor;
+    GrEffectRef* grEffect;
+    shader->asNewEffect(context, paint, NULL, &grColor, &grEffect);
+    return grEffect;
 }
 
 GLCircleOutside2PtConicalEffect::GLCircleOutside2PtConicalEffect(const GrBackendEffectFactory& factory,

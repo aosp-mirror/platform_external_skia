@@ -74,6 +74,9 @@
         '../include/gpu',
       ],
     },
+    'defines': [
+      'GR_COMPRESS_ALPHA_MASK=0',
+    ],
   },
   'targets': [
     {
@@ -84,6 +87,8 @@
       'dependencies': [
         'core.gyp:*',
         'utils.gyp:*',
+        'etc1.gyp:libetc1',
+        'ktx.gyp:libSkKTX',
       ],
       'includes': [
         'gpu.gypi',

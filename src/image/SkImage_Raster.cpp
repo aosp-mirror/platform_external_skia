@@ -31,7 +31,7 @@ public:
             return false;
         }
 
-        if (SkImageInfoToBitmapConfig(info) == SkBitmap::kNo_Config) {
+        if (kUnknown_SkColorType == info.colorType()) {
             return false;
         }
 
@@ -94,8 +94,9 @@ SkImage_Raster::SkImage_Raster(const Info& info, SkData* data, size_t rowBytes)
 {
     data->ref();
     void* addr = const_cast<void*>(data->data());
+    SkColorTable* ctable = NULL;
 
-    fBitmap.installPixels(info, addr, rowBytes, release_data, data);
+    fBitmap.installPixels(info, addr, rowBytes, ctable, release_data, data);
     fBitmap.setImmutable();
     fBitmap.lockPixels();
 }
@@ -103,7 +104,7 @@ SkImage_Raster::SkImage_Raster(const Info& info, SkData* data, size_t rowBytes)
 SkImage_Raster::SkImage_Raster(const Info& info, SkPixelRef* pr, size_t rowBytes)
     : INHERITED(info.fWidth, info.fHeight)
 {
-    fBitmap.setConfig(info, rowBytes);
+    fBitmap.setInfo(info, rowBytes);
     fBitmap.setPixelRef(pr);
     fBitmap.lockPixels();
 }
@@ -133,8 +134,8 @@ bool SkImage_Raster::onReadPixels(SkBitmap* dst, const SkIRect& subset) const {
 
 const void* SkImage_Raster::onPeekPixels(SkImageInfo* infoPtr,
                                          size_t* rowBytesPtr) const {
-    SkImageInfo info;
-    if (!fBitmap.asImageInfo(&info) || !fBitmap.getPixels()) {
+    const SkImageInfo info = fBitmap.info();
+    if ((kUnknown_SkColorType == info.colorType()) || !fBitmap.getPixels()) {
         return NULL;
     }
     *infoPtr = info;

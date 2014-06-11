@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2008 The Android Open Source Project
  *
@@ -9,7 +8,6 @@
 
 #include "SkCanvas.h"
 #include "SkBitmapDevice.h"
-#include "SkBounder.h"
 #include "SkDeviceImageFilterProxy.h"
 #include "SkDraw.h"
 #include "SkDrawFilter.h"
@@ -257,7 +255,6 @@ public:
         canvas->updateDeviceCMCache();
 
         fClipStack = &canvas->fClipStack;
-        fBounder = canvas->getBounder();
         fCurrLayer = canvas->fMCRec->fTopLayer;
         fSkipEmptyClips = skipEmptyClips;
     }
@@ -282,9 +279,6 @@ public:
             SkDEBUGCODE(this->validate();)
 
             fCurrLayer = rec->fNext;
-            if (fBounder) {
-                fBounder->setClip(fClip);
-            }
             // fCurrLayer may be NULL now
 
             return true;
@@ -424,23 +418,6 @@ bool AutoDrawLooper::doNext(SkDrawFilter::Type drawType) {
     return true;
 }
 
-/*  Stack helper for managing a SkBounder. In the destructor, if we were
-    given a bounder, we call its commit() method, signifying that we are
-    done accumulating bounds for that draw.
-*/
-class SkAutoBounderCommit {
-public:
-    SkAutoBounderCommit(SkBounder* bounder) : fBounder(bounder) {}
-    ~SkAutoBounderCommit() {
-        if (NULL != fBounder) {
-            fBounder->commit();
-        }
-    }
-private:
-    SkBounder*  fBounder;
-};
-#define SkAutoBounderCommit(...) SK_REQUIRE_LOCAL_VAR(SkAutoBounderCommit)
-
 #include "SkColorPriv.h"
 
 ////////// macros to place around the internal draw calls //////////////////
@@ -449,14 +426,12 @@ private:
     this->predrawNotify();                                          \
     AutoDrawLooper  looper(this, paint, true);                      \
     while (looper.next(type)) {                                     \
-        SkAutoBounderCommit ac(fBounder);                           \
         SkDrawIter          iter(this);
 
 #define LOOPER_BEGIN(paint, type, bounds)                           \
     this->predrawNotify();                                          \
     AutoDrawLooper  looper(this, paint, false, bounds);             \
     while (looper.next(type)) {                                     \
-        SkAutoBounderCommit ac(fBounder);                           \
         SkDrawIter          iter(this);
 
 #define LOOPER_END    }
@@ -464,7 +439,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////
 
 SkBaseDevice* SkCanvas::init(SkBaseDevice* device) {
-    fBounder = NULL;
     fCachedLocalClipBounds.setEmpty();
     fCachedLocalClipBoundsDirty = true;
     fAllowSoftClip = true;
@@ -499,7 +473,7 @@ SkCanvas::SkCanvas(int width, int height)
     inc_canvas();
 
     SkBitmap bitmap;
-    bitmap.setConfig(SkImageInfo::MakeUnknown(width, height));
+    bitmap.setInfo(SkImageInfo::MakeUnknown(width, height));
     this->init(SkNEW_ARGS(SkBitmapDevice, (bitmap)))->unref();
 }
 
@@ -526,15 +500,9 @@ SkCanvas::~SkCanvas() {
 
     this->internalRestore();    // restore the last, since we're going away
 
-    SkSafeUnref(fBounder);
     SkDELETE(fMetaData);
 
     dec_canvas();
-}
-
-SkBounder* SkCanvas::setBounder(SkBounder* bounder) {
-    SkRefCnt_SafeAssign(fBounder, bounder);
-    return bounder;
 }
 
 SkDrawFilter* SkCanvas::getDrawFilter() const {
@@ -913,7 +881,7 @@ static SkBaseDevice* create_compatible_device(SkCanvas* canvas,
 int SkCanvas::internalSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags,
                                 bool justForImageFilter, SaveLayerStrategy strategy) {
 #ifndef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-    flags = (SaveFlags)(flags | kClipToLayer_SaveFlag);
+    flags |= kClipToLayer_SaveFlag;
 #endif
 
     // do this before we create the layer. We don't call the public save() since
@@ -1114,8 +1082,7 @@ SkAutoROCanvasPixels::SkAutoROCanvasPixels(SkCanvas* canvas) {
 
 bool SkAutoROCanvasPixels::asROBitmap(SkBitmap* bitmap) const {
     if (fAddr) {
-        return bitmap->installPixels(fInfo, const_cast<void*>(fAddr), fRowBytes,
-                                     NULL, NULL);
+        return bitmap->installPixels(fInfo, const_cast<void*>(fAddr), fRowBytes);
     } else {
         bitmap->reset();
         return false;
@@ -1699,22 +1666,8 @@ void SkCanvas::replayClips(ClipVisitor* visitor) const {
     SkClipStack::B2TIter                iter(fClipStack);
     const SkClipStack::Element*         element;
 
-    static const SkRect kEmpty = { 0, 0, 0, 0 };
     while ((element = iter.next()) != NULL) {
-        switch (element->getType()) {
-            case SkClipStack::Element::kPath_Type:
-                visitor->clipPath(element->getPath(), element->getOp(), element->isAA());
-                break;
-            case SkClipStack::Element::kRRect_Type:
-                visitor->clipRRect(element->getRRect(), element->getOp(), element->isAA());
-                break;
-            case SkClipStack::Element::kRect_Type:
-                visitor->clipRect(element->getRect(), element->getOp(), element->isAA());
-                break;
-            case SkClipStack::Element::kEmpty_Type:
-                visitor->clipRect(kEmpty, SkRegion::kIntersect_Op, false);
-                break;
-        }
+        element->replay(visitor);
     }
 }
 
@@ -2512,31 +2465,39 @@ void SkCanvas::drawTextOnPathHV(const void* text, size_t byteLength,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void SkCanvas::EXPERIMENTAL_optimize(SkPicture* picture) {
+void SkCanvas::EXPERIMENTAL_optimize(const SkPicture* picture) {
     SkBaseDevice* device = this->getDevice();
     if (NULL != device) {
         device->EXPERIMENTAL_optimize(picture);
     }
 }
 
-void SkCanvas::EXPERIMENTAL_purge(SkPicture* picture) {
+void SkCanvas::EXPERIMENTAL_purge(const SkPicture* picture) {
     SkBaseDevice* device = this->getTopDevice();
     if (NULL != device) {
         device->EXPERIMENTAL_purge(picture);
     }
 }
 
-void SkCanvas::drawPicture(SkPicture& picture) {
+void SkCanvas::drawPicture(const SkPicture* picture) {
+    if (NULL != picture) {
+        this->onDrawPicture(picture);
+    }
+}
+
+void SkCanvas::onDrawPicture(const SkPicture* picture) {
+    SkASSERT(NULL != picture);
+
     SkBaseDevice* device = this->getTopDevice();
     if (NULL != device) {
         // Canvas has to first give the device the opportunity to render
         // the picture itself.
-        if (device->EXPERIMENTAL_drawPicture(this, &picture)) {
+        if (device->EXPERIMENTAL_drawPicture(this, picture)) {
             return; // the device has rendered the entire picture
         }
     }
 
-    picture.draw(this);
+    picture->draw(this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2581,7 +2542,7 @@ int SkCanvas::LayerIter::y() const { return fImpl->getY(); }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkCanvas::ClipVisitor::~ClipVisitor() { }
+SkCanvasClipVisitor::~SkCanvasClipVisitor() { }
 
 ///////////////////////////////////////////////////////////////////////////////
 

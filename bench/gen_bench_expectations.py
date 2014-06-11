@@ -20,6 +20,7 @@ ERR_LB = 1.5
 
 # List of bench configs to monitor. Ignore all other configs.
 CONFIGS_TO_INCLUDE = ['simple_viewport_1000x1000',
+                      'simple_viewport_1000x1000_angle',
                       'simple_viewport_1000x1000_gpu',
                       'simple_viewport_1000x1000_scalar_1.100000',
                       'simple_viewport_1000x1000_scalar_1.100000_gpu',
@@ -45,13 +46,14 @@ def compute_ranges(benches):
   Returns:
     a list of float [lower_bound, upper_bound].
   """
-  minimum = min(benches)
-  maximum = max(benches)
-  diff = maximum - minimum
   avg = sum(benches) / len(benches)
+  squared_avg = avg ** 2
+  avg_sum_squared = sum([bench**2 for bench in benches])/len(benches)
+  std_dev = (abs(avg_sum_squared - squared_avg) + 0.0001*abs(avg**2)) ** 0.5
 
-  return [minimum - diff * RANGE_RATIO_LOWER - avg * ERR_RATIO - ERR_LB,
-          maximum + diff * RANGE_RATIO_UPPER + avg * ERR_RATIO + ERR_UB]
+  # If the results are normally distributed, 2 standard deviations
+  # captures something like ~95% of the possible range of results I think
+  return [avg - 2*std_dev, avg + 2*std_dev]
 
 
 def create_expectations_dict(revision_data_points, builder):

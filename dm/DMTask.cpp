@@ -5,20 +5,26 @@
 DEFINE_bool(cpu, true, "Master switch for running CPU-bound work.");
 DEFINE_bool(gpu, true, "Master switch for running GPU-bound work.");
 
+DECLARE_bool(dryRun);
+
 namespace DM {
 
 Task::Task(Reporter* reporter, TaskRunner* taskRunner)
     : fReporter(reporter)
     , fTaskRunner(taskRunner)
     , fDepth(0) {
-    fReporter->start();
+    fReporter->taskCreated();
 }
 
 Task::Task(const Task& parent)
     : fReporter(parent.fReporter)
     , fTaskRunner(parent.fTaskRunner)
     , fDepth(parent.depth() + 1) {
-    fReporter->start();
+    fReporter->taskCreated();
+}
+
+Task::~Task() {
+    fReporter->taskDestroyed();
 }
 
 void Task::fail(const char* msg) {
@@ -34,7 +40,7 @@ void Task::start() {
 }
 
 void Task::finish() {
-    fReporter->finish(this->name(), SkTime::GetMSecs() - fStart);
+    fReporter->printStatus(this->name(), SkTime::GetMSecs() - fStart);
 }
 
 void Task::spawnChildNext(CpuTask* task) {
@@ -45,11 +51,11 @@ CpuTask::CpuTask(Reporter* reporter, TaskRunner* taskRunner) : Task(reporter, ta
 CpuTask::CpuTask(const Task& parent) : Task(parent) {}
 
 void CpuTask::run() {
-    this->start();
     if (FLAGS_cpu && !this->shouldSkip()) {
-        this->draw();
+        this->start();
+        if (!FLAGS_dryRun) this->draw();
+        this->finish();
     }
-    this->finish();
     SkDELETE(this);
 }
 
@@ -63,11 +69,11 @@ void CpuTask::spawnChild(CpuTask* task) {
 GpuTask::GpuTask(Reporter* reporter, TaskRunner* taskRunner) : Task(reporter, taskRunner) {}
 
 void GpuTask::run(GrContextFactory& factory) {
-    this->start();
     if (FLAGS_gpu && !this->shouldSkip()) {
-        this->draw(&factory);
+        this->start();
+        if (!FLAGS_dryRun) this->draw(&factory);
+        this->finish();
     }
-    this->finish();
     SkDELETE(this);
 }
 

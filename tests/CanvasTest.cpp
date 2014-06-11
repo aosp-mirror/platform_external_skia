@@ -101,7 +101,7 @@ static void test_clipVisitor(skiatest::Reporter* reporter, SkCanvas* canvas) {
     SkISize size = canvas->getDeviceSize();
 
     SkBitmap bm;
-    bm.setConfig(SkImageInfo::MakeN32Premul(size.width(), size.height()));
+    bm.setInfo(SkImageInfo::MakeN32Premul(size.width(), size.height()));
     SkCanvas c(bm);
 
     Canvas2CanvasClipVisitor visitor(&c);
@@ -503,7 +503,7 @@ static void DrawPictureTestStep(SkCanvas* canvas,
     testCanvas->drawRect(kTestRect, kTestPaint);
     SkAutoTUnref<SkPicture> testPicture(recorder.endRecording());
 
-    canvas->drawPicture(*testPicture);
+    canvas->drawPicture(testPicture);
 }
 TEST_STEP(DrawPicture, DrawPictureTestStep);
 
@@ -632,10 +632,7 @@ static void AssertCanvasStatesEqual(skiatest::Reporter* reporter,
         canvas1->getClipDeviceBounds(&deviceBounds1) ==
         canvas2->getClipDeviceBounds(&deviceBounds2),
         testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, deviceBounds1 == deviceBounds2,
-        testStep->assertMessage());
-    REPORTER_ASSERT_MESSAGE(reporter, canvas1->getBounder() ==
-        canvas2->getBounder(), testStep->assertMessage());
+    REPORTER_ASSERT_MESSAGE(reporter, deviceBounds1 == deviceBounds2, testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, canvas1->getTotalMatrix() ==
         canvas2->getTotalMatrix(), testStep->assertMessage());
     REPORTER_ASSERT_MESSAGE(reporter, equal_clips(*canvas1, *canvas2), testStep->assertMessage());
@@ -695,8 +692,7 @@ private:
                                     testStep->assertMessage());
         }
         REPORTER_ASSERT_MESSAGE(reporter,
-            !referenceRecord->fPicture->fPathHeap ==
-            !testRecord->fPicture->fPathHeap,
+            !referenceRecord->fPathHeap == !testRecord->fPathHeap,
             testStep->assertMessage());
         // The following tests are commented out because they currently
         // fail. Issue: http://code.google.com/p/skia/issues/detail?id=507

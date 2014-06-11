@@ -73,9 +73,11 @@ SkImageDecoder::Peeker* SkImageDecoder::setPeeker(Peeker*) {
     return NULL;
 }
 
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
 SkImageDecoder::Chooser* SkImageDecoder::setChooser(Chooser*) {
     return NULL;
 }
+#endif
 
 SkBitmap::Allocator* SkImageDecoder::setAllocator(SkBitmap::Allocator*) {
     return NULL;
@@ -94,18 +96,15 @@ bool SkImageDecoder::cropBitmap(SkBitmap*, SkBitmap*, int, int, int, int, int,
     return false;
 }
 
-bool SkImageDecoder::chooseFromOneChoice(SkBitmap::Config, int, int) const {
+#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
+bool SkImageDecoder::chooseFromOneChoice(SkColorType, int, int) const {
     return false;
 }
+#endif
 
 bool SkImageDecoder::allocPixelRef(SkBitmap*, SkColorTable*) const {
     return false;
 }
-
-SkBitmap::Config SkImageDecoder::getPrefConfig(SrcDepth, bool) const {
-    return SkBitmap::kNo_Config;
-}
-
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -147,9 +146,3 @@ bool SkImageEncoder::encodeFile(const char file[], const SkBitmap& bm, int quali
     return false;
 }
 /////////////////////////////////////////////////////////////////////////
-
-// Empty implementation for SkImages.
-
-#include "SkImages.h"
-
-void SkImages::InitializeFlattenables() {}

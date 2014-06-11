@@ -50,12 +50,12 @@
         'gm.gyp:gm_expectations',
         'jsoncpp.gyp:jsoncpp',
         'pdf.gyp:pdf',
+        'etc1.gyp:libetc1',
       ],
       'conditions': [
         ['skia_android_framework', {
           'libraries': [
             '-lskia',
-            '-lcutils',
           ],
         }],
         ['skia_run_pdfviewer_in_gm or skia_poppler_enabled', {
