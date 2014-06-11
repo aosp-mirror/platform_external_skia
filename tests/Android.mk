@@ -197,6 +197,7 @@ LOCAL_SRC_FILES := \
 	TLSTest.cpp \
 	TSetTest.cpp \
 	TestSize.cpp \
+	TextureCompressionTest.cpp \
 	TileGridTest.cpp \
 	ToUnicodeTest.cpp \
 	TracingTest.cpp \
