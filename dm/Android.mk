@@ -421,7 +421,6 @@ LOCAL_SRC_FILES := \
 	../tests/PictureTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureStateTreeTest.cpp \
-	../tests/PictureUtilsTest.cpp \
 	../tests/PixelRefTest.cpp \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
