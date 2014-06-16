@@ -226,7 +226,6 @@
 #define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
 #define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
 #define kNative_8888_SkColorType kN32_SkColorType
-#define SK_SUPPORT_LEGACY_BLURMASKFILTER_STYLE
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 #define SK_ATTR_DEPRECATED SK_NOTHING_ARG1
 #define SK_SUPPORT_LEGACY_SHADER_LOCALMATRIX
