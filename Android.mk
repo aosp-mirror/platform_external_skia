@@ -163,6 +163,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
+	src/core/SkRecordDraw.cpp \
+	src/core/SkRecordOpts.cpp \
+	src/core/SkRecorder.cpp \
+	src/core/SkRecording.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
@@ -528,14 +532,14 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
 	$(LOCAL_PATH)/src/core \
-	$(LOCAL_PATH)/src/opts \
 	$(LOCAL_PATH)/src/image \
+	$(LOCAL_PATH)/src/opts \
+	$(LOCAL_PATH)/src/utils \
 	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
 	$(LOCAL_PATH)/include/images \
-	$(LOCAL_PATH)/src/utils \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/src/images \
