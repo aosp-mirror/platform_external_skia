@@ -12,6 +12,9 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
 
+LOCAL_CPPFLAGS := \
+	-Wno-invalid-offsetof
+
 LOCAL_SRC_FILES := \
 	DM.cpp \
 	DMBenchTask.cpp \
