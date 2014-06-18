@@ -197,6 +197,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libEGL \
 	libz
 
+LOCAL_STATIC_LIBRARIES := \
+	libjsoncpp
+
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/config \

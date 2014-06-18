@@ -279,6 +279,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL
 
+LOCAL_STATIC_LIBRARIES := \
+	libjsoncpp
+
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
