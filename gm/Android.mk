@@ -188,7 +188,8 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../src/gpu/GrTest.cpp
+	../src/gpu/GrTest.cpp \
+	../tools/CrashHandler.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -202,6 +203,7 @@ LOCAL_STATIC_LIBRARIES := \
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -217,7 +219,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pipe/utils \
-	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../tools/flags \

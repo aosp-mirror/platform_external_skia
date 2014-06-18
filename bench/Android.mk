@@ -270,6 +270,7 @@ LOCAL_SRC_FILES := \
 	BenchTimer.cpp \
 	BenchSysTimer_posix.cpp \
 	BenchGpuTimer_gl.cpp \
+	../tools/CrashHandler.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp
 
@@ -302,8 +303,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../third_party/etc1
+	$(LOCAL_PATH)/../third_party/etc1 \
+	$(LOCAL_PATH)/../tools/flags
 
 LOCAL_MODULE_TAGS := \
 	tests

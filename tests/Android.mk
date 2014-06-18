@@ -218,6 +218,7 @@ LOCAL_SRC_FILES := \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	TDStackNesterTest.cpp \
 	../tools/sk_tool_utils.cpp \
+	../tools/CrashHandler.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
