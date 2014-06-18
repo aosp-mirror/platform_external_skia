@@ -272,6 +272,7 @@ LOCAL_SRC_FILES := \
 	BenchGpuTimer_gl.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/Resources.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -298,13 +299,13 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/flags
+	$(LOCAL_PATH)/../third_party/etc1
 
 LOCAL_MODULE_TAGS := \
 	tests

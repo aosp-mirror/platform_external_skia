@@ -188,6 +188,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/Resources.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/CrashHandler.cpp
 
@@ -214,16 +215,16 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/effects \
+	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../include/pdf \
-	$(LOCAL_PATH)/../third_party/etc1
+	$(LOCAL_PATH)/../third_party/etc1 \
+	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
 	tests

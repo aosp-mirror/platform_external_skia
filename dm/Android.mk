@@ -485,6 +485,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
+	../tools/Resources.cpp \
 	../tools/picture_utils.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -511,6 +512,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../bench \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
@@ -526,7 +528,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
