@@ -12,6 +12,9 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
 
+LOCAL_CPPFLAGS := \
+	-Wno-invalid-offsetof
+
 LOCAL_SRC_FILES := \
 	skia_test.cpp \
 	PathOpsAngleTest.cpp \
@@ -157,7 +160,6 @@ LOCAL_SRC_FILES := \
 	PictureTest.cpp \
 	PictureShaderTest.cpp \
 	PictureStateTreeTest.cpp \
-	PictureUtilsTest.cpp \
 	PixelRefTest.cpp \
 	PointTest.cpp \
 	PremulAlphaRoundTripTest.cpp \
@@ -220,11 +222,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../tools/picture_utils.cpp \
-	../src/record/SkRecordDraw.cpp \
-	../src/record/SkRecordOpts.cpp \
-	../src/record/SkRecorder.cpp \
-	../src/record/SkRecording.cpp
+	../tools/picture_utils.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
@@ -244,7 +242,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	$(LOCAL_PATH)/../include/record \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/image \
@@ -253,7 +250,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/pipe/utils \
-	$(LOCAL_PATH)/../src/record \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../experimental/PdfViewer \

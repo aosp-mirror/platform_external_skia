@@ -32,7 +32,7 @@
  as the colortable.count says it is.
  */
 static void build_compressed_data(void* buffer, const SkBitmap& bitmap) {
-    SkASSERT(SkBitmap::kIndex8_Config == bitmap.config());
+    SkASSERT(kIndex_8_SkColorType == bitmap.colorType());
 
     SkAutoLockPixels alp(bitmap);
     if (!bitmap.readyToDraw()) {
@@ -203,7 +203,7 @@ static GrTexture* sk_gr_create_bitmap_texture(GrContext* ctx,
     GrTextureDesc desc;
     generate_bitmap_texture_desc(*bitmap, &desc);
 
-    if (SkBitmap::kIndex8_Config == bitmap->config()) {
+    if (kIndex_8_SkColorType == bitmap->colorType()) {
         // build_compressed_data doesn't do npot->pot expansion
         // and paletted textures can't be sub-updated
         if (ctx->supportsIndex8PixelConfig(params, bitmap->width(), bitmap->height())) {
@@ -343,6 +343,7 @@ void GrUnlockAndUnrefCachedBitmapTexture(GrTexture* texture) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef SK_SUPPORT_LEGACY_BITMAP_CONFIG
 GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config config) {
     switch (config) {
         case SkBitmap::kA8_Config:
@@ -360,6 +361,7 @@ GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config config) {
             return kUnknown_GrPixelConfig;
     }
 }
+#endif
 
 // alphatype is ignore for now, but if GrPixelConfig is expanded to encompass
 // alpha info, that will be considered.

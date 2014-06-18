@@ -17,8 +17,8 @@
 namespace sk_tools {
     void force_all_opaque(const SkBitmap& bitmap) {
         SkASSERT(NULL == bitmap.getTexture());
-        SkASSERT(SkBitmap::kARGB_8888_Config == bitmap.config());
-        if (NULL != bitmap.getTexture() || SkBitmap::kARGB_8888_Config == bitmap.config()) {
+        SkASSERT(kN32_SkColorType == bitmap.colorType());
+        if (NULL != bitmap.getTexture() || kN32_SkColorType == bitmap.colorType()) {
             return;
         }
 
@@ -39,15 +39,6 @@ namespace sk_tools {
                 str->operator[](i) = newChar;
             }
         }
-    }
-
-    void make_filepath(SkString* path, const SkString& dir, const SkString& name) {
-        size_t len = dir.size();
-        path->set(dir);
-        if (0 < len  && '/' != dir[len - 1]) {
-            path->append("/");
-        }
-        path->append(name);
     }
 
     bool is_percentage(const char* const string) {

@@ -15,6 +15,9 @@
     'skia_for_android_framework_defines': [
       'SK_SUPPORT_LEGACY_SETCONFIG_INFO',
       'SK_SUPPORT_LEGACY_SETCONFIG',
+      'SK_SUPPORT_LEGACY_IMAGEDECODER_CONFIG',
+      'SK_SUPPORT_LEGACY_DEVICE_VIRTUAL_ISOPAQUE',
+      'SK_SUPPORT_LEGACY_BITMAP_CONFIG',
       # Needed until we fix skbug.com/2440.
       'SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG',
       # Transitional, for deprecated SkCanvas::SaveFlags methods.

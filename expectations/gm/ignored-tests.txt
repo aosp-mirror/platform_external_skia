@@ -33,10 +33,8 @@
 ## epoger will rebaseline by 25 Dec 2013
 #gradtext
 
-# reed: https://codereview.chromium.org/190723004/
-# This change removes an API that this GM was testing. If/when it lands and sticks,
-# I will likely just delete the GM.
-canvas-layer-state
+# reed: bitmapfilters changed (labels) with hide_config CL, just need rebaselines
+bitmapfilters
 
 # humper:
 # Needs rebaselining after faster GPU blur patch lands
@@ -48,25 +46,7 @@ blurquickreject
 blurrects
 bigblurs
 
-# These are part of picture-version 27 -- removal of SkUnitMapp
-# just need to be rebaselined
-scaled_tilemode_bitmap
-scaled_tilemodes_npot
-scaled_tilemodes
-tilemode_bitmap
-tilemodes_npot
-tilemodes
-
-# Added by kevin.petit@arm.com for https://codereview.chromium.org/317193003
-# Only S32A_D565_Blend is causing mismatches
-shadertext3
-drawbitmaprect
-coloremoji
-
 # Added by robertphillips for https://codereview.chromium.org/316143003/
 # This CL actually fixes this GM's image
 distantclip
 
-# dandov: Fix for bitmap shader by taking into account if the bitmap is alpha only
-# https://codereview.chromium.org/318923005/
-bitmapshaders

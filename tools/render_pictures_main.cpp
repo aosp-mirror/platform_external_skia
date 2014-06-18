@@ -124,13 +124,13 @@ static bool write_image_to_file(const void* buffer, size_t size, SkBitmap* bitma
     SkString name = SkStringPrintf("%s_%d%s", gInputFileName.c_str(), gImageNo++,
                                    get_suffix_from_format(format));
     SkString dir(FLAGS_writePath[0]);
-    sk_tools::make_filepath(&outPath, dir, name);
+    outPath = SkOSPath::SkPathJoin(dir.c_str(), name.c_str());
     SkFILEWStream fileStream(outPath.c_str());
     if (!(fileStream.isValid() && fileStream.write(buffer, size))) {
         SkDebugf("Failed to write encoded data to \"%s\"\n", outPath.c_str());
     }
     // Put in a dummy bitmap.
-    return SkImageDecoder::DecodeStream(&memStream, bitmap, SkBitmap::kNo_Config,
+    return SkImageDecoder::DecodeStream(&memStream, bitmap, kUnknown_SkColorType,
                                         SkImageDecoder::kDecodeBounds_Mode);
 }
 
@@ -386,9 +386,7 @@ static int process_input(const char* input, const SkString* writePath,
     SkDebugf("process_input, %s\n", input);
     if (iter.next(&inputFilename)) {
         do {
-            SkString inputPath;
-            SkString inputAsSkString(input);
-            sk_tools::make_filepath(&inputPath, inputAsSkString, inputFilename);
+            SkString inputPath = SkOSPath::SkPathJoin(input, inputFilename.c_str());
             if (!render_picture(inputPath, writePath, mismatchPath, renderer, jsonSummaryPtr)) {
                 ++failures;
             }

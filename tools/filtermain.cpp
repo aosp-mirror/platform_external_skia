@@ -18,7 +18,6 @@
 #include "SkPictureRecorder.h"
 #include "SkStream.h"
 #include "picture_utils.h"
-#include "path_utils.h"
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
@@ -818,9 +817,9 @@ int tool_main(int argc, char** argv) {
     if (iter.next(&inputFilename)) {
 
         do {
-            sk_tools::make_filepath(&inFile, inDir, inputFilename);
+            inFile = SkOSPath::SkPathJoin(inDir.c_str(), inputFilename.c_str());
             if (!outDir.isEmpty()) {
-                sk_tools::make_filepath(&outFile, outDir, inputFilename);
+                outFile = SkOSPath::SkPathJoin(outDir.c_str(), inputFilename.c_str());
             }
             SkDebugf("Executing %s\n", inputFilename.c_str());
             filter_picture(inFile, outFile);

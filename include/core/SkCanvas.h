@@ -1200,7 +1200,10 @@ protected:
         kNoLayer_SaveLayerStrategy
     };
 
-    virtual void willSave(SaveFlags) {}
+    // Transitional, pending external clients cleanup.
+    virtual void willSave(SaveFlags) { this->willSave(); }
+
+    virtual void willSave() {}
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) {
         return kFullLayer_SaveLayerStrategy;
     }

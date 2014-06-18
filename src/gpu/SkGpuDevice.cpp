@@ -386,9 +386,14 @@ void SkGpuDevice::drawPoints(const SkDraw& draw, SkCanvas::PointMode mode,
     }
 
     if (paint.getPathEffect() && 2 == count && SkCanvas::kLines_PointMode == mode) {
-        if (GrDashingEffect::DrawDashLine(pts, paint, this->context())) {
-            return;
-        }
+        GrStrokeInfo strokeInfo(paint, SkPaint::kStroke_Style);
+        GrPaint grPaint;
+        SkPaint2GrPaintShader(this->context(), paint, true, &grPaint);
+        SkPath path;
+        path.moveTo(pts[0]);
+        path.lineTo(pts[1]);
+        fContext->drawPath(grPaint, path, strokeInfo);
+        return;
     }
 
     // we only handle hairlines and paints without path effects or mask filters,
@@ -1371,7 +1376,7 @@ void SkGpuDevice::internalDrawBitmap(const SkBitmap& bitmap,
     // the rest from the SkPaint.
     GrPaint grPaint;
     grPaint.addColorEffect(effect);
-    bool alphaOnly = !(SkBitmap::kA8_Config == bitmap.config());
+    bool alphaOnly = !(kAlpha_8_SkColorType == bitmap.colorType());
     GrColor grColor = (alphaOnly) ? SkColor2GrColorJustAlpha(paint.getColor()) :
                                     SkColor2GrColor(paint.getColor());
     SkPaint2GrPaintNoShader(this->context(), paint, grColor, false, &grPaint);

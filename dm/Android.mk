@@ -12,6 +12,9 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
 
+LOCAL_CPPFLAGS := \
+	-Wno-invalid-offsetof
+
 LOCAL_SRC_FILES := \
 	DM.cpp \
 	DMBenchTask.cpp \
@@ -421,7 +424,6 @@ LOCAL_SRC_FILES := \
 	../tests/PictureTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureStateTreeTest.cpp \
-	../tests/PictureUtilsTest.cpp \
 	../tests/PixelRefTest.cpp \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
@@ -479,10 +481,6 @@ LOCAL_SRC_FILES := \
 	../gm/androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp \
-	../src/record/SkRecordDraw.cpp \
-	../src/record/SkRecordOpts.cpp \
-	../src/record/SkRecorder.cpp \
-	../src/record/SkRecording.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
@@ -509,7 +507,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../include/record \
 	$(LOCAL_PATH)/../bench \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
@@ -522,7 +519,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/pdf \
-	$(LOCAL_PATH)/../src/record \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../tools/flags \

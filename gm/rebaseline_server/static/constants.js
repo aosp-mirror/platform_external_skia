@@ -20,7 +20,6 @@ module.constant('constants', (function() {
     KEY__DIFFERENCES__NUM_DIFF_PIXELS: 'numDifferingPixels',
     KEY__DIFFERENCES__PERCENT_DIFF_PIXELS: 'percentDifferingPixels',
     KEY__DIFFERENCES__PERCEPTUAL_DIFF: 'perceptualDifference',
-    KEY__DIFFERENCES__WEIGHTED_DIFF: 'weightedDiffMeasure',
 
     // NOTE: Keep these in sync with ../imagepair.py
     KEY__IMAGEPAIRS__DIFFERENCES: 'differenceData',
@@ -74,5 +73,8 @@ module.constant('constants', (function() {
     KEY__EDITS__MODIFICATIONS: 'modifications',
     KEY__EDITS__OLD_RESULTS_HASH: 'oldResultsHash',
     KEY__EDITS__OLD_RESULTS_TYPE: 'oldResultsType',
+
+    // These are just used on the client side, no need to sync with server code.
+    KEY__IMAGEPAIRS__ROWSPAN: 'rowspan',
   }
 })())

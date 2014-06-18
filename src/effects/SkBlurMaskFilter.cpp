@@ -630,11 +630,14 @@ void OutputRectBlurProfileLookup(GrGLShaderBuilder* builder,
                                  const char *profileSize, const char *loc,
                                  const char *blurred_width,
                                  const char *sharp_width) {
-    builder->fsCodeAppendf("\t\tfloat coord = (0.5 * (abs(2.0*%s - %s) - %s))/%s;\n",
+    builder->fsCodeAppendf("\tfloat %s;\n", output);
+    builder->fsCodeAppendf("\t\t{\n");
+    builder->fsCodeAppendf("\t\t\tfloat coord = (0.5 * (abs(2.0*%s - %s) - %s))/%s;\n",
                            loc, blurred_width, sharp_width, profileSize);
-    builder->fsCodeAppendf("\t\t%s = ", output);
+    builder->fsCodeAppendf("\t\t\t%s = ", output);
     builder->fsAppendTextureLookup(sampler, "vec2(coord,0.5)");
     builder->fsCodeAppend(".a;\n");
+    builder->fsCodeAppendf("\t\t}\n");
 }
 
 void GrGLRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
@@ -673,18 +676,10 @@ void GrGLRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
     builder->fsCodeAppendf("\tfloat center = 2.0 * floor(%s/2.0 + .25) - 1.0;\n", profileSizeName);
     builder->fsCodeAppendf("\tvec2 wh = smallDims - vec2(center,center);\n");
 
-    builder->fsCodeAppendf("\tfloat horiz_lookup;\n");
-    builder->fsCodeAppendf("\tif (%s <= smallDims.x) {\n", profileSizeName);
     OutputRectBlurProfileLookup(builder, samplers[0], "horiz_lookup", profileSizeName, "translatedPos.x", "width", "wh.x");
-    builder->fsCodeAppendf("\t}\n");
-
-    builder->fsCodeAppendf("\tfloat vert_lookup;\n");
-    builder->fsCodeAppendf("\tif (%s <= smallDims.y) {\n", profileSizeName);
     OutputRectBlurProfileLookup(builder, samplers[0], "vert_lookup", profileSizeName, "translatedPos.y", "height", "wh.y");
-    builder->fsCodeAppendf("\t}\n");
 
     builder->fsCodeAppendf("\tfloat final = horiz_lookup * vert_lookup;\n");
-
     builder->fsCodeAppendf("\t%s = src * vec4(final);\n", outputColor );
 }
 

@@ -19,6 +19,7 @@
         '../samplecode', # To pull SampleApp.h and SampleCode.h
         '../src/pipe/utils', # For TiledPipeController
         '../src/utils/debugger',
+        '../tools',
       ],
       'includes': [
         'gmslides.gypi',
@@ -134,6 +135,9 @@
         # Lua
         '../src/utils/SkLuaCanvas.cpp',
         '../src/utils/SkLua.cpp',
+        
+        # tools
+        '../tools/sk_tool_utils.cpp',
       ],
       'sources!': [
         '../samplecode/SampleSkLayer.cpp', #relies on SkMatrix44 which doesn't compile
@@ -236,7 +240,8 @@
             '../src/views/ios/SkOSWindow_iOS.mm',
             '../src/utils/ios/SkImageDecoder_iOS.mm',
             '../src/utils/ios/SkStream_NSData.mm',
-            '../src/utils/ios/SkOSFile_iOS.mm',
+            # Not fully implemented yet
+            # '../src/utils/ios/SkOSFile_iOS.mm',
 
             '../src/utils/mac/SkCreateCGImageRef.cpp',
             '../experimental/iOSSampleApp/SkiOSSampleApp-Debug.xcconfig',

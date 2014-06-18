@@ -12,8 +12,12 @@ LOCAL_CFLAGS += \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
 
+LOCAL_CPPFLAGS := \
+	-Wno-invalid-offsetof
+
 LOCAL_SRC_FILES := \
 	gm_expectations.cpp \
+	../tools/sk_tool_utils.cpp \
 	gmmain.cpp \
 	system_preferences_default.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
@@ -210,6 +214,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pipe/utils \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../tools/flags \
