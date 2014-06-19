@@ -450,6 +450,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
+	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
