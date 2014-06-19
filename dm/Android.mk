@@ -41,7 +41,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
-	../bench/SkBenchmark.cpp \
+	../bench/Benchmark.cpp \
 	../bench/AAClipBench.cpp \
 	../bench/BicubicBench.cpp \
 	../bench/BitmapBench.cpp \

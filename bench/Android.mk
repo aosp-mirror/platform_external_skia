@@ -17,12 +17,12 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	BenchLogger.cpp \
+	GMBench.cpp \
 	ResultsWriter.cpp \
-	SkBenchLogger.cpp \
-	SkGMBench.cpp \
 	benchmain.cpp \
 	../tools/sk_tool_utils.cpp \
-	SkBenchmark.cpp \
+	Benchmark.cpp \
 	AAClipBench.cpp \
 	BicubicBench.cpp \
 	BitmapBench.cpp \
