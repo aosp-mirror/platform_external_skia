@@ -532,6 +532,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
 	$(LOCAL_PATH)/src/core \
+	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
 	$(LOCAL_PATH)/src/utils \
@@ -552,7 +553,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
