@@ -223,8 +223,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../tools/picture_utils.cpp \
-	../tools/Resources.cpp
+	../tools/Resources.cpp \
+	../tools/picture_utils.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \

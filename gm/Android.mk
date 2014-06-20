@@ -16,6 +16,8 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	gm_expectations.cpp \
+	../tools/sk_tool_utils.cpp \
 	gmmain.cpp \
 	system_preferences_default.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
@@ -186,11 +188,9 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../tools/CrashHandler.cpp \
-	gm_expectations.cpp \
-	../tools/sk_tool_utils.cpp \
 	../tools/Resources.cpp \
-	../src/gpu/GrTest.cpp
+	../src/gpu/GrTest.cpp \
+	../tools/CrashHandler.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -203,6 +203,8 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../src/utils \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -212,7 +214,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/ports \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
-	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
@@ -223,8 +224,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../include/pdf \
-	$(LOCAL_PATH)/../tools
+	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
 	tests
