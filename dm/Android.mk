@@ -479,14 +479,14 @@ LOCAL_SRC_FILES := \
 	../tests/TDStackNesterTest.cpp \
 	../tools/sk_tool_utils.cpp \
 	../gm/androidfallback.cpp \
-	../tools/CrashHandler.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp \
+	../tools/CrashHandler.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../tools/Resources.cpp \
-	../tools/picture_utils.cpp
+	../tools/picture_utils.cpp \
+	../tools/Resources.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
