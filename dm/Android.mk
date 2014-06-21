@@ -477,7 +477,6 @@ LOCAL_SRC_FILES := \
 	../tests/XfermodeTest.cpp \
 	../tests/PipeTest.cpp \
 	../tests/TDStackNesterTest.cpp \
-	../tools/sk_tool_utils.cpp \
 	../gm/androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp \
@@ -486,7 +485,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/picture_utils.cpp \
-	../tools/Resources.cpp
+	../tools/Resources.cpp \
+	../tools/sk_tool_utils.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \

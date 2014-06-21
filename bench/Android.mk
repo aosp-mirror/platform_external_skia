@@ -21,7 +21,6 @@ LOCAL_SRC_FILES := \
 	GMBench.cpp \
 	ResultsWriter.cpp \
 	benchmain.cpp \
-	../tools/sk_tool_utils.cpp \
 	Benchmark.cpp \
 	AAClipBench.cpp \
 	BicubicBench.cpp \
@@ -270,6 +269,7 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/Resources.cpp \
+	../tools/sk_tool_utils.cpp \
 	../tools/timer/Timer.cpp \
 	../tools/timer/TimerData.cpp \
 	../tools/timer/GpuTimer.cpp \
