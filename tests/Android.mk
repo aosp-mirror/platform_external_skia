@@ -224,7 +224,8 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/picture_utils.cpp \
 	../tools/Resources.cpp \
-	../tools/sk_tool_utils.cpp
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \

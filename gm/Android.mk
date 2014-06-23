@@ -190,8 +190,9 @@ LOCAL_SRC_FILES := \
 	../tools/CrashHandler.cpp \
 	gm_expectations.cpp \
 	../tools/Resources.cpp \
-	../src/gpu/GrTest.cpp \
-	../tools/sk_tool_utils.cpp
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp \
+	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \

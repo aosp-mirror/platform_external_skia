@@ -482,12 +482,13 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/CrashHandler.cpp \
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/picture_utils.cpp \
-	../tools/Resources.cpp \
-	../tools/sk_tool_utils.cpp
+	../tools/Resources.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
