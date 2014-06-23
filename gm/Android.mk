@@ -87,6 +87,7 @@ LOCAL_SRC_FILES := \
 	gammatext.cpp \
 	getpostextpath.cpp \
 	giantbitmap.cpp \
+	glyph_pos.cpp \
 	gradients.cpp \
 	gradients_2pt_conical.cpp \
 	gradients_no_texture.cpp \

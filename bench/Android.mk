@@ -168,6 +168,7 @@ LOCAL_SRC_FILES := \
 	../gm/gammatext.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
+	../gm/glyph_pos.cpp \
 	../gm/gradients.cpp \
 	../gm/gradients_2pt_conical.cpp \
 	../gm/gradients_no_texture.cpp \
