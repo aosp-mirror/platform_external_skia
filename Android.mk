@@ -434,6 +434,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
+	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilBuffer.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
