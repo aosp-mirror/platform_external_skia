@@ -25,7 +25,6 @@ LOCAL_SRC_FILES := \
 	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
-	DMRecordTask.cpp \
 	DMReplayTask.cpp \
 	DMReporter.cpp \
 	DMSKPTask.cpp \
