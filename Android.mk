@@ -235,6 +235,7 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathOpsQuad.cpp \
 	src/pathops/SkPathOpsRect.cpp \
 	src/pathops/SkPathOpsSimplify.cpp \
+	src/pathops/SkPathOpsTightBounds.cpp \
 	src/pathops/SkPathOpsTriangle.cpp \
 	src/pathops/SkPathOpsTypes.cpp \
 	src/pathops/SkPathWriter.cpp \

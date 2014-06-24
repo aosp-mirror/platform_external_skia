@@ -17,6 +17,7 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	skia_test.cpp \
+	Test.cpp \
 	PathOpsAngleTest.cpp \
 	PathOpsBoundsTest.cpp \
 	PathOpsCubicIntersectionTest.cpp \
@@ -55,7 +56,7 @@ LOCAL_SRC_FILES := \
 	PathOpsSkpTest.cpp \
 	PathOpsTestCommon.cpp \
 	PathOpsThreadedCommon.cpp \
-	Test.cpp \
+	PathOpsTightBoundsTest.cpp \
 	AAClipTest.cpp \
 	ARGBImageEncoderTest.cpp \
 	AndroidPaintTest.cpp \
@@ -218,12 +219,12 @@ LOCAL_SRC_FILES := \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	TDStackNesterTest.cpp \
 	../tools/CrashHandler.cpp \
+	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/picture_utils.cpp \
-	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp
 
@@ -248,12 +249,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/effects \
-	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/pathops \
-	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/pipe/utils \
+	$(LOCAL_PATH)/../src/image \
+	$(LOCAL_PATH)/../src/images \
+	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
