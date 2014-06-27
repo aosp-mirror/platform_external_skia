@@ -130,6 +130,7 @@ LOCAL_SRC_FILES := \
 	ImageDecodingTest.cpp \
 	ImageFilterTest.cpp \
 	InfRectTest.cpp \
+	InterpolatorTest.cpp \
 	JpegTest.cpp \
 	KtxTest.cpp \
 	LListTest.cpp \
