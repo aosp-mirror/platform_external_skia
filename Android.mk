@@ -320,7 +320,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
-	src/images/SkStreamHelpers.cpp \
 	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
@@ -547,7 +546,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/images \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
-	$(LOCAL_PATH)/src/images \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
