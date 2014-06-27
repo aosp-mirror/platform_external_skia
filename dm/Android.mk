@@ -42,7 +42,6 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../bench/Benchmark.cpp \
 	../bench/AAClipBench.cpp \
-	../bench/BicubicBench.cpp \
 	../bench/BitmapBench.cpp \
 	../bench/BitmapRectBench.cpp \
 	../bench/BitmapScaleBench.cpp \
@@ -124,7 +123,6 @@ LOCAL_SRC_FILES := \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/beziereffects.cpp \
-	../gm/bicubicfilter.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \

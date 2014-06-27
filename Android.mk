@@ -246,7 +246,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkAlphaThresholdFilter.cpp \
 	src/effects/SkArithmeticMode.cpp \
 	src/effects/SkAvoidXfermode.cpp \
-	src/effects/SkBicubicImageFilter.cpp \
 	src/effects/SkBitmapSource.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
 	src/effects/SkBlurMask.cpp \

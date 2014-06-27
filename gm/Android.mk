@@ -26,7 +26,6 @@ LOCAL_SRC_FILES := \
 	arcofzorro.cpp \
 	arithmode.cpp \
 	beziereffects.cpp \
-	bicubicfilter.cpp \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
