@@ -354,7 +354,6 @@ LOCAL_SRC_FILES := \
 	src/sfnt/SkOTTable_name.cpp \
 	src/sfnt/SkOTUtils.cpp \
 	src/utils/SkCondVar.cpp \
-	src/utils/SkCountdown.cpp \
 	src/utils/SkBase64.cpp \
 	src/utils/SkBitmapHasher.cpp \
 	src/utils/SkBitSet.cpp \
