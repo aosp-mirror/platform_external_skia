@@ -183,12 +183,13 @@ LOCAL_SRC_FILES := \
 	RoundRectTest.cpp \
 	RuntimeConfigTest.cpp \
 	SHA1Test.cpp \
+	SListTest.cpp \
 	ScalarTest.cpp \
 	SerializationTest.cpp \
 	ShaderImageFilterTest.cpp \
 	ShaderOpacityTest.cpp \
+	SizeTest.cpp \
 	SkBase64Test.cpp \
-	SListTest.cpp \
 	SmallAllocatorTest.cpp \
 	SortTest.cpp \
 	SrcOverTest.cpp \
@@ -199,7 +200,6 @@ LOCAL_SRC_FILES := \
 	TArrayTest.cpp \
 	TLSTest.cpp \
 	TSetTest.cpp \
-	TestSize.cpp \
 	TextureCompressionTest.cpp \
 	TileGridTest.cpp \
 	ToUnicodeTest.cpp \

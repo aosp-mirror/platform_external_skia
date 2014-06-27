@@ -446,12 +446,13 @@ LOCAL_SRC_FILES := \
 	../tests/RoundRectTest.cpp \
 	../tests/RuntimeConfigTest.cpp \
 	../tests/SHA1Test.cpp \
+	../tests/SListTest.cpp \
 	../tests/ScalarTest.cpp \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
+	../tests/SizeTest.cpp \
 	../tests/SkBase64Test.cpp \
-	../tests/SListTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
 	../tests/SortTest.cpp \
 	../tests/SrcOverTest.cpp \
@@ -462,7 +463,6 @@ LOCAL_SRC_FILES := \
 	../tests/TArrayTest.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
-	../tests/TestSize.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/TileGridTest.cpp \
 	../tests/ToUnicodeTest.cpp \
