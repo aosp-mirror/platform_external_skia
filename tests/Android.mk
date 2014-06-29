@@ -115,6 +115,7 @@ LOCAL_SRC_FILES := \
 	GifTest.cpp \
 	GpuColorFilterTest.cpp \
 	GpuDrawPathTest.cpp \
+	GpuLayerCacheTest.cpp \
 	GpuRectanizerTest.cpp \
 	GrBinHashKeyTest.cpp \
 	GrContextFactoryTest.cpp \
