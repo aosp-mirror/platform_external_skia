@@ -43,7 +43,6 @@ LOCAL_SRC_FILES := \
 	blurquickreject.cpp \
 	blurrect.cpp \
 	blurroundrect.cpp \
-	canvasstate.cpp \
 	circles.cpp \
 	circularclips.cpp \
 	clippedbitmapshaders.cpp \
