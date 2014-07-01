@@ -272,8 +272,7 @@ LOCAL_SRC_FILES := \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
-	../src/gpu/GrTest.cpp \
-	nanobench.cpp
+	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
