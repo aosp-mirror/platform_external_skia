@@ -148,6 +148,9 @@ DEF_TEST(KtxReexportPKM, reporter) {
     SkBitmap etcBitmap;
     SkAutoTUnref<SkData> fileData(SkData::NewFromFileName(filename.c_str()));
     REPORTER_ASSERT(reporter, NULL != fileData);
+    if (NULL == fileData) {
+        return;
+    }
 
     bool installDiscardablePixelRefSuccess =
         SkInstallDiscardablePixelRef(
