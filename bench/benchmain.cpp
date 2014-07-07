@@ -5,17 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "BenchTimer.h"
+#include "BenchLogger.h"
+#include "Benchmark.h"
+#include "CrashHandler.h"
+#include "GMBench.h"
 #include "ResultsWriter.h"
-#include "SkBenchLogger.h"
-#include "SkBenchmark.h"
 #include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkColorPriv.h"
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
 #include "SkDeferredCanvas.h"
-#include "SkGMBench.h"
 #include "SkGraphics.h"
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
@@ -23,6 +23,7 @@
 #include "SkPictureRecorder.h"
 #include "SkString.h"
 #include "SkSurface.h"
+#include "Timer.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
@@ -55,7 +56,7 @@ class Iter {
 public:
     Iter() : fBenches(BenchRegistry::Head()), fGMs(skiagm::GMRegistry::Head()) {}
 
-    SkBenchmark* next() {
+    Benchmark* next() {
         if (fBenches) {
             BenchRegistry::Factory f = fBenches->factory();
             fBenches = fBenches->next();
@@ -66,7 +67,7 @@ public:
             SkAutoTDelete<skiagm::GM> gm(fGMs->factory()(NULL));
             fGMs = fGMs->next();
             if (gm->getFlags() & skiagm::GM::kAsBench_Flag) {
-                return SkNEW_ARGS(SkGMBench, (gm.detach()));
+                return SkNEW_ARGS(GMBench, (gm.detach()));
             }
         }
 
@@ -143,24 +144,24 @@ static void perform_scale(SkCanvas* canvas, int w, int h) {
 }
 
 static SkSurface* make_surface(SkColorType colorType, const SkIPoint& size,
-                               SkBenchmark::Backend backend, int sampleCount,
+                               Benchmark::Backend backend, int sampleCount,
                                GrContext* context) {
     SkSurface* surface = NULL;
     SkImageInfo info = SkImageInfo::Make(size.fX, size.fY, colorType,
                                          kPremul_SkAlphaType);
 
     switch (backend) {
-        case SkBenchmark::kRaster_Backend:
+        case Benchmark::kRaster_Backend:
             surface = SkSurface::NewRaster(info);
             surface->getCanvas()->clear(SK_ColorWHITE);
             break;
 #if SK_SUPPORT_GPU
-        case SkBenchmark::kGPU_Backend: {
+        case Benchmark::kGPU_Backend: {
             surface = SkSurface::NewRenderTarget(context, info, sampleCount);
             break;
         }
 #endif
-        case SkBenchmark::kPDF_Backend:
+        case Benchmark::kPDF_Backend:
         default:
             SkDEBUGFAIL("unsupported");
     }
@@ -192,24 +193,24 @@ static const struct Config {
     SkColorType         fColorType;
     const char*         name;
     int                 sampleCount;
-    SkBenchmark::Backend backend;
+    Benchmark::Backend  backend;
     GLContextType       contextType;
     bool                runByDefault;
 } gConfigs[] = {
-    { kN32_SkColorType,     "NONRENDERING", 0, SkBenchmark::kNonRendering_Backend, kNative, true},
-    { kN32_SkColorType,     "8888",         0, SkBenchmark::kRaster_Backend,       kNative, true},
-    { kRGB_565_SkColorType, "565",          0, SkBenchmark::kRaster_Backend,       kNative, true},
+    { kN32_SkColorType,     "NONRENDERING", 0, Benchmark::kNonRendering_Backend, kNative, true},
+    { kN32_SkColorType,     "8888",         0, Benchmark::kRaster_Backend,       kNative, true},
+    { kRGB_565_SkColorType, "565",          0, Benchmark::kRaster_Backend,       kNative, true},
 #if SK_SUPPORT_GPU
-    { kN32_SkColorType,     "GPU",          0, SkBenchmark::kGPU_Backend,          kNative, true},
-    { kN32_SkColorType,     "MSAA4",        4, SkBenchmark::kGPU_Backend,          kNative, false},
-    { kN32_SkColorType,     "MSAA16",      16, SkBenchmark::kGPU_Backend,          kNative, false},
-    { kN32_SkColorType,     "NVPRMSAA4",    4, SkBenchmark::kGPU_Backend,          kNVPR,   true},
-    { kN32_SkColorType,     "NVPRMSAA16",  16, SkBenchmark::kGPU_Backend,          kNVPR,   false},
+    { kN32_SkColorType,     "GPU",          0, Benchmark::kGPU_Backend,          kNative, true},
+    { kN32_SkColorType,     "MSAA4",        4, Benchmark::kGPU_Backend,          kNative, false},
+    { kN32_SkColorType,     "MSAA16",      16, Benchmark::kGPU_Backend,          kNative, false},
+    { kN32_SkColorType,     "NVPRMSAA4",    4, Benchmark::kGPU_Backend,          kNVPR,   true},
+    { kN32_SkColorType,     "NVPRMSAA16",  16, Benchmark::kGPU_Backend,          kNVPR,   false},
 #if SK_ANGLE
-    { kN32_SkColorType,     "ANGLE",        0, SkBenchmark::kGPU_Backend,          kANGLE,  true},
+    { kN32_SkColorType,     "ANGLE",        0, Benchmark::kGPU_Backend,          kANGLE,  true},
 #endif // SK_ANGLE
-    { kN32_SkColorType,     "Debug",        0, SkBenchmark::kGPU_Backend,          kDebug,  kIsDebug},
-    { kN32_SkColorType,     "NULLGPU",      0, SkBenchmark::kGPU_Backend,          kNull,   true},
+    { kN32_SkColorType,     "Debug",        0, Benchmark::kGPU_Backend,          kDebug,  kIsDebug},
+    { kN32_SkColorType,     "NULLGPU",      0, Benchmark::kGPU_Backend,          kNull,   true},
 #endif // SK_SUPPORT_GPU
 };
 
@@ -254,10 +255,7 @@ DEFINE_double(error, 0.01,
               "Ratio of subsequent bench measurements must drop within 1±error to converge.");
 DEFINE_string(timeFormat, "%9.2f", "Format to print results, in milliseconds per 1000 loops.");
 DEFINE_bool2(verbose, v, false, "Print more.");
-DEFINE_string2(resourcePath, i, "resources", "directory for test resources.");
-#ifdef SK_BUILD_JSON_WRITER
 DEFINE_string(outResultsFile, "", "If given, the results will be written to the file in JSON format.");
-#endif
 DEFINE_bool(dryRun, false, "Don't actually run the tests, just print what would have been done.");
 
 // Has this bench converged?  First arguments are milliseconds / loop iteration,
@@ -273,6 +271,7 @@ static bool HasConverged(double prevPerLoop, double currPerLoop, double currRaw)
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
+    SetupCrashHandler();
     SkCommandLineFlags::Parse(argc, argv);
 #if SK_ENABLE_INST_COUNT
     if (FLAGS_leaks) {
@@ -282,7 +281,7 @@ int tool_main(int argc, char** argv) {
     SkAutoGraphics ag;
 
     // First, parse some flags.
-    SkBenchLogger logger;
+    BenchLogger logger;
     if (FLAGS_logFile.count()) {
         logger.SetLogFile(FLAGS_logFile[0]);
     }
@@ -291,13 +290,11 @@ int tool_main(int argc, char** argv) {
     MultiResultsWriter writer;
     writer.add(&logWriter);
 
-#ifdef SK_BUILD_JSON_WRITER
     SkAutoTDelete<JSONResultsWriter> jsonWriter;
     if (FLAGS_outResultsFile.count()) {
         jsonWriter.reset(SkNEW(JSONResultsWriter(FLAGS_outResultsFile[0])));
         writer.add(jsonWriter.get());
     }
-#endif
 
     // Instantiate after all the writers have been added to writer so that we
     // call close() before their destructors are called on the way out.
@@ -343,22 +340,18 @@ int tool_main(int argc, char** argv) {
         // Non-rendering configs only run in normal mode
         for (int i = 0; i < configs.count(); ++i) {
             const Config& config = gConfigs[configs[i]];
-            if (SkBenchmark::kNonRendering_Backend == config.backend) {
+            if (Benchmark::kNonRendering_Backend == config.backend) {
                 configs.remove(i, 1);
                 --i;
             }
         }
-    }
-    // Set the resource path.
-    if (!FLAGS_resourcePath.isEmpty()) {
-        SkBenchmark::SetResourcePath(FLAGS_resourcePath[0]);
     }
 
 #if SK_SUPPORT_GPU
     for (int i = 0; i < configs.count(); ++i) {
         const Config& config = gConfigs[configs[i]];
 
-        if (SkBenchmark::kGPU_Backend == config.backend) {
+        if (Benchmark::kGPU_Backend == config.backend) {
             GrContext* context = gContextFactory.get(config.contextType);
             if (NULL == context) {
                 SkDebugf("GrContext could not be created for config %s. Config will be skipped.\n",
@@ -416,7 +409,7 @@ int tool_main(int argc, char** argv) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gConfigs); ++i) {
 #if SK_SUPPORT_GPU
         const Config& config = gConfigs[i];
-        if (SkBenchmark::kGPU_Backend != config.backend) {
+        if (Benchmark::kGPU_Backend != config.backend) {
             continue;
         }
         GrContext* context = gContextFactory.get(config.contextType);
@@ -439,9 +432,9 @@ int tool_main(int argc, char** argv) {
 
     // Run each bench in each configuration it supports and we asked for.
     Iter iter;
-    SkBenchmark* bench;
+    Benchmark* bench;
     while ((bench = iter.next()) != NULL) {
-        SkAutoTUnref<SkBenchmark> benchUnref(bench);
+        SkAutoTUnref<Benchmark> benchUnref(bench);
         if (SkCommandLineFlags::ShouldSkip(FLAGS_match, bench->getName())) {
             continue;
         }
@@ -464,7 +457,7 @@ int tool_main(int argc, char** argv) {
             GrContext* context = NULL;
 #if SK_SUPPORT_GPU
             SkGLContextHelper* glContext = NULL;
-            if (SkBenchmark::kGPU_Backend == config.backend) {
+            if (Benchmark::kGPU_Backend == config.backend) {
                 context = gContextFactory.get(config.contextType);
                 if (NULL == context) {
                     continue;
@@ -479,7 +472,7 @@ int tool_main(int argc, char** argv) {
             const SkIPoint dim = bench->getSize();
 
             SkAutoTUnref<SkSurface> surface;
-            if (SkBenchmark::kNonRendering_Backend != config.backend) {
+            if (Benchmark::kNonRendering_Backend != config.backend) {
                 surface.reset(make_surface(config.fColorType,
                                            dim,
                                            config.backend,
@@ -534,12 +527,12 @@ int tool_main(int argc, char** argv) {
 
 #if SK_SUPPORT_GPU
             SkGLContextHelper* contextHelper = NULL;
-            if (SkBenchmark::kGPU_Backend == config.backend) {
+            if (Benchmark::kGPU_Backend == config.backend) {
                 contextHelper = gContextFactory.getGLContext(config.contextType);
             }
-            BenchTimer timer(contextHelper);
+            Timer timer(contextHelper);
 #else
-            BenchTimer timer;
+            Timer timer;
 #endif
 
             double previous = std::numeric_limits<double>::infinity();
@@ -649,7 +642,7 @@ int tool_main(int argc, char** argv) {
             }
             if (FLAGS_verbose) { SkDebugf("\n"); }
 
-            if (!FLAGS_dryRun && FLAGS_outDir.count() && SkBenchmark::kNonRendering_Backend != config.backend) {
+            if (!FLAGS_dryRun && FLAGS_outDir.count() && Benchmark::kNonRendering_Backend != config.backend) {
                 SkAutoTUnref<SkImage> image(surface->newImageSnapshot());
                 if (image.get()) {
                     saveFile(bench->getName(), config.name, FLAGS_outDir[0],

@@ -41,7 +41,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
-	../bench/SkBenchmark.cpp \
+	../bench/Benchmark.cpp \
 	../bench/AAClipBench.cpp \
 	../bench/BicubicBench.cpp \
 	../bench/BitmapBench.cpp \
@@ -481,10 +481,12 @@ LOCAL_SRC_FILES := \
 	../gm/androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/gpu/GrTest.cpp \
+	../tools/CrashHandler.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../tools/picture_utils.cpp
+	../tools/picture_utils.cpp \
+	../tools/Resources.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -492,6 +494,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz
+
+LOCAL_STATIC_LIBRARIES := \
+	libjsoncpp
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/config \
@@ -507,6 +512,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../bench \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
@@ -521,7 +527,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
-	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf

@@ -17,12 +17,12 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	BenchLogger.cpp \
+	GMBench.cpp \
 	ResultsWriter.cpp \
-	SkBenchLogger.cpp \
-	SkGMBench.cpp \
 	benchmain.cpp \
 	../tools/sk_tool_utils.cpp \
-	SkBenchmark.cpp \
+	Benchmark.cpp \
 	AAClipBench.cpp \
 	BicubicBench.cpp \
 	BitmapBench.cpp \
@@ -267,10 +267,13 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../gm/androidfallback.cpp \
-	BenchTimer.cpp \
-	BenchSysTimer_posix.cpp \
-	BenchGpuTimer_gl.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/CrashHandler.cpp \
+	../tools/Resources.cpp \
+	../tools/timer/Timer.cpp \
+	../tools/timer/TimerData.cpp \
+	../tools/timer/GpuTimer.cpp \
+	../tools/timer/SysTimer_posix.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -279,10 +282,10 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL
 
+LOCAL_STATIC_LIBRARIES := \
+	libjsoncpp
+
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/../src/core \
-	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -294,13 +297,17 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/effects \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../third_party/etc1
+	$(LOCAL_PATH)/../third_party/etc1 \
+	$(LOCAL_PATH)/../tools/timer
 
 LOCAL_MODULE_TAGS := \
 	tests

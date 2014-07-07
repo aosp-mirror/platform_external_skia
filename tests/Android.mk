@@ -218,11 +218,13 @@ LOCAL_SRC_FILES := \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	TDStackNesterTest.cpp \
 	../tools/sk_tool_utils.cpp \
+	../tools/CrashHandler.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../tools/picture_utils.cpp
+	../tools/picture_utils.cpp \
+	../tools/Resources.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
@@ -242,6 +244,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/image \
@@ -251,12 +254,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
-	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../experimental \
-	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \

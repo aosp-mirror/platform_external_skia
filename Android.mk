@@ -402,6 +402,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
+	src/gpu/GrCacheable.cpp \
 	src/gpu/GrCacheID.cpp \
 	src/gpu/GrClipData.cpp \
 	src/gpu/GrContext.cpp \
@@ -449,6 +450,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
+	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
@@ -532,6 +534,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
 	$(LOCAL_PATH)/src/core \
+	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
 	$(LOCAL_PATH)/src/utils \
@@ -552,7 +555,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \

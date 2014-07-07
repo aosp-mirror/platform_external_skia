@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -7,22 +6,19 @@
  */
 #include "TimerData.h"
 
-#include "BenchTimer.h"
+#include "Timer.h"
 #include <limits>
 
-using namespace std;
-
 TimerData::TimerData(int maxNumTimings)
-: fMaxNumTimings(maxNumTimings)
-, fCurrTiming(0)
-, fWallTimes(maxNumTimings)
-, fTruncatedWallTimes(maxNumTimings)
-, fCpuTimes(maxNumTimings)
-, fTruncatedCpuTimes(maxNumTimings)
-, fGpuTimes(maxNumTimings){
-}
+    : fMaxNumTimings(maxNumTimings)
+    , fCurrTiming(0)
+    , fWallTimes(maxNumTimings)
+    , fTruncatedWallTimes(maxNumTimings)
+    , fCpuTimes(maxNumTimings)
+    , fTruncatedCpuTimes(maxNumTimings)
+    , fGpuTimes(maxNumTimings) {}
 
-bool TimerData::appendTimes(BenchTimer* timer) {
+bool TimerData::appendTimes(Timer* timer) {
     SkASSERT(timer != NULL);
     if (fCurrTiming >= fMaxNumTimings) {
         return false;
@@ -140,7 +136,6 @@ SkString TimerData::getResult(const char* doubleFormat,
     return str;
 }
 
-#ifdef SK_BUILD_JSON_WRITER
 Json::Value TimerData::getJSON(uint32_t timerFlags,
                                Result result,
                                int itersPerTiming) {
@@ -223,4 +218,3 @@ Json::Value TimerData::getJSON(uint32_t timerFlags,
     }
     return dataNode;
 }
-#endif  // SK_BUILD_JSON_WRITER
