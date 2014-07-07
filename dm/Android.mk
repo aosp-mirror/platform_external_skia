@@ -277,6 +277,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
+	../gm/yuvtorgbeffect.cpp \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \

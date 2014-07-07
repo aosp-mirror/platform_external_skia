@@ -459,6 +459,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
 	src/gpu/effects/GrTextureDomain.cpp \
 	src/gpu/effects/GrTextureStripAtlas.cpp \
+	src/gpu/effects/GrYUVtoRGBEffect.cpp \
 	src/gpu/gl/GrGLAssembleInterface.cpp \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \

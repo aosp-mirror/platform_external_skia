@@ -259,6 +259,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
+	../gm/yuvtorgbeffect.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \

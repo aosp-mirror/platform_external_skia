@@ -180,6 +180,7 @@ LOCAL_SRC_FILES := \
 	xfermodes.cpp \
 	xfermodes2.cpp \
 	xfermodes3.cpp \
+	yuvtorgbeffect.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
