@@ -4,7 +4,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkBenchmark.h"
+
+#include "Benchmark.h"
+
 #include "SkPaint.h"
 #include "SkParse.h"
 
@@ -12,9 +14,7 @@ const char* SkTriState::Name[] = { "default", "true", "false" };
 
 template BenchRegistry* BenchRegistry::gHead;
 
-const char* SkBenchmark::gResourcePath;
-
-SkBenchmark::SkBenchmark() {
+Benchmark::Benchmark() {
     fForceAlpha = 0xFF;
     fForceAA = true;
     fForceFilter = false;
@@ -22,23 +22,23 @@ SkBenchmark::SkBenchmark() {
     fOrMask = fClearMask = 0;
 }
 
-const char* SkBenchmark::getName() {
+const char* Benchmark::getName() {
     return this->onGetName();
 }
 
-SkIPoint SkBenchmark::getSize() {
+SkIPoint Benchmark::getSize() {
     return this->onGetSize();
 }
 
-void SkBenchmark::preDraw() {
+void Benchmark::preDraw() {
     this->onPreDraw();
 }
 
-void SkBenchmark::draw(const int loops, SkCanvas* canvas) {
+void Benchmark::draw(const int loops, SkCanvas* canvas) {
     this->onDraw(loops, canvas);
 }
 
-void SkBenchmark::setupPaint(SkPaint* paint) {
+void Benchmark::setupPaint(SkPaint* paint) {
     paint->setAlpha(fForceAlpha);
     paint->setAntiAlias(fForceAA);
     paint->setFilterLevel(fForceFilter ? SkPaint::kLow_FilterLevel
@@ -51,16 +51,6 @@ void SkBenchmark::setupPaint(SkPaint* paint) {
     }
 }
 
-void SkBenchmark::SetResourcePath(const char* resourcePath) {
-    gResourcePath = resourcePath;
-}
-
-SkString SkBenchmark::GetResourcePath() {
-    return SkString(gResourcePath);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-SkIPoint SkBenchmark::onGetSize() {
+SkIPoint Benchmark::onGetSize() {
     return SkIPoint::Make(640, 480);
 }

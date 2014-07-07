@@ -5,7 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkBenchmark.h"
+#include "Benchmark.h"
+#include "Resources.h"
 #include "SkCanvas.h"
 #include "SkData.h"
 #include "SkDecodingImageGenerator.h"
@@ -76,7 +77,7 @@ static etc1_byte* create_expanded_etc1_bitmap(const uint8_t* orig, int factor) {
 // the ETC1 benches should all be working on the same data. Due to the
 // simplicity of the PKM file, that data is the 128x128 mandrill etc1
 // compressed texture repeated by some factor (currently 8 -> 1024x1024)
-class ETCBitmapBenchBase : public SkBenchmark {
+class ETCBitmapBenchBase : public Benchmark {
 public:
     ETCBitmapBenchBase() : fPKMData(loadPKM()) {
         if (NULL == fPKMData) {
@@ -114,7 +115,7 @@ private:
         return SkData::NewFromMalloc(expandedETC1, dataSz);
     }
 
-    typedef SkBenchmark INHERITED;
+    typedef Benchmark INHERITED;
 };
 
 // This is the rendering benchmark. Prior to rendering the data, create a
@@ -209,8 +210,11 @@ protected:
     }
 
     virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+        SkPixelRef* pr = fBitmap.pixelRef();
         for (int i = 0; i < loops; ++i) {
-            this->fBitmap.pixelRef()->notifyPixelsChanged();
+            if (pr) {
+                pr->notifyPixelsChanged();
+            }
             canvas->drawBitmap(this->fBitmap, 0, 0, NULL);
         }
     }
@@ -219,16 +223,16 @@ private:
     typedef ETCBitmapBench INHERITED;
 };
 
-DEF_BENCH(return new ETCBitmapBench(false, SkBenchmark::kRaster_Backend);)
-DEF_BENCH(return new ETCBitmapBench(true, SkBenchmark::kRaster_Backend);)
+DEF_BENCH(return new ETCBitmapBench(false, Benchmark::kRaster_Backend);)
+DEF_BENCH(return new ETCBitmapBench(true, Benchmark::kRaster_Backend);)
 
-DEF_BENCH(return new ETCBitmapBench(false, SkBenchmark::kGPU_Backend);)
-DEF_BENCH(return new ETCBitmapBench(true, SkBenchmark::kGPU_Backend);)
+DEF_BENCH(return new ETCBitmapBench(false, Benchmark::kGPU_Backend);)
+DEF_BENCH(return new ETCBitmapBench(true, Benchmark::kGPU_Backend);)
 
-DEF_BENCH(return new ETCBitmapUploadBench(false, SkBenchmark::kRaster_Backend);)
-DEF_BENCH(return new ETCBitmapUploadBench(true, SkBenchmark::kRaster_Backend);)
+DEF_BENCH(return new ETCBitmapUploadBench(false, Benchmark::kRaster_Backend);)
+DEF_BENCH(return new ETCBitmapUploadBench(true, Benchmark::kRaster_Backend);)
 
-DEF_BENCH(return new ETCBitmapUploadBench(false, SkBenchmark::kGPU_Backend);)
-DEF_BENCH(return new ETCBitmapUploadBench(true, SkBenchmark::kGPU_Backend);)
+DEF_BENCH(return new ETCBitmapUploadBench(false, Benchmark::kGPU_Backend);)
+DEF_BENCH(return new ETCBitmapUploadBench(true, Benchmark::kGPU_Backend);)
 
 #endif  // SK_IGNORE_ETC1_SUPPORT

@@ -5,7 +5,9 @@
  * found in the LICENSE file.
  */
 
+#include "CrashHandler.h"
 #include "OverwriteLine.h"
+#include "Resources.h"
 #include "SkCommandLineFlags.h"
 #include "SkGraphics.h"
 #include "SkOSFile.h"
@@ -39,7 +41,6 @@ DEFINE_bool(cpu, true, "whether or not to run CPU tests.");
 DEFINE_bool(gpu, true, "whether or not to run GPU tests.");
 DEFINE_int32(threads, SkThreadPool::kThreadPerCore,
              "Run threadsafe tests on a threadpool with this many threads.");
-DEFINE_string2(resourcePath, i, "resources", "directory for test resources.");
 
 // need to explicitly declare this, or we get some weird infinite loop llist
 template TestRegistry* TestRegistry::gHead;
@@ -132,9 +133,9 @@ static bool should_run(const char* testName, bool isGPUTest) {
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
+    SetupCrashHandler();
     SkCommandLineFlags::SetUsage("");
     SkCommandLineFlags::Parse(argc, argv);
-    Test::SetResourcePath(FLAGS_resourcePath[0]);
 
 #if SK_ENABLE_INST_COUNT
     if (FLAGS_leaks) {
@@ -156,7 +157,7 @@ int tool_main(int argc, char** argv) {
         if (!tmpDir.isEmpty()) {
             header.appendf(" --tmpDir %s", tmpDir.c_str());
         }
-        SkString resourcePath = Test::GetResourcePath();
+        SkString resourcePath = GetResourcePath();
         if (!resourcePath.isEmpty()) {
             header.appendf(" --resourcePath %s", resourcePath.c_str());
         }

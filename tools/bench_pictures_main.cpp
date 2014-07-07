@@ -5,12 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "BenchTimer.h"
+#include "BenchLogger.h"
+#include "Timer.h"
 #include "CopyTilesRenderer.h"
+#include "CrashHandler.h"
 #include "LazyDecodeBitmap.h"
 #include "PictureBenchmark.h"
 #include "PictureRenderingFlags.h"
-#include "SkBenchLogger.h"
+#include "PictureResultsWriter.h"
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
 #include "SkDiscardableMemoryPool.h"
@@ -21,9 +23,8 @@
 #include "SkPicture.h"
 #include "SkStream.h"
 #include "picture_utils.h"
-#include "PictureResultsWriter.h"
 
-SkBenchLogger gLogger;
+BenchLogger gLogger;
 PictureResultsLoggerWriter gLogWriter(&gLogger);
 PictureResultsMultiWriter gWriter;
 
@@ -39,9 +40,7 @@ DEFINE_string(filter, "",
         "Specific flags are listed above.");
 DEFINE_string(logFile, "", "Destination for writing log output, in addition to stdout.");
 DEFINE_bool(logPerIter, false, "Log each repeat timer instead of mean.");
-#ifdef SK_BUILD_JSON_WRITER
 DEFINE_string(jsonLog, "", "Destination for writing JSON data.");
-#endif
 DEFINE_bool(min, false, "Print the minimum times (instead of average).");
 DECLARE_int32(multi);
 DECLARE_string(readPath);
@@ -393,6 +392,7 @@ static int process_input(const char* input,
 
 int tool_main(int argc, char** argv);
 int tool_main(int argc, char** argv) {
+    SetupCrashHandler();
     SkString usage;
     usage.printf("Time drawing .skp files.\n"
                  "\tPossible arguments for --filter: [%s]\n\t\t[%s]",
@@ -419,14 +419,12 @@ int tool_main(int argc, char** argv) {
         }
     }
 
-#ifdef SK_BUILD_JSON_WRITER
     SkAutoTDelete<PictureJSONResultsWriter> jsonWriter;
     if (FLAGS_jsonLog.count() == 1) {
         jsonWriter.reset(SkNEW(PictureJSONResultsWriter(FLAGS_jsonLog[0])));
         gWriter.add(jsonWriter.get());
     }
 
-#endif
     gWriter.add(&gLogWriter);
 
 

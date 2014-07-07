@@ -5,36 +5,14 @@
   ],
   'targets': [
     {
-      'target_name': 'gm_expectations',
-      'type': 'static_library',
-      'include_dirs' : [
-        '../src/utils/',
-      ],
-      'sources': [
-        '../gm/gm_expectations.h',
-        '../gm/gm_expectations.cpp',
-        '../tools/sk_tool_utils.cpp',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
-        'jsoncpp.gyp:jsoncpp',
-      ],
-      'direct_dependent_settings': {
-        'include_dirs': [
-          '../gm/',
-        ],
-      },
-    },
-    {
       'target_name': 'gm',
       'type': 'executable',
       'include_dirs' : [
         '../src/core',
-        '../src/images',
         '../src/effects',
-        '../src/pipe/utils/',
-        '../src/utils/',
-        '../tools',
+        '../src/images',
+        '../src/pipe/utils',
+        '../src/utils',
       ],
       'includes': [
         'gmslides.gypi',
@@ -47,12 +25,14 @@
         '../src/pipe/utils/SamplePipeControllers.cpp',
       ],
       'dependencies': [
-        'skia_lib.gyp:skia_lib',
+        'etc1.gyp:libetc1',
         'flags.gyp:flags',
-        'gm.gyp:gm_expectations',
         'jsoncpp.gyp:jsoncpp',
         'pdf.gyp:pdf',
-        'etc1.gyp:libetc1',
+        'skia_lib.gyp:skia_lib',
+        'tools.gyp:crash_handler',
+        'tools.gyp:gm_expectations',
+        'tools.gyp:resources',
       ],
       'conditions': [
         ['skia_android_framework', {

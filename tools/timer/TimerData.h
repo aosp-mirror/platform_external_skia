@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
@@ -23,7 +22,7 @@
     #pragma warning(pop)
 #endif
 
-class BenchTimer;
+class Timer;
 
 class TimerData {
 public:
@@ -33,12 +32,12 @@ public:
     explicit TimerData(int maxNumTimings);
 
     /**
-     * Collect times from the BenchTimer for an iteration. It will fail if called more often than
+     * Collect times from the Timer for an iteration. It will fail if called more often than
      * indicated in the constructor.
      *
-     * @param BenchTimer Must not be null.
+     * @param Timer Must not be null.
      */
-    bool appendTimes(BenchTimer*);
+    bool appendTimes(Timer*);
 
     enum Result {
         kMin_Result,
@@ -68,11 +67,9 @@ public:
                        const char* configName,
                        uint32_t timerFlags,
                        int itersPerTiming = 1);
-#ifdef SK_BUILD_JSON_WRITER
     Json::Value getJSON(uint32_t timerFlags,
                         Result result,
                         int itersPerTiming = 1);
-#endif // SK_BUILD_JSON_WRITER
 
 private:
     int fMaxNumTimings;
