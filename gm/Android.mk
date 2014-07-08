@@ -234,4 +234,4 @@ LOCAL_MODULE := \
 	skia_gm
 
 include external/stlport/libstlport.mk
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)
