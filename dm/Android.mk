@@ -366,9 +366,9 @@ LOCAL_SRC_FILES := \
 	../tests/FlateTest.cpp \
 	../tests/FontHostStreamTest.cpp \
 	../tests/FontHostTest.cpp \
-	../tests/FontObjTest.cpp \
 	../tests/FontMgrTest.cpp \
 	../tests/FontNamesTest.cpp \
+	../tests/FontObjTest.cpp \
 	../tests/FrontBufferedStreamTest.cpp \
 	../tests/GLInterfaceValidationTest.cpp \
 	../tests/GLProgramsTest.cpp \
@@ -382,8 +382,8 @@ LOCAL_SRC_FILES := \
 	../tests/GrContextFactoryTest.cpp \
 	../tests/GrDrawTargetTest.cpp \
 	../tests/GrMemoryPoolTest.cpp \
-	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrOrderedSetTest.cpp \
+	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTBSearchTest.cpp \
 	../tests/GradientTest.cpp \
@@ -410,8 +410,8 @@ LOCAL_SRC_FILES := \
 	../tests/MetaDataTest.cpp \
 	../tests/MipMapTest.cpp \
 	../tests/NameAllocatorTest.cpp \
-	../tests/ObjectPoolTest.cpp \
 	../tests/OSPathTest.cpp \
+	../tests/ObjectPoolTest.cpp \
 	../tests/OnceTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PackBitsTest.cpp \
@@ -421,13 +421,14 @@ LOCAL_SRC_FILES := \
 	../tests/PathMeasureTest.cpp \
 	../tests/PathTest.cpp \
 	../tests/PathUtilsTest.cpp \
-	../tests/PictureTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureStateTreeTest.cpp \
+	../tests/PictureTest.cpp \
 	../tests/PixelRefTest.cpp \
 	../tests/PointTest.cpp \
 	../tests/PremulAlphaRoundTripTest.cpp \
 	../tests/QuickRejectTest.cpp \
+	../tests/RTConfRegistryTest.cpp \
 	../tests/RTreeTest.cpp \
 	../tests/RandomTest.cpp \
 	../tests/ReadPixelsTest.cpp \
@@ -469,7 +470,6 @@ LOCAL_SRC_FILES := \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
-	../tests/UnitTestTest.cpp \
 	../tests/UtilsTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \

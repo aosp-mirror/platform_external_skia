@@ -105,9 +105,9 @@ LOCAL_SRC_FILES := \
 	FlateTest.cpp \
 	FontHostStreamTest.cpp \
 	FontHostTest.cpp \
-	FontObjTest.cpp \
 	FontMgrTest.cpp \
 	FontNamesTest.cpp \
+	FontObjTest.cpp \
 	FrontBufferedStreamTest.cpp \
 	GLInterfaceValidationTest.cpp \
 	GLProgramsTest.cpp \
@@ -121,8 +121,8 @@ LOCAL_SRC_FILES := \
 	GrContextFactoryTest.cpp \
 	GrDrawTargetTest.cpp \
 	GrMemoryPoolTest.cpp \
-	GrRedBlackTreeTest.cpp \
 	GrOrderedSetTest.cpp \
+	GrRedBlackTreeTest.cpp \
 	GrSurfaceTest.cpp \
 	GrTBSearchTest.cpp \
 	GradientTest.cpp \
@@ -149,8 +149,8 @@ LOCAL_SRC_FILES := \
 	MetaDataTest.cpp \
 	MipMapTest.cpp \
 	NameAllocatorTest.cpp \
-	ObjectPoolTest.cpp \
 	OSPathTest.cpp \
+	ObjectPoolTest.cpp \
 	OnceTest.cpp \
 	PDFPrimitivesTest.cpp \
 	PackBitsTest.cpp \
@@ -160,13 +160,14 @@ LOCAL_SRC_FILES := \
 	PathMeasureTest.cpp \
 	PathTest.cpp \
 	PathUtilsTest.cpp \
-	PictureTest.cpp \
 	PictureShaderTest.cpp \
 	PictureStateTreeTest.cpp \
+	PictureTest.cpp \
 	PixelRefTest.cpp \
 	PointTest.cpp \
 	PremulAlphaRoundTripTest.cpp \
 	QuickRejectTest.cpp \
+	RTConfRegistryTest.cpp \
 	RTreeTest.cpp \
 	RandomTest.cpp \
 	ReadPixelsTest.cpp \
@@ -208,7 +209,6 @@ LOCAL_SRC_FILES := \
 	TracingTest.cpp \
 	TypefaceTest.cpp \
 	UnicodeTest.cpp \
-	UnitTestTest.cpp \
 	UtilsTest.cpp \
 	WArrayTest.cpp \
 	WritePixelsTest.cpp \
