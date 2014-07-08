@@ -1861,7 +1861,8 @@ void SkPaint::descriptorProc(const SkDeviceProperties* deviceProperties,
     }
 
 #ifdef SK_BUILD_FOR_ANDROID
-    SkWriteBuffer androidBuffer;
+    char buffer[128];
+    SkWriteBuffer androidBuffer(buffer, sizeof(buffer));
     fPaintOptionsAndroid.flatten(androidBuffer);
     descSize += androidBuffer.bytesWritten();
     entryCount += 1;
