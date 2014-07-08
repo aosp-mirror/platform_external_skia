@@ -487,7 +487,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../tools/picture_utils.cpp
+	../tools/picture_utils.cpp \
+	../tools/RefCntIs.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \

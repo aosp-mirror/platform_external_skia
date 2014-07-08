@@ -228,7 +228,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/picture_utils.cpp \
 	../tools/sk_tool_utils.cpp \
-	../tools/sk_tool_utils_font.cpp
+	../tools/sk_tool_utils_font.cpp \
+	../tools/RefCntIs.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
