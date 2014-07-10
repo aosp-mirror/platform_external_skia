@@ -154,6 +154,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureRangePlayback.cpp \
 	src/core/SkPictureRecord.cpp \
 	src/core/SkPictureRecorder.cpp \
+	src/core/SkPictureReplacementPlayback.cpp \
 	src/core/SkPictureShader.cpp \
 	src/core/SkPictureStateTree.cpp \
 	src/core/SkPixelRef.cpp \
