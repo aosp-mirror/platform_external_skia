@@ -41,6 +41,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../bench/Benchmark.cpp \
 	../bench/AAClipBench.cpp \
+	../bench/AlternatingColorPatternBench.cpp \
 	../bench/BitmapBench.cpp \
 	../bench/BitmapRectBench.cpp \
 	../bench/BitmapScaleBench.cpp \
