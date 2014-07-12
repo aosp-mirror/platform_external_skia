@@ -408,14 +408,15 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrCacheable.cpp \
 	src/gpu/GrCacheID.cpp \
 	src/gpu/GrClipData.cpp \
+	src/gpu/GrClipMaskCache.cpp \
+	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrEffect.cpp \
-	src/gpu/GrClipMaskCache.cpp \
-	src/gpu/GrClipMaskManager.cpp \
+	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuObject.cpp \
 	src/gpu/GrGpuFactory.cpp \
@@ -488,7 +489,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGpuGL_program.cpp \
 	src/gpu/SkGpuDevice.cpp \
 	src/gpu/SkGr.cpp \
-	src/gpu/SkGrFontScaler.cpp \
 	src/gpu/SkGrPixelRef.cpp \
 	src/gpu/SkGrTexturePixelRef.cpp \
 	src/image/SkImage_Gpu.cpp \
