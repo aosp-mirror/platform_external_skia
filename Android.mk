@@ -587,6 +587,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlitRow_opts_arm.cpp \
 	src/opts/SkBlurImage_opts_arm.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \
+	src/opts/SkTextureCompression_opts_arm.cpp \
 	src/opts/SkUtils_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm.cpp
 
@@ -600,6 +601,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlitRow_opts_arm_neon.cpp \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
+	src/opts/SkTextureCompression_opts_neon.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 
 LOCAL_CFLAGS_arm += \
@@ -620,6 +622,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlitRect_opts_SSE2.cpp \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
+	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
@@ -639,6 +642,7 @@ LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBlitRect_opts_SSE2.cpp \
 	src/opts/SkBlurImage_opts_SSE2.cpp \
 	src/opts/SkMorphology_opts_SSE2.cpp \
+	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_SSE2.cpp \
 	src/opts/SkXfermode_opts_SSE2.cpp \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
@@ -653,6 +657,7 @@ LOCAL_SRC_FILES_mips += \
 	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp \
 	src/opts/SkBitmapProcState_opts_none.cpp \
 	src/opts/SkBlitRow_opts_none.cpp
@@ -664,6 +669,7 @@ LOCAL_SRC_FILES_mips64 += \
 	src/opts/SkBlurImage_opts_none.cpp \
 	src/opts/SkMorphology_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
+	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
 LOCAL_CFLAGS_arm64 += \
@@ -681,6 +687,7 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_arm.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
+	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkUtils_opts_none.cpp \
 	src/opts/SkXfermode_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
