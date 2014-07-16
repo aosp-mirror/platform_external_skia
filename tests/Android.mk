@@ -202,7 +202,6 @@ LOCAL_SRC_FILES := \
 	StrokeTest.cpp \
 	SurfaceTest.cpp \
 	TArrayTest.cpp \
-	THashCache.cpp \
 	TLSTest.cpp \
 	TSetTest.cpp \
 	TextureCompressionTest.cpp \

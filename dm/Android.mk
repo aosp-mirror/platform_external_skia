@@ -462,7 +462,6 @@ LOCAL_SRC_FILES := \
 	../tests/StrokeTest.cpp \
 	../tests/SurfaceTest.cpp \
 	../tests/TArrayTest.cpp \
-	../tests/THashCache.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
 	../tests/TextureCompressionTest.cpp \
