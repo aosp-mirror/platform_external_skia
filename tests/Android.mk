@@ -104,6 +104,7 @@ LOCAL_SRC_FILES := \
 	FitsInTest.cpp \
 	FlatDataTest.cpp \
 	FlateTest.cpp \
+	FloatingPointTextureTest.cpp \
 	FontHostStreamTest.cpp \
 	FontHostTest.cpp \
 	FontMgrTest.cpp \
