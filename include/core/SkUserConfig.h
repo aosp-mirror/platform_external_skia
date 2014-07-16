@@ -211,7 +211,6 @@
 #define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE 1
 #define IGNORE_ROT_AA_RECT_OPT
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
-#define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
 #define SK_ATTR_DEPRECATED SK_NOTHING_ARG1
 #define SK_BUILD_FOR_ANDROID
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
@@ -227,7 +226,6 @@
 #define SK_GAMMA_EXPONENT 1.4
 #define SK_IGNORE_ETC1_SUPPORT
 #define SK_INTERNAL
-#define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
 #define SK_SCALAR_IS_FLOAT
 #define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
