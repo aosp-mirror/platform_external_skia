@@ -373,6 +373,7 @@ LOCAL_SRC_FILES := \
 	../tests/SHA1Test.cpp \
 	../tests/SListTest.cpp \
 	../tests/ScalarTest.cpp \
+	../tests/ScaledImageCache.cpp \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \

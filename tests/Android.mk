@@ -191,6 +191,7 @@ LOCAL_SRC_FILES := \
 	SHA1Test.cpp \
 	SListTest.cpp \
 	ScalarTest.cpp \
+	ScaledImageCache.cpp \
 	SerializationTest.cpp \
 	ShaderImageFilterTest.cpp \
 	ShaderOpacityTest.cpp \
