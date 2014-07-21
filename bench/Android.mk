@@ -23,6 +23,7 @@ LOCAL_SRC_FILES := \
 	benchmain.cpp \
 	Benchmark.cpp \
 	AAClipBench.cpp \
+	AlternatingColorPatternBench.cpp \
 	BitmapBench.cpp \
 	BitmapRectBench.cpp \
 	BitmapScaleBench.cpp \
