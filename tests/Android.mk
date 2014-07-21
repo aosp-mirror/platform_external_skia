@@ -132,6 +132,7 @@ LOCAL_SRC_FILES := \
 	ImageCacheTest.cpp \
 	ImageDecodingTest.cpp \
 	ImageFilterTest.cpp \
+	ImageGeneratorTest.cpp \
 	ImageNewShaderTest.cpp \
 	InfRectTest.cpp \
 	InterpolatorTest.cpp \
