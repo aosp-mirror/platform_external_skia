@@ -231,6 +231,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
+	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp
