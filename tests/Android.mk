@@ -76,6 +76,7 @@ LOCAL_SRC_FILES := \
 	BlitRowTest.cpp \
 	BlurTest.cpp \
 	CachedDecodingPixelRefTest.cpp \
+	CanvasStateHelpers.cpp \
 	CanvasStateTest.cpp \
 	CanvasTest.cpp \
 	ChecksumTest.cpp \
