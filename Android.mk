@@ -50,6 +50,7 @@ ifeq ($(NO_FALLBACK_FONT),true)
 endif
 
 LOCAL_CFLAGS += \
+	-fPIC \
 	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
