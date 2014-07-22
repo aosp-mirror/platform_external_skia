@@ -240,6 +240,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
+	libdl \
 	libGLESv2 \
 	libEGL \
 	liblog
