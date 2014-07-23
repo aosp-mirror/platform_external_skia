@@ -618,8 +618,7 @@ endif
 LOCAL_CFLAGS_x86 += \
 	-msse2 \
 	-mfpmath=sse \
-	-m32 \
-	-mssse3
+	-m32
 
 LOCAL_SRC_FILES_x86 += \
 	src/opts/opts_check_x86.cpp \
@@ -639,8 +638,7 @@ LOCAL_SRC_FILES_x86 += \
 LOCAL_CFLAGS_x86_64 += \
 	-msse2 \
 	-mfpmath=sse \
-	-m32 \
-	-mssse3
+	-m32
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/opts_check_x86.cpp \
