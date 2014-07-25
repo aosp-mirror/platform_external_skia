@@ -423,7 +423,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrEffect.cpp \
 	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrGpu.cpp \
-	src/gpu/GrGpuObject.cpp \
+	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
