@@ -145,6 +145,7 @@ LOCAL_SRC_FILES := \
 	../gm/offsetimagefilter.cpp \
 	../gm/optimizations.cpp \
 	../gm/ovals.cpp \
+	../gm/patch.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \

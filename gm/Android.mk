@@ -127,6 +127,7 @@ LOCAL_SRC_FILES := \
 	offsetimagefilter.cpp \
 	optimizations.cpp \
 	ovals.cpp \
+	patch.cpp \
 	patheffects.cpp \
 	pathfill.cpp \
 	pathinterior.cpp \
