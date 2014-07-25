@@ -410,7 +410,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
-	src/gpu/GrCacheable.cpp \
 	src/gpu/GrCacheID.cpp \
 	src/gpu/GrClipData.cpp \
 	src/gpu/GrClipMaskCache.cpp \
