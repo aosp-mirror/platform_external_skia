@@ -248,6 +248,7 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
+	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../include/pathops \
 	$(LOCAL_PATH)/../include/pipe \
 	$(LOCAL_PATH)/../include/effects \
@@ -256,7 +257,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/sfnt \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
-	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/effects \

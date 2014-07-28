@@ -541,6 +541,7 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
+	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
@@ -551,7 +552,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
 	$(LOCAL_PATH)/src/utils \
-	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
@@ -575,6 +575,7 @@ LOCAL_C_INCLUDES := \
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
+	$(LOCAL_PATH)/include/gpu \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
