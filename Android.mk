@@ -33,6 +33,7 @@ LOCAL_PATH:= $(call my-dir)
 ###############################################################################
 
 include $(CLEAR_VARS)
+LOCAL_FDO_SUPPORT := true
 LOCAL_ARM_MODE := thumb
 ifeq ($(TARGET_ARCH),arm)
 	ifeq ($(ARCH_ARM_HAVE_VFP),true)
