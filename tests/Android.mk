@@ -130,7 +130,6 @@ LOCAL_SRC_FILES := \
 	GrSurfaceTest.cpp \
 	GrTBSearchTest.cpp \
 	GradientTest.cpp \
-	HashCacheTest.cpp \
 	ImageCacheTest.cpp \
 	ImageDecodingTest.cpp \
 	ImageFilterTest.cpp \

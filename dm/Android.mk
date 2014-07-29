@@ -314,7 +314,6 @@ LOCAL_SRC_FILES := \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTBSearchTest.cpp \
 	../tests/GradientTest.cpp \
-	../tests/HashCacheTest.cpp \
 	../tests/ImageCacheTest.cpp \
 	../tests/ImageDecodingTest.cpp \
 	../tests/ImageFilterTest.cpp \
