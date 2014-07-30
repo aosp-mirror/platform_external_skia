@@ -485,13 +485,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramEffects.cpp \
+	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLShaderBuilder.cpp \
 	src/gpu/gl/GrGLSL.cpp \
 	src/gpu/gl/GrGLStencilBuffer.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
-	src/gpu/gl/GrGLUniformManager.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGpuGL.cpp \
