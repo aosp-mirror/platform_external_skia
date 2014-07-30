@@ -87,6 +87,7 @@ LOCAL_SRC_FILES := \
 	RegionBench.cpp \
 	RegionContainBench.cpp \
 	RepeatTileBench.cpp \
+	RotatedRectBench.cpp \
 	ScalarBench.cpp \
 	ShaderMaskBench.cpp \
 	SkipZeroesBench.cpp \
