@@ -408,7 +408,6 @@ LOCAL_SRC_FILES := \
 	../tests/TDStackNesterTest.cpp \
 	../gm/androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../src/gpu/GrTest.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
@@ -417,7 +416,8 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
-	../tools/picture_utils.cpp
+	../tools/picture_utils.cpp \
+	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
@@ -442,11 +442,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	$(LOCAL_PATH)/../src/core \
-	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/images \
