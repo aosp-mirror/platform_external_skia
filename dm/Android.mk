@@ -445,6 +445,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/fonts \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
@@ -453,7 +454,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
-	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
