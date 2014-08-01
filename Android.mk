@@ -614,7 +614,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 
 LOCAL_CFLAGS_arm += \
-	-D__ARM_HAVE_NEON
+	-DSK_ARM_HAS_NEON
 
 endif
 
