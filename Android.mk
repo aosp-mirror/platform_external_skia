@@ -343,6 +343,7 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
+	src/core/SkForceCPlusPlusLinking.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
