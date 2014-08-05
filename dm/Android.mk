@@ -407,6 +407,7 @@ LOCAL_SRC_FILES := \
 	../tests/PipeTest.cpp \
 	../tests/TDStackNesterTest.cpp \
 	../gm/androidfallback.cpp \
+	../tests/FontConfigParser.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/sk_tool_utils.cpp \
@@ -459,6 +460,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
+	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
