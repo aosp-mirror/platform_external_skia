@@ -406,7 +406,6 @@ LOCAL_SRC_FILES := \
 	../tests/XfermodeTest.cpp \
 	../tests/PipeTest.cpp \
 	../tests/TDStackNesterTest.cpp \
-	../gm/androidfallback.cpp \
 	../tests/FontConfigParser.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
