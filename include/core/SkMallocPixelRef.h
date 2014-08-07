@@ -78,21 +78,18 @@ public:
     class PRFactory : public SkPixelRefFactory {
     public:
         virtual SkPixelRef* create(const SkImageInfo&,
+                                   size_t rowBytes,
                                    SkColorTable*) SK_OVERRIDE;
     };
-
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkMallocPixelRef)
 
 protected:
     // The ownPixels version of this constructor is deprecated.
     SkMallocPixelRef(const SkImageInfo&, void* addr, size_t rb, SkColorTable*,
                      bool ownPixels);
-    SkMallocPixelRef(SkReadBuffer& buffer);
     virtual ~SkMallocPixelRef();
 
     virtual bool onNewLockPixels(LockRec*) SK_OVERRIDE;
     virtual void onUnlockPixels() SK_OVERRIDE;
-    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     virtual size_t getAllocatedSizeInBytes() const SK_OVERRIDE;
 
     size_t rowBytes() const { return fRB; }

@@ -8,7 +8,7 @@
 #include "GMBench.h"
 
 GMBench::GMBench(skiagm::GM* gm) : fGM(gm) {
-    fName.printf("GM:%s", gm->getName());
+    fName.printf("GM_%s", gm->getName());
 }
 
 GMBench::~GMBench() { delete fGM; }
@@ -49,3 +49,4 @@ SkIPoint GMBench::onGetSize() {
     SkISize size = fGM->getISize();
     return SkIPoint::Make(size.fWidth, size.fHeight);
 }
+

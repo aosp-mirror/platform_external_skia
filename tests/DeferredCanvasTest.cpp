@@ -49,23 +49,6 @@ static SkPMColor read_pixel(SkSurface* surface, int x, int y) {
     return pixel;
 }
 
-static void TestDeferredCanvasBitmapAccess(skiatest::Reporter* reporter) {
-    SkBitmap store;
-
-    SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
-
-    canvas->clear(0x00000000);
-
-    // verify that the clear() was deferred
-    REPORTER_ASSERT(reporter, 0xFFFFFFFF == read_pixel(surface, 0, 0));
-
-    SkBitmap accessed = canvas->getDevice()->accessBitmap(false);
-
-    // verify that clear was executed
-    REPORTER_ASSERT(reporter, 0 == read_pixel(surface, 0, 0));
-}
-
 class MockSurface : public SkSurface_Base {
 public:
     MockSurface(int width, int height) : SkSurface_Base(width, height) {
@@ -487,6 +470,7 @@ static void TestDeferredCanvasMemoryLimit(skiatest::Reporter* reporter) {
     SkBitmap sourceImage;
     // 100 by 100 image, takes 40,000 bytes in memory
     sourceImage.allocN32Pixels(100, 100);
+    sourceImage.eraseColor(SK_ColorGREEN);
 
     for (int i = 0; i < 5; i++) {
         sourceImage.notifyPixelsChanged(); // to force re-serialization
@@ -520,6 +504,7 @@ static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
     SkBitmap sourceImages[imageCount];
     for (int i = 0; i < imageCount; i++) {
         sourceImages[i].allocN32Pixels(100, 100);
+        sourceImages[i].eraseColor(SK_ColorGREEN);
     }
 
     size_t bitmapSize = sourceImages[0].getSize();
@@ -547,7 +532,7 @@ static void TestDeferredCanvasBitmapCaching(skiatest::Reporter* reporter) {
     canvas->drawBitmap(sourceImages[0], 0, 0, NULL);
     REPORTER_ASSERT(reporter, 2 == notificationCounter.fStorageAllocatedChangedCount);
     canvas->drawBitmap(sourceImages[0], 0, 0, NULL);
-    REPORTER_ASSERT(reporter, 3 == notificationCounter.fStorageAllocatedChangedCount);
+    REPORTER_ASSERT(reporter, 2 == notificationCounter.fStorageAllocatedChangedCount);
     REPORTER_ASSERT(reporter, 1 == notificationCounter.fFlushedDrawCommandsCount);
     REPORTER_ASSERT(reporter, canvas->storageAllocatedForRecording() < 2 * bitmapSize);
 
@@ -619,6 +604,7 @@ static void TestDeferredCanvasBitmapShaderNoLeak(skiatest::Reporter* reporter) {
             SkPaint paint;
             SkBitmap paintPattern;
             paintPattern.allocN32Pixels(10, 10);
+            paintPattern.eraseColor(SK_ColorGREEN);
             paint.setShader(SkNEW_ARGS(SkBitmapProcShader,
                 (paintPattern, SkShader::kClamp_TileMode, SkShader::kClamp_TileMode)))->unref();
             canvas->drawPaint(paint);
@@ -647,6 +633,7 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
     SkBitmap sourceImage;
     // 100 by 100 image, takes 40,000 bytes in memory
     sourceImage.allocN32Pixels(100, 100);
+    sourceImage.eraseColor(SK_ColorGREEN);
 
     // 1 under : should not store the image
     {
@@ -677,79 +664,100 @@ static void TestDeferredCanvasBitmapSizeThreshold(skiatest::Reporter* reporter) 
 }
 
 
-typedef void* PixelPtr;
+typedef const void* PixelPtr;
 // Returns an opaque pointer which, either points to a GrTexture or RAM pixel
 // buffer. Used to test pointer equality do determine whether a surface points
 // to the same pixel data storage as before.
-static PixelPtr getSurfacePixelPtr(SkSurface* surface, bool useGpu) {
-    return useGpu ? surface->getCanvas()->getDevice()->accessBitmap(false).getTexture() :
-        surface->getCanvas()->getDevice()->accessBitmap(false).getPixels();
+static PixelPtr get_surface_ptr(SkSurface* surface, bool useGpu) {
+#if SK_SUPPORT_GPU
+    if (useGpu) {
+        return surface->getCanvas()->internal_private_accessTopLayerRenderTarget()->asTexture();
+    } else
+#endif
+    {
+        return surface->peekPixels(NULL, NULL);
+    }
 }
 
 static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFactory* factory) {
     SkImageInfo imageSpec = SkImageInfo::MakeN32Premul(10, 10);
-    SkSurface* surface;
     bool useGpu = NULL != factory;
+    int cnt;
 #if SK_SUPPORT_GPU
     if (useGpu) {
-        GrContext* context = factory->get(GrContextFactory::kNative_GLContextType);
-        if (NULL == context) {
-            return;
-        }
-
-        surface = SkSurface::NewRenderTarget(context, imageSpec);
+        cnt = GrContextFactory::kGLContextTypeCnt;
     } else {
-        surface = SkSurface::NewRaster(imageSpec);
+        cnt = 1;
     }
 #else
     SkASSERT(!useGpu);
-    surface = SkSurface::NewRaster(imageSpec);
+    cnt = 1;
 #endif
-    SkASSERT(NULL != surface);
-    SkAutoTUnref<SkSurface> aur(surface);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface));
+    for (int i = 0; i < cnt; ++i) {
+        SkSurface* surface;
+#if SK_SUPPORT_GPU
+        if (useGpu) {
+            GrContextFactory::GLContextType glCtxType = (GrContextFactory::GLContextType) i;
+            if (!GrContextFactory::IsRenderingGLContext(glCtxType)) {
+                continue;
+            }
+            GrContext* context = factory->get(glCtxType);
+            if (NULL == context) {
+                return;
+            }
 
-    SkImage* image1 = canvas->newImageSnapshot();
-    SkAutoTUnref<SkImage> aur_i1(image1);
-    PixelPtr pixels1 = getSurfacePixelPtr(surface, useGpu);
-    // The following clear would normally trigger a copy on write, but
-    // it won't because rendering is deferred.
-    canvas->clear(SK_ColorBLACK);
-    // Obtaining a snapshot directly from the surface (as opposed to the
-    // SkDeferredCanvas) will not trigger a flush of deferred draw operations
-    // and will therefore return the same image as the previous snapshot.
-    SkImage* image2 = surface->newImageSnapshot();
-    SkAutoTUnref<SkImage> aur_i2(image2);
-    // Images identical because of deferral
-    REPORTER_ASSERT(reporter, image1->uniqueID() == image2->uniqueID());
-    // Now we obtain a snpshot via the deferred canvas, which triggers a flush.
-    // Because there is a pending clear, this will generate a different image.
-    SkImage* image3 = canvas->newImageSnapshot();
-    SkAutoTUnref<SkImage> aur_i3(image3);
-    REPORTER_ASSERT(reporter, image1->uniqueID() != image3->uniqueID());
-    // Verify that backing store is now a different buffer because of copy on
-    // write
-    PixelPtr pixels2 = getSurfacePixelPtr(surface, useGpu);
-    REPORTER_ASSERT(reporter, pixels1 != pixels2);
-    // Verify copy-on write with a draw operation that gets deferred by
-    // the in order draw buffer.
-    SkPaint paint;
-    canvas->drawPaint(paint);
-    SkImage* image4 = canvas->newImageSnapshot();  // implicit flush
-    SkAutoTUnref<SkImage> aur_i4(image4);
-    REPORTER_ASSERT(reporter, image4->uniqueID() != image3->uniqueID());
-    PixelPtr pixels3 = getSurfacePixelPtr(surface, useGpu);
-    REPORTER_ASSERT(reporter, pixels2 != pixels3);
-    // Verify that a direct canvas flush with a pending draw does not trigger
-    // a copy on write when the surface is not sharing its buffer with an
-    // SkImage.
-    canvas->clear(SK_ColorWHITE);
-    canvas->flush();
-    PixelPtr pixels4 = getSurfacePixelPtr(surface, useGpu);
-    canvas->drawPaint(paint);
-    canvas->flush();
-    PixelPtr pixels5 = getSurfacePixelPtr(surface, useGpu);
-    REPORTER_ASSERT(reporter, pixels4 == pixels5);
+            surface = SkSurface::NewRenderTarget(context, imageSpec);
+        } else
+#endif
+        {
+           surface = SkSurface::NewRaster(imageSpec);
+        }
+        SkASSERT(NULL != surface);
+        SkAutoTUnref<SkSurface> aur(surface);
+        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface));
+
+        SkImage* image1 = canvas->newImageSnapshot();
+        SkAutoTUnref<SkImage> aur_i1(image1);
+        PixelPtr pixels1 = get_surface_ptr(surface, useGpu);
+        // The following clear would normally trigger a copy on write, but
+        // it won't because rendering is deferred.
+        canvas->clear(SK_ColorBLACK);
+        // Obtaining a snapshot directly from the surface (as opposed to the
+        // SkDeferredCanvas) will not trigger a flush of deferred draw operations
+        // and will therefore return the same image as the previous snapshot.
+        SkImage* image2 = surface->newImageSnapshot();
+        SkAutoTUnref<SkImage> aur_i2(image2);
+        // Images identical because of deferral
+        REPORTER_ASSERT(reporter, image1->uniqueID() == image2->uniqueID());
+        // Now we obtain a snpshot via the deferred canvas, which triggers a flush.
+        // Because there is a pending clear, this will generate a different image.
+        SkImage* image3 = canvas->newImageSnapshot();
+        SkAutoTUnref<SkImage> aur_i3(image3);
+        REPORTER_ASSERT(reporter, image1->uniqueID() != image3->uniqueID());
+        // Verify that backing store is now a different buffer because of copy on
+        // write
+        PixelPtr pixels2 = get_surface_ptr(surface, useGpu);
+        REPORTER_ASSERT(reporter, pixels1 != pixels2);
+        // Verify copy-on write with a draw operation that gets deferred by
+        // the in order draw buffer.
+        SkPaint paint;
+        canvas->drawPaint(paint);
+        SkImage* image4 = canvas->newImageSnapshot();  // implicit flush
+        SkAutoTUnref<SkImage> aur_i4(image4);
+        REPORTER_ASSERT(reporter, image4->uniqueID() != image3->uniqueID());
+        PixelPtr pixels3 = get_surface_ptr(surface, useGpu);
+        REPORTER_ASSERT(reporter, pixels2 != pixels3);
+        // Verify that a direct canvas flush with a pending draw does not trigger
+        // a copy on write when the surface is not sharing its buffer with an
+        // SkImage.
+        canvas->clear(SK_ColorWHITE);
+        canvas->flush();
+        PixelPtr pixels4 = get_surface_ptr(surface, useGpu);
+        canvas->drawPaint(paint);
+        canvas->flush();
+        PixelPtr pixels5 = get_surface_ptr(surface, useGpu);
+        REPORTER_ASSERT(reporter, pixels4 == pixels5);
+    }
 }
 
 static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContextFactory* factory) {
@@ -757,42 +765,57 @@ static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContext
     SkSurface* surface;
     SkSurface* alternateSurface;
     bool useGpu = NULL != factory;
+    int cnt;
 #if SK_SUPPORT_GPU
     if (useGpu) {
-        GrContext* context = factory->get(GrContextFactory::kNative_GLContextType);
-        if (NULL == context) {
-            return;
-        }
-        surface = SkSurface::NewRenderTarget(context, imageSpec);
-        alternateSurface = SkSurface::NewRenderTarget(context, imageSpec);
+        cnt = GrContextFactory::kGLContextTypeCnt;
     } else {
-        surface = SkSurface::NewRaster(imageSpec);
-        alternateSurface = SkSurface::NewRaster(imageSpec);
+        cnt = 1;
     }
 #else
     SkASSERT(!useGpu);
-    surface = SkSurface::NewRaster(imageSpec);
-    alternateSurface = SkSurface::NewRaster(imageSpec);
+    cnt = 1;
 #endif
-    SkASSERT(NULL != surface);
-    SkASSERT(NULL != alternateSurface);
-    SkAutoTUnref<SkSurface> aur1(surface);
-    SkAutoTUnref<SkSurface> aur2(alternateSurface);
-    PixelPtr pixels1 = getSurfacePixelPtr(surface, useGpu);
-    PixelPtr pixels2 = getSurfacePixelPtr(alternateSurface, useGpu);
-    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface));
-    SkAutoTUnref<SkImage> image1(canvas->newImageSnapshot());
-    canvas->setSurface(alternateSurface);
-    SkAutoTUnref<SkImage> image2(canvas->newImageSnapshot());
-    REPORTER_ASSERT(reporter, image1->uniqueID() != image2->uniqueID());
-    // Verify that none of the above operations triggered a surface copy on write.
-    REPORTER_ASSERT(reporter, getSurfacePixelPtr(surface, useGpu) == pixels1);
-    REPORTER_ASSERT(reporter, getSurfacePixelPtr(alternateSurface, useGpu) == pixels2);
-    // Verify that a flushed draw command will trigger a copy on write on alternateSurface.
-    canvas->clear(SK_ColorWHITE);
-    canvas->flush();
-    REPORTER_ASSERT(reporter, getSurfacePixelPtr(surface, useGpu) == pixels1);
-    REPORTER_ASSERT(reporter, getSurfacePixelPtr(alternateSurface, useGpu) != pixels2);
+
+    for (int i = 0; i < cnt; ++i) {
+#if SK_SUPPORT_GPU
+        if (useGpu) {
+            GrContextFactory::GLContextType glCtxType = (GrContextFactory::GLContextType) i;
+            if (!GrContextFactory::IsRenderingGLContext(glCtxType)) {
+                continue;
+            }
+            GrContext* context = factory->get(glCtxType);
+            if (NULL == context) {
+                continue;
+            }
+            surface = SkSurface::NewRenderTarget(context, imageSpec);
+            alternateSurface = SkSurface::NewRenderTarget(context, imageSpec);
+        } else
+#endif
+        {
+            surface = SkSurface::NewRaster(imageSpec);
+            alternateSurface = SkSurface::NewRaster(imageSpec);
+        }
+        SkASSERT(NULL != surface);
+        SkASSERT(NULL != alternateSurface);
+        SkAutoTUnref<SkSurface> aur1(surface);
+        SkAutoTUnref<SkSurface> aur2(alternateSurface);
+        PixelPtr pixels1 = get_surface_ptr(surface, useGpu);
+        PixelPtr pixels2 = get_surface_ptr(alternateSurface, useGpu);
+        SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface));
+        SkAutoTUnref<SkImage> image1(canvas->newImageSnapshot());
+        canvas->setSurface(alternateSurface);
+        SkAutoTUnref<SkImage> image2(canvas->newImageSnapshot());
+        REPORTER_ASSERT(reporter, image1->uniqueID() != image2->uniqueID());
+        // Verify that none of the above operations triggered a surface copy on write.
+        REPORTER_ASSERT(reporter, get_surface_ptr(surface, useGpu) == pixels1);
+        REPORTER_ASSERT(reporter, get_surface_ptr(alternateSurface, useGpu) == pixels2);
+        // Verify that a flushed draw command will trigger a copy on write on alternateSurface.
+        canvas->clear(SK_ColorWHITE);
+        canvas->flush();
+        REPORTER_ASSERT(reporter, get_surface_ptr(surface, useGpu) == pixels1);
+        REPORTER_ASSERT(reporter, get_surface_ptr(alternateSurface, useGpu) != pixels2);
+    }
 }
 
 static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporter) {
@@ -817,7 +840,6 @@ static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporte
 }
 
 DEF_TEST(DeferredCanvas_CPU, reporter) {
-    TestDeferredCanvasBitmapAccess(reporter);
     TestDeferredCanvasFlush(reporter);
     TestDeferredCanvasSilentFlush(reporter);
     TestDeferredCanvasFreshFrame(reporter);

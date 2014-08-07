@@ -127,6 +127,21 @@ private:
 };
 #define AutoScaledCacheUnlocker(...) SK_REQUIRE_LOCAL_VAR(AutoScaledCacheUnlocker)
 
+// Check to see that the size of the bitmap that would be produced by
+// scaling by the given inverted matrix is less than the maximum allowed.
+static inline bool cache_size_okay(const SkBitmap& bm, const SkMatrix& invMat) {
+    size_t maximumAllocation
+        = SkScaledImageCache::GetSingleAllocationByteLimit();
+    if (0 == maximumAllocation) {
+        return true;
+    }
+    // float matrixScaleFactor = 1.0 / (invMat.scaleX * invMat.scaleY);
+    // return ((origBitmapSize * matrixScaleFactor) < maximumAllocationSize);
+    // Skip the division step:
+    return bm.info().getSafeSize(bm.info().minRowBytes())
+        < (maximumAllocation * invMat.getScaleX() * invMat.getScaleY());
+}
+
 // TODO -- we may want to pass the clip into this function so we only scale
 // the portion of the image that we're going to need.  This will complicate
 // the interface to the cache, but might be well worth it.
@@ -140,14 +155,14 @@ bool SkBitmapProcState::possiblyScaleImage() {
     if (fFilterLevel <= SkPaint::kLow_FilterLevel) {
         return false;
     }
-
     // Check to see if the transformation matrix is simple, and if we're
     // doing high quality scaling.  If so, do the bitmap scale here and
     // remove the scaling component from the matrix.
 
     if (SkPaint::kHigh_FilterLevel == fFilterLevel &&
         fInvMatrix.getType() <= (SkMatrix::kScale_Mask | SkMatrix::kTranslate_Mask) &&
-        kN32_SkColorType == fOrigBitmap.colorType()) {
+        kN32_SkColorType == fOrigBitmap.colorType() &&
+        cache_size_okay(fOrigBitmap, fInvMatrix)) {
 
         SkScalar invScaleX = fInvMatrix.getScaleX();
         SkScalar invScaleY = fInvMatrix.getScaleY();
@@ -172,16 +187,11 @@ bool SkBitmapProcState::possiblyScaleImage() {
 
             // All the criteria are met; let's make a new bitmap.
 
-            SkConvolutionProcs simd;
-            sk_bzero(&simd, sizeof(simd));
-            this->platformConvolutionProcs(&simd);
-
             if (!SkBitmapScaler::Resize(&fScaledBitmap,
                                         fOrigBitmap,
                                         SkBitmapScaler::RESIZE_BEST,
                                         dest_width,
                                         dest_height,
-                                        simd,
                                         SkScaledImageCache::GetAllocator())) {
                 // we failed to create fScaledBitmap, so just return and let
                 // the scanline proc handle it.
@@ -486,6 +496,8 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
 
     ///////////////////////////////////////////////////////////////////////
 
+    const SkAlphaType at = fBitmap->alphaType();
+
     // No need to do this if we're doing HQ sampling; if filter quality is
     // still set to HQ by the time we get here, then we must have installed
     // the shader procs above and can skip all this.
@@ -505,15 +517,24 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
         // bits 3,4,5 encoding the source bitmap format
         switch (fBitmap->colorType()) {
             case kN32_SkColorType:
+                if (kPremul_SkAlphaType != at && kOpaque_SkAlphaType != at) {
+                    return false;
+                }
                 index |= 0;
                 break;
             case kRGB_565_SkColorType:
                 index |= 8;
                 break;
             case kIndex_8_SkColorType:
+                if (kPremul_SkAlphaType != at && kOpaque_SkAlphaType != at) {
+                    return false;
+                }
                 index |= 16;
                 break;
             case kARGB_4444_SkColorType:
+                if (kPremul_SkAlphaType != at && kOpaque_SkAlphaType != at) {
+                    return false;
+                }
                 index |= 24;
                 break;
             case kAlpha_8_SkColorType:

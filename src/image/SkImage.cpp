@@ -78,6 +78,12 @@ GrTexture* SkImage::getTexture() {
     return as_IB(this)->onGetTexture();
 }
 
+SkShader* SkImage::newShader(SkShader::TileMode tileX,
+                             SkShader::TileMode tileY,
+                             const SkMatrix* localMatrix) const {
+    return as_IB(this)->onNewShader(tileX, tileY, localMatrix);
+}
+
 SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
     SkBitmap bm;
     if (as_IB(this)->getROPixels(&bm)) {

@@ -21,7 +21,6 @@
 class SkDiscardablePixelRef : public SkPixelRef {
 public:
     SK_DECLARE_INST_COUNT(SkDiscardablePixelRef)
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
 
 protected:
     ~SkDiscardablePixelRef();
@@ -48,6 +47,12 @@ private:
     SkDiscardablePixelRef(const SkImageInfo&, SkImageGenerator*,
                           size_t rowBytes,
                           SkDiscardableMemory::Factory* factory);
+
+    virtual bool onGetYUV8Planes(SkISize sizes[3],
+                                 void* planes[3],
+                                 size_t rowBytes[3]) SK_OVERRIDE {
+        return fGenerator->getYUV8Planes(sizes, planes, rowBytes);
+    }
 
     friend bool SkInstallDiscardablePixelRef(SkImageGenerator*, SkBitmap*,
                                              SkDiscardableMemory::Factory*);

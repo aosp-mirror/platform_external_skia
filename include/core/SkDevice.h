@@ -67,27 +67,17 @@ public:
         bounds->setXYWH(origin.x(), origin.y(), this->width(), this->height());
     }
 
-#ifdef SK_SUPPORT_LEGACY_DEVICE_VIRTUAL_ISOPAQUE
-    virtual int width() const {
-        return this->imageInfo().width();
-    }
-    virtual int height() const {
-        return this->imageInfo().height();
-    }
-    virtual bool isOpaque() const {
-        return this->imageInfo().isOpaque();
-    }
-#else
     int width() const {
         return this->imageInfo().width();
     }
+
     int height() const {
         return this->imageInfo().height();
     }
+
     bool isOpaque() const {
         return this->imageInfo().isOpaque();
     }
-#endif
 
     /** Return the bitmap associated with this device. Call this each time you need
         to access the bitmap, as it notifies the subclass to perform any flushing
@@ -104,7 +94,7 @@ public:
     /**
      * Return the device's associated gpu render target, or NULL.
      */
-    virtual GrRenderTarget* accessRenderTarget() = 0;
+    virtual GrRenderTarget* accessRenderTarget() { return NULL; }
 
 
     /**
@@ -157,10 +147,8 @@ protected:
      *  make a change to the specified values, it should write them into the
      *  textflags parameter (output) and return true. If the paint is fine as
      *  is, then ignore the textflags parameter and return false.
-     *
-     *  The baseclass SkBaseDevice filters based on its depth and blitters.
      */
-    virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) = 0;
+    virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) { return false; }
 
     /**
      *
@@ -254,6 +242,8 @@ protected:
                               const SkColor colors[], SkXfermode* xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) = 0;
+    // default implementation calls drawVertices
+    virtual void drawPatch(const SkDraw&, const SkPatch& patch, const SkPaint& paint);
     /** The SkDevice passed will be an SkDevice which was returned by a call to
         onCreateDevice on this device with kSaveLayer_Usage.
      */
@@ -273,8 +263,8 @@ protected:
     /** Called when this device is installed into a Canvas. Balanced by a call
         to unlockPixels() when the device is removed from a Canvas.
     */
-    virtual void lockPixels() = 0;
-    virtual void unlockPixels() = 0;
+    virtual void lockPixels() {}
+    virtual void unlockPixels() {}
 
     /**
      *  Returns true if the device allows processing of this imagefilter. If
@@ -282,7 +272,7 @@ protected:
      *  some subclasses that do not support pixel manipulations after drawing
      *  has occurred (e.g. printing). The default implementation returns true.
      */
-    virtual bool allowImageFilter(const SkImageFilter*) = 0;
+    virtual bool allowImageFilter(const SkImageFilter*) { return true; }
 
     /**
      *  Override and return true for filters that the device can handle
@@ -291,7 +281,7 @@ protected:
      *  Returning false means the SkCanvas will have apply the filter itself,
      *  and just pass the resulting image to the device.
      */
-    virtual bool canHandleImageFilter(const SkImageFilter*) = 0;
+    virtual bool canHandleImageFilter(const SkImageFilter*) { return false; }
 
     /**
      *  Related (but not required) to canHandleImageFilter, this method returns
@@ -302,7 +292,9 @@ protected:
      */
     virtual bool filterImage(const SkImageFilter*, const SkBitmap&,
                              const SkImageFilter::Context& ctx,
-                             SkBitmap* result, SkIPoint* offset) = 0;
+                             SkBitmap* result, SkIPoint* offset) {
+        return false;
+    }
 
 protected:
     // default impl returns NULL
@@ -348,13 +340,6 @@ protected:
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
-     *  Purge all discardable optimization information for 'picture'. If
-     *  picture is NULL then purge discardable information for all pictures.
-     */
-    virtual void EXPERIMENTAL_purge(const SkPicture* picture);
-
-    /**
-     *  PRIVATE / EXPERIMENTAL -- do not call
      *  This entry point gives the backend an opportunity to take over the rendering
      *  of 'picture'. If optimization data is available (due to an earlier
      *  'optimize' call) this entry point should make use of it and return true
@@ -380,7 +365,7 @@ private:
     // but cannot change the width/height, so there should be no change to
     // any clip information.
     // TODO: move to SkBitmapDevice
-    virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) = 0;
+    virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) {}
 
     // just called by SkCanvas when built as a layer
     void setOrigin(int x, int y) { fOrigin.set(x, y); }
@@ -393,7 +378,9 @@ private:
 
     /** Causes any deferred drawing to the device to be completed.
      */
-    virtual void flush() = 0;
+    virtual void flush() {}
+
+    virtual SkImageFilter::UniqueIDCache* getImageFilterCache() { return NULL; }
 
     SkIPoint    fOrigin;
     SkMetaData* fMetaData;

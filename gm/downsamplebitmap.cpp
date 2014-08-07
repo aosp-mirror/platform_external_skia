@@ -15,7 +15,7 @@
 #include "SkPaint.h"
 
 static void setTypeface(SkPaint* paint, const char name[], SkTypeface::Style style) {
-    SkSafeUnref(paint->setTypeface(SkTypeface::CreateFromName(name, style)));
+    sk_tool_utils::set_portable_typeface(paint, name, style);
 }
 
 class DownsampleBitmapGM : public skiagm::GM {
@@ -172,11 +172,8 @@ class DownsampleBitmapImageGM: public DownsampleBitmapGM {
       int fSize;
 
       virtual void make_bitmap() SK_OVERRIDE {
-          SkString resourcePath = GetResourcePath();
-          resourcePath.append("/");
-          resourcePath.append(fFilename);
-
           SkImageDecoder* codec = NULL;
+          SkString resourcePath = GetResourcePath(fFilename.c_str());
           SkFILEStream stream(resourcePath.c_str());
           if (stream.isValid()) {
               codec = SkImageDecoder::Factory(&stream);

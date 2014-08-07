@@ -51,8 +51,6 @@ public:
     // override from SkPixelRef
     virtual GrTexture* getTexture() SK_OVERRIDE;
 
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
-
 protected:
     // overrides from SkPixelRef
     virtual bool onReadPixels(SkBitmap* dst, const SkIRect* subset) SK_OVERRIDE;

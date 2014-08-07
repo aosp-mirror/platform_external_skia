@@ -200,47 +200,9 @@ size_t SkMallocPixelRef::getAllocatedSizeInBytes() const {
     return this->info().getSafeSize(fRB);
 }
 
-void SkMallocPixelRef::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
-
-    buffer.write32(SkToU32(fRB));
-
-    // TODO: replace this bulk write with a chunky one that can trim off any
-    // trailing bytes on each scanline (in case rowbytes > width*size)
-    size_t size = this->info().getSafeSize(fRB);
-    buffer.writeByteArray(fStorage, size);
-    buffer.writeBool(fCTable != NULL);
-    if (fCTable) {
-        fCTable->writeToBuffer(buffer);
-    }
-}
-
-SkMallocPixelRef::SkMallocPixelRef(SkReadBuffer& buffer)
-    : INHERITED(buffer, NULL)
-    , fReleaseProc(sk_free_releaseproc)
-    , fReleaseProcContext(NULL)
-{
-    fRB = buffer.read32();
-    size_t size = buffer.isValid() ? this->info().getSafeSize(fRB) : 0;
-    if (buffer.validateAvailable(size)) {
-        fStorage = sk_malloc_throw(size);
-        buffer.readByteArray(fStorage, size);
-    } else {
-        fStorage = NULL;
-    }
-
-    if (buffer.readBool()) {
-        fCTable = SkNEW_ARGS(SkColorTable, (buffer));
-    } else {
-        fCTable = NULL;
-    }
-
-    this->setPreLocked(fStorage, fRB, fCTable);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
-SkPixelRef* SkMallocPixelRef::PRFactory::create(const SkImageInfo& info,
+SkPixelRef* SkMallocPixelRef::PRFactory::create(const SkImageInfo& info, size_t rowBytes,
                                                 SkColorTable* ctable) {
-    return SkMallocPixelRef::NewAllocate(info, info.minRowBytes(), ctable);
+    return SkMallocPixelRef::NewAllocate(info, rowBytes, ctable);
 }

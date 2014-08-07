@@ -1089,11 +1089,6 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
         this->addRect(bounds, dir);
     } else if (rrect.isOval()) {
         this->addOval(bounds, dir);
-#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
-    } else if (rrect.isSimple()) {
-        const SkVector& rad = rrect.getSimpleRadii();
-        this->addRoundRect(bounds, rad.x(), rad.y(), dir);
-#endif
     } else {
         fDirection = this->hasOnlyMoveTos() ? dir : kUnknown_Direction;
 
@@ -1135,10 +1130,6 @@ bool SkPath::hasOnlyMoveTos() const {
     return true;
 }
 
-#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
-#define CUBIC_ARC_FACTOR    ((SK_ScalarSqrt2 - SK_Scalar1) * 4 / 3)
-#endif
-
 void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
                           Direction dir) {
     assert_known_direction(dir);
@@ -1151,96 +1142,9 @@ void SkPath::addRoundRect(const SkRect& rect, SkScalar rx, SkScalar ry,
         return;
     }
 
-#ifdef SK_IGNORE_QUAD_RR_CORNERS_OPT
-    SkScalar    w = rect.width();
-    SkScalar    halfW = SkScalarHalf(w);
-    SkScalar    h = rect.height();
-    SkScalar    halfH = SkScalarHalf(h);
-
-    if (halfW <= 0 || halfH <= 0) {
-        return;
-    }
-
-    bool skip_hori = rx >= halfW;
-    bool skip_vert = ry >= halfH;
-
-    if (skip_hori && skip_vert) {
-        this->addOval(rect, dir);
-        return;
-    }
-
-    fDirection = this->hasOnlyMoveTos() ? dir : kUnknown_Direction;
-
-    SkAutoPathBoundsUpdate apbu(this, rect);
-    SkAutoDisableDirectionCheck addc(this);
-
-    if (skip_hori) {
-        rx = halfW;
-    } else if (skip_vert) {
-        ry = halfH;
-    }
-    SkScalar    sx = SkScalarMul(rx, CUBIC_ARC_FACTOR);
-    SkScalar    sy = SkScalarMul(ry, CUBIC_ARC_FACTOR);
-
-    this->incReserve(17);
-    this->moveTo(rect.fRight - rx, rect.fTop);                  // top-right
-    if (dir == kCCW_Direction) {
-        if (!skip_hori) {
-            this->lineTo(rect.fLeft + rx, rect.fTop);           // top
-        }
-        this->cubicTo(rect.fLeft + rx - sx, rect.fTop,
-                      rect.fLeft, rect.fTop + ry - sy,
-                      rect.fLeft, rect.fTop + ry);          // top-left
-        if (!skip_vert) {
-            this->lineTo(rect.fLeft, rect.fBottom - ry);        // left
-        }
-        this->cubicTo(rect.fLeft, rect.fBottom - ry + sy,
-                      rect.fLeft + rx - sx, rect.fBottom,
-                      rect.fLeft + rx, rect.fBottom);       // bot-left
-        if (!skip_hori) {
-            this->lineTo(rect.fRight - rx, rect.fBottom);       // bottom
-        }
-        this->cubicTo(rect.fRight - rx + sx, rect.fBottom,
-                      rect.fRight, rect.fBottom - ry + sy,
-                      rect.fRight, rect.fBottom - ry);      // bot-right
-        if (!skip_vert) {
-            this->lineTo(rect.fRight, rect.fTop + ry);          // right
-        }
-        this->cubicTo(rect.fRight, rect.fTop + ry - sy,
-                      rect.fRight - rx + sx, rect.fTop,
-                      rect.fRight - rx, rect.fTop);         // top-right
-    } else {
-        this->cubicTo(rect.fRight - rx + sx, rect.fTop,
-                      rect.fRight, rect.fTop + ry - sy,
-                      rect.fRight, rect.fTop + ry);         // top-right
-        if (!skip_vert) {
-            this->lineTo(rect.fRight, rect.fBottom - ry);       // right
-        }
-        this->cubicTo(rect.fRight, rect.fBottom - ry + sy,
-                      rect.fRight - rx + sx, rect.fBottom,
-                      rect.fRight - rx, rect.fBottom);      // bot-right
-        if (!skip_hori) {
-            this->lineTo(rect.fLeft + rx, rect.fBottom);        // bottom
-        }
-        this->cubicTo(rect.fLeft + rx - sx, rect.fBottom,
-                      rect.fLeft, rect.fBottom - ry + sy,
-                      rect.fLeft, rect.fBottom - ry);       // bot-left
-        if (!skip_vert) {
-            this->lineTo(rect.fLeft, rect.fTop + ry);           // left
-        }
-        this->cubicTo(rect.fLeft, rect.fTop + ry - sy,
-                      rect.fLeft + rx - sx, rect.fTop,
-                      rect.fLeft + rx, rect.fTop);          // top-left
-        if (!skip_hori) {
-            this->lineTo(rect.fRight - rx, rect.fTop);          // top
-        }
-    }
-    this->close();
-#else
     SkRRect rrect;
     rrect.setRectXY(rect, rx, ry);
     this->addRRect(rrect, dir);
-#endif
 }
 
 void SkPath::addOval(const SkRect& oval, Direction dir) {
@@ -2111,6 +2015,7 @@ size_t SkPath::readFromMemory(const void* storage, size_t length) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkString.h"
+#include "SkStream.h"
 
 static void append_scalar(SkString* str, SkScalar value) {
     SkString tmp;
@@ -2142,14 +2047,14 @@ static void append_params(SkString* str, const char label[], const SkPoint pts[]
     str->append(");\n");
 }
 
-void SkPath::dump(bool forceClose, const char title[]) const {
+void SkPath::dump(SkWStream* wStream, bool forceClose) const {
     Iter    iter(*this, forceClose);
     SkPoint pts[4];
     Verb    verb;
 
-    SkDebugf("path: forceClose=%s %s\n", forceClose ? "true" : "false",
-             title ? title : "");
-
+    if (!wStream) {
+        SkDebugf("path: forceClose=%s\n", forceClose ? "true" : "false");
+    }
     SkString builder;
 
     while ((verb = iter.next(pts, false)) != kDone_Verb) {
@@ -2170,7 +2075,7 @@ void SkPath::dump(bool forceClose, const char title[]) const {
                 append_params(&builder, "path.cubicTo", &pts[1], 3);
                 break;
             case kClose_Verb:
-                builder.append("path.close();");
+                builder.append("path.close();\n");
                 break;
             default:
                 SkDebugf("  path: UNKNOWN VERB %d, aborting dump...\n", verb);
@@ -2178,11 +2083,15 @@ void SkPath::dump(bool forceClose, const char title[]) const {
                 break;
         }
     }
-    SkDebugf("%s\n", builder.c_str());
+    if (wStream) {
+        wStream->writeText(builder.c_str());
+    } else {
+        SkDebugf("%s", builder.c_str());
+    }
 }
 
 void SkPath::dump() const {
-    this->dump(false);
+    this->dump(NULL, false);
 }
 
 #ifdef SK_DEBUG

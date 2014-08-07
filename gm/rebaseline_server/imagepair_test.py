@@ -19,17 +19,18 @@ import imagediffdb
 import imagepair
 
 
-IMG_URL_BASE = 'http://chromium-skia-gm.commondatastorage.googleapis.com/gm/bitmap-64bitMD5/'
+IMG_URL_BASE = ('http://chromium-skia-gm.commondatastorage.googleapis.com/'
+                'gm/bitmap-64bitMD5/')
 
 
 class ImagePairTest(unittest.TestCase):
 
   def setUp(self):
-    self._temp_dir = tempfile.mkdtemp()
+    self.temp_dir = tempfile.mkdtemp()
     self.maxDiff = None
 
   def tearDown(self):
-    shutil.rmtree(self._temp_dir)
+    shutil.rmtree(self.temp_dir)
 
   def shortDescription(self):
     """Tells unittest framework to not print docstrings for test cases."""
@@ -87,7 +88,7 @@ class ImagePairTest(unittest.TestCase):
                     'maxDiffPerChannel': [255, 255, 247],
                     'numDifferingPixels': 662,
                     'percentDifferingPixels': 0.0662,
-                    'perceptualDifference': 0.06620000000000914,
+                    'perceptualDifference': 0.06620300000000157,
                 },
                 'imageAUrl': 'arcofzorro/16206093933823793653.png',
                 'imageBUrl': 'arcofzorro/13786535001616823825.png',
@@ -160,9 +161,26 @@ class ImagePairTest(unittest.TestCase):
                 'isDifferent': True,
             },
         ],
+
+        # One of the two images is missing, but download_all_images=True so we
+        # should download it anyway.
+        [
+            # inputs:
+            None,
+            'arcofzorro/13786535001616823825.png',
+            None,
+            None,
+            # expected output:
+            {
+                'imageAUrl': None,
+                'imageBUrl': 'arcofzorro/13786535001616823825.png',
+                'isDifferent': True,
+            },
+        ],
+
     ]
 
-    db = imagediffdb.ImageDiffDB(self._temp_dir)
+    db = imagediffdb.ImageDiffDB(self.temp_dir)
     for selftest in selftests:
       image_pair = imagepair.ImagePair(
           image_diff_db=db,
@@ -170,7 +188,8 @@ class ImagePairTest(unittest.TestCase):
           imageA_relative_url=selftest[0],
           imageB_relative_url=selftest[1],
           expectations=selftest[2],
-          extra_columns=selftest[3])
+          extra_columns=selftest[3],
+          download_all_images=True)
       self.assertEqual(image_pair.as_dict(), selftest[4])
 
 

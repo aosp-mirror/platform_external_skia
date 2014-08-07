@@ -12,16 +12,16 @@ Repackage expected/actual GM results as needed by our HTML rebaseline viewer.
 # System-level imports
 import argparse
 import fnmatch
-import json
 import logging
 import os
-import re
-import sys
 import time
 
+# Must fix up PYTHONPATH before importing from within Skia
+import fix_pythonpath  # pylint: disable=W0611
+
 # Imports from within Skia
-import fix_pythonpath  # must do this first
-from pyutils import url_utils
+from py.utils import url_utils
+import column
 import gm_json
 import imagediffdb
 import imagepair
@@ -33,6 +33,17 @@ EXPECTATION_FIELDS_PASSED_THRU_VERBATIM = [
     results.KEY__EXPECTATIONS__IGNOREFAILURE,
     results.KEY__EXPECTATIONS__REVIEWED,
 ]
+FREEFORM_COLUMN_IDS = [
+    results.KEY__EXTRACOLUMNS__BUILDER,
+    results.KEY__EXTRACOLUMNS__TEST,
+]
+ORDERED_COLUMN_IDS = [
+    results.KEY__EXTRACOLUMNS__RESULT_TYPE,
+    results.KEY__EXTRACOLUMNS__BUILDER,
+    results.KEY__EXTRACOLUMNS__TEST,
+    results.KEY__EXTRACOLUMNS__CONFIG,
+]
+
 TRUNK_DIRECTORY = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DEFAULT_EXPECTATIONS_DIR = os.path.join(TRUNK_DIRECTORY, 'expectations', 'gm')
 DEFAULT_IGNORE_FAILURES_FILE = 'ignored-tests.txt'
@@ -50,32 +61,30 @@ class ExpectationComparisons(results.BaseComparisons):
   are immutable.  If you want to update the results based on updated JSON
   file contents, you will need to create a new ExpectationComparisons object."""
 
-  def __init__(self, actuals_root=results.DEFAULT_ACTUALS_DIR,
+  def __init__(self, image_diff_db, actuals_root=results.DEFAULT_ACTUALS_DIR,
                expected_root=DEFAULT_EXPECTATIONS_DIR,
                ignore_failures_file=DEFAULT_IGNORE_FAILURES_FILE,
-               generated_images_root=results.DEFAULT_GENERATED_IMAGES_ROOT,
                diff_base_url=None, builder_regex_list=None):
     """
     Args:
+      image_diff_db: instance of ImageDiffDB we use to cache the image diffs
       actuals_root: root directory containing all actual-results.json files
       expected_root: root directory containing all expected-results.json files
       ignore_failures_file: if a file with this name is found within
           expected_root, ignore failures for any tests listed in the file
-      generated_images_root: directory within which to create all pixel diffs;
-          if this directory does not yet exist, it will be created
       diff_base_url: base URL within which the client should look for diff
           images; if not specified, defaults to a "file:///" URL representation
-          of generated_images_root
+          of image_diff_db's storage_root
       builder_regex_list: List of regular expressions specifying which builders
           we will process. If None, process all builders.
     """
     time_start = int(time.time())
     if builder_regex_list != None:
       self.set_match_builders_pattern_list(builder_regex_list)
-    self._image_diff_db = imagediffdb.ImageDiffDB(generated_images_root)
+    self._image_diff_db = image_diff_db
     self._diff_base_url = (
         diff_base_url or
-        url_utils.create_filepath_url(generated_images_root))
+        url_utils.create_filepath_url(image_diff_db.storage_root))
     self._actuals_root = actuals_root
     self._expected_root = expected_root
     self._ignore_failures_on_these_tests = []
@@ -171,7 +180,7 @@ class ExpectationComparisons(results.BaseComparisons):
     if not os.path.isdir(root):
       raise IOError('no directory found at path %s' % root)
     actual_builders_written = []
-    for dirpath, dirnames, filenames in os.walk(root):
+    for dirpath, _, filenames in os.walk(root):
       for matching_filename in fnmatch.filter(filenames, pattern):
         builder = os.path.basename(dirpath)
         per_builder_dict = meta_dict.get(builder)
@@ -210,6 +219,15 @@ class ExpectationComparisons(results.BaseComparisons):
     failing_image_pairs = imagepairset.ImagePairSet(
         descriptions=IMAGEPAIR_SET_DESCRIPTIONS,
         diff_base_url=self._diff_base_url)
+
+    # Override settings for columns that should be filtered using freeform text.
+    for column_id in FREEFORM_COLUMN_IDS:
+      factory = column.ColumnHeaderFactory(
+          header_text=column_id, use_freeform_filter=True)
+      all_image_pairs.set_column_header_factory(
+          column_id=column_id, column_header_factory=factory)
+      failing_image_pairs.set_column_header_factory(
+          column_id=column_id, column_header_factory=factory)
 
     all_image_pairs.ensure_extra_column_values_in_summary(
         column_id=results.KEY__EXTRACOLUMNS__RESULT_TYPE, values=[
@@ -339,9 +357,12 @@ class ExpectationComparisons(results.BaseComparisons):
           except Exception:
             logging.exception('got exception while creating new ImagePair')
 
+    # pylint: disable=W0201
     self._results = {
-      results.KEY__HEADER__RESULTS_ALL: all_image_pairs.as_dict(),
-      results.KEY__HEADER__RESULTS_FAILURES: failing_image_pairs.as_dict(),
+      results.KEY__HEADER__RESULTS_ALL: all_image_pairs.as_dict(
+          column_ids_in_order=ORDERED_COLUMN_IDS),
+      results.KEY__HEADER__RESULTS_FAILURES: failing_image_pairs.as_dict(
+          column_ids_in_order=ORDERED_COLUMN_IDS),
     }
 
 
@@ -377,11 +398,12 @@ def main():
       help='Directory within which to download images and generate diffs; '
       'defaults to \'%(default)s\' .')
   args = parser.parse_args()
+  image_diff_db = imagediffdb.ImageDiffDB(storage_root=args.workdir)
   results_obj = ExpectationComparisons(
+      image_diff_db=image_diff_db,
       actuals_root=args.actuals,
       expected_root=args.expectations,
-      ignore_failures_file=args.ignore_failures_file,
-      generated_images_root=args.workdir)
+      ignore_failures_file=args.ignore_failures_file)
   gm_json.WriteToFile(
       results_obj.get_packaged_results_of_type(results_type=args.results),
       args.outfile)

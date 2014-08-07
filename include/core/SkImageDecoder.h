@@ -205,6 +205,20 @@ public:
     void resetPrefConfigTable() { fUsePrefTable = false; }
 #endif
 
+    /**
+     *  By default, the codec will try to comply with the "pref" colortype
+     *  that is passed to decode() or decodeSubset(). However, this can be called
+     *  to override that, causing the codec to try to match the src depth instead
+     *  (as shown below).
+     *
+     *      src_8Index  -> kIndex_8_SkColorType
+     *      src_8Gray   -> kN32_SkColorType
+     *      src_8bpc    -> kN32_SkColorType
+     */
+    void setPreserveSrcDepth(bool preserve) {
+        fPreserveSrcDepth = preserve;
+    }
+
     SkBitmap::Allocator* getAllocator() const { return fAllocator; }
     SkBitmap::Allocator* setAllocator(SkBitmap::Allocator*);
 
@@ -354,27 +368,6 @@ public:
         return DecodeStream(stream, bitmap, kUnknown_SkColorType, kDecodePixels_Mode, NULL);
     }
 
-#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CONFIG
-    bool decode(SkStream* stream, SkBitmap* bitmap, SkBitmap::Config pref, Mode mode) {
-        return this->decode(stream, bitmap, SkBitmapConfigToColorType(pref), mode);
-    }
-    bool decodeSubset(SkBitmap* bm, const SkIRect& subset, SkBitmap::Config pref) {
-        return this->decodeSubset(bm, subset, SkBitmapConfigToColorType(pref));
-    }
-    static bool DecodeFile(const char file[], SkBitmap* bitmap, SkBitmap::Config pref, Mode mode,
-                           Format* format = NULL) {
-        return DecodeFile(file, bitmap, SkBitmapConfigToColorType(pref), mode, format);
-    }
-    static bool DecodeMemory(const void* buffer, size_t size, SkBitmap* bitmap,
-                             SkBitmap::Config pref, Mode mode, Format* format = NULL) {
-        return DecodeMemory(buffer, size, bitmap, SkBitmapConfigToColorType(pref), mode, format);
-    }
-    static bool DecodeStream(SkStreamRewindable* stream, SkBitmap* bitmap, SkBitmap::Config pref,
-                             Mode mode, Format* format = NULL) {
-        return DecodeStream(stream, bitmap, SkBitmapConfigToColorType(pref), mode, format);
-    }
-#endif
-
 protected:
     // must be overridden in subclasses. This guy is called by decode(...)
     virtual bool onDecode(SkStream*, SkBitmap* bitmap, Mode) = 0;
@@ -477,6 +470,7 @@ private:
     PrefConfigTable         fPrefTable;     // use if fUsePrefTable is true
     bool                    fUsePrefTable;
 #endif
+    bool                    fPreserveSrcDepth;
     bool                    fDitherImage;
     bool                    fSkipWritingZeroes;
     mutable bool            fShouldCancelDecode;

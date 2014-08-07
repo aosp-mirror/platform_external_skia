@@ -27,10 +27,6 @@ public:
     }
 
 protected:
-    virtual uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
-
     virtual SkISize onISize() {
         return SkISize::Make(520, 160);
     }
@@ -44,6 +40,7 @@ protected:
 
         SkPaint  paint;
         paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(72));
         paint.setLooper(fLooper);
 

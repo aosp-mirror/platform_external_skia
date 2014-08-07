@@ -74,18 +74,12 @@ void PictureBenchmark::run(SkPicture* pict) {
 
     if (fPreprocess) {
         if (NULL != fRenderer->getCanvas()) {
-            fRenderer->getCanvas()->EXPERIMENTAL_optimize(pict);
+            fRenderer->getCanvas()->EXPERIMENTAL_optimize(fRenderer->getPicture());
         }
     }
 
     fRenderer->render(NULL);
     fRenderer->resetState(true);   // flush, swapBuffers and Finish
-
-    if (fPreprocess) {
-        if (NULL != fRenderer->getCanvas()) {
-            fRenderer->getCanvas()->EXPERIMENTAL_purge(pict);
-        }
-    }
 
     if (fPurgeDecodedTex) {
         fRenderer->purgeTextures();
@@ -173,7 +167,7 @@ void PictureBenchmark::run(SkPicture* pict) {
                 SkAssertResult(longRunningTimerData.appendTimes(longRunningTimer.get()));
             }
 
-            fWriter->tileConfig(tiledRenderer->getConfigName());
+            fWriter->logRenderer(tiledRenderer);
             fWriter->tileMeta(x, y, xTiles, yTiles);
 
             // TODO(borenet): Turn off per-iteration tile time reporting for now.
@@ -220,12 +214,6 @@ void PictureBenchmark::run(SkPicture* pict) {
 
                 SkAssertResult(perRunTimerData.appendTimes(perRunTimer.get()));
 
-                if (fPreprocess) {
-                    if (NULL != fRenderer->getCanvas()) {
-                        fRenderer->getCanvas()->EXPERIMENTAL_purge(pict);
-                    }
-                }
-
                 if (fPurgeDecodedTex) {
                     fRenderer->purgeTextures();
                 }
@@ -236,7 +224,7 @@ void PictureBenchmark::run(SkPicture* pict) {
             SkAssertResult(longRunningTimerData.appendTimes(longRunningTimer.get()));
         }
 
-        fWriter->tileConfig(fRenderer->getConfigName());
+        fWriter->logRenderer(fRenderer);
         if (fPurgeDecodedTex) {
             fWriter->addTileFlag(PictureResultsWriter::kPurging);
         }

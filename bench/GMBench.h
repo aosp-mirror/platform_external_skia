@@ -4,6 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef GMBench_DEFINED
+#define GMBench_DEFINED
 
 #include "Benchmark.h"
 #include "SkCanvas.h"
@@ -29,3 +31,5 @@ private:
     SkString    fName;
     typedef Benchmark INHERITED;
 };
+
+#endif

@@ -13,7 +13,7 @@
 
 #include "SkGr.h"
 #include "SkBitmap.h"
-#include "SkBitmapDevice.h"
+#include "SkDevice.h"
 #include "SkPicture.h"
 #include "SkRegion.h"
 #include "GrContext.h"
@@ -24,10 +24,10 @@ struct GrSkDrawProcs;
 class GrTextContext;
 
 /**
- *  Subclass of SkBitmapDevice, which directs all drawing to the GrGpu owned by the
+ *  Subclass of SkBaseDevice, which directs all drawing to the GrGpu owned by the
  *  canvas.
  */
-class SK_API SkGpuDevice : public SkBitmapDevice {
+class SK_API SkGpuDevice : public SkBaseDevice {
 public:
     enum Flags {
         kNeedClear_Flag = 1 << 0,  //!< Surface requires an initial clear
@@ -143,8 +143,6 @@ protected:
     /**  PRIVATE / EXPERIMENTAL -- do not call */
     virtual void EXPERIMENTAL_optimize(const SkPicture* picture) SK_OVERRIDE;
     /**  PRIVATE / EXPERIMENTAL -- do not call */
-    virtual void EXPERIMENTAL_purge(const SkPicture* picture) SK_OVERRIDE;
-    /**  PRIVATE / EXPERIMENTAL -- do not call */
     virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture) SK_OVERRIDE;
 
 private:
@@ -161,12 +159,17 @@ private:
     GrRenderTarget*     fRenderTarget;
     bool                fNeedClear;
 
+    // remove when our clients don't rely on accessBitmap()
+    SkBitmap fLegacyBitmap;
+
     // called from rt and tex cons
     void initFromRenderTarget(GrContext*, GrRenderTarget*, unsigned flags);
 
     virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
 
     virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
+
+    virtual SkImageFilter::UniqueIDCache* getImageFilterCache() SK_OVERRIDE;
 
     // sets the render target, clip, and matrix on GrContext. Use forceIdenity to override
     // SkDraw's matrix and draw in device coords.
@@ -214,7 +217,7 @@ private:
 
     static SkPicture::AccelData::Key ComputeAccelDataKey();
 
-    typedef SkBitmapDevice INHERITED;
+    typedef SkBaseDevice INHERITED;
 };
 
 #endif

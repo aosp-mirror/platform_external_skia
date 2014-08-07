@@ -27,6 +27,9 @@ public:
 
     GrTexture* getTexture() { return fBitmap.getTexture(); }
 
+    virtual SkShader* onNewShader(SkShader::TileMode,
+                                  SkShader::TileMode,
+                                  const SkMatrix* localMatrix) const SK_OVERRIDE;
 private:
     SkBitmap    fBitmap;
 
@@ -42,6 +45,13 @@ SkImage_Gpu::SkImage_Gpu(const SkBitmap& bitmap)
 }
 
 SkImage_Gpu::~SkImage_Gpu() {
+}
+
+SkShader* SkImage_Gpu::onNewShader(SkShader::TileMode tileX,
+                                   SkShader::TileMode tileY,
+                                   const SkMatrix* localMatrix) const
+{
+    return SkShader::CreateBitmapShader(fBitmap, tileX, tileY, localMatrix);
 }
 
 void SkImage_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,

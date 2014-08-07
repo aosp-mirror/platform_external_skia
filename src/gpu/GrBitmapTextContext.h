@@ -11,7 +11,6 @@
 #include "GrTextContext.h"
 
 class GrTextStrike;
-class GrAtlasMgr;
 
 /*
  * This class implements GrTextContext using standard bitmap fonts
@@ -48,8 +47,9 @@ private:
     void*                       fVertices;
     int32_t                     fMaxVertices;
     GrTexture*                  fCurrTexture;
-    SkAutoTUnref<GrEffectRef>   fCachedEffect;
-    uint32_t                    fEffectTextureGenID;
+    SkAutoTUnref<GrEffect>      fCachedEffect;
+    // Used to check whether fCachedEffect is still valid.
+    uint32_t                    fEffectTextureUniqueID;
     int                         fCurrVertex;
     SkRect                      fVertexBounds;
 };

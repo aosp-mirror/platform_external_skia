@@ -59,12 +59,12 @@ public:
     }
 
 protected:
-    virtual uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
-
     virtual SkString onShortName() {
         return SkString("bitmapscroll");
+    }
+
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
     }
 
     virtual SkISize onISize() {
@@ -109,6 +109,7 @@ protected:
     void drawLabel(SkCanvas* canvas, const char *text, int startX, int startY,
                  int endX, int endY) {
         SkPaint paint;
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setColor(0xFF000000);
         SkPath path;
         path.moveTo(SkIntToScalar(startX), SkIntToScalar(startY));

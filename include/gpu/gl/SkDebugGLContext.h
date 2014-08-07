@@ -13,13 +13,13 @@
 class SkDebugGLContext : public SkGLContextHelper {
 
 public:
-    SkDebugGLContext() {};
+    SkDebugGLContext() {}
 
-    virtual void makeCurrent() const SK_OVERRIDE {};
-    virtual void swapBuffers() const SK_OVERRIDE {};
+    virtual void makeCurrent() const SK_OVERRIDE {}
+    virtual void swapBuffers() const SK_OVERRIDE {}
 
 protected:
-    virtual const GrGLInterface* createGLContext() SK_OVERRIDE;
+    virtual const GrGLInterface* createGLContext(GrGLStandard forcedGpuAPI) SK_OVERRIDE;
 
     virtual void destroyGLContext() SK_OVERRIDE {};
 };

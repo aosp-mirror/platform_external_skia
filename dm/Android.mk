@@ -8,6 +8,8 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
+	-fPIC \
+	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
@@ -17,7 +19,6 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	DM.cpp \
-	DMBenchTask.cpp \
 	DMCpuGMTask.cpp \
 	DMExpectationsTask.cpp \
 	DMGpuGMTask.cpp \
@@ -25,8 +26,6 @@ LOCAL_SRC_FILES := \
 	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
-	DMRecordTask.cpp \
-	DMReplayTask.cpp \
 	DMReporter.cpp \
 	DMSKPTask.cpp \
 	DMSerializeTask.cpp \
@@ -41,92 +40,215 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
-	../bench/Benchmark.cpp \
-	../bench/AAClipBench.cpp \
-	../bench/BicubicBench.cpp \
-	../bench/BitmapBench.cpp \
-	../bench/BitmapRectBench.cpp \
-	../bench/BitmapScaleBench.cpp \
-	../bench/BlurBench.cpp \
-	../bench/BlurImageFilterBench.cpp \
-	../bench/BlurRectBench.cpp \
-	../bench/BlurRoundRectBench.cpp \
-	../bench/ChartBench.cpp \
-	../bench/ChecksumBench.cpp \
-	../bench/ChromeBench.cpp \
-	../bench/CmapBench.cpp \
-	../bench/ColorFilterBench.cpp \
-	../bench/ColorPrivBench.cpp \
-	../bench/CoverageBench.cpp \
-	../bench/DashBench.cpp \
-	../bench/DecodeBench.cpp \
-	../bench/DeferredCanvasBench.cpp \
-	../bench/DeferredSurfaceCopyBench.cpp \
-	../bench/DisplacementBench.cpp \
-	../bench/ETCBitmapBench.cpp \
-	../bench/FSRectBench.cpp \
-	../bench/FontCacheBench.cpp \
-	../bench/FontScalerBench.cpp \
-	../bench/GameBench.cpp \
-	../bench/GrMemoryPoolBench.cpp \
-	../bench/GrResourceCacheBench.cpp \
-	../bench/GrOrderedSetBench.cpp \
-	../bench/GradientBench.cpp \
-	../bench/HairlinePathBench.cpp \
-	../bench/ImageCacheBench.cpp \
-	../bench/ImageDecodeBench.cpp \
-	../bench/ImageFilterDAGBench.cpp \
-	../bench/InterpBench.cpp \
-	../bench/LightingBench.cpp \
-	../bench/LineBench.cpp \
-	../bench/MagnifierBench.cpp \
-	../bench/MathBench.cpp \
-	../bench/Matrix44Bench.cpp \
-	../bench/MatrixBench.cpp \
-	../bench/MatrixConvolutionBench.cpp \
-	../bench/MemcpyBench.cpp \
-	../bench/MemoryBench.cpp \
-	../bench/MemsetBench.cpp \
-	../bench/MergeBench.cpp \
-	../bench/MorphologyBench.cpp \
-	../bench/MutexBench.cpp \
-	../bench/PathBench.cpp \
-	../bench/PathIterBench.cpp \
-	../bench/PathUtilsBench.cpp \
-	../bench/PerlinNoiseBench.cpp \
-	../bench/PicturePlaybackBench.cpp \
-	../bench/PictureRecordBench.cpp \
-	../bench/PremulAndUnpremulAlphaOpsBench.cpp \
-	../bench/QuadTreeBench.cpp \
-	../bench/RTreeBench.cpp \
-	../bench/ReadPixBench.cpp \
-	../bench/RectBench.cpp \
-	../bench/RectanizerBench.cpp \
-	../bench/RectoriBench.cpp \
-	../bench/RefCntBench.cpp \
-	../bench/RegionBench.cpp \
-	../bench/RegionContainBench.cpp \
-	../bench/RepeatTileBench.cpp \
-	../bench/ScalarBench.cpp \
-	../bench/ShaderMaskBench.cpp \
-	../bench/SkipZeroesBench.cpp \
-	../bench/SortBench.cpp \
-	../bench/StackBench.cpp \
-	../bench/StrokeBench.cpp \
-	../bench/TableBench.cpp \
-	../bench/TextBench.cpp \
-	../bench/TileBench.cpp \
-	../bench/VertBench.cpp \
-	../bench/WritePixelsBench.cpp \
-	../bench/WriterBench.cpp \
-	../bench/XfermodeBench.cpp \
+	../tests/Test.cpp \
+	../tests/PathOpsAngleTest.cpp \
+	../tests/PathOpsBoundsTest.cpp \
+	../tests/PathOpsCubicIntersectionTest.cpp \
+	../tests/PathOpsCubicIntersectionTestData.cpp \
+	../tests/PathOpsCubicLineIntersectionTest.cpp \
+	../tests/PathOpsCubicQuadIntersectionTest.cpp \
+	../tests/PathOpsCubicReduceOrderTest.cpp \
+	../tests/PathOpsCubicToQuadsTest.cpp \
+	../tests/PathOpsDCubicTest.cpp \
+	../tests/PathOpsDLineTest.cpp \
+	../tests/PathOpsDPointTest.cpp \
+	../tests/PathOpsDQuadTest.cpp \
+	../tests/PathOpsDRectTest.cpp \
+	../tests/PathOpsDTriangleTest.cpp \
+	../tests/PathOpsDVectorTest.cpp \
+	../tests/PathOpsExtendedTest.cpp \
+	../tests/PathOpsInverseTest.cpp \
+	../tests/PathOpsLineIntersectionTest.cpp \
+	../tests/PathOpsLineParametetersTest.cpp \
+	../tests/PathOpsOpCubicThreadedTest.cpp \
+	../tests/PathOpsOpRectThreadedTest.cpp \
+	../tests/PathOpsOpTest.cpp \
+	../tests/PathOpsQuadIntersectionTest.cpp \
+	../tests/PathOpsQuadIntersectionTestData.cpp \
+	../tests/PathOpsQuadLineIntersectionTest.cpp \
+	../tests/PathOpsQuadLineIntersectionThreadedTest.cpp \
+	../tests/PathOpsQuadParameterizationTest.cpp \
+	../tests/PathOpsQuadReduceOrderTest.cpp \
+	../tests/PathOpsSimplifyDegenerateThreadedTest.cpp \
+	../tests/PathOpsSimplifyFailTest.cpp \
+	../tests/PathOpsSimplifyQuadralateralsThreadedTest.cpp \
+	../tests/PathOpsSimplifyQuadThreadedTest.cpp \
+	../tests/PathOpsSimplifyRectThreadedTest.cpp \
+	../tests/PathOpsSimplifyTest.cpp \
+	../tests/PathOpsSimplifyTrianglesThreadedTest.cpp \
+	../tests/PathOpsSkpTest.cpp \
+	../tests/PathOpsTestCommon.cpp \
+	../tests/PathOpsThreadedCommon.cpp \
+	../tests/PathOpsTightBoundsTest.cpp \
+	../tests/AAClipTest.cpp \
+	../tests/ARGBImageEncoderTest.cpp \
+	../tests/AndroidPaintTest.cpp \
+	../tests/AnnotationTest.cpp \
+	../tests/AsADashTest.cpp \
+	../tests/AtomicTest.cpp \
+	../tests/BBoxHierarchyTest.cpp \
+	../tests/BitSetTest.cpp \
+	../tests/BitmapCopyTest.cpp \
+	../tests/BitmapGetColorTest.cpp \
+	../tests/BitmapHasherTest.cpp \
+	../tests/BitmapHeapTest.cpp \
+	../tests/BitmapTest.cpp \
+	../tests/BlendTest.cpp \
+	../tests/BlitRowTest.cpp \
+	../tests/BlurTest.cpp \
+	../tests/CachedDecodingPixelRefTest.cpp \
+	../tests/CanvasStateHelpers.cpp \
+	../tests/CanvasStateTest.cpp \
+	../tests/CanvasTest.cpp \
+	../tests/ChecksumTest.cpp \
+	../tests/ClampRangeTest.cpp \
+	../tests/ClipCacheTest.cpp \
+	../tests/ClipCubicTest.cpp \
+	../tests/ClipStackTest.cpp \
+	../tests/ClipperTest.cpp \
+	../tests/ColorFilterTest.cpp \
+	../tests/ColorPrivTest.cpp \
+	../tests/ColorTest.cpp \
+	../tests/DashPathEffectTest.cpp \
+	../tests/DataRefTest.cpp \
+	../tests/DeferredCanvasTest.cpp \
+	../tests/DequeTest.cpp \
+	../tests/DeviceLooperTest.cpp \
+	../tests/DiscardableMemoryPoolTest.cpp \
+	../tests/DiscardableMemoryTest.cpp \
+	../tests/DocumentTest.cpp \
+	../tests/DrawBitmapRectTest.cpp \
+	../tests/DrawPathTest.cpp \
+	../tests/DrawTextTest.cpp \
+	../tests/DynamicHashTest.cpp \
+	../tests/EmptyPathTest.cpp \
+	../tests/ErrorTest.cpp \
+	../tests/FillPathTest.cpp \
+	../tests/FitsInTest.cpp \
+	../tests/FlatDataTest.cpp \
+	../tests/FlateTest.cpp \
+	../tests/FloatingPointTextureTest.cpp \
+	../tests/FontHostStreamTest.cpp \
+	../tests/FontHostTest.cpp \
+	../tests/FontMgrTest.cpp \
+	../tests/FontNamesTest.cpp \
+	../tests/FontObjTest.cpp \
+	../tests/FrontBufferedStreamTest.cpp \
+	../tests/GLInterfaceValidationTest.cpp \
+	../tests/GLProgramsTest.cpp \
+	../tests/GeometryTest.cpp \
+	../tests/GifTest.cpp \
+	../tests/GpuColorFilterTest.cpp \
+	../tests/GpuDrawPathTest.cpp \
+	../tests/GpuLayerCacheTest.cpp \
+	../tests/GpuRectanizerTest.cpp \
+	../tests/GrBinHashKeyTest.cpp \
+	../tests/GrContextFactoryTest.cpp \
+	../tests/GrDrawTargetTest.cpp \
+	../tests/GrMemoryPoolTest.cpp \
+	../tests/GrOrderedSetTest.cpp \
+	../tests/GrRedBlackTreeTest.cpp \
+	../tests/GrSurfaceTest.cpp \
+	../tests/GrTBSearchTest.cpp \
+	../tests/GradientTest.cpp \
+	../tests/ImageCacheTest.cpp \
+	../tests/ImageDecodingTest.cpp \
+	../tests/ImageFilterTest.cpp \
+	../tests/ImageGeneratorTest.cpp \
+	../tests/ImageNewShaderTest.cpp \
+	../tests/InfRectTest.cpp \
+	../tests/InterpolatorTest.cpp \
+	../tests/JpegTest.cpp \
+	../tests/KtxTest.cpp \
+	../tests/LListTest.cpp \
+	../tests/LayerDrawLooperTest.cpp \
+	../tests/LayerRasterizerTest.cpp \
+	../tests/MD5Test.cpp \
+	../tests/MallocPixelRefTest.cpp \
+	../tests/MathTest.cpp \
+	../tests/Matrix44Test.cpp \
+	../tests/MatrixClipCollapseTest.cpp \
+	../tests/MatrixTest.cpp \
+	../tests/MemoryTest.cpp \
+	../tests/MemsetTest.cpp \
+	../tests/MessageBusTest.cpp \
+	../tests/MetaDataTest.cpp \
+	../tests/MipMapTest.cpp \
+	../tests/NameAllocatorTest.cpp \
+	../tests/OSPathTest.cpp \
+	../tests/ObjectPoolTest.cpp \
+	../tests/OnceTest.cpp \
+	../tests/PDFPrimitivesTest.cpp \
+	../tests/PackBitsTest.cpp \
+	../tests/PaintTest.cpp \
+	../tests/ParsePathTest.cpp \
+	../tests/PathCoverageTest.cpp \
+	../tests/PathMeasureTest.cpp \
+	../tests/PathTest.cpp \
+	../tests/PathUtilsTest.cpp \
+	../tests/PictureShaderTest.cpp \
+	../tests/PictureStateTreeTest.cpp \
+	../tests/PictureTest.cpp \
+	../tests/PixelRefTest.cpp \
+	../tests/PointTest.cpp \
+	../tests/PremulAlphaRoundTripTest.cpp \
+	../tests/QuickRejectTest.cpp \
+	../tests/RTConfRegistryTest.cpp \
+	../tests/RTreeTest.cpp \
+	../tests/RandomTest.cpp \
+	../tests/ReadPixelsTest.cpp \
+	../tests/ReadWriteAlphaTest.cpp \
+	../tests/Reader32Test.cpp \
+	../tests/RecordDrawTest.cpp \
+	../tests/RecordOptsTest.cpp \
+	../tests/RecordPatternTest.cpp \
+	../tests/RecordTest.cpp \
+	../tests/RecorderTest.cpp \
+	../tests/RecordingTest.cpp \
+	../tests/RefCntTest.cpp \
+	../tests/RefDictTest.cpp \
+	../tests/RegionTest.cpp \
+	../tests/ResourceCacheTest.cpp \
+	../tests/RoundRectTest.cpp \
+	../tests/RuntimeConfigTest.cpp \
+	../tests/SHA1Test.cpp \
+	../tests/SListTest.cpp \
+	../tests/ScalarTest.cpp \
+	../tests/ScaledImageCache.cpp \
+	../tests/SerializationTest.cpp \
+	../tests/ShaderImageFilterTest.cpp \
+	../tests/ShaderOpacityTest.cpp \
+	../tests/SizeTest.cpp \
+	../tests/SkBase64Test.cpp \
+	../tests/SmallAllocatorTest.cpp \
+	../tests/SortTest.cpp \
+	../tests/SrcOverTest.cpp \
+	../tests/StreamTest.cpp \
+	../tests/StringTest.cpp \
+	../tests/StrokeTest.cpp \
+	../tests/SurfaceTest.cpp \
+	../tests/TArrayTest.cpp \
+	../tests/TLSTest.cpp \
+	../tests/TSetTest.cpp \
+	../tests/TextureCompressionTest.cpp \
+	../tests/TileGridTest.cpp \
+	../tests/ToUnicodeTest.cpp \
+	../tests/TracingTest.cpp \
+	../tests/TypefaceTest.cpp \
+	../tests/UnicodeTest.cpp \
+	../tests/UtilsTest.cpp \
+	../tests/WArrayTest.cpp \
+	../tests/WritePixelsTest.cpp \
+	../tests/Writer32Test.cpp \
+	../tests/XfermodeTest.cpp \
+	../tests/PipeTest.cpp \
+	../tests/TDStackNesterTest.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/alphagradients.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/beziereffects.cpp \
-	../gm/bicubicfilter.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
@@ -144,7 +266,6 @@ LOCAL_SRC_FILES := \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurroundrect.cpp \
-	../gm/canvasstate.cpp \
 	../gm/circles.cpp \
 	../gm/circularclips.cpp \
 	../gm/clippedbitmapshaders.cpp \
@@ -187,6 +308,8 @@ LOCAL_SRC_FILES := \
 	../gm/gammatext.cpp \
 	../gm/getpostextpath.cpp \
 	../gm/giantbitmap.cpp \
+	../gm/glyph_pos.cpp \
+	../gm/glyph_pos_align.cpp \
 	../gm/gradients.cpp \
 	../gm/gradients_2pt_conical.cpp \
 	../gm/gradients_no_texture.cpp \
@@ -226,6 +349,7 @@ LOCAL_SRC_FILES := \
 	../gm/offsetimagefilter.cpp \
 	../gm/optimizations.cpp \
 	../gm/ovals.cpp \
+	../gm/patch.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \
@@ -236,6 +360,7 @@ LOCAL_SRC_FILES := \
 	../gm/perlinnoise.cpp \
 	../gm/pictureimagefilter.cpp \
 	../gm/pictureshader.cpp \
+	../gm/pictureshadertile.cpp \
 	../gm/points.cpp \
 	../gm/poly2poly.cpp \
 	../gm/polygons.cpp \
@@ -281,216 +406,24 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes.cpp \
 	../gm/xfermodes2.cpp \
 	../gm/xfermodes3.cpp \
-	../tests/PathOpsAngleTest.cpp \
-	../tests/PathOpsBoundsTest.cpp \
-	../tests/PathOpsCubicIntersectionTest.cpp \
-	../tests/PathOpsCubicIntersectionTestData.cpp \
-	../tests/PathOpsCubicLineIntersectionTest.cpp \
-	../tests/PathOpsCubicQuadIntersectionTest.cpp \
-	../tests/PathOpsCubicReduceOrderTest.cpp \
-	../tests/PathOpsCubicToQuadsTest.cpp \
-	../tests/PathOpsDCubicTest.cpp \
-	../tests/PathOpsDLineTest.cpp \
-	../tests/PathOpsDPointTest.cpp \
-	../tests/PathOpsDQuadTest.cpp \
-	../tests/PathOpsDRectTest.cpp \
-	../tests/PathOpsDTriangleTest.cpp \
-	../tests/PathOpsDVectorTest.cpp \
-	../tests/PathOpsExtendedTest.cpp \
-	../tests/PathOpsInverseTest.cpp \
-	../tests/PathOpsLineIntersectionTest.cpp \
-	../tests/PathOpsLineParametetersTest.cpp \
-	../tests/PathOpsOpCubicThreadedTest.cpp \
-	../tests/PathOpsOpRectThreadedTest.cpp \
-	../tests/PathOpsOpTest.cpp \
-	../tests/PathOpsQuadIntersectionTest.cpp \
-	../tests/PathOpsQuadIntersectionTestData.cpp \
-	../tests/PathOpsQuadLineIntersectionTest.cpp \
-	../tests/PathOpsQuadLineIntersectionThreadedTest.cpp \
-	../tests/PathOpsQuadParameterizationTest.cpp \
-	../tests/PathOpsQuadReduceOrderTest.cpp \
-	../tests/PathOpsSimplifyDegenerateThreadedTest.cpp \
-	../tests/PathOpsSimplifyFailTest.cpp \
-	../tests/PathOpsSimplifyQuadralateralsThreadedTest.cpp \
-	../tests/PathOpsSimplifyQuadThreadedTest.cpp \
-	../tests/PathOpsSimplifyRectThreadedTest.cpp \
-	../tests/PathOpsSimplifyTest.cpp \
-	../tests/PathOpsSimplifyTrianglesThreadedTest.cpp \
-	../tests/PathOpsSkpTest.cpp \
-	../tests/PathOpsTestCommon.cpp \
-	../tests/PathOpsThreadedCommon.cpp \
-	../tests/Test.cpp \
-	../tests/AAClipTest.cpp \
-	../tests/ARGBImageEncoderTest.cpp \
-	../tests/AndroidPaintTest.cpp \
-	../tests/AnnotationTest.cpp \
-	../tests/AsADashTest.cpp \
-	../tests/AtomicTest.cpp \
-	../tests/BBoxHierarchyTest.cpp \
-	../tests/BitSetTest.cpp \
-	../tests/BitmapCopyTest.cpp \
-	../tests/BitmapGetColorTest.cpp \
-	../tests/BitmapHasherTest.cpp \
-	../tests/BitmapHeapTest.cpp \
-	../tests/BitmapTest.cpp \
-	../tests/BlendTest.cpp \
-	../tests/BlitRowTest.cpp \
-	../tests/BlurTest.cpp \
-	../tests/CachedDecodingPixelRefTest.cpp \
-	../tests/CanvasStateTest.cpp \
-	../tests/CanvasTest.cpp \
-	../tests/ChecksumTest.cpp \
-	../tests/ClampRangeTest.cpp \
-	../tests/ClipCacheTest.cpp \
-	../tests/ClipCubicTest.cpp \
-	../tests/ClipStackTest.cpp \
-	../tests/ClipperTest.cpp \
-	../tests/ColorFilterTest.cpp \
-	../tests/ColorPrivTest.cpp \
-	../tests/ColorTest.cpp \
-	../tests/DashPathEffectTest.cpp \
-	../tests/DataRefTest.cpp \
-	../tests/DeferredCanvasTest.cpp \
-	../tests/DequeTest.cpp \
-	../tests/DeviceLooperTest.cpp \
-	../tests/DiscardableMemoryPoolTest.cpp \
-	../tests/DiscardableMemoryTest.cpp \
-	../tests/DocumentTest.cpp \
-	../tests/DrawBitmapRectTest.cpp \
-	../tests/DrawPathTest.cpp \
-	../tests/DrawTextTest.cpp \
-	../tests/DynamicHashTest.cpp \
-	../tests/EmptyPathTest.cpp \
-	../tests/ErrorTest.cpp \
-	../tests/FillPathTest.cpp \
-	../tests/FitsInTest.cpp \
-	../tests/FlatDataTest.cpp \
-	../tests/FlateTest.cpp \
-	../tests/FontHostStreamTest.cpp \
-	../tests/FontHostTest.cpp \
-	../tests/FontObjTest.cpp \
-	../tests/FontMgrTest.cpp \
-	../tests/FontNamesTest.cpp \
-	../tests/FrontBufferedStreamTest.cpp \
-	../tests/GLInterfaceValidationTest.cpp \
-	../tests/GLProgramsTest.cpp \
-	../tests/GeometryTest.cpp \
-	../tests/GifTest.cpp \
-	../tests/GpuColorFilterTest.cpp \
-	../tests/GpuDrawPathTest.cpp \
-	../tests/GpuRectanizerTest.cpp \
-	../tests/GrBinHashKeyTest.cpp \
-	../tests/GrContextFactoryTest.cpp \
-	../tests/GrDrawTargetTest.cpp \
-	../tests/GrMemoryPoolTest.cpp \
-	../tests/GrRedBlackTreeTest.cpp \
-	../tests/GrOrderedSetTest.cpp \
-	../tests/GrSurfaceTest.cpp \
-	../tests/GrTBSearchTest.cpp \
-	../tests/GradientTest.cpp \
-	../tests/HashCacheTest.cpp \
-	../tests/ImageCacheTest.cpp \
-	../tests/ImageDecodingTest.cpp \
-	../tests/ImageFilterTest.cpp \
-	../tests/InfRectTest.cpp \
-	../tests/JpegTest.cpp \
-	../tests/KtxTest.cpp \
-	../tests/LListTest.cpp \
-	../tests/LayerDrawLooperTest.cpp \
-	../tests/LayerRasterizerTest.cpp \
-	../tests/MD5Test.cpp \
-	../tests/MallocPixelRefTest.cpp \
-	../tests/MathTest.cpp \
-	../tests/Matrix44Test.cpp \
-	../tests/MatrixClipCollapseTest.cpp \
-	../tests/MatrixTest.cpp \
-	../tests/MemoryTest.cpp \
-	../tests/MemsetTest.cpp \
-	../tests/MessageBusTest.cpp \
-	../tests/MetaDataTest.cpp \
-	../tests/MipMapTest.cpp \
-	../tests/NameAllocatorTest.cpp \
-	../tests/ObjectPoolTest.cpp \
-	../tests/OSPathTest.cpp \
-	../tests/OnceTest.cpp \
-	../tests/PDFPrimitivesTest.cpp \
-	../tests/PackBitsTest.cpp \
-	../tests/PaintTest.cpp \
-	../tests/ParsePathTest.cpp \
-	../tests/PathCoverageTest.cpp \
-	../tests/PathMeasureTest.cpp \
-	../tests/PathTest.cpp \
-	../tests/PathUtilsTest.cpp \
-	../tests/PictureTest.cpp \
-	../tests/PictureShaderTest.cpp \
-	../tests/PictureStateTreeTest.cpp \
-	../tests/PixelRefTest.cpp \
-	../tests/PointTest.cpp \
-	../tests/PremulAlphaRoundTripTest.cpp \
-	../tests/QuickRejectTest.cpp \
-	../tests/RTreeTest.cpp \
-	../tests/RandomTest.cpp \
-	../tests/ReadPixelsTest.cpp \
-	../tests/ReadWriteAlphaTest.cpp \
-	../tests/Reader32Test.cpp \
-	../tests/RecordDrawTest.cpp \
-	../tests/RecordOptsTest.cpp \
-	../tests/RecordPatternTest.cpp \
-	../tests/RecordTest.cpp \
-	../tests/RecorderTest.cpp \
-	../tests/RecordingTest.cpp \
-	../tests/RefCntTest.cpp \
-	../tests/RefDictTest.cpp \
-	../tests/RegionTest.cpp \
-	../tests/ResourceCacheTest.cpp \
-	../tests/RoundRectTest.cpp \
-	../tests/RuntimeConfigTest.cpp \
-	../tests/SHA1Test.cpp \
-	../tests/ScalarTest.cpp \
-	../tests/SerializationTest.cpp \
-	../tests/ShaderImageFilterTest.cpp \
-	../tests/ShaderOpacityTest.cpp \
-	../tests/SkBase64Test.cpp \
-	../tests/SListTest.cpp \
-	../tests/SmallAllocatorTest.cpp \
-	../tests/SortTest.cpp \
-	../tests/SrcOverTest.cpp \
-	../tests/StreamTest.cpp \
-	../tests/StringTest.cpp \
-	../tests/StrokeTest.cpp \
-	../tests/SurfaceTest.cpp \
-	../tests/TArrayTest.cpp \
-	../tests/TLSTest.cpp \
-	../tests/TSetTest.cpp \
-	../tests/TestSize.cpp \
-	../tests/TextureCompressionTest.cpp \
-	../tests/TileGridTest.cpp \
-	../tests/ToUnicodeTest.cpp \
-	../tests/TracingTest.cpp \
-	../tests/TypefaceTest.cpp \
-	../tests/UnicodeTest.cpp \
-	../tests/UnitTestTest.cpp \
-	../tests/UtilsTest.cpp \
-	../tests/WArrayTest.cpp \
-	../tests/WritePixelsTest.cpp \
-	../tests/Writer32Test.cpp \
-	../tests/XfermodeTest.cpp \
-	../tests/PipeTest.cpp \
-	../tests/TDStackNesterTest.cpp \
-	../tools/sk_tool_utils.cpp \
-	../gm/androidfallback.cpp \
+	../gm/yuvtorgbeffect.cpp \
+	../tests/FontConfigParser.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
-	../src/gpu/GrTest.cpp \
 	../tools/CrashHandler.cpp \
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp \
+	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
+	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
-	../tools/Resources.cpp
+	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
+	libdl \
 	libGLESv2 \
 	libEGL \
 	libz
@@ -510,10 +443,11 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../src/fonts \
+	$(LOCAL_PATH)/../tools \
+	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../tools/flags \
-	$(LOCAL_PATH)/../bench \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/images \
@@ -521,12 +455,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
-	$(LOCAL_PATH)/../tools \
-	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
+	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
@@ -538,4 +472,4 @@ LOCAL_MODULE := \
 	skia_dm
 
 include external/stlport/libstlport.mk
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)

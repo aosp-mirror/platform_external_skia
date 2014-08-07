@@ -25,19 +25,25 @@ import threading
 import time
 import urlparse
 
+# Must fix up PYTHONPATH before importing from within Skia
+import fix_pythonpath  # pylint: disable=W0611
+
 # Imports from within Skia
-import fix_pythonpath  # must do this first
-from pyutils import gs_utils
+from py.utils import gs_utils
 import gm_json
 
 # Imports from local dir
 #
+# pylint: disable=C0301
 # Note: we import results under a different name, to avoid confusion with the
 # Server.results() property. See discussion at
 # https://codereview.chromium.org/195943004/diff/1/gm/rebaseline_server/server.py#newcode44
+# pylint: enable=C0301
 import compare_configs
+import compare_rendered_pictures
 import compare_to_expectations
 import download_actuals
+import imagediffdb
 import imagepairset
 import results as results_mod
 
@@ -67,9 +73,7 @@ DEFAULT_PORT = 8888
 
 PARENT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
 TRUNK_DIRECTORY = os.path.dirname(os.path.dirname(PARENT_DIRECTORY))
-# Directory, relative to PARENT_DIRECTORY, within which the server will serve
-# out live results (not static files).
-RESULTS_SUBDIR = 'results'
+
 # Directory, relative to PARENT_DIRECTORY, within which the server will serve
 # out static files.
 STATIC_CONTENTS_SUBDIR = 'static'
@@ -77,6 +81,19 @@ STATIC_CONTENTS_SUBDIR = 'static'
 GENERATED_HTML_SUBDIR = 'generated-html'
 GENERATED_IMAGES_SUBDIR = 'generated-images'
 GENERATED_JSON_SUBDIR = 'generated-json'
+
+# Directives associated with various HTTP GET requests.
+GET__LIVE_RESULTS = 'live-results'
+GET__PRECOMPUTED_RESULTS = 'results'
+GET__PREFETCH_RESULTS = 'prefetch'
+GET__STATIC_CONTENTS = 'static'
+
+# Parameters we use within do_GET_live_results()
+LIVE_PARAM__SET_A_DIR = 'setADir'
+LIVE_PARAM__SET_B_DIR = 'setBDir'
+
+# Parameters we use within do_GET_prefetch_results()
+PREFETCH_PARAM__DOWNLOAD_ONLY_DIFFERING = 'downloadOnlyDifferingImages'
 
 # How often (in seconds) clients should reload while waiting for initial
 # results to load.
@@ -157,11 +174,12 @@ def _create_index(file_path, config_pairs):
       file_handle.write('<li>Expectations vs Actuals</li><ul>')
       for summary_type in SUMMARY_TYPES:
         file_handle.write(
-            '<li>'
-            '<a href="/%s/view.html#/view.html?resultsToLoad=/%s/%s">'
-            '%s</a></li>' % (
-                STATIC_CONTENTS_SUBDIR, RESULTS_SUBDIR,
-                summary_type, summary_type))
+            '<li><a href="/{static_directive}/view.html#/view.html?'
+            'resultsToLoad=/{results_directive}/{summary_type}">'
+            '{summary_type}</a></li>'.format(
+                results_directive=GET__PRECOMPUTED_RESULTS,
+                static_directive=GET__STATIC_CONTENTS,
+                summary_type=summary_type))
       file_handle.write('</ul>')
     if config_pairs:
       file_handle.write('<li>Comparing configs within actual results</li><ul>')
@@ -171,7 +189,7 @@ def _create_index(file_path, config_pairs):
           file_handle.write(
               ' <a href="/%s/view.html#/view.html?'
               'resultsToLoad=/%s/%s/%s-vs-%s_%s.json">%s</a>' % (
-                  STATIC_CONTENTS_SUBDIR, STATIC_CONTENTS_SUBDIR,
+                  GET__STATIC_CONTENTS, GET__STATIC_CONTENTS,
                   GENERATED_JSON_SUBDIR, config_pair[0], config_pair[1],
                   summary_type, summary_type))
         file_handle.write('</li>')
@@ -187,7 +205,9 @@ class Server(object):
                json_filename=DEFAULT_JSON_FILENAME,
                gm_summaries_bucket=DEFAULT_GM_SUMMARIES_BUCKET,
                port=DEFAULT_PORT, export=False, editable=True,
-               reload_seconds=0, config_pairs=None, builder_regex_list=None):
+               reload_seconds=0, config_pairs=None, builder_regex_list=None,
+               boto_file_path=None,
+               imagediffdb_threads=imagediffdb.DEFAULT_NUM_WORKER_THREADS):
     """
     Args:
       actuals_dir: directory under which we will check out the latest actual
@@ -206,6 +226,10 @@ class Server(object):
           don't compare configs at all.
       builder_regex_list: List of regular expressions specifying which builders
           we will process. If None, process all builders.
+      boto_file_path: Path to .boto file giving us credentials to access
+          Google Storage buckets; if None, we will only be able to access
+          public GS buckets.
+      imagediffdb_threads: How many threads to spin up within imagediffdb.
     """
     self._actuals_dir = actuals_dir
     self._json_filename = json_filename
@@ -216,6 +240,13 @@ class Server(object):
     self._reload_seconds = reload_seconds
     self._config_pairs = config_pairs or []
     self._builder_regex_list = builder_regex_list
+    self.truncate_results = False
+
+    if boto_file_path:
+      self._gs = gs_utils.GSUtils(boto_file_path=boto_file_path)
+    else:
+      self._gs = gs_utils.GSUtils()
+
     _create_index(
         file_path=os.path.join(
             PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR, GENERATED_HTML_SUBDIR,
@@ -226,7 +257,16 @@ class Server(object):
     # 1. self._results
     # 2. the expected or actual results on local disk
     self.results_rlock = threading.RLock()
-    # self._results will be filled in by calls to update_results()
+
+    # Create a single ImageDiffDB instance that is used by all our differs.
+    self._image_diff_db = imagediffdb.ImageDiffDB(
+        gs=self._gs,
+        storage_root=os.path.join(
+            PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR,
+            GENERATED_IMAGES_SUBDIR),
+        num_worker_threads=imagediffdb_threads)
+
+    # This will be filled in by calls to update_results()
     self._results = None
 
   @property
@@ -234,6 +274,16 @@ class Server(object):
     """ Returns the most recently generated results, or None if we don't have
     any valid results (update_results() has not completed yet). """
     return self._results
+
+  @property
+  def image_diff_db(self):
+    """ Returns reference to our ImageDiffDB object."""
+    return self._image_diff_db
+
+  @property
+  def gs(self):
+    """ Returns reference to our GSUtils object."""
+    return self._gs
 
   @property
   def is_exported(self):
@@ -296,7 +346,7 @@ class Server(object):
         # TODO(epoger): When this is a large number of builders, we would be
         # better off downloading them in parallel!
         for builder in matching_builders:
-          gs_utils.download_file(
+          self._gs.download_file(
               source_bucket=self._gm_summaries_bucket,
               source_path=posixpath.join(builder, self._json_filename),
               dest_path=os.path.join(self._actuals_dir, builder,
@@ -335,10 +385,8 @@ class Server(object):
         _run_command(['gclient', 'sync'], TRUNK_DIRECTORY)
 
       self._results = compare_to_expectations.ExpectationComparisons(
+          image_diff_db=self._image_diff_db,
           actuals_root=self._actuals_dir,
-          generated_images_root=os.path.join(
-              PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR,
-              GENERATED_IMAGES_SUBDIR),
           diff_base_url=posixpath.join(
               os.pardir, STATIC_CONTENTS_SUBDIR, GENERATED_IMAGES_SUBDIR),
           builder_regex_list=self._builder_regex_list)
@@ -346,7 +394,7 @@ class Server(object):
       json_dir = os.path.join(
           PARENT_DIRECTORY, STATIC_CONTENTS_SUBDIR, GENERATED_JSON_SUBDIR)
       if not os.path.isdir(json_dir):
-         os.makedirs(json_dir)
+        os.makedirs(json_dir)
 
       for config_pair in self._config_pairs:
         config_comparisons = compare_configs.ConfigComparisons(
@@ -395,6 +443,7 @@ class Server(object):
     else:
       host = '127.0.0.1'
       server_address = (host, self._port)
+    # pylint: disable=W0201
     http_server = BaseHTTPServer.HTTPServer(server_address, HTTPRequestHandler)
     self._url = 'http://%s:%d' % (host, http_server.server_port)
     logging.info('Listening for requests on %s' % self._url)
@@ -416,10 +465,10 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       logging.debug('do_GET: path="%s"' % self.path)
       if self.path == '' or self.path == '/' or self.path == '/index.html' :
         self.redirect_to('/%s/%s/index.html' % (
-            STATIC_CONTENTS_SUBDIR, GENERATED_HTML_SUBDIR))
+            GET__STATIC_CONTENTS, GENERATED_HTML_SUBDIR))
         return
       if self.path == '/favicon.ico' :
-        self.redirect_to('/%s/favicon.ico' % STATIC_CONTENTS_SUBDIR)
+        self.redirect_to('/%s/favicon.ico' % GET__STATIC_CONTENTS)
         return
 
       # All requests must be of this form:
@@ -429,8 +478,10 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       normpath = posixpath.normpath(self.path)
       (dispatcher_name, remainder) = PATHSPLIT_RE.match(normpath).groups()
       dispatchers = {
-          RESULTS_SUBDIR: self.do_GET_results,
-          STATIC_CONTENTS_SUBDIR: self.do_GET_static,
+          GET__LIVE_RESULTS: self.do_GET_live_results,
+          GET__PRECOMPUTED_RESULTS: self.do_GET_precomputed_results,
+          GET__PREFETCH_RESULTS: self.do_GET_prefetch_results,
+          GET__STATIC_CONTENTS: self.do_GET_static,
       }
       dispatcher = dispatchers[dispatcher_name]
       dispatcher(remainder)
@@ -438,14 +489,15 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_error(404)
       raise
 
-  def do_GET_results(self, results_type):
-    """ Handle a GET request for GM results.
+  def do_GET_precomputed_results(self, results_type):
+    """ Handle a GET request for part of the precomputed _SERVER.results object.
 
     Args:
       results_type: string indicating which set of results to return;
             must be one of the results_mod.RESULTS_* constants
     """
-    logging.debug('do_GET_results: sending results of type "%s"' % results_type)
+    logging.debug('do_GET_precomputed_results: sending results of type "%s"' %
+                  results_type)
     # Since we must make multiple calls to the ExpectationComparisons object,
     # grab a reference to it in case it is updated to point at a new
     # ExpectationComparisons object within another thread.
@@ -472,6 +524,43 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
           },
       }
     self.send_json_dict(response_dict)
+
+  def do_GET_live_results(self, url_remainder):
+    """ Handle a GET request for live-generated image diff data.
+
+    Args:
+      url_remainder: string indicating which image diffs to generate
+    """
+    logging.debug('do_GET_live_results: url_remainder="%s"' % url_remainder)
+    param_dict = urlparse.parse_qs(url_remainder)
+    results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
+        setA_dirs=param_dict[LIVE_PARAM__SET_A_DIR],
+        setB_dirs=param_dict[LIVE_PARAM__SET_B_DIR],
+        image_diff_db=_SERVER.image_diff_db,
+        diff_base_url='/static/generated-images',
+        gs=_SERVER.gs, truncate_results=_SERVER.truncate_results)
+    self.send_json_dict(results_obj.get_packaged_results_of_type(
+        results_mod.KEY__HEADER__RESULTS_ALL))
+
+  def do_GET_prefetch_results(self, url_remainder):
+    """ Prefetch image diff data for a future do_GET_live_results() call.
+
+    Args:
+      url_remainder: string indicating which image diffs to generate
+    """
+    logging.debug('do_GET_prefetch_results: url_remainder="%s"' % url_remainder)
+    param_dict = urlparse.parse_qs(url_remainder)
+    download_all_images = (
+        param_dict.get(PREFETCH_PARAM__DOWNLOAD_ONLY_DIFFERING, [''])[0].lower()
+        not in ['1', 'true'])
+    compare_rendered_pictures.RenderedPicturesComparisons(
+        setA_dirs=param_dict[LIVE_PARAM__SET_A_DIR],
+        setB_dirs=param_dict[LIVE_PARAM__SET_B_DIR],
+        image_diff_db=_SERVER.image_diff_db,
+        diff_base_url='/static/generated-images',
+        gs=_SERVER.gs, truncate_results=_SERVER.truncate_results,
+        prefetch_only=True, download_all_images=download_all_images)
+    self.send_response(200)
 
   def do_GET_static(self, path):
     """ Handle a GET request for a file under STATIC_CONTENTS_SUBDIR .
@@ -629,6 +718,12 @@ def main():
                           'actual GM results. If this directory does not '
                           'exist, it will be created. Defaults to %(default)s'),
                     default=DEFAULT_ACTUALS_DIR)
+  parser.add_argument('--boto',
+                    help=('Path to .boto file giving us credentials to access '
+                          'Google Storage buckets. If not specified, we will '
+                          'only be able to access public GS buckets (and thus '
+                          'won\'t be able to download SKP images).'),
+                    default='')
   # TODO(epoger): Before https://codereview.chromium.org/310093003 ,
   # when this tool downloaded the JSON summaries from skia-autogen,
   # it had an --actuals-revision the caller could specify to download
@@ -674,6 +769,14 @@ def main():
                             'By default, we do not reload at all, and you '
                             'must restart the server to pick up new data.'),
                       default=0)
+  parser.add_argument('--threads', type=int,
+                      help=('How many parallel threads we use to download '
+                            'images and generate diffs; defaults to '
+                            '%(default)s'),
+                      default=imagediffdb.DEFAULT_NUM_WORKER_THREADS)
+  parser.add_argument('--truncate', action='store_true',
+                      help=('FOR TESTING ONLY: truncate the set of images we '
+                            'process, to speed up testing.'))
   args = parser.parse_args()
   if args.compare_configs:
     config_pairs = CONFIG_PAIRS_TO_COMPARE
@@ -686,7 +789,10 @@ def main():
                    gm_summaries_bucket=args.gm_summaries_bucket,
                    port=args.port, export=args.export, editable=args.editable,
                    reload_seconds=args.reload, config_pairs=config_pairs,
-                   builder_regex_list=args.builders)
+                   builder_regex_list=args.builders, boto_file_path=args.boto,
+                   imagediffdb_threads=args.threads)
+  if args.truncate:
+    _SERVER.truncate_results = True
   _SERVER.run()
 
 

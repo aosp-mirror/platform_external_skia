@@ -25,6 +25,11 @@ static inline int32_t sk_atomic_inc(int32_t* addr) {
     return _InterlockedIncrement(reinterpret_cast<long*>(addr)) - 1;
 }
 
+static inline int64_t sk_atomic_inc(int64_t* addr) {
+    // InterlockedIncrement returns the new value, we want to return the old.
+    return InterlockedIncrement64(addr) - 1;
+}
+
 static inline int32_t sk_atomic_add(int32_t* addr, int32_t inc) {
     return _InterlockedExchangeAdd(reinterpret_cast<long*>(addr), static_cast<long>(inc));
 }

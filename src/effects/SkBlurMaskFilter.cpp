@@ -22,6 +22,7 @@
 #include "GrTexture.h"
 #include "GrEffect.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "effects/GrSimpleTextureEffect.h"
 #include "GrTBackendEffectFactory.h"
 #include "SkGrPixelRef.h"
@@ -555,8 +556,7 @@ public:
     /**
      * Create a simple filter effect with custom bicubic coefficients.
      */
-    static GrEffectRef* Create(GrContext *context, const SkRect& rect,
-                               float sigma) {
+    static GrEffect* Create(GrContext *context, const SkRect& rect, float sigma) {
         GrTexture *blurProfileTexture = NULL;
         int doubleProfileSize = SkScalarCeilToInt(12*sigma);
 
@@ -572,8 +572,7 @@ public:
         if (!createdBlurProfileTexture) {
            return NULL;
         }
-        AutoEffectUnref effect(SkNEW_ARGS(GrRectBlurEffect, (rect, sigma, blurProfileTexture)));
-        return CreateEffectRef(effect);
+        return SkNEW_ARGS(GrRectBlurEffect, (rect, sigma, blurProfileTexture));
     }
 
     const SkRect& getRect() const { return fRect; }
@@ -601,16 +600,16 @@ public:
                       const GrDrawEffect&);
     virtual void emitCode(GrGLShaderBuilder*,
                           const GrDrawEffect&,
-                          EffectKey,
+                          const GrEffectKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
 
 private:
-    typedef GrGLUniformManager::UniformHandle        UniformHandle;
+    typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
     UniformHandle       fProxyRectUniform;
     UniformHandle       fProfileSizeUniform;
@@ -642,7 +641,7 @@ void OutputRectBlurProfileLookup(GrGLShaderBuilder* builder,
 
 void GrGLRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
                                  const GrDrawEffect&,
-                                 EffectKey key,
+                                 const GrEffectKey& key,
                                  const char* outputColor,
                                  const char* inputColor,
                                  const TransformedCoordsArray& coords,
@@ -683,13 +682,13 @@ void GrGLRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
     builder->fsCodeAppendf("\t%s = src * vec4(final);\n", outputColor );
 }
 
-void GrGLRectBlurEffect::setData(const GrGLUniformManager& uman,
+void GrGLRectBlurEffect::setData(const GrGLProgramDataManager& pdman,
                                  const GrDrawEffect& drawEffect) {
     const GrRectBlurEffect& rbe = drawEffect.castEffect<GrRectBlurEffect>();
     SkRect rect = rbe.getRect();
 
-    uman.set4f(fProxyRectUniform, rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);
-    uman.set1f(fProfileSizeUniform, SkScalarCeilToScalar(6*rbe.getSigma()));
+    pdman.set4f(fProxyRectUniform, rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);
+    pdman.set1f(fProfileSizeUniform, SkScalarCeilToScalar(6*rbe.getSigma()));
 }
 
 bool GrRectBlurEffect::CreateBlurProfileTexture(GrContext *context, float sigma,
@@ -760,10 +759,10 @@ void GrRectBlurEffect::getConstantColorComponents(GrColor* color, uint32_t* vali
 
 GR_DEFINE_EFFECT_TEST(GrRectBlurEffect);
 
-GrEffectRef* GrRectBlurEffect::TestCreate(SkRandom* random,
-                                         GrContext* context,
-                                         const GrDrawTargetCaps&,
-                                         GrTexture**) {
+GrEffect* GrRectBlurEffect::TestCreate(SkRandom* random,
+                                       GrContext* context,
+                                       const GrDrawTargetCaps&,
+                                       GrTexture**) {
     float sigma = random->nextRangeF(3,8);
     float width = random->nextRangeF(200,300);
     float height = random->nextRangeF(200,300);
@@ -794,8 +793,7 @@ bool SkBlurMaskFilterImpl::directFilterMaskGPU(GrContext* context,
     int pad=SkScalarCeilToInt(6*xformedSigma)/2;
     rect.outset(SkIntToScalar(pad), SkIntToScalar(pad));
 
-    SkAutoTUnref<GrEffectRef> effect(GrRectBlurEffect::Create(
-            context, rect, xformedSigma));
+    SkAutoTUnref<GrEffect> effect(GrRectBlurEffect::Create(context, rect, xformedSigma));
     if (!effect) {
         return false;
     }
@@ -816,7 +814,7 @@ class GrGLRRectBlurEffect;
 class GrRRectBlurEffect : public GrEffect {
 public:
 
-    static GrEffectRef* Create(GrContext* context, float sigma, const SkRRect&);
+    static GrEffect* Create(GrContext* context, float sigma, const SkRRect&);
 
     virtual ~GrRRectBlurEffect() {};
     static const char* Name() { return "GrRRectBlur"; }
@@ -845,7 +843,7 @@ private:
 };
 
 
-GrEffectRef* GrRRectBlurEffect::Create(GrContext* context, float sigma, const SkRRect& rrect) {
+GrEffect* GrRRectBlurEffect::Create(GrContext* context, float sigma, const SkRRect& rrect) {
     if (!rrect.isSimpleCircular()) {
         return NULL;
     }
@@ -914,8 +912,7 @@ GrEffectRef* GrRRectBlurEffect::Create(GrContext* context, float sigma, const Sk
         return NULL;
     }
 
-    return CreateEffectRef(AutoEffectUnref(SkNEW_ARGS(GrRRectBlurEffect,
-                                                      (sigma, rrect, blurNinePatchTexture))));
+    return SkNEW_ARGS(GrRRectBlurEffect, (sigma, rrect, blurNinePatchTexture));
 }
 
 void GrRRectBlurEffect::getConstantColorComponents(GrColor* color, uint32_t* validFlags) const {
@@ -943,10 +940,10 @@ bool GrRRectBlurEffect::onIsEqual(const GrEffect& other) const {
 
 GR_DEFINE_EFFECT_TEST(GrRRectBlurEffect);
 
-GrEffectRef* GrRRectBlurEffect::TestCreate(SkRandom* random,
-                                     GrContext* context,
-                                     const GrDrawTargetCaps& caps,
-                                     GrTexture*[]) {
+GrEffect* GrRRectBlurEffect::TestCreate(SkRandom* random,
+                                        GrContext* context,
+                                        const GrDrawTargetCaps& caps,
+                                        GrTexture*[]) {
     SkScalar w = random->nextRangeScalar(100.f, 1000.f);
     SkScalar h = random->nextRangeScalar(100.f, 1000.f);
     SkScalar r = random->nextRangeF(1.f, 9.f);
@@ -964,18 +961,18 @@ public:
 
     virtual void emitCode(GrGLShaderBuilder* builder,
                           const GrDrawEffect& drawEffect,
-                          EffectKey key,
+                          const GrEffectKey& key,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
 
 private:
-    GrGLUniformManager::UniformHandle   fProxyRectUniform;
-    GrGLUniformManager::UniformHandle   fCornerRadiusUniform;
-    GrGLUniformManager::UniformHandle   fBlurRadiusUniform;
+    GrGLProgramDataManager::UniformHandle fProxyRectUniform;
+    GrGLProgramDataManager::UniformHandle fCornerRadiusUniform;
+    GrGLProgramDataManager::UniformHandle fBlurRadiusUniform;
     typedef GrGLEffect INHERITED;
 };
 
@@ -986,7 +983,7 @@ GrGLRRectBlurEffect::GrGLRRectBlurEffect(const GrBackendEffectFactory& factory,
 
 void GrGLRRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
                              const GrDrawEffect& drawEffect,
-                             EffectKey key,
+                             const GrEffectKey& key,
                              const char* outputColor,
                              const char* inputColor,
                              const TransformedCoordsArray&,
@@ -1015,7 +1012,7 @@ void GrGLRRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
     // warp the fragment position to the appropriate part of the 9patch blur texture
 
     builder->fsCodeAppendf("\t\tvec2 rectCenter = (%s.xy + %s.zw)/2.0;\n", rectName, rectName);
-    builder->fsCodeAppendf("\t\tvec2 translatedFragPos = %s - %s.xy;\n", fragmentPos, rectName);
+    builder->fsCodeAppendf("\t\tvec2 translatedFragPos = %s.xy - %s.xy;\n", fragmentPos, rectName);
     builder->fsCodeAppendf("\t\tfloat threshold = %s + 2.0*%s;\n", cornerRadiusName, blurRadiusName );
     builder->fsCodeAppendf("\t\tvec2 middle = %s.zw - %s.xy - 2.0*threshold;\n", rectName, rectName );
 
@@ -1039,22 +1036,22 @@ void GrGLRRectBlurEffect::emitCode(GrGLShaderBuilder* builder,
     builder->fsCodeAppend(";\n");
 }
 
-void GrGLRRectBlurEffect::setData(const GrGLUniformManager& uman,
+void GrGLRRectBlurEffect::setData(const GrGLProgramDataManager& pdman,
                                     const GrDrawEffect& drawEffect) {
     const GrRRectBlurEffect& brre = drawEffect.castEffect<GrRRectBlurEffect>();
     SkRRect rrect = brre.getRRect();
 
     float blurRadius = 3.f*SkScalarCeilToScalar(brre.getSigma()-1/6.0f);
-    uman.set1f(fBlurRadiusUniform, blurRadius);
+    pdman.set1f(fBlurRadiusUniform, blurRadius);
 
     SkRect rect = rrect.getBounds();
     rect.outset(blurRadius, blurRadius);
-    uman.set4f(fProxyRectUniform, rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);
+    pdman.set4f(fProxyRectUniform, rect.fLeft, rect.fTop, rect.fRight, rect.fBottom);
 
     SkScalar radius = 0;
     SkASSERT(rrect.isSimpleCircular() || rrect.isRect());
     radius = rrect.getSimpleRadii().fX;
-    uman.set1f(fCornerRadiusUniform, radius);
+    pdman.set1f(fCornerRadiusUniform, radius);
 }
 
 
@@ -1076,7 +1073,7 @@ bool SkBlurMaskFilterImpl::directFilterRRectMaskGPU(GrContext* context,
     float extra=3.f*SkScalarCeilToScalar(xformedSigma-1/6.0f);
     proxy_rect.outset(extra, extra);
 
-    SkAutoTUnref<GrEffectRef> effect(GrRRectBlurEffect::Create(
+    SkAutoTUnref<GrEffect> effect(GrRRectBlurEffect::Create(
             context, xformedSigma, rrect));
     if (!effect) {
         return false;

@@ -491,7 +491,7 @@ bool GrDefaultPathRenderer::internalDrawPath(const SkPath& path,
                 bounds = path.getBounds();
             }
             GrDrawTarget::AutoGeometryAndStatePush agasp(target, GrDrawTarget::kPreserve_ASRInit);
-            target->drawSimpleRect(bounds, NULL);
+            target->drawSimpleRect(bounds);
         } else {
             if (passCount > 1) {
                 drawState->enableState(GrDrawState::kNoColorWrites_StateBit);
@@ -513,7 +513,7 @@ bool GrDefaultPathRenderer::canDrawPath(const SkPath& path,
                                         bool antiAlias) const {
     // this class can draw any path with any fill but doesn't do any anti-aliasing.
 
-    return !antiAlias &&
+    return !antiAlias && !(SkPath::kConic_SegmentMask & path.getSegmentMasks()) &&
         (stroke.isFillStyle() ||
          IsStrokeHairlineOrEquivalent(stroke, target->getDrawState().getViewMatrix(), NULL));
 }

@@ -10,23 +10,28 @@ Test compare_rendered_pictures.py
 
 TODO(epoger): Create a command to update the expected results (in
 self._output_dir_expected) when appropriate.  For now, you should:
-1. examine the results in self._output_dir_actual and make sure they are ok
+1. examine the results in self.output_dir_actual and make sure they are ok
 2. rm -rf self._output_dir_expected
-3. mv self._output_dir_actual self._output_dir_expected
+3. mv self.output_dir_actual self._output_dir_expected
 Although, if you're using an SVN checkout, this will blow away .svn directories
 within self._output_dir_expected, which wouldn't be good...
 
 """
 
+# System-level imports
 import os
 import subprocess
-import sys
+
+# Must fix up PYTHONPATH before importing from within Skia
+import fix_pythonpath  # pylint: disable=W0611
 
 # Imports from within Skia
 import base_unittest
 import compare_rendered_pictures
+import find_run_binary
+import gm_json
+import imagediffdb
 import results
-import gm_json  # must import results first, so that gm_json will be in sys.path
 
 
 class CompareRenderedPicturesTest(base_unittest.TestCase):
@@ -34,39 +39,61 @@ class CompareRenderedPicturesTest(base_unittest.TestCase):
   def test_endToEnd(self):
     """Generate two sets of SKPs, run render_pictures over both, and compare
     the results."""
+    setA_label = 'before_patch'
+    setB_label = 'after_patch'
     self._generate_skps_and_run_render_pictures(
-        subdir='before_patch', skpdict={
+        subdir=setA_label, skpdict={
             'changed.skp': 200,
             'unchanged.skp': 100,
             'only-in-before.skp': 128,
         })
     self._generate_skps_and_run_render_pictures(
-        subdir='after_patch', skpdict={
+        subdir=setB_label, skpdict={
             'changed.skp': 201,
             'unchanged.skp': 100,
             'only-in-after.skp': 128,
         })
 
     results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
-        actuals_root=self._temp_dir,
-        subdirs=('before_patch', 'after_patch'),
-        generated_images_root=self._temp_dir,
-        diff_base_url='/static/generated-images')
+        setA_dirs=[os.path.join(self.temp_dir, setA_label)],
+        setB_dirs=[os.path.join(self.temp_dir, setB_label)],
+        image_diff_db=imagediffdb.ImageDiffDB(self.temp_dir),
+        image_base_gs_url='gs://fakebucket/fake/path',
+        diff_base_url='/static/generated-images',
+        setA_label=setA_label, setB_label=setB_label)
     results_obj.get_timestamp = mock_get_timestamp
 
     gm_json.WriteToFile(
         results_obj.get_packaged_results_of_type(
             results.KEY__HEADER__RESULTS_ALL),
-        os.path.join(self._output_dir_actual, 'compare_rendered_pictures.json'))
+        os.path.join(self.output_dir_actual, 'compare_rendered_pictures.json'))
+
+  def test_repo_url(self):
+    """Use repo: URL to specify summary files."""
+    results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
+        setA_dirs=[
+            'repo:gm/rebaseline_server/testdata/inputs/skp-actuals/setA'],
+        setB_dirs=[
+            'repo:gm/rebaseline_server/testdata/inputs/skp-actuals/setB'],
+        image_diff_db=imagediffdb.ImageDiffDB(self.temp_dir),
+        image_base_gs_url='gs://fakebucket/fake/path',
+        diff_base_url='/static/generated-images',
+        setA_label='setA', setB_label='setB')
+    results_obj.get_timestamp = mock_get_timestamp
+
+    gm_json.WriteToFile(
+        results_obj.get_packaged_results_of_type(
+            results.KEY__HEADER__RESULTS_ALL),
+        os.path.join(self.output_dir_actual, 'compare_rendered_pictures.json'))
 
   def _generate_skps_and_run_render_pictures(self, subdir, skpdict):
     """Generate SKPs and run render_pictures on them.
 
     Args:
-      subdir: subdirectory (within self._temp_dir) to write all files into
+      subdir: subdirectory (within self.temp_dir) to write all files into
       skpdict: {skpname: redvalue} dictionary describing the SKP files to render
     """
-    out_path = os.path.join(self._temp_dir, subdir)
+    out_path = os.path.join(self.temp_dir, subdir)
     os.makedirs(out_path)
     for skpname, redvalue in skpdict.iteritems():
       self._run_skpmaker(
@@ -75,10 +102,9 @@ class CompareRenderedPicturesTest(base_unittest.TestCase):
     # TODO(epoger): Add --mode tile 256 256 --writeWholeImage to the unittest,
     # and fix its result!  (imageURLs within whole-image entries are wrong when
     # I tried adding that)
-    binary = self.find_path_to_program('render_pictures')
+    binary = find_run_binary.find_path_to_program('render_pictures')
     return subprocess.check_output([
         binary,
-        '--clone', '1',
         '--config', '8888',
         '-r', out_path,
         '--writeChecksumBasedFilenames',
@@ -97,7 +123,7 @@ class CompareRenderedPicturesTest(base_unittest.TestCase):
       width: Width of canvas to create.
       height: Height of canvas to create.
     """
-    binary = self.find_path_to_program('skpmaker')
+    binary = find_run_binary.find_path_to_program('skpmaker')
     return subprocess.check_output([
         binary,
         '--red', str(red),

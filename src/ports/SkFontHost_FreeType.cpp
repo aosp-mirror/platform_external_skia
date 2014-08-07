@@ -200,8 +200,7 @@ protected:
     virtual void generateMetrics(SkGlyph* glyph) SK_OVERRIDE;
     virtual void generateImage(const SkGlyph& glyph) SK_OVERRIDE;
     virtual void generatePath(const SkGlyph& glyph, SkPath* path) SK_OVERRIDE;
-    virtual void generateFontMetrics(SkPaint::FontMetrics* mx,
-                                     SkPaint::FontMetrics* my) SK_OVERRIDE;
+    virtual void generateFontMetrics(SkPaint::FontMetrics*) SK_OVERRIDE;
     virtual SkUnichar generateGlyphToChar(uint16_t glyph) SK_OVERRIDE;
 
 private:
@@ -1116,7 +1115,7 @@ void SkScalerContext_FreeType::generateAdvance(SkGlyph* glyph) {
         FT_Error    error;
         FT_Fixed    advance;
 
-        error = FT_Get_Advance( fFace, glyph->getGlyphID(fBaseGlyphCount),
+        error = FT_Get_Advance( fFace, glyph->getGlyphID(),
                                 fLoadGlyphFlags | FT_ADVANCE_FLAG_FAST_ONLY,
                                 &advance );
         if (0 == error) {
@@ -1218,11 +1217,11 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
         goto ERROR;
     }
 
-    err = FT_Load_Glyph( fFace, glyph->getGlyphID(fBaseGlyphCount), fLoadGlyphFlags );
+    err = FT_Load_Glyph( fFace, glyph->getGlyphID(), fLoadGlyphFlags );
     if (err != 0) {
 #if 0
         SkDEBUGF(("SkScalerContext_FreeType::generateMetrics(%x): FT_Load_Glyph(glyph:%d flags:%x) returned 0x%x\n",
-                    fFaceRec->fFontID, glyph->getGlyphID(fBaseGlyphCount), fLoadGlyphFlags, err));
+                    fFaceRec->fFontID, glyph->getGlyphID(), fLoadGlyphFlags, err));
 #endif
     ERROR:
         glyph->zeroMetrics();
@@ -1306,7 +1305,7 @@ void SkScalerContext_FreeType::generateMetrics(SkGlyph* glyph) {
 
 #ifdef ENABLE_GLYPH_SPEW
     SkDEBUGF(("FT_Set_Char_Size(this:%p sx:%x sy:%x ", this, fScaleX, fScaleY));
-    SkDEBUGF(("Metrics(glyph:%d flags:0x%x) w:%d\n", glyph->getGlyphID(fBaseGlyphCount), fLoadGlyphFlags, glyph->fWidth));
+    SkDEBUGF(("Metrics(glyph:%d flags:0x%x) w:%d\n", glyph->getGlyphID(), fLoadGlyphFlags, glyph->fWidth));
 #endif
 }
 
@@ -1320,10 +1319,10 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph) {
         goto ERROR;
     }
 
-    err = FT_Load_Glyph( fFace, glyph.getGlyphID(fBaseGlyphCount), fLoadGlyphFlags);
+    err = FT_Load_Glyph( fFace, glyph.getGlyphID(), fLoadGlyphFlags);
     if (err != 0) {
         SkDEBUGF(("SkScalerContext_FreeType::generateImage: FT_Load_Glyph(glyph:%d width:%d height:%d rb:%d flags:%d) returned 0x%x\n",
-                    glyph.getGlyphID(fBaseGlyphCount), glyph.fWidth, glyph.fHeight, glyph.rowBytes(), fLoadGlyphFlags, err));
+                    glyph.getGlyphID(), glyph.fWidth, glyph.fHeight, glyph.rowBytes(), fLoadGlyphFlags, err));
     ERROR:
         memset(glyph.fImage, 0, glyph.rowBytes() * glyph.fHeight);
         return;
@@ -1349,11 +1348,11 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
     flags |= FT_LOAD_NO_BITMAP; // ignore embedded bitmaps so we're sure to get the outline
     flags &= ~FT_LOAD_RENDER;   // don't scan convert (we just want the outline)
 
-    FT_Error err = FT_Load_Glyph( fFace, glyph.getGlyphID(fBaseGlyphCount), flags);
+    FT_Error err = FT_Load_Glyph( fFace, glyph.getGlyphID(), flags);
 
     if (err != 0) {
         SkDEBUGF(("SkScalerContext_FreeType::generatePath: FT_Load_Glyph(glyph:%d flags:%d) returned 0x%x\n",
-                    glyph.getGlyphID(fBaseGlyphCount), flags, err));
+                    glyph.getGlyphID(), flags, err));
         path->reset();
         return;
     }
@@ -1372,22 +1371,16 @@ void SkScalerContext_FreeType::generatePath(const SkGlyph& glyph,
     }
 }
 
-void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
-                                                   SkPaint::FontMetrics* my) {
-    if (NULL == mx && NULL == my) {
+void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics) {
+    if (NULL == metrics) {
         return;
     }
 
-    SkAutoMutexAcquire  ac(gFTMutex);
+    SkAutoMutexAcquire ac(gFTMutex);
 
     if (this->setupSize()) {
         ERROR:
-        if (mx) {
-            sk_bzero(mx, sizeof(SkPaint::FontMetrics));
-        }
-        if (my) {
-            sk_bzero(my, sizeof(SkPaint::FontMetrics));
-        }
+        sk_bzero(metrics, sizeof(*metrics));
         return;
     }
 
@@ -1434,14 +1427,9 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         underlinePosition = -SkIntToScalar(face->underline_position +
                                            face->underline_thickness / 2) / upem;
 
-        if(mx) {
-            mx->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-            mx->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
-        }
-        if(my){
-            my->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-            my->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
-        }
+        metrics->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
+        metrics->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
+
         // we may be able to synthesize x_height and cap_height from outline
         if (!x_height) {
             FT_BBox bbox;
@@ -1469,14 +1457,8 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         underlineThickness = 0;
         underlinePosition = 0;
 
-        if(mx) {
-            mx->fFlags &= ~SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-            mx->fFlags &= ~SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
-        }
-        if(my){
-            my->fFlags &= ~SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-            my->fFlags &= ~SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
-        }
+        metrics->fFlags &= ~SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
+        metrics->fFlags &= ~SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
     } else {
         goto ERROR;
     }
@@ -1497,34 +1479,22 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* mx,
         leading = 0.0f;
     }
 
-    if (mx) {
-        mx->fTop = ymax * mxy;
-        mx->fAscent = ascent * mxy;
-        mx->fDescent = descent * mxy;
-        mx->fBottom = ymin * mxy;
-        mx->fLeading = leading * mxy;
-        mx->fAvgCharWidth = avgCharWidth * mxy;
-        mx->fXMin = xmin;
-        mx->fXMax = xmax;
-        mx->fXHeight = x_height;
-        mx->fCapHeight = cap_height;
-        mx->fUnderlineThickness = underlineThickness * mxy;
-        mx->fUnderlinePosition = underlinePosition * mxy;
+    SkScalar scale = myy;
+    if (this->isVertical()) {
+        scale = mxy;
     }
-    if (my) {
-        my->fTop = ymax * myy;
-        my->fAscent = ascent * myy;
-        my->fDescent = descent * myy;
-        my->fBottom = ymin * myy;
-        my->fLeading = leading * myy;
-        my->fAvgCharWidth = avgCharWidth * myy;
-        my->fXMin = xmin;
-        my->fXMax = xmax;
-        my->fXHeight = x_height;
-        my->fCapHeight = cap_height;
-        my->fUnderlineThickness = underlineThickness * myy;
-        my->fUnderlinePosition = underlinePosition * myy;
-    }
+    metrics->fTop = ymax * scale;
+    metrics->fAscent = ascent * scale;
+    metrics->fDescent = descent * scale;
+    metrics->fBottom = ymin * scale;
+    metrics->fLeading = leading * scale;
+    metrics->fAvgCharWidth = avgCharWidth * scale;
+    metrics->fXMin = xmin;
+    metrics->fXMax = xmax;
+    metrics->fXHeight = x_height;
+    metrics->fCapHeight = cap_height;
+    metrics->fUnderlineThickness = underlineThickness * scale;
+    metrics->fUnderlinePosition = underlinePosition * scale;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1714,11 +1684,9 @@ size_t SkTypeface_FreeType::onGetTableData(SkFontTableTag tag, size_t offset,
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-/*  Export this so that other parts of our FonttHost port can make use of our
-    ability to extract the name+style from a stream, using FreeType's api.
-*/
-bool find_name_and_attributes(SkStream* stream, SkString* name,
-                              SkTypeface::Style* style, bool* isFixedPitch) {
+/*static*/ bool SkTypeface_FreeType::ScanFont(
+    SkStream* stream, int ttcIndex, SkString* name, SkTypeface::Style* style, bool* isFixedPitch)
+{
     FT_Library  library;
     if (FT_Init_FreeType(&library)) {
         return false;
@@ -1746,7 +1714,7 @@ bool find_name_and_attributes(SkStream* stream, SkString* name,
     }
 
     FT_Face face;
-    if (FT_Open_Face(library, &args, 0, &face)) {
+    if (FT_Open_Face(library, &args, ttcIndex, &face)) {
         FT_Done_FreeType(library);
         return false;
     }

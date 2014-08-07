@@ -85,13 +85,5 @@ bool NeedsDeepCopy(const SkPaint& paint) {
      *  Eventually we hope this list will be empty, and we can always return
      *  false.
      */
-    return false
-#ifdef SK_SUPPORT_LEGACY_SHADER_LOCALMATRIX
-           || paint.getShader()
-#endif
-#ifdef SK_SUPPORT_LEGACY_LAYERRASTERIZER_API
-           || paint.getRasterizer()
-#endif
-           || paint.getImageFilter()
-           ;
+    return paint.getImageFilter();
 }

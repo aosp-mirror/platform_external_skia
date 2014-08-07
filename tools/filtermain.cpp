@@ -13,7 +13,6 @@
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
 #include "SkPicture.h"
-#include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
 #include "SkPictureRecorder.h"
 #include "SkStream.h"
@@ -817,9 +816,9 @@ int tool_main(int argc, char** argv) {
     if (iter.next(&inputFilename)) {
 
         do {
-            inFile = SkOSPath::SkPathJoin(inDir.c_str(), inputFilename.c_str());
+            inFile = SkOSPath::Join(inDir.c_str(), inputFilename.c_str());
             if (!outDir.isEmpty()) {
-                outFile = SkOSPath::SkPathJoin(outDir.c_str(), inputFilename.c_str());
+                outFile = SkOSPath::Join(outDir.c_str(), inputFilename.c_str());
             }
             SkDebugf("Executing %s\n", inputFilename.c_str());
             filter_picture(inFile, outFile);

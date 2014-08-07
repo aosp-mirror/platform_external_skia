@@ -15,13 +15,7 @@ bool GrSoftwarePathRenderer::canDrawPath(const SkPath&,
                                          const SkStrokeRec&,
                                          const GrDrawTarget*,
                                          bool antiAlias) const {
-    if (!antiAlias || NULL == fContext) {
-        // TODO: We could allow the SW path to also handle non-AA paths but
-        // this would mean that GrDefaultPathRenderer would never be called
-        // (since it appears after the SW renderer in the path renderer
-        // chain). Some testing would need to be done r.e. performance
-        // and consistency of the resulting images before removing
-        // the "!antiAlias" clause from the above test
+    if (NULL == fContext) {
         return false;
     }
 
@@ -90,22 +84,22 @@ void draw_around_inv_path(GrDrawTarget* target,
     if (devClipBounds.fTop < devPathBounds.fTop) {
         rect.iset(devClipBounds.fLeft, devClipBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fTop);
-        target->drawSimpleRect(rect, NULL);
+        target->drawSimpleRect(rect);
     }
     if (devClipBounds.fLeft < devPathBounds.fLeft) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fTop,
                   devPathBounds.fLeft, devPathBounds.fBottom);
-        target->drawSimpleRect(rect, NULL);
+        target->drawSimpleRect(rect);
     }
     if (devClipBounds.fRight > devPathBounds.fRight) {
         rect.iset(devPathBounds.fRight, devPathBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fBottom);
-        target->drawSimpleRect(rect, NULL);
+        target->drawSimpleRect(rect);
     }
     if (devClipBounds.fBottom > devPathBounds.fBottom) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fBottom,
                   devClipBounds.fRight, devClipBounds.fBottom);
-        target->drawSimpleRect(rect, NULL);
+        target->drawSimpleRect(rect);
     }
 }
 

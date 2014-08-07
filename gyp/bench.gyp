@@ -6,48 +6,25 @@
   ],
   'targets': [
     {
-      'target_name': 'bench',
+      'target_name': 'nanobench',
       'type': 'executable',
-      'dependencies': [
-        'etc1.gyp:libetc1',
-        'flags.gyp:flags',
-        'jsoncpp.gyp:jsoncpp',
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:crash_handler',
-        'tools.gyp:resources',
-        'tools.gyp:timer',
-      ],
       'sources': [
-        '../bench/BenchLogger.cpp',
-        '../bench/BenchLogger.h',
+        '../gm/gm.cpp',
         '../bench/GMBench.cpp',
-        '../bench/GMBench.h',
+        '../bench/SKPBench.cpp',
         '../bench/ResultsWriter.cpp',
-        '../bench/benchmain.cpp',
-        '../tools/sk_tool_utils.cpp',
-      ],
-      'conditions': [
-        ['skia_gpu == 1',
-          {
-            'include_dirs' : [
-              '../src/gpu',
-            ],
-            'dependencies': [
-              'gputest.gyp:skgputest',
-            ],
-          },
-        ],
-        ['skia_android_framework == 1',
-          {
-            'libraries': [
-              '-lskia',
-            ],
-          },
-        ],
+        '../bench/nanobench.cpp',
       ],
       'includes': [
         'bench.gypi',
         'gmslides.gypi',
+      ],
+      'dependencies': [
+        'flags.gyp:flags_common',
+        'jsoncpp.gyp:jsoncpp',
+        'skia_lib.gyp:skia_lib',
+        'tools.gyp:crash_handler',
+        'tools.gyp:timer',
       ],
     },
   ],

@@ -18,7 +18,7 @@ SK_CONF_DECLARE(bool, c_DisplayCache, "gpu.displayCache", false,
                 "Display program cache usage.");
 #endif
 
-typedef GrGLUniformManager::UniformHandle UniformHandle;
+typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
 struct GrGpuGL::ProgramCache::Entry {
     SK_DECLARE_INST_COUNT_ROOT(Entry);
@@ -79,7 +79,7 @@ void GrGpuGL::ProgramCache::abandon() {
     for (int i = 0; i < fCount; ++i) {
         SkASSERT(NULL != fEntries[i]->fProgram.get());
         fEntries[i]->fProgram->abandon();
-        fEntries[i]->fProgram.reset(NULL);
+        SkDELETE(fEntries[i]);
     }
     fCount = 0;
 }
@@ -234,7 +234,7 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
         SkSTArray<8, const GrEffectStage*, true> colorStages;
         SkSTArray<8, const GrEffectStage*, true> coverageStages;
         GrGLProgramDesc desc;
-        GrGLProgramDesc::Build(this->getDrawState(),
+        if (!GrGLProgramDesc::Build(this->getDrawState(),
                                type,
                                blendOpts,
                                srcCoeff,
@@ -243,7 +243,10 @@ bool GrGpuGL::flushGraphicsState(DrawType type, const GrDeviceCoordTexture* dstC
                                dstCopy,
                                &colorStages,
                                &coverageStages,
-                               &desc);
+                               &desc)) {
+            SkDEBUGFAIL("Failed to generate GL program descriptor");
+            return false;
+        }
 
         fCurrentProgram.reset(fProgramCache->getProgram(desc,
                                                         colorStages.begin(),
@@ -350,9 +353,12 @@ void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
         uint32_t usedAttribArraysMask = 0;
         const GrVertexAttrib* vertexAttrib = this->getDrawState().getVertexAttribs();
 
+        bool canIgnoreColorAttrib = this->getDrawState().canIgnoreColorAttribute();
+
         for (int vertexAttribIndex = 0; vertexAttribIndex < vertexAttribCount;
              ++vertexAttribIndex, ++vertexAttrib) {
 
+            if (kColor_GrVertexAttribBinding != vertexAttrib->fBinding || !canIgnoreColorAttrib) {
             usedAttribArraysMask |= (1 << vertexAttribIndex);
             GrVertexAttribType attribType = vertexAttrib->fType;
             attribState->set(this,
@@ -364,6 +370,7 @@ void GrGpuGL::setupGeometry(const DrawInfo& info, size_t* indexOffsetInBytes) {
                              stride,
                              reinterpret_cast<GrGLvoid*>(
                                  vertexOffsetInBytes + vertexAttrib->fOffset));
+            }
         }
         attribState->disableUnusedArrays(this, usedAttribArraysMask);
     }

@@ -6,7 +6,9 @@
  */
 
 #include "SkDevice.h"
+#include "SkDraw.h"
 #include "SkMetaData.h"
+#include "SkPatchUtils.h"
 
 SkBaseDevice::SkBaseDevice()
     : fLeakyProperties(SkDeviceProperties::MakeDefault())
@@ -77,6 +79,17 @@ void SkBaseDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
     this->drawPath(draw, path, paint, preMatrix, pathIsMutable);
 }
 
+void SkBaseDevice::drawPatch(const SkDraw& draw, const SkPatch& patch, const SkPaint& paint) {
+    SkPatch::VertexData data;
+    
+    SkISize lod = SkPatchUtils::GetLevelOfDetail(patch, draw.fMatrix);
+
+    // It automatically adjusts lodX and lodY in case it exceeds the number of indices.
+    patch.getVertexData(&data, lod.width(), lod.height());
+    this->drawVertices(draw, SkCanvas::kTriangles_VertexMode, data.fVertexCount, data.fPoints,
+                       data.fTexCoords, data.fColors, NULL, data.fIndices, data.fIndexCount, paint);
+}
+
 bool SkBaseDevice::readPixels(const SkImageInfo& info, void* dstP, size_t rowBytes, int x, int y) {
 #ifdef SK_DEBUG
     SkASSERT(info.width() > 0 && info.height() > 0);
@@ -132,10 +145,6 @@ void* SkBaseDevice::onAccessPixels(SkImageInfo* info, size_t* rowBytes) {
 
 void SkBaseDevice::EXPERIMENTAL_optimize(const SkPicture* picture) {
     // The base class doesn't perform any analysis but derived classes may
-}
-
-void SkBaseDevice::EXPERIMENTAL_purge(const SkPicture* picture) {
-    // Derived-classes may have data to purge but not the base class
 }
 
 bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture) {

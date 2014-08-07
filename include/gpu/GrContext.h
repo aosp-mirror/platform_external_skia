@@ -20,7 +20,6 @@
 
 class GrAARectRenderer;
 class GrAutoScratchTexture;
-class GrCacheable;
 class GrDrawState;
 class GrDrawTarget;
 class GrEffect;
@@ -38,6 +37,7 @@ class GrResourceEntry;
 class GrResourceCache;
 class GrStencilBuffer;
 class GrTestTarget;
+class GrTextContext;
 class GrTextureParams;
 class GrVertexBuffer;
 class GrVertexBufferAllocPool;
@@ -85,24 +85,21 @@ public:
     }
 
     /**
-     * Abandons all GPU resources, assumes 3D API state is unknown. Call this
-     * if you have lost the associated GPU context, and thus internal texture,
-     * buffer, etc. references/IDs are now invalid. Should be called even when
-     * GrContext is no longer going to be used for two reasons:
+     * Abandons all GPU resources and assumes the underlying backend 3D API 
+     * context is not longer usable. Call this if you have lost the associated
+     * GPU context, and thus internal texture, buffer, etc. references/IDs are
+     * now invalid. Should be called even when GrContext is no longer going to
+     * be used for two reasons:
      *  1) ~GrContext will not try to free the objects in the 3D API.
-     *  2) If you've created GrGpuObjects that outlive the GrContext they will
-     *     be marked as invalid (GrGpuObjects::isValid()) and won't attempt to
-     *     free their underlying resource in the 3D API.
-     * Content drawn since the last GrContext::flush() may be lost.
+     *  2) Any GrGpuResources created by this GrContext that outlive
+     *     will be marked as invalid (GrGpuResource::wasDestroyed()) and
+     *     when they're destroyed no 3D API calls will be made.
+     * Content drawn since the last GrContext::flush() may be lost. After this
+     * function is called the only valid action on the GrContext or
+     * GrGpuResources it created is to destroy them.
      */
-    void contextLost();
-
-    /**
-     * Similar to contextLost, but makes no attempt to reset state.
-     * Use this method when GrContext destruction is pending, but
-     * the graphics context is destroyed first.
-     */
-    void contextDestroyed();
+    void abandonContext();
+    void contextDestroyed() { this->abandonContext(); }  //  legacy alias
 
     ///////////////////////////////////////////////////////////////////////////
     // Resource Cache
@@ -185,14 +182,24 @@ public:
     /**
      * Stores a custom resource in the cache, based on the specified key.
      */
-    void addResourceToCache(const GrResourceKey&, GrCacheable*);
+    void addResourceToCache(const GrResourceKey&, GrGpuResource*);
 
     /**
      * Finds a resource in the cache, based on the specified key. This is intended for use in
      * conjunction with addResourceToCache(). The return value will be NULL if not found. The
      * caller must balance with a call to unref().
      */
-    GrCacheable* findAndRefCachedResource(const GrResourceKey&);
+    GrGpuResource* findAndRefCachedResource(const GrResourceKey&);
+
+    /**
+     * Creates a new text rendering context that is optimal for the
+     * render target and the context. Caller assumes the ownership
+     * of the returned object. The returned object must be deleted
+     * before the context is destroyed.
+     */
+    GrTextContext* createTextContext(GrRenderTarget*,
+                                     const SkDeviceProperties&,
+                                     bool enableDistanceFieldFonts);
 
     ///////////////////////////////////////////////////////////////////////////
     // Textures
@@ -461,33 +468,26 @@ public:
      *                      Otherwise, if stroke width == 0, then the stroke
      *                      is always a single pixel thick, else the rect is
      *                      mitered/beveled stroked based on stroke width.
-     *                      If the stroke is dashed the rect is sent to drawPath.
-     *  @param matrix       Optional matrix applied to the rect. Applied before
-     *                      context's matrix or the paint's matrix.
      *  The rects coords are used to access the paint (through texture matrix)
      */
     void drawRect(const GrPaint& paint,
                   const SkRect&,
-                  const GrStrokeInfo* strokeInfo = NULL,
-                  const SkMatrix* matrix = NULL);
+                  const GrStrokeInfo* strokeInfo = NULL);
 
     /**
      * Maps a rect of local coordinates onto the a rect of destination
-     * coordinates. Each rect can optionally be transformed. The localRect
-     * is stretched over the dstRect. The dstRect is transformed by the
-     * context's matrix. Additional optional matrices for both rects can be
-     * provided by parameters.
+     * coordinates. The localRect is stretched over the dstRect. The dstRect is
+     * transformed by the context's matrix. An additional optional matrix can be
+     *  provided to transform the local rect.
      *
      * @param paint         describes how to color pixels.
      * @param dstRect       the destination rect to draw.
      * @param localRect     rect of local coordinates to be mapped onto dstRect
-     * @param dstMatrix     Optional matrix to transform dstRect. Applied before context's matrix.
      * @param localMatrix   Optional matrix to transform localRect.
      */
     void drawRectToRect(const GrPaint& paint,
                         const SkRect& dstRect,
                         const SkRect& localRect,
-                        const SkMatrix* dstMatrix = NULL,
                         const SkMatrix* localMatrix = NULL);
 
     /**
@@ -921,11 +921,6 @@ public:
     // Called by tests that draw directly to the context via GrDrawTarget
     void getTestTarget(GrTestTarget*);
 
-    // Functions for managing gpu trace markers
-    bool isGpuTracingEnabled() const { return fGpuTracingEnabled; }
-    void enableGpuTracing() { fGpuTracingEnabled = true; }
-    void disableGpuTracing() { fGpuTracingEnabled = false; }
-
     void addGpuTraceMarker(const GrGpuTraceMarker* marker);
     void removeGpuTraceMarker(const GrGpuTraceMarker* marker);
 
@@ -992,8 +987,6 @@ private:
 
     int                             fMaxTextureSizeOverride;
 
-    bool                            fGpuTracingEnabled;
-
     GrContext(); // init must be called after the constructor.
     bool init(GrBackend, GrBackendContext);
 
@@ -1018,6 +1011,7 @@ private:
     // addExistingTextureToCache
     friend class GrTexture;
     friend class GrStencilAndCoverPathRenderer;
+    friend class GrStencilAndCoverTextContext;
 
     // Add an existing texture to the texture cache. This is intended solely
     // for use with textures released from an GrAutoScratchTexture.
@@ -1028,12 +1022,12 @@ private:
      * of effects that make a readToUPM->writeToPM->readToUPM cycle invariant. Otherwise, they
      * return NULL.
      */
-    const GrEffectRef* createPMToUPMEffect(GrTexture* texture,
-                                           bool swapRAndB,
-                                           const SkMatrix& matrix);
-    const GrEffectRef* createUPMToPMEffect(GrTexture* texture,
-                                           bool swapRAndB,
-                                           const SkMatrix& matrix);
+    const GrEffect* createPMToUPMEffect(GrTexture* texture,
+                                        bool swapRAndB,
+                                        const SkMatrix& matrix);
+    const GrEffect* createUPMToPMEffect(GrTexture* texture,
+                                        bool swapRAndB,
+                                        const SkMatrix& matrix);
 
     /**
      *  This callback allows the resource cache to callback into the GrContext
@@ -1107,7 +1101,7 @@ public:
         // The cache also has a ref which we are lending to the caller of detach(). When the caller
         // lets go of the ref and the ref count goes to 0 internal_dispose will see this flag is
         // set and re-ref the texture, thereby restoring the cache's ref.
-        SkASSERT(texture->getRefCnt() > 1);
+        SkASSERT(!texture->unique());
         texture->impl()->setFlag((GrTextureFlags) GrTextureImpl::kReturnToCache_FlagBit);
         texture->unref();
         SkASSERT(NULL != texture->getCacheEntry());

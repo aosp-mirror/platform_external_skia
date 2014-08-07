@@ -1,11 +1,6 @@
 #include "DMTask.h"
 #include "DMTaskRunner.h"
-#include "SkCommandLineFlags.h"
-
-DEFINE_bool(cpu, true, "Master switch for running CPU-bound work.");
-DEFINE_bool(gpu, true, "Master switch for running GPU-bound work.");
-
-DECLARE_bool(dryRun);
+#include "SkCommonFlags.h"
 
 namespace DM {
 
@@ -73,6 +68,12 @@ void GpuTask::run(GrContextFactory& factory) {
         this->start();
         if (!FLAGS_dryRun) this->draw(&factory);
         this->finish();
+        if (FLAGS_abandonGpuContext) {
+            factory.abandonContexts();
+        }
+        if (FLAGS_resetGpuContext || FLAGS_abandonGpuContext) {
+            factory.destroyContexts();
+        }
     }
     SkDELETE(this);
 }

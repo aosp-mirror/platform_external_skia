@@ -49,18 +49,7 @@ public:
     /**
      * Copies another draw state with a preconcat to the view matrix.
      **/
-    GrDrawState(const GrDrawState& state, const SkMatrix& preConcatMatrix) {
-        SkDEBUGCODE(fBlockEffectRemovalCnt = 0;)
-        *this = state;
-        if (!preConcatMatrix.isIdentity()) {
-            for (int i = 0; i < fColorStages.count(); ++i) {
-                fColorStages[i].localCoordChange(preConcatMatrix);
-            }
-            for (int i = 0; i < fCoverageStages.count(); ++i) {
-                fCoverageStages[i].localCoordChange(preConcatMatrix);
-            }
-        }
-    }
+    GrDrawState(const GrDrawState& state, const SkMatrix& preConcatMatrix);
 
     virtual ~GrDrawState() { SkASSERT(0 == fBlockEffectRemovalCnt); }
 
@@ -103,8 +92,8 @@ public:
         this->setVertexAttribs(A, count);
     }
 
-    const GrVertexAttrib* getVertexAttribs() const { return fCommon.fVAPtr; }
-    int getVertexAttribCount() const { return fCommon.fVACount; }
+    const GrVertexAttrib* getVertexAttribs() const { return fVAPtr; }
+    int getVertexAttribCount() const { return fVACount; }
 
     size_t getVertexSize() const;
 
@@ -121,26 +110,26 @@ public:
      */
 
     int positionAttributeIndex() const {
-        return fCommon.fFixedFunctionVertexAttribIndices[kPosition_GrVertexAttribBinding];
+        return fFixedFunctionVertexAttribIndices[kPosition_GrVertexAttribBinding];
     }
     int localCoordAttributeIndex() const {
-        return fCommon.fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
+        return fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
     }
     int colorVertexAttributeIndex() const {
-        return fCommon.fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
+        return fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
     }
     int coverageVertexAttributeIndex() const {
-        return fCommon.fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
+        return fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
     }
 
     bool hasLocalCoordAttribute() const {
-        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
+        return -1 != fFixedFunctionVertexAttribIndices[kLocalCoord_GrVertexAttribBinding];
     }
     bool hasColorVertexAttribute() const {
-        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
+        return -1 != fFixedFunctionVertexAttribIndices[kColor_GrVertexAttribBinding];
     }
     bool hasCoverageVertexAttribute() const {
-        return -1 != fCommon.fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
+        return -1 != fFixedFunctionVertexAttribIndices[kCoverage_GrVertexAttribBinding];
     }
 
     bool validateVertexAttribs() const;
@@ -150,81 +139,15 @@ public:
      */
      class AutoVertexAttribRestore {
      public:
-         AutoVertexAttribRestore(GrDrawState* drawState) {
-             SkASSERT(NULL != drawState);
-             fDrawState = drawState;
-             fVAPtr = drawState->fCommon.fVAPtr;
-             fVACount = drawState->fCommon.fVACount;
-             fDrawState->setDefaultVertexAttribs();
-         }
+         AutoVertexAttribRestore(GrDrawState* drawState);
 
-         ~AutoVertexAttribRestore(){
-             fDrawState->setVertexAttribs(fVAPtr, fVACount);
-         }
+         ~AutoVertexAttribRestore() { fDrawState->setVertexAttribs(fVAPtr, fVACount); }
 
      private:
          GrDrawState*          fDrawState;
          const GrVertexAttrib* fVAPtr;
          int                   fVACount;
      };
-
-    /**
-     * Accessing positions, local coords, or colors, of a vertex within an array is a hassle
-     * involving casts and simple math. These helpers exist to keep GrDrawTarget clients' code a bit
-     * nicer looking.
-     */
-
-    /**
-     * Gets a pointer to a GrPoint of a vertex's position or texture
-     * coordinate.
-     * @param vertices      the vertex array
-     * @param vertexIndex   the index of the vertex in the array
-     * @param vertexSize    the size of each vertex in the array
-     * @param offset        the offset in bytes of the vertex component.
-     *                      Defaults to zero (corresponding to vertex position)
-     * @return pointer to the vertex component as a GrPoint
-     */
-    static SkPoint* GetVertexPoint(void* vertices,
-                                   int vertexIndex,
-                                   int vertexSize,
-                                   int offset = 0) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<SkPoint*>(start + offset +
-                                 vertexIndex * vertexSize);
-    }
-    static const SkPoint* GetVertexPoint(const void* vertices,
-                                         int vertexIndex,
-                                         int vertexSize,
-                                         int offset = 0) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<const SkPoint*>(start + offset +
-                                       vertexIndex * vertexSize);
-    }
-
-    /**
-     * Gets a pointer to a GrColor inside a vertex within a vertex array.
-     * @param vertices      the vetex array
-     * @param vertexIndex   the index of the vertex in the array
-     * @param vertexSize    the size of each vertex in the array
-     * @param offset        the offset in bytes of the vertex color
-     * @return pointer to the vertex component as a GrColor
-     */
-    static GrColor* GetVertexColor(void* vertices,
-                                   int vertexIndex,
-                                   int vertexSize,
-                                   int offset) {
-        intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<GrColor*>(start + offset +
-                                 vertexIndex * vertexSize);
-    }
-    static const GrColor* GetVertexColor(const void* vertices,
-                                         int vertexIndex,
-                                         int vertexSize,
-                                         int offset) {
-        const intptr_t start = GrTCast<intptr_t>(vertices);
-        return GrTCast<const GrColor*>(start + offset +
-                                       vertexIndex * vertexSize);
-    }
 
     /// @}
 
@@ -249,9 +172,12 @@ public:
      *
      *  @param color    the color to set.
      */
-    void setColor(GrColor color) { fCommon.fColor = color; }
+    void setColor(GrColor color) {
+        fColor = color;
+        this->invalidateBlendOptFlags();
+    }
 
-    GrColor getColor() const { return fCommon.fColor; }
+    GrColor getColor() const { return fColor; }
 
     /**
      *  Sets the color to be used for the next draw to be
@@ -262,38 +188,6 @@ public:
     void setAlpha(uint8_t a) {
         this->setColor((a << 24) | (a << 16) | (a << 8) | a);
     }
-
-    /**
-     * Constructor sets the color to be 'color' which is undone by the destructor.
-     */
-    class AutoColorRestore : public ::SkNoncopyable {
-    public:
-        AutoColorRestore() : fDrawState(NULL), fOldColor(0) {}
-
-        AutoColorRestore(GrDrawState* drawState, GrColor color) {
-            fDrawState = NULL;
-            this->set(drawState, color);
-        }
-
-        void reset() {
-            if (NULL != fDrawState) {
-                fDrawState->setColor(fOldColor);
-                fDrawState = NULL;
-            }
-        }
-
-        void set(GrDrawState* drawState, GrColor color) {
-            this->reset();
-            fDrawState = drawState;
-            fOldColor = fDrawState->getColor();
-            fDrawState->setColor(color);
-        }
-
-        ~AutoColorRestore() { this->reset(); }
-    private:
-        GrDrawState*    fDrawState;
-        GrColor         fOldColor;
-    };
 
     /// @}
 
@@ -307,18 +201,53 @@ public:
      * coverage is ignored when per-vertex coverage is provided.
      */
     void setCoverage(uint8_t coverage) {
-        fCommon.fCoverage = GrColorPackRGBA(coverage, coverage, coverage, coverage);
+        fCoverage = GrColorPackRGBA(coverage, coverage, coverage, coverage);
+        this->invalidateBlendOptFlags();
     }
 
     uint8_t getCoverage() const {
-        return GrColorUnpackR(fCommon.fCoverage);
+        return GrColorUnpackR(fCoverage);
     }
 
     GrColor getCoverageColor() const {
-        return fCommon.fCoverage;
+        return fCoverage;
     }
 
     /// @}
+
+    /**
+     * This struct is here so that the GrDrawState can have multiple instances of state information.
+     * The use of this will come in a future revision when we want to keep track of the original
+     * draw state as well as an optimized version of it.
+     */
+    struct State {
+        State() {
+            this->reset();
+        }
+
+        State(const GrEffectStage* colorArray, int colorCount,
+                      const GrEffectStage* coverageArray, int coverageCount)
+            : fColorStages(colorArray, colorCount), fCoverageStages(coverageArray, coverageCount) {
+                fSrcBlend = kOne_GrBlendCoeff;
+                fDstBlend = kZero_GrBlendCoeff;
+        }
+
+        static bool HaveCompatibleState(const State& a, const State& b, bool explicitLocalCoords);
+
+        void reset() {
+            fSrcBlend = kOne_GrBlendCoeff;
+            fDstBlend = kZero_GrBlendCoeff;
+            fColorStages.reset();
+            fCoverageStages.reset();
+        }
+
+        GrBlendCoeff                        fSrcBlend;
+        GrBlendCoeff                        fDstBlend;
+
+        typedef SkSTArray<4, GrEffectStage> EffectStageArray;
+        EffectStageArray                    fColorStages;
+        EffectStageArray                    fCoverageStages;
+    };
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Effect Stages
@@ -340,15 +269,17 @@ public:
     /// the color / coverage distinction.
     ////
 
-    const GrEffectRef* addColorEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
+    const GrEffect* addColorEffect(const GrEffect* effect, int attr0 = -1, int attr1 = -1) {
         SkASSERT(NULL != effect);
-        SkNEW_APPEND_TO_TARRAY(&fColorStages, GrEffectStage, (effect, attr0, attr1));
+        SkNEW_APPEND_TO_TARRAY(&fState.fColorStages, GrEffectStage, (effect, attr0, attr1));
+        this->invalidateBlendOptFlags();
         return effect;
     }
 
-    const GrEffectRef* addCoverageEffect(const GrEffectRef* effect, int attr0 = -1, int attr1 = -1) {
+    const GrEffect* addCoverageEffect(const GrEffect* effect, int attr0 = -1, int attr1 = -1) {
         SkASSERT(NULL != effect);
-        SkNEW_APPEND_TO_TARRAY(&fCoverageStages, GrEffectStage, (effect, attr0, attr1));
+        SkNEW_APPEND_TO_TARRAY(&fState.fCoverageStages, GrEffectStage, (effect, attr0, attr1));
+        this->invalidateBlendOptFlags();
         return effect;
     }
 
@@ -356,27 +287,23 @@ public:
      * Creates a GrSimpleTextureEffect that uses local coords as texture coordinates.
      */
     void addColorTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
-        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix);
-        this->addColorEffect(effect)->unref();
+        this->addColorEffect(GrSimpleTextureEffect::Create(texture, matrix))->unref();
     }
 
     void addCoverageTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
-        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix);
-        this->addCoverageEffect(effect)->unref();
+        this->addCoverageEffect(GrSimpleTextureEffect::Create(texture, matrix))->unref();
     }
 
     void addColorTextureEffect(GrTexture* texture,
                                const SkMatrix& matrix,
                                const GrTextureParams& params) {
-        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
-        this->addColorEffect(effect)->unref();
+        this->addColorEffect(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
     }
 
     void addCoverageTextureEffect(GrTexture* texture,
                                   const SkMatrix& matrix,
                                   const GrTextureParams& params) {
-        GrEffectRef* effect = GrSimpleTextureEffect::Create(texture, matrix, params);
-        this->addCoverageEffect(effect)->unref();
+        this->addCoverageEffect(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
     }
 
     /**
@@ -393,23 +320,7 @@ public:
 
         ~AutoRestoreEffects() { this->set(NULL); }
 
-        void set(GrDrawState* ds) {
-            if (NULL != fDrawState) {
-                int n = fDrawState->fColorStages.count() - fColorEffectCnt;
-                SkASSERT(n >= 0);
-                fDrawState->fColorStages.pop_back_n(n);
-                n = fDrawState->fCoverageStages.count() - fCoverageEffectCnt;
-                SkASSERT(n >= 0);
-                fDrawState->fCoverageStages.pop_back_n(n);
-                SkDEBUGCODE(--fDrawState->fBlockEffectRemovalCnt;)
-            }
-            fDrawState = ds;
-            if (NULL != ds) {
-                fColorEffectCnt = ds->fColorStages.count();
-                fCoverageEffectCnt = ds->fCoverageStages.count();
-                SkDEBUGCODE(++ds->fBlockEffectRemovalCnt;)
-            }
-        }
+        void set(GrDrawState* ds);
 
         bool isSet() const { return NULL != fDrawState; }
 
@@ -419,12 +330,12 @@ public:
         int fCoverageEffectCnt;
     };
 
-    int numColorStages() const { return fColorStages.count(); }
-    int numCoverageStages() const { return fCoverageStages.count(); }
+    int numColorStages() const { return fState.fColorStages.count(); }
+    int numCoverageStages() const { return fState.fCoverageStages.count(); }
     int numTotalStages() const { return this->numColorStages() + this->numCoverageStages(); }
 
-    const GrEffectStage& getColorStage(int stageIdx) const { return fColorStages[stageIdx]; }
-    const GrEffectStage& getCoverageStage(int stageIdx) const { return fCoverageStages[stageIdx]; }
+    const GrEffectStage& getColorStage(int stageIdx) const { return fState.fColorStages[stageIdx]; }
+    const GrEffectStage& getCoverageStage(int stageIdx) const { return fState.fCoverageStages[stageIdx]; }
 
     /**
      * Checks whether any of the effects will read the dst pixel color.
@@ -451,8 +362,9 @@ public:
      * @param dstCoef coefficient applied to the dst color.
      */
     void setBlendFunc(GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff) {
-        fCommon.fSrcBlend = srcCoeff;
-        fCommon.fDstBlend = dstCoeff;
+        fState.fSrcBlend = srcCoeff;
+        fState.fDstBlend = dstCoeff;
+        this->invalidateBlendOptFlags();
     #ifdef SK_DEBUG
         if (GrBlendCoeffRefsDst(dstCoeff)) {
             GrPrintf("Unexpected dst blend coeff. Won't work correctly with coverage stages.\n");
@@ -463,13 +375,13 @@ public:
     #endif
     }
 
-    GrBlendCoeff getSrcBlendCoeff() const { return fCommon.fSrcBlend; }
-    GrBlendCoeff getDstBlendCoeff() const { return fCommon.fDstBlend; }
+    GrBlendCoeff getSrcBlendCoeff() const { return fState.fSrcBlend; }
+    GrBlendCoeff getDstBlendCoeff() const { return fState.fDstBlend; }
 
     void getDstBlendCoeff(GrBlendCoeff* srcBlendCoeff,
                           GrBlendCoeff* dstBlendCoeff) const {
-        *srcBlendCoeff = fCommon.fSrcBlend;
-        *dstBlendCoeff = fCommon.fDstBlend;
+        *srcBlendCoeff = fState.fSrcBlend;
+        *dstBlendCoeff = fState.fDstBlend;
     }
 
     /**
@@ -482,13 +394,16 @@ public:
      *
      * @param constant the constant to set
      */
-    void setBlendConstant(GrColor constant) { fCommon.fBlendConstant = constant; }
+    void setBlendConstant(GrColor constant) {
+        fBlendConstant = constant;
+        this->invalidateBlendOptFlags();
+    }
 
     /**
      * Retrieves the last value set by setBlendConstant()
      * @return the blending constant value
      */
-    GrColor getBlendConstant() const { return fCommon.fBlendConstant; }
+    GrColor getBlendConstant() const { return fBlendConstant; }
 
     /**
      * Determines whether multiplying the computed per-pixel color by the pixel's fractional
@@ -510,25 +425,36 @@ public:
          */
         kSkipDraw_BlendOptFlag          = 0x1,
         /**
-         * Emit the src color, disable HW blending (replace dst with src)
-         */
-        kDisableBlend_BlendOptFlag      = 0x2,
-        /**
          * The coverage value does not have to be computed separately from alpha, the the output
          * color can be the modulation of the two.
          */
-        kCoverageAsAlpha_BlendOptFlag   = 0x4,
+        kCoverageAsAlpha_BlendOptFlag   = 0x2,
         /**
          * Instead of emitting a src color, emit coverage in the alpha channel and r,g,b are
          * "don't cares".
          */
-        kEmitCoverage_BlendOptFlag      = 0x8,
+        kEmitCoverage_BlendOptFlag      = 0x4,
         /**
          * Emit transparent black instead of the src color, no need to compute coverage.
          */
-        kEmitTransBlack_BlendOptFlag    = 0x10,
+        kEmitTransBlack_BlendOptFlag    = 0x8,
+        /**
+         * Flag used to invalidate the cached BlendOptFlags, OptSrcCoeff, and OptDstCoeff cached by
+         * the get BlendOpts function. 
+         */
+        kInvalid_BlendOptFlag           = 1 << 31,
     };
     GR_DECL_BITFIELD_OPS_FRIENDS(BlendOptFlags);
+
+    void invalidateBlendOptFlags() {
+        fBlendOptFlags = kInvalid_BlendOptFlag;
+    }
+
+    /**
+     * We don't use suplied vertex color attributes if our blend mode is EmitCoverage or
+     * EmitTransBlack
+     */
+    bool canIgnoreColorAttribute() const;
 
     /**
      * Determines what optimizations can be applied based on the blend. The coefficients may have
@@ -539,6 +465,9 @@ public:
      *
      * Subclasses of GrDrawTarget that actually draw (as opposed to those that just buffer for
      * playback) must call this function and respect the flags that replace the output color.
+     *
+     * If the cached BlendOptFlags does not have the invalidate bit set, then getBlendOpts will
+     * simply returned the cached flags and coefficients. Otherwise it will calculate the values. 
      */
     BlendOptFlags getBlendOpts(bool forceCoverage = false,
                                GrBlendCoeff* srcCoeff = NULL,
@@ -560,7 +489,7 @@ public:
      * Retrieves the current view matrix
      * @return the current view matrix.
      */
-    const SkMatrix& getViewMatrix() const { return fCommon.fViewMatrix; }
+    const SkMatrix& getViewMatrix() const { return fViewMatrix; }
 
     /**
      *  Retrieves the inverse of the current view matrix.
@@ -575,7 +504,7 @@ public:
         // TODO: determine whether we really need to leave matrix unmodified
         // at call sites when inversion fails.
         SkMatrix inverse;
-        if (fCommon.fViewMatrix.invert(&inverse)) {
+        if (fViewMatrix.invert(&inverse)) {
             if (matrix) {
                 *matrix = inverse;
             }
@@ -692,19 +621,21 @@ public:
      * @param settings  the stencil settings to use.
      */
     void setStencil(const GrStencilSettings& settings) {
-        fCommon.fStencilSettings = settings;
+        fStencilSettings = settings;
+        this->invalidateBlendOptFlags();
     }
 
     /**
      * Shortcut to disable stencil testing and ops.
      */
     void disableStencil() {
-        fCommon.fStencilSettings.setDisabled();
+        fStencilSettings.setDisabled();
+        this->invalidateBlendOptFlags();
     }
 
-    const GrStencilSettings& getStencil() const { return fCommon.fStencilSettings; }
+    const GrStencilSettings& getStencil() const { return fStencilSettings; }
 
-    GrStencilSettings* stencil() { return &fCommon.fStencilSettings; }
+    GrStencilSettings* stencil() { return &fStencilSettings; }
 
     /// @}
 
@@ -753,7 +684,8 @@ public:
     };
 
     void resetStateFlags() {
-        fCommon.fFlagBits = 0;
+        fFlagBits = 0;
+        this->invalidateBlendOptFlags();
     }
 
     /**
@@ -762,7 +694,8 @@ public:
      * @param stateBits bitfield of StateBits specifying the states to enable
      */
     void enableState(uint32_t stateBits) {
-        fCommon.fFlagBits |= stateBits;
+        fFlagBits |= stateBits;
+        this->invalidateBlendOptFlags();
     }
 
     /**
@@ -771,7 +704,8 @@ public:
      * @param stateBits bitfield of StateBits specifying the states to disable
      */
     void disableState(uint32_t stateBits) {
-        fCommon.fFlagBits &= ~(stateBits);
+        fFlagBits &= ~(stateBits);
+        this->invalidateBlendOptFlags();
     }
 
     /**
@@ -789,27 +723,27 @@ public:
     }
 
     bool isDitherState() const {
-        return 0 != (fCommon.fFlagBits & kDither_StateBit);
+        return 0 != (fFlagBits & kDither_StateBit);
     }
 
     bool isHWAntialiasState() const {
-        return 0 != (fCommon.fFlagBits & kHWAntialias_StateBit);
+        return 0 != (fFlagBits & kHWAntialias_StateBit);
     }
 
     bool isClipState() const {
-        return 0 != (fCommon.fFlagBits & kClip_StateBit);
+        return 0 != (fFlagBits & kClip_StateBit);
     }
 
     bool isColorWriteDisabled() const {
-        return 0 != (fCommon.fFlagBits & kNoColorWrites_StateBit);
+        return 0 != (fFlagBits & kNoColorWrites_StateBit);
     }
 
     bool isCoverageDrawing() const {
-        return 0 != (fCommon.fFlagBits & kCoverageDrawing_StateBit);
+        return 0 != (fFlagBits & kCoverageDrawing_StateBit);
     }
 
     bool isStateFlagEnabled(uint32_t stateBit) const {
-        return 0 != (stateBit & fCommon.fFlagBits);
+        return 0 != (stateBit & fFlagBits);
     }
 
     /// @}
@@ -832,7 +766,7 @@ public:
      */
     void setDrawFace(DrawFace face) {
         SkASSERT(kInvalid_DrawFace != face);
-        fCommon.fDrawFace = face;
+        fDrawFace = face;
     }
 
     /**
@@ -840,208 +774,60 @@ public:
      * or both faces.
      * @return the current draw face(s).
      */
-    DrawFace getDrawFace() const { return fCommon.fDrawFace; }
+    DrawFace getDrawFace() const { return fDrawFace; }
 
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
 
-    bool operator ==(const GrDrawState& s) const {
-        if (fRenderTarget.get() != s.fRenderTarget.get() ||
-            fColorStages.count() != s.fColorStages.count() ||
-            fCoverageStages.count() != s.fCoverageStages.count() ||
-            fCommon != s.fCommon) {
-            return false;
-        }
-        for (int i = 0; i < fColorStages.count(); i++) {
-            if (fColorStages[i] != s.fColorStages[i]) {
-                return false;
-            }
-        }
-        for (int i = 0; i < fCoverageStages.count(); i++) {
-            if (fCoverageStages[i] != s.fCoverageStages[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool operator !=(const GrDrawState& s) const { return !(*this == s); }
+    /** Return type for CombineIfPossible. */
+    enum CombinedState {
+        /** The GrDrawStates cannot be combined. */
+        kIncompatible_CombinedState,
+        /** Either draw state can be used in place of the other. */
+        kAOrB_CombinedState,
+        /** Use the first draw state. */
+        kA_CombinedState,
+        /** Use the second draw state. */
+        kB_CombinedState,
+    };
 
-    GrDrawState& operator= (const GrDrawState& s) {
-        SkASSERT(0 == fBlockEffectRemovalCnt || 0 == this->numTotalStages());
-        this->setRenderTarget(s.fRenderTarget.get());
-        fCommon = s.fCommon;
-        fColorStages = s.fColorStages;
-        fCoverageStages = s.fCoverageStages;
-        return *this;
-    }
+    /** This function determines whether the GrDrawStates used for two draws can be combined into
+        a single GrDrawState. This is used to avoid storing redundant GrDrawStates and to determine
+        if draws can be batched. The return value indicates whether combining is possible and, if
+        so, which of the two inputs should be used. */
+    static CombinedState CombineIfPossible(const GrDrawState& a, const GrDrawState& b);
+
+    GrDrawState& operator= (const GrDrawState& that);
 
 private:
+    void onReset(const SkMatrix* initialViewMatrix);
 
-    void onReset(const SkMatrix* initialViewMatrix) {
-        SkASSERT(0 == fBlockEffectRemovalCnt || 0 == this->numTotalStages());
-        fColorStages.reset();
-        fCoverageStages.reset();
+    BlendOptFlags calcBlendOpts(bool forceCoverage = false,
+                               GrBlendCoeff* srcCoeff = NULL,
+                               GrBlendCoeff* dstCoeff = NULL) const;
 
-        fRenderTarget.reset(NULL);
-
-        this->setDefaultVertexAttribs();
-
-        fCommon.fColor = 0xffffffff;
-        if (NULL == initialViewMatrix) {
-            fCommon.fViewMatrix.reset();
-        } else {
-            fCommon.fViewMatrix = *initialViewMatrix;
-        }
-        fCommon.fSrcBlend = kOne_GrBlendCoeff;
-        fCommon.fDstBlend = kZero_GrBlendCoeff;
-        fCommon.fBlendConstant = 0x0;
-        fCommon.fFlagBits = 0x0;
-        fCommon.fStencilSettings.setDisabled();
-        fCommon.fCoverage = 0xffffffff;
-        fCommon.fDrawFace = kBoth_DrawFace;
-    }
-
-    /** Fields that are identical in GrDrawState and GrDrawState::DeferredState. */
-    struct CommonState {
-        // These fields are roughly sorted by decreasing likelihood of being different in op==
-        GrColor               fColor;
-        SkMatrix              fViewMatrix;
-        GrBlendCoeff          fSrcBlend;
-        GrBlendCoeff          fDstBlend;
-        GrColor               fBlendConstant;
-        uint32_t              fFlagBits;
-        const GrVertexAttrib* fVAPtr;
-        int                   fVACount;
-        GrStencilSettings     fStencilSettings;
-        GrColor               fCoverage;
-        DrawFace              fDrawFace;
-
-        // This is simply a different representation of info in fVertexAttribs and thus does
-        // not need to be compared in op==.
-        int fFixedFunctionVertexAttribIndices[kGrFixedFunctionVertexAttribBindingCnt];
-
-        bool operator== (const CommonState& other) const {
-            bool result = fColor == other.fColor &&
-                          fViewMatrix.cheapEqualTo(other.fViewMatrix) &&
-                          fSrcBlend == other.fSrcBlend &&
-                          fDstBlend == other.fDstBlend &&
-                          fBlendConstant == other.fBlendConstant &&
-                          fFlagBits == other.fFlagBits &&
-                          fVACount == other.fVACount &&
-                          !memcmp(fVAPtr, other.fVAPtr, fVACount * sizeof(GrVertexAttrib)) &&
-                          fStencilSettings == other.fStencilSettings &&
-                          fCoverage == other.fCoverage &&
-                          fDrawFace == other.fDrawFace;
-            SkASSERT(!result || 0 == memcmp(fFixedFunctionVertexAttribIndices,
-                                            other.fFixedFunctionVertexAttribIndices,
-                                            sizeof(fFixedFunctionVertexAttribIndices)));
-            return result;
-        }
-        bool operator!= (const CommonState& other) const { return !(*this == other); }
-    };
-
-    /** GrDrawState uses GrEffectStages to hold stage state which holds a ref on GrEffectRef.
-        DeferredState must directly reference GrEffects, however. */
-    struct SavedEffectStage {
-        SavedEffectStage() : fEffect(NULL) {}
-        const GrEffect*                    fEffect;
-        GrEffectStage::SavedCoordChange    fCoordChange;
-    };
-
-public:
-    /**
-     * DeferredState contains all of the data of a GrDrawState but does not hold refs on GrResource
-     * objects. Resources are allowed to hit zero ref count while in DeferredStates. Their internal
-     * dispose mechanism returns them to the cache. This allows recycling resources through the
-     * the cache while they are in a deferred draw queue.
-     */
-    class DeferredState {
-    public:
-        DeferredState() : fRenderTarget(NULL) {
-            SkDEBUGCODE(fInitialized = false;)
-        }
-        // TODO: Remove this when DeferredState no longer holds a ref to the RT
-        ~DeferredState() { SkSafeUnref(fRenderTarget); }
-
-        void saveFrom(const GrDrawState& drawState) {
-            fCommon = drawState.fCommon;
-            // TODO: Here we will copy the GrRenderTarget pointer without taking a ref.
-            fRenderTarget = drawState.fRenderTarget.get();
-            SkSafeRef(fRenderTarget);
-            // Here we ref the effects directly rather than the effect-refs. TODO: When the effect-
-            // ref gets fully unref'ed it will cause the underlying effect to unref its resources
-            // and recycle them to the cache (if no one else is holding a ref to the resources).
-            fStages.reset(drawState.fColorStages.count() + drawState.fCoverageStages.count());
-            fColorStageCnt = drawState.fColorStages.count();
-            for (int i = 0; i < fColorStageCnt; ++i) {
-                fStages[i].saveFrom(drawState.fColorStages[i]);
-            }
-            for (int i = 0; i < drawState.fCoverageStages.count(); ++i) {
-                fStages[i + fColorStageCnt].saveFrom(drawState.fCoverageStages[i]);
-            }
-            SkDEBUGCODE(fInitialized = true;)
-        }
-
-        void restoreTo(GrDrawState* drawState) {
-            SkASSERT(fInitialized);
-            drawState->fCommon = fCommon;
-            drawState->setRenderTarget(fRenderTarget);
-            // reinflate color/cov stage arrays.
-            drawState->fColorStages.reset();
-            for (int i = 0; i < fColorStageCnt; ++i) {
-                SkNEW_APPEND_TO_TARRAY(&drawState->fColorStages, GrEffectStage, (fStages[i]));
-            }
-            int coverageStageCnt = fStages.count() - fColorStageCnt;
-            drawState->fCoverageStages.reset();
-            for (int i = 0; i < coverageStageCnt; ++i) {
-                SkNEW_APPEND_TO_TARRAY(&drawState->fCoverageStages,
-                                        GrEffectStage, (fStages[i + fColorStageCnt]));
-            }
-        }
-
-        bool isEqual(const GrDrawState& state) const {
-            int numCoverageStages = fStages.count() - fColorStageCnt;
-            if (fRenderTarget != state.fRenderTarget.get() ||
-                fColorStageCnt != state.fColorStages.count() ||
-                numCoverageStages != state.fCoverageStages.count() ||
-                fCommon != state.fCommon) {
-                return false;
-            }
-            bool explicitLocalCoords = state.hasLocalCoordAttribute();
-            for (int i = 0; i < fColorStageCnt; ++i) {
-                if (!fStages[i].isEqual(state.fColorStages[i], explicitLocalCoords)) {
-                    return false;
-                }
-            }
-            for (int i = 0; i < numCoverageStages; ++i) {
-                int s = fColorStageCnt + i;
-                if (!fStages[s].isEqual(state.fCoverageStages[i], explicitLocalCoords)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-    private:
-        typedef SkAutoSTArray<8, GrEffectStage::DeferredStage> DeferredStageArray;
-
-        GrRenderTarget*                       fRenderTarget;
-        CommonState                           fCommon;
-        int                                   fColorStageCnt;
-        DeferredStageArray                    fStages;
-
-        SkDEBUGCODE(bool fInitialized;)
-    };
-
-private:
-
+    // These fields are roughly sorted by decreasing likelihood of being different in op==
     SkAutoTUnref<GrRenderTarget>        fRenderTarget;
-    CommonState                         fCommon;
+    GrColor                             fColor;
+    SkMatrix                            fViewMatrix;
+    GrColor                             fBlendConstant;
+    uint32_t                            fFlagBits;
+    const GrVertexAttrib*               fVAPtr;
+    int                                 fVACount;
+    GrStencilSettings                   fStencilSettings;
+    GrColor                             fCoverage;
+    DrawFace                            fDrawFace;
 
-    typedef SkSTArray<4, GrEffectStage> EffectStageArray;
-    EffectStageArray                    fColorStages;
-    EffectStageArray                    fCoverageStages;
+    State                               fState;
+    
+    mutable GrBlendCoeff                        fOptSrcBlend;
+    mutable GrBlendCoeff                        fOptDstBlend;
+    mutable BlendOptFlags                       fBlendOptFlags;
+
+    // This is simply a different representation of info in fVertexAttribs and thus does
+    // not need to be compared in op==.
+    int fFixedFunctionVertexAttribIndices[kGrFixedFunctionVertexAttribBindingCnt];
 
     // Some of the auto restore objects assume that no effects are removed during their lifetime.
     // This is used to assert that this condition holds.

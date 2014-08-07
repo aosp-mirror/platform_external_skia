@@ -7,12 +7,13 @@
 
 #include "GrConvolutionEffect.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLTexture.h"
 #include "GrTBackendEffectFactory.h"
 
 // For brevity
-typedef GrGLUniformManager::UniformHandle UniformHandle;
+typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
 class GrGLConvolutionEffect : public GrGLEffect {
 public:
@@ -20,15 +21,15 @@ public:
 
     virtual void emitCode(GrGLShaderBuilder*,
                           const GrDrawEffect&,
-                          EffectKey,
+                          const GrEffectKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager& uman, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager& pdman, const GrDrawEffect&) SK_OVERRIDE;
 
-    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
+    static inline void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder*);
 
 private:
     int width() const { return Gr1DKernelEffect::WidthFromRadius(fRadius); }
@@ -56,7 +57,7 @@ GrGLConvolutionEffect::GrGLConvolutionEffect(const GrBackendEffectFactory& facto
 
 void GrGLConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
                                      const GrDrawEffect&,
-                                     EffectKey key,
+                                     const GrEffectKey& key,
                                      const char* outputColor,
                                      const char* inputColor,
                                      const TransformedCoordsArray& coords,
@@ -102,7 +103,7 @@ void GrGLConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
     builder->fsCodeAppend(modulate.c_str());
 }
 
-void GrGLConvolutionEffect::setData(const GrGLUniformManager& uman,
+void GrGLConvolutionEffect::setData(const GrGLProgramDataManager& pdman,
                                     const GrDrawEffect& drawEffect) {
     const GrConvolutionEffect& conv = drawEffect.castEffect<GrConvolutionEffect>();
     GrTexture& texture = *conv.texture(0);
@@ -120,29 +121,29 @@ void GrGLConvolutionEffect::setData(const GrGLUniformManager& uman,
         default:
             SkFAIL("Unknown filter direction.");
     }
-    uman.set2fv(fImageIncrementUni, 1, imageIncrement);
+    pdman.set2fv(fImageIncrementUni, 1, imageIncrement);
     if (conv.useBounds()) {
         const float* bounds = conv.bounds();
         if (Gr1DKernelEffect::kY_Direction == conv.direction() &&
             texture.origin() != kTopLeft_GrSurfaceOrigin) {
-            uman.set2f(fBoundsUni, 1.0f - bounds[1], 1.0f - bounds[0]);
+            pdman.set2f(fBoundsUni, 1.0f - bounds[1], 1.0f - bounds[0]);
         } else {
-            uman.set2f(fBoundsUni, bounds[0], bounds[1]);
+            pdman.set2f(fBoundsUni, bounds[0], bounds[1]);
         }
     }
-    uman.set1fv(fKernelUni, this->width(), conv.kernel());
+    pdman.set1fv(fKernelUni, this->width(), conv.kernel());
 }
 
-GrGLEffect::EffectKey GrGLConvolutionEffect::GenKey(const GrDrawEffect& drawEffect,
-                                                    const GrGLCaps&) {
+void GrGLConvolutionEffect::GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&,
+                                   GrEffectKeyBuilder* b) {
     const GrConvolutionEffect& conv = drawEffect.castEffect<GrConvolutionEffect>();
-    EffectKey key = conv.radius();
+    uint32_t key = conv.radius();
     key <<= 2;
     if (conv.useBounds()) {
         key |= 0x2;
         key |= GrConvolutionEffect::kY_Direction == conv.direction() ? 0x1 : 0x0;
     }
-    return key;
+    b->add32(key);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -211,10 +212,10 @@ bool GrConvolutionEffect::onIsEqual(const GrEffect& sBase) const {
 
 GR_DEFINE_EFFECT_TEST(GrConvolutionEffect);
 
-GrEffectRef* GrConvolutionEffect::TestCreate(SkRandom* random,
-                                             GrContext*,
-                                             const GrDrawTargetCaps&,
-                                             GrTexture* textures[]) {
+GrEffect* GrConvolutionEffect::TestCreate(SkRandom* random,
+                                          GrContext*,
+                                          const GrDrawTargetCaps&,
+                                          GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;
     Direction dir = random->nextBool() ? kX_Direction : kY_Direction;

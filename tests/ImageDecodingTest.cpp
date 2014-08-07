@@ -158,7 +158,7 @@ static void test_unpremul(skiatest::Reporter* reporter) {
     SkString basename;
     if (iter.next(&basename)) {
         do {
-            SkString filename = SkOSPath::SkPathJoin(resourcePath.c_str(), basename.c_str());
+            SkString filename = SkOSPath::Join(resourcePath.c_str(), basename.c_str());
             // SkDebugf("about to decode \"%s\"\n", filename.c_str());
             compare_unpremul(reporter, filename);
         } while (iter.next(&basename));
@@ -241,7 +241,7 @@ DEF_TEST(ImageDecoding_alphaType, reporter) {
     SkString basename;
     if (iter.next(&basename)) {
         do {
-            SkString filename = SkOSPath::SkPathJoin(resourcePath.c_str(), basename.c_str());
+            SkString filename = SkOSPath::Join(resourcePath.c_str(), basename.c_str());
             for (int truth = 0; truth <= 1; ++truth) {
                 test_alphaType(reporter, filename, SkToBool(truth));
             }
@@ -264,7 +264,7 @@ DEF_TEST(ImageDecoding_unpremul, reporter) {
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(suffixes); ++i) {
         SkString basename = SkStringPrintf("%s%s", root, suffixes[i]);
-        SkString fullName = SkOSPath::SkPathJoin(resourcePath.c_str(), basename.c_str());
+        SkString fullName = SkOSPath::Join(resourcePath.c_str(), basename.c_str());
 
         SkBitmap bm;
         SkFILEStream stream(fullName.c_str());
@@ -503,12 +503,9 @@ static SkPixelRef* install_pixel_ref(SkBitmap* bitmap,
  *  SkInstallDiscardablePixelRef functions.
  */
 DEF_TEST(ImprovedBitmapFactory, reporter) {
-    SkString resourcePath = GetResourcePath();
-    SkString path = SkOSPath::SkPathJoin(
-            resourcePath.c_str(), "randPixels.png");
-    SkAutoTUnref<SkStreamRewindable> stream(
-        SkStream::NewFromFile(path.c_str()));
-    if (sk_exists(path.c_str())) {
+    SkString pngFilename = GetResourcePath("randPixels.png");
+    SkAutoTUnref<SkStreamRewindable> stream(SkStream::NewFromFile(pngFilename.c_str()));
+    if (sk_exists(pngFilename.c_str())) {
         SkBitmap bm;
         SkAssertResult(bm.setInfo(SkImageInfo::MakeN32Premul(1, 1)));
         REPORTER_ASSERT(reporter,
@@ -695,7 +692,7 @@ DEF_TEST(ImageDecoderOptions, reporter) {
     const bool useDataList[] = {true, false};
 
     for (size_t fidx = 0; fidx < SK_ARRAY_COUNT(files); ++fidx) {
-        SkString path = SkOSPath::SkPathJoin(resourceDir.c_str(), files[fidx]);
+        SkString path = SkOSPath::Join(resourceDir.c_str(), files[fidx]);
         if (!sk_exists(path.c_str())) {
             continue;
         }
@@ -725,4 +722,97 @@ DEF_TEST(ImageDecoderOptions, reporter) {
             }
         }
     }
+}
+
+DEF_TEST(DiscardablePixelRef_SecondLockColorTableCheck, r) {
+    SkString resourceDir = GetResourcePath();
+    SkString path = SkOSPath::Join(resourceDir.c_str(), "randPixels.gif");
+    if (!sk_exists(path.c_str())) {
+        return;
+    }
+    SkAutoDataUnref encoded(SkData::NewFromFileName(path.c_str()));
+    SkBitmap bitmap;
+    if (!SkInstallDiscardablePixelRef(
+            SkDecodingImageGenerator::Create(
+                    encoded, SkDecodingImageGenerator::Options()), &bitmap)) {
+        #ifndef SK_BUILD_FOR_WIN
+        ERRORF(r, "SkInstallDiscardablePixelRef [randPixels.gif] failed.");
+        #endif
+        return;
+    }
+    if (kIndex_8_SkColorType != bitmap.colorType()) {
+        return;
+    }
+    {
+        SkAutoLockPixels alp(bitmap);
+        REPORTER_ASSERT(r, bitmap.getColorTable() && "first pass");
+    }
+    {
+        SkAutoLockPixels alp(bitmap);
+        REPORTER_ASSERT(r, bitmap.getColorTable() && "second pass");
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+namespace {
+class SingleAllocator : public SkBitmap::Allocator {
+public:
+    SingleAllocator(void* p, size_t s) : fPixels(p), fSize(s) { }
+    ~SingleAllocator() {}
+    // If the pixels in fPixels are big enough, use them.
+    virtual bool allocPixelRef(SkBitmap* bm, SkColorTable* ct) SK_OVERRIDE {
+        SkASSERT(bm);
+        if (bm->info().getSafeSize(bm->rowBytes()) <= fSize) {
+            bm->setPixels(fPixels, ct);
+            fPixels = NULL;
+            fSize = 0;
+            return true;
+        }
+        return bm->allocPixels(NULL, ct);
+    }
+    bool ready() { return fPixels != NULL; }
+private:
+    void* fPixels;
+    size_t fSize;
+};
+}  // namespace
+
+/*  This tests for a bug in libjpeg where INT32 is typedefed to long
+    and memory can be written to outside of the array. */
+DEF_TEST(ImageDecoding_JpegOverwrite, r) {
+    SkString resourceDir = GetResourcePath();
+    SkString path = SkOSPath::Join(resourceDir.c_str(), "randPixels.jpg");
+    SkAutoTUnref<SkStreamAsset> stream(
+            SkStream::NewFromFile(path.c_str()));
+    if (!stream.get()) {
+        SkDebugf("\nPath '%s' missing.\n", path.c_str());
+        return;
+    }
+    SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(stream));
+    if (NULL == decoder.get()) {
+        ERRORF(r, "\nSkImageDecoder::Factory failed.\n");
+        return;
+    }
+    SkAssertResult(stream->rewind());
+
+    static const uint16_t sentinal = 0xBEEF;
+    static const int pixelCount = 16;
+    SkAutoTMalloc<uint16_t> pixels(pixelCount + 1);
+    // pixels.get() should be 4-byte aligned.
+    // This is necessary to reproduce the bug.
+
+    pixels[pixelCount] = sentinal;  // This value should not be changed.
+
+    SkAutoTUnref<SingleAllocator> allocator(
+            SkNEW_ARGS(SingleAllocator,
+                       ((void*)pixels.get(), sizeof(uint16_t) * pixelCount)));
+    decoder->setAllocator(allocator);
+    decoder->setSampleSize(2);
+    SkBitmap bitmap;
+    bool success = decoder->decode(stream, &bitmap, kRGB_565_SkColorType,
+                                   SkImageDecoder::kDecodePixels_Mode);
+    REPORTER_ASSERT(r, success);
+    REPORTER_ASSERT(r, !allocator->ready());  // Decoder used correct memory
+    REPORTER_ASSERT(r, sentinal == pixels[pixelCount]);
 }

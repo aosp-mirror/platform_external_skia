@@ -4,6 +4,7 @@
       "headerText": "builder", 
       "isFilterable": true, 
       "isSortable": true, 
+      "useFreeformFilter": false, 
       "valuesAndCounts": [
         [
           "Test-Android-GalaxyNexus-SGX540-Arm7-Release", 
@@ -23,6 +24,7 @@
       "headerText": "config", 
       "isFilterable": true, 
       "isSortable": true, 
+      "useFreeformFilter": false, 
       "valuesAndCounts": [
         [
           "TODO", 
@@ -34,6 +36,7 @@
       "headerText": "resultType", 
       "isFilterable": true, 
       "isSortable": true, 
+      "useFreeformFilter": false, 
       "valuesAndCounts": [
         [
           "failed", 
@@ -53,6 +56,7 @@
       "headerText": "test", 
       "isFilterable": true, 
       "isSortable": true, 
+      "useFreeformFilter": false, 
       "valuesAndCounts": [
         [
           "3x3bitmaprect", 
@@ -93,11 +97,17 @@
       ]
     }
   }, 
+  "extraColumnOrder": [
+    "builder", 
+    "config", 
+    "resultType", 
+    "test"
+  ], 
   "header": {
-    "dataHash": "5496105477154010366", 
+    "dataHash": "-5829724510169924592", 
     "isEditable": false, 
     "isExported": true, 
-    "schemaVersion": 3, 
+    "schemaVersion": 4, 
     "timeNextUpdateAvailable": null, 
     "timeUpdated": 12345678, 
     "type": "all"
@@ -189,7 +199,7 @@
         ], 
         "numDifferingPixels": 6081, 
         "percentDifferingPixels": 2.4324, 
-        "perceptualDifference": 1.917199999999994
+        "perceptualDifference": 1.9172010000000057
       }, 
       "extraColumns": {
         "builder": "Test-Builder-We-Have-No-Expectations-File-For", 
@@ -210,7 +220,7 @@
         ], 
         "numDifferingPixels": 50097, 
         "percentDifferingPixels": 30.5767822265625, 
-        "perceptualDifference": 3.3917
+        "perceptualDifference": 3.391725000000008
       }, 
       "extraColumns": {
         "builder": "Test-Builder-We-Have-No-Expectations-File-For", 
@@ -253,7 +263,7 @@
         ], 
         "numDifferingPixels": 6081, 
         "percentDifferingPixels": 2.4324, 
-        "perceptualDifference": 1.917199999999994
+        "perceptualDifference": 1.9172010000000057
       }, 
       "extraColumns": {
         "builder": "Test-Mac10.7-MacMini4.1-GeForce320M-x86_64-Debug", 
@@ -274,7 +284,7 @@
         ], 
         "numDifferingPixels": 50097, 
         "percentDifferingPixels": 30.5767822265625, 
-        "perceptualDifference": 3.3917
+        "perceptualDifference": 3.391725000000008
       }, 
       "extraColumns": {
         "builder": "Test-Mac10.7-MacMini4.1-GeForce320M-x86_64-Debug", 

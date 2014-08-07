@@ -18,6 +18,7 @@
         'gmslides.gypi',
       ],
       'sources': [
+        '../gm/gm.cpp',
         '../gm/gmmain.cpp',
         '../gm/system_preferences_default.cpp',
 
@@ -33,6 +34,7 @@
         'tools.gyp:crash_handler',
         'tools.gyp:gm_expectations',
         'tools.gyp:resources',
+        'tools.gyp:sk_tool_utils',
       ],
       'conditions': [
         ['skia_android_framework', {

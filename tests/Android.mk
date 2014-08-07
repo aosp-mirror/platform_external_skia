@@ -8,6 +8,8 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
+	-fPIC \
+	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
@@ -17,6 +19,7 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	skia_test.cpp \
+	Test.cpp \
 	PathOpsAngleTest.cpp \
 	PathOpsBoundsTest.cpp \
 	PathOpsCubicIntersectionTest.cpp \
@@ -55,7 +58,7 @@ LOCAL_SRC_FILES := \
 	PathOpsSkpTest.cpp \
 	PathOpsTestCommon.cpp \
 	PathOpsThreadedCommon.cpp \
-	Test.cpp \
+	PathOpsTightBoundsTest.cpp \
 	AAClipTest.cpp \
 	ARGBImageEncoderTest.cpp \
 	AndroidPaintTest.cpp \
@@ -73,6 +76,7 @@ LOCAL_SRC_FILES := \
 	BlitRowTest.cpp \
 	BlurTest.cpp \
 	CachedDecodingPixelRefTest.cpp \
+	CanvasStateHelpers.cpp \
 	CanvasStateTest.cpp \
 	CanvasTest.cpp \
 	ChecksumTest.cpp \
@@ -102,11 +106,12 @@ LOCAL_SRC_FILES := \
 	FitsInTest.cpp \
 	FlatDataTest.cpp \
 	FlateTest.cpp \
+	FloatingPointTextureTest.cpp \
 	FontHostStreamTest.cpp \
 	FontHostTest.cpp \
-	FontObjTest.cpp \
 	FontMgrTest.cpp \
 	FontNamesTest.cpp \
+	FontObjTest.cpp \
 	FrontBufferedStreamTest.cpp \
 	GLInterfaceValidationTest.cpp \
 	GLProgramsTest.cpp \
@@ -114,21 +119,24 @@ LOCAL_SRC_FILES := \
 	GifTest.cpp \
 	GpuColorFilterTest.cpp \
 	GpuDrawPathTest.cpp \
+	GpuLayerCacheTest.cpp \
 	GpuRectanizerTest.cpp \
 	GrBinHashKeyTest.cpp \
 	GrContextFactoryTest.cpp \
 	GrDrawTargetTest.cpp \
 	GrMemoryPoolTest.cpp \
-	GrRedBlackTreeTest.cpp \
 	GrOrderedSetTest.cpp \
+	GrRedBlackTreeTest.cpp \
 	GrSurfaceTest.cpp \
 	GrTBSearchTest.cpp \
 	GradientTest.cpp \
-	HashCacheTest.cpp \
 	ImageCacheTest.cpp \
 	ImageDecodingTest.cpp \
 	ImageFilterTest.cpp \
+	ImageGeneratorTest.cpp \
+	ImageNewShaderTest.cpp \
 	InfRectTest.cpp \
+	InterpolatorTest.cpp \
 	JpegTest.cpp \
 	KtxTest.cpp \
 	LListTest.cpp \
@@ -146,8 +154,8 @@ LOCAL_SRC_FILES := \
 	MetaDataTest.cpp \
 	MipMapTest.cpp \
 	NameAllocatorTest.cpp \
-	ObjectPoolTest.cpp \
 	OSPathTest.cpp \
+	ObjectPoolTest.cpp \
 	OnceTest.cpp \
 	PDFPrimitivesTest.cpp \
 	PackBitsTest.cpp \
@@ -157,13 +165,14 @@ LOCAL_SRC_FILES := \
 	PathMeasureTest.cpp \
 	PathTest.cpp \
 	PathUtilsTest.cpp \
-	PictureTest.cpp \
 	PictureShaderTest.cpp \
 	PictureStateTreeTest.cpp \
+	PictureTest.cpp \
 	PixelRefTest.cpp \
 	PointTest.cpp \
 	PremulAlphaRoundTripTest.cpp \
 	QuickRejectTest.cpp \
+	RTConfRegistryTest.cpp \
 	RTreeTest.cpp \
 	RandomTest.cpp \
 	ReadPixelsTest.cpp \
@@ -182,12 +191,14 @@ LOCAL_SRC_FILES := \
 	RoundRectTest.cpp \
 	RuntimeConfigTest.cpp \
 	SHA1Test.cpp \
+	SListTest.cpp \
 	ScalarTest.cpp \
+	ScaledImageCache.cpp \
 	SerializationTest.cpp \
 	ShaderImageFilterTest.cpp \
 	ShaderOpacityTest.cpp \
+	SizeTest.cpp \
 	SkBase64Test.cpp \
-	SListTest.cpp \
 	SmallAllocatorTest.cpp \
 	SortTest.cpp \
 	SrcOverTest.cpp \
@@ -198,14 +209,12 @@ LOCAL_SRC_FILES := \
 	TArrayTest.cpp \
 	TLSTest.cpp \
 	TSetTest.cpp \
-	TestSize.cpp \
 	TextureCompressionTest.cpp \
 	TileGridTest.cpp \
 	ToUnicodeTest.cpp \
 	TracingTest.cpp \
 	TypefaceTest.cpp \
 	UnicodeTest.cpp \
-	UnitTestTest.cpp \
 	UtilsTest.cpp \
 	WArrayTest.cpp \
 	WritePixelsTest.cpp \
@@ -217,17 +226,20 @@ LOCAL_SRC_FILES := \
 	PipeTest.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	TDStackNesterTest.cpp \
-	../tools/sk_tool_utils.cpp \
 	../tools/CrashHandler.cpp \
+	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../tools/flags/SkCommandLineFlags.cpp \
+	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
-	../tools/Resources.cpp
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp
 
 LOCAL_SHARED_LIBRARIES := \
 	libskia \
+	libdl \
 	libGLESv2 \
 	libEGL \
 	liblog
@@ -245,19 +257,20 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../src/fonts \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/effects \
-	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/pathops \
-	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/pipe/utils \
+	$(LOCAL_PATH)/../src/image \
+	$(LOCAL_PATH)/../src/images \
+	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
@@ -268,4 +281,4 @@ LOCAL_MODULE := \
 	skia_test
 
 include external/stlport/libstlport.mk
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)

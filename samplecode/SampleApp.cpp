@@ -8,6 +8,7 @@
 #include "SampleApp.h"
 
 #include "OverView.h"
+#include "Resources.h"
 #include "SampleCode.h"
 #include "SamplePipeControllers.h"
 #include "SkCanvas.h"
@@ -754,7 +755,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
         SkString filename;
         while (iter.next(&filename)) {
             *fSamples.append() = new PictFileFactory(
-                    SkOSPath::SkPathJoin(FLAGS_pictureDir[0], filename.c_str()));
+                SkOSPath::Join(FLAGS_pictureDir[0], filename.c_str()));
         }
     }
     if (!FLAGS_picture.isEmpty()) {
@@ -768,7 +769,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
         SkString filename;
         while (iter.next(&filename)) {
             *fSamples.append() = new PdfFileViewerFactory(
-                    SkOSPath::SkPathJoin(FLAGS_pictureDir[0], filename.c_str()));
+                SkOSPath::Join(FLAGS_pictureDir[0], filename.c_str()));
         }
     }
 #endif
@@ -973,8 +974,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
 
 SampleWindow::~SampleWindow() {
     delete fPdfCanvas;
-    fTypeface->unref();
-
+    SkSafeUnref(fTypeface);
     SkSafeUnref(fDevManager);
 }
 
@@ -1007,7 +1007,7 @@ static SkBitmap capture_bitmap(SkCanvas* canvas) {
 
 static bool bitmap_diff(SkCanvas* canvas, const SkBitmap& orig,
                         SkBitmap* diff) {
-    const SkBitmap& src = canvas->getDevice()->accessBitmap(false);
+    SkBitmap src = capture_bitmap(canvas);
 
     SkAutoLockPixels alp0(src);
     SkAutoLockPixels alp1(orig);
@@ -1282,7 +1282,7 @@ void SampleWindow::saveToPdf()
 
 SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
     if (fSaveToPdf) {
-        const SkBitmap& bmp = canvas->getDevice()->accessBitmap(false);
+        const SkBitmap bmp = capture_bitmap(canvas);
         SkISize size = SkISize::Make(bmp.width(), bmp.height());
         SkPDFDevice* pdfDevice = new SkPDFDevice(size, size,
                 canvas->getTotalMatrix());
@@ -1308,15 +1308,6 @@ SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
     return canvas;
 }
 
-static void paint_rgn(const SkBitmap& bm, const SkIRect& r,
-                      const SkRegion& rgn) {
-    SkCanvas    canvas(bm);
-    SkRegion    inval(rgn);
-
-    inval.translate(r.fLeft, r.fTop);
-    canvas.clipRegion(inval);
-    canvas.drawColor(0xFFFF8080);
-}
 #include "SkData.h"
 void SampleWindow::afterChildren(SkCanvas* orig) {
     if (fSaveToPdf) {
@@ -1327,7 +1318,8 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
         SkString name;
         name.printf("%s.pdf", this->getTitle());
         SkPDFDocument doc;
-        SkPDFDevice* device = static_cast<SkPDFDevice*>(fPdfCanvas->getDevice());
+        SkPDFDevice* device = NULL;//static_cast<SkPDFDevice*>(fPdfCanvas->getDevice());
+        SkASSERT(false);
         doc.appendPage(device);
 #ifdef SK_BUILD_FOR_ANDROID
         name.prepend("/sdcard/");
@@ -1357,9 +1349,8 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
     if (fRequestGrabImage) {
         fRequestGrabImage = false;
 
-        SkBaseDevice* device = orig->getDevice();
-        SkBitmap bmp;
-        if (device->accessBitmap(false).copyTo(&bmp, kN32_SkColorType)) {
+        SkBitmap bmp = capture_bitmap(orig);
+        if (!bmp.isNull()) {
             static int gSampleGrabCounter;
             SkString name;
             name.printf("sample_grab_%d.png", gSampleGrabCounter++);
@@ -1369,13 +1360,11 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
     }
 
     if (kPicture_DeviceType == fDeviceType) {
-        SkAutoTUnref<SkPicture> picture(fRecorder.endRecording());
+        SkAutoTUnref<const SkPicture> picture(fRecorder.endRecording());
 
         if (true) {
-            SkPicture* pict = new SkPicture(*picture);
             this->installDrawFilter(orig);
-            orig->drawPicture(pict);
-            pict->unref();
+            orig->drawPicture(picture);
         } else if (true) {
             SkDynamicMemoryWStream ostream;
             picture->serialize(&ostream);
@@ -1394,19 +1383,6 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
     // Do this after presentGL and other finishing, rather than in afterChild
     if (fMeasureFPS && fMeasureFPS_StartTime) {
         fMeasureFPS_Time += SkTime::GetMSecs() - fMeasureFPS_StartTime;
-    }
-
-    //    if ((fScrollTestX | fScrollTestY) != 0)
-    if (false) {
-        const SkBitmap& bm = orig->getDevice()->accessBitmap(true);
-        int dx = fScrollTestX * 7;
-        int dy = fScrollTestY * 7;
-        SkIRect r;
-        SkRegion inval;
-
-        r.set(50, 50, 50+100, 50+100);
-        bm.scrollRect(&r, dx, dy, &inval);
-        paint_rgn(bm, r, inval);
     }
 }
 
@@ -1685,6 +1661,8 @@ static void cleanup_for_filename(SkString* name) {
 }
 #endif
 
+DECLARE_bool(portableFonts);
+
 bool SampleWindow::onHandleChar(SkUnichar uni) {
     {
         SkView* view = curr_view(this);
@@ -1737,6 +1715,10 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
         case 'f':
             // only
             toggleFPS();
+            break;
+        case 'F':
+            FLAGS_portableFonts ^= true;
+            this->inval(NULL);
             break;
         case 'g':
             fRequestGrabImage = true;
@@ -2249,9 +2231,8 @@ void SampleView::draw(SkCanvas* canvas) {
     } else {
         SkGPipeWriter writer;
         SimplePC controller(canvas);
-        TiledPipeController tc(canvas->getDevice()->accessBitmap(false),
-                               &SkImageDecoder::DecodeMemory,
-                               &canvas->getTotalMatrix());
+        SkBitmap bitmap = capture_bitmap(canvas);
+        TiledPipeController tc(bitmap, &SkImageDecoder::DecodeMemory, &canvas->getTotalMatrix());
         SkGPipeController* pc;
         if (SkOSMenu::kMixedState == fPipeState) {
             pc = &tc;
@@ -2403,12 +2384,12 @@ void get_preferred_size(int* x, int* y, int* width, int* height) {
 }
 
 #ifdef SK_BUILD_FOR_IOS
-void save_args(int argc, char *argv[]) {
+IOS_launch_type set_cmd_line_args(int , char *[], const char* resourceDir) {
+    SetResourcePath(resourceDir);
+    return kApplication__iOSLaunchType;
 }
 #endif
 
-// FIXME: this should be in a header
-void application_init();
 void application_init() {
 //    setenv("ANDROID_ROOT", "../../../data", 0);
 #ifdef SK_BUILD_FOR_MAC
@@ -2418,8 +2399,6 @@ void application_init() {
     SkEvent::Init();
 }
 
-// FIXME: this should be in a header
-void application_term();
 void application_term() {
     SkEvent::Term();
     SkGraphics::Term();

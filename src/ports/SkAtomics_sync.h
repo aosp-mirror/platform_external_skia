@@ -16,6 +16,18 @@ static inline __attribute__((always_inline)) int32_t sk_atomic_inc(int32_t* addr
     return __sync_fetch_and_add(addr, 1);
 }
 
+static inline __attribute__((always_inline)) int64_t sk_atomic_inc(int64_t* addr) {
+#if defined(__mips__) && !defined(__LP64__) && !defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8)
+    /** Some versions of the GCC 32-bit MIPS toolchains (e.g. 4.8) for android are missing
+     * support for the __sync* functions that operate on 64-bit values. The workaround
+     * is to use __atomic* functions until we can move everything to <stdatomic.h>.
+     */
+    return __atomic_fetch_add(addr, 1, __ATOMIC_SEQ_CST);
+#else
+    return __sync_fetch_and_add(addr, 1);
+#endif
+}
+
 static inline __attribute__((always_inline)) int32_t sk_atomic_add(int32_t* addr, int32_t inc) {
     return __sync_fetch_and_add(addr, inc);
 }

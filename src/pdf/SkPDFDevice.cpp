@@ -29,26 +29,11 @@
 #include "SkRect.h"
 #include "SkRRect.h"
 #include "SkString.h"
+#include "SkSurface.h"
 #include "SkTextFormatParams.h"
 #include "SkTemplates.h"
 #include "SkTypefacePriv.h"
 #include "SkTSet.h"
-
-#ifdef SK_BUILD_FOR_ANDROID
-#include "SkTypeface_android.h"
-
-struct TypefaceFallbackData {
-    SkTypeface* typeface;
-    int lowerBounds;
-    int upperBounds;
-
-    bool operator==(const TypefaceFallbackData& b) const {
-        return typeface == b.typeface &&
-               lowerBounds == b.lowerBounds &&
-               upperBounds == b.upperBounds;
-    }
-};
-#endif
 
 #define DPI_FOR_RASTER_SCALE_ONE 72
 
@@ -702,8 +687,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline SkBitmap makeContentBitmap(const SkISize& contentSize,
-                                         const SkMatrix* initialTransform) {
+static inline SkImageInfo make_content_info(const SkISize& contentSize,
+                                            const SkMatrix* initialTransform) {
     SkImageInfo info;
     if (initialTransform) {
         // Compute the size of the drawing area.
@@ -723,24 +708,22 @@ static inline SkBitmap makeContentBitmap(const SkISize& contentSize,
         info = SkImageInfo::MakeUnknown(abs(contentSize.fWidth),
                                         abs(contentSize.fHeight));
     }
-
-    SkBitmap bitmap;
-    bitmap.setInfo(info);
-    return bitmap;
+    return info;
 }
 
 // TODO(vandebo) change pageSize to SkSize.
-// TODO: inherit from SkBaseDevice instead of SkBitmapDevice
 SkPDFDevice::SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
                          const SkMatrix& initialTransform)
-    : SkBitmapDevice(makeContentBitmap(contentSize, &initialTransform)),
-      fPageSize(pageSize),
-      fContentSize(contentSize),
-      fLastContentEntry(NULL),
-      fLastMarginContentEntry(NULL),
-      fClipStack(NULL),
-      fEncoder(NULL),
-      fRasterDpi(72.0f) {
+    : fPageSize(pageSize)
+    , fContentSize(contentSize)
+    , fLastContentEntry(NULL)
+    , fLastMarginContentEntry(NULL)
+    , fClipStack(NULL)
+    , fEncoder(NULL)
+    , fRasterDpi(72.0f)
+{
+    const SkImageInfo info = make_content_info(contentSize, &initialTransform);
+
     // Just report that PDF does not supports perspective in the
     // initial transform.
     NOT_IMPLEMENTED(initialTransform.hasPerspective(), true);
@@ -751,10 +734,10 @@ SkPDFDevice::SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
     fInitialTransform.setTranslate(0, SkIntToScalar(pageSize.fHeight));
     fInitialTransform.preScale(SK_Scalar1, -SK_Scalar1);
     fInitialTransform.preConcat(initialTransform);
+    fLegacyBitmap.setInfo(info);
 
-    SkIRect existingClip = SkIRect::MakeWH(this->width(), this->height());
+    SkIRect existingClip = SkIRect::MakeWH(info.width(), info.height());
     fExistingClipRegion.setRect(existingClip);
-
     this->init();
 }
 
@@ -762,17 +745,19 @@ SkPDFDevice::SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
 SkPDFDevice::SkPDFDevice(const SkISize& layerSize,
                          const SkClipStack& existingClipStack,
                          const SkRegion& existingClipRegion)
-    : SkBitmapDevice(makeContentBitmap(layerSize, NULL)),
-      fPageSize(layerSize),
-      fContentSize(layerSize),
-      fExistingClipStack(existingClipStack),
-      fExistingClipRegion(existingClipRegion),
-      fLastContentEntry(NULL),
-      fLastMarginContentEntry(NULL),
-      fClipStack(NULL),
-      fEncoder(NULL),
-      fRasterDpi(72.0f) {
+    : fPageSize(layerSize)
+    , fContentSize(layerSize)
+    , fExistingClipStack(existingClipStack)
+    , fExistingClipRegion(existingClipRegion)
+    , fLastContentEntry(NULL)
+    , fLastMarginContentEntry(NULL)
+    , fClipStack(NULL)
+    , fEncoder(NULL)
+    , fRasterDpi(72.0f)
+{
     fInitialTransform.reset();
+    fLegacyBitmap.setInfo(make_content_info(layerSize, NULL));
+
     this->init();
 }
 
@@ -961,10 +946,15 @@ void SkPDFDevice::drawRect(const SkDraw& d, const SkRect& rect,
                           &content.entry()->fContent);
 }
 
-void SkPDFDevice::drawRRect(const SkDraw& draw, const SkRRect& rrect,
-                            const SkPaint& paint) {
+void SkPDFDevice::drawRRect(const SkDraw& draw, const SkRRect& rrect, const SkPaint& paint) {
     SkPath  path;
     path.addRRect(rrect);
+    this->drawPath(draw, path, paint, NULL, true);
+}
+
+void SkPDFDevice::drawOval(const SkDraw& draw, const SkRect& oval, const SkPaint& paint) {
+    SkPath  path;
+    path.addOval(oval);
     this->drawPath(draw, path, paint, NULL, true);
 }
 
@@ -1169,116 +1159,6 @@ void SkPDFDevice::drawPosText(const SkDraw& d, const void* text, size_t len,
         return;
     }
 
-#ifdef SK_BUILD_FOR_ANDROID
-    /*
-     * In the case that we have enabled fallback fonts on Android we need to
-     * take the following steps to ensure that the PDF draws all characters,
-     * regardless of their underlying font file, correctly.
-     *
-     * 1. Convert input into GlyphID encoding if it currently is not
-     * 2. Iterate over the glyphIDs and identify the actual typeface that each
-     *    glyph resolves to
-     * 3. Iterate over those typefaces and recursively call this function with
-     *    only the glyphs (and their positions) that the typeface is capable of
-     *    resolving.
-     */
-    if (paint.getPaintOptionsAndroid().isUsingFontFallbacks()) {
-        uint16_t* glyphIDs = NULL;
-        SkGlyphStorage tmpStorage(0);
-        size_t numGlyphs = 0;
-
-        // convert to glyphIDs
-        if (paint.getTextEncoding() == SkPaint::kGlyphID_TextEncoding) {
-            numGlyphs = len / 2;
-            glyphIDs = reinterpret_cast<uint16_t*>(const_cast<void*>(text));
-        } else {
-            numGlyphs = paint.textToGlyphs(text, len, NULL);
-            tmpStorage.reset(numGlyphs);
-            paint.textToGlyphs(text, len, tmpStorage.get());
-            glyphIDs = tmpStorage.get();
-        }
-
-        // if no typeface is provided in the paint get the default
-        SkAutoTUnref<SkTypeface> origFace(SkSafeRef(paint.getTypeface()));
-        if (NULL == origFace.get()) {
-            origFace.reset(SkTypeface::RefDefault());
-        }
-        const uint16_t origGlyphCount = origFace->countGlyphs();
-
-        // keep a list of the already visited typefaces and some data about them
-        SkTDArray<TypefaceFallbackData> visitedTypefaces;
-
-        // find all the typefaces needed to resolve this run of text
-        bool usesOriginalTypeface = false;
-        for (uint16_t x = 0; x < numGlyphs; ++x) {
-            // optimization that checks to see if original typeface can resolve
-            // the glyph
-            if (glyphIDs[x] < origGlyphCount) {
-                usesOriginalTypeface = true;
-                continue;
-            }
-
-            // find the fallback typeface that supports this glyph
-            TypefaceFallbackData data;
-            data.typeface =
-                    SkGetTypefaceForGlyphID(glyphIDs[x], origFace.get(),
-                                            paint.getPaintOptionsAndroid(),
-                                            &data.lowerBounds,
-                                            &data.upperBounds);
-            // add the typeface and its data if we don't have it
-            if (data.typeface && !visitedTypefaces.contains(data)) {
-                visitedTypefaces.push(data);
-            }
-        }
-
-        // if the original font was used then add it to the list as well
-        if (usesOriginalTypeface) {
-            TypefaceFallbackData* data = visitedTypefaces.push();
-            data->typeface = origFace.get();
-            data->lowerBounds = 0;
-            data->upperBounds = origGlyphCount;
-        }
-
-        // keep a scratch glyph and pos storage
-        SkAutoTMalloc<SkScalar> posStorage(len * scalarsPerPos);
-        SkScalar* tmpPos = posStorage.get();
-        SkGlyphStorage glyphStorage(numGlyphs);
-        uint16_t* tmpGlyphIDs = glyphStorage.get();
-
-        // loop through all the valid typefaces, trim the glyphs to only those
-        // resolved by the typeface, and then draw that run of glyphs
-        for (int x = 0; x < visitedTypefaces.count(); ++x) {
-            const TypefaceFallbackData& data = visitedTypefaces[x];
-
-            int tmpGlyphCount = 0;
-            for (uint16_t y = 0; y < numGlyphs; ++y) {
-                if (glyphIDs[y] >= data.lowerBounds &&
-                        glyphIDs[y] < data.upperBounds) {
-                    tmpGlyphIDs[tmpGlyphCount] = glyphIDs[y] - data.lowerBounds;
-                    memcpy(&(tmpPos[tmpGlyphCount * scalarsPerPos]),
-                           &(pos[y * scalarsPerPos]),
-                           scalarsPerPos * sizeof(SkScalar));
-                    tmpGlyphCount++;
-                }
-            }
-
-            // recursively call this function with the right typeface
-            SkPaint tmpPaint = paint;
-            tmpPaint.setTypeface(data.typeface);
-            tmpPaint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-
-            // turn off fallback chaining
-            SkPaintOptionsAndroid paintOpts = tmpPaint.getPaintOptionsAndroid();
-            paintOpts.setUseFontFallbacks(false);
-            tmpPaint.setPaintOptionsAndroid(paintOpts);
-
-            this->drawPosText(d, tmpGlyphIDs, tmpGlyphCount * 2, tmpPos, constY,
-                              scalarsPerPos, tmpPaint);
-        }
-        return;
-    }
-#endif
-
     SkGlyphStorage storage(0);
     uint16_t* glyphIDs = NULL;
     size_t numGlyphs = force_glyph_encoding(paint, text, len, &storage,
@@ -1364,6 +1244,10 @@ void SkPDFDevice::drawDevice(const SkDraw& d, SkBaseDevice* device,
     fFontGlyphUsage->merge(pdfDevice->getFontGlyphUsage());
 }
 
+SkImageInfo SkPDFDevice::imageInfo() const {
+    return fLegacyBitmap.info();
+}
+
 void SkPDFDevice::onAttachToCanvas(SkCanvas* canvas) {
     INHERITED::onAttachToCanvas(canvas);
 
@@ -1375,6 +1259,10 @@ void SkPDFDevice::onDetachFromCanvas() {
     INHERITED::onDetachFromCanvas();
 
     fClipStack = NULL;
+}
+
+SkSurface* SkPDFDevice::newSurface(const SkImageInfo& info) {
+    return SkSurface::NewRaster(info);
 }
 
 ContentEntry* SkPDFDevice::getLastContentEntry() {
@@ -2237,8 +2125,7 @@ void SkPDFDevice::internalDrawBitmap(const SkMatrix& origMatrix,
         }
         perspectiveBitmap.eraseColor(SK_ColorTRANSPARENT);
 
-        SkBitmapDevice device(perspectiveBitmap);
-        SkCanvas canvas(&device);
+        SkCanvas canvas(perspectiveBitmap);
 
         SkScalar deltaX = bounds.left();
         SkScalar deltaY = bounds.top();
@@ -2305,6 +2192,3 @@ void SkPDFDevice::internalDrawBitmap(const SkMatrix& origMatrix,
                                 &content.entry()->fContent);
 }
 
-bool SkPDFDevice::allowImageFilter(const SkImageFilter*) {
-    return false;
-}

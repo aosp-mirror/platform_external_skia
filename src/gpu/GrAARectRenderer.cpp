@@ -8,6 +8,7 @@
 #include "GrAARectRenderer.h"
 #include "GrGpu.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "gl/GrGLVertexEffect.h"
 #include "GrTBackendEffectFactory.h"
 #include "SkColorPriv.h"
@@ -19,7 +20,7 @@ class GrGLAlignedRectEffect;
 // Axis Aligned special case
 class GrAlignedRectEffect : public GrVertexEffect {
 public:
-    static GrEffectRef* Create() {
+    static GrEffect* Create() {
         GR_CREATE_STATIC_EFFECT(gAlignedRectEffect, GrAlignedRectEffect, ());
         gAlignedRectEffect->ref();
         return gAlignedRectEffect;
@@ -45,7 +46,7 @@ public:
 
         virtual void emitCode(GrGLFullShaderBuilder* builder,
                               const GrDrawEffect& drawEffect,
-                              EffectKey key,
+                              const GrEffectKey& key,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
@@ -87,11 +88,9 @@ public:
                                    (GrGLSLExpr4(inputColor) * GrGLSLExpr1("coverage")).c_str());
         }
 
-        static inline EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
-            return 0;
-        }
+        static void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder*) {}
 
-        virtual void setData(const GrGLUniformManager& uman, const GrDrawEffect&) SK_OVERRIDE {}
+        virtual void setData(const GrGLProgramDataManager& pdman, const GrDrawEffect&) SK_OVERRIDE {}
 
     private:
         typedef GrGLVertexEffect INHERITED;
@@ -113,10 +112,10 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrAlignedRectEffect);
 
-GrEffectRef* GrAlignedRectEffect::TestCreate(SkRandom* random,
-                                             GrContext* context,
-                                             const GrDrawTargetCaps&,
-                                             GrTexture* textures[]) {
+GrEffect* GrAlignedRectEffect::TestCreate(SkRandom* random,
+                                          GrContext* context,
+                                          const GrDrawTargetCaps&,
+                                          GrTexture* textures[]) {
     return GrAlignedRectEffect::Create();
 }
 
@@ -137,7 +136,7 @@ class GrGLRectEffect;
  */
 class GrRectEffect : public GrVertexEffect {
 public:
-    static GrEffectRef* Create() {
+    static GrEffect* Create() {
         GR_CREATE_STATIC_EFFECT(gRectEffect, GrRectEffect, ());
         gRectEffect->ref();
         return gRectEffect;
@@ -163,7 +162,7 @@ public:
 
         virtual void emitCode(GrGLFullShaderBuilder* builder,
                               const GrDrawEffect& drawEffect,
-                              EffectKey key,
+                              const GrEffectKey& key,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
@@ -200,7 +199,7 @@ public:
             builder->fsCodeAppend("\tfloat scaleH = min(1.0, 2.0*insetH/spanH);\n");
 
             // Compute the coverage for the rect's width
-            builder->fsCodeAppendf("\tvec2 offset = %s - %s.xy;\n",
+            builder->fsCodeAppendf("\tvec2 offset = %s.xy - %s.xy;\n",
                                    builder->fragmentPosition(), fsRectEdgeName);
             builder->fsCodeAppendf("\tfloat perpDot = abs(offset.x * %s.w - offset.y * %s.z);\n",
                                    fsRectEdgeName, fsRectEdgeName);
@@ -220,11 +219,9 @@ public:
                                    (GrGLSLExpr4(inputColor) * GrGLSLExpr1("coverage")).c_str());
         }
 
-        static inline EffectKey GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&) {
-            return 0;
-        }
+        static void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder*) {}
 
-        virtual void setData(const GrGLUniformManager& uman, const GrDrawEffect&) SK_OVERRIDE {}
+        virtual void setData(const GrGLProgramDataManager& pdman, const GrDrawEffect&) SK_OVERRIDE {}
 
     private:
         typedef GrGLVertexEffect INHERITED;
@@ -248,10 +245,10 @@ private:
 
 GR_DEFINE_EFFECT_TEST(GrRectEffect);
 
-GrEffectRef* GrRectEffect::TestCreate(SkRandom* random,
-                                      GrContext* context,
-                                      const GrDrawTargetCaps&,
-                                      GrTexture* textures[]) {
+GrEffect* GrRectEffect::TestCreate(SkRandom* random,
+                                   GrContext* context,
+                                   const GrDrawTargetCaps&,
+                                   GrTexture* textures[]) {
     return GrRectEffect::Create();
 }
 
@@ -631,7 +628,7 @@ void GrAARectRenderer::shaderFillAARect(GrGpu* gpu,
 
     RectVertex* verts = reinterpret_cast<RectVertex*>(geo.vertices());
 
-    GrEffectRef* effect = GrRectEffect::Create();
+    GrEffect* effect = GrRectEffect::Create();
     static const int kRectAttrIndex = 1;
     static const int kWidthIndex = 2;
     drawState->addCoverageEffect(effect, kRectAttrIndex, kWidthIndex)->unref();
@@ -681,7 +678,7 @@ void GrAARectRenderer::shaderFillAlignedAARect(GrGpu* gpu,
 
     AARectVertex* verts = reinterpret_cast<AARectVertex*>(geo.vertices());
 
-    GrEffectRef* effect = GrAlignedRectEffect::Create();
+    GrEffect* effect = GrAlignedRectEffect::Create();
     static const int kOffsetIndex = 1;
     drawState->addCoverageEffect(effect, kOffsetIndex)->unref();
 
@@ -762,8 +759,10 @@ void GrAARectRenderer::strokeAARect(GrGpu* gpu,
     devOutside.outset(rx, ry);
 
     bool miterStroke = true;
+    // For hairlines, make bevel and round joins appear the same as mitered ones.
     // small miter limit means right angles show bevel...
-    if (stroke.getJoin() != SkPaint::kMiter_Join || stroke.getMiter() < SK_ScalarSqrt2) {
+    if ((width > 0) && (stroke.getJoin() != SkPaint::kMiter_Join ||
+                        stroke.getMiter() < SK_ScalarSqrt2)) {
         miterStroke = false;
     }
 

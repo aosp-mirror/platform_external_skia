@@ -19,6 +19,7 @@
 
 class GrGpu;
 class GrIndexBufferAllocPool;
+class GrPathRange;
 class GrVertexBufferAllocPool;
 
 /**
@@ -119,11 +120,12 @@ private:
         DrawPaths();
         ~DrawPaths();
 
-        int fPathCount;
-        const GrPath** fPaths;
-        SkMatrix* fTransforms;
+        SkAutoTUnref<const GrPathRange> fPathRange;
+        uint32_t* fIndices;
+        size_t fCount;
+        float* fTransforms;
+        PathTransformType fTransformsType;
         SkPath::FillType fFill;
-        SkStrokeRec::Style fStroke;
         GrDeviceCoordTexture fDstCopy;
     };
 
@@ -145,19 +147,24 @@ private:
         SkIPoint                fDstPoint;
     };
 
+    struct Clip : public ::SkNoncopyable {
+        SkClipStack fStack;
+        SkIPoint    fOrigin;
+    };
+
     // overrides from GrDrawTarget
     virtual void onDraw(const DrawInfo&) SK_OVERRIDE;
     virtual void onDrawRect(const SkRect& rect,
-                            const SkMatrix* matrix,
                             const SkRect* localRect,
                             const SkMatrix* localMatrix) SK_OVERRIDE;
 
     virtual void onStencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
     virtual void onDrawPath(const GrPath*, SkPath::FillType,
                             const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
-    virtual void onDrawPaths(int, const GrPath**, const SkMatrix*,
-                             SkPath::FillType, SkStrokeRec::Style,
-                             const GrDeviceCoordTexture* dstCopy) SK_OVERRIDE;
+    virtual void onDrawPaths(const GrPathRange*,
+                             const uint32_t indices[], int count,
+                             const float transforms[], PathTransformType,
+                             SkPath::FillType, const GrDeviceCoordTexture*) SK_OVERRIDE;
 
     virtual bool onReserveVertexSpace(size_t vertexSize,
                                       int vertexCount,
@@ -194,9 +201,9 @@ private:
     // instanced draw. The caller must have already recorded a new draw state and clip if necessary.
     int concatInstancedDraw(const DrawInfo& info);
 
-    // we lazily record state and clip changes in order to skip clips and states that have no
-    // effect.
-    bool needsNewState() const;
+    // Determines whether the current draw operation requieres a new drawstate and if so records it.
+    void recordStateIfNecessary();
+    // We lazily record clip changes in order to skip clips that have no effect.
     bool needsNewClip() const;
 
     // these functions record a command
@@ -212,28 +219,38 @@ private:
     // TODO: Use a single allocator for commands and records
     enum {
         kCmdPreallocCnt          = 32,
-        kDrawPreallocCnt         = 8,
+        kDrawPreallocCnt         = 16,
         kStencilPathPreallocCnt  = 8,
         kDrawPathPreallocCnt     = 8,
         kDrawPathsPreallocCnt    = 8,
         kStatePreallocCnt        = 8,
         kClipPreallocCnt         = 8,
-        kClearPreallocCnt        = 4,
+        kClearPreallocCnt        = 8,
         kGeoPoolStatePreAllocCnt = 4,
         kCopySurfacePreallocCnt  = 4,
     };
 
-    SkSTArray<kCmdPreallocCnt, uint8_t, true>                          fCmds;
+    typedef GrTAllocator<DrawRecord>                        DrawAllocator;
+    typedef GrTAllocator<StencilPath>                       StencilPathAllocator;
+    typedef GrTAllocator<DrawPath>                          DrawPathAllocator;
+    typedef GrTAllocator<DrawPaths>                         DrawPathsAllocator;
+    typedef GrTAllocator<GrDrawState>                       StateAllocator;
+    typedef GrTAllocator<Clear>                             ClearAllocator;
+    typedef GrTAllocator<CopySurface>                       CopySurfaceAllocator;
+    typedef GrTAllocator<Clip>                              ClipAllocator;
+
     GrSTAllocator<kDrawPreallocCnt, DrawRecord>                        fDraws;
     GrSTAllocator<kStencilPathPreallocCnt, StencilPath>                fStencilPaths;
     GrSTAllocator<kDrawPathPreallocCnt, DrawPath>                      fDrawPath;
     GrSTAllocator<kDrawPathsPreallocCnt, DrawPaths>                    fDrawPaths;
-    GrSTAllocator<kStatePreallocCnt, GrDrawState::DeferredState>       fStates;
+    GrSTAllocator<kStatePreallocCnt, GrDrawState>                      fStates;
     GrSTAllocator<kClearPreallocCnt, Clear>                            fClears;
     GrSTAllocator<kCopySurfacePreallocCnt, CopySurface>                fCopySurfaces;
-    GrSTAllocator<kClipPreallocCnt, SkClipStack>                       fClips;
-    GrSTAllocator<kClipPreallocCnt, SkIPoint>                          fClipOrigins;
+    GrSTAllocator<kClipPreallocCnt, Clip>                              fClips;
+
     SkTArray<GrTraceMarkerSet, false>                                  fGpuCmdMarkers;
+
+    SkSTArray<kCmdPreallocCnt, uint8_t, true>                          fCmds;
 
     GrDrawTarget*                   fDstGpu;
 

@@ -35,7 +35,25 @@ import subprocess
 import sys
 import threading
 
-from git_utils import git_executable
+
+def git_executable():
+  """Find the git executable.
+
+  Returns:
+      A string suitable for passing to subprocess functions, or None.
+  """
+  envgit = os.environ.get('GIT_EXECUTABLE')
+  searchlist = ['git', 'git.exe', 'git.bat']
+  if envgit:
+    searchlist.insert(0, envgit)
+  with open(os.devnull, 'w') as devnull:
+    for git in searchlist:
+      try:
+        subprocess.call([git, '--version'], stdout=devnull)
+      except (OSError,):
+        continue
+      return git
+  return None
 
 
 DEFAULT_DEPS_PATH = os.path.normpath(

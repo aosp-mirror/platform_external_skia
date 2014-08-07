@@ -17,7 +17,6 @@
 #include "SkPath.h"
 #include "SkPathEffect.h"
 #include "SkPicture.h"
-#include "SkPixelRef.h"
 #include "SkRasterizer.h"
 #include "SkReadBuffer.h"
 #include "SkReader32.h"
@@ -46,6 +45,8 @@ public:
         kColorShaderNoBool_Version         = 26,
         kNoUnitMappers_Version             = 27,
         kNoMoreBitmapFlatten_Version       = 28,
+        kSimplifyLocalMatrix_Version       = 30,
+        kImageFilterUniqueID_Version       = 31,
     };
 
     /**
@@ -119,7 +120,6 @@ public:
     SkImageFilter* readImageFilter() { return this->readFlattenable<SkImageFilter>(); }
     SkMaskFilter*  readMaskFilter()  { return this->readFlattenable<SkMaskFilter>(); }
     SkPathEffect*  readPathEffect()  { return this->readFlattenable<SkPathEffect>(); }
-    SkPixelRef*    readPixelRef()    { return this->readFlattenable<SkPixelRef>(); }
     SkRasterizer*  readRasterizer()  { return this->readFlattenable<SkRasterizer>(); }
     SkShader*      readShader()      { return this->readFlattenable<SkShader>(); }
     SkXfermode*    readXfermode()    { return this->readFlattenable<SkXfermode>(); }

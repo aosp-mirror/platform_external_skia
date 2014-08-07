@@ -11,8 +11,9 @@
 #include "SkImageDecoder.h"
 #include <QListWidgetItem>
 #include "PictureRenderer.h"
-#include "SkPictureRecord.h"
 #include "SkPicturePlayback.h"
+#include "SkPictureRecord.h"
+#include "SkPictureData.h"
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
 
@@ -155,32 +156,61 @@ void SkDebuggerGUI::showDeletes() {
     }
 }
 
-// The timed picture playback uses the SkPicturePlayback's profiling stubs
-// to time individual commands. The offsets are needed to map SkPicture
-// offsets to individual commands.
+// The timed picture playback just steps through every operation timing
+// each one individually. Note that each picture should be replayed multiple 
+// times (via calls to 'draw') before each command's time is accessed via 'time'.
 class SkTimedPicturePlayback : public SkPicturePlayback {
 public:
-    static SkTimedPicturePlayback* CreateFromStream(SkStream* stream, const SkPictInfo& info,
-                                                    SkPicture::InstallPixelRefProc proc,
-                                                    const SkTDArray<bool>& deletedCommands) {
-        // Mimics SkPicturePlayback::CreateFromStream
-        SkAutoTDelete<SkTimedPicturePlayback> playback(SkNEW_ARGS(SkTimedPicturePlayback,
-                                                               (deletedCommands, info)));
-        if (!playback->parseStream(stream, proc)) {
-            return NULL; // we're invalid
-        }
-        return playback.detach();
-    }
 
-    SkTimedPicturePlayback(const SkTDArray<bool>& deletedCommands,
-                           const SkPictInfo& info)
-        : INHERITED(info)
+    SkTimedPicturePlayback(const SkPicture* picture, const SkTDArray<bool>& deletedCommands)
+        : INHERITED(picture)
         , fSkipCommands(deletedCommands)
         , fTot(0.0)
         , fCurCommand(0) {
         fTimes.setCount(deletedCommands.count());
         fTypeTimes.setCount(LAST_DRAWTYPE_ENUM+1);
         this->resetTimes();
+    }
+
+    virtual void draw(SkCanvas* canvas, SkDrawPictureCallback* callback) SK_OVERRIDE {
+        AutoResetOpID aroi(this);
+        SkASSERT(0 == fCurOffset);
+
+        SkReader32 reader(fPictureData->opData()->bytes(), fPictureData->opData()->size());
+
+        // Record this, so we can concat w/ it if we encounter a setMatrix()
+        SkMatrix initialMatrix = canvas->getTotalMatrix();
+
+        SkAutoCanvasRestore acr(canvas, false);
+
+        int opIndex = -1;
+
+        while (!reader.eof()) {
+            if (NULL != callback && callback->abortDrawing()) {
+                return;
+            }
+
+            fCurOffset = reader.offset();
+            uint32_t size;
+            DrawType op = ReadOpAndSize(&reader, &size);
+            if (NOOP == op) {
+                // NOOPs are to be ignored - do not propagate them any further
+                reader.setOffset(fCurOffset + size);
+                continue;
+            }
+
+            opIndex++;
+
+            if (this->preDraw(opIndex, op)) {
+                // This operation is disabled in the debugger's GUI
+                reader.setOffset(fCurOffset + size);
+                continue;
+            }
+
+            this->handleOp(&reader, op, size, canvas, initialMatrix);
+
+            this->postDraw(opIndex);
+        }
     }
 
     void resetTimes() {
@@ -195,6 +225,7 @@ public:
 
     int count() const { return fTimes.count(); }
 
+    // Return the fraction of the total time consumed by the index-th operation
     double time(int index) const { return fTimes[index] / fTot; }
 
     const SkTDArray<double>* typeTimes() const { return &fTypeTimes; }
@@ -207,11 +238,11 @@ protected:
     SkTDArray<double> fTimes;   // sum of time consumed for each command
     SkTDArray<double> fTypeTimes; // sum of time consumed for each type of command (e.g., drawPath)
     double fTot;                // total of all times in 'fTimes'
+
     int fCurType;
     int fCurCommand;            // the current command being executed/timed
 
-#ifdef SK_DEVELOPER
-    virtual bool preDraw(int opIndex, int type) SK_OVERRIDE {
+    bool preDraw(int opIndex, int type) {
         fCurCommand = opIndex;
 
         if (fSkipCommands[fCurCommand]) {
@@ -238,7 +269,7 @@ protected:
         return false;
     }
 
-    virtual void postDraw(int opIndex) SK_OVERRIDE {
+    void postDraw(int opIndex) {
 #if defined(SK_BUILD_FOR_WIN32)
         // CPU timer doesn't work well on Windows
         double time = fTimer.endWall();
@@ -253,12 +284,12 @@ protected:
         fTypeTimes[fCurType] += time;
         fTot += time;
     }
-#endif
 
 private:
     typedef SkPicturePlayback INHERITED;
 };
 
+#if 0
 // Wrap SkPicture to allow installation of an SkTimedPicturePlayback object
 class SkTimedPicture : public SkPicture {
 public:
@@ -286,19 +317,19 @@ public:
         return NULL;
     }
 
-    void resetTimes() { ((SkTimedPicturePlayback*) fPlayback)->resetTimes(); }
+    void resetTimes() { ((SkTimedPicturePlayback*) fData.get())->resetTimes(); }
 
-    int count() const { return ((SkTimedPicturePlayback*) fPlayback)->count(); }
+    int count() const { return ((SkTimedPicturePlayback*) fData.get())->count(); }
 
     // return the fraction of the total time this command consumed
-    double time(int index) const { return ((SkTimedPicturePlayback*) fPlayback)->time(index); }
+    double time(int index) const { return ((SkTimedPicturePlayback*) fData.get())->time(index); }
 
-    const SkTDArray<double>* typeTimes() const { return ((SkTimedPicturePlayback*) fPlayback)->typeTimes(); }
+    const SkTDArray<double>* typeTimes() const { return ((SkTimedPicturePlayback*) fData.get())->typeTimes(); }
 
-    double totTime() const { return ((SkTimedPicturePlayback*) fPlayback)->totTime(); }
+    double totTime() const { return ((SkTimedPicturePlayback*) fData.get())->totTime(); }
 
 private:
-    // disallow default ctor b.c. we don't have a good way to setup the fPlayback ptr
+    // disallow default ctor b.c. we don't have a good way to setup the fData ptr
     SkTimedPicture();
     // Private ctor only used by CreateTimedPicture, which has created the playback.
     SkTimedPicture(SkTimedPicturePlayback* playback, int width, int height)
@@ -308,10 +339,11 @@ private:
 
     typedef SkPicture INHERITED;
 };
+#endif
 
 // This is a simplification of PictureBenchmark's run with the addition of
 // clearing of the times after the first pass (in resetTimes)
-void SkDebuggerGUI::run(SkTimedPicture* pict,
+void SkDebuggerGUI::run(const SkPicture* pict,
                         sk_tools::PictureRenderer* renderer,
                         int repeats) {
     SkASSERT(pict);
@@ -330,8 +362,10 @@ void SkDebuggerGUI::run(SkTimedPicture* pict,
     renderer->render();
     renderer->resetState(true);    // flush, swapBuffers and Finish
 
+#if 0
     // We throw this away the first batch of times to remove first time effects (such as paging in this program)
     pict->resetTimes();
+#endif
 
     for (int i = 0; i < repeats; ++i) {
         renderer->setup();
@@ -360,11 +394,14 @@ void SkDebuggerGUI::actionProfile() {
         return;
     }
 
-    SkAutoTUnref<SkTimedPicture> picture(SkTimedPicture::CreateTimedPicture(&inputStream,
-                                         &SkImageDecoder::DecodeMemory, fSkipCommands));
+    SkAutoTUnref<SkPicture> picture(SkPicture::CreateFromStream(&inputStream,
+                                        &SkImageDecoder::DecodeMemory)); // , fSkipCommands));
     if (NULL == picture.get()) {
         return;
     }
+
+
+#if 0
 
     // For now this #if allows switching between tiled and simple rendering
     // modes. Eventually this will be accomplished via the GUI
@@ -414,6 +451,8 @@ void SkDebuggerGUI::actionProfile() {
 
     setupOverviewText(picture->typeTimes(), picture->totTime(), kNumRepeats);
     setupClipStackText();
+
+#endif
 }
 
 void SkDebuggerGUI::actionCancel() {

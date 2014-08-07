@@ -17,6 +17,8 @@
 #include "SkMatrix22.h"
 #include "SkOTTable_EBLC.h"
 #include "SkOTTable_EBSC.h"
+#include "SkOTTable_gasp.h"
+#include "SkOTTable_maxp.h"
 #include "SkPath.h"
 #include "SkScalerContext.h"
 #include "SkScalerContext_win_dw.h"
@@ -24,13 +26,83 @@
 #include "SkTypeface_win_dw.h"
 
 #include <dwrite.h>
+#include <dwrite_1.h>
 
 static bool isLCD(const SkScalerContext::Rec& rec) {
     return SkMask::kLCD16_Format == rec.fMaskFormat ||
            SkMask::kLCD32_Format == rec.fMaskFormat;
 }
 
-static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
+static bool is_hinted_without_gasp(DWriteFontTypeface* typeface) {
+    AutoTDWriteTable<SkOTTableMaximumProfile> maxp(typeface->fDWriteFontFace.get());
+    if (!maxp.fExists) {
+        return false;
+    }
+    if (maxp.fSize < sizeof(SkOTTableMaximumProfile::Version::TT)) {
+        return false;
+    }
+    if (maxp->version.version != SkOTTableMaximumProfile::Version::TT::VERSION) {
+        return false;
+    }
+
+    if (0 == maxp->version.tt.maxSizeOfInstructions) {
+        // No hints.
+        return false;
+    }
+
+    AutoTDWriteTable<SkOTTableGridAndScanProcedure> gasp(typeface->fDWriteFontFace.get());
+    return !gasp.fExists;
+}
+
+/** A PPEMRange is inclusive, [min, max]. */
+struct PPEMRange {
+    int min;
+    int max;
+};
+
+/** If the rendering mode for the specified 'size' is gridfit, then place
+ *  the gridfit range into 'range'. Otherwise, leave 'range' alone.
+ */
+static void expand_range_if_gridfit_only(DWriteFontTypeface* typeface, int size, PPEMRange* range) {
+    AutoTDWriteTable<SkOTTableGridAndScanProcedure> gasp(typeface->fDWriteFontFace.get());
+    if (!gasp.fExists) {
+        return;
+    }
+    if (gasp.fSize < sizeof(SkOTTableGridAndScanProcedure)) {
+        return;
+    }
+    if (gasp->version != SkOTTableGridAndScanProcedure::version0 &&
+        gasp->version != SkOTTableGridAndScanProcedure::version1)
+    {
+        return;
+    }
+
+    uint16_t numRanges = SkEndianSwap16(gasp->numRanges);
+    if (numRanges > 1024 ||
+        gasp.fSize < sizeof(SkOTTableGridAndScanProcedure) +
+                     sizeof(SkOTTableGridAndScanProcedure::GaspRange) * numRanges)
+    {
+        return;
+    }
+
+    const SkOTTableGridAndScanProcedure::GaspRange* rangeTable =
+            SkTAfter<const SkOTTableGridAndScanProcedure::GaspRange>(gasp.get());
+    int minPPEM = -1;
+    for (uint16_t i = 0; i < numRanges; ++i, ++rangeTable) {
+        int maxPPEM = SkEndianSwap16(rangeTable->maxPPEM);
+        // Test that the size is in range and the range is gridfit only.
+        if (minPPEM < size && size <= maxPPEM &&
+            rangeTable->flags.raw.value == SkOTTableGridAndScanProcedure::GaspRange::behavior::Raw::GridfitMask)
+        {
+            range->min = minPPEM + 1;
+            range->max = maxPPEM;
+            return;
+        }
+        minPPEM = maxPPEM;
+    }
+}
+
+static bool has_bitmap_strike(DWriteFontTypeface* typeface, PPEMRange range) {
     {
         AutoTDWriteTable<SkOTTableEmbeddedBitmapLocation> eblc(typeface->fDWriteFontFace.get());
         if (!eblc.fExists) {
@@ -44,7 +116,8 @@ static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
         }
 
         uint32_t numSizes = SkEndianSwap32(eblc->numSizes);
-        if (eblc.fSize < sizeof(SkOTTableEmbeddedBitmapLocation) +
+        if (numSizes > 1024 ||
+            eblc.fSize < sizeof(SkOTTableEmbeddedBitmapLocation) +
                          sizeof(SkOTTableEmbeddedBitmapLocation::BitmapSizeTable) * numSizes)
         {
             return false;
@@ -53,13 +126,15 @@ static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
         const SkOTTableEmbeddedBitmapLocation::BitmapSizeTable* sizeTable =
                 SkTAfter<const SkOTTableEmbeddedBitmapLocation::BitmapSizeTable>(eblc.get());
         for (uint32_t i = 0; i < numSizes; ++i, ++sizeTable) {
-            if (sizeTable->ppemX == size && sizeTable->ppemY == size) {
+            if (sizeTable->ppemX == sizeTable->ppemY &&
+                range.min <= sizeTable->ppemX && sizeTable->ppemX <= range.max)
+            {
                 // TODO: determine if we should dig through IndexSubTableArray/IndexSubTable
                 // to determine the actual number of glyphs with bitmaps.
 
                 // TODO: Ensure that the bitmaps actually cover a significant portion of the strike.
 
-                //TODO: Endure that the bitmaps are bi-level.
+                // TODO: Ensure that the bitmaps are bi-level?
                 if (sizeTable->endGlyphIndex >= sizeTable->startGlyphIndex + 3) {
                     return true;
                 }
@@ -80,7 +155,8 @@ static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
         }
 
         uint32_t numSizes = SkEndianSwap32(ebsc->numSizes);
-        if (ebsc.fSize < sizeof(SkOTTableEmbeddedBitmapScaling) +
+        if (numSizes > 1024 ||
+            ebsc.fSize < sizeof(SkOTTableEmbeddedBitmapScaling) +
                          sizeof(SkOTTableEmbeddedBitmapScaling::BitmapScaleTable) * numSizes)
         {
             return false;
@@ -89,7 +165,8 @@ static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
         const SkOTTableEmbeddedBitmapScaling::BitmapScaleTable* scaleTable =
                 SkTAfter<const SkOTTableEmbeddedBitmapScaling::BitmapScaleTable>(ebsc.get());
         for (uint32_t i = 0; i < numSizes; ++i, ++scaleTable) {
-            if (scaleTable->ppemX == size && scaleTable->ppemY == size) {
+            if (scaleTable->ppemX == scaleTable->ppemY &&
+                range.min <= scaleTable->ppemX && scaleTable->ppemX <= range.max) {
                 // EBSC tables are normally only found in bitmap only fonts.
                 return true;
             }
@@ -99,15 +176,15 @@ static bool hasBitmapStrike(DWriteFontTypeface* typeface, int size) {
     return false;
 }
 
-static bool bothZero(SkScalar a, SkScalar b) {
+static bool both_zero(SkScalar a, SkScalar b) {
     return 0 == a && 0 == b;
 }
 
 // returns false if there is any non-90-rotation or skew
-static bool isAxisAligned(const SkScalerContext::Rec& rec) {
+static bool is_axis_aligned(const SkScalerContext::Rec& rec) {
     return 0 == rec.fPreSkewX &&
-           (bothZero(rec.fPost2x2[0][1], rec.fPost2x2[1][0]) ||
-            bothZero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
+           (both_zero(rec.fPost2x2[0][1], rec.fPost2x2[1][0]) ||
+            both_zero(rec.fPost2x2[0][0], rec.fPost2x2[1][1]));
 }
 
 SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
@@ -159,11 +236,17 @@ SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
     }
 
     bool bitmapRequested = SkToBool(fRec.fFlags & SkScalerContext::kEmbeddedBitmapText_Flag);
-    bool hasBitmap = false;
+    bool treatLikeBitmap = false;
     bool axisAlignedBitmap = false;
     if (bitmapRequested) {
-        hasBitmap = hasBitmapStrike(typeface, SkScalarTruncToInt(gdiTextSize));
-        axisAlignedBitmap = isAxisAligned(fRec);
+        // When embedded bitmaps are requested, treat the entire range like
+        // a bitmap strike if the range is gridfit only and contains a bitmap.
+        int bitmapPPEM = SkScalarTruncToInt(gdiTextSize);
+        PPEMRange range = { bitmapPPEM, bitmapPPEM };
+        expand_range_if_gridfit_only(typeface, bitmapPPEM, &range);
+        treatLikeBitmap = has_bitmap_strike(typeface, range);
+
+        axisAlignedBitmap = is_axis_aligned(fRec);
     }
 
     // If the user requested aliased, do so with aliased compatible metrics.
@@ -176,7 +259,7 @@ SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
 
     // If we can use a bitmap, use gdi classic rendering and measurement.
     // This will not always provide a bitmap, but matches expected behavior.
-    } else if (hasBitmap && axisAlignedBitmap) {
+    } else if (treatLikeBitmap && axisAlignedBitmap) {
         fTextSizeRender = gdiTextSize;
         fRenderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_GDI_CLASSIC;
         fTextureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
@@ -185,12 +268,23 @@ SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
 
     // If rotated but the horizontal text could have used a bitmap,
     // render high quality rotated glyphs but measure using bitmap metrics.
-    } else if (hasBitmap) {
+    } else if (treatLikeBitmap) {
         fTextSizeRender = gdiTextSize;
         fRenderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC;
         fTextureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
         fTextSizeMeasure = gdiTextSize;
         fMeasuringMode = DWRITE_MEASURING_MODE_GDI_CLASSIC;
+
+    // Fonts that have hints but no gasp table get non-symmetric rendering.
+    // Usually such fonts have low quality hints which were never tested
+    // with anything but GDI ClearType classic. Such fonts often rely on
+    // drop out control in the y direction in order to be legible.
+    } else if (is_hinted_without_gasp(typeface)) {
+        fTextSizeRender = gdiTextSize;
+        fRenderingMode = DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL;
+        fTextureType = DWRITE_TEXTURE_CLEARTYPE_3x1;
+        fTextSizeMeasure = realTextSize;
+        fMeasuringMode = DWRITE_MEASURING_MODE_NATURAL;
 
     // The normal case is to use natural symmetric rendering and linear metrics.
     } else {
@@ -292,6 +386,9 @@ void SkScalerContext_DW::generateAdvance(SkGlyph* glyph) {
     if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
         DWRITE_MEASURING_MODE_GDI_NATURAL == fMeasuringMode)
     {
+        // DirectWrite produced 'compatible' metrics, but while close,
+        // the end result is not always an integer as it would be with GDI.
+        vecs[0].fX = SkScalarRoundToScalar(advanceX);
         fG_inv.mapVectors(vecs, SK_ARRAY_COUNT(vecs));
     } else {
         fSkXform.mapVectors(vecs, SK_ARRAY_COUNT(vecs));
@@ -350,17 +447,12 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     glyph->fTop = SkToS16(bbox.top);
 }
 
-void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* mx,
-                                             SkPaint::FontMetrics* my) {
-    if (!(mx || my))
-      return;
+void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {
+    if (NULL == metrics) {
+        return;
+    }
 
-    if (mx) {
-        sk_bzero(mx, sizeof(*mx));
-    }
-    if (my) {
-        sk_bzero(my, sizeof(*my));
-    }
+    sk_bzero(metrics, sizeof(*metrics));
 
     DWRITE_FONT_METRICS dwfm;
     if (DWRITE_MEASURING_MODE_GDI_CLASSIC == fMeasuringMode ||
@@ -376,32 +468,42 @@ void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* mx,
     }
 
     SkScalar upem = SkIntToScalar(dwfm.designUnitsPerEm);
-    if (mx) {
-        mx->fTop = -fTextSizeRender * SkIntToScalar(dwfm.ascent) / upem;
-        mx->fAscent = mx->fTop;
-        mx->fDescent = fTextSizeRender * SkIntToScalar(dwfm.descent) / upem;
-        mx->fBottom = mx->fDescent;
-        mx->fLeading = fTextSizeRender * SkIntToScalar(dwfm.lineGap) / upem;
-        mx->fXHeight = fTextSizeRender * SkIntToScalar(dwfm.xHeight) / upem;
-        mx->fUnderlineThickness = fTextSizeRender * SkIntToScalar(dwfm.underlineThickness) / upem;
-        mx->fUnderlinePosition = -(fTextSizeRender * SkIntToScalar(dwfm.underlinePosition) / upem);
 
-        mx->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-        mx->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
-    }
+    metrics->fAscent = -fTextSizeRender * SkIntToScalar(dwfm.ascent) / upem;
+    metrics->fDescent = fTextSizeRender * SkIntToScalar(dwfm.descent) / upem;
+    metrics->fLeading = fTextSizeRender * SkIntToScalar(dwfm.lineGap) / upem;
+    metrics->fXHeight = fTextSizeRender * SkIntToScalar(dwfm.xHeight) / upem;
+    metrics->fUnderlineThickness = fTextSizeRender * SkIntToScalar(dwfm.underlineThickness) / upem;
+    metrics->fUnderlinePosition = -(fTextSizeRender * SkIntToScalar(dwfm.underlinePosition) / upem);
 
-    if (my) {
-        my->fTop = -fTextSizeRender * SkIntToScalar(dwfm.ascent) / upem;
-        my->fAscent = my->fTop;
-        my->fDescent = fTextSizeRender * SkIntToScalar(dwfm.descent) / upem;
-        my->fBottom = my->fDescent;
-        my->fLeading = fTextSizeRender * SkIntToScalar(dwfm.lineGap) / upem;
-        my->fXHeight = fTextSizeRender * SkIntToScalar(dwfm.xHeight) / upem;
-        my->fUnderlineThickness = fTextSizeRender * SkIntToScalar(dwfm.underlineThickness) / upem;
-        my->fUnderlinePosition = -(fTextSizeRender * SkIntToScalar(dwfm.underlinePosition) / upem);
+    metrics->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
+    metrics->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
 
-        my->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
-        my->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
+    if (NULL != fTypeface->fDWriteFontFace1.get()) {
+        DWRITE_FONT_METRICS1 dwfm1;
+        fTypeface->fDWriteFontFace1->GetMetrics(&dwfm1);
+        metrics->fTop = -fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxTop) / upem;
+        metrics->fBottom = -fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxBottom) / upem;
+        metrics->fXMin = fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxLeft) / upem;
+        metrics->fXMax = fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxRight) / upem;
+
+        metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
+    } else {
+        AutoTDWriteTable<SkOTTableHead> head(fTypeface->fDWriteFontFace.get());
+        if (head.fExists &&
+            head.fSize >= sizeof(SkOTTableHead) &&
+            head->version == SkOTTableHead::version1)
+        {
+            metrics->fTop = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMax) / upem;
+            metrics->fBottom = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMin) / upem;
+            metrics->fXMin = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMin) / upem;
+            metrics->fXMax = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMax) / upem;
+
+            metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
+        } else {
+            metrics->fTop = metrics->fAscent;
+            metrics->fBottom = metrics->fDescent;
+        }
     }
 }
 

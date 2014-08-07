@@ -16,6 +16,7 @@
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
 static int32_t sk_atomic_inc(int32_t* addr);
+static int64_t sk_atomic_inc(int64_t* addr);
 
 /** Atomically adds inc to the int referenced by addr and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
@@ -49,8 +50,8 @@ static void sk_membar_acquire__after_atomic_conditional_inc();
  *  and returns the previous value.
  *  No additional memory barrier is required; this must act as a compiler barrier.
  */
-static inline int32_t sk_atomic_conditional_inc(int32_t* addr) {
-    int32_t prev;
+template<typename INT_TYPE> static inline INT_TYPE sk_atomic_conditional_inc(INT_TYPE* addr) {
+    INT_TYPE prev;
     do {
         prev = *addr;
         if (0 == prev) {
@@ -95,7 +96,6 @@ public:
 };
 
 #define SK_DECLARE_STATIC_MUTEX(name) static SkBaseMutex name = ...
-#define SK_DECLARE_GLOBAL_MUTEX(name) SkBaseMutex name = ...
 */
 
 #include SK_MUTEX_PLATFORM_H

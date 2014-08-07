@@ -71,7 +71,7 @@ protected:
 
 private:
     SimpleOffsetFilter(SkScalar dx, SkScalar dy, SkImageFilter* input)
-    : SkImageFilter(input), fDX(dx), fDY(dy) {}
+    : SkImageFilter(1, &input), fDX(dx), fDY(dy) {}
 
     SkScalar fDX, fDY;
 };
@@ -99,6 +99,7 @@ protected:
         canvas.clear(0x00000000);
         SkPaint paint;
         paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setColor(0xFFFFFFFF);
         paint.setTextSize(SkIntToScalar(96));
         const char* str = "e";

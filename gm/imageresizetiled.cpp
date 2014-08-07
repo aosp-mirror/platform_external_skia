@@ -22,6 +22,8 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE { return kNoBBH_Flag; }
+
     virtual SkString onShortName() SK_OVERRIDE {
         return SkString("imageresizetiled");
     }
@@ -55,6 +57,7 @@ protected:
                 };
                 SkPaint textPaint;
                 textPaint.setAntiAlias(true);
+                sk_tool_utils::set_portable_typeface(&textPaint);
                 textPaint.setTextSize(SkIntToScalar(100));
                 int posY = 0;
                 for (unsigned i = 0; i < SK_ARRAY_COUNT(str); i++) {

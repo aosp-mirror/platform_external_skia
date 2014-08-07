@@ -17,7 +17,6 @@
 #include "Sk2DPathEffect.h"
 #include "SkArithmeticMode.h"
 #include "SkAvoidXfermode.h"
-#include "SkBicubicImageFilter.h"
 #include "SkBitmapSource.h"
 #include "SkBlurDrawLooper.h"
 #include "SkBlurImageFilter.h"
@@ -63,7 +62,6 @@
 
 static void InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkAvoidXfermode)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBicubicImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapProcShader)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBitmapSource)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkBlurDrawLooper)
@@ -87,7 +85,6 @@ static void InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLocalMatrixShader)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLumaColorFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPath1DPathEffect)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(Sk2DPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkLine2DPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPath2DPathEffect)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkPerlinNoiseShader)
@@ -108,7 +105,6 @@ static void InitializeFlattenables() {
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMergeImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkColorFilterImageFilter)
     SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkDownSampleImageFilter)
-    SK_DEFINE_FLATTENABLE_REGISTRAR_ENTRY(SkMallocPixelRef)
 
     SkArithmeticMode::InitializeFlattenables();
     SkBlurMaskFilter::InitializeFlattenables();

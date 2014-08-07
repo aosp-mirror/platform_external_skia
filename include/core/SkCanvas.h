@@ -14,6 +14,7 @@
 #include "SkClipStack.h"
 #include "SkPaint.h"
 #include "SkRefCnt.h"
+#include "SkPatch.h"
 #include "SkPath.h"
 #include "SkRegion.h"
 #include "SkXfermode.h"
@@ -164,7 +165,11 @@ public:
      *  the bitmap of the pixels that the canvas draws into. The reference count
      *  of the returned device is not changed by this call.
      */
+#ifndef SK_SUPPORT_LEGACY_GETDEVICE
+protected:  // Can we make this private?
+#endif
     SkBaseDevice* getDevice() const;
+public:
 
     /**
      *  saveLayer() can create another device (which is later drawn onto
@@ -230,30 +235,31 @@ public:
     /**
      *  Copy the pixels from the base-layer into the specified buffer (pixels + rowBytes),
      *  converting them into the requested format (SkImageInfo). The base-layer pixels are read
-     *  starting at the specified (x,y) location in the coordinate system of the base-layer.
+     *  starting at the specified (srcX,srcY) location in the coordinate system of the base-layer.
      *
-     *  The specified ImageInfo and (x,y) offset specifies a source rectangle
+     *  The specified ImageInfo and (srcX,srcY) offset specifies a source rectangle
      *
-     *      srcR(x, y, info.width(), info.height());
+     *      srcR.setXYWH(srcX, srcY, dstInfo.width(), dstInfo.height());
      *
-     *  SrcR is intersected with the bounds of the base-layer. If this intersection is not empty,
-     *  then we have two sets of pixels (of equal size), the "src" specified by base-layer at (x,y)
-     *  and the "dst" by info+pixels+rowBytes. Replace the dst pixels with the corresponding src
-     *  pixels, performing any colortype/alphatype transformations needed (in the case where the
-     *  src and dst have different colortypes or alphatypes).
+     *  srcR is intersected with the bounds of the base-layer. If this intersection is not empty,
+     *  then we have two sets of pixels (of equal size). Replace the dst pixels with the
+     *  corresponding src pixels, performing any colortype/alphatype transformations needed
+     *  (in the case where the src and dst have different colortypes or alphatypes).
      *
      *  This call can fail, returning false, for several reasons:
+     *  - If srcR does not intersect the base-layer bounds.
      *  - If the requested colortype/alphatype cannot be converted from the base-layer's types.
      *  - If this canvas is not backed by pixels (e.g. picture or PDF)
      */
-    bool readPixels(const SkImageInfo&, void* pixels, size_t rowBytes, int x, int y);
+    bool readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                    int srcX, int srcY);
 
     /**
      *  Helper for calling readPixels(info, ...). This call will check if bitmap has been allocated.
      *  If not, it will attempt to call allocPixels(). If this fails, it will return false. If not,
      *  it calls through to readPixels(info, ...) and returns its result.
      */
-    bool readPixels(SkBitmap* bitmap, int x, int y);
+    bool readPixels(SkBitmap* bitmap, int srcX, int srcY);
 
     /**
      *  Helper for allocating pixels and then calling readPixels(info, ...). The bitmap is resized
@@ -293,8 +299,10 @@ public:
 
     enum SaveFlags {
         /** save the matrix state, restoring it on restore() */
+        // [deprecated] kMatrix_SaveFlag            = 0x01,
         kMatrix_SaveFlag            = 0x01,
         /** save the clip state, restoring it on restore() */
+        // [deprecated] kClip_SaveFlag              = 0x02,
         kClip_SaveFlag              = 0x02,
         /** the layer needs to support per-pixel alpha */
         kHasAlphaLayer_SaveFlag     = 0x04,
@@ -308,6 +316,7 @@ public:
         kClipToLayer_SaveFlag       = 0x10,
 
         // helper masks for common choices
+        // [deprecated] kMatrixClip_SaveFlag        = 0x03,
         kMatrixClip_SaveFlag        = 0x03,
 #ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
         kARGB_NoClipLayer_SaveFlag  = 0x0F,
@@ -325,22 +334,6 @@ public:
         @return The value to pass to restoreToCount() to balance this save()
     */
     int save();
-
-    /** DEPRECATED - use save() instead.
-
-        This behaves the same as save(), but it allows fine-grained control of
-        which state bits to be saved (and subsequently restored).
-
-        @param flags The flags govern what portion of the Matrix/Clip/drawFilter
-                     state the save (and matching restore) effect. For example,
-                     if only kMatrix is specified, then only the matrix state
-                     will be pushed and popped. Likewise for the clip if kClip
-                     is specified.  However, the drawFilter is always affected
-                     by calls to save/restore.
-        @return The value to pass to restoreToCount() to balance this save()
-    */
-    SK_ATTR_EXTERNALLY_DEPRECATED("SaveFlags use is deprecated")
-    int save(SaveFlags flags);
 
     /** This behaves the same as save(), but in addition it allocates an
         offscreen bitmap. All drawing calls are directed there, and only when
@@ -972,12 +965,6 @@ public:
     */
     void EXPERIMENTAL_optimize(const SkPicture* picture);
 
-    /** PRIVATE / EXPERIMENTAL -- do not call
-        Purge all the discardable optimization information associated with
-        'picture'. If NULL is passed in, purge all discardable information.
-    */
-    void EXPERIMENTAL_purge(const SkPicture* picture);
-
     /** Draw the picture into this canvas. This method effective brackets the
         playback of the picture's draw calls with save/restore, so the state
         of this canvas will be unchanged after this call.
@@ -1020,6 +1007,8 @@ public:
                               const SkColor colors[], SkXfermode* xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint);
+    
+    virtual void drawPatch(const SkPatch& patch, const SkPaint& paint);
 
     /** Send a blob of data to the canvas.
         For canvases that draw, this call is effectively a no-op, as the data
@@ -1111,15 +1100,6 @@ public:
     virtual ClipType getClipType() const;
 #endif
 
-#ifdef SK_SUPPORT_LEGACY_GETTOTALCLIP
-    /** DEPRECATED -- need to move this guy to private/friend
-     *  Return the current device clip (concatenation of all clip calls).
-     *  This does not account for the translate in any of the devices.
-     *  @return the current device clip (concatenation of all clip calls).
-     */
-    const SkRegion& getTotalClip() const;
-#endif
-
     /** Return the clip stack. The clip stack stores all the individual
      *  clips organized by the save/restore frame in which they were
      *  added.
@@ -1199,9 +1179,6 @@ protected:
         kFullLayer_SaveLayerStrategy,
         kNoLayer_SaveLayerStrategy
     };
-
-    // Transitional, pending external clients cleanup.
-    virtual void willSave(SaveFlags) { this->willSave(); }
 
     virtual void willSave() {}
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) {
@@ -1298,6 +1275,7 @@ private:
     friend class SkLua;             // needs top layer size and offset
     friend class SkDebugCanvas;     // needs experimental fAllowSimplifyClip
     friend class SkDeferredDevice;  // needs getTopDevice()
+    friend class SkSurface_Raster;  // needs getDevice()
 
     SkBaseDevice* createLayerDevice(const SkImageInfo&);
 
@@ -1333,7 +1311,7 @@ private:
     void internalDrawDevice(SkBaseDevice*, int x, int y, const SkPaint*);
 
     // shared by save() and saveLayer()
-    int internalSave(SaveFlags flags);
+    int internalSave();
     void internalRestore();
     static void DrawRect(const SkDraw& draw, const SkPaint& paint,
                          const SkRect& r, SkScalar textSize);

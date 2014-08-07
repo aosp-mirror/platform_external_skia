@@ -266,7 +266,7 @@ public:
     bool shuttleBitmap(const SkBitmap&, int32_t slot);
 
 protected:
-    virtual void willSave(SaveFlags) SK_OVERRIDE;
+    virtual void willSave() SK_OVERRIDE;
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) SK_OVERRIDE;
     virtual void willRestore() SK_OVERRIDE;
 
@@ -475,12 +475,14 @@ bool SkGPipeCanvas::needOpBytes(size_t needed) {
     }
 
     needed += 4;  // size of DrawOp atom
-    needed = SkTMax<size_t>(MIN_BLOCK_SIZE, needed);
     needed = SkAlign4(needed);
     if (fWriter.bytesWritten() + needed > fBlockSize) {
-        // Before we wipe out any data that has already been written, read it
-        // out.
+        // Before we wipe out any data that has already been written, read it out.
         this->doNotify();
+
+        // If we're going to allocate a new block, allocate enough to make it worthwhile.
+        needed = SkTMax<size_t>(MIN_BLOCK_SIZE, needed);
+
         void* block = fController->requestBlock(needed, &fBlockSize);
         if (NULL == block) {
             // Do not notify the readers, which would call this function again.
@@ -515,13 +517,13 @@ uint32_t SkGPipeCanvas::getTypefaceID(SkTypeface* face) {
 #define NOTIFY_SETUP(canvas)    \
     AutoPipeNotify apn(canvas)
 
-void SkGPipeCanvas::willSave(SaveFlags flags) {
+void SkGPipeCanvas::willSave() {
     NOTIFY_SETUP(this);
     if (this->needOpBytes()) {
-        this->writeOp(kSave_DrawOp, 0, flags);
+        this->writeOp(kSave_DrawOp);
     }
 
-    this->INHERITED::willSave(flags);
+    this->INHERITED::willSave();
 }
 
 SkCanvas::SaveLayerStrategy SkGPipeCanvas::willSaveLayer(const SkRect* bounds, const SkPaint* paint,

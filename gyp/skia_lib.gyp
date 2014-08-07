@@ -15,6 +15,7 @@
       [ 'skia_arch_type == "x86" and skia_os != "android"', {
         'component_libs': [
           'opts.gyp:opts_ssse3',
+          'opts.gyp:opts_sse4',
         ],
       }],
       [ 'arm_neon == 1', {
@@ -32,6 +33,7 @@
   'targets': [
     {
       'target_name': 'skia_lib',
+      'sources': [ '<(skia_src_path)/core/SkForceCPlusPlusLinking.cpp', ],
       'conditions': [
         [ 'skia_shared_lib', {
           'conditions': [

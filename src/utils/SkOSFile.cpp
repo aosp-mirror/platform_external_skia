@@ -6,7 +6,7 @@
  */
 #include "SkOSFile.h"
 
-SkString SkOSPath::SkPathJoin(const char *rootPath, const char *relativePath) {
+SkString SkOSPath::Join(const char *rootPath, const char *relativePath) {
     SkString result(rootPath);
     if (!result.endsWith(SkPATH_SEPARATOR)) {
         result.appendUnichar(SkPATH_SEPARATOR);
@@ -15,7 +15,7 @@ SkString SkOSPath::SkPathJoin(const char *rootPath, const char *relativePath) {
     return result;
 }
 
-SkString SkOSPath::SkBasename(const char* fullPath) {
+SkString SkOSPath::Basename(const char* fullPath) {
     if (!fullPath) {
         return SkString();
     }
@@ -52,17 +52,6 @@ static uint16_t* concat_to_16(const char src[], const char suffix[])
     SkASSERT(i + 1 <= len + len2);
 
     return dst;
-}
-
-SkUTF16_Str::SkUTF16_Str(const char src[])
-{
-    size_t  len = strlen(src);
-
-    fStr = (uint16_t*)sk_malloc_throw((len + 1) * sizeof(uint16_t));
-    size_t i;
-    for (i = 0; i < len; i++)
-        fStr[i] = src[i];
-    fStr[i] = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////

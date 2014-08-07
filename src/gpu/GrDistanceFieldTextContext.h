@@ -34,11 +34,17 @@ private:
     SkScalar                fTextRatio;
     bool                    fUseLCDText;
     bool                    fEnableDFRendering;
+    SkAutoTUnref<GrEffect>  fCachedEffect;
+    // Used to check whether fCachedEffect is still valid.
+    uint32_t                fEffectTextureUniqueID;
+    SkColor                 fEffectColor;
+    uint32_t                fEffectFlags;
     GrTexture*              fGammaTexture;
 
     void init(const GrPaint&, const SkPaint&);
     void drawPackedGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
     void flushGlyphs();                 // automatically called by destructor
+    void setupCoverageEffect(const SkColor& filteredColor);
     void finish();
 
     enum {
@@ -48,10 +54,11 @@ private:
         kDefaultRequestedVerts   = kDefaultRequestedGlyphs * 4,
     };
 
-    SkPoint*                fVertices;
+    void*                   fVertices;
     int32_t                 fMaxVertices;
     GrTexture*              fCurrTexture;
     int                     fCurrVertex;
+    SkRect                  fVertexBounds;
 };
 
 #endif

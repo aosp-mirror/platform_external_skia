@@ -29,7 +29,7 @@ void GrTexture::internal_dispose() const {
     if (this->impl()->isSetFlag((GrTextureFlags) GrTextureImpl::kReturnToCache_FlagBit) &&
         NULL != this->INHERITED::getContext()) {
         GrTexture* nonConstThis = const_cast<GrTexture *>(this);
-        this->fRefCnt = 1;      // restore ref count to initial setting
+        this->ref(); // restore ref count to initial setting
 
         nonConstThis->impl()->resetFlag((GrTextureFlags) GrTextureImpl::kReturnToCache_FlagBit);
         nonConstThis->INHERITED::getContext()->addExistingTextureToCache(nonConstThis);
@@ -39,7 +39,6 @@ void GrTexture::internal_dispose() const {
         return;
     }
 
-    SkASSERT(0 == this->getDeferredRefCount());
     this->INHERITED::internal_dispose();
 }
 
@@ -64,21 +63,7 @@ size_t GrTexture::gpuMemorySize() const {
                                    GrBytesPerPixel(fDesc.fConfig);
 
     if (GrPixelConfigIsCompressed(fDesc.fConfig)) {
-        // Figure out the width and height corresponding to the data...
-
-        // Both of the available formats (ETC1 and LATC) have 4x4
-        // blocks that compress down to 8 bytes.
-        switch(fDesc.fConfig) {
-            case kETC1_GrPixelConfig:
-            case kLATC_GrPixelConfig:
-                SkASSERT((fDesc.fWidth & 3) == 0);
-                SkASSERT((fDesc.fHeight & 3) == 0);
-                textureSize = (fDesc.fWidth >> 2) * (fDesc.fHeight >> 2) * 8;
-                break;
-
-            default:
-                SkFAIL("Unknown compressed config");
-        }
+        textureSize = GrCompressedFormatDataSize(fDesc.fConfig, fDesc.fWidth, fDesc.fHeight);
     }
 
     if (this->impl()->hasMipMaps()) {
@@ -117,12 +102,27 @@ void GrTexture::writePixels(int left, int top, int width, int height,
                                 pixelOpsFlags);
 }
 
+void GrTexture::abandonReleaseCommon() {
+    // In debug builds the resource cache tracks removed/exclusive textures and has an unref'ed ptr.
+    // After abandon() or release() the resource cache will be unreachable (getContext() == NULL).
+    // So we readd the texture to the cache here so that it is removed from the exclusive list and
+    // there is no longer an unref'ed ptr to the texture in the cache.
+    if (this->impl()->isSetFlag((GrTextureFlags)GrTextureImpl::kReturnToCache_FlagBit)) {
+        SkASSERT(!this->wasDestroyed());
+        this->ref();  // restores the ref the resource cache gave up when it marked this exclusive.
+        this->impl()->resetFlag((GrTextureFlags) GrTextureImpl::kReturnToCache_FlagBit);
+        this->getContext()->addExistingTextureToCache(this);
+    }
+}
+
 void GrTexture::onRelease() {
+    this->abandonReleaseCommon();
     SkASSERT(!this->impl()->isSetFlag((GrTextureFlags) GrTextureImpl::kReturnToCache_FlagBit));
     INHERITED::onRelease();
 }
 
 void GrTexture::onAbandon() {
+    this->abandonReleaseCommon();
     if (NULL != fRenderTarget.get()) {
         fRenderTarget->abandon();
     }

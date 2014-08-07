@@ -17,6 +17,7 @@
 #include "GrTexture.h"
 #include "GrTBackendEffectFactory.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "effects/Gr1DKernelEffect.h"
 #endif
 
@@ -32,7 +33,7 @@ SkMorphologyImageFilter::SkMorphologyImageFilter(int radiusX,
                                                  int radiusY,
                                                  SkImageFilter* input,
                                                  const CropRect* cropRect)
-    : INHERITED(input, cropRect), fRadius(SkISize::Make(radiusX, radiusY)) {
+    : INHERITED(1, &input, cropRect), fRadius(SkISize::Make(radiusX, radiusY)) {
 }
 
 
@@ -278,9 +279,8 @@ public:
         kDilate_MorphologyType,
     };
 
-    static GrEffectRef* Create(GrTexture* tex, Direction dir, int radius, MorphologyType type) {
-        AutoEffectUnref effect(SkNEW_ARGS(GrMorphologyEffect, (tex, dir, radius, type)));
-        return CreateEffectRef(effect);
+    static GrEffect* Create(GrTexture* tex, Direction dir, int radius, MorphologyType type) {
+        return SkNEW_ARGS(GrMorphologyEffect, (tex, dir, radius, type));
     }
 
     virtual ~GrMorphologyEffect();
@@ -316,22 +316,22 @@ public:
 
     virtual void emitCode(GrGLShaderBuilder*,
                           const GrDrawEffect&,
-                          EffectKey,
+                          const GrEffectKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
+    static inline void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder* b);
 
-    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
 
 private:
     int width() const { return GrMorphologyEffect::WidthFromRadius(fRadius); }
 
-    int                                 fRadius;
-    GrMorphologyEffect::MorphologyType  fType;
-    GrGLUniformManager::UniformHandle   fImageIncrementUni;
+    int                                   fRadius;
+    GrMorphologyEffect::MorphologyType    fType;
+    GrGLProgramDataManager::UniformHandle fImageIncrementUni;
 
     typedef GrGLEffect INHERITED;
 };
@@ -346,7 +346,7 @@ GrGLMorphologyEffect::GrGLMorphologyEffect(const GrBackendEffectFactory& factory
 
 void GrGLMorphologyEffect::emitCode(GrGLShaderBuilder* builder,
                                     const GrDrawEffect&,
-                                    EffectKey key,
+                                    const GrEffectKey& key,
                                     const char* outputColor,
                                     const char* inputColor,
                                     const TransformedCoordsArray& coords,
@@ -384,15 +384,15 @@ void GrGLMorphologyEffect::emitCode(GrGLShaderBuilder* builder,
     builder->fsCodeAppend(modulate.c_str());
 }
 
-GrGLEffect::EffectKey GrGLMorphologyEffect::GenKey(const GrDrawEffect& drawEffect,
-                                                   const GrGLCaps&) {
+void GrGLMorphologyEffect::GenKey(const GrDrawEffect& drawEffect,
+                                  const GrGLCaps&, GrEffectKeyBuilder* b) {
     const GrMorphologyEffect& m = drawEffect.castEffect<GrMorphologyEffect>();
-    EffectKey key = static_cast<EffectKey>(m.radius());
+    uint32_t key = static_cast<uint32_t>(m.radius());
     key |= (m.type() << 8);
-    return key;
+    b->add32(key);
 }
 
-void GrGLMorphologyEffect::setData(const GrGLUniformManager& uman,
+void GrGLMorphologyEffect::setData(const GrGLProgramDataManager& pdman,
                                    const GrDrawEffect& drawEffect) {
     const Gr1DKernelEffect& kern = drawEffect.castEffect<Gr1DKernelEffect>();
     GrTexture& texture = *kern.texture(0);
@@ -409,7 +409,7 @@ void GrGLMorphologyEffect::setData(const GrGLUniformManager& uman,
         default:
             SkFAIL("Unknown filter direction.");
     }
-    uman.set2fv(fImageIncrementUni, 1, imageIncrement);
+    pdman.set2fv(fImageIncrementUni, 1, imageIncrement);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -447,10 +447,10 @@ void GrMorphologyEffect::getConstantColorComponents(GrColor* color, uint32_t* va
 
 GR_DEFINE_EFFECT_TEST(GrMorphologyEffect);
 
-GrEffectRef* GrMorphologyEffect::TestCreate(SkRandom* random,
-                                            GrContext*,
-                                            const GrDrawTargetCaps&,
-                                            GrTexture* textures[]) {
+GrEffect* GrMorphologyEffect::TestCreate(SkRandom* random,
+                                         GrContext*,
+                                         const GrDrawTargetCaps&,
+                                         GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;
     Direction dir = random->nextBool() ? kX_Direction : kY_Direction;

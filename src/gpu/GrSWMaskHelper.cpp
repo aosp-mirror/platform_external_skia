@@ -13,7 +13,6 @@
 
 #include "SkData.h"
 #include "SkStrokeRec.h"
-#include "SkTextureCompressor.h"
 
 // TODO: try to remove this #include
 #include "GrContext.h"
@@ -36,6 +35,53 @@ SkXfermode::Mode op_to_mode(SkRegion::Op op) {
 
     return modeMap[op];
 }
+
+static inline GrPixelConfig fmt_to_config(SkTextureCompressor::Format fmt) {
+    static const GrPixelConfig configMap[] = {
+        kLATC_GrPixelConfig,       // kLATC_Format,
+        kR11_EAC_GrPixelConfig,    // kR11_EAC_Format,
+        kETC1_GrPixelConfig,       // kETC1_Format,
+        kASTC_12x12_GrPixelConfig  // kASTC_12x12_Format,
+    };
+    GR_STATIC_ASSERT(0 == SkTextureCompressor::kLATC_Format);
+    GR_STATIC_ASSERT(1 == SkTextureCompressor::kR11_EAC_Format);
+    GR_STATIC_ASSERT(2 == SkTextureCompressor::kETC1_Format);
+    GR_STATIC_ASSERT(3 == SkTextureCompressor::kASTC_12x12_Format);
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(configMap) == SkTextureCompressor::kFormatCnt);
+
+    return configMap[fmt];
+}
+
+#if GR_COMPRESS_ALPHA_MASK
+static bool choose_compressed_fmt(const GrDrawTargetCaps* caps,
+                                  SkTextureCompressor::Format *fmt) {
+    if (NULL == fmt) {
+        return false;
+    }
+
+    // We can't use scratch textures without the ability to update
+    // compressed textures...
+    if (!(caps->compressedTexSubImageSupport())) {
+        return false;
+    }
+
+    // Figure out what our preferred texture type is. If ASTC is available, that always
+    // gives the biggest win. Otherwise, in terms of compression speed and accuracy,
+    // LATC has a slight edge over R11 EAC.
+    if (caps->isConfigTexturable(kASTC_12x12_GrPixelConfig)) {
+        *fmt = SkTextureCompressor::kASTC_12x12_Format;
+        return true;
+    } else if (caps->isConfigTexturable(kLATC_GrPixelConfig)) {
+        *fmt = SkTextureCompressor::kLATC_Format;
+        return true;
+    } else if (caps->isConfigTexturable(kR11_EAC_GrPixelConfig)) {
+        *fmt = SkTextureCompressor::kR11_EAC_Format;
+        return true;
+    }
+
+    return false;
+}
+#endif
 
 }
 
@@ -103,9 +149,29 @@ bool GrSWMaskHelper::init(const SkIRect& resultBounds,
     SkIRect bounds = SkIRect::MakeWH(resultBounds.width(),
                                      resultBounds.height());
 
-    if (!fBM.allocPixels(SkImageInfo::MakeA8(bounds.fRight, bounds.fBottom))) {
+#if GR_COMPRESS_ALPHA_MASK
+    fCompressMask = choose_compressed_fmt(fContext->getGpu()->caps(), &fCompressedFormat);
+#else
+    fCompressMask = false;
+#endif
+
+    // Make sure that the width is a multiple of 16 so that we can use
+    // specialized SIMD instructions that compress 4 blocks at a time.
+    int cmpWidth, cmpHeight;
+    if (fCompressMask) {
+        int dimX, dimY;
+        SkTextureCompressor::GetBlockDimensions(fCompressedFormat, &dimX, &dimY);
+        cmpWidth = dimX * ((bounds.fRight + (dimX - 1)) / dimX);
+        cmpHeight = dimY * ((bounds.fBottom + (dimY - 1)) / dimY);
+    } else {
+        cmpWidth = bounds.fRight;
+        cmpHeight = bounds.fBottom;
+    }
+
+    if (!fBM.allocPixels(SkImageInfo::MakeA8(cmpWidth, cmpHeight))) {
         return false;
     }
+
     sk_bzero(fBM.getPixels(), fBM.getSafeSize());
 
     sk_bzero(&fDraw, sizeof(fDraw));
@@ -125,17 +191,25 @@ bool GrSWMaskHelper::getTexture(GrAutoScratchTexture* texture) {
     GrTextureDesc desc;
     desc.fWidth = fBM.width();
     desc.fHeight = fBM.height();
+    desc.fConfig = kAlpha_8_GrPixelConfig;
 
-#if GR_COMPRESS_ALPHA_MASK
-    static const int kLATCBlockSize = 4;
-    if (desc.fWidth % kLATCBlockSize == 0 && desc.fHeight % kLATCBlockSize == 0) {
-        desc.fConfig = kLATC_GrPixelConfig;
-    } else {
+    if (fCompressMask) {
+
+#ifdef SK_DEBUG
+        int dimX, dimY;
+        SkTextureCompressor::GetBlockDimensions(fCompressedFormat, &dimX, &dimY);
+        SkASSERT((desc.fWidth % dimX) == 0);
+        SkASSERT((desc.fHeight % dimY) == 0);
 #endif
-        desc.fConfig = kAlpha_8_GrPixelConfig;
-#if GR_COMPRESS_ALPHA_MASK
+
+        desc.fConfig = fmt_to_config(fCompressedFormat);
+
+        // If this config isn't supported then we should fall back to A8
+        if (!(fContext->getGpu()->caps()->isConfigTexturable(desc.fConfig))) {
+            SkDEBUGFAIL("Determining compression should be set from choose_compressed_fmt");
+            desc.fConfig = kAlpha_8_GrPixelConfig;
+        }
     }
-#endif
 
     texture->set(fContext, desc);
     return NULL != texture->texture();
@@ -156,6 +230,17 @@ void GrSWMaskHelper::sendTextureData(GrTexture *texture, const GrTextureDesc& de
                          reuseScratch ? 0 : GrContext::kDontFlush_PixelOpsFlag);
 }
 
+void GrSWMaskHelper::compressTextureData(GrTexture *texture, const GrTextureDesc& desc) {
+
+    SkASSERT(GrPixelConfigIsCompressed(desc.fConfig));
+    SkASSERT(fmt_to_config(fCompressedFormat) == desc.fConfig);
+
+    SkAutoDataUnref cmpData(SkTextureCompressor::CompressBitmapToFormat(fBM, fCompressedFormat));
+    SkASSERT(NULL != cmpData);
+
+    this->sendTextureData(texture, desc, cmpData->data(), 0);
+}
+
 /**
  * Move the result of the software mask generation back to the gpu
  */
@@ -168,12 +253,8 @@ void GrSWMaskHelper::toTexture(GrTexture *texture) {
     desc.fConfig = texture->config();
         
     // First see if we should compress this texture before uploading.
-    if (texture->config() == kLATC_GrPixelConfig) {
-        SkTextureCompressor::Format format = SkTextureCompressor::kLATC_Format;
-        SkAutoDataUnref latcData(SkTextureCompressor::CompressBitmapToFormat(fBM, format));
-        SkASSERT(NULL != latcData);
-
-        this->sendTextureData(texture, desc, latcData->data(), 0);
+    if (fCompressMask) {
+        this->compressTextureData(texture, desc);
     } else {
         // Looks like we have to send a full A8 texture. 
         this->sendTextureData(texture, desc, fBM.getPixels(), fBM.rowBytes());

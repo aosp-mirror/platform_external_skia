@@ -49,10 +49,10 @@
       'include_dirs' : [ '../src/utils/' ],
       'sources': [
         '../gm/gm_expectations.cpp',
-        '../tools/sk_tool_utils.cpp',
       ],
       'dependencies': [
         'jsoncpp.gyp:jsoncpp',
+        'sk_tool_utils',
         'skia_lib.gyp:skia_lib',
       ],
       'direct_dependent_settings': {
@@ -84,7 +84,26 @@
         'skia_lib.gyp:skia_lib',
       ],
       'direct_dependent_settings': {
-        'include_dirs': [ '../tools/', ],
+        'include_dirs': [ '../tools', ],
+      },
+    },
+    {
+      'target_name': 'sk_tool_utils',
+      'type': 'static_library',
+      'sources': [
+        '../tools/sk_tool_utils.cpp',
+        '../tools/sk_tool_utils_font.cpp',
+      ],
+      'include_dirs': [
+        '../src/fonts',
+      ],
+      'dependencies': [
+        'resources',
+        'flags.gyp:flags',
+        'skia_lib.gyp:skia_lib',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [ '../tools', ],
       },
     },
     {
@@ -148,13 +167,12 @@
         '../tools/skpdiff/SkImageDiffer.cpp',
         '../tools/skpdiff/SkPMetric.cpp',
         '../tools/skpdiff/skpdiff_util.cpp',
-        '../tools/flags/SkCommandLineFlags.cpp',
       ],
       'include_dirs': [
-        '../tools/flags',
         '../src/core/', # needed for SkTLList.h
       ],
       'dependencies': [
+        'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
       ],
       'cflags': [
@@ -256,6 +274,7 @@
       'include_dirs': [
         # For SkBitmapHasher.h
         '../src/utils/',
+        '../tools/',
       ],
       'dependencies': [
         'gm_expectations',
@@ -271,7 +290,6 @@
         '../tools/skpinfo.cpp',
       ],
       'include_dirs': [
-        '../tools/flags',
         '../src/core/',
       ],
       'dependencies': [
@@ -290,7 +308,6 @@
         '../src/core/',
         '../src/images',
         '../src/lazy',
-        '../tools/flags',
       ],
       'dependencies': [
         'flags.gyp:flags',
@@ -386,6 +403,11 @@
         'skia_lib.gyp:skia_lib',
         'tools.gyp:picture_renderer',
         'tools.gyp:picture_utils',
+      ],
+      'conditions': [
+        ['skia_android_framework == 1', {
+          'libraries': [ '-lskia' ],
+        }],
       ],
     },
     {
@@ -686,6 +708,27 @@
             'type': 'executable',
             'sources': [
               '../tools/win_lcid.cpp',
+            ],
+          },
+        ],
+      },
+    ],
+    ['skia_os == "mac"',
+      {
+        'targets': [
+          {
+            'target_name': 'create_test_font',
+            'type': 'executable',
+            'sources': [
+              '../tools/create_test_font.cpp',
+            ],
+            'include_dirs': [
+              '../src/core',
+            ],
+            'dependencies': [
+              'flags.gyp:flags',
+              'skia_lib.gyp:skia_lib',
+              'resources',
             ],
           },
         ],

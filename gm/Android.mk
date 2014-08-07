@@ -8,6 +8,8 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
+	-fPIC \
+	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1
@@ -16,17 +18,16 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	gm.cpp \
 	gmmain.cpp \
 	system_preferences_default.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
-	gm.cpp \
 	aaclip.cpp \
 	aarectmodes.cpp \
 	alphagradients.cpp \
 	arcofzorro.cpp \
 	arithmode.cpp \
 	beziereffects.cpp \
-	bicubicfilter.cpp \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
@@ -44,7 +45,6 @@ LOCAL_SRC_FILES := \
 	blurquickreject.cpp \
 	blurrect.cpp \
 	blurroundrect.cpp \
-	canvasstate.cpp \
 	circles.cpp \
 	circularclips.cpp \
 	clippedbitmapshaders.cpp \
@@ -87,6 +87,8 @@ LOCAL_SRC_FILES := \
 	gammatext.cpp \
 	getpostextpath.cpp \
 	giantbitmap.cpp \
+	glyph_pos.cpp \
+	glyph_pos_align.cpp \
 	gradients.cpp \
 	gradients_2pt_conical.cpp \
 	gradients_no_texture.cpp \
@@ -126,6 +128,7 @@ LOCAL_SRC_FILES := \
 	offsetimagefilter.cpp \
 	optimizations.cpp \
 	ovals.cpp \
+	patch.cpp \
 	patheffects.cpp \
 	pathfill.cpp \
 	pathinterior.cpp \
@@ -136,6 +139,7 @@ LOCAL_SRC_FILES := \
 	perlinnoise.cpp \
 	pictureimagefilter.cpp \
 	pictureshader.cpp \
+	pictureshadertile.cpp \
 	points.cpp \
 	poly2poly.cpp \
 	polygons.cpp \
@@ -181,15 +185,16 @@ LOCAL_SRC_FILES := \
 	xfermodes.cpp \
 	xfermodes2.cpp \
 	xfermodes3.cpp \
+	yuvtorgbeffect.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
-	androidfallback.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	gm_expectations.cpp \
-	../tools/sk_tool_utils.cpp \
 	../tools/Resources.cpp \
+	../tools/sk_tool_utils.cpp \
+	../tools/sk_tool_utils_font.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -214,7 +219,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
+	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
+	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../src/core \
 	$(LOCAL_PATH)/../src/gpu \
 	$(LOCAL_PATH)/../src/effects \
@@ -223,8 +230,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../include/pdf \
-	$(LOCAL_PATH)/../tools
+	$(LOCAL_PATH)/../include/pdf
 
 LOCAL_MODULE_TAGS := \
 	tests
@@ -233,4 +239,4 @@ LOCAL_MODULE := \
 	skia_gm
 
 include external/stlport/libstlport.mk
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)

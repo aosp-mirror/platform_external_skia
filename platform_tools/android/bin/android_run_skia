@@ -19,10 +19,14 @@ if [ -f "${SKIA_OUT}/$BUILDTYPE/lib/libskia_android.so" ]; then
     adb_push_if_needed "${SKIA_OUT}/$BUILDTYPE/lib/libskia_android.so" /data/local/tmp
 fi
 adb_push_if_needed "${SKIA_OUT}/$BUILDTYPE/lib/lib${APP_ARGS[0]}.so" /data/local/tmp
+if [[ -n $RESOURCE_PATH ]]; then
+  adb_push_if_needed "${SKIA_SRC_DIR}/resources" $RESOURCE_PATH
+fi
 
 STATUS_FILENAME="/data/local/tmp/.skia_tmp_$(date +%s%N)"
 $ADB ${DEVICE_SERIAL} shell \
-    "/data/local/tmp/skia_launcher ${APP_ARGS[*]}; echo \$? > ${STATUS_FILENAME}"
+    "LD_LIBRARY_PATH=/data/local/tmp:$LD_LIBRARY_PATH \
+     /data/local/tmp/skia_launcher ${APP_ARGS[*]}; echo \$? > ${STATUS_FILENAME}"
 if [ -z "$($ADB $DEVICE_SERIAL shell 'if [ -f $STATUS_FILENAME ]; then echo exists; fi')" ]; then
   echo "***********************************************************************"
   echo "The application terminated unexpectedly and did not produce an exit code"

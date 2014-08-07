@@ -67,7 +67,6 @@ static void fillCanvas(SkCanvas* canvas, SkColorType colorType, PackUnpremulProc
 DEF_GPUTEST(PremulAlphaRoundTrip, reporter, factory) {
     const SkImageInfo info = SkImageInfo::MakeN32Premul(256, 256);
 
-    SkAutoTUnref<SkBaseDevice> device;
     for (int dtype = 0; dtype < 2; ++dtype) {
 
         int glCtxTypeCnt = 1;
@@ -77,6 +76,7 @@ DEF_GPUTEST(PremulAlphaRoundTrip, reporter, factory) {
         }
 #endif
         for (int glCtxType = 0; glCtxType < glCtxTypeCnt; ++glCtxType) {
+            SkAutoTUnref<SkBaseDevice> device;
             if (0 == dtype) {
                 device.reset(SkBitmapDevice::Create(info));
             } else {
@@ -121,6 +121,10 @@ DEF_GPUTEST(PremulAlphaRoundTrip, reporter, factory) {
                     const uint32_t* pixels1 = readBmp1.getAddr32(0, y);
                     const uint32_t* pixels2 = readBmp2.getAddr32(0, y);
                     for (int x = 0; x < 256 && success; ++x) {
+                        // We see sporadic failures here. May help to see where it goes wrong.
+                        if (pixels1[x] != pixels2[x]) {
+                            SkDebugf("%x != %x, x = %d, y = %d\n", pixels1[x], pixels2[x], x, y);
+                        }
                         REPORTER_ASSERT(reporter, success = pixels1[x] == pixels2[x]);
                     }
                 }

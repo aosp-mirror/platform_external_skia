@@ -24,14 +24,14 @@ public:
 
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(FailImageFilter)
 protected:
-    FailImageFilter() : INHERITED(0) {}
+    FailImageFilter() : INHERITED(0, NULL) {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
         return false;
     }
 
     FailImageFilter(SkReadBuffer& buffer)
-      : INHERITED(1, buffer) {}
+      : INHERITED(0, buffer) {}
 
 private:
     typedef SkImageFilter INHERITED;
@@ -44,13 +44,13 @@ static SkFlattenable::Registrar gFailImageFilterReg("FailImageFilter",
 
 class IdentityImageFilter : public SkImageFilter {
 public:
-    static IdentityImageFilter* Create() {
-        return SkNEW(IdentityImageFilter);
+    static IdentityImageFilter* Create(SkImageFilter* input = NULL) {
+        return SkNEW_ARGS(IdentityImageFilter, (input));
     }
 
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(IdentityImageFilter)
 protected:
-    IdentityImageFilter() : INHERITED(0) {}
+    IdentityImageFilter(SkImageFilter* input) : INHERITED(1, &input) {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
         *result = src;
@@ -113,6 +113,7 @@ static void draw_text(SkCanvas* canvas, const SkRect& r, SkImageFilter* imf) {
     paint.setImageFilter(imf);
     paint.setColor(SK_ColorCYAN);
     paint.setAntiAlias(true);
+    sk_tool_utils::set_portable_typeface(&paint);
     paint.setTextSize(r.height()/2);
     paint.setTextAlign(SkPaint::kCenter_Align);
     canvas->drawText("Text", 4, r.centerX(), r.centerY(), paint);
@@ -198,7 +199,7 @@ protected:
             FailImageFilter::Create(),
             SkColorFilterImageFilter::Create(cf),
             SkBlurImageFilter::Create(12.0f, 0.0f),
-            SkDropShadowImageFilter::Create(10.0f, 5.0f, 3.0f, SK_ColorBLUE),
+            SkDropShadowImageFilter::Create(10.0f, 5.0f, 3.0f, 3.0f, SK_ColorBLUE),
         };
         cf->unref();
 

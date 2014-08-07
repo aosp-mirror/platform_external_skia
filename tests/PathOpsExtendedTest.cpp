@@ -49,102 +49,6 @@ static bool gShowPath = false;
 static bool gComparePathsAssert = true;
 static bool gPathStrAssert = true;
 
-static const char* gFillTypeStr[] = {
-    "kWinding_FillType",
-    "kEvenOdd_FillType",
-    "kInverseWinding_FillType",
-    "kInverseEvenOdd_FillType"
-};
-
-static void output_scalar(SkScalar num) {
-    if (num == (int) num) {
-        SkDebugf("%d", (int) num);
-    } else {
-        SkString str;
-        str.printf("%1.9g", num);
-        int width = (int) str.size();
-        const char* cStr = str.c_str();
-        while (cStr[width - 1] == '0') {
-            --width;
-        }
-        str.resize(width);
-        SkDebugf("%sf", str.c_str());
-    }
-}
-
-static void output_points(const SkPoint* pts, int count) {
-    for (int index = 0; index < count; ++index) {
-        output_scalar(pts[index].fX);
-        SkDebugf(", ");
-        output_scalar(pts[index].fY);
-        if (index + 1 < count) {
-            SkDebugf(", ");
-        }
-    }
-    SkDebugf(");\n");
-}
-
-static void showPathContours(SkPath::RawIter& iter, const char* pathName) {
-    uint8_t verb;
-    SkPoint pts[4];
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
-        switch (verb) {
-            case SkPath::kMove_Verb:
-                SkDebugf("    %s.moveTo(", pathName);
-                output_points(&pts[0], 1);
-                continue;
-            case SkPath::kLine_Verb:
-                SkDebugf("    %s.lineTo(", pathName);
-                output_points(&pts[1], 1);
-                break;
-            case SkPath::kQuad_Verb:
-                SkDebugf("    %s.quadTo(", pathName);
-                output_points(&pts[1], 2);
-                break;
-            case SkPath::kCubic_Verb:
-                SkDebugf("    %s.cubicTo(", pathName);
-                output_points(&pts[1], 3);
-                break;
-            case SkPath::kClose_Verb:
-                SkDebugf("    %s.close();\n", pathName);
-                break;
-            default:
-                SkDEBUGFAIL("bad verb");
-                return;
-        }
-    }
-}
-
-static void showPath(const SkPath& path, const char* pathName, bool includeDeclaration) {
-    SkPath::RawIter iter(path);
-#define SUPPORT_RECT_CONTOUR_DETECTION 0
-#if SUPPORT_RECT_CONTOUR_DETECTION
-    int rectCount = path.isRectContours() ? path.rectContours(NULL, NULL) : 0;
-    if (rectCount > 0) {
-        SkTDArray<SkRect> rects;
-        SkTDArray<SkPath::Direction> directions;
-        rects.setCount(rectCount);
-        directions.setCount(rectCount);
-        path.rectContours(rects.begin(), directions.begin());
-        for (int contour = 0; contour < rectCount; ++contour) {
-            const SkRect& rect = rects[contour];
-            SkDebugf("path.addRect(%1.9g, %1.9g, %1.9g, %1.9g, %s);\n", rect.fLeft, rect.fTop,
-                    rect.fRight, rect.fBottom, directions[contour] == SkPath::kCCW_Direction
-                    ? "SkPath::kCCW_Direction" : "SkPath::kCW_Direction");
-        }
-        return;
-    }
-#endif
-    SkPath::FillType fillType = path.getFillType();
-    SkASSERT(fillType >= SkPath::kWinding_FillType && fillType <= SkPath::kInverseEvenOdd_FillType);
-    if (includeDeclaration) {
-        SkDebugf("    SkPath %s;\n", pathName);
-    }
-    SkDebugf("    %s.setFillType(SkPath::%s);\n", pathName, gFillTypeStr[fillType]);
-    iter.setPath(path);
-    showPathContours(iter, pathName);
-}
-
 #if DEBUG_SHOW_TEST_NAME
 static void showPathData(const SkPath& path) {
     SkPath::RawIter iter(path);
@@ -223,29 +127,6 @@ void showOp(const SkPathOp op) {
             SkASSERT(0);
     }
 }
-
-#if DEBUG_SHOW_TEST_NAME
-
-void ShowFunctionHeader(const char* functionName) {
-    SkDebugf("\nstatic void %s(skiatest::Reporter* reporter, const char* filename) {\n", functionName);
-    if (strcmp("skphealth_com76", functionName) == 0) {
-        SkDebugf("found it\n");
-    }
-}
-
-static const char* gOpStrs[] = {
-    "kDifference_PathOp",
-    "kIntersect_PathOp",
-    "kUnion_PathOp",
-    "kXor_PathOp",
-    "kReverseDifference_PathOp",
-};
-
-void ShowOp(SkPathOp op, const char* pathOne, const char* pathTwo) {
-    SkDebugf("    testPathOp(reporter, %s, %s, %s, filename);\n", pathOne, pathTwo, gOpStrs[op]);
-    SkDebugf("}\n");
-}
-#endif
 
 #if DEBUG_SHOW_TEST_NAME
 static char hexorator(int x) {
@@ -420,8 +301,10 @@ static void showPathOpPath(const char* testName, const SkPath& one, const SkPath
     *gTestOp.append() = shapeOp;
     ++gTestNo;
     SkDebugf("    SkPath path, pathB;\n");
-    showPath(a, "path", false);
-    showPath(b, "pathB", false);
+#if DEBUG_SHOW_TEST_NAME
+    SkPathOpsDebug::ShowOnePath(a, "path", false);
+    SkPathOpsDebug::ShowOnePath(b, "pathB", false);
+#endif
     SkDebugf("    testPathOp(reporter, path, pathB, %s, filename);\n", opStrs[shapeOp]);
     SkDebugf("}\n");
     drawAsciiPaths(scaledOne, scaledTwo, true);
@@ -433,6 +316,8 @@ void ShowTestArray() {
     }
 }
 
+SK_DECLARE_STATIC_MUTEX(compareDebugOut3);
+SK_DECLARE_STATIC_MUTEX(compareDebugOut4);
 static int comparePaths(skiatest::Reporter* reporter, const char* testName, const SkPath& one,
         const SkPath& scaledOne, const SkPath& two, const SkPath& scaledTwo, SkBitmap& bitmap,
         const SkPath& a, const SkPath& b, const SkPathOp shapeOp, const SkMatrix& scale) {
@@ -446,13 +331,11 @@ static int comparePaths(skiatest::Reporter* reporter, const char* testName, cons
     }
     const int MAX_ERRORS = 8;
     if (errors2x2 > MAX_ERRORS && gComparePathsAssert) {
-        SK_DECLARE_STATIC_MUTEX(compareDebugOut3);
         SkAutoMutexAcquire autoM(compareDebugOut3);
         SkDebugf("\n*** this test fails ***\n");
         showPathOpPath(testName, one, two, a, b, scaledOne, scaledTwo, shapeOp, scale);
         REPORTER_ASSERT(reporter, 0);
     } else if (gShowPath || errors2x2 == MAX_ERRORS || errors2x2 == MAX_ERRORS - 1) {
-        SK_DECLARE_STATIC_MUTEX(compareDebugOut4);
         SkAutoMutexAcquire autoM(compareDebugOut4);
         showPathOpPath(testName, one, two, a, b, scaledOne, scaledTwo, shapeOp, scale);
     }
@@ -519,13 +402,16 @@ static void outputToStream(const char* pathStr, const char* pathPrefix, const ch
     outFile.flush();
 }
 
+SK_DECLARE_STATIC_MUTEX(simplifyDebugOut);
 bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& state,
                   const char* pathStr) {
     SkPath::FillType fillType = useXor ? SkPath::kEvenOdd_FillType : SkPath::kWinding_FillType;
     path.setFillType(fillType);
+#if DEBUG_SHOW_TEST_NAME
     if (gShowPath) {
-        showPath(path, "path", false);
+        SkPathOpsDebug::ShowOnePath(path, "path", false);
     }
+#endif
     if (!Simplify(path, &out)) {
         SkDebugf("%s did not expect failure\n", __FUNCTION__);
         REPORTER_ASSERT(state.fReporter, 0);
@@ -536,7 +422,6 @@ bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadState& st
     }
     int result = comparePaths(state.fReporter, NULL, path, out, *state.fBitmap);
     if (result && gPathStrAssert) {
-        SK_DECLARE_STATIC_MUTEX(simplifyDebugOut);
         SkAutoMutexAcquire autoM(simplifyDebugOut);
         char temp[8192];
         sk_bzero(temp, sizeof(temp));
@@ -574,20 +459,6 @@ bool testSimplify(skiatest::Reporter* reporter, const SkPath& path, const char* 
     reporter->bumpTestCount();
     return result == 0;
 }
-
-#if DEBUG_SHOW_TEST_NAME
-
-SK_DECLARE_STATIC_MUTEX(gTestMutex);
-
-void SkPathOpsDebug::ShowPath(const SkPath& a, const SkPath& b, SkPathOp shapeOp,
-        const char* testName) {
-    SkAutoMutexAcquire ac(gTestMutex);
-    ShowFunctionHeader(testName);
-    showPath(a, "path", true);
-    showPath(b, "pathB", true);
-    ShowOp(shapeOp, "path", "pathB");
-}
-#endif
 
 #if DEBUG_SHOW_TEST_NAME
 static void showName(const SkPath& a, const SkPath& b, const SkPathOp shapeOp) {

@@ -9,18 +9,16 @@
 #define PictureRenderer_DEFINED
 
 #include "SkCanvas.h"
-#include "SkCountdown.h"
 #include "SkDrawFilter.h"
+#include "SkJSONCPP.h"
 #include "SkMath.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
-#include "SkRunnable.h"
 #include "SkString.h"
 #include "SkTDArray.h"
-#include "SkThreadPool.h"
 #include "SkTypes.h"
 
 #if SK_SUPPORT_GPU
@@ -92,8 +90,11 @@ public:
      * @param useChecksumBasedFilenames Whether to use checksum-based filenames when writing
      *     bitmap images to disk.
      */
-    virtual void init(SkPicture* pict, const SkString* writePath, const SkString* mismatchPath,
-                      const SkString* inputFilename, bool useChecksumBasedFilenames);
+    virtual void init(const SkPicture* pict, 
+                      const SkString* writePath, 
+                      const SkString* mismatchPath,
+                      const SkString* inputFilename, 
+                      bool useChecksumBasedFilenames);
 
     /**
      * TODO(epoger): Temporary hack, while we work on http://skbug.com/2584 ('bench_pictures is
@@ -165,7 +166,11 @@ public:
     /**
      * Set the backend type. Returns true on success and false on failure.
      */
+#if SK_SUPPORT_GPU
+    bool setDeviceType(SkDeviceTypes deviceType, GrGLStandard gpuAPI = kNone_GrGLStandard) {
+#else
     bool setDeviceType(SkDeviceTypes deviceType) {
+#endif
         fDeviceType = deviceType;
 #if SK_SUPPORT_GPU
         // In case this function is called more than once
@@ -200,7 +205,7 @@ public:
                 return false;
         }
 #if SK_SUPPORT_GPU
-        fGrContext = fGrContextFactory.get(glContextType);
+        fGrContext = fGrContextFactory.get(glContextType, gpuAPI);
         if (NULL == fGrContext) {
             return false;
         } else {
@@ -296,6 +301,60 @@ public:
         return config;
     }
 
+    Json::Value getJSONConfig() {
+        Json::Value result;
+
+        result["mode"] = this->getConfigNameInternal().c_str();
+        result["scale"] = 1.0f;
+        if (SK_Scalar1 != fScaleFactor) {
+            result["scale"] = SkScalarToFloat(fScaleFactor);
+        }
+        if (kRTree_BBoxHierarchyType == fBBoxHierarchyType) {
+            result["bbh"] = "rtree";
+        } else if (kQuadTree_BBoxHierarchyType == fBBoxHierarchyType) {
+            result["bbh"] = "quadtree";
+        } else if (kTileGrid_BBoxHierarchyType == fBBoxHierarchyType) {
+            SkString tmp("grid_");
+            tmp.appendS32(fGridInfo.fTileInterval.width());
+            tmp.append("x");
+            tmp.appendS32(fGridInfo.fTileInterval.height());
+            result["bbh"] = tmp.c_str();
+        }
+#if SK_SUPPORT_GPU
+        SkString tmp;
+        switch (fDeviceType) {
+            case kGPU_DeviceType:
+                if (0 != fSampleCount) {
+                    tmp = "msaa";
+                    tmp.appendS32(fSampleCount);
+                    result["config"] = tmp.c_str();
+                } else {
+                    result["config"] = "gpu";
+                }
+                break;
+            case kNVPR_DeviceType:
+                tmp = "nvprmsaa";
+                tmp.appendS32(fSampleCount);
+                result["config"] = tmp.c_str();
+                break;
+#if SK_ANGLE
+            case kAngle_DeviceType:
+                result["config"] = "angle";
+                break;
+#endif
+#if SK_MESA
+            case kMesa_DeviceType:
+                result["config"] = "mesa";
+                break;
+#endif
+            default:
+                // Assume that no extra info means bitmap.
+                break;
+        }
+#endif
+        return result;
+    }
+
 #if SK_SUPPORT_GPU
     bool isUsingGpuDevice() {
         switch (fDeviceType) {
@@ -350,7 +409,7 @@ public:
         return fCanvas;
     }
 
-    SkPicture* getPicture() {
+    const SkPicture* getPicture() {
         return fPicture;
     }
 
@@ -380,7 +439,7 @@ public:
 
 protected:
     SkAutoTUnref<SkCanvas> fCanvas;
-    SkAutoTUnref<SkPicture> fPicture;
+    SkAutoTUnref<const SkPicture> fPicture;
     bool                   fUseChecksumBasedFilenames;
     ImageResultsAndExpectations*   fJsonSummaryPtr;
     SkDeviceTypes          fDeviceType;
@@ -466,8 +525,11 @@ private:
 
 class SimplePictureRenderer : public PictureRenderer {
 public:
-    virtual void init(SkPicture* pict, const SkString* writePath, const SkString* mismatchPath,
-                      const SkString* inputFilename, bool useChecksumBasedFilenames) SK_OVERRIDE;
+    virtual void init(const SkPicture* pict,
+                      const SkString* writePath, 
+                      const SkString* mismatchPath,
+                      const SkString* inputFilename, 
+                      bool useChecksumBasedFilenames) SK_OVERRIDE;
 
     virtual bool render(SkBitmap** out = NULL) SK_OVERRIDE;
 
@@ -481,14 +543,16 @@ class TiledPictureRenderer : public PictureRenderer {
 public:
     TiledPictureRenderer();
 
-    virtual void init(SkPicture* pict, const SkString* writePath, const SkString* mismatchPath,
-                      const SkString* inputFilename, bool useChecksumBasedFilenames) SK_OVERRIDE;
+    virtual void init(const SkPicture* pict, 
+                      const SkString* writePath, 
+                      const SkString* mismatchPath,
+                      const SkString* inputFilename, 
+                      bool useChecksumBasedFilenames) SK_OVERRIDE;
 
     /**
      * Renders to tiles, rather than a single canvas.
      * If fWritePath was provided, a separate file is
      * created for each tile, named "path0.png", "path1.png", etc.
-     * Multithreaded mode currently does not support writing to a file.
      */
     virtual bool render(SkBitmap** out = NULL) SK_OVERRIDE;
 
@@ -598,39 +662,6 @@ private:
     typedef PictureRenderer INHERITED;
 };
 
-class CloneData;
-
-class MultiCorePictureRenderer : public TiledPictureRenderer {
-public:
-    explicit MultiCorePictureRenderer(int threadCount);
-
-    ~MultiCorePictureRenderer();
-
-    virtual void init(SkPicture* pict, const SkString* writePath, const SkString* mismatchPath,
-                      const SkString* inputFilename, bool useChecksumBasedFilenames) SK_OVERRIDE;
-
-    /**
-     * Behaves like TiledPictureRenderer::render(), only using multiple threads.
-     */
-    virtual bool render(SkBitmap** out = NULL) SK_OVERRIDE;
-
-    virtual void end() SK_OVERRIDE;
-
-    virtual bool supportsTimingIndividualTiles() SK_OVERRIDE { return false; }
-
-private:
-    virtual SkString getConfigNameInternal() SK_OVERRIDE;
-
-    const int            fNumThreads;
-    SkTDArray<SkCanvas*> fCanvasPool;
-    SkThreadPool         fThreadPool;
-    SkPicture*           fPictureClones;
-    CloneData**          fCloneData;
-    SkCountdown          fCountdown;
-
-    typedef TiledPictureRenderer INHERITED;
-};
-
 /**
  * This class does not do any rendering, but its render function executes turning an SkPictureRecord
  * into an SkPicturePlayback, which we want to time.
@@ -654,7 +685,6 @@ private:
 };
 
 extern PictureRenderer* CreateGatherPixelRefsRenderer();
-extern PictureRenderer* CreatePictureCloneRenderer();
 
 }
 

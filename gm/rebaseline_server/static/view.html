@@ -4,9 +4,11 @@
 
 <head>
   <title ng-bind="windowTitle"></title>
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.1.5/angular.js"></script>
   <script src="constants.js"></script>
   <script src="loader.js"></script>
+  <script src="utils.js"></script>
   <link rel="stylesheet" href="view.css">
 </head>
 
@@ -18,12 +20,20 @@
     </a>
   </h2>
 
-  <em ng-show="!extraColumnHeaders"><!-- show until data is loaded -->
+  <em ng-show="!readyToDisplay">
     Loading results from <a href="{{resultsToLoad}}">{{resultsToLoad}}</a> ...
     {{loadingMessage}}
   </em>
 
-  <div ng-show="extraColumnHeaders"><!-- everything: hide until data is loaded -->
+  <div ng-show="readyToDisplay">
+
+    <div class="warning-div"
+         ng-show="urlSchemaVersionLoaded != constants.URL_VALUE__SCHEMA_VERSION__CURRENT">
+      WARNING!  The URL you loaded used schema version {{urlSchemaVersionLoaded}}, rather than
+      the most recent version {{constants.URL_VALUE__SCHEMA_VERSION__CURRENT}}.  It has been
+      converted to the most recent version on a best-effort basis; you may wish to double-check
+      which records are displayed.
+    </div>
 
     <div class="warning-div"
          ng-show="header[constants.KEY__HEADER__IS_EDITABLE] && header[constants.KEY__HEADER__IS_EXPORTED]">
@@ -66,58 +76,53 @@
       </th>
     </tr>
     <tr valign="top">
-      <td>
-        resultType<br>
-        <label ng-repeat="valueAndCount in extraColumnHeaders[constants.KEY__EXTRACOLUMNS__RESULT_TYPE][constants.KEY__EXTRACOLUMNHEADERS__VALUES_AND_COUNTS]">
-          <input type="checkbox"
-                 name="resultTypes"
-                 value="{{valueAndCount[0]}}"
-                 ng-checked="!isValueInSet(valueAndCount[0], hiddenResultTypes)"
-                 ng-click="toggleValueInSet(valueAndCount[0], hiddenResultTypes); setUpdatesPending(true)">
-          {{valueAndCount[0]}} ({{valueAndCount[1]}})<br>
-        </label>
-        <button ng-click="hiddenResultTypes = {}; updateResults()">
-          all
-        </button>
-        <button ng-click="hiddenResultTypes = {}; toggleValuesInSet(allResultTypes, hiddenResultTypes); updateResults()">
-          none
-        </button>
-        <button ng-click="toggleValuesInSet(allResultTypes, hiddenResultTypes); updateResults()">
-          toggle
-        </button>
+
+      <!-- filters -->
+      <td ng-repeat="columnName in orderedColumnNames">
+
+        <!-- Only display filterable columns here... -->
+        <div ng-if="extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__IS_FILTERABLE]">
+          {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}}<br>
+
+          <!-- If we filter this column using free-form text match... -->
+          <div ng-if="extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__USE_FREEFORM_FILTER]">
+            <input type="text"
+                   ng-model="columnStringMatch[columnName]"
+                   ng-change="setUpdatesPending(true)"/>
+            <br>
+            <button ng-click="setColumnStringMatch(columnName, '')"
+                    ng-disabled="('' == columnStringMatch[columnName])">
+              clear (show all)
+            </button>
+          </div>
+
+          <!-- If we filter this column using checkboxes... -->
+          <div ng-if="!extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__USE_FREEFORM_FILTER]">
+            <label ng-repeat="valueAndCount in extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__VALUES_AND_COUNTS]">
+              <input type="checkbox"
+                     name="resultTypes"
+                     value="{{valueAndCount[0]}}"
+                     ng-checked="isValueInSet(valueAndCount[0], showingColumnValues[columnName])"
+                     ng-click="toggleValueInSet(valueAndCount[0], showingColumnValues[columnName]); setUpdatesPending(true)">
+              {{valueAndCount[0]}} ({{valueAndCount[1]}})<br>
+            </label>
+            <button ng-click="showingColumnValues[columnName] = {}; toggleValuesInSet(allColumnValues[columnName], showingColumnValues[columnName]); updateResults()"
+                    ng-disabled="!readyToDisplay || allColumnValues[columnName].length == setSize(showingColumnValues[columnName])">
+              all
+            </button>
+            <button ng-click="showingColumnValues[columnName] = {}; updateResults()"
+                    ng-disabled="!readyToDisplay || 0 == setSize(showingColumnValues[columnName])">
+              none
+            </button>
+            <button ng-click="toggleValuesInSet(allColumnValues[columnName], showingColumnValues[columnName]); updateResults()">
+              toggle
+            </button>
+          </div>
+
+        </div>
       </td>
-      <td ng-repeat="category in [constants.KEY__EXTRACOLUMNS__BUILDER, constants.KEY__EXTRACOLUMNS__TEST]">
-        {{category}}
-        <br>
-        <input type="text"
-               ng-model="categoryValueMatch[category]"
-               ng-change="setUpdatesPending(true)"/>
-        <br>
-        <button ng-click="setCategoryValueMatch(category, '')"
-                ng-disabled="('' == categoryValueMatch[category])">
-          clear (show all)
-        </button>
-      </td>
-      <td>
-        config<br>
-        <label ng-repeat="valueAndCount in extraColumnHeaders[constants.KEY__EXTRACOLUMNS__CONFIG][constants.KEY__EXTRACOLUMNHEADERS__VALUES_AND_COUNTS]">
-          <input type="checkbox"
-                 name="configs"
-                 value="{{valueAndCount[0]}}"
-                 ng-checked="!isValueInSet(valueAndCount[0], hiddenConfigs)"
-                 ng-click="toggleValueInSet(valueAndCount[0], hiddenConfigs); setUpdatesPending(true)">
-          {{valueAndCount[0]}} ({{valueAndCount[1]}})<br>
-        </label>
-        <button ng-click="hiddenConfigs = {}; updateResults()">
-          all
-        </button>
-        <button ng-click="hiddenConfigs = {}; toggleValuesInSet(allConfigs, hiddenConfigs); updateResults()">
-          none
-        </button>
-        <button ng-click="toggleValuesInSet(allConfigs, hiddenConfigs); updateResults()">
-          toggle
-        </button>
-      </td>
+
+      <!-- settings -->
       <td><table>
         <tr><td>
           <input type="checkbox" ng-model="showThumbnailsPending"
@@ -192,57 +197,54 @@
 
       <p>
 
+    <div class="results-header"> <!-- results header -->
+          <div class="results-header-actions">
+            all tests shown:
+            <button ng-click="selectAllImagePairs()">
+              select
+            </button>
+            <button ng-click="clearAllImagePairs()">
+              clear
+            </button>
+            <button ng-click="toggleAllImagePairs()">
+              toggle
+            </button>
+          <div ng-repeat="otherTab in tabs">
+            <button ng-click="moveSelectedImagePairsToTab(otherTab)"
+                    ng-disabled="selectedImagePairs.length == 0"
+                    ng-show="otherTab != viewingTab">
+              move {{selectedImagePairs.length}} selected tests to {{otherTab}} tab
+            </button>
+          </div>
+        </div>
+        <div class="results-header-stats">
+          Found {{filteredImagePairs.length}} matches;
+          <span ng-show="filteredImagePairs.length > limitedImagePairs.length">
+            displaying the first {{limitedImagePairs.length}}.
+          </span>
+          <span ng-show="filteredImagePairs.length <= limitedImagePairs.length">
+            displaying them all.
+          </span>
+          <span ng-show="renderEndTime > renderStartTime">
+            Rendered in {{(renderEndTime - renderStartTime).toFixed(0)}} ms.
+          </span>
+          <br>
+          (click on the column header radio buttons to re-sort by that column)
+        </div>
+    </div> <!-- results header -->
+
     <table border="0"><tr><td> <!-- table holding results header + results table -->
-      <table border="0" width="100%"> <!-- results header -->
-        <tr>
-          <td>
-            Found {{filteredImagePairs.length}} matches;
-            <span ng-show="filteredImagePairs.length > limitedImagePairs.length">
-              displaying the first {{limitedImagePairs.length}}.
-            </span>
-            <span ng-show="filteredImagePairs.length <= limitedImagePairs.length">
-              displaying them all.
-            </span>
-            <span ng-show="renderEndTime > renderStartTime">
-              Rendered in {{(renderEndTime - renderStartTime).toFixed(0)}} ms.
-            </span>
-            <br>
-            (click on the column header radio buttons to re-sort by that column)
-          </td>
-          <td align="right">
-            <div>
-              all tests shown:
-              <button ng-click="selectAllImagePairs()">
-                select
-              </button>
-              <button ng-click="clearAllImagePairs()">
-                clear
-              </button>
-              <button ng-click="toggleAllImagePairs()">
-                toggle
-              </button>
-            </div>
-            <div ng-repeat="otherTab in tabs">
-              <button ng-click="moveSelectedImagePairsToTab(otherTab)"
-                      ng-disabled="selectedImagePairs.length == 0"
-                      ng-show="otherTab != viewingTab">
-                move {{selectedImagePairs.length}} selected tests to {{otherTab}} tab
-              </button>
-            </div>
-          </td>
-        </tr>
-      </table> <!-- results header -->
       </td></tr><tr><td>
       <table border="1" ng-app="diff_viewer"> <!-- results -->
         <tr>
           <!-- Most column headers are displayed in a common fashion... -->
-          <th ng-repeat="categoryName in [constants.KEY__EXTRACOLUMNS__RESULT_TYPE, constants.KEY__EXTRACOLUMNS__BUILDER, constants.KEY__EXTRACOLUMNS__TEST, constants.KEY__EXTRACOLUMNS__CONFIG]">
+          <th ng-repeat="columnName in orderedColumnNames">
             <input type="radio"
                    name="sortColumnRadio"
-                   value="{{categoryName}}"
-                   ng-checked="(sortColumnKey == categoryName)"
-                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXTRACOLUMNS, categoryName)">
-            {{categoryName}}
+                   value="{{columnName}}"
+                   ng-checked="(sortColumnKey == columnName)"
+                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXTRACOLUMNS, columnName)">
+            {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}}
           </th>
           <!-- ... but there are a few columns where we display things differently. -->
           <th>
@@ -299,61 +301,28 @@
         <tr ng-repeat="imagePair in limitedImagePairs" valign="top"
             ng-class-odd="'results-odd'" ng-class-even="'results-even'"
             results-updated-callback-directive>
-          <td>
-            {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__RESULT_TYPE]}}
+
+          <td ng-repeat="columnName in orderedColumnNames">
+            {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][columnName]}}
             <br>
             <button class="show-only-button"
                     ng-show="viewingTab == defaultTab"
-                    ng-click="showOnlyResultType(imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__RESULT_TYPE])"
-                    title="show only results of type {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__RESULT_TYPE]}}">
+                    ng-disabled="1 == setSize(showingColumnValues[columnName])"
+                    ng-click="showOnlyColumnValue(columnName, imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][columnName])"
+                    title="show only results of {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}} {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][columnName]}}">
               show only
             </button>
             <br>
             <button class="show-all-button"
                     ng-show="viewingTab == defaultTab"
-                    ng-disabled="0 == setSize(hiddenResultTypes)"
-                    ng-click="showAllResultTypes()"
-                    title="show results of all types">
+                    ng-disabled="allColumnValues[columnName].length == setSize(showingColumnValues[columnName])"
+                    ng-click="showAllColumnValues(columnName)"
+                    title="show results of all {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}}s">
               show all
             </button>
           </td>
-          <td ng-repeat="categoryName in [constants.KEY__EXTRACOLUMNS__BUILDER, constants.KEY__EXTRACOLUMNS__TEST]">
-            {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][categoryName]}}
-            <br>
-            <button class="show-only-button"
-                    ng-show="viewingTab == defaultTab"
-                    ng-disabled="imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][categoryName] == categoryValueMatch[categoryName]"
-                    ng-click="setCategoryValueMatch(categoryName, imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][categoryName])"
-                    title="show only results of {{categoryName}} {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][categoryName]}}">
-              show only
-            </button>
-            <br>
-            <button class="show-all-button"
-                    ng-show="viewingTab == defaultTab"
-                    ng-disabled="'' == categoryValueMatch[categoryName]"
-                    ng-click="setCategoryValueMatch(categoryName, '')"
-                    title="show results of all {{categoryName}}s">
-              show all
-            </button>
-          </td>
-          <td>
-            {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__CONFIG]}}
-            <br>
-            <button class="show-only-button"
-                    ng-show="viewingTab == defaultTab"
-                    ng-click="showOnlyConfig(imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__CONFIG])"
-                    title="show only results of config {{imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS][constants.KEY__EXTRACOLUMNS__CONFIG]}}">
-              show only
-            </button>
-            <br>
-            <button class="show-all-button"
-                    ng-show="viewingTab == defaultTab"
-                    ng-disabled="0 == setSize(hiddenConfigs)"
-                    ng-click="showAllConfigs()"
-                    title="show results of all configs">
-              show all
-            </button>
-          </td>
+
+          <!-- bugs -->
           <td>
             <a ng-repeat="bug in imagePair[constants.KEY__IMAGEPAIRS__EXPECTATIONS][constants.KEY__EXPECTATIONS__BUGS]"
                href="https://code.google.com/p/skia/issues/detail?id={{bug}}"
@@ -441,7 +410,7 @@
     </td></tr></table> <!-- table holding results header + imagePairs table -->
 
   </div><!-- main display area of selected tab -->
-  </div><!-- everything: hide until data is loaded -->
+  </div><!-- everything: hide until readyToDisplay -->
 
 </body>
 </html>

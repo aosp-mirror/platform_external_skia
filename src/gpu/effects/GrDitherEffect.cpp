@@ -8,6 +8,7 @@
 #include "GrDitherEffect.h"
 
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "gl/GrGLSL.h"
 #include "GrTBackendEffectFactory.h"
 
@@ -19,8 +20,9 @@ class GLDitherEffect;
 
 class DitherEffect : public GrEffect {
 public:
-    static GrEffectRef* Create() {
-        return CreateEffectRef(AutoEffectUnref(SkNEW(DitherEffect)));
+    static GrEffect* Create() {
+        GR_CREATE_STATIC_EFFECT(gDitherEffect, DitherEffect, ())
+        return SkRef(gDitherEffect);
     }
 
     virtual ~DitherEffect() {};
@@ -55,10 +57,10 @@ void DitherEffect::getConstantColorComponents(GrColor* color, uint32_t* validFla
 
 GR_DEFINE_EFFECT_TEST(DitherEffect);
 
-GrEffectRef* DitherEffect::TestCreate(SkRandom*,
-                                      GrContext*,
-                                      const GrDrawTargetCaps&,
-                                      GrTexture*[]) {
+GrEffect* DitherEffect::TestCreate(SkRandom*,
+                                   GrContext*,
+                                   const GrDrawTargetCaps&,
+                                   GrTexture*[]) {
     return DitherEffect::Create();
 }
 
@@ -70,7 +72,7 @@ public:
 
     virtual void emitCode(GrGLShaderBuilder* builder,
                           const GrDrawEffect& drawEffect,
-                          EffectKey key,
+                          const GrEffectKey& key,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -87,7 +89,7 @@ GLDitherEffect::GLDitherEffect(const GrBackendEffectFactory& factory,
 
 void GLDitherEffect::emitCode(GrGLShaderBuilder* builder,
                               const GrDrawEffect& drawEffect,
-                              EffectKey key,
+                              const GrEffectKey& key,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
@@ -102,7 +104,7 @@ void GLDitherEffect::emitCode(GrGLShaderBuilder* builder,
     // For each channel c, add the random offset to the pixel to either bump
     // it up or let it remain constant during quantization.
     builder->fsCodeAppendf("\t\tfloat r = "
-                           "fract(sin(dot(%s ,vec2(12.9898,78.233))) * 43758.5453);\n",
+                           "fract(sin(dot(%s.xy ,vec2(12.9898,78.233))) * 43758.5453);\n",
                            builder->fragmentPosition());
     builder->fsCodeAppendf("\t\t%s = (1.0/255.0) * vec4(r, r, r, r) + %s;\n",
                            outputColor, GrGLSLExpr4(inputColor).c_str());
@@ -110,6 +112,4 @@ void GLDitherEffect::emitCode(GrGLShaderBuilder* builder,
 
 //////////////////////////////////////////////////////////////////////////////
 
-GrEffectRef* GrDitherEffect::Create() {
-    return DitherEffect::Create();
-}
+GrEffect* GrDitherEffect::Create() { return DitherEffect::Create(); }

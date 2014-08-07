@@ -28,10 +28,6 @@ public:
     }
 
 protected:
-    virtual uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
-
     virtual SkString onShortName() {
         return SkString("samplerstress");
     }
@@ -101,6 +97,7 @@ protected:
         // stipple mask with a round rect soft clip
         SkPaint paint;
         paint.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(72);
         paint.setShader(fShader.get());
         paint.setMaskFilter(fMaskFilter.get());
@@ -127,6 +124,7 @@ protected:
         SkPaint paint2;
         paint2.setColor(SK_ColorBLACK);
         paint2.setAntiAlias(true);
+        sk_tool_utils::set_portable_typeface(&paint2);
         paint2.setTextSize(72);
         paint2.setStyle(SkPaint::kStroke_Style);
         paint2.setStrokeWidth(1);

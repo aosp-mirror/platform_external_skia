@@ -48,8 +48,11 @@ enum {
     kDefaultTileHeight = 256
 };
 
-void PictureRenderer::init(SkPicture* pict, const SkString* writePath, const SkString* mismatchPath,
-                           const SkString* inputFilename, bool useChecksumBasedFilenames) {
+void PictureRenderer::init(const SkPicture* pict, 
+                           const SkString* writePath, 
+                           const SkString* mismatchPath,
+                           const SkString* inputFilename, 
+                           bool useChecksumBasedFilenames) {
     this->CopyString(&fWritePath, writePath);
     this->CopyString(&fMismatchPath, mismatchPath);
     this->CopyString(&fInputFilename, inputFilename);
@@ -360,7 +363,7 @@ bool RecordPictureRenderer::render(SkBitmap** out) {
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
     if (!fWritePath.isEmpty()) {
         // Record the new picture as a new SKP with PNG encoded bitmaps.
-        SkString skpPath = SkOSPath::SkPathJoin(fWritePath.c_str(), fInputFilename.c_str());
+        SkString skpPath = SkOSPath::Join(fWritePath.c_str(), fInputFilename.c_str());
         SkFILEWStream stream(skpPath.c_str());
         picture->serialize(&stream, &encode_bitmap_to_data);
         return true;
@@ -406,7 +409,7 @@ SkString PipePictureRenderer::getConfigNameInternal() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void SimplePictureRenderer::init(SkPicture* picture, const SkString* writePath,
+void SimplePictureRenderer::init(const SkPicture* picture, const SkString* writePath,
                                  const SkString* mismatchPath, const SkString* inputFilename,
                                  bool useChecksumBasedFilenames) {
     INHERITED::init(picture, writePath, mismatchPath, inputFilename, useChecksumBasedFilenames);
@@ -451,7 +454,7 @@ TiledPictureRenderer::TiledPictureRenderer()
     , fTilesX(0)
     , fTilesY(0) { }
 
-void TiledPictureRenderer::init(SkPicture* pict, const SkString* writePath,
+void TiledPictureRenderer::init(const SkPicture* pict, const SkString* writePath,
                                 const SkString* mismatchPath, const SkString* inputFilename,
                                 bool useChecksumBasedFilenames) {
     SkASSERT(NULL != pict);
@@ -579,7 +582,9 @@ void TiledPictureRenderer::setupPowerOf2Tiles() {
  * Saves and restores so that the initial clip and matrix return to their state before this function
  * is called.
  */
-static void draw_tile_to_canvas(SkCanvas* canvas, const SkRect& tileRect, SkPicture* picture) {
+static void draw_tile_to_canvas(SkCanvas* canvas, 
+                                const SkRect& tileRect, 
+                                const SkPicture* picture) {
     int saveCount = canvas->save();
     // Translate so that we draw the correct portion of the picture.
     // Perform a postTranslate so that the scaleFactor does not interfere with the positioning.
@@ -698,188 +703,6 @@ SkString TiledPictureRenderer::getConfigNameInternal() {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-// Holds all of the information needed to draw a set of tiles.
-class CloneData : public SkRunnable {
-
-public:
-    CloneData(SkPicture* clone, SkCanvas* canvas, SkTDArray<SkRect>& rects, int start, int end,
-              SkRunnable* done, ImageResultsAndExpectations* jsonSummaryPtr,
-              bool useChecksumBasedFilenames, bool enableWrites)
-        : fClone(clone)
-        , fCanvas(canvas)
-        , fEnableWrites(enableWrites)
-        , fRects(rects)
-        , fStart(start)
-        , fEnd(end)
-        , fSuccess(NULL)
-        , fDone(done)
-        , fJsonSummaryPtr(jsonSummaryPtr)
-        , fUseChecksumBasedFilenames(useChecksumBasedFilenames) {
-        SkASSERT(fDone != NULL);
-    }
-
-    virtual void run() SK_OVERRIDE {
-        SkGraphics::SetTLSFontCacheLimit(1024 * 1024);
-
-        SkBitmap bitmap;
-        if (fBitmap != NULL) {
-            // All tiles are the same size.
-            setup_bitmap(&bitmap, SkScalarFloorToInt(fRects[0].width()), SkScalarFloorToInt(fRects[0].height()));
-        }
-
-        for (int i = fStart; i < fEnd; i++) {
-            draw_tile_to_canvas(fCanvas, fRects[i], fClone);
-            if (fEnableWrites) {
-                if (!write(fCanvas, fWritePath, fMismatchPath, fInputFilename, fJsonSummaryPtr,
-                           fUseChecksumBasedFilenames, &i)
-                    && fSuccess != NULL) {
-                    *fSuccess = false;
-                    // If one tile fails to write to a file, do not continue drawing the rest.
-                    break;
-                }
-                if (fBitmap != NULL) {
-                    if (fCanvas->readPixels(&bitmap, 0, 0)) {
-                        SkAutoLockPixels alp(*fBitmap);
-                        bitmapCopyAtOffset(bitmap, fBitmap, SkScalarFloorToInt(fRects[i].left()),
-                                           SkScalarFloorToInt(fRects[i].top()));
-                    } else {
-                        *fSuccess = false;
-                        // If one tile fails to read pixels, do not continue drawing the rest.
-                        break;
-                    }
-                }
-            }
-        }
-        fDone->run();
-    }
-
-    void setPathsAndSuccess(const SkString& writePath, const SkString& mismatchPath,
-                            const SkString& inputFilename, bool* success) {
-        fWritePath.set(writePath);
-        fMismatchPath.set(mismatchPath);
-        fInputFilename.set(inputFilename);
-        fSuccess = success;
-    }
-
-    void setBitmap(SkBitmap* bitmap) {
-        fBitmap = bitmap;
-    }
-
-private:
-    // All pointers unowned.
-    SkPicture*         fClone;      // Picture to draw from. Each CloneData has a unique one which
-                                    // is threadsafe.
-    SkCanvas*          fCanvas;     // Canvas to draw to. Reused for each tile.
-    bool               fEnableWrites; // TODO(epoger): Temporary hack; see declaration of
-                                      // fEnableWrites in PictureRenderer.h.
-    SkString           fWritePath;  // If not empty, write all results into this directory.
-    SkString           fMismatchPath;  // If not empty, write all unexpected results into this dir.
-    SkString           fInputFilename; // Filename of input SkPicture file.
-    SkTDArray<SkRect>& fRects;      // All tiles of the picture.
-    const int          fStart;      // Range of tiles drawn by this thread.
-    const int          fEnd;
-    bool*              fSuccess;    // Only meaningful if path is non-null. Shared by all threads,
-                                    // and only set to false upon failure to write to a PNG.
-    SkRunnable*        fDone;
-    SkBitmap*          fBitmap;
-    ImageResultsAndExpectations* fJsonSummaryPtr;
-    bool               fUseChecksumBasedFilenames;
-};
-
-MultiCorePictureRenderer::MultiCorePictureRenderer(int threadCount)
-: fNumThreads(threadCount)
-, fThreadPool(threadCount)
-, fCountdown(threadCount) {
-    // Only need to create fNumThreads - 1 clones, since one thread will use the base
-    // picture.
-    fPictureClones = SkNEW_ARRAY(SkPicture, fNumThreads - 1);
-    fCloneData = SkNEW_ARRAY(CloneData*, fNumThreads);
-}
-
-void MultiCorePictureRenderer::init(SkPicture *pict, const SkString* writePath,
-                                    const SkString* mismatchPath, const SkString* inputFilename,
-                                    bool useChecksumBasedFilenames) {
-    // Set fPicture and the tiles.
-    this->INHERITED::init(pict, writePath, mismatchPath, inputFilename, useChecksumBasedFilenames);
-    for (int i = 0; i < fNumThreads; ++i) {
-        *fCanvasPool.append() = this->setupCanvas(this->getTileWidth(), this->getTileHeight());
-    }
-    // Only need to create fNumThreads - 1 clones, since one thread will use the base picture.
-    fPicture->clone(fPictureClones, fNumThreads - 1);
-    // Populate each thread with the appropriate data.
-    // Group the tiles into nearly equal size chunks, rounding up so we're sure to cover them all.
-    const int chunkSize = (fTileRects.count() + fNumThreads - 1) / fNumThreads;
-
-    for (int i = 0; i < fNumThreads; i++) {
-        SkPicture* pic;
-        if (i == fNumThreads-1) {
-            // The last set will use the original SkPicture.
-            pic = fPicture;
-        } else {
-            pic = &fPictureClones[i];
-        }
-        const int start = i * chunkSize;
-        const int end = SkMin32(start + chunkSize, fTileRects.count());
-        fCloneData[i] = SkNEW_ARGS(CloneData,
-                                   (pic, fCanvasPool[i], fTileRects, start, end, &fCountdown,
-                                    fJsonSummaryPtr, useChecksumBasedFilenames, fEnableWrites));
-    }
-}
-
-bool MultiCorePictureRenderer::render(SkBitmap** out) {
-    bool success = true;
-    if (!fWritePath.isEmpty() || !fMismatchPath.isEmpty()) {
-        for (int i = 0; i < fNumThreads-1; i++) {
-            fCloneData[i]->setPathsAndSuccess(fWritePath, fMismatchPath, fInputFilename, &success);
-        }
-    }
-
-    if (NULL != out) {
-        *out = SkNEW(SkBitmap);
-        setup_bitmap(*out, fPicture->width(), fPicture->height());
-        for (int i = 0; i < fNumThreads; i++) {
-            fCloneData[i]->setBitmap(*out);
-        }
-    } else {
-        for (int i = 0; i < fNumThreads; i++) {
-            fCloneData[i]->setBitmap(NULL);
-        }
-    }
-
-    fCountdown.reset(fNumThreads);
-    for (int i = 0; i < fNumThreads; i++) {
-        fThreadPool.add(fCloneData[i]);
-    }
-    fCountdown.wait();
-
-    return success;
-}
-
-void MultiCorePictureRenderer::end() {
-    for (int i = 0; i < fNumThreads - 1; i++) {
-        SkDELETE(fCloneData[i]);
-        fCloneData[i] = NULL;
-    }
-
-    fCanvasPool.unrefAll();
-
-    this->INHERITED::end();
-}
-
-MultiCorePictureRenderer::~MultiCorePictureRenderer() {
-    // Each individual CloneData was deleted in end.
-    SkDELETE_ARRAY(fCloneData);
-    SkDELETE_ARRAY(fPictureClones);
-}
-
-SkString MultiCorePictureRenderer::getConfigNameInternal() {
-    SkString name = this->INHERITED::getConfigNameInternal();
-    name.appendf("_multi_%i_threads", fNumThreads);
-    return name;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-
 void PlaybackCreationRenderer::setup() {
     SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
     fRecorder.reset(SkNEW(SkPictureRecorder));
@@ -939,29 +762,6 @@ private:
 
 PictureRenderer* CreateGatherPixelRefsRenderer() {
     return SkNEW(GatherRenderer);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-class PictureCloneRenderer : public PictureRenderer {
-public:
-    virtual bool render(SkBitmap** out = NULL) SK_OVERRIDE {
-        for (int i = 0; i < 100; ++i) {
-            SkPicture* clone = fPicture->clone();
-            SkSafeUnref(clone);
-        }
-
-        return (fWritePath.isEmpty());    // we don't have anything to write
-    }
-
-private:
-    virtual SkString getConfigNameInternal() SK_OVERRIDE {
-        return SkString("picture_clone");
-    }
-};
-
-PictureRenderer* CreatePictureCloneRenderer() {
-    return SkNEW(PictureCloneRenderer);
 }
 
 } // namespace sk_tools

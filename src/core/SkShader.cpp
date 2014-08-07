@@ -209,8 +209,8 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
 }
 
 bool SkShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                           const SkMatrix* localMatrixOrNull, GrColor* grColor,
-                           GrEffectRef** grEffect)  const {
+                           const SkMatrix* localMatrixOrNull, GrColor* paintColor,
+                           GrEffect** effect)  const {
     return false;
 }
 
@@ -228,8 +228,8 @@ SkShader* SkShader::CreateBitmapShader(const SkBitmap& src, TileMode tmx, TileMo
 }
 
 SkShader* SkShader::CreatePictureShader(SkPicture* src, TileMode tmx, TileMode tmy,
-                                       const SkMatrix* localMatrix) {
-    return SkPictureShader::Create(src, tmx, tmy, localMatrix);
+                                        const SkMatrix* localMatrix, const SkRect* tile) {
+    return SkPictureShader::Create(src, tmx, tmy, localMatrix, tile);
 }
 
 #ifndef SK_IGNORE_TO_STRING
@@ -348,20 +348,20 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 #include "SkGr.h"
 
 bool SkColorShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                const SkMatrix* localMatrix, GrColor* grColor,
-                                GrEffectRef** grEffect) const {
-    *grEffect = NULL;
+                                const SkMatrix* localMatrix, GrColor* paintColor,
+                                GrEffect** effect) const {
+    *effect = NULL;
     SkColor skColor = fColor;
     U8CPU newA = SkMulDiv255Round(SkColorGetA(fColor), paint.getAlpha());
-    *grColor = SkColor2GrColor(SkColorSetA(skColor, newA));
+    *paintColor = SkColor2GrColor(SkColorSetA(skColor, newA));
     return true;
 }
 
 #else
 
 bool SkColorShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                     const SkMatrix* localMatrix, GrColor* grColor,
-                                     GrEffectRef** grEffect) const {
+                                     const SkMatrix* localMatrix, GrColor* paintColor,
+                                     GrEffect** effect) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }

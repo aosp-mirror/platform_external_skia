@@ -231,7 +231,7 @@ public:
     }
 
 protected:
-    virtual void willSave(SaveFlags) SK_OVERRIDE;
+    virtual void willSave() SK_OVERRIDE;
     virtual SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SaveFlags) SK_OVERRIDE;
     virtual void willRestore() SK_OVERRIDE;
 
@@ -314,9 +314,11 @@ private:
     void applyUserTransform(SkCanvas* canvas);
 
     size_t getOpID() const {
+#if 0
         if (NULL != fPicture) {
             return fPicture->EXPERIMENTAL_curOpID();
         }
+#endif
         return 0;
     }
 

@@ -16,7 +16,6 @@
 // Gr headers
 #include "GrTypes.h"
 #include "GrContext.h"
-#include "GrFontScaler.h"
 
 // skia headers
 #include "SkBitmap.h"
@@ -85,12 +84,12 @@ void GrUnlockAndUnrefCachedBitmapTexture(GrTexture*);
 ////////////////////////////////////////////////////////////////////////////////
 
 // Converts a SkPaint to a GrPaint, ignoring the SkPaint's shader.
-// Sets the color of GrPaint to the value of the parameter grColor
+// Sets the color of GrPaint to the value of the parameter paintColor
 // Callers may subsequently modify the GrPaint. Setting constantColor indicates
 // that the final paint will draw the same color at every pixel. This allows
 // an optimization where the the color filter can be applied to the SkPaint's
 // color once while converting to GrPaint and then ignored.
-void SkPaint2GrPaintNoShader(GrContext* context, const SkPaint& skPaint, GrColor grColor,
+void SkPaint2GrPaintNoShader(GrContext* context, const SkPaint& skPaint, GrColor paintColor,
                              bool constantColor, GrPaint* grPaint);
 
 // This function is similar to skPaint2GrPaintNoShader but also converts
@@ -103,28 +102,6 @@ void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
 // Classes
 
 class SkGlyphCache;
-
-class SkGrFontScaler : public GrFontScaler {
-public:
-    explicit SkGrFontScaler(SkGlyphCache* strike);
-    virtual ~SkGrFontScaler();
-
-    // overrides
-    virtual const GrKey* getKey();
-    virtual GrMaskFormat getMaskFormat();
-    virtual bool getPackedGlyphBounds(GrGlyph::PackedID, SkIRect* bounds) SK_OVERRIDE;
-    virtual bool getPackedGlyphImage(GrGlyph::PackedID, int width, int height,
-                                     int rowBytes, void* image) SK_OVERRIDE;
-    virtual bool getPackedGlyphDFBounds(GrGlyph::PackedID, SkIRect* bounds) SK_OVERRIDE;
-    virtual bool getPackedGlyphDFImage(GrGlyph::PackedID, int width, int height,
-                                       void* image) SK_OVERRIDE;
-    virtual bool getGlyphPath(uint16_t glyphID, SkPath*);
-
-private:
-    SkGlyphCache* fStrike;
-    GrKey*  fKey;
-//    DECLARE_INSTANCE_COUNTER(SkGrFontScaler);
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

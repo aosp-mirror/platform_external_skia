@@ -23,9 +23,10 @@ class SK_API SkMatrixConvolutionImageFilter : public SkImageFilter {
 public:
     /*! \enum TileMode */
     enum TileMode {
-      kClamp_TileMode,         /*!< Clamp to the image's edge pixels. */
+      kClamp_TileMode = 0,         /*!< Clamp to the image's edge pixels. */
       kRepeat_TileMode,        /*!< Wrap around to the image's opposite edge. */
       kClampToBlack_TileMode,  /*!< Fill with transparent black. */
+      kMax_TileMode = kClampToBlack_TileMode
     };
 
     virtual ~SkMatrixConvolutionImageFilter();
@@ -86,7 +87,7 @@ protected:
 
 
 #if SK_SUPPORT_GPU
-    virtual bool asNewEffect(GrEffectRef** effect,
+    virtual bool asNewEffect(GrEffect** effect,
                              GrTexture*,
                              const SkMatrix& ctm,
                              const SkIRect& bounds) const SK_OVERRIDE;

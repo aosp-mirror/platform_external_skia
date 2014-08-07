@@ -9,6 +9,7 @@
 #include "GrSimpleTextureEffect.h"
 #include "GrTBackendEffectFactory.h"
 #include "gl/GrGLEffect.h"
+#include "gl/GrGLShaderBuilder.h"
 #include "SkFloatingPoint.h"
 
 
@@ -48,70 +49,92 @@ void GrTextureDomain::GLDomain::sampleTexture(GrGLShaderBuilder* builder,
     SkASSERT((Mode)-1 == fMode || textureDomain.mode() == fMode);
     SkDEBUGCODE(fMode = textureDomain.mode();)
 
-    if (kIgnore_Mode == textureDomain.mode()) {
-        builder->fsCodeAppendf("\t%s = ", outColor);
-        builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
-                                                    inCoords.c_str());
-        builder->fsCodeAppend(";\n");
-        return;
-    }
-
-    if (!fDomainUni.isValid()) {
+    if (textureDomain.mode() != kIgnore_Mode && !fDomainUni.isValid()) {
         const char* name;
         SkString uniName("TexDom");
         if (textureDomain.fIndex >= 0) {
             uniName.appendS32(textureDomain.fIndex);
         }
         fDomainUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
-                                            kVec4f_GrSLType, uniName.c_str(), &name);
+                                         kVec4f_GrSLType, uniName.c_str(), &name);
         fDomainName = name;
     }
-    if (kClamp_Mode == textureDomain.mode()) {
-        SkString clampedCoords;
-        clampedCoords.appendf("\tclamp(%s, %s.xy, %s.zw)",
-                                inCoords.c_str(), fDomainName.c_str(), fDomainName.c_str());
 
-        builder->fsCodeAppendf("\t%s = ", outColor);
-        builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler, clampedCoords.c_str());
-        builder->fsCodeAppend(";\n");
-    } else {
-        SkASSERT(GrTextureDomain::kDecal_Mode == textureDomain.mode());
-        // Add a block since we're going to declare variables.
-        GrGLShaderBuilder::FSBlock block(builder);
-
-        const char* domain = fDomainName.c_str();
-        if (kImagination_GrGLVendor == builder->ctxInfo().vendor()) {
-            // On the NexusS and GalaxyNexus, the other path (with the 'any'
-            // call) causes the compilation error "Calls to any function that
-            // may require a gradient calculation inside a conditional block
-            // may return undefined results". This appears to be an issue with
-            // the 'any' call since even the simple "result=black; if (any())
-            // result=white;" code fails to compile.
-            builder->fsCodeAppend("\tvec4 outside = vec4(0.0, 0.0, 0.0, 0.0);\n");
-            builder->fsCodeAppend("\tvec4 inside = ");
-            builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler, inCoords.c_str());
+    switch (textureDomain.mode()) {
+        case kIgnore_Mode: {
+            builder->fsCodeAppendf("\t%s = ", outColor);
+            builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
+                                                      inCoords.c_str());
             builder->fsCodeAppend(";\n");
+            break;
+        }
+        case kClamp_Mode: {
+            SkString clampedCoords;
+            clampedCoords.appendf("\tclamp(%s, %s.xy, %s.zw)",
+                                  inCoords.c_str(), fDomainName.c_str(), fDomainName.c_str());
 
-            builder->fsCodeAppendf("\tfloat x = abs(2.0*(%s.x - %s.x)/(%s.z - %s.x) - 1.0);\n",
-                                    inCoords.c_str(), domain, domain, domain);
-            builder->fsCodeAppendf("\tfloat y = abs(2.0*(%s.y - %s.y)/(%s.w - %s.y) - 1.0);\n",
-                                    inCoords.c_str(), domain, domain, domain);
-            builder->fsCodeAppend("\tfloat blend = step(1.0, max(x, y));\n");
-            builder->fsCodeAppendf("\t%s = mix(inside, outside, blend);\n", outColor);
-        } else {
-            builder->fsCodeAppend("\tbvec4 outside;\n");
-            builder->fsCodeAppendf("\toutside.xy = lessThan(%s, %s.xy);\n", inCoords.c_str(),
-                                   domain);
-            builder->fsCodeAppendf("\toutside.zw = greaterThan(%s, %s.zw);\n", inCoords.c_str(),
-                                   domain);
-            builder->fsCodeAppendf("\t%s = any(outside) ? vec4(0.0, 0.0, 0.0, 0.0) : ", outColor);
-            builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler, inCoords.c_str());
+            builder->fsCodeAppendf("\t%s = ", outColor);
+            builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
+                                                      clampedCoords.c_str());
             builder->fsCodeAppend(";\n");
+            break;
+        }
+        case kDecal_Mode: {
+            // Add a block since we're going to declare variables.
+            GrGLShaderBuilder::FSBlock block(builder);
+
+            const char* domain = fDomainName.c_str();
+            if (kImagination_GrGLVendor == builder->ctxInfo().vendor()) {
+                // On the NexusS and GalaxyNexus, the other path (with the 'any'
+                // call) causes the compilation error "Calls to any function that
+                // may require a gradient calculation inside a conditional block
+                // may return undefined results". This appears to be an issue with
+                // the 'any' call since even the simple "result=black; if (any())
+                // result=white;" code fails to compile.
+                builder->fsCodeAppend("\tvec4 outside = vec4(0.0, 0.0, 0.0, 0.0);\n");
+                builder->fsCodeAppend("\tvec4 inside = ");
+                builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
+                                                          inCoords.c_str());
+                builder->fsCodeAppend(";\n");
+                builder->fsCodeAppendf("\tfloat x = (%s).x;\n", inCoords.c_str());
+                builder->fsCodeAppendf("\tfloat y = (%s).y;\n", inCoords.c_str());
+
+                builder->fsCodeAppendf("\tx = abs(2.0*(x - %s.x)/(%s.z - %s.x) - 1.0);\n",
+                                       domain, domain, domain);
+                builder->fsCodeAppendf("\ty = abs(2.0*(y - %s.y)/(%s.w - %s.y) - 1.0);\n",
+                                       domain, domain, domain);
+                builder->fsCodeAppend("\tfloat blend = step(1.0, max(x, y));\n");
+                builder->fsCodeAppendf("\t%s = mix(inside, outside, blend);\n", outColor);
+            } else {
+                builder->fsCodeAppend("\tbvec4 outside;\n");
+                builder->fsCodeAppendf("\toutside.xy = lessThan(%s, %s.xy);\n", inCoords.c_str(),
+                                       domain);
+                builder->fsCodeAppendf("\toutside.zw = greaterThan(%s, %s.zw);\n", inCoords.c_str(),
+                                       domain);
+                builder->fsCodeAppendf("\t%s = any(outside) ? vec4(0.0, 0.0, 0.0, 0.0) : ",
+                                       outColor);
+                builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
+                                                          inCoords.c_str());
+                builder->fsCodeAppend(";\n");
+            }
+            break;
+        }
+        case kRepeat_Mode: {
+            SkString clampedCoords;
+            clampedCoords.printf("\tmod(%s - %s.xy, %s.zw - %s.xy) + %s.xy",
+                                 inCoords.c_str(), fDomainName.c_str(), fDomainName.c_str(),
+                                 fDomainName.c_str(), fDomainName.c_str());
+
+            builder->fsCodeAppendf("\t%s = ", outColor);
+            builder->fsAppendTextureLookupAndModulate(inModulateColor, sampler,
+                                                      clampedCoords.c_str());
+            builder->fsCodeAppend(";\n");
+            break;
         }
     }
 }
 
-void GrTextureDomain::GLDomain::setData(const GrGLUniformManager& uman,
+void GrTextureDomain::GLDomain::setData(const GrGLProgramDataManager& pdman,
                                         const GrTextureDomain& textureDomain,
                                         GrSurfaceOrigin textureOrigin) {
     SkASSERT(textureDomain.mode() == fMode);
@@ -131,7 +154,7 @@ void GrTextureDomain::GLDomain::setData(const GrGLUniformManager& uman,
             SkTSwap(values[1], values[3]);
         }
         if (0 != memcmp(values, fPrevDomain, 4 * sizeof(GrGLfloat))) {
-            uman.set4fv(fDomainUni, 1, values);
+            pdman.set4fv(fDomainUni, 1, values);
             memcpy(fPrevDomain, values, 4 * sizeof(GrGLfloat));
         }
     }
@@ -146,15 +169,15 @@ public:
 
     virtual void emitCode(GrGLShaderBuilder*,
                           const GrDrawEffect&,
-                          EffectKey,
+                          const GrEffectKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    virtual void setData(const GrGLUniformManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
 
-    static inline EffectKey GenKey(const GrDrawEffect&, const GrGLCaps&);
+    static inline void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder*);
 
 private:
     GrTextureDomain::GLDomain         fGLDomain;
@@ -168,7 +191,7 @@ GrGLTextureDomainEffect::GrGLTextureDomainEffect(const GrBackendEffectFactory& f
 
 void GrGLTextureDomainEffect::emitCode(GrGLShaderBuilder* builder,
                                        const GrDrawEffect& drawEffect,
-                                       EffectKey key,
+                                       const GrEffectKey& key,
                                        const char* outputColor,
                                        const char* inputColor,
                                        const TransformedCoordsArray& coords,
@@ -180,23 +203,23 @@ void GrGLTextureDomainEffect::emitCode(GrGLShaderBuilder* builder,
     fGLDomain.sampleTexture(builder, domain, outputColor, coords2D, samplers[0], inputColor);
 }
 
-void GrGLTextureDomainEffect::setData(const GrGLUniformManager& uman,
+void GrGLTextureDomainEffect::setData(const GrGLProgramDataManager& pdman,
                                       const GrDrawEffect& drawEffect) {
     const GrTextureDomainEffect& effect = drawEffect.castEffect<GrTextureDomainEffect>();
     const GrTextureDomain& domain = effect.textureDomain();
-    fGLDomain.setData(uman, domain, effect.texture(0)->origin());
+    fGLDomain.setData(pdman, domain, effect.texture(0)->origin());
 }
 
-GrGLEffect::EffectKey GrGLTextureDomainEffect::GenKey(const GrDrawEffect& drawEffect,
-                                                      const GrGLCaps&) {
+void GrGLTextureDomainEffect::GenKey(const GrDrawEffect& drawEffect, const GrGLCaps&,
+                                     GrEffectKeyBuilder* b) {
     const GrTextureDomain& domain = drawEffect.castEffect<GrTextureDomainEffect>().textureDomain();
-    return GrTextureDomain::GLDomain::DomainKey(domain);
+    b->add32(GrTextureDomain::GLDomain::DomainKey(domain));
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrEffectRef* GrTextureDomainEffect::Create(GrTexture* texture,
+GrEffect* GrTextureDomainEffect::Create(GrTexture* texture,
                                            const SkMatrix& matrix,
                                            const SkRect& domain,
                                            GrTextureDomain::Mode mode,
@@ -208,14 +231,12 @@ GrEffectRef* GrTextureDomainEffect::Create(GrTexture* texture,
         return GrSimpleTextureEffect::Create(texture, matrix, filterMode);
     } else {
 
-        AutoEffectUnref effect(SkNEW_ARGS(GrTextureDomainEffect, (texture,
-                                                                  matrix,
-                                                                  domain,
-                                                                  mode,
-                                                                  filterMode,
-                                                                  coordSet)));
-        return CreateEffectRef(effect);
-
+        return SkNEW_ARGS(GrTextureDomainEffect, (texture,
+                                                  matrix,
+                                                  domain,
+                                                  mode,
+                                                  filterMode,
+                                                  coordSet));
     }
 }
 
@@ -227,6 +248,8 @@ GrTextureDomainEffect::GrTextureDomainEffect(GrTexture* texture,
                                              GrCoordSet coordSet)
     : GrSingleTextureEffect(texture, matrix, filterMode, coordSet)
     , fTextureDomain(domain, mode) {
+    SkASSERT(mode != GrTextureDomain::kRepeat_Mode ||
+            filterMode == GrTextureParams::kNone_FilterMode);
 }
 
 GrTextureDomainEffect::~GrTextureDomainEffect() {
@@ -255,10 +278,10 @@ void GrTextureDomainEffect::getConstantColorComponents(GrColor* color, uint32_t*
 
 GR_DEFINE_EFFECT_TEST(GrTextureDomainEffect);
 
-GrEffectRef* GrTextureDomainEffect::TestCreate(SkRandom* random,
-                                               GrContext*,
-                                               const GrDrawTargetCaps&,
-                                               GrTexture* textures[]) {
+GrEffect* GrTextureDomainEffect::TestCreate(SkRandom* random,
+                                            GrContext*,
+                                            const GrDrawTargetCaps&,
+                                            GrTexture* textures[]) {
     int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
                                       GrEffectUnitTest::kAlphaTextureIdx;
     SkRect domain;
@@ -269,7 +292,7 @@ GrEffectRef* GrTextureDomainEffect::TestCreate(SkRandom* random,
     GrTextureDomain::Mode mode =
         (GrTextureDomain::Mode) random->nextULessThan(GrTextureDomain::kModeCount);
     const SkMatrix& matrix = GrEffectUnitTest::TestMatrix(random);
-    bool bilerp = random->nextBool();
+    bool bilerp = mode != GrTextureDomain::kRepeat_Mode ? random->nextBool() : false;
     GrCoordSet coords = random->nextBool() ? kLocal_GrCoordSet : kPosition_GrCoordSet;
     return GrTextureDomainEffect::Create(textures[texIdx],
                                          matrix,

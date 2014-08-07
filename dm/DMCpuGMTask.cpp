@@ -2,8 +2,6 @@
 #include "DMExpectationsTask.h"
 #include "DMPipeTask.h"
 #include "DMQuiltTask.h"
-#include "DMRecordTask.h"
-#include "DMReplayTask.h"
 #include "DMSerializeTask.h"
 #include "DMUtil.h"
 #include "DMWriteTask.h"
@@ -39,12 +37,15 @@ void CpuGMTask::draw() {
     SPAWN(PipeTask, fGMFactory(NULL), bitmap, PipeTask::kInProcess_Mode);
     SPAWN(PipeTask, fGMFactory(NULL), bitmap, PipeTask::kCrossProcess_Mode);
     SPAWN(PipeTask, fGMFactory(NULL), bitmap, PipeTask::kSharedAddress_Mode);
-    SPAWN(QuiltTask, fGMFactory(NULL), bitmap);
-    SPAWN(RecordTask, fGMFactory(NULL), bitmap, RecordTask::kOptimize_Mode);
-    SPAWN(RecordTask, fGMFactory(NULL), bitmap, RecordTask::kNoOptimize_Mode);
-    SPAWN(ReplayTask, fGMFactory(NULL), bitmap, ReplayTask::kNormal_Mode);
-    SPAWN(ReplayTask, fGMFactory(NULL), bitmap, ReplayTask::kRTree_Mode);
-    SPAWN(SerializeTask, fGMFactory(NULL), bitmap);
+
+    SPAWN(QuiltTask, fGMFactory(NULL), bitmap, QuiltTask::kNoBBH_Mode);
+    SPAWN(QuiltTask, fGMFactory(NULL), bitmap, QuiltTask::kRTree_Mode);
+    SPAWN(QuiltTask, fGMFactory(NULL), bitmap, QuiltTask::kQuadTree_Mode);
+    SPAWN(QuiltTask, fGMFactory(NULL), bitmap, QuiltTask::kTileGrid_Mode);
+    SPAWN(QuiltTask, fGMFactory(NULL), bitmap, QuiltTask::kSkRecord_Mode);
+
+    SPAWN(SerializeTask, fGMFactory(NULL), bitmap, SerializeTask::kNormal_Mode);
+    SPAWN(SerializeTask, fGMFactory(NULL), bitmap, SerializeTask::kSkRecord_Mode);
 
     SPAWN(WriteTask, bitmap);
 #undef SPAWN

@@ -14,6 +14,7 @@
 #include "SkSize.h"
 #include "SkString.h"
 #include "SkTRegistry.h"
+#include "sk_tool_utils.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
@@ -44,6 +45,8 @@ namespace skiagm {
             kGPUOnly_Flag               = 1 << 9,
 
             kAsBench_Flag               = 1 << 10, // Run the GM as a benchmark in the bench tool
+
+            kNoBBH_Flag                 = 1 << 11, // May draw wrong using a bounding-box hierarchy
         };
 
         enum Mode {

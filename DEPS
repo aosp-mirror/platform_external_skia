@@ -3,11 +3,11 @@ use_relative_paths = True
 # Dependencies on outside packages.
 #
 deps = {
-  "common": "https://skia.googlesource.com/common.git@9bda9ca2f55b584189b83457d1cfea7805713f64",
+  "common": "https://skia.googlesource.com/common.git@f63e1cfff23615157e28942af5f5e8298351cb10",
 
   # DEPS using https://chromium.googlesource.com are pulled from chromium @ r205199
   # (see https://chromium.googlesource.com/chromium/chromium/+/c59bfa8ef877f45bfa859669053859857af1d279)
-  "third_party/externals/angle2" : "https://chromium.googlesource.com/angle/angle.git",
+  "third_party/externals/angle2" : "https://chromium.googlesource.com/angle/angle.git@23a8a433529d9db23882c702a29d5e594841563d",
   "third_party/externals/freetype" : "https://skia.googlesource.com/third_party/freetype2.git@VER-2-5-0-1",
   "third_party/externals/gyp" : "https://chromium.googlesource.com/external/gyp.git@3917682a16d5c19ff3576a8be0ffdb3a332954b1",
   "third_party/externals/libjpeg" : "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo.git@82ce8a6d4ebe12a177c0c3597192f2b4f09e81c3",
@@ -19,13 +19,17 @@ deps = {
   "third_party/externals/nanomsg": "git://github.com/nanomsg/nanomsg.git@0.4-beta",
 }
 
+recursedeps = [
+  "common",
+]
+
 deps_os = {
   "android": {
     "platform_tools/android/third_party/externals/expat" : "https://android.googlesource.com/platform/external/expat.git@android-4.2.2_r1.2",
     "platform_tools/android/third_party/externals/gif" : "https://android.googlesource.com/platform/external/giflib.git@android-4.2.2_r1.2",
     "platform_tools/android/third_party/externals/png" : "https://android.googlesource.com/platform/external/libpng.git@android-4.2.2_r1.2",
     "platform_tools/android/third_party/externals/jpeg" :
-      "https://android.googlesource.com/platform/external/jpeg.git@746f1f0853ddbd14ab5da6af35cc1fa560453d1e",
+      "https://android.googlesource.com/platform/external/jpeg.git@ef1b83013e7814622a9d11579878d342e84580b7",
   },
   "chromeos": {
     "platform_tools/chromeos/third_party/externals/gif" : "https://android.googlesource.com/platform/external/giflib.git@android-4.2.2_r1.2",

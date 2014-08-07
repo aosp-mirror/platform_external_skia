@@ -129,24 +129,16 @@ def main(target_dir=None, require_sk_user_config=False):
     generate_user_config.generate_user_config(
         original_sk_user_config=user_config,
         require_sk_user_config=require_sk_user_config, target_dir=dst_dir,
-        ordered_set=common.DEFINES)
+        defines=common.DEFINES)
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
-                                       target_file='tests.gyp',
+                                       target_file='tools.gyp',
                                        skia_trunk=target_dir,
-                                       dest_dir='tests',
+                                       dest_dir='tools',
                                        skia_lib_var_dict=common,
-                                       local_module_name='skia_test',
-                                       local_module_tags=['tests'])
-
-    tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
-                                       target_file='bench.gyp',
-                                       skia_trunk=target_dir,
-                                       dest_dir='bench',
-                                       skia_lib_var_dict=common,
-                                       local_module_name='skia_bench',
+                                       local_module_name='skia_bench_pictures',
                                        local_module_tags=['tests'],
-                                       place_in_local_tmp=True)
+                                       desired_targets=['bench_pictures'])
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
                                        target_file='gm.gyp',
@@ -154,7 +146,8 @@ def main(target_dir=None, require_sk_user_config=False):
                                        dest_dir='gm',
                                        skia_lib_var_dict=common,
                                        local_module_name='skia_gm',
-                                       local_module_tags=['tests'])
+                                       local_module_tags=['tests'],
+                                       desired_targets=['gm'])
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
                                        target_file='dm.gyp',
@@ -162,7 +155,8 @@ def main(target_dir=None, require_sk_user_config=False):
                                        dest_dir='dm',
                                        skia_lib_var_dict=common,
                                        local_module_name='skia_dm',
-                                       local_module_tags=['tests'])
+                                       local_module_tags=['tests'],
+                                       desired_targets=['dm'])
 
     # Now that the defines have been written to SkUserConfig and they've been
     # used to skip adding them to the tools makefiles, they are not needed in

@@ -8,7 +8,6 @@
 #ifndef GrGpuGL_DEFINED
 #define GrGpuGL_DEFINED
 
-#include "GrBinHashKey.h"
 #include "GrDrawState.h"
 #include "GrGLContext.h"
 #include "GrGLIRect.h"
@@ -19,7 +18,6 @@
 #include "GrGLVertexArray.h"
 #include "GrGLVertexBuffer.h"
 #include "GrGpu.h"
-#include "GrTHashTable.h"
 #include "SkTypes.h"
 
 #ifdef SK_DEVELOPER
@@ -105,8 +103,6 @@ public:
     void notifyIndexBufferDelete(GrGLuint id) {
         fHWGeometryState.notifyIndexBufferDelete(id);
     }
-    void notifyTextureDelete(GrGLTexture* texture);
-    void notifyRenderTargetDelete(GrRenderTarget* renderTarget);
 
     // These functions should be used to generate and delete GL path names. They have their own
     // allocator that runs on the client side, so they are much faster than going through GenPaths.
@@ -136,6 +132,7 @@ private:
     virtual GrVertexBuffer* onCreateVertexBuffer(size_t size, bool dynamic) SK_OVERRIDE;
     virtual GrIndexBuffer* onCreateIndexBuffer(size_t size, bool dynamic) SK_OVERRIDE;
     virtual GrPath* onCreatePath(const SkPath&, const SkStrokeRec&) SK_OVERRIDE;
+    virtual GrPathRange* onCreatePathRange(size_t size, const SkStrokeRec&) SK_OVERRIDE;
     virtual GrTexture* onWrapBackendTexture(const GrBackendTextureDesc&) SK_OVERRIDE;
     virtual GrRenderTarget* onWrapBackendRenderTarget(const GrBackendRenderTargetDesc&) SK_OVERRIDE;
     virtual bool createStencilBufferForRenderTarget(GrRenderTarget* rt,
@@ -165,9 +162,10 @@ private:
 
     virtual void onGpuStencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
     virtual void onGpuDrawPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
-    virtual void onGpuDrawPaths(int, const GrPath**, const SkMatrix*,
-                                SkPath::FillType,
-                                SkStrokeRec::Style) SK_OVERRIDE;
+    virtual void onGpuDrawPaths(const GrPathRange*,
+                                const uint32_t indices[], int count,
+                                const float transforms[], PathTransformType,
+                                SkPath::FillType) SK_OVERRIDE;
 
     virtual void clearStencil() SK_OVERRIDE;
     virtual void clearStencilClip(const SkIRect& rect,
@@ -445,15 +443,7 @@ private:
         }
     } fHWBlendState;
 
-    struct {
-        TriState fMSAAEnabled;
-        TriState fSmoothLineEnabled;
-        void invalidate() {
-            fMSAAEnabled = kUnknown_TriState;
-            fSmoothLineEnabled = kUnknown_TriState;
-        }
-    } fHWAAState;
-
+    TriState fMSAAEnabled;
 
     GrGLProgram::MatrixState    fHWProjectionMatrixState;
 
@@ -464,8 +454,8 @@ private:
     GrDrawState::DrawFace       fHWDrawFace;
     TriState                    fHWWriteToColor;
     TriState                    fHWDitherEnabled;
-    GrRenderTarget*             fHWBoundRenderTarget;
-    SkTArray<GrTexture*, true>  fHWBoundTextures;
+    uint32_t                    fHWBoundRenderTargetUniqueID;
+    SkTArray<uint32_t, true>    fHWBoundTextureUniqueIDs;
 
     struct PathTexGenData {
         GrGLenum  fMode;

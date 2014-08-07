@@ -21,10 +21,9 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 SkXfermodeImageFilter::SkXfermodeImageFilter(SkXfermode* mode,
-                                             SkImageFilter* background,
-                                             SkImageFilter* foreground,
+                                             SkImageFilter* inputs[2],
                                              const CropRect* cropRect)
-  : INHERITED(background, foreground, cropRect), fMode(mode) {
+  : INHERITED(2, inputs, cropRect), fMode(mode) {
     SkSafeRef(fMode);
 }
 
@@ -124,7 +123,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     GrTexture* foregroundTex = foreground.getTexture();
     GrContext* context = foregroundTex->getContext();
 
-    GrEffectRef* xferEffect = NULL;
+    GrEffect* xferEffect = NULL;
 
     GrTextureDesc desc;
     desc.fFlags = kRenderTarget_GrTextureFlagBit | kNoStencil_GrTextureFlagBit;

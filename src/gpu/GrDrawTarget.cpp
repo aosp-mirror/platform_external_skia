@@ -389,7 +389,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
     SkASSERT(NULL != drawState.getRenderTarget());
 
     for (int s = 0; s < drawState.numColorStages(); ++s) {
-        const GrEffectRef& effect = *drawState.getColorStage(s).getEffect();
+        const GrEffect* effect = drawState.getColorStage(s).getEffect();
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
@@ -397,7 +397,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
         }
     }
     for (int s = 0; s < drawState.numCoverageStages(); ++s) {
-        const GrEffectRef& effect = *drawState.getCoverageStage(s).getEffect();
+        const GrEffect* effect = drawState.getCoverageStage(s).getEffect();
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
@@ -548,33 +548,25 @@ void GrDrawTarget::drawPath(const GrPath* path, SkPath::FillType fill) {
     this->onDrawPath(path, fill, dstCopy.texture() ? &dstCopy : NULL);
 }
 
-void GrDrawTarget::drawPaths(int pathCount, const GrPath** paths,
-                             const SkMatrix* transforms,
-                             SkPath::FillType fill, SkStrokeRec::Style stroke) {
-    SkASSERT(pathCount > 0);
-    SkASSERT(NULL != paths);
-    SkASSERT(NULL != paths[0]);
+void GrDrawTarget::drawPaths(const GrPathRange* pathRange,
+                             const uint32_t indices[], int count,
+                             const float transforms[], PathTransformType transformsType,
+                             SkPath::FillType fill) {
     SkASSERT(this->caps()->pathRenderingSupport());
-    SkASSERT(!SkPath::IsInverseFillType(fill));
+    SkASSERT(NULL != pathRange);
+    SkASSERT(NULL != indices);
+    SkASSERT(NULL != transforms);
 
-    const GrDrawState* drawState = &getDrawState();
-
-    SkRect devBounds;
-    for (int i = 0; i < pathCount; ++i) {
-        SkRect mappedPathBounds;
-        transforms[i].mapRect(&mappedPathBounds, paths[i]->getBounds());
-        devBounds.join(mappedPathBounds);
-    }
-
-    SkMatrix viewM = drawState->getViewMatrix();
-    viewM.mapRect(&devBounds);
-
+    // Don't compute a bounding box for setupDstReadIfNecessary(), we'll opt
+    // instead for it to just copy the entire dst. Realistically this is a moot
+    // point, because any context that supports NV_path_rendering will also
+    // support NV_blend_equation_advanced.
     GrDeviceCoordTexture dstCopy;
-    if (!this->setupDstReadIfNecessary(&dstCopy, &devBounds)) {
+    if (!this->setupDstReadIfNecessary(&dstCopy, NULL)) {
         return;
     }
 
-    this->onDrawPaths(pathCount, paths, transforms, fill, stroke,
+    this->onDrawPaths(pathRange, indices, count, transforms, transformsType, fill,
                       dstCopy.texture() ? &dstCopy : NULL);
 }
 
@@ -621,24 +613,17 @@ void GrDrawTarget::removeGpuTraceMarker(const GrGpuTraceMarker* marker) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrDrawTarget::willUseHWAALines() const {
-    // There is a conflict between using smooth lines and our use of premultiplied alpha. Smooth
-    // lines tweak the incoming alpha value but not in a premul-alpha way. So we only use them when
-    // our alpha is 0xff and tweaking the color for partial coverage is OK
-    if (!this->caps()->hwAALineSupport() ||
-        !this->getDrawState().isHWAntialiasState()) {
-        return false;
-    }
-    GrDrawState::BlendOptFlags opts = this->getDrawState().getBlendOpts();
-    return (GrDrawState::kDisableBlend_BlendOptFlag & opts) &&
-           (GrDrawState::kCoverageAsAlpha_BlendOptFlag & opts);
-}
-
 bool GrDrawTarget::canApplyCoverage() const {
     // we can correctly apply coverage if a) we have dual source blending
-    // or b) one of our blend optimizations applies.
+    // or b) one of our blend optimizations applies
+    // or c) the src, dst blend coeffs are 1,0 and we will read Dst Color
+    GrBlendCoeff srcCoeff;
+    GrBlendCoeff dstCoeff;
+    GrDrawState::BlendOptFlags flag = this->getDrawState().getBlendOpts(true, &srcCoeff, &dstCoeff);
     return this->caps()->dualSourceBlendingSupport() ||
-           GrDrawState::kNone_BlendOpt != this->getDrawState().getBlendOpts(true);
+           GrDrawState::kNone_BlendOpt != flag ||
+           (this->getDrawState().willEffectReadDstColor() &&
+            kOne_GrBlendCoeff == srcCoeff && kZero_GrBlendCoeff == dstCoeff);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -711,14 +696,8 @@ void set_vertex_attributes(GrDrawState* drawState, bool hasUVs) {
 };
 
 void GrDrawTarget::onDrawRect(const SkRect& rect,
-                              const SkMatrix* matrix,
                               const SkRect* localRect,
                               const SkMatrix* localMatrix) {
-
-    GrDrawState::AutoViewMatrixRestore avmr;
-    if (NULL != matrix) {
-        avmr.set(this->drawState(), *matrix);
-    }
 
     set_vertex_attributes(this->drawState(), NULL != localRect);
 
@@ -1043,6 +1022,7 @@ void GrDrawTargetCaps::reset() {
     fDiscardRenderTargetSupport = false;
     fReuseScratchTextures = true;
     fGpuTracingSupport = false;
+    fCompressedTexSubImageSupport = false;
 
     fMapBufferFlags = kNone_MapFlags;
 
@@ -1068,6 +1048,7 @@ GrDrawTargetCaps& GrDrawTargetCaps::operator=(const GrDrawTargetCaps& other) {
     fDiscardRenderTargetSupport = other.fDiscardRenderTargetSupport;
     fReuseScratchTextures = other.fReuseScratchTextures;
     fGpuTracingSupport = other.fGpuTracingSupport;
+    fCompressedTexSubImageSupport = other.fCompressedTexSubImageSupport;
 
     fMapBufferFlags = other.fMapBufferFlags;
 
@@ -1117,6 +1098,7 @@ SkString GrDrawTargetCaps::dump() const {
     r.appendf("Discard Render Target Support: %s\n", gNY[fDiscardRenderTargetSupport]);
     r.appendf("Reuse Scratch Textures       : %s\n", gNY[fReuseScratchTextures]);
     r.appendf("Gpu Tracing Support          : %s\n", gNY[fGpuTracingSupport]);
+    r.appendf("Compressed Update Support    : %s\n", gNY[fCompressedTexSubImageSupport]);
     r.appendf("Max Texture Size             : %d\n", fMaxTextureSize);
     r.appendf("Max Render Target Size       : %d\n", fMaxRenderTargetSize);
     r.appendf("Max Sample Count             : %d\n", fMaxSampleCount);
@@ -1133,16 +1115,22 @@ SkString GrDrawTargetCaps::dump() const {
         "BGRA8888", // kBGRA_8888_GrPixelConfig,
         "ETC1",     // kETC1_GrPixelConfig,
         "LATC",     // kLATC_GrPixelConfig,
+        "R11EAC",   // kR11_EAC_GrPixelConfig,
+        "ASTC12x12",// kASTC_12x12_GrPixelConfig,
+        "RGBAFloat",  // kRGBA_float_GrPixelConfig
     };
-    GR_STATIC_ASSERT(0 == kUnknown_GrPixelConfig);
-    GR_STATIC_ASSERT(1 == kAlpha_8_GrPixelConfig);
-    GR_STATIC_ASSERT(2 == kIndex_8_GrPixelConfig);
-    GR_STATIC_ASSERT(3 == kRGB_565_GrPixelConfig);
-    GR_STATIC_ASSERT(4 == kRGBA_4444_GrPixelConfig);
-    GR_STATIC_ASSERT(5 == kRGBA_8888_GrPixelConfig);
-    GR_STATIC_ASSERT(6 == kBGRA_8888_GrPixelConfig);
-    GR_STATIC_ASSERT(7 == kETC1_GrPixelConfig);
-    GR_STATIC_ASSERT(8 == kLATC_GrPixelConfig);
+    GR_STATIC_ASSERT(0  == kUnknown_GrPixelConfig);
+    GR_STATIC_ASSERT(1  == kAlpha_8_GrPixelConfig);
+    GR_STATIC_ASSERT(2  == kIndex_8_GrPixelConfig);
+    GR_STATIC_ASSERT(3  == kRGB_565_GrPixelConfig);
+    GR_STATIC_ASSERT(4  == kRGBA_4444_GrPixelConfig);
+    GR_STATIC_ASSERT(5  == kRGBA_8888_GrPixelConfig);
+    GR_STATIC_ASSERT(6  == kBGRA_8888_GrPixelConfig);
+    GR_STATIC_ASSERT(7  == kETC1_GrPixelConfig);
+    GR_STATIC_ASSERT(8  == kLATC_GrPixelConfig);
+    GR_STATIC_ASSERT(9  == kR11_EAC_GrPixelConfig);
+    GR_STATIC_ASSERT(10 == kASTC_12x12_GrPixelConfig);
+    GR_STATIC_ASSERT(11 == kRGBA_float_GrPixelConfig);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kConfigNames) == kGrPixelConfigCnt);
 
     SkASSERT(!fConfigRenderSupport[kUnknown_GrPixelConfig][0]);

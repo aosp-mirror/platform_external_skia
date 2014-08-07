@@ -10,8 +10,9 @@
 #define GrTexture_DEFINED
 
 #include "GrSurface.h"
-#include "SkPoint.h"
 #include "GrRenderTarget.h"
+#include "SkPoint.h"
+#include "SkRefCnt.h"
 
 class GrResourceKey;
 class GrTextureParams;
@@ -89,7 +90,6 @@ public:
 #ifdef SK_DEBUG
     void validate() const {
         this->INHERITED::validate();
-
         this->validateDesc();
     }
 #endif
@@ -119,6 +119,7 @@ protected:
     void validateDesc() const;
 
 private:
+    void abandonReleaseCommon();
     virtual void internal_dispose() const SK_OVERRIDE;
 
     // these two shift a fixed-point value into normalized coordinates

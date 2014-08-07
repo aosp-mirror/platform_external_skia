@@ -23,11 +23,18 @@ struct SkRect;
 class GrTextureDomain {
 public:
     enum Mode {
-        kIgnore_Mode,  // Ignore the texture domain rectangle.
-        kClamp_Mode,   // Clamp texture coords to the domain rectangle.
-        kDecal_Mode,   // Treat the area outside the domain rectangle as fully transparent.
+        // Ignore the texture domain rectangle.
+        kIgnore_Mode,
+        // Clamp texture coords to the domain rectangle.
+        kClamp_Mode,
+        // Treat the area outside the domain rectangle as fully transparent.
+        kDecal_Mode,
+        // Wrap texture coordinates.  NOTE: filtering may not work as expected because Bilerp will
+        // read texels outside of the domain.  We could perform additional texture reads and filter
+        // in the shader, but are not currently doing this for performance reasons
+        kRepeat_Mode,
 
-        kLastMode = kDecal_Mode
+        kLastMode = kRepeat_Mode
     };
     static const int kModeCount = kLastMode + 1;
 
@@ -97,7 +104,7 @@ public:
          * Call this from GrGLEffect::setData() to upload uniforms necessary for the texture domain.
          * The rectangle is automatically adjusted to account for the texture's origin.
          */
-        void setData(const GrGLUniformManager& uman, const GrTextureDomain& textureDomain,
+        void setData(const GrGLProgramDataManager& pdman, const GrTextureDomain& textureDomain,
                      GrSurfaceOrigin textureOrigin);
 
         enum {
@@ -108,16 +115,16 @@ public:
          * GrGLEffect::GenKey() must call this and include the returned value in it's computed key.
          * The returned will be limited to the lower kDomainKeyBits bits.
          */
-        static GrGLEffect::EffectKey DomainKey(const GrTextureDomain& domain) {
+        static uint32_t DomainKey(const GrTextureDomain& domain) {
             GR_STATIC_ASSERT(kModeCount <= 4);
             return domain.mode();
         }
 
     private:
-        SkDEBUGCODE(Mode                  fMode;)
-        GrGLUniformManager::UniformHandle fDomainUni;
-        SkString                          fDomainName;
-        GrGLfloat                         fPrevDomain[4];
+        SkDEBUGCODE(Mode                      fMode;)
+        GrGLProgramDataManager::UniformHandle fDomainUni;
+        SkString                              fDomainName;
+        GrGLfloat                             fPrevDomain[4];
     };
 
 protected:
@@ -136,12 +143,12 @@ class GrGLTextureDomainEffect;
 class GrTextureDomainEffect : public GrSingleTextureEffect {
 
 public:
-    static GrEffectRef* Create(GrTexture*,
-                               const SkMatrix&,
-                               const SkRect& domain,
-                               GrTextureDomain::Mode,
-                               GrTextureParams::FilterMode filterMode,
-                               GrCoordSet = kLocal_GrCoordSet);
+    static GrEffect* Create(GrTexture*,
+                            const SkMatrix&,
+                            const SkRect& domain,
+                            GrTextureDomain::Mode,
+                            GrTextureParams::FilterMode filterMode,
+                            GrCoordSet = kLocal_GrCoordSet);
 
     virtual ~GrTextureDomainEffect();
 

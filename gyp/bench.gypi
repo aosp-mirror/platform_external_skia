@@ -2,18 +2,28 @@
   'include_dirs': [
     '../src/core',
     '../src/effects',
+    '../src/gpu',
     '../src/utils',
     '../tools',
   ],
   'dependencies': [
+    'etc1.gyp:libetc1',
     'skia_lib.gyp:skia_lib',
+    'tools.gyp:resources',
+    'tools.gyp:sk_tool_utils',
+  ],
+  'conditions': [
+    ['skia_gpu == 1', {
+      'include_dirs': [ '../src/gpu' ],
+      'dependencies': [ 'gputest.gyp:skgputest' ],
+    }],
   ],
   'sources': [
     '../bench/Benchmark.cpp',
     '../bench/Benchmark.h',
 
     '../bench/AAClipBench.cpp',
-    '../bench/BicubicBench.cpp',
+    '../bench/AlternatingColorPatternBench.cpp',
     '../bench/BitmapBench.cpp',
     '../bench/BitmapRectBench.cpp',
     '../bench/BitmapScaleBench.cpp',
@@ -30,7 +40,6 @@
     '../bench/CoverageBench.cpp',
     '../bench/DashBench.cpp',
     '../bench/DecodeBench.cpp',
-    '../bench/DeferredCanvasBench.cpp',
     '../bench/DeferredSurfaceCopyBench.cpp',
     '../bench/DisplacementBench.cpp',
     '../bench/ETCBitmapBench.cpp',
@@ -77,6 +86,7 @@
     '../bench/RegionBench.cpp',
     '../bench/RegionContainBench.cpp',
     '../bench/RepeatTileBench.cpp',
+    '../bench/RotatedRectBench.cpp',
     '../bench/ScalarBench.cpp',
     '../bench/ShaderMaskBench.cpp',
     '../bench/SkipZeroesBench.cpp',

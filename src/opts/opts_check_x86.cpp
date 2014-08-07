@@ -8,11 +8,14 @@
 #include "SkBitmapFilter_opts_SSE2.h"
 #include "SkBitmapProcState_opts_SSE2.h"
 #include "SkBitmapProcState_opts_SSSE3.h"
+#include "SkBitmapScaler.h"
 #include "SkBlitMask.h"
 #include "SkBlitRect_opts_SSE2.h"
 #include "SkBlitRow.h"
 #include "SkBlitRow_opts_SSE2.h"
+#include "SkBlitRow_opts_SSE4.h"
 #include "SkBlurImage_opts_SSE2.h"
+#include "SkBlurImage_opts_SSE4.h"
 #include "SkMorphology_opts.h"
 #include "SkMorphology_opts_SSE2.h"
 #include "SkRTConf.h"
@@ -82,6 +85,8 @@ static int get_SIMD_level() {
     getcpuid(1, cpu_info);
     if ((cpu_info[2] & (1<<20)) != 0) {
         return SK_CPU_SSE_LEVEL_SSE42;
+    } else if ((cpu_info[2] & (1<<19)) != 0) {
+        return SK_CPU_SSE_LEVEL_SSE41;
     } else if ((cpu_info[2] & (1<<9)) != 0) {
         return SK_CPU_SSE_LEVEL_SSSE3;
     } else if ((cpu_info[3] & (1<<26)) != 0) {
@@ -120,7 +125,7 @@ static inline bool supports_simd(int minLevel) {
 
 SK_CONF_DECLARE( bool, c_hqfilter_sse, "bitmap.filter.highQualitySSE", false, "Use SSE optimized version of high quality image filters");
 
-void SkBitmapProcState::platformConvolutionProcs(SkConvolutionProcs* procs) {
+void SkBitmapScaler::PlatformConvolutionProcs(SkConvolutionProcs* procs) {
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
         procs->fExtraHorizontalReads = 3;
         procs->fConvolveVertically = &convolveVertically_SSE2;
@@ -206,16 +211,30 @@ SkBlitRow::Proc SkBlitRow::PlatformProcs565(unsigned flags) {
     }
 }
 
-static SkBlitRow::Proc32 platform_32_procs[] = {
+static SkBlitRow::Proc32 platform_32_procs_SSE2[] = {
     NULL,                               // S32_Opaque,
     S32_Blend_BlitRow32_SSE2,           // S32_Blend,
     S32A_Opaque_BlitRow32_SSE2,         // S32A_Opaque
     S32A_Blend_BlitRow32_SSE2,          // S32A_Blend,
 };
 
+#if defined(SK_ATT_ASM_SUPPORTED)
+static SkBlitRow::Proc32 platform_32_procs_SSE4[] = {
+    NULL,                               // S32_Opaque,
+    S32_Blend_BlitRow32_SSE2,           // S32_Blend,
+    S32A_Opaque_BlitRow32_SSE4_asm,     // S32A_Opaque
+    S32A_Blend_BlitRow32_SSE2,          // S32A_Blend,
+};
+#endif
+
 SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
+#if defined(SK_ATT_ASM_SUPPORTED)
+    if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
+        return platform_32_procs_SSE4[flags];
+    } else
+#endif
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
-        return platform_32_procs[flags];
+        return platform_32_procs_SSE2[flags];
     } else {
         return NULL;
     }
@@ -340,10 +359,13 @@ bool SkBoxBlurGetPlatformProcs(SkBoxBlurProc* boxBlurX,
 #ifdef SK_DISABLE_BLUR_DIVISION_OPTIMIZATION
     return false;
 #else
-    if (!supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
-        return false;
+    if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
+        return SkBoxBlurGetPlatformProcs_SSE4(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
     }
-    return SkBoxBlurGetPlatformProcs_SSE2(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
+    else if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
+        return SkBoxBlurGetPlatformProcs_SSE2(boxBlurX, boxBlurY, boxBlurXY, boxBlurYX);
+    }
+    return false;
 #endif
 }
 

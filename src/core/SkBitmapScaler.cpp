@@ -246,8 +246,10 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
                             const SkBitmap& source,
                             ResizeMethod method,
                             float destWidth, float destHeight,
-                            const SkConvolutionProcs& convolveProcs,
                             SkBitmap::Allocator* allocator) {
+
+  SkConvolutionProcs convolveProcs= { 0, NULL, NULL, NULL, NULL };
+  PlatformConvolutionProcs(&convolveProcs);
 
   SkRect destSubset = { 0, 0, destWidth, destHeight };
 
@@ -262,6 +264,7 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
         SkErrorInternals::SetError( kInvalidArgument_SkError,
                                     "Sorry, the destination bitmap scale subset "
                                     "falls outside the full destination bitmap." );
+        return false;
     }
 
     // If the size of source or destination is 0, i.e. 0x0, 0xN or Nx0, just
@@ -314,4 +317,17 @@ bool SkBitmapScaler::Resize(SkBitmap* resultPtr,
     resultPtr->lockPixels();
     SkASSERT(NULL != resultPtr->getPixels());
     return true;
+}
+
+// static -- simpler interface to the resizer; returns a default bitmap if scaling
+// fails for any reason.  This is the interface that Chrome expects.
+SkBitmap SkBitmapScaler::Resize(const SkBitmap& source,
+                                ResizeMethod method,
+                                float destWidth, float destHeight,
+                                SkBitmap::Allocator* allocator) {
+  SkBitmap result;
+  if (!Resize(&result, source, method, destWidth, destHeight, allocator)) {
+    return SkBitmap();
+  }
+  return result;
 }

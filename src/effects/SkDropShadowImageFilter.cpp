@@ -15,21 +15,10 @@
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 
-SkDropShadowImageFilter::SkDropShadowImageFilter(SkScalar dx, SkScalar dy, SkScalar sigma,
-                                                 SkColor color, SkImageFilter* input)
-    : INHERITED(input)
-    , fDx(dx)
-    , fDy(dy)
-    , fSigmaX(sigma)
-    , fSigmaY(sigma)
-    , fColor(color)
-{
-}
-
 SkDropShadowImageFilter::SkDropShadowImageFilter(SkScalar dx, SkScalar dy,
                                                  SkScalar sigmaX, SkScalar sigmaY, SkColor color,
                                                  SkImageFilter* input, const CropRect* cropRect)
-    : INHERITED(input, cropRect)
+    : INHERITED(1, &input, cropRect)
     , fDx(dx)
     , fDy(dy)
     , fSigmaX(sigmaX)

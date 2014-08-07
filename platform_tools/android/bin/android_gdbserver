@@ -22,7 +22,11 @@ GDB_TMP_DIR=$(pwd)/android_gdb_tmp
 mkdir -p $GDB_TMP_DIR
 
 echo "Copying symbol files"
-SYSTEM_LIBRARY_PATH=/system/lib
+if [[ $ANDROID_ARCH == *64* ]]; then
+  SYSTEM_LIBRARY_PATH=/system/lib64
+else
+  SYSTEM_LIBRARY_PATH=/system/lib
+fi
 for library_file in \
     libc.so \
     libstdc++.so \
@@ -30,17 +34,28 @@ for library_file in \
     liblog.so \
     libz.so \
     libgccdemangle.so \
-    libcorkscrew.so \
+    libsigchain.so \
+    libcutils.so \
+    libunwind.so \
+    libunwind-ptrace.so \
+    libbacktrace.so \
     libutils.so \
     libstlport.so \
     libGLES_trace.so \
     libEGL.so \
     libGLESv2.so \
     ; do
-    adb_pull_if_needed "${SYSTEM_LIBRARY_PATH}/${library_file}" $GDB_TMP_DIR
+    ANDROID_LS=`$ADB $DEVICE_SERIAL shell ls -ld ${SYSTEM_LIBRARY_PATH}/${library_file}`
+    if [ "${ANDROID_LS:0:1}" == "-" ]; then
+      adb_pull_if_needed "${SYSTEM_LIBRARY_PATH}/${library_file}" $GDB_TMP_DIR
+    fi
 done
 
-adb_pull_if_needed /system/bin/linker $GDB_TMP_DIR
+if [[ $ANDROID_ARCH == *64* ]]; then
+  adb_pull_if_needed /system/bin/linker64 $GDB_TMP_DIR
+else
+  adb_pull_if_needed /system/bin/linker $GDB_TMP_DIR
+fi
 
 echo "Pushing app..."
 for file in \
@@ -53,7 +68,7 @@ for file in \
 done
 
 echo "Pushing gdbserver..."
-adb_push_if_needed $ANDROID_TOOLCHAIN/../gdbserver data/local/tmp
+adb_push_if_needed $ANDROID_TOOLCHAIN/../gdbserver /data/local/tmp
 
 echo "Setting up port forward"
 $ADB forward "tcp:5039" "tcp:5039"
@@ -65,4 +80,4 @@ $ADB shell ps | grep ${APP_NAME} | awk '{print $2}' | xargs $ADB shell kill
 
 # Starting up gdbserver in android shell
 echo "Starting gdbserver with command: ${APP_ARGS[@]}"
-$ADB shell /data/local/tmp/gdbserver :5039 /data/local/tmp/skia_launcher ${APP_ARGS[@]} &
+$ADB shell LD_LIBRARY_PATH=/data/local/tmp:\$LD_LIBRARY_PATH /data/local/tmp/gdbserver :5039 /data/local/tmp/skia_launcher ${APP_ARGS[@]} &
