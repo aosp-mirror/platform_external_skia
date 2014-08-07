@@ -411,7 +411,6 @@ LOCAL_SRC_FILES := \
 	../tests/FontConfigParser.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
-	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
 	../tools/Resources.cpp \
