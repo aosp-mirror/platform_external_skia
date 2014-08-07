@@ -18,10 +18,10 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	gm.cpp \
 	gmmain.cpp \
 	system_preferences_default.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
-	gm.cpp \
 	aaclip.cpp \
 	aarectmodes.cpp \
 	alphagradients.cpp \
