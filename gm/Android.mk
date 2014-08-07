@@ -139,6 +139,7 @@ LOCAL_SRC_FILES := \
 	perlinnoise.cpp \
 	pictureimagefilter.cpp \
 	pictureshader.cpp \
+	pictureshadertile.cpp \
 	points.cpp \
 	poly2poly.cpp \
 	polygons.cpp \
