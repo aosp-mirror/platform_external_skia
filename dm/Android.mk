@@ -248,6 +248,7 @@ LOCAL_SRC_FILES := \
 	../gm/alphagradients.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
+	../gm/astcbitmap.cpp \
 	../gm/beziereffects.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
