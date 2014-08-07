@@ -82,6 +82,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsTightBoundsTest.cpp \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
+	../tests/AndroidPaintTest.cpp \
 	../tests/AnnotationTest.cpp \
 	../tests/AsADashTest.cpp \
 	../tests/AtomicTest.cpp \
