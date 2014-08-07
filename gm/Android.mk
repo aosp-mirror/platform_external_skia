@@ -27,7 +27,6 @@ LOCAL_SRC_FILES := \
 	alphagradients.cpp \
 	arcofzorro.cpp \
 	arithmode.cpp \
-	astcbitmap.cpp \
 	beziereffects.cpp \
 	bigblurs.cpp \
 	bigmatrix.cpp \
