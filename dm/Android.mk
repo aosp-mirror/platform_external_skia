@@ -361,6 +361,7 @@ LOCAL_SRC_FILES := \
 	../gm/pathreverse.cpp \
 	../gm/peekpixels.cpp \
 	../gm/perlinnoise.cpp \
+	../gm/picture.cpp \
 	../gm/pictureimagefilter.cpp \
 	../gm/pictureshader.cpp \
 	../gm/pictureshadertile.cpp \

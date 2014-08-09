@@ -138,6 +138,7 @@ LOCAL_SRC_FILES := \
 	pathreverse.cpp \
 	peekpixels.cpp \
 	perlinnoise.cpp \
+	picture.cpp \
 	pictureimagefilter.cpp \
 	pictureshader.cpp \
 	pictureshadertile.cpp \
