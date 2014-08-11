@@ -101,6 +101,7 @@ LOCAL_SRC_FILES := \
 	hittestpath.cpp \
 	imagealphathreshold.cpp \
 	imageblur.cpp \
+	imageblur2.cpp \
 	imageblurtiled.cpp \
 	imagemagnifier.cpp \
 	imageresizetiled.cpp \
