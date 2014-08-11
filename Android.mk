@@ -485,6 +485,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
+	src/gpu/gl/GrGLPathRendering.cpp \
 	src/gpu/gl/GrGLSLPrettyPrint.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
