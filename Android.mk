@@ -138,7 +138,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
-	src/core/SkMatrixClipStateMgr.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkPackBits.cpp \
