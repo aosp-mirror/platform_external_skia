@@ -152,6 +152,7 @@ LOCAL_SRC_FILES := \
 	rrect.cpp \
 	rrects.cpp \
 	roundrects.cpp \
+	samplerstress.cpp \
 	shaderbounds.cpp \
 	selftest.cpp \
 	shadows.cpp \
