@@ -213,7 +213,6 @@ LOCAL_SRC_FILES := \
 	src/doc/SkDocument.cpp \
 	src/image/SkImage.cpp \
 	src/image/SkImagePriv.cpp \
-	src/image/SkImage_Codec.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
@@ -551,6 +550,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
+	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
@@ -560,7 +560,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
-	$(LOCAL_PATH)/include/images \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
