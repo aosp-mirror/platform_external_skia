@@ -375,7 +375,6 @@ LOCAL_SRC_FILES := \
 	../gm/rrect.cpp \
 	../gm/rrects.cpp \
 	../gm/roundrects.cpp \
-	../gm/samplerstress.cpp \
 	../gm/shaderbounds.cpp \
 	../gm/selftest.cpp \
 	../gm/shadows.cpp \
