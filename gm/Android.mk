@@ -131,6 +131,7 @@ LOCAL_SRC_FILES := \
 	optimizations.cpp \
 	ovals.cpp \
 	patch.cpp \
+	patchgrid.cpp \
 	patheffects.cpp \
 	pathfill.cpp \
 	pathinterior.cpp \

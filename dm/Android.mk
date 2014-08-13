@@ -354,6 +354,7 @@ LOCAL_SRC_FILES := \
 	../gm/optimizations.cpp \
 	../gm/ovals.cpp \
 	../gm/patch.cpp \
+	../gm/patchgrid.cpp \
 	../gm/patheffects.cpp \
 	../gm/pathfill.cpp \
 	../gm/pathinterior.cpp \

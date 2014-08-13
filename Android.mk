@@ -392,6 +392,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
 	src/utils/SkPictureUtils.cpp \
+	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
 	src/utils/SkPathUtils.cpp \
 	src/utils/SkProxyCanvas.cpp \
