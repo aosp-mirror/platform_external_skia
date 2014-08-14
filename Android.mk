@@ -142,7 +142,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMipMap.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
-	src/core/SkPaintOptionsAndroid.cpp \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
