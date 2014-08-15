@@ -183,6 +183,7 @@ LOCAL_SRC_FILES := \
 	RuntimeConfigTest.cpp \
 	SHA1Test.cpp \
 	ScalarTest.cpp \
+	ScaledImageCache.cpp \
 	SerializationTest.cpp \
 	ShaderImageFilterTest.cpp \
 	ShaderOpacityTest.cpp \
