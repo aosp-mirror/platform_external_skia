@@ -548,6 +548,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/xml \
+	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
@@ -557,7 +558,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/gpu \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/src/effects \
-	$(LOCAL_PATH)/include/images \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
 	$(LOCAL_PATH)/third_party/etc1 \
