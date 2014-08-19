@@ -277,6 +277,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkObjectParser.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/CrashHandler.cpp \
+	../tools/ProcStats.cpp \
 	../tools/timer/Timer.cpp \
 	../tools/timer/TimerData.cpp \
 	../tools/timer/GpuTimer.cpp \

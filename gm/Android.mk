@@ -196,6 +196,7 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	gm_expectations.cpp \
+	../tools/ProcStats.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
