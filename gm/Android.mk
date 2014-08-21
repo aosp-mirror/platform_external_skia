@@ -173,6 +173,7 @@ LOCAL_SRC_FILES := \
 	testimagefilters.cpp \
 	texdata.cpp \
 	variedtext.cpp \
+	textblob.cpp \
 	texturedomaineffect.cpp \
 	thinrects.cpp \
 	thinstrokedrects.cpp \
