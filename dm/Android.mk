@@ -347,6 +347,7 @@ LOCAL_SRC_FILES := \
 	../gm/mixedxfermodes.cpp \
 	../gm/modecolorfilters.cpp \
 	../gm/morphology.cpp \
+	../gm/multipicturedraw.cpp \
 	../gm/nested.cpp \
 	../gm/ninepatchstretch.cpp \
 	../gm/nonclosedpaths.cpp \

@@ -146,6 +146,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMatrix.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
+	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkPackBits.cpp \
 	src/core/SkPaint.cpp \
 	src/core/SkPaintPriv.cpp \
