@@ -232,6 +232,7 @@ LOCAL_SRC_FILES := \
 	../tests/TArrayTest.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
+	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
 	../tests/TileGridTest.cpp \
 	../tests/ToUnicodeTest.cpp \
