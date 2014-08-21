@@ -299,8 +299,8 @@ LOCAL_SRC_FILES := \
 	src/effects/SkMatrixImageFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
-	src/effects/gradients/SkBitmapCache.cpp \
 	src/effects/gradients/SkClampRange.cpp \
+	src/effects/gradients/SkGradientBitmapCache.cpp \
 	src/effects/gradients/SkGradientShader.cpp \
 	src/effects/gradients/SkLinearGradient.cpp \
 	src/effects/gradients/SkRadialGradient.cpp \
