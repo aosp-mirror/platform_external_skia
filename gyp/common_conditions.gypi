@@ -21,6 +21,11 @@
         '-mfpmath=sse',
       ],
     }],
+    [ 'skia_arch_type == "arm64"', {
+      'cflags': [
+        '-ffp-contract=off',
+      ],
+    }],
 
     [ 'skia_os == "win"',
       {
