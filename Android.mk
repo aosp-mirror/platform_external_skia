@@ -74,6 +74,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkBBoxRecord.cpp \
 	src/core/SkBBoxHierarchyRecord.cpp \
 	src/core/SkBitmap.cpp \
+	src/core/SkBitmapCache.cpp \
 	src/core/SkBitmapDevice.cpp \
 	src/core/SkBitmapFilter.cpp \
 	src/core/SkBitmapHeap.cpp \
