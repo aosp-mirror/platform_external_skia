@@ -26,7 +26,6 @@ LOCAL_SRC_FILES := \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
 	BitmapBench.cpp \
-	BitmapFractionalBench.cpp \
 	BitmapRectBench.cpp \
 	BitmapScaleBench.cpp \
 	BlurBench.cpp \
