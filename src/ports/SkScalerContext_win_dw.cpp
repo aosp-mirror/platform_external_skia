@@ -100,6 +100,8 @@ static void expand_range_if_gridfit_only(DWriteFontTypeface* typeface, int size,
         }
         minPPEM = maxPPEM;
     }
+
+    return;
 }
 
 static bool has_bitmap_strike(DWriteFontTypeface* typeface, PPEMRange range) {
