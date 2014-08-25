@@ -693,9 +693,6 @@ LOCAL_SRC_FILES_mips64 += \
 	src/opts/SkTextureCompression_opts_none.cpp \
 	src/opts/SkXfermode_opts_none.cpp
 
-LOCAL_CFLAGS_arm64 += \
-	-ffp-contract=off
-
 LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkBitmapProcState_arm_neon.cpp \
 	src/opts/SkBitmapProcState_matrixProcs_neon.cpp \
