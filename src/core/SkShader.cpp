@@ -43,6 +43,9 @@ SkShader::SkShader(const SkMatrix* localMatrix) {
     } else {
         fLocalMatrix.reset();
     }
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    fGenerationID = 0;
+#endif
 }
 
 SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
@@ -52,6 +55,9 @@ SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
     } else {
         fLocalMatrix.reset();
     }
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    fGenerationID = 0;
+#endif
 }
 
 SkShader::~SkShader() {
