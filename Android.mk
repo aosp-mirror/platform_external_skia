@@ -449,6 +449,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrReducedClip.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceCache2.cpp \
+	src/gpu/GrRODrawState.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
