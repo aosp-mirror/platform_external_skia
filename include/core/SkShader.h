@@ -392,6 +392,9 @@ public:
      *  to get that data.
      */
     virtual bool asACustomShader(void** customData) const { return false; }
+
+    uint32_t getGenerationID() const { return fGenerationID; }
+    void setGenerationID(uint32_t generationID) { fGenerationID = generationID; }
 #endif
 
     //////////////////////////////////////////////////////////////////////////
@@ -469,6 +472,10 @@ private:
     SkMatrix fLocalMatrix;
     
     typedef SkFlattenable INHERITED;
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    uint32_t fGenerationID;
+#endif
 };
 
 #endif
