@@ -79,7 +79,6 @@ LOCAL_SRC_FILES := \
 	PicturePlaybackBench.cpp \
 	PictureRecordBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
-	QuadTreeBench.cpp \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
 	RectBench.cpp \
