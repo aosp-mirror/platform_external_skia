@@ -93,7 +93,6 @@ LOCAL_SRC_FILES := \
 	ShaderMaskBench.cpp \
 	SkipZeroesBench.cpp \
 	SortBench.cpp \
-	StackBench.cpp \
 	StrokeBench.cpp \
 	TableBench.cpp \
 	TextBench.cpp \
