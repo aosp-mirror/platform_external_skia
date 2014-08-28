@@ -182,9 +182,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
 	src/core/SkRegion_path.cpp \
+	src/core/SkResourceCache.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
-	src/core/SkScaledImageCache.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
