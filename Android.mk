@@ -312,8 +312,6 @@ LOCAL_SRC_FILES := \
 	src/images/SkImageDecoder_FactoryDefault.cpp \
 	src/images/SkImageDecoder_FactoryRegistrar.cpp \
 	src/images/SkImageDecoder_wbmp.cpp \
-	src/images/SkImageDecoder_pkm.cpp \
-	src/images/SkImageDecoder_ktx.cpp \
 	src/images/SkImageDecoder_libbmp.cpp \
 	src/images/SkImageDecoder_libgif.cpp \
 	src/images/SkImageDecoder_libico.cpp \
