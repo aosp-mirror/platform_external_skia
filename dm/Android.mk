@@ -156,6 +156,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageDecodingTest.cpp \
 	../tests/ImageFilterTest.cpp \
 	../tests/ImageGeneratorTest.cpp \
+	../tests/ImageInfoTest.cpp \
 	../tests/ImageIsOpaqueTest.cpp \
 	../tests/ImageNewShaderTest.cpp \
 	../tests/InfRectTest.cpp \
