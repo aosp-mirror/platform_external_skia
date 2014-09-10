@@ -20,7 +20,6 @@ LOCAL_CPPFLAGS := \
 LOCAL_SRC_FILES := \
 	DM.cpp \
 	DMCpuGMTask.cpp \
-	DMExpectationsTask.cpp \
 	DMGpuGMTask.cpp \
 	DMPDFRasterizeTask.cpp \
 	DMPDFTask.cpp \
@@ -35,7 +34,6 @@ LOCAL_SRC_FILES := \
 	DMUtil.cpp \
 	DMWriteTask.cpp \
 	../gm/gm.cpp \
-	../gm/gm_expectations.cpp \
 	../src/utils/SkTaskGroup.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
