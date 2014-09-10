@@ -241,7 +241,6 @@ LOCAL_SRC_FILES := \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
-	../tests/UnpremultiplyTest.cpp \
 	../tests/UtilsTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
