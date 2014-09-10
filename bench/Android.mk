@@ -20,6 +20,7 @@ LOCAL_CPPFLAGS := \
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
 	GMBench.cpp \
+	RecordingBench.cpp \
 	SKPBench.cpp \
 	nanobench.cpp \
 	Benchmark.cpp \
