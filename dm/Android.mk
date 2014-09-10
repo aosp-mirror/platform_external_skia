@@ -302,6 +302,7 @@ LOCAL_SRC_FILES := \
 	../gm/drrect.cpp \
 	../gm/etc1bitmap.cpp \
 	../gm/extractbitmap.cpp \
+	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/factory.cpp \

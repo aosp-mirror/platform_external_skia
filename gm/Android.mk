@@ -76,6 +76,7 @@ LOCAL_SRC_FILES := \
 	drrect.cpp \
 	etc1bitmap.cpp \
 	extractbitmap.cpp \
+	emboss.cpp \
 	emptypath.cpp \
 	fatpathfill.cpp \
 	factory.cpp \
