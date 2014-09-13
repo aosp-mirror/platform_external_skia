@@ -63,7 +63,6 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1
 
 LOCAL_CPPFLAGS := \
-	-std=c++11 \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
