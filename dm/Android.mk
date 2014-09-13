@@ -15,6 +15,7 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1
 
 LOCAL_CPPFLAGS := \
+	-std=c++11 \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
@@ -108,6 +109,7 @@ LOCAL_SRC_FILES := \
 	../tests/ColorFilterTest.cpp \
 	../tests/ColorPrivTest.cpp \
 	../tests/ColorTest.cpp \
+	../tests/Cpp11Test.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DeferredCanvasTest.cpp \
