@@ -431,6 +431,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
+	src/gpu/GrOptDrawState.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
