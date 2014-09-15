@@ -209,6 +209,7 @@ LOCAL_SRC_FILES := \
 	../tests/RecordTest.cpp \
 	../tests/RecorderTest.cpp \
 	../tests/RecordingTest.cpp \
+	../tests/RecordingXfermodeTest.cpp \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
 	../tests/RegionTest.cpp \
