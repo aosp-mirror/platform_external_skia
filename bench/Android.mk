@@ -77,6 +77,7 @@ LOCAL_SRC_FILES := \
 	PathIterBench.cpp \
 	PathUtilsBench.cpp \
 	PerlinNoiseBench.cpp \
+	PictureNestingBench.cpp \
 	PicturePlaybackBench.cpp \
 	PictureRecordBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
