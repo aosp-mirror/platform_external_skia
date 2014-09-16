@@ -69,6 +69,7 @@ LOCAL_SRC_FILES := \
 	dashing.cpp \
 	deviceproperties.cpp \
 	distantclip.cpp \
+	dftext.cpp \
 	displacement.cpp \
 	downsamplebitmap.cpp \
 	drawlooper.cpp \

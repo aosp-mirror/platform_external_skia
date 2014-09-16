@@ -150,6 +150,7 @@ LOCAL_SRC_FILES := \
 	../gm/dashing.cpp \
 	../gm/deviceproperties.cpp \
 	../gm/distantclip.cpp \
+	../gm/dftext.cpp \
 	../gm/displacement.cpp \
 	../gm/downsamplebitmap.cpp \
 	../gm/drawlooper.cpp \
