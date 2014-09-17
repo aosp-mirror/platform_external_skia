@@ -505,6 +505,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGpuGL_program.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
 	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
+	src/gpu/gl/builders/GrGLFragmentOnlyProgramBuilder.cpp \
+	src/gpu/gl/builders/GrGLFullProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
