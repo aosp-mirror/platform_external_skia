@@ -67,7 +67,6 @@ LOCAL_SRC_FILES := \
 	discard.cpp \
 	dashcubics.cpp \
 	dashing.cpp \
-	deviceproperties.cpp \
 	distantclip.cpp \
 	dftext.cpp \
 	displacement.cpp \
