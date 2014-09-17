@@ -175,6 +175,7 @@ LOCAL_SRC_FILES := \
 	../tests/MemsetTest.cpp \
 	../tests/MessageBusTest.cpp \
 	../tests/MetaDataTest.cpp \
+	../tests/MiniDataTest.cpp \
 	../tests/MipMapTest.cpp \
 	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
