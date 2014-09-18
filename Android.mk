@@ -436,8 +436,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
+	src/gpu/GrPathRange.cpp \
 	src/gpu/GrPathRendererChain.cpp \
 	src/gpu/GrPathRenderer.cpp \
+	src/gpu/GrPathRendering.cpp \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
