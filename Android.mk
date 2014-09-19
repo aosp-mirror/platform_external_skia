@@ -216,7 +216,6 @@ LOCAL_SRC_FILES := \
 	src/doc/SkDocument.cpp \
 	src/image/SkImage.cpp \
 	src/image/SkImagePriv.cpp \
-	src/image/SkImage_Codec.cpp \
 	src/image/SkImage_Raster.cpp \
 	src/image/SkSurface.cpp \
 	src/image/SkSurface_Raster.cpp \
