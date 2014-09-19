@@ -177,6 +177,7 @@ LOCAL_SRC_FILES := \
 	texdata.cpp \
 	variedtext.cpp \
 	textblob.cpp \
+	textblobshader.cpp \
 	texturedomaineffect.cpp \
 	thinrects.cpp \
 	thinstrokedrects.cpp \

@@ -405,6 +405,7 @@ LOCAL_SRC_FILES := \
 	../gm/texdata.cpp \
 	../gm/variedtext.cpp \
 	../gm/textblob.cpp \
+	../gm/textblobshader.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
