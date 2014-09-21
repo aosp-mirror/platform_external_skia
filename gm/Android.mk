@@ -171,6 +171,7 @@ LOCAL_SRC_FILES := \
 	strokerects.cpp \
 	strokes.cpp \
 	stroketext.cpp \
+	surface.cpp \
 	tablecolorfilter.cpp \
 	texteffects.cpp \
 	testimagefilters.cpp \
