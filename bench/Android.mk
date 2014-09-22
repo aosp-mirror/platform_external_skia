@@ -252,6 +252,7 @@ LOCAL_SRC_FILES := \
 	../gm/strokerects.cpp \
 	../gm/strokes.cpp \
 	../gm/stroketext.cpp \
+	../gm/surface.cpp \
 	../gm/tablecolorfilter.cpp \
 	../gm/texteffects.cpp \
 	../gm/testimagefilters.cpp \
