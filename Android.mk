@@ -422,7 +422,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
-	src/gpu/GrEffect.cpp \
 	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
@@ -441,6 +440,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRendering.cpp \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrProgramElement.cpp \
+	src/gpu/GrProcessor.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
 	src/gpu/GrPictureUtils.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
