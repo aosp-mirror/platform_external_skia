@@ -523,7 +523,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/SkGLContextHelper.cpp \
 	src/gpu/gl/GrGLDefaultInterface_native.cpp \
 	src/gpu/gl/android/GrGLCreateNativeInterface_android.cpp \
-	src/gpu/gl/android/SkNativeGLContext_android.cpp \
+	src/gpu/gl/egl/SkNativeGLContext_egl.cpp \
 	src/gpu/gl/debug/GrGLCreateDebugInterface.cpp \
 	src/gpu/gl/debug/GrBufferObj.cpp \
 	src/gpu/gl/debug/GrTextureObj.cpp \
