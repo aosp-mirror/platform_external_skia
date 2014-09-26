@@ -1,6 +1,6 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+
 
 LOCAL_SRC_FILES:= \
   AAClipTest.cpp \
@@ -166,12 +166,15 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL
 
+LOCAL_STATIC_LIBRARIES := libstlport_static
+
 LOCAL_MODULE_TAGS := eng tests
 
 # Skia does not enforce this usage pattern so we disable it here to avoid
 # unecessary log spew when building
 LOCAL_CFLAGS := -Wno-unused-parameter
 
-LOCAL_CXX_STL := stlport_static
+#include stlport headers
+include external/stlport/libstlport.mk
 
 include $(BUILD_EXECUTABLE)

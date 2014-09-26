@@ -1,7 +1,6 @@
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 LOCAL_SRC_FILES := \
   benchmain.cpp \
@@ -94,6 +93,8 @@ LOCAL_SRC_FILES += \
 
 LOCAL_SHARED_LIBRARIES := libcutils libskia libGLESv2 libEGL 
 
+LOCAL_STATIC_LIBRARIES := libstlport_static
+
 LOCAL_C_INCLUDES := \
   external/skia/src/core \
   external/skia/src/effects \
@@ -109,6 +110,7 @@ LOCAL_MODULE_TAGS := optional
 # unecessary log spew when building
 LOCAL_CFLAGS := -Wno-unused-parameter
 
-LOCAL_CXX_STL := stlport_static
+#include stlport headers
+include external/stlport/libstlport.mk
 
 include $(BUILD_EXECUTABLE)
