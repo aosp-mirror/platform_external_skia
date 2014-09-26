@@ -31,7 +31,6 @@ LOCAL_PATH:= $(call my-dir)
 #
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 LOCAL_ARM_MODE := thumb
 
@@ -662,7 +661,8 @@ LOCAL_CFLAGS += -Wno-unused-parameter
 
 LOCAL_MODULE:= libskia
 
-LOCAL_CXX_STL := stlport
+#include stlport headers
+include external/stlport/libstlport.mk
 
 include $(BUILD_SHARED_LIBRARY)
 
