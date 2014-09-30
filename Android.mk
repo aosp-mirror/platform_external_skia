@@ -142,7 +142,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
 	src/core/SkMetaData.cpp \
-	src/core/SkMiniData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkMultiPictureDraw.cpp \
 	src/core/SkPackBits.cpp \
