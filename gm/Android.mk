@@ -131,7 +131,6 @@ LOCAL_SRC_FILES := \
 	ninepatchstretch.cpp \
 	nonclosedpaths.cpp \
 	offsetimagefilter.cpp \
-	optimizations.cpp \
 	ovals.cpp \
 	patch.cpp \
 	patchgrid.cpp \

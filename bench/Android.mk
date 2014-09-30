@@ -212,7 +212,6 @@ LOCAL_SRC_FILES := \
 	../gm/ninepatchstretch.cpp \
 	../gm/nonclosedpaths.cpp \
 	../gm/offsetimagefilter.cpp \
-	../gm/optimizations.cpp \
 	../gm/ovals.cpp \
 	../gm/patch.cpp \
 	../gm/patchgrid.cpp \
