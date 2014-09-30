@@ -123,7 +123,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkFilterShader.cpp \
 	src/core/SkFlattenable.cpp \
 	src/core/SkFlattenableSerialization.cpp \
-	src/core/SkFloat.cpp \
 	src/core/SkFloatBits.cpp \
 	src/core/SkFont.cpp \
 	src/core/SkFontHost.cpp \
