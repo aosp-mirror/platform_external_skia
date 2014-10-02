@@ -94,6 +94,7 @@ LOCAL_SRC_FILES := \
 	../tests/BlendTest.cpp \
 	../tests/BlitRowTest.cpp \
 	../tests/BlurTest.cpp \
+	../tests/CachedDataTest.cpp \
 	../tests/CachedDecodingPixelRefTest.cpp \
 	../tests/CanvasStateHelpers.cpp \
 	../tests/CanvasStateTest.cpp \
