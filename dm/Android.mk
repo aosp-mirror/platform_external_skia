@@ -177,7 +177,6 @@ LOCAL_SRC_FILES := \
 	../tests/MipMapTest.cpp \
 	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
-	../tests/ObjectPoolTest.cpp \
 	../tests/OnceTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
@@ -215,7 +214,6 @@ LOCAL_SRC_FILES := \
 	../tests/RoundRectTest.cpp \
 	../tests/RuntimeConfigTest.cpp \
 	../tests/SHA1Test.cpp \
-	../tests/SListTest.cpp \
 	../tests/ScalarTest.cpp \
 	../tests/SerializationTest.cpp \
 	../tests/ShaderImageFilterTest.cpp \
