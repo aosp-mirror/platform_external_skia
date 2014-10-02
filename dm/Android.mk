@@ -85,7 +85,6 @@ LOCAL_SRC_FILES := \
 	../tests/AnnotationTest.cpp \
 	../tests/AsADashTest.cpp \
 	../tests/AtomicTest.cpp \
-	../tests/BBoxHierarchyTest.cpp \
 	../tests/BitSetTest.cpp \
 	../tests/BitmapCopyTest.cpp \
 	../tests/BitmapGetColorTest.cpp \
