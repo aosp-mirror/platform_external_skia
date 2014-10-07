@@ -661,6 +661,13 @@ LOCAL_CFLAGS += -Wno-unused-parameter
 
 LOCAL_MODULE:= libskia
 
+# At least src/opts/memset16_neon.S does not compile with Clang.
+LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
+# At least src/opts/SkBitmapProcState_matrix_clamp_neon.h does not compile with Clang.
+LOCAL_CLANG_CFLAGS_arm += -no-integrated-as
+# At least src/opts/SkBlitRow_opts_arm_neon.cpp does not compile with Clang.
+LOCAL_CLANG_CFLAGS_arm64 += -no-integrated-as
+
 #include stlport headers
 include external/stlport/libstlport.mk
 
