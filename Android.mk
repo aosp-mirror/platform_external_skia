@@ -90,6 +90,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkBlitter_RGB16.cpp \
 	src/core/SkBlitter_Sprite.cpp \
 	src/core/SkBuffer.cpp \
+	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
