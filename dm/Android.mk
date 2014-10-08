@@ -430,6 +430,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
+	../experimental/sk_surface.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
 	../src/gpu/GrTest.cpp
