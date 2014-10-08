@@ -489,6 +489,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLPathRendering.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
+	src/gpu/gl/GrGLProgramEffects.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLSL.cpp \
@@ -499,12 +500,12 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGpuGL.cpp \
 	src/gpu/gl/GrGpuGL_program.cpp \
-	src/gpu/gl/builders/GrGLLegacyNvprProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLNvprProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
-	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLSLPrettyPrint.cpp \
+	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
+	src/gpu/gl/builders/GrGLFragmentOnlyProgramBuilder.cpp \
+	src/gpu/gl/builders/GrGLFullProgramBuilder.cpp \
+	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
+	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
 	src/gpu/gl/builders/GrGLVertexShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLFragmentShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLGeometryShaderBuilder.cpp \
