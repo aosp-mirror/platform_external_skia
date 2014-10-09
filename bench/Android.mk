@@ -51,6 +51,7 @@ LOCAL_SRC_FILES := \
 	FontCacheBench.cpp \
 	FontScalerBench.cpp \
 	GameBench.cpp \
+	GeometryBench.cpp \
 	GrMemoryPoolBench.cpp \
 	GrResourceCacheBench.cpp \
 	GrOrderedSetBench.cpp \
