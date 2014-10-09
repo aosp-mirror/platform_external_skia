@@ -26,6 +26,7 @@ LOCAL_SRC_FILES := \
 	Benchmark.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
+	BezierBench.cpp \
 	BitmapBench.cpp \
 	BitmapRectBench.cpp \
 	BitmapScaleBench.cpp \
@@ -111,6 +112,7 @@ LOCAL_SRC_FILES := \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
 	../gm/beziereffects.cpp \
+	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
@@ -245,6 +247,7 @@ LOCAL_SRC_FILES := \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
+	../gm/smallarc.cpp \
 	../gm/stringart.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \

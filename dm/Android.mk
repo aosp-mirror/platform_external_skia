@@ -228,6 +228,7 @@ LOCAL_SRC_FILES := \
 	../tests/StreamTest.cpp \
 	../tests/StringTest.cpp \
 	../tests/StrokeTest.cpp \
+	../tests/StrokerTest.cpp \
 	../tests/SurfaceTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/THashCache.cpp \
@@ -254,6 +255,7 @@ LOCAL_SRC_FILES := \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
 	../gm/beziereffects.cpp \
+	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
@@ -388,6 +390,7 @@ LOCAL_SRC_FILES := \
 	../gm/shallowgradient.cpp \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
+	../gm/smallarc.cpp \
 	../gm/stringart.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \

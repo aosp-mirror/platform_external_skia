@@ -29,6 +29,7 @@ LOCAL_SRC_FILES := \
 	arithmode.cpp \
 	astcbitmap.cpp \
 	beziereffects.cpp \
+	beziers.cpp \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
@@ -163,6 +164,7 @@ LOCAL_SRC_FILES := \
 	shallowgradient.cpp \
 	simpleaaclip.cpp \
 	skbug1719.cpp \
+	smallarc.cpp \
 	stringart.cpp \
 	spritebitmap.cpp \
 	srcmode.cpp \
