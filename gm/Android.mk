@@ -50,6 +50,7 @@ LOCAL_SRC_FILES := \
 	circularclips.cpp \
 	clip_strokerect.cpp \
 	clippedbitmapshaders.cpp \
+	colorcube.cpp \
 	colorfilterimagefilter.cpp \
 	colorfilters.cpp \
 	colormatrix.cpp \

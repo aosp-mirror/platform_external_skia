@@ -37,6 +37,7 @@ LOCAL_SRC_FILES := \
 	ChecksumBench.cpp \
 	ChromeBench.cpp \
 	CmapBench.cpp \
+	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
 	CoverageBench.cpp \
@@ -131,6 +132,7 @@ LOCAL_SRC_FILES := \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
+	../gm/colorcube.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \

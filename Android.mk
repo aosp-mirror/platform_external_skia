@@ -257,6 +257,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkBlurMask.cpp \
 	src/effects/SkBlurImageFilter.cpp \
 	src/effects/SkBlurMaskFilter.cpp \
+	src/effects/SkColorCubeFilter.cpp \
 	src/effects/SkColorFilters.cpp \
 	src/effects/SkColorFilterImageFilter.cpp \
 	src/effects/SkColorMatrix.cpp \
