@@ -279,6 +279,7 @@ LOCAL_SRC_FILES := \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
 	../gm/colorcube.cpp \
+	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
