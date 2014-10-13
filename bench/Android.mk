@@ -15,6 +15,7 @@ LOCAL_CFLAGS += \
 	-D_FORTIFY_SOURCE=1
 
 LOCAL_CPPFLAGS := \
+	-fno-threadsafe-statics \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
