@@ -1480,7 +1480,7 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
             flags |= SkScalerContext::kGenA8FromLCD_Flag;
         } else {
             SkPixelGeometry geometry = deviceProperties
-                                     ? deviceProperties->fPixelGeometry
+                                     ? deviceProperties->pixelGeometry()
                                      : SkSurfacePropsDefaultPixelGeometry();
             switch (geometry) {
                 case kUnknown_SkPixelGeometry:
@@ -1531,13 +1531,13 @@ void SkScalerContext::MakeRec(const SkPaint& paint,
         rec->setDeviceGamma(SK_GAMMA_EXPONENT);
         rec->setPaintGamma(SK_GAMMA_EXPONENT);
     } else {
-        rec->setDeviceGamma(deviceProperties->getGamma());
+        rec->setDeviceGamma(deviceProperties->gamma());
 
         //For now always set the paint gamma equal to the device gamma.
         //The math in SkMaskGamma can handle them being different,
         //but it requires superluminous masks when
         //Ex : deviceGamma(x) < paintGamma(x) and x is sufficiently large.
-        rec->setPaintGamma(deviceProperties->getGamma());
+        rec->setPaintGamma(deviceProperties->gamma());
     }
 
 #ifdef SK_GAMMA_CONTRAST
