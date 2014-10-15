@@ -10,12 +10,17 @@
 SKPBench::SKPBench(const char* name, const SkPicture* pic, const SkIRect& clip, SkScalar scale)
     : fPic(SkRef(pic))
     , fClip(clip)
-    , fScale(scale) {
-    fName.printf("%s_%.2g", name, scale);
+    , fScale(scale)
+    , fName(name) {
+    fUniqueName.printf("%s_%.2g", name, scale);  // Scale makes this unqiue for skiaperf.com traces.
 }
 
 const char* SKPBench::onGetName() {
     return fName.c_str();
+}
+
+const char* SKPBench::onGetUniqueName() {
+    return fUniqueName.c_str();
 }
 
 bool SKPBench::isSuitableFor(Backend backend) {
@@ -30,7 +35,7 @@ void SKPBench::onDraw(const int loops, SkCanvas* canvas) {
     canvas->save();
         canvas->scale(fScale, fScale);
         for (int i = 0; i < loops; i++) {
-            fPic->draw(canvas);
+            fPic->playback(canvas);
             canvas->flush();
         }
     canvas->restore();

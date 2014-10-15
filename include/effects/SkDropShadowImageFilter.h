@@ -14,17 +14,20 @@ public:
     static SkDropShadowImageFilter* Create(SkScalar dx, SkScalar dy,
                                            SkScalar sigmaX, SkScalar sigmaY, SkColor color,
                                            SkImageFilter* input = NULL,
-                                           const CropRect* cropRect = NULL) {
+                                           const CropRect* cropRect = NULL,
+                                           uint32_t uniqueID = 0) {
         return SkNEW_ARGS(SkDropShadowImageFilter, (dx, dy, sigmaX, sigmaY,
-                                                    color, input, cropRect));
+                                                    color, input, cropRect, uniqueID));
     }
     virtual void computeFastBounds(const SkRect&, SkRect*) const SK_OVERRIDE;
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDropShadowImageFilter)
 
 protected:
     SkDropShadowImageFilter(SkScalar dx, SkScalar dy, SkScalar sigmaX, SkScalar sigmaY, SkColor,
-                            SkImageFilter* input, const CropRect* cropRect);
+                            SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID);
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     explicit SkDropShadowImageFilter(SkReadBuffer&);
+#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     virtual bool onFilterImage(Proxy*, const SkBitmap& source, const Context&, SkBitmap* result, SkIPoint* loc) const SK_OVERRIDE;
     virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,

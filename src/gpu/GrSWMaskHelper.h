@@ -18,7 +18,6 @@
 #include "SkTextureCompressor.h"
 #include "SkTypes.h"
 
-class GrAutoScratchTexture;
 class GrContext;
 class GrTexture;
 class SkPath;
@@ -42,14 +41,16 @@ class GrDrawTarget;
 class GrSWMaskHelper : SkNoncopyable {
 public:
     GrSWMaskHelper(GrContext* context)
-    : fContext(context), fCompressMask(false) {
+    : fContext(context)
+    , fCompressionMode(kNone_CompressionMode) {
     }
 
     // set up the internal state in preparation for draws. Since many masks
     // may be accumulated in the helper during creation, "resultBounds"
     // allows the caller to specify the region of interest - to limit the
-    // amount of work.
-    bool init(const SkIRect& resultBounds, const SkMatrix* matrix);
+    // amount of work. allowCompression should be set to false if you plan on using
+    // your own texture to draw into, and not a scratch texture via getTexture().
+    bool init(const SkIRect& resultBounds, const SkMatrix* matrix, bool allowCompression = true);
 
     // Draw a single rect into the accumulation bitmap using the specified op
     void draw(const SkRect& rect, SkRegion::Op op,
@@ -59,20 +60,19 @@ public:
     void draw(const SkPath& path, const SkStrokeRec& stroke, SkRegion::Op op,
               bool antiAlias, uint8_t alpha);
 
-    // Helper function to get a scratch texture suitable for capturing the
-    // result (i.e., right size & format)
-    bool getTexture(GrAutoScratchTexture* texture);
-
     // Move the mask generation results from the internal bitmap to the gpu.
     void toTexture(GrTexture* texture);
 
+    // Convert mask generation results to a signed distance field
+    void toSDF(unsigned char* sdf);
+    
     // Reset the internal bitmap
     void clear(uint8_t alpha) {
         fBM.eraseColor(SkColorSetARGB(alpha, alpha, alpha, alpha));
     }
 
     // Canonical usage utility that draws a single path and uploads it
-    // to the GPU. The result is returned in "result".
+    // to the GPU. The result is returned.
     static GrTexture* DrawPathMaskToTexture(GrContext* context,
                                             const SkPath& path,
                                             const SkStrokeRec& stroke,
@@ -94,20 +94,33 @@ public:
                                          GrDrawTarget* target,
                                          const SkIRect& rect);
 
-protected:
 private:
+    // Helper function to get a scratch texture suitable for capturing the
+    // result (i.e., right size & format)
+    GrTexture* createTexture();
+
     GrContext*      fContext;
     SkMatrix        fMatrix;
     SkBitmap        fBM;
     SkDraw          fDraw;
     SkRasterClip    fRasterClip;
 
-    // This flag says whether or not we should compress the mask. If
-    // it is true, then fCompressedFormat is always valid.
-    bool                        fCompressMask;
+    // This enum says whether or not we should compress the mask:
+    // kNone_CompressionMode: compression is not supported on this device.
+    // kCompress_CompressionMode: compress the bitmap before it gets sent to the gpu
+    // kBlitter_CompressionMode: write to the bitmap using a special compressed blitter.
+    enum CompressionMode {
+        kNone_CompressionMode,
+        kCompress_CompressionMode,
+        kBlitter_CompressionMode,
+    } fCompressionMode;
+
+    // This is the buffer into which we store our compressed data. This buffer is
+    // only allocated (non-null) if fCompressionMode is kBlitter_CompressionMode
+    SkAutoMalloc fCompressedBuffer;
 
     // This is the desired format within which to compress the
-    // texture. This value is only valid if fCompressMask is true.
+    // texture. This value is only valid if fCompressionMode is not kNone_CompressionMode.
     SkTextureCompressor::Format fCompressedFormat;
 
     // Actually sends the texture data to the GPU. This is called from

@@ -26,7 +26,7 @@
 namespace {
 extern const GrVertexAttrib kAttribs[] = {
     {kVec2f_GrVertexAttribType, 0, kPosition_GrVertexAttribBinding},
-    {kVec4f_GrVertexAttribType, sizeof(SkPoint), kEffect_GrVertexAttribBinding}
+    {kVec4f_GrVertexAttribType, sizeof(SkPoint), kGeometryProcessor_GrVertexAttribBinding}
 };
 }
 
@@ -92,17 +92,17 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)},
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
-            for(int edgeType = 0; edgeType < kGrEffectEdgeTypeCnt; ++edgeType) {
-                SkAutoTUnref<GrEffect> effect;
+            for(int edgeType = 0; edgeType < kGrProcessorEdgeTypeCnt; ++edgeType) {
+                SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
                     if (NULL == tt.target()) {
                         continue;
                     }
-                    GrEffectEdgeType et = (GrEffectEdgeType)edgeType;
-                    effect.reset(GrCubicEffect::Create(et, *tt.target()->caps()));
-                    if (!effect) {
+                    GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
+                    gp.reset(GrCubicEffect::Create(et, *tt.target()->caps()));
+                    if (!gp) {
                         continue;
                     }
                 }
@@ -166,11 +166,11 @@ protected:
 
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
-                    SkASSERT(NULL != tt.target());
+                    SkASSERT(tt.target());
                     GrDrawState* drawState = tt.target()->drawState();
-                    drawState->setVertexAttribs<kAttribs>(2);
+                    drawState->setVertexAttribs<kAttribs>(2, sizeof(Vertex));
 
-                    drawState->addCoverageEffect(effect, 1);
+                    drawState->setGeometryProcessor(gp);
                     drawState->setRenderTarget(rt);
                     drawState->setColor(0xff000000);
 
@@ -250,17 +250,17 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
             SkScalar weight = rand.nextRangeF(0.f, 2.f);
-            for(int edgeType = 0; edgeType < kGrEffectEdgeTypeCnt; ++edgeType) {
-                SkAutoTUnref<GrEffect> effect;
+            for(int edgeType = 0; edgeType < kGrProcessorEdgeTypeCnt; ++edgeType) {
+                SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
                     if (NULL == tt.target()) {
                         continue;
                     }
-                    GrEffectEdgeType et = (GrEffectEdgeType)edgeType;
-                    effect.reset(GrConicEffect::Create(et, *tt.target()->caps()));
-                    if (!effect) {
+                    GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
+                    gp.reset(GrConicEffect::Create(et, *tt.target()->caps()));
+                    if (!gp) {
                         continue;
                     }
                 }
@@ -321,11 +321,11 @@ protected:
 
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
-                    SkASSERT(NULL != tt.target());
+                    SkASSERT(tt.target());
                     GrDrawState* drawState = tt.target()->drawState();
-                    drawState->setVertexAttribs<kAttribs>(2);
+                    drawState->setVertexAttribs<kAttribs>(2, sizeof(Vertex));
 
-                    drawState->addCoverageEffect(effect, 1);
+                    drawState->setGeometryProcessor(gp);
                     drawState->setRenderTarget(rt);
                     drawState->setColor(0xff000000);
 
@@ -439,17 +439,17 @@ protected:
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)},
                 {rand.nextRangeF(0.f, w), rand.nextRangeF(0.f, h)}
             };
-            for(int edgeType = 0; edgeType < kGrEffectEdgeTypeCnt; ++edgeType) {
-                SkAutoTUnref<GrEffect> effect;
+            for(int edgeType = 0; edgeType < kGrProcessorEdgeTypeCnt; ++edgeType) {
+                SkAutoTUnref<GrGeometryProcessor> gp;
                 {   // scope to contain GrTestTarget
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
                     if (NULL == tt.target()) {
                         continue;
                     }
-                    GrEffectEdgeType et = (GrEffectEdgeType)edgeType;
-                    effect.reset(GrQuadEffect::Create(et, *tt.target()->caps()));
-                    if (!effect) {
+                    GrPrimitiveEdgeType et = (GrPrimitiveEdgeType)edgeType;
+                    gp.reset(GrQuadEffect::Create(et, *tt.target()->caps()));
+                    if (!gp) {
                         continue;
                     }
                 }
@@ -505,11 +505,11 @@ protected:
 
                     GrTestTarget tt;
                     context->getTestTarget(&tt);
-                    SkASSERT(NULL != tt.target());
+                    SkASSERT(tt.target());
                     GrDrawState* drawState = tt.target()->drawState();
-                    drawState->setVertexAttribs<kAttribs>(2);
+                    drawState->setVertexAttribs<kAttribs>(2, sizeof(Vertex));
 
-                    drawState->addCoverageEffect(effect, 1);
+                    drawState->setGeometryProcessor(gp);
                     drawState->setRenderTarget(rt);
                     drawState->setColor(0xff000000);
 

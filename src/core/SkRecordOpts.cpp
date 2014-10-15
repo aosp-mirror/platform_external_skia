@@ -14,15 +14,13 @@
 using namespace SkRecords;
 
 void SkRecordOptimize(SkRecord* record) {
-    // TODO(mtklein): fuse independent optimizations to reduce number of passes?
-    SkRecordNoopCulls(record);
-    SkRecordNoopSaveRestores(record);
-    // TODO(mtklein): figure out why we draw differently and reenable
-    //SkRecordNoopSaveLayerDrawRestores(record);
+    // This might be useful  as a first pass in the future if we want to weed
+    // out junk for other optimization passes.  Right now, nothing needs it,
+    // and the bounding box hierarchy will do the work of skipping no-op
+    // Save-NoDraw-Restore sequences better than we can here.
+    //SkRecordNoopSaveRestores(record);
 
-    SkRecordAnnotateCullingPairs(record);
-    SkRecordReduceDrawPosTextStrength(record);  // Helpful to run this before BoundDrawPosTextH.
-    SkRecordBoundDrawPosTextH(record);
+    SkRecordNoopSaveLayerDrawRestores(record);
 }
 
 // Most of the optimizations in this file are pattern-based.  These are all defined as structs with:
@@ -45,21 +43,6 @@ static bool apply(Pass* pass, SkRecord* record) {
     return changed;
 }
 
-struct CullNooper {
-    typedef Pattern3<Is<PushCull>, Star<Is<NoOp> >, Is<PopCull> > Pattern;
-
-    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
-        record->replace<NoOp>(begin);  // PushCull
-        record->replace<NoOp>(end-1);  // PopCull
-        return true;
-    }
-};
-
-void SkRecordNoopCulls(SkRecord* record) {
-    CullNooper pass;
-    while (apply(&pass, record));
-}
-
 // Turns the logical NoOp Save and Restore in Save-Draw*-Restore patterns into actual NoOps.
 struct SaveOnlyDrawsRestoreNooper {
     typedef Pattern3<Is<Save>,
@@ -76,8 +59,10 @@ struct SaveOnlyDrawsRestoreNooper {
 // Turns logical no-op Save-[non-drawing command]*-Restore patterns into actual no-ops.
 struct SaveNoDrawsRestoreNooper {
     // Star matches greedily, so we also have to exclude Save and Restore.
+    // Nested SaveLayers need to be excluded, or we'll match their Restore!
     typedef Pattern3<Is<Save>,
-                     Star<Not<Or3<Is<Save>,
+                     Star<Not<Or4<Is<Save>,
+                                  Is<SaveLayer>,
                                   Is<Restore>,
                                   IsDraw> > >,
                      Is<Restore> >
@@ -166,133 +151,3 @@ void SkRecordNoopSaveLayerDrawRestores(SkRecord* record) {
     apply(&pass, record);
 }
 
-
-// Replaces DrawPosText with DrawPosTextH when all Y coordinates are equal.
-struct StrengthReducer {
-    typedef Pattern1<Is<DrawPosText> > Pattern;
-
-    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
-        SkASSERT(end == begin + 1);
-        DrawPosText* draw = pattern->first<DrawPosText>();
-
-        const unsigned points = draw->paint.countText(draw->text, draw->byteLength);
-        if (points == 0) {
-            return false;  // No point (ha!).
-        }
-
-        const SkScalar firstY = draw->pos[0].fY;
-        for (unsigned i = 1; i < points; i++) {
-            if (draw->pos[i].fY != firstY) {
-                return false;  // Needs full power of DrawPosText.
-            }
-        }
-        // All ys are the same.  We can replace DrawPosText with DrawPosTextH.
-
-        // draw->pos is points SkPoints, [(x,y),(x,y),(x,y),(x,y), ... ].
-        // We're going to squint and look at that as 2*points SkScalars, [x,y,x,y,x,y,x,y, ...].
-        // Then we'll rearrange things so all the xs are in order up front, clobbering the ys.
-        SK_COMPILE_ASSERT(sizeof(SkPoint) == 2 * sizeof(SkScalar), SquintingIsNotSafe);
-        SkScalar* scalars = &draw->pos[0].fX;
-        for (unsigned i = 0; i < 2*points; i += 2) {
-            scalars[i/2] = scalars[i];
-        }
-
-        // Extend lifetime of draw to the end of the loop so we can copy its paint.
-        Adopted<DrawPosText> adopted(draw);
-        SkNEW_PLACEMENT_ARGS(record->replace<DrawPosTextH>(begin, adopted),
-                             DrawPosTextH,
-                             (draw->paint, draw->text, draw->byteLength, scalars, firstY));
-        return true;
-    }
-};
-void SkRecordReduceDrawPosTextStrength(SkRecord* record) {
-    StrengthReducer pass;
-    apply(&pass, record);
-}
-
-// Tries to replace DrawPosTextH with BoundedDrawPosTextH, which knows conservative upper and lower
-// bounds to use with SkCanvas::quickRejectY.
-struct TextBounder {
-    typedef Pattern1<Is<DrawPosTextH> > Pattern;
-
-    bool onMatch(SkRecord* record, Pattern* pattern, unsigned begin, unsigned end) {
-        SkASSERT(end == begin + 1);
-        DrawPosTextH* draw = pattern->first<DrawPosTextH>();
-
-        // If we're drawing vertical text, none of the checks we're about to do make any sense.
-        // We'll need to call SkPaint::computeFastBounds() later, so bail if that's not possible.
-        if (draw->paint.isVerticalText() || !draw->paint.canComputeFastBounds()) {
-            return false;
-        }
-
-        // Rather than checking the top and bottom font metrics, we guess.  Actually looking up the
-        // top and bottom metrics is slow, and this overapproximation should be good enough.
-        const SkScalar buffer = draw->paint.getTextSize() * 1.5f;
-        SkDEBUGCODE(SkPaint::FontMetrics metrics;)
-        SkDEBUGCODE(draw->paint.getFontMetrics(&metrics);)
-        SkASSERT(-buffer <= metrics.fTop);
-        SkASSERT(+buffer >= metrics.fBottom);
-
-        // Let the paint adjust the text bounds.  We don't care about left and right here, so we use
-        // 0 and 1 respectively just so the bounds rectangle isn't empty.
-        SkRect bounds;
-        bounds.set(0, draw->y - buffer, SK_Scalar1, draw->y + buffer);
-        SkRect adjusted = draw->paint.computeFastBounds(bounds, &bounds);
-
-        Adopted<DrawPosTextH> adopted(draw);
-        SkNEW_PLACEMENT_ARGS(record->replace<BoundedDrawPosTextH>(begin, adopted),
-                             BoundedDrawPosTextH,
-                             (&adopted, adjusted.fTop, adjusted.fBottom));
-        return true;
-    }
-};
-void SkRecordBoundDrawPosTextH(SkRecord* record) {
-    TextBounder pass;
-    apply(&pass, record);
-}
-
-// Replaces PushCull with PairedPushCull, which lets us skip to the paired PopCull when the canvas
-// can quickReject the cull rect.
-// There's no efficient way (yet?) to express this one as a pattern, so we write a custom pass.
-class CullAnnotator {
-public:
-    // Do nothing to most ops.
-    template <typename T> void operator()(T*) {}
-
-    void operator()(PushCull* push) {
-        Pair pair = { fIndex, push };
-        fPushStack.push(pair);
-    }
-
-    void operator()(PopCull* pop) {
-        Pair push = fPushStack.top();
-        fPushStack.pop();
-
-        SkASSERT(fIndex > push.index);
-        unsigned skip = fIndex - push.index;
-
-        Adopted<PushCull> adopted(push.command);
-        SkNEW_PLACEMENT_ARGS(fRecord->replace<PairedPushCull>(push.index, adopted),
-                             PairedPushCull, (&adopted, skip));
-    }
-
-    void apply(SkRecord* record) {
-        for (fRecord = record, fIndex = 0; fIndex < record->count(); fIndex++) {
-            fRecord->mutate<void>(fIndex, *this);
-        }
-    }
-
-private:
-    struct Pair {
-        unsigned index;
-        PushCull* command;
-    };
-
-    SkTDArray<Pair> fPushStack;
-    SkRecord* fRecord;
-    unsigned fIndex;
-};
-void SkRecordAnnotateCullingPairs(SkRecord* record) {
-    CullAnnotator pass;
-    pass.apply(record);
-}

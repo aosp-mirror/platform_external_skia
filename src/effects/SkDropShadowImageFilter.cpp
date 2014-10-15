@@ -17,8 +17,9 @@
 
 SkDropShadowImageFilter::SkDropShadowImageFilter(SkScalar dx, SkScalar dy,
                                                  SkScalar sigmaX, SkScalar sigmaY, SkColor color,
-                                                 SkImageFilter* input, const CropRect* cropRect)
-    : INHERITED(1, &input, cropRect)
+                                                 SkImageFilter* input, const CropRect* cropRect,
+                                                 uint32_t uniqueID)
+    : INHERITED(1, &input, cropRect, uniqueID)
     , fDx(dx)
     , fDy(dy)
     , fSigmaX(sigmaX)
@@ -27,6 +28,7 @@ SkDropShadowImageFilter::SkDropShadowImageFilter(SkScalar dx, SkScalar dy,
 {
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkDropShadowImageFilter::SkDropShadowImageFilter(SkReadBuffer& buffer)
  : INHERITED(1, buffer) {
     fDx = buffer.readScalar();
@@ -39,9 +41,19 @@ SkDropShadowImageFilter::SkDropShadowImageFilter(SkReadBuffer& buffer)
                     SkScalarIsFinite(fSigmaX) &&
                     SkScalarIsFinite(fSigmaY));
 }
+#endif
 
-void SkDropShadowImageFilter::flatten(SkWriteBuffer& buffer) const
-{
+SkFlattenable* SkDropShadowImageFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+    SkScalar dx = buffer.readScalar();
+    SkScalar dy = buffer.readScalar();
+    SkScalar sigmaX = buffer.readScalar();
+    SkScalar sigmaY = buffer.readScalar();
+    SkColor color = buffer.readColor();
+    return Create(dx, dy, sigmaX, sigmaY, color, common.getInput(0), &common.cropRect(), common.uniqueID());
+}
+
+void SkDropShadowImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writeScalar(fDx);
     buffer.writeScalar(fDy);
@@ -110,9 +122,6 @@ void SkDropShadowImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) 
 bool SkDropShadowImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
                                              SkIRect* dst) const {
     SkIRect bounds = src;
-    if (getInput(0) && !getInput(0)->filterBounds(src, ctm, &bounds)) {
-        return false;
-    }
     SkVector offsetVec = SkVector::Make(fDx, fDy);
     ctm.mapVectors(&offsetVec, 1);
     bounds.offset(-SkScalarCeilToInt(offsetVec.x()),
@@ -122,6 +131,9 @@ bool SkDropShadowImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix&
     bounds.outset(SkScalarCeilToInt(SkScalarMul(sigma.x(), SkIntToScalar(3))),
                   SkScalarCeilToInt(SkScalarMul(sigma.y(), SkIntToScalar(3))));
     bounds.join(src);
+    if (getInput(0) && !getInput(0)->filterBounds(bounds, ctm, &bounds)) {
+        return false;
+    }
     *dst = bounds;
     return true;
 }

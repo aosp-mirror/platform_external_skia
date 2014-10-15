@@ -33,7 +33,24 @@
 ## epoger will rebaseline by 25 Dec 2013
 #gradtext
 
-#bsalomon: Slight AA changes to a rect in GPU configs after change that increases
-#batching
-bleed
+# rileya - https://codereview.chromium.org/516463005/ will rebaseline after bots cycle
+yuv_to_rgb_effect
 
+# robertphillips - skia:2995
+blurrects
+
+# derekf https://codereview.chromium.org/639523002/
+simpleblurroundrect
+blurrects
+blurcircles
+bleed
+drawbitmapmatrix
+
+#bsalomon slight(?) changes after reseting GrContext between GMs
+imageblur_large
+imageblur
+dftext
+megalooper_0x0
+megalooper_1x4
+megalooper_4x1
+imagefiltersbase

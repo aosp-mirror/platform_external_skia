@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2007 The Android Open Source Project
  *
@@ -6,15 +5,14 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkBitmapProcState_DEFINED
 #define SkBitmapProcState_DEFINED
 
 #include "SkBitmap.h"
 #include "SkBitmapFilter.h"
 #include "SkMatrix.h"
+#include "SkMipMap.h"
 #include "SkPaint.h"
-#include "SkScaledImageCache.h"
 
 #define FractionalInt_IS_64BIT
 
@@ -36,7 +34,7 @@ class SkPaint;
 
 struct SkBitmapProcState {
 
-    SkBitmapProcState(): fScaledCacheID(NULL), fBitmapFilter(NULL) {}
+    SkBitmapProcState() : fBitmapFilter(NULL) {}
     ~SkBitmapProcState();
 
     typedef void (*ShaderProc32)(const SkBitmapProcState&, int x, int y,
@@ -142,7 +140,8 @@ private:
     SkBitmap            fOrigBitmap;        // CONSTRUCTOR
     SkBitmap            fScaledBitmap;      // chooseProcs
 
-    SkScaledImageCache::ID* fScaledCacheID;
+    SkAutoTUnref<const SkMipMap> fCurrMip;
+    bool                fAdjustedMatrix;    // set by possiblyScaleImage
 
     MatrixProc chooseMatrixProc(bool trivial_matrix);
     bool chooseProcs(const SkMatrix& inv, const SkPaint&);

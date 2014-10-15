@@ -89,6 +89,7 @@ extern "C" {
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCompressedTexImage2DProc)(GrGLenum target, GrGLint level, GrGLenum internalformat, GrGLsizei width, GrGLsizei height, GrGLint border, GrGLsizei imageSize, const GrGLvoid* data);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCompressedTexSubImage2DProc)(GrGLenum target, GrGLint level, GrGLint xoffset, GrGLint yoffset, GrGLsizei width, GrGLsizei height, GrGLenum format, GrGLsizei imageSize, const GrGLvoid* data);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCopyTexSubImage2DProc)(GrGLenum target, GrGLint level, GrGLint xoffset, GrGLint yoffset, GrGLint x, GrGLint y, GrGLsizei width, GrGLsizei height);
+    typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCopyTextureCHROMIUMProc)(GrGLenum target, GrGLenum src, GrGLenum dst, GrGLint level, GrGLint format, GrGLenum type);
     typedef GrGLuint (GR_GL_FUNCTION_TYPE* GrGLCreateProgramProc)(void);
     typedef GrGLuint (GR_GL_FUNCTION_TYPE* GrGLCreateShaderProc)(GrGLenum type);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCullFaceProc)(GrGLenum mode);
@@ -245,12 +246,14 @@ extern "C" {
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCoverStrokePathProc)(GrGLuint name, GrGLenum coverMode);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCoverFillPathInstancedProc)(GrGLsizei numPaths, GrGLenum pathNameType, const GrGLvoid *paths, GrGLuint pathBase, GrGLenum coverMode, GrGLenum transformType, const GrGLfloat *transformValues);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLCoverStrokePathInstancedProc)(GrGLsizei numPaths, GrGLenum pathNameType, const GrGLvoid *paths, GrGLuint pathBase, GrGLenum coverMode, GrGLenum transformType, const GrGLfloat* transformValues);
+    // NV_path_rendering v1.2
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLStencilThenCoverFillPathProc)(GrGLuint path, GrGLenum fillMode, GrGLuint mask, GrGLenum coverMode);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLStencilThenCoverStrokePathProc)(GrGLuint path, GrGLint reference, GrGLuint mask, GrGLenum coverMode);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLStencilThenCoverFillPathInstancedProc)(GrGLsizei numPaths, GrGLenum pathNameType, const GrGLvoid *paths, GrGLuint pathBase, GrGLenum fillMode, GrGLuint mask, GrGLenum coverMode, GrGLenum transformType, const GrGLfloat *transformValues);
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLStencilThenCoverStrokePathInstancedProc)(GrGLsizei numPaths, GrGLenum pathNameType, const GrGLvoid *paths, GrGLuint pathBase, GrGLint reference, GrGLuint mask, GrGLenum coverMode, GrGLenum transformType, const GrGLfloat *transformValues);
-
+    // NV_path_rendering v1.3
     typedef GrGLvoid (GR_GL_FUNCTION_TYPE* GrGLProgramPathFragmentInputGenProc)(GrGLuint program, GrGLint location, GrGLenum genMode, GrGLint components,const GrGLfloat *coeffs);
+    typedef GrGLenum (GR_GL_FUNCTION_TYPE* GrGLPathMemoryGlyphIndexArrayProc)(GrGLuint firstPathName, GrGLenum fontTarget, GrGLsizeiptr fontSize, const GrGLvoid *fontData, GrGLsizei faceIndex, GrGLuint firstGlyphIndex, GrGLsizei numGlyphs, GrGLuint pathParameterTemplate, GrGLfloat emScale);
 }  // extern "C"
 
 #endif

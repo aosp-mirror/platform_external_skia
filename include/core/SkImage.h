@@ -16,6 +16,7 @@
 
 class SkData;
 class SkCanvas;
+class SkImageGenerator;
 class SkPaint;
 class GrContext;
 class GrTexture;
@@ -38,7 +39,6 @@ public:
 
     static SkImage* NewRasterCopy(const Info&, const void* pixels, size_t rowBytes);
     static SkImage* NewRasterData(const Info&, SkData* pixels, size_t rowBytes);
-    static SkImage* NewEncodedData(SkData*);
 
     /**
      * GrTexture is a more logical parameter for this factory, but its
@@ -46,6 +46,15 @@ public:
      * SkBitmap instead. This will be changed in the future. skbug.com/1449
      */
     static SkImage* NewTexture(const SkBitmap&);
+
+    virtual bool isOpaque() const { return false; }
+
+    /**
+     *  Construct a new SkImage based on the given ImageGenerator.
+     *  This function will always take ownership of the passed
+     *  ImageGenerator.  Returns NULL on error.
+     */
+    static SkImage* NewFromGenerator(SkImageGenerator*);
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
@@ -61,17 +70,6 @@ public:
     virtual SkShader* newShader(SkShader::TileMode,
                                 SkShader::TileMode,
                                 const SkMatrix* localMatrix = NULL) const;
-
-    void draw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*);
-
-    /**
-     *  Draw the image, cropped to the src rect, to the dst rect of a canvas.
-     *  If src is larger than the bounds of the image, the rest of the image is
-     *  filled with transparent black pixels.
-     *
-     *  See SkCanvas::drawBitmapRectToRect for similar behavior.
-     */
-    void draw(SkCanvas*, const SkRect* src, const SkRect& dst, const SkPaint*);
 
     /**
      *  If the image has direct access to its pixels (i.e. they are in local
@@ -112,6 +110,19 @@ private:
     static uint32_t NextUniqueID();
 
     typedef SkRefCnt INHERITED;
+
+    friend class SkCanvas;
+
+    void draw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*) const;
+
+    /**
+     *  Draw the image, cropped to the src rect, to the dst rect of a canvas.
+     *  If src is larger than the bounds of the image, the rest of the image is
+     *  filled with transparent black pixels.
+     *
+     *  See SkCanvas::drawBitmapRectToRect for similar behavior.
+     */
+    void drawRect(SkCanvas*, const SkRect* src, const SkRect& dst, const SkPaint*) const;
 
     /**
      *  Return a copy of the image's pixels, limiting them to the subset

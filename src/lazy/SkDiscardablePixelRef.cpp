@@ -64,11 +64,7 @@ bool SkDiscardablePixelRef::onNewLockPixels(LockRec* rec) {
     SkPMColor colors[256];
     int colorCount = 0;
 
-#ifdef SK_SUPPORT_LEGACY_IMAGEGENERATORAPI
-    if (!fGenerator->getPixels(info, pixels, fRowBytes)) {
-#else
     if (!fGenerator->getPixels(info, pixels, fRowBytes, colors, &colorCount)) {
-#endif
         fDiscardableMemory->unlock();
         SkDELETE(fDiscardableMemory);
         fDiscardableMemory = NULL;
@@ -105,9 +101,12 @@ bool SkInstallDiscardablePixelRef(SkImageGenerator* generator, SkBitmap* dst,
         || (!dst->setInfo(info))) {
         return false;
     }
-    SkASSERT(dst->colorType() != kUnknown_SkColorType);
+    // Since dst->setInfo() may have changed/fixed-up info, we copy it back from that bitmap
+    info = dst->info();
+
+    SkASSERT(info.colorType() != kUnknown_SkColorType);
     if (dst->empty()) {  // Use a normal pixelref.
-        return dst->allocPixels();
+        return dst->tryAllocPixels();
     }
     SkAutoTUnref<SkDiscardablePixelRef> ref(
         SkNEW_ARGS(SkDiscardablePixelRef,

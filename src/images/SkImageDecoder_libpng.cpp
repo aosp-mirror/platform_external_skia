@@ -62,7 +62,7 @@ public:
         stream->ref();
     }
     ~SkPNGImageIndex() {
-        if (NULL != fPng_ptr) {
+        if (fPng_ptr) {
             png_destroy_read_struct(&fPng_ptr, &fInfo_ptr, png_infopp_NULL);
         }
     }
@@ -709,17 +709,7 @@ bool SkPNGImageDecoder::decodePalette(png_structp png_ptr, png_infop info_ptr,
         *colorPtr = colorPtr[-1];
     }
 
-    SkAlphaType alphaType = kOpaque_SkAlphaType;
-    if (reallyHasAlpha) {
-        if (this->getRequireUnpremultipliedColors()) {
-            alphaType = kUnpremul_SkAlphaType;
-        } else {
-            alphaType = kPremul_SkAlphaType;
-        }
-    }
-
-    *colorTablep = SkNEW_ARGS(SkColorTable,
-                              (colorStorage, colorCount, alphaType));
+    *colorTablep = SkNEW_ARGS(SkColorTable, (colorStorage, colorCount));
     *reallyHasAlphap = reallyHasAlpha;
     return true;
 }
@@ -823,7 +813,7 @@ bool SkPNGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
             return false;
         }
     } else {
-        if (!decodedBitmap.allocPixels(NULL, needColorTable ? colorTable : NULL)) {
+        if (!decodedBitmap.tryAllocPixels(NULL, needColorTable ? colorTable : NULL)) {
             return false;
         }
     }
@@ -1161,7 +1151,7 @@ bool SkPNGImageEncoder::onEncode(SkWStream* stream, const SkBitmap& bitmap, int 
 
     // we must do this after we have locked the pixels
     SkColorTable* ctable = bitmap.getColorTable();
-    if (NULL != ctable) {
+    if (ctable) {
         if (ctable->count() == 0) {
             return false;
         }

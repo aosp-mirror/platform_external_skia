@@ -62,8 +62,11 @@ static void testOpLoopsMain(PathOpsThreadState* data) {
 }
 
 DEF_TEST(PathOpsOpLoopsThreaded, reporter) {
-    int threadCount = initializeTests(reporter, "cubicOp");
-    PathOpsThreadedTestRunner testRunner(reporter, threadCount);
+    if (!FLAGS_runFail) {
+        return;
+    }
+    initializeTests(reporter, "cubicOp");
+    PathOpsThreadedTestRunner testRunner(reporter);
     for (int a = 0; a < 6; ++a) {  // outermost
         for (int b = a + 1; b < 7; ++b) {
             for (int c = 0 ; c < 6; ++c) {
@@ -81,7 +84,10 @@ finish:
 }
 
 DEF_TEST(PathOpsOpLoops, reporter) {
-    (void) initializeTests(reporter, "cubicOp");
+    if (!FLAGS_runFail) {
+        return;
+    }
+    initializeTests(reporter, "cubicOp");
     PathOpsThreadState state;
     state.fReporter = reporter;
     SkBitmap bitmap;

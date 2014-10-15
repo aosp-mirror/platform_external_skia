@@ -91,20 +91,29 @@ bool SkOffsetImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm
     return true;
 }
 
+SkFlattenable* SkOffsetImageFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+    SkPoint offset;
+    buffer.readPoint(&offset);
+    return Create(offset.x(), offset.y(), common.getInput(0), &common.cropRect(), common.uniqueID());
+}
+
 void SkOffsetImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writePoint(fOffset);
 }
 
 SkOffsetImageFilter::SkOffsetImageFilter(SkScalar dx, SkScalar dy, SkImageFilter* input,
-                                         const CropRect* cropRect)
-  : INHERITED(1, &input, cropRect) {
+                                         const CropRect* cropRect, uint32_t uniqueID)
+  : INHERITED(1, &input, cropRect, uniqueID) {
     fOffset.set(dx, dy);
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkOffsetImageFilter::SkOffsetImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     buffer.readPoint(&fOffset);
     buffer.validate(SkScalarIsFinite(fOffset.fX) &&
                     SkScalarIsFinite(fOffset.fY));
 }
+#endif

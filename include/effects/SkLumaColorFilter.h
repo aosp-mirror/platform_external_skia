@@ -28,14 +28,16 @@ public:
     virtual void filterSpan(const SkPMColor src[], int count, SkPMColor[]) const SK_OVERRIDE;
 
 #if SK_SUPPORT_GPU
-    virtual GrEffect* asNewEffect(GrContext*) const SK_OVERRIDE;
+    virtual GrFragmentProcessor* asFragmentProcessor(GrContext*) const SK_OVERRIDE;
 #endif
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkLumaColorFilter)
 
 protected:
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     SkLumaColorFilter(SkReadBuffer& buffer);
+#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
 private:

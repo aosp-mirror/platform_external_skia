@@ -14,11 +14,10 @@
 #include "SkDevice.h"
 #include "SkXfermode.h"
 
-SkDebugCanvas::SkDebugCanvas(int width, int height)
-        : INHERITED(width, height)
+SkDebugCanvas::SkDebugCanvas(int windowWidth, int windowHeight)
+        : INHERITED(windowWidth, windowHeight)
         , fPicture(NULL)
-        , fWidth(width)
-        , fHeight(height)
+        , fWindowSize(SkISize::Make(windowWidth, windowHeight))
         , fFilter(false)
         , fMegaVizMode(false)
         , fIndex(0)
@@ -76,7 +75,7 @@ int SkDebugCanvas::getCommandAtPoint(int x, int y, int index) {
 
     SkCanvas canvas(bitmap);
     canvas.translate(SkIntToScalar(-x), SkIntToScalar(-y));
-    applyUserTransform(&canvas);
+    this->applyUserTransform(&canvas);
 
     int layer = 0;
     SkColor prev = bitmap.getColor(0,0);
@@ -255,10 +254,10 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
         }
         canvas->clear(SK_ColorTRANSPARENT);
         canvas->resetMatrix();
-        SkRect rect = SkRect::MakeWH(SkIntToScalar(fWidth),
-                                     SkIntToScalar(fHeight));
-        canvas->clipRect(rect, SkRegion::kReplace_Op );
-        applyUserTransform(canvas);
+        SkRect rect = SkRect::MakeWH(SkIntToScalar(fWindowSize.fWidth), 
+                                     SkIntToScalar(fWindowSize.fHeight));
+        canvas->clipRect(rect, SkRegion::kReplace_Op);
+        this->applyUserTransform(canvas);
         fOutstandingSaveCount = 0;
     }
 
@@ -292,17 +291,7 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
 
     for (; i <= index; i++) {
         if (i == index && fFilter) {
-            SkPaint p;
-            p.setColor(0xAAFFFFFF);
-            canvas->save();
-            canvas->resetMatrix();
-            SkRect mask;
-            mask.set(SkIntToScalar(0), SkIntToScalar(0),
-                    SkIntToScalar(fWidth), SkIntToScalar(fHeight));
-            canvas->clipRect(mask, SkRegion::kReplace_Op, false);
-            canvas->drawRectCoords(SkIntToScalar(0), SkIntToScalar(0),
-                    SkIntToScalar(fWidth), SkIntToScalar(fHeight), p);
-            canvas->restore();
+            canvas->clear(0xAAFFFFFF);
         }
 
         if (fCommandVector[i]->isVisible()) {
@@ -321,12 +310,13 @@ void SkDebugCanvas::drawTo(SkCanvas* canvas, int index) {
     }
 
     if (fMegaVizMode) {
-        SkRect r = SkRect::MakeWH(SkIntToScalar(fWidth), SkIntToScalar(fHeight));
+        SkRect r = SkRect::MakeWH(SkIntToScalar(fWindowSize.fWidth), 
+                                  SkIntToScalar(fWindowSize.fHeight));
         r.outset(SK_Scalar1, SK_Scalar1);
 
         canvas->save();
         // nuke the CTM
-        canvas->setMatrix(SkMatrix::I());
+        canvas->resetMatrix();
         // turn off clipping
         canvas->clipRect(r, SkRegion::kReplace_Op);
 
@@ -519,8 +509,10 @@ void SkDebugCanvas::drawPath(const SkPath& path, const SkPaint& paint) {
     this->addDrawCommand(new SkDrawPathCommand(path, paint));
 }
 
-void SkDebugCanvas::onDrawPicture(const SkPicture* picture) {
-    this->addDrawCommand(new SkDrawPictureCommand(picture));
+void SkDebugCanvas::onDrawPicture(const SkPicture* picture, 
+                                  const SkMatrix* matrix, 
+                                  const SkPaint* paint) {
+    this->addDrawCommand(new SkDrawPictureCommand(picture, matrix, paint));
 }
 
 void SkDebugCanvas::drawPoints(PointMode mode, size_t count,
@@ -567,6 +559,11 @@ void SkDebugCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const 
                                      const SkMatrix* matrix, const SkPaint& paint) {
     this->addDrawCommand(
         new SkDrawTextOnPathCommand(text, byteLength, path, matrix, paint));
+}
+
+void SkDebugCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                   const SkPaint& paint) {
+    this->addDrawCommand(new SkDrawTextBlobCommand(blob, x, y, paint));
 }
 
 void SkDebugCanvas::drawVertices(VertexMode vmode, int vertexCount,

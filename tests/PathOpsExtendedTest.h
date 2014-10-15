@@ -8,12 +8,15 @@
 #define PathOpsExtendedTest_DEFINED
 
 #include "SkBitmap.h"
+#include "SkCommandLineFlags.h"
 #include "SkPath.h"
 #include "SkPathOpsTypes.h"
 #include "SkStream.h"
 #include "SkThread.h"
 #include "SkThreadUtils.h"
 #include "Test.h"
+
+DECLARE_bool(runFail);
 
 struct PathOpsThreadState;
 
@@ -36,7 +39,7 @@ extern bool testSimplify(SkPath& path, bool useXor, SkPath& out, PathOpsThreadSt
                          const char* pathStr);
 extern bool testSimplify(skiatest::Reporter* reporter, const SkPath& path, const char* filename);
 
-int initializeTests(skiatest::Reporter* reporter, const char* testName);
+void initializeTests(skiatest::Reporter* reporter, const char* testName);
 void outputProgress(char* ramStr, const char* pathStr, SkPath::FillType );
 void outputProgress(char* ramStr, const char* pathStr, SkPathOp op);
 

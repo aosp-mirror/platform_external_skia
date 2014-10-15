@@ -6,7 +6,8 @@
  */
 
 #include "SkCachingPixelRef.h"
-#include "SkScaledImageCache.h"
+#include "SkBitmapCache.h"
+#include "SkRect.h"
 
 bool SkCachingPixelRef::Install(SkImageGenerator* generator,
                                 SkBitmap* dst) {
@@ -30,13 +31,11 @@ SkCachingPixelRef::SkCachingPixelRef(const SkImageInfo& info,
     : INHERITED(info)
     , fImageGenerator(generator)
     , fErrorInDecoding(false)
-    , fScaledCacheId(NULL)
     , fRowBytes(rowBytes) {
     SkASSERT(fImageGenerator != NULL);
 }
 SkCachingPixelRef::~SkCachingPixelRef() {
     SkDELETE(fImageGenerator);
-    SkASSERT(NULL == fScaledCacheId);
     // Assert always unlock before unref.
 }
 
@@ -46,52 +45,33 @@ bool SkCachingPixelRef::onNewLockPixels(LockRec* rec) {
     }
 
     const SkImageInfo& info = this->info();
-    SkBitmap bitmap;
-    SkASSERT(NULL == fScaledCacheId);
-    fScaledCacheId = SkScaledImageCache::FindAndLock(this->getGenerationID(),
-                                                     info.fWidth,
-                                                     info.fHeight,
-                                                     &bitmap);
-    if (NULL == fScaledCacheId) {
+    if (!SkBitmapCache::Find(this->getGenerationID(),
+                             SkIRect::MakeWH(info.width(), info.height()),
+                             &fLockedBitmap)) {
         // Cache has been purged, must re-decode.
-        if (!bitmap.allocPixels(info, fRowBytes)) {
+        if (!fLockedBitmap.tryAllocPixels(info, fRowBytes)) {
             fErrorInDecoding = true;
             return false;
         }
-        SkAutoLockPixels autoLockPixels(bitmap);
-        if (!fImageGenerator->getPixels(info, bitmap.getPixels(), fRowBytes)) {
+        if (!fImageGenerator->getPixels(info, fLockedBitmap.getPixels(), fRowBytes)) {
             fErrorInDecoding = true;
             return false;
         }
-        fScaledCacheId = SkScaledImageCache::AddAndLock(this->getGenerationID(),
-                                                        info.fWidth,
-                                                        info.fHeight,
-                                                        bitmap);
-        SkASSERT(fScaledCacheId != NULL);
+        fLockedBitmap.setImmutable();
+        SkBitmapCache::Add(this->getGenerationID(),
+                           SkIRect::MakeWH(info.width(), info.height()),
+                           fLockedBitmap);
     }
 
-    // Now bitmap should contain a concrete PixelRef of the decoded
-    // image.
-    SkAutoLockPixels autoLockPixels(bitmap);
-    void* pixels = bitmap.getPixels();
+    // Now bitmap should contain a concrete PixelRef of the decoded image.
+    void* pixels = fLockedBitmap.getPixels();
     SkASSERT(pixels != NULL);
-
-    // At this point, the autoLockPixels will unlockPixels()
-    // to remove bitmap's lock on the pixels.  We will then
-    // destroy bitmap.  The *only* guarantee that this pointer
-    // remains valid is the guarantee made by
-    // SkScaledImageCache that it will not destroy the *other*
-    // bitmap (SkScaledImageCache::Rec.fBitmap) that holds a
-    // reference to the concrete PixelRef while this record is
-    // locked.
     rec->fPixels = pixels;
     rec->fColorTable = NULL;
-    rec->fRowBytes = bitmap.rowBytes();
+    rec->fRowBytes = fLockedBitmap.rowBytes();
     return true;
 }
 
 void SkCachingPixelRef::onUnlockPixels() {
-    SkASSERT(fScaledCacheId != NULL);
-    SkScaledImageCache::Unlock( static_cast<SkScaledImageCache::ID*>(fScaledCacheId));
-    fScaledCacheId = NULL;
+    fLockedBitmap.reset();
 }

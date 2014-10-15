@@ -25,7 +25,10 @@
       var code            = document.getElementById('code');
       var output          = document.getElementById('output');
       var stdout          = document.getElementById('stdout');
+      var gpu             = document.getElementById('use-gpu');
       var img             = document.getElementById('img');
+      var imageWidth      = document.getElementById('image-width');
+      var imageHeight     = document.getElementById('image-height');
       var tryHistory      = document.getElementById('tryHistory');
       var parser          = new DOMParser();
       var tryTemplate     = document.getElementById('tryTemplate');
@@ -45,6 +48,11 @@
         sourceSelectByID(sourceId);
       }
 
+      function setIFrameURL() {
+        var url = document.URL;
+        url = url.replace('/c/', '/iframe/');
+        embed.value = '<iframe src="' + url + '" width="740" height="550" style="border: solid #00a 5px; border-radius: 5px;"/>'
+      }
 
       function beginWait() {
         document.body.classList.add('waiting');
@@ -133,6 +141,7 @@
           req.send();
         } else {
           sourceId = 0;
+          chooseSource.classList.remove('show');
         }
       }
 
@@ -144,13 +153,15 @@
         theme: "default",
         lineNumbers: true,
         matchBrackets: true,
+        lineWrapping: true,
         mode: "text/x-c++src",
         indentUnit: 4,
       });
 
-      // Match the initial textarea size.
+      // Match the initial textarea width, but leave the height alone
+      // The css will automatically resize the editor vertically.
       editor.setSize(editor.defaultCharWidth() * code.cols,
-                     editor.defaultTextHeight() * code.rows);
+                     null);
 
 
       /**
@@ -164,10 +175,14 @@
 
       function clearOutput() {
         output.textContent = "";
+        output.style.display='none';
         if (stdout) {
           stdout.textContent = "";
+          stdout.style.display='none';
         }
-        embed.style.display='none';
+        if (embed) {
+          embed.style.display='none';
+        }
       }
 
       /**
@@ -199,9 +214,13 @@
         code.value = body.code;
         editor.setValue(body.code);
         img.src = '/i/'+body.hash+'.png';
+        imageWidth.value = body.width;
+        imageHeight.value = body.height;
+        gpu.checked = body.gpu;
         sourceSelectByID(body.source);
         if (permalink) {
           permalink.href = '/c/' + body.hash;
+          permalink.style.display='inline-block';
         }
       }
 
@@ -232,11 +251,16 @@
         // The img is optional and only appears if there is a valid
         // image to display.
         endWait();
-        console.log(e.target.response);
         body = JSON.parse(e.target.response);
         output.textContent = body.message;
+        if (body.message) {
+          output.style.display = 'block';
+        }
         if (stdout) {
           stdout.textContent = body.stdout;
+          if (body.stdout) {
+            stdout.style.display = 'block';
+          }
         }
         if (body.hasOwnProperty('img')) {
           img.src = 'data:image/png;base64,' + body.img;
@@ -251,14 +275,13 @@
         }
         if (permalink) {
           permalink.href = '/c/' + body.hash;
+          permalink.style.display = 'inline-block';
         }
         if (embed) {
-          var url = document.URL;
-          url = url.replace('/c/', '/iframe/');
-          embed.value = '<iframe src="' + url + '" width="740" height="550" style="border: solid #00a 5px; border-radius: 5px;"/>'
+          setIFrameURL();
         }
-        if (embedButton && embedButton.hasAttribute('disabled')) {
-          embedButton.removeAttribute('disabled');
+        if (embedButton) {
+          embedButton.style.display = 'inline-block';
         }
       }
 
@@ -272,7 +295,14 @@
         req.overrideMimeType('application/json');
         req.open('POST', '/', true);
         req.setRequestHeader('content-type', 'application/json');
-        req.send(JSON.stringify({'code': editor.getValue(), 'name': workspaceName, 'source': sourceId}));
+        req.send(JSON.stringify({
+          'code': editor.getValue(),
+          'width': parseInt(imageWidth.value),
+          'height': parseInt(imageHeight.value),
+          'name': workspaceName,
+          'source': sourceId,
+          'gpu': gpu.checked
+        }));
       }
       run.addEventListener('click', onSubmitCode);
 
@@ -284,6 +314,8 @@
       if (embedButton) {
         embedButton.addEventListener('click', onEmbedClick);
       }
+
+      setIFrameURL();
 
       // Add the images to the history if we are on a workspace page.
       if (tryHistory && history_) {

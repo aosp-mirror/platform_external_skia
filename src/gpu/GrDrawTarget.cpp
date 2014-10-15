@@ -13,6 +13,8 @@
 #include "GrDrawTargetCaps.h"
 #include "GrPath.h"
 #include "GrRenderTarget.h"
+#include "GrSurfacePriv.h"
+#include "GrTemplates.h"
 #include "GrTexture.h"
 #include "GrVertexBuffer.h"
 
@@ -31,7 +33,7 @@ GrDrawTarget::DrawInfo& GrDrawTarget::DrawInfo::operator =(const DrawInfo& di) {
     fVerticesPerInstance    = di.fVerticesPerInstance;
     fIndicesPerInstance     = di.fIndicesPerInstance;
 
-    if (NULL != di.fDevBounds) {
+    if (di.fDevBounds) {
         SkASSERT(di.fDevBounds == &di.fDevBoundsStorage);
         fDevBoundsStorage = di.fDevBoundsStorage;
         fDevBounds = &fDevBoundsStorage;
@@ -90,7 +92,7 @@ GrDrawTarget::GrDrawTarget(GrContext* context)
     : fClip(NULL)
     , fContext(context)
     , fGpuTraceMarkerCount(0) {
-    SkASSERT(NULL != context);
+    SkASSERT(context);
 
     fDrawState = &fDefaultDrawState;
     // We assume that fDrawState always owns a ref to the object it points at.
@@ -134,7 +136,7 @@ const GrClipData* GrDrawTarget::getClip() const {
 }
 
 void GrDrawTarget::setDrawState(GrDrawState*  drawState) {
-    SkASSERT(NULL != fDrawState);
+    SkASSERT(fDrawState);
     if (NULL == drawState) {
         drawState = &fDefaultDrawState;
     }
@@ -151,7 +153,7 @@ bool GrDrawTarget::reserveVertexSpace(size_t vertexSize,
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     bool acquired = false;
     if (vertexCount > 0) {
-        SkASSERT(NULL != vertices);
+        SkASSERT(vertices);
         this->releasePreviousVertexSource();
         geoSrc.fVertexSrc = kNone_GeometrySrcType;
 
@@ -163,7 +165,7 @@ bool GrDrawTarget::reserveVertexSpace(size_t vertexSize,
         geoSrc.fVertexSrc = kReserved_GeometrySrcType;
         geoSrc.fVertexCount = vertexCount;
         geoSrc.fVertexSize = vertexSize;
-    } else if (NULL != vertices) {
+    } else if (vertices) {
         *vertices = NULL;
     }
     return acquired;
@@ -174,7 +176,7 @@ bool GrDrawTarget::reserveIndexSpace(int indexCount,
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     bool acquired = false;
     if (indexCount > 0) {
-        SkASSERT(NULL != indices);
+        SkASSERT(indices);
         this->releasePreviousIndexSource();
         geoSrc.fIndexSrc = kNone_GeometrySrcType;
 
@@ -183,7 +185,7 @@ bool GrDrawTarget::reserveIndexSpace(int indexCount,
     if (acquired) {
         geoSrc.fIndexSrc = kReserved_GeometrySrcType;
         geoSrc.fIndexCount = indexCount;
-    } else if (NULL != indices) {
+    } else if (indices) {
         *indices = NULL;
     }
     return acquired;
@@ -194,10 +196,10 @@ bool GrDrawTarget::reserveVertexAndIndexSpace(int vertexCount,
                                               int indexCount,
                                               void** vertices,
                                               void** indices) {
-    size_t vertexSize = this->drawState()->getVertexSize();
+    size_t vertexStride = this->drawState()->getVertexStride();
     this->willReserveVertexAndIndexSpace(vertexCount, indexCount);
     if (vertexCount) {
-        if (!this->reserveVertexSpace(vertexSize, vertexCount, vertices)) {
+        if (!this->reserveVertexSpace(vertexStride, vertexCount, vertices)) {
             if (indexCount) {
                 this->resetIndexSource();
             }
@@ -217,10 +219,10 @@ bool GrDrawTarget::reserveVertexAndIndexSpace(int vertexCount,
 
 bool GrDrawTarget::geometryHints(int32_t* vertexCount,
                                  int32_t* indexCount) const {
-    if (NULL != vertexCount) {
+    if (vertexCount) {
         *vertexCount = -1;
     }
-    if (NULL != indexCount) {
+    if (indexCount) {
         *indexCount = -1;
     }
     return false;
@@ -277,7 +279,7 @@ void GrDrawTarget::setVertexSourceToArray(const void* vertexArray,
     this->releasePreviousVertexSource();
     GeometrySrcState& geoSrc = fGeoSrcStateStack.back();
     geoSrc.fVertexSrc = kArray_GeometrySrcType;
-    geoSrc.fVertexSize = this->drawState()->getVertexSize();
+    geoSrc.fVertexSize = this->drawState()->getVertexStride();
     geoSrc.fVertexCount = vertexCount;
     this->onSetVertexSourceToArray(vertexArray, vertexCount);
 }
@@ -297,7 +299,7 @@ void GrDrawTarget::setVertexSourceToBuffer(const GrVertexBuffer* buffer) {
     geoSrc.fVertexSrc    = kBuffer_GeometrySrcType;
     geoSrc.fVertexBuffer = buffer;
     buffer->ref();
-    geoSrc.fVertexSize = this->drawState()->getVertexSize();
+    geoSrc.fVertexSize = this->drawState()->getVertexStride();
 }
 
 void GrDrawTarget::setIndexSourceToBuffer(const GrIndexBuffer* buffer) {
@@ -386,10 +388,19 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
         }
     }
 
-    SkASSERT(NULL != drawState.getRenderTarget());
+    SkASSERT(drawState.getRenderTarget());
+
+    if (drawState.hasGeometryProcessor()) {
+        const GrGeometryProcessor* gp = drawState.getGeometryProcessor();
+        int numTextures = gp->numTextures();
+        for (int t = 0; t < numTextures; ++t) {
+            GrTexture* texture = gp->texture(t);
+            SkASSERT(texture->asRenderTarget() != drawState.getRenderTarget());
+        }
+    }
 
     for (int s = 0; s < drawState.numColorStages(); ++s) {
-        const GrEffect* effect = drawState.getColorStage(s).getEffect();
+        const GrProcessor* effect = drawState.getColorStage(s).getProcessor();
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
@@ -397,7 +408,7 @@ bool GrDrawTarget::checkDraw(GrPrimitiveType type, int startVertex,
         }
     }
     for (int s = 0; s < drawState.numCoverageStages(); ++s) {
-        const GrEffect* effect = drawState.getCoverageStage(s).getEffect();
+        const GrProcessor* effect = drawState.getCoverageStage(s).getProcessor();
         int numTextures = effect->numTextures();
         for (int t = 0; t < numTextures; ++t) {
             GrTexture* texture = effect->texture(t);
@@ -422,7 +433,7 @@ bool GrDrawTarget::setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const 
     const GrClipData* clip = this->getClip();
     clip->getConservativeBounds(rt, &copyRect);
 
-    if (NULL != drawBounds) {
+    if (drawBounds) {
         SkIRect drawIBounds;
         drawBounds->roundOut(&drawIBounds);
         if (!copyRect.intersect(drawIBounds)) {
@@ -444,15 +455,16 @@ bool GrDrawTarget::setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const 
     desc.fWidth = copyRect.width();
     desc.fHeight = copyRect.height();
 
-    GrAutoScratchTexture ast(fContext, desc, GrContext::kApprox_ScratchTexMatch);
+    SkAutoTUnref<GrTexture> copy(
+        fContext->refScratchTexture(desc, GrContext::kApprox_ScratchTexMatch));
 
-    if (NULL == ast.texture()) {
+    if (!copy) {
         GrPrintf("Failed to create temporary copy of destination texture.\n");
         return false;
     }
     SkIPoint dstPoint = {0, 0};
-    if (this->copySurface(ast.texture(), rt, copyRect, dstPoint)) {
-        dstCopy->setTexture(ast.texture());
+    if (this->copySurface(copy, rt, copyRect, dstPoint)) {
+        dstCopy->setTexture(copy);
         dstCopy->setOffset(copyRect.fLeft, copyRect.fTop);
         return true;
     } else {
@@ -478,7 +490,7 @@ void GrDrawTarget::drawIndexed(GrPrimitiveType type,
         info.fVerticesPerInstance   = 0;
         info.fIndicesPerInstance    = 0;
 
-        if (NULL != devBounds) {
+        if (devBounds) {
             info.setDevBounds(*devBounds);
         }
         // TODO: We should continue with incorrect blending.
@@ -505,7 +517,7 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
         info.fVerticesPerInstance   = 0;
         info.fIndicesPerInstance    = 0;
 
-        if (NULL != devBounds) {
+        if (devBounds) {
             info.setDevBounds(*devBounds);
         }
         // TODO: We should continue with incorrect blending.
@@ -518,7 +530,7 @@ void GrDrawTarget::drawNonIndexed(GrPrimitiveType type,
 
 void GrDrawTarget::stencilPath(const GrPath* path, SkPath::FillType fill) {
     // TODO: extract portions of checkDraw that are relevant to path stenciling.
-    SkASSERT(NULL != path);
+    SkASSERT(path);
     SkASSERT(this->caps()->pathRenderingSupport());
     SkASSERT(!SkPath::IsInverseFillType(fill));
     this->onStencilPath(path, fill);
@@ -526,7 +538,7 @@ void GrDrawTarget::stencilPath(const GrPath* path, SkPath::FillType fill) {
 
 void GrDrawTarget::drawPath(const GrPath* path, SkPath::FillType fill) {
     // TODO: extract portions of checkDraw that are relevant to path rendering.
-    SkASSERT(NULL != path);
+    SkASSERT(path);
     SkASSERT(this->caps()->pathRenderingSupport());
     const GrDrawState* drawState = &getDrawState();
 
@@ -553,9 +565,9 @@ void GrDrawTarget::drawPaths(const GrPathRange* pathRange,
                              const float transforms[], PathTransformType transformsType,
                              SkPath::FillType fill) {
     SkASSERT(this->caps()->pathRenderingSupport());
-    SkASSERT(NULL != pathRange);
-    SkASSERT(NULL != indices);
-    SkASSERT(NULL != transforms);
+    SkASSERT(pathRange);
+    SkASSERT(indices);
+    SkASSERT(transforms);
 
     // Don't compute a bounding box for setupDstReadIfNecessary(), we'll opt
     // instead for it to just copy the entire dst. Realistically this is a moot
@@ -613,21 +625,6 @@ void GrDrawTarget::removeGpuTraceMarker(const GrGpuTraceMarker* marker) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GrDrawTarget::canApplyCoverage() const {
-    // we can correctly apply coverage if a) we have dual source blending
-    // or b) one of our blend optimizations applies
-    // or c) the src, dst blend coeffs are 1,0 and we will read Dst Color
-    GrBlendCoeff srcCoeff;
-    GrBlendCoeff dstCoeff;
-    GrDrawState::BlendOptFlags flag = this->getDrawState().getBlendOpts(true, &srcCoeff, &dstCoeff);
-    return this->caps()->dualSourceBlendingSupport() ||
-           GrDrawState::kNone_BlendOpt != flag ||
-           (this->getDrawState().willEffectReadDstColor() &&
-            kOne_GrBlendCoeff == srcCoeff && kZero_GrBlendCoeff == dstCoeff);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
                                         int instanceCount,
                                         int verticesPerInstance,
@@ -650,7 +647,7 @@ void GrDrawTarget::drawIndexedInstances(GrPrimitiveType type,
     info.fVerticesPerInstance = verticesPerInstance;
 
     // Set the same bounds for all the draws.
-    if (NULL != devBounds) {
+    if (devBounds) {
         info.setDevBounds(*devBounds);
     }
     // TODO: We should continue with incorrect blending.
@@ -687,9 +684,9 @@ extern const GrVertexAttrib gBWRectPosUVAttribs[] = {
 
 void set_vertex_attributes(GrDrawState* drawState, bool hasUVs) {
     if (hasUVs) {
-        drawState->setVertexAttribs<gBWRectPosUVAttribs>(2);
+        drawState->setVertexAttribs<gBWRectPosUVAttribs>(2, 2 * sizeof(SkPoint));
     } else {
-        drawState->setVertexAttribs<gBWRectPosUVAttribs>(1);
+        drawState->setVertexAttribs<gBWRectPosUVAttribs>(1, sizeof(SkPoint));
     }
 }
 
@@ -699,7 +696,7 @@ void GrDrawTarget::onDrawRect(const SkRect& rect,
                               const SkRect* localRect,
                               const SkMatrix* localMatrix) {
 
-    set_vertex_attributes(this->drawState(), NULL != localRect);
+    set_vertex_attributes(this->drawState(), SkToBool(localRect));
 
     AutoReleaseGeometry geo(this, 4, 0);
     if (!geo.succeeded()) {
@@ -707,16 +704,16 @@ void GrDrawTarget::onDrawRect(const SkRect& rect,
         return;
     }
 
-    size_t vsize = this->drawState()->getVertexSize();
-    geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vsize);
-    if (NULL != localRect) {
+    size_t vstride = this->drawState()->getVertexStride();
+    geo.positions()->setRectFan(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom, vstride);
+    if (localRect) {
         SkPoint* coords = GrTCast<SkPoint*>(GrTCast<intptr_t>(geo.vertices()) +
                                             sizeof(SkPoint));
         coords->setRectFan(localRect->fLeft, localRect->fTop,
                            localRect->fRight, localRect->fBottom,
-                           vsize);
-        if (NULL != localMatrix) {
-            localMatrix->mapPointsWithStride(coords, vsize, 4);
+                           vstride);
+        if (localMatrix) {
+            localMatrix->mapPointsWithStride(coords, vstride, 4);
         }
     }
     SkRect bounds;
@@ -742,7 +739,7 @@ GrDrawTarget::AutoStateRestore::AutoStateRestore(GrDrawTarget* target,
 }
 
 GrDrawTarget::AutoStateRestore::~AutoStateRestore() {
-    if (NULL != fDrawTarget) {
+    if (fDrawTarget) {
         fDrawTarget->setDrawState(fSavedState);
         fSavedState->unref();
     }
@@ -822,8 +819,7 @@ bool GrDrawTarget::AutoReleaseGeometry::set(GrDrawTarget*  target,
     this->reset();
     fTarget = target;
     bool success = true;
-    if (NULL != fTarget) {
-        fTarget = target;
+    if (fTarget) {
         success = target->reserveVertexAndIndexSpace(vertexCount,
                                                      indexCount,
                                                      &fVertices,
@@ -833,16 +829,16 @@ bool GrDrawTarget::AutoReleaseGeometry::set(GrDrawTarget*  target,
             this->reset();
         }
     }
-    SkASSERT(success == (NULL != fTarget));
+    SkASSERT(success == SkToBool(fTarget));
     return success;
 }
 
 void GrDrawTarget::AutoReleaseGeometry::reset() {
-    if (NULL != fTarget) {
-        if (NULL != fVertices) {
+    if (fTarget) {
+        if (fVertices) {
             fTarget->resetVertexSource();
         }
-        if (NULL != fIndices) {
+        if (fIndices) {
             fTarget->resetIndexSource();
         }
         fTarget = NULL;
@@ -917,8 +913,8 @@ bool GrDrawTarget::copySurface(GrSurface* dst,
                                GrSurface* src,
                                const SkIRect& srcRect,
                                const SkIPoint& dstPoint) {
-    SkASSERT(NULL != dst);
-    SkASSERT(NULL != src);
+    SkASSERT(dst);
+    SkASSERT(src);
 
     SkIRect clippedSrcRect;
     SkIPoint clippedDstPoint;
@@ -942,8 +938,8 @@ bool GrDrawTarget::canCopySurface(GrSurface* dst,
                                   GrSurface* src,
                                   const SkIRect& srcRect,
                                   const SkIPoint& dstPoint) {
-    SkASSERT(NULL != dst);
-    SkASSERT(NULL != src);
+    SkASSERT(dst);
+    SkASSERT(src);
 
     SkIRect clippedSrcRect;
     SkIPoint clippedDstPoint;
@@ -970,7 +966,7 @@ bool GrDrawTarget::onCanCopySurface(GrSurface* dst,
     SkASSERT(dstPoint.fX + srcRect.width() <= dst->width() &&
              dstPoint.fY + srcRect.height() <= dst->height());
 
-    return !dst->isSameAs(src) && NULL != dst->asRenderTarget() && NULL != src->asTexture();
+    return !dst->surfacePriv().isSameAs(src) && dst->asRenderTarget() && src->asTexture();
 }
 
 bool GrDrawTarget::onCopySurface(GrSurface* dst,
@@ -990,7 +986,7 @@ bool GrDrawTarget::onCopySurface(GrSurface* dst,
     matrix.setTranslate(SkIntToScalar(srcRect.fLeft - dstPoint.fX),
                         SkIntToScalar(srcRect.fTop - dstPoint.fY));
     matrix.postIDiv(tex->width(), tex->height());
-    this->drawState()->addColorTextureEffect(tex, matrix);
+    this->drawState()->addColorTextureProcessor(tex, matrix);
     SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX,
                                         dstPoint.fY,
                                         srcRect.width(),
@@ -1153,3 +1149,13 @@ SkString GrDrawTargetCaps::dump() const {
 
     return r;
 }
+
+uint32_t GrDrawTargetCaps::CreateUniqueID() {
+    static int32_t gUniqueID = SK_InvalidUniqueID;
+    uint32_t id;
+    do {
+        id = static_cast<uint32_t>(sk_atomic_inc(&gUniqueID) + 1);
+    } while (id == SK_InvalidUniqueID);
+    return id;
+}
+

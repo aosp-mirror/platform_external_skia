@@ -8,20 +8,12 @@
 #ifndef GrGLProgramDesc_DEFINED
 #define GrGLProgramDesc_DEFINED
 
-#include "GrGLEffect.h"
+#include "GrGLProcessor.h"
 #include "GrDrawState.h"
 #include "GrGpu.h"
+#include "GrOptDrawState.h"
 
 class GrGpuGL;
-
-#ifdef SK_DEBUG
-  // Optionally compile the experimental GS code. Set to SK_DEBUG so that debug build bots will
-  // execute the code.
-  #define GR_GL_EXPERIMENTAL_GS 1
-#else
-  #define GR_GL_EXPERIMENTAL_GS 0
-#endif
-
 
 /** This class describes a program to generate. It also serves as a program cache key. Very little
     of this is GL-specific. The GL-specific parts could be factored out into a subclass. */
@@ -43,33 +35,21 @@ public:
     // Gets the a checksum of the key. Can be used as a hash value for a fast lookup in a cache.
     uint32_t getChecksum() const { return *this->atOffset<uint32_t, kChecksumOffset>(); }
 
-    // For unit testing.
-    bool setRandom(SkRandom*,
-                   const GrGpuGL* gpu,
-                   const GrRenderTarget* dummyDstRenderTarget,
-                   const GrTexture* dummyDstCopyTexture,
-                   const GrEffectStage* stages[],
-                   int numColorStages,
-                   int numCoverageStages,
-                   int currAttribIndex);
-
     /**
-     * Builds a program descriptor from a GrDrawState. Whether the primitive type is points, the
-     * output of GrDrawState::getBlendOpts, and the caps of the GrGpuGL are also inputs. It also
-     * outputs the color and coverage stages referenced by the generated descriptor. This may
-     * not contain all stages from the draw state and coverage stages from the drawState may
-     * be treated as color stages in the output.
+     * Builds a program descriptor from a GrOptDrawState. Whether the primitive type is points, and
+     * the caps of the GrGpuGL are also inputs. It also outputs the color and coverage stages
+     * referenced by the generated descriptor. Coverage stages from the drawState may be treated as
+     * color stages in the output.
      */
-    static bool Build(const GrDrawState&,
-                      GrGpu::DrawType drawType,
-                      GrDrawState::BlendOptFlags,
-                      GrBlendCoeff srcCoeff,
-                      GrBlendCoeff dstCoeff,
-                      const GrGpuGL* gpu,
-                      const GrDeviceCoordTexture* dstCopy,
-                      SkTArray<const GrEffectStage*, true>* outColorStages,
-                      SkTArray<const GrEffectStage*, true>* outCoverageStages,
-                      GrGLProgramDesc* outDesc);
+    static bool Build(const GrOptDrawState&,
+                      GrGpu::DrawType,
+                      GrGpuGL*,
+                      const GrDeviceCoordTexture*,
+                      GrGLProgramDesc*);
+
+    bool hasGeometryProcessor() const {
+        return SkToBool(this->getHeader().fHasGeometryProcessor);
+    }
 
     int numColorEffects() const {
         return this->getHeader().fColorEffectCnt;
@@ -99,68 +79,36 @@ public:
 private:
     // Specifies where the initial color comes from before the stages are applied.
     enum ColorInput {
-        kSolidWhite_ColorInput,
+        kAllOnes_ColorInput,
         kAttribute_ColorInput,
         kUniform_ColorInput,
 
         kColorInputCnt
     };
 
-    enum CoverageOutput {
-        // modulate color and coverage, write result as the color output.
-        kModulate_CoverageOutput,
-        // Writes color*coverage as the primary color output and also writes coverage as the
-        // secondary output. Only set if dual source blending is supported.
-        kSecondaryCoverage_CoverageOutput,
-        // Writes color*coverage as the primary color output and also writes coverage * (1 - colorA)
-        // as the secondary output. Only set if dual source blending is supported.
-        kSecondaryCoverageISA_CoverageOutput,
-        // Writes color*coverage as the primary color output and also writes coverage *
-        // (1 - colorRGB) as the secondary output. Only set if dual source blending is supported.
-        kSecondaryCoverageISC_CoverageOutput,
-        // Combines the coverage, dst, and color as coverage * color + (1 - coverage) * dst. This
-        // can only be set if fDstReadKey is non-zero.
-        kCombineWithDst_CoverageOutput,
-
-        kCoverageOutputCnt
-    };
-
-    static bool CoverageOutputUsesSecondaryOutput(CoverageOutput co) {
-        switch (co) {
-            case kSecondaryCoverage_CoverageOutput: //  fallthru
-            case kSecondaryCoverageISA_CoverageOutput:
-            case kSecondaryCoverageISC_CoverageOutput:
-                return true;
-            default:
-                return false;
-        }
-    }
-
     struct KeyHeader {
-        uint8_t                     fDstReadKey;        // set by GrGLShaderBuilder if there
+        uint8_t                          fDstReadKey;   // set by GrGLShaderBuilder if there
                                                         // are effects that must read the dst.
                                                         // Otherwise, 0.
-        uint8_t                     fFragPosKey;        // set by GrGLShaderBuilder if there are
+        uint8_t                          fFragPosKey;   // set by GrGLShaderBuilder if there are
                                                         // effects that read the fragment position.
                                                         // Otherwise, 0.
-        ColorInput                  fColorInput : 8;
-        ColorInput                  fCoverageInput : 8;
-        CoverageOutput              fCoverageOutput : 8;
 
-        SkBool8                     fHasVertexCode;
+        SkBool8                     fUseFragShaderOnly;
         SkBool8                     fEmitsPointSize;
 
-        // To enable experimental geometry shader code (not for use in
-        // production)
-#if GR_GL_EXPERIMENTAL_GS
-        SkBool8                     fExperimentalGS;
-#endif
+        ColorInput                       fColorInput : 8;
+        ColorInput                       fCoverageInput : 8;
+
+        GrOptDrawState::PrimaryOutputType    fPrimaryOutputType : 8;
+        GrOptDrawState::SecondaryOutputType  fSecondaryOutputType : 8;
 
         int8_t                      fPositionAttributeIndex;
         int8_t                      fLocalCoordAttributeIndex;
         int8_t                      fColorAttributeIndex;
         int8_t                      fCoverageAttributeIndex;
 
+        SkBool8                     fHasGeometryProcessor;
         int8_t                      fColorEffectCnt;
         int8_t                      fCoverageEffectCnt;
     };
@@ -195,34 +143,39 @@ private:
 
     KeyHeader* header() { return this->atOffset<KeyHeader, kHeaderOffset>(); }
 
-    // Shared code between setRandom() and Build().
-    static bool GetEffectKeyAndUpdateStats(const GrEffectStage& stage,
-                                           const GrGLCaps& caps,
-                                           bool useExplicitLocalCoords,
-                                           GrEffectKeyBuilder* b,
-                                           uint16_t* effectKeySize,
-                                           bool* setTrueIfReadsDst,
-                                           bool* setTrueIfReadsPos,
-                                           bool* setTrueIfHasVertexCode);
-
+    // a helper class to handle getting an individual processor's key
+    template <class ProcessorKeyBuilder>
+    static bool BuildStagedProcessorKey(const typename ProcessorKeyBuilder::StagedProcessor& stage,
+                                        const GrGLCaps& caps,
+                                        bool requiresLocalCoordAttrib,
+                                        GrGLProgramDesc* desc,
+                                        int* offsetAndSizeIndex);
     void finalize();
 
     const KeyHeader& getHeader() const { return *this->atOffset<KeyHeader, kHeaderOffset>(); }
 
     /** Used to provide effects' keys to their emitCode() function. */
-    class EffectKeyProvider {
+    class ProcKeyProvider {
     public:
-        enum EffectType {
-            kColor_EffectType,
-            kCoverage_EffectType,
+        enum ProcessorType {
+            kGeometry_ProcessorType,
+            kFragment_ProcessorType,
         };
 
-        EffectKeyProvider(const GrGLProgramDesc* desc, EffectType type) : fDesc(desc) {
-            // Coverage effect key offsets begin immediately after those of the color effects.
-            fBaseIndex = kColor_EffectType == type ? 0 : desc->numColorEffects();
+        ProcKeyProvider(const GrGLProgramDesc* desc, ProcessorType type)
+            : fDesc(desc), fBaseIndex(0) {
+            switch (type) {
+                case kGeometry_ProcessorType:
+                    // there can be only one
+                    fBaseIndex = 0;
+                    break;
+                case kFragment_ProcessorType:
+                    fBaseIndex = desc->hasGeometryProcessor() ? 1 : 0;
+                    break;
+            }
         }
 
-        GrEffectKey get(int index) const {
+        GrProcessorKey get(int index) const {
             const uint16_t* offsetsAndLengths = reinterpret_cast<const uint16_t*>(
                 fDesc->fKey.begin() + kEffectKeyOffsetsAndLengthOffset);
             // We store two uint16_ts per effect, one for the offset to the effect's key and one for
@@ -231,7 +184,7 @@ private:
             uint16_t length = offsetsAndLengths[2 * (fBaseIndex + index) + 1];
             // Currently effects must add to the key in units of uint32_t.
             SkASSERT(0 == (length % sizeof(uint32_t)));
-            return GrEffectKey(reinterpret_cast<const uint32_t*>(fDesc->fKey.begin() + offset),
+            return GrProcessorKey(reinterpret_cast<const uint32_t*>(fDesc->fKey.begin() + offset),
                                length / sizeof(uint32_t));
         }
     private:
@@ -250,11 +203,13 @@ private:
 
     // GrGLProgram and GrGLShaderBuilder read the private fields to generate code. TODO: Split out
     // part of GrGLShaderBuilder that is used by effects so that this header doesn't need to be
-    // visible to GrGLEffects. Then make public accessors as necessary and remove friends.
+    // visible to GrGLProcessors. Then make public accessors as necessary and remove friends.
     friend class GrGLProgram;
-    friend class GrGLShaderBuilder;
-    friend class GrGLFullShaderBuilder;
-    friend class GrGLFragmentOnlyShaderBuilder;
+    friend class GrGLProgramBuilder;
+    friend class GrGLLegacyNvprProgramBuilder;
+    friend class GrGLVertexBuilder;
+    friend class GrGLFragmentShaderBuilder;
+    friend class GrGLGeometryBuilder;
 };
 
 #endif

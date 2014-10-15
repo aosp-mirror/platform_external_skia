@@ -11,24 +11,24 @@
 #include "GrBlend.h"
 #include "effects/GrSimpleTextureEffect.h"
 
-void GrPaint::addColorTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
-    this->addColorEffect(GrSimpleTextureEffect::Create(texture, matrix))->unref();
+void GrPaint::addColorTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
+    this->addColorProcessor(GrSimpleTextureEffect::Create(texture, matrix))->unref();
 }
 
-void GrPaint::addCoverageTextureEffect(GrTexture* texture, const SkMatrix& matrix) {
-    this->addCoverageEffect(GrSimpleTextureEffect::Create(texture, matrix))->unref();
+void GrPaint::addCoverageTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
+    this->addCoverageProcessor(GrSimpleTextureEffect::Create(texture, matrix))->unref();
 }
 
-void GrPaint::addColorTextureEffect(GrTexture* texture,
+void GrPaint::addColorTextureProcessor(GrTexture* texture,
                                     const SkMatrix& matrix,
                                     const GrTextureParams& params) {
-    this->addColorEffect(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
+    this->addColorProcessor(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
 }
 
-void GrPaint::addCoverageTextureEffect(GrTexture* texture,
+void GrPaint::addCoverageTextureProcessor(GrTexture* texture,
                                        const SkMatrix& matrix,
                                        const GrTextureParams& params) {
-    this->addCoverageEffect(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
+    this->addCoverageProcessor(GrSimpleTextureEffect::Create(texture, matrix, params))->unref();
 }
 
 bool GrPaint::isOpaque() const {
@@ -52,31 +52,35 @@ bool GrPaint::getOpaqueAndKnownColor(GrColor* solidColor,
 
     // TODO: Share this implementation with GrDrawState
 
-    GrColor coverage = GrColorPackRGBA(fCoverage, fCoverage, fCoverage, fCoverage);
-    uint32_t coverageComps = kRGBA_GrColorComponentFlags;
+    GrProcessor::InvariantOutput inout;
+    inout.fColor = GrColorPackRGBA(fCoverage, fCoverage, fCoverage, fCoverage);
+    inout.fValidFlags = kRGBA_GrColorComponentFlags;
+    inout.fIsSingleComponent = false;
     int count = fCoverageStages.count();
     for (int i = 0; i < count; ++i) {
-        fCoverageStages[i].getEffect()->getConstantColorComponents(&coverage, &coverageComps);
+        fCoverageStages[i].getProcessor()->computeInvariantOutput(&inout);
     }
-    if (kRGBA_GrColorComponentFlags != coverageComps || 0xffffffff != coverage) {
+    if (!inout.isSolidWhite()) {
         return false;
     }
 
-    GrColor color = fColor;
-    uint32_t colorComps = kRGBA_GrColorComponentFlags;
+    inout.fColor = fColor;
+    inout.fValidFlags = kRGBA_GrColorComponentFlags;
+    inout.fIsSingleComponent = false;
     count = fColorStages.count();
     for (int i = 0; i < count; ++i) {
-        fColorStages[i].getEffect()->getConstantColorComponents(&color, &colorComps);
+        fColorStages[i].getProcessor()->computeInvariantOutput(&inout);
     }
 
     SkASSERT((NULL == solidColor) == (NULL == solidColorKnownComponents));
 
     GrBlendCoeff srcCoeff = fSrcBlendCoeff;
     GrBlendCoeff dstCoeff = fDstBlendCoeff;
-    GrSimplifyBlend(&srcCoeff, &dstCoeff, color, colorComps, 0, 0, 0);
+    GrSimplifyBlend(&srcCoeff, &dstCoeff, inout.fColor, inout.fValidFlags,
+                    0, 0, 0);
 
     bool opaque = kZero_GrBlendCoeff == dstCoeff && !GrBlendCoeffRefsDst(srcCoeff);
-    if (NULL != solidColor) {
+    if (solidColor) {
         if (opaque) {
             switch (srcCoeff) {
                 case kZero_GrBlendCoeff:
@@ -85,8 +89,8 @@ bool GrPaint::getOpaqueAndKnownColor(GrColor* solidColor,
                     break;
 
                 case kOne_GrBlendCoeff:
-                    *solidColor = color;
-                    *solidColorKnownComponents = colorComps;
+                    *solidColor = inout.fColor;
+                    *solidColorKnownComponents = inout.fValidFlags;
                     break;
 
                 // The src coeff should never refer to the src and if it refers to dst then opaque

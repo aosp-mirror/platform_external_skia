@@ -15,6 +15,7 @@
 
 class GrTextStrike;
 class GrPath;
+class GrPathRange;
 
 /*
  * This class implements text rendering using stencil and cover path rendering
@@ -23,47 +24,66 @@ class GrPath;
  */
 class GrStencilAndCoverTextContext : public GrTextContext {
 public:
-    GrStencilAndCoverTextContext(GrContext*, const SkDeviceProperties&);
+    static GrStencilAndCoverTextContext* Create(GrContext*, const SkDeviceProperties&);
+
     virtual ~GrStencilAndCoverTextContext();
 
-    virtual void drawText(const GrPaint&, const SkPaint&, const char text[],
-                          size_t byteLength,
-                          SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void drawPosText(const GrPaint&, const SkPaint&,
-                             const char text[], size_t byteLength,
-                             const SkScalar pos[], SkScalar constY,
-                             int scalarsPerPosition) SK_OVERRIDE;
+private:
+    static const int kGlyphBufferSize = 1024;
+
+    enum RenderMode {
+        /**
+         * This is the render mode used by drawText(), which is mainly used by
+         * the Skia unit tests. It tries match the other text backends exactly,
+         * with the exception of not implementing LCD text, and doing anti-
+         * aliasing with the built-in MSAA.
+         */
+        kMaxAccuracy_RenderMode,
+
+        /**
+         * This is the render mode used by drawPosText(). It ignores hinting and
+         * LCD text, even if the client provided positions for hinted glyphs,
+         * and renders from a canonically-sized, generic set of paths for the
+         * given typeface. In the future we should work out a system for the
+         * client to know it should not provide hinted glyph positions. This
+         * render mode also tries to use GPU stroking for fake bold, even when
+         * SK_USE_FREETYPE_EMBOLDEN is set.
+         */
+        kMaxPerformance_RenderMode,
+    };
+
+    GrDrawState::AutoRestoreEffects fStateRestore;
+    SkScalar                        fTextRatio;
+    float                           fTextInverseRatio;
+    SkGlyphCache*                   fGlyphCache;
+    GrPathRange*                    fGlyphs;
+    uint32_t                        fIndexBuffer[kGlyphBufferSize];
+    float                           fTransformBuffer[2 * kGlyphBufferSize];
+    GrDrawTarget::PathTransformType fTransformType;
+    int                             fPendingGlyphCount;
+    SkMatrix                        fContextInitialMatrix;
+    bool                            fNeedsDeviceSpaceGlyphs;
+
+    GrStencilAndCoverTextContext(GrContext*, const SkDeviceProperties&);
 
     virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
 
-private:
-    class GlyphPathRange;
-    static const int kGlyphBufferSize = 1024;
+    virtual void onDrawText(const GrPaint&, const SkPaint&, const char text[],
+                            size_t byteLength,
+                            SkScalar x, SkScalar y) SK_OVERRIDE;
+    virtual void onDrawPosText(const GrPaint&, const SkPaint&,
+                               const char text[], size_t byteLength,
+                               const SkScalar pos[], int scalarsPerPosition,
+                               const SkPoint& offset) SK_OVERRIDE;
 
-    enum DeviceSpaceGlyphsBehavior {
-        kUseIfNeeded_DeviceSpaceGlyphsBehavior,
-        kDoNotUse_DeviceSpaceGlyphsBehavior,
-    };
     void init(const GrPaint&, const SkPaint&, size_t textByteLength,
-              DeviceSpaceGlyphsBehavior, SkScalar textTranslateY = 0);
+              RenderMode, const SkPoint& textTranslate);
     void initGlyphs(SkGlyphCache* cache);
     void appendGlyph(uint16_t glyphID, float x);
     void appendGlyph(uint16_t glyphID, float x, float y);
     void flush();
     void finish();
 
-    GrDrawState::AutoRestoreEffects fStateRestore;
-    SkScalar fTextRatio;
-    float fTextInverseRatio;
-    SkStrokeRec fStroke;
-    SkGlyphCache* fGlyphCache;
-    GlyphPathRange* fGlyphs;
-    uint32_t fIndexBuffer[kGlyphBufferSize];
-    float fTransformBuffer[2 * kGlyphBufferSize];
-    GrDrawTarget::PathTransformType fTransformType;
-    int fPendingGlyphCount;
-    SkMatrix fContextInitialMatrix;
-    bool fNeedsDeviceSpaceGlyphs;
 };
 
 #endif

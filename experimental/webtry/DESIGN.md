@@ -89,7 +89,7 @@ The server is started and stopped via:
 
     sudo /etc/init.d/webtry [start|stop|restart]
 
-By sysv init only handles starting and stopping a program once, so we use
+But sysv init only handles starting and stopping a program once, so we use
 Monit to monitor the application and restart it if it crashes. The config
 is in:
 
@@ -128,7 +128,7 @@ To connect to the database from the skia-webtry-b server:
 
     $ mysql --host=173.194.83.52 --user=root --password
 
-Initial setup of the database, the user, and the only table:
+Initial setup of the database, the user, and the tables:
 
     CREATE DATABASE webtry;
     USE webtry;
@@ -144,6 +144,8 @@ Initial setup of the database, the user, and the only table:
       code               TEXT      DEFAULT ''                 NOT NULL,
       create_ts          TIMESTAMP DEFAULT CURRENT_TIMESTAMP  NOT NULL,
       hash               CHAR(64)  DEFAULT ''                 NOT NULL,
+      width              INTEGER   DEFAULT 256                NOT NULL,
+      height             INTEGER   DEFAULT 256                NOT NULL,
       source_image_id    INTEGER   DEFAULT 0                  NOT NULL,
       PRIMARY KEY(hash),
 
@@ -160,6 +162,8 @@ Initial setup of the database, the user, and the only table:
       name             CHAR(64)  DEFAULT ''                 NOT NULL,
       create_ts        TIMESTAMP DEFAULT CURRENT_TIMESTAMP  NOT NULL,
       hash             CHAR(64)  DEFAULT ''                 NOT NULL,
+      width            INTEGER   DEFAULT 256                NOT NULL,
+      height           INTEGER   DEFAULT 256                NOT NULL,
       source_image_id  INTEGER   DEFAULT 0                  NOT NULL,
       hidden           INTEGER   DEFAULT 0                  NOT NULL,
 
@@ -251,8 +255,8 @@ Squid
 
 Squid is configured to run on port 80 and run as an accelerator for the actual
 Go program which is running on port 8000. The config for the squid proxy is
-held in sys/webtry_squid, which is copied into place during installation and
-squid is kept running via monit.
+held in setup/sys/webtry_squid, which is copied into place during installation
+and squid is kept running via monit.
 
 Workspaces
 ----------

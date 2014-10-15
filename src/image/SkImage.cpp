@@ -29,14 +29,13 @@ uint32_t SkImage::NextUniqueID() {
     return id;
 }
 
-void SkImage::draw(SkCanvas* canvas, SkScalar x, SkScalar y,
-                   const SkPaint* paint) {
+void SkImage::draw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkPaint* paint) const {
     as_IB(this)->onDraw(canvas, x, y, paint);
 }
 
-void SkImage::draw(SkCanvas* canvas, const SkRect* src, const SkRect& dst,
-                   const SkPaint* paint) {
-    as_IB(this)->onDrawRectToRect(canvas, src, dst, paint);
+void SkImage::drawRect(SkCanvas* canvas, const SkRect* src, const SkRect& dst,
+                   const SkPaint* paint) const {
+    as_IB(this)->onDrawRect(canvas, src, dst, paint);
 }
 
 const void* SkImage::peekPixels(SkImageInfo* info, size_t* rowBytes) const {
@@ -95,9 +94,9 @@ SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool raster_canvas_supports(const SkImageInfo& info) {
-    switch (info.fColorType) {
+    switch (info.colorType()) {
         case kN32_SkColorType:
-            return kUnpremul_SkAlphaType != info.fAlphaType;
+            return kUnpremul_SkAlphaType != info.alphaType();
         case kRGB_565_SkColorType:
             return true;
         case kAlpha_8_SkColorType:
@@ -118,9 +117,8 @@ bool SkImage_Base::onReadPixels(SkBitmap* bitmap, const SkIRect& subset) const {
             return false;
         }
     } else {
-        const SkImageInfo info = SkImageInfo::MakeN32Premul(subset.width(), subset.height());
         SkBitmap tmp;
-        if (!tmp.allocPixels(info)) {
+        if (!tmp.tryAllocN32Pixels(subset.width(), subset.height())) {
             return false;
         }
         *bitmap = tmp;
@@ -137,6 +135,6 @@ bool SkImage_Base::onReadPixels(SkBitmap* bitmap, const SkIRect& subset) const {
     paint.setXfermodeMode(SkXfermode::kClear_Mode);
     canvas.drawRect(dstR, paint);
 
-    const_cast<SkImage_Base*>(this)->onDrawRectToRect(&canvas, &srcR, dstR, NULL);
+    canvas.drawImageRect(this, &srcR, dstR);
     return true;
 }

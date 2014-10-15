@@ -12,7 +12,6 @@
 #include "SkBitmap.h"
 #include "SkCanvas.h"
 #include "SkColor.h"
-#include "SkDeviceProperties.h"
 #include "SkImageFilter.h"
 
 class SkClipStack;
@@ -21,7 +20,7 @@ struct SkIRect;
 class SkMatrix;
 class SkMetaData;
 class SkRegion;
-
+struct SkDeviceProperties;
 class GrRenderTarget;
 
 class SK_API SkBaseDevice : public SkRefCnt {
@@ -32,23 +31,11 @@ public:
      *  Construct a new device.
     */
     SkBaseDevice();
-
-    /**
-     *  Construct a new device.
-    */
-    SkBaseDevice(const SkDeviceProperties& deviceProperties);
-
     virtual ~SkBaseDevice();
 
     SkBaseDevice* createCompatibleDevice(const SkImageInfo&);
 
     SkMetaData& getMetaData();
-
-    /** Return the image properties of the device. */
-    virtual const SkDeviceProperties& getDeviceProperties() const {
-        //Currently, all the properties are leaky.
-        return fLeakyProperties;
-    }
 
     /**
      *  Return ImageInfo for this device. If the canvas is not backed by pixels
@@ -138,8 +125,7 @@ protected:
     };
 
     struct TextFlags {
-        uint32_t            fFlags;     // SkPaint::getFlags()
-        SkPaint::Hinting    fHinting;
+        uint32_t    fFlags;     // SkPaint::getFlags()
     };
 
     /**
@@ -232,8 +218,8 @@ protected:
     virtual void drawText(const SkDraw&, const void* text, size_t len,
                           SkScalar x, SkScalar y, const SkPaint& paint) = 0;
     virtual void drawPosText(const SkDraw&, const void* text, size_t len,
-                             const SkScalar pos[], SkScalar constY,
-                             int scalarsPerPos, const SkPaint& paint) = 0;
+                             const SkScalar pos[], int scalarsPerPos,
+                             const SkPoint& offset, const SkPaint& paint) = 0;
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
                                 const SkPath& path, const SkMatrix* matrix,
                                 const SkPaint& paint) = 0;
@@ -242,8 +228,12 @@ protected:
                               const SkColor colors[], SkXfermode* xmode,
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) = 0;
+    // default implementation unrolls the blob runs.
+    virtual void drawTextBlob(const SkDraw&, const SkTextBlob*, SkScalar x, SkScalar y,
+                              const SkPaint& paint);
     // default implementation calls drawVertices
-    virtual void drawPatch(const SkDraw&, const SkPatch& patch, const SkPaint& paint);
+    virtual void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
+                           const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint);
     /** The SkDevice passed will be an SkDevice which was returned by a call to
         onCreateDevice on this device with kSaveLayer_Usage.
      */
@@ -298,7 +288,7 @@ protected:
 
 protected:
     // default impl returns NULL
-    virtual SkSurface* newSurface(const SkImageInfo&);
+    virtual SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&);
 
     // default impl returns NULL
     virtual const void* peekPixels(SkImageInfo*, size_t* rowBytes);
@@ -330,7 +320,9 @@ protected:
      *  If the device does handle a property, that property should be set to the identity value
      *  for that property, effectively making it non-leaky.
      */
-    SkDeviceProperties fLeakyProperties;
+    const SkDeviceProperties& getLeakyProperties() const {
+        return *fLeakyProperties;
+    }
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
@@ -348,7 +340,10 @@ protected:
      *  to perform some device-specific warm up tasks and then let SkCanvas
      *  perform the main rendering loop (by return false from here).
      */
-    virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture);
+    virtual bool EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
+                                          const SkPaint*);
+
+    void setPixelGeometry(SkPixelGeometry geo);
 
 private:
     friend class SkCanvas;
@@ -367,6 +362,8 @@ private:
     // TODO: move to SkBitmapDevice
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) {}
 
+    virtual bool forceConservativeRasterClip() const { return false; }
+
     // just called by SkCanvas when built as a layer
     void setOrigin(int x, int y) { fOrigin.set(x, y); }
     // just called by SkCanvas for saveLayer
@@ -380,10 +377,11 @@ private:
      */
     virtual void flush() {}
 
-    virtual SkImageFilter::UniqueIDCache* getImageFilterCache() { return NULL; }
+    virtual SkImageFilter::Cache* getImageFilterCache() { return NULL; }
 
     SkIPoint    fOrigin;
     SkMetaData* fMetaData;
+    SkDeviceProperties* fLeakyProperties;   // will always exist.
 
 #ifdef SK_DEBUG
     bool        fAttachedToCanvas;

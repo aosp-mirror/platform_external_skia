@@ -153,7 +153,7 @@ static void rand_bitmap_for_canvas(SkBitmap* bitmap) {
     do {
         info = SkImageInfo::Make(kBitmapSize, kBitmapSize, rand_colortype(),
                                  kPremul_SkAlphaType);
-    } while (!valid_for_raster_canvas(info) || !bitmap->allocPixels(info));
+    } while (!valid_for_raster_canvas(info) || !bitmap->tryAllocPixels(info));
 }
 
 static void make_g_bitmap(SkBitmap& bitmap) {
@@ -371,7 +371,9 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     {
         SkRTreeFactory factory;
         SkPictureRecorder recorder;
-        SkCanvas* recordingCanvas = recorder.beginRecording(kBitmapSize, kBitmapSize, &factory, 0);
+        SkCanvas* recordingCanvas = recorder.beginRecording(SkIntToScalar(kBitmapSize), 
+                                                            SkIntToScalar(kBitmapSize), 
+                                                            &factory, 0);
         drawSomething(recordingCanvas);
         SkAutoTUnref<SkPicture> pict(recorder.endRecording());
         filter = SkPictureImageFilter::Create(pict.get(), make_rect());
@@ -433,7 +435,7 @@ static void do_fuzz(SkCanvas* canvas) {
         printf("Fuzzing with %u\n", kSeed);
     }
     numFilters++;
-    if (NULL != filter) {
+    if (filter) {
         numValidFilters++;
     }
     printf("Filter no : %u. Valid filters so far : %u\r", numFilters, numValidFilters);

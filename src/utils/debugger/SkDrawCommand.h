@@ -343,12 +343,16 @@ private:
 
 class SkDrawPictureCommand : public SkDrawCommand {
 public:
-    SkDrawPictureCommand(const SkPicture* picture);
+    SkDrawPictureCommand(const SkPicture* picture, const SkMatrix* matrix, const SkPaint* paint);
     virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
     virtual bool render(SkCanvas* canvas) const SK_OVERRIDE;
 
 private:
     SkAutoTUnref<const SkPicture> fPicture;
+    SkMatrix                      fMatrix;
+    SkMatrix*                     fMatrixPtr;
+    SkPaint                       fPaint;
+    SkPaint*                      fPaintPtr;
 
     typedef SkDrawCommand INHERITED;
 };
@@ -428,6 +432,22 @@ private:
     size_t    fByteLength;
     SkScalar  fConstY;
     SkPaint   fPaint;
+
+    typedef SkDrawCommand INHERITED;
+};
+
+class SkDrawTextBlobCommand : public SkDrawCommand {
+public:
+    SkDrawTextBlobCommand(const SkTextBlob* blob, SkScalar x, SkScalar y, const SkPaint& paint);
+
+    virtual void execute(SkCanvas* canvas) SK_OVERRIDE;
+    virtual bool render(SkCanvas* canvas) const SK_OVERRIDE;
+
+private:
+    SkAutoTUnref<const SkTextBlob> fBlob;
+    SkScalar                       fXPos;
+    SkScalar                       fYPos;
+    SkPaint                        fPaint;
 
     typedef SkDrawCommand INHERITED;
 };

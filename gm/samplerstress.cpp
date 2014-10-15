@@ -8,12 +8,12 @@
 #include "gm.h"
 #include "SkCanvas.h"
 #include "SkShader.h"
-#include "SkStippleMaskFilter.h"
+#include "SkBlurMaskFilter.h"
 
 namespace skiagm {
 
 /**
- * Stress test the samplers by rendering a textured glyph with a mask and
+ * Stress test the GPU samplers by rendering a textured glyph with a mask and
  * an AA clip
  */
 class SamplerStressGM : public GM {
@@ -28,8 +28,12 @@ public:
     }
 
 protected:
+    virtual uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
     virtual SkString onShortName() {
-        return SkString("samplerstress");
+        return SkString("gpusamplerstress");
     }
 
     virtual SkISize onISize() {
@@ -67,7 +71,7 @@ protected:
     }
 
     void createShader() {
-        if (NULL != fShader.get()) {
+        if (fShader.get()) {
             return;
         }
 
@@ -79,11 +83,12 @@ protected:
     }
 
     void createMaskFilter() {
-        if (NULL != fMaskFilter.get()) {
+        if (fMaskFilter.get()) {
             return;
         }
 
-        fMaskFilter.reset(SkStippleMaskFilter::Create());
+        const SkScalar sigma = 1;
+        fMaskFilter.reset(SkBlurMaskFilter::Create(kNormal_SkBlurStyle, sigma));
     }
 
     virtual void onDraw(SkCanvas* canvas) {
@@ -97,7 +102,6 @@ protected:
         // stipple mask with a round rect soft clip
         SkPaint paint;
         paint.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(72);
         paint.setShader(fShader.get());
         paint.setMaskFilter(fMaskFilter.get());
@@ -124,7 +128,6 @@ protected:
         SkPaint paint2;
         paint2.setColor(SK_ColorBLACK);
         paint2.setAntiAlias(true);
-        sk_tool_utils::set_portable_typeface(&paint2);
         paint2.setTextSize(72);
         paint2.setStyle(SkPaint::kStroke_Style);
         paint2.setStrokeWidth(1);

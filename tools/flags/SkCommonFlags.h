@@ -20,11 +20,14 @@ DECLARE_string(match);
 DECLARE_bool(quiet);
 DECLARE_bool(resetGpuContext);
 DECLARE_bool(abandonGpuContext);
-DECLARE_bool(single);
 DECLARE_string(skps);
 DECLARE_int32(threads);
 DECLARE_string(resourcePath);
 DECLARE_bool(verbose);
 DECLARE_bool(veryVerbose);
+DECLARE_string(writePath);
+
+DECLARE_string(key);
+DECLARE_string(properties);
 
 #endif

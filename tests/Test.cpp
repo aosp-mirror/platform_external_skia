@@ -15,7 +15,7 @@
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
-#include "gl/SkNativeGLContext.h"
+#include "gl/SkGLContext.h"
 #else
 class GrContext;
 #endif
@@ -73,10 +73,6 @@ protected:
     // Proxy down to fReporter.  We assume these calls are threadsafe.
     virtual bool allowExtendedTest() const SK_OVERRIDE {
         return fReporter->allowExtendedTest();
-    }
-
-    virtual bool allowThreaded() const SK_OVERRIDE {
-        return fReporter->allowThreaded();
     }
 
     virtual void bumpTestCount() SK_OVERRIDE {

@@ -8,6 +8,7 @@
 #ifndef SkTextureCompressor_DEFINED
 #define SkTextureCompressor_DEFINED
 
+#include "SkBitmapProcShader.h"
 #include "SkImageInfo.h"
 
 class SkBitmap;
@@ -29,6 +30,19 @@ namespace SkTextureCompressor {
                             //    bitmap to insert alphas.
 
         // Multi-purpose formats
+        kASTC_4x4_Format,   // 4x4 blocks, no compression, decompresses RGBA
+        kASTC_5x4_Format,   // 5x4 blocks, no compression, decompresses RGBA
+        kASTC_5x5_Format,   // 5x5 blocks, no compression, decompresses RGBA
+        kASTC_6x5_Format,   // 6x5 blocks, no compression, decompresses RGBA
+        kASTC_6x6_Format,   // 6x6 blocks, no compression, decompresses RGBA
+        kASTC_8x5_Format,   // 8x5 blocks, no compression, decompresses RGBA
+        kASTC_8x6_Format,   // 8x6 blocks, no compression, decompresses RGBA
+        kASTC_8x8_Format,   // 8x8 blocks, no compression, decompresses RGBA
+        kASTC_10x5_Format,  // 10x5 blocks, no compression, decompresses RGBA
+        kASTC_10x6_Format,  // 10x6 blocks, no compression, decompresses RGBA
+        kASTC_10x8_Format,  // 10x8 blocks, no compression, decompresses RGBA
+        kASTC_10x10_Format, // 10x10 blocks, no compression, decompresses RGBA
+        kASTC_12x10_Format, // 12x10 blocks, no compression, decompresses RGBA
         kASTC_12x12_Format, // 12x12 blocks, compresses A8, decompresses RGBA
 
         kLast_Format = kASTC_12x12_Format
@@ -73,11 +87,24 @@ namespace SkTextureCompressor {
     typedef bool (*CompressionProc)(uint8_t* dst, const uint8_t* src,
                                     int width, int height, int rowBytes);
 
+    // Returns true if there exists a blitter for the specified format.
+    inline bool ExistsBlitterForFormat(Format format) {
+        switch (format) {
+            case kLATC_Format:
+            case kR11_EAC_Format:
+            case kASTC_12x12_Format:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
     // Returns the blitter for the given compression format. Note, the blitter
     // is intended to be used with the proper input. I.e. if you try to blit
     // RGB source data into an R11 EAC texture, you're gonna have a bad time.
     SkBlitter* CreateBlitterForFormat(int width, int height, void* compressedBuffer,
-                                      Format format);
+                                      SkTBlitterAllocator *allocator, Format format);
 
     // Returns the desired dimensions of the block size for the given format. These dimensions
     // don't necessarily correspond to the specification's dimensions, since there may

@@ -31,7 +31,8 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBitmapProcShader)
 
 
-    bool asNewEffect(GrContext*, const SkPaint&, const SkMatrix*, GrColor*, GrEffect**)
+    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                             GrFragmentProcessor**)
             const SK_OVERRIDE;
 
     class BitmapProcShaderContext : public SkShader::Context {
@@ -55,7 +56,9 @@ public:
     };
 
 protected:
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     SkBitmapProcShader(SkReadBuffer& );
+#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     virtual Context* onCreateContext(const ContextRec&, void* storage) const SK_OVERRIDE;
 

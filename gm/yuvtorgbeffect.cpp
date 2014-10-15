@@ -35,7 +35,7 @@ protected:
     }
 
     virtual SkISize onISize() SK_OVERRIDE {
-        return SkISize::Make(334, 64);
+        return SkISize::Make(334, 128);
     }
 
     virtual uint32_t onGetFlags() const SK_OVERRIDE {
@@ -83,47 +83,50 @@ protected:
 
         GrDrawState* drawState = tt.target()->drawState();
 
-        GrTexture* texture[3];
-        texture[0] = GrLockAndRefCachedBitmapTexture(context, fBmp[0], NULL);
-        texture[1] = GrLockAndRefCachedBitmapTexture(context, fBmp[1], NULL);
-        texture[2] = GrLockAndRefCachedBitmapTexture(context, fBmp[2], NULL);
-        if ((NULL == texture[0]) || (NULL == texture[1]) || (NULL == texture[2])) {
+        SkAutoTUnref<GrTexture> texture[3];
+        texture[0].reset(GrRefCachedBitmapTexture(context, fBmp[0], NULL));
+        texture[1].reset(GrRefCachedBitmapTexture(context, fBmp[1], NULL));
+        texture[2].reset(GrRefCachedBitmapTexture(context, fBmp[2], NULL));
+
+        if (!texture[0] || !texture[1] || !texture[2]) {
             return;
         }
 
         static const SkScalar kDrawPad = 10.f;
         static const SkScalar kTestPad = 10.f;
+        static const SkScalar kColorSpaceOffset = 64.f;
 
-        SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fBmp[0].width()),
-                                           SkIntToScalar(fBmp[0].height()));
-        renderRect.outset(kDrawPad, kDrawPad);
+        for (int space = kJPEG_SkYUVColorSpace; space <= kLastEnum_SkYUVColorSpace;
+             ++space) {
+            SkRect renderRect = SkRect::MakeWH(SkIntToScalar(fBmp[0].width()),
+                                               SkIntToScalar(fBmp[0].height()));
+            renderRect.outset(kDrawPad, kDrawPad);
 
-        SkScalar y = kDrawPad + kTestPad;
-        SkScalar x = kDrawPad + kTestPad;
+            SkScalar y = kDrawPad + kTestPad + space * kColorSpaceOffset;
+            SkScalar x = kDrawPad + kTestPad;
 
-        const int indices[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+            const int indices[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+                                       {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
 
-        for (int i = 0; i < 6; ++i) {
-            SkAutoTUnref<GrEffect> effect(
-                        GrYUVtoRGBEffect::Create(texture[indices[i][0]],
-                                                 texture[indices[i][1]],
-                                                 texture[indices[i][2]]));
-            if (effect) {
-                SkMatrix viewMatrix;
-                viewMatrix.setTranslate(x, y);
-                drawState->reset(viewMatrix);
-                drawState->setRenderTarget(rt);
-                drawState->setColor(0xffffffff);
-                drawState->addColorEffect(effect, 1);
-                tt.target()->drawSimpleRect(renderRect);
+            for (int i = 0; i < 6; ++i) {
+                SkAutoTUnref<GrFragmentProcessor> fp(
+                            GrYUVtoRGBEffect::Create(texture[indices[i][0]],
+                                                    texture[indices[i][1]],
+                                                    texture[indices[i][2]],
+                                                    static_cast<SkYUVColorSpace>(space)));
+                if (fp) {
+                    SkMatrix viewMatrix;
+                    viewMatrix.setTranslate(x, y);
+                    drawState->reset(viewMatrix);
+                    drawState->setRenderTarget(rt);
+                    drawState->setColor(0xffffffff);
+                    drawState->addColorProcessor(fp);
+                    tt.target()->drawSimpleRect(renderRect);
+                }
+                x += renderRect.width() + kTestPad;
             }
-            x += renderRect.width() + kTestPad;
         }
-
-        GrUnlockAndUnrefCachedBitmapTexture(texture[0]);
-        GrUnlockAndUnrefCachedBitmapTexture(texture[1]);
-        GrUnlockAndUnrefCachedBitmapTexture(texture[2]);
-    }
+     }
 
 private:
     SkBitmap fBmp[3];

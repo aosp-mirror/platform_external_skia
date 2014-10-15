@@ -4,28 +4,28 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#include "gl/builders/GrGLProgramBuilder.h"
 #include "GrMatrixConvolutionEffect.h"
-#include "gl/GrGLShaderBuilder.h"
-#include "gl/GrGLEffect.h"
+#include "gl/GrGLProcessor.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLTexture.h"
-#include "GrTBackendEffectFactory.h"
+#include "GrTBackendProcessorFactory.h"
 
-class GrGLMatrixConvolutionEffect : public GrGLEffect {
+class GrGLMatrixConvolutionEffect : public GrGLFragmentProcessor {
 public:
-    GrGLMatrixConvolutionEffect(const GrBackendEffectFactory& factory,
-                                const GrDrawEffect& effect);
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    GrGLMatrixConvolutionEffect(const GrBackendProcessorFactory& factory,
+                                const GrProcessor&);
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
 
-    static inline void GenKey(const GrDrawEffect&, const GrGLCaps&, GrEffectKeyBuilder*);
+    static inline void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder*);
 
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
 private:
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
@@ -40,40 +40,39 @@ private:
     UniformHandle               fBiasUni;
     GrTextureDomain::GLDomain   fDomain;
 
-    typedef GrGLEffect INHERITED;
+    typedef GrGLFragmentProcessor INHERITED;
 };
 
-GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrBackendEffectFactory& factory,
-                                                         const GrDrawEffect& drawEffect)
+GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrBackendProcessorFactory& factory,
+                                                         const GrProcessor& processor)
     : INHERITED(factory) {
-    const GrMatrixConvolutionEffect& m = drawEffect.castEffect<GrMatrixConvolutionEffect>();
+    const GrMatrixConvolutionEffect& m = processor.cast<GrMatrixConvolutionEffect>();
     fKernelSize = m.kernelSize();
     fConvolveAlpha = m.convolveAlpha();
 }
 
-void GrGLMatrixConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
-                                           const GrDrawEffect& drawEffect,
-                                           const GrEffectKey& key,
+void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
+                                           const GrFragmentProcessor& fp,
+                                           const GrProcessorKey& key,
                                            const char* outputColor,
                                            const char* inputColor,
                                            const TransformedCoordsArray& coords,
                                            const TextureSamplerArray& samplers) {
-    sk_ignore_unused_variable(inputColor);
-    const GrTextureDomain& domain = drawEffect.castEffect<GrMatrixConvolutionEffect>().domain();
-    SkString coords2D = builder->ensureFSCoords2D(coords, 0);
-    fBoundsUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    const GrTextureDomain& domain = fp.cast<GrMatrixConvolutionEffect>().domain();
+
+    fBoundsUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                      kVec4f_GrSLType, "Bounds");
-    fImageIncrementUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fImageIncrementUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                              kVec2f_GrSLType, "ImageIncrement");
-    fKernelUni = builder->addUniformArray(GrGLShaderBuilder::kFragment_Visibility,
+    fKernelUni = builder->addUniformArray(GrGLProgramBuilder::kFragment_Visibility,
                                           kFloat_GrSLType,
                                           "Kernel",
                                           fKernelSize.width() * fKernelSize.height());
-    fKernelOffsetUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fKernelOffsetUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                            kVec2f_GrSLType, "KernelOffset");
-    fGainUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fGainUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                    kFloat_GrSLType, "Gain");
-    fBiasUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fBiasUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                    kFloat_GrSLType, "Bias");
 
     const char* kernelOffset = builder->getUniformCStr(fKernelOffsetUni);
@@ -84,39 +83,45 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLShaderBuilder* builder,
     int kWidth = fKernelSize.width();
     int kHeight = fKernelSize.height();
 
-    builder->fsCodeAppend("\t\tvec4 sum = vec4(0, 0, 0, 0);\n");
-    builder->fsCodeAppendf("\t\tvec2 coord = %s - %s * %s;\n", coords2D.c_str(), kernelOffset,
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
+    fsBuilder->codeAppend("vec4 sum = vec4(0, 0, 0, 0);");
+    fsBuilder->codeAppendf("vec2 coord = %s - %s * %s;", coords2D.c_str(), kernelOffset,
                            imgInc);
-    builder->fsCodeAppend("\t\tvec4 c;\n");
+    fsBuilder->codeAppend("vec4 c;");
 
     for (int y = 0; y < kHeight; y++) {
         for (int x = 0; x < kWidth; x++) {
-            GrGLShaderBuilder::FSBlock block(builder);
-            builder->fsCodeAppendf("\t\tfloat k = %s[%d * %d + %d];\n", kernel, y, kWidth, x);
+            GrGLShaderBuilder::ShaderBlock block(fsBuilder);
+            fsBuilder->codeAppendf("float k = %s[%d * %d + %d];", kernel, y, kWidth, x);
             SkString coord;
             coord.printf("coord + vec2(%d, %d) * %s", x, y, imgInc);
-            fDomain.sampleTexture(builder, domain, "c", coord, samplers[0]);
+            fDomain.sampleTexture(fsBuilder, domain, "c", coord, samplers[0]);
             if (!fConvolveAlpha) {
-                builder->fsCodeAppend("\t\tc.rgb /= c.a;\n");
+                fsBuilder->codeAppend("c.rgb /= c.a;");
             }
-            builder->fsCodeAppend("\t\tsum += c * k;\n");
+            fsBuilder->codeAppend("sum += c * k;");
         }
     }
     if (fConvolveAlpha) {
-        builder->fsCodeAppendf("\t\t%s = sum * %s + %s;\n", outputColor, gain, bias);
-        builder->fsCodeAppendf("\t\t%s.rgb = clamp(%s.rgb, 0.0, %s.a);\n",
+        fsBuilder->codeAppendf("%s = sum * %s + %s;", outputColor, gain, bias);
+        fsBuilder->codeAppendf("%s.rgb = clamp(%s.rgb, 0.0, %s.a);",
                                outputColor, outputColor, outputColor);
     } else {
-        fDomain.sampleTexture(builder, domain, "c", coords2D, samplers[0]);
-        builder->fsCodeAppendf("\t\t%s.a = c.a;\n", outputColor);
-        builder->fsCodeAppendf("\t\t%s.rgb = sum.rgb * %s + %s;\n", outputColor, gain, bias);
-        builder->fsCodeAppendf("\t\t%s.rgb *= %s.a;\n", outputColor, outputColor);
+        fDomain.sampleTexture(fsBuilder, domain, "c", coords2D, samplers[0]);
+        fsBuilder->codeAppendf("%s.a = c.a;", outputColor);
+        fsBuilder->codeAppendf("%s.rgb = sum.rgb * %s + %s;", outputColor, gain, bias);
+        fsBuilder->codeAppendf("%s.rgb *= %s.a;", outputColor, outputColor);
     }
+
+    SkString modulate;
+    GrGLSLMulVarBy4f(&modulate, outputColor, inputColor);
+    fsBuilder->codeAppend(modulate.c_str());
 }
 
-void GrGLMatrixConvolutionEffect::GenKey(const GrDrawEffect& drawEffect,
-                                         const GrGLCaps&, GrEffectKeyBuilder* b) {
-    const GrMatrixConvolutionEffect& m = drawEffect.castEffect<GrMatrixConvolutionEffect>();
+void GrGLMatrixConvolutionEffect::GenKey(const GrProcessor& processor,
+                                         const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    const GrMatrixConvolutionEffect& m = processor.cast<GrMatrixConvolutionEffect>();
     SkASSERT(m.kernelSize().width() <= 0x7FFF && m.kernelSize().height() <= 0xFFFF);
     uint32_t key = m.kernelSize().width() << 16 | m.kernelSize().height();
     key |= m.convolveAlpha() ? 1 << 31 : 0;
@@ -125,8 +130,8 @@ void GrGLMatrixConvolutionEffect::GenKey(const GrDrawEffect& drawEffect,
 }
 
 void GrGLMatrixConvolutionEffect::setData(const GrGLProgramDataManager& pdman,
-                                          const GrDrawEffect& drawEffect) {
-    const GrMatrixConvolutionEffect& conv = drawEffect.castEffect<GrMatrixConvolutionEffect>();
+                                          const GrProcessor& processor) {
+    const GrMatrixConvolutionEffect& conv = processor.cast<GrMatrixConvolutionEffect>();
     GrTexture& texture = *conv.texture(0);
     // the code we generated was for a specific kernel size
     SkASSERT(conv.kernelSize() == fKernelSize);
@@ -151,31 +156,28 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
                                                      const SkIPoint& kernelOffset,
                                                      GrTextureDomain::Mode tileMode,
                                                      bool convolveAlpha)
-  : INHERITED(texture, MakeDivByTextureWHMatrix(texture)),
+  : INHERITED(texture, GrCoordTransform::MakeDivByTextureWHMatrix(texture)),
     fKernelSize(kernelSize),
     fGain(SkScalarToFloat(gain)),
     fBias(SkScalarToFloat(bias) / 255.0f),
     fConvolveAlpha(convolveAlpha),
     fDomain(GrTextureDomain::MakeTexelDomain(texture, bounds), tileMode) {
-    fKernel = new float[kernelSize.width() * kernelSize.height()];
     for (int i = 0; i < kernelSize.width() * kernelSize.height(); i++) {
         fKernel[i] = SkScalarToFloat(kernel[i]);
     }
     fKernelOffset[0] = static_cast<float>(kernelOffset.x());
     fKernelOffset[1] = static_cast<float>(kernelOffset.y());
-    this->setWillNotUseInputColor();
 }
 
 GrMatrixConvolutionEffect::~GrMatrixConvolutionEffect() {
-    delete[] fKernel;
 }
 
-const GrBackendEffectFactory& GrMatrixConvolutionEffect::getFactory() const {
-    return GrTBackendEffectFactory<GrMatrixConvolutionEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& GrMatrixConvolutionEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<GrMatrixConvolutionEffect>::getInstance();
 }
 
-bool GrMatrixConvolutionEffect::onIsEqual(const GrEffect& sBase) const {
-    const GrMatrixConvolutionEffect& s = CastEffect<GrMatrixConvolutionEffect>(sBase);
+bool GrMatrixConvolutionEffect::onIsEqual(const GrProcessor& sBase) const {
+    const GrMatrixConvolutionEffect& s = sBase.cast<GrMatrixConvolutionEffect>();
     return this->texture(0) == s.texture(0) &&
            fKernelSize == s.kernelSize() &&
            !memcmp(fKernel, s.kernel(),
@@ -187,14 +189,63 @@ bool GrMatrixConvolutionEffect::onIsEqual(const GrEffect& sBase) const {
            fDomain == s.domain();
 }
 
-GR_DEFINE_EFFECT_TEST(GrMatrixConvolutionEffect);
+// Static function to create a 2D convolution
+GrFragmentProcessor*
+GrMatrixConvolutionEffect::CreateGaussian(GrTexture* texture,
+                                          const SkIRect& bounds,
+                                          const SkISize& kernelSize,
+                                          SkScalar gain,
+                                          SkScalar bias,
+                                          const SkIPoint& kernelOffset,
+                                          GrTextureDomain::Mode tileMode,
+                                          bool convolveAlpha,
+                                          SkScalar sigmaX,
+                                          SkScalar sigmaY) {
+    float kernel[MAX_KERNEL_SIZE];
+    int width = kernelSize.width();
+    int height = kernelSize.height();
+    SkASSERT(width * height <= MAX_KERNEL_SIZE);
+    float sum = 0.0f;
+    float sigmaXDenom = 1.0f / (2.0f * SkScalarToFloat(SkScalarSquare(sigmaX)));
+    float sigmaYDenom = 1.0f / (2.0f * SkScalarToFloat(SkScalarSquare(sigmaY)));
+    int xRadius = width / 2;
+    int yRadius = height / 2;
+    for (int x = 0; x < width; x++) {
+      float xTerm = static_cast<float>(x - xRadius);
+      xTerm = xTerm * xTerm * sigmaXDenom;
+      for (int y = 0; y < height; y++) {
+        float yTerm = static_cast<float>(y - yRadius);
+        float xyTerm = sk_float_exp(-(xTerm + yTerm * yTerm * sigmaYDenom));
+        // Note that the constant term (1/(sqrt(2*pi*sigma^2)) of the Gaussian
+       // is dropped here, since we renormalize the kernel below.
+        kernel[y * width + x] = xyTerm;
+        sum += xyTerm;
+      }
+    }
+    // Normalize the kernel
+    float scale = 1.0f / sum;
+    for (int i = 0; i < width * height; ++i) {
+        kernel[i] *= scale;
+    }
+    return SkNEW_ARGS(GrMatrixConvolutionEffect, (texture,
+                                                  bounds,
+                                                  kernelSize,
+                                                  kernel,
+                                                  gain,
+                                                  bias,
+                                                  kernelOffset,
+                                                  tileMode,
+                                                  convolveAlpha));
+}
 
-GrEffect* GrMatrixConvolutionEffect::TestCreate(SkRandom* random,
-                                                GrContext* context,
-                                                const GrDrawTargetCaps&,
-                                                GrTexture* textures[]) {
-    int texIdx = random->nextBool() ? GrEffectUnitTest::kSkiaPMTextureIdx :
-                                      GrEffectUnitTest::kAlphaTextureIdx;
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMatrixConvolutionEffect);
+
+GrFragmentProcessor* GrMatrixConvolutionEffect::TestCreate(SkRandom* random,
+                                                           GrContext* context,
+                                                           const GrDrawTargetCaps&,
+                                                           GrTexture* textures[]) {
+    int texIdx = random->nextBool() ? GrProcessorUnitTest::kSkiaPMTextureIdx :
+                                      GrProcessorUnitTest::kAlphaTextureIdx;
     int width = random->nextRangeU(1, MAX_KERNEL_SIZE);
     int height = random->nextRangeU(1, MAX_KERNEL_SIZE / width);
     SkISize kernelSize = SkISize::Make(width, height);

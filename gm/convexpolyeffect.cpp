@@ -22,15 +22,9 @@
 
 #include "effects/GrConvexPolyEffect.h"
 
-namespace {
-extern const GrVertexAttrib kAttribs[] = {
-    {kVec2f_GrVertexAttribType, 0, kPosition_GrVertexAttribBinding},
-};
-}
-
 namespace skiagm {
 /**
- * This GM directly exercises a GrEffect that draws convex polygons.
+ * This GM directly exercises a GrProcessor that draws convex polygons.
  */
 class ConvexPolyEffect : public GM {
 public:
@@ -114,12 +108,12 @@ protected:
 
         SkScalar y = 0;
         for (SkTLList<SkPath>::Iter iter(fPaths, SkTLList<SkPath>::Iter::kHead_IterStart);
-             NULL != iter.get();
+             iter.get();
              iter.next()) {
             const SkPath* path = iter.get();
             SkScalar x = 0;
 
-            for (int et = 0; et < kGrEffectEdgeTypeCnt; ++et) {
+            for (int et = 0; et < kGrProcessorEdgeTypeCnt; ++et) {
                 GrTestTarget tt;
                 context->getTestTarget(&tt);
                 if (NULL == tt.target()) {
@@ -127,19 +121,18 @@ protected:
                     return;
                 }
                 GrDrawState* drawState = tt.target()->drawState();
-                drawState->setVertexAttribs<kAttribs>(SK_ARRAY_COUNT(kAttribs));
 
                 SkMatrix m;
                 SkPath p;
                 m.setTranslate(x, y);
                 path->transform(m, &p);
 
-                GrEffectEdgeType edgeType = (GrEffectEdgeType) et;
-                SkAutoTUnref<GrEffect> effect(GrConvexPolyEffect::Create(edgeType, p));
-                if (!effect) {
+                GrPrimitiveEdgeType edgeType = (GrPrimitiveEdgeType) et;
+                SkAutoTUnref<GrFragmentProcessor> fp(GrConvexPolyEffect::Create(edgeType, p));
+                if (!fp) {
                     continue;
                 }
-                drawState->addCoverageEffect(effect, 1);
+                drawState->addCoverageProcessor(fp);
                 drawState->setIdentityViewMatrix();
                 drawState->setRenderTarget(rt);
                 drawState->setColor(0xff000000);
@@ -172,12 +165,12 @@ protected:
         }
 
         for (SkTLList<SkRect>::Iter iter(fRects, SkTLList<SkRect>::Iter::kHead_IterStart);
-             NULL != iter.get();
+             iter.get();
              iter.next()) {
 
             SkScalar x = 0;
 
-            for (int et = 0; et < kGrEffectEdgeTypeCnt; ++et) {
+            for (int et = 0; et < kGrProcessorEdgeTypeCnt; ++et) {
                 GrTestTarget tt;
                 context->getTestTarget(&tt);
                 if (NULL == tt.target()) {
@@ -186,15 +179,14 @@ protected:
                 }
                 SkRect rect = *iter.get();
                 rect.offset(x, y);
-                GrEffectEdgeType edgeType = (GrEffectEdgeType) et;
-                SkAutoTUnref<GrEffect> effect(GrConvexPolyEffect::Create(edgeType, rect));
-                if (!effect) {
+                GrPrimitiveEdgeType edgeType = (GrPrimitiveEdgeType) et;
+                SkAutoTUnref<GrFragmentProcessor> fp(GrConvexPolyEffect::Create(edgeType, rect));
+                if (!fp) {
                     continue;
                 }
 
                 GrDrawState* drawState = tt.target()->drawState();
-                drawState->setVertexAttribs<kAttribs>(SK_ARRAY_COUNT(kAttribs));
-                drawState->addCoverageEffect(effect, 1);
+                drawState->addCoverageProcessor(fp);
                 drawState->setIdentityViewMatrix();
                 drawState->setRenderTarget(rt);
                 drawState->setColor(0xff000000);

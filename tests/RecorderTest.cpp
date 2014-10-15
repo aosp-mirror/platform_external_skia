@@ -7,6 +7,7 @@
 
 #include "Test.h"
 
+#include "SkPictureRecorder.h"
 #include "SkRecord.h"
 #include "SkRecorder.h"
 #include "SkRecords.h"
@@ -48,6 +49,39 @@ DEF_TEST(Recorder, r) {
     REPORTER_ASSERT(r, 1 == tally.count<SkRecords::DrawRect>());
 }
 
+// All of Skia will work fine without support for comment groups, but
+// Chrome's inspector can break.  This serves as a simple regression test.
+DEF_TEST(Recorder_CommentGroups, r) {
+    SkRecord record;
+    SkRecorder recorder(&record, 1920, 1080);
+
+    recorder.beginCommentGroup("test");
+        recorder.addComment("foo", "bar");
+        recorder.addComment("baz", "quux");
+    recorder.endCommentGroup();
+
+    Tally tally;
+    tally.apply(record);
+
+    REPORTER_ASSERT(r, 1 == tally.count<SkRecords::BeginCommentGroup>());
+    REPORTER_ASSERT(r, 2 == tally.count<SkRecords::AddComment>());
+    REPORTER_ASSERT(r, 1 == tally.count<SkRecords::EndCommentGroup>());
+}
+
+// DrawData is similar to comment groups.  It doesn't affect drawing, but
+// it's a pass-through we provide to the client.  Again, a simple reg. test.
+DEF_TEST(Recorder_DrawData, r) {
+    SkRecord record;
+    SkRecorder recorder(&record, 100, 100);
+
+    const char* data = "This sure is some data, eh?";
+    recorder.drawData(data, strlen(data));
+
+    Tally tally;
+    tally.apply(record);
+    REPORTER_ASSERT(r, 1 == tally.count<SkRecords::DrawData>());
+}
+
 // Regression test for leaking refs held by optional arguments.
 DEF_TEST(Recorder_RefLeaking, r) {
     // We use SaveLayer to test:
@@ -67,3 +101,52 @@ DEF_TEST(Recorder_RefLeaking, r) {
     }
     REPORTER_ASSERT(r, paint.getShader()->unique());
 }
+
+DEF_TEST(Recorder_RefPictures, r) {
+    SkAutoTUnref<SkPicture> pic;
+
+    {
+        SkPictureRecorder pr;
+        SkCanvas* canvas = pr.beginRecording(100, 100);
+        canvas->drawColor(SK_ColorRED);
+        pic.reset(pr.endRecording());
+    }
+    REPORTER_ASSERT(r, pic->unique());
+
+    {
+        SkRecord record;
+        SkRecorder recorder(&record, 100, 100);
+        recorder.drawPicture(pic);
+        // the recorder should now also be an owner
+        REPORTER_ASSERT(r, !pic->unique());
+    }
+    // the recorder destructor should have released us (back to unique)
+    REPORTER_ASSERT(r, pic->unique());
+}
+
+DEF_TEST(Recorder_IsDrawingToLayer, r) {
+    SkRecord record;
+    SkRecorder recorder(&record, 100, 100);
+
+    // We'll save, saveLayer, save, and saveLayer, then restore them all,
+    // checking that isDrawingToLayer() is correct at each step.
+
+    REPORTER_ASSERT(r, !recorder.isDrawingToLayer());
+    recorder.save();
+        REPORTER_ASSERT(r, !recorder.isDrawingToLayer());
+        recorder.saveLayer(NULL, NULL);
+            REPORTER_ASSERT(r, recorder.isDrawingToLayer());
+            recorder.save();
+                REPORTER_ASSERT(r, recorder.isDrawingToLayer());
+                recorder.saveLayer(NULL, NULL);
+                    REPORTER_ASSERT(r, recorder.isDrawingToLayer());
+                recorder.restore();
+                REPORTER_ASSERT(r, recorder.isDrawingToLayer());
+            recorder.restore();
+            REPORTER_ASSERT(r, recorder.isDrawingToLayer());
+        recorder.restore();
+        REPORTER_ASSERT(r, !recorder.isDrawingToLayer());
+    recorder.restore();
+    REPORTER_ASSERT(r, !recorder.isDrawingToLayer());
+}
+

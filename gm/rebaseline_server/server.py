@@ -23,13 +23,15 @@ import subprocess
 import thread
 import threading
 import time
+import urllib
 import urlparse
 
 # Must fix up PYTHONPATH before importing from within Skia
-import fix_pythonpath  # pylint: disable=W0611
+import rs_fixpypath  # pylint: disable=W0611
 
 # Imports from within Skia
 from py.utils import gs_utils
+import buildbot_globals
 import gm_json
 
 # Imports from local dir
@@ -46,6 +48,8 @@ import download_actuals
 import imagediffdb
 import imagepairset
 import results as results_mod
+import writable_expectations as writable_expectations_mod
+
 
 PATHSPLIT_RE = re.compile('/([^/]+)/(.+)')
 
@@ -65,6 +69,9 @@ MIME_TYPE_MAP = {'': 'application/octet-stream',
 KEY__EDITS__MODIFICATIONS = 'modifications'
 KEY__EDITS__OLD_RESULTS_HASH = 'oldResultsHash'
 KEY__EDITS__OLD_RESULTS_TYPE = 'oldResultsType'
+KEY__LIVE_EDITS__MODIFICATIONS = 'modifications'
+KEY__LIVE_EDITS__SET_A_DESCRIPTIONS = 'setA'
+KEY__LIVE_EDITS__SET_B_DESCRIPTIONS = 'setB'
 
 DEFAULT_ACTUALS_DIR = results_mod.DEFAULT_ACTUALS_DIR
 DEFAULT_GM_SUMMARIES_BUCKET = download_actuals.GM_SUMMARIES_BUCKET
@@ -88,23 +95,39 @@ GET__PRECOMPUTED_RESULTS = 'results'
 GET__PREFETCH_RESULTS = 'prefetch'
 GET__STATIC_CONTENTS = 'static'
 
-# Parameters we use within do_GET_live_results()
+# Parameters we use within do_GET_live_results() and do_GET_prefetch_results()
+LIVE_PARAM__DOWNLOAD_ONLY_DIFFERING = 'downloadOnlyDifferingImages'
 LIVE_PARAM__SET_A_DIR = 'setADir'
+LIVE_PARAM__SET_A_SECTION = 'setASection'
 LIVE_PARAM__SET_B_DIR = 'setBDir'
-
-# Parameters we use within do_GET_prefetch_results()
-PREFETCH_PARAM__DOWNLOAD_ONLY_DIFFERING = 'downloadOnlyDifferingImages'
+LIVE_PARAM__SET_B_SECTION = 'setBSection'
 
 # How often (in seconds) clients should reload while waiting for initial
 # results to load.
 RELOAD_INTERVAL_UNTIL_READY = 10
 
-SUMMARY_TYPES = [
+_GM_SUMMARY_TYPES = [
     results_mod.KEY__HEADER__RESULTS_FAILURES,
     results_mod.KEY__HEADER__RESULTS_ALL,
 ]
 # If --compare-configs is specified, compare these configs.
 CONFIG_PAIRS_TO_COMPARE = [('8888', 'gpu')]
+
+# SKP results that are available to compare.
+#
+# TODO(stephana): We don't actually want to maintain this list of platforms.
+# We are just putting them in here for now, as "convenience" links for testing
+# SKP diffs.
+# Ultimately, we will depend on buildbot steps linking to their own diffs on
+# the shared rebaseline_server instance.
+_SKP_BASE_GS_URL = 'gs://' + buildbot_globals.Get('skp_summaries_bucket')
+_SKP_BASE_REPO_URL = (
+    compare_rendered_pictures.REPO_URL_PREFIX + posixpath.join(
+        'expectations', 'skp'))
+_SKP_PLATFORMS = [
+    'Test-Mac10.8-MacMini4.1-GeForce320M-x86_64-Debug',
+    'Test-Ubuntu12-ShuttleA-GTX660-x86-Release',
+]
 
 _HTTP_HEADER_CONTENT_LENGTH = 'Content-Length'
 _HTTP_HEADER_CONTENT_TYPE = 'Content-Type'
@@ -170,22 +193,25 @@ def _create_index(file_path, config_pairs):
         '<!DOCTYPE html><html>'
         '<head><title>rebaseline_server</title></head>'
         '<body><ul>')
-    if SUMMARY_TYPES:
-      file_handle.write('<li>Expectations vs Actuals</li><ul>')
-      for summary_type in SUMMARY_TYPES:
+
+    if _GM_SUMMARY_TYPES:
+      file_handle.write('<li>GM Expectations vs Actuals</li><ul>')
+      for summary_type in _GM_SUMMARY_TYPES:
         file_handle.write(
-            '<li><a href="/{static_directive}/view.html#/view.html?'
+            '\n<li><a href="/{static_directive}/view.html#/view.html?'
             'resultsToLoad=/{results_directive}/{summary_type}">'
             '{summary_type}</a></li>'.format(
                 results_directive=GET__PRECOMPUTED_RESULTS,
                 static_directive=GET__STATIC_CONTENTS,
                 summary_type=summary_type))
       file_handle.write('</ul>')
+
     if config_pairs:
-      file_handle.write('<li>Comparing configs within actual results</li><ul>')
+      file_handle.write(
+          '\n<li>Comparing configs within actual GM results</li><ul>')
       for config_pair in config_pairs:
         file_handle.write('<li>%s vs %s:' % config_pair)
-        for summary_type in SUMMARY_TYPES:
+        for summary_type in _GM_SUMMARY_TYPES:
           file_handle.write(
               ' <a href="/%s/view.html#/view.html?'
               'resultsToLoad=/%s/%s/%s-vs-%s_%s.json">%s</a>' % (
@@ -194,7 +220,40 @@ def _create_index(file_path, config_pairs):
                   summary_type, summary_type))
         file_handle.write('</li>')
       file_handle.write('</ul>')
-    file_handle.write('</ul></body></html>')
+
+    if _SKP_PLATFORMS:
+      file_handle.write('\n<li>Rendered SKPs:<ul>')
+      for builder in _SKP_PLATFORMS:
+        file_handle.write(
+            '\n<li><a href="../live-view.html#live-view.html?%s">' %
+            urllib.urlencode({
+                LIVE_PARAM__SET_A_SECTION:
+                    gm_json.JSONKEY_EXPECTEDRESULTS,
+                LIVE_PARAM__SET_A_DIR:
+                    posixpath.join(_SKP_BASE_REPO_URL, builder),
+                LIVE_PARAM__SET_B_SECTION:
+                    gm_json.JSONKEY_ACTUALRESULTS,
+                LIVE_PARAM__SET_B_DIR:
+                    posixpath.join(_SKP_BASE_GS_URL, builder),
+            }))
+        file_handle.write('expected vs actuals on %s</a></li>' % builder)
+      file_handle.write(
+          '\n<li><a href="../live-view.html#live-view.html?%s">' %
+          urllib.urlencode({
+              LIVE_PARAM__SET_A_SECTION:
+                  gm_json.JSONKEY_ACTUALRESULTS,
+              LIVE_PARAM__SET_A_DIR:
+                  posixpath.join(_SKP_BASE_GS_URL, _SKP_PLATFORMS[0]),
+              LIVE_PARAM__SET_B_SECTION:
+                  gm_json.JSONKEY_ACTUALRESULTS,
+              LIVE_PARAM__SET_B_DIR:
+                  posixpath.join(_SKP_BASE_GS_URL, _SKP_PLATFORMS[1]),
+          }))
+      file_handle.write('actuals on %s vs %s</a></li>' % (
+          _SKP_PLATFORMS[0], _SKP_PLATFORMS[1]))
+      file_handle.write('</li>')
+
+    file_handle.write('\n</ul></body></html>')
 
 
 class Server(object):
@@ -218,7 +277,9 @@ class Server(object):
           at all, just compare to whatever files are already in actuals_dir
       port: which TCP port to listen on for HTTP requests
       export: whether to allow HTTP clients on other hosts to access this server
-      editable: whether HTTP clients are allowed to submit new baselines
+      editable: whether HTTP clients are allowed to submit new GM baselines
+          (SKP baseline modifications are performed using an entirely different
+          mechanism, not affected by this parameter)
       reload_seconds: polling interval with which to check for new results;
           if 0, don't check for new results at all
       config_pairs: List of (string, string) tuples; for each tuple, compare
@@ -293,7 +354,13 @@ class Server(object):
 
   @property
   def is_editable(self):
-    """ Returns true iff HTTP clients are allowed to submit new baselines. """
+    """ True iff HTTP clients are allowed to submit new GM baselines.
+
+    TODO(epoger): This only pertains to GM baselines; SKP baselines are
+    editable whenever expectations vs actuals are shown.
+    Once we move the GM baselines to use the same code as the SKP baselines,
+    we can delete this property.
+    """
     return self._editable
 
   @property
@@ -406,7 +473,7 @@ class Server(object):
             diff_base_url=posixpath.join(
                 os.pardir, GENERATED_IMAGES_SUBDIR),
             builder_regex_list=self._builder_regex_list)
-        for summary_type in SUMMARY_TYPES:
+        for summary_type in _GM_SUMMARY_TYPES:
           gm_json.WriteToFile(
               config_comparisons.get_packaged_results_of_type(
                   results_type=summary_type),
@@ -475,8 +542,7 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       #   /dispatcher/remainder
       # where 'dispatcher' indicates which do_GET_* dispatcher to run
       # and 'remainder' is the remaining path sent to that dispatcher.
-      normpath = posixpath.normpath(self.path)
-      (dispatcher_name, remainder) = PATHSPLIT_RE.match(normpath).groups()
+      (dispatcher_name, remainder) = PATHSPLIT_RE.match(self.path).groups()
       dispatchers = {
           GET__LIVE_RESULTS: self.do_GET_live_results,
           GET__PRECOMPUTED_RESULTS: self.do_GET_precomputed_results,
@@ -525,6 +591,52 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       }
     self.send_json_dict(response_dict)
 
+  def _get_live_results_or_prefetch(self, url_remainder, prefetch_only=False):
+    """ Handle a GET request for live-generated image diff data.
+
+    Args:
+      url_remainder: string indicating which image diffs to generate
+      prefetch_only: if True, the user isn't waiting around for results
+    """
+    param_dict = urlparse.parse_qs(url_remainder)
+    download_all_images = (
+        param_dict.get(LIVE_PARAM__DOWNLOAD_ONLY_DIFFERING, [''])[0].lower()
+        not in ['1', 'true'])
+    setA_dir = param_dict[LIVE_PARAM__SET_A_DIR][0]
+    setB_dir = param_dict[LIVE_PARAM__SET_B_DIR][0]
+    setA_section = self._validate_summary_section(
+        param_dict.get(LIVE_PARAM__SET_A_SECTION, [None])[0])
+    setB_section = self._validate_summary_section(
+        param_dict.get(LIVE_PARAM__SET_B_SECTION, [None])[0])
+
+    # If the sets show expectations vs actuals, always show expectations on
+    # the left (setA).
+    if ((setA_section == gm_json.JSONKEY_ACTUALRESULTS) and
+        (setB_section == gm_json.JSONKEY_EXPECTEDRESULTS)):
+      setA_dir, setB_dir = setB_dir, setA_dir
+      setA_section, setB_section = setB_section, setA_section
+
+    # Are we comparing some actuals against expectations stored in the repo?
+    # If so, we can allow the user to submit new baselines.
+    is_editable = (
+        (setA_section == gm_json.JSONKEY_EXPECTEDRESULTS) and
+        (setA_dir.startswith(compare_rendered_pictures.REPO_URL_PREFIX)) and
+        (setB_section == gm_json.JSONKEY_ACTUALRESULTS))
+
+    results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
+        setA_dir=setA_dir, setB_dir=setB_dir,
+        setA_section=setA_section, setB_section=setB_section,
+        image_diff_db=_SERVER.image_diff_db,
+        diff_base_url='/static/generated-images',
+        gs=_SERVER.gs, truncate_results=_SERVER.truncate_results,
+        prefetch_only=prefetch_only, download_all_images=download_all_images)
+    if prefetch_only:
+      self.send_response(200)
+    else:
+      self.send_json_dict(results_obj.get_packaged_results_of_type(
+          results_type=results_mod.KEY__HEADER__RESULTS_ALL,
+          is_editable=is_editable))
+
   def do_GET_live_results(self, url_remainder):
     """ Handle a GET request for live-generated image diff data.
 
@@ -532,15 +644,8 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       url_remainder: string indicating which image diffs to generate
     """
     logging.debug('do_GET_live_results: url_remainder="%s"' % url_remainder)
-    param_dict = urlparse.parse_qs(url_remainder)
-    results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
-        setA_dirs=param_dict[LIVE_PARAM__SET_A_DIR],
-        setB_dirs=param_dict[LIVE_PARAM__SET_B_DIR],
-        image_diff_db=_SERVER.image_diff_db,
-        diff_base_url='/static/generated-images',
-        gs=_SERVER.gs, truncate_results=_SERVER.truncate_results)
-    self.send_json_dict(results_obj.get_packaged_results_of_type(
-        results_mod.KEY__HEADER__RESULTS_ALL))
+    self._get_live_results_or_prefetch(
+        url_remainder=url_remainder, prefetch_only=False)
 
   def do_GET_prefetch_results(self, url_remainder):
     """ Prefetch image diff data for a future do_GET_live_results() call.
@@ -549,18 +654,8 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       url_remainder: string indicating which image diffs to generate
     """
     logging.debug('do_GET_prefetch_results: url_remainder="%s"' % url_remainder)
-    param_dict = urlparse.parse_qs(url_remainder)
-    download_all_images = (
-        param_dict.get(PREFETCH_PARAM__DOWNLOAD_ONLY_DIFFERING, [''])[0].lower()
-        not in ['1', 'true'])
-    compare_rendered_pictures.RenderedPicturesComparisons(
-        setA_dirs=param_dict[LIVE_PARAM__SET_A_DIR],
-        setB_dirs=param_dict[LIVE_PARAM__SET_B_DIR],
-        image_diff_db=_SERVER.image_diff_db,
-        diff_base_url='/static/generated-images',
-        gs=_SERVER.gs, truncate_results=_SERVER.truncate_results,
-        prefetch_only=True, download_all_images=download_all_images)
-    self.send_response(200)
+    self._get_live_results_or_prefetch(
+        url_remainder=url_remainder, prefetch_only=True)
 
   def do_GET_static(self, path):
     """ Handle a GET request for a file under STATIC_CONTENTS_SUBDIR .
@@ -595,11 +690,11 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     normpath = posixpath.normpath(self.path)
     dispatchers = {
       '/edits': self.do_POST_edits,
+      '/live-edits': self.do_POST_live_edits,
     }
     try:
       dispatcher = dispatchers[normpath]
       dispatcher()
-      self.send_response(200)
     except:
       self.send_error(404)
       raise
@@ -659,6 +754,47 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     # We can do this in a separate thread; we should return our success message
     # to the UI as soon as possible.
     thread.start_new_thread(_SERVER.update_results, (True,))
+    self.send_response(200)
+
+  def do_POST_live_edits(self):
+    """ Handle a POST request with modifications to SKP expectations, in this
+    format:
+
+    {
+      KEY__LIVE_EDITS__SET_A_DESCRIPTIONS: {
+        # setA descriptions from the original data
+      },
+      KEY__LIVE_EDITS__SET_B_DESCRIPTIONS: {
+        # setB descriptions from the original data
+      },
+      KEY__LIVE_EDITS__MODIFICATIONS: [
+        # as needed by writable_expectations.modify()
+      ],
+    }
+
+    Raises an Exception if there were any problems.
+    """
+    content_type = self.headers[_HTTP_HEADER_CONTENT_TYPE]
+    if content_type != 'application/json;charset=UTF-8':
+      raise Exception('unsupported %s [%s]' % (
+          _HTTP_HEADER_CONTENT_TYPE, content_type))
+
+    content_length = int(self.headers[_HTTP_HEADER_CONTENT_LENGTH])
+    json_data = self.rfile.read(content_length)
+    data = json.loads(json_data)
+    logging.debug('do_POST_live_edits: received new GM expectations data [%s]' %
+                  data)
+    with writable_expectations_mod.WritableExpectations(
+        data[KEY__LIVE_EDITS__SET_A_DESCRIPTIONS]) as writable_expectations:
+      writable_expectations.modify(data[KEY__LIVE_EDITS__MODIFICATIONS])
+      diffs = writable_expectations.get_diffs()
+      # TODO(stephana): Move to a simpler web framework so we don't have to
+      # call these functions.  See http://skbug.com/2856 ('rebaseline_server:
+      # Refactor server to use a simple web framework')
+      self.send_response(200)
+      self.send_header('Content-type', 'text/plain')
+      self.end_headers()
+      self.wfile.write(diffs)
 
   def redirect_to(self, url):
     """ Redirect the HTTP client to a different url.
@@ -707,6 +843,21 @@ class HTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.end_headers()
     json.dump(json_dict, self.wfile)
 
+  def _validate_summary_section(self, section_name):
+    """Validates the section we have been requested to read within JSON summary.
+
+    Args:
+      section_name: which section of the JSON summary file has been requested
+
+    Returns: the validated section name
+
+    Raises: Exception if an invalid section_name was requested.
+    """
+    if section_name not in compare_rendered_pictures.ALLOWED_SECTION_NAMES:
+      raise Exception('requested section name "%s" not in allowed list %s' % (
+          section_name, compare_rendered_pictures.ALLOWED_SECTION_NAMES))
+    return section_name
+
 
 def main():
   logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
@@ -739,7 +890,9 @@ def main():
                             'differences between these config pairs: '
                             + str(CONFIG_PAIRS_TO_COMPARE)))
   parser.add_argument('--editable', action='store_true',
-                      help=('Allow HTTP clients to submit new baselines.'))
+                      help=('Allow HTTP clients to submit new GM baselines; '
+                            'SKP baselines can be edited regardless of this '
+                            'setting.'))
   parser.add_argument('--export', action='store_true',
                       help=('Instead of only allowing access from HTTP clients '
                             'on localhost, allow HTTP clients on other hosts '

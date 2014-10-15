@@ -13,8 +13,7 @@
 
 class SkRadialGradient : public SkGradientShaderBase {
 public:
-    SkRadialGradient(const SkPoint& center, SkScalar radius, const Descriptor&,
-                     const SkMatrix* localMatrix);
+    SkRadialGradient(const SkPoint& center, SkScalar radius, const Descriptor&);
 
     virtual size_t contextSize() const SK_OVERRIDE;
 
@@ -33,7 +32,8 @@ public:
                                  SkMatrix* matrix,
                                  TileMode* xy) const SK_OVERRIDE;
     virtual GradientType asAGradient(GradientInfo* info) const SK_OVERRIDE;
-    virtual bool asNewEffect(GrContext*, const SkPaint&, const SkMatrix*, GrColor*, GrEffect**) const SK_OVERRIDE;
+    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                     GrFragmentProcessor**) const SK_OVERRIDE;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkRadialGradient)
@@ -44,6 +44,7 @@ protected:
     virtual Context* onCreateContext(const ContextRec&, void* storage) const SK_OVERRIDE;
 
 private:
+    friend class SkGradientShader;
     typedef SkGradientShaderBase INHERITED;
     const SkPoint fCenter;
     const SkScalar fRadius;

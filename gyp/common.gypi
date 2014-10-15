@@ -16,6 +16,7 @@
       'SK_GAMMA_SRGB',
       'SK_GAMMA_APPLY_TO_A8',
       'SK_SCALAR_TO_FLOAT_EXCLUDED',  # temporary to allow Chrome to call SkFloatToScalar
+      # 'SK_USE_DISCARDABLE_SCALEDIMAGECACHE',  # TODO(reed): Re-enable when tests don't crash with this.
     ],
 
     # Validate the 'skia_os' setting against 'OS', because only certain
@@ -92,22 +93,11 @@
         # one makefile and allow someone to add SK_DEBUG etc for their own
         # debugging purposes.
         'configurations': {
-          'Debug': {
-            'defines': [
-              'SK_DEBUG',
-              'SK_DEVELOPER=1',
-            ],
-          },
-          'Release': {
-            'defines': [
-              'SK_RELEASE',
-            ],
-          },
+          'Debug':   { 'defines': [ 'SK_DEVELOPER=1' ] },
+          'Release': { 'defines': [ 'NDEBUG' ] },
           'Release_Developer': {
             'inherit_from': ['Release'],
-            'defines': [
-              'SK_DEVELOPER=1',
-            ],
+            'defines': [ 'SK_DEVELOPER=1' ],
           },
         },
       }],

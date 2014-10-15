@@ -11,8 +11,8 @@
 #include "SkTwoPointConicalGradient.h"
 
 #if SK_SUPPORT_GPU
-#include "GrTBackendEffectFactory.h"
-#include "gl/GrGLShaderBuilder.h"
+#include "GrTBackendProcessorFactory.h"
+#include "gl/builders/GrGLProgramBuilder.h"
 // For brevity
 typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
@@ -60,28 +60,28 @@ class GLEdge2PtConicalEffect;
 class Edge2PtConicalEffect : public GrGradientEffect {
 public:
 
-    static GrEffect* Create(GrContext* ctx,
-                            const SkTwoPointConicalGradient& shader,
-                            const SkMatrix& matrix,
-                            SkShader::TileMode tm) {
+    static GrFragmentProcessor* Create(GrContext* ctx,
+                                       const SkTwoPointConicalGradient& shader,
+                                       const SkMatrix& matrix,
+                                       SkShader::TileMode tm) {
         return SkNEW_ARGS(Edge2PtConicalEffect, (ctx, shader, matrix, tm));
     }
 
     virtual ~Edge2PtConicalEffect() {}
 
     static const char* Name() { return "Two-Point Conical Gradient Edge Touching"; }
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
     // The radial gradient parameters can collapse to a linear (instead of quadratic) equation.
     SkScalar center() const { return fCenterX1; }
     SkScalar diffRadius() const { return fDiffRadius; }
     SkScalar radius() const { return fRadius0; }
 
-    typedef GLEdge2PtConicalEffect GLEffect;
+    typedef GLEdge2PtConicalEffect GLProcessor;
 
 private:
-    virtual bool onIsEqual(const GrEffect& sBase) const SK_OVERRIDE {
-        const Edge2PtConicalEffect& s = CastEffect<Edge2PtConicalEffect>(sBase);
+    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+        const Edge2PtConicalEffect& s = sBase.cast<Edge2PtConicalEffect>();
         return (INHERITED::onIsEqual(sBase) &&
                 this->fCenterX1 == s.fCenterX1 &&
                 this->fRadius0 == s.fRadius0 &&
@@ -98,9 +98,12 @@ private:
         fDiffRadius(shader.getDiffRadius()){
         // We should only be calling this shader if we are degenerate case with touching circles
         // When deciding if we are in edge case, we scaled by the end radius for cases when the
-        // start radius was close to zero, otherwise we scaled by the start radius
-        SkASSERT(SkScalarAbs(SkScalarAbs(fDiffRadius) - SkScalarAbs(fCenterX1)) <
-                 kEdgeErrorTol * (fRadius0 < kErrorTol ? shader.getEndRadius() : fRadius0));
+        // start radius was close to zero, otherwise we scaled by the start radius.  In addition
+        // Our test for the edge case in set_matrix_circle_conical has a higher tolerance so we
+        // need the sqrt value below
+        SkASSERT(SkScalarAbs(SkScalarAbs(fDiffRadius) - fCenterX1) <
+                 (fRadius0 < kErrorTol ? shader.getEndRadius() * kEdgeErrorTol :
+                                         fRadius0 * sqrt(kEdgeErrorTol)));
 
         // We pass the linear part of the quadratic as a varying.
         //    float b = -2.0 * (fCenterX1 * x + fRadius0 * fDiffRadius * z)
@@ -116,7 +119,7 @@ private:
         this->addCoordTransform(&fBTransform);
     }
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     // @{
     // Cache of values - these can change arbitrarily, EXCEPT
@@ -134,19 +137,19 @@ private:
 
 class GLEdge2PtConicalEffect : public GrGLGradientEffect {
 public:
-    GLEdge2PtConicalEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&);
+    GLEdge2PtConicalEffect(const GrBackendProcessorFactory& factory, const GrProcessor&);
     virtual ~GLEdge2PtConicalEffect() { }
 
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
-    static void GenKey(const GrDrawEffect&, const GrGLCaps& caps, GrEffectKeyBuilder* b);
+    static void GenKey(const GrProcessor&, const GrGLCaps& caps, GrProcessorKeyBuilder* b);
 
 protected:
     UniformHandle fParamUni;
@@ -167,16 +170,19 @@ private:
 
 };
 
-const GrBackendEffectFactory& Edge2PtConicalEffect::getFactory() const {
-    return GrTBackendEffectFactory<Edge2PtConicalEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& Edge2PtConicalEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<Edge2PtConicalEffect>::getInstance();
 }
 
-GR_DEFINE_EFFECT_TEST(Edge2PtConicalEffect);
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(Edge2PtConicalEffect);
 
-GrEffect* Edge2PtConicalEffect::TestCreate(SkRandom* random,
-                                           GrContext* context,
-                                           const GrDrawTargetCaps&,
-                                           GrTexture**) {
+/*
+ * All Two point conical gradient test create functions may occasionally create edge case shaders
+ */
+GrFragmentProcessor* Edge2PtConicalEffect::TestCreate(SkRandom* random,
+                                                      GrContext* context,
+                                                      const GrDrawTargetCaps&,
+                                                      GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1();
     SkPoint center2;
@@ -203,30 +209,30 @@ GrEffect* Edge2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    GrEffect* effect;
+    GrFragmentProcessor* fp;
     GrColor paintColor;
-    SkAssertResult(shader->asNewEffect(context, paint, NULL, &paintColor, &effect));
-    return effect;
+    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &fp));
+    return fp;
 }
 
-GLEdge2PtConicalEffect::GLEdge2PtConicalEffect(const GrBackendEffectFactory& factory,
-                                               const GrDrawEffect& drawEffect)
+GLEdge2PtConicalEffect::GLEdge2PtConicalEffect(const GrBackendProcessorFactory& factory,
+                                               const GrProcessor&)
     : INHERITED(factory)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
     , fCachedRadius(-SK_ScalarMax)
     , fCachedDiffRadius(-SK_ScalarMax) {}
 
-void GLEdge2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
-                                      const GrDrawEffect&,
-                                      const GrEffectKey& key,
+void GLEdge2PtConicalEffect::emitCode(GrGLFPBuilder* builder,
+                                      const GrFragmentProcessor&,
+                                      const GrProcessorKey& key,
                                       const char* outputColor,
                                       const char* inputColor,
                                       const TransformedCoordsArray& coords,
                                       const TextureSamplerArray& samplers) {
     uint32_t baseKey = key.get32(0);
     this->emitUniforms(builder, baseKey);
-    fParamUni = builder->addUniformArray(GrGLShaderBuilder::kFragment_Visibility,
+    fParamUni = builder->addUniformArray(GrGLProgramBuilder::kFragment_Visibility,
                                          kFloat_GrSLType, "Conical2FSParams", 3);
 
     SkString cName("c");
@@ -240,12 +246,14 @@ void GLEdge2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     builder->getUniformVariable(fParamUni).appendArrayAccess(2, &p2);
 
     // We interpolate the linear component in coords[1].
-    SkASSERT(coords[0].type() == coords[1].type());
+    SkASSERT(coords[0].getType() == coords[1].getType());
     const char* coords2D;
     SkString bVar;
-    if (kVec3f_GrSLType == coords[0].type()) {
-        builder->fsCodeAppendf("\tvec3 interpolants = vec3(%s.xy / %s.z, %s.x / %s.z);\n",
-                               coords[0].c_str(), coords[0].c_str(), coords[1].c_str(), coords[1].c_str());
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    if (kVec3f_GrSLType == coords[0].getType()) {
+        fsBuilder->codeAppendf("\tvec3 interpolants = vec3(%s.xy / %s.z, %s.x / %s.z);\n",
+                               coords[0].c_str(), coords[0].c_str(), coords[1].c_str(),
+                               coords[1].c_str());
         coords2D = "interpolants.xy";
         bVar = "interpolants.z";
     } else {
@@ -255,28 +263,28 @@ void GLEdge2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
 
     // output will default to transparent black (we simply won't write anything
     // else to it if invalid, instead of discarding or returning prematurely)
-    builder->fsCodeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
+    fsBuilder->codeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
 
     // c = (x^2)+(y^2) - params[1]
-    builder->fsCodeAppendf("\tfloat %s = dot(%s, %s) - %s;\n",
+    fsBuilder->codeAppendf("\tfloat %s = dot(%s, %s) - %s;\n",
                            cName.c_str(), coords2D, coords2D, p1.c_str());
 
     // linear case: t = -c/b
-    builder->fsCodeAppendf("\tfloat %s = -(%s / %s);\n", tName.c_str(),
+    fsBuilder->codeAppendf("\tfloat %s = -(%s / %s);\n", tName.c_str(),
                            cName.c_str(), bVar.c_str());
 
     // if r(t) > 0, then t will be the x coordinate
-    builder->fsCodeAppendf("\tif (%s * %s + %s > 0.0) {\n", tName.c_str(),
+    fsBuilder->codeAppendf("\tif (%s * %s + %s > 0.0) {\n", tName.c_str(),
                            p2.c_str(), p0.c_str());
-    builder->fsCodeAppend("\t");
+    fsBuilder->codeAppend("\t");
     this->emitColor(builder, tName.c_str(), baseKey, outputColor, inputColor, samplers);
-    builder->fsCodeAppend("\t}\n");
+    fsBuilder->codeAppend("\t}\n");
 }
 
 void GLEdge2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
-                                     const GrDrawEffect& drawEffect) {
-    INHERITED::setData(pdman, drawEffect);
-    const Edge2PtConicalEffect& data = drawEffect.castEffect<Edge2PtConicalEffect>();
+                                     const GrProcessor& processor) {
+    INHERITED::setData(pdman, processor);
+    const Edge2PtConicalEffect& data = processor.cast<Edge2PtConicalEffect>();
     SkScalar radius0 = data.radius();
     SkScalar diffRadius = data.diffRadius();
 
@@ -295,9 +303,9 @@ void GLEdge2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
     }
 }
 
-void GLEdge2PtConicalEffect::GenKey(const GrDrawEffect& drawEffect,
-                                    const GrGLCaps&, GrEffectKeyBuilder* b) {
-    b->add32(GenBaseGradientKey(drawEffect));
+void GLEdge2PtConicalEffect::GenKey(const GrProcessor& processor,
+                                    const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    b->add32(GenBaseGradientKey(processor));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -367,27 +375,27 @@ class GLFocalOutside2PtConicalEffect;
 class FocalOutside2PtConicalEffect : public GrGradientEffect {
 public:
 
-    static GrEffect* Create(GrContext* ctx,
-                            const SkTwoPointConicalGradient& shader,
-                            const SkMatrix& matrix,
-                            SkShader::TileMode tm,
-                            SkScalar focalX) {
+    static GrFragmentProcessor* Create(GrContext* ctx,
+                                       const SkTwoPointConicalGradient& shader,
+                                       const SkMatrix& matrix,
+                                       SkShader::TileMode tm,
+                                       SkScalar focalX) {
         return SkNEW_ARGS(FocalOutside2PtConicalEffect, (ctx, shader, matrix, tm, focalX));
     }
 
     virtual ~FocalOutside2PtConicalEffect() { }
 
     static const char* Name() { return "Two-Point Conical Gradient Focal Outside"; }
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
     bool isFlipped() const { return fIsFlipped; }
     SkScalar focal() const { return fFocalX; }
 
-    typedef GLFocalOutside2PtConicalEffect GLEffect;
+    typedef GLFocalOutside2PtConicalEffect GLProcessor;
 
 private:
-    virtual bool onIsEqual(const GrEffect& sBase) const SK_OVERRIDE {
-        const FocalOutside2PtConicalEffect& s = CastEffect<FocalOutside2PtConicalEffect>(sBase);
+    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+        const FocalOutside2PtConicalEffect& s = sBase.cast<FocalOutside2PtConicalEffect>();
         return (INHERITED::onIsEqual(sBase) &&
                 this->fFocalX == s.fFocalX &&
                 this->fIsFlipped == s.fIsFlipped);
@@ -400,7 +408,7 @@ private:
                                  SkScalar focalX)
     : INHERITED(ctx, shader, matrix, tm), fFocalX(focalX), fIsFlipped(shader.isFlippedGrad()) {}
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     SkScalar         fFocalX;
     bool             fIsFlipped;
@@ -410,19 +418,19 @@ private:
 
 class GLFocalOutside2PtConicalEffect : public GrGLGradientEffect {
 public:
-    GLFocalOutside2PtConicalEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&);
+    GLFocalOutside2PtConicalEffect(const GrBackendProcessorFactory& factory, const GrProcessor&);
     virtual ~GLFocalOutside2PtConicalEffect() { }
 
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
-    static void GenKey(const GrDrawEffect&, const GrGLCaps& caps, GrEffectKeyBuilder* b);
+    static void GenKey(const GrProcessor&, const GrGLCaps& caps, GrProcessorKeyBuilder* b);
 
 protected:
     UniformHandle fParamUni;
@@ -444,16 +452,19 @@ private:
 
 };
 
-const GrBackendEffectFactory& FocalOutside2PtConicalEffect::getFactory() const {
-    return GrTBackendEffectFactory<FocalOutside2PtConicalEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& FocalOutside2PtConicalEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<FocalOutside2PtConicalEffect>::getInstance();
 }
 
-GR_DEFINE_EFFECT_TEST(FocalOutside2PtConicalEffect);
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(FocalOutside2PtConicalEffect);
 
-GrEffect* FocalOutside2PtConicalEffect::TestCreate(SkRandom* random,
-                                                   GrContext* context,
-                                                   const GrDrawTargetCaps&,
-                                                   GrTexture**) {
+/*
+ * All Two point conical gradient test create functions may occasionally create edge case shaders
+ */
+GrFragmentProcessor* FocalOutside2PtConicalEffect::TestCreate(SkRandom* random,
+                                                              GrContext* context,
+                                                              const GrDrawTargetCaps&,
+                                                              GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = 0.f;
     SkPoint center2;
@@ -477,32 +488,32 @@ GrEffect* FocalOutside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           colors, stops, colorCount,
                                                                           tm));
     SkPaint paint;
-    GrEffect* effect;
+    GrFragmentProcessor* effect;
     GrColor paintColor;
-    SkAssertResult(shader->asNewEffect(context, paint, NULL, &paintColor, &effect));
+    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &effect));
     return effect;
 }
 
-GLFocalOutside2PtConicalEffect::GLFocalOutside2PtConicalEffect(const GrBackendEffectFactory& factory,
-                                                               const GrDrawEffect& drawEffect)
+GLFocalOutside2PtConicalEffect::GLFocalOutside2PtConicalEffect(const GrBackendProcessorFactory& factory,
+                                                               const GrProcessor& processor)
     : INHERITED(factory)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
     , fCachedFocal(SK_ScalarMax) {
-    const FocalOutside2PtConicalEffect& data = drawEffect.castEffect<FocalOutside2PtConicalEffect>();
+    const FocalOutside2PtConicalEffect& data = processor.cast<FocalOutside2PtConicalEffect>();
     fIsFlipped = data.isFlipped();
 }
 
-void GLFocalOutside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
-                                              const GrDrawEffect&,
-                                              const GrEffectKey& key,
+void GLFocalOutside2PtConicalEffect::emitCode(GrGLFPBuilder* builder,
+                                              const GrFragmentProcessor&,
+                                              const GrProcessorKey& key,
                                               const char* outputColor,
                                               const char* inputColor,
                                               const TransformedCoordsArray& coords,
                                               const TextureSamplerArray& samplers) {
     uint32_t baseKey = key.get32(0);
     this->emitUniforms(builder, baseKey);
-    fParamUni = builder->addUniformArray(GrGLShaderBuilder::kFragment_Visibility,
+    fParamUni = builder->addUniformArray(GrGLProgramBuilder::kFragment_Visibility,
                                          kFloat_GrSLType, "Conical2FSParams", 2);
     SkString tName("t");
     SkString p0; // focalX
@@ -512,39 +523,40 @@ void GLFocalOutside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     builder->getUniformVariable(fParamUni).appendArrayAccess(1, &p1);
 
     // if we have a vec3 from being in perspective, convert it to a vec2 first
-    SkString coords2DString = builder->ensureFSCoords2D(coords, 0);
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    SkString coords2DString = fsBuilder->ensureFSCoords2D(coords, 0);
     const char* coords2D = coords2DString.c_str();
 
     // t = p.x * focal.x +/- sqrt(p.x^2 + (1 - focal.x^2) * p.y^2)
 
     // output will default to transparent black (we simply won't write anything
     // else to it if invalid, instead of discarding or returning prematurely)
-    builder->fsCodeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
+    fsBuilder->codeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
 
-    builder->fsCodeAppendf("\tfloat xs = %s.x * %s.x;\n", coords2D, coords2D);
-    builder->fsCodeAppendf("\tfloat ys = %s.y * %s.y;\n", coords2D, coords2D);
-    builder->fsCodeAppendf("\tfloat d = xs + %s * ys;\n", p1.c_str());
+    fsBuilder->codeAppendf("\tfloat xs = %s.x * %s.x;\n", coords2D, coords2D);
+    fsBuilder->codeAppendf("\tfloat ys = %s.y * %s.y;\n", coords2D, coords2D);
+    fsBuilder->codeAppendf("\tfloat d = xs + %s * ys;\n", p1.c_str());
 
     // Must check to see if we flipped the circle order (to make sure start radius < end radius)
     // If so we must also flip sign on sqrt
     if (!fIsFlipped) {
-        builder->fsCodeAppendf("\tfloat %s = %s.x * %s  + sqrt(d);\n", tName.c_str(),
+        fsBuilder->codeAppendf("\tfloat %s = %s.x * %s  + sqrt(d);\n", tName.c_str(),
                                coords2D, p0.c_str());
     } else {
-        builder->fsCodeAppendf("\tfloat %s = %s.x * %s  - sqrt(d);\n", tName.c_str(),
+        fsBuilder->codeAppendf("\tfloat %s = %s.x * %s  - sqrt(d);\n", tName.c_str(),
                                coords2D, p0.c_str());
     }
 
-    builder->fsCodeAppendf("\tif (%s >= 0.0 && d >= 0.0) {\n", tName.c_str());
-    builder->fsCodeAppend("\t\t");
+    fsBuilder->codeAppendf("\tif (%s >= 0.0 && d >= 0.0) {\n", tName.c_str());
+    fsBuilder->codeAppend("\t\t");
     this->emitColor(builder, tName.c_str(), baseKey, outputColor, inputColor, samplers);
-    builder->fsCodeAppend("\t}\n");
+    fsBuilder->codeAppend("\t}\n");
 }
 
 void GLFocalOutside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
-                                             const GrDrawEffect& drawEffect) {
-    INHERITED::setData(pdman, drawEffect);
-    const FocalOutside2PtConicalEffect& data = drawEffect.castEffect<FocalOutside2PtConicalEffect>();
+                                             const GrProcessor& processor) {
+    INHERITED::setData(pdman, processor);
+    const FocalOutside2PtConicalEffect& data = processor.cast<FocalOutside2PtConicalEffect>();
     SkASSERT(data.isFlipped() == fIsFlipped);
     SkScalar focal = data.focal();
 
@@ -561,11 +573,11 @@ void GLFocalOutside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman
     }
 }
 
-void GLFocalOutside2PtConicalEffect::GenKey(const GrDrawEffect& drawEffect,
-                                            const GrGLCaps&, GrEffectKeyBuilder* b) {
+void GLFocalOutside2PtConicalEffect::GenKey(const GrProcessor& processor,
+                                            const GrGLCaps&, GrProcessorKeyBuilder* b) {
     uint32_t* key = b->add32n(2);
-    key[0] = GenBaseGradientKey(drawEffect);
-    key[1] = drawEffect.castEffect<FocalOutside2PtConicalEffect>().isFlipped();
+    key[0] = GenBaseGradientKey(processor);
+    key[1] = processor.cast<FocalOutside2PtConicalEffect>().isFlipped();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -575,26 +587,26 @@ class GLFocalInside2PtConicalEffect;
 class FocalInside2PtConicalEffect : public GrGradientEffect {
 public:
 
-    static GrEffect* Create(GrContext* ctx,
-                            const SkTwoPointConicalGradient& shader,
-                            const SkMatrix& matrix,
-                            SkShader::TileMode tm,
-                            SkScalar focalX) {
+    static GrFragmentProcessor* Create(GrContext* ctx,
+                                       const SkTwoPointConicalGradient& shader,
+                                       const SkMatrix& matrix,
+                                       SkShader::TileMode tm,
+                                       SkScalar focalX) {
         return SkNEW_ARGS(FocalInside2PtConicalEffect, (ctx, shader, matrix, tm, focalX));
     }
 
     virtual ~FocalInside2PtConicalEffect() {}
 
     static const char* Name() { return "Two-Point Conical Gradient Focal Inside"; }
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
     SkScalar focal() const { return fFocalX; }
 
-    typedef GLFocalInside2PtConicalEffect GLEffect;
+    typedef GLFocalInside2PtConicalEffect GLProcessor;
 
 private:
-    virtual bool onIsEqual(const GrEffect& sBase) const SK_OVERRIDE {
-        const FocalInside2PtConicalEffect& s = CastEffect<FocalInside2PtConicalEffect>(sBase);
+    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+        const FocalInside2PtConicalEffect& s = sBase.cast<FocalInside2PtConicalEffect>();
         return (INHERITED::onIsEqual(sBase) &&
                 this->fFocalX == s.fFocalX);
     }
@@ -606,7 +618,7 @@ private:
                                 SkScalar focalX)
         : INHERITED(ctx, shader, matrix, tm), fFocalX(focalX) {}
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     SkScalar         fFocalX;
 
@@ -615,19 +627,19 @@ private:
 
 class GLFocalInside2PtConicalEffect : public GrGLGradientEffect {
 public:
-    GLFocalInside2PtConicalEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&);
+    GLFocalInside2PtConicalEffect(const GrBackendProcessorFactory& factory, const GrProcessor&);
     virtual ~GLFocalInside2PtConicalEffect() {}
 
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
-    static void GenKey(const GrDrawEffect&, const GrGLCaps& caps, GrEffectKeyBuilder* b);
+    static void GenKey(const GrProcessor&, const GrGLCaps& caps, GrProcessorKeyBuilder* b);
 
 protected:
     UniformHandle fFocalUni;
@@ -647,16 +659,19 @@ private:
 
 };
 
-const GrBackendEffectFactory& FocalInside2PtConicalEffect::getFactory() const {
-    return GrTBackendEffectFactory<FocalInside2PtConicalEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& FocalInside2PtConicalEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<FocalInside2PtConicalEffect>::getInstance();
 }
 
-GR_DEFINE_EFFECT_TEST(FocalInside2PtConicalEffect);
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(FocalInside2PtConicalEffect);
 
-GrEffect* FocalInside2PtConicalEffect::TestCreate(SkRandom* random,
-                                                  GrContext* context,
-                                                  const GrDrawTargetCaps&,
-                                                  GrTexture**) {
+/*
+ * All Two point conical gradient test create functions may occasionally create edge case shaders
+ */
+GrFragmentProcessor* FocalInside2PtConicalEffect::TestCreate(SkRandom* random,
+                                                             GrContext* context,
+                                                             const GrDrawTargetCaps&,
+                                                             GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = 0.f;
     SkPoint center2;
@@ -683,28 +698,28 @@ GrEffect* FocalInside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           tm));
     SkPaint paint;
     GrColor paintColor;
-    GrEffect* effect;
-    SkAssertResult(shader->asNewEffect(context, paint, NULL, &paintColor, &effect));
-    return effect;
+    GrFragmentProcessor* fp;
+    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &fp));
+    return fp;
 }
 
-GLFocalInside2PtConicalEffect::GLFocalInside2PtConicalEffect(const GrBackendEffectFactory& factory,
-                                                             const GrDrawEffect& drawEffect)
+GLFocalInside2PtConicalEffect::GLFocalInside2PtConicalEffect(const GrBackendProcessorFactory& factory,
+                                                             const GrProcessor&)
     : INHERITED(factory)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
     , fCachedFocal(SK_ScalarMax) {}
 
-void GLFocalInside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
-                                             const GrDrawEffect&,
-                                             const GrEffectKey& key,
+void GLFocalInside2PtConicalEffect::emitCode(GrGLFPBuilder* builder,
+                                             const GrFragmentProcessor&,
+                                             const GrProcessorKey& key,
                                              const char* outputColor,
                                              const char* inputColor,
                                              const TransformedCoordsArray& coords,
                                              const TextureSamplerArray& samplers) {
     uint32_t baseKey = key.get32(0);
     this->emitUniforms(builder, baseKey);
-    fFocalUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fFocalUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                     kFloat_GrSLType, "Conical2FSParams");
     SkString tName("t");
 
@@ -713,20 +728,21 @@ void GLFocalInside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     GrGLShaderVar focal = builder->getUniformVariable(fFocalUni);
 
     // if we have a vec3 from being in perspective, convert it to a vec2 first
-    SkString coords2DString = builder->ensureFSCoords2D(coords, 0);
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    SkString coords2DString = fsBuilder->ensureFSCoords2D(coords, 0);
     const char* coords2D = coords2DString.c_str();
 
     // t = p.x * focalX + length(p)
-    builder->fsCodeAppendf("\tfloat %s = %s.x * %s  + length(%s);\n", tName.c_str(),
+    fsBuilder->codeAppendf("\tfloat %s = %s.x * %s  + length(%s);\n", tName.c_str(),
                            coords2D, focal.c_str(), coords2D);
 
     this->emitColor(builder, tName.c_str(), baseKey, outputColor, inputColor, samplers);
 }
 
 void GLFocalInside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
-                                            const GrDrawEffect& drawEffect) {
-    INHERITED::setData(pdman, drawEffect);
-    const FocalInside2PtConicalEffect& data = drawEffect.castEffect<FocalInside2PtConicalEffect>();
+                                            const GrProcessor& processor) {
+    INHERITED::setData(pdman, processor);
+    const FocalInside2PtConicalEffect& data = processor.cast<FocalInside2PtConicalEffect>();
     SkScalar focal = data.focal();
 
     if (fCachedFocal != focal) {
@@ -735,9 +751,9 @@ void GLFocalInside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
     }
 }
 
-void GLFocalInside2PtConicalEffect::GenKey(const GrDrawEffect& drawEffect,
-                                           const GrGLCaps&, GrEffectKeyBuilder* b) {
-    b->add32(GenBaseGradientKey(drawEffect));
+void GLFocalInside2PtConicalEffect::GenKey(const GrProcessor& processor,
+                                           const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    b->add32(GenBaseGradientKey(processor));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -809,18 +825,18 @@ class GLCircleInside2PtConicalEffect;
 class CircleInside2PtConicalEffect : public GrGradientEffect {
 public:
 
-    static GrEffect* Create(GrContext* ctx,
-                            const SkTwoPointConicalGradient& shader,
-                            const SkMatrix& matrix,
-                            SkShader::TileMode tm,
-                            const CircleConicalInfo& info) {
+    static GrFragmentProcessor* Create(GrContext* ctx,
+                                       const SkTwoPointConicalGradient& shader,
+                                       const SkMatrix& matrix,
+                                       SkShader::TileMode tm,
+                                       const CircleConicalInfo& info) {
         return SkNEW_ARGS(CircleInside2PtConicalEffect, (ctx, shader, matrix, tm, info));
     }
 
     virtual ~CircleInside2PtConicalEffect() {}
 
     static const char* Name() { return "Two-Point Conical Gradient Inside"; }
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
     SkScalar centerX() const { return fInfo.fCenterEnd.fX; }
     SkScalar centerY() const { return fInfo.fCenterEnd.fY; }
@@ -828,11 +844,11 @@ public:
     SkScalar B() const { return fInfo.fB; }
     SkScalar C() const { return fInfo.fC; }
 
-    typedef GLCircleInside2PtConicalEffect GLEffect;
+    typedef GLCircleInside2PtConicalEffect GLProcessor;
 
 private:
-    virtual bool onIsEqual(const GrEffect& sBase) const SK_OVERRIDE {
-        const CircleInside2PtConicalEffect& s = CastEffect<CircleInside2PtConicalEffect>(sBase);
+    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+        const CircleInside2PtConicalEffect& s = sBase.cast<CircleInside2PtConicalEffect>();
         return (INHERITED::onIsEqual(sBase) &&
                 this->fInfo.fCenterEnd == s.fInfo.fCenterEnd &&
                 this->fInfo.fA == s.fInfo.fA &&
@@ -847,7 +863,7 @@ private:
                                  const CircleConicalInfo& info)
         : INHERITED(ctx, shader, matrix, tm), fInfo(info) {}
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     const CircleConicalInfo fInfo;
 
@@ -856,19 +872,19 @@ private:
 
 class GLCircleInside2PtConicalEffect : public GrGLGradientEffect {
 public:
-    GLCircleInside2PtConicalEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&);
+    GLCircleInside2PtConicalEffect(const GrBackendProcessorFactory& factory, const GrProcessor&);
     virtual ~GLCircleInside2PtConicalEffect() {}
 
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
-    static void GenKey(const GrDrawEffect&, const GrGLCaps& caps, GrEffectKeyBuilder* b);
+    static void GenKey(const GrProcessor&, const GrGLCaps& caps, GrProcessorKeyBuilder* b);
 
 protected:
     UniformHandle fCenterUni;
@@ -893,16 +909,19 @@ private:
 
 };
 
-const GrBackendEffectFactory& CircleInside2PtConicalEffect::getFactory() const {
-    return GrTBackendEffectFactory<CircleInside2PtConicalEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& CircleInside2PtConicalEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<CircleInside2PtConicalEffect>::getInstance();
 }
 
-GR_DEFINE_EFFECT_TEST(CircleInside2PtConicalEffect);
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(CircleInside2PtConicalEffect);
 
-GrEffect* CircleInside2PtConicalEffect::TestCreate(SkRandom* random,
-                                                   GrContext* context,
-                                                   const GrDrawTargetCaps&,
-                                                   GrTexture**) {
+/*
+ * All Two point conical gradient test create functions may occasionally create edge case shaders
+ */
+GrFragmentProcessor* CircleInside2PtConicalEffect::TestCreate(SkRandom* random,
+                                                              GrContext* context,
+                                                              const GrDrawTargetCaps&,
+                                                              GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1() + 0.0001f; // make sure radius1 != 0
     SkPoint center2;
@@ -928,13 +947,13 @@ GrEffect* CircleInside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           tm));
     SkPaint paint;
     GrColor paintColor;
-    GrEffect* effect;
-    SkAssertResult(shader->asNewEffect(context, paint, NULL, &paintColor, &effect));
-    return effect;
+    GrFragmentProcessor* processor;
+    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &processor));
+    return processor;
 }
 
-GLCircleInside2PtConicalEffect::GLCircleInside2PtConicalEffect(const GrBackendEffectFactory& factory,
-                                                               const GrDrawEffect& drawEffect)
+GLCircleInside2PtConicalEffect::GLCircleInside2PtConicalEffect(const GrBackendProcessorFactory& factory,
+                                                               const GrProcessor& processor)
     : INHERITED(factory)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
@@ -944,18 +963,18 @@ GLCircleInside2PtConicalEffect::GLCircleInside2PtConicalEffect(const GrBackendEf
     , fCachedB(SK_ScalarMax)
     , fCachedC(SK_ScalarMax) {}
 
-void GLCircleInside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
-                                              const GrDrawEffect&,
-                                              const GrEffectKey& key,
+void GLCircleInside2PtConicalEffect::emitCode(GrGLFPBuilder* builder,
+                                              const GrFragmentProcessor&,
+                                              const GrProcessorKey& key,
                                               const char* outputColor,
                                               const char* inputColor,
                                               const TransformedCoordsArray& coords,
                                               const TextureSamplerArray& samplers) {
     uint32_t baseKey = key.get32(0);
     this->emitUniforms(builder, baseKey);
-    fCenterUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fCenterUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                      kVec2f_GrSLType, "Conical2FSCenter");
-    fParamUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fParamUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                     kVec3f_GrSLType, "Conical2FSParams");
     SkString tName("t");
 
@@ -966,7 +985,8 @@ void GLCircleInside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     GrGLShaderVar params = builder->getUniformVariable(fParamUni);
 
     // if we have a vec3 from being in perspective, convert it to a vec2 first
-    SkString coords2DString = builder->ensureFSCoords2D(coords, 0);
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    SkString coords2DString = fsBuilder->ensureFSCoords2D(coords, 0);
     const char* coords2D = coords2DString.c_str();
 
     // p = coords2D
@@ -977,18 +997,19 @@ void GLCircleInside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     // C = 1 / A
     // d = dot(e, p) + B
     // t = d +/- sqrt(d^2 - A * dot(p, p) + C)
-    builder->fsCodeAppendf("\tfloat pDotp = dot(%s,  %s);\n", coords2D, coords2D);
-    builder->fsCodeAppendf("\tfloat d = dot(%s,  %s) + %s.y;\n", coords2D, center.c_str(), params.c_str());
-    builder->fsCodeAppendf("\tfloat %s = d + sqrt(d * d - %s.x * pDotp + %s.z);\n",
+    fsBuilder->codeAppendf("\tfloat pDotp = dot(%s,  %s);\n", coords2D, coords2D);
+    fsBuilder->codeAppendf("\tfloat d = dot(%s,  %s) + %s.y;\n", coords2D, center.c_str(),
+                           params.c_str());
+    fsBuilder->codeAppendf("\tfloat %s = d + sqrt(d * d - %s.x * pDotp + %s.z);\n",
                            tName.c_str(), params.c_str(), params.c_str());
 
     this->emitColor(builder, tName.c_str(), baseKey, outputColor, inputColor, samplers);
 }
 
 void GLCircleInside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
-                                             const GrDrawEffect& drawEffect) {
-    INHERITED::setData(pdman, drawEffect);
-    const CircleInside2PtConicalEffect& data = drawEffect.castEffect<CircleInside2PtConicalEffect>();
+                                             const GrProcessor& processor) {
+    INHERITED::setData(pdman, processor);
+    const CircleInside2PtConicalEffect& data = processor.cast<CircleInside2PtConicalEffect>();
     SkScalar centerX = data.centerX();
     SkScalar centerY = data.centerY();
     SkScalar A = data.A();
@@ -1009,9 +1030,9 @@ void GLCircleInside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman
     }
 }
 
-void GLCircleInside2PtConicalEffect::GenKey(const GrDrawEffect& drawEffect,
-                                            const GrGLCaps&, GrEffectKeyBuilder* b) {
-    b->add32(GenBaseGradientKey(drawEffect));
+void GLCircleInside2PtConicalEffect::GenKey(const GrProcessor& processor,
+                                            const GrGLCaps&, GrProcessorKeyBuilder* b) {
+    b->add32(GenBaseGradientKey(processor));
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1021,18 +1042,18 @@ class GLCircleOutside2PtConicalEffect;
 class CircleOutside2PtConicalEffect : public GrGradientEffect {
 public:
 
-    static GrEffect* Create(GrContext* ctx,
-                            const SkTwoPointConicalGradient& shader,
-                            const SkMatrix& matrix,
-                            SkShader::TileMode tm,
-                            const CircleConicalInfo& info) {
+    static GrFragmentProcessor* Create(GrContext* ctx,
+                                       const SkTwoPointConicalGradient& shader,
+                                       const SkMatrix& matrix,
+                                       SkShader::TileMode tm,
+                                       const CircleConicalInfo& info) {
         return SkNEW_ARGS(CircleOutside2PtConicalEffect, (ctx, shader, matrix, tm, info));
     }
 
     virtual ~CircleOutside2PtConicalEffect() {}
 
     static const char* Name() { return "Two-Point Conical Gradient Outside"; }
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
     SkScalar centerX() const { return fInfo.fCenterEnd.fX; }
     SkScalar centerY() const { return fInfo.fCenterEnd.fY; }
@@ -1042,11 +1063,11 @@ public:
     SkScalar tLimit() const { return fTLimit; }
     bool isFlipped() const { return fIsFlipped; }
 
-    typedef GLCircleOutside2PtConicalEffect GLEffect;
+    typedef GLCircleOutside2PtConicalEffect GLProcessor;
 
 private:
-    virtual bool onIsEqual(const GrEffect& sBase) const SK_OVERRIDE {
-        const CircleOutside2PtConicalEffect& s = CastEffect<CircleOutside2PtConicalEffect>(sBase);
+    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+        const CircleOutside2PtConicalEffect& s = sBase.cast<CircleOutside2PtConicalEffect>();
         return (INHERITED::onIsEqual(sBase) &&
                 this->fInfo.fCenterEnd == s.fInfo.fCenterEnd &&
                 this->fInfo.fA == s.fInfo.fA &&
@@ -1063,7 +1084,8 @@ private:
                                   const CircleConicalInfo& info)
         : INHERITED(ctx, shader, matrix, tm), fInfo(info) {
         if (shader.getStartRadius() != shader.getEndRadius()) {
-            fTLimit = SkScalarDiv(shader.getStartRadius(), (shader.getStartRadius() - shader.getEndRadius()));
+            fTLimit = SkScalarDiv(shader.getStartRadius(),
+                                  (shader.getStartRadius() - shader.getEndRadius()));
         } else {
             fTLimit = SK_ScalarMin;
         }
@@ -1071,7 +1093,7 @@ private:
         fIsFlipped = shader.isFlippedGrad();
     }
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     const CircleConicalInfo fInfo;
     SkScalar fTLimit;
@@ -1082,19 +1104,19 @@ private:
 
 class GLCircleOutside2PtConicalEffect : public GrGLGradientEffect {
 public:
-    GLCircleOutside2PtConicalEffect(const GrBackendEffectFactory& factory, const GrDrawEffect&);
+    GLCircleOutside2PtConicalEffect(const GrBackendProcessorFactory&, const GrProcessor&);
     virtual ~GLCircleOutside2PtConicalEffect() {}
 
-    virtual void emitCode(GrGLShaderBuilder*,
-                          const GrDrawEffect&,
-                          const GrEffectKey&,
+    virtual void emitCode(GrGLFPBuilder*,
+                          const GrFragmentProcessor&,
+                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
                           const TextureSamplerArray&) SK_OVERRIDE;
-    virtual void setData(const GrGLProgramDataManager&, const GrDrawEffect&) SK_OVERRIDE;
+    virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
 
-    static void GenKey(const GrDrawEffect&, const GrGLCaps& caps, GrEffectKeyBuilder* b);
+    static void GenKey(const GrProcessor&, const GrGLCaps& caps, GrProcessorKeyBuilder* b);
 
 protected:
     UniformHandle fCenterUni;
@@ -1122,16 +1144,19 @@ private:
 
 };
 
-const GrBackendEffectFactory& CircleOutside2PtConicalEffect::getFactory() const {
-    return GrTBackendEffectFactory<CircleOutside2PtConicalEffect>::getInstance();
+const GrBackendFragmentProcessorFactory& CircleOutside2PtConicalEffect::getFactory() const {
+    return GrTBackendFragmentProcessorFactory<CircleOutside2PtConicalEffect>::getInstance();
 }
 
-GR_DEFINE_EFFECT_TEST(CircleOutside2PtConicalEffect);
+GR_DEFINE_FRAGMENT_PROCESSOR_TEST(CircleOutside2PtConicalEffect);
 
-GrEffect* CircleOutside2PtConicalEffect::TestCreate(SkRandom* random,
-                                                    GrContext* context,
-                                                    const GrDrawTargetCaps&,
-                                                    GrTexture**) {
+/*
+ * All Two point conical gradient test create functions may occasionally create edge case shaders
+ */
+GrFragmentProcessor* CircleOutside2PtConicalEffect::TestCreate(SkRandom* random,
+                                                               GrContext* context,
+                                                               const GrDrawTargetCaps&,
+                                                               GrTexture**) {
     SkPoint center1 = {random->nextUScalar1(), random->nextUScalar1()};
     SkScalar radius1 = random->nextUScalar1() + 0.0001f; // make sure radius1 != 0
     SkPoint center2;
@@ -1141,11 +1166,11 @@ GrEffect* CircleOutside2PtConicalEffect::TestCreate(SkRandom* random,
         center2.set(random->nextUScalar1(), random->nextUScalar1());
         // If the circles share a center than we can't be in the outside case
     } while (center1 == center2);
-        SkPoint diff = center2 - center1;
-        diffLen = diff.length();
-        // Below makes sure that circle one is not contained within circle two
-        // and have radius2 >= radius to match sorting on cpu side
-        radius2 = radius1 + random->nextRangeF(0.f, diffLen);
+    SkPoint diff = center2 - center1;
+    diffLen = diff.length();
+    // Below makes sure that circle one is not contained within circle two
+    // and have radius2 >= radius to match sorting on cpu side
+    radius2 = radius1 + random->nextRangeF(0.f, diffLen);
 
     SkColor colors[kMaxRandomGradientColors];
     SkScalar stopsArray[kMaxRandomGradientColors];
@@ -1158,13 +1183,13 @@ GrEffect* CircleOutside2PtConicalEffect::TestCreate(SkRandom* random,
                                                                           tm));
     SkPaint paint;
     GrColor paintColor;
-    GrEffect* effect;
-    SkAssertResult(shader->asNewEffect(context, paint, NULL, &paintColor, &effect));
-    return effect;
+    GrFragmentProcessor* processor;
+    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &processor));
+    return processor;
 }
 
-GLCircleOutside2PtConicalEffect::GLCircleOutside2PtConicalEffect(const GrBackendEffectFactory& factory,
-                                                                 const GrDrawEffect& drawEffect)
+GLCircleOutside2PtConicalEffect::GLCircleOutside2PtConicalEffect(const GrBackendProcessorFactory& factory,
+                                                                 const GrProcessor& processor)
     : INHERITED(factory)
     , fVSVaryingName(NULL)
     , fFSVaryingName(NULL)
@@ -1174,22 +1199,22 @@ GLCircleOutside2PtConicalEffect::GLCircleOutside2PtConicalEffect(const GrBackend
     , fCachedB(SK_ScalarMax)
     , fCachedC(SK_ScalarMax)
     , fCachedTLimit(SK_ScalarMax) {
-    const CircleOutside2PtConicalEffect& data = drawEffect.castEffect<CircleOutside2PtConicalEffect>();
+    const CircleOutside2PtConicalEffect& data = processor.cast<CircleOutside2PtConicalEffect>();
     fIsFlipped = data.isFlipped();
     }
 
-void GLCircleOutside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
-                                               const GrDrawEffect&,
-                                               const GrEffectKey& key,
+void GLCircleOutside2PtConicalEffect::emitCode(GrGLFPBuilder* builder,
+                                               const GrFragmentProcessor&,
+                                               const GrProcessorKey& key,
                                                const char* outputColor,
                                                const char* inputColor,
                                                const TransformedCoordsArray& coords,
                                                const TextureSamplerArray& samplers) {
     uint32_t baseKey = key.get32(0);
     this->emitUniforms(builder, baseKey);
-    fCenterUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fCenterUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                      kVec2f_GrSLType, "Conical2FSCenter");
-    fParamUni = builder->addUniform(GrGLShaderBuilder::kFragment_Visibility,
+    fParamUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
                                     kVec4f_GrSLType, "Conical2FSParams");
     SkString tName("t");
 
@@ -1200,12 +1225,13 @@ void GLCircleOutside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     GrGLShaderVar params = builder->getUniformVariable(fParamUni);
 
     // if we have a vec3 from being in perspective, convert it to a vec2 first
-    SkString coords2DString = builder->ensureFSCoords2D(coords, 0);
+    GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
+    SkString coords2DString = fsBuilder->ensureFSCoords2D(coords, 0);
     const char* coords2D = coords2DString.c_str();
 
     // output will default to transparent black (we simply won't write anything
     // else to it if invalid, instead of discarding or returning prematurely)
-    builder->fsCodeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
+    fsBuilder->codeAppendf("\t%s = vec4(0.0,0.0,0.0,0.0);\n", outputColor);
 
     // p = coords2D
     // e = center end
@@ -1216,28 +1242,30 @@ void GLCircleOutside2PtConicalEffect::emitCode(GrGLShaderBuilder* builder,
     // d = dot(e, p) + B
     // t = d +/- sqrt(d^2 - A * dot(p, p) + C)
 
-    builder->fsCodeAppendf("\tfloat pDotp = dot(%s,  %s);\n", coords2D, coords2D);
-    builder->fsCodeAppendf("\tfloat d = dot(%s,  %s) + %s.y;\n", coords2D, center.c_str(), params.c_str());
-    builder->fsCodeAppendf("\tfloat deter = d * d - %s.x * pDotp + %s.z;\n", params.c_str(), params.c_str());
+    fsBuilder->codeAppendf("\tfloat pDotp = dot(%s,  %s);\n", coords2D, coords2D);
+    fsBuilder->codeAppendf("\tfloat d = dot(%s,  %s) + %s.y;\n", coords2D, center.c_str(),
+                           params.c_str());
+    fsBuilder->codeAppendf("\tfloat deter = d * d - %s.x * pDotp + %s.z;\n", params.c_str(),
+                           params.c_str());
 
     // Must check to see if we flipped the circle order (to make sure start radius < end radius)
     // If so we must also flip sign on sqrt
     if (!fIsFlipped) {
-        builder->fsCodeAppendf("\tfloat %s = d + sqrt(deter);\n", tName.c_str());
+        fsBuilder->codeAppendf("\tfloat %s = d + sqrt(deter);\n", tName.c_str());
     } else {
-        builder->fsCodeAppendf("\tfloat %s = d - sqrt(deter);\n", tName.c_str());
+        fsBuilder->codeAppendf("\tfloat %s = d - sqrt(deter);\n", tName.c_str());
     }
 
-    builder->fsCodeAppendf("\tif (%s >= %s.w && deter >= 0.0) {\n", tName.c_str(), params.c_str());
-    builder->fsCodeAppend("\t\t");
+    fsBuilder->codeAppendf("\tif (%s >= %s.w && deter >= 0.0) {\n", tName.c_str(), params.c_str());
+    fsBuilder->codeAppend("\t\t");
     this->emitColor(builder, tName.c_str(), baseKey, outputColor, inputColor, samplers);
-    builder->fsCodeAppend("\t}\n");
+    fsBuilder->codeAppend("\t}\n");
 }
 
 void GLCircleOutside2PtConicalEffect::setData(const GrGLProgramDataManager& pdman,
-                                              const GrDrawEffect& drawEffect) {
-    INHERITED::setData(pdman, drawEffect);
-    const CircleOutside2PtConicalEffect& data = drawEffect.castEffect<CircleOutside2PtConicalEffect>();
+                                              const GrProcessor& processor) {
+    INHERITED::setData(pdman, processor);
+    const CircleOutside2PtConicalEffect& data = processor.cast<CircleOutside2PtConicalEffect>();
     SkASSERT(data.isFlipped() == fIsFlipped);
     SkScalar centerX = data.centerX();
     SkScalar centerY = data.centerY();
@@ -1262,19 +1290,19 @@ void GLCircleOutside2PtConicalEffect::setData(const GrGLProgramDataManager& pdma
     }
 }
 
-void GLCircleOutside2PtConicalEffect::GenKey(const GrDrawEffect& drawEffect,
-                                             const GrGLCaps&, GrEffectKeyBuilder* b) {
+void GLCircleOutside2PtConicalEffect::GenKey(const GrProcessor& processor,
+                                             const GrGLCaps&, GrProcessorKeyBuilder* b) {
     uint32_t* key = b->add32n(2);
-    key[0] = GenBaseGradientKey(drawEffect);
-    key[1] = drawEffect.castEffect<CircleOutside2PtConicalEffect>().isFlipped();
+    key[0] = GenBaseGradientKey(processor);
+    key[1] = processor.cast<CircleOutside2PtConicalEffect>().isFlipped();
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-GrEffect* Gr2PtConicalGradientEffect::Create(GrContext* ctx,
-                                             const SkTwoPointConicalGradient& shader,
-                                             SkShader::TileMode tm,
-                                             const SkMatrix* localMatrix) {
+GrFragmentProcessor* Gr2PtConicalGradientEffect::Create(GrContext* ctx,
+                                                        const SkTwoPointConicalGradient& shader,
+                                                        SkShader::TileMode tm,
+                                                        const SkMatrix* localMatrix) {
     SkMatrix matrix;
     if (!shader.getLocalMatrix().invert(&matrix)) {
         return NULL;

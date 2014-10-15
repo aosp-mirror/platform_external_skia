@@ -43,16 +43,6 @@ void SkPoint::setIRectFan(int l, int t, int r, int b, size_t stride) {
                                                    SkIntToScalar(t));
 }
 
-void SkPoint::setRectFan(SkScalar l, SkScalar t, SkScalar r, SkScalar b,
-                         size_t stride) {
-    SkASSERT(stride >= sizeof(SkPoint));
-
-    ((SkPoint*)((intptr_t)this + 0 * stride))->set(l, t);
-    ((SkPoint*)((intptr_t)this + 1 * stride))->set(l, b);
-    ((SkPoint*)((intptr_t)this + 2 * stride))->set(r, b);
-    ((SkPoint*)((intptr_t)this + 3 * stride))->set(r, t);
-}
-
 void SkPoint::rotateCW(SkPoint* dst) const {
     SkASSERT(dst);
 
@@ -224,7 +214,7 @@ SkScalar SkPoint::distanceToLineBetweenSqd(const SkPoint& a,
 
     SkScalar uLengthSqd = u.lengthSqd();
     SkScalar det = u.cross(v);
-    if (NULL != side) {
+    if (side) {
         SkASSERT(-1 == SkPoint::kLeft_Side &&
                   0 == SkPoint::kOn_Side &&
                   1 == kRight_Side);

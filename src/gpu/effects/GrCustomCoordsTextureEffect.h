@@ -8,8 +8,8 @@
 #ifndef GrCustomCoordsTextureEffect_DEFINED
 #define GrCustomCoordsTextureEffect_DEFINED
 
-#include "GrEffect.h"
-#include "GrVertexEffect.h"
+#include "GrProcessor.h"
+#include "GrGeometryProcessor.h"
 
 class GrGLCustomCoordsTextureEffect;
 
@@ -18,9 +18,9 @@ class GrGLCustomCoordsTextureEffect;
  * It allows explicit specification of the filtering and wrap modes (GrTextureParams). The input
  * coords are a custom attribute.
  */
-class GrCustomCoordsTextureEffect : public GrVertexEffect {
+class GrCustomCoordsTextureEffect : public GrGeometryProcessor {
 public:
-    static GrEffect* Create(GrTexture* tex, const GrTextureParams& p) {
+    static GrGeometryProcessor* Create(GrTexture* tex, const GrTextureParams& p) {
         return SkNEW_ARGS(GrCustomCoordsTextureEffect, (tex, p));
     }
 
@@ -28,22 +28,25 @@ public:
 
     static const char* Name() { return "Texture"; }
 
-    virtual void getConstantColorComponents(GrColor* color, uint32_t* validFlags) const SK_OVERRIDE;
+    const GrShaderVar& inTextureCoords() const { return fInTextureCoords; }
 
-    typedef GrGLCustomCoordsTextureEffect GLEffect;
+    typedef GrGLCustomCoordsTextureEffect GLProcessor;
 
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendGeometryProcessorFactory& getFactory() const SK_OVERRIDE;
 
 private:
     GrCustomCoordsTextureEffect(GrTexture* texture, const GrTextureParams& params);
 
-    virtual bool onIsEqual(const GrEffect& other) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrProcessor& other) const SK_OVERRIDE;
 
-    GrTextureAccess fTextureAccess;
+    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
 
-    GR_DECLARE_EFFECT_TEST;
+    GrTextureAccess    fTextureAccess;
+    const GrShaderVar& fInTextureCoords;
 
-    typedef GrVertexEffect INHERITED;
+    GR_DECLARE_GEOMETRY_PROCESSOR_TEST;
+
+    typedef GrGeometryProcessor INHERITED;
 };
 
 #endif

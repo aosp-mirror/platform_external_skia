@@ -21,6 +21,7 @@ void GrGLRenderTarget::init(const Desc& desc,
     fMSColorRenderbufferID  = desc.fMSColorRenderbufferID;
     fViewport               = viewport;
     fTexIDObj.reset(SkSafeRef(texID));
+    this->registerWithCache();
 }
 
 namespace {
@@ -52,8 +53,8 @@ GrGLRenderTarget::GrGLRenderTarget(GrGpuGL* gpu,
                          viewport.fWidth, viewport.fHeight,
                          desc.fConfig, desc.fSampleCnt,
                          desc.fOrigin)) {
-    SkASSERT(NULL != texID);
-    SkASSERT(NULL != texture);
+    SkASSERT(texID);
+    SkASSERT(texture);
     // FBO 0 can't also be a texture, right?
     SkASSERT(0 != desc.fRTFBOID);
     SkASSERT(0 != desc.fTexFBOID);
@@ -101,7 +102,7 @@ void GrGLRenderTarget::onAbandon() {
     fRTFBOID                = 0;
     fTexFBOID               = 0;
     fMSColorRenderbufferID  = 0;
-    if (NULL != fTexIDObj.get()) {
+    if (fTexIDObj.get()) {
         fTexIDObj->abandon();
         fTexIDObj.reset(NULL);
     }

@@ -225,6 +225,23 @@ void SkNWayCanvas::drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
     }
 }
 
+void SkNWayCanvas::drawImage(const SkImage* image, SkScalar left, SkScalar top,
+                             const SkPaint* paint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawImage(image, left, top, paint);
+    }
+}
+
+void SkNWayCanvas::drawImageRect(const SkImage* image, const SkRect* src,
+                                 const SkRect& dst,
+                                 const SkPaint* paint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawImageRect(image, src, dst, paint);
+    }
+}
+
 void SkNWayCanvas::drawSprite(const SkBitmap& bitmap, int x, int y,
                               const SkPaint* paint) {
     Iter iter(fList);
@@ -265,10 +282,19 @@ void SkNWayCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const S
     }
 }
 
-void SkNWayCanvas::onDrawPicture(const SkPicture* picture) {
+void SkNWayCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                  const SkPaint &paint) {
     Iter iter(fList);
     while (iter.next()) {
-        iter->drawPicture(picture);
+        iter->drawTextBlob(blob, x, y, paint);
+    }
+}
+
+void SkNWayCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
+                                 const SkPaint* paint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawPicture(picture, matrix, paint);
     }
 }
 
@@ -281,6 +307,15 @@ void SkNWayCanvas::drawVertices(VertexMode vmode, int vertexCount,
     while (iter.next()) {
         iter->drawVertices(vmode, vertexCount, vertices, texs, colors, xmode,
                            indices, indexCount, paint);
+    }
+}
+
+void SkNWayCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                               const SkPoint texCoords[4], SkXfermode* xmode,
+                               const SkPaint& paint) {
+    Iter iter(fList);
+    while (iter.next()) {
+        iter->drawPatch(cubics, colors, texCoords, xmode, paint);
     }
 }
 

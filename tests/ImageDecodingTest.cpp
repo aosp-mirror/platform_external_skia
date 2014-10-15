@@ -55,9 +55,10 @@ static bool skip_image_format(SkImageDecoder::Format format) {
         // decoders do not, so skip them as well.
         case SkImageDecoder::kICO_Format:
         case SkImageDecoder::kBMP_Format:
-        // KTX is a Texture format so it's not particularly clear how to 
-        // decode the alpha from it.
+        // KTX and ASTC are texture formats so it's not particularly clear how to 
+        // decode the alpha from them.
         case SkImageDecoder::kKTX_Format:
+        case SkImageDecoder::kASTC_Format:
         // The rest of these are opaque.
         case SkImageDecoder::kPKM_Format:
         case SkImageDecoder::kWBMP_Format:
@@ -277,7 +278,7 @@ DEF_TEST(ImageDecoding_unpremul, reporter) {
 
         // This should never fail since we know the images we're decoding.
         SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(&stream));
-        REPORTER_ASSERT(reporter, NULL != decoder.get());
+        REPORTER_ASSERT(reporter, decoder.get());
         if (NULL == decoder.get()) {
             continue;
         }
@@ -509,9 +510,9 @@ DEF_TEST(ImprovedBitmapFactory, reporter) {
         SkBitmap bm;
         SkAssertResult(bm.setInfo(SkImageInfo::MakeN32Premul(1, 1)));
         REPORTER_ASSERT(reporter,
-            NULL != install_pixel_ref(&bm, stream.detach(), 1, true));
+            install_pixel_ref(&bm, stream.detach(), 1, true));
         SkAutoLockPixels alp(bm);
-        REPORTER_ASSERT(reporter, NULL != bm.getPixels());
+        REPORTER_ASSERT(reporter, bm.getPixels());
     }
 }
 
@@ -769,7 +770,7 @@ public:
             fSize = 0;
             return true;
         }
-        return bm->allocPixels(NULL, ct);
+        return bm->tryAllocPixels(NULL, ct);
     }
     bool ready() { return fPixels != NULL; }
 private:

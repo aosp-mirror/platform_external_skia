@@ -96,9 +96,7 @@ static SkPMColor convertToPMColor(SkColorType ct, SkAlphaType at, const uint32_t
 static void fillCanvas(SkCanvas* canvas) {
     static SkBitmap bmp;
     if (bmp.isNull()) {
-        SkDEBUGCODE(bool alloc =) bmp.allocN32Pixels(DEV_W, DEV_H);
-        SkASSERT(alloc);
-        SkAutoLockPixels alp(bmp);
+        bmp.allocN32Pixels(DEV_W, DEV_H);
         intptr_t pixels = reinterpret_cast<intptr_t>(bmp.getPixels());
         for (int y = 0; y < DEV_H; ++y) {
             for (int x = 0; x < DEV_W; ++x) {
@@ -320,9 +318,9 @@ DEF_GPUTEST(ReadPixels, reporter, factory) {
                 desc.fHeight = DEV_H;
                 desc.fConfig = kSkia8888_GrPixelConfig;
                 desc.fOrigin = 1 == dtype ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin;
-                GrAutoScratchTexture ast(context, desc, GrContext::kExact_ScratchTexMatch);
-                SkAutoTUnref<GrTexture> tex(ast.detach());
-                surface.reset(SkSurface::NewRenderTargetDirect(tex->asRenderTarget()));
+                SkAutoTUnref<GrTexture> texture(
+                    context->refScratchTexture(desc, GrContext::kExact_ScratchTexMatch));
+                surface.reset(SkSurface::NewRenderTargetDirect(texture->asRenderTarget()));
 #else
                 continue;
 #endif

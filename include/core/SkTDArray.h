@@ -282,12 +282,12 @@ public:
     }
 
     // routines to treat the array like a stack
-    T*          push() { return this->append(); }
-    void        push(const T& elem) { *this->append() = elem; }
-    const T&    top() const { return (*this)[fCount - 1]; }
-    T&          top() { return (*this)[fCount - 1]; }
-    void        pop(T* elem) { if (elem) *elem = (*this)[fCount - 1]; --fCount; }
-    void        pop() { --fCount; }
+    T*       push() { return this->append(); }
+    void     push(const T& elem) { *this->append() = elem; }
+    const T& top() const { return (*this)[fCount - 1]; }
+    T&       top() { return (*this)[fCount - 1]; }
+    void     pop(T* elem) { SkASSERT(fCount > 0); if (elem) *elem = (*this)[fCount - 1]; --fCount; }
+    void     pop() { SkASSERT(fCount > 0); --fCount; }
 
     void deleteAll() {
         T*  iter = fArray;
@@ -346,6 +346,11 @@ public:
         SkASSERT(fData == (ArrayT*)fArray);
     }
 #endif
+
+    void shrinkToFit() {
+        fReserve = fCount;
+        fArray = (T*)sk_realloc_throw(fArray, fReserve * sizeof(T));
+    }
 
 private:
 #ifdef SK_DEBUG

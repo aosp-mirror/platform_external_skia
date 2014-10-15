@@ -6,22 +6,15 @@
  */
 
 #include "SkDevice.h"
+#include "SkDeviceProperties.h"
 #include "SkDraw.h"
 #include "SkMetaData.h"
 #include "SkPatchUtils.h"
+#include "SkShader.h"
+#include "SkTextBlob.h"
 
 SkBaseDevice::SkBaseDevice()
-    : fLeakyProperties(SkDeviceProperties::MakeDefault())
-#ifdef SK_DEBUG
-    , fAttachedToCanvas(false)
-#endif
-{
-    fOrigin.setZero();
-    fMetaData = NULL;
-}
-
-SkBaseDevice::SkBaseDevice(const SkDeviceProperties& deviceProperties)
-    : fLeakyProperties(deviceProperties)
+    : fLeakyProperties(SkNEW_ARGS(SkDeviceProperties, (SkDeviceProperties::kLegacyLCD_InitType)))
 #ifdef SK_DEBUG
     , fAttachedToCanvas(false)
 #endif
@@ -31,7 +24,8 @@ SkBaseDevice::SkBaseDevice(const SkDeviceProperties& deviceProperties)
 }
 
 SkBaseDevice::~SkBaseDevice() {
-    delete fMetaData;
+    SkDELETE(fLeakyProperties);
+    SkDELETE(fMetaData);
 }
 
 SkBaseDevice* SkBaseDevice::createCompatibleDevice(const SkImageInfo& info) {
@@ -63,7 +57,11 @@ const SkBitmap& SkBaseDevice::accessBitmap(bool changePixels) {
     return bitmap;
 }
 
-SkSurface* SkBaseDevice::newSurface(const SkImageInfo&) { return NULL; }
+void SkBaseDevice::setPixelGeometry(SkPixelGeometry geo) {
+    fLeakyProperties->setPixelGeometry(geo);
+}
+
+SkSurface* SkBaseDevice::newSurface(const SkImageInfo&, const SkSurfaceProps&) { return NULL; }
 
 const void* SkBaseDevice::peekPixels(SkImageInfo*, size_t*) { return NULL; }
 
@@ -79,15 +77,52 @@ void SkBaseDevice::drawDRRect(const SkDraw& draw, const SkRRect& outer,
     this->drawPath(draw, path, paint, preMatrix, pathIsMutable);
 }
 
-void SkBaseDevice::drawPatch(const SkDraw& draw, const SkPatch& patch, const SkPaint& paint) {
-    SkPatch::VertexData data;
+void SkBaseDevice::drawPatch(const SkDraw& draw, const SkPoint cubics[12], const SkColor colors[4],
+                             const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint) {
+    SkPatchUtils::VertexData data;
     
-    SkISize lod = SkPatchUtils::GetLevelOfDetail(patch, draw.fMatrix);
+    SkISize lod = SkPatchUtils::GetLevelOfDetail(cubics, draw.fMatrix);
 
     // It automatically adjusts lodX and lodY in case it exceeds the number of indices.
-    patch.getVertexData(&data, lod.width(), lod.height());
-    this->drawVertices(draw, SkCanvas::kTriangles_VertexMode, data.fVertexCount, data.fPoints,
-                       data.fTexCoords, data.fColors, NULL, data.fIndices, data.fIndexCount, paint);
+    // If it fails to generate the vertices, then we do not draw. 
+    if (SkPatchUtils::getVertexData(&data, cubics, colors, texCoords, lod.width(), lod.height())) {
+        this->drawVertices(draw, SkCanvas::kTriangles_VertexMode, data.fVertexCount, data.fPoints,
+                           data.fTexCoords, data.fColors, xmode, data.fIndices, data.fIndexCount,
+                           paint);
+    }
+}
+
+void SkBaseDevice::drawTextBlob(const SkDraw& draw, const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                const SkPaint &paint) {
+
+    SkPaint runPaint = paint;
+
+    SkTextBlob::RunIterator it(blob);
+    while (!it.done()) {
+        size_t textLen = it.glyphCount() * sizeof(uint16_t);
+        const SkPoint& offset = it.offset();
+        // applyFontToPaint() always overwrites the exact same attributes,
+        // so it is safe to not re-seed the paint.
+        it.applyFontToPaint(&runPaint);
+
+        switch (it.positioning()) {
+        case SkTextBlob::kDefault_Positioning:
+            this->drawText(draw, it.glyphs(), textLen, x + offset.x(), y + offset.y(), runPaint);
+            break;
+        case SkTextBlob::kHorizontal_Positioning:
+            this->drawPosText(draw, it.glyphs(), textLen, it.pos(), 1,
+                              SkPoint::Make(x, y + offset.y()), runPaint);
+            break;
+        case SkTextBlob::kFull_Positioning:
+            this->drawPosText(draw, it.glyphs(), textLen, it.pos(), 2,
+                              SkPoint::Make(x, y), runPaint);
+            break;
+        default:
+            SkFAIL("unhandled positioning mode");
+        }
+
+        it.next();
+    }
 }
 
 bool SkBaseDevice::readPixels(const SkImageInfo& info, void* dstP, size_t rowBytes, int x, int y) {
@@ -147,7 +182,8 @@ void SkBaseDevice::EXPERIMENTAL_optimize(const SkPicture* picture) {
     // The base class doesn't perform any analysis but derived classes may
 }
 
-bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture) {
+bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
+                                            const SkPaint*) {
     // The base class doesn't perform any accelerated picture rendering
     return false;
 }

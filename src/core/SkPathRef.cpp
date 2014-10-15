@@ -29,12 +29,16 @@ SkPathRef::Editor::Editor(SkAutoTUnref<SkPathRef>* pathRef,
 
 //////////////////////////////////////////////////////////////////////////////
 
-SkPathRef* SkPathRef::CreateEmptyImpl() {
-    return SkNEW(SkPathRef);
+// As a template argument, this must have external linkage.
+SkPathRef* sk_create_empty_pathref() {
+    SkPathRef* empty = SkNEW(SkPathRef);
+    empty->computeBounds();   // Avoids races later to be the first to do this.
+    return empty;
 }
 
+SK_DECLARE_STATIC_LAZY_PTR(SkPathRef, empty, sk_create_empty_pathref);
+
 SkPathRef* SkPathRef::CreateEmpty() {
-    SK_DECLARE_STATIC_LAZY_PTR(SkPathRef, empty, CreateEmptyImpl);
     return SkRef(empty.get());
 }
 
@@ -343,7 +347,7 @@ SkPoint* SkPathRef::growForRepeatedVerb(int /*SkPath::Verb*/ verb,
     }
 
     if (SkPath::kConic_Verb == verb) {
-        SkASSERT(NULL != weights);
+        SkASSERT(weights);
         *weights = fConicWeights.append(numVbs);
     }
 

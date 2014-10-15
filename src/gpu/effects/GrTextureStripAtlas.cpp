@@ -35,7 +35,7 @@ GrTextureStripAtlas::Hash* GrTextureStripAtlas::GetCache() {
 
 // Remove the specified atlas from the cache
 void GrTextureStripAtlas::CleanUp(const GrContext*, void* info) {
-    SkASSERT(NULL != info);
+    SkASSERT(info);
 
     AtlasEntry* entry = static_cast<AtlasEntry*>(info);
 
@@ -155,13 +155,12 @@ int GrTextureStripAtlas::lockRow(const SkBitmap& data) {
 
         // Pass in the kDontFlush flag, since we know we're writing to a part of this texture
         // that is not currently in use
-        fDesc.fContext->writeTexturePixels(fTexture,
-                                           0,  rowNumber * fDesc.fRowHeight,
-                                           fDesc.fWidth, fDesc.fRowHeight,
-                                           SkImageInfo2GrPixelConfig(data.info()),
-                                           data.getPixels(),
-                                           data.rowBytes(),
-                                           GrContext::kDontFlush_PixelOpsFlag);
+        fTexture->writePixels(0,  rowNumber * fDesc.fRowHeight,
+                              fDesc.fWidth, fDesc.fRowHeight,
+                              SkImageInfo2GrPixelConfig(data.info()),
+                              data.getPixels(),
+                              data.rowBytes(),
+                              GrContext::kDontFlush_PixelOpsFlag);
     }
 
     SkASSERT(rowNumber >= 0);
@@ -209,14 +208,13 @@ void GrTextureStripAtlas::lockTexture() {
         this->initLRU();
         fKeyTable.rewind();
     }
-    SkASSERT(NULL != fTexture);
+    SkASSERT(fTexture);
 }
 
 void GrTextureStripAtlas::unlockTexture() {
-    SkASSERT(NULL != fTexture && 0 == fLockedRows);
+    SkASSERT(fTexture && 0 == fLockedRows);
     fTexture->unref();
     fTexture = NULL;
-    fDesc.fContext->purgeCache();
 }
 
 void GrTextureStripAtlas::initLRU() {
@@ -246,8 +244,8 @@ void GrTextureStripAtlas::appendLRU(AtlasRow* row) {
 }
 
 void GrTextureStripAtlas::removeFromLRU(AtlasRow* row) {
-    SkASSERT(NULL != row);
-    if (NULL != row->fNext && NULL != row->fPrev) {
+    SkASSERT(row);
+    if (row->fNext && row->fPrev) {
         row->fPrev->fNext = row->fNext;
         row->fNext->fPrev = row->fPrev;
     } else {
@@ -342,7 +340,7 @@ void GrTextureStripAtlas::validate() {
     if (fLockedRows == 0) {
         SkASSERT(NULL == fTexture);
     } else {
-        SkASSERT(NULL != fTexture);
+        SkASSERT(fTexture);
     }
 }
 #endif

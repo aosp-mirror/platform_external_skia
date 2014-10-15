@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2007 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkColorShader_DEFINED
 #define SkColorShader_DEFINED
@@ -56,9 +54,8 @@ public:
 
     virtual GradientType asAGradient(GradientInfo* info) const SK_OVERRIDE;
 
-    virtual bool asNewEffect(GrContext* context, const SkPaint& paint,
-                             const SkMatrix* localMatrix, GrColor* paintColor,
-                             GrEffect** effect) const SK_OVERRIDE;
+    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                     GrFragmentProcessor**) const SK_OVERRIDE;
 
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkColorShader)
@@ -67,9 +64,13 @@ protected:
     SkColorShader(SkReadBuffer&);
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     virtual Context* onCreateContext(const ContextRec&, void* storage) const SK_OVERRIDE;
+    virtual bool onAsLuminanceColor(SkColor* lum) const SK_OVERRIDE {
+        *lum = fColor;
+        return true;
+    }
 
 private:
-    SkColor     fColor;         // ignored if fInheritColor is true
+    SkColor fColor;
 
     typedef SkShader INHERITED;
 };

@@ -15,12 +15,13 @@
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
 #include "SkDevice.h"
+#include "SkDocument.h"
 #include "SkGPipe.h"
 #include "SkGraphics.h"
 #include "SkImageEncoder.h"
 #include "SkOSFile.h"
-#include "SkPDFDevice.h"
-#include "SkPDFDocument.h"
+//#include "SkPDFDevice.h"
+//#include "SkPDFDocument.h"
 #include "SkPaint.h"
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
@@ -271,17 +272,15 @@ public:
         fBackend = kNone_BackEndType;
     }
 
-    virtual SkCanvas* createCanvas(SampleWindow::DeviceType dType,
-                                   SampleWindow* win) {
+    virtual SkSurface* createSurface(SampleWindow::DeviceType dType,
+                                     SampleWindow* win) SK_OVERRIDE {
 #if SK_SUPPORT_GPU
-        if (IsGpuDeviceType(dType) && NULL != fCurContext) {
-            SkAutoTUnref<SkBaseDevice> device(new SkGpuDevice(fCurContext, fCurRenderTarget));
-            return new SkCanvas(device);
-        } else
-#endif
-        {
-            return NULL;
+        if (IsGpuDeviceType(dType) && fCurContext) {
+            SkSurfaceProps props(win->getSurfaceProps());
+            return SkSurface::NewRenderTargetDirect(fCurRenderTarget, &props);
         }
+#endif
+        return NULL;
     }
 
     virtual void publishCanvas(SampleWindow::DeviceType dType,
@@ -300,7 +299,8 @@ public:
                                              SkImageInfo2GrPixelConfig(bm.colorType(),
                                                                        bm.alphaType()),
                                              bm.getPixels(),
-                                             bm.rowBytes());
+                                             bm.rowBytes(),
+                                             GrContext::kFlushWrites_PixelOp);
             }
         }
 #endif
@@ -860,7 +860,6 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
     fMagnify = false;
 
     fSaveToPdf = false;
-    fPdfCanvas = NULL;
 
     fTransitionNext = 6;
     fTransitionPrev = 2;
@@ -949,8 +948,6 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
 
     this->loadView((*fSamples[fCurrIndex])());
 
-    fPDFData = NULL;
-
     if (NULL == devManager) {
         fDevManager = new DefaultDeviceManager();
     } else {
@@ -973,7 +970,6 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
 }
 
 SampleWindow::~SampleWindow() {
-    delete fPdfCanvas;
     SkSafeUnref(fTypeface);
     SkSafeUnref(fDevManager);
 }
@@ -999,7 +995,7 @@ void SampleWindow::listTitles() {
 
 static SkBitmap capture_bitmap(SkCanvas* canvas) {
     SkBitmap bm;
-    if (bm.allocPixels(canvas->imageInfo())) {
+    if (bm.tryAllocPixels(canvas->imageInfo())) {
         canvas->readPixels(&bm, 0, 0);
     }
     return bm;
@@ -1282,13 +1278,16 @@ void SampleWindow::saveToPdf()
 
 SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
     if (fSaveToPdf) {
-        const SkBitmap bmp = capture_bitmap(canvas);
-        SkISize size = SkISize::Make(bmp.width(), bmp.height());
-        SkPDFDevice* pdfDevice = new SkPDFDevice(size, size,
-                canvas->getTotalMatrix());
-        fPdfCanvas = new SkCanvas(pdfDevice);
-        pdfDevice->unref();
-        canvas = fPdfCanvas;
+        SkString name;
+        if (!this->getRawTitle(&name)) {
+            name.set("unknown_sample");
+        }
+        name.append(".pdf");
+#ifdef SK_BUILD_FOR_ANDROID
+        name.prepend("/sdcard/");
+#endif
+        fPDFDocument.reset(SkDocument::CreatePDF(name.c_str()));
+        canvas = fPDFDocument->beginPage(this->width(), this->height());
     } else if (kPicture_DeviceType == fDeviceType) {
         canvas = fRecorder.beginRecording(9999, 9999, NULL, 0);
     } else {
@@ -1308,38 +1307,11 @@ SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
     return canvas;
 }
 
-#include "SkData.h"
 void SampleWindow::afterChildren(SkCanvas* orig) {
     if (fSaveToPdf) {
         fSaveToPdf = false;
-        if (fShowZoomer) {
-            showZoomer(fPdfCanvas);
-        }
-        SkString name;
-        name.printf("%s.pdf", this->getTitle());
-        SkPDFDocument doc;
-        SkPDFDevice* device = NULL;//static_cast<SkPDFDevice*>(fPdfCanvas->getDevice());
-        SkASSERT(false);
-        doc.appendPage(device);
-#ifdef SK_BUILD_FOR_ANDROID
-        name.prepend("/sdcard/");
-#endif
-
-#ifdef SK_BUILD_FOR_IOS
-        SkDynamicMemoryWStream mstream;
-        doc.emitPDF(&mstream);
-        fPDFData = mstream.copyToData();
-#endif
-        SkFILEWStream stream(name.c_str());
-        if (stream.isValid()) {
-            doc.emitPDF(&stream);
-            const char* desc = "File saved from Skia SampleApp";
-            this->onPDFSaved(this->getTitle(), desc, name.c_str());
-        }
-
-        delete fPdfCanvas;
-        fPdfCanvas = NULL;
-
+        fPDFDocument->endPage();
+        fPDFDocument.reset(NULL);
         // We took over the draw calls in order to create the PDF, so we need
         // to redraw.
         this->inval(NULL);
@@ -1376,7 +1348,7 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
                 orig->drawPicture(pict.get());
             }
         } else {
-            picture->draw(orig);
+            picture->playback(orig);
         }
     }
 
@@ -1410,7 +1382,13 @@ void SampleWindow::beforeChild(SkView* child, SkCanvas* canvas) {
         t = SkScalarMul(SkScalarDiv(t, gAnimPeriod), gAnimMag);
         SkMatrix m;
         m.reset();
+#if 1
         m.setPerspY(t);
+#else
+        m.setPerspY(SK_Scalar1 / 1000);
+        m.setSkewX(SkScalarDiv(8, 25));
+        m.dump();
+#endif
         canvas->concat(m);
     }
 
@@ -1712,6 +1690,9 @@ bool SampleWindow::onHandleChar(SkUnichar uni) {
             post_event_to_sink(SkNEW_ARGS(SkEvent, (gUpdateWindowTitleEvtName)), this);
             this->inval(NULL);
             break;
+        case 'D':
+            toggleDistanceFieldFonts();
+            break;
         case 'f':
             // only
             toggleFPS();
@@ -1805,6 +1786,15 @@ void SampleWindow::toggleRendering() {
 
 void SampleWindow::toggleFPS() {
     fMeasureFPS = !fMeasureFPS;
+    this->updateTitle();
+    this->inval(NULL);
+}
+
+void SampleWindow::toggleDistanceFieldFonts() {
+    SkSurfaceProps props = this->getSurfaceProps();
+    uint32_t flags = props.flags() ^ SkSurfaceProps::kUseDistanceFieldFonts_Flag;
+    this->setSurfaceProps(SkSurfaceProps(flags, props.pixelGeometry()));
+
     this->updateTitle();
     this->inval(NULL);
 }
@@ -1992,11 +1982,13 @@ static const char* trystate_str(SkOSMenu::TriState state,
     return NULL;
 }
 
-void SampleWindow::updateTitle() {
-    SkView* view = curr_view(this);
+bool SampleWindow::getRawTitle(SkString* title) {
+    return curr_title(this, title);
+}
 
+void SampleWindow::updateTitle() {
     SkString title;
-    if (!curr_title(this, &title)) {
+    if (!this->getRawTitle(&title)) {
         title.set("<unknown>");
     }
 
@@ -2020,6 +2012,9 @@ void SampleWindow::updateTitle() {
     if (fPerspAnim) {
         title.prepend("<K> ");
     }
+    if (this->getSurfaceProps().flags() & SkSurfaceProps::kUseDistanceFieldFonts_Flag) {
+        title.prepend("<DFF> ");
+    }
 
     title.prepend(trystate_str(fLCDState, "LCD ", "lcd "));
     title.prepend(trystate_str(fAAState, "AA ", "aa "));
@@ -2036,6 +2031,8 @@ void SampleWindow::updateTitle() {
     if (fMeasureFPS) {
         title.appendf(" %8.3f ms", fMeasureFPS_Time / (float)FPS_REPEAT_COUNT);
     }
+
+    SkView* view = curr_view(this);
     if (SampleView::IsSampleView(view)) {
         switch (fPipeState) {
             case SkOSMenu::kOnState:
@@ -2053,7 +2050,7 @@ void SampleWindow::updateTitle() {
 
 #if SK_SUPPORT_GPU
     if (IsGpuDeviceType(fDeviceType) &&
-        NULL != fDevManager &&
+        fDevManager &&
         fDevManager->getGrRenderTarget() &&
         fDevManager->getGrRenderTarget()->numSamples() > 0) {
         title.appendf(" [MSAA: %d]",

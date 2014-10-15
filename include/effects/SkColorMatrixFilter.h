@@ -26,7 +26,7 @@ public:
     virtual uint32_t getFlags() const SK_OVERRIDE;
     virtual bool asColorMatrix(SkScalar matrix[20]) const SK_OVERRIDE;
 #if SK_SUPPORT_GPU
-    virtual GrEffect* asNewEffect(GrContext*) const SK_OVERRIDE;
+    virtual GrFragmentProcessor* asFragmentProcessor(GrContext*) const SK_OVERRIDE;
 #endif
 
     struct State {
@@ -41,7 +41,9 @@ public:
 protected:
     explicit SkColorMatrixFilter(const SkColorMatrix&);
     explicit SkColorMatrixFilter(const SkScalar array[20]);
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     explicit SkColorMatrixFilter(SkReadBuffer& buffer);
+#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
 private:

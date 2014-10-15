@@ -44,8 +44,7 @@ class SkTwoPointConicalGradient : public SkGradientShaderBase {
 public:
     SkTwoPointConicalGradient(const SkPoint& start, SkScalar startRadius,
                               const SkPoint& end, SkScalar endRadius,
-                              bool flippedGrad, const Descriptor&,
-                              const SkMatrix* localMatrix);
+                              bool flippedGrad, const Descriptor&);
 
 
     virtual size_t contextSize() const SK_OVERRIDE;
@@ -65,8 +64,8 @@ public:
                                  SkMatrix* matrix,
                                  TileMode* xy) const;
     virtual SkShader::GradientType asAGradient(GradientInfo* info) const  SK_OVERRIDE;
-    virtual bool asNewEffect(GrContext*, const SkPaint&, const SkMatrix*, GrColor* paintColor,
-                             GrEffect**) const SK_OVERRIDE;
+    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                     GrFragmentProcessor**) const SK_OVERRIDE;
     virtual bool isOpaque() const SK_OVERRIDE;
 
     SkScalar getCenterX1() const { return SkPoint::Distance(fCenter1, fCenter2); }
@@ -92,6 +91,7 @@ private:
     SkScalar fRadius2;
     bool fFlippedGrad;
 
+    friend class SkGradientShader;
     typedef SkGradientShaderBase INHERITED;
 };
 

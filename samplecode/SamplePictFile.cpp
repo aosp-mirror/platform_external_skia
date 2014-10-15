@@ -68,9 +68,6 @@ protected:
             case kRTree_BBoxType:
                 name.append(" <bbox: R>");
                 break;
-            case kQuadTree_BBoxType:
-                name.append(" <bbox: Q>");
-                break;
             case kTileGrid_BBoxType:
                 name.append(" <bbox: T>");
                 break;
@@ -107,7 +104,6 @@ protected:
 private:
     enum BBoxType {
         kNo_BBoxType,
-        kQuadTree_BBoxType,
         kRTree_BBoxType,
         kTileGrid_BBoxType,
 
@@ -127,7 +123,9 @@ private:
         if (SkImageDecoder::DecodeFile(path, &bm)) {
             bm.setImmutable();
             SkPictureRecorder recorder;
-            SkCanvas* can = recorder.beginRecording(bm.width(), bm.height(), NULL, 0);
+            SkCanvas* can = recorder.beginRecording(SkIntToScalar(bm.width()), 
+                                                    SkIntToScalar(bm.height()), 
+                                                    NULL, 0);
             can->drawBitmap(bm, 0, 0, NULL);
             pic.reset(recorder.endRecording());
         } else {
@@ -139,13 +137,16 @@ private:
             }
 
             if (false) {
-                SkSurface* surf = SkSurface::NewRasterPMColor(pic->width(), pic->height());
+                SkSurface* surf = SkSurface::NewRasterPMColor(SkScalarCeilToInt(pic->cullRect().width()), 
+                                                              SkScalarCeilToInt(pic->cullRect().height()));
                 surf->getCanvas()->drawPicture(pic);
                 surf->unref();
             }
             if (false) { // re-record
                 SkPictureRecorder recorder;
-                pic->draw(recorder.beginRecording(pic->width(), pic->height(), NULL, 0));
+                pic->playback(recorder.beginRecording(pic->cullRect().width(),
+                                                      pic->cullRect().height(), 
+                                                      NULL, 0));
                 SkAutoTUnref<SkPicture> p2(recorder.endRecording());
 
                 SkString path2(path);
@@ -167,9 +168,6 @@ private:
         case kRTree_BBoxType:
             factory.reset(SkNEW(SkRTreeFactory));
             break;
-        case kQuadTree_BBoxType:
-            factory.reset(SkNEW(SkQuadTreeFactory));
-            break;
         case kTileGrid_BBoxType: {
             SkASSERT(!fTileSize.isEmpty());
             SkTileGridFactory::TileGridInfo gridInfo;
@@ -184,7 +182,9 @@ private:
         }
 
         SkPictureRecorder recorder;
-        pic->draw(recorder.beginRecording(pic->width(), pic->height(), factory.get(), 0));
+        pic->playback(recorder.beginRecording(pic->cullRect().width(),
+                                              pic->cullRect().height(), 
+                                              factory.get(), 0));
         return recorder.endRecording();
     }
 

@@ -39,13 +39,14 @@ SkBitmapProcShader::SkBitmapProcShader(const SkBitmap& src, TileMode tmx, TileMo
     fTileModeY = (uint8_t)tmy;
 }
 
-SkBitmapProcShader::SkBitmapProcShader(SkReadBuffer& buffer)
-        : INHERITED(buffer) {
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
+SkBitmapProcShader::SkBitmapProcShader(SkReadBuffer& buffer) : INHERITED(buffer) {
     buffer.readBitmap(&fRawBitmap);
     fRawBitmap.setImmutable();
     fTileModeX = buffer.readUInt();
     fTileModeY = buffer.readUInt();
 }
+#endif
 
 SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
                                                    SkMatrix* texM,
@@ -63,9 +64,21 @@ SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
     return kDefault_BitmapType;
 }
 
-void SkBitmapProcShader::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
+SkFlattenable* SkBitmapProcShader::CreateProc(SkReadBuffer& buffer) {
+    SkMatrix lm;
+    buffer.readMatrix(&lm);
+    SkBitmap bm;
+    if (!buffer.readBitmap(&bm)) {
+        return NULL;
+    }
+    bm.setImmutable();
+    TileMode mx = (TileMode)buffer.readUInt();
+    TileMode my = (TileMode)buffer.readUInt();
+    return SkShader::CreateBitmapShader(bm, mx, my, &lm);
+}
 
+void SkBitmapProcShader::flatten(SkWriteBuffer& buffer) const {
+    buffer.writeMatrix(this->getLocalMatrix());
     buffer.writeBitmap(fRawBitmap);
     buffer.writeUInt(fTileModeX);
     buffer.writeUInt(fTileModeY);
@@ -382,9 +395,9 @@ void SkBitmapProcShader::toString(SkString* str) const {
 #include "effects/GrSimpleTextureEffect.h"
 #include "SkGr.h"
 
-bool SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                     const SkMatrix* localMatrix, GrColor* paintColor,
-                                     GrEffect** effect) const {
+bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& paint,
+                                             const SkMatrix* localMatrix, GrColor* paintColor,
+                                             GrFragmentProcessor** fp) const {
     SkMatrix matrix;
     matrix.setIDiv(fRawBitmap.width(), fRawBitmap.height());
 
@@ -446,9 +459,9 @@ bool SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& paint,
 
     }
     GrTextureParams params(tm, textureFilterMode);
-    GrTexture* texture = GrLockAndRefCachedBitmapTexture(context, fRawBitmap, &params);
+    SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fRawBitmap, &params));
 
-    if (NULL == texture) {
+    if (!texture) {
         SkErrorInternals::SetError( kInternalError_SkError,
                                     "Couldn't convert bitmap to texture.");
         return false;
@@ -459,20 +472,18 @@ bool SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& paint,
                                                 SkColor2GrColorJustAlpha(paint.getColor());
 
     if (useBicubic) {
-        *effect = GrBicubicEffect::Create(texture, matrix, tm);
+        *fp = GrBicubicEffect::Create(texture, matrix, tm);
     } else {
-        *effect = GrSimpleTextureEffect::Create(texture, matrix, params);
+        *fp = GrSimpleTextureEffect::Create(texture, matrix, params);
     }
-    GrUnlockAndUnrefCachedBitmapTexture(texture);
 
     return true;
 }
 
 #else 
 
-bool SkBitmapProcShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                     const SkMatrix* localMatrix, GrColor* paintColor,
-                                     GrEffect** effect) const {
+bool SkBitmapProcShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                             GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }

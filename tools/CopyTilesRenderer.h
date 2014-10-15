@@ -22,12 +22,17 @@ namespace sk_tools {
     class CopyTilesRenderer : public TiledPictureRenderer {
 
     public:
+#if SK_SUPPORT_GPU
+        CopyTilesRenderer(const GrContext::Options &opts, int x, int y);
+#else
         CopyTilesRenderer(int x, int y);
+#endif
         virtual void init(const SkPicture* pict, 
                           const SkString* writePath, 
                           const SkString* mismatchPath,
                           const SkString* inputFilename,
-                          bool useChecksumBasedFilenames) SK_OVERRIDE;
+                          bool useChecksumBasedFilenames,
+                          bool useMultiPictureDraw) SK_OVERRIDE;
 
         /**
          *  Similar to TiledPictureRenderer, this will draw a PNG for each tile. However, the

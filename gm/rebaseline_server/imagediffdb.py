@@ -24,7 +24,7 @@ import time
 import urllib
 
 # Must fix up PYTHONPATH before importing from within Skia
-import fix_pythonpath  # pylint: disable=W0611
+import rs_fixpypath  # pylint: disable=W0611
 
 # Imports from within Skia
 import find_run_binary
@@ -50,10 +50,15 @@ KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL = 'maxDiffPerChannel'
 KEY__DIFFERENCES__NUM_DIFF_PIXELS = 'numDifferingPixels'
 KEY__DIFFERENCES__PERCENT_DIFF_PIXELS = 'percentDifferingPixels'
 KEY__DIFFERENCES__PERCEPTUAL_DIFF = 'perceptualDifference'
+KEY__DIFFERENCES__DIFF_URL = 'diffUrl'
+KEY__DIFFERENCES__WHITE_DIFF_URL = 'whiteDiffUrl'
 
 # Special values within ImageDiffDB._diff_dict
 _DIFFRECORD_FAILED = 'failed'
 _DIFFRECORD_PENDING = 'pending'
+
+# How often to report tasks_queue size
+QUEUE_LOGGING_GRANULARITY = 1000
 
 # Temporary variable to keep track of how many times we download
 # the same file in multiple threads.
@@ -122,8 +127,10 @@ class DiffRecord(object):
     try:
       skpdiff_summary_file = os.path.join(skpdiff_output_dir,
                                           'skpdiff-output.json')
-      skpdiff_rgbdiff_dir = os.path.join(skpdiff_output_dir, 'rgbDiff')
-      skpdiff_whitediff_dir = os.path.join(skpdiff_output_dir, 'whiteDiff')
+      skpdiff_rgbdiff_dir = os.path.join(storage_root, RGBDIFFS_SUBDIR)
+      skpdiff_whitediff_dir = os.path.join(storage_root, WHITEDIFFS_SUBDIR)
+      _mkdir_unless_exists(skpdiff_rgbdiff_dir)
+      _mkdir_unless_exists(skpdiff_rgbdiff_dir)
 
       # TODO(epoger): Consider calling skpdiff ONCE for all image pairs,
       # instead of calling it separately for each image pair.
@@ -131,9 +138,13 @@ class DiffRecord(object):
       # spinning up the skpdiff binary, etc.
       # Con: we would have to wait until all image pairs were loaded before
       # generating any of the diffs?
+      # Note(stephana): '--longnames' was added to allow for this 
+      # case (multiple files at once) versus specifying output diffs 
+      # directly.
       find_run_binary.run_command(
           [SKPDIFF_BINARY, '-p', expected_image_file, actual_image_file,
            '--jsonp', 'false',
+           '--longnames', 'true',
            '--output', skpdiff_summary_file,
            '--differs', 'perceptual', 'different_pixels',
            '--rgbDiffDir', skpdiff_rgbdiff_dir,
@@ -149,13 +160,14 @@ class DiffRecord(object):
       record = data['records'][0]
       self._width = record['width']
       self._height = record['height']
+      self._diffUrl = os.path.split(record['rgbDiffPath'])[1]
+      self._whiteDiffUrl = os.path.split(record['whiteDiffPath'])[1]
+
       # TODO: make max_diff_per_channel a tuple instead of a list, because the
       # structure is meaningful (first element is red, second is green, etc.)
       # See http://stackoverflow.com/a/626871
       self._max_diff_per_channel = [
           record['maxRedDiff'], record['maxGreenDiff'], record['maxBlueDiff']]
-      rgb_diff_path = record['rgbDiffPath']
-      white_diff_path = record['whiteDiffPath']
       per_differ_stats = record['diffs']
       for stats in per_differ_stats:
         differ_name = stats['differName']
@@ -172,22 +184,6 @@ class DiffRecord(object):
       if not 0 <= perceptual_similarity <= 1:
         perceptual_similarity = 0
       self._perceptual_difference = 100 - (perceptual_similarity * 100)
-
-      # Store the rgbdiff and whitediff images generated above.
-      diff_image_locator = _get_difference_locator(
-          expected_image_locator=expected_image_locator,
-          actual_image_locator=actual_image_locator)
-      basename = str(diff_image_locator) + image_suffix
-      _mkdir_unless_exists(os.path.join(storage_root, RGBDIFFS_SUBDIR))
-      _mkdir_unless_exists(os.path.join(storage_root, WHITEDIFFS_SUBDIR))
-      # TODO: Modify skpdiff's behavior so we can tell it exactly where to
-      # write the image files into, rather than having to move them around
-      # after skpdiff writes them out.
-      shutil.copyfile(rgb_diff_path,
-                      os.path.join(storage_root, RGBDIFFS_SUBDIR, basename))
-      shutil.copyfile(white_diff_path,
-                      os.path.join(storage_root, WHITEDIFFS_SUBDIR, basename))
-
     finally:
       shutil.rmtree(skpdiff_output_dir)
 
@@ -221,7 +217,10 @@ class DiffRecord(object):
             self.get_percent_pixels_differing(),
         KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL: self._max_diff_per_channel,
         KEY__DIFFERENCES__PERCEPTUAL_DIFF: self._perceptual_difference,
+        KEY__DIFFERENCES__DIFF_URL: self._diffUrl,
+        KEY__DIFFERENCES__WHITE_DIFF_URL: self._whiteDiffUrl, 
     }
+
 
 
 class ImageDiffDB(object):
@@ -239,6 +238,10 @@ class ImageDiffDB(object):
     """
     self._storage_root = storage_root
     self._gs = gs
+
+    # Mechanism for reporting queue size periodically.
+    self._last_queue_size_reported = None
+    self._queue_size_report_lock = threading.RLock()
 
     # Dictionary of DiffRecords, keyed by (expected_image_locator,
     # actual_image_locator) tuples.
@@ -270,6 +273,29 @@ class ImageDiffDB(object):
       worker.start()
       self._workers.append(worker)
 
+  def log_queue_size_if_changed(self, limit_verbosity=True):
+    """Log the size of self._tasks_queue, if it has changed since the last call.
+
+    Reports the current queue size, using log.info(), unless the queue is the
+    same size as the last time we reported it.
+
+    Args:
+      limit_verbosity: if True, only log if the queue size is a multiple of
+          QUEUE_LOGGING_GRANULARITY
+    """
+    # Acquire the lock, to synchronize access to self._last_queue_size_reported
+    self._queue_size_report_lock.acquire()
+    try:
+      size = self._tasks_queue.qsize()
+      if size == self._last_queue_size_reported:
+        return
+      if limit_verbosity and (size % QUEUE_LOGGING_GRANULARITY != 0):
+        return
+      logging.info('tasks_queue size is %d' % size)
+      self._last_queue_size_reported = size
+    finally:
+      self._queue_size_report_lock.release()
+
   def worker(self, worker_num):
     """Launch a worker thread that pulls tasks off self._tasks_queue.
 
@@ -277,6 +303,7 @@ class ImageDiffDB(object):
       worker_num: (integer) which worker this is
     """
     while True:
+      self.log_queue_size_if_changed()
       params = self._tasks_queue.get()
       key, expected_image_url, actual_image_url = params
       try:
@@ -343,6 +370,7 @@ class ImageDiffDB(object):
 
     if must_add_to_queue:
       self._tasks_queue.put((key, expected_image_url, actual_image_url))
+      self.log_queue_size_if_changed()
 
   def get_diff_record(self, expected_image_locator, actual_image_locator):
     """Returns the DiffRecord for this image pair.
@@ -447,20 +475,3 @@ def _sanitize_locator(locator):
     return DISALLOWED_FILEPATH_CHAR_REGEX.sub('_', str(locator))
   else:
     return locator
-
-def _get_difference_locator(expected_image_locator, actual_image_locator):
-  """Returns the locator string used to look up the diffs between expected_image
-  and actual_image.
-
-  We must keep this function in sync with getImageDiffRelativeUrl() in
-  static/loader.js
-
-  Args:
-    expected_image_locator: locator string pointing at expected image
-    actual_image_locator: locator string pointing at actual image
-
-  Returns: already-sanitized locator where the diffs between expected and
-      actual images can be found
-  """
-  return "%s-vs-%s" % (_sanitize_locator(expected_image_locator),
-                       _sanitize_locator(actual_image_locator))

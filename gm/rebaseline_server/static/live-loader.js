@@ -8,6 +8,12 @@ var Loader = angular.module(
     ['ConstantsModule']
 );
 
+// This configuration is needed to allow downloads of the diff patch.
+// See https://github.com/angular/angular.js/issues/3889
+Loader.config(['$compileProvider', function($compileProvider) {
+  $compileProvider.aHrefSanitizationWhitelist(/^\s*(https?|ftp|file|blob):/);
+}]);
+
 Loader.directive(
   'resultsUpdatedCallbackDirective',
   ['$timeout',
@@ -128,18 +134,25 @@ Loader.controller(
     $scope.constants = constants;
     $scope.windowTitle = "Loading GM Results...";
     $scope.setADir = $location.search().setADir;
+    $scope.setASection = $location.search().setASection;
     $scope.setBDir = $location.search().setBDir;
+    $scope.setBSection = $location.search().setBSection;
     $scope.loadingMessage = "please wait...";
+
+    var currSortAsc = true; 
+
 
     /**
      * On initial page load, load a full dictionary of results.
      * Once the dictionary is loaded, unhide the page elements so they can
      * render the data.
      */
-    var liveQueryUrl =
+    $scope.liveQueryUrl =
        "/live-results/setADir=" + encodeURIComponent($scope.setADir) +
-       "&setBDir=" + encodeURIComponent($scope.setBDir);
-    $http.get(liveQueryUrl).success(
+       "&setASection=" + encodeURIComponent($scope.setASection) +
+       "&setBDir=" + encodeURIComponent($scope.setBDir) +
+       "&setBSection=" + encodeURIComponent($scope.setBSection);
+    $http.get($scope.liveQueryUrl).success(
       function(data, status, header, config) {
         var dataHeader = data[constants.KEY__ROOT__HEADER];
         if (dataHeader[constants.KEY__HEADER__SCHEMA_VERSION] !=
@@ -171,8 +184,11 @@ Loader.controller(
           $scope.orderedColumnNames = data[constants.KEY__ROOT__EXTRACOLUMNORDER];
           $scope.imagePairs = data[constants.KEY__ROOT__IMAGEPAIRS];
           $scope.imageSets = data[constants.KEY__ROOT__IMAGESETS];
+
+          // set the default sort column and make it ascending.
           $scope.sortColumnSubdict = constants.KEY__IMAGEPAIRS__DIFFERENCES;
           $scope.sortColumnKey = constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF;
+          currSortAsc = true;
 
           $scope.showSubmitAdvancedSettings = false;
           $scope.submitAdvancedSettings = {};
@@ -252,7 +268,9 @@ Loader.controller(
           // parameter name -> copier object to load/save parameter value
           $scope.queryParameters.map = {
             'setADir':               $scope.queryParameters.copiers.simple,
+            'setASection':           $scope.queryParameters.copiers.simple,
             'setBDir':               $scope.queryParameters.copiers.simple,
+            'setBSection':           $scope.queryParameters.copiers.simple,
             'displayLimitPending':   $scope.queryParameters.copiers.simple,
             'showThumbnailsPending': $scope.queryParameters.copiers.simple,
             'mergeIdenticalRowsPending': $scope.queryParameters.copiers.simple,
@@ -604,14 +622,7 @@ Loader.controller(
       // array copies?  (For better performance.)
 
       if ($scope.viewingTab == $scope.defaultTab) {
-
-        // TODO(epoger): Until we allow the user to reverse sort order,
-        // there are certain columns we want to sort in a different order.
-        var doReverse = (
-            ($scope.sortColumnKey ==
-             constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS) ||
-            ($scope.sortColumnKey ==
-             constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF));
+        var doReverse = !currSortAsc;
 
         $scope.filteredImagePairs =
             $filter("orderBy")(
@@ -661,10 +672,33 @@ Loader.controller(
      * @param key (string): sort by value associated with this key in subdict
      */
     $scope.sortResultsBy = function(subdict, key) {
-      $scope.sortColumnSubdict = subdict;
-      $scope.sortColumnKey = key;
+      // if we are already sorting by this column then toggle between asc/desc
+      if ((subdict === $scope.sortColumnSubdict) && ($scope.sortColumnKey === key)) {
+        currSortAsc = !currSortAsc;
+      } else {
+        $scope.sortColumnSubdict = subdict;
+        $scope.sortColumnKey = key;
+        currSortAsc = true; 
+      }
       $scope.updateResults();
     }
+
+    /**
+     * Returns ASC or DESC (from constants) if currently the data
+     * is sorted by the provided column. 
+     *
+     * @param colName: name of the column for which we need to get the class.
+     */
+
+    $scope.sortedByColumnsCls = function (colName) {
+      if ($scope.sortColumnKey !== colName) {
+        return '';
+      }
+
+      var result = (currSortAsc) ? constants.ASC : constants.DESC;
+      console.log("sort class:", result);
+      return result;
+    };
 
     /**
      * For a particular ImagePair, return the value of the column we are
@@ -681,7 +715,7 @@ Loader.controller(
       } else {
         return undefined;
       }
-    }
+    };
 
     /**
      * For a particular ImagePair, return the value we use for the
@@ -696,7 +730,7 @@ Loader.controller(
     $scope.getSecondOrderSortValue = function(imagePair) {
       return imagePair[constants.KEY__IMAGEPAIRS__IMAGE_A_URL] + "-vs-" +
           imagePair[constants.KEY__IMAGEPAIRS__IMAGE_B_URL];
-    }
+    };
 
     /**
      * Set $scope.columnStringMatch[name] = value, and update results.
@@ -707,7 +741,7 @@ Loader.controller(
     $scope.setColumnStringMatch = function(name, value) {
       $scope.columnStringMatch[name] = value;
       $scope.updateResults();
-    }
+    };
 
     /**
      * Update $scope.showingColumnValues[columnName] and $scope.columnStringMatch[columnName]
@@ -722,7 +756,7 @@ Loader.controller(
       $scope.showingColumnValues[columnName] = {};
       $scope.toggleValueInSet(columnValue, $scope.showingColumnValues[columnName]);
       $scope.updateResults();
-    }
+    };
 
     /**
      * Update $scope.showingColumnValues[columnName] and $scope.columnStringMatch[columnName]
@@ -737,7 +771,7 @@ Loader.controller(
       $scope.toggleValuesInSet($scope.allColumnValues[columnName],
                                $scope.showingColumnValues[columnName]);
       $scope.updateResults();
-    }
+    };
 
 
     //
@@ -748,14 +782,17 @@ Loader.controller(
      * Tell the server that the actual results of these particular tests
      * are acceptable.
      *
-     * TODO(epoger): This assumes that the original expectations are in
-     * imageSetA, and the actuals are in imageSetB.
+     * This assumes that the original expectations are in imageSetA, and the
+     * new expectations are in imageSetB.  That's fine, because the server
+     * mandates that anyway (it will swap the sets if the user requests them
+     * in the opposite order).
      *
      * @param imagePairsSubset an array of test results, most likely a subset of
      *        $scope.imagePairs (perhaps with some modifications)
      */
     $scope.submitApprovals = function(imagePairsSubset) {
       $scope.submitPending = true;
+      $scope.diffResults = "";
 
       // Convert bug text field to null or 1-item array.
       var bugs = null;
@@ -763,13 +800,6 @@ Loader.controller(
       if (!isNaN(bugNumber)) {
         bugs = [bugNumber];
       }
-
-      // TODO(epoger): This is a suboptimal way to prevent users from
-      // rebaselining failures in alternative renderModes, but it does work.
-      // For a better solution, see
-      // https://code.google.com/p/skia/issues/detail?id=1748 ('gm: add new
-      // result type, RenderModeMismatch')
-      var encounteredComparisonConfig = false;
 
       var updatedExpectations = [];
       for (var i = 0; i < imagePairsSubset.length; i++) {
@@ -779,14 +809,11 @@ Loader.controller(
             imagePair[constants.KEY__IMAGEPAIRS__EXPECTATIONS];
         updatedExpectation[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS] =
             imagePair[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS];
+        updatedExpectation[constants.KEY__IMAGEPAIRS__SOURCE_JSON_FILE] =
+            imagePair[constants.KEY__IMAGEPAIRS__SOURCE_JSON_FILE];
         // IMAGE_B_URL contains the actual image (which is now the expectation)
         updatedExpectation[constants.KEY__IMAGEPAIRS__IMAGE_B_URL] =
             imagePair[constants.KEY__IMAGEPAIRS__IMAGE_B_URL];
-        if (0 == updatedExpectation[constants.KEY__IMAGEPAIRS__EXTRACOLUMNS]
-                                   [constants.KEY__EXTRACOLUMNS__CONFIG]
-                                   .indexOf('comparison-')) {
-          encounteredComparisonConfig = true;
-        }
 
         // Advanced settings...
         if (null == updatedExpectation[constants.KEY__IMAGEPAIRS__EXPECTATIONS]) {
@@ -807,47 +834,28 @@ Loader.controller(
 
         updatedExpectations.push(updatedExpectation);
       }
-      if (encounteredComparisonConfig) {
-        alert("Approval failed -- you cannot approve results with config " +
-            "type comparison-*");
-        $scope.submitPending = false;
-        return;
-      }
       var modificationData = {};
-      modificationData[constants.KEY__EDITS__MODIFICATIONS] =
+      modificationData[constants.KEY__LIVE_EDITS__MODIFICATIONS] =
           updatedExpectations;
-      modificationData[constants.KEY__EDITS__OLD_RESULTS_HASH] =
-          $scope.header[constants.KEY__HEADER__DATAHASH];
-      modificationData[constants.KEY__EDITS__OLD_RESULTS_TYPE] =
-          $scope.header[constants.KEY__HEADER__TYPE];
+      modificationData[constants.KEY__LIVE_EDITS__SET_A_DESCRIPTIONS] =
+          $scope.header[constants.KEY__HEADER__SET_A_DESCRIPTIONS];
+      modificationData[constants.KEY__LIVE_EDITS__SET_B_DESCRIPTIONS] =
+          $scope.header[constants.KEY__HEADER__SET_B_DESCRIPTIONS];
       $http({
         method: "POST",
-        url: "/edits",
+        url: "/live-edits",
         data: modificationData
       }).success(function(data, status, headers, config) {
-        var imagePairIndicesToMove = [];
-        for (var i = 0; i < imagePairsSubset.length; i++) {
-          imagePairIndicesToMove.push(imagePairsSubset[i].index);
-        }
-        $scope.moveImagePairsToTab(imagePairIndicesToMove,
-                                   "HackToMakeSureThisImagePairDisappears");
-        $scope.updateResults();
-        alert("New baselines submitted successfully!\n\n" +
-            "You still need to commit the updated expectations files on " +
-            "the server side to the Skia repo.\n\n" +
-            "When you click OK, your web UI will reload; after that " +
-            "completes, you will see the updated data (once the server has " +
-            "finished loading the update results into memory!) and you can " +
-            "submit more baselines if you want.");
-        // I don't know why, but if I just call reload() here it doesn't work.
-        // Making a timer call it fixes the problem.
-        $timeout(function(){location.reload();}, 1);
+        $scope.diffResults = data;
+        var blob = new Blob([$scope.diffResults], {type: 'text/plain'});
+        $scope.diffResultsBlobUrl = window.URL.createObjectURL(blob);
+        $scope.submitPending = false;
       }).error(function(data, status, headers, config) {
         alert("There was an error submitting your baselines.\n\n" +
             "Please see server-side log for details.");
         $scope.submitPending = false;
       });
-    }
+    };
 
 
     //
@@ -865,7 +873,7 @@ Loader.controller(
      */
     $scope.setSize = function(set) {
       return Object.keys(set).length;
-    }
+    };
 
     /**
      * Returns true if value "value" is present within set "set".
@@ -876,7 +884,7 @@ Loader.controller(
      */
     $scope.isValueInSet = function(value, set) {
       return (true == set[value]);
-    }
+    };
 
     /**
      * If value "value" is already in set "set", remove it; otherwise, add it.
@@ -890,7 +898,7 @@ Loader.controller(
       } else {
         set[value] = true;
       }
-    }
+    };
 
     /**
      * For each value in valueArray, call toggleValueInSet(value, set).
@@ -903,7 +911,7 @@ Loader.controller(
       for (var i = 0; i < arrayLength; i++) {
         $scope.toggleValueInSet(valueArray[i], set);
       }
-    }
+    };
 
 
     //
@@ -920,7 +928,7 @@ Loader.controller(
      */
     $scope.isValueInArray = function(value, array) {
       return (-1 != array.indexOf(value));
-    }
+    };
 
     /**
      * If value "value" is already in array "array", remove it; otherwise,
@@ -936,7 +944,7 @@ Loader.controller(
       } else {
         array.splice(i, 1);
       }
-    }
+    };
 
 
     //
@@ -964,7 +972,7 @@ Loader.controller(
         slice.push(array[row][column]);
       }
       return slice;
-    }
+    };
 
     /**
      * Returns a human-readable (in local time zone) time string for a
@@ -975,7 +983,7 @@ Loader.controller(
     $scope.localTimeString = function(secondsPastEpoch) {
       var d = new Date(secondsPastEpoch * 1000);
       return d.toString();
-    }
+    };
 
     /**
      * Returns a hex color string (such as "#aabbcc") for the given RGB values.
@@ -998,7 +1006,7 @@ Loader.controller(
         bString = "0" + bString;
       }
       return '#' + rString + gString + bString;
-    }
+    };
 
     /**
      * Returns a hex color string (such as "#aabbcc") for the given brightness.
@@ -1011,25 +1019,6 @@ Loader.controller(
     $scope.brightnessStringToHexColor = function(brightnessString) {
       var v = parseInt(brightnessString);
       return $scope.hexColorString(v, v, v);
-    }
-
-    /**
-     * Returns the last path component of image diff URL for a given ImagePair.
-     *
-     * Depending on which diff this is (whitediffs, pixeldiffs, etc.) this
-     * will be relative to different base URLs.
-     *
-     * We must keep this function in sync with _get_difference_locator() in
-     * ../imagediffdb.py
-     *
-     * @param imagePair: ImagePair to generate image diff URL for
-     */
-    $scope.getImageDiffRelativeUrl = function(imagePair) {
-      var before =
-          imagePair[constants.KEY__IMAGEPAIRS__IMAGE_A_URL] + "-vs-" +
-          imagePair[constants.KEY__IMAGEPAIRS__IMAGE_B_URL];
-      return before.replace(/[^\w\-]/g, "_") + ".png";
-    }
-
+    };
   }
 );

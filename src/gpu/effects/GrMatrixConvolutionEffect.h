@@ -19,15 +19,15 @@ class GrGLMatrixConvolutionEffect;
 
 class GrMatrixConvolutionEffect : public GrSingleTextureEffect {
 public:
-    static GrEffect* Create(GrTexture* texture,
-                            const SkIRect& bounds,
-                            const SkISize& kernelSize,
-                            const SkScalar* kernel,
-                            SkScalar gain,
-                            SkScalar bias,
-                            const SkIPoint& kernelOffset,
-                            GrTextureDomain::Mode tileMode,
-                            bool convolveAlpha) {
+    static GrFragmentProcessor* Create(GrTexture* texture,
+                                       const SkIRect& bounds,
+                                       const SkISize& kernelSize,
+                                       const SkScalar* kernel,
+                                       SkScalar gain,
+                                       SkScalar bias,
+                                       const SkIPoint& kernelOffset,
+                                       GrTextureDomain::Mode tileMode,
+                                       bool convolveAlpha) {
         return SkNEW_ARGS(GrMatrixConvolutionEffect, (texture,
                                                       bounds,
                                                       kernelSize,
@@ -38,13 +38,19 @@ public:
                                                       tileMode,
                                                       convolveAlpha));
     }
-    virtual ~GrMatrixConvolutionEffect();
 
-    virtual void getConstantColorComponents(GrColor* color,
-                                            uint32_t* validFlags) const SK_OVERRIDE {
-        // TODO: Try to do better?
-        *validFlags = 0;
-    }
+    static GrFragmentProcessor* CreateGaussian(GrTexture* texture,
+                                               const SkIRect& bounds,
+                                               const SkISize& kernelSize,
+                                               SkScalar gain,
+                                               SkScalar bias,
+                                               const SkIPoint& kernelOffset,
+                                               GrTextureDomain::Mode tileMode,
+                                               bool convolveAlpha,
+                                               SkScalar sigmaX,
+                                               SkScalar sigmaY);
+
+    virtual ~GrMatrixConvolutionEffect();
 
     static const char* Name() { return "MatrixConvolution"; }
     const SkIRect& bounds() const { return fBounds; }
@@ -56,9 +62,9 @@ public:
     bool convolveAlpha() const { return fConvolveAlpha; }
     const GrTextureDomain& domain() const { return fDomain; }
 
-    typedef GrGLMatrixConvolutionEffect GLEffect;
+    typedef GrGLMatrixConvolutionEffect GLProcessor;
 
-    virtual const GrBackendEffectFactory& getFactory() const SK_OVERRIDE;
+    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
 
 private:
     GrMatrixConvolutionEffect(GrTexture*,
@@ -71,18 +77,23 @@ private:
                               GrTextureDomain::Mode tileMode,
                               bool convolveAlpha);
 
-    virtual bool onIsEqual(const GrEffect&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+
+    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE {
+        // TODO: Try to do better?
+        inout->mulByUnknownColor();
+    }
 
     SkIRect         fBounds;
     SkISize         fKernelSize;
-    float*          fKernel;
+    float           fKernel[MAX_KERNEL_SIZE];
     float           fGain;
     float           fBias;
     float           fKernelOffset[2];
     bool            fConvolveAlpha;
     GrTextureDomain fDomain;
 
-    GR_DECLARE_EFFECT_TEST;
+    GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     typedef GrSingleTextureEffect INHERITED;
 };

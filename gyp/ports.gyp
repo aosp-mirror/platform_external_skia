@@ -92,7 +92,7 @@
                 ],
               },
               'sources': [
-                '../src/fonts/SkFontMgr_fontconfig.cpp',
+                '../src/ports/SkFontMgr_fontconfig.cpp',
                 '../src/ports/SkFontHost_fontconfig.cpp',
                 '../src/ports/SkFontConfigInterface_direct.cpp',
               ],
@@ -182,9 +182,7 @@
           ],
           'sources': [
             '../src/ports/SkDebug_android.cpp',
-            '../src/ports/SkFontConfigInterface_android.cpp',
             '../src/ports/SkFontConfigParser_android.cpp',
-            '../src/ports/SkFontHost_fontconfig.cpp',
             '../src/ports/SkFontMgr_android.cpp',
           ],
           'dependencies': [

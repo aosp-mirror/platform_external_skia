@@ -5,7 +5,7 @@
 <head>
   <title ng-bind="windowTitle"></title>
   <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
-  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.1.5/angular.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.20/angular.js"></script>
   <script src="constants.js"></script>
   <script src="live-loader.js"></script>
   <script src="utils.js"></script>
@@ -24,8 +24,8 @@
   <em ng-show="!readyToDisplay">
     Loading results of query:
     <ul>
-      <li>setA: {{setADir}}</li>
-      <li>setB: {{setBDir}}</li>
+      <li>setA: "{{setASection}}" within {{setADir}}</li>
+      <li>setB: "{{setBSection}}" within {{setBDir}}</li>
     </ul>
     <br>
     {{loadingMessage}}
@@ -41,15 +41,16 @@
       which records are displayed.
     </div>
 
-    <div class="warning-div"
-         ng-show="header[constants.KEY__HEADER__IS_EDITABLE] && header[constants.KEY__HEADER__IS_EXPORTED]">
-      WARNING!  These results are editable and exported, so any user
-      who can connect to this server over the network can modify them.
-    </div>
-
     <div ng-show="header[constants.KEY__HEADER__TIME_UPDATED]">
-      setA: {{setADir}}<br>
-      setB: {{setBDir}}<br>
+      setA: "{{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__SECTION]}}"
+      within {{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__DIR]}}
+      <span ng-show="header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]">at <a href="https://skia.googlesource.com/skia/+/{{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]}}">rev {{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]}}</a></span>
+      <br>
+      setB: "{{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__SECTION]}}"
+      within {{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__DIR]}}
+      <span ng-show="header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]">at <a href="https://skia.googlesource.com/skia/+/{{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]}}">rev {{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__REPO_REVISION]}}</a></span>
+      <br>
+      <a href="{{liveQueryUrl}}">latest raw JSON diffs between these two sets</a><br>
       These results current as of
       {{localTimeString(header[constants.KEY__HEADER__TIME_UPDATED])}}
     </div>
@@ -173,7 +174,7 @@
           <button style="font-size:20px"
                   ng-click="submitApprovals(filteredImagePairs)"
                   ng-disabled="submitPending || (filteredImagePairs.length == 0)">
-            Update these {{filteredImagePairs.length}} expectations on the server
+            Get a patchfile to update these {{filteredImagePairs.length}} expectations
           </button>
         </div>
         <div style="display:inline-block">
@@ -196,6 +197,16 @@
               <input type="text" ng-model="submitAdvancedSettings[setting]">
             </li>
           </ul>
+        </div>
+        <div ng-show="diffResults">
+          <p>
+          Here is the patch to apply to your local checkout:
+          <br>
+          <textarea rows="8" cols="50">{{diffResults}}</textarea>
+          <br>
+          <a download="patch.txt" ng-href="{{diffResultsBlobUrl}}">
+            Click here to download that patch as a text file.
+          </a>
         </div>
       </div>
 
@@ -246,53 +257,65 @@
         <tr>
           <!-- Most column headers are displayed in a common fashion... -->
           <th ng-repeat="columnName in orderedColumnNames">
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="{{columnName}}"
-                   ng-checked="(sortColumnKey == columnName)"
-                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXTRACOLUMNS, columnName)">
-            {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}}
+              <a ng-class="'sort-' + sortedByColumnsCls(columnName)"
+                 ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXTRACOLUMNS, columnName)"
+                 href=""
+                 class="sortable-header">
+               {{extraColumnHeaders[columnName][constants.KEY__EXTRACOLUMNHEADERS__HEADER_TEXT]}}
+             </a>
           </th>
           <!-- ... but there are a few columns where we display things differently. -->
           <th>
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="bugs"
-                   ng-checked="(sortColumnKey == constants.KEY__EXPECTATIONS__BUGS)"
-                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXPECTATIONS, constants.KEY__EXPECTATIONS__BUGS)">
-            bugs
+            <a ng-class="'sort-' + sortedByColumnsCls(constants.KEY__EXPECTATIONS__BUGS)"
+               ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__EXPECTATIONS, constants.KEY__EXPECTATIONS__BUGS)"
+               href=""
+               class="sortable-header">
+                  bugs
+            </a>
           </th>
           <th width="{{imageSize}}">
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="imageA"
-                   ng-checked="(sortColumnKey == constants.KEY__IMAGEPAIRS__IMAGE_A_URL)"
-                   ng-click="sortResultsBy('none', constants.KEY__IMAGEPAIRS__IMAGE_A_URL)">
-            {{imageSets[constants.KEY__IMAGESETS__SET__IMAGE_A][constants.KEY__IMAGESETS__FIELD__DESCRIPTION]}}
+            <a ng-class="'sort-' + sortedByColumnsCls(constants.KEY__IMAGEPAIRS__IMAGE_A_URL)"
+               ng-click="sortResultsBy('none', constants.KEY__IMAGEPAIRS__IMAGE_A_URL)"
+               href=""
+               title="setA: '{{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__SECTION]}}' within {{header[constants.KEY__HEADER__SET_A_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__DIR]}}"
+               class="sortable-header">
+              <span ng-show="'Pending Approval' != viewingTab">
+                {{imageSets[constants.KEY__IMAGESETS__SET__IMAGE_A][constants.KEY__IMAGESETS__FIELD__DESCRIPTION]}}
+              </span>
+              <span ng-show="'Pending Approval' == viewingTab">
+                old expectations
+              </span>
+            </a>
           </th>
           <th width="{{imageSize}}">
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="imageB"
-                   ng-checked="(sortColumnKey == constants.KEY__IMAGEPAIRS__IMAGE_B_URL)"
-                   ng-click="sortResultsBy('none', constants.KEY__IMAGEPAIRS__IMAGE_B_URL)">
-            {{imageSets[constants.KEY__IMAGESETS__SET__IMAGE_B][constants.KEY__IMAGESETS__FIELD__DESCRIPTION]}}
+            <a ng-class="'sort-' + sortedByColumnsCls(constants.KEY__IMAGEPAIRS__IMAGE_B_URL)"
+               ng-click="sortResultsBy('none', constants.KEY__IMAGEPAIRS__IMAGE_B_URL)"
+               href=""
+               title="setB: '{{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__SECTION]}}' within {{header[constants.KEY__HEADER__SET_B_DESCRIPTIONS][constants.KEY__SET_DESCRIPTIONS__DIR]}}"
+               class="sortable-header">
+              <span ng-show="'Pending Approval' != viewingTab">
+                {{imageSets[constants.KEY__IMAGESETS__SET__IMAGE_B][constants.KEY__IMAGESETS__FIELD__DESCRIPTION]}}
+              </span>
+              <span ng-show="'Pending Approval' == viewingTab">
+                new expectations
+              </span>
+            </a>
           </th>
           <th width="{{imageSize}}">
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="percentDifferingPixels"
-                   ng-checked="(sortColumnKey == constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS)"
-                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__DIFFERENCES, constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS)">
-            differing pixels in white
+            <a ng-class="'sort-' + sortedByColumnsCls(constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS)"
+               ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__DIFFERENCES, constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS)"
+               href=""
+               class="sortable-header">
+                  differing pixels in white
+            </a>
           </th>
           <th width="{{imageSize}}">
-            <input type="radio"
-                   name="sortColumnRadio"
-                   value="perceptualDiff"
-                   ng-checked="(sortColumnKey == constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF)"
-                   ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__DIFFERENCES, constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF)">
-            perceptual difference
+            <a ng-class="'sort-' + sortedByColumnsCls(constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF)"
+               ng-click="sortResultsBy(constants.KEY__IMAGEPAIRS__DIFFERENCES, constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF)"
+               href=""
+               class="sortable-header">
+               perceptual difference
+            </a>
             <br>
             <input type="range" ng-model="pixelDiffBgColorBrightness"
                    ng-init="pixelDiffBgColorBrightness=64; pixelDiffBgColor=brightnessStringToHexColor(pixelDiffBgColorBrightness)"
@@ -371,10 +394,10 @@
             <div ng-if="imagePair[constants.KEY__IMAGEPAIRS__IS_DIFFERENT]"
                  title="{{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__NUM_DIFF_PIXELS] | number:0}} of {{(100 * imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__NUM_DIFF_PIXELS] / imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS]) | number:0}} pixels ({{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS].toFixed(4)}}%) differ from expectation.">
 
-              <a href="{{imageSets[constants.KEY__IMAGESETS__SET__WHITEDIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{getImageDiffRelativeUrl(imagePair)}}" target="_blank">View Image</a><br/>
+              <a href="{{imageSets[constants.KEY__IMAGESETS__SET__WHITEDIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__WHITE_DIFF_URL]}}" target="_blank">View Image</a><br/>
               <img ng-if="showThumbnails"
                    width="{{imageSize}}"
-                   ng-src="{{imageSets[constants.KEY__IMAGESETS__SET__WHITEDIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{getImageDiffRelativeUrl(imagePair)}}" />
+                   ng-src="{{imageSets[constants.KEY__IMAGESETS__SET__WHITEDIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__WHITE_DIFF_URL]}}" />
               <br/>
               {{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__PERCENT_DIFF_PIXELS].toFixed(4)}}%
               ({{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__NUM_DIFF_PIXELS]}})
@@ -390,11 +413,11 @@
             <div ng-if="imagePair[constants.KEY__IMAGEPAIRS__IS_DIFFERENT]"
                  title="Perceptual difference measure is {{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF].toFixed(4)}}%.  Maximum difference per channel: R={{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL][0]}}, G={{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL][1]}}, B={{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL][2]}}">
 
-              <a href="{{imageSets[constants.KEY__IMAGESETS__SET__DIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{getImageDiffRelativeUrl(imagePair)}}" target="_blank">View Image</a><br/>
+              <a href="{{imageSets[constants.KEY__IMAGESETS__SET__DIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__DIFF_URL]}}" target="_blank">View Image</a><br/>
               <img ng-if="showThumbnails"
                    ng-style="{backgroundColor: pixelDiffBgColor}"
                    width="{{imageSize}}"
-                   ng-src="{{imageSets[constants.KEY__IMAGESETS__SET__DIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{getImageDiffRelativeUrl(imagePair)}}" />
+                   ng-src="{{imageSets[constants.KEY__IMAGESETS__SET__DIFFS][constants.KEY__IMAGESETS__FIELD__BASE_URL]}}/{{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__DIFF_URL]}}" />
               <br/>
               {{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__PERCEPTUAL_DIFF].toFixed(4)}}%
               {{imagePair[constants.KEY__IMAGEPAIRS__DIFFERENCES][constants.KEY__DIFFERENCES__MAX_DIFF_PER_CHANNEL]}}

@@ -46,7 +46,7 @@ static bool should_draw_immediately(const SkBitmap* bitmap, const SkPaint* paint
         if (shader && !shader->asAGradient(NULL)) {
             SkBitmap bm;
             if (shader->asABitmap(&bm, NULL, NULL) &&
-                NULL != bm.getTexture()) {
+                bm.getTexture()) {
                 return true;
             }
         }
@@ -161,7 +161,7 @@ public:
 
     virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
 
-    virtual SkSurface* newSurface(const SkImageInfo&) SK_OVERRIDE;
+    virtual SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE;
 
 protected:
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE;
@@ -210,8 +210,8 @@ protected:
                             SkScalar x, SkScalar y, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawPosText(const SkDraw&, const void* text, size_t len,
-                                const SkScalar pos[], SkScalar constY,
-                                int scalarsPerPos, const SkPaint& paint) SK_OVERRIDE
+                             const SkScalar pos[], int scalarsPerPos,
+                             const SkPoint& offset, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawTextOnPath(const SkDraw&, const void* text,
                                 size_t len, const SkPath& path,
@@ -224,7 +224,9 @@ protected:
                                 SkXfermode* xmode, const uint16_t indices[],
                                 int indexCount, const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
-    virtual void drawPatch(const SkDraw&, const SkPatch& patch, const SkPaint& paint) SK_OVERRIDE
+    virtual void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
+                           const SkPoint texCoords[4], SkXfermode* xmode,
+                           const SkPaint& paint) SK_OVERRIDE
         {SkASSERT(0);}
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) SK_OVERRIDE
@@ -334,11 +336,11 @@ bool SkDeferredDevice::hasPendingCommands() {
 
 void SkDeferredDevice::aboutToDraw()
 {
-    if (NULL != fNotificationClient) {
+    if (fNotificationClient) {
         fNotificationClient->prepareForDraw();
     }
     if (fCanDiscardCanvasContents) {
-        if (NULL != fSurface) {
+        if (fSurface) {
             fSurface->notifyContentWillChange(SkSurface::kDiscard_ContentChangeMode);
         }
         fCanDiscardCanvasContents = false;
@@ -472,8 +474,8 @@ SkBaseDevice* SkDeferredDevice::onCreateDevice(const SkImageInfo& info, Usage us
     return immediateDevice()->createCompatibleDevice(info);
 }
 
-SkSurface* SkDeferredDevice::newSurface(const SkImageInfo& info) {
-    return this->immediateDevice()->newSurface(info);
+SkSurface* SkDeferredDevice::newSurface(const SkImageInfo& info, const SkSurfaceProps& props) {
+    return this->immediateDevice()->newSurface(info, props);
 }
 
 bool SkDeferredDevice::onReadPixels(const SkImageInfo& info, void* pixels, size_t rowBytes,
@@ -524,6 +526,8 @@ SkDeferredCanvas::SkDeferredCanvas(SkDeferredDevice* device) : SkCanvas (device)
 void SkDeferredCanvas::init() {
     fBitmapSizeThreshold = kDeferredCanvasBitmapSizeThreshold;
     fDeferredDrawing = true; // On by default
+    fCachedCanvasSize.setEmpty();
+    fCachedCanvasSizeDirty = true;
 }
 
 void SkDeferredCanvas::setMaxRecordingStorage(size_t maxStorage) {
@@ -587,6 +591,14 @@ bool SkDeferredCanvas::isFreshFrame() const {
     return this->getDeferredDevice()->isFreshFrame();
 }
 
+SkISize SkDeferredCanvas::getCanvasSize() const {
+    if (fCachedCanvasSizeDirty) {
+        fCachedCanvasSize = this->getBaseLayerSize();
+        fCachedCanvasSizeDirty = false;
+    }
+    return fCachedCanvasSize;
+}
+
 bool SkDeferredCanvas::hasPendingCommands() const {
     return this->getDeferredDevice()->hasPendingCommands();
 }
@@ -602,11 +614,12 @@ SkDeferredCanvas::~SkDeferredCanvas() {
 
 SkSurface* SkDeferredCanvas::setSurface(SkSurface* surface) {
     SkDeferredDevice* deferredDevice = this->getDeferredDevice();
-    SkASSERT(NULL != deferredDevice);
+    SkASSERT(deferredDevice);
     // By swapping the surface into the existing device, we preserve
     // all pending commands, which can help to seamlessly recover from
     // a lost accelerated graphics context.
     deferredDevice->setSurface(surface);
+    fCachedCanvasSizeDirty = true;
     return surface;
 }
 
@@ -630,7 +643,7 @@ SkImage* SkDeferredCanvas::newImageSnapshot() {
 bool SkDeferredCanvas::isFullFrame(const SkRect* rect,
                                    const SkPaint* paint) const {
     SkCanvas* canvas = this->drawingCanvas();
-    SkISize canvasSize = this->getDeviceSize();
+    SkISize canvasSize = this->getCanvasSize();
     if (rect) {
         if (!canvas->getTotalMatrix().rectStaysRect()) {
             return false; // conservative
@@ -899,8 +912,16 @@ void SkDeferredCanvas::onDrawTextOnPath(const void* text, size_t byteLength, con
     this->recordedDrawCommand();
 }
 
-void SkDeferredCanvas::onDrawPicture(const SkPicture* picture) {
-    this->drawingCanvas()->drawPicture(picture);
+void SkDeferredCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                      const SkPaint& paint) {
+    AutoImmediateDrawIfNeeded autoDraw(*this, &paint);
+    this->drawingCanvas()->drawTextBlob(blob, x, y, paint);
+    this->recordedDrawCommand();
+}
+
+void SkDeferredCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
+                                     const SkPaint* paint) {
+    this->drawingCanvas()->drawPicture(picture, matrix, paint);
     this->recordedDrawCommand();
 }
 
@@ -916,8 +937,12 @@ void SkDeferredCanvas::drawVertices(VertexMode vmode, int vertexCount,
     this->recordedDrawCommand();
 }
 
-void SkDeferredCanvas::drawPatch(const SkPatch& patch, const SkPaint& paint) {
-    //TODO
+void SkDeferredCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                                   const SkPoint texCoords[4], SkXfermode* xmode,
+                                   const SkPaint& paint) {
+    AutoImmediateDrawIfNeeded autoDraw(*this, &paint);
+    this->drawingCanvas()->drawPatch(cubics, colors, texCoords, xmode, paint);
+    this->recordedDrawCommand();
 }
 
 SkDrawFilter* SkDeferredCanvas::setDrawFilter(SkDrawFilter* filter) {

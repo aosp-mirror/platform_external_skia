@@ -29,9 +29,10 @@ SkGlyphCache_Globals* create_globals() {
 
 }  // namespace
 
+SK_DECLARE_STATIC_LAZY_PTR(SkGlyphCache_Globals, globals, create_globals);
+
 // Returns the shared globals
 static SkGlyphCache_Globals& getSharedGlobals() {
-    SK_DECLARE_STATIC_LAZY_PTR(SkGlyphCache_Globals, globals, create_globals);
     return *globals.get();
 }
 
@@ -339,7 +340,7 @@ const void* SkGlyphCache::findImage(const SkGlyph& glyph) {
             const_cast<SkGlyph&>(glyph).fImage = fGlyphAlloc.alloc(size,
                                         SkChunkAlloc::kReturnNil_AllocFailType);
             // check that alloc() actually succeeded
-            if (NULL != glyph.fImage) {
+            if (glyph.fImage) {
                 fScalerContext->getImage(glyph);
                 // TODO: the scaler may have changed the maskformat during
                 // getImage (e.g. from AA or LCD to BW) which means we may have
@@ -373,10 +374,10 @@ const void* SkGlyphCache::findDistanceField(const SkGlyph& glyph) {
             }
             const void* image = this->findImage(glyph);
             // now generate the distance field
-            if (NULL != image) {
+            if (image) {
                 const_cast<SkGlyph&>(glyph).fDistanceField = fGlyphAlloc.alloc(size,
                                             SkChunkAlloc::kReturnNil_AllocFailType);
-                if (NULL != glyph.fDistanceField) {
+                if (glyph.fDistanceField) {
                     SkMask::Format maskFormat = static_cast<SkMask::Format>(glyph.fMaskFormat);
                     if (SkMask::kA8_Format == maskFormat) {
                         // make the distance field from the image
@@ -485,23 +486,6 @@ int SkGlyphCache_Globals::setCacheCountLimit(int newCount) {
 void SkGlyphCache_Globals::purgeAll() {
     SkAutoMutexAcquire    ac(fMutex);
     this->internalPurge(fTotalMemoryUsed);
-}
-
-void SkGlyphCache::VisitAllCaches(bool (*proc)(SkGlyphCache*, void*),
-                                  void* context) {
-    SkGlyphCache_Globals& globals = getGlobals();
-    SkAutoMutexAcquire    ac(globals.fMutex);
-    SkGlyphCache*         cache;
-
-    globals.validate();
-
-    for (cache = globals.internalGetHead(); cache != NULL; cache = cache->fNext) {
-        if (proc(cache, context)) {
-            break;
-        }
-    }
-
-    globals.validate();
 }
 
 /*  This guy calls the visitor from within the mutext lock, so the visitor

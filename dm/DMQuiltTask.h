@@ -12,27 +12,24 @@
 namespace DM {
 
 class QuiltTask : public CpuTask {
-
 public:
-    enum Mode {
-        kNoBBH_Mode,
-        kRTree_Mode,
-        kQuadTree_Mode,
-        kTileGrid_Mode,
-        kSkRecord_Mode,  // Currently uses no BBH.
+    enum BBH {
+        kNone_BBH,
+        kRTree_BBH,
+        kTileGrid_BBH,
     };
 
     QuiltTask(const Task& parent,  // QuiltTask must be a child task.  Pass its parent here.
               skiagm::GM*,         // GM to run through a picture.  Takes ownership.
               SkBitmap reference,  // Bitmap to compare picture replay results to.
-              Mode mode);
+              BBH);
 
     virtual void draw() SK_OVERRIDE;
     virtual bool shouldSkip() const SK_OVERRIDE;
     virtual SkString name() const SK_OVERRIDE { return fName; }
 
 private:
-    const Mode fMode;
+    const BBH fBBH;
     const SkString fName;
     SkAutoTDelete<skiagm::GM> fGM;
     const SkBitmap fReference;

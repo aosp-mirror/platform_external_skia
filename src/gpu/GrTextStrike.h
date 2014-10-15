@@ -23,20 +23,22 @@ class GrGpu;
 class GrFontPurgeListener;
 
 /**
- *  The textcache maps a hostfontscaler instance to a dictionary of
+ *  The textstrike maps a hostfontscaler instance to a dictionary of
  *  glyphid->strike
  */
 class GrTextStrike {
 public:
-    GrTextStrike(GrFontCache*, const GrFontDescKey* fontScalerKey, GrMaskFormat, GrAtlas*);
+    GrTextStrike(GrFontCache*, const GrFontDescKey* fontScalerKey);
     ~GrTextStrike();
 
     const GrFontDescKey* getFontScalerKey() const { return fFontScalerKey; }
     GrFontCache* getFontCache() const { return fFontCache; }
-    GrMaskFormat getMaskFormat() const { return fMaskFormat; }
-    GrTexture*   getTexture() const { return fAtlas->getTexture(); }
 
     inline GrGlyph* getGlyph(GrGlyph::PackedID, GrFontScaler*);
+    // returns true if glyph (or glyph+padding for distance field)
+    // is too large to ever fit in texture atlas subregions (GrPlots)
+    bool glyphTooLargeForAtlas(GrGlyph*);
+    // returns true if glyph successfully added to texture atlas, false otherwise
     bool addGlyphToAtlas(GrGlyph*, GrFontScaler*);
 
     // testing
@@ -63,8 +65,6 @@ private:
     GrTAllocPool<GrGlyph> fPool;
 
     GrFontCache*    fFontCache;
-    GrAtlas*        fAtlas;
-    GrMaskFormat    fMaskFormat;
     bool            fUseDistanceField;
 
     GrAtlas::ClientPlotUsage fPlotUsage;
@@ -81,10 +81,15 @@ public:
 
     inline GrTextStrike* getStrike(GrFontScaler*, bool useDistanceField);
 
+    // add to texture atlas that matches this format
+    GrPlot* addToAtlas(GrMaskFormat format, GrAtlas::ClientPlotUsage* usage,
+                       int width, int height, const void* image,
+                       SkIPoint16* loc);
+
     void freeAll();
 
-    // make an unused plot available
-    bool freeUnusedPlot(GrTextStrike* preserveStrike);
+    // make an unused plot available for this glyph
+    bool freeUnusedPlot(GrTextStrike* preserveStrike, const GrGlyph* glyph);
 
     // testing
     int countStrikes() const { return fCache.count(); }

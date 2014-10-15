@@ -11,9 +11,11 @@
 #include "Benchmark.h"
 #include "GrGpuResource.h"
 #include "GrContext.h"
+#include "GrGpu.h"
 #include "GrResourceCache.h"
 #include "GrStencilBuffer.h"
 #include "GrTexture.h"
+#include "GrTexturePriv.h"
 #include "SkCanvas.h"
 
 enum {
@@ -27,6 +29,7 @@ public:
     StencilResource(GrGpu* gpu, int id)
         : INHERITED(gpu, false)
         , fID(id) {
+        this->registerWithCache();
     }
 
     virtual ~StencilResource() { this->release(); }
@@ -51,6 +54,7 @@ public:
     TextureResource(GrGpu* gpu, int id)
         : INHERITED(gpu, false)
         , fID(id) {
+        this->registerWithCache();
     }
 
     virtual ~TextureResource() { this->release(); }
@@ -60,7 +64,14 @@ public:
     }
 
     static GrResourceKey ComputeKey(const GrTextureDesc& desc) {
-        return GrTextureImpl::ComputeScratchKey(desc);
+        GrCacheID::Key key;
+        memset(&key, 0, sizeof(key));
+        key.fData32[0] = (desc.fWidth) | (desc.fHeight << 16);
+        key.fData32[1] = desc.fConfig | desc.fSampleCnt << 16;
+        key.fData32[2] = desc.fFlags;
+        static int gType = GrResourceKey::GenerateResourceType();
+        static int gDomain = GrCacheID::GenerateDomain();
+        return GrResourceKey(GrCacheID(gDomain, key), gType, 0);
     }
 
     int fID;
@@ -144,7 +155,7 @@ static void check_cache_contents_or_die(GrResourceCache* cache, int k) {
         desc.fHeight |= 1;
         GrResourceKey key = TextureResource::ComputeKey(desc);
         GrGpuResource* item = cache->find(key);
-        if (NULL != item) {
+        if (item) {
             SkFAIL("cache add does not work as expected");
             return;
         }
@@ -155,7 +166,7 @@ static void check_cache_contents_or_die(GrResourceCache* cache, int k) {
         h |= 1;
         GrResourceKey key = StencilResource::ComputeKey(w, h, s);
         GrGpuResource* item = cache->find(key);
-        if (NULL != item) {
+        if (item) {
             SkFAIL("cache add does not work as expected");
             return;
         }
@@ -182,7 +193,7 @@ protected:
         GrGpu* gpu = canvas->getGrContext()->getGpu();
 
         for (int i = 0; i < loops; ++i) {
-            GrResourceCache cache(CACHE_SIZE_COUNT, CACHE_SIZE_BYTES);
+            GrResourceCache cache(gpu->caps(), CACHE_SIZE_COUNT, CACHE_SIZE_BYTES);
             populate_cache(&cache, gpu, DUPLICATE_COUNT);
             populate_cache(&cache, gpu, RESOURCE_COUNT);
 
@@ -216,7 +227,7 @@ protected:
 
     virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         GrGpu* gpu = canvas->getGrContext()->getGpu();
-        GrResourceCache cache(CACHE_SIZE_COUNT, CACHE_SIZE_BYTES);
+        GrResourceCache cache(gpu->caps(), CACHE_SIZE_COUNT, CACHE_SIZE_BYTES);
         populate_cache(&cache, gpu, DUPLICATE_COUNT);
         populate_cache(&cache, gpu, RESOURCE_COUNT);
 

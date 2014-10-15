@@ -111,9 +111,13 @@ setup_device() {
       DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
       ANDROID_ARCH="arm"
       ;;
-    intel_rhb | razr_i | x86)
+    intel_rhb | razr_i)
       DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
       DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
+      ANDROID_ARCH="x86"
+      ;;
+    x86)
+      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
       ANDROID_ARCH="x86"
       ;;
     x86_64 | x64)
@@ -124,7 +128,7 @@ setup_device() {
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=0"
       ANDROID_ARCH="arm"
       ;;
-    arm_v7_thumb | nvidia_logan)
+    arm_v7_thumb | nvidia_logan | nexus_5)
       DEFINES="${DEFINES} skia_arch_type=arm arm_neon_optional=1 arm_version=7 arm_thumb=1"
       ANDROID_ARCH="arm"
       ;;
@@ -192,12 +196,6 @@ adb_pull_if_needed() {
   # read input params
   ANDROID_SRC="$1"
   HOST_DST="$2"
-
-  if [ -d $HOST_DST ];
-  then
-    HOST_DST="${HOST_DST}/$(basename ${ANDROID_SRC})"
-  fi
-
 
   if [ -f $HOST_DST ];
   then

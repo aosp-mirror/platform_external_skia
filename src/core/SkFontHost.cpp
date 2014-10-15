@@ -198,59 +198,14 @@ SkTypeface* SkFontMgr::legacyCreateTypeface(const char familyName[],
     return this->onLegacyCreateTypeface(familyName, styleBits);
 }
 
-SkFontMgr* SkFontMgr::CreateDefault() {
+// As a template argument this must have external linkage.
+SkFontMgr* sk_fontmgr_create_default() {
     SkFontMgr* fm = SkFontMgr::Factory();
     return fm ? fm : SkNEW(SkEmptyFontMgr);
 }
 
+SK_DECLARE_STATIC_LAZY_PTR(SkFontMgr, singleton, sk_fontmgr_create_default);
+
 SkFontMgr* SkFontMgr::RefDefault() {
-    SK_DECLARE_STATIC_LAZY_PTR(SkFontMgr, singleton, CreateDefault);
     return SkRef(singleton.get());
 }
-
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef SK_FONTHOST_DOES_NOT_USE_FONTMGR
-
-#if 0
-static SkFontStyle TypefaceStyleBitsToFontStyle(SkTypeface::Style styleBits) {
-    SkFontStyle::Weight weight = (styleBits & SkTypeface::kBold) ?
-                                     SkFontStyle::kBold_Weight :
-                                     SkFontStyle::kNormal_Weight;
-    SkFontStyle::Width width = SkFontStyle::kNormal_Width;
-    SkFontStyle::Slant slant = (styleBits & SkTypeface::kItalic) ?
-                                     SkFontStyle::kUpright_Slant :
-                                     SkFontStyle::kItalic_Slant;
-    return SkFontStyle(weight, width, slant);
-}
-#endif
-
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style style) {
-    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
-    if (familyFace) {
-        bool bold = style & SkTypeface::kBold;
-        bool italic = style & SkTypeface::kItalic;
-        SkFontStyle newStyle = SkFontStyle(bold ? SkFontStyle::kBold_Weight
-                                                : SkFontStyle::kNormal_Weight,
-                                           SkFontStyle::kNormal_Width,
-                                           italic ? SkFontStyle::kItalic_Slant
-                                                  : SkFontStyle::kUpright_Slant);
-        return fm->matchFaceStyle(familyFace, newStyle);
-    } else {
-        return fm->legacyCreateTypeface(familyName, style);
-    }
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
-    return fm->createFromFile(path);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
-    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
-    return fm->createFromStream(stream);
-}
-
-#endif

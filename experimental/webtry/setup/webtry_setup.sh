@@ -2,32 +2,83 @@
 #
 # Script to setup a GCE instance to run the webtry server.
 # For full instructions see the README file.
-sudo apt-get install schroot debootstrap monit squid3
-sudo apt-get install g++ libfreetype6 libfreetype6-dev libpng12-0 libpng12-dev libglu1-mesa-dev mesa-common-dev freeglut3-dev libgif-dev libfontconfig libfontconfig-dev
 
-echo "Adding the webtry user account"
+function banner {
+	echo ""
+	echo "******************************************"
+	echo "*"
+	echo "* $1"
+	echo "*"
+	echo "******************************************"
+	echo ""
+}
+
+banner "Installing debian packages needed for the server"
+
+sudo apt-get install schroot debootstrap monit squid3
+
+# although aufs is being replaced by overlayfs, it's not clear
+# to me if overlayfs is completely supported by schroot yet.
+sudo apt-get install aufs-tools
+
+banner "Setting up the webtry user account"
 sudo adduser webtry
 
-sudo cp continue_install /home/webtry/continue_install
-sudo chmod 766 /home/webtry/continue_install
-sudo chown webtry:webtry /home/webtry/continue_install
-sudo su webtry -c /home/webtry/continue_install
+sudo mkdir /home/webtry/cache
+sudo mkdir /home/webtry/cache/src
+sudo mkdir /home/webtry/inout
+sudo chmod 777 /home/webtry/inout
+sudo chmod 777 /home/webtry/cache
+sudo chmod 777 /home/webtry/cache/src
 
-sudo mkdir -p /srv/chroot/webtry
-sudo cp /home/webtry/skia/experimental/webtry/sys/webtry_schroot /etc/schroot/chroot.d/webtry
+sudo cp sys/webtry_schroot /etc/schroot/chroot.d/webtry
 
-sudo mkdir /srv/chroot/webtry/etc
-sudo mkdir /srv/chroot/webtry/bin
-sudo cp /bin/sh /srv/chroot/webtry/bin/sh
+CHROOT_JAIL=/srv/chroot/webtry_gyp
+# Build the chroot environment.
+if [ ! -d ${CHROOT_JAIL} ]; then
+	banner "Building the chroot jail"
+	sudo mkdir -p ${CHROOT_JAIL}
 
-# Copy all the dependent libraries into the schroot.
-sudo cp --parents `ldd /home/webtry/skia/out/Debug/webtry | cut -d " " -f 3` /srv/chroot/webtry
-sudo cp --parents `ldd /bin/sh | cut -d " " -f 3` /srv/chroot/webtry
+	sudo debootstrap --variant=minbase wheezy ${CHROOT_JAIL}
+	sudo cp setup_jail.sh ${CHROOT_JAIL}/bin
+	sudo chmod 755 ${CHROOT_JAIL}/bin/setup_jail.sh
+	sudo chroot ${CHROOT_JAIL} /bin/setup_jail.sh
+	sudo sh -c "echo 'none /dev/shm tmpfs rw,nosuid,nodev,noexec 0 0' >> ${CHROOT_JAIL}/etc/fstab"
+fi
 
-sudo cp /home/webtry/skia/experimental/webtry/sys/webtry_init /etc/init.d/webtry
-sudo cp /home/webtry/skia/experimental/webtry/sys/webtry_monit /etc/monit/conf.d/webtry
-sudo cp /home/webtry/skia/experimental/webtry/sys/webtry_squid /etc/squid3/squid.conf
+# The continue_install_jail script will update and build up the skia library
+# inside the jail.
+
+banner "Installing and updating software on the chroot jail"
+sudo cp continue_install_jail.sh ${CHROOT_JAIL}/bin/continue_install_jail.sh
+sudo chmod 755 ${CHROOT_JAIL}/bin/continue_install_jail.sh
+sudo chroot ${CHROOT_JAIL} /bin/continue_install_jail.sh
+sudo chown -R webtry:webtry ${CHROOT_JAIL}/skia_build/skia
+
+# The continue_install script will fetch the latest versions of
+# skia and depot_tools.  We split up the installation process into
+# two pieces like this so that the continue_install script can
+# be run independently of this one to fetch and build the latest skia.
+
+banner "Building the webtry server outside the jail"
+
+sudo cp continue_install.sh /home/webtry
+sudo chown webtry:webtry /home/webtry/continue_install.sh
+sudo su - webtry -c /home/webtry/continue_install.sh
+
+banner "Setting up system initialization scripts"
+
+sudo cp sys/webtry_init /etc/init.d/webtry
+sudo cp sys/webtry_monit /etc/monit/conf.d/webtry
+sudo cp sys/webtry_squid /etc/squid3/squid.conf
 sudo chmod 744 /etc/init.d/webtry
 
 # Confirm that monit is happy.
 sudo monit -t
+sudo monit reload
+
+banner "Restarting webtry server"
+
+sudo /etc/init.d/webtry restart
+
+banner "All done!"

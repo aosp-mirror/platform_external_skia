@@ -24,7 +24,7 @@ void GrGLTexture::init(GrGpuGL* gpu,
                                            textureDesc.fTextureID,
                                            textureDesc.fIsWrapped)));
 
-    if (NULL != rtDesc) {
+    if (rtDesc) {
         GrGLIRect vp;
         vp.fLeft   = 0;
         vp.fWidth  = textureDesc.fWidth;
@@ -33,6 +33,7 @@ void GrGLTexture::init(GrGpuGL* gpu,
 
         fRenderTarget.reset(SkNEW_ARGS(GrGLRenderTarget, (gpu, *rtDesc, vp, fTexIDObj, this)));
     }
+    this->registerWithCache();
 }
 
 GrGLTexture::GrGLTexture(GrGpuGL* gpu,
@@ -54,7 +55,7 @@ void GrGLTexture::onRelease() {
 }
 
 void GrGLTexture::onAbandon() {
-    if (NULL != fTexIDObj.get()) {
+    if (fTexIDObj.get()) {
         fTexIDObj->abandon();
         fTexIDObj.reset(NULL);
     }

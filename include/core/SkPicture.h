@@ -20,7 +20,7 @@
 class GrContext;
 #endif
 
-class SkBBHFactory;
+class GrReplacements;
 class SkBBoxHierarchy;
 class SkCanvas;
 class SkData;
@@ -62,10 +62,6 @@ public:
 
         typedef SkRefCnt INHERITED;
     };
-
-#ifdef SK_SUPPORT_LEGACY_DEFAULT_PICTURE_CTOR
-    SkPicture();
-#endif
 
     /**  PRIVATE / EXPERIMENTAL -- do not call */
     void EXPERIMENTAL_addAccelData(const AccelData*) const;
@@ -109,31 +105,31 @@ public:
 
     virtual ~SkPicture();
 
-#ifdef SK_SUPPORT_LEGACY_PICTURE_CLONE
-    /**
-     *  Creates a thread-safe clone of the picture that is ready for playback.
-     */
-    SkPicture* clone() const;
+    /** Replays the drawing commands on the specified canvas. Note that
+        this has the effect of unfurling this picture into the destination
+        canvas. Using the SkCanvas::drawPicture entry point gives the destination
+        canvas the option of just taking a ref.
+        @param canvas the canvas receiving the drawing commands.
+        @param callback a callback that allows interruption of playback
+    */
+    void playback(SkCanvas* canvas, SkDrawPictureCallback* = NULL) const;
+
+#ifdef SK_LEGACY_PICTURE_DRAW_API
+    void draw(SkCanvas* canvas, SkDrawPictureCallback* callback = NULL) const {
+        this->playback(canvas, callback);
+    }
 #endif
 
-    /** Replays the drawing commands on the specified canvas.
-        @param canvas the canvas receiving the drawing commands.
-    */
-    void draw(SkCanvas* canvas, SkDrawPictureCallback* = NULL) const;
+#ifdef SK_LEGACY_PICTURE_SIZE_API
+    int width() const  { return SkScalarCeilToInt(fCullWidth); }
+    int height() const { return SkScalarCeilToInt(fCullHeight); }
+#endif
 
-    /** Return the width of the picture's recording canvas. This
-        value reflects what was passed to setSize(), and does not necessarily
-        reflect the bounds of what has been recorded into the picture.
-        @return the width of the picture's recording canvas
+    /** Return the cull rect used when creating this picture: { 0, 0, cullWidth, cullHeight }.
+        It does not necessarily reflect the bounds of what has been recorded into the picture.
+        @return the cull rect used to create this picture
     */
-    int width() const { return fWidth; }
-
-    /** Return the height of the picture's recording canvas. This
-        value reflects what was passed to setSize(), and does not necessarily
-        reflect the bounds of what has been recorded into the picture.
-        @return the height of the picture's recording canvas
-    */
-    int height() const { return fHeight; }
+    const SkRect cullRect() const { return SkRect::MakeWH(fCullWidth, fCullHeight); }
 
     /** Return a non-zero, unique value representing the picture. This call is
         only valid when not recording. Between a beginRecording/endRecording
@@ -181,7 +177,7 @@ public:
         If false is returned, SkPictInfo is unmodified.
     */
     static bool InternalOnly_StreamIsSKP(SkStream*, SkPictInfo*);
-    static bool InternalOnly_BufferIsSKP(SkReadBuffer&, SkPictInfo*);
+    static bool InternalOnly_BufferIsSKP(SkReadBuffer*, SkPictInfo*);
 
     /** Return true if the picture is suitable for rendering on the GPU.
      */
@@ -197,6 +193,17 @@ public:
 
     // Takes ref on listener.
     void addDeletionListener(DeletionListener* listener) const;
+
+    /** Return the approximate number of operations in this picture.  This
+     *  number may be greater or less than the number of SkCanvas calls
+     *  recorded: some calls may be recorded as more than one operation, or some
+     *  calls may be optimized away.
+     */
+    int approximateOpCount() const;
+
+    /** Return true if this picture contains text.
+     */
+    bool hasText() const;
 
 private:
     // V2 : adds SkPixelRef's generation ID.
@@ -231,19 +238,24 @@ private:
     // V29: Removed SaveFlags parameter from save().
     // V30: Remove redundant SkMatrix from SkLocalMatrixShader.
     // V31: Add a serialized UniqueID to SkImageFilter.
+    // V32: Removed SkPaintOptionsAndroid from SkPaint
+    // V33: Serialize only public API of effects.
+    // V34: Add SkTextBlob serialization.
+    // V35: Store SkRect (rather then width & height) in header
+    // V36: Remove (obsolete) alphatype from SkColorTable
 
     // Note: If the picture version needs to be increased then please follow the
     // steps to generate new SKPs in (only accessible to Googlers): http://goo.gl/qATVcw
 
     // Only SKPs within the min/current picture version range (inclusive) can be read.
     static const uint32_t MIN_PICTURE_VERSION = 19;
-    static const uint32_t CURRENT_PICTURE_VERSION = 31;
+    static const uint32_t CURRENT_PICTURE_VERSION = 36;
 
     mutable uint32_t      fUniqueID;
 
-    // TODO: make SkPictureData const when clone method goes away
-    SkAutoTDelete<SkPictureData> fData;
-    int                   fWidth, fHeight;
+    SkAutoTDelete<const SkPictureData>    fData;
+    const SkScalar                        fCullWidth;
+    const SkScalar                        fCullHeight;
     mutable SkAutoTUnref<const AccelData> fAccelData;
 
     mutable SkTDArray<DeletionListener*> fDeletionListeners;  // pointers are refed
@@ -253,45 +265,47 @@ private:
 
     // Create a new SkPicture from an existing SkPictureData. The new picture
     // takes ownership of 'data'.
-    SkPicture(SkPictureData* data, int width, int height);
+    SkPicture(SkPictureData* data, SkScalar width, SkScalar height);
 
-    SkPicture(int width, int height, const SkPictureRecord& record, bool deepCopyOps);
-
-    // An OperationList encapsulates a set of operation offsets into the picture byte
-    // stream along with the CTMs needed for those operation.
-    class OperationList : ::SkNoncopyable {
-    public:
-        // The following three entry points should only be accessed if
-        // 'valid' returns true.
-        int numOps() const { return fOps.count(); }
-        // The offset in the picture of the operation to execute.
-        uint32_t offset(int index) const;
-        // The CTM that must be installed for the operation to behave correctly
-        const SkMatrix& matrix(int index) const;
-
-        SkTDArray<void*> fOps;
-    };
-
-    /** PRIVATE / EXPERIMENTAL -- do not call
-        Return the operations required to render the content inside 'queryRect'.
-    */
-    const OperationList* EXPERIMENTAL_getActiveOps(const SkIRect& queryRect) const;
+    SkPicture(SkScalar width, SkScalar height, const SkPictureRecord& record, bool deepCopyOps);
 
     void createHeader(SkPictInfo* info) const;
     static bool IsValidPictInfo(const SkPictInfo& info);
 
-    friend class SkPictureData;                // to access OperationList
-    friend class SkPictureRecorder;            // just for SkPicture-based constructor
-    friend class SkGpuDevice;                  // for EXPERIMENTAL_getActiveOps/OperationList
-    friend class GrGatherCanvas;               // needs to know if old or new picture
-    friend class SkPicturePlayback;            // to get fData & OperationList
-    friend class SkPictureReplacementPlayback; // to access OperationList
+    friend class SkPictureRecorder;            // SkRecord-based constructor.
+    friend class SkGpuDevice;                  // for fData access
+    friend class GrLayerHoister;               // access to fRecord
+    friend class CollectLayers;                // access to fRecord
+    friend class SkPicturePlayback;            // to get fData
+    friend class ReplaceDraw;
 
     typedef SkRefCnt INHERITED;
 
-    SkPicture(int width, int height, SkRecord*);  // Takes ownership.
-    SkAutoTDelete<SkRecord> fRecord;
-    bool fRecordWillPlayBackBitmaps; // TODO: const
+    // Takes ownership of the SkRecord, refs the (optional) BBH.
+    SkPicture(SkScalar width, SkScalar height, SkRecord*, SkBBoxHierarchy*);
+    // Return as a new SkPicture that's backed by SkRecord.
+    static SkPicture* Forwardport(const SkPicture&);
+    // Return as a new SkPicture that's backed by the old backend.
+    static SkPicture* Backport(const SkRecord& src, const SkRect& cullRect);
+
+    SkAutoTDelete<SkRecord>       fRecord;
+    SkAutoTUnref<SkBBoxHierarchy> fBBH;
+
+    struct PathCounter;
+
+    struct Analysis {
+        Analysis() {}  // Only used by SkPictureData codepath.
+        explicit Analysis(const SkRecord&);
+
+        bool suitableForGpuRasterization(const char** reason, int sampleCount) const;
+
+        bool        fWillPlaybackBitmaps;
+        bool        fHasText;
+        int         fNumPaintWithPathEffectUses;
+        int         fNumFastPathDashEffects;
+        int         fNumAAConcavePaths;
+        int         fNumAAHairlineConcavePaths;
+    } fAnalysis;
 };
 
 #endif

@@ -11,6 +11,7 @@
 #include "SkTextureCompressor_R11EAC.h"
 
 #include "SkBitmap.h"
+#include "SkBitmapProcShader.h"
 #include "SkData.h"
 #include "SkEndian.h"
 
@@ -44,24 +45,31 @@ void GetBlockDimensions(Format format, int* dimX, int* dimY, bool matchSpec) {
     }
 
     // No specialized arguments, return the dimensions as they are in the spec.
-    switch(format) {
-        // These formats are 64 bits per 4x4 block.
-        default:
-            SkDEBUGFAIL("Unknown compression format!");
-            // fall through
-        case kLATC_Format:
-        case kR11_EAC_Format:
-        case kETC1_Format: 
-            *dimX = 4;
-            *dimY = 4;
-            break;
+    static const struct FormatDimensions {
+        const int fBlockSizeX;
+        const int fBlockSizeY;
+    } kFormatDimensions[kFormatCnt] = {
+        { 4, 4 }, // kLATC_Format
+        { 4, 4 }, // kR11_EAC_Format
+        { 4, 4 }, // kETC1_Format
+        { 4, 4 }, // kASTC_4x4_Format
+        { 5, 4 }, // kASTC_5x4_Format
+        { 5, 5 }, // kASTC_5x5_Format
+        { 6, 5 }, // kASTC_6x5_Format
+        { 6, 6 }, // kASTC_6x6_Format
+        { 8, 5 }, // kASTC_8x5_Format
+        { 8, 6 }, // kASTC_8x6_Format
+        { 8, 8 }, // kASTC_8x8_Format
+        { 10, 5 }, // kASTC_10x5_Format
+        { 10, 6 }, // kASTC_10x6_Format
+        { 10, 8 }, // kASTC_10x8_Format
+        { 10, 10 }, // kASTC_10x10_Format
+        { 12, 10 }, // kASTC_12x10_Format
+        { 12, 12 }, // kASTC_12x12_Format
+    };
 
-        // This format is 12x12 blocks to 128 bits.
-        case kASTC_12x12_Format:
-            *dimX = 12;
-            *dimY = 12;
-            break;        
-    }
+    *dimX = kFormatDimensions[format].fBlockSizeX;
+    *dimY = kFormatDimensions[format].fBlockSizeY;
 }
 
 int GetCompressedDataSize(Format fmt, int width, int height) {
@@ -78,7 +86,20 @@ int GetCompressedDataSize(Format fmt, int width, int height) {
             encodedBlockSize = 8;
             break;
 
-        // This format is 12x12 blocks to 128 bits.
+        // This format is 128 bits.
+        case kASTC_4x4_Format:
+        case kASTC_5x4_Format:
+        case kASTC_5x5_Format:
+        case kASTC_6x5_Format:
+        case kASTC_6x6_Format:
+        case kASTC_8x5_Format:
+        case kASTC_8x6_Format:
+        case kASTC_8x8_Format:
+        case kASTC_10x5_Format:
+        case kASTC_10x6_Format:
+        case kASTC_10x8_Format:
+        case kASTC_10x10_Format:
+        case kASTC_12x10_Format:
         case kASTC_12x12_Format:
             encodedBlockSize = 16;
             break;
@@ -145,14 +166,14 @@ bool CompressBufferToFormat(uint8_t* dst, const uint8_t* src, SkColorType srcCol
         }
     }
 
-    if (NULL != proc) {
+    if (proc) {
         return proc(dst, src, width, height, rowBytes);
     }
 
     return false;
 }
 
-SkData *CompressBitmapToFormat(const SkBitmap &bitmap, Format format) {
+SkData* CompressBitmapToFormat(const SkBitmap &bitmap, Format format) {
     SkAutoLockPixels alp(bitmap);
 
     int compressedDataSize = GetCompressedDataSize(format, bitmap.width(), bitmap.height());
@@ -161,27 +182,27 @@ SkData *CompressBitmapToFormat(const SkBitmap &bitmap, Format format) {
     }
 
     const uint8_t* src = reinterpret_cast<const uint8_t*>(bitmap.getPixels());
-    uint8_t* dst = reinterpret_cast<uint8_t*>(sk_malloc_throw(compressedDataSize));
+    SkData* dst = SkData::NewUninitialized(compressedDataSize);
 
-    if (CompressBufferToFormat(dst, src, bitmap.colorType(), bitmap.width(), bitmap.height(),
-                               bitmap.rowBytes(), format)) {
-        return SkData::NewFromMalloc(dst, compressedDataSize);
+    if (!CompressBufferToFormat((uint8_t*)dst->writable_data(), src, bitmap.colorType(),
+                                bitmap.width(), bitmap.height(), bitmap.rowBytes(), format)) {
+        dst->unref();
+        dst = NULL;
     }
-
-    sk_free(dst);
-    return NULL;
+    return dst;
 }
 
-SkBlitter* CreateBlitterForFormat(int width, int height, void* compressedBuffer, Format format) {
+SkBlitter* CreateBlitterForFormat(int width, int height, void* compressedBuffer,
+                                  SkTBlitterAllocator *allocator, Format format) {
     switch(format) {
         case kLATC_Format:
-            return CreateLATCBlitter(width, height, compressedBuffer);
+            return CreateLATCBlitter(width, height, compressedBuffer, allocator);
 
         case kR11_EAC_Format:
-            return CreateR11EACBlitter(width, height, compressedBuffer);
+            return CreateR11EACBlitter(width, height, compressedBuffer, allocator);
 
         case kASTC_12x12_Format:
-            return CreateASTCBlitter(width, height, compressedBuffer);
+            return CreateASTCBlitter(width, height, compressedBuffer, allocator);
 
         default:
             return NULL;
@@ -212,9 +233,23 @@ bool DecompressBufferFromFormat(uint8_t* dst, int dstRowBytes, const uint8_t* sr
         case kETC1_Format:
             return 0 == etc1_decode_image(src, dst, width, height, 3, dstRowBytes);
 #endif
+
+        case kASTC_4x4_Format:
+        case kASTC_5x4_Format:
+        case kASTC_5x5_Format:
+        case kASTC_6x5_Format:
+        case kASTC_6x6_Format:
+        case kASTC_8x5_Format:
+        case kASTC_8x6_Format:
+        case kASTC_8x8_Format:
+        case kASTC_10x5_Format:
+        case kASTC_10x6_Format:
+        case kASTC_10x8_Format:
+        case kASTC_10x10_Format:
+        case kASTC_12x10_Format:
         case kASTC_12x12_Format:
-            // TODO(krajcevski) .. right now just fall through and return false.
-            return false;
+            DecompressASTC(dst, dstRowBytes, src, width, height, dimX, dimY);
+            return true;
 
         default:
             // Do nothing...

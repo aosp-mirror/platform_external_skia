@@ -14,8 +14,7 @@ class SkSurface_Gpu : public SkSurface_Base {
 public:
     SK_DECLARE_INST_COUNT(SkSurface_Gpu)
 
-    SkSurface_Gpu(GrRenderTarget*, bool cached, TextRenderMode trm, 
-                  SkSurface::RenderTargetFlags flags);
+    SkSurface_Gpu(GrRenderTarget*, const SkSurfaceProps*, bool doClear);
     virtual ~SkSurface_Gpu();
 
     virtual SkCanvas* onNewCanvas() SK_OVERRIDE;
@@ -34,16 +33,14 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget, bool cached, TextRenderMode trm,
-                             SkSurface::RenderTargetFlags flags)
-        : INHERITED(renderTarget->width(), renderTarget->height()) {
+SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget, const SkSurfaceProps* props,
+                             bool doClear)
+        : INHERITED(renderTarget->width(), renderTarget->height(), props) {
     int deviceFlags = 0;
-    deviceFlags |= cached ? SkGpuDevice::kCached_Flag : 0;
-    deviceFlags |= (kDistanceField_TextRenderMode == trm) ? SkGpuDevice::kDFFonts_Flag : 0;
-    fDevice = SkGpuDevice::Create(renderTarget, deviceFlags);
+    deviceFlags |= this->props().isUseDistanceFieldFonts() ? SkGpuDevice::kDFFonts_Flag : 0;
+    fDevice = SkGpuDevice::Create(renderTarget, this->props(), deviceFlags);
 
-    if (kRGB_565_GrPixelConfig != renderTarget->config() && 
-        !(flags & kDontClear_RenderTargetFlag)) {
+    if (kRGB_565_GrPixelConfig != renderTarget->config() && doClear) {
         fDevice->clear(0x0);
     }
 }
@@ -53,13 +50,17 @@ SkSurface_Gpu::~SkSurface_Gpu() {
 }
 
 SkCanvas* SkSurface_Gpu::onNewCanvas() {
-    return SkNEW_ARGS(SkCanvas, (fDevice));
+    SkCanvas::InitFlags flags = SkCanvas::kDefault_InitFlags;
+    // When we think this works...
+//    flags |= SkCanvas::kConservativeRasterClip_InitFlag;
+
+    return SkNEW_ARGS(SkCanvas, (fDevice, &this->props(), flags));
 }
 
 SkSurface* SkSurface_Gpu::onNewSurface(const SkImageInfo& info) {
     GrRenderTarget* rt = fDevice->accessRenderTarget();
     int sampleCount = rt->numSamples();
-    return SkSurface::NewRenderTarget(fDevice->context(), info, sampleCount);
+    return SkSurface::NewRenderTarget(fDevice->context(), info, sampleCount, &this->props());
 }
 
 SkImage* SkSurface_Gpu::onNewImageSnapshot() {
@@ -77,7 +78,7 @@ void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
 void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
     GrRenderTarget* rt = fDevice->accessRenderTarget();
     // are we sharing our render target with the image?
-    SkASSERT(NULL != this->getCachedImage());
+    SkASSERT(this->getCachedImage());
     if (rt->asTexture() == SkTextureImageGetTexture(this->getCachedImage())) {
         // We call createCompatibleDevice because it uses the texture cache. This isn't
         // necessarily correct (http://skbug.com/2252), but never using the cache causes
@@ -86,9 +87,9 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
             fDevice->createCompatibleDevice(fDevice->imageInfo()));
         SkAutoTUnref<SkGpuDevice> aurd(newDevice);
         if (kRetain_ContentChangeMode == mode) {
-            fDevice->context()->copyTexture(rt->asTexture(), newDevice->accessRenderTarget());
+            fDevice->context()->copySurface(newDevice->accessRenderTarget(), rt->asTexture());
         }
-        SkASSERT(NULL != this->getCachedCanvas());
+        SkASSERT(this->getCachedCanvas());
         SkASSERT(this->getCachedCanvas()->getDevice() == fDevice);
 
         this->getCachedCanvas()->setRootDevice(newDevice);
@@ -104,16 +105,15 @@ void SkSurface_Gpu::onDiscard() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target, TextRenderMode trm,
-                                            RenderTargetFlags flags) {
+SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target, const SkSurfaceProps* props) {
     if (NULL == target) {
         return NULL;
     }
-    return SkNEW_ARGS(SkSurface_Gpu, (target, false, trm, flags));
+    return SkNEW_ARGS(SkSurface_Gpu, (target, props, false));
 }
 
 SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, int sampleCount,
-                                      TextRenderMode trm, RenderTargetFlags flags) {
+                                      const SkSurfaceProps* props) {
     if (NULL == ctx) {
         return NULL;
     }
@@ -130,12 +130,11 @@ SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, i
         return NULL;
     }
 
-    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), false, trm, flags));
+    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), props, true));
 }
 
 SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& info,
-                                             int sampleCount, TextRenderMode trm,
-                                             RenderTargetFlags flags) {
+                                             int sampleCount, const SkSurfaceProps* props) {
     if (NULL == ctx) {
         return NULL;
     }
@@ -147,11 +146,11 @@ SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& 
     desc.fConfig = SkImageInfo2GrPixelConfig(info);
     desc.fSampleCnt = sampleCount;
 
-    SkAutoTUnref<GrTexture> tex(ctx->lockAndRefScratchTexture(desc, GrContext::kExact_ScratchTexMatch));
+    SkAutoTUnref<GrTexture> tex(ctx->refScratchTexture(desc, GrContext::kExact_ScratchTexMatch));
 
     if (NULL == tex) {
         return NULL;
     }
 
-    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), true, trm, flags));
+    return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), props, true));
 }

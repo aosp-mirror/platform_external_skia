@@ -120,45 +120,6 @@ SkTypeface* FontConfigTypeface::LegacyCreateTypeface(
     return face;
 }
 
-#ifdef SK_FONTHOST_DOES_NOT_USE_FONTMGR
-
-SkTypeface* SkFontHost::CreateTypeface(const SkTypeface* familyFace,
-                                       const char familyName[],
-                                       SkTypeface::Style style) {
-    return FontConfigTypeface::LegacyCreateTypeface(familyFace, familyName,
-                                                    style);
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromStream(SkStream* stream) {
-    if (!stream) {
-        return NULL;
-    }
-    const size_t length = stream->getLength();
-    if (!length) {
-        return NULL;
-    }
-    if (length >= 1024 * 1024 * 1024) {
-        return NULL;  // don't accept too large fonts (>= 1GB) for safety.
-    }
-
-    // ask freetype for reported style and if it is a fixed width font
-    SkTypeface::Style style = SkTypeface::kNormal;
-    bool isFixedWidth = false;
-    if (!SkTypeface_FreeType::ScanFont(stream, 0, NULL, &style, &isFixedWidth)) {
-        return NULL;
-    }
-
-    SkTypeface* face = SkNEW_ARGS(FontConfigTypeface, (style, isFixedWidth, stream));
-    return face;
-}
-
-SkTypeface* SkFontHost::CreateTypefaceFromFile(const char path[]) {
-    SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
-    return stream.get() ? CreateTypefaceFromStream(stream) : NULL;
-}
-
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 
 SkStream* FontConfigTypeface::onOpenStream(int* ttcIndex) const {
@@ -176,7 +137,7 @@ SkStream* FontConfigTypeface::onOpenStream(int* ttcIndex) const {
         size_t length = stream->getLength();
 
         const void* memory = stream->getMemoryBase();
-        if (NULL != memory) {
+        if (memory) {
             return new SkMemoryStream(memory, length, true);
         }
 
@@ -201,8 +162,13 @@ SkStream* FontConfigTypeface::onOpenStream(int* ttcIndex) const {
     return stream;
 }
 
+void FontConfigTypeface::onGetFamilyName(SkString* familyName) const {
+    *familyName = this->getFamilyName();
+}
+
 void FontConfigTypeface::onGetFontDescriptor(SkFontDescriptor* desc,
                                              bool* isLocalStream) const {
     desc->setFamilyName(this->getFamilyName());
+    desc->setFontIndex(this->getIdentity().fTTCIndex);
     *isLocalStream = SkToBool(this->getLocalStream());
 }

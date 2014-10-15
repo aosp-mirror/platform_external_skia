@@ -45,7 +45,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 
-class GrGLTexture : public GrTextureImpl {
+class GrGLTexture : public GrTexture {
 
 public:
     struct TexParams {
@@ -89,7 +89,7 @@ public:
         fTexParamsTimestamp = timestamp;
     }
 
-    GrGLuint textureID() const { return (NULL != fTexIDObj.get()) ? fTexIDObj->id() : 0; }
+    GrGLuint textureID() const { return (fTexIDObj.get()) ? fTexIDObj->id() : 0; }
 
 protected:
     // overrides of GrTexture
@@ -105,7 +105,7 @@ private:
               const Desc& textureDesc,
               const GrGLRenderTarget::Desc* rtDesc);
 
-    typedef GrTextureImpl INHERITED;
+    typedef GrTexture INHERITED;
 };
 
 #endif

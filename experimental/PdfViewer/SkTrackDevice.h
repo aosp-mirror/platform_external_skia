@@ -29,10 +29,6 @@ public:
     SkTrackDevice(const SkBitmap& bitmap) : SkBitmapDevice(bitmap)
                                           , fTracker(NULL) {}
 
-    SkTrackDevice(const SkBitmap& bitmap, const SkDeviceProperties& deviceProperties)
-        : SkBitmapDevice(bitmap, deviceProperties)
-        , fTracker(NULL) {}
-
     virtual ~SkTrackDevice() {}
 
     // Install a tracker - we can reuse the tracker between multiple devices, and the state of the
@@ -124,10 +120,10 @@ protected:
     }
 
     virtual void drawPosText(const SkDraw& dummy1, const void* text, size_t len,
-                             const SkScalar pos[], SkScalar constY,
-                             int scalarsPerPos, const SkPaint& paint) {
+                             const SkScalar pos[], int scalarsPerPos,
+                             const SkPoint& offset, const SkPaint& paint) {
         before();
-        INHERITED::drawPosText(dummy1, text, len, pos, constY, scalarsPerPos, paint);
+        INHERITED::drawPosText(dummy1, text, len, pos, scalarsPerPos, offset, paint);
         after();
     }
 

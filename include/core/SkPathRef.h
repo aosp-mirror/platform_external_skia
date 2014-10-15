@@ -144,7 +144,7 @@ public:
      *              fact ovals can report false.
      */
     bool isOval(SkRect* rect) const {
-        if (fIsOval && NULL != rect) {
+        if (fIsOval && rect) {
             *rect = getBounds();
         }
 
@@ -421,7 +421,7 @@ private:
     /**
      * Called the first time someone calls CreateEmpty to actually create the singleton.
      */
-    static SkPathRef* CreateEmptyImpl();
+    friend SkPathRef* sk_create_empty_pathref();
 
     void setIsOval(bool isOval) { fIsOval = isOval; }
 

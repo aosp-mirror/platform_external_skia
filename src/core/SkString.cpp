@@ -583,30 +583,36 @@ void SkString::prependf(const char format[], ...) {
     this->prepend(buffer, strlen(buffer));
 }
 
+void SkString::prependVAList(const char format[], va_list args) {
+    char    buffer[kBufferSize];
+    VSNPRINTF(buffer, kBufferSize, format, args);
+
+    this->prepend(buffer, strlen(buffer));
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void SkString::remove(size_t offset, size_t length) {
     size_t size = this->size();
 
     if (offset < size) {
-        if (offset + length > size) {
+        if (length > size - offset) {
             length = size - offset;
         }
+        SkASSERT(length <= size);
+        SkASSERT(offset <= size - length);
         if (length > 0) {
-            SkASSERT(size > length);
             SkString    tmp(size - length);
             char*       dst = tmp.writable_str();
             const char* src = this->c_str();
 
             if (offset) {
-                SkASSERT(offset <= tmp.size());
                 memcpy(dst, src, offset);
             }
-            size_t tail = size - offset - length;
-            SkASSERT((int32_t)tail >= 0);
+            size_t tail = size - (offset + length);
             if (tail) {
-        //      SkASSERT(offset + length <= tmp.size());
-                memcpy(dst + offset, src + offset + length, tail);
+                memcpy(dst + offset, src + (offset + length), tail);
             }
             SkASSERT(dst[tmp.size()] == 0);
             this->swap(tmp);

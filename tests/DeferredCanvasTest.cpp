@@ -51,7 +51,7 @@ static SkPMColor read_pixel(SkSurface* surface, int x, int y) {
 
 class MockSurface : public SkSurface_Base {
 public:
-    MockSurface(int width, int height) : SkSurface_Base(width, height) {
+    MockSurface(int width, int height) : SkSurface_Base(width, height, NULL) {
         clearCounts();
         fBitmap.allocN32Pixels(width, height);
     }
@@ -681,7 +681,7 @@ static PixelPtr get_surface_ptr(SkSurface* surface, bool useGpu) {
 
 static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFactory* factory) {
     SkImageInfo imageSpec = SkImageInfo::MakeN32Premul(10, 10);
-    bool useGpu = NULL != factory;
+    bool useGpu = SkToBool(factory);
     int cnt;
 #if SK_SUPPORT_GPU
     if (useGpu) {
@@ -706,13 +706,13 @@ static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFac
                 return;
             }
 
-            surface = SkSurface::NewRenderTarget(context, imageSpec);
+            surface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
         } else
 #endif
         {
            surface = SkSurface::NewRaster(imageSpec);
         }
-        SkASSERT(NULL != surface);
+        SkASSERT(surface);
         SkAutoTUnref<SkSurface> aur(surface);
         SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface));
 
@@ -764,7 +764,7 @@ static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContext
     SkImageInfo imageSpec = SkImageInfo::MakeN32Premul(10, 10);
     SkSurface* surface;
     SkSurface* alternateSurface;
-    bool useGpu = NULL != factory;
+    bool useGpu = SkToBool(factory);
     int cnt;
 #if SK_SUPPORT_GPU
     if (useGpu) {
@@ -788,16 +788,16 @@ static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContext
             if (NULL == context) {
                 continue;
             }
-            surface = SkSurface::NewRenderTarget(context, imageSpec);
-            alternateSurface = SkSurface::NewRenderTarget(context, imageSpec);
+            surface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
+            alternateSurface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
         } else
 #endif
         {
             surface = SkSurface::NewRaster(imageSpec);
             alternateSurface = SkSurface::NewRaster(imageSpec);
         }
-        SkASSERT(NULL != surface);
-        SkASSERT(NULL != alternateSurface);
+        SkASSERT(surface);
+        SkASSERT(alternateSurface);
         SkAutoTUnref<SkSurface> aur1(surface);
         SkAutoTUnref<SkSurface> aur2(alternateSurface);
         PixelPtr pixels1 = get_surface_ptr(surface, useGpu);
@@ -839,6 +839,59 @@ static void TestDeferredCanvasCreateCompatibleDevice(skiatest::Reporter* reporte
     REPORTER_ASSERT(reporter, notificationCounter.fStorageAllocatedChangedCount == 1);
 }
 
+static void TestDeferredCanvasGetCanvasSize(skiatest::Reporter* reporter) {
+    SkRect rect;
+    rect.setXYWH(SkIntToScalar(0), SkIntToScalar(0), SkIntToScalar(gWidth), SkIntToScalar(gHeight));
+    SkRect clip;
+    clip.setXYWH(SkIntToScalar(0), SkIntToScalar(0), SkIntToScalar(1), SkIntToScalar(1));
+
+    SkPaint paint;
+    SkISize size = SkISize::Make(gWidth, gHeight);
+
+    SkAutoTUnref<SkSurface> surface(createSurface(0xFFFFFFFF));
+    SkAutoTUnref<SkDeferredCanvas> canvas(SkDeferredCanvas::Create(surface.get()));
+    SkSurface* newSurface = SkSurface::NewRasterPMColor(4, 4);
+    SkAutoTUnref<SkSurface> aur(newSurface);
+
+    for (int i = 0; i < 2; ++i) {
+        if (i == 1) {
+            canvas->setSurface(newSurface);
+            size = SkISize::Make(4, 4);
+        }
+
+        // verify that canvas size is correctly initialized or set
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that clear, clip and draw the canvas will not change its size
+        canvas->clear(0x00000000);
+        canvas->clipRect(clip, SkRegion::kIntersect_Op, false);
+        canvas->drawRect(rect, paint);
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that flush the canvas will not change its size
+        canvas->flush();
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that clear canvas with saved state will not change its size
+        canvas->save();
+        canvas->clear(0xFFFFFFFF);
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that restore canvas state will not change its size
+        canvas->restore();
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that clear within a layer will not change canvas size
+        canvas->saveLayer(&clip, &paint);
+        canvas->clear(0x00000000);
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+
+        // Verify that restore from a layer will not change canvas size
+        canvas->restore();
+        REPORTER_ASSERT(reporter, size == canvas->getCanvasSize());
+    }
+}
+
 DEF_TEST(DeferredCanvas_CPU, reporter) {
     TestDeferredCanvasFlush(reporter);
     TestDeferredCanvasSilentFlush(reporter);
@@ -850,6 +903,7 @@ DEF_TEST(DeferredCanvas_CPU, reporter) {
     TestDeferredCanvasBitmapSizeThreshold(reporter);
     TestDeferredCanvasCreateCompatibleDevice(reporter);
     TestDeferredCanvasWritePixelsToSurface(reporter);
+    TestDeferredCanvasGetCanvasSize(reporter);
     TestDeferredCanvasSurface(reporter, NULL);
     TestDeferredCanvasSetSurface(reporter, NULL);
 }

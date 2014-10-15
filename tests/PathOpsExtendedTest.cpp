@@ -14,14 +14,16 @@
 #include "SkPaint.h"
 #include "SkRTConf.h"
 #include "SkStream.h"
+#include "SkTaskGroup.h"
 #include "SkThread.h"
-#include "SkThreadPool.h"
 
 #ifdef SK_BUILD_FOR_MAC
 #include <sys/sysctl.h>
 #endif
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
+
+DEFINE_bool2(runFail, f, false, "run tests known to fail.");
 
 static const char marker[] =
     "</div>\n"
@@ -542,7 +544,7 @@ bool testThreadedPathOp(skiatest::Reporter* reporter, const SkPath& a, const SkP
 
 SK_DECLARE_STATIC_MUTEX(gMutex);
 
-int initializeTests(skiatest::Reporter* reporter, const char* test) {
+void initializeTests(skiatest::Reporter* reporter, const char* test) {
 #if 0  // doesn't work yet
     SK_CONF_SET("images.jpeg.suppressDecoderWarnings", true);
     SK_CONF_SET("images.png.suppressDecoderWarnings", true);
@@ -566,7 +568,6 @@ int initializeTests(skiatest::Reporter* reporter, const char* test) {
             }
         }
     }
-    return reporter->allowThreaded() ? SkThreadPool::kThreadPerCore : 1;
 }
 
 void outputProgress(char* ramStr, const char* pathStr, SkPath::FillType pathFillType) {

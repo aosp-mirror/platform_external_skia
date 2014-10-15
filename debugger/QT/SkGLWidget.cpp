@@ -47,7 +47,8 @@ void SkGLWidget::initializeGL() {
     GrBackendRenderTargetDesc desc = this->getDesc(this->width(), this->height());
     desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
     GrRenderTarget* curRenderTarget = fCurContext->wrapBackendRenderTarget(desc);
-    fGpuDevice = new SkGpuDevice(fCurContext, curRenderTarget);
+    fGpuDevice = SkGpuDevice::Create(curRenderTarget,
+                                     SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
     fCanvas = new SkCanvas(fGpuDevice);
     curRenderTarget->unref();
 }
@@ -65,10 +66,11 @@ void SkGLWidget::resizeGL(int w, int h) {
         GrRenderTarget* curRenderTarget = fCurContext->wrapBackendRenderTarget(desc);
         SkSafeUnref(fGpuDevice);
         SkSafeUnref(fCanvas);
-        fGpuDevice = new SkGpuDevice(fCurContext, curRenderTarget);
+        fGpuDevice = SkGpuDevice::Create(curRenderTarget,
+                                         SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
         fCanvas = new SkCanvas(fGpuDevice);
     }
-    fDebugger->resize(w, h);
+    fDebugger->setWindowSize(w, h);
     draw();
 }
 

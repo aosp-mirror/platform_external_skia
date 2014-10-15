@@ -11,6 +11,7 @@
 #include "SkMallocPixelRef.h"
 #include "SkOSFile.h"
 #include "SkPictureRecorder.h"
+#include "SkTableColorFilter.h"
 #include "SkTemplates.h"
 #include "SkTypeface.h"
 #include "SkWriteBuffer.h"
@@ -177,7 +178,7 @@ static T* TestFlattenableSerialization(T* testObj, bool shouldSucceed,
     size_t bytesWritten = writer.bytesWritten();
     REPORTER_ASSERT(reporter, SkAlign4(bytesWritten) == bytesWritten);
 
-    unsigned char dataWritten[1024];
+    unsigned char dataWritten[4096];
     SkASSERT(bytesWritten <= sizeof(dataWritten));
     writer.writeToMemory(dataWritten);
 
@@ -198,7 +199,7 @@ static T* TestFlattenableSerialization(T* testObj, bool shouldSucceed,
         // This should have succeeded, since there are enough bytes to read this
         REPORTER_ASSERT(reporter, buffer2.isValid());
         REPORTER_ASSERT(reporter, static_cast<size_t>(peekAfter - peekBefore) == bytesWritten);
-        REPORTER_ASSERT(reporter, NULL != obj2);
+        REPORTER_ASSERT(reporter, obj2);
     } else {
         // If the deserialization was supposed to fail, make sure it did
         REPORTER_ASSERT(reporter, !buffer.isValid());
@@ -261,11 +262,35 @@ static void TestBitmapSerialization(const SkBitmap& validBitmap,
     }
 }
 
+static void TestXfermodeSerialization(skiatest::Reporter* reporter) {
+    for (size_t i = 0; i <= SkXfermode::kLastMode; ++i) {
+        if (i == SkXfermode::kSrcOver_Mode) {
+            // skip SrcOver, as it is allowed to return NULL from Create()
+            continue;
+        }
+        SkAutoTUnref<SkXfermode> mode(SkXfermode::Create(static_cast<SkXfermode::Mode>(i)));
+        REPORTER_ASSERT(reporter, mode.get());
+        SkAutoTUnref<SkXfermode> copy(
+            TestFlattenableSerialization<SkXfermode>(mode.get(), true, reporter));
+    }
+}
+
+static void TestColorFilterSerialization(skiatest::Reporter* reporter) {
+    uint8_t table[256];
+    for (int i = 0; i < 256; ++i) {
+        table[i] = (i * 41) % 256;
+    }
+    SkAutoTUnref<SkColorFilter> colorFilter(SkTableColorFilter::Create(table));
+    SkAutoTUnref<SkColorFilter> copy(
+        TestFlattenableSerialization<SkColorFilter>(colorFilter.get(), true, reporter));
+}
+
 static SkBitmap draw_picture(SkPicture& picture) {
      SkBitmap bitmap;
-     bitmap.allocN32Pixels(picture.width(), picture.height());
+     bitmap.allocN32Pixels(SkScalarCeilToInt(picture.cullRect().width()), 
+                           SkScalarCeilToInt(picture.cullRect().height()));
      SkCanvas canvas(bitmap);
-     picture.draw(&canvas);
+     picture.playback(&canvas);
      return bitmap;
 }
 
@@ -300,7 +325,7 @@ static void TestPictureTypefaceSerialization(skiatest::Reporter* reporter) {
         return;
     }
     SkString filename = SkOSPath::Join(resourcePath.c_str(), "test.ttc");
-    SkTypeface* typeface = SkTypeface::CreateFromFile(filename.c_str());
+    SkTypeface* typeface = SkTypeface::CreateFromFile(filename.c_str(), 1);
     if (!typeface) {
         SkDebugf("Could not run fontstream test because test.ttc not found.");
         return;
@@ -315,9 +340,11 @@ static void TestPictureTypefaceSerialization(skiatest::Reporter* reporter) {
     // Paint some text.
     SkPictureRecorder recorder;
     SkIRect canvasRect = SkIRect::MakeWH(kBitmapSize, kBitmapSize);
-    SkCanvas* canvas = recorder.beginRecording(canvasRect.width(), canvasRect.height(), NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(SkIntToScalar(canvasRect.width()), 
+                                               SkIntToScalar(canvasRect.height()), 
+                                               NULL, 0);
     canvas->drawColor(SK_ColorWHITE);
-    canvas->drawText("A", 1, 24, 32, paint);
+    canvas->drawText("A!", 2, 24, 32, paint);
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
 
     // Serlialize picture and create its clone from stream.
@@ -332,14 +359,12 @@ static void TestPictureTypefaceSerialization(skiatest::Reporter* reporter) {
     compare_bitmaps(reporter, origBitmap, destBitmap);
 }
 
-static bool setup_bitmap_for_canvas(SkBitmap* bitmap) {
-    SkImageInfo info = SkImageInfo::Make(
-        kBitmapSize, kBitmapSize, kN32_SkColorType, kPremul_SkAlphaType);
-    return bitmap->allocPixels(info);
+static void setup_bitmap_for_canvas(SkBitmap* bitmap) {
+    bitmap->allocN32Pixels(kBitmapSize, kBitmapSize);
 }
 
-static bool make_checkerboard_bitmap(SkBitmap& bitmap) {
-    bool success = setup_bitmap_for_canvas(&bitmap);
+static void make_checkerboard_bitmap(SkBitmap& bitmap) {
+    setup_bitmap_for_canvas(&bitmap);
 
     SkCanvas canvas(bitmap);
     canvas.clear(0x00000000);
@@ -360,14 +385,12 @@ static bool make_checkerboard_bitmap(SkBitmap& bitmap) {
             canvas.restore();
         }
     }
-
-    return success;
 }
 
-static bool drawSomething(SkCanvas* canvas) {
+static void draw_something(SkCanvas* canvas) {
     SkPaint paint;
     SkBitmap bitmap;
-    bool success = make_checkerboard_bitmap(bitmap);
+    make_checkerboard_bitmap(bitmap);
 
     canvas->save();
     canvas->scale(0.5f, 0.5f);
@@ -386,8 +409,6 @@ static bool drawSomething(SkCanvas* canvas) {
     paint.setColor(SK_ColorBLACK);
     paint.setTextSize(SkIntToScalar(kBitmapSize/3));
     canvas->drawText("Picture", 7, SkIntToScalar(kBitmapSize/2), SkIntToScalar(kBitmapSize/4), paint);
-
-    return success;
 }
 
 DEF_TEST(Serialization, reporter) {
@@ -407,6 +428,16 @@ DEF_TEST(Serialization, reporter) {
     {
         SkRegion region;
         TestObjectSerialization(&region, reporter);
+    }
+
+    // Test xfermode serialization
+    {
+        TestXfermodeSerialization(reporter);
+    }
+
+    // Test color filter serialization
+    {
+        TestColorFilterSerialization(reporter);
     }
 
     // Test string serialization
@@ -466,9 +497,8 @@ DEF_TEST(Serialization, reporter) {
         validBitmap.setInfo(info);
 
         // Create a bitmap with a really large height
-        info.fHeight = 1000000000;
         SkBitmap invalidBitmap;
-        invalidBitmap.setInfo(info);
+        invalidBitmap.setInfo(info.makeWH(info.width(), 1000000000));
 
         // The deserialization should succeed, and the rendering shouldn't crash,
         // even when the device fails to initialize, due to its size
@@ -478,8 +508,9 @@ DEF_TEST(Serialization, reporter) {
     // Test simple SkPicture serialization
     {
         SkPictureRecorder recorder;
-        bool didDraw = drawSomething(recorder.beginRecording(kBitmapSize, kBitmapSize, NULL, 0));
-        REPORTER_ASSERT(reporter, didDraw);
+        draw_something(recorder.beginRecording(SkIntToScalar(kBitmapSize),
+                                               SkIntToScalar(kBitmapSize),
+                                               NULL, 0));
         SkAutoTUnref<SkPicture> pict(recorder.endRecording());
 
         // Serialize picture
@@ -493,7 +524,7 @@ DEF_TEST(Serialization, reporter) {
         SkValidatingReadBuffer reader(static_cast<void*>(data.get()), size);
         SkAutoTUnref<SkPicture> readPict(
             SkPicture::CreateFromBuffer(reader));
-        REPORTER_ASSERT(reporter, NULL != readPict.get());
+        REPORTER_ASSERT(reporter, readPict.get());
     }
 
     TestPictureTypefaceSerialization(reporter);

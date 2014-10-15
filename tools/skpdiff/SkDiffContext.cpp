@@ -12,7 +12,10 @@
 #include "SkSize.h"
 #include "SkStream.h"
 #include "SkTDict.h"
-#include "SkThreadPool.h"
+#include "SkTaskGroup.h"
+
+// from the tools directory for replace_char(...)
+#include "picture_utils.h"
 
 #include "SkDiffContext.h"
 #include "SkImageDiffer.h"
@@ -21,11 +24,10 @@
 SkDiffContext::SkDiffContext() {
     fDiffers = NULL;
     fDifferCount = 0;
-    fThreadCount = SkThreadPool::kThreadPerCore;
 }
 
 SkDiffContext::~SkDiffContext() {
-    if (NULL != fDiffers) {
+    if (fDiffers) {
         SkDELETE_ARRAY(fDiffers);
     }
 }
@@ -48,9 +50,13 @@ void SkDiffContext::setWhiteDiffDir(const SkString& path) {
     }
 }
 
+void SkDiffContext::setLongNames(const bool useLongNames) {
+    longNames = useLongNames;
+}
+
 void SkDiffContext::setDiffers(const SkTDArray<SkImageDiffer*>& differs) {
     // Delete whatever the last array of differs was
-    if (NULL != fDiffers) {
+    if (fDiffers) {
         SkDELETE_ARRAY(fDiffers);
         fDiffers = NULL;
         fDifferCount = 0;
@@ -79,6 +85,16 @@ static SkString get_common_prefix(const SkString& a, const SkString& b) {
     }
 }
 
+static SkString get_combined_name(const SkString& a, const SkString& b) {
+    // Note (stephana): We must keep this function in sync with
+    // getImageDiffRelativeUrl() in static/loader.js (under rebaseline_server).
+    SkString result = a;
+    result.append("-vs-");
+    result.append(b);
+    sk_tools::replace_char(&result, '.', '_');
+    return result;
+}
+
 void SkDiffContext::addDiff(const char* baselinePath, const char* testPath) {
     // Load the images at the paths
     SkBitmap baselineBitmap;
@@ -100,7 +116,13 @@ void SkDiffContext::addDiff(const char* baselinePath, const char* testPath) {
     // compute the common name
     SkString baseName = SkOSPath::Basename(baselinePath);
     SkString testName = SkOSPath::Basename(testPath);
-    newRecord->fCommonName = get_common_prefix(baseName, testName);
+
+    if (longNames) {
+        newRecord->fCommonName = get_combined_name(baseName, testName);
+    } else {
+        newRecord->fCommonName = get_common_prefix(baseName, testName);
+    }
+    newRecord->fCommonName.append(".png");
 
     newRecord->fBaselinePath = baselinePath;
     newRecord->fTestPath = testPath;
@@ -215,7 +237,7 @@ void SkDiffContext::diffDirectories(const char baselinePath[], const char testPa
         return;
     }
 
-    SkThreadPool threadPool(fThreadCount);
+    SkTaskGroup tg;
     SkTArray<SkThreadedDiff> runnableDiffs;
     runnableDiffs.reset(baselineEntries.count());
 
@@ -230,13 +252,11 @@ void SkDiffContext::diffDirectories(const char baselinePath[], const char testPa
         if (sk_exists(testFile.c_str()) && !sk_isdir(testFile.c_str())) {
             // Queue up the comparison with the differ
             runnableDiffs[x].setup(this, baselineFile, testFile);
-            threadPool.add(&runnableDiffs[x]);
+            tg.add(&runnableDiffs[x]);
         } else {
             SkDebugf("Baseline file \"%s\" has no corresponding test file\n", baselineFile.c_str());
         }
     }
-
-    threadPool.wait();
 }
 
 
@@ -261,16 +281,15 @@ void SkDiffContext::diffPatterns(const char baselinePattern[], const char testPa
         return;
     }
 
-    SkThreadPool threadPool(fThreadCount);
+    SkTaskGroup tg;
     SkTArray<SkThreadedDiff> runnableDiffs;
     runnableDiffs.reset(baselineEntries.count());
 
     for (int x = 0; x < baselineEntries.count(); x++) {
         runnableDiffs[x].setup(this, baselineEntries[x], testEntries[x]);
-        threadPool.add(&runnableDiffs[x]);
+        tg.add(&runnableDiffs[x]);
     }
-
-    threadPool.wait();
+    tg.wait();
 }
 
 void SkDiffContext::outputRecords(SkWStream& stream, bool useJSONP) {
@@ -288,7 +307,7 @@ void SkDiffContext::outputRecords(SkWStream& stream, bool useJSONP) {
     // See http://skbug.com/2713 ('make skpdiff use jsoncpp library to write out
     // JSON output, instead of manual writeText() calls?')
     stream.writeText("    \"records\": [\n");
-    while (NULL != currentRecord) {
+    while (currentRecord) {
         stream.writeText("        {\n");
 
             SkString baselineAbsPath = get_absolute_path(currentRecord->fBaselinePath);
@@ -367,7 +386,7 @@ void SkDiffContext::outputRecords(SkWStream& stream, bool useJSONP) {
         currentRecord = iter.next();
 
         // JSON does not allow trailing commas
-        if (NULL != currentRecord) {
+        if (currentRecord) {
             stream.writeText(",");
         }
         stream.writeText("\n");
@@ -390,7 +409,7 @@ void SkDiffContext::outputCsv(SkWStream& stream) {
     DiffRecord* currentRecord = iter.get();
 
     // Write CSV header and create a dictionary of all columns.
-    while (NULL != currentRecord) {
+    while (currentRecord) {
         for (int diffIndex = 0; diffIndex < currentRecord->fDiffs.count(); diffIndex++) {
             DiffData& data = currentRecord->fDiffs[diffIndex];
             if (!columns.find(data.fDiffName)) {
@@ -409,7 +428,7 @@ void SkDiffContext::outputCsv(SkWStream& stream) {
 
     SkTLList<DiffRecord>::Iter iter2(fRecords, SkTLList<DiffRecord>::Iter::kHead_IterStart);
     currentRecord = iter2.get();
-    while (NULL != currentRecord) {
+    while (currentRecord) {
         for (int i = 0; i < cntColumns; i++) {
             values[i] = -1;
         }

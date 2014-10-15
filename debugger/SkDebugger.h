@@ -60,9 +60,7 @@ public:
         fDebugCanvas->toggleFilter(on);
     }
 
-    void resize(int width, int height) {
-        fDebugCanvas->setBounds(width, height);
-    }
+    void setWindowSize(int width, int height) { fDebugCanvas->setWindowSize(width, height); }
 
     void loadPicture(SkPicture* picture);
 
@@ -93,12 +91,8 @@ public:
         return fDebugCanvas->getCurrentClip();
     }
 
-    int pictureHeight() {
-        return fPictureHeight;
-    }
-
-    int pictureWidth() {
-        return fPictureWidth;
+    SkRect pictureCull() const   { 
+        return NULL == fPicture ? SkRect::MakeEmpty() : fPicture->cullRect();
     }
 
     int index() {
@@ -106,25 +100,25 @@ public:
     }
 
     void setOverdrawViz(bool overDrawViz) {
-        if (NULL != fDebugCanvas) {
+        if (fDebugCanvas) {
             fDebugCanvas->setOverdrawViz(overDrawViz);
         }
     }
 
     void setPathOps(bool pathOps) {
-        if (NULL != fDebugCanvas) {
+        if (fDebugCanvas) {
             fDebugCanvas->setAllowSimplifyClip(pathOps);
         }
     }
 
     void setMegaViz(bool megaViz) {
-        if (NULL != fDebugCanvas) {
+        if (fDebugCanvas) {
             fDebugCanvas->setMegaVizMode(megaViz);
         }
     }
 
     void setTexFilterOverride(bool texFilterOverride, SkPaint::FilterLevel level) {
-        if (NULL != fDebugCanvas) {
+        if (fDebugCanvas) {
             fDebugCanvas->overrideTexFiltering(texFilterOverride, level);
         }
     }
@@ -138,8 +132,6 @@ private:
     SkDebugCanvas* fDebugCanvas;
     SkPicture* fPicture;
 
-    int fPictureWidth;
-    int fPictureHeight;
     int fIndex;
 };
 

@@ -23,6 +23,15 @@
 // raster paths.
 #define MAX_SIGMA SkIntToScalar(532)
 
+static SkVector mapSigma(const SkSize& localSigma, const SkMatrix& ctm) {
+    SkVector sigma = SkVector::Make(localSigma.width(), localSigma.height());
+    ctm.mapVectors(&sigma, 1);
+    sigma.fX = SkMinScalar(SkScalarAbs(sigma.fX), MAX_SIGMA);
+    sigma.fY = SkMinScalar(SkScalarAbs(sigma.fY), MAX_SIGMA);
+    return sigma;
+}
+
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkBlurImageFilter::SkBlurImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     fSigma.fWidth = buffer.readScalar();
@@ -32,13 +41,21 @@ SkBlurImageFilter::SkBlurImageFilter(SkReadBuffer& buffer)
                     (fSigma.fWidth >= 0) &&
                     (fSigma.fHeight >= 0));
 }
+#endif
 
 SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX,
                                      SkScalar sigmaY,
                                      SkImageFilter* input,
-                                     const CropRect* cropRect)
-    : INHERITED(1, &input, cropRect), fSigma(SkSize::Make(sigmaX, sigmaY)) {
-    SkASSERT(sigmaX >= 0 && sigmaY >= 0);
+                                     const CropRect* cropRect,
+                                     uint32_t uniqueID)
+    : INHERITED(1, &input, cropRect, uniqueID), fSigma(SkSize::Make(sigmaX, sigmaY)) {
+}
+
+SkFlattenable* SkBlurImageFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+    SkScalar sigmaX = buffer.readScalar();
+    SkScalar sigmaY = buffer.readScalar();
+    return Create(sigmaX, sigmaY, common.getInput(0), &common.cropRect(), common.uniqueID());
 }
 
 void SkBlurImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -163,15 +180,12 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
         return false;
     }
 
-    if (!dst->allocPixels(src.info().makeWH(srcBounds.width(), srcBounds.height()))) {
+    if (!dst->tryAllocPixels(src.info().makeWH(srcBounds.width(), srcBounds.height()))) {
         return false;
     }
     dst->getBounds(&dstBounds);
 
-    SkVector sigma = SkVector::Make(fSigma.width(), fSigma.height());
-    ctx.ctm().mapVectors(&sigma, 1);
-    sigma.fX = SkMinScalar(sigma.fX, MAX_SIGMA);
-    sigma.fY = SkMinScalar(sigma.fY, MAX_SIGMA);
+    SkVector sigma = mapSigma(fSigma, ctx.ctm());
 
     int kernelSizeX, kernelSizeX3, lowOffsetX, highOffsetX;
     int kernelSizeY, kernelSizeY3, lowOffsetY, highOffsetY;
@@ -190,7 +204,7 @@ bool SkBlurImageFilter::onFilterImage(Proxy* proxy,
     }
 
     SkBitmap temp;
-    if (!temp.allocPixels(dst->info())) {
+    if (!temp.tryAllocPixels(dst->info())) {
         return false;
     }
 
@@ -244,13 +258,12 @@ void SkBlurImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) const 
 bool SkBlurImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
                                        SkIRect* dst) const {
     SkIRect bounds = src;
-    if (getInput(0) && !getInput(0)->filterBounds(src, ctm, &bounds)) {
-        return false;
-    }
-    SkVector sigma = SkVector::Make(fSigma.width(), fSigma.height());
-    ctm.mapVectors(&sigma, 1);
+    SkVector sigma = mapSigma(fSigma, ctm);
     bounds.outset(SkScalarCeilToInt(SkScalarMul(sigma.x(), SkIntToScalar(3))),
                   SkScalarCeilToInt(SkScalarMul(sigma.y(), SkIntToScalar(3))));
+    if (getInput(0) && !getInput(0)->filterBounds(bounds, ctm, &bounds)) {
+        return false;
+    }
     *dst = bounds;
     return true;
 }
@@ -268,10 +281,7 @@ bool SkBlurImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const 
         return false;
     }
     GrTexture* source = input.getTexture();
-    SkVector sigma = SkVector::Make(fSigma.width(), fSigma.height());
-    ctx.ctm().mapVectors(&sigma, 1);
-    sigma.fX = SkMinScalar(sigma.fX, MAX_SIGMA);
-    sigma.fY = SkMinScalar(sigma.fY, MAX_SIGMA);
+    SkVector sigma = mapSigma(fSigma, ctx.ctm());
     offset->fX = rect.fLeft;
     offset->fY = rect.fTop;
     rect.offset(-srcOffset);

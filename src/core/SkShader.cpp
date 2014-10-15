@@ -6,6 +6,7 @@
  */
 
 #include "SkBitmapProcShader.h"
+#include "SkColorShader.h"
 #include "SkEmptyShader.h"
 #include "SkReadBuffer.h"
 #include "SkMallocPixelRef.h"
@@ -45,6 +46,7 @@ SkShader::SkShader(const SkMatrix* localMatrix) {
     }
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
     inc_shader_counter();
     if (buffer.readBool()) {
@@ -53,6 +55,7 @@ SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
         fLocalMatrix.reset();
     }
 }
+#endif
 
 SkShader::~SkShader() {
     dec_shader_counter();
@@ -77,6 +80,18 @@ bool SkShader::computeTotalInverse(const ContextRec& rec, SkMatrix* totalInverse
         m = &total;
     }
     return m->invert(totalInverse);
+}
+
+bool SkShader::asLuminanceColor(SkColor* colorPtr) const {
+    SkColor storage;
+    if (NULL == colorPtr) {
+        colorPtr = &storage;
+    }
+    if (this->onAsLuminanceColor(colorPtr)) {
+        *colorPtr = SkColorSetA(*colorPtr, 0xFF);   // we only return opaque
+        return true;
+    }
+    return false;
 }
 
 SkShader::Context* SkShader::createContext(const ContextRec& rec, void* storage) const {
@@ -208,9 +223,8 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
 }
 
-bool SkShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                           const SkMatrix* localMatrixOrNull, GrColor* paintColor,
-                           GrEffect** effect)  const {
+bool SkShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                   GrFragmentProcessor**)  const {
     return false;
 }
 
@@ -220,6 +234,10 @@ SkShader* SkShader::refAsALocalMatrixShader(SkMatrix*) const {
 
 SkShader* SkShader::CreateEmptyShader() {
     return SkNEW(SkEmptyShader);
+}
+
+SkShader* SkShader::CreateColorShader(SkColor color) {
+    return SkNEW_ARGS(SkColorShader, (color));
 }
 
 SkShader* SkShader::CreateBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
@@ -243,7 +261,6 @@ void SkShader::toString(SkString* str) const {
 
 //////////////////////////////////////////////////////////////////////////////
 
-#include "SkColorShader.h"
 #include "SkUtils.h"
 
 SkColorShader::SkColorShader(SkColor c)
@@ -254,6 +271,7 @@ bool SkColorShader::isOpaque() const {
     return SkColorGetA(fColor) == 255;
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkColorShader::SkColorShader(SkReadBuffer& b) : INHERITED(b) {
     // V25_COMPATIBILITY_CODE We had a boolean to make the color shader inherit the paint's
     // color. We don't support that any more.
@@ -266,9 +284,13 @@ SkColorShader::SkColorShader(SkReadBuffer& b) : INHERITED(b) {
     }
     fColor = b.readColor();
 }
+#endif
+
+SkFlattenable* SkColorShader::CreateProc(SkReadBuffer& buffer) {
+    return SkNEW_ARGS(SkColorShader, (buffer.readColor()));
+}
 
 void SkColorShader::flatten(SkWriteBuffer& buffer) const {
-    this->INHERITED::flatten(buffer);
     buffer.writeColor(fColor);
 }
 
@@ -347,10 +369,9 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 
 #include "SkGr.h"
 
-bool SkColorShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                const SkMatrix* localMatrix, GrColor* paintColor,
-                                GrEffect** effect) const {
-    *effect = NULL;
+bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix*,
+                                        GrColor* paintColor, GrFragmentProcessor** fp) const {
+    *fp = NULL;
     SkColor skColor = fColor;
     U8CPU newA = SkMulDiv255Round(SkColorGetA(fColor), paint.getAlpha());
     *paintColor = SkColor2GrColor(SkColorSetA(skColor, newA));
@@ -359,9 +380,8 @@ bool SkColorShader::asNewEffect(GrContext* context, const SkPaint& paint,
 
 #else
 
-bool SkColorShader::asNewEffect(GrContext* context, const SkPaint& paint,
-                                     const SkMatrix* localMatrix, GrColor* paintColor,
-                                     GrEffect** effect) const {
+bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+                                        GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }
@@ -382,6 +402,10 @@ void SkColorShader::toString(SkString* str) const {
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
+SkFlattenable* SkEmptyShader::CreateProc(SkReadBuffer&) {
+    return SkShader::CreateEmptyShader();
+}
 
 #ifndef SK_IGNORE_TO_STRING
 #include "SkEmptyShader.h"

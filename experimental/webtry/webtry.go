@@ -36,9 +36,6 @@ import (
 )
 
 const (
-	RESULT_COMPILE = `../../experimental/webtry/safec++ -DSK_GAMMA_SRGB -DSK_GAMMA_APPLY_TO_A8 -DSK_SCALAR_TO_FLOAT_EXCLUDED -DSK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1 -DSK_SUPPORT_GPU=0 -DSK_SUPPORT_OPENCL=0 -DSK_FORCE_DISTANCEFIELD_FONTS=0 -DSK_SCALAR_IS_FLOAT -DSK_CAN_USE_FLOAT -DSK_SAMPLES_FOR_X -DSK_BUILD_FOR_UNIX -DSK_USE_POSIX_THREADS -DSK_SYSTEM_ZLIB=1 -DSK_DEBUG -DSK_DEVELOPER=1 -I../../src/core -I../../src/images -I../../tools/flags -I../../include/config -I../../include/core -I../../include/pathops -I../../include/pipe -I../../include/effects -I../../include/ports -I../../src/sfnt -I../../include/utils -I../../src/utils -I../../include/images -g -fno-exceptions -fstrict-aliasing -Wall -Wextra -Winit-self -Wpointer-arith -Wno-unused-parameter -m64 -fno-rtti -Wnon-virtual-dtor -c ../../../cache/%s.cpp -o ../../../cache/%s.o`
-	LINK           = `../../experimental/webtry/safec++ -m64 -lstdc++ -lm -o ../../../inout/%s -Wl,--start-group ../../../cache/%s.o obj/experimental/webtry/webtry.main.o obj/gyp/libflags.a libskia_images.a libskia_core.a libskia_effects.a obj/gyp/libjpeg.a obj/gyp/libetc1.a obj/gyp/libSkKTX.a obj/gyp/libwebp_dec.a obj/gyp/libwebp_demux.a obj/gyp/libwebp_dsp.a obj/gyp/libwebp_enc.a obj/gyp/libwebp_utils.a libskia_utils.a libskia_opts.a libskia_opts_ssse3.a libskia_ports.a libskia_sfnt.a -Wl,--end-group -lpng -lz -lgif -lpthread -lfontconfig -ldl -lfreetype`
-
 	DEFAULT_SAMPLE = `void draw(SkCanvas* canvas) {
     SkPaint p;
     p.setColor(SK_ColorRED);
@@ -55,6 +52,9 @@ const (
 var (
 	// codeTemplate is the cpp code template the user's code is copied into.
 	codeTemplate *template.Template = nil
+
+	// gypTemplate is the GYP file to build the executable containing the user's code.
+	gypTemplate *template.Template = nil
 
 	// indexTemplate is the main index.html page we serve.
 	indexTemplate *htemplate.Template = nil
@@ -146,54 +146,43 @@ func init() {
 	}
 	os.Chdir(cwd)
 
-	codeTemplate, err = template.ParseFiles(filepath.Join(cwd, "templates/template.cpp"))
-	if err != nil {
-		panic(err)
-	}
-	indexTemplate, err = htemplate.ParseFiles(
+	codeTemplate = template.Must(template.ParseFiles(filepath.Join(cwd, "templates/template.cpp")))
+	gypTemplate = template.Must(template.ParseFiles(filepath.Join(cwd, "templates/template.gyp")))
+	indexTemplate = htemplate.Must(htemplate.ParseFiles(
 		filepath.Join(cwd, "templates/index.html"),
 		filepath.Join(cwd, "templates/titlebar.html"),
+		filepath.Join(cwd, "templates/sidebar.html"),
 		filepath.Join(cwd, "templates/content.html"),
 		filepath.Join(cwd, "templates/headercommon.html"),
 		filepath.Join(cwd, "templates/footercommon.html"),
-	)
-	if err != nil {
-		panic(err)
-	}
-	iframeTemplate, err = htemplate.ParseFiles(
+	))
+	iframeTemplate = htemplate.Must(htemplate.ParseFiles(
 		filepath.Join(cwd, "templates/iframe.html"),
 		filepath.Join(cwd, "templates/content.html"),
 		filepath.Join(cwd, "templates/headercommon.html"),
 		filepath.Join(cwd, "templates/footercommon.html"),
-	)
-	if err != nil {
-		panic(err)
-	}
-	recentTemplate, err = htemplate.ParseFiles(
+	))
+	recentTemplate = htemplate.Must(htemplate.ParseFiles(
 		filepath.Join(cwd, "templates/recent.html"),
 		filepath.Join(cwd, "templates/titlebar.html"),
+		filepath.Join(cwd, "templates/sidebar.html"),
 		filepath.Join(cwd, "templates/headercommon.html"),
 		filepath.Join(cwd, "templates/footercommon.html"),
-	)
-	if err != nil {
-		panic(err)
-	}
-	workspaceTemplate, err = htemplate.ParseFiles(
+	))
+	workspaceTemplate = htemplate.Must(htemplate.ParseFiles(
 		filepath.Join(cwd, "templates/workspace.html"),
 		filepath.Join(cwd, "templates/titlebar.html"),
+		filepath.Join(cwd, "templates/sidebar.html"),
 		filepath.Join(cwd, "templates/content.html"),
 		filepath.Join(cwd, "templates/headercommon.html"),
 		filepath.Join(cwd, "templates/footercommon.html"),
-	)
-	if err != nil {
-		panic(err)
-	}
+	))
 
 	// The git command returns output of the format:
 	//
 	//   f672cead70404080a991ebfb86c38316a4589b23 2014-04-27 19:21:51 +0000
 	//
-	logOutput, err := doCmd(`git log --format=%H%x20%ai HEAD^..HEAD`, true)
+	logOutput, err := doCmd(`git log --format=%H%x20%ai HEAD^..HEAD`)
 	if err != nil {
 		panic(err)
 	}
@@ -231,7 +220,7 @@ func init() {
 			log.Printf("ERROR: Failed to open: %q\n", err)
 			panic(err)
 		}
-		sql := `CREATE TABLE source_images (
+		sql := `CREATE TABLE IF NOT EXISTS source_images (
              id        INTEGER     PRIMARY KEY                NOT NULL,
              image     MEDIUMBLOB  DEFAULT ''                 NOT NULL, -- formatted as a PNG.
              width     INTEGER     DEFAULT 0                  NOT NULL,
@@ -240,38 +229,52 @@ func init() {
              hidden    INTEGER     DEFAULT 0                  NOT NULL
              )`
 		_, err = db.Exec(sql)
-		log.Printf("Info: status creating sqlite table for sources: %q\n", err)
+		if err != nil {
+			log.Printf("Info: status creating sqlite table for sources: %q\n", err)
+		}
 
-		sql = `CREATE TABLE webtry (
+		sql = `CREATE TABLE IF NOT EXISTS webtry (
              code               TEXT      DEFAULT ''                 NOT NULL,
              create_ts          TIMESTAMP DEFAULT CURRENT_TIMESTAMP  NOT NULL,
              hash               CHAR(64)  DEFAULT ''                 NOT NULL,
+             width              INTEGER   DEFAULT 256                NOT NULL,
+             height             INTEGER   DEFAULT 256                NOT NULL,
+             gpu                BOOL      DEFAULT 0                  NOT NULL,
              source_image_id    INTEGER   DEFAULT 0                  NOT NULL,
 
              PRIMARY KEY(hash)
             )`
 		_, err = db.Exec(sql)
-		log.Printf("Info: status creating sqlite table for webtry: %q\n", err)
+		if err != nil {
+			log.Printf("Info: status creating sqlite table for webtry: %q\n", err)
+		}
 
-		sql = `CREATE TABLE workspace (
+		sql = `CREATE TABLE IF NOT EXISTS workspace (
           name      CHAR(64)  DEFAULT ''                 NOT NULL,
           create_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP  NOT NULL,
           PRIMARY KEY(name)
         )`
 		_, err = db.Exec(sql)
-		log.Printf("Info: status creating sqlite table for workspace: %q\n", err)
+		if err != nil {
+			log.Printf("Info: status creating sqlite table for workspace: %q\n", err)
+		}
 
-		sql = `CREATE TABLE workspacetry (
+		sql = `CREATE TABLE IF NOT EXISTS workspacetry (
           name               CHAR(64)  DEFAULT ''                 NOT NULL,
           create_ts          TIMESTAMP DEFAULT CURRENT_TIMESTAMP  NOT NULL,
           hash               CHAR(64)  DEFAULT ''                 NOT NULL,
+          width              INTEGER   DEFAULT 256                NOT NULL,
+          height             INTEGER   DEFAULT 256                NOT NULL,
+          gpu                BOOL      DEFAULT 0                  NOT NULL,
           hidden             INTEGER   DEFAULT 0                  NOT NULL,
           source_image_id    INTEGER   DEFAULT 0                  NOT NULL,
 
           FOREIGN KEY (name)   REFERENCES workspace(name)
         )`
 		_, err = db.Exec(sql)
-		log.Printf("Info: status creating sqlite table for workspace try: %q\n", err)
+		if err != nil {
+			log.Printf("Info: status creating sqlite table for workspace try: %q\n", err)
+		}
 	}
 
 	// Ping the database to keep the connection fresh.
@@ -333,31 +336,70 @@ type Titlebar struct {
 type userCode struct {
 	Code     string
 	Hash     string
+	Width    int
+	Height   int
+	GPU      bool
 	Source   int
 	Titlebar Titlebar
 }
 
-// expandToFile expands the template and writes the result to the file.
-func expandToFile(filename string, code string, t *template.Template) error {
+// writeTemplate creates a given output file and writes the template
+// result there.
+func writeTemplate(filename string, t *template.Template, context interface{}) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return t.Execute(f, userCode{Code: code, Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo}})
+	return t.Execute(f, context)
+}
+
+// expandToFile expands the template and writes the result to the file.
+func expandToFile(filename string, code string, t *template.Template) error {
+	return writeTemplate(filename, t, userCode{
+		Code:     code,
+		Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo},
+	})
 }
 
 // expandCode expands the template into a file and calculates the MD5 hash.
-func expandCode(code string, source int) (string, error) {
+// We include the width and height here so that a single hash can capture
+// both the code and the supplied width/height parameters.
+func expandCode(code string, source int, width, height int, gpu bool) (string, error) {
+	// in order to support fonts in the chroot jail, we need to make sure
+	// we're using portable typefaces.
+	// TODO(humper):  Make this more robust, supporting things like setTypeface
+
+	inputCodeLines := strings.Split(code, "\n")
+	outputCodeLines := []string{
+		"DECLARE_bool(portableFonts);",
+		fmt.Sprintf("// WxH: %d, %d", width, height),
+		fmt.Sprintf("// GPU: %v", gpu),
+	}
+	for _, line := range inputCodeLines {
+		outputCodeLines = append(outputCodeLines, line)
+		if strings.HasPrefix(strings.TrimSpace(line), "SkPaint p") {
+			outputCodeLines = append(outputCodeLines, "FLAGS_portableFonts = true;")
+			outputCodeLines = append(outputCodeLines, "sk_tool_utils::set_portable_typeface(&p, \"Helvetica\", SkTypeface::kNormal);")
+		}
+	}
+
+	fontFriendlyCode := strings.Join(outputCodeLines, "\n")
+
 	h := md5.New()
-	h.Write([]byte(code))
+	h.Write([]byte(fontFriendlyCode))
 	binary.Write(h, binary.LittleEndian, int64(source))
 	hash := fmt.Sprintf("%x", h.Sum(nil))
 	// At this point we are running in skia/experimental/webtry, making cache a
 	// peer directory to skia.
 	// TODO(jcgregorio) Make all relative directories into flags.
-	err := expandToFile(fmt.Sprintf("../../../cache/%s.cpp", hash), code, codeTemplate)
+	err := expandToFile(fmt.Sprintf("../../../cache/src/%s.cpp", hash), fontFriendlyCode, codeTemplate)
 	return hash, err
+}
+
+// expandGyp produces the GYP file needed to build the code
+func expandGyp(hash string) error {
+	return writeTemplate(fmt.Sprintf("../../../cache/%s.gyp", hash), gypTemplate, struct{ Hash string }{hash})
 }
 
 // response is serialized to JSON as a response to POSTs.
@@ -368,9 +410,10 @@ type response struct {
 	Hash    string `json:"hash"`
 }
 
-// doCmd executes the given command line string in either the out/Debug
-// directory or the inout directory. Returns the stdout and stderr.
-func doCmd(commandLine string, moveToDebug bool) (string, error) {
+// doCmd executes the given command line string; the command being
+// run is expected to not care what its current working directory is.
+// Returns the stdout and stderr.
+func doCmd(commandLine string) (string, error) {
 	log.Printf("Command: %q\n", commandLine)
 	programAndArgs := strings.SplitN(commandLine, " ", 2)
 	program := programAndArgs[0]
@@ -379,20 +422,6 @@ func doCmd(commandLine string, moveToDebug bool) (string, error) {
 		args = strings.Split(programAndArgs[1], " ")
 	}
 	cmd := exec.Command(program, args...)
-	abs, err := filepath.Abs("../../out/Debug")
-	if err != nil {
-		return "", fmt.Errorf("Failed to find absolute path to Debug directory.")
-	}
-	if moveToDebug {
-		cmd.Dir = abs
-	} else if !*useChroot { // Don't set cmd.Dir when using chroot.
-		abs, err := filepath.Abs("../../../inout")
-		if err != nil {
-			return "", fmt.Errorf("Failed to find absolute path to inout directory.")
-		}
-		cmd.Dir = abs
-	}
-	log.Printf("Run in directory: %q\n", cmd.Dir)
 	message, err := cmd.CombinedOutput()
 	log.Printf("StdOut + StdErr: %s\n", string(message))
 	if err != nil {
@@ -425,15 +454,15 @@ func reportTryError(w http.ResponseWriter, r *http.Request, err error, message, 
 	w.Write(resp)
 }
 
-func writeToDatabase(hash string, code string, workspaceName string, source int) {
+func writeToDatabase(hash string, code string, workspaceName string, source int, width, height int, gpu bool) {
 	if db == nil {
 		return
 	}
-	if _, err := db.Exec("INSERT INTO webtry (code, hash, source_image_id) VALUES(?, ?, ?)", code, hash, source); err != nil {
+	if _, err := db.Exec("INSERT INTO webtry (code, hash, width, height, gpu, source_image_id) VALUES(?, ?, ?, ?, ?, ?)", code, hash, width, height, gpu, source); err != nil {
 		log.Printf("ERROR: Failed to insert code into database: %q\n", err)
 	}
 	if workspaceName != "" {
-		if _, err := db.Exec("INSERT INTO workspacetry (name, hash, source_image_id) VALUES(?, ?, ?)", workspaceName, hash, source); err != nil {
+		if _, err := db.Exec("INSERT INTO workspacetry (name, hash, width, height, gpu, source_image_id) VALUES(?, ?, ?, ?, ?, ?)", workspaceName, hash, width, height, gpu, source); err != nil {
 			log.Printf("ERROR: Failed to insert into workspacetry table: %q\n", err)
 		}
 	}
@@ -573,7 +602,10 @@ type Workspace struct {
 	Name     string
 	Code     string
 	Hash     string
+	Width    int
+	Height   int
 	Source   int
+	GPU      bool
 	Tries    []Try
 	Titlebar Titlebar
 }
@@ -595,14 +627,17 @@ func newWorkspace() (string, error) {
 }
 
 // getCode returns the code for a given hash, or the empty string if not found.
-func getCode(hash string) (string, int, error) {
+func getCode(hash string) (string, int, int, int, bool, error) {
 	code := ""
+	width := 0
+	height := 0
 	source := 0
-	if err := db.QueryRow("SELECT code, source_image_id FROM webtry WHERE hash=?", hash).Scan(&code, &source); err != nil {
+	gpu := false
+	if err := db.QueryRow("SELECT code, width, height, gpu, source_image_id FROM webtry WHERE hash=?", hash).Scan(&code, &width, &height, &gpu, &source); err != nil {
 		log.Printf("ERROR: Code for hash is missing: %q\n", err)
-		return code, source, err
+		return code, width, height, source, gpu, err
 	}
-	return code, source, nil
+	return code, width, height, source, gpu, nil
 }
 
 func workspaceHandler(w http.ResponseWriter, r *http.Request) {
@@ -631,15 +666,20 @@ func workspaceHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		var code string
 		var hash string
+		var width int
+		var height int
 		source := 0
+		gpu := false
 		if len(tries) == 0 {
 			code = DEFAULT_SAMPLE
+			width = 256
+			height = 256
 		} else {
 			hash = tries[len(tries)-1].Hash
-			code, source, _ = getCode(hash)
+			code, width, height, source, gpu, _ = getCode(hash)
 		}
 		w.Header().Set("Content-Type", "text/html")
-		if err := workspaceTemplate.Execute(w, Workspace{Tries: tries, Code: code, Name: name, Hash: hash, Source: source, Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo}}); err != nil {
+		if err := workspaceTemplate.Execute(w, Workspace{Tries: tries, Code: code, Name: name, Hash: hash, Width: width, Height: height, GPU: gpu, Source: source, Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo}}); err != nil {
 			log.Printf("ERROR: Failed to expand template: %q\n", err)
 		}
 	} else if r.Method == "POST" {
@@ -665,6 +705,9 @@ func hasPreProcessor(code string) bool {
 
 type TryRequest struct {
 	Code   string `json:"code"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	GPU    bool   `json:"gpu"`
 	Name   string `json:"name"`   // Optional name of the workspace the code is in.
 	Source int    `json:"source"` // ID of the source image, 0 if none.
 }
@@ -687,14 +730,14 @@ func iframeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var code string
-	code, source, err := getCode(hash)
+	code, width, height, source, gpu, err := getCode(hash)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	// Expand the template.
 	w.Header().Set("Content-Type", "text/html")
-	if err := iframeTemplate.Execute(w, userCode{Code: code, Hash: hash, Source: source}); err != nil {
+	if err := iframeTemplate.Execute(w, userCode{Code: code, Width: width, Height: height, GPU: gpu, Hash: hash, Source: source}); err != nil {
 		log.Printf("ERROR: Failed to expand template: %q\n", err)
 	}
 }
@@ -702,6 +745,9 @@ func iframeHandler(w http.ResponseWriter, r *http.Request) {
 type TryInfo struct {
 	Hash   string `json:"hash"`
 	Code   string `json:"code"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	GPU    bool   `json:"gpu"`
 	Source int    `json:"source"`
 }
 
@@ -718,7 +764,7 @@ func tryInfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := match[1]
-	code, source, err := getCode(hash)
+	code, width, height, source, gpu, err := getCode(hash)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -726,6 +772,9 @@ func tryInfoHandler(w http.ResponseWriter, r *http.Request) {
 	m := TryInfo{
 		Hash:   hash,
 		Code:   code,
+		Width:  width,
+		Height: height,
+		GPU:    gpu,
 		Source: source,
 	}
 	resp, err := json.Marshal(m)
@@ -738,7 +787,7 @@ func tryInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func cleanCompileOutput(s, hash string) string {
-	old := "../../../cache/" + hash + ".cpp:"
+	old := "../../../cache/src/" + hash + ".cpp:"
 	log.Printf("INFO: replacing %q\n", old)
 	return strings.Replace(s, old, "usercode.cpp:", -1)
 }
@@ -750,6 +799,9 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		code := DEFAULT_SAMPLE
 		source := 0
+		width := 256
+		height := 256
+		gpu := false
 		match := directLink.FindStringSubmatch(r.URL.Path)
 		var hash string
 		if len(match) == 2 && r.URL.Path != "/" {
@@ -759,14 +811,14 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// Update 'code' with the code found in the database.
-			if err := db.QueryRow("SELECT code, source_image_id FROM webtry WHERE hash=?", hash).Scan(&code, &source); err != nil {
+			if err := db.QueryRow("SELECT code, width, height, gpu, source_image_id FROM webtry WHERE hash=?", hash).Scan(&code, &width, &height, &gpu, &source); err != nil {
 				http.NotFound(w, r)
 				return
 			}
 		}
 		// Expand the template.
 		w.Header().Set("Content-Type", "text/html")
-		if err := indexTemplate.Execute(w, userCode{Code: code, Hash: hash, Source: source, Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo}}); err != nil {
+		if err := indexTemplate.Execute(w, userCode{Code: code, Hash: hash, Source: source, Width: width, Height: height, GPU: gpu, Titlebar: Titlebar{GitHash: gitHash, GitInfo: gitInfo}}); err != nil {
 			log.Printf("ERROR: Failed to expand template: %q\n", err)
 		}
 	} else if r.Method == "POST" {
@@ -792,43 +844,31 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 			reportTryError(w, r, err, "Preprocessor macros aren't allowed.", "")
 			return
 		}
-		hash, err := expandCode(LineNumbers(request.Code), request.Source)
+		hash, err := expandCode(LineNumbers(request.Code), request.Source, request.Width, request.Height, request.GPU)
 		if err != nil {
 			reportTryError(w, r, err, "Failed to write the code to compile.", hash)
 			return
 		}
-		writeToDatabase(hash, request.Code, request.Name, request.Source)
-		message, err := doCmd(fmt.Sprintf(RESULT_COMPILE, hash, hash), true)
+		writeToDatabase(hash, request.Code, request.Name, request.Source, request.Width, request.Height, request.GPU)
+		err = expandGyp(hash)
 		if err != nil {
-			message = cleanCompileOutput(message, hash)
-			reportTryError(w, r, err, message, hash)
+			reportTryError(w, r, err, "Failed to write the gyp file.", hash)
 			return
 		}
-		linkMessage, err := doCmd(fmt.Sprintf(LINK, hash, hash), true)
-		if err != nil {
-			linkMessage = cleanCompileOutput(linkMessage, hash)
-			reportTryError(w, r, err, linkMessage, hash)
-			return
-		}
-		message += linkMessage
-		cmd := hash + " --out " + hash + ".png"
-		if request.Source > 0 {
-			cmd += fmt.Sprintf("  --source image-%d.png", request.Source)
+		cmd := fmt.Sprintf("scripts/fiddle_wrapper %s --width %d --height %d", hash, request.Width, request.Height)
+		if request.GPU {
+			cmd += " --gpu"
 		}
 		if *useChroot {
-			cmd = "schroot -c webtry --directory=/inout -- /inout/" + cmd
-		} else {
-			abs, err := filepath.Abs("../../../inout")
-			if err != nil {
-				reportTryError(w, r, err, "Failed to find executable directory.", hash)
-				return
-			}
-			cmd = abs + "/" + cmd
+			cmd = "schroot -c webtry --directory=/ -- /skia_build/skia/experimental/webtry/" + cmd
+		}
+		if request.Source > 0 {
+			cmd += fmt.Sprintf(" --source image-%d.png", request.Source)
 		}
 
-		execMessage, err := doCmd(cmd, false)
+		message, err := doCmd(cmd)
 		if err != nil {
-			reportTryError(w, r, err, "Failed to run the code:\n"+execMessage, hash)
+			reportTryError(w, r, err, "Failed to run the code:\n"+message, hash)
 			return
 		}
 		png, err := ioutil.ReadFile("../../../inout/" + hash + ".png")
@@ -839,7 +879,6 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 
 		m := response{
 			Message: message,
-			StdOut:  execMessage,
 			Img:     base64.StdEncoding.EncodeToString([]byte(png)),
 			Hash:    hash,
 		}

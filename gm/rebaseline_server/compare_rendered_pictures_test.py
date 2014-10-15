@@ -20,10 +20,11 @@ within self._output_dir_expected, which wouldn't be good...
 
 # System-level imports
 import os
+import posixpath
 import subprocess
 
 # Must fix up PYTHONPATH before importing from within Skia
-import fix_pythonpath  # pylint: disable=W0611
+import rs_fixpypath  # pylint: disable=W0611
 
 # Imports from within Skia
 import base_unittest
@@ -31,6 +32,7 @@ import compare_rendered_pictures
 import find_run_binary
 import gm_json
 import imagediffdb
+import imagepairset
 import results
 
 
@@ -39,54 +41,130 @@ class CompareRenderedPicturesTest(base_unittest.TestCase):
   def test_endToEnd(self):
     """Generate two sets of SKPs, run render_pictures over both, and compare
     the results."""
-    setA_label = 'before_patch'
-    setB_label = 'after_patch'
+    setA_subdir = 'before_patch'
+    setB_subdir = 'after_patch'
     self._generate_skps_and_run_render_pictures(
-        subdir=setA_label, skpdict={
+        subdir=setA_subdir, skpdict={
             'changed.skp': 200,
             'unchanged.skp': 100,
             'only-in-before.skp': 128,
         })
     self._generate_skps_and_run_render_pictures(
-        subdir=setB_label, skpdict={
+        subdir=setB_subdir, skpdict={
             'changed.skp': 201,
             'unchanged.skp': 100,
             'only-in-after.skp': 128,
         })
 
     results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
-        setA_dirs=[os.path.join(self.temp_dir, setA_label)],
-        setB_dirs=[os.path.join(self.temp_dir, setB_label)],
+        setA_dir=os.path.join(self.temp_dir, setA_subdir),
+        setB_dir=os.path.join(self.temp_dir, setB_subdir),
+        setA_section=gm_json.JSONKEY_ACTUALRESULTS,
+        setB_section=gm_json.JSONKEY_ACTUALRESULTS,
         image_diff_db=imagediffdb.ImageDiffDB(self.temp_dir),
         image_base_gs_url='gs://fakebucket/fake/path',
-        diff_base_url='/static/generated-images',
-        setA_label=setA_label, setB_label=setB_label)
+        diff_base_url='/static/generated-images')
     results_obj.get_timestamp = mock_get_timestamp
+
+    # Overwrite elements within the results that change from one test run
+    # to the next.
+    # pylint: disable=W0212
+    results_obj._setA_descriptions[results.KEY__SET_DESCRIPTIONS__DIR] = [
+        'before-patch-fake-dir']
+    results_obj._setB_descriptions[results.KEY__SET_DESCRIPTIONS__DIR] = [
+        'after-patch-fake-dir']
 
     gm_json.WriteToFile(
         results_obj.get_packaged_results_of_type(
             results.KEY__HEADER__RESULTS_ALL),
         os.path.join(self.output_dir_actual, 'compare_rendered_pictures.json'))
+
+  def test_endToEnd_withImageBaseGSUrl(self):
+    """Generate two sets of SKPs, run render_pictures over both, and compare
+    the results."""
+    setA_subdir = 'before_patch'
+    setB_subdir = 'after_patch'
+    imageA_gs_base = 'superman/kent-camera/pictures'
+    imageB_gs_base = 'batman/batarang/pictures'
+    self._generate_skps_and_run_render_pictures(
+        subdir=setA_subdir, skpdict={
+            'changed.skp': 200,
+            'unchanged.skp': 100,
+            'only-in-before.skp': 128,
+        },
+        image_base_gs_url='gs://%s' % imageA_gs_base)
+    self._generate_skps_and_run_render_pictures(
+        subdir=setB_subdir, skpdict={
+            'changed.skp': 201,
+            'unchanged.skp': 100,
+            'only-in-after.skp': 128,
+        },
+        image_base_gs_url='gs://%s' % imageB_gs_base)
+
+    results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
+        setA_dir=os.path.join(self.temp_dir, setA_subdir),
+        setB_dir=os.path.join(self.temp_dir, setB_subdir),
+        setA_section=gm_json.JSONKEY_ACTUALRESULTS,
+        setB_section=gm_json.JSONKEY_ACTUALRESULTS,
+        image_diff_db=imagediffdb.ImageDiffDB(self.temp_dir),
+        image_base_gs_url='gs://fakebucket/fake/path',
+        diff_base_url='/static/generated-images')
+    results_obj.get_timestamp = mock_get_timestamp
+
+    output_dict = results_obj.get_packaged_results_of_type(
+        results.KEY__HEADER__RESULTS_ALL)
+    # Assert that the baseURLs are as expected.
+    self.assertEquals(
+        output_dict[imagepairset.KEY__ROOT__IMAGESETS]
+                   [imagepairset.KEY__IMAGESETS__SET__IMAGE_A]
+                   [imagepairset.KEY__IMAGESETS__FIELD__BASE_URL],
+        'http://storage.cloud.google.com/%s' % imageA_gs_base)
+    self.assertEquals(
+        output_dict[imagepairset.KEY__ROOT__IMAGESETS]
+                   [imagepairset.KEY__IMAGESETS__SET__IMAGE_B]
+                   [imagepairset.KEY__IMAGESETS__FIELD__BASE_URL],
+        'http://storage.cloud.google.com/%s' % imageB_gs_base)
+    # Overwrite elements within the results that change from one test run
+    # to the next.
+    # pylint: disable=W0212
+    results_obj._setA_descriptions[results.KEY__SET_DESCRIPTIONS__DIR] = [
+        'before-patch-fake-dir']
+    results_obj._setB_descriptions[results.KEY__SET_DESCRIPTIONS__DIR] = [
+        'after-patch-fake-dir']
+
+    gm_json.WriteToFile(
+        output_dict,
+        os.path.join(self.output_dir_actual,
+                               'compare_rendered_pictures.json'))
 
   def test_repo_url(self):
     """Use repo: URL to specify summary files."""
+    base_repo_url = 'repo:gm/rebaseline_server/testdata/inputs/skp-summaries'
     results_obj = compare_rendered_pictures.RenderedPicturesComparisons(
-        setA_dirs=[
-            'repo:gm/rebaseline_server/testdata/inputs/skp-actuals/setA'],
-        setB_dirs=[
-            'repo:gm/rebaseline_server/testdata/inputs/skp-actuals/setB'],
+        setA_dir=posixpath.join(base_repo_url, 'expectations'),
+        setB_dir=posixpath.join(base_repo_url, 'actuals'),
+        setA_section=gm_json.JSONKEY_EXPECTEDRESULTS,
+        setB_section=gm_json.JSONKEY_ACTUALRESULTS,
         image_diff_db=imagediffdb.ImageDiffDB(self.temp_dir),
         image_base_gs_url='gs://fakebucket/fake/path',
-        diff_base_url='/static/generated-images',
-        setA_label='setA', setB_label='setB')
+        diff_base_url='/static/generated-images')
     results_obj.get_timestamp = mock_get_timestamp
+
+    # Overwrite elements within the results that change from one test run
+    # to the next.
+    # pylint: disable=W0212
+    results_obj._setA_descriptions\
+        [results.KEY__SET_DESCRIPTIONS__REPO_REVISION] = 'fake-repo-revision'
+    results_obj._setB_descriptions\
+        [results.KEY__SET_DESCRIPTIONS__REPO_REVISION] = 'fake-repo-revision'
 
     gm_json.WriteToFile(
         results_obj.get_packaged_results_of_type(
             results.KEY__HEADER__RESULTS_ALL),
         os.path.join(self.output_dir_actual, 'compare_rendered_pictures.json'))
 
-  def _generate_skps_and_run_render_pictures(self, subdir, skpdict):
+  def _generate_skps_and_run_render_pictures(self, subdir, skpdict,
+                                             image_base_gs_url=None):
     """Generate SKPs and run render_pictures on them.
 
     Args:
@@ -103,13 +181,16 @@ class CompareRenderedPicturesTest(base_unittest.TestCase):
     # and fix its result!  (imageURLs within whole-image entries are wrong when
     # I tried adding that)
     binary = find_run_binary.find_path_to_program('render_pictures')
-    return subprocess.check_output([
+    render_pictures_cmd = [
         binary,
         '--config', '8888',
         '-r', out_path,
         '--writeChecksumBasedFilenames',
         '--writeJsonSummaryPath', os.path.join(out_path, 'summary.json'),
-        '--writePath', out_path])
+        '--writePath', out_path]
+    if image_base_gs_url:
+      render_pictures_cmd.extend(['--imageBaseGSUrl', image_base_gs_url])
+    return subprocess.check_output(render_pictures_cmd)
 
   def _run_skpmaker(self, output_path, red=0, green=0, blue=0,
                     width=640, height=400):

@@ -17,7 +17,7 @@ class SkBitmap;
 class SkColorFilter;
 class SkBaseDevice;
 struct SkIPoint;
-class GrEffect;
+class GrFragmentProcessor;
 class GrTexture;
 
 /**
@@ -49,42 +49,30 @@ public:
         uint32_t fFlags;
     };
 
-    class SK_API Cache : public SkRefCnt {
-    public:
-        // By default, we cache only image filters with 2 or more children.
-        // Values less than 2 mean always cache; values greater than 2 are not supported.
-        static Cache* Create(int minChildren = 2);
-        virtual ~Cache() {}
-        virtual bool get(const SkImageFilter* key, SkBitmap* result, SkIPoint* offset) = 0;
-        virtual void set(const SkImageFilter* key,
-                         const SkBitmap& result, const SkIPoint& offset) = 0;
-        virtual void remove(const SkImageFilter* key) = 0;
-    };
-
     // This cache maps from (filter's unique ID + CTM + clipBounds + src bitmap generation ID) to
     // (result, offset).
-    class UniqueIDCache : public SkRefCnt {
+    class Cache : public SkRefCnt {
     public:
         struct Key;
-        virtual ~UniqueIDCache() {}
-        static UniqueIDCache* Create(size_t maxBytes);
-        static UniqueIDCache* Get();
+        virtual ~Cache() {}
+        static Cache* Create(size_t maxBytes);
+        static Cache* Get();
         virtual bool get(const Key& key, SkBitmap* result, SkIPoint* offset) const = 0;
         virtual void set(const Key& key, const SkBitmap& result, const SkIPoint& offset) = 0;
     };
 
     class Context {
     public:
-        Context(const SkMatrix& ctm, const SkIRect& clipBounds, UniqueIDCache* cache) :
+        Context(const SkMatrix& ctm, const SkIRect& clipBounds, Cache* cache) :
             fCTM(ctm), fClipBounds(clipBounds), fCache(cache) {
         }
         const SkMatrix& ctm() const { return fCTM; }
         const SkIRect& clipBounds() const { return fClipBounds; }
-        UniqueIDCache* cache() const { return fCache; }
+        Cache* cache() const { return fCache; }
     private:
         SkMatrix fCTM;
         SkIRect  fClipBounds;
-        UniqueIDCache* fCache;
+        Cache* fCache;
     };
 
     class Proxy {
@@ -126,8 +114,8 @@ public:
     /**
      *  Returns true if the filter can be processed on the GPU.  This is most
      *  often used for multi-pass effects, where intermediate results must be
-     *  rendered to textures.  For single-pass effects, use asNewEffect().
-     *  The default implementation returns asNewEffect(NULL, NULL, SkMatrix::I(),
+     *  rendered to textures.  For single-pass effects, use asFragmentProcessor().
+     *  The default implementation returns asFragmentProcessor(NULL, NULL, SkMatrix::I(),
      *  SkIRect()).
      */
     virtual bool canFilterImageGPU() const;
@@ -135,12 +123,12 @@ public:
     /**
      *  Process this image filter on the GPU.  This is most often used for
      *  multi-pass effects, where intermediate results must be rendered to
-     *  textures.  For single-pass effects, use asNewEffect().  src is the
+     *  textures.  For single-pass effects, use asFragmentProcessor().  src is the
      *  source image for processing, as a texture-backed bitmap.  result is
      *  the destination bitmap, which should contain a texture-backed pixelref
      *  on success.  offset is the amount to translate the resulting image
      *  relative to the src when it is drawn. The default implementation does
-     *  single-pass processing using asNewEffect().
+     *  single-pass processing using asFragmentProcessor().
      */
     virtual bool filterImageGPU(Proxy*, const SkBitmap& src, const Context&,
                                 SkBitmap* result, SkIPoint* offset) const;
@@ -198,17 +186,6 @@ public:
                            SkBitmap* result, SkIPoint* offset) const;
 #endif
 
-    /**
-     *  Set an external cache to be used for all image filter processing. This
-     *  will replace the default intra-frame cache.
-     */
-    static void SetExternalCache(Cache* cache);
-
-    /**
-     *  Returns the currently-set external cache, or NULL if none is set.
-     */
-    static Cache* GetExternalCache();
-
     SK_DEFINE_FLATTENABLE_TYPE(SkImageFilter)
 
 protected:
@@ -217,12 +194,22 @@ protected:
         Common() {}
         ~Common();
 
-        bool unflatten(SkReadBuffer&, int expectedInputs = -1);
+        /**
+         *  Attempt to unflatten the cropRect and the expected number of input filters.
+         *  If any number of input filters is valid, pass -1.
+         *  If this fails (i.e. corrupt buffer or contents) then return false and common will
+         *  be left uninitialized.
+         *  If this returns true, then inputCount() is the number of found input filters, each
+         *  of which may be NULL or a valid imagefilter.
+         */
+        bool unflatten(SkReadBuffer&, int expectedInputs);
 
-        CropRect        cropRect() const { return fCropRect; }
+        const CropRect& cropRect() const { return fCropRect; }
         int             inputCount() const { return fInputs.count(); }
         SkImageFilter** inputs() const { return fInputs.get(); }
         uint32_t        uniqueID() const { return fUniqueID; }
+
+        SkImageFilter*  getInput(int index) const { return fInputs[index]; }
 
         // If the caller wants a copy of the inputs, call this and it will transfer ownership
         // of the unflattened input filters to the caller. This is just a short-cut for copying
@@ -239,7 +226,7 @@ protected:
         void allocInputs(int count);
     };
 
-    SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect = NULL);
+    SkImageFilter(int inputCount, SkImageFilter** inputs, const CropRect* cropRect = NULL, uint32_t uniqueID = 0);
 
     virtual ~SkImageFilter();
 
@@ -252,7 +239,7 @@ protected:
      */
     explicit SkImageFilter(int inputCount, SkReadBuffer& rb);
 
-    virtual void flatten(SkWriteBuffer& wb) const SK_OVERRIDE;
+    virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     /**
      *  This is the virtual which should be overridden by the derived class
@@ -303,10 +290,10 @@ protected:
 
     /**
      *  Returns true if the filter can be expressed a single-pass
-     *  GrEffect, used to process this filter on the GPU, or false if
+     *  GrProcessor, used to process this filter on the GPU, or false if
      *  not.
      *
-     *  If effect is non-NULL, a new GrEffect instance is stored
+     *  If effect is non-NULL, a new GrProcessor instance is stored
      *  in it.  The caller assumes ownership of the stage, and it is up to the
      *  caller to unref it.
      *
@@ -316,10 +303,8 @@ protected:
      *  will be called with (NULL, NULL, SkMatrix::I()) to query for support,
      *  so returning "true" indicates support for all possible matrices.
      */
-    virtual bool asNewEffect(GrEffect** effect,
-                             GrTexture*,
-                             const SkMatrix& matrix,
-                             const SkIRect& bounds) const;
+    virtual bool asFragmentProcessor(GrFragmentProcessor**, GrTexture*, const SkMatrix&,
+                                     const SkIRect& bounds) const;
 
 private:
     bool usesSrcInput() const { return fUsesSrcInput; }
@@ -331,5 +316,16 @@ private:
     CropRect fCropRect;
     uint32_t fUniqueID; // Globally unique
 };
+
+/**
+ *  Helper to unflatten the common data, and return NULL if we fail.
+ */
+#define SK_IMAGEFILTER_UNFLATTEN_COMMON(localVar, expectedCount)    \
+    Common localVar;                                                \
+    do {                                                            \
+        if (!localVar.unflatten(buffer, expectedCount)) {           \
+            return NULL;                                            \
+        }                                                           \
+    } while (0)
 
 #endif

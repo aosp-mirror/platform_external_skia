@@ -40,10 +40,10 @@ void GrGLCheckErr(const GrGLInterface* gl,
     uint32_t err = GR_GL_GET_ERROR(gl);
     if (GR_GL_NO_ERROR != err) {
         GrPrintf("---- glGetError 0x%x(%s)", err, get_error_string(err));
-        if (NULL != location) {
+        if (location) {
             GrPrintf(" at\n\t%s", location);
         }
-        if (NULL != call) {
+        if (call) {
             GrPrintf("\n\t\t%s", call);
         }
         GrPrintf("\n");
@@ -167,7 +167,7 @@ GrGLSLVersion GrGLGetGLSLVersionFromString(const char* versionString) {
 }
 
 GrGLVendor GrGLGetVendorFromString(const char* vendorString) {
-    if (NULL != vendorString) {
+    if (vendorString) {
         if (0 == strcmp(vendorString, "ARM")) {
             return kARM_GrGLVendor;
         }
@@ -188,7 +188,7 @@ GrGLVendor GrGLGetVendorFromString(const char* vendorString) {
 }
 
 GrGLRenderer GrGLGetRendererFromString(const char* rendererString) {
-    if (NULL != rendererString) {
+    if (rendererString) {
         if (0 == strcmp(rendererString, "NVIDIA Tegra 3")) {
             return kTegra3_GrGLRenderer;
         } else if (0 == strcmp(rendererString, "NVIDIA Tegra")) {
@@ -263,4 +263,29 @@ template<> void GrGLGetMatrix<4>(GrGLfloat* dest, const SkMatrix& src) {
     dest[13] = SkScalarToFloat(src[SkMatrix::kMTransY]);
     dest[14] = 0;
     dest[15] = SkScalarToFloat(src[SkMatrix::kMPersp2]);
+}
+
+GrGLenum GrToGLStencilFunc(GrStencilFunc basicFunc) {
+    static const GrGLenum gTable[] = {
+        GR_GL_ALWAYS,           // kAlways_StencilFunc
+        GR_GL_NEVER,            // kNever_StencilFunc
+        GR_GL_GREATER,          // kGreater_StencilFunc
+        GR_GL_GEQUAL,           // kGEqual_StencilFunc
+        GR_GL_LESS,             // kLess_StencilFunc
+        GR_GL_LEQUAL,           // kLEqual_StencilFunc,
+        GR_GL_EQUAL,            // kEqual_StencilFunc,
+        GR_GL_NOTEQUAL,         // kNotEqual_StencilFunc,
+    };
+    GR_STATIC_ASSERT(SK_ARRAY_COUNT(gTable) == kBasicStencilFuncCount);
+    GR_STATIC_ASSERT(0 == kAlways_StencilFunc);
+    GR_STATIC_ASSERT(1 == kNever_StencilFunc);
+    GR_STATIC_ASSERT(2 == kGreater_StencilFunc);
+    GR_STATIC_ASSERT(3 == kGEqual_StencilFunc);
+    GR_STATIC_ASSERT(4 == kLess_StencilFunc);
+    GR_STATIC_ASSERT(5 == kLEqual_StencilFunc);
+    GR_STATIC_ASSERT(6 == kEqual_StencilFunc);
+    GR_STATIC_ASSERT(7 == kNotEqual_StencilFunc);
+    SkASSERT((unsigned) basicFunc < kBasicStencilFuncCount);
+
+    return gTable[basicFunc];
 }

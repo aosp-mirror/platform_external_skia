@@ -25,6 +25,18 @@
 // perform a draw and this one does.
 class SimpleOffsetFilter : public SkImageFilter {
 public:
+    class Registrar {
+    public:
+        Registrar() {
+            SkFlattenable::Register("SimpleOffsetFilter",
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
+                                    SimpleOffsetFilter::DeepCreateProc,
+#else
+                                    SimpleOffsetFilter::CreateProc,
+#endif
+                                    SimpleOffsetFilter::GetFlattenableType());
+        }
+    };
     static SkImageFilter* Create(SkScalar dx, SkScalar dy, SkImageFilter* input) {
         return SkNEW_ARGS(SimpleOffsetFilter, (dx, dy, input));
     }
@@ -34,7 +46,7 @@ public:
         SkBitmap source = src;
         SkImageFilter* input = getInput(0);
         SkIPoint srcOffset = SkIPoint::Make(0, 0);
-        if (NULL != input && !input->filterImage(proxy, src, ctx, &source, &srcOffset)) {
+        if (input && !input->filterImage(proxy, src, ctx, &source, &srcOffset)) {
             return false;
         }
 
@@ -57,28 +69,37 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SimpleOffsetFilter);
 
 protected:
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     explicit SimpleOffsetFilter(SkReadBuffer& buffer)
     : SkImageFilter(1, buffer) {
         fDX = buffer.readScalar();
         fDY = buffer.readScalar();
     }
+#endif
 
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
-        this->SkImageFilter::flatten(buffer);
+        this->INHERITED::flatten(buffer);
         buffer.writeScalar(fDX);
         buffer.writeScalar(fDY);
     }
 
 private:
     SimpleOffsetFilter(SkScalar dx, SkScalar dy, SkImageFilter* input)
-    : SkImageFilter(1, &input), fDX(dx), fDY(dy) {}
+        : SkImageFilter(1, &input), fDX(dx), fDY(dy) {}
 
     SkScalar fDX, fDY;
+
+    typedef SkImageFilter INHERITED;
 };
 
-SkFlattenable::Registrar registrar("SimpleOffsetFilter",
-                                   SimpleOffsetFilter::CreateProc,
-                                   SimpleOffsetFilter::GetFlattenableType());
+static SimpleOffsetFilter::Registrar gReg;
+
+SkFlattenable* SimpleOffsetFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+    SkScalar dx = buffer.readScalar();
+    SkScalar dy = buffer.readScalar();
+    return Create(dx, dy, common.getInput(0));
+}
 
 class ImageFiltersGraphGM : public skiagm::GM {
 public:

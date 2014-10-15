@@ -1,11 +1,9 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 
 #ifndef SkRect_DEFINED
 #define SkRect_DEFINED
@@ -277,7 +275,6 @@ struct SK_API SkIRect {
         rectangle. If either rectangle is empty, do nothing and return false.
     */
     bool intersect(const SkIRect& a, const SkIRect& b) {
-        SkASSERT(&a && &b);
 
         if (!a.isEmpty() && !b.isEmpty() &&
                 a.fLeft < b.fRight && b.fLeft < a.fRight &&
@@ -298,7 +295,6 @@ struct SK_API SkIRect {
         we assert that both rectangles are non-empty.
     */
     bool intersectNoEmptyCheck(const SkIRect& a, const SkIRect& b) {
-        SkASSERT(&a && &b);
         SkASSERT(!a.isEmpty() && !b.isEmpty());
 
         if (a.fLeft < b.fRight && b.fLeft < a.fRight &&
@@ -653,7 +649,6 @@ struct SK_API SkRect {
         If either rectangle is empty, do nothing and return false.
     */
     bool intersect(const SkRect& r);
-    bool intersect2(const SkRect& r);
 
     /** If this rectangle intersects the rectangle specified by left, top, right, bottom,
         return true and set this rectangle to that intersection, otherwise return false
@@ -663,31 +658,38 @@ struct SK_API SkRect {
     bool intersect(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom);
 
     /**
-     *  Return true if this rectangle is not empty, and the specified sides of
-     *  a rectangle are not empty, and they intersect.
-     */
-    bool intersects(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom) const {
-        return // first check that both are not empty
-               left < right && top < bottom &&
-               fLeft < fRight && fTop < fBottom &&
-               // now check for intersection
-               fLeft < right && left < fRight &&
-               fTop < bottom && top < fBottom;
-    }
-
-    /** If rectangles a and b intersect, return true and set this rectangle to
+     *  If rectangles a and b intersect, return true and set this rectangle to
      *  that intersection, otherwise return false and do not change this
      *  rectangle. If either rectangle is empty, do nothing and return false.
      */
     bool intersect(const SkRect& a, const SkRect& b);
 
+
+private:
+    static bool Intersects(SkScalar al, SkScalar at, SkScalar ar, SkScalar ab,
+                           SkScalar bl, SkScalar bt, SkScalar br, SkScalar bb) {
+        SkScalar L = SkMaxScalar(al, bl);
+        SkScalar R = SkMinScalar(ar, br);
+        SkScalar T = SkMaxScalar(at, bt);
+        SkScalar B = SkMinScalar(ab, bb);
+        return L < R && T < B;
+    }
+
+public:
+    /**
+     *  Return true if this rectangle is not empty, and the specified sides of
+     *  a rectangle are not empty, and they intersect.
+     */
+    bool intersects(SkScalar left, SkScalar top, SkScalar right, SkScalar bottom) const {
+        return Intersects(fLeft, fTop, fRight, fBottom, left, top, right, bottom);
+    }
+
     /**
      *  Return true if rectangles a and b are not empty and intersect.
      */
     static bool Intersects(const SkRect& a, const SkRect& b) {
-        return  !a.isEmpty() && !b.isEmpty() &&
-                a.fLeft < b.fRight && b.fLeft < a.fRight &&
-                a.fTop < b.fBottom && b.fTop < a.fBottom;
+        return Intersects(a.fLeft, a.fTop, a.fRight, a.fBottom,
+                          b.fLeft, b.fTop, b.fRight, b.fBottom);
     }
 
     /**
@@ -704,8 +706,19 @@ struct SK_API SkRect {
     void join(const SkRect& r) {
         this->join(r.fLeft, r.fTop, r.fRight, r.fBottom);
     }
-    // alias for join()
-    void growToInclude(const SkRect& r) { this->join(r); }
+
+    void joinNonEmptyArg(const SkRect& r) {
+        SkASSERT(!r.isEmpty());
+        // if we are empty, just assign
+        if (fLeft >= fRight || fTop >= fBottom) {
+            *this = r;
+        } else {
+            fLeft   = SkMinScalar(fLeft, r.left());
+            fTop    = SkMinScalar(fTop, r.top());
+            fRight  = SkMaxScalar(fRight, r.right());
+            fBottom = SkMaxScalar(fBottom, r.bottom());
+        }
+    }
 
     /**
      *  Grow the rect to include the specified (x,y). After this call, the
@@ -827,7 +840,17 @@ struct SK_API SkRect {
      *  if the edges are computed separately, and may have crossed over each
      *  other. When this returns, left <= right && top <= bottom
      */
-    void sort();
+    void sort() {
+        SkScalar min = SkMinScalar(fLeft, fRight);
+        SkScalar max = SkMaxScalar(fLeft, fRight);
+        fLeft = min;
+        fRight = max;
+        
+        min = SkMinScalar(fTop, fBottom);
+        max = SkMaxScalar(fTop, fBottom);
+        fTop = min;
+        fBottom = max;
+    }
 
     /**
      *  cast-safe way to treat the rect as an array of (4) SkScalars.

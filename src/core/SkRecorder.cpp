@@ -6,11 +6,14 @@
  */
 
 #include "SkRecorder.h"
+#include "SkPatchUtils.h"
 #include "SkPicture.h"
 
 // SkCanvas will fail in mysterious ways if it doesn't know the real width and height.
 SkRecorder::SkRecorder(SkRecord* record, int width, int height)
-    : SkCanvas(width, height), fRecord(record) {}
+    : SkCanvas(width, height, SkCanvas::kConservativeRasterClip_InitFlag)
+    , fRecord(record)
+    , fSaveLayerCount(0) {}
 
 void SkRecorder::forgetRecord() {
     fRecord = NULL;
@@ -57,12 +60,12 @@ T* SkRecorder::copy(const T* src) {
 // This copy() is for arrays.
 // It will work with POD or non-POD, though currently we only use it for POD.
 template <typename T>
-T* SkRecorder::copy(const T src[], unsigned count) {
+T* SkRecorder::copy(const T src[], size_t count) {
     if (NULL == src) {
         return NULL;
     }
     T* dst = fRecord->alloc<T>(count);
-    for (unsigned i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         SkNEW_PLACEMENT_ARGS(dst + i, T, (src[i]));
     }
     return dst;
@@ -72,7 +75,7 @@ T* SkRecorder::copy(const T src[], unsigned count) {
 // This measured around 2x faster for copying code points,
 // but I found no corresponding speedup for other arrays.
 template <>
-char* SkRecorder::copy(const char src[], unsigned count) {
+char* SkRecorder::copy(const char src[], size_t count) {
     if (NULL == src) {
         return NULL;
     }
@@ -80,6 +83,13 @@ char* SkRecorder::copy(const char src[], unsigned count) {
     memcpy(dst, src, count);
     return dst;
 }
+
+// As above, assuming and copying a terminating \0.
+template <>
+char* SkRecorder::copy(const char* src) {
+    return this->copy(src, strlen(src)+1);
+}
+
 
 void SkRecorder::clear(SkColor color) {
     APPEND(Clear, color);
@@ -186,8 +196,13 @@ void SkRecorder::onDrawTextOnPath(const void* text, size_t byteLength, const SkP
            this->copy(matrix));
 }
 
-void SkRecorder::onDrawPicture(const SkPicture* picture) {
-    picture->draw(this);
+void SkRecorder::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                const SkPaint& paint) {
+    APPEND(DrawTextBlob, delay_copy(paint), blob, x, y);
+}
+
+void SkRecorder::onDrawPicture(const SkPicture* pic, const SkMatrix* matrix, const SkPaint* paint) {
+    APPEND(DrawPicture, this->copy(paint), pic, this->copy(matrix));
 }
 
 void SkRecorder::drawVertices(VertexMode vmode,
@@ -206,22 +221,36 @@ void SkRecorder::drawVertices(VertexMode vmode,
                          indexCount);
 }
 
+void SkRecorder::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                             const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint) {
+    APPEND(DrawPatch, delay_copy(paint),
+           cubics ? this->copy(cubics, SkPatchUtils::kNumCtrlPts) : NULL,
+           colors ? this->copy(colors, SkPatchUtils::kNumCorners) : NULL,
+           texCoords ? this->copy(texCoords, SkPatchUtils::kNumCorners) : NULL,
+           xmode);
+}
+
 void SkRecorder::willSave() {
+    fSaveIsSaveLayer.push(false);
     APPEND(Save);
-    INHERITED(willSave);
 }
 
 SkCanvas::SaveLayerStrategy SkRecorder::willSaveLayer(const SkRect* bounds,
                                                       const SkPaint* paint,
                                                       SkCanvas::SaveFlags flags) {
+    fSaveLayerCount++;
+    fSaveIsSaveLayer.push(true);
     APPEND(SaveLayer, this->copy(bounds), this->copy(paint), flags);
-    INHERITED(willSaveLayer, bounds, paint, flags);
     return SkCanvas::kNoLayer_SaveLayerStrategy;
 }
 
-void SkRecorder::willRestore() {
-    APPEND(Restore);
-    INHERITED(willRestore);
+void SkRecorder::didRestore() {
+    SkBool8 saveLayer;
+    fSaveIsSaveLayer.pop(&saveLayer);
+    if (saveLayer) {
+        fSaveLayerCount--;
+    }
+    APPEND(Restore, this->devBounds(), this->getTotalMatrix());
 }
 
 void SkRecorder::onPushCull(const SkRect& rect) {
@@ -233,31 +262,54 @@ void SkRecorder::onPopCull() {
 }
 
 void SkRecorder::didConcat(const SkMatrix& matrix) {
-    APPEND(Concat, matrix);
-    INHERITED(didConcat, matrix);
+    this->didSetMatrix(this->getTotalMatrix());
 }
 
 void SkRecorder::didSetMatrix(const SkMatrix& matrix) {
+    SkDEVCODE(if (matrix != this->getTotalMatrix()) {
+        matrix.dump();
+        this->getTotalMatrix().dump();
+        SkASSERT(matrix == this->getTotalMatrix());
+    })
     APPEND(SetMatrix, matrix);
-    INHERITED(didSetMatrix, matrix);
 }
 
 void SkRecorder::onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
-    APPEND(ClipRect, rect, op, edgeStyle == kSoft_ClipEdgeStyle);
     INHERITED(onClipRect, rect, op, edgeStyle);
+    APPEND(ClipRect, this->devBounds(), rect, op, edgeStyle == kSoft_ClipEdgeStyle);
 }
 
 void SkRecorder::onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
-    APPEND(ClipRRect, rrect, op, edgeStyle == kSoft_ClipEdgeStyle);
-    INHERITED(updateClipConservativelyUsingBounds, rrect.getBounds(), op, false);
+    INHERITED(onClipRRect, rrect, op, edgeStyle);
+    APPEND(ClipRRect, this->devBounds(), rrect, op, edgeStyle == kSoft_ClipEdgeStyle);
 }
 
 void SkRecorder::onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edgeStyle) {
-    APPEND(ClipPath, delay_copy(path), op, edgeStyle == kSoft_ClipEdgeStyle);
-    INHERITED(updateClipConservativelyUsingBounds, path.getBounds(), op, path.isInverseFillType());
+    INHERITED(onClipPath, path, op, edgeStyle);
+    APPEND(ClipPath, this->devBounds(), delay_copy(path), op, edgeStyle == kSoft_ClipEdgeStyle);
 }
 
 void SkRecorder::onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
-    APPEND(ClipRegion, delay_copy(deviceRgn), op);
     INHERITED(onClipRegion, deviceRgn, op);
+    APPEND(ClipRegion, this->devBounds(), delay_copy(deviceRgn), op);
+}
+
+void SkRecorder::beginCommentGroup(const char* description) {
+    APPEND(BeginCommentGroup, this->copy(description));
+}
+
+void SkRecorder::addComment(const char* key, const char* value) {
+    APPEND(AddComment, this->copy(key), this->copy(value));
+}
+
+void SkRecorder::endCommentGroup() {
+    APPEND(EndCommentGroup);
+}
+
+bool SkRecorder::isDrawingToLayer() const {
+    return fSaveLayerCount > 0;
+}
+
+void SkRecorder::drawData(const void* data, size_t length) {
+    APPEND(DrawData, copy((const char*)data), length);
 }

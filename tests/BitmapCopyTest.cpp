@@ -61,11 +61,11 @@ static void init_src(const SkBitmap& bitmap) {
     }
 }
 
-static SkColorTable* init_ctable(SkAlphaType alphaType) {
+static SkColorTable* init_ctable() {
     static const SkColor colors[] = {
         SK_ColorBLACK, SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorWHITE
     };
-    return new SkColorTable(colors, SK_ARRAY_COUNT(colors), alphaType);
+    return new SkColorTable(colors, SK_ARRAY_COUNT(colors));
 }
 
 struct Pair {
@@ -196,19 +196,16 @@ static const int H = 33;
 
 static void setup_src_bitmaps(SkBitmap* srcOpaque, SkBitmap* srcPremul,
                               SkColorType ct) {
-    SkColorTable* ctOpaque = NULL;
-    SkColorTable* ctPremul = NULL;
+    SkColorTable* ctable = NULL;
     if (kIndex_8_SkColorType == ct) {
-        ctOpaque = init_ctable(kOpaque_SkAlphaType);
-        ctPremul = init_ctable(kPremul_SkAlphaType);
+        ctable = init_ctable();
     }
 
     srcOpaque->allocPixels(SkImageInfo::Make(W, H, ct, kOpaque_SkAlphaType),
-                           NULL, ctOpaque);
+                           NULL, ctable);
     srcPremul->allocPixels(SkImageInfo::Make(W, H, ct, kPremul_SkAlphaType),
-                           NULL, ctPremul);
-    SkSafeUnref(ctOpaque);
-    SkSafeUnref(ctPremul);
+                           NULL, ctable);
+    SkSafeUnref(ctable);
     init_src(*srcOpaque);
     init_src(*srcPremul);
 }
@@ -384,17 +381,19 @@ DEF_TEST(BitmapCopy, reporter) {
             SkBitmap src, subset;
             SkColorTable* ct = NULL;
             if (kIndex_8_SkColorType == src.colorType()) {
-                ct = init_ctable(kPremul_SkAlphaType);
+                ct = init_ctable();
             }
 
+            int localSubW;
             if (isExtracted[copyCase]) { // A larger image to extract from.
-                src.allocPixels(SkImageInfo::Make(2 * subW + 1, subH,
-                                                  gPairs[i].fColorType,
-                                                  kPremul_SkAlphaType));
+                localSubW = 2 * subW + 1;
             } else { // Tests expect a 2x2 bitmap, so make smaller.
-                src.allocPixels(SkImageInfo::Make(subW, subH,
-                                                  gPairs[i].fColorType,
-                                                  kPremul_SkAlphaType));
+                localSubW = subW;
+            }
+            // could fail if we pass kIndex_8 for the colortype
+            if (src.tryAllocPixels(SkImageInfo::Make(localSubW, subH, gPairs[i].fColorType,
+                                                     kPremul_SkAlphaType))) {
+                // failure is fine, as we will notice later on
             }
             SkSafeUnref(ct);
 
@@ -607,8 +606,8 @@ DEF_TEST(BitmapReadPixels, reporter) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(gRec); ++i) {
         clear_4x4_pixels(dstPixels);
 
-        dstInfo.fWidth = gRec[i].fRequestedDstSize.width();
-        dstInfo.fHeight = gRec[i].fRequestedDstSize.height();
+        dstInfo = dstInfo.makeWH(gRec[i].fRequestedDstSize.width(),
+                                 gRec[i].fRequestedDstSize.height());
         bool success = srcBM.readPixels(dstInfo, dstPixels, rowBytes,
                                         gRec[i].fRequestedSrcLoc.x(), gRec[i].fRequestedSrcLoc.y());
         

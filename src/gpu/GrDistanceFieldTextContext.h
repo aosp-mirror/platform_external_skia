@@ -10,6 +10,7 @@
 
 #include "GrTextContext.h"
 
+class GrGeometryProcessor;
 class GrTextStrike;
 
 /*
@@ -17,36 +18,11 @@ class GrTextStrike;
  */
 class GrDistanceFieldTextContext : public GrTextContext {
 public:
-    GrDistanceFieldTextContext(GrContext*, const SkDeviceProperties&, bool enable);
+    static GrDistanceFieldTextContext* Create(GrContext*, const SkDeviceProperties&, bool enable);
+
     virtual ~GrDistanceFieldTextContext();
 
-    virtual void drawText(const GrPaint&, const SkPaint&, const char text[], size_t byteLength,
-                          SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void drawPosText(const GrPaint&, const SkPaint&,
-                             const char text[], size_t byteLength,
-                             const SkScalar pos[], SkScalar constY,
-                             int scalarsPerPosition) SK_OVERRIDE;
-
-    virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
-
 private:
-    GrTextStrike*           fStrike;
-    SkScalar                fTextRatio;
-    bool                    fUseLCDText;
-    bool                    fEnableDFRendering;
-    SkAutoTUnref<GrEffect>  fCachedEffect;
-    // Used to check whether fCachedEffect is still valid.
-    uint32_t                fEffectTextureUniqueID;
-    SkColor                 fEffectColor;
-    uint32_t                fEffectFlags;
-    GrTexture*              fGammaTexture;
-
-    void init(const GrPaint&, const SkPaint&);
-    void drawPackedGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
-    void flushGlyphs();                 // automatically called by destructor
-    void setupCoverageEffect(const SkColor& filteredColor);
-    void finish();
-
     enum {
         kMinRequestedGlyphs      = 1,
         kDefaultRequestedGlyphs  = 64,
@@ -54,11 +30,38 @@ private:
         kDefaultRequestedVerts   = kDefaultRequestedGlyphs * 4,
     };
 
-    void*                   fVertices;
-    int32_t                 fMaxVertices;
-    GrTexture*              fCurrTexture;
-    int                     fCurrVertex;
-    SkRect                  fVertexBounds;
+    GrTextStrike*                      fStrike;
+    SkScalar                           fTextRatio;
+    bool                               fUseLCDText;
+    bool                               fEnableDFRendering;
+    SkAutoTUnref<GrGeometryProcessor>  fCachedGeometryProcessor;
+    // Used to check whether fCachedEffect is still valid.
+    uint32_t                           fEffectTextureUniqueID;
+    SkColor                            fEffectColor;
+    uint32_t                           fEffectFlags;
+    GrTexture*                         fGammaTexture;
+    void*                              fVertices;
+    int32_t                            fMaxVertices;
+    GrTexture*                         fCurrTexture;
+    int                                fCurrVertex;
+    SkRect                             fVertexBounds;
+
+    GrDistanceFieldTextContext(GrContext*, const SkDeviceProperties&, bool enable);
+
+    virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
+
+    virtual void onDrawText(const GrPaint&, const SkPaint&, const char text[], size_t byteLength,
+                            SkScalar x, SkScalar y) SK_OVERRIDE;
+    virtual void onDrawPosText(const GrPaint&, const SkPaint&,
+                               const char text[], size_t byteLength,
+                               const SkScalar pos[], int scalarsPerPosition,
+                               const SkPoint& offset) SK_OVERRIDE;
+
+    void init(const GrPaint&, const SkPaint&);
+    void appendGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
+    void setupCoverageEffect(const SkColor& filteredColor);
+    void flush();                 // automatically called by destructor
+    void finish();
 };
 
 #endif

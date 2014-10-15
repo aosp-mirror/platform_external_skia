@@ -27,7 +27,9 @@ LOCAL_SRC_FILES := \
 	alphagradients.cpp \
 	arcofzorro.cpp \
 	arithmode.cpp \
+	astcbitmap.cpp \
 	beziereffects.cpp \
+	beziers.cpp \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
@@ -47,7 +49,10 @@ LOCAL_SRC_FILES := \
 	blurroundrect.cpp \
 	circles.cpp \
 	circularclips.cpp \
+	clip_strokerect.cpp \
 	clippedbitmapshaders.cpp \
+	colorcube.cpp \
+	coloremoji.cpp \
 	colorfilterimagefilter.cpp \
 	colorfilters.cpp \
 	colormatrix.cpp \
@@ -65,8 +70,8 @@ LOCAL_SRC_FILES := \
 	discard.cpp \
 	dashcubics.cpp \
 	dashing.cpp \
-	deviceproperties.cpp \
 	distantclip.cpp \
+	dftext.cpp \
 	displacement.cpp \
 	downsamplebitmap.cpp \
 	drawlooper.cpp \
@@ -74,6 +79,7 @@ LOCAL_SRC_FILES := \
 	drrect.cpp \
 	etc1bitmap.cpp \
 	extractbitmap.cpp \
+	emboss.cpp \
 	emptypath.cpp \
 	fatpathfill.cpp \
 	factory.cpp \
@@ -100,6 +106,7 @@ LOCAL_SRC_FILES := \
 	hittestpath.cpp \
 	imagealphathreshold.cpp \
 	imageblur.cpp \
+	imageblur2.cpp \
 	imageblurtiled.cpp \
 	imagemagnifier.cpp \
 	imageresizetiled.cpp \
@@ -122,13 +129,14 @@ LOCAL_SRC_FILES := \
 	mixedxfermodes.cpp \
 	modecolorfilters.cpp \
 	morphology.cpp \
+	multipicturedraw.cpp \
 	nested.cpp \
 	ninepatchstretch.cpp \
 	nonclosedpaths.cpp \
 	offsetimagefilter.cpp \
-	optimizations.cpp \
 	ovals.cpp \
 	patch.cpp \
+	patchgrid.cpp \
 	patheffects.cpp \
 	pathfill.cpp \
 	pathinterior.cpp \
@@ -137,6 +145,7 @@ LOCAL_SRC_FILES := \
 	pathreverse.cpp \
 	peekpixels.cpp \
 	perlinnoise.cpp \
+	picture.cpp \
 	pictureimagefilter.cpp \
 	pictureshader.cpp \
 	pictureshadertile.cpp \
@@ -156,6 +165,7 @@ LOCAL_SRC_FILES := \
 	shallowgradient.cpp \
 	simpleaaclip.cpp \
 	skbug1719.cpp \
+	smallarc.cpp \
 	stringart.cpp \
 	spritebitmap.cpp \
 	srcmode.cpp \
@@ -164,11 +174,14 @@ LOCAL_SRC_FILES := \
 	strokerects.cpp \
 	strokes.cpp \
 	stroketext.cpp \
+	surface.cpp \
 	tablecolorfilter.cpp \
 	texteffects.cpp \
 	testimagefilters.cpp \
 	texdata.cpp \
 	variedtext.cpp \
+	textblob.cpp \
+	textblobshader.cpp \
 	texturedomaineffect.cpp \
 	thinrects.cpp \
 	thinstrokedrects.cpp \
@@ -192,6 +205,7 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	gm_expectations.cpp \
+	../tools/ProcStats.cpp \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \

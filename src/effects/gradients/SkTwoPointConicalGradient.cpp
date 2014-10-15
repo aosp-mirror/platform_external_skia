@@ -196,14 +196,14 @@ void SkTwoPointConicalGradient::init() {
 SkTwoPointConicalGradient::SkTwoPointConicalGradient(
         const SkPoint& start, SkScalar startRadius,
         const SkPoint& end, SkScalar endRadius,
-        bool flippedGrad, const Descriptor& desc,
-        const SkMatrix* localMatrix)
-    : SkGradientShaderBase(desc, localMatrix),
-    fCenter1(start),
-    fCenter2(end),
-    fRadius1(startRadius),
-    fRadius2(endRadius),
-    fFlippedGrad(flippedGrad) {
+        bool flippedGrad, const Descriptor& desc)
+    : SkGradientShaderBase(desc)
+    , fCenter1(start)
+    , fCenter2(end)
+    , fRadius1(startRadius)
+    , fRadius2(endRadius)
+    , fFlippedGrad(flippedGrad)
+{
     // this is degenerate, and should be caught by our caller
     SkASSERT(fCenter1 != fCenter2 || fRadius1 != fRadius2);
     this->init();
@@ -343,6 +343,7 @@ SkShader::GradientType SkTwoPointConicalGradient::asAGradient(
     return kConical_GradientType;
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkTwoPointConicalGradient::SkTwoPointConicalGradient(
     SkReadBuffer& buffer)
     : INHERITED(buffer),
@@ -366,9 +367,47 @@ SkTwoPointConicalGradient::SkTwoPointConicalGradient(
     }
     this->init();
 };
+#endif
 
-void SkTwoPointConicalGradient::flatten(
-    SkWriteBuffer& buffer) const {
+SkFlattenable* SkTwoPointConicalGradient::CreateProc(SkReadBuffer& buffer) {
+    DescriptorScope desc;
+    if (!desc.unflatten(buffer)) {
+        return NULL;
+    }
+    SkPoint c1 = buffer.readPoint();
+    SkPoint c2 = buffer.readPoint();
+    SkScalar r1 = buffer.readScalar();
+    SkScalar r2 = buffer.readScalar();
+
+    if (buffer.readBool()) {    // flipped
+        SkTSwap(c1, c2);
+        SkTSwap(r1, r2);
+
+        SkColor* colors = desc.mutableColors();
+        SkScalar* pos = desc.mutablePos();
+        const int last = desc.fCount - 1;
+        const int half = desc.fCount >> 1;
+        for (int i = 0; i < half; ++i) {
+            SkTSwap(colors[i], colors[last - i]);
+            if (pos) {
+                SkScalar tmp = pos[i];
+                pos[i] = SK_Scalar1 - pos[last - i];
+                pos[last - i] = SK_Scalar1 - tmp;
+            }
+        }
+        if (pos) {
+            if (desc.fCount & 1) {
+                pos[half] = SK_Scalar1 - pos[half];
+            }
+        }
+    }
+
+    return SkGradientShader::CreateTwoPointConical(c1, r1, c2, r2, desc.fColors, desc.fPos,
+                                                   desc.fCount, desc.fTileMode, desc.fGradFlags,
+                                                   desc.fLocalMatrix);
+}
+
+void SkTwoPointConicalGradient::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
     buffer.writePoint(fCenter1);
     buffer.writePoint(fCenter2);
@@ -381,22 +420,23 @@ void SkTwoPointConicalGradient::flatten(
 
 #include "SkGr.h"
 
-bool SkTwoPointConicalGradient::asNewEffect(GrContext* context, const SkPaint& paint,
-                                             const SkMatrix* localMatrix, GrColor* paintColor,
-                                             GrEffect** effect)  const {
-    SkASSERT(NULL != context);
+bool SkTwoPointConicalGradient::asFragmentProcessor(GrContext* context,
+                                                    const SkPaint& paint,
+                                                    const SkMatrix* localMatrix,
+                                                    GrColor* paintColor,
+                                                    GrFragmentProcessor** fp)  const {
+    SkASSERT(context);
     SkASSERT(fPtsToUnit.isIdentity());
 
-    *effect = Gr2PtConicalGradientEffect::Create(context, *this, fTileMode, localMatrix);
+    *fp = Gr2PtConicalGradientEffect::Create(context, *this, fTileMode, localMatrix);
     *paintColor = SkColor2GrColorJustAlpha(paint.getColor());
     return true;
 }
 
 #else
 
-bool SkTwoPointConicalGradient::asNewEffect(GrContext* context, const SkPaint& paint,
-                                            const SkMatrix* localMatrix, GrColor* paintColor,
-                                            GrEffect** effect)  const {
+bool SkTwoPointConicalGradient::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*,
+                                                    GrColor*, GrFragmentProcessor**)  const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;
 }

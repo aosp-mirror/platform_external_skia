@@ -13,38 +13,6 @@
 #include "GrGpu.h"
 #include "GrStencilBuffer.h"
 
-bool GrRenderTarget::readPixels(int left, int top, int width, int height,
-                                GrPixelConfig config,
-                                void* buffer,
-                                size_t rowBytes,
-                                uint32_t pixelOpsFlags) {
-    // go through context so that all necessary flushing occurs
-    GrContext* context = this->getContext();
-    if (NULL == context) {
-        return false;
-    }
-    return context->readRenderTargetPixels(this,
-                                           left, top, width, height,
-                                           config, buffer, rowBytes,
-                                           pixelOpsFlags);
-}
-
-void GrRenderTarget::writePixels(int left, int top, int width, int height,
-                                 GrPixelConfig config,
-                                 const void* buffer,
-                                 size_t rowBytes,
-                                 uint32_t pixelOpsFlags) {
-    // go through context so that all necessary flushing occurs
-    GrContext* context = this->getContext();
-    if (NULL == context) {
-        return;
-    }
-    context->writeRenderTargetPixels(this,
-                                     left, top, width, height,
-                                     config, buffer, rowBytes,
-                                     pixelOpsFlags);
-}
-
 void GrRenderTarget::resolve() {
     // go through context so that all necessary flushing occurs
     GrContext* context = this->getContext();
@@ -79,7 +47,7 @@ size_t GrRenderTarget::gpuMemorySize() const {
 
 void GrRenderTarget::flagAsNeedingResolve(const SkIRect* rect) {
     if (kCanResolve_ResolveType == getResolveType()) {
-        if (NULL != rect) {
+        if (rect) {
             fResolveRect.join(*rect);
             if (!fResolveRect.intersect(0, 0, this->width(), this->height())) {
                 fResolveRect.setEmpty();

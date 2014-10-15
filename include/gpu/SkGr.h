@@ -44,13 +44,6 @@ GR_STATIC_ASSERT((int)kIDA_GrBlendCoeff  == (int)SkXfermode::kIDA_Coeff);
 
 #include "SkColorPriv.h"
 
-#ifdef SK_SUPPORT_LEGACY_BITMAP_CONFIG
-/**
- *  Convert the SkBitmap::Config to the corresponding PixelConfig, or
- *  kUnknown_PixelConfig if the conversion cannot be done.
- */
-GrPixelConfig SkBitmapConfig2GrPixelConfig(SkBitmap::Config);
-#endif
 GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType, SkAlphaType);
 
 static inline GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info) {
@@ -77,9 +70,7 @@ static inline GrColor SkColor2GrColorJustAlpha(SkColor c) {
 
 bool GrIsBitmapInCache(const GrContext*, const SkBitmap&, const GrTextureParams*);
 
-GrTexture* GrLockAndRefCachedBitmapTexture(GrContext*, const SkBitmap&, const GrTextureParams*);
-
-void GrUnlockAndUnrefCachedBitmapTexture(GrTexture*);
+GrTexture* GrRefCachedBitmapTexture(GrContext*, const SkBitmap&, const GrTextureParams*);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -93,7 +84,7 @@ void SkPaint2GrPaintNoShader(GrContext* context, const SkPaint& skPaint, GrColor
                              bool constantColor, GrPaint* grPaint);
 
 // This function is similar to skPaint2GrPaintNoShader but also converts
-// skPaint's shader to a GrTexture/GrEffectStage if possible.
+// skPaint's shader to a GrTexture/GrProcessorStage if possible.
 // constantColor has the same meaning as in skPaint2GrPaintNoShader.
 void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
                            bool constantColor, GrPaint* grPaint);

@@ -6,11 +6,12 @@
  */
 
 #include "SkCanvas.h"
+#include "SkPatchUtils.h"
 #include "SkPictureData.h"
 #include "SkPicturePlayback.h"
 #include "SkPictureRecord.h"
-#include "SkPictureStateTree.h"
 #include "SkReader32.h"
+#include "SkTextBlob.h"
 #include "SkTDArray.h"
 #include "SkTypes.h"
 
@@ -64,86 +65,11 @@ static SkBitmap shallow_copy(const SkBitmap& bitmap) {
     return bitmap;
 }
 
-const SkPicture::OperationList* SkPicturePlayback::getActiveOps(const SkCanvas* canvas) {
-
-    if (fUseBBH) {
-        SkRect clipBounds;
-        if (canvas->getClipBounds(&clipBounds)) {
-            SkIRect query;
-            clipBounds.roundOut(&query);
-
-            return fPictureData->getActiveOps(query);
-        }
-    } 
-
-    return NULL;
-}
-
-// Initialize the state tree iterator. Return false if there is nothing left to draw.
-bool SkPicturePlayback::initIterator(SkPictureStateTree::Iterator* iter, 
-                                     SkCanvas* canvas,
-                                     const SkPicture::OperationList *activeOpsList) {
-
-    if (NULL != activeOpsList) {
-        if (0 == activeOpsList->numOps()) {
-            return false;  // nothing to draw
-        }
-
-        fPictureData->initIterator(iter, activeOpsList->fOps, canvas);
-    }
-
-    return true;
-}
-
-// If 'iter' is valid use it to skip forward through the picture.
-void SkPicturePlayback::StepIterator(SkPictureStateTree::Iterator* iter, SkReader32* reader) {
-    if (iter->isValid()) {
-        uint32_t skipTo = iter->nextDraw();
-        if (SkPictureStateTree::Iterator::kDrawComplete == skipTo) {
-            reader->setOffset(reader->size());  // skip to end
-        } else {
-            reader->setOffset(skipTo);
-        }
-    }
-}
-
-// Update the iterator and state tree to catch up with the skipped ops.
-void SkPicturePlayback::SkipIterTo(SkPictureStateTree::Iterator* iter,
-                                   SkReader32* reader,
-                                   uint32_t skipTo) {
-    SkASSERT(skipTo <= reader->size());
-    SkASSERT(reader->offset() <= skipTo); // should only be skipping forward
-
-    if (iter->isValid()) {
-        // If using a bounding box hierarchy, advance the state tree
-        // iterator until at or after skipTo
-        uint32_t adjustedSkipTo;
-        do {
-            adjustedSkipTo = iter->nextDraw();
-        } while (adjustedSkipTo < skipTo);
-        skipTo = adjustedSkipTo;
-    }
-    if (SkPictureStateTree::Iterator::kDrawComplete == skipTo) {
-        reader->setOffset(reader->size());  // skip to end
-    } else {
-        reader->setOffset(skipTo);
-    }
-}
-
 void SkPicturePlayback::draw(SkCanvas* canvas, SkDrawPictureCallback* callback) {
     AutoResetOpID aroi(this);
     SkASSERT(0 == fCurOffset);
 
-    SkAutoTDelete<const SkPicture::OperationList> activeOpsList(this->getActiveOps(canvas));
-    SkPictureStateTree::Iterator it;
-
-    if (!this->initIterator(&it, canvas, activeOpsList.get())) {
-        return;  // nothing to draw
-    }
-
     SkReader32 reader(fPictureData->opData()->bytes(), fPictureData->opData()->size());
-
-    StepIterator(&it, &reader);
 
     // Record this, so we can concat w/ it if we encounter a setMatrix()
     SkMatrix initialMatrix = canvas->getTotalMatrix();
@@ -151,31 +77,28 @@ void SkPicturePlayback::draw(SkCanvas* canvas, SkDrawPictureCallback* callback) 
     SkAutoCanvasRestore acr(canvas, false);
 
     while (!reader.eof()) {
-        if (NULL != callback && callback->abortDrawing()) {
+        if (callback && callback->abortDrawing()) {
             return;
         }
 
         fCurOffset = reader.offset();
         uint32_t size;
         DrawType op = ReadOpAndSize(&reader, &size);
-        if (NOOP == op) {
-            // NOOPs are to be ignored - do not propagate them any further
-            SkipIterTo(&it, &reader, fCurOffset + size);
-            continue;
-        }
 
         this->handleOp(&reader, op, size, canvas, initialMatrix);
-
-        StepIterator(&it, &reader);
     }
 }
 
-void SkPicturePlayback::handleOp(SkReader32* reader, 
-                                 DrawType op, 
-                                 uint32_t size, 
+void SkPicturePlayback::handleOp(SkReader32* reader,
+                                 DrawType op,
+                                 uint32_t size,
                                  SkCanvas* canvas,
                                  const SkMatrix& initialMatrix) {
     switch (op) {
+        case NOOP: {
+            SkASSERT(size >= 4);
+            reader->skip(size - 4);
+        } break;
         case CLIP_PATH: {
             const SkPath& path = fPictureData->getPath(reader);
             uint32_t packed = reader->readInt();
@@ -306,6 +229,31 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
         case DRAW_PAINT:
             canvas->drawPaint(*fPictureData->getPaint(reader));
             break;
+        case DRAW_PATCH: {
+            const SkPaint& paint = *fPictureData->getPaint(reader);
+
+            const SkPoint* cubics = (const SkPoint*)reader->skip(SkPatchUtils::kNumCtrlPts *
+                                                                 sizeof(SkPoint));
+            uint32_t flag = reader->readInt();
+            const SkColor* colors = NULL;
+            if (flag & DRAW_VERTICES_HAS_COLORS) {
+                colors = (const SkColor*)reader->skip(SkPatchUtils::kNumCorners * sizeof(SkColor));
+            }
+            const SkPoint* texCoords = NULL;
+            if (flag & DRAW_VERTICES_HAS_TEXS) {
+                texCoords = (const SkPoint*)reader->skip(SkPatchUtils::kNumCorners *
+                                                         sizeof(SkPoint));
+            }
+            SkAutoTUnref<SkXfermode> xfer;
+            if (flag & DRAW_VERTICES_HAS_XFER) {
+                int mode = reader->readInt();
+                if (mode < 0 || mode > SkXfermode::kLastMode) {
+                    mode = SkXfermode::kModulate_Mode;
+                }
+                xfer.reset(SkXfermode::Create((SkXfermode::Mode)mode));
+            }
+            canvas->drawPatch(cubics, colors, texCoords, xfer, paint);
+        } break;
         case DRAW_PATH: {
             const SkPaint& paint = *fPictureData->getPaint(reader);
             canvas->drawPath(fPictureData->getPath(reader), paint);
@@ -313,6 +261,13 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
         case DRAW_PICTURE:
             canvas->drawPicture(fPictureData->getPicture(reader));
             break;
+        case DRAW_PICTURE_MATRIX_PAINT: {
+            const SkPaint* paint = fPictureData->getPaint(reader);
+            SkMatrix matrix;
+            reader->readMatrix(&matrix);
+            const SkPicture* pic = fPictureData->getPicture(reader);
+            canvas->drawPicture(pic, &matrix, paint);
+        } break;
         case DRAW_POINTS: {
             const SkPaint& paint = *fPictureData->getPaint(reader);
             SkCanvas::PointMode mode = (SkCanvas::PointMode)reader->readInt();
@@ -386,6 +341,13 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             SkScalar x = reader->readScalar();
             SkScalar y = reader->readScalar();
             canvas->drawText(text.text(), text.length(), x, y, paint);
+        } break;
+        case DRAW_TEXT_BLOB: {
+            const SkPaint& paint = *fPictureData->getPaint(reader);
+            const SkTextBlob* blob = fPictureData->getTextBlob(reader);
+            SkScalar x = reader->readScalar();
+            SkScalar y = reader->readScalar();
+            canvas->drawTextBlob(blob, x, y, paint);
         } break;
         case DRAW_TEXT_TOP_BOTTOM: {
             const SkPaint& paint = *fPictureData->getPaint(reader);
@@ -480,7 +442,7 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             canvas->translate(dx, dy);
         } break;
         default:
-            SkASSERT(0);
+            SkASSERTF(false, "Unknown draw type: %d", op);
     }
 }
 

@@ -8,6 +8,7 @@
 #include "SkTextureCompressor_LATC.h"
 #include "SkTextureCompressor_Blitter.h"
 
+#include "SkBlitter.h"
 #include "SkEndian.h"
 
 // Compression options. In general, the slow version is much more accurate, but
@@ -296,8 +297,27 @@ static uint64_t compress_latc_block(const uint8_t pixels[]) {
 
 #if COMPRESS_LATC_FAST
 
-// Take the top three indices of each int and pack them into the low 12
+// Take the top three bits of each index and pack them into the low 12
 // bits of the integer.
+static inline uint32_t pack_index(uint32_t x) {
+    // Pack it in...
+#if defined (SK_CPU_BENDIAN)
+    return
+        (x >> 24) |
+        ((x >> 13) & 0x38) |
+        ((x >> 2) & 0x1C0) |
+        ((x << 9) & 0xE00);
+#else
+    return
+        (x & 0x7) |
+        ((x >> 5) & 0x38) |
+        ((x >> 10) & 0x1C0) |
+        ((x >> 15) & 0xE00);
+#endif
+}
+
+// Converts each 8-bit byte in the integer into an LATC index, and then packs
+// the indices into the low 12 bits of the integer.
 static inline uint32_t convert_index(uint32_t x) {
     // Since the palette is 
     // 255, 0, 219, 182, 146, 109, 73, 36
@@ -325,21 +345,8 @@ static inline uint32_t convert_index(uint32_t x) {
     // Mask out high bits:
     // 9 7 6 5 4 3 2 0 --> 1 7 6 5 4 3 2 0
     x &= 0x07070707;
-
-    // Pack it in...
-#if defined (SK_CPU_BENDIAN)
-    return
-        (x >> 24) |
-        ((x >> 13) & 0x38) |
-        ((x >> 2) & 0x1C0) |
-        ((x << 9) & 0xE00);
-#else
-    return
-        (x & 0x7) |
-        ((x >> 5) & 0x38) |
-        ((x >> 10) & 0x1C0) |
-        ((x >> 15) & 0xE00);
-#endif
+    
+    return pack_index(x);
 }
 
 typedef uint64_t (*PackIndicesProc)(const uint8_t* alpha, int rowBytes);
@@ -413,6 +420,53 @@ void decompress_latc_block(uint8_t* dst, int dstRowBytes, const uint8_t* src) {
     }
 }
 
+// This is the type passed as the CompressorType argument of the compressed
+// blitter for the LATC format. The static functions required to be in this
+// struct are documented in SkTextureCompressor_Blitter.h
+struct CompressorLATC {
+    static inline void CompressA8Vertical(uint8_t* dst, const uint8_t block[]) {
+        compress_a8_latc_block<PackColumnMajor>(&dst, block, 4);
+    }
+
+    static inline void CompressA8Horizontal(uint8_t* dst, const uint8_t* src,
+                                            int srcRowBytes) {
+        compress_a8_latc_block<PackRowMajor>(&dst, src, srcRowBytes);
+    }
+
+#if PEDANTIC_BLIT_RECT
+    static inline void UpdateBlock(uint8_t* dst, const uint8_t* src, int srcRowBytes,
+                                   const uint8_t* mask) {
+        // Pack the mask
+        uint64_t cmpMask = 0;
+        for (int i = 0; i < 4; ++i) {
+            const uint32_t idx = *(reinterpret_cast<const uint32_t*>(src + i*srcRowBytes));
+            cmpMask |= static_cast<uint64_t>(pack_index(idx)) << 12*i;
+        }
+        cmpMask = SkEndian_SwapLE64(cmpMask << 16); // avoid header
+
+        uint64_t cmpSrc;
+        uint8_t *cmpSrcPtr = reinterpret_cast<uint8_t*>(&cmpSrc);
+        compress_a8_latc_block<PackRowMajor>(&cmpSrcPtr, src, srcRowBytes);
+
+        // Mask out header
+        cmpSrc = cmpSrc & cmpMask;
+
+        // Read destination encoding
+        uint64_t *cmpDst = reinterpret_cast<uint64_t*>(dst);
+
+        // If the destination is the encoding for a blank block, then we need
+        // to properly set the header
+        if (0 == cmpDst) {
+            *cmpDst = SkTEndian_SwapLE64(0x24924924924900FFULL);
+        }
+
+        // Set the new indices
+        *cmpDst &= ~cmpMask;
+        *cmpDst |= cmpSrc;
+    }
+#endif  // PEDANTIC_BLIT_RECT
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace SkTextureCompressor {
@@ -427,10 +481,23 @@ bool CompressA8ToLATC(uint8_t* dst, const uint8_t* src, int width, int height, i
 #endif
 }
 
-SkBlitter* CreateLATCBlitter(int width, int height, void* outputBuffer) {
+SkBlitter* CreateLATCBlitter(int width, int height, void* outputBuffer,
+                             SkTBlitterAllocator* allocator) {
+    if ((width % 4) != 0 || (height % 4) != 0) {
+        return NULL;
+    }
+
 #if COMPRESS_LATC_FAST
-    return new
-        SkTCompressedAlphaBlitter<4, 8, CompressA8LATCBlockVertical>
+    // Memset the output buffer to an encoding that decodes to zero. We must do this
+    // in order to avoid having uninitialized values in the buffer if the blitter
+    // decides not to write certain scanlines (and skip entire rows of blocks).
+    // In the case of LATC, if everything is zero, then LUM0 and LUM1 are also zero,
+    // and they will only be non-zero (0xFF) if the index is 7. So bzero will do just fine.
+    // (8 bytes per block) * (w * h / 16 blocks) = w * h / 2
+    sk_bzero(outputBuffer, width * height / 2);
+
+    return allocator->createT<
+        SkTCompressedAlphaBlitter<4, 8, CompressorLATC>, int, int, void* >
         (width, height, outputBuffer);
 #elif COMPRESS_LATC_SLOW
     // TODO (krajcevski)

@@ -14,6 +14,7 @@
 #include "SkRegion.h"
 #include "SkEvent.h"
 #include "SkKey.h"
+#include "SkSurfaceProps.h"
 #include "SkTDArray.h"
 
 #ifdef SK_BUILD_FOR_WINCEx
@@ -21,14 +22,18 @@
 #endif
 //#define USE_GX_SCREEN
 
-class SkCanvas;
-
+class SkSurface;
 class SkOSMenu;
 
 class SkWindow : public SkView {
 public:
             SkWindow();
     virtual ~SkWindow();
+
+    SkSurfaceProps getSurfaceProps() const { return fSurfaceProps; }
+    void setSurfaceProps(const SkSurfaceProps& props) {
+        fSurfaceProps = props;
+    }
 
     const SkBitmap& getBitmap() const { return fBitmap; }
 
@@ -59,7 +64,7 @@ public:
     void    preConcat(const SkMatrix&);
     void    postConcat(const SkMatrix&);
 
-    virtual SkCanvas* createCanvas();
+    virtual SkSurface* createSurface();
 
     virtual void onPDFSaved(const char title[], const char desc[],
         const char path[]) {}
@@ -81,6 +86,7 @@ protected:
     virtual bool onSetFocusView(SkView* focus);
 
 private:
+    SkSurfaceProps  fSurfaceProps;
     SkColorType fColorType;
     SkBitmap    fBitmap;
     SkRegion    fDirtyRgn;

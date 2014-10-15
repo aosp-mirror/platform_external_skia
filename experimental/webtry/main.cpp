@@ -1,6 +1,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include "GrContextFactory.h"
+
 #include "SkCanvas.h"
 #include "SkCommandLineFlags.h"
 #include "SkData.h"
@@ -9,6 +11,7 @@
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkImageInfo.h"
+#include "SkOSFile.h"
 #include "SkStream.h"
 #include "SkSurface.h"
 
@@ -18,11 +21,16 @@ __SK_FORCE_IMAGE_DECODER_LINKING;
 
 DEFINE_string(out, "", "Filename of the PNG to write to.");
 DEFINE_string(source, "", "Filename of the source image.");
+DEFINE_int32(width, 256, "Width of output image.");
+DEFINE_int32(height, 256, "Height of output image.");
+DEFINE_bool(gpu, false, "Use GPU (Mesa) rendering.");
 
 // Defined in template.cpp.
 extern SkBitmap source;
 
 static bool install_syscall_filter() {
+
+#ifndef SK_UNSAFE_BUILD_DESKTOP_ONLY
     struct sock_filter filter[] = {
         /* Grab the system call number. */
         EXAMINE_SYSCALL,
@@ -36,6 +44,7 @@ static bool install_syscall_filter() {
         ALLOW_SYSCALL(mmap),
         ALLOW_SYSCALL(munmap),
         ALLOW_SYSCALL(brk),
+        ALLOW_SYSCALL(futex),
         KILL_PROCESS,
     };
     struct sock_fprog prog = {
@@ -64,6 +73,9 @@ failed:
         fprintf(stderr, "SECCOMP_FILTER is not available. :(\n");
     }
     return false;
+#else
+    return true;
+#endif /* SK_UNSAFE_BUILD_DESKTOP_ONLY */
 }
 
 static void setLimits() {
@@ -76,9 +88,9 @@ static void setLimits() {
         perror("setrlimit(RLIMIT_CPU)");
     }
 
-    // Limit to 50M of Address space.
-    n.rlim_cur = 50000000;
-    n.rlim_max = 50000000;
+    // Limit to 150M of Address space.
+    n.rlim_cur = 150000000;
+    n.rlim_max = 150000000;
     if (setrlimit(RLIMIT_AS, &n)) {
         perror("setrlimit(RLIMIT_CPU)");
     }
@@ -96,16 +108,36 @@ int main(int argc, char** argv) {
     }
 
     if (FLAGS_source.count() == 1) {
-       if (!SkImageDecoder::DecodeFile(FLAGS_source[0], &source)) {
-           perror("Unable to read the source image.");
-       }
+        const char *sourceDir = getenv("WEBTRY_INOUT");
+        if (NULL == sourceDir) {
+            sourceDir = "/skia_build/inout";
+        }
+
+        SkString sourcePath = SkOSPath::Join(sourceDir, FLAGS_source[0]);
+        if (!SkImageDecoder::DecodeFile(sourcePath.c_str(), &source)) {
+            perror("Unable to read the source image.");
+        }
     }
 
     SkFILEWStream stream(FLAGS_out[0]);
 
-    SkImageInfo info = SkImageInfo::MakeN32(256, 256, kPremul_SkAlphaType);
-    SkAutoTUnref<SkSurface> surface(SkSurface::NewRaster(info));
-    SkCanvas* canvas = surface->getCanvas();
+    SkImageInfo info = SkImageInfo::MakeN32(FLAGS_width, FLAGS_height, kPremul_SkAlphaType);
+
+    SkCanvas* canvas;
+    SkAutoTUnref<SkSurface> surface;
+
+    GrContextFactory* grFactory = NULL;
+
+    if (FLAGS_gpu) {
+        GrContext::Options grContextOpts;
+        grFactory = new GrContextFactory(grContextOpts);
+        GrContext* gr = grFactory->get(GrContextFactory::kMESA_GLContextType);
+        surface.reset(SkSurface::NewRenderTarget(gr,info));
+    } else {
+        surface.reset(SkSurface::NewRaster(info));
+    }    
+
+    canvas = surface->getCanvas();
 
     setLimits();
 
@@ -123,4 +155,5 @@ int main(int argc, char** argv) {
         exit(1);
     }
     stream.write(data->data(), data->size());
+    delete grFactory;
 }

@@ -60,11 +60,8 @@ public:
                                                   TileMode tileMode,
                                                   bool convolveAlpha,
                                                   SkImageFilter* input = NULL,
-                                                  const CropRect* cropRect = NULL) {
-        return SkNEW_ARGS(SkMatrixConvolutionImageFilter, (kernelSize, kernel, gain, bias,
-                                                           kernelOffset, tileMode, convolveAlpha,
-                                                           input, cropRect));
-    }
+                                                  const CropRect* cropRect = NULL,
+                                                  uint32_t uniqueID = 0);
 
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkMatrixConvolutionImageFilter)
 
@@ -77,8 +74,11 @@ protected:
                                    TileMode tileMode,
                                    bool convolveAlpha,
                                    SkImageFilter* input,
-                                   const CropRect* cropRect);
+                                   const CropRect* cropRect,
+                                   uint32_t uniqueID);
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     explicit SkMatrixConvolutionImageFilter(SkReadBuffer& buffer);
+#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
@@ -87,10 +87,8 @@ protected:
 
 
 #if SK_SUPPORT_GPU
-    virtual bool asNewEffect(GrEffect** effect,
-                             GrTexture*,
-                             const SkMatrix& ctm,
-                             const SkIRect& bounds) const SK_OVERRIDE;
+    virtual bool asFragmentProcessor(GrFragmentProcessor**, GrTexture*, const SkMatrix&,
+                                     const SkIRect& bounds) const SK_OVERRIDE;
 #endif
 
 private:

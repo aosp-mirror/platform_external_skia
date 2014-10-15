@@ -309,32 +309,26 @@ DEF_TEST(Paint_regression_measureText, reporter) {
     r.setLTRB(SK_ScalarNaN, SK_ScalarNaN, SK_ScalarNaN, SK_ScalarNaN);
 
     // test that the rect was reset
-    paint.measureText("", 0, &r, 1.0f);
+    paint.measureText("", 0, &r);
     REPORTER_ASSERT(reporter, r.isEmpty());
 }
 
 #define ASSERT(expr) REPORTER_ASSERT(r, expr)
 
-DEF_TEST(Paint_FlatteningTraits, r) {
+DEF_TEST(Paint_MoreFlattening, r) {
     SkPaint paint;
     paint.setColor(0x00AABBCC);
-    paint.setTextScaleX(1.0f);  // Encoded despite being the default value.
+    paint.setTextScaleX(1.0f);  // Default value, ignored.
     paint.setTextSize(19);
     paint.setXfermode(SkXfermode::Create(SkXfermode::kModulate_Mode))->unref();
-    paint.setLooper(NULL);  // Ignored.
+    paint.setLooper(NULL);  // Default value, ignored.
 
     SkWriteBuffer writer;
-    SkPaint::FlatteningTraits::Flatten(writer, paint);
-    const size_t expectedBytesWritten = sizeof(void*) == 8 ? 36 : 32;
-    ASSERT(expectedBytesWritten == writer.bytesWritten());
+    paint.flatten(writer);
 
-    const uint32_t* written = writer.getWriter32()->contiguousArray();
-    SkASSERT(written != NULL);
-    ASSERT(*written == ((1<<0) | (1<<1) | (1<<2) | (1<<8)));  // Dirty bits for our 4.
-
-    SkReadBuffer reader(written, writer.bytesWritten());
+    SkReadBuffer reader(writer.getWriter32()->contiguousArray(), writer.bytesWritten());
     SkPaint other;
-    SkPaint::FlatteningTraits::Unflatten(reader, &other);
+    other.unflatten(reader);
     ASSERT(reader.offset() == writer.bytesWritten());
 
     // No matter the encoding, these must always hold.
@@ -348,4 +342,30 @@ DEF_TEST(Paint_FlatteningTraits, r) {
     ASSERT(other.getXfermode()->asMode(&otherMode));
     ASSERT(paint.getXfermode()->asMode(&paintMode));
     ASSERT(otherMode == paintMode);
+}
+
+DEF_TEST(Paint_getHash, r) {
+    // Try not to inspect the actual hash values in here.
+    // We might want to change the hash function.
+
+    SkPaint paint;
+    const uint32_t defaultHash = paint.getHash();
+
+    // Check that some arbitrary field affects the hash.
+    paint.setColor(0xFF00FF00);
+    REPORTER_ASSERT(r, paint.getHash() != defaultHash);
+    paint.setColor(SK_ColorBLACK);  // Reset to default value.
+    REPORTER_ASSERT(r, paint.getHash() == defaultHash);
+
+    // SkTypeface is the first field we hash, so test it specially.
+    paint.setTypeface(SkTypeface::RefDefault())->unref();
+    REPORTER_ASSERT(r, paint.getHash() != defaultHash);
+    paint.setTypeface(NULL);
+    REPORTER_ASSERT(r, paint.getHash() == defaultHash);
+
+    // This is part of fBitfields, the last field we hash.
+    paint.setHinting(SkPaint::kSlight_Hinting);
+    REPORTER_ASSERT(r, paint.getHash() != defaultHash);
+    paint.setHinting(SkPaint::kNormal_Hinting);
+    REPORTER_ASSERT(r, paint.getHash() == defaultHash);
 }

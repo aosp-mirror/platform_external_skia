@@ -628,7 +628,7 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
             }
             case SkCanvas::kLines_PointMode:
 #ifndef SK_DISABLE_DASHING_OPTIMIZATION
-                if (2 == count && NULL != paint.getPathEffect()) {
+                if (2 == count && paint.getPathEffect()) {
                     // most likely a dashed line - see if it is one of the ones
                     // we can accelerate
                     SkStrokeRec rec(paint);
@@ -817,7 +817,12 @@ void SkDraw::drawRect(const SkRect& rect, const SkPaint& paint) const {
     devRect.roundOut(&ir);
     if (paint.getStyle() != SkPaint::kFill_Style) {
         // extra space for hairlines
-        ir.inset(-1, -1);
+        if (paint.getStrokeWidth() == 0) {
+            ir.outset(1, 1);
+        } else {
+            SkScalar radius = SkScalarHalf(paint.getStrokeWidth());
+            ir.outset(radius, radius);
+        }
     }
     if (fRC->quickReject(ir)) {
         return;
@@ -939,7 +944,7 @@ bool SkDrawTreatAAStrokeAsHairline(SkScalar strokeWidth, const SkMatrix& matrix,
     SkScalar len0 = fast_len(dst[0]);
     SkScalar len1 = fast_len(dst[1]);
     if (len0 <= SK_Scalar1 && len1 <= SK_Scalar1) {
-        if (NULL != coverage) {
+        if (coverage) {
             *coverage = SkScalarAve(len0, len1);
         }
         return true;
@@ -1571,7 +1576,7 @@ void SkDraw::drawText(const char text[], size_t byteLength,
 
     SkDrawCacheProc glyphCacheProc = paint.getDrawCacheProc();
 
-    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, fMatrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->getLeakyProperties(), fMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     // transform our starting point
@@ -1650,9 +1655,8 @@ void SkDraw::drawText(const char text[], size_t byteLength,
 //////////////////////////////////////////////////////////////////////////////
 
 void SkDraw::drawPosText_asPaths(const char text[], size_t byteLength,
-                                 const SkScalar pos[], SkScalar constY,
-                                 int scalarsPerPosition,
-                                 const SkPaint& origPaint) const {
+                                 const SkScalar pos[], int scalarsPerPosition,
+                                 const SkPoint& offset, const SkPaint& origPaint) const {
     // setup our std paint, in hopes of getting hits in the cache
     SkPaint paint(origPaint);
     SkScalar matrixScale = paint.setupForAsPaths();
@@ -1670,7 +1674,7 @@ void SkDraw::drawPosText_asPaths(const char text[], size_t byteLength,
 
     const char*        stop = text + byteLength;
     SkTextAlignProcScalar alignProc(paint.getTextAlign());
-    SkTextMapStateProc tmsProc(SkMatrix::I(), constY, scalarsPerPosition);
+    SkTextMapStateProc tmsProc(SkMatrix::I(), offset, scalarsPerPosition);
 
     // Now restore the original settings, so we "draw" with whatever style/stroking.
     paint.setStyle(origPaint.getStyle());
@@ -1700,8 +1704,8 @@ void SkDraw::drawPosText_asPaths(const char text[], size_t byteLength,
 }
 
 void SkDraw::drawPosText(const char text[], size_t byteLength,
-                         const SkScalar pos[], SkScalar constY,
-                         int scalarsPerPosition, const SkPaint& paint) const {
+                         const SkScalar pos[], int scalarsPerPosition,
+                         const SkPoint& offset, const SkPaint& paint) const {
     SkASSERT(byteLength == 0 || text != NULL);
     SkASSERT(1 == scalarsPerPosition || 2 == scalarsPerPosition);
 
@@ -1713,13 +1717,12 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
     }
 
     if (ShouldDrawTextAsPaths(paint, *fMatrix)) {
-        this->drawPosText_asPaths(text, byteLength, pos, constY,
-                                  scalarsPerPosition, paint);
+        this->drawPosText_asPaths(text, byteLength, pos, scalarsPerPosition, offset, paint);
         return;
     }
 
     SkDrawCacheProc     glyphCacheProc = paint.getDrawCacheProc();
-    SkAutoGlyphCache    autoCache(paint, &fDevice->fLeakyProperties, fMatrix);
+    SkAutoGlyphCache    autoCache(paint, &fDevice->getLeakyProperties(), fMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
 
     SkAAClipBlitterWrapper wrapper;
@@ -1738,7 +1741,7 @@ void SkDraw::drawPosText(const char text[], size_t byteLength,
     SkTextAlignProc    alignProc(paint.getTextAlign());
     SkDraw1Glyph       d1g;
     SkDraw1Glyph::Proc proc = d1g.init(this, blitter, cache, paint);
-    SkTextMapStateProc tmsProc(*fMatrix, constY, scalarsPerPosition);
+    SkTextMapStateProc tmsProc(*fMatrix, offset, scalarsPerPosition);
 
     if (cache->isSubpixel()) {
         // maybe we should skip the rounding if linearText is set
@@ -2019,11 +2022,9 @@ public:
     };
 
     SK_TO_STRING_OVERRIDE()
-    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTriColorShader)
+    SK_DECLARE_NOT_FLATTENABLE_PROCS(SkTriColorShader)
 
 protected:
-    SkTriColorShader(SkReadBuffer& buffer) : SkShader(buffer) {}
-
     virtual Context* onCreateContext(const ContextRec& rec, void* storage) const SK_OVERRIDE {
         return SkNEW_PLACEMENT_ARGS(storage, TriColorShaderContext, (*this, rec));
     }
@@ -2132,7 +2133,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
                           const SkColor colors[], SkXfermode* xmode,
                           const uint16_t indices[], int indexCount,
                           const SkPaint& paint) const {
-    SkASSERT(0 == count || NULL != vertices);
+    SkASSERT(0 == count || vertices);
 
     // abort early if there is nothing to draw
     if (count < 3 || (indices && indexCount < 3) || fRC->isEmpty()) {
@@ -2170,7 +2171,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
 
     // setup the custom shader (if needed)
     SkAutoTUnref<SkComposeShader> composeShader;
-    if (NULL != colors) {
+    if (colors) {
         if (NULL == textures) {
             // just colors (no texture)
             shader = p.setShader(&triShader);
@@ -2200,9 +2201,9 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
     VertState       state(count, indices, indexCount);
     VertState::Proc vertProc = state.chooseProc(vmode);
 
-    if (NULL != textures || NULL != colors) {
+    if (textures || colors) {
         while (vertProc(&state)) {
-            if (NULL != textures) {
+            if (textures) {
                 SkMatrix tempM;
                 if (texture_to_matrix(state, vertices, textures, &tempM)) {
                     SkShader::ContextRec rec(*fBitmap, p, *fMatrix);
@@ -2212,7 +2213,7 @@ void SkDraw::drawVertices(SkCanvas::VertexMode vmode, int count,
                     }
                 }
             }
-            if (NULL != colors) {
+            if (colors) {
                 // Find the context for triShader.
                 SkTriColorShader::TriColorShaderContext* triColorShaderContext;
 

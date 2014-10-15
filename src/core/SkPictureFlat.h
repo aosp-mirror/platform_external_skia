@@ -8,7 +8,6 @@
 #ifndef SkPictureFlat_DEFINED
 #define SkPictureFlat_DEFINED
 
-//#define SK_DEBUG_SIZE
 
 #include "SkBitmapHeap.h"
 #include "SkChecksum.h"
@@ -68,7 +67,11 @@ enum DrawType {
     PUSH_CULL,
     POP_CULL,
 
-    LAST_DRAWTYPE_ENUM = POP_CULL
+    DRAW_PATCH, // could not add in aphabetical order
+    DRAW_PICTURE_MATRIX_PAINT,
+    DRAW_TEXT_BLOB,
+
+    LAST_DRAWTYPE_ENUM = DRAW_TEXT_BLOB
 };
 
 // In the 'match' method, this constant will match any flavor of DRAW_BITMAP*
@@ -567,7 +570,12 @@ private:
     SkTDynamicHash<SkFlatData, SkFlatData, SkFlatData::HashTraits> fHash;
 };
 
-typedef SkFlatDictionary<SkPaint, SkPaint::FlatteningTraits> SkPaintDictionary;
+struct SkPaintFlatteningTraits {
+    static void Flatten(SkWriteBuffer& buffer, const SkPaint& paint) { paint.flatten(buffer); }
+    static void Unflatten(SkReadBuffer& buffer, SkPaint* paint) { paint->unflatten(buffer); }
+};
+
+typedef SkFlatDictionary<SkPaint, SkPaintFlatteningTraits> SkPaintDictionary;
 
 class SkChunkFlatController : public SkFlatController {
 public:

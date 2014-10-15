@@ -1,20 +1,23 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SkWindow.h"
 #include "SkCanvas.h"
-#include "SkDevice.h"
 #include "SkOSMenu.h"
+#include "SkSurface.h"
 #include "SkSystemEventTypes.h"
 #include "SkTime.h"
 
 #define SK_EventDelayInval "\xd" "n" "\xa" "l"
 
-SkWindow::SkWindow() : fFocusView(NULL) {
+SkWindow::SkWindow()
+    : fSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType)
+    , fFocusView(NULL)
+{
     fClicks.reset();
     fWaitingOnInval = false;
 
@@ -32,8 +35,9 @@ SkWindow::~SkWindow() {
     fMenus.deleteAll();
 }
 
-SkCanvas* SkWindow::createCanvas() {
-    return new SkCanvas(this->getBitmap());
+SkSurface* SkWindow::createSurface() {
+    const SkBitmap& bm = this->getBitmap();
+    return SkSurface::NewRasterDirect(bm.info(), bm.getPixels(), bm.rowBytes(), &fSurfaceProps);
 }
 
 void SkWindow::setMatrix(const SkMatrix& matrix) {
@@ -126,7 +130,8 @@ bool SkWindow::update(SkIRect* updateArea) {
         bm.setPixels(buffer);
 #endif
 
-        SkAutoTUnref<SkCanvas> canvas(this->createCanvas());
+        SkAutoTUnref<SkSurface> surface(this->createSurface());
+        SkCanvas* canvas = surface->getCanvas();
 
         canvas->clipRegion(fDirtyRgn);
         if (updateArea)

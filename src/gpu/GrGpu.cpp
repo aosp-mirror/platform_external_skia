@@ -50,18 +50,6 @@ GrGpu::GrGpu(GrContext* context)
 }
 
 GrGpu::~GrGpu() {
-    this->releaseResources();
-}
-
-void GrGpu::abandonResources() {
-
-    fClipMaskManager.releaseResources();
-
-    while (NULL != fObjectList.head()) {
-        fObjectList.head()->abandon();
-    }
-
-    SkASSERT(NULL == fQuadIndexBuffer || fQuadIndexBuffer->wasDestroyed());
     SkSafeSetNull(fQuadIndexBuffer);
     delete fVertexPool;
     fVertexPool = NULL;
@@ -69,42 +57,7 @@ void GrGpu::abandonResources() {
     fIndexPool = NULL;
 }
 
-void GrGpu::releaseResources() {
-
-    fClipMaskManager.releaseResources();
-
-    while (NULL != fObjectList.head()) {
-        fObjectList.head()->release();
-    }
-
-    SkASSERT(NULL == fQuadIndexBuffer || fQuadIndexBuffer->wasDestroyed());
-    SkSafeSetNull(fQuadIndexBuffer);
-    delete fVertexPool;
-    fVertexPool = NULL;
-    delete fIndexPool;
-    fIndexPool = NULL;
-}
-
-void GrGpu::insertObject(GrGpuResource* object) {
-    SkASSERT(NULL != object);
-    SkASSERT(this == object->getGpu());
-
-    fObjectList.addToHead(object);
-}
-
-void GrGpu::removeObject(GrGpuResource* object) {
-    SkASSERT(NULL != object);
-    SkASSERT(this == object->getGpu());
-
-    fObjectList.remove(object);
-}
-
-
-void GrGpu::unimpl(const char msg[]) {
-#ifdef SK_DEBUG
-    GrPrintf("--- GrGpu unimplemented(\"%s\")\n", msg);
-#endif
-}
+void GrGpu::contextAbandoned() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -134,10 +87,10 @@ GrTexture* GrGpu::createTexture(const GrTextureDesc& desc,
     } else {
         this->handleDirtyContext();
         tex = this->onCreateTexture(desc, srcData, rowBytes);
-        if (NULL != tex &&
+        if (tex &&
             (kRenderTarget_GrTextureFlagBit & desc.fFlags) &&
             !(kNoStencil_GrTextureFlagBit & desc.fFlags)) {
-            SkASSERT(NULL != tex->asRenderTarget());
+            SkASSERT(tex->asRenderTarget());
             // TODO: defer this and attach dynamically
             if (!this->attachStencilBufferToRenderTarget(tex->asRenderTarget())) {
                 tex->unref();
@@ -154,7 +107,7 @@ bool GrGpu::attachStencilBufferToRenderTarget(GrRenderTarget* rt) {
         this->getContext()->findStencilBuffer(rt->width(),
                                               rt->height(),
                                               rt->numSamples());
-    if (NULL != sb) {
+    if (sb) {
         rt->setStencilBuffer(sb);
         bool attached = this->attachStencilBufferToRenderTarget(sb, rt);
         if (!attached) {
@@ -172,8 +125,7 @@ bool GrGpu::attachStencilBufferToRenderTarget(GrRenderTarget* rt) {
         // We used to clear down in the GL subclass using a special purpose
         // FBO. But iOS doesn't allow a stencil-only FBO. It reports unsupported
         // FBO status.
-        GrDrawState::AutoRenderTargetRestore artr(this->drawState(), rt);
-        this->clearStencil();
+        this->clearStencil(rt);
         return true;
     } else {
         return false;
@@ -188,7 +140,7 @@ GrTexture* GrGpu::wrapBackendTexture(const GrBackendTextureDesc& desc) {
     }
     // TODO: defer this and attach dynamically
     GrRenderTarget* tgt = tex->asRenderTarget();
-    if (NULL != tgt &&
+    if (tgt &&
         !this->attachStencilBufferToRenderTarget(tgt)) {
         tex->unref();
         return NULL;
@@ -212,32 +164,19 @@ GrIndexBuffer* GrGpu::createIndexBuffer(size_t size, bool dynamic) {
     return this->onCreateIndexBuffer(size, dynamic);
 }
 
-GrPath* GrGpu::createPath(const SkPath& path, const SkStrokeRec& stroke) {
-    SkASSERT(this->caps()->pathRenderingSupport());
-    this->handleDirtyContext();
-    return this->onCreatePath(path, stroke);
-}
-
-GrPathRange* GrGpu::createPathRange(size_t size, const SkStrokeRec& stroke) {
-    SkASSERT(this->caps()->pathRenderingSupport());
-    this->handleDirtyContext();
-    return this->onCreatePathRange(size, stroke);
-}
-
 void GrGpu::clear(const SkIRect* rect,
                   GrColor color,
                   bool canIgnoreRect,
                   GrRenderTarget* renderTarget) {
-    GrDrawState::AutoRenderTargetRestore art;
-    if (NULL != renderTarget) {
-        art.set(this->drawState(), renderTarget);
+    if (NULL == renderTarget) {
+        renderTarget = this->getDrawState().getRenderTarget();
     }
-    if (NULL == this->getDrawState().getRenderTarget()) {
+    if (NULL == renderTarget) {
         SkASSERT(0);
         return;
     }
     this->handleDirtyContext();
-    this->onClear(rect, color, canIgnoreRect);
+    this->onClear(renderTarget, rect, color, canIgnoreRect);
 }
 
 bool GrGpu::readPixels(GrRenderTarget* target,
@@ -319,13 +258,14 @@ static inline void fill_indices(uint16_t* indices, int quadCount) {
 }
 
 const GrIndexBuffer* GrGpu::getQuadIndexBuffer() const {
-    if (NULL == fQuadIndexBuffer) {
+    if (NULL == fQuadIndexBuffer || fQuadIndexBuffer->wasDestroyed()) {
+        SkSafeUnref(fQuadIndexBuffer);
         static const int SIZE = sizeof(uint16_t) * 6 * MAX_QUADS;
         GrGpu* me = const_cast<GrGpu*>(this);
         fQuadIndexBuffer = me->createIndexBuffer(SIZE, false);
-        if (NULL != fQuadIndexBuffer) {
+        if (fQuadIndexBuffer) {
             uint16_t* indices = (uint16_t*)fQuadIndexBuffer->map();
-            if (NULL != indices) {
+            if (indices) {
                 fill_indices(indices, MAX_QUADS);
                 fQuadIndexBuffer->unmap();
             } else {
@@ -407,7 +347,7 @@ void GrGpu::onStencilPath(const GrPath* path, SkPath::FillType fill) {
         return;
     }
 
-    this->onGpuStencilPath(path, fill);
+    this->pathRendering()->stencilPath(path, fill);
 }
 
 
@@ -422,7 +362,7 @@ void GrGpu::onDrawPath(const GrPath* path, SkPath::FillType fill,
         return;
     }
 
-    this->onGpuDrawPath(path, fill);
+    this->pathRendering()->drawPath(path, fill);
 }
 
 void GrGpu::onDrawPaths(const GrPathRange* pathRange,
@@ -438,16 +378,17 @@ void GrGpu::onDrawPaths(const GrPathRange* pathRange,
         return;
     }
 
-    this->onGpuDrawPaths(pathRange, indices, count, transforms, transformsType, fill);
+    pathRange->willDrawPaths(indices, count);
+    this->pathRendering()->drawPaths(pathRange, indices, count, transforms, transformsType, fill);
 }
 
 void GrGpu::finalizeReservedVertices() {
-    SkASSERT(NULL != fVertexPool);
+    SkASSERT(fVertexPool);
     fVertexPool->unmap();
 }
 
 void GrGpu::finalizeReservedIndices() {
-    SkASSERT(NULL != fIndexPool);
+    SkASSERT(fIndexPool);
     fIndexPool->unmap();
 }
 
@@ -483,7 +424,7 @@ bool GrGpu::onReserveVertexSpace(size_t vertexSize,
     GeometryPoolState& geomPoolState = fGeomPoolStateStack.back();
 
     SkASSERT(vertexCount > 0);
-    SkASSERT(NULL != vertices);
+    SkASSERT(vertices);
 
     this->prepareVertexPool();
 
@@ -502,7 +443,7 @@ bool GrGpu::onReserveIndexSpace(int indexCount, void** indices) {
     GeometryPoolState& geomPoolState = fGeomPoolStateStack.back();
 
     SkASSERT(indexCount > 0);
-    SkASSERT(NULL != indices);
+    SkASSERT(indices);
 
     this->prepareIndexPool();
 

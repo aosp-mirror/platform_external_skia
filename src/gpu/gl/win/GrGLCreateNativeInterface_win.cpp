@@ -12,24 +12,13 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include <GL/gl.h>
-
-#define GET_PROC(F) functions->f ## F = (GrGL ## F ## Proc) get(ctx, "gl" #F)
-#define GET_PROC_SUFFIX(F, S) functions->f ## F = (GrGL ## F ## Proc) get(ctx, "gl" #F #S)
-#define GET_PROC_LOCAL(F) GrGL ## F ## Proc F = (GrGL ## F ## Proc) get(ctx, "gl" #F)
-
-#define GET_LINKED GET_PROC
-#define GET_LINKED_SUFFIX GET_PROC_SUFFIX
-
-#include "gl/GrGLAssembleGLESInterface.h"
-
 class AutoLibraryUnload {
 public:
     AutoLibraryUnload(const char* moduleName) {
         fModule = LoadLibrary(moduleName);
     }
     ~AutoLibraryUnload() {
-        if (NULL != fModule) {
+        if (fModule) {
             FreeLibrary(fModule);
         }
     }
@@ -43,14 +32,14 @@ class GLProcGetter {
 public:
     GLProcGetter() : fGLLib("opengl32.dll") {}
 
-    bool isInitialized() const { return NULL != fGLLib.get(); }
+    bool isInitialized() const { return SkToBool(fGLLib.get()); }
 
     GrGLFuncPtr getProc(const char name[]) const {
         GrGLFuncPtr proc;
-        if (NULL != (proc = (GrGLFuncPtr) GetProcAddress(fGLLib.get(), name))) {
+        if ((proc = (GrGLFuncPtr) GetProcAddress(fGLLib.get(), name))) {
             return proc;
         }
-        if (NULL != (proc = (GrGLFuncPtr) wglGetProcAddress(name))) {
+        if ((proc = (GrGLFuncPtr) wglGetProcAddress(name))) {
             return proc;
         }
         return NULL;
@@ -61,8 +50,8 @@ private:
 };
 
 static GrGLFuncPtr win_get_gl_proc(void* ctx, const char name[]) {
-    SkASSERT(NULL != ctx);
-    SkASSERT(NULL != wglGetCurrentContext());
+    SkASSERT(ctx);
+    SkASSERT(wglGetCurrentContext());
     const GLProcGetter* getter = (const GLProcGetter*) ctx;
     return getter->getProc(name);
 }

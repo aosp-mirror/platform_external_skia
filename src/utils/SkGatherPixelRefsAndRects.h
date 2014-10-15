@@ -103,7 +103,7 @@ protected:
         }
 
         SkRect pathBounds = path.getBounds();
-        if (NULL != prePathMatrix) {
+        if (prePathMatrix) {
             prePathMatrix->mapRect(&pathBounds);
         }
 
@@ -195,8 +195,8 @@ protected:
         this->drawRect(draw, bounds, paint);
     }
     virtual void drawPosText(const SkDraw& draw, const void* text, size_t len,
-                             const SkScalar pos[], SkScalar constY,
-                             int scalarsPerPos, const SkPaint& paint) SK_OVERRIDE {
+                             const SkScalar pos[], int scalarsPerPos,
+                             const SkPoint& offset, const SkPaint& paint) SK_OVERRIDE {
         SkBitmap bitmap;
         if (!GetBitmapFromPaint(paint, &bitmap)) {
             return;
@@ -209,18 +209,13 @@ protected:
         // Similar to SkDraw asserts.
         SkASSERT(scalarsPerPos == 1 || scalarsPerPos == 2);
 
-        SkScalar y = scalarsPerPos == 1 ? constY : constY + pos[1];
-
-        SkPoint min, max;
-        min.set(pos[0], y);
-        max.set(pos[0], y);
+        SkPoint min = SkPoint::Make(offset.x() + pos[0],
+                                    offset.y() + (2 == scalarsPerPos ? pos[1] : 0));
+        SkPoint max = min;
 
         for (size_t i = 1; i < len; ++i) {
-            SkScalar x = pos[i * scalarsPerPos];
-            SkScalar y = constY;
-            if (2 == scalarsPerPos) {
-                y += pos[i * scalarsPerPos + 1];
-            }
+            SkScalar x = offset.x() + pos[i * scalarsPerPos];
+            SkScalar y = offset.y() + (2 == scalarsPerPos ? pos[i * 2 + 1] : 0);
 
             min.set(SkMinScalar(x, min.x()), SkMinScalar(y, min.y()));
             max.set(SkMaxScalar(x, max.x()), SkMaxScalar(y, max.y()));
@@ -295,7 +290,7 @@ private:
 
     static bool GetBitmapFromPaint(const SkPaint &paint, SkBitmap* bitmap) {
         SkShader* shader = paint.getShader();
-        if (NULL != shader) {
+        if (shader) {
             if (SkShader::kNone_GradientType == shader->asAGradient(NULL)) {
                 return SkShader::kNone_BitmapType != shader->asABitmap(bitmap, NULL, NULL);
             }

@@ -9,10 +9,12 @@
 #include "SkDumpCanvas.h"
 
 #ifdef SK_DEVELOPER
+#include "SkPatchUtils.h"
 #include "SkPicture.h"
 #include "SkPixelRef.h"
 #include "SkRRect.h"
 #include "SkString.h"
+#include "SkTextBlob.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -422,14 +424,25 @@ void SkDumpCanvas::onDrawTextOnPath(const void* text, size_t byteLength, const S
                str.c_str(), byteLength);
 }
 
-void SkDumpCanvas::onDrawPicture(const SkPicture* picture) {
-    this->dump(kDrawPicture_Verb, NULL, "drawPicture(%p) %d:%d", picture,
-               picture->width(), picture->height());
+void SkDumpCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                  const SkPaint& paint) {
+    SkString str;
+    toString(blob->bounds(), &str);
+    this->dump(kDrawText_Verb, &paint, "drawTextBlob(%p) [%s]", blob, str.c_str());
+    // FIXME: dump the actual blob content?
+}
+
+void SkDumpCanvas::onDrawPicture(const SkPicture* picture, const SkMatrix* matrix,
+                                 const SkPaint* paint) {
+    this->dump(kDrawPicture_Verb, NULL, "drawPicture(%p) %f:%f:%f:%f", picture,
+               picture->cullRect().fLeft, picture->cullRect().fTop,
+               picture->cullRect().fRight, picture->cullRect().fBottom);
     fNestLevel += 1;
-    this->INHERITED::onDrawPicture(picture);
+    this->INHERITED::onDrawPicture(picture, matrix, paint);
     fNestLevel -= 1;
-    this->dump(kDrawPicture_Verb, NULL, "endPicture(%p) %d:%d", &picture,
-               picture->width(), picture->height());
+    this->dump(kDrawPicture_Verb, NULL, "endPicture(%p) %f:%f:%f:%f", &picture,
+               picture->cullRect().fLeft, picture->cullRect().fTop,
+               picture->cullRect().fRight, picture->cullRect().fBottom);
 }
 
 void SkDumpCanvas::drawVertices(VertexMode vmode, int vertexCount,
@@ -440,6 +453,26 @@ void SkDumpCanvas::drawVertices(VertexMode vmode, int vertexCount,
     this->dump(kDrawVertices_Verb, &paint, "drawVertices(%s [%d] %g %g ...)",
                toString(vmode), vertexCount, SkScalarToFloat(vertices[0].fX),
                SkScalarToFloat(vertices[0].fY));
+}
+
+void SkDumpCanvas::onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                               const SkPoint texCoords[4], SkXfermode* xmode,
+                               const SkPaint& paint) {
+    //dumps corner points and colors in clockwise order starting on upper-left corner
+    this->dump(kDrawPatch_Verb, &paint, "drawPatch(Vertices{[%f, %f], [%f, %f], [%f, %f], [%f, %f]}\
+              | Colors{[0x%x], [0x%x], [0x%x], [0x%x]} | TexCoords{[%f,%f], [%f,%f], [%f,%f], \
+               [%f,%f]})",
+              cubics[SkPatchUtils::kTopP0_CubicCtrlPts].fX,
+              cubics[SkPatchUtils::kTopP0_CubicCtrlPts].fY,
+              cubics[SkPatchUtils::kTopP3_CubicCtrlPts].fX,
+              cubics[SkPatchUtils::kTopP3_CubicCtrlPts].fY,
+              cubics[SkPatchUtils::kBottomP3_CubicCtrlPts].fX,
+              cubics[SkPatchUtils::kBottomP3_CubicCtrlPts].fY,
+              cubics[SkPatchUtils::kBottomP0_CubicCtrlPts].fX,
+              cubics[SkPatchUtils::kBottomP0_CubicCtrlPts].fY,
+              colors[0], colors[1], colors[2], colors[3],
+              texCoords[0].x(), texCoords[0].y(), texCoords[1].x(), texCoords[1].y(),
+              texCoords[2].x(), texCoords[2].y(), texCoords[3].x(), texCoords[3].y());
 }
 
 void SkDumpCanvas::drawData(const void* data, size_t length) {

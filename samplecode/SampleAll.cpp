@@ -172,9 +172,11 @@ protected:
         dst->addCircle(loc.fX, loc.fY, fRadius);
     }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
     Dot2DPathEffect(SkReadBuffer& buffer) : INHERITED(buffer) {
         fRadius = buffer.readScalar();
     }
+#endif
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->INHERITED::flatten(buffer);
         buffer.writeScalar(fRadius);
@@ -320,7 +322,7 @@ protected:
             do {
                 canvas->save();
                 canvas->clipRect(clip);
-                picture->draw(canvas);
+                picture->playback(canvas);
                 canvas->restore();
                 if (clip.fRight < SkIntToScalar(320))
                     clip.offset(SkIntToScalar(160), 0);

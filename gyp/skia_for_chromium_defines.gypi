@@ -13,10 +13,8 @@
     # If these become 'permanent', they should be moved into skia_common.gypi
     #
     'skia_for_chromium_defines': [
-      'SK_SUPPORT_LEGACY_PICTURE_CLONE',
-      'SK_SUPPORT_LEGACY_GETDEVICE',
-      'SK_IGNORE_ETC1_SUPPORT',
-      'SK_IGNORE_GPU_DITHER',
+      'SK_SUPPORT_LEGACY_TEXTRENDERMODE',
+      'SK_LEGACY_NO_DISTANCE_FIELD_PATHS'
     ],
   },
 }

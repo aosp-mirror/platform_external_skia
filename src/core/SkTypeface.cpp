@@ -8,7 +8,7 @@
 #include "SkAdvancedTypefaceMetrics.h"
 #include "SkEndian.h"
 #include "SkFontDescriptor.h"
-#include "SkFontHost.h"
+#include "SkFontMgr.h"
 #include "SkLazyPtr.h"
 #include "SkOTTable_OS_2.h"
 #include "SkStream.h"
@@ -67,6 +67,9 @@ protected:
     public:
         virtual bool next(SkTypeface::LocalizedString*) SK_OVERRIDE { return false; }
     };
+    virtual void onGetFamilyName(SkString* familyName) const SK_OVERRIDE {
+        familyName->reset();
+    }
     virtual SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const SK_OVERRIDE {
         return SkNEW(EmptyLocalizedStrings);
     };
@@ -76,28 +79,31 @@ protected:
     }
 };
 
+namespace {
+
 SK_DECLARE_STATIC_MUTEX(gCreateDefaultMutex);
-SkTypeface* SkTypeface::CreateDefault(int style) {
+
+// As a template arguments, these must have external linkage.
+SkTypeface* sk_create_default_typeface(int style) {
     // If backed by fontconfig, it's not safe to call SkFontHost::CreateTypeface concurrently.
     // To be safe, we serialize here with a mutex so only one call to
     // CreateTypeface is happening at any given time.
     // TODO(bungeman, mtklein): This is sad.  Make our fontconfig code safe?
     SkAutoMutexAcquire lock(&gCreateDefaultMutex);
 
-    SkTypeface* t = SkFontHost::CreateTypeface(NULL, NULL, (Style)style);
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    SkTypeface* t = fm->legacyCreateTypeface(NULL, style);;
     return t ? t : SkEmptyTypeface::Create();
 }
 
-void SkTypeface::DeleteDefault(SkTypeface* t) {
-    // The SkTypeface returned by SkFontHost::CreateTypeface may _itself_ be a
-    // cleverly-shared singleton.  This is less than ideal.  This means we
-    // cannot just assert our ownership and SkDELETE(t) like we'd want to.
-    SkSafeUnref(t);
-}
+void sk_unref_typeface(SkTypeface* ptr) { SkSafeUnref(ptr); }
+
+}  // namespace
+
+SK_DECLARE_STATIC_LAZY_PTR_ARRAY(SkTypeface, defaults, 4,
+                                 sk_create_default_typeface, sk_unref_typeface);
 
 SkTypeface* SkTypeface::GetDefaultTypeface(Style style) {
-    SK_DECLARE_STATIC_LAZY_PTR_ARRAY(SkTypeface, defaults, 4, CreateDefault, DeleteDefault);
-
     SkASSERT((int)style < 4);
     return defaults[style];
 }
@@ -123,23 +129,39 @@ SkTypeface* SkTypeface::CreateFromName(const char name[], Style style) {
     if (NULL == name) {
         return RefDefault(style);
     }
-    return SkFontHost::CreateTypeface(NULL, name, style);
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    return fm->legacyCreateTypeface(name, style);
 }
 
 SkTypeface* SkTypeface::CreateFromTypeface(const SkTypeface* family, Style s) {
-    if (family && family->style() == s) {
+    if (!family) {
+        return SkTypeface::RefDefault(s);
+    }
+
+    if (family->style() == s) {
         family->ref();
         return const_cast<SkTypeface*>(family);
     }
-    return SkFontHost::CreateTypeface(family, NULL, s);
+
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    bool bold = s & SkTypeface::kBold;
+    bool italic = s & SkTypeface::kItalic;
+    SkFontStyle newStyle = SkFontStyle(bold ? SkFontStyle::kBold_Weight
+                                            : SkFontStyle::kNormal_Weight,
+                                       SkFontStyle::kNormal_Width,
+                                       italic ? SkFontStyle::kItalic_Slant
+                                              : SkFontStyle::kUpright_Slant);
+    return fm->matchFaceStyle(family, newStyle);
 }
 
-SkTypeface* SkTypeface::CreateFromStream(SkStream* stream) {
-    return SkFontHost::CreateTypefaceFromStream(stream);
+SkTypeface* SkTypeface::CreateFromStream(SkStream* stream, int index) {
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    return fm->createFromStream(stream, index);
 }
 
-SkTypeface* SkTypeface::CreateFromFile(const char path[]) {
-    return SkFontHost::CreateTypefaceFromFile(path);
+SkTypeface* SkTypeface::CreateFromFile(const char path[], int index) {
+    SkAutoTUnref<SkFontMgr> fm(SkFontMgr::RefDefault());
+    return fm->createFromFile(path, index);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -149,45 +171,24 @@ void SkTypeface::serialize(SkWStream* wstream) const {
     SkFontDescriptor desc(this->style());
     this->onGetFontDescriptor(&desc, &isLocal);
 
-    desc.serialize(wstream);
-    if (isLocal) {
-        int ttcIndex;   // TODO: write this to the stream?
-        SkAutoTUnref<SkStream> rstream(this->openStream(&ttcIndex));
-        if (rstream.get()) {
-            size_t length = rstream->getLength();
-            wstream->writePackedUInt(length);
-            wstream->writeStream(rstream, length);
-        } else {
-            wstream->writePackedUInt(0);
-        }
-    } else {
-        wstream->writePackedUInt(0);
+    if (isLocal && NULL == desc.getFontData()) {
+        int ttcIndex;
+        desc.setFontData(this->onOpenStream(&ttcIndex));
+        desc.setFontIndex(ttcIndex);
     }
+
+    desc.serialize(wstream);
 }
 
 SkTypeface* SkTypeface::Deserialize(SkStream* stream) {
     SkFontDescriptor desc(stream);
-    size_t length = stream->readPackedUInt();
-    if (length > 0) {
-        void* addr = sk_malloc_flags(length, 0);
-        if (addr) {
-            SkAutoTUnref<SkMemoryStream> localStream(SkNEW(SkMemoryStream));
-            localStream->setMemoryOwned(addr, length);
-
-            if (stream->read(addr, length) == length) {
-                return SkTypeface::CreateFromStream(localStream.get());
-            } else {
-                // Failed to read the full font data, so fall through and try to create from name.
-                // If this is because of EOF, all subsequent reads from the stream will be EOF.
-                // If this is because of a stream error, the stream is in an error state,
-                // do not attempt to skip any remaining bytes.
-            }
-        } else {
-            // failed to allocate, so just skip and create-from-name
-            stream->skip(length);
+    SkStream* data = desc.getFontData();
+    if (data) {
+        SkTypeface* typeface = SkTypeface::CreateFromStream(data, desc.getFontIndex());
+        if (typeface) {
+            return typeface;
         }
     }
-
     return SkTypeface::CreateFromName(desc.getFamilyName(), desc.getStyle());
 }
 
@@ -261,10 +262,8 @@ SkTypeface::LocalizedStrings* SkTypeface::createFamilyNameIterator() const {
 }
 
 void SkTypeface::getFamilyName(SkString* name) const {
-    bool isLocal = false;
-    SkFontDescriptor desc(this->style());
-    this->onGetFontDescriptor(&desc, &isLocal);
-    name->set(desc.getFamilyName());
+    SkASSERT(name);
+    this->onGetFamilyName(name);
 }
 
 SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(

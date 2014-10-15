@@ -20,8 +20,8 @@
 #include "SkString.h"
 #include "SkTArray.h"
 #include "SkTDArray.h"
+#include "SkTaskGroup.h"
 #include "SkTemplates.h"
-#include "SkThreadPool.h"
 #include "SkTime.h"
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
@@ -38,7 +38,7 @@ const struct SkipOverTest {
     { 7, "http___www_foxsports_nl_.skp", true},  // (no repro on mac) addT SkASSERT(this != other || fVerb == SkPath::kCubic_Verb)
     {13, "http___www_modernqigong_com_.skp", false},  // SkAAClip::Builder::addRun SkASSERT(fBounds.contains(x, y));
     {14, "http___www_devbridge_com_.skp", true},  // checkSmallCoincidence SkASSERT(!next->fSmall || checkMultiple);
-    {16, "http___www_1023world_net_.skp", true},  // bitmap decode assert (corrupt skp?)
+    {16, "http___www_1023world_net_.skp", false},  // bitmap decode assert (corrupt skp?)
     {19, "http___www_alamdi_com_.skp", true},  // cubic/quad intersection
     {26, "http___www_liveencounters_net_.skp", true},  // (no repro on mac) checkSmall addT:549 (line, expects cubic)
     {28, "http___www_encros_fr_.skp", false},  // SkAAClip::Builder::addRun SkASSERT(fBounds.contains(x, y));
@@ -90,14 +90,14 @@ static SkString get_in_path(int dirNo, const char* filename) {
     }
     if (filename) {
         path.appendf("%s%s", PATH_SLASH, filename);
-        if (!sk_exists(path.c_str())) {        
+        if (!sk_exists(path.c_str())) {
             SkDebugf("could not read %s\n", path.c_str());
             return SkString();
         }
     }
     return path;
 }
-    
+
 static void make_recursive_dir(const SkString& path) {
     if (sk_exists(path.c_str())) {
         return;
@@ -129,7 +129,7 @@ static SkString get_out_path(int dirNo, const char* dirName) {
     make_recursive_dir(path);
     return path;
 }
-  
+
 static SkString get_sum_path(const char* dirName) {
     SkString path;
     SkASSERT(dirName);
@@ -166,12 +166,12 @@ struct TestResult {
         fTestStep = kCompareBits;
         fScale = 1;
     }
-    
+
     void init(int dirNo, const SkString& filename) {
         fDirNo = dirNo;
         strcpy(fFilename, filename.c_str());
         fTestStep = kCompareBits;
-        fScale = 1;       
+        fScale = 1;
     }
 
     SkString status() {
@@ -204,7 +204,7 @@ struct TestResult {
     }
 
     void testOne();
-    
+
     char fFilename[kMaxLength];
     TestStep fTestStep;
     int fDirNo;
@@ -245,13 +245,8 @@ struct TestState {
 };
 
 struct TestRunner {
-    TestRunner(int threadCount)
-        : fNumThreads(threadCount) {
-    }
-
     ~TestRunner();
     void render();
-    int fNumThreads;
     SkTDArray<class TestRunnable*> fRunnables;
 };
 
@@ -300,9 +295,9 @@ TestRunner::~TestRunner() {
 }
 
 void TestRunner::render() {
-    SkThreadPool pool(fNumThreads);
+    SkTaskGroup tg;
     for (int index = 0; index < fRunnables.count(); ++ index) {
-        pool.add(fRunnables[index]);
+        tg.add(fRunnables[index]);
     }
 }
 
@@ -394,22 +389,21 @@ static bool addError(TestState* data, const TestResult& testResult) {
 
 static SkMSec timePict(SkPicture* pic, SkCanvas* canvas) {
     canvas->save();
-    int pWidth = pic->width();
-    int pHeight = pic->height();
-    const int maxDimension = 1000;
+    SkScalar pWidth = pic->cullRect().width();
+    SkScalar pHeight = pic->cullRect().height();
+    const SkScalar maxDimension = 1000.0f;
     const int slices = 3;
-    int xInterval = SkTMax(pWidth - maxDimension, 0) / (slices - 1);
-    int yInterval = SkTMax(pHeight - maxDimension, 0) / (slices - 1);
-    SkRect rect = {0, 0, SkIntToScalar(SkTMin(maxDimension, pWidth)),
-            SkIntToScalar(SkTMin(maxDimension, pHeight))};
+    SkScalar xInterval = SkTMax(pWidth - maxDimension, 0.0f) / (slices - 1);
+    SkScalar yInterval = SkTMax(pHeight - maxDimension, 0.0f) / (slices - 1);
+    SkRect rect = {0, 0, SkTMin(maxDimension, pWidth), SkTMin(maxDimension, pHeight) };
     canvas->clipRect(rect);
     SkMSec start = SkTime::GetMSecs();
     for (int x = 0; x < slices; ++x) {
         for (int y = 0; y < slices; ++y) {
-            pic->draw(canvas);
-            canvas->translate(0, SkIntToScalar(yInterval));
+            pic->playback(canvas);
+            canvas->translate(0, yInterval);
         }
-        canvas->translate(SkIntToScalar(xInterval), SkIntToScalar(-yInterval * slices));
+        canvas->translate(xInterval, -yInterval * slices);
     }
     SkMSec end = SkTime::GetMSecs();
     canvas->restore();
@@ -422,7 +416,7 @@ static void drawPict(SkPicture* pic, SkCanvas* canvas, int scale) {
         canvas->save();
         canvas->scale(1.0f / scale, 1.0f / scale);
     }
-    pic->draw(canvas);
+    pic->playback(canvas);
     if (scale != 1) {
         canvas->restore();
     }
@@ -473,24 +467,23 @@ void TestResult::testOne() {
             SkDebugf("unable to decode %s\n", fFilename);
             goto finish;
         }
-        int width = pic->width();
-        int height = pic->height();
+        SkScalar width = pic->cullRect().width();
+        SkScalar height = pic->cullRect().height();
         SkBitmap oldBitmap, opBitmap;
         fScale = 1;
         while (width / fScale > 32767 || height / fScale > 32767) {
             ++fScale;
         }
         do {
-            int dimX = (width + fScale - 1) / fScale;
-            int dimY = (height + fScale - 1) / fScale;
-            if (oldBitmap.allocN32Pixels(dimX, dimY) &&
-                opBitmap.allocN32Pixels(dimX, dimY)) {
+            int dimX = SkScalarCeilToInt(width / fScale);
+            int dimY = SkScalarCeilToInt(height / fScale);
+            if (oldBitmap.tryAllocN32Pixels(dimX, dimY) && opBitmap.tryAllocN32Pixels(dimX, dimY)) {
                 break;
             }
             SkDebugf("-%d-", fScale);
         } while (++fScale < 256);
         if (fScale >= 256) {
-            SkDebugf("unable to allocate bitmap for %s (w=%d h=%d)\n", fFilename,
+            SkDebugf("unable to allocate bitmap for %s (w=%f h=%f)\n", fFilename,
                     width, height);
             goto finish;
         }
@@ -533,16 +526,10 @@ DEFINE_string2(dir, d, NULL, "range of directories (e.g., 1-100)");
 DEFINE_string2(skp, s, NULL, "skp to test");
 DEFINE_bool2(single, z, false, "run tests on a single thread internally.");
 DEFINE_int32(testIndex, 0, "override local test index (PathOpsSkpClipOneOff only).");
-DEFINE_int32(threads, SkThreadPool::kThreadPerCore,
-        "Run threadsafe tests on a threadpool with this many threads.");
 DEFINE_bool2(verbose, v, false, "enable verbose output.");
 
 static bool verbose() {
     return FLAGS_verbose;
-}
-
-static int getThreadCount() {
-    return FLAGS_single ? 1 : FLAGS_threads;
 }
 
 class Dirs {
@@ -618,7 +605,7 @@ public:
         }
         return NULL;
     }
-    
+
     void set(const SkCommandLineFlags::StringArray& names) {
         fNames = &names;
     }
@@ -628,7 +615,7 @@ private:
     const SkCommandLineFlags::StringArray* fNames;
 } gNames;
 
-static bool buildTestDir(int dirNo, int firstDirNo, 
+static bool buildTestDir(int dirNo, int firstDirNo,
         SkTDArray<TestResult>* tests, SkTDArray<SortByName*>* sorted) {
     SkString dirName = get_out_path(dirNo, outStatusDir);
     if (!dirName.size()) {
@@ -794,8 +781,7 @@ static void encodeFound(TestState& state) {
             }
         }
     }
-    int threadCount = getThreadCount();
-    TestRunner testRunner(threadCount);
+    TestRunner testRunner;
     for (int index = 0; index < state.fPixelWorst.count(); ++index) {
         const TestResult& result = state.fPixelWorst[index];
         SkString filename(result.fFilename);
@@ -867,8 +853,7 @@ static void testSkpClipMain(TestState* data) {
 DEF_TEST(PathOpsSkpClipThreaded) {
     gDirs.setDefault();
     initTest();
-    int threadCount = getThreadCount();
-    TestRunner testRunner(threadCount);
+    TestRunner testRunner;
     int dirNo;
     gDirs.reset();
     while ((dirNo = gDirs.next()) > 0) {
@@ -891,7 +876,7 @@ DEF_TEST(PathOpsSkpClipThreaded) {
     }
     encodeFound(state);
 }
- 
+
 static bool buildTests(SkTDArray<TestResult>* tests, SkTDArray<SortByName*>* sorted) {
     int firstDirNo = gDirs.first();
     int dirNo;
@@ -914,8 +899,7 @@ DEF_TEST(PathOpsSkpClipUberThreaded) {
     if (!buildTests(tests.get(), sorted.get())) {
         return;
     }
-    int threadCount = getThreadCount();
-    TestRunner testRunner(threadCount);
+    TestRunner testRunner;
     int dirNo;
     gDirs.reset();
     while ((dirNo = gDirs.next()) > 0) {

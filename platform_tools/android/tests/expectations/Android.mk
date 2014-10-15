@@ -33,6 +33,12 @@ LOCAL_PATH:= $(call my-dir)
 ###############################################################################
 
 include $(CLEAR_VARS)
+LOCAL_FDO_SUPPORT := true
+ifneq ($(strip $(TARGET_FDO_CFLAGS)),)
+	# This should be the last -Oxxx specified in LOCAL_CFLAGS
+	LOCAL_CFLAGS += -O2
+endif
+
 LOCAL_ARM_MODE := thumb
 ifeq ($(TARGET_ARCH),arm)
 	ifeq ($(ARCH_ARM_HAVE_VFP),true)
@@ -151,13 +157,9 @@ include $(BUILD_SHARED_LIBRARY)
 
 # benchmark (timings)
 include $(BASE_PATH)/bench/Android.mk
-include $(BASE_PATH)/tools/Android.mk
 
 # golden-master (fidelity / regression test)
 include $(BASE_PATH)/gm/Android.mk
-
-# unit-tests
-include $(BASE_PATH)/tests/Android.mk
 
 # diamond-master (one test to rule them all)
 include $(BASE_PATH)/dm/Android.mk

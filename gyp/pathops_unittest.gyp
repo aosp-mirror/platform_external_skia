@@ -16,10 +16,12 @@
       ],
       'sources': [
         '../tests/PathOpsAngleIdeas.cpp',
+        '../tests/PathOpsBattles.cpp',
         '../tests/PathOpsCubicLineIntersectionIdeas.cpp',
         '../tests/PathOpsDebug.cpp',
         '../tests/PathOpsOpLoopThreadedTest.cpp',
         '../tests/skia_test.cpp',
+        '../src/utils/SkTaskGroup.cpp',
       ],
       'conditions': [
         [ 'skia_android_framework == 1', {

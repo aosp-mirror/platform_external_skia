@@ -4,8 +4,14 @@
 .android_config
 .gclient*
 .gm-actuals
+.cproject
+.project
+.settings/
 TAGS
+bower_components
 common
+experimental/webtry/templates/template.cpp
+experimental/webtry/webtry.db
 gyp/build
 out
 platform_tools/chromeos/third_party/externals

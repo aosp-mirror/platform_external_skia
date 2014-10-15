@@ -17,7 +17,7 @@ import os
 import time
 
 # Must fix up PYTHONPATH before importing from within Skia
-import fix_pythonpath  # pylint: disable=W0611
+import rs_fixpypath  # pylint: disable=W0611
 
 # Imports from within Skia
 from py.utils import url_utils
@@ -78,6 +78,7 @@ class ExpectationComparisons(results.BaseComparisons):
       builder_regex_list: List of regular expressions specifying which builders
           we will process. If None, process all builders.
     """
+    super(ExpectationComparisons, self).__init__()
     time_start = int(time.time())
     if builder_regex_list != None:
       self.set_match_builders_pattern_list(builder_regex_list)
@@ -346,7 +347,8 @@ class ExpectationComparisons(results.BaseComparisons):
           try:
             image_pair = imagepair.ImagePair(
                 image_diff_db=self._image_diff_db,
-                base_url=gm_json.GM_ACTUALS_ROOT_HTTP_URL,
+                imageA_base_url=gm_json.GM_ACTUALS_ROOT_HTTP_URL,
+                imageB_base_url=gm_json.GM_ACTUALS_ROOT_HTTP_URL,
                 imageA_relative_url=expected_image_relative_url,
                 imageB_relative_url=actual_image_relative_url,
                 expectations=expectations_dict,

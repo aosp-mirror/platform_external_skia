@@ -2,8 +2,9 @@
 #define DMUtil_DEFINED
 
 #include "SkBitmap.h"
+#include "SkCanvas.h"
 #include "SkString.h"
-#include "gm_expectations.h"
+#include "gm.h"
 
 class SkBBHFactory;
 
@@ -17,10 +18,8 @@ SkString UnderJoin(const char* a, const char* b);
 // "foo_bar.skp" -> "foo-bar_skp"
 SkString FileToTaskName(SkString);
 
-// Draw gm to picture.  If skr is true, uses EXPERIMENTAL_beginRecording().
-SkPicture* RecordPicture(skiagm::GM* gm,
-                         SkBBHFactory* factory = NULL,
-                         bool skr = false);
+// Draw gm to picture.
+SkPicture* RecordPicture(skiagm::GM* gm, SkBBHFactory* factory = NULL);
 
 // Allocate an empty bitmap with this size and depth.
 void AllocatePixels(SkColorType, int w, int h, SkBitmap* bitmap);
@@ -35,6 +34,9 @@ unsigned MaxComponentDifference(const SkBitmap& a, const SkBitmap& b);
 
 // Are these identical bitmaps?
 bool BitmapsEqual(const SkBitmap& a, const SkBitmap& b);
+
+// Hook to modify canvas using global flag values (e.g. --matrix).
+void CanvasPreflight(SkCanvas*);
 
 }  // namespace DM
 

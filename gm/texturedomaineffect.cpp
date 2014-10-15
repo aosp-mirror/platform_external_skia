@@ -92,8 +92,8 @@ protected:
 
         GrDrawState* drawState = tt.target()->drawState();
 
-        GrTexture* texture = GrLockAndRefCachedBitmapTexture(context, fBmp, NULL);
-        if (NULL == texture) {
+        SkAutoTUnref<GrTexture> texture(GrRefCachedBitmapTexture(context, fBmp, NULL));
+        if (!texture) {
             return;
         }
 
@@ -122,13 +122,13 @@ protected:
                 SkScalar x = kDrawPad + kTestPad;
                 for (int m = 0; m < GrTextureDomain::kModeCount; ++m) {
                     GrTextureDomain::Mode mode = (GrTextureDomain::Mode) m;
-                    SkAutoTUnref<GrEffect> effect(
+                    SkAutoTUnref<GrFragmentProcessor> fp(
                         GrTextureDomainEffect::Create(texture, textureMatrices[tm],
                                                 GrTextureDomain::MakeTexelDomain(texture,
                                                                                 texelDomains[d]),
                                                 mode, GrTextureParams::kNone_FilterMode));
 
-                    if (!effect) {
+                    if (!fp) {
                         continue;
                     }
                     SkMatrix viewMatrix;
@@ -136,7 +136,7 @@ protected:
                     drawState->reset(viewMatrix);
                     drawState->setRenderTarget(rt);
                     drawState->setColor(0xffffffff);
-                    drawState->addColorEffect(effect, 1);
+                    drawState->addColorProcessor(fp);
 
                     tt.target()->drawSimpleRect(renderRect);
                     x += renderRect.width() + kTestPad;
@@ -144,7 +144,6 @@ protected:
                 y += renderRect.height() + kTestPad;
             }
         }
-        GrUnlockAndUnrefCachedBitmapTexture(texture);
     }
 
 private:

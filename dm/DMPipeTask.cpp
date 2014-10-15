@@ -24,9 +24,9 @@ static uint32_t get_flags(PipeTask::Mode mode) {
 static const char* get_name(const uint32_t flags) {
     if (flags & SkGPipeWriter::kCrossProcess_Flag &&
         flags & SkGPipeWriter::kSharedAddressSpace_Flag) {
-        return "shared_address_space_pipe";
+        return "shared-address-space-pipe";
     } else if (flags & SkGPipeWriter::kCrossProcess_Flag) {
-        return "cross_process_pipe";
+        return "cross-process-pipe";
     } else {
         return "pipe";
     }
@@ -55,13 +55,14 @@ void PipeTask::draw() {
                                                  fFlags,
                                                  bitmap.width(),
                                                  bitmap.height());
+    CanvasPreflight(pipeCanvas);
     pipeCanvas->concat(fGM->getInitialTransform());
     fGM->draw(pipeCanvas);
     writer.endRecording();
 
     if (!BitmapsEqual(bitmap, fReference)) {
         this->fail();
-        this->spawnChild(SkNEW_ARGS(WriteTask, (*this, bitmap)));
+        this->spawnChild(SkNEW_ARGS(WriteTask, (*this, "GM", bitmap)));
     }
 }
 

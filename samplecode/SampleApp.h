@@ -22,6 +22,7 @@ class GrRenderTarget;
 
 class SkCanvas;
 class SkData;
+class SkDocument;
 class SkEvent;
 class SkTypeface;
 class SkViewFactory;
@@ -76,7 +77,7 @@ public:
 
         // called before drawing. should install correct device
         // type on the canvas. Will skip drawing if returns false.
-        virtual SkCanvas* createCanvas(DeviceType dType, SampleWindow* win) = 0;
+        virtual SkSurface* createSurface(DeviceType dType, SampleWindow* win) = 0;
 
         // called after drawing, should get the results onto the
         // screen.
@@ -100,24 +101,25 @@ public:
     SampleWindow(void* hwnd, int argc, char** argv, DeviceManager*);
     virtual ~SampleWindow();
 
-    virtual SkCanvas* createCanvas() SK_OVERRIDE {
-        SkCanvas* canvas = NULL;
+    virtual SkSurface* createSurface() SK_OVERRIDE {
+        SkSurface* surface = NULL;
         if (fDevManager) {
-            canvas = fDevManager->createCanvas(fDeviceType, this);
+            surface = fDevManager->createSurface(fDeviceType, this);
         }
-        if (NULL == canvas) {
-            canvas = this->INHERITED::createCanvas();
+        if (NULL == surface) {
+            surface = this->INHERITED::createSurface();
         }
-        return canvas;
+        return surface;
     }
 
-    virtual void draw(SkCanvas* canvas);
+    virtual void draw(SkCanvas*) SK_OVERRIDE;
 
     void setDeviceType(DeviceType type);
     void toggleRendering();
     void toggleSlideshow();
     void toggleFPS();
     void showOverview();
+    void toggleDistanceFieldFonts();
 
     GrContext* getGrContext() const { return fDevManager->getGrContext(); }
 
@@ -131,7 +133,6 @@ public:
     bool handleTouch(int ownerId, float x, float y,
             SkView::Click::State state);
     void saveToPdf();
-    SkData* getPDFData() { return fPDFData; }
     void postInvalDelay();
 
     DeviceType getDeviceType() const { return fDeviceType; }
@@ -172,8 +173,7 @@ private:
     DeviceManager* fDevManager;
 
     bool fSaveToPdf;
-    SkCanvas* fPdfCanvas;
-    SkData* fPDFData;
+    SkAutoTUnref<SkDocument> fPDFDocument;
 
     bool fUseClip;
     bool fNClip;
@@ -225,6 +225,7 @@ private:
 
     void loadView(SkView*);
     void updateTitle();
+    bool getRawTitle(SkString*);
 
     bool zoomIn();
     bool zoomOut();

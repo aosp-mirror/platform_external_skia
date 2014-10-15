@@ -58,39 +58,46 @@ bool matrix_needs_clamping(SkScalar matrix[20]) {
 };
 
 SkColorFilterImageFilter* SkColorFilterImageFilter::Create(SkColorFilter* cf,
-        SkImageFilter* input, const CropRect* cropRect) {
+        SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID) {
     SkASSERT(cf);
     SkScalar colorMatrix[20], inputMatrix[20];
     SkColorFilter* inputColorFilter;
     if (input && cf->asColorMatrix(colorMatrix)
               && input->asColorFilter(&inputColorFilter)
-              && (NULL != inputColorFilter)) {
+              && (inputColorFilter)) {
         SkAutoUnref autoUnref(inputColorFilter);
         if (inputColorFilter->asColorMatrix(inputMatrix) && !matrix_needs_clamping(inputMatrix)) {
             SkScalar combinedMatrix[20];
             mult_color_matrix(colorMatrix, inputMatrix, combinedMatrix);
             SkAutoTUnref<SkColorFilter> newCF(SkColorMatrixFilter::Create(combinedMatrix));
-            return SkNEW_ARGS(SkColorFilterImageFilter, (newCF, input->getInput(0), cropRect));
+            return SkNEW_ARGS(SkColorFilterImageFilter, (newCF, input->getInput(0), cropRect, 0));
         }
     }
-    return SkNEW_ARGS(SkColorFilterImageFilter, (cf, input, cropRect));
+    return SkNEW_ARGS(SkColorFilterImageFilter, (cf, input, cropRect, uniqueID));
 }
 
 SkColorFilterImageFilter::SkColorFilterImageFilter(SkColorFilter* cf,
-        SkImageFilter* input, const CropRect* cropRect)
-    : INHERITED(1, &input, cropRect), fColorFilter(cf) {
+        SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID)
+    : INHERITED(1, &input, cropRect, uniqueID), fColorFilter(cf) {
     SkASSERT(cf);
     SkSafeRef(cf);
 }
 
+#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
 SkColorFilterImageFilter::SkColorFilterImageFilter(SkReadBuffer& buffer)
   : INHERITED(1, buffer) {
     fColorFilter = buffer.readColorFilter();
 }
+#endif
+
+SkFlattenable* SkColorFilterImageFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
+    SkAutoTUnref<SkColorFilter> cf(buffer.readColorFilter());
+    return Create(cf, common.getInput(0), &common.cropRect(), common.uniqueID());
+}
 
 void SkColorFilterImageFilter::flatten(SkWriteBuffer& buffer) const {
     this->INHERITED::flatten(buffer);
-
     buffer.writeFlattenable(fColorFilter);
 }
 

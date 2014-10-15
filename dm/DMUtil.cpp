@@ -1,10 +1,24 @@
 #include "DMUtil.h"
 
 #include "SkColorPriv.h"
+#include "SkCommandLineFlags.h"
 #include "SkPicture.h"
 #include "SkPictureRecorder.h"
 
+DEFINE_string(matrix, "1 0 0 0 1 0 0 0 1",
+              "Matrix to apply to the canvas before drawing.");
+
 namespace DM {
+
+void CanvasPreflight(SkCanvas* canvas) {
+    if (FLAGS_matrix.count() == 9) {
+        SkMatrix m;
+        for (int i = 0; i < 9; i++) {
+            m[i] = (SkScalar)atof(FLAGS_matrix[i]);
+        }
+        canvas->concat(m);
+    }
+}
 
 SkString UnderJoin(const char* a, const char* b) {
     SkString s;
@@ -20,13 +34,13 @@ SkString FileToTaskName(SkString filename) {
     return filename;
 }
 
-SkPicture* RecordPicture(skiagm::GM* gm, SkBBHFactory* factory, bool skr) {
-    const int w = gm->getISize().width(),
-              h = gm->getISize().height();
+SkPicture* RecordPicture(skiagm::GM* gm, SkBBHFactory* factory) {
+    const SkScalar w = SkIntToScalar(gm->getISize().width()),
+                   h = SkIntToScalar(gm->getISize().height());
     SkPictureRecorder recorder;
 
-    SkCanvas* canvas = skr ? recorder.EXPERIMENTAL_beginRecording(w, h, factory)
-                           : recorder.             beginRecording(w, h, factory);
+    SkCanvas* canvas = recorder.beginRecording(w, h, factory);
+    CanvasPreflight(canvas);
     canvas->concat(gm->getInitialTransform());
     gm->draw(canvas);
     canvas->flush();

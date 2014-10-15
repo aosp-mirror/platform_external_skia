@@ -219,6 +219,46 @@ void SkAAClip::validate() const {
     --yoff;
     SkASSERT(yoff->fY == lastY);
 }
+
+static void dump_one_row(const uint8_t* SK_RESTRICT row,
+                         int width, int leading_num) {
+    if (leading_num) {
+        SkDebugf( "%03d ", leading_num );
+    }
+    while (width > 0) {
+        int n = row[0];
+        int val = row[1];
+        char out = '.';
+        if (val == 0xff) {
+            out = '*';
+        } else if (val > 0) {
+            out = '+';
+        }
+        for (int i = 0 ; i < n ; i++) {
+            SkDebugf( "%c", out );
+        }
+        row += 2;
+        width -= n;
+    }
+    SkDebugf( "\n" );
+}
+
+void SkAAClip::debug(bool compress_y) const {
+    Iter iter(*this);
+    const int width = fBounds.width();
+
+    int y = fBounds.fTop;
+    while (!iter.done()) {
+        if (compress_y) {
+            dump_one_row(iter.data(), width, iter.bottom() - iter.top() + 1);
+        } else {
+            do {
+                dump_one_row(iter.data(), width, 0);
+            } while (++y < iter.bottom());
+        }
+        iter.next();
+    }
+}
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -682,6 +722,34 @@ bool SkAAClip::setRect(const SkIRect& bounds) {
     SkASSERT(!this->isEmpty());
     return true;
 #endif
+}
+
+bool SkAAClip::isRect() const {
+    if (this->isEmpty()) {
+        return false;
+    }
+
+    const RunHead* head = fRunHead;
+    if (head->fRowCount != 1) {
+        return false;
+    }
+    const YOffset* yoff = head->yoffsets();
+    if (yoff->fY != fBounds.fBottom - 1) {
+        return false;
+    }
+
+    const uint8_t* row = head->data() + yoff->fOffset;
+    int width = fBounds.width();
+    do {
+        if (row[1] != 0xFF) {
+            return false;
+        }
+        int n = row[0];
+        SkASSERT(n <= width);
+        width -= n;
+        row += 2;
+    } while (width > 0);
+    return true;
 }
 
 bool SkAAClip::setRect(const SkRect& r, bool doAA) {

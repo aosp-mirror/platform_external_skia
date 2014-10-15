@@ -1,5 +1,53 @@
 {
   "extraColumnHeaders": {
+    "builderA": {
+      "headerText": "builderA", 
+      "isFilterable": true, 
+      "isSortable": true, 
+      "useFreeformFilter": false, 
+      "valuesAndCounts": [
+        [
+          null, 
+          4
+        ]
+      ]
+    }, 
+    "builderB": {
+      "headerText": "builderB", 
+      "isFilterable": true, 
+      "isSortable": true, 
+      "useFreeformFilter": false, 
+      "valuesAndCounts": [
+        [
+          null, 
+          4
+        ]
+      ]
+    }, 
+    "renderModeA": {
+      "headerText": "renderModeA", 
+      "isFilterable": true, 
+      "isSortable": true, 
+      "useFreeformFilter": false, 
+      "valuesAndCounts": [
+        [
+          null, 
+          4
+        ]
+      ]
+    }, 
+    "renderModeB": {
+      "headerText": "renderModeB", 
+      "isFilterable": true, 
+      "isSortable": true, 
+      "useFreeformFilter": false, 
+      "valuesAndCounts": [
+        [
+          null, 
+          4
+        ]
+      ]
+    }, 
     "resultType": {
       "headerText": "resultType", 
       "isFilterable": true, 
@@ -24,7 +72,7 @@
       "headerText": "sourceSkpFile", 
       "isFilterable": true, 
       "isSortable": true, 
-      "useFreeformFilter": false, 
+      "useFreeformFilter": true, 
       "valuesAndCounts": [
         [
           "changed.skp", 
@@ -73,13 +121,31 @@
     "resultType", 
     "sourceSkpFile", 
     "tiledOrWhole", 
-    "tilenum"
+    "tilenum", 
+    "builderA", 
+    "renderModeA", 
+    "builderB", 
+    "renderModeB"
   ], 
   "header": {
-    "dataHash": "-4754972663365911725", 
+    "dataHash": "-9145196899696949575", 
     "isEditable": false, 
     "isExported": true, 
-    "schemaVersion": 4, 
+    "schemaVersion": 5, 
+    "setA": {
+      "dir": [
+        "before-patch-fake-dir"
+      ], 
+      "repoRevision": null, 
+      "section": "actual-results"
+    }, 
+    "setB": {
+      "dir": [
+        "after-patch-fake-dir"
+      ], 
+      "repoRevision": null, 
+      "section": "actual-results"
+    }, 
     "timeNextUpdateAvailable": null, 
     "timeUpdated": 12345678, 
     "type": "all"
@@ -87,47 +153,67 @@
   "imagePairs": [
     {
       "extraColumns": {
+        "builderA": null, 
+        "builderB": null, 
+        "renderModeA": null, 
+        "renderModeB": null, 
         "resultType": "failed", 
         "sourceSkpFile": "changed.skp", 
         "tiledOrWhole": "whole", 
         "tilenum": "N/A"
       }, 
-      "imageAUrl": "changed_skp/bitmap-64bitMD5_3101044995537104462.png", 
-      "imageBUrl": "changed_skp/bitmap-64bitMD5_13623922271964399662.png", 
-      "isDifferent": true
+      "imageAUrl": "changed_skp/bitmap-64bitMD5_17527938180154630042.png", 
+      "imageBUrl": "changed_skp/bitmap-64bitMD5_2314401992566164894.png", 
+      "isDifferent": true, 
+      "sourceJsonFile": "./summary.json"
     }, 
     {
       "extraColumns": {
+        "builderA": null, 
+        "builderB": null, 
+        "renderModeA": null, 
+        "renderModeB": null, 
         "resultType": "no-comparison", 
         "sourceSkpFile": "only-in-after.skp", 
         "tiledOrWhole": "whole", 
         "tilenum": "N/A"
       }, 
       "imageAUrl": null, 
-      "imageBUrl": "only-in-after_skp/bitmap-64bitMD5_2320185040577047131.png", 
-      "isDifferent": true
+      "imageBUrl": "only-in-after_skp/bitmap-64bitMD5_6558642089737589931.png", 
+      "isDifferent": true, 
+      "sourceJsonFile": "./summary.json"
     }, 
     {
       "extraColumns": {
+        "builderA": null, 
+        "builderB": null, 
+        "renderModeA": null, 
+        "renderModeB": null, 
         "resultType": "no-comparison", 
         "sourceSkpFile": "only-in-before.skp", 
         "tiledOrWhole": "whole", 
         "tilenum": "N/A"
       }, 
-      "imageAUrl": "only-in-before_skp/bitmap-64bitMD5_2320185040577047131.png", 
+      "imageAUrl": "only-in-before_skp/bitmap-64bitMD5_6558642089737589931.png", 
       "imageBUrl": null, 
-      "isDifferent": true
+      "isDifferent": true, 
+      "sourceJsonFile": "./summary.json"
     }, 
     {
       "extraColumns": {
+        "builderA": null, 
+        "builderB": null, 
+        "renderModeA": null, 
+        "renderModeB": null, 
         "resultType": "succeeded", 
         "sourceSkpFile": "unchanged.skp", 
         "tiledOrWhole": "whole", 
         "tilenum": "N/A"
       }, 
-      "imageAUrl": "unchanged_skp/bitmap-64bitMD5_3322248763049618493.png", 
-      "imageBUrl": "unchanged_skp/bitmap-64bitMD5_3322248763049618493.png", 
-      "isDifferent": false
+      "imageAUrl": "unchanged_skp/bitmap-64bitMD5_1094324242976325446.png", 
+      "imageBUrl": "unchanged_skp/bitmap-64bitMD5_1094324242976325446.png", 
+      "isDifferent": false, 
+      "sourceJsonFile": "./summary.json"
     }
   ], 
   "imageSets": {
@@ -137,11 +223,11 @@
     }, 
     "imageA": {
       "baseUrl": "http://storage.cloud.google.com/fakebucket/fake/path", 
-      "description": "before_patch"
+      "description": "setA"
     }, 
     "imageB": {
       "baseUrl": "http://storage.cloud.google.com/fakebucket/fake/path", 
-      "description": "after_patch"
+      "description": "setB"
     }, 
     "whiteDiffs": {
       "baseUrl": "/static/generated-images/whitediffs", 

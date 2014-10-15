@@ -177,6 +177,8 @@ public:
         fTs.reset();
     }
 
+    bool reversePoints(const SkPoint& p1, const SkPoint& p2) const;
+
     void setOppXor(bool isOppXor) {
         fOppXor = isOppXor;
     }
@@ -282,7 +284,7 @@ public:
     void addStartSpan(int endIndex);
     int addT(SkOpSegment* other, const SkPoint& pt, double newT);
     void addTCancel(const SkPoint& startPt, const SkPoint& endPt, SkOpSegment* other);
-    void addTCoincident(const SkPoint& startPt, const SkPoint& endPt, double endT,
+    bool addTCoincident(const SkPoint& startPt, const SkPoint& endPt, double endT,
                         SkOpSegment* other);
     const SkOpSpan* addTPair(double t, SkOpSegment* other, double otherT, bool borrowWind,
                              const SkPoint& pt);
@@ -405,7 +407,7 @@ private:
                    const SkOpSegment* other2, SkOpSpan* oSpan, SkTDArray<AlignedSpan>* );
     bool betweenPoints(double midT, const SkPoint& pt1, const SkPoint& pt2) const;
     void bumpCoincidentBlind(bool binary, int index, int last);
-    void bumpCoincidentThis(const SkOpSpan& oTest, bool binary, int* index,
+    bool bumpCoincidentThis(const SkOpSpan& oTest, bool binary, int* index,
                            SkTArray<SkPoint, true>* outsideTs);
     void bumpCoincidentOBlind(int index, int last);
     void bumpCoincidentOther(const SkOpSpan& oTest, int* index,

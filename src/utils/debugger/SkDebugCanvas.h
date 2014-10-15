@@ -145,10 +145,7 @@ public:
      */
     void toggleCommand(int index, bool toggle);
 
-    void setBounds(int width, int height) {
-        fWidth = width;
-        fHeight = height;
-    }
+    void setWindowSize(int width, int height) { fWindowSize.set(width, height); }
 
     void setUserMatrix(SkMatrix matrix) {
         fUserMatrix = matrix;
@@ -210,21 +207,16 @@ public:
 
     virtual bool isClipEmpty() const SK_OVERRIDE { return false; }
     virtual bool isClipRect() const SK_OVERRIDE { return true; }
-#ifdef SK_SUPPORT_LEGACY_GETCLIPTYPE
-    virtual ClipType getClipType() const SK_OVERRIDE {
-        return kRect_ClipType;
-    }
-#endif
     virtual bool getClipBounds(SkRect* bounds) const SK_OVERRIDE {
-        if (NULL != bounds) {
+        if (bounds) {
             bounds->setXYWH(0, 0,
-                            SkIntToScalar(this->imageInfo().fWidth),
-                            SkIntToScalar(this->imageInfo().fHeight));
+                            SkIntToScalar(this->imageInfo().width()),
+                            SkIntToScalar(this->imageInfo().height()));
         }
         return true;
     }
     virtual bool getClipDeviceBounds(SkIRect* bounds) const SK_OVERRIDE {
-        if (NULL != bounds) {
+        if (bounds) {
             bounds->setLargest();
         }
         return true;
@@ -247,6 +239,8 @@ protected:
                                 SkScalar constY, const SkPaint&) SK_OVERRIDE;
     virtual void onDrawTextOnPath(const void* text, size_t byteLength, const SkPath& path,
                                   const SkMatrix* matrix, const SkPaint&) SK_OVERRIDE;
+    virtual void onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,
+                                const SkPaint& paint) SK_OVERRIDE;
     virtual void onPushCull(const SkRect& cullRect) SK_OVERRIDE;
     virtual void onPopCull() SK_OVERRIDE;
 
@@ -255,15 +249,14 @@ protected:
     virtual void onClipPath(const SkPath&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
     virtual void onClipRegion(const SkRegion& region, SkRegion::Op) SK_OVERRIDE;
 
-    virtual void onDrawPicture(const SkPicture* picture) SK_OVERRIDE;
+    virtual void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) SK_OVERRIDE;
 
     void markActiveCommands(int index);
 
 private:
     SkTDArray<SkDrawCommand*> fCommandVector;
     SkPicture* fPicture;
-    int fWidth;
-    int fHeight;
+    SkISize fWindowSize;
     bool fFilter;
     bool fMegaVizMode;
     int fIndex;
@@ -315,7 +308,7 @@ private:
 
     size_t getOpID() const {
 #if 0
-        if (NULL != fPicture) {
+        if (fPicture) {
             return fPicture->EXPERIMENTAL_curOpID();
         }
 #endif

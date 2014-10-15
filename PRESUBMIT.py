@@ -20,6 +20,7 @@ REVERT_CL_SUBJECT_PREFIX = 'Revert '
 
 SKIA_TREE_STATUS_URL = 'http://skia-tree-status.appspot.com'
 
+# Please add the complete email address here (and not just 'xyz@' or 'xyz').
 PUBLIC_API_OWNERS = (
     'reed@chromium.org',
     'reed@google.com',
@@ -188,11 +189,12 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
   """
   results = []
   requires_owner_check = False
-  for affected_svn_file in input_api.AffectedFiles():
-    affected_file_path = affected_svn_file.AbsoluteLocalPath()
+  for affected_file in input_api.AffectedFiles():
+    affected_file_path = affected_file.LocalPath()
     file_path, file_ext = os.path.splitext(affected_file_path)
-    # We only care about files that end in .h and are under the include dir.
-    if file_ext == '.h' and 'include' in file_path.split(os.path.sep):
+    # We only care about files that end in .h and are under the top-level
+    # include dir.
+    if file_ext == '.h' and 'include' == file_path.split(os.path.sep)[0]:
       requires_owner_check = True
 
   if not requires_owner_check:
@@ -206,6 +208,16 @@ def _CheckLGTMsForPublicAPI(input_api, output_api):
     if re.match(REVERT_CL_SUBJECT_PREFIX, issue_properties['subject'], re.I):
       # It is a revert CL, ignore the public api owners check.
       return results
+
+    match = re.search(r'^TBR=(.*)$', issue_properties['description'], re.M)
+    if match:
+      tbr_entries = match.group(1).strip().split(',')
+      for owner in PUBLIC_API_OWNERS:
+        if owner in tbr_entries or owner.split('@')[0] in tbr_entries:
+          # If an owner is specified in the TBR= line then ignore the public
+          # api owners check.
+          return results
+
     if issue_properties['owner_email'] in PUBLIC_API_OWNERS:
       # An owner created the CL that is an automatic LGTM.
       lgtm_from_owner = True

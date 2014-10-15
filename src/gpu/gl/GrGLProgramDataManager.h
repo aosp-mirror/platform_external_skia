@@ -17,7 +17,7 @@
 class GrGpuGL;
 class SkMatrix;
 class GrGLProgram;
-class GrGLShaderBuilder;
+class GrGLProgramBuilder;
 
 /** Manages the resources used by a shader program.
  * The resources are objects the program uses to communicate with the
@@ -26,35 +26,48 @@ class GrGLShaderBuilder;
 class GrGLProgramDataManager : public SkRefCnt {
 public:
     // Opaque handle to a uniform
-    class UniformHandle {
+    class ShaderResourceHandle {
+    public:
+        bool isValid() const { return -1 != fValue; }
+        ShaderResourceHandle()
+            : fValue(-1) {
+        }
+    protected:
+        ShaderResourceHandle(int value)
+            : fValue(value) {
+            SkASSERT(isValid());
+        }
+        int fValue;
+    };
+
+    class UniformHandle : public ShaderResourceHandle {
     public:
         /** Creates a reference to an unifrom of a GrGLShaderBuilder.
          * The ref can be used to set the uniform with corresponding the GrGLProgramDataManager.*/
         static UniformHandle CreateFromUniformIndex(int i);
-
-        bool isValid() const { return -1 != fValue; }
-
+        UniformHandle() { }
         bool operator==(const UniformHandle& other) const { return other.fValue == fValue; }
-
-        UniformHandle()
-            : fValue(-1) {
-        }
-
     private:
-        UniformHandle(int value)
-            : fValue(value) {
-            SkASSERT(isValid());
-        }
-
+        UniformHandle(int value) : ShaderResourceHandle(value) { }
         int toProgramDataIndex() const { SkASSERT(isValid()); return fValue; }
         int toShaderBuilderIndex() const { return toProgramDataIndex(); }
 
-        int fValue;
         friend class GrGLProgramDataManager; // For accessing toProgramDataIndex().
-        friend class GrGLShaderBuilder; // For accessing toShaderBuilderIndex().
+        friend class GrGLProgramBuilder; // For accessing toShaderBuilderIndex().
     };
 
-    GrGLProgramDataManager(GrGpuGL*, GrGLProgram*, const GrGLShaderBuilder&);
+    struct UniformInfo {
+        GrGLShaderVar fVariable;
+        uint32_t      fVisibility;
+        GrGLint       fLocation;
+    };
+
+    // This uses an allocator rather than array so that the GrGLShaderVars don't move in memory
+    // after they are inserted. Users of GrGLShaderBuilder get refs to the vars and ptrs to their
+    // name strings. Otherwise, we'd have to hand out copies.
+    typedef GrTAllocator<UniformInfo> UniformInfoArray;
+
+    GrGLProgramDataManager(GrGpuGL*, const UniformInfoArray&);
 
     /** Functions for uploading uniform values. The varities ending in v can be used to upload to an
      *  array of uniforms. arrayCount must be <= the array count of the uniform.
@@ -97,5 +110,4 @@ private:
 
     typedef SkRefCnt INHERITED;
 };
-
 #endif

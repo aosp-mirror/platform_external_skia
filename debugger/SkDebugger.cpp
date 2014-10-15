@@ -13,10 +13,8 @@
 
 SkDebugger::SkDebugger() {
     // Create this some other dynamic way?
-    fDebugCanvas = new SkDebugCanvas(100, 100);
+    fDebugCanvas = new SkDebugCanvas(0, 0);
     fPicture = NULL;
-    fPictureWidth = 0;
-    fPictureHeight = 0;
     fIndex = 0;
 }
 
@@ -27,23 +25,23 @@ SkDebugger::~SkDebugger() {
 }
 
 void SkDebugger::loadPicture(SkPicture* picture) {
-    fPictureWidth = picture->width();
-    fPictureHeight = picture->height();
+    SkRefCnt_SafeAssign(fPicture, picture);
+
     delete fDebugCanvas;
-    fDebugCanvas = new SkDebugCanvas(fPictureWidth, fPictureHeight);
-    fDebugCanvas->setBounds(fPictureWidth, fPictureHeight);
+    fDebugCanvas = new SkDebugCanvas(SkScalarCeilToInt(this->pictureCull().width()), 
+                                     SkScalarCeilToInt(this->pictureCull().height()));
     fDebugCanvas->setPicture(picture);
-    picture->draw(fDebugCanvas);
+    picture->playback(fDebugCanvas);
     fDebugCanvas->setPicture(NULL);
     fIndex = fDebugCanvas->getSize() - 1;
-    SkRefCnt_SafeAssign(fPicture, picture);
 }
 
 SkPicture* SkDebugger::copyPicture() {
     // We can't just call clone here since we want to removed the "deleted"
     // commands. Playing back will strip those out.
     SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(fPictureWidth, fPictureHeight, NULL, 0);
+    SkCanvas* canvas = recorder.beginRecording(this->pictureCull().width(), 
+                                               this->pictureCull().height());
 
     bool vizMode = fDebugCanvas->getMegaVizMode();
     fDebugCanvas->setMegaVizMode(false);
@@ -100,7 +98,7 @@ void SkDebugger::getOverviewText(const SkTDArray<double>* typeTimes,
         overview->append(SkDrawCommand::GetCommandString((DrawType) i));
         overview->append(": ");
         overview->appendS32(counts[i]);
-        if (NULL != typeTimes && totTime >= 0.0) {
+        if (typeTimes && totTime >= 0.0) {
             overview->append(" - ");
             overview->appendf("%.2f", (*typeTimes)[i]/(float)numRuns);
             overview->append("ms");
@@ -117,7 +115,7 @@ void SkDebugger::getOverviewText(const SkTDArray<double>* typeTimes,
         total += counts[i];
     }
 #ifdef SK_DEBUG
-    if (NULL != typeTimes) {
+    if (typeTimes) {
         SkASSERT(SkScalarNearlyEqual(SkDoubleToScalar(totPercent),
                                      SkDoubleToScalar(100.0)));
         SkASSERT(SkScalarNearlyEqual(SkDoubleToScalar(tempSum),
@@ -143,13 +141,15 @@ void SkDebugger::getOverviewText(const SkTDArray<double>* typeTimes,
     totalStr.append("<br/>");
     overview->insert(0, totalStr);
 
+    overview->append("<br/>SkPicture L: ");
+    overview->appendScalar(this->pictureCull().fLeft);
+    overview->append(" T: ");
+    overview->appendScalar(this->pictureCull().fTop);
+    overview->append(" R: ");
+    overview->appendScalar(this->pictureCull().fRight);
+    overview->append(" B: ");
+    overview->appendScalar(this->pictureCull().fBottom);
     overview->append("<br/>");
-    overview->append("SkPicture Width: ");
-    overview->appendS32(pictureWidth());
-    overview->append("px<br/>");
-    overview->append("SkPicture Height: ");
-    overview->appendS32(pictureHeight());
-    overview->append("px");
 }
 
 void SkDebugger::getClipStackText(SkString* clipStack) {

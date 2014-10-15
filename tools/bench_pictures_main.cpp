@@ -54,7 +54,12 @@ DEFINE_bool(trackDeferredCaching, false, "Only meaningful with --deferImageDecod
             "SK_LAZY_CACHE_STATS set to true. Report percentage of cache hits when using "
             "deferred image decoding.");
 
-DEFINE_bool(preprocess, false, "If true, perform device specific preprocessing before timing.");
+#if GR_GPU_STATS
+DEFINE_bool(gpuStats, false, "Only meaningful with gpu configurations. "
+            "Report some GPU call statistics.");
+#endif
+
+DEFINE_bool(mpd, false, "If true, use MultiPictureDraw to render.");
 
 // Buildbot-specific parameters
 DEFINE_string(builderName, "", "Name of the builder this is running on.");
@@ -199,9 +204,11 @@ static bool run_single_benchmark(const SkString& inputPath,
 
     SkString filename = SkOSPath::Basename(inputPath.c_str());
 
-    gWriter.bench(filename.c_str(), picture->width(), picture->height());
+    gWriter.bench(filename.c_str(), 
+                  SkScalarCeilToInt(picture->cullRect().width()), 
+                  SkScalarCeilToInt(picture->cullRect().height()));
 
-    benchmark.run(picture);
+    benchmark.run(picture, FLAGS_mpd);
 
 #if SK_LAZY_CACHE_STATS
     if (FLAGS_trackDeferredCaching) {
@@ -348,7 +355,6 @@ static void setup_benchmark(sk_tools::PictureBenchmark* benchmark) {
     }
 
     benchmark->setPurgeDecodedTex(FLAGS_purgeDecodedTex);
-    benchmark->setPreprocess(FLAGS_preprocess);
 
     if (FLAGS_readPath.count() < 1) {
         gLogger.logError(".skp files or directories are required.\n");
@@ -464,6 +470,15 @@ int tool_main(int argc, char** argv) {
                  (double) gTotalCacheHits / (gTotalCacheHits + gTotalCacheMisses));
     }
 #endif
+
+#if GR_GPU_STATS
+    if (FLAGS_gpuStats && benchmark.renderer()->isUsingGpuDevice()) {
+        GrContext* ctx = benchmark.renderer()->getGrContext();
+        SkDebugf("RenderTarget Binds: %d\n", ctx->gpuStats()->renderTargetBinds());
+        SkDebugf("Shader Compilations: %d\n", ctx->gpuStats()->shaderCompilations());
+    }
+#endif
+
     gWriter.end();
     return 0;
 }

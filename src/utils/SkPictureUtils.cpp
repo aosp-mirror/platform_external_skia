@@ -132,8 +132,8 @@ public:
         this->addBitmapFromPaint(paint);
     }
     virtual void drawPosText(const SkDraw&, const void* text, size_t len,
-                             const SkScalar pos[], SkScalar constY,
-                             int, const SkPaint& paint) SK_OVERRIDE {
+                             const SkScalar pos[], int,
+                             const SkPoint&, const SkPaint& paint) SK_OVERRIDE {
         this->addBitmapFromPaint(paint);
     }
     virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
@@ -196,16 +196,16 @@ SkData* SkPictureUtils::GatherPixelRefs(const SkPicture* pict, const SkRect& are
     }
 
     // this test also handles if either area or pict's width/height are empty
-    if (!SkRect::Intersects(area,
-                            SkRect::MakeWH(SkIntToScalar(pict->width()),
-                                           SkIntToScalar(pict->height())))) {
+    if (!SkRect::Intersects(area, pict->cullRect())) {
         return NULL;
     }
 
     SkTDArray<SkPixelRef*> array;
     PixelRefSet prset(&array);
 
-    GatherPixelRefDevice device(pict->width(), pict->height(), &prset);
+    GatherPixelRefDevice device(SkScalarCeilToInt(pict->cullRect().width()), 
+                                SkScalarCeilToInt(pict->cullRect().height()), 
+                                &prset);
     SkNoSaveLayerCanvas canvas(&device);
 
     canvas.clipRect(area, SkRegion::kIntersect_Op, false);

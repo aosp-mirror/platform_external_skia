@@ -11,6 +11,7 @@
 #include "SkCanvas.h"
 #include "SkRecord.h"
 #include "SkRecords.h"
+#include "SkTDArray.h"
 
 // SkRecorder provides an SkCanvas interface for recording into an SkRecord.
 
@@ -64,7 +65,8 @@ public:
 
     void willSave() SK_OVERRIDE;
     SaveLayerStrategy willSaveLayer(const SkRect*, const SkPaint*, SkCanvas::SaveFlags) SK_OVERRIDE;
-    void willRestore() SK_OVERRIDE;
+    void willRestore() SK_OVERRIDE {}
+    void didRestore() SK_OVERRIDE;
 
     void didConcat(const SkMatrix&) SK_OVERRIDE;
     void didSetMatrix(const SkMatrix&) SK_OVERRIDE;
@@ -89,24 +91,49 @@ public:
                           const SkPath& path,
                           const SkMatrix* matrix,
                           const SkPaint& paint) SK_OVERRIDE;
+    void onDrawTextBlob(const SkTextBlob* blob,
+                        SkScalar x,
+                        SkScalar y,
+                        const SkPaint& paint) SK_OVERRIDE;
+    void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
+                     const SkPoint texCoords[4], SkXfermode* xmode,
+                     const SkPaint& paint) SK_OVERRIDE;
+
     void onClipRect(const SkRect& rect, SkRegion::Op op, ClipEdgeStyle edgeStyle) SK_OVERRIDE;
     void onClipRRect(const SkRRect& rrect, SkRegion::Op op, ClipEdgeStyle edgeStyle) SK_OVERRIDE;
     void onClipPath(const SkPath& path, SkRegion::Op op, ClipEdgeStyle edgeStyle) SK_OVERRIDE;
     void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE;
 
-    void onDrawPicture(const SkPicture* picture) SK_OVERRIDE;
+    void onDrawPicture(const SkPicture*, const SkMatrix*, const SkPaint*) SK_OVERRIDE;
 
     void onPushCull(const SkRect& cullRect) SK_OVERRIDE;
     void onPopCull() SK_OVERRIDE;
+
+    void beginCommentGroup(const char*) SK_OVERRIDE;
+    void addComment(const char*, const char*) SK_OVERRIDE;
+    void endCommentGroup() SK_OVERRIDE;
+    void drawData(const void*, size_t) SK_OVERRIDE;
+
+    bool isDrawingToLayer() const SK_OVERRIDE;
+    SkSurface* onNewSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE { return NULL; }
 
 private:
     template <typename T>
     T* copy(const T*);
 
     template <typename T>
-    T* copy(const T[], unsigned count);
+    T* copy(const T[], size_t count);
+
+    SkIRect devBounds() const {
+        SkIRect devBounds;
+        this->getClipDeviceBounds(&devBounds);
+        return devBounds;
+    }
 
     SkRecord* fRecord;
+
+    int fSaveLayerCount;
+    SkTDArray<SkBool8> fSaveIsSaveLayer;
 };
 
 #endif//SkRecorder_DEFINED

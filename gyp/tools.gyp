@@ -15,8 +15,6 @@
       'dependencies': [
         'bbh_shootout',
         'bench_pictures',
-        'bench_record',
-        'bench_playback',
         'dump_record',
         'filter',
         'gpuveto',
@@ -167,13 +165,16 @@
         '../tools/skpdiff/SkImageDiffer.cpp',
         '../tools/skpdiff/SkPMetric.cpp',
         '../tools/skpdiff/skpdiff_util.cpp',
+        '../src/utils/SkTaskGroup.cpp',
       ],
       'include_dirs': [
         '../src/core/', # needed for SkTLList.h
+        '../tools/',    # needed for picture_utils::replace_char
       ],
       'dependencies': [
         'flags.gyp:flags',
         'skia_lib.gyp:skia_lib',
+        'tools.gyp:picture_utils',
       ],
       'cflags': [
         '-O3',
@@ -385,7 +386,6 @@
       'sources': [
         '../bench/BenchLogger.cpp',
         '../bench/BenchLogger.h',
-        '../bench/ResultsWriter.cpp',
         '../tools/PictureBenchmark.cpp',
         '../tools/PictureResultsWriter.h',
         '../tools/bench_pictures_main.cpp',
@@ -408,40 +408,6 @@
         ['skia_android_framework == 1', {
           'libraries': [ '-lskia' ],
         }],
-      ],
-    },
-    {
-      'target_name': 'bench_record',
-      'type': 'executable',
-      'sources': [
-        '../tools/bench_record.cpp',
-        '../tools/LazyDecodeBitmap.cpp',
-      ],
-      'include_dirs': [
-        '../src/core/',
-        '../src/images',
-        '../src/lazy',
-      ],
-      'dependencies': [
-        'timer',
-        'flags.gyp:flags',
-        'skia_lib.gyp:skia_lib',
-      ],
-    },
-    {
-      'target_name': 'bench_playback',
-      'type': 'executable',
-      'sources': [
-        '../tools/bench_playback.cpp',
-      ],
-      'include_dirs': [
-        '../src/core/',
-        '../src/images',
-      ],
-      'dependencies': [
-        'timer',
-        'flags.gyp:flags',
-        'skia_lib.gyp:skia_lib',
       ],
     },
     {
@@ -517,17 +483,18 @@
       'type': 'executable',
       'sources': [
         '../tools/render_pdfs_main.cpp',
-        '../tools/PdfRenderer.cpp',
-        '../tools/PdfRenderer.h',
       ],
       'include_dirs': [
+        '../src/core',
         '../src/pipe/utils/',
         '../src/utils/',
       ],
       'dependencies': [
+        'flags.gyp:flags',
         'pdf.gyp:pdf',
         'skia_lib.gyp:skia_lib',
         'tools.gyp:picture_utils',
+        'tools.gyp:proc_stats',
       ],
       'conditions': [
         ['skia_win_debuggers_path and skia_os == "win"',
@@ -643,6 +610,17 @@
       'dependencies': [
         'skia_lib.gyp:skia_lib',
       ],
+    },
+    {
+      'target_name': 'proc_stats',
+      'type': 'static_library',
+      'sources': [
+        '../tools/ProcStats.h',
+        '../tools/ProcStats.cpp',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [ '../tools', ],
+      },
     },
   ],
   'conditions': [

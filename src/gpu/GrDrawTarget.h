@@ -12,6 +12,7 @@
 #include "GrContext.h"
 #include "GrDrawState.h"
 #include "GrIndexBuffer.h"
+#include "GrPathRendering.h"
 #include "GrTraceMarker.h"
 
 #include "SkClipStack.h"
@@ -35,6 +36,9 @@ protected:
 
 public:
     SK_DECLARE_INST_COUNT(GrDrawTarget)
+
+
+    typedef GrPathRendering::PathTransformType PathTransformType ;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -84,32 +88,13 @@ public:
      */
     GrDrawState* drawState() { return fDrawState; }
 
-    /**
-     * Color alpha and coverage are two inputs to the drawing pipeline. For some
-     * blend modes it is safe to fold the coverage into constant or per-vertex
-     * color alpha value. For other blend modes they must be handled separately.
-     * Depending on features available in the underlying 3D API this may or may
-     * not be possible.
-     *
-     * This function considers the current draw state and the draw target's
-     * capabilities to determine whether coverage can be handled correctly. The
-     * following assumptions are made:
-     *    1. The caller intends to somehow specify coverage. This can be
-     *       specified either by enabling a coverage stage on the GrDrawState or
-     *       via the vertex layout.
-     *    2. Other than enabling coverage stages or enabling coverage in the
-     *       layout, the current configuration of the target's GrDrawState is as
-     *       it will be at draw time.
-     */
-    bool canApplyCoverage() const;
-
     /** When we're using coverage AA but the blend is incompatible (given gpu
      * limitations) we should disable AA. */
-    bool shouldDisableCoverageAAForBlend() {
+    bool shouldDisableCoverageAAForBlend() const {
         // Enable below if we should draw with AA even when it produces
         // incorrect blending.
         // return false;
-        return !this->canApplyCoverage();
+        return !this->getDrawState().couldApplyCoverage(*this->caps());
     }
 
     /**
@@ -349,40 +334,13 @@ public:
      * @param count           Number of paths to draw (length of indices array)
      * @param transforms      Array of individual transforms, one for each path
      * @param transformsType  Type of transformations in the array. Array contains
-                              PathTransformSize(transformsType) × count elements
+                              PathTransformSize(transformsType) * count elements
      * @param fill            Fill type for drawing all the paths
      */
-    enum PathTransformType {
-        kNone_PathTransformType,        //!< []
-        kTranslateX_PathTransformType,  //!< [kMTransX]
-        kTranslateY_PathTransformType,  //!< [kMTransY]
-        kTranslate_PathTransformType,   //!< [kMTransX, kMTransY]
-        kAffine_PathTransformType,      //!< [kMScaleX, kMSkewX, kMTransX, kMSkewY, kMScaleY, kMTransY]
-
-        kLast_PathTransformType = kAffine_PathTransformType
-    };
     void drawPaths(const GrPathRange* pathRange,
                    const uint32_t indices[], int count,
                    const float transforms[], PathTransformType transformsType,
                    SkPath::FillType fill);
-
-    static inline int PathTransformSize(PathTransformType type) {
-        switch (type) {
-            case kNone_PathTransformType:
-                return 0;
-            case kTranslateX_PathTransformType:
-            case kTranslateY_PathTransformType:
-                return 1;
-            case kTranslate_PathTransformType:
-                return 2;
-            case kAffine_PathTransformType:
-                return 6;
-
-            default:
-                SkFAIL("Unknown path transform type");
-                return 0;
-        }
-    }
 
     /**
      * Helper function for drawing rects. It performs a geometry src push and pop
@@ -635,7 +593,7 @@ public:
         bool set(GrDrawTarget*  target,
                  int            vertexCount,
                  int            indexCount);
-        bool succeeded() const { return NULL != fTarget; }
+        bool succeeded() const { return SkToBool(fTarget); }
         void* vertices() const { SkASSERT(this->succeeded()); return fVertices; }
         void* indices() const { SkASSERT(this->succeeded()); return fIndices; }
         SkPoint* positions() const {
@@ -681,7 +639,7 @@ public:
     public:
         AutoGeometryPush(GrDrawTarget* target)
             : fAttribRestore(target->drawState()) {
-            SkASSERT(NULL != target);
+            SkASSERT(target);
             fTarget = target;
             target->pushGeometrySource();
         }
@@ -703,7 +661,7 @@ public:
                                  ASRInit init,
                                  const SkMatrix* viewMatrix = NULL)
             : fState(target, init, viewMatrix) {
-            SkASSERT(NULL != target);
+            SkASSERT(target);
             fTarget = target;
             target->pushGeometrySource();
             if (kPreserve_ASRInit == init) {
@@ -725,7 +683,7 @@ public:
         DrawToken(GrDrawTarget* drawTarget, uint32_t drawID) :
                   fDrawTarget(drawTarget), fDrawID(drawID) {}
 
-        bool isIssued() { return NULL != fDrawTarget && fDrawTarget->isIssued(fDrawID); }
+        bool isIssued() { return fDrawTarget && fDrawTarget->isIssued(fDrawID); }
 
     private:
         GrDrawTarget*  fDrawTarget;
@@ -736,6 +694,10 @@ public:
     virtual DrawToken getCurrentDrawToken() { return DrawToken(this, 0); }
 
 protected:
+    // Extend access to GrDrawState::convertToPEndeingExec to subclasses.
+    void convertDrawStateToPendingExec(GrDrawState* ds) {
+        ds->convertToPendingExec();
+    }
 
     enum GeometrySrcType {
         kNone_GeometrySrcType,     //<! src has not been specified
@@ -864,7 +826,7 @@ protected:
 
         // NULL if no copy of the dst is needed for the draw.
         const GrDeviceCoordTexture* getDstCopy() const {
-            if (NULL != fDstCopy.texture()) {
+            if (fDstCopy.texture()) {
                 return &fDstCopy;
             } else {
                 return NULL;
@@ -892,6 +854,14 @@ protected:
 
         GrDeviceCoordTexture    fDstCopy;
     };
+
+    // Makes a copy of the dst if it is necessary for the draw. Returns false if a copy is required
+    // but couldn't be made. Otherwise, returns true.  This method needs to be protected because it
+    // needs to be accessed by GLPrograms to setup a correct drawstate
+    bool setupDstReadIfNecessary(DrawInfo* info) {
+        return this->setupDstReadIfNecessary(&info->fDstCopy, info->getDevBounds());
+    }
+    bool setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const SkRect* drawBounds);
 
 private:
     // A subclass can optionally overload this function to be notified before
@@ -950,13 +920,6 @@ private:
     // called when setting a new vert/idx source to unref prev vb/ib
     void releasePreviousVertexSource();
     void releasePreviousIndexSource();
-
-    // Makes a copy of the dst if it is necessary for the draw. Returns false if a copy is required
-    // but couldn't be made. Otherwise, returns true.
-    bool setupDstReadIfNecessary(DrawInfo* info) {
-        return this->setupDstReadIfNecessary(&info->fDstCopy, info->getDevBounds());
-    }
-    bool setupDstReadIfNecessary(GrDeviceCoordTexture* dstCopy, const SkRect* drawBounds);
 
     // Check to see if this set of draw commands has been sent out
     virtual bool       isIssued(uint32_t drawID) { return true; }

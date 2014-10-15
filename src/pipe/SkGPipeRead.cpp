@@ -21,10 +21,12 @@
 #include "SkImageFilter.h"
 #include "SkMaskFilter.h"
 #include "SkReadBuffer.h"
+#include "SkPatchUtils.h"
 #include "SkPathEffect.h"
 #include "SkRasterizer.h"
 #include "SkRRect.h"
 #include "SkShader.h"
+#include "SkTextBlob.h"
 #include "SkTypeface.h"
 #include "SkXfermode.h"
 
@@ -192,8 +194,8 @@ public:
         *fTypefaces.append() = SkTypeface::Deserialize(&stream);
     }
 
-    void setTypeface(SkPaint* paint, unsigned id) {
-        paint->setTypeface(id ? fTypefaces[id - 1] : NULL);
+    SkTypeface* getTypeface(unsigned id) const {
+        return id ? fTypefaces[id - 1] : NULL;
     }
 
 private:
@@ -401,6 +403,34 @@ static void drawDRRect_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     reader->readRRect(&inner);
     if (state->shouldDraw()) {
         canvas->drawDRRect(outer, inner, state->paint());
+    }
+}
+
+static void drawPatch_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
+                         SkGPipeState* state) {
+    
+    unsigned flags = DrawOp_unpackFlags(op32);
+    
+    const SkPoint* cubics = skip<SkPoint>(reader, SkPatchUtils::kNumCtrlPts);
+    
+    const SkColor* colors = NULL;
+    if (flags & kDrawVertices_HasColors_DrawOpFlag) {
+        colors = skip<SkColor>(reader, SkPatchUtils::kNumCorners);
+    }
+    const SkPoint* texCoords = NULL;
+    if (flags & kDrawVertices_HasTexs_DrawOpFlag) {
+        texCoords = skip<SkPoint>(reader, SkPatchUtils::kNumCorners);
+    }
+    SkAutoTUnref<SkXfermode> xfer;
+    if (flags & kDrawVertices_HasXfermode_DrawOpFlag) {
+        int mode = reader->readInt();
+        if (mode < 0 || mode > SkXfermode::kLastMode) {
+            mode = SkXfermode::kModulate_Mode;
+        }
+        xfer.reset(SkXfermode::Create((SkXfermode::Mode)mode));
+    }
+    if (state->shouldDraw()) {
+        canvas->drawPatch(cubics, colors, texCoords, xfer, state->paint());
     }
 }
 
@@ -641,6 +671,33 @@ static void drawPicture_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     UNIMPLEMENTED
 }
 
+static void drawTextBlob_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
+                            SkGPipeState* state) {
+    SkScalar x = reader->readScalar();
+    SkScalar y = reader->readScalar();
+
+    int typefaceCount = reader->readU32();
+    SkAutoSTMalloc<16, SkTypeface*> typefaceArray(typefaceCount);
+    if (state->getFlags() & SkGPipeWriter::kCrossProcess_Flag) {
+        for (int i = 0; i < typefaceCount; ++i) {
+            typefaceArray[i] = state->getTypeface(reader->readU32());
+        }
+    } else {
+        reader->read(typefaceArray.get(), typefaceCount * sizeof(SkTypeface*));
+    }
+
+    size_t blobSize = reader->readU32();
+    const void* data = reader->skip(SkAlign4(blobSize));
+
+    if (state->shouldDraw()) {
+        SkReadBuffer blobBuffer(data, blobSize);
+        blobBuffer.setTypefaceArray(typefaceArray.get(), typefaceCount);
+        SkAutoTUnref<const SkTextBlob> blob(SkTextBlob::CreateFromBuffer(blobBuffer));
+        SkASSERT(blob.get());
+
+        canvas->drawTextBlob(blob, x, y, state->paint());
+    }
+}
 ///////////////////////////////////////////////////////////////////////////////
 
 static void paintOp_rp(SkCanvas*, SkReader32* reader, uint32_t op32,
@@ -685,7 +742,8 @@ static void paintOp_rp(SkCanvas*, SkReader32* reader, uint32_t op32,
             case kTypeface_PaintOp:
                 SkASSERT(SkToBool(state->getFlags() &
                                   SkGPipeWriter::kCrossProcess_Flag));
-                state->setTypeface(p, data); break;
+                p->setTypeface(state->getTypeface(data));
+                break;
             default: SkDEBUGFAIL("bad paintop"); return;
         }
         SkASSERT(reader->offset() <= stop);
@@ -775,6 +833,7 @@ static const ReadProc gReadTable[] = {
     drawDRRect_rp,
     drawOval_rp,
     drawPaint_rp,
+    drawPatch_rp,
     drawPath_rp,
     drawPicture_rp,
     drawPoints_rp,
@@ -784,6 +843,7 @@ static const ReadProc gReadTable[] = {
     drawRRect_rp,
     drawSprite_rp,
     drawText_rp,
+    drawTextBlob_rp,
     drawTextOnPath_rp,
     drawVertices_rp,
     restore_rp,

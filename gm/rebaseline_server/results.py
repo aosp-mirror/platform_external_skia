@@ -15,7 +15,7 @@ import os
 import re
 
 # Must fix up PYTHONPATH before importing from within Skia
-import fix_pythonpath  # pylint: disable=W0611
+import rs_fixpypath  # pylint: disable=W0611
 
 # Imports from within Skia
 import gm_json
@@ -23,7 +23,7 @@ import imagepairset
 
 # Keys used to link an image to a particular GM test.
 # NOTE: Keep these in sync with static/constants.js
-VALUE__HEADER__SCHEMA_VERSION = 4
+VALUE__HEADER__SCHEMA_VERSION = 5
 KEY__EXPECTATIONS__BUGS = gm_json.JSONKEY_EXPECTEDRESULTS_BUGS
 KEY__EXPECTATIONS__IGNOREFAILURE = gm_json.JSONKEY_EXPECTEDRESULTS_IGNOREFAILURE
 KEY__EXPECTATIONS__REVIEWED = gm_json.JSONKEY_EXPECTEDRESULTS_REVIEWED
@@ -38,6 +38,8 @@ KEY__HEADER__IS_STILL_LOADING = 'resultsStillLoading'
 KEY__HEADER__RESULTS_ALL = 'all'
 KEY__HEADER__RESULTS_FAILURES = 'failures'
 KEY__HEADER__SCHEMA_VERSION = 'schemaVersion'
+KEY__HEADER__SET_A_DESCRIPTIONS = 'setA'
+KEY__HEADER__SET_B_DESCRIPTIONS = 'setB'
 KEY__HEADER__TIME_NEXT_UPDATE_AVAILABLE = 'timeNextUpdateAvailable'
 KEY__HEADER__TIME_UPDATED = 'timeUpdated'
 KEY__HEADER__TYPE = 'type'
@@ -45,6 +47,9 @@ KEY__RESULT_TYPE__FAILED = gm_json.JSONKEY_ACTUALRESULTS_FAILED
 KEY__RESULT_TYPE__FAILUREIGNORED = gm_json.JSONKEY_ACTUALRESULTS_FAILUREIGNORED
 KEY__RESULT_TYPE__NOCOMPARISON = gm_json.JSONKEY_ACTUALRESULTS_NOCOMPARISON
 KEY__RESULT_TYPE__SUCCEEDED = gm_json.JSONKEY_ACTUALRESULTS_SUCCEEDED
+KEY__SET_DESCRIPTIONS__DIR = 'dir'
+KEY__SET_DESCRIPTIONS__REPO_REVISION = 'repoRevision'
+KEY__SET_DESCRIPTIONS__SECTION = 'section'
 
 IMAGE_FILENAME_RE = re.compile(gm_json.IMAGE_FILENAME_PATTERN)
 IMAGE_FILENAME_FORMATTER = '%s_%s.png'  # pass in (testname, config)
@@ -67,6 +72,11 @@ DEFAULT_SKIP_BUILDERS_PATTERN_LIST = [
 class BaseComparisons(object):
   """Base class for generating summary of comparisons between two image sets.
   """
+
+  def __init__(self):
+    """Base constructor; most subclasses will override."""
+    self._setA_descriptions = None
+    self._setB_descriptions = None
 
   def get_results_of_type(self, results_type):
     """Return results of some/all tests (depending on 'results_type' parameter).
@@ -94,7 +104,7 @@ class BaseComparisons(object):
     """
     response_dict = self._results[results_type]
     time_updated = self.get_timestamp()
-    response_dict[imagepairset.KEY__ROOT__HEADER] = {
+    header_dict = {
         KEY__HEADER__SCHEMA_VERSION: (
             VALUE__HEADER__SCHEMA_VERSION),
 
@@ -119,6 +129,11 @@ class BaseComparisons(object):
         # Whether the service is accessible from other hosts.
         KEY__HEADER__IS_EXPORTED: is_exported,
     }
+    if self._setA_descriptions:
+      header_dict[KEY__HEADER__SET_A_DESCRIPTIONS] = self._setA_descriptions
+    if self._setB_descriptions:
+      header_dict[KEY__HEADER__SET_B_DESCRIPTIONS] = self._setB_descriptions
+    response_dict[imagepairset.KEY__ROOT__HEADER] = header_dict
     return response_dict
 
   def get_timestamp(self):
@@ -198,7 +213,7 @@ class BaseComparisons(object):
     Raises:
       IOError if root does not refer to an existing directory
     """
-    # I considered making this call _read_dicts_from_root(), but I decided
+    # I considered making this call read_dicts_from_root(), but I decided
     # it was better to prune out the ignored builders within the os.walk().
     if not os.path.isdir(root):
       raise IOError('no directory found at path %s' % root)
@@ -212,8 +227,12 @@ class BaseComparisons(object):
         meta_dict[builder] = gm_json.LoadFromFile(full_path)
     return meta_dict
 
-  def _read_dicts_from_root(self, root, pattern='*.json'):
+  @staticmethod
+  def read_dicts_from_root(root, pattern='*.json'):
     """Read all JSON dictionaries within a directory tree.
+
+    TODO(stephana): Factor this out into a utility module, as a standalone
+    function (not part of a class).
 
     Args:
       root: path to root of directory tree

@@ -11,8 +11,8 @@
 #include "SkBitmap.h"
 #include "SkPathHeap.h"
 #include "SkPicture.h"
+#include "SkPictureContentInfo.h"
 #include "SkPictureFlat.h"
-#include "SkPictureStateTree.h"
 
 class SkData;
 class SkPictureRecord;
@@ -23,8 +23,8 @@ class SkBBoxHierarchy;
 class SkMatrix;
 class SkPaint;
 class SkPath;
-class SkPictureStateTree;
 class SkReadBuffer;
+class SkTextBlob;
 
 struct SkPictInfo {
     enum Flags {
@@ -35,8 +35,7 @@ struct SkPictInfo {
 
     char        fMagic[8];
     uint32_t    fVersion;
-    uint32_t    fWidth;
-    uint32_t    fHeight;
+    SkRect      fCullRect;
     uint32_t    fFlags;
 };
 
@@ -48,90 +47,16 @@ struct SkPictInfo {
 // This tag specifies the size of the ReadBuffer, needed for the following tags
 #define SK_PICT_BUFFER_SIZE_TAG     SkSetFourByteTag('a', 'r', 'a', 'y')
 // these are all inside the ARRAYS tag
-#define SK_PICT_BITMAP_BUFFER_TAG  SkSetFourByteTag('b', 't', 'm', 'p')
-#define SK_PICT_PAINT_BUFFER_TAG   SkSetFourByteTag('p', 'n', 't', ' ')
-#define SK_PICT_PATH_BUFFER_TAG    SkSetFourByteTag('p', 't', 'h', ' ')
+#define SK_PICT_BITMAP_BUFFER_TAG   SkSetFourByteTag('b', 't', 'm', 'p')
+#define SK_PICT_PAINT_BUFFER_TAG    SkSetFourByteTag('p', 'n', 't', ' ')
+#define SK_PICT_PATH_BUFFER_TAG     SkSetFourByteTag('p', 't', 'h', ' ')
+#define SK_PICT_TEXTBLOB_BUFFER_TAG SkSetFourByteTag('b', 'l', 'o', 'b')
 
 // Always write this guy last (with no length field afterwards)
 #define SK_PICT_EOF_TAG     SkSetFourByteTag('e', 'o', 'f', ' ')
 
-// SkPictureContentInfo is not serialized! It is intended solely for use
-// with suitableForGpuRasterization.
-class SkPictureContentInfo {
-public:
-    SkPictureContentInfo() { this->reset(); }
-
-    SkPictureContentInfo(const SkPictureContentInfo& src) { this->set(src); }
-
-    void set(const SkPictureContentInfo& src) {
-        fNumPaintWithPathEffectUses = src.fNumPaintWithPathEffectUses;
-        fNumFastPathDashEffects = src.fNumFastPathDashEffects;
-        fNumAAConcavePaths = src.fNumAAConcavePaths;
-        fNumAAHairlineConcavePaths = src.fNumAAHairlineConcavePaths;
-    }
-
-    void reset() {
-        fNumPaintWithPathEffectUses = 0;
-        fNumFastPathDashEffects = 0;
-        fNumAAConcavePaths = 0;
-        fNumAAHairlineConcavePaths = 0;
-    }
-
-    void swap(SkPictureContentInfo* other) {
-        SkTSwap(fNumPaintWithPathEffectUses, other->fNumPaintWithPathEffectUses);
-        SkTSwap(fNumFastPathDashEffects, other->fNumFastPathDashEffects);
-        SkTSwap(fNumAAConcavePaths, other->fNumAAConcavePaths);
-        SkTSwap(fNumAAHairlineConcavePaths, other->fNumAAHairlineConcavePaths);
-    }
-
-    void incPaintWithPathEffectUses() { ++fNumPaintWithPathEffectUses; }
-    int numPaintWithPathEffectUses() const { return fNumPaintWithPathEffectUses; }
-
-    void incFastPathDashEffects() { ++fNumFastPathDashEffects; }
-    int numFastPathDashEffects() const { return fNumFastPathDashEffects; }
-
-    void incAAConcavePaths() { ++fNumAAConcavePaths; }
-    int numAAConcavePaths() const { return fNumAAConcavePaths; }
-
-    void incAAHairlineConcavePaths() {
-        ++fNumAAHairlineConcavePaths;
-        SkASSERT(fNumAAHairlineConcavePaths <= fNumAAConcavePaths);
-    }
-    int numAAHairlineConcavePaths() const { return fNumAAHairlineConcavePaths; }
-
-private:
-    // This field is incremented every time a paint with a path effect is
-    // used (i.e., it is not a de-duplicated count)
-    int fNumPaintWithPathEffectUses;
-    // This field is incremented every time a paint with a path effect that is
-    // dashed, we are drawing a line, and we can use the gpu fast path
-    int fNumFastPathDashEffects;
-    // This field is incremented every time an anti-aliased drawPath call is
-    // issued with a concave path
-    int fNumAAConcavePaths;
-    // This field is incremented every time a drawPath call is
-    // issued for a hairline stroked concave path.
-    int fNumAAHairlineConcavePaths;
-};
-
-#ifdef SK_SUPPORT_LEGACY_PICTURE_CLONE
-/**
- * Container for data that is needed to deep copy a SkPicture. The container
- * enables the data to be generated once and reused for subsequent copies.
- */
-struct SkPictCopyInfo {
-    SkPictCopyInfo() : controller(1024) {}
-
-    SkChunkFlatController controller;
-    SkTDArray<SkFlatData*> paintData;
-};
-#endif
-
 class SkPictureData {
 public:
-#ifdef SK_SUPPORT_LEGACY_PICTURE_CLONE
-    SkPictureData(const SkPictureData& src, SkPictCopyInfo* deepCopyInfo = NULL);
-#endif
     SkPictureData(const SkPictureRecord& record, const SkPictInfo&, bool deepCopyOps);
     static SkPictureData* CreateFromStream(SkStream*,
                                            const SkPictInfo&,
@@ -140,14 +65,14 @@ public:
 
     virtual ~SkPictureData();
 
-    const SkPicture::OperationList* getActiveOps(const SkIRect& queryRect) const;
-
     void serialize(SkWStream*, SkPicture::EncodeBitmap) const;
     void flatten(SkWriteBuffer&) const;
 
-    void dumpSize() const;
-
     bool containsBitmaps() const;
+
+    bool hasText() const { return fContentInfo.hasText(); }
+
+    int opCount() const { return fContentInfo.numOperations(); }
 
     const SkData* opData() const { return fOpData; }
 
@@ -188,43 +113,11 @@ public:
         return &(*fPaints)[index - 1];
     }
 
-    void initIterator(SkPictureStateTree::Iterator* iter, 
-                      const SkTDArray<void*>& draws,
-                      SkCanvas* canvas) const {
-        if (NULL != fStateTree) {
-            fStateTree->initIterator(iter, draws, canvas);
-        }
+    const SkTextBlob* getTextBlob(SkReader32* reader) const {
+        int index = reader->readInt();
+        SkASSERT(index > 0 && index <= fTextBlobCount);
+        return fTextBlobRefs[index - 1];
     }
-
-#ifdef SK_DEBUG_SIZE
-    int size(size_t* sizePtr);
-    int bitmaps(size_t* size);
-    int paints(size_t* size);
-    int paths(size_t* size);
-#endif
-
-#ifdef SK_DEBUG_DUMP
-private:
-    void dumpBitmap(const SkBitmap& bitmap) const;
-    void dumpMatrix(const SkMatrix& matrix) const;
-    void dumpPaint(const SkPaint& paint) const;
-    void dumpPath(const SkPath& path) const;
-    void dumpPicture(const SkPicture& picture) const;
-    void dumpRegion(const SkRegion& region) const;
-    int dumpDrawType(char* bufferPtr, char* buffer, DrawType drawType);
-    int dumpInt(char* bufferPtr, char* buffer, char* name);
-    int dumpRect(char* bufferPtr, char* buffer, char* name);
-    int dumpPoint(char* bufferPtr, char* buffer, char* name);
-    void dumpPointArray(char** bufferPtrPtr, char* buffer, int count);
-    int dumpPtr(char* bufferPtr, char* buffer, char* name, void* ptr);
-    int dumpRectPtr(char* bufferPtr, char* buffer, char* name);
-    int dumpScalar(char* bufferPtr, char* buffer, char* name);
-    void dumpText(char** bufferPtrPtr, char* buffer);
-    void dumpStream();
-
-public:
-    void dump() const;
-#endif
 
 #if SK_SUPPORT_GPU
     /**
@@ -240,11 +133,11 @@ public:
      */
     bool suitableForGpuRasterization(GrContext* context, const char **reason,
                                      GrPixelConfig config, SkScalar dpi) const;
+
+    bool suitableForLayerOptimization() const;
 #endif
 
 private:
-    friend class SkPicture; // needed in SkPicture::clone (rm when it is removed)
-
     void init();
 
     // these help us with reading/writing
@@ -267,9 +160,8 @@ private:
 
     const SkPicture** fPictureRefs;
     int fPictureCount;
-
-    SkBBoxHierarchy* fBoundingHierarchy;
-    SkPictureStateTree* fStateTree;
+    const SkTextBlob** fTextBlobRefs;
+    int fTextBlobCount;
 
     SkPictureContentInfo fContentInfo;
 

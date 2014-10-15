@@ -26,7 +26,9 @@
 #include "SkTypeface_win_dw.h"
 
 #include <dwrite.h>
-#include <dwrite_1.h>
+#if SK_HAS_DWRITE_1_H
+#  include <dwrite_1.h>
+#endif
 
 static bool isLCD(const SkScalerContext::Rec& rec) {
     return SkMask::kLCD16_Format == rec.fMaskFormat ||
@@ -100,8 +102,6 @@ static void expand_range_if_gridfit_only(DWriteFontTypeface* typeface, int size,
         }
         minPPEM = maxPPEM;
     }
-
-    return;
 }
 
 static bool has_bitmap_strike(DWriteFontTypeface* typeface, PPEMRange range) {
@@ -400,11 +400,11 @@ void SkScalerContext_DW::generateAdvance(SkGlyph* glyph) {
     glyph->fAdvanceY = SkScalarToFixed(vecs[0].fY);
 }
 
-void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
-    glyph->fWidth = 0;
-
-    this->generateAdvance(glyph);
-
+HRESULT SkScalerContext_DW::getBoundingBox(SkGlyph* glyph,
+                                           DWRITE_RENDERING_MODE renderingMode,
+                                           DWRITE_TEXTURE_TYPE textureType,
+                                           RECT* bbox)
+{
     //Measure raster size.
     fXform.dx = SkFixedToFloat(glyph->getSubXFixed());
     fXform.dy = SkFixedToFloat(glyph->getSubYFixed());
@@ -428,25 +428,70 @@ void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
     run.glyphOffsets = &offset;
 
     SkTScopedComPtr<IDWriteGlyphRunAnalysis> glyphRunAnalysis;
-    HRVM(fTypeface->fFactory->CreateGlyphRunAnalysis(
-             &run,
-             1.0f, // pixelsPerDip,
-             &fXform,
-             fRenderingMode,
-             fMeasuringMode,
-             0.0f, // baselineOriginX,
-             0.0f, // baselineOriginY,
-             &glyphRunAnalysis),
-         "Could not create glyph run analysis.");
+    HRM(fTypeface->fFactory->CreateGlyphRunAnalysis(
+            &run,
+            1.0f, // pixelsPerDip,
+            &fXform,
+            renderingMode,
+            fMeasuringMode,
+            0.0f, // baselineOriginX,
+            0.0f, // baselineOriginY,
+            &glyphRunAnalysis),
+        "Could not create glyph run analysis.");
 
-    RECT bbox;
-    HRVM(glyphRunAnalysis->GetAlphaTextureBounds(fTextureType, &bbox),
-         "Could not get texture bounds.");
+    HRM(glyphRunAnalysis->GetAlphaTextureBounds(textureType, bbox),
+        "Could not get texture bounds.");
 
+    return S_OK;
+}
+
+/** GetAlphaTextureBounds succeeds but sometimes returns empty bounds like
+ *  { 0x80000000, 0x80000000, 0x80000000, 0x80000000 }
+ *  for small, but not quite zero, sized glyphs.
+ *  Only set as non-empty if the returned bounds are non-empty.
+ */
+static bool glyph_check_and_set_bounds(SkGlyph* glyph, const RECT& bbox) {
+    if (bbox.left >= bbox.right || bbox.top >= bbox.bottom) {
+        return false;
+    }
     glyph->fWidth = SkToU16(bbox.right - bbox.left);
     glyph->fHeight = SkToU16(bbox.bottom - bbox.top);
     glyph->fLeft = SkToS16(bbox.left);
     glyph->fTop = SkToS16(bbox.top);
+    return true;
+}
+
+void SkScalerContext_DW::generateMetrics(SkGlyph* glyph) {
+    glyph->fWidth = 0;
+    glyph->fHeight = 0;
+    glyph->fLeft = 0;
+    glyph->fTop = 0;
+
+    this->generateAdvance(glyph);
+
+    RECT bbox;
+    HRVM(this->getBoundingBox(glyph, fRenderingMode, fTextureType, &bbox),
+         "Requested bounding box could not be determined.");
+
+    if (glyph_check_and_set_bounds(glyph, bbox)) {
+        return;
+    }
+
+    // GetAlphaTextureBounds succeeds but returns an empty RECT if there are no
+    // glyphs of the specified texture type. When this happens, try with the
+    // alternate texture type.
+    if (DWRITE_TEXTURE_CLEARTYPE_3x1 == fTextureType) {
+        HRVM(this->getBoundingBox(glyph,
+                                  DWRITE_RENDERING_MODE_ALIASED,
+                                  DWRITE_TEXTURE_ALIASED_1x1,
+                                  &bbox),
+             "Fallback bounding box could not be determined.");
+        if (glyph_check_and_set_bounds(glyph, bbox)) {
+            glyph->fForceBW = 1;
+        }
+    }
+    // TODO: handle the case where a request for DWRITE_TEXTURE_ALIASED_1x1
+    // fails, and try DWRITE_TEXTURE_CLEARTYPE_3x1.
 }
 
 void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {
@@ -481,7 +526,8 @@ void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {
     metrics->fFlags |= SkPaint::FontMetrics::kUnderlineThinknessIsValid_Flag;
     metrics->fFlags |= SkPaint::FontMetrics::kUnderlinePositionIsValid_Flag;
 
-    if (NULL != fTypeface->fDWriteFontFace1.get()) {
+#if SK_HAS_DWRITE_1_H
+    if (fTypeface->fDWriteFontFace1.get()) {
         DWRITE_FONT_METRICS1 dwfm1;
         fTypeface->fDWriteFontFace1->GetMetrics(&dwfm1);
         metrics->fTop = -fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxTop) / upem;
@@ -490,23 +536,28 @@ void SkScalerContext_DW::generateFontMetrics(SkPaint::FontMetrics* metrics) {
         metrics->fXMax = fTextSizeRender * SkIntToScalar(dwfm1.glyphBoxRight) / upem;
 
         metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
-    } else {
-        AutoTDWriteTable<SkOTTableHead> head(fTypeface->fDWriteFontFace.get());
-        if (head.fExists &&
-            head.fSize >= sizeof(SkOTTableHead) &&
-            head->version == SkOTTableHead::version1)
-        {
-            metrics->fTop = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMax) / upem;
-            metrics->fBottom = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMin) / upem;
-            metrics->fXMin = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMin) / upem;
-            metrics->fXMax = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMax) / upem;
-
-            metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
-        } else {
-            metrics->fTop = metrics->fAscent;
-            metrics->fBottom = metrics->fDescent;
-        }
+        return;
     }
+#else
+#  pragma message("No dwrite_1.h is available, font metrics may be affected.")
+#endif
+
+    AutoTDWriteTable<SkOTTableHead> head(fTypeface->fDWriteFontFace.get());
+    if (head.fExists &&
+        head.fSize >= sizeof(SkOTTableHead) &&
+        head->version == SkOTTableHead::version1)
+    {
+        metrics->fTop = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMax) / upem;
+        metrics->fBottom = -fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->yMin) / upem;
+        metrics->fXMin = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMin) / upem;
+        metrics->fXMax = fTextSizeRender * (int16_t)SkEndian_SwapBE16(head->xMax) / upem;
+
+        metrics->fMaxCharWidth = metrics->fXMax - metrics->fXMin;
+        return;
+    }
+
+    metrics->fTop = metrics->fAscent;
+    metrics->fBottom = metrics->fDescent;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -604,9 +655,12 @@ static void rgb_to_lcd32(const uint8_t* SK_RESTRICT src, const SkGlyph& glyph,
     }
 }
 
-const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph) {
+const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph,
+                                           DWRITE_RENDERING_MODE renderingMode,
+                                           DWRITE_TEXTURE_TYPE textureType)
+{
     int sizeNeeded = glyph.fWidth * glyph.fHeight;
-    if (DWRITE_RENDERING_MODE_ALIASED != fRenderingMode) {
+    if (DWRITE_RENDERING_MODE_ALIASED != renderingMode) {
         sizeNeeded *= 3;
     }
     if (sizeNeeded > fBits.count()) {
@@ -641,7 +695,7 @@ const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph) {
     HRNM(fTypeface->fFactory->CreateGlyphRunAnalysis(&run,
                                           1.0f, // pixelsPerDip,
                                           &fXform,
-                                          fRenderingMode,
+                                          renderingMode,
                                           fMeasuringMode,
                                           0.0f, // baselineOriginX,
                                           0.0f, // baselineOriginY,
@@ -655,7 +709,7 @@ const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph) {
     bbox.top = glyph.fTop;
     bbox.right = glyph.fLeft + glyph.fWidth;
     bbox.bottom = glyph.fTop + glyph.fHeight;
-    HRNM(glyphRunAnalysis->CreateAlphaTexture(fTextureType,
+    HRNM(glyphRunAnalysis->CreateAlphaTexture(textureType,
                                               &bbox,
                                               fBits.begin(),
                                               sizeNeeded),
@@ -665,7 +719,13 @@ const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph) {
 
 void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
     //Create the mask.
-    const void* bits = this->drawDWMask(glyph);
+    DWRITE_RENDERING_MODE renderingMode = fRenderingMode;
+    DWRITE_TEXTURE_TYPE textureType = fTextureType;
+    if (glyph.fForceBW) {
+        renderingMode = DWRITE_RENDERING_MODE_ALIASED;
+        textureType = DWRITE_TEXTURE_ALIASED_1x1;
+    }
+    const void* bits = this->drawDWMask(glyph, renderingMode, textureType);
     if (!bits) {
         sk_bzero(glyph.fImage, glyph.computeImageSize());
         return;
@@ -673,7 +733,7 @@ void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
 
     //Copy the mask into the glyph.
     const uint8_t* src = (const uint8_t*)bits;
-    if (DWRITE_RENDERING_MODE_ALIASED == fRenderingMode) {
+    if (DWRITE_RENDERING_MODE_ALIASED == renderingMode) {
         bilevel_to_bw(src, glyph);
         const_cast<SkGlyph&>(glyph).fMaskFormat = SkMask::kBW_Format;
     } else if (!isLCD(fRec)) {

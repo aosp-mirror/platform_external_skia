@@ -50,11 +50,11 @@ public:
 
     SkCanvas* canvas() { return fCanvas; }
 
-    SkData* end() {
+    SkStreamAsset* end() {
         fCanvas->flush();
         fDocument->endPage();
         fDocument->close();
-        return fWriteStream.copyToData();
+        return fWriteStream.detachAsStream();
     }
 
 private:
@@ -66,26 +66,31 @@ private:
 }  // namespace
 
 void PDFTask::draw() {
-    SkAutoTUnref<SkData> pdfData;
+    SkAutoTDelete<SkStreamAsset> pdfData;
     bool rasterize = true;
     if (fGM.get()) {
         rasterize = 0 == (fGM->getFlags() & skiagm::GM::kSkipPDFRasterization_Flag);
         SinglePagePDF pdf(fGM->width(), fGM->height());
+        CanvasPreflight(pdf.canvas());
         //TODO(mtklein): GM doesn't do this.  Why not?
         //pdf.canvas()->concat(fGM->getInitialTransform());
         fGM->draw(pdf.canvas());
         pdfData.reset(pdf.end());
     } else {
-        SinglePagePDF pdf(SkIntToScalar(fPicture->width()), SkIntToScalar(fPicture->height()));
-        fPicture->draw(pdf.canvas());
+        SinglePagePDF pdf(fPicture->cullRect().width(), fPicture->cullRect().height());
+        CanvasPreflight(pdf.canvas());
+        fPicture->playback(pdf.canvas());
         pdfData.reset(pdf.end());
     }
 
     SkASSERT(pdfData.get());
     if (rasterize) {
-        this->spawnChild(SkNEW_ARGS(PDFRasterizeTask, (*this, pdfData.get(), fRasterize)));
+        this->spawnChild(SkNEW_ARGS(PDFRasterizeTask,
+                                    (*this, pdfData->duplicate(), fRasterize)));
     }
-    this->spawnChild(SkNEW_ARGS(WriteTask, (*this, pdfData.get(), ".pdf")));
+    const char* sourceType = fGM.get() ? "GM" : "SKP";
+    this->spawnChild(SkNEW_ARGS(WriteTask,
+                                (*this, sourceType, pdfData->duplicate(), ".pdf")));
 }
 
 bool PDFTask::shouldSkip() const {

@@ -170,6 +170,7 @@ public:
         GLPtr<GrGLCompressedTexImage2DProc> fCompressedTexImage2D;
         GLPtr<GrGLCompressedTexSubImage2DProc> fCompressedTexSubImage2D;
         GLPtr<GrGLCopyTexSubImage2DProc> fCopyTexSubImage2D;
+        GLPtr<GrGLCopyTextureCHROMIUMProc> fCopyTextureCHROMIUM;
         GLPtr<GrGLCreateProgramProc> fCreateProgram;
         GLPtr<GrGLCreateShaderProc> fCreateShader;
         GLPtr<GrGLCullFaceProc> fCullFace;
@@ -335,11 +336,14 @@ public:
         GLPtr<GrGLCoverStrokePathProc> fCoverStrokePath;
         GLPtr<GrGLCoverFillPathInstancedProc> fCoverFillPathInstanced;
         GLPtr<GrGLCoverStrokePathInstancedProc> fCoverStrokePathInstanced;
+        // NV_path_rendering v1.2
         GLPtr<GrGLStencilThenCoverFillPathProc> fStencilThenCoverFillPath;
         GLPtr<GrGLStencilThenCoverStrokePathProc> fStencilThenCoverStrokePath;
         GLPtr<GrGLStencilThenCoverFillPathInstancedProc> fStencilThenCoverFillPathInstanced;
         GLPtr<GrGLStencilThenCoverStrokePathInstancedProc> fStencilThenCoverStrokePathInstanced;
+        // NV_path_rendering v1.3
         GLPtr<GrGLProgramPathFragmentInputGenProc> fProgramPathFragmentInputGen;
+        GLPtr<GrGLPathMemoryGlyphIndexArrayProc> fPathMemoryGlyphIndexArray;
     } fFunctions;
 
     // Per-GL func callback

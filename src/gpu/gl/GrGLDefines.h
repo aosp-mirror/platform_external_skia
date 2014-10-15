@@ -895,13 +895,33 @@
 #define GR_GL_MITER_REVERT                                  0x90A7
 #define GR_GL_MITER_TRUNCATE                                0x90A8
 
+// glyph loading values
+#define GR_GL_STANDARD_FONT_NAME                            0x9072
+#define GR_GL_SYSTEM_FONT_NAME                              0x9073
+#define GR_GL_FILE_NAME                                     0x9074
+#define GR_GL_STANDARD_FONT_FORMAT                          0x936C
+#define GR_GL_SKIP_MISSING_GLYPH                            0x90A9
+#define GR_GL_USE_MISSING_GLYPH                             0x90AA
+#define GR_GL_FONT_GLYPHS_AVAILABLE                         0x9368
+#define GR_GL_FONT_TARGET_UNAVAILABLE                       0x9369
+#define GR_GL_FONT_UNAVAILABLE                              0x936A
+#define GR_GL_FONT_UNINTELLIGIBLE                           0x936B
+/*      GL_INVALID_ENUM */
+/*      GL_INVALID_VALUE */
+/*      GL_OUT_OF_MEMORY */
+
 // NV_path_rendering extension to ARB_program_interface_query:
 // .. corresponds to the set of active input variables used by the fragment
 // shader stage of <program> (if a fragment stage exists).
 #define GR_GL_FRAGMENT_INPUT                                0x936D
 
+// NV_path_rendering extension to EXT_direct_state_access:
+// [the matrix functions] must support the PATH_PROJECTION_NV and
+// PATH_MODELVIEW_NV tokens for matrixMode.
+#define GR_GL_PATH_PROJECTION                               0x1701
+#define GR_GL_PATH_MODELVIEW                                0x1700
+
 /*  ARM specific define for MSAA support on framebuffer fetch */
 #define GR_GL_FETCH_PER_SAMPLE_ARM                          0x8F65
-
 
 #endif

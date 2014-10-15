@@ -25,10 +25,7 @@ public:
 
 protected:
     virtual bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
-        info->fWidth = 100;
-        info->fHeight = 100;
-        info->fColorType = kN32_SkColorType;
-        info->fAlphaType = kPremul_SkAlphaType;
+        *info = SkImageInfo::MakeN32Premul(100, 100);
         return true;
     }
     // default onGetPixels() returns false, which is what we want.
@@ -190,7 +187,9 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
     c.concat(matrix);
 
     SkBitmap bm;
-    bm.allocN32Pixels(width, height);
+    if (bm.tryAllocN32Pixels(width, height)) {
+        // allow this to fail silently, to test the code downstream
+    }
     bm.eraseColor(SK_ColorRED);
 
     matrix.setAll(0.0078740157f,

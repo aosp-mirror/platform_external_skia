@@ -11,11 +11,16 @@
 #include "SkTemplates.h"
 
 #include <dwrite.h>
+#include <winsdkver.h>
 
 class SkString;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Factory
+
+#ifndef SK_HAS_DWRITE_1_H
+#define SK_HAS_DWRITE_1_H (WINVER_MAXVER >= 0x0602)
+#endif
 
 IDWriteFactory* sk_get_dwrite_factory();
 
@@ -28,8 +33,10 @@ typedef SkAutoSTMalloc<16, WCHAR> SkSMallocWCHAR;
 /** Converts a utf8 string to a WCHAR string. */
 HRESULT sk_cstring_to_wchar(const char* skname, SkSMallocWCHAR* name);
 
-/** Converts a WCHAR string to a utf8 string. */
-HRESULT sk_wchar_to_skstring(WCHAR* name, SkString* skname);
+/** Converts a WCHAR string to a utf8 string.
+ *  @param nameLen the number of WCHARs in the name.
+ */
+HRESULT sk_wchar_to_skstring(WCHAR* name, int nameLen, SkString* skname);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Locale

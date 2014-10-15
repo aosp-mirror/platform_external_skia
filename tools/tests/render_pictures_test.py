@@ -36,7 +36,7 @@ EXPECTED_HEADER_CONTENTS = {
 # the comparison.
 RED_WHOLEIMAGE = {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 11092453015575919668,
+    "checksumValue" : 2853310525600416231,
     "comparisonResult" : "failed",
     "filepath" : "red_skp.png",
 }
@@ -46,7 +46,7 @@ RED_WHOLEIMAGE = {
 # the comparison.
 GREEN_WHOLEIMAGE = {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 8891695120562235492,
+    "checksumValue" : 11143979097452425335,
     "comparisonResult" : "succeeded",
     "filepath" : "green_skp.png",
 }
@@ -68,22 +68,22 @@ RED_TILES = [{
     "filepath" : "red_skp-tile1.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 16670399404877552232,
+    "checksumValue" : 15939355025996362179,
     "comparisonResult" : "failed",
     "filepath" : "red_skp-tile2.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 2507897274083364964,
+    "checksumValue" : 649771916797529222,
     "comparisonResult" : "failed",
     "filepath" : "red_skp-tile3.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 7325267995523877959,
+    "checksumValue" : 8132820002266077288,
     "comparisonResult" : "failed",
     "filepath" : "red_skp-tile4.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 2181381724594493116,
+    "checksumValue" : 2406160701181324581,
     "comparisonResult" : "failed",
     "filepath" : "red_skp-tile5.png",
 }]
@@ -105,22 +105,22 @@ GREEN_TILES = [{
     "filepath" : "green_skp-tile1.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 5686489729535631913,
+    "checksumValue" : 11866144860997809880,
     "comparisonResult" : "succeeded",
     "filepath" : "green_skp-tile2.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 7980646035555096146,
+    "checksumValue" : 3893392565127823822,
     "comparisonResult" : "succeeded",
     "filepath" : "green_skp-tile3.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 17817086664365875131,
+    "checksumValue" : 2083084978343901738,
     "comparisonResult" : "succeeded",
     "filepath" : "green_skp-tile4.png",
 }, {
     "checksumAlgorithm" : "bitmap-64bitMD5",
-    "checksumValue" : 10673669813016809363,
+    "checksumValue" : 89620927366502076,
     "comparisonResult" : "succeeded",
     "filepath" : "green_skp-tile5.png",
 }]
@@ -197,10 +197,50 @@ class RenderPicturesTest(base_unittest.TestCase):
         '--writeWholeImage'])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "tiled-images": RED_TILES,
                 "whole-image": RED_WHOLEIMAGE,
+            },
+            "green.skp": {
+                "tiled-images": GREEN_TILES,
+                "whole-image": GREEN_WHOLEIMAGE,
+            }
+        }
+    }
+    self._assert_json_contents(output_json_path, expected_summary_dict)
+    self._assert_directory_contents(
+        write_path_dir, ['red_skp.png', 'green_skp.png'])
+
+  def test_ignore_some_failures(self):
+    """test_tiled_whole_image, but ignoring some failed tests.
+    """
+    output_json_path = os.path.join(self._output_dir, 'actuals.json')
+    write_path_dir = self.create_empty_dir(
+        path=os.path.join(self._output_dir, 'writePath'))
+    self._generate_skps()
+    expectations_path = self._create_expectations(ignore_some_failures=True)
+    self._run_render_pictures([
+        '-r', self._input_skp_dir,
+        '--bbh', 'grid', '256', '256',
+        '--mode', 'tile', '256', '256',
+        '--readJsonSummaryPath', expectations_path,
+        '--writeJsonSummaryPath', output_json_path,
+        '--writePath', write_path_dir,
+        '--writeWholeImage'])
+    modified_red_tiles = copy.deepcopy(RED_TILES)
+    modified_red_tiles[5]['comparisonResult'] = 'failure-ignored'
+    expected_summary_dict = {
+        "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
+        "actual-results" : {
+            "red.skp": {
+                "tiled-images": modified_red_tiles,
+                "whole-image": modified_dict(
+                    RED_WHOLEIMAGE, {"comparisonResult" : "failure-ignored"}),
             },
             "green.skp": {
                 "tiled-images": GREEN_TILES,
@@ -232,6 +272,8 @@ class RenderPicturesTest(base_unittest.TestCase):
     modified_red_tiles[5]['comparisonResult'] = 'no-comparison'
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "tiled-images": modified_red_tiles,
@@ -276,6 +318,8 @@ class RenderPicturesTest(base_unittest.TestCase):
     if expected_summary_dict == None:
       expected_summary_dict = {
           "header" : EXPECTED_HEADER_CONTENTS,
+          "image-base-gs-url" : None,
+          "descriptions" : None,
           "actual-results" : {
               "red.skp": {
                   "whole-image": RED_WHOLEIMAGE,
@@ -300,6 +344,8 @@ class RenderPicturesTest(base_unittest.TestCase):
       pass
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "whole-image": modified_dict(
@@ -320,31 +366,39 @@ class RenderPicturesTest(base_unittest.TestCase):
     write_path_dir = self.create_empty_dir(
         path=os.path.join(self._output_dir, 'writePath'))
     self._generate_skps()
-    self._run_render_pictures(['-r', self._input_skp_dir,
-                               '--writeChecksumBasedFilenames',
-                               '--writePath', write_path_dir,
-                               '--writeJsonSummaryPath', output_json_path])
+    self._run_render_pictures([
+        '-r', self._input_skp_dir,
+        '--descriptions', 'builder=builderName', 'renderMode=renderModeName',
+        '--writeChecksumBasedFilenames',
+        '--writePath', write_path_dir,
+        '--writeJsonSummaryPath', output_json_path,
+    ])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : {
+            "builder": "builderName",
+            "renderMode": "renderModeName",
+        },
         "actual-results" : {
             "red.skp": {
                 # Manually verified: 640x400 red rectangle with black border
                 "whole-image": {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 11092453015575919668,
+                    "checksumValue" : 2853310525600416231,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "red_skp/bitmap-64bitMD5_11092453015575919668.png",
+                        "red_skp/bitmap-64bitMD5_2853310525600416231.png",
                 },
             },
             "green.skp": {
                 # Manually verified: 640x400 green rectangle with black border
                 "whole-image": {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 8891695120562235492,
+                    "checksumValue" : 11143979097452425335,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "green_skp/bitmap-64bitMD5_8891695120562235492.png",
+                        "green_skp/bitmap-64bitMD5_11143979097452425335.png",
                 },
             }
         }
@@ -353,10 +407,10 @@ class RenderPicturesTest(base_unittest.TestCase):
     self._assert_directory_contents(write_path_dir, ['red_skp', 'green_skp'])
     self._assert_directory_contents(
         os.path.join(write_path_dir, 'red_skp'),
-        ['bitmap-64bitMD5_11092453015575919668.png'])
+        ['bitmap-64bitMD5_2853310525600416231.png'])
     self._assert_directory_contents(
         os.path.join(write_path_dir, 'green_skp'),
-        ['bitmap-64bitMD5_8891695120562235492.png'])
+        ['bitmap-64bitMD5_11143979097452425335.png'])
 
   def test_untiled_validate(self):
     """Same as test_untiled, but with --validate."""
@@ -373,6 +427,8 @@ class RenderPicturesTest(base_unittest.TestCase):
         '--writeJsonSummaryPath', output_json_path])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "whole-image": RED_WHOLEIMAGE,
@@ -400,6 +456,8 @@ class RenderPicturesTest(base_unittest.TestCase):
         '--writeJsonSummaryPath', output_json_path])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "tiled-images": RED_TILES,
@@ -434,6 +492,8 @@ class RenderPicturesTest(base_unittest.TestCase):
         '--writeJsonSummaryPath', output_json_path])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 "tiled-images": RED_TILES,
@@ -464,6 +524,8 @@ class RenderPicturesTest(base_unittest.TestCase):
                                '--writeJsonSummaryPath', output_json_path])
     expected_summary_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "image-base-gs-url" : None,
+        "descriptions" : None,
         "actual-results" : {
             "red.skp": {
                 # Manually verified these 6 images, all 256x256 tiles,
@@ -483,28 +545,28 @@ class RenderPicturesTest(base_unittest.TestCase):
                         "red_skp/bitmap-64bitMD5_9323613075234140270.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 16670399404877552232,
+                    "checksumValue" : 15939355025996362179,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "red_skp/bitmap-64bitMD5_16670399404877552232.png",
+                        "red_skp/bitmap-64bitMD5_15939355025996362179.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 2507897274083364964,
+                    "checksumValue" : 649771916797529222,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "red_skp/bitmap-64bitMD5_2507897274083364964.png",
+                        "red_skp/bitmap-64bitMD5_649771916797529222.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 7325267995523877959,
+                    "checksumValue" : 8132820002266077288,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "red_skp/bitmap-64bitMD5_7325267995523877959.png",
+                        "red_skp/bitmap-64bitMD5_8132820002266077288.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 2181381724594493116,
+                    "checksumValue" : 2406160701181324581,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "red_skp/bitmap-64bitMD5_2181381724594493116.png",
+                        "red_skp/bitmap-64bitMD5_2406160701181324581.png",
                 }],
             },
             "green.skp": {
@@ -525,28 +587,28 @@ class RenderPicturesTest(base_unittest.TestCase):
                         "green_skp/bitmap-64bitMD5_7624374914829746293.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 5686489729535631913,
+                    "checksumValue" : 11866144860997809880,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "green_skp/bitmap-64bitMD5_5686489729535631913.png",
+                        "green_skp/bitmap-64bitMD5_11866144860997809880.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 7980646035555096146,
+                    "checksumValue" : 3893392565127823822,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "green_skp/bitmap-64bitMD5_7980646035555096146.png",
+                        "green_skp/bitmap-64bitMD5_3893392565127823822.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 17817086664365875131,
+                    "checksumValue" : 2083084978343901738,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "green_skp/bitmap-64bitMD5_17817086664365875131.png",
+                        "green_skp/bitmap-64bitMD5_2083084978343901738.png",
                 }, {
                     "checksumAlgorithm" : "bitmap-64bitMD5",
-                    "checksumValue" : 10673669813016809363,
+                    "checksumValue" : 89620927366502076,
                     "comparisonResult" : "no-comparison",
                     "filepath" :
-                        "green_skp/bitmap-64bitMD5_10673669813016809363.png",
+                        "green_skp/bitmap-64bitMD5_89620927366502076.png",
                 }],
             }
         }
@@ -557,18 +619,18 @@ class RenderPicturesTest(base_unittest.TestCase):
         os.path.join(write_path_dir, 'red_skp'),
         ['bitmap-64bitMD5_5815827069051002745.png',
          'bitmap-64bitMD5_9323613075234140270.png',
-         'bitmap-64bitMD5_16670399404877552232.png',
-         'bitmap-64bitMD5_2507897274083364964.png',
-         'bitmap-64bitMD5_7325267995523877959.png',
-         'bitmap-64bitMD5_2181381724594493116.png'])
+         'bitmap-64bitMD5_15939355025996362179.png',
+         'bitmap-64bitMD5_649771916797529222.png',
+         'bitmap-64bitMD5_8132820002266077288.png',
+         'bitmap-64bitMD5_2406160701181324581.png'])
     self._assert_directory_contents(
         os.path.join(write_path_dir, 'green_skp'),
         ['bitmap-64bitMD5_12587324416545178013.png',
          'bitmap-64bitMD5_7624374914829746293.png',
-         'bitmap-64bitMD5_5686489729535631913.png',
-         'bitmap-64bitMD5_7980646035555096146.png',
-         'bitmap-64bitMD5_17817086664365875131.png',
-         'bitmap-64bitMD5_10673669813016809363.png'])
+         'bitmap-64bitMD5_11866144860997809880.png',
+         'bitmap-64bitMD5_3893392565127823822.png',
+         'bitmap-64bitMD5_2083084978343901738.png',
+         'bitmap-64bitMD5_89620927366502076.png'])
 
   def _run_render_pictures(self, args):
     binary = find_run_binary.find_path_to_program('render_pictures')
@@ -576,12 +638,14 @@ class RenderPicturesTest(base_unittest.TestCase):
         [binary, '--config', '8888'] + args)
 
   def _create_expectations(self, missing_some_images=False,
+                           ignore_some_failures=False,
                            rel_path='expectations.json'):
     """Creates expectations JSON file within self._expectations_dir .
 
     Args:
       missing_some_images: (bool) whether to remove expectations for a subset
           of the images
+      ignore_some_failures: (bool) whether to ignore some failing tests
       rel_path: (string) relative path within self._expectations_dir to write
           the expectations into
 
@@ -589,6 +653,7 @@ class RenderPicturesTest(base_unittest.TestCase):
     """
     expectations_dict = {
         "header" : EXPECTED_HEADER_CONTENTS,
+        "descriptions" : None,
         "expected-results" : {
             # red.skp: these should fail the comparison
             "red.skp": {
@@ -605,8 +670,13 @@ class RenderPicturesTest(base_unittest.TestCase):
         }
     }
     if missing_some_images:
-      del expectations_dict['expected-results']['red.skp']['whole-image']
-      del expectations_dict['expected-results']['red.skp']['tiled-images'][-1]
+      red_subdict = expectations_dict['expected-results']['red.skp']
+      del red_subdict['whole-image']
+      del red_subdict['tiled-images'][-1]
+    elif ignore_some_failures:
+      red_subdict = expectations_dict['expected-results']['red.skp']
+      red_subdict['whole-image']['ignoreFailure'] = True
+      red_subdict['tiled-images'][-1]['ignoreFailure'] = True
     path = os.path.join(self._expectations_dir, rel_path)
     with open(path, 'w') as fh:
       json.dump(expectations_dict, fh)

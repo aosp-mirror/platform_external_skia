@@ -6,15 +6,9 @@
  */
 
 #include "SkBBHFactory.h"
-#include "SkPictureStateTree.h"
-#include "SkQuadTree.h"
 #include "SkRTree.h"
 #include "SkTileGrid.h"
 
-
-SkBBoxHierarchy* SkQuadTreeFactory::operator()(int width, int height) const {
-    return SkNEW_ARGS(SkQuadTree, (SkIRect::MakeWH(width, height)));
-}
 
 SkBBoxHierarchy* SkRTreeFactory::operator()(int width, int height) const {
     // These values were empirically determined to produce reasonable
@@ -39,6 +33,5 @@ SkBBoxHierarchy* SkTileGridFactory::operator()(int width, int height) const {
     // "-1"s below.
     int xTileCount = (width + fInfo.fTileInterval.width() - 1) / fInfo.fTileInterval.width();
     int yTileCount = (height + fInfo.fTileInterval.height() - 1) / fInfo.fTileInterval.height();
-    return SkNEW_ARGS(SkTileGrid, (xTileCount, yTileCount, fInfo,
-                                    SkTileGridNextDatum<SkPictureStateTree::Draw>));
+    return SkNEW_ARGS(SkTileGrid, (xTileCount, yTileCount, fInfo));
 }

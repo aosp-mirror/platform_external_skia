@@ -7,6 +7,7 @@
 
 #include "SkCanvas.h"
 #include "SkData.h"
+#include "SkDecodingImageGenerator.h"
 #include "SkImageEncoder.h"
 #include "SkRRect.h"
 #include "SkSurface.h"
@@ -51,7 +52,7 @@ static SkSurface* createSurface(SurfaceType surfaceType, GrContext* context,
         }
         case kGpu_SurfaceType:
 #if SK_SUPPORT_GPU
-            return context ? SkSurface::NewRenderTarget(context, info) : NULL;
+            return context ? SkSurface::NewRenderTarget(context, info, 0, NULL) : NULL;
 #endif
             break;
         case kGpuScratch_SurfaceType:
@@ -74,8 +75,7 @@ static void test_image(skiatest::Reporter* reporter) {
     SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
     size_t rowBytes = info.minRowBytes();
     size_t size = info.getSafeSize(rowBytes);
-    void* addr = sk_malloc_throw(size);
-    SkData* data = SkData::NewFromMalloc(addr, size);
+    SkData* data = SkData::NewUninitialized(size);
 
     REPORTER_ASSERT(reporter, 1 == data->getRefCnt());
     SkImage* image = SkImage::NewRasterData(info, data, rowBytes);
@@ -90,11 +90,11 @@ static SkImage* createImage(ImageType imageType, GrContext* context,
     const SkPMColor pmcolor = SkPreMultiplyColor(color);
     const SkImageInfo info = SkImageInfo::MakeN32Premul(10, 10);
     const size_t rowBytes = info.minRowBytes();
-    const size_t size = rowBytes * info.fHeight;
+    const size_t size = rowBytes * info.height();
 
-    void* addr = sk_malloc_throw(size);
+    SkAutoTUnref<SkData> data(SkData::NewUninitialized(size));
+    void* addr = data->writable_data();
     sk_memset32((SkPMColor*)addr, pmcolor, SkToInt(size >> 2));
-    SkAutoTUnref<SkData> data(SkData::NewFromMalloc(addr, size));
 
     switch (imageType) {
         case kRasterCopy_ImageType:
@@ -109,7 +109,8 @@ static SkImage* createImage(ImageType imageType, GrContext* context,
             SkAutoTUnref<SkData> src(
                  SkImageEncoder::EncodeData(bitmap, SkImageEncoder::kPNG_Type,
                                             100));
-            return SkImage::NewEncodedData(src);
+            return SkImage::NewFromGenerator(
+                SkDecodingImageGenerator::Create(data, SkDecodingImageGenerator::Options()));
         }
     }
     SkASSERT(false);
@@ -139,14 +140,14 @@ static void test_imagepeek(skiatest::Reporter* reporter) {
             continue;   // gpu may not be enabled
         }
         const void* addr = image->peekPixels(&info, &rowBytes);
-        bool success = (NULL != addr);
+        bool success = SkToBool(addr);
         REPORTER_ASSERT(reporter, gRec[i].fPeekShouldSucceed == success);
         if (success) {
-            REPORTER_ASSERT(reporter, 10 == info.fWidth);
-            REPORTER_ASSERT(reporter, 10 == info.fHeight);
-            REPORTER_ASSERT(reporter, kN32_SkColorType == info.fColorType);
-            REPORTER_ASSERT(reporter, kPremul_SkAlphaType == info.fAlphaType ||
-                            kOpaque_SkAlphaType == info.fAlphaType);
+            REPORTER_ASSERT(reporter, 10 == info.width());
+            REPORTER_ASSERT(reporter, 10 == info.height());
+            REPORTER_ASSERT(reporter, kN32_SkColorType == info.colorType());
+            REPORTER_ASSERT(reporter, kPremul_SkAlphaType == info.alphaType() ||
+                            kOpaque_SkAlphaType == info.alphaType());
             REPORTER_ASSERT(reporter, info.minRowBytes() <= rowBytes);
             REPORTER_ASSERT(reporter, pmcolor == *(const SkPMColor*)addr);
         }
@@ -199,7 +200,7 @@ static void test_canvaspeek(skiatest::Reporter* reporter,
             surface->getCanvas()->clear(color);
 
             const void* addr = surface->getCanvas()->peekPixels(&info, &rowBytes);
-            bool success = (NULL != addr);
+            bool success = SkToBool(addr);
             REPORTER_ASSERT(reporter, gRec[i].fPeekShouldSucceed == success);
 
             SkImageInfo info2;
@@ -389,7 +390,7 @@ static void TestGetTexture(skiatest::Reporter* reporter,
     SkAutoTUnref<SkImage> image(surface->newImageSnapshot());
     GrTexture* texture = image->getTexture();
     if (surfaceType == kGpu_SurfaceType || surfaceType == kGpuScratch_SurfaceType) {
-        REPORTER_ASSERT(reporter, NULL != texture);
+        REPORTER_ASSERT(reporter, texture);
         REPORTER_ASSERT(reporter, 0 != texture->getTextureHandle());
     } else {
         REPORTER_ASSERT(reporter, NULL == texture);
@@ -444,14 +445,14 @@ DEF_GPUTEST(Surface, reporter, factory) {
 
 #if SK_SUPPORT_GPU
     TestGetTexture(reporter, kRaster_SurfaceType, NULL);
-    if (NULL != factory) {
+    if (factory) {
         for (int i= 0; i < GrContextFactory::kGLContextTypeCnt; ++i) {
             GrContextFactory::GLContextType glCtxType = (GrContextFactory::GLContextType) i;
             if (!GrContextFactory::IsRenderingGLContext(glCtxType)) {
                 continue;
             }
             GrContext* context = factory->get(glCtxType);
-            if (NULL != context) {
+            if (context) {
                 TestSurfaceInCache(reporter, kGpu_SurfaceType, context);
                 TestSurfaceInCache(reporter, kGpuScratch_SurfaceType, context);
                 Test_crbug263329(reporter, kGpu_SurfaceType, context);
