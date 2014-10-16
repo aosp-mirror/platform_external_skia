@@ -23,7 +23,7 @@ public:
     }
 
 protected:
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
+    virtual Result onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
 
 private:
     typedef SkImageDecoder INHERITED;
@@ -31,11 +31,11 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
+SkImageDecoder::Result SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     SkAutoMalloc autoMal;
     const size_t length = CopyStreamToStorage(&autoMal, stream);
     if (0 == length) {
-        return false;
+        return kFailure;
     }
 
     unsigned char* buf = (unsigned char*)autoMal.get();
@@ -49,7 +49,7 @@ bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 #ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     // should we allow the Chooser (if present) to pick a config for us???
     if (!this->chooseFromOneChoice(kN32_SkColorType, width, height)) {
-        return false;
+        return kFailure;
     }
 #endif
 
@@ -60,18 +60,18 @@ bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     bm->setInfo(SkImageInfo::MakeN32(sampler.scaledWidth(), sampler.scaledHeight(),
                                      kOpaque_SkAlphaType));
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-        return true;
+        return kSuccess;
     }
 
     if (!this->allocPixelRef(bm, NULL)) {
-        return false;
+        return kFailure;
     }
 
     // Lock the pixels, since we're about to write to them...
     SkAutoLockPixels alp(*bm);
 
     if (!sampler.begin(bm, SkScaledBitmapSampler::kRGB, *this)) {
-        return false;
+        return kFailure;
     }
 
     // Advance buffer past the header
@@ -84,7 +84,7 @@ bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     // Decode ETC1
     if (etc1_decode_image(buf, outRGBDataPtr, width, height, 3, width*3)) {
-        return false;
+        return kFailure;
     }
 
     // Set each of the pixels...
@@ -97,7 +97,7 @@ bool SkPKMImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         srcRow += sampler.srcDY() * srcRowBytes;
     }
 
-    return true;
+    return kSuccess;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

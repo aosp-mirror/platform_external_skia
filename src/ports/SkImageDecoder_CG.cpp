@@ -47,22 +47,22 @@ static CGImageSourceRef SkStreamToCGImageSource(SkStream* stream) {
 
 class SkImageDecoder_CG : public SkImageDecoder {
 protected:
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode);
+    virtual Result onDecode(SkStream* stream, SkBitmap* bm, Mode);
 };
 
 #define BITMAP_INFO (kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast)
 
-bool SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
+SkImageDecoder::Result SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     CGImageSourceRef imageSrc = SkStreamToCGImageSource(stream);
 
     if (NULL == imageSrc) {
-        return false;
+        return kFailure;
     }
     SkAutoTCallVProc<const void, CFRelease> arsrc(imageSrc);
 
     CGImageRef image = CGImageSourceCreateImageAtIndex(imageSrc, 0, NULL);
     if (NULL == image) {
-        return false;
+        return kFailure;
     }
     SkAutoTCallVProc<CGImage, CGImageRelease> arimage(image);
 
@@ -71,17 +71,17 @@ bool SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     bm->setInfo(SkImageInfo::MakeN32Premul(width, height));
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-        return true;
+        return kSuccess;
     }
 
     if (!this->allocPixelRef(bm, NULL)) {
-        return false;
+        return kFailure;
     }
 
     SkAutoLockPixels alp(*bm);
 
     if (!SkCopyPixelsFromCGImage(bm->info(), bm->rowBytes(), bm->getPixels(), image)) {
-        return false;
+        return kFailure;
     }
 
     CGImageAlphaInfo info = CGImageGetAlphaInfo(image);
@@ -109,7 +109,7 @@ bool SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         }
         bm->setAlphaType(kUnpremul_SkAlphaType);
     }
-    return true;
+    return kSuccess;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
