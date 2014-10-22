@@ -172,7 +172,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkRecordDraw.cpp \
 	src/core/SkRecordOpts.cpp \
 	src/core/SkRecorder.cpp \
-	src/core/SkRecording.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
