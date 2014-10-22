@@ -238,7 +238,7 @@ protected:
     virtual bool onBuildTileIndex(SkStreamRewindable *stream, int *width, int *height) SK_OVERRIDE;
     virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
 #endif
-    virtual bool onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
+    virtual Result onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
 
 private:
 #ifdef SK_BUILD_FOR_ANDROID
@@ -322,18 +322,33 @@ static bool skip_src_rows_tile(jpeg_decompress_struct* cinfo,
 }
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+
 // This guy exists just to aid in debugging, as it allows debuggers to just
 // set a break-point in one place to see all error exists.
-static bool return_false(const jpeg_decompress_struct& cinfo,
-                         const SkBitmap& bm, const char caller[]) {
+static void print_jpeg_decoder_errors(const jpeg_decompress_struct& cinfo,
+                         int width, int height, const char caller[]) {
     if (!(c_suppressJPEGImageDecoderErrors)) {
         char buffer[JMSG_LENGTH_MAX];
         cinfo.err->format_message((const j_common_ptr)&cinfo, buffer);
         SkDebugf("libjpeg error %d <%s> from %s [%d %d]\n",
-                 cinfo.err->msg_code, buffer, caller, bm.width(), bm.height());
+                 cinfo.err->msg_code, buffer, caller, width, height);
     }
-    return false;   // must always return false
 }
+
+static bool return_false(const jpeg_decompress_struct& cinfo,
+                         const SkBitmap& bm, const char caller[]) {
+    print_jpeg_decoder_errors(cinfo, bm.width(), bm.height(), caller);
+    return false;
+}
+
+static SkImageDecoder::Result return_failure(const jpeg_decompress_struct& cinfo,
+                                             const SkBitmap& bm, const char caller[]) {
+    print_jpeg_decoder_errors(cinfo, bm.width(), bm.height(), caller);
+    return SkImageDecoder::kFailure;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 // Convert a scanline of CMYK samples to RGBX in place. Note that this
 // method moves the "scanline" pointer in its processing
@@ -483,7 +498,6 @@ static void adjust_out_color_space_and_dither(jpeg_decompress_struct* cinfo,
 #endif
 }
 
-
 /**
    Sets all pixels in given bitmap to SK_ColorWHITE for all rows >= y.
    Used when decoding fails partway through reading scanlines to fill
@@ -529,7 +543,7 @@ static bool get_src_config(const jpeg_decompress_struct& cinfo,
     return true;
 }
 
-bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
+SkImageDecoder::Result SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 #ifdef TIME_DECODE
     SkAutoTime atm("JPEG Decode");
 #endif
@@ -545,7 +559,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     // All objects need to be instantiated before this setjmp call so that
     // they will be cleaned up properly if an error occurs.
     if (setjmp(errorManager.fJmpBuf)) {
-        return return_false(cinfo, *bm, "setjmp");
+        return return_failure(cinfo, *bm, "setjmp");
     }
 
     initialize_info(&cinfo, &srcManager);
@@ -553,7 +567,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     int status = jpeg_read_header(&cinfo, true);
     if (status != JPEG_HEADER_OK) {
-        return return_false(cinfo, *bm, "read_header");
+        return return_failure(cinfo, *bm, "read_header");
     }
 
     /*  Try to fulfill the requested sampleSize. Since jpeg can do it (when it
@@ -580,8 +594,9 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         // individual pixel. It is very unlikely to be opaque, since
         // an opaque A8 bitmap would not be very interesting.
         // Otherwise, a jpeg image is opaque.
-        return bm->setInfo(SkImageInfo::Make(cinfo.image_width, cinfo.image_height,
-                                             colorType, alphaType));
+        bool success = bm->setInfo(SkImageInfo::Make(cinfo.image_width, cinfo.image_height,
+                                                     colorType, alphaType));
+        return success ? kSuccess : kFailure;
     }
 
     /*  image_width and image_height are the original dimensions, available
@@ -605,10 +620,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             // individual pixel. It is very unlikely to be opaque, since
             // an opaque A8 bitmap would not be very interesting.
             // Otherwise, a jpeg image is opaque.
-            return bm->setInfo(SkImageInfo::Make(smpl.scaledWidth(), smpl.scaledHeight(),
-                                                 colorType, alphaType));
+            bool success = bm->setInfo(SkImageInfo::Make(smpl.scaledWidth(), smpl.scaledHeight(),
+                                                         colorType, alphaType));
+            return success ? kSuccess : kFailure;
         } else {
-            return return_false(cinfo, *bm, "start_decompress");
+            return return_failure(cinfo, *bm, "start_decompress");
         }
     }
     sampleSize = recompute_sampleSize(sampleSize, cinfo);
@@ -616,7 +632,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 #ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
     // should we allow the Chooser (if present) to pick a colortype for us???
     if (!this->chooseFromOneChoice(colorType, cinfo.output_width, cinfo.output_height)) {
-        return return_false(cinfo, *bm, "chooseFromOneChoice");
+        return return_failure(cinfo, *bm, "chooseFromOneChoice");
     }
 #endif
 
@@ -628,10 +644,10 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     bm->setInfo(SkImageInfo::Make(sampler.scaledWidth(), sampler.scaledHeight(),
                                   colorType, alphaType));
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
-        return true;
+        return kSuccess;
     }
     if (!this->allocPixelRef(bm, NULL)) {
-        return return_false(cinfo, *bm, "allocPixelRef");
+        return return_failure(cinfo, *bm, "allocPixelRef");
     }
 
     SkAutoLockPixels alp(*bm);
@@ -654,15 +670,16 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
                 // so return early.  We will return a partial image.
                 fill_below_level(cinfo.output_scanline, bm);
                 cinfo.output_scanline = cinfo.output_height;
-                break;  // Skip to jpeg_finish_decompress()
+                jpeg_finish_decompress(&cinfo);
+                return kPartialSuccess;
             }
             if (this->shouldCancelDecode()) {
-                return return_false(cinfo, *bm, "shouldCancelDecode");
+                return return_failure(cinfo, *bm, "shouldCancelDecode");
             }
             rowptr += bpr;
         }
         jpeg_finish_decompress(&cinfo);
-        return true;
+        return kSuccess;
     }
 #endif
 
@@ -671,11 +688,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     int srcBytesPerPixel;
 
     if (!get_src_config(cinfo, &sc, &srcBytesPerPixel)) {
-        return return_false(cinfo, *bm, "jpeg colorspace");
+        return return_failure(cinfo, *bm, "jpeg colorspace");
     }
 
     if (!sampler.begin(bm, sc, *this)) {
-        return return_false(cinfo, *bm, "sampler.begin");
+        return return_failure(cinfo, *bm, "sampler.begin");
     }
 
     SkAutoMalloc srcStorage(cinfo.output_width * srcBytesPerPixel);
@@ -683,7 +700,7 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
 
     //  Possibly skip initial rows [sampler.srcY0]
     if (!skip_src_rows(&cinfo, srcRow, sampler.srcY0())) {
-        return return_false(cinfo, *bm, "skip rows");
+        return return_failure(cinfo, *bm, "skip rows");
     }
 
     // now loop through scanlines until y == bm->height() - 1
@@ -695,10 +712,11 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
             // so return early.  We will return a partial image.
             fill_below_level(y, bm);
             cinfo.output_scanline = cinfo.output_height;
-            break;  // Skip to jpeg_finish_decompress()
+            jpeg_finish_decompress(&cinfo);
+            return kSuccess;
         }
         if (this->shouldCancelDecode()) {
-            return return_false(cinfo, *bm, "shouldCancelDecode");
+            return return_failure(cinfo, *bm, "shouldCancelDecode");
         }
 
         if (JCS_CMYK == cinfo.out_color_space) {
@@ -712,18 +730,18 @@ bool SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
         }
 
         if (!skip_src_rows(&cinfo, srcRow, sampler.srcDY() - 1)) {
-            return return_false(cinfo, *bm, "skip rows");
+            return return_failure(cinfo, *bm, "skip rows");
         }
     }
 
     // we formally skip the rest, so we don't get a complaint from libjpeg
     if (!skip_src_rows(&cinfo, srcRow,
                        cinfo.output_height - cinfo.output_scanline)) {
-        return return_false(cinfo, *bm, "skip rows");
+        return return_failure(cinfo, *bm, "skip rows");
     }
     jpeg_finish_decompress(&cinfo);
 
-    return true;
+    return kSuccess;
 }
 
 #ifdef SK_BUILD_FOR_ANDROID
