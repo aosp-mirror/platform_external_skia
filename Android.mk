@@ -138,6 +138,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
+	src/core/SkMaskCache.cpp \
 	src/core/SkMaskFilter.cpp \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
