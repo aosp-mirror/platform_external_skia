@@ -66,6 +66,7 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
@@ -554,6 +555,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
@@ -588,6 +590,7 @@ LOCAL_C_INCLUDES := \
 	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
