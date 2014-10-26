@@ -141,6 +141,7 @@ LOCAL_SRC_FILES := \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
 	../gm/colortype.cpp \
+	../gm/colorwheel.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/composeshader.cpp \

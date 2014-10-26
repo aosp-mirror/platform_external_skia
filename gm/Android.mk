@@ -57,6 +57,7 @@ LOCAL_SRC_FILES := \
 	colorfilters.cpp \
 	colormatrix.cpp \
 	colortype.cpp \
+	colorwheel.cpp \
 	complexclip.cpp \
 	complexclip2.cpp \
 	composeshader.cpp \
