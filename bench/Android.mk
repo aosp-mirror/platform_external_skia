@@ -270,6 +270,7 @@ LOCAL_SRC_FILES := \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
+	../gm/tiledscaledbitmap.cpp \
 	../gm/tileimagefilter.cpp \
 	../gm/tilemodes.cpp \
 	../gm/tilemodes_scaled.cpp \

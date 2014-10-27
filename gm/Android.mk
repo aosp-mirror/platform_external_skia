@@ -186,6 +186,7 @@ LOCAL_SRC_FILES := \
 	texturedomaineffect.cpp \
 	thinrects.cpp \
 	thinstrokedrects.cpp \
+	tiledscaledbitmap.cpp \
 	tileimagefilter.cpp \
 	tilemodes.cpp \
 	tilemodes_scaled.cpp \
