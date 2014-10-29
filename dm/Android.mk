@@ -34,7 +34,6 @@ LOCAL_SRC_FILES := \
 	DMUtil.cpp \
 	DMWriteTask.cpp \
 	../gm/gm.cpp \
-	../src/utils/SkTaskGroup.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
