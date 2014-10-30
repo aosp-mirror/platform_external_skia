@@ -192,6 +192,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathMeasureTest.cpp \
 	../tests/PathTest.cpp \
 	../tests/PathUtilsTest.cpp \
+	../tests/PictureBBHTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureTest.cpp \
 	../tests/PixelRefTest.cpp \
