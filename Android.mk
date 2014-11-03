@@ -394,6 +394,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkProxyCanvas.cpp \
 	src/utils/SkSHA1.cpp \
 	src/utils/SkRTConf.cpp \
+	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \
 	src/utils/SkTextureCompressor_R11EAC.cpp \
