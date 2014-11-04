@@ -82,7 +82,6 @@ LOCAL_SRC_FILES := \
 	PerlinNoiseBench.cpp \
 	PictureNestingBench.cpp \
 	PicturePlaybackBench.cpp \
-	PictureRecordBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
