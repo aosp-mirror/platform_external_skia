@@ -22,6 +22,7 @@ LOCAL_SRC_FILES := \
 	DMCpuGMTask.cpp \
 	DMGpuGMTask.cpp \
 	DMPDFRasterizeTask.cpp \
+	DMJsonWriter.cpp \
 	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
