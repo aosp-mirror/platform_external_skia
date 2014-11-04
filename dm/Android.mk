@@ -18,7 +18,6 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
-	../src/core/SkTaskGroup.cpp \
 	DM.cpp \
 	DMCpuGMTask.cpp \
 	DMGpuGMTask.cpp \
