@@ -236,6 +236,7 @@ LOCAL_SRC_FILES := \
 	../tests/SurfaceTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/THashCache.cpp \
+	../tests/Time.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
 	../tests/TextBlobTest.cpp \
