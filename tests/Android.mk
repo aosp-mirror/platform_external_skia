@@ -268,5 +268,4 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	skia_test
 
-include external/stlport/libstlport.mk
 include $(BUILD_EXECUTABLE)

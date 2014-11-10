@@ -25,14 +25,13 @@ echo "Copying symbol files"
 SYSTEM_LIBRARY_PATH=/system/lib
 for library_file in \
     libc.so \
-    libstdc++.so \
     libm.so \
     liblog.so \
     libz.so \
     libgccdemangle.so \
     libcorkscrew.so \
     libutils.so \
-    libstlport.so \
+    libc++.so \
     libGLES_trace.so \
     libEGL.so \
     libGLESv2.so \
