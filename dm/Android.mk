@@ -504,5 +504,4 @@ LOCAL_MODULE := \
 LOCAL_PICKUP_FILES := \
 	$(LOCAL_PATH)/../resources
 
-include external/stlport/libstlport.mk
 include $(BUILD_NATIVE_TEST)
