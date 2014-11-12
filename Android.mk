@@ -714,7 +714,6 @@ LOCAL_SRC_FILES_arm64 += \
 	src/opts/SkXfermode_opts_arm.cpp \
 	src/opts/SkXfermode_opts_arm_neon.cpp
 
-include external/stlport/libstlport.mk
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################

@@ -339,5 +339,4 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	skia_nanobench
 
-include external/stlport/libstlport.mk
 include $(BUILD_NATIVE_TEST)

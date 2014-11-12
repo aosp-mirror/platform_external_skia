@@ -29,7 +29,6 @@ else
 fi
 for library_file in \
     libc.so \
-    libstdc++.so \
     libm.so \
     liblog.so \
     libz.so \
@@ -40,7 +39,7 @@ for library_file in \
     libunwind-ptrace.so \
     libbacktrace.so \
     libutils.so \
-    libstlport.so \
+    libc++.so \
     libGLES_trace.so \
     libEGL.so \
     libGLESv2.so \

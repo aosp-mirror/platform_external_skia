@@ -31,8 +31,6 @@ def write_tool_android_mk(target_dir, var_dict):
 
     makefile_writer.write_local_vars(f, var_dict, False, None)
 
-    makefile_writer.write_include_stlport(f)
-
     f.write('include $(BUILD_NATIVE_TEST)\n')
 
 
