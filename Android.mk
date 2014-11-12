@@ -208,6 +208,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
+	src/core/SkVarAlloc.cpp \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
