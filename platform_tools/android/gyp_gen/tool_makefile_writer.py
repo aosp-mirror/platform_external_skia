@@ -39,7 +39,6 @@ def write_tool_android_mk(target_dir, var_dict, place_in_local_tmp):
     if place_in_local_tmp:
       f.write('LOCAL_MODULE_PATH := $(local_target_dir)\n')
 
-    makefile_writer.write_include_stlport(f)
     f.write('include $(BUILD_EXECUTABLE)\n')
 
 

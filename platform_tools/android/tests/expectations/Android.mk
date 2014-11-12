@@ -142,7 +142,6 @@ LOCAL_MODULE_TAGS_bar += \
 LOCAL_MODULE_bar += \
 	local_module_bar
 
-include external/stlport/libstlport.mk
 include $(BUILD_SHARED_LIBRARY)
 
 #############################################################

@@ -75,5 +75,4 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	skia_bench_pictures
 
-include external/stlport/libstlport.mk
 include $(BUILD_NATIVE_TEST)
