@@ -538,5 +538,4 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	skia_dm
 
-include external/stlport/libstlport.mk
 include $(BUILD_EXECUTABLE)

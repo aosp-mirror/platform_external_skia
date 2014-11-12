@@ -37,5 +37,4 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	local_module
 
-include external/stlport/libstlport.mk
 include $(BUILD_EXECUTABLE)
