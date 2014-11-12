@@ -136,6 +136,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageGenerator.cpp \
+	src/core/SkLayerInfo.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
@@ -446,7 +447,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
-	src/gpu/GrPictureUtils.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
