@@ -154,7 +154,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
-	src/core/SkPathHeap.cpp \
 	src/core/SkPathMeasure.cpp \
 	src/core/SkPathRef.cpp \
 	src/core/SkPicture.cpp \
