@@ -58,6 +58,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsDTriangleTest.cpp \
 	../tests/PathOpsDVectorTest.cpp \
 	../tests/PathOpsExtendedTest.cpp \
+	../tests/PathOpsFuzz763Test.cpp \
 	../tests/PathOpsInverseTest.cpp \
 	../tests/PathOpsLineIntersectionTest.cpp \
 	../tests/PathOpsLineParametetersTest.cpp \
