@@ -447,6 +447,7 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3_D.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
+	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
