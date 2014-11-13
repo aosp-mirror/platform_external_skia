@@ -446,6 +446,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
+	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
