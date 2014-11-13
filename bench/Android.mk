@@ -22,7 +22,6 @@ LOCAL_SRC_FILES := \
 	GMBench.cpp \
 	RecordingBench.cpp \
 	SKPBench.cpp \
-	nanobench_main.cpp \
 	nanobench.cpp \
 	Benchmark.cpp \
 	AAClipBench.cpp \
