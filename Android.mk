@@ -353,7 +353,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkDiscardableMemory_none.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
-	src/ports/SkXMLParser_empty.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkDebug_android.cpp \
@@ -568,7 +567,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
-	$(LOCAL_PATH)/include/xml \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
