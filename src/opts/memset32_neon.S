@@ -9,6 +9,7 @@
 	.fpu neon
 	.align 4
 	.globl	memset32_neon
+	.func
 
 	/* r0 = buffer, r1 = value, r2 = times to write */
 memset32_neon:
@@ -108,4 +109,5 @@ memset32_dropthru:
 	str		r1, [r0, #0]
 	bx		lr
 
+	.endfunc
 	.end
