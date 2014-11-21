@@ -60,7 +60,8 @@ LOCAL_CFLAGS += \
 	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
-	-D_FORTIFY_SOURCE=1
+	-D_FORTIFY_SOURCE=1 \
+	-ftrapv
 
 LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
