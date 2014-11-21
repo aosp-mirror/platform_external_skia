@@ -134,7 +134,7 @@ protected:
      *  textflags parameter (output) and return true. If the paint is fine as
      *  is, then ignore the textflags parameter and return false.
      */
-    virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) { return false; }
+    virtual bool filterTextFlags(const SkPaint& /*paint*/, TextFlags*) { return false; }
 
     /**
      *
@@ -281,8 +281,8 @@ protected:
      *  it just returns false and leaves result and offset unchanged.
      */
     virtual bool filterImage(const SkImageFilter*, const SkBitmap&,
-                             const SkImageFilter::Context& ctx,
-                             SkBitmap* result, SkIPoint* offset) {
+                             const SkImageFilter::Context& /*ctx*/,
+                             SkBitmap* /*result*/, SkIPoint* /*offset*/) {
         return false;
     }
 
