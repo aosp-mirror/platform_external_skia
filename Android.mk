@@ -410,7 +410,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
-	src/gpu/GrAllocPool.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
