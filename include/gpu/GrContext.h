@@ -849,7 +849,7 @@ public:
             kWideOpen_InitialClip,
         };
 
-        AutoClip(GrContext* context, InitialClip initialState)
+        AutoClip(GrContext* context, InitialClip SkDEBUGCODE(initialState))
         : fContext(context) {
             SkASSERT(kWideOpen_InitialClip == initialState);
             fNewClipData.fClipStack = &fNewClipStack;

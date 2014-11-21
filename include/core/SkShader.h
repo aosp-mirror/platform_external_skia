@@ -366,7 +366,7 @@ public:
         const SkXfermode*   fMode;
     };
 
-    virtual bool asACompose(ComposeRec* rec) const { return false; }
+    virtual bool asACompose(ComposeRec*) const { return false; }
 
 
     /**
@@ -403,7 +403,7 @@ public:
      *  If the shader is a custom shader which has data the caller might want, call this function
      *  to get that data.
      */
-    virtual bool asACustomShader(void** customData) const { return false; }
+    virtual bool asACustomShader(void** /*customData*/) const { return false; }
 #endif
 
     //////////////////////////////////////////////////////////////////////////
