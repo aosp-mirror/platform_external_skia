@@ -212,7 +212,7 @@ public:
          *      storageAllocatedForRecording(), for convenience.
          */
         virtual void storageAllocatedForRecordingChanged(
-            size_t newAllocatedStorage) {}
+            size_t /*newAllocatedStorage*/) {}
 
         /**
          *  Called after pending draw commands have been flushed
