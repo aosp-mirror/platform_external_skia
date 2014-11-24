@@ -126,6 +126,17 @@ public:
     */
     uint32_t getGenerationID() const;
 
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    /** Returns a non-zero, unique value corresponding to this SkPixelRef,
+        which is unchanged when the pixels are changed and even when this
+        object is deleted.
+
+        Can be used as a key which must remain unique across changes and
+        deletions.
+     */
+    uint32_t getStableID() const { return fStableID; }
+#endif
+
     /**
      *  Call this if you have changed the contents of the pixels. This will in-
      *  turn cause a different generation ID value to be returned from
@@ -343,6 +354,9 @@ private:
 
     mutable uint32_t fGenerationID;
     mutable bool     fUniqueGenerationID;
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    const uint32_t fStableID;
+#endif
 
     SkTDArray<GenIDChangeListener*> fGenIDChangeListeners;  // pointers are owned
 

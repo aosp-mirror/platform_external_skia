@@ -83,7 +83,12 @@ void SkPixelRef::setMutex(SkBaseMutex* mutex) {
 // just need a > 0 value, so pick a funny one to aid in debugging
 #define SKPIXELREF_PRELOCKED_LOCKCOUNT     123456789
 
-SkPixelRef::SkPixelRef(const SkImageInfo& info) : fInfo(info) {
+SkPixelRef::SkPixelRef(const SkImageInfo& info)
+        : fInfo(info)
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        , fStableID(SkNextPixelRefGenerationID())
+#endif
+{
     this->setMutex(NULL);
     fRec.zero();
     fLockCount = 0;
@@ -93,7 +98,12 @@ SkPixelRef::SkPixelRef(const SkImageInfo& info) : fInfo(info) {
 }
 
 
-SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex) : fInfo(info) {
+SkPixelRef::SkPixelRef(const SkImageInfo& info, SkBaseMutex* mutex)
+        : fInfo(info)
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        , fStableID(SkNextPixelRefGenerationID())
+#endif
+{
     this->setMutex(mutex);
     fRec.zero();
     fLockCount = 0;
@@ -111,6 +121,9 @@ static SkImageInfo read_info(SkReadBuffer& buffer) {
 SkPixelRef::SkPixelRef(SkReadBuffer& buffer, SkBaseMutex* mutex)
         : INHERITED(buffer)
         , fInfo(read_info(buffer))
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        , fStableID(SkNextPixelRefGenerationID())
+#endif
 {
     this->setMutex(mutex);
     fRec.zero();
