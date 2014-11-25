@@ -134,6 +134,8 @@ LOCAL_SRC_FILES := \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
+	../gm/cgms.cpp \
+	../gm/cgm.c \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \
