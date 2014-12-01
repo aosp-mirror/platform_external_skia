@@ -426,6 +426,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
+	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
