@@ -105,6 +105,7 @@ LOCAL_SRC_FILES := \
 	gradientDirtyLaundry.cpp \
 	gradient_matrix.cpp \
 	gradtext.cpp \
+	grayscalejpg.cpp \
 	hairlines.cpp \
 	hairmodes.cpp \
 	hittestpath.cpp \
