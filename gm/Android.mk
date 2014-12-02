@@ -171,6 +171,7 @@ LOCAL_SRC_FILES := \
 	simpleaaclip.cpp \
 	skbug1719.cpp \
 	smallarc.cpp \
+	smallimage.cpp \
 	stringart.cpp \
 	spritebitmap.cpp \
 	srcmode.cpp \
