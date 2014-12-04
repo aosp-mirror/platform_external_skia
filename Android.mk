@@ -464,7 +464,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
 	src/gpu/GrTextContext.cpp \
-	src/gpu/GrTextStrike.cpp \
+	src/gpu/GrFontCache.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
