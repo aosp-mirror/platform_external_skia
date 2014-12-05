@@ -242,7 +242,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../include/utils \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
-	$(LOCAL_PATH)/../include/gpu/effects \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/fonts \
