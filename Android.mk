@@ -590,6 +590,7 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
+	$(LOCAL_PATH)/include/gpu/effects \
 	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
