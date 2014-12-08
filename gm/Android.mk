@@ -90,6 +90,7 @@ LOCAL_SRC_FILES := \
 	filltypes.cpp \
 	filltypespersp.cpp \
 	filterbitmap.cpp \
+	filterfastbounds.cpp \
 	filterindiabox.cpp \
 	fontcache.cpp \
 	fontmgr.cpp \
