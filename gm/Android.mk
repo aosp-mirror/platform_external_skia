@@ -187,6 +187,7 @@ LOCAL_SRC_FILES := \
 	testimagefilters.cpp \
 	texdata.cpp \
 	variedtext.cpp \
+	tallstretchedbitmaps.cpp \
 	textblob.cpp \
 	textblobshader.cpp \
 	texturedomaineffect.cpp \

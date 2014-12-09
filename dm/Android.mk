@@ -421,6 +421,7 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/variedtext.cpp \
+	../gm/tallstretchedbitmaps.cpp \
 	../gm/textblob.cpp \
 	../gm/textblobshader.cpp \
 	../gm/texturedomaineffect.cpp \
