@@ -473,7 +473,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrConvolutionEffect.cpp \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
-	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
+	src/gpu/effects/GrBitmapTextGeoProc.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
