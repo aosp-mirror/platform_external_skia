@@ -33,7 +33,6 @@ LOCAL_SRC_FILES := \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
-	bitmapmatrix.cpp \
 	bitmapfilters.cpp \
 	bitmappremul.cpp \
 	bitmaprect.cpp \

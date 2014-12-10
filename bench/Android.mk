@@ -117,7 +117,6 @@ LOCAL_SRC_FILES := \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
-	../gm/bitmapmatrix.cpp \
 	../gm/bitmapfilters.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
