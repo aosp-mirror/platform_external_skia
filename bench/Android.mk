@@ -294,6 +294,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
