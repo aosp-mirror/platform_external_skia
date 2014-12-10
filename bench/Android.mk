@@ -33,6 +33,7 @@ LOCAL_SRC_FILES := \
 	BlurBench.cpp \
 	BlurImageFilterBench.cpp \
 	BlurRectBench.cpp \
+	BlurRectsBench.cpp \
 	BlurRoundRectBench.cpp \
 	ChartBench.cpp \
 	ChecksumBench.cpp \
