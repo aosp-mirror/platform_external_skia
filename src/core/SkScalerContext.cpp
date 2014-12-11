@@ -745,7 +745,9 @@ void SkScalerContextRec::computeMatrices(PreMatrixScale preMatrixScale, SkVector
     // never affect any pixels.
     SkVector diag[2] = { { A.getScaleX() + A.getSkewX(), A.getScaleY() + A.getSkewY() },
                          { A.getScaleX() - A.getSkewX(), A.getScaleY() - A.getSkewY() }, };
-    if (diag[0].lengthSqd() < SK_ScalarNearlyZero || diag[1].lengthSqd() < SK_ScalarNearlyZero) {
+    if (diag[0].lengthSqd() <= SK_ScalarNearlyZero * SK_ScalarNearlyZero ||
+        diag[1].lengthSqd() <= SK_ScalarNearlyZero * SK_ScalarNearlyZero)
+    {
         s->fX = SK_Scalar1;
         s->fY = SK_Scalar1;
         sA->setScale(0, 0);
