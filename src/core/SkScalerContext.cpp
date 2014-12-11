@@ -24,8 +24,6 @@
 #include "SkStroke.h"
 #include "SkThread.h"
 
-#include <limits>
-
 #define ComputeBWRowBytes(width)        (((unsigned)(width) + 7) >> 3)
 
 void SkGlyph::toMask(SkMask* mask) const {
