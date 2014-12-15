@@ -429,6 +429,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
+	src/gpu/GrGeometryProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
