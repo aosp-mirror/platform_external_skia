@@ -491,6 +491,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
+	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
@@ -510,7 +511,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
 	src/gpu/gl/GrGpuGL.cpp \
-	src/gpu/gl/GrGpuGL_program.cpp \
 	src/gpu/gl/builders/GrGLLegacyNvprProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLNvprProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
