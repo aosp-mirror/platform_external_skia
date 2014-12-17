@@ -298,6 +298,7 @@ LOCAL_SRC_FILES := \
 	../gm/colorwheel.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
+	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \

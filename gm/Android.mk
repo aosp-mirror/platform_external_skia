@@ -62,6 +62,7 @@ LOCAL_SRC_FILES := \
 	colorwheel.cpp \
 	complexclip.cpp \
 	complexclip2.cpp \
+	complexclip3.cpp \
 	composeshader.cpp \
 	convexpaths.cpp \
 	convexpolyclip.cpp \
