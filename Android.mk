@@ -256,6 +256,7 @@ LOCAL_SRC_FILES := \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAlphaThresholdFilter.cpp \
+	src/effects/SkArcToPathEffect.cpp \
 	src/effects/SkArithmeticMode.cpp \
 	src/effects/SkAvoidXfermode.cpp \
 	src/effects/SkBitmapSource.cpp \
