@@ -478,6 +478,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrBicubicEffect.cpp \
 	src/gpu/effects/GrBitmapTextGeoProc.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
+	src/gpu/effects/GrDisableColorXP.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrMatrixConvolutionEffect.cpp \
