@@ -71,6 +71,7 @@ LOCAL_SRC_FILES := \
 	cubicpaths.cpp \
 	cmykjpeg.cpp \
 	degeneratesegments.cpp \
+	dcshader.cpp \
 	discard.cpp \
 	dashcubics.cpp \
 	dashing.cpp \
