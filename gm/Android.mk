@@ -64,6 +64,7 @@ LOCAL_SRC_FILES := \
 	complexclip2.cpp \
 	complexclip3.cpp \
 	composeshader.cpp \
+	conicpaths.cpp \
 	convexpaths.cpp \
 	convexpolyclip.cpp \
 	convexpolyeffect.cpp \
