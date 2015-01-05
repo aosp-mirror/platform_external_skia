@@ -300,7 +300,6 @@ LOCAL_SRC_FILES := \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
-	../gm/conicpaths.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
