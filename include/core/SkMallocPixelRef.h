@@ -92,8 +92,6 @@ protected:
     virtual void onUnlockPixels() SK_OVERRIDE;
     virtual size_t getAllocatedSizeInBytes() const SK_OVERRIDE;
 
-    size_t rowBytes() const { return fRB; }
-
 private:
     void*           fStorage;
     SkColorTable*   fCTable;
