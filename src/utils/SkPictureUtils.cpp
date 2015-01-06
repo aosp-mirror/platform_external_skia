@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "SkBBoxHierarchy.h"
 #include "SkBitmapDevice.h"
 #include "SkCanvas.h"
 #include "SkData.h"
@@ -12,6 +13,7 @@
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
 #include "SkRRect.h"
+#include "SkRecord.h"
 #include "SkShader.h"
 
 class PixelRefSet {
@@ -62,9 +64,6 @@ public:
         return SkImageInfo::MakeUnknown(fSize.width(), fSize.height());
     }
     virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE { return NULL; }
-    virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) SK_OVERRIDE {
-        return false;
-    }
     // TODO: allow this call to return failure, or move to SkBitmapDevice only.
     virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE {
         return fEmptyBitmap;
@@ -76,10 +75,6 @@ public:
     virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkImageFilter::Context&,
                              SkBitmap* result, SkIPoint* offset) SK_OVERRIDE {
         return false;
-    }
-
-    virtual void clear(SkColor color) SK_OVERRIDE {
-        nothing_to_do();
     }
 
     virtual void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE {
@@ -157,10 +152,10 @@ protected:
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE {
         not_supported();
     }
-    virtual SkBaseDevice* onCreateDevice(const SkImageInfo& info, Usage usage) SK_OVERRIDE {
+    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo& cinfo) SK_OVERRIDE {
         // we expect to only get called via savelayer, in which case it is fine.
-        SkASSERT(kSaveLayer_Usage == usage);
-        return SkNEW_ARGS(GatherPixelRefDevice, (info.width(), info.height(), fPRSet));
+        SkASSERT(kSaveLayer_Usage == cinfo.fUsage);
+        return SkNEW_ARGS(GatherPixelRefDevice, (cinfo.fInfo.width(), cinfo.fInfo.height(), fPRSet));
     }
     virtual void flush() SK_OVERRIDE {}
 
@@ -217,4 +212,26 @@ SkData* SkPictureUtils::GatherPixelRefs(const SkPicture* pict, const SkRect& are
         data = SkData::NewFromMalloc(array.detach(), count * sizeof(SkPixelRef*));
     }
     return data;
+}
+
+struct MeasureRecords {
+    template <typename T> size_t operator()(const T& op) { return 0; }
+    size_t operator()(const SkRecords::DrawPicture& op) {
+        return SkPictureUtils::ApproximateBytesUsed(op.picture);
+    }
+};
+
+size_t SkPictureUtils::ApproximateBytesUsed(const SkPicture* pict) {
+    size_t byteCount = sizeof(*pict);
+
+    byteCount += pict->fRecord->bytesUsed();
+    if (pict->fBBH.get()) {
+        byteCount += pict->fBBH->bytesUsed();
+    }
+    MeasureRecords visitor;
+    for (unsigned curOp = 0; curOp < pict->fRecord->count(); curOp++) {
+        byteCount += pict->fRecord->visit<size_t>(curOp, visitor);
+    }
+
+    return byteCount;
 }

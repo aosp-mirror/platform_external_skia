@@ -128,12 +128,13 @@ public:
     uint32_t getGenerationID() const;
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    /** Returns a non-zero, unique value corresponding to this SkPixelRef,
-        which is unchanged when the pixels are changed and even when this
-        object is deleted.
+    /** Returns a non-zero, unique value corresponding to this SkPixelRef.
+        Unlike the generation ID, this ID remains the same even when the pixels
+        are changed. IDs are not reused (until uint32_t wraps), so it is safe
+        to consider this ID unique even after this SkPixelRef is deleted.
 
-        Can be used as a key which must remain unique across changes and
-        deletions.
+        Can be used as a key which uniquely identifies this SkPixelRef
+        regardless of changes to its pixels or deletion of this object.
      */
     uint32_t getStableID() const { return fStableID; }
 #endif
@@ -252,13 +253,14 @@ public:
     /**
      *  Makes a deep copy of this PixelRef, respecting the requested config.
      *  @param colorType Desired colortype.
+     *  @param profileType Desired colorprofiletype.
      *  @param subset Subset of this PixelRef to copy. Must be fully contained within the bounds of
      *         of this PixelRef.
      *  @return A new SkPixelRef, or NULL if either there is an error (e.g. the destination could
      *          not be created with the given config), or this PixelRef does not support deep
      *          copies.
      */
-    virtual SkPixelRef* deepCopy(SkColorType /*colortype*/, const SkIRect* /*subset*/) {
+    virtual SkPixelRef* deepCopy(SkColorType, SkColorProfileType, const SkIRect* /*subset*/) {
         return NULL;
     }
 

@@ -7,29 +7,12 @@
 
 #include "SkSurface_Base.h"
 #include "SkImagePriv.h"
+#include "SkImage_Base.h"
 #include "SkCanvas.h"
 #include "SkGpuDevice.h"
+#include "SkSurface_Gpu.h"
 
-class SkSurface_Gpu : public SkSurface_Base {
-public:
-    SK_DECLARE_INST_COUNT(SkSurface_Gpu)
-
-    SkSurface_Gpu(GrRenderTarget*, const SkSurfaceProps*, bool doClear);
-    virtual ~SkSurface_Gpu();
-
-    virtual SkCanvas* onNewCanvas() SK_OVERRIDE;
-    virtual SkSurface* onNewSurface(const SkImageInfo&) SK_OVERRIDE;
-    virtual SkImage* onNewImageSnapshot() SK_OVERRIDE;
-    virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y,
-                        const SkPaint*) SK_OVERRIDE;
-    virtual void onCopyOnWrite(ContentChangeMode) SK_OVERRIDE;
-    virtual void onDiscard() SK_OVERRIDE;
-
-private:
-    SkGpuDevice* fDevice;
-
-    typedef SkSurface_Base INHERITED;
-};
+#if SK_SUPPORT_GPU
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -37,11 +20,11 @@ SkSurface_Gpu::SkSurface_Gpu(GrRenderTarget* renderTarget, const SkSurfaceProps*
                              bool doClear)
         : INHERITED(renderTarget->width(), renderTarget->height(), props) {
     int deviceFlags = 0;
-    deviceFlags |= this->props().isUseDistanceFieldFonts() ? SkGpuDevice::kDFFonts_Flag : 0;
+    deviceFlags |= this->props().isUseDistanceFieldFonts() ? SkGpuDevice::kDFText_Flag : 0;
     fDevice = SkGpuDevice::Create(renderTarget, this->props(), deviceFlags);
 
     if (kRGB_565_GrPixelConfig != renderTarget->config() && doClear) {
-        fDevice->clear(0x0);
+        fDevice->clearAll();
     }
 }
 
@@ -64,7 +47,12 @@ SkSurface* SkSurface_Gpu::onNewSurface(const SkImageInfo& info) {
 }
 
 SkImage* SkSurface_Gpu::onNewImageSnapshot() {
-    return SkImage::NewTexture(fDevice->accessBitmap(false));
+    const int sampleCount = fDevice->accessRenderTarget()->numSamples();
+    SkImage* image = SkNewImageFromBitmapTexture(fDevice->accessBitmap(false), sampleCount);
+    if (image) {
+        as_IB(image)->initWithProps(this->props());
+    }
+    return image;
 }
 
 void SkSurface_Gpu::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
@@ -83,8 +71,7 @@ void SkSurface_Gpu::onCopyOnWrite(ContentChangeMode mode) {
         // We call createCompatibleDevice because it uses the texture cache. This isn't
         // necessarily correct (http://skbug.com/2252), but never using the cache causes
         // a Chromium regression. (http://crbug.com/344020)
-        SkGpuDevice* newDevice = static_cast<SkGpuDevice*>(
-            fDevice->createCompatibleDevice(fDevice->imageInfo()));
+        SkGpuDevice* newDevice = fDevice->cloneDevice(this->props());
         SkAutoTUnref<SkGpuDevice> aurd(newDevice);
         if (kRetain_ContentChangeMode == mode) {
             fDevice->context()->copySurface(newDevice->accessRenderTarget(), rt->asTexture());
@@ -118,8 +105,8 @@ SkSurface* SkSurface::NewRenderTarget(GrContext* ctx, const SkImageInfo& info, i
         return NULL;
     }
 
-    GrTextureDesc desc;
-    desc.fFlags = kRenderTarget_GrTextureFlagBit | kCheckAllocation_GrTextureFlagBit;
+    GrSurfaceDesc desc;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag | kCheckAllocation_GrSurfaceFlag;
     desc.fWidth = info.width();
     desc.fHeight = info.height();
     desc.fConfig = SkImageInfo2GrPixelConfig(info);
@@ -139,8 +126,8 @@ SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& 
         return NULL;
     }
 
-    GrTextureDesc desc;
-    desc.fFlags = kRenderTarget_GrTextureFlagBit | kCheckAllocation_GrTextureFlagBit;
+    GrSurfaceDesc desc;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag | kCheckAllocation_GrSurfaceFlag;
     desc.fWidth = info.width();
     desc.fHeight = info.height();
     desc.fConfig = SkImageInfo2GrPixelConfig(info);
@@ -154,3 +141,5 @@ SkSurface* SkSurface::NewScratchRenderTarget(GrContext* ctx, const SkImageInfo& 
 
     return SkNEW_ARGS(SkSurface_Gpu, (tex->asRenderTarget(), props, true));
 }
+
+#endif

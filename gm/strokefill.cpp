@@ -23,11 +23,11 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("stroke-fill");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(640, 480);
     }
 
@@ -39,7 +39,7 @@ protected:
         canvas->drawText(text, len, x, y + SkIntToScalar(120), p);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkScalar x = SkIntToScalar(100);
         SkScalar y = SkIntToScalar(88);
 
@@ -79,6 +79,42 @@ protected:
         path2.addCircle(x + SkIntToScalar(360), y + SkIntToScalar(200), SkIntToScalar(50), SkPath::kCW_Direction);
         SkASSERT(path2.cheapIsDirection(SkPath::kCW_Direction));
         canvas->drawPath(path2, paint);
+
+        SkRect r = SkRect::MakeXYWH(x - SkIntToScalar(50), y + SkIntToScalar(280),
+                                    SkIntToScalar(100), SkIntToScalar(100));
+        SkPath path3;
+        path3.setFillType(SkPath::kWinding_FillType);
+        path3.addRect(r, SkPath::kCW_Direction);
+        r.inset(SkIntToScalar(10), SkIntToScalar(10));
+        path3.addRect(r, SkPath::kCCW_Direction);
+        canvas->drawPath(path3, paint);
+
+        r = SkRect::MakeXYWH(x + SkIntToScalar(70), y + SkIntToScalar(280), 
+                             SkIntToScalar(100), SkIntToScalar(100));
+        SkPath path4;
+        path4.setFillType(SkPath::kWinding_FillType);
+        path4.addRect(r, SkPath::kCCW_Direction);
+        r.inset(SkIntToScalar(10), SkIntToScalar(10));
+        path4.addRect(r, SkPath::kCW_Direction);
+        canvas->drawPath(path4, paint);
+
+        r = SkRect::MakeXYWH(x + SkIntToScalar(190), y + SkIntToScalar(280), 
+                             SkIntToScalar(100), SkIntToScalar(100));
+        path4.reset();
+        SkASSERT(!path4.cheapComputeDirection(NULL));
+        path4.addRect(r, SkPath::kCCW_Direction);
+        SkASSERT(path4.cheapIsDirection(SkPath::kCCW_Direction));
+        path4.moveTo(0, 0); // test for crbug.com/247770
+        canvas->drawPath(path4, paint);
+
+        r = SkRect::MakeXYWH(x + SkIntToScalar(310), y + SkIntToScalar(280), 
+                             SkIntToScalar(100), SkIntToScalar(100));
+        path4.reset();
+        SkASSERT(!path4.cheapComputeDirection(NULL));
+        path4.addRect(r, SkPath::kCW_Direction);
+        SkASSERT(path4.cheapIsDirection(SkPath::kCW_Direction));
+        path4.moveTo(0, 0); // test for crbug.com/247770
+        canvas->drawPath(path4, paint);
     }
 
 private:
@@ -87,7 +123,6 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 
-static GM* MyFactory(void*) { return new StrokeFillGM; }
-static GMRegistry reg(MyFactory);
+DEF_GM(return SkNEW(StrokeFillGM);)
 
 }

@@ -39,6 +39,10 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 bool SkSurface_Raster::Valid(const SkImageInfo& info, size_t rowBytes) {
+    if (info.isEmpty()) {
+        return false;
+    }
+
     static const size_t kMaxTotalSize = SK_MaxS32;
 
     int shift = 0;
@@ -115,7 +119,7 @@ void SkSurface_Raster::onDraw(SkCanvas* canvas, SkScalar x, SkScalar y,
 }
 
 SkImage* SkSurface_Raster::onNewImageSnapshot() {
-    return SkNewImageFromBitmap(fBitmap, fWeOwnThePixels);
+    return SkNewImageFromBitmap(fBitmap, fWeOwnThePixels, &this->props());
 }
 
 void SkSurface_Raster::onCopyOnWrite(ContentChangeMode mode) {

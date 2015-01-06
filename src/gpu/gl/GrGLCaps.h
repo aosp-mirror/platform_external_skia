@@ -168,7 +168,7 @@ public:
     /**
      * Some helper functions for encapsulating various extensions to read FB Buffer on openglES
      *
-     * TODO On desktop opengl 4.2+ we can achieve something similar to this effect
+     * TODO(joshualitt) On desktop opengl 4.2+ we can achieve something similar to this effect
      */
     bool fbFetchSupport() const { return fFBFetchSupport; }
 
@@ -244,6 +244,9 @@ public:
 
     /// Is there support for Vertex Array Objects?
     bool vertexArrayObjectSupport() const { return fVertexArrayObjectSupport; }
+
+    /// Is there support for ES2 compatability?
+    bool ES2CompatibilitySupport() const { return fES2CompatibilitySupport; }
 
     /// Use indices or vertices in CPU arrays rather than VBOs for dynamic content.
     bool useNonVBOVertexAndIndexDynamicData() const {
@@ -325,9 +328,10 @@ private:
     void initConfigRenderableTable(const GrGLContextInfo&);
     void initConfigTexturableTable(const GrGLContextInfo&, const GrGLInterface*);
 
-    bool doReadPixelsSupported(const GrGLInterface* intf,
-                                   GrGLenum format,
-                                   GrGLenum type) const;
+    // Must be called after fGeometryShaderSupport is initialized.
+    void initShaderPrecisionTable(const GrGLContextInfo&, const GrGLInterface*);
+
+    bool doReadPixelsSupported(const GrGLInterface* intf, GrGLenum format, GrGLenum type) const;
 
     // tracks configs that have been verified to pass the FBO completeness when
     // used as a color attachment
@@ -363,10 +367,12 @@ private:
     bool fTwoFormatLimit : 1;
     bool fFragCoordsConventionSupport : 1;
     bool fVertexArrayObjectSupport : 1;
+    bool fES2CompatibilitySupport : 1;
     bool fUseNonVBOVertexAndIndexDynamicData : 1;
     bool fIsCoreProfile : 1;
     bool fFullClearIsFree : 1;
     bool fDropsTileOnZeroDivide : 1;
+    // TODO(joshualitt) encapsulate the FB Fetch logic in a feature object
     bool fFBFetchSupport : 1;
 
     const char* fFBFetchColorName;

@@ -11,7 +11,9 @@
 #define GrPaint_DEFINED
 
 #include "GrColor.h"
-#include "GrProcessorStage.h"
+#include "GrFragmentStage.h"
+#include "GrXferProcessor.h"
+#include "effects/GrPorterDuffXferProcessor.h"
 
 #include "SkXfermode.h"
 
@@ -50,27 +52,10 @@ public:
     ~GrPaint() {}
 
     /**
-     * Sets the blending coefficients to use to blend the final primitive color with the
-     * destination color. Defaults to kOne for src and kZero for dst (i.e. src mode).
-     */
-    void setBlendFunc(GrBlendCoeff srcCoeff, GrBlendCoeff dstCoeff) {
-        fSrcBlendCoeff = srcCoeff;
-        fDstBlendCoeff = dstCoeff;
-    }
-    GrBlendCoeff getSrcBlendCoeff() const { return fSrcBlendCoeff; }
-    GrBlendCoeff getDstBlendCoeff() const { return fDstBlendCoeff; }
-
-    /**
      * The initial color of the drawn primitive. Defaults to solid white.
      */
     void setColor(GrColor color) { fColor = color; }
     GrColor getColor() const { return fColor; }
-
-    /**
-     * Applies fractional coverage to the entire drawn primitive. Defaults to 0xff.
-     */
-    void setCoverage(uint8_t coverage) { fCoverage = coverage; }
-    uint8_t getCoverage() const { return fCoverage; }
 
     /**
      * Should primitives be anti-aliased or not. Defaults to false.
@@ -84,14 +69,24 @@ public:
     void setDither(bool dither) { fDither = dither; }
     bool isDither() const { return fDither; }
 
+    const GrXPFactory* setXPFactory(const GrXPFactory* xpFactory) {
+        fXPFactory.reset(SkRef(xpFactory));
+        return xpFactory;
+    }
+
+    void setPorterDuffXPFactory(SkXfermode::Mode mode) {
+        fXPFactory.reset(GrPorterDuffXPFactory::Create(mode));
+    }
+
+    void setPorterDuffXPFactory(GrBlendCoeff src, GrBlendCoeff dst) {
+        fXPFactory.reset(GrPorterDuffXPFactory::Create(src, dst));
+    }
+
     /**
      * Appends an additional color processor to the color computation.
      */
     const GrFragmentProcessor* addColorProcessor(const GrFragmentProcessor* fp) {
         SkASSERT(fp);
-        if (!fp->willUseInputColor()) {
-            fColorStages.reset();
-        }
         SkNEW_APPEND_TO_TARRAY(&fColorStages, GrFragmentStage, (fp));
         return fp;
     }
@@ -101,9 +96,6 @@ public:
      */
     const GrFragmentProcessor* addCoverageProcessor(const GrFragmentProcessor* fp) {
         SkASSERT(fp);
-        if (!fp->willUseInputColor()) {
-            fCoverageStages.reset();
-        }
         SkNEW_APPEND_TO_TARRAY(&fCoverageStages, GrFragmentStage, (fp));
         return fp;
     }
@@ -121,20 +113,21 @@ public:
     int numCoverageStages() const { return fCoverageStages.count(); }
     int numTotalStages() const { return this->numColorStages() + this->numCoverageStages(); }
 
+    const GrXPFactory* getXPFactory() const { return fXPFactory.get(); }
+
     const GrFragmentStage& getColorStage(int s) const { return fColorStages[s]; }
     const GrFragmentStage& getCoverageStage(int s) const { return fCoverageStages[s]; }
 
     GrPaint& operator=(const GrPaint& paint) {
-        fSrcBlendCoeff = paint.fSrcBlendCoeff;
-        fDstBlendCoeff = paint.fDstBlendCoeff;
         fAntiAlias = paint.fAntiAlias;
         fDither = paint.fDither;
 
         fColor = paint.fColor;
-        fCoverage = paint.fCoverage;
 
         fColorStages = paint.fColorStages;
         fCoverageStages = paint.fCoverageStages;
+
+        fXPFactory.reset(SkRef(paint.getXPFactory()));
 
         return *this;
     }
@@ -143,21 +136,10 @@ public:
      * Resets the paint to the defaults.
      */
     void reset() {
-        this->resetBlend();
         this->resetOptions();
         this->resetColor();
-        this->resetCoverage();
         this->resetStages();
     }
-
-    /**
-     * Determines whether the drawing with this paint is opaque with respect to both color blending
-     * and fractional coverage. It does not consider whether AA has been enabled on the paint or
-     * not. Depending upon whether multisampling or coverage-based AA is in use, AA may make the
-     * result only apply to the interior of primitives.
-     *
-     */
-    bool isOpaque() const;
 
     /**
      * Returns true if isOpaque would return true and the paint represents a solid constant color
@@ -166,66 +148,14 @@ public:
     bool isOpaqueAndConstantColor(GrColor* constantColor) const;
 
 private:
+    SkAutoTUnref<const GrXPFactory> fXPFactory;
+    SkSTArray<4, GrFragmentStage>   fColorStages;
+    SkSTArray<2, GrFragmentStage>   fCoverageStages;
 
-    /**
-     * Helper for isOpaque and isOpaqueAndConstantColor.
-     */
-    bool getOpaqueAndKnownColor(GrColor* solidColor, uint32_t* solidColorKnownComponents) const;
+    bool                            fAntiAlias;
+    bool                            fDither;
 
-    /**
-     * Called when the source coord system from which geometry is rendered changes. It ensures that
-     * the local coordinates seen by effects remains unchanged. oldToNew gives the transformation
-     * from the previous coord system to the new coord system.
-     */
-    void localCoordChange(const SkMatrix& oldToNew) {
-        for (int i = 0; i < fColorStages.count(); ++i) {
-            fColorStages[i].localCoordChange(oldToNew);
-        }
-        for (int i = 0; i < fCoverageStages.count(); ++i) {
-            fCoverageStages[i].localCoordChange(oldToNew);
-        }
-    }
-
-    bool localCoordChangeInverse(const SkMatrix& newToOld) {
-        SkMatrix oldToNew;
-        bool computed = false;
-        for (int i = 0; i < fColorStages.count(); ++i) {
-            if (!computed && !newToOld.invert(&oldToNew)) {
-                return false;
-            } else {
-                computed = true;
-            }
-            fColorStages[i].localCoordChange(oldToNew);
-        }
-        for (int i = 0; i < fCoverageStages.count(); ++i) {
-            if (!computed && !newToOld.invert(&oldToNew)) {
-                return false;
-            } else {
-                computed = true;
-            }
-            fCoverageStages[i].localCoordChange(oldToNew);
-        }
-        return true;
-    }
-
-    friend class GrContext; // To access above two functions
-    friend class GrStencilAndCoverTextContext;  // To access above two functions
-
-    SkSTArray<4, GrFragmentStage> fColorStages;
-    SkSTArray<2, GrFragmentStage> fCoverageStages;
-
-    GrBlendCoeff                fSrcBlendCoeff;
-    GrBlendCoeff                fDstBlendCoeff;
-    bool                        fAntiAlias;
-    bool                        fDither;
-
-    GrColor                     fColor;
-    uint8_t                     fCoverage;
-
-    void resetBlend() {
-        fSrcBlendCoeff = kOne_GrBlendCoeff;
-        fDstBlendCoeff = kZero_GrBlendCoeff;
-    }
+    GrColor                         fColor;
 
     void resetOptions() {
         fAntiAlias = false;
@@ -236,14 +166,7 @@ private:
         fColor = GrColorPackRGBA(0xff, 0xff, 0xff, 0xff);
     }
 
-    void resetCoverage() {
-        fCoverage = 0xff;
-    }
-
-    void resetStages() {
-        fColorStages.reset();
-        fCoverageStages.reset();
-    }
+    void resetStages();
 };
 
 #endif

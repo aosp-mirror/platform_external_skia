@@ -184,6 +184,9 @@ bool GrGLInterface::validate() const {
         NULL == fFunctions.fUniformMatrix3fv ||
         NULL == fFunctions.fUniformMatrix4fv ||
         NULL == fFunctions.fUseProgram ||
+        NULL == fFunctions.fVertexAttrib1f ||
+        NULL == fFunctions.fVertexAttrib2fv ||
+        NULL == fFunctions.fVertexAttrib3fv ||
         NULL == fFunctions.fVertexAttrib4fv ||
         NULL == fFunctions.fVertexAttribPointer ||
         NULL == fFunctions.fViewport ||
@@ -454,6 +457,15 @@ bool GrGLInterface::validate() const {
         if (NULL == fFunctions.fGetProgramResourceLocation) {
             RETURN_FALSE_INTERFACE
         }
+    }
+
+    if (kGLES_GrGLStandard == fStandard || glVer >= GR_GL_VER(4,1) ||
+        fExtensions.has("GL_ARB_ES2_compatibility")) {
+#if 0 // Enable this once Chrome gives us the function ptr
+        if (NULL == fFunctions.fGetShaderPrecisionFormat) {
+            RETURN_FALSE_INTERFACE
+        }
+#endif
     }
 
     if (fExtensions.has("GL_NV_path_rendering")) {

@@ -35,6 +35,7 @@
 #include "SkImageDecoder.h"
 #include "SkImageEncoder.h"
 #include "SkJSONCPP.h"
+#include "SkMultiPictureDraw.h"
 #include "SkOSFile.h"
 #include "SkPDFRasterizer.h"
 #include "SkPicture.h"
@@ -151,6 +152,9 @@ enum ConfigFlags {
     /* Read reference GM images if a read path is provided. */
     kRead_ConfigFlag  = 0x2,
     kRW_ConfigFlag    = (kWrite_ConfigFlag | kRead_ConfigFlag),
+    /* Use distance fields for rendering text */
+    kDFText_ConfigFlag = 0x4,
+    kRWDFT_ConfigFlag = (kRW_ConfigFlag | kDFText_ConfigFlag),
 };
 
 struct ConfigData {
@@ -243,11 +247,11 @@ public:
     /**
      * Assemble filename suitable for writing out an SkBitmap.
      */
-    SkString make_bitmap_filename(const char *path,
-                                  const char *shortName,
-                                  const char *configName,
-                                  const char *renderModeDescriptor,
-                                  const GmResultDigest &bitmapDigest) {
+    SkString makeBitmapFilename(const char *path,
+                                const char *shortName,
+                                const char *configName,
+                                const char *renderModeDescriptor,
+                                const GmResultDigest &bitmapDigest) {
         if (fWriteChecksumBasedFilenames) {
             SkString filename;
             filename.append(bitmapDigest.getHashType());
@@ -292,7 +296,7 @@ public:
         }
     }
 
-    static ErrorCombination write_bitmap(const SkString& path, const SkBitmap& bitmap) {
+    static ErrorCombination WriteBitmap(const SkString& path, const SkBitmap& bitmap) {
         // TODO(epoger): Now that we have removed force_all_opaque()
         // from this method, we should be able to get rid of the
         // transformation to 8888 format also.
@@ -331,7 +335,7 @@ public:
     /**
      * Returns true if failures on this test should be ignored.
      */
-    bool ShouldIgnoreTest(const char *name) const {
+    bool shouldIgnoreTest(const char *name) const {
         for (int i = 0; i < fIgnorableTestNames.count(); i++) {
             if (fIgnorableTestNames[i].equals(name)) {
                 return true;
@@ -478,7 +482,7 @@ public:
      * (logically a noop for rasters, if wasted time), and thus collapse the
      * GPU special case and also let this be used for SkPicture testing.
      */
-    static void setup_bitmap(const ConfigData& gRec, SkISize& size,
+    static void setup_bitmap(const ConfigData& gRec, const SkISize& size,
                              SkBitmap* bitmap) {
         bitmap->allocPixels(SkImageInfo::Make(size.width(), size.height(),
                                               gRec.fColorType, kPremul_SkAlphaType));
@@ -545,7 +549,7 @@ public:
         force_all_opaque(*bitmap);
     }
 
-    static void installFilter(SkCanvas* canvas);
+    static void InstallFilter(SkCanvas* canvas);
 
     static void invokeGM(GM* gm, SkCanvas* canvas, bool isPDF, bool isDeferred) {
         SkAutoCanvasRestore acr(canvas, true);
@@ -553,7 +557,7 @@ public:
         if (!isPDF) {
             canvas->concat(gm->getInitialTransform());
         }
-        installFilter(canvas);
+        InstallFilter(canvas);
         gm->setCanvasIsDeferred(isDeferred);
         gm->draw(canvas);
         canvas->setDrawFilter(NULL);
@@ -563,92 +567,110 @@ public:
                                            GrSurface* gpuTarget,
                                            SkBitmap* bitmap,
                                            bool deferred) {
-        SkISize size (gm->getISize());
-        setup_bitmap(gRec, size, bitmap);
-        const SkImageInfo info = bitmap->info();
+        const SkISize size (gm->getISize());
 
-        SkAutoTUnref<SkSurface> surface;
+        SkAutoTUnref<SkSurface> surface(CreateSurface(gRec, size, gpuTarget));
         SkAutoTUnref<SkCanvas> canvas;
 
-        if (gRec.fBackend == kRaster_Backend) {
-            surface.reset(SkSurface::NewRasterDirect(info,
-                                                     bitmap->getPixels(),
-                                                     bitmap->rowBytes()));
-            if (deferred) {
-                canvas.reset(SkDeferredCanvas::Create(surface));
-            } else {
-                canvas.reset(SkRef(surface->getCanvas()));
-            }
-            invokeGM(gm, canvas, false, deferred);
-            canvas->flush();
+        if (deferred) {
+            canvas.reset(SkDeferredCanvas::Create(surface));
+        } else {
+            canvas.reset(SkRef(surface->getCanvas()));
         }
-#if SK_SUPPORT_GPU
-        else {  // GPU
-            surface.reset(SkSurface::NewRenderTargetDirect(gpuTarget->asRenderTarget()));
-            if (deferred) {
-                canvas.reset(SkDeferredCanvas::Create(surface));
-            } else {
-                canvas.reset(SkRef(surface->getCanvas()));
-            }
-            invokeGM(gm, canvas, false, deferred);
-            // the device is as large as the current rendertarget, so
-            // we explicitly only readback the amount we expect (in
-            // size) overwrite our previous allocation
-            bitmap->setInfo(SkImageInfo::MakeN32Premul(size.fWidth, size.fHeight));
-            canvas->readPixels(bitmap, 0, 0);
-        }
-#endif
+        invokeGM(gm, canvas, false, deferred);
+        canvas->flush();
+
+        setup_bitmap(gRec, size, bitmap);
+        surface->readPixels(bitmap->info(), bitmap->getPixels(), bitmap->rowBytes(), 0, 0);
         complete_bitmap(bitmap);
         return kEmpty_ErrorCombination;
     }
 
-    static void generate_image_from_picture(GM* gm, const ConfigData& gRec,
-                                            SkPicture* pict, SkBitmap* bitmap,
-                                            SkScalar scale = SK_Scalar1,
-                                            bool tile = false) {
-        SkISize size = gm->getISize();
-        setup_bitmap(gRec, size, bitmap);
+    static void DrawPictureToSurface(SkSurface* surf,
+                                     const SkPicture* pict,
+                                     SkScalar scale,
+                                     bool tile,
+                                     bool useMPD) {
+        SkASSERT(surf->width() == pict->cullRect().width() &&
+                 surf->height() == pict->cullRect().height());
 
         if (tile) {
-            // Generate the result image by rendering to tiles and accumulating
-            // the results in 'bitmap'
+            SkMultiPictureDraw mpd;
+            SkTDArray<SkSurface*> surfaces;
 
-            // This 16x16 tiling matches the settings applied to 'pict' in
-            // 'generate_new_picture'
-            SkISize tileSize = SkISize::Make(16, 16);
+            const SkISize tileSize = SkISize::Make(16, 16);
 
-            SkBitmap tileBM;
-            setup_bitmap(gRec, tileSize, &tileBM);
-            SkCanvas tileCanvas(tileBM);
-            installFilter(&tileCanvas);
+            const SkImageInfo ii = surf->getCanvas()->imageInfo().makeWH(tileSize.width(),
+                                                                         tileSize.height());
 
-            SkCanvas bmpCanvas(*bitmap);
-            SkPaint bmpPaint;
-            bmpPaint.setXfermodeMode(SkXfermode::kSrc_Mode);
+            for (int tileY = 0; tileY < pict->cullRect().height(); tileY += tileSize.height()) {
+                for (int tileX = 0; tileX < pict->cullRect().width(); tileX += tileSize.width()) {
 
-            for (int yTile = 0; yTile < (size.height()+15)/16; ++yTile) {
-                for (int xTile = 0; xTile < (size.width()+15)/16; ++xTile) {
-                    int saveCount = tileCanvas.save();
-                    SkMatrix mat(tileCanvas.getTotalMatrix());
-                    mat.postTranslate(SkIntToScalar(-xTile*tileSize.width()),
-                                      SkIntToScalar(-yTile*tileSize.height()));
-                    tileCanvas.setMatrix(mat);
-                    pict->playback(&tileCanvas);
-                    tileCanvas.flush();
-                    tileCanvas.restoreToCount(saveCount);
-                    bmpCanvas.drawBitmap(tileBM,
-                                         SkIntToScalar(xTile * tileSize.width()),
-                                         SkIntToScalar(yTile * tileSize.height()),
-                                         &bmpPaint);
+                    *surfaces.append() = surf->getCanvas()->newSurface(ii);
+
+                    InstallFilter(surfaces.top()->getCanvas());
+
+                    SkMatrix matrix;
+                    matrix.setTranslate(-pict->cullRect().fLeft, -pict->cullRect().fTop);
+                    matrix.postTranslate(-SkIntToScalar(tileX), -SkIntToScalar(tileY));
+                    matrix.postScale(scale, scale);
+
+                    if (useMPD) {
+                        mpd.add(surfaces.top()->getCanvas(), pict, &matrix, NULL);
+                    } else {
+                        surfaces.top()->getCanvas()->drawPicture(pict, &matrix, NULL);
+                    }
+                }
+            }
+
+            mpd.draw();
+
+            SkPaint gatherPaint;
+            gatherPaint.setXfermodeMode(SkXfermode::kSrc_Mode);
+
+            int tileIndex = 0;
+            for (int tileY = 0; tileY < pict->cullRect().height(); tileY += tileSize.height()) {
+                for (int tileX = 0; tileX < pict->cullRect().width(); tileX += tileSize.width()) {
+                    surf->getCanvas()->drawImage(surfaces[tileIndex]->newImageSnapshot(),
+                                                 SkIntToScalar(tileX), SkIntToScalar(tileY),
+                                                 &gatherPaint);
+                    surfaces[tileIndex]->unref();
+                    tileIndex++;
                 }
             }
         } else {
-            SkCanvas canvas(*bitmap);
-            installFilter(&canvas);
-            canvas.scale(scale, scale);
-            canvas.drawPicture(pict);
-            complete_bitmap(bitmap);
+            InstallFilter(surf->getCanvas());
+
+            SkMatrix matrix;
+            matrix.setTranslate(-pict->cullRect().fLeft, -pict->cullRect().fTop);
+            matrix.postScale(scale, scale);
+
+            if (useMPD) {
+                SkMultiPictureDraw mpd;
+                mpd.add(surf->getCanvas(), pict, &matrix, NULL);
+                mpd.draw();
+            } else {
+                surf->getCanvas()->drawPicture(pict, &matrix, NULL);
+            }
         }
+    }
+
+    static void generate_image_from_picture(GM* gm, const ConfigData& config,
+                                            GrSurface* gpuTarget,
+                                            SkPicture* pict, SkBitmap* bitmap,
+                                            SkScalar scale = SK_Scalar1,
+                                            bool tile = false) {
+        const SkISize size = gm->getISize();
+
+        SkAutoTUnref<SkSurface> surf(CreateSurface(config, size, gpuTarget));
+
+        DrawPictureToSurface(surf, pict, scale, tile, false);
+
+        setup_bitmap(config, size, bitmap);
+
+        surf->readPixels(bitmap->info(), bitmap->getPixels(), bitmap->rowBytes(), 0, 0);
+
+        complete_bitmap(bitmap);
     }
 
     static bool generate_pdf(GM* gm, SkDynamicMemoryWStream& pdf) {
@@ -821,10 +843,10 @@ public:
             // Write out the "actuals" for any tests without expectations, if we have
             // been directed to do so.
             if (fMissingExpectationsPath) {
-                SkString path = make_bitmap_filename(fMissingExpectationsPath, shortName,
-                                                     configName, renderModeDescriptor,
-                                                     actualBitmapAndDigest.fDigest);
-                write_bitmap(path, actualBitmapAndDigest.fBitmap);
+                SkString path = this->makeBitmapFilename(fMissingExpectationsPath, shortName,
+                                                         configName, renderModeDescriptor,
+                                                         actualBitmapAndDigest.fDigest);
+                WriteBitmap(path, actualBitmapAndDigest.fBitmap);
             }
 
         } else if (!expectations.match(actualBitmapAndDigest.fDigest)) {
@@ -840,10 +862,10 @@ public:
             // Write out the "actuals" for any mismatches, if we have
             // been directed to do so.
             if (fMismatchPath) {
-                SkString path = make_bitmap_filename(fMismatchPath, shortName, configName,
-                                                     renderModeDescriptor,
-                                                     actualBitmapAndDigest.fDigest);
-                write_bitmap(path, actualBitmapAndDigest.fBitmap);
+                SkString path = this->makeBitmapFilename(fMismatchPath, shortName, configName,
+                                                         renderModeDescriptor,
+                                                         actualBitmapAndDigest.fDigest);
+                WriteBitmap(path, actualBitmapAndDigest.fBitmap);
             }
 
             // If we have access to a single expected bitmap, log more
@@ -922,7 +944,7 @@ public:
      * @param actualBitmapAndDigest ptr to bitmap generated by this run, or NULL
      *        if we don't have a usable bitmap representation
      */
-    ErrorCombination compare_test_results_to_stored_expectations(
+    ErrorCombination compareTestResultsToStoredExpectations(
         GM* gm, const ConfigData& gRec, const char* configName,
         const BitmapAndDigest* actualBitmapAndDigest) {
         ErrorCombination errors;
@@ -960,7 +982,7 @@ public:
                  * See comments above complete_bitmap() for more detail.
                  */
                 Expectations expectations = expectationsSource->get(nameWithExtension.c_str());
-                if (this->ShouldIgnoreTest(gm->getName())) {
+                if (this->shouldIgnoreTest(gm->getName())) {
                     expectations.setIgnoreFailure(true);
                 }
                 errors.add(compare_to_expectations(expectations, *actualBitmapAndDigest,
@@ -1033,7 +1055,7 @@ public:
 
     static SkPicture* stream_to_new_picture(const SkPicture& src) {
         SkDynamicMemoryWStream storage;
-        src.serialize(&storage, NULL);
+        src.serialize(&storage);
         SkAutoTUnref<SkStreamAsset> pictReadback(storage.detachAsStream());
         SkPicture* retval = SkPicture::CreateFromStream(pictReadback,
                                                         &SkImageDecoder::DecodeMemory);
@@ -1050,7 +1072,6 @@ public:
                                   SkBitmap* bitmap) {
         ErrorCombination errors;
         SkDynamicMemoryWStream document;
-        SkString path;
 
         if (gRec.fBackend == kRaster_Backend ||
             gRec.fBackend == kGPU_Backend) {
@@ -1062,22 +1083,15 @@ public:
                 // trying to generate the image.
                 return errors;
             }
-            BitmapAndDigest bitmapAndDigest(*bitmap);
-            errors.add(compare_test_results_to_stored_expectations(
-                           gm, gRec, gRec.fName, &bitmapAndDigest));
 
-            if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
-                path = make_bitmap_filename(writePath, gm->getName(), gRec.fName,
-                                            "", bitmapAndDigest.fDigest);
-                errors.add(write_bitmap(path, bitmapAndDigest.fBitmap));
-            }
+            errors.add(this->writeBitmap(gm, gRec, gRec.fName, writePath, *bitmap));
         } else if (gRec.fBackend == kPDF_Backend) {
             if (!generate_pdf(gm, document)) {
                 errors.add(kGeneratePdfFailed_ErrorType);
             } else {
                 SkAutoTUnref<SkStreamAsset> documentStream(document.detachAsStream());
                 if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
-                    path = make_filename(writePath, gm->getName(), gRec.fName, "", "pdf");
+                    SkString path = make_filename(writePath, gm->getName(), gRec.fName, "", "pdf");
                     errors.add(write_document(path, documentStream));
                 }
 
@@ -1098,16 +1112,8 @@ public:
                         configName.append("-");
                         configName.append(pdfRasterizers[i]->fName);
 
-                        BitmapAndDigest bitmapAndDigest(pdfBitmap);
-                        errors.add(compare_test_results_to_stored_expectations(
-                                   gm, gRec, configName.c_str(), &bitmapAndDigest));
-
-                        if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
-                            path = make_bitmap_filename(writePath, gm->getName(),
-                                                        configName.c_str(),
-                                                        "", bitmapAndDigest.fDigest);
-                            errors.add(write_bitmap(path, bitmapAndDigest.fBitmap));
-                        }
+                        errors.add(this->writeBitmap(gm, gRec, configName.c_str(),
+                                                     writePath, pdfBitmap));
                     }
                 } else {
                     errors.add(kIntentionallySkipped_ErrorType);
@@ -1117,11 +1123,11 @@ public:
             generate_xps(gm, document);
             SkAutoTUnref<SkStreamAsset> documentStream(document.detachAsStream());
 
-            errors.add(compare_test_results_to_stored_expectations(
+            errors.add(this->compareTestResultsToStoredExpectations(
                            gm, gRec, gRec.fName, NULL));
 
             if (writePath && (gRec.fFlags & kWrite_ConfigFlag)) {
-                path = make_filename(writePath, gm->getName(), gRec.fName, "", "xps");
+                SkString path = make_filename(writePath, gm->getName(), gRec.fName, "", "xps");
                 errors.add(write_document(path, documentStream));
             }
         } else {
@@ -1163,6 +1169,77 @@ public:
         return kEmpty_ErrorCombination;
     }
 
+    static SkSurface* CreateSurface(const ConfigData& config,
+                                    const SkISize& size,
+                                    GrSurface* gpuTarget) {
+        if (config.fBackend == kRaster_Backend) {
+            SkImageInfo ii = SkImageInfo::Make(size.width(), size.height(), 
+                                               config.fColorType, kPremul_SkAlphaType);
+
+            return SkSurface::NewRaster(ii);
+        }
+#if SK_SUPPORT_GPU
+        else {
+            uint32_t flags = (config.fFlags & kDFText_ConfigFlag) ?
+                                SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
+            SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
+            return SkSurface::NewRenderTargetDirect(gpuTarget->asRenderTarget(), &props);
+        }
+#endif
+
+        return NULL;
+    }
+
+    ErrorCombination writeBitmap(GM* gm,
+                                 const ConfigData& config,
+                                 const char* configName,
+                                 const char* writePath,
+                                 const SkBitmap& bitmap) {
+        ErrorCombination errors;
+
+        BitmapAndDigest bitmapAndDigest(bitmap);
+        errors.add(this->compareTestResultsToStoredExpectations(gm, config,
+                                                                configName, &bitmapAndDigest));
+
+        if (writePath && (config.fFlags & kWrite_ConfigFlag)) {
+            SkString path;
+
+            path = this->makeBitmapFilename(writePath, gm->getName(), configName,
+                                            "", bitmapAndDigest.fDigest);
+            errors.add(WriteBitmap(path, bitmapAndDigest.fBitmap));
+        }
+
+        return errors;
+    }
+
+    ErrorCombination testMPDDrawing(GM* gm,
+                                    const ConfigData& config,
+                                    const char* writePath,
+                                    GrSurface* gpuTarget,
+                                    const SkBitmap& referenceBitmap) {
+        SkASSERT(kRaster_Backend == config.fBackend || kGPU_Backend == config.fBackend);
+
+        static const uint32_t kMPDFlags = SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
+
+        SkAutoTUnref<SkPicture> pict(generate_new_picture(gm, kRTree_BbhType, kMPDFlags));
+
+        SkAutoTUnref<SkSurface> surf(CreateSurface(config, gm->getISize(), gpuTarget));
+
+        DrawPictureToSurface(surf, pict, SK_Scalar1, false, true);
+
+        SkBitmap bitmap;
+
+        setup_bitmap(config, gm->getISize(), &bitmap);
+
+        surf->readPixels(bitmap.info(), bitmap.getPixels(), bitmap.rowBytes(), 0, 0);
+        complete_bitmap(&bitmap);
+
+        SkString configName(config.fName);
+        configName.append("-mpd");
+
+        return this->writeBitmap(gm, config, configName.c_str(), writePath, bitmap);
+    }
+
     ErrorCombination test_pipe_playback(GM* gm, const ConfigData& gRec,
                                         const SkBitmap& referenceBitmap, bool simulateFailure) {
         const SkString shortNamePlusConfig = make_shortname_plus_config(gm->getName(),
@@ -1183,7 +1260,7 @@ public:
                 SkISize size = gm->getISize();
                 setup_bitmap(gRec, size, &bitmap);
                 SkCanvas canvas(bitmap);
-                installFilter(&canvas);
+                InstallFilter(&canvas);
                 // Pass a decoding function so the factory GM (which has an SkBitmap
                 // with encoded data) will not fail playback.
                 PipeController pipeController(&canvas, &SkImageDecoder::DecodeMemory);
@@ -1226,7 +1303,7 @@ public:
                 SkISize size = gm->getISize();
                 setup_bitmap(gRec, size, &bitmap);
                 SkCanvas canvas(bitmap);
-                installFilter(&canvas);
+                InstallFilter(&canvas);
                 TiledPipeController pipeController(bitmap, &SkImageDecoder::DecodeMemory);
                 SkGPipeWriter writer;
                 SkCanvas* pipeCanvas = writer.startRecording(&pipeController,
@@ -1291,6 +1368,8 @@ static const ConfigData gRec[] = {
     { kN32_SkColorType, kGPU_Backend,    GrContextFactory::kNative_GLContextType,  4, kRW_ConfigFlag,    "msaa4",        false},
     { kN32_SkColorType, kGPU_Backend,    GrContextFactory::kNVPR_GLContextType,    4, kRW_ConfigFlag,    "nvprmsaa4",   true },
     { kN32_SkColorType, kGPU_Backend,    GrContextFactory::kNVPR_GLContextType,   16, kRW_ConfigFlag,    "nvprmsaa16",  false},
+    /* Not quite ready to turn on distance field text baselines */
+    { kN32_SkColorType, kGPU_Backend,    GrContextFactory::kNative_GLContextType,  0, kRWDFT_ConfigFlag, "gpudft",      false },
     /* The gpudebug context does not generate meaningful images, so don't record
      * the images it generates!  We only run it to look for asserts. */
     { kN32_SkColorType, kGPU_Backend,    GrContextFactory::kDebug_GLContextType,   0, kNone_ConfigFlag,  "gpudebug",     kDebugOnly},
@@ -1424,6 +1503,8 @@ DEFINE_string(config, "", configUsage().c_str());
 DEFINE_bool(cpu, true, "Allows non-GPU configs to be run. Applied after --config.");
 DEFINE_string(pdfRasterizers, "default", pdfRasterizerUsage().c_str());
 DEFINE_bool(deferred, false, "Exercise the deferred rendering test pass.");
+DEFINE_bool(mpd, false, "Exercise MultiPictureDraw.");
+
 DEFINE_bool(dryRun, false, "Don't actually run the tests, just print what would have been done.");
 DEFINE_string(excludeConfig, "", "Space delimited list of configs to skip.");
 DEFINE_bool(forceBWtext, false, "Disable text anti-aliasing.");
@@ -1561,10 +1642,12 @@ template <typename T> void appendUnique(SkTDArray<T>* array, const T& value) {
  *
  * Returns all errors encountered while doing so.
  */
-ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &compareConfig,
+ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm,
+                                    const ConfigData &compareConfig, GrSurface* gpuTarget,
                                     const SkBitmap &comparisonBitmap,
                                     const SkTDArray<SkScalar> &tileGridReplayScales);
-ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &compareConfig,
+ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm,
+                                    const ConfigData &compareConfig, GrSurface* gpuTarget,
                                     const SkBitmap &comparisonBitmap,
                                     const SkTDArray<SkScalar> &tileGridReplayScales) {
     ErrorCombination errorsForAllModes;
@@ -1573,7 +1656,7 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
                                                                            compareConfig.fName);
 
     SkPicture* pict = gmmain.generate_new_picture(gm, kNone_BbhType, 0);
-    SkAutoUnref aur(pict);
+    SkAutoTUnref<SkPicture> aur(pict);
     if (FLAGS_replay) {
         const char renderModeDescriptor[] = "-replay";
         if (gmFlags & GM::kSkipPicture_Flag) {
@@ -1582,7 +1665,8 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
             errorsForAllModes.add(kIntentionallySkipped_ErrorType);
         } else {
             SkBitmap bitmap;
-            gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);
+            gmmain.generate_image_from_picture(gm, compareConfig, gpuTarget, pict, &bitmap);
+
             errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
                 gm->getName(), compareConfig.fName, renderModeDescriptor, bitmap,
                 &comparisonBitmap));
@@ -1597,9 +1681,9 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
             errorsForAllModes.add(kIntentionallySkipped_ErrorType);
         } else {
             SkPicture* repict = gmmain.stream_to_new_picture(*pict);
-            SkAutoUnref aurr(repict);
+            SkAutoTUnref<SkPicture> aurr(repict);
             SkBitmap bitmap;
-            gmmain.generate_image_from_picture(gm, compareConfig, repict, &bitmap);
+            gmmain.generate_image_from_picture(gm, compareConfig, gpuTarget, repict, &bitmap);
             errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
                 gm->getName(), compareConfig.fName, renderModeDescriptor, bitmap,
                 &comparisonBitmap));
@@ -1630,9 +1714,9 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
             errorsForAllModes.add(kIntentionallySkipped_ErrorType);
         } else {
             SkPicture* pict = gmmain.generate_new_picture(gm, kRTree_BbhType, 0);
-            SkAutoUnref aur(pict);
+            SkAutoTUnref<SkPicture> aur(pict);
             SkBitmap bitmap;
-            gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap);
+            gmmain.generate_image_from_picture(gm, compareConfig, gpuTarget, pict, &bitmap);
             errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
                 gm->getName(), compareConfig.fName, renderModeDescriptor, bitmap,
                 &comparisonBitmap));
@@ -1660,12 +1744,12 @@ ErrorCombination run_multiple_modes(GMMain &gmmain, GM *gm, const ConfigData &co
                 SkScalar recordScale = SkScalarInvert(replayScale);
                 SkPicture* pict = gmmain.generate_new_picture(
                     gm, kTileGrid_BbhType, 0, recordScale);
-                SkAutoUnref aur(pict);
+                SkAutoTUnref<SkPicture> aur(pict);
                 SkBitmap bitmap;
                 // We cannot yet pass 'true' to generate_image_from_picture to
                 // perform actual tiled rendering (see Issue 1198 -
                 // https://code.google.com/p/skia/issues/detail?id=1198)
-                gmmain.generate_image_from_picture(gm, compareConfig, pict, &bitmap,
+                gmmain.generate_image_from_picture(gm, compareConfig, gpuTarget, pict, &bitmap,
                                                    replayScale /*, true */);
                 errorsForAllModes.add(gmmain.compare_test_results_to_reference_bitmap(
                     gm->getName(), compareConfig.fName, renderModeDescriptor.c_str(), bitmap,
@@ -1759,9 +1843,9 @@ ErrorCombination run_multiple_configs(GMMain &gmmain, GM *gm,
             bool grSuccess = false;
             if (gr) {
                 // create a render target to back the device
-                GrTextureDesc desc;
+                GrSurfaceDesc desc;
                 desc.fConfig = kSkia8888_GrPixelConfig;
-                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fFlags = kRenderTarget_GrSurfaceFlag;
                 desc.fWidth = gm->getISize().width();
                 desc.fHeight = gm->getISize().height();
                 desc.fSampleCnt = config.fSampleCnt;
@@ -1806,13 +1890,27 @@ ErrorCombination run_multiple_configs(GMMain &gmmain, GM *gm,
 
         // TODO: run only if gmmain.test_drawing succeeded.
         if (kRaster_Backend == config.fBackend) {
-            run_multiple_modes(gmmain, gm, config, comparisonBitmap, tileGridReplayScales);
+            run_multiple_modes(gmmain, gm, config, gpuTarget, comparisonBitmap, tileGridReplayScales);
         }
 
         if (FLAGS_deferred && errorsForThisConfig.isEmpty() &&
             (kGPU_Backend == config.fBackend || kRaster_Backend == config.fBackend)) {
             errorsForThisConfig.add(gmmain.test_deferred_drawing(gm, config, comparisonBitmap,
                                                                  gpuTarget));
+        }
+
+        if (FLAGS_mpd && (kGPU_Backend == config.fBackend || kRaster_Backend == config.fBackend)) {
+
+            if (gmFlags & GM::kSkipPicture_Flag) {
+                gmmain.RecordSkippedTest(shortNamePlusConfig,
+                                         renderModeDescriptor,
+                                         config.fBackend);
+                errorsForThisConfig.add(kIntentionallySkipped_ErrorType);
+            } else if (!(gmFlags & GM::kGPUOnly_Flag)) {
+                errorsForThisConfig.add(gmmain.testMPDDrawing(gm, config, 
+                                                              writePath, gpuTarget,
+                                                              comparisonBitmap));
+            }
         }
 
         errorsForAllConfigs.add(errorsForThisConfig);
@@ -2257,7 +2355,7 @@ int tool_main(int argc, char** argv) {
     }
 #endif
 
-    SkGraphics::Init();
+    SkAutoGraphics ag;
 
     setSystemPreferences();
     GMMain gmmain;
@@ -2474,12 +2572,11 @@ int tool_main(int argc, char** argv) {
 
     delete grFactory;
 #endif
-    SkGraphics::Term();
 
     return (reportError) ? -1 : 0;
 }
 
-void GMMain::installFilter(SkCanvas* canvas) {
+void GMMain::InstallFilter(SkCanvas* canvas) {
     if (FLAGS_forceBWtext) {
         canvas->setDrawFilter(SkNEW(BWTextDrawFilter))->unref();
     }

@@ -11,10 +11,10 @@
 #include "SkColorPriv.h"
 #include "SkDescriptor.h"
 #include "SkDraw.h"
-#include "SkFontHost.h"
 #include "SkGlyph.h"
 #include "SkMaskFilter.h"
 #include "SkMaskGamma.h"
+#include "SkMatrix22.h"
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 #include "SkPathEffect.h"
@@ -167,8 +167,7 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
             }
         } else {
             // just use devPath
-            SkIRect ir;
-            devPath.getBounds().roundOut(&ir);
+            const SkIRect ir = devPath.getBounds().roundOut();
 
             if (ir.isEmpty() || !ir.is16Bit()) {
                 goto SK_ERROR;
@@ -181,7 +180,6 @@ void SkScalerContext::getMetrics(SkGlyph* glyph) {
             if (glyph->fWidth > 0) {
                 switch (fRec.fMaskFormat) {
                 case SkMask::kLCD16_Format:
-                case SkMask::kLCD32_Format:
                     glyph->fWidth += 2;
                     glyph->fLeft -= 1;
                     break;
@@ -325,31 +323,6 @@ static void pack4xHToLCD16(const SkBitmap& src, const SkMask& dst,
     }
 }
 
-template<bool APPLY_PREBLEND>
-static void pack4xHToLCD32(const SkBitmap& src, const SkMask& dst,
-                           const SkMaskGamma::PreBlend& maskPreBlend) {
-    SkASSERT(kAlpha_8_SkColorType == src.colorType());
-    SkASSERT(SkMask::kLCD32_Format == dst.fFormat);
-
-    const int width = dst.fBounds.width();
-    const int height = dst.fBounds.height();
-    SkPMColor* dstP = (SkPMColor*)dst.fImage;
-    size_t dstRB = dst.fRowBytes;
-
-    for (int y = 0; y < height; ++y) {
-        const uint8_t* srcP = src.getAddr8(0, y);
-
-        // TODO: need to use fir filter here as well.
-        for (int x = 0; x < width; ++x) {
-            U8CPU r = sk_apply_lut_if<APPLY_PREBLEND>(*srcP++, maskPreBlend.fR);
-            U8CPU g = sk_apply_lut_if<APPLY_PREBLEND>(*srcP++, maskPreBlend.fG);
-            U8CPU b = sk_apply_lut_if<APPLY_PREBLEND>(*srcP++, maskPreBlend.fB);
-            dstP[x] = SkPackARGB32(0xFF, r, g, b);
-        }
-        dstP = (SkPMColor*)((char*)dstP + dstRB);
-    }
-}
-
 static inline int convert_8_to_1(unsigned byte) {
     SkASSERT(byte <= 0xFF);
     return byte >> 7;
@@ -418,7 +391,6 @@ static void generateMask(const SkMask& mask, const SkPath& path,
         case SkMask::kA8_Format:
             break;
         case SkMask::kLCD16_Format:
-        case SkMask::kLCD32_Format:
             // TODO: trigger off LCD orientation
             dstW = 4*dstW - 8;
             matrix.setTranslate(-SkIntToScalar(mask.fBounds.fLeft + 1),
@@ -468,13 +440,6 @@ static void generateMask(const SkMask& mask, const SkPath& path,
                 pack4xHToLCD16<true>(bm, mask, maskPreBlend);
             } else {
                 pack4xHToLCD16<false>(bm, mask, maskPreBlend);
-            }
-            break;
-        case SkMask::kLCD32_Format:
-            if (maskPreBlend.isApplicable()) {
-                pack4xHToLCD32<true>(bm, mask, maskPreBlend);
-            } else {
-                pack4xHToLCD32<false>(bm, mask, maskPreBlend);
             }
             break;
         default:
@@ -735,6 +700,10 @@ void SkScalerContextRec::getLocalMatrix(SkMatrix* m) const {
     SkPaint::SetTextMatrix(m, fTextSize, fPreScaleX, fPreSkewX);
 }
 
+void SkScalerContextRec::getLocalMatrixWithoutTextSize(SkMatrix* m) const {
+    SkPaint::SetTextMatrix(m, SK_Scalar1, fPreScaleX, fPreSkewX);
+}
+
 void SkScalerContextRec::getSingleMatrix(SkMatrix* m) const {
     this->getLocalMatrix(m);
 
@@ -742,6 +711,129 @@ void SkScalerContextRec::getSingleMatrix(SkMatrix* m) const {
     SkMatrix    deviceMatrix;
     this->getMatrixFrom2x2(&deviceMatrix);
     m->postConcat(deviceMatrix);
+}
+
+void SkScalerContextRec::getSingleMatrixWithoutTextSize(SkMatrix* m) const {
+    this->getLocalMatrixWithoutTextSize(m);
+
+    //  now concat the device matrix
+    SkMatrix    deviceMatrix;
+    this->getMatrixFrom2x2(&deviceMatrix);
+    m->postConcat(deviceMatrix);
+}
+
+void SkScalerContextRec::computeMatrices(PreMatrixScale preMatrixScale, SkVector* s, SkMatrix* sA,
+                                         SkMatrix* GsA, SkMatrix* G_inv, SkMatrix* A_out)
+{
+    // A is the 'total' matrix.
+    SkMatrix A;
+    this->getSingleMatrix(&A);
+
+    // The caller may find the 'total' matrix useful when dealing directly with EM sizes.
+    if (A_out) {
+        *A_out = A;
+    }
+
+    // If the 'total' matrix is singular, set the 'scale' to something finite and zero the matrices.
+    // All underlying ports have issues with zero text size, so use the matricies to zero.
+
+    // Map the vectors [1,1] and [1,-1] (the EM) through the 'total' matrix.
+    // If the length of one of these vectors is less than 1/256 then an EM filling square will
+    // never affect any pixels.
+    SkVector diag[2] = { { A.getScaleX() + A.getSkewX(), A.getScaleY() + A.getSkewY() },
+                         { A.getScaleX() - A.getSkewX(), A.getScaleY() - A.getSkewY() }, };
+    if (diag[0].lengthSqd() <= SK_ScalarNearlyZero * SK_ScalarNearlyZero ||
+        diag[1].lengthSqd() <= SK_ScalarNearlyZero * SK_ScalarNearlyZero)
+    {
+        s->fX = SK_Scalar1;
+        s->fY = SK_Scalar1;
+        sA->setScale(0, 0);
+        if (GsA) {
+            GsA->setScale(0, 0);
+        }
+        if (G_inv) {
+            G_inv->reset();
+        }
+        return;
+    }
+
+    // GA is the matrix A with rotation removed.
+    SkMatrix GA;
+    bool skewedOrFlipped = A.getSkewX() || A.getSkewY() || A.getScaleX() < 0 || A.getScaleY() < 0;
+    if (skewedOrFlipped) {
+        // h is where A maps the horizontal baseline.
+        SkPoint h = SkPoint::Make(SK_Scalar1, 0);
+        A.mapPoints(&h, 1);
+
+        // G is the Givens Matrix for A (rotational matrix where GA[0][1] == 0).
+        SkMatrix G;
+        SkComputeGivensRotation(h, &G);
+
+        GA = G;
+        GA.preConcat(A);
+
+        // The 'remainingRotation' is G inverse, which is fairly simple since G is 2x2 rotational.
+        if (G_inv) {
+            G_inv->setAll(
+                G.get(SkMatrix::kMScaleX), -G.get(SkMatrix::kMSkewX), G.get(SkMatrix::kMTransX),
+                -G.get(SkMatrix::kMSkewY), G.get(SkMatrix::kMScaleY), G.get(SkMatrix::kMTransY),
+                G.get(SkMatrix::kMPersp0), G.get(SkMatrix::kMPersp1), G.get(SkMatrix::kMPersp2));
+        }
+    } else {
+        GA = A;
+        if (G_inv) {
+            G_inv->reset();
+        }
+    }
+
+    // At this point, given GA, create s.
+    switch (preMatrixScale) {
+        case kFull_PreMatrixScale:
+            s->fX = SkScalarAbs(GA.get(SkMatrix::kMScaleX));
+            s->fY = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
+            break;
+        case kVertical_PreMatrixScale: {
+            SkScalar yScale = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
+            s->fX = yScale;
+            s->fY = yScale;
+            break;
+        }
+        case kVerticalInteger_PreMatrixScale: {
+            SkScalar realYScale = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
+            SkScalar intYScale = SkScalarRoundToScalar(realYScale);
+            if (intYScale == 0) {
+                intYScale = SK_Scalar1;
+            }
+            s->fX = intYScale;
+            s->fY = intYScale;
+            break;
+        }
+    }
+
+    // The 'remaining' matrix sA is the total matrix A without the scale.
+    if (!skewedOrFlipped && (
+            (kFull_PreMatrixScale == preMatrixScale) ||
+            (kVertical_PreMatrixScale == preMatrixScale && A.getScaleX() == A.getScaleY())))
+    {
+        // If GA == A and kFull_PreMatrixScale, sA is identity.
+        // If GA == A and kVertical_PreMatrixScale and A.scaleX == A.scaleY, sA is identity.
+        sA->reset();
+    } else if (!skewedOrFlipped && kVertical_PreMatrixScale == preMatrixScale) {
+        // If GA == A and kVertical_PreMatrixScale, sA.scaleY is SK_Scalar1.
+        sA->reset();
+        sA->setScaleX(A.getScaleX() / s->fY);
+    } else {
+        // TODO: like kVertical_PreMatrixScale, kVerticalInteger_PreMatrixScale with int scales.
+        *sA = A;
+        sA->preScale(SkScalarInvert(s->fX), SkScalarInvert(s->fY));
+    }
+
+    // The 'remainingWithoutRotation' matrix GsA is the non-rotational part of A without the scale.
+    if (GsA) {
+        *GsA = GA;
+         // G is rotational so reorders with the scale.
+        GsA->preScale(SkScalarInvert(s->fX), SkScalarInvert(s->fY));
+    }
 }
 
 SkAxisAlignment SkComputeAxisAlignmentForHText(const SkMatrix& matrix) {
@@ -757,8 +849,6 @@ SkAxisAlignment SkComputeAxisAlignmentForHText(const SkMatrix& matrix) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-#include "SkFontHost.h"
 
 class SkScalerContext_Empty : public SkScalerContext {
 public:

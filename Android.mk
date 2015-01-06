@@ -66,6 +66,7 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
 	src/core/SkAdvancedTypefaceMetrics.cpp \
@@ -92,6 +93,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkBuffer.cpp \
 	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
+	src/core/SkCanvasDrawable.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
@@ -130,14 +132,17 @@ LOCAL_SRC_FILES := \
 	src/core/SkGeometry.cpp \
 	src/core/SkGlyphCache.cpp \
 	src/core/SkGraphics.cpp \
+	src/core/SkHalf.cpp \
 	src/core/SkInstCnt.cpp \
 	src/core/SkImageFilter.cpp \
 	src/core/SkImageInfo.cpp \
 	src/core/SkImageGenerator.cpp \
+	src/core/SkLayerInfo.cpp \
 	src/core/SkLocalMatrixShader.cpp \
 	src/core/SkLineClipper.cpp \
 	src/core/SkMallocPixelRef.cpp \
 	src/core/SkMask.cpp \
+	src/core/SkMaskCache.cpp \
 	src/core/SkMaskFilter.cpp \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
@@ -150,7 +155,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPaintPriv.cpp \
 	src/core/SkPath.cpp \
 	src/core/SkPathEffect.cpp \
-	src/core/SkPathHeap.cpp \
 	src/core/SkPathMeasure.cpp \
 	src/core/SkPathRef.cpp \
 	src/core/SkPicture.cpp \
@@ -169,10 +173,10 @@ LOCAL_SRC_FILES := \
 	src/core/SkRasterClip.cpp \
 	src/core/SkRasterizer.cpp \
 	src/core/SkReadBuffer.cpp \
+	src/core/SkRecord.cpp \
 	src/core/SkRecordDraw.cpp \
 	src/core/SkRecordOpts.cpp \
 	src/core/SkRecorder.cpp \
-	src/core/SkRecording.cpp \
 	src/core/SkRect.cpp \
 	src/core/SkRefDict.cpp \
 	src/core/SkRegion.cpp \
@@ -196,6 +200,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkStroke.cpp \
 	src/core/SkStrokeRec.cpp \
 	src/core/SkStrokerPriv.cpp \
+	src/core/SkTaskGroup.cpp \
 	src/core/SkTextBlob.cpp \
 	src/core/SkTileGrid.cpp \
 	src/core/SkTLS.cpp \
@@ -205,6 +210,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkUnPreMultiply.cpp \
 	src/core/SkUtils.cpp \
 	src/core/SkValidatingReadBuffer.cpp \
+	src/core/SkVarAlloc.cpp \
 	src/core/SkVertState.cpp \
 	src/core/SkWriteBuffer.cpp \
 	src/core/SkWriter32.cpp \
@@ -250,6 +256,7 @@ LOCAL_SRC_FILES := \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
 	src/effects/SkAlphaThresholdFilter.cpp \
+	src/effects/SkArcToPathEffect.cpp \
 	src/effects/SkArithmeticMode.cpp \
 	src/effects/SkAvoidXfermode.cpp \
 	src/effects/SkBitmapSource.cpp \
@@ -349,7 +356,6 @@ LOCAL_SRC_FILES := \
 	src/ports/SkDiscardableMemory_none.cpp \
 	src/ports/SkTime_Unix.cpp \
 	src/ports/SkTLS_pthread.cpp \
-	src/ports/SkXMLParser_empty.cpp \
 	src/ports/SkFontHost_FreeType.cpp \
 	src/ports/SkFontHost_FreeType_common.cpp \
 	src/ports/SkDebug_android.cpp \
@@ -393,6 +399,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkProxyCanvas.cpp \
 	src/utils/SkSHA1.cpp \
 	src/utils/SkRTConf.cpp \
+	src/utils/SkTextBox.cpp \
 	src/utils/SkTextureCompressor.cpp \
 	src/utils/SkTextureCompressor_ASTC.cpp \
 	src/utils/SkTextureCompressor_R11EAC.cpp \
@@ -406,7 +413,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAADistanceFieldPathRenderer.cpp \
 	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
-	src/gpu/GrAllocPool.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
@@ -416,14 +422,19 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
+	src/gpu/GrCoordTransform.cpp \
+	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
+	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
+	src/gpu/GrGeometryProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
+	src/gpu/GrInvariantOutput.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
@@ -439,14 +450,13 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
+	src/gpu/GrProcOptInfo.cpp \
 	src/gpu/GrGpuResourceRef.cpp \
-	src/gpu/GrPictureUtils.cpp \
 	src/gpu/GrRecordReplaceDraw.cpp \
 	src/gpu/GrRectanizer_pow2.cpp \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
-	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceCache2.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
@@ -457,20 +467,23 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
 	src/gpu/GrTextContext.cpp \
-	src/gpu/GrTextStrike.cpp \
+	src/gpu/GrFontCache.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
+	src/gpu/effects/GrCoverageSetOpXP.cpp \
 	src/gpu/effects/GrBezierEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
 	src/gpu/effects/GrBicubicEffect.cpp \
-	src/gpu/effects/GrCustomCoordsTextureEffect.cpp \
+	src/gpu/effects/GrBitmapTextGeoProc.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
+	src/gpu/effects/GrDisableColorXP.cpp \
 	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrMatrixConvolutionEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
+	src/gpu/effects/GrPorterDuffXferProcessor.cpp \
 	src/gpu/effects/GrRRectEffect.cpp \
 	src/gpu/effects/GrSimpleTextureEffect.cpp \
 	src/gpu/effects/GrSingleTextureEffect.cpp \
@@ -481,6 +494,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
+	src/gpu/gl/GrGLGpu.cpp \
+	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
 	src/gpu/gl/GrGLIndexBuffer.cpp \
 	src/gpu/gl/GrGLInterface.cpp \
@@ -499,8 +514,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
-	src/gpu/gl/GrGpuGL.cpp \
-	src/gpu/gl/GrGpuGL_program.cpp \
 	src/gpu/gl/builders/GrGLLegacyNvprProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLNvprProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
@@ -554,13 +567,13 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
-	$(LOCAL_PATH)/include/xml \
 	$(LOCAL_PATH)/include/images \
 	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
@@ -588,6 +601,7 @@ LOCAL_C_INCLUDES := \
 	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \

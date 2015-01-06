@@ -17,10 +17,10 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrCoordTransform.h"
+#include "GrInvariantOutput.h"
+#include "SkGr.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
-#include "GrTBackendProcessorFactory.h"
-#include "SkGr.h"
 #endif
 
 static const int kBlockSize = 256;
@@ -48,11 +48,6 @@ inline SkScalar smoothCurve(SkScalar t) {
 
     // returns t * t * (3 - 2 * t)
     return SkScalarMul(SkScalarSquare(t), SK_Scalar3 - 2 * t);
-}
-
-bool perlin_noise_type_is_valid(SkPerlinNoiseShader::Type type) {
-    return (SkPerlinNoiseShader::kFractalNoise_Type == type) ||
-           (SkPerlinNoiseShader::kTurbulence_Type == type);
 }
 
 } // end namespace
@@ -287,22 +282,6 @@ SkPerlinNoiseShader::SkPerlinNoiseShader(SkPerlinNoiseShader::Type type,
     SkASSERT(numOctaves >= 0 && numOctaves < 256);
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkPerlinNoiseShader::SkPerlinNoiseShader(SkReadBuffer& buffer) : INHERITED(buffer) {
-    fType           = (SkPerlinNoiseShader::Type) buffer.readInt();
-    fBaseFrequencyX = buffer.readScalar();
-    fBaseFrequencyY = buffer.readScalar();
-    fNumOctaves     = buffer.readInt();
-    fSeed           = buffer.readScalar();
-    fStitchTiles    = buffer.readBool();
-    fTileSize.fWidth  = buffer.readInt();
-    fTileSize.fHeight = buffer.readInt();
-    buffer.validate(perlin_noise_type_is_valid(fType) &&
-                    (fNumOctaves >= 0) && (fNumOctaves <= 255) &&
-                    (fStitchTiles != fTileSize.isEmpty()));
-}
-#endif
-
 SkPerlinNoiseShader::~SkPerlinNoiseShader() {
 }
 
@@ -507,17 +486,13 @@ void SkPerlinNoiseShader::PerlinNoiseShaderContext::shadeSpan16(
 
 #if SK_SUPPORT_GPU
 
-#include "GrTBackendProcessorFactory.h"
-
 class GrGLPerlinNoise : public GrGLFragmentProcessor {
 public:
-    GrGLPerlinNoise(const GrBackendProcessorFactory&,
-                    const GrProcessor&);
+    GrGLPerlinNoise(const GrProcessor&);
     virtual ~GrGLPerlinNoise() {}
 
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -557,10 +532,17 @@ public:
         SkDELETE(fPaintingData);
     }
 
-    static const char* Name() { return "PerlinNoise"; }
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE {
-        return GrTBackendFragmentProcessorFactory<GrPerlinNoiseEffect>::getInstance();
+    virtual const char* name() const SK_OVERRIDE { return "PerlinNoise"; }
+
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GrGLPerlinNoise::GenKey(*this, caps, b);
     }
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GrGLPerlinNoise, (*this));
+    }
+
     const SkPerlinNoiseShader::StitchData& stitchData() const { return fPaintingData->fStitchDataInit; }
 
     SkPerlinNoiseShader::Type type() const { return fType; }
@@ -570,24 +552,19 @@ public:
     const SkMatrix& matrix() const { return fCoordTransform.getMatrix(); }
     uint8_t alpha() const { return fAlpha; }
 
-    typedef GrGLPerlinNoise GLProcessor;
-
 private:
-    virtual bool onIsEqual(const GrProcessor& sBase) const SK_OVERRIDE {
+    virtual bool onIsEqual(const GrFragmentProcessor& sBase) const SK_OVERRIDE {
         const GrPerlinNoiseEffect& s = sBase.cast<GrPerlinNoiseEffect>();
         return fType == s.fType &&
                fPaintingData->fBaseFrequency == s.fPaintingData->fBaseFrequency &&
                fNumOctaves == s.fNumOctaves &&
                fStitchTiles == s.fStitchTiles &&
-               fCoordTransform.getMatrix() == s.fCoordTransform.getMatrix() &&
                fAlpha == s.fAlpha &&
-               fPermutationsAccess.getTexture() == s.fPermutationsAccess.getTexture() &&
-               fNoiseAccess.getTexture() == s.fNoiseAccess.getTexture() &&
                fPaintingData->fStitchDataInit == s.fPaintingData->fStitchDataInit;
     }
 
-    void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE {
-        inout->setToUnknown();
+    void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE {
+        inout->setToUnknown(GrInvariantOutput::kWillNot_ReadInput);
     }
 
     GrPerlinNoiseEffect(SkPerlinNoiseShader::Type type,
@@ -602,11 +579,11 @@ private:
       , fPermutationsAccess(permutationsTexture)
       , fNoiseAccess(noiseTexture)
       , fPaintingData(paintingData) {
+        this->initClassID<GrPerlinNoiseEffect>();
         this->addTextureAccess(&fPermutationsAccess);
         this->addTextureAccess(&fNoiseAccess);
         fCoordTransform.reset(kLocal_GrCoordSet, matrix);
         this->addCoordTransform(&fCoordTransform);
-        this->setWillNotUseInputColor();
     }
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
@@ -649,24 +626,23 @@ GrFragmentProcessor* GrPerlinNoiseEffect::TestCreate(SkRandom* random,
     SkPaint paint;
     GrColor paintColor;
     GrFragmentProcessor* effect;
-    SkAssertResult(shader->asFragmentProcessor(context, paint, NULL, &paintColor, &effect));
+    SkAssertResult(shader->asFragmentProcessor(context, paint,
+                                               GrProcessorUnitTest::TestMatrix(random), NULL,
+                                               &paintColor, &effect));
 
     SkDELETE(shader);
 
     return effect;
 }
 
-GrGLPerlinNoise::GrGLPerlinNoise(const GrBackendProcessorFactory& factory,
-                                 const GrProcessor& processor)
-  : INHERITED (factory)
-  , fType(processor.cast<GrPerlinNoiseEffect>().type())
+GrGLPerlinNoise::GrGLPerlinNoise(const GrProcessor& processor)
+  : fType(processor.cast<GrPerlinNoiseEffect>().type())
   , fStitchTiles(processor.cast<GrPerlinNoiseEffect>().stitchTiles())
   , fNumOctaves(processor.cast<GrPerlinNoiseEffect>().numOctaves()) {
 }
 
 void GrGLPerlinNoise::emitCode(GrGLFPBuilder* builder,
                                const GrFragmentProcessor&,
-                               const GrProcessorKey& key,
                                const char* outputColor,
                                const char* inputColor,
                                const TransformedCoordsArray& coords,
@@ -677,16 +653,19 @@ void GrGLPerlinNoise::emitCode(GrGLFPBuilder* builder,
     SkString vCoords = fsBuilder->ensureFSCoords2D(coords, 0);
 
     fBaseFrequencyUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                            kVec2f_GrSLType, "baseFrequency");
+                                            kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                            "baseFrequency");
     const char* baseFrequencyUni = builder->getUniformCStr(fBaseFrequencyUni);
     fAlphaUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                    kFloat_GrSLType, "alpha");
+                                    kFloat_GrSLType, kDefault_GrSLPrecision,
+                                    "alpha");
     const char* alphaUni = builder->getUniformCStr(fAlphaUni);
 
     const char* stitchDataUni = NULL;
     if (fStitchTiles) {
         fStitchDataUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                             kVec2f_GrSLType, "stitchData");
+                                             kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                             "stitchData");
         stitchDataUni = builder->getUniformCStr(fStitchDataUni);
     }
 
@@ -966,10 +945,11 @@ void GrGLPerlinNoise::setData(const GrGLProgramDataManager& pdman, const GrProce
 /////////////////////////////////////////////////////////////////////
 
 bool SkPerlinNoiseShader::asFragmentProcessor(GrContext* context, const SkPaint& paint,
+                                              const SkMatrix& viewM,
                                               const SkMatrix* externalLocalMatrix,
                                               GrColor* paintColor, GrFragmentProcessor** fp) const {
     SkASSERT(context);
-    
+
     *paintColor = SkColor2GrColorJustAlpha(paint.getColor());
 
     SkMatrix localMatrix = this->getLocalMatrix();
@@ -977,7 +957,7 @@ bool SkPerlinNoiseShader::asFragmentProcessor(GrContext* context, const SkPaint&
         localMatrix.preConcat(*externalLocalMatrix);
     }
 
-    SkMatrix matrix = context->getMatrix();
+    SkMatrix matrix = viewM;
     matrix.preConcat(localMatrix);
 
     if (0 == fNumOctaves) {
@@ -1001,7 +981,7 @@ bool SkPerlinNoiseShader::asFragmentProcessor(GrContext* context, const SkPaint&
     SkAutoTUnref<GrTexture> noiseTexture(
         GrRefCachedBitmapTexture(context, paintingData->getNoiseBitmap(), NULL));
 
-    SkMatrix m = context->getMatrix();
+    SkMatrix m = viewM;
     m.setTranslateX(-localMatrix.getTranslateX() + SK_Scalar1);
     m.setTranslateY(-localMatrix.getTranslateY() + SK_Scalar1);
     if ((permutationsTexture) && (noiseTexture)) {
@@ -1020,7 +1000,8 @@ bool SkPerlinNoiseShader::asFragmentProcessor(GrContext* context, const SkPaint&
 
 #else
 
-bool SkPerlinNoiseShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+bool SkPerlinNoiseShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
+                                              const SkMatrix*, GrColor*,
                                               GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;

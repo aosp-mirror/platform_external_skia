@@ -122,13 +122,6 @@ SkTextBlob::~SkTextBlob() {
     }
 }
 
-void SkTextBlob::internal_dispose() const {
-    // SkTextBlobs use externally-managed storage.
-    this->internal_dispose_restore_refcnt_to_1();
-    this->~SkTextBlob();
-    sk_free(const_cast<SkTextBlob*>(this));
-}
-
 uint32_t SkTextBlob::uniqueID() const {
     static int32_t  gTextBlobGenerationID; // = 0;
 
@@ -318,7 +311,49 @@ void SkTextBlobBuilder::updateDeferredBounds() {
         return;
     }
 
-    // FIXME: measure the current run & union bounds
+    SkASSERT(fLastRun >= sizeof(SkTextBlob));
+    SkTextBlob::RunRecord* run = reinterpret_cast<SkTextBlob::RunRecord*>(fStorage.get() +
+                                                                          fLastRun);
+    SkASSERT(SkPaint::kGlyphID_TextEncoding == run->font().getTextEncoding());
+
+    SkRect runBounds = SkRect::MakeEmpty();
+    if (SkTextBlob::kDefault_Positioning == run->positioning()) {
+        run->font().measureText(run->glyphBuffer(),
+                                run->glyphCount() * sizeof(uint16_t),
+                                &runBounds);
+    } else {
+        SkASSERT(SkTextBlob::kFull_Positioning == run->positioning() ||
+                 SkTextBlob::kHorizontal_Positioning == run->positioning());
+
+        SkAutoSTArray<16, SkRect> glyphBounds(run->glyphCount());
+        run->font().getTextWidths(run->glyphBuffer(),
+                                  run->glyphCount() * sizeof(uint16_t),
+                                  NULL,
+                                  glyphBounds.get());
+
+        SkScalar* glyphOffset = run->posBuffer();
+        for (unsigned i = 0; i < run->glyphCount(); ++i) {
+            if (SkTextBlob::kFull_Positioning == run->positioning()) {
+                // [ x, y, x, y... ]
+                glyphBounds[i].offset(glyphOffset[0], glyphOffset[1]);
+                SkASSERT(2 == SkTextBlob::ScalarsPerGlyph(run->positioning()));
+                glyphOffset += 2;
+            } else {
+                // [ x, x, x... ], const y applied by runBounds.offset(run->offset()) later.
+                glyphBounds[i].offset(glyphOffset[0], 0);
+                SkASSERT(1 == SkTextBlob::ScalarsPerGlyph(run->positioning()));
+                glyphOffset += 1;
+            }
+
+            runBounds.join(glyphBounds[i]);
+        }
+
+        SkASSERT((void*)glyphOffset <= SkTextBlob::RunRecord::Next(run));
+    }
+
+    runBounds.offset(run->offset());
+
+    fBounds.join(runBounds);
     fDeferredBounds = false;
 }
 
@@ -399,7 +434,7 @@ void SkTextBlobBuilder::allocInternal(const SkPaint &font,
     SkASSERT(SkPaint::kGlyphID_TextEncoding == font.getTextEncoding());
 
     if (!this->mergeRun(font, positioning, count, offset)) {
-        updateDeferredBounds();
+        this->updateDeferredBounds();
 
         size_t runSize = SkTextBlob::RunRecord::StorageSize(count, positioning);
         this->reserve(runSize);

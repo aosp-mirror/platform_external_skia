@@ -23,17 +23,19 @@ SkBaseDevice::SkBaseDevice()
     fMetaData = NULL;
 }
 
+SkBaseDevice::SkBaseDevice(const SkDeviceProperties& dp)
+    : fLeakyProperties(SkNEW_ARGS(SkDeviceProperties, (dp)))
+#ifdef SK_DEBUG
+    , fAttachedToCanvas(false)
+#endif
+{
+    fOrigin.setZero();
+    fMetaData = NULL;
+}
+
 SkBaseDevice::~SkBaseDevice() {
     SkDELETE(fLeakyProperties);
     SkDELETE(fMetaData);
-}
-
-SkBaseDevice* SkBaseDevice::createCompatibleDevice(const SkImageInfo& info) {
-    return this->onCreateDevice(info, kGeneral_Usage);
-}
-
-SkBaseDevice* SkBaseDevice::createCompatibleDeviceForSaveLayer(const SkImageInfo& info) {
-    return this->onCreateDevice(info, kSaveLayer_Usage);
 }
 
 SkMetaData& SkBaseDevice::getMetaData() {
@@ -57,8 +59,31 @@ const SkBitmap& SkBaseDevice::accessBitmap(bool changePixels) {
     return bitmap;
 }
 
-void SkBaseDevice::setPixelGeometry(SkPixelGeometry geo) {
-    fLeakyProperties->setPixelGeometry(geo);
+SkPixelGeometry SkBaseDevice::CreateInfo::AdjustGeometry(const SkImageInfo& info,
+                                                         Usage usage,
+                                                         SkPixelGeometry geo) {
+    switch (usage) {
+        case kGeneral_Usage:
+            break;
+        case kSaveLayer_Usage:
+            if (info.alphaType() != kOpaque_SkAlphaType) {
+                geo = kUnknown_SkPixelGeometry;
+            }
+            break;
+        case kImageFilter_Usage:
+            geo = kUnknown_SkPixelGeometry;
+            break;
+    }
+    return geo;
+}
+
+void SkBaseDevice::initForRootLayer(SkPixelGeometry geo) {
+    // For now we don't expect to change the geometry for the root-layer, but we make the call
+    // anyway to document logically what is going on.
+    //
+    fLeakyProperties->setPixelGeometry(CreateInfo::AdjustGeometry(this->imageInfo(),
+                                                                  kGeneral_Usage,
+                                                                  geo));
 }
 
 SkSurface* SkBaseDevice::newSurface(const SkImageInfo&, const SkSurfaceProps&) { return NULL; }
@@ -104,6 +129,7 @@ void SkBaseDevice::drawTextBlob(const SkDraw& draw, const SkTextBlob* blob, SkSc
         // applyFontToPaint() always overwrites the exact same attributes,
         // so it is safe to not re-seed the paint.
         it.applyFontToPaint(&runPaint);
+        runPaint.setFlags(this->filterTextFlags(runPaint));
 
         switch (it.positioning()) {
         case SkTextBlob::kDefault_Positioning:
@@ -178,12 +204,28 @@ void* SkBaseDevice::onAccessPixels(SkImageInfo* info, size_t* rowBytes) {
     return NULL;
 }
 
-void SkBaseDevice::EXPERIMENTAL_optimize(const SkPicture* picture) {
-    // The base class doesn't perform any analysis but derived classes may
-}
-
 bool SkBaseDevice::EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
                                             const SkPaint*) {
     // The base class doesn't perform any accelerated picture rendering
     return false;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+uint32_t SkBaseDevice::filterTextFlags(const SkPaint& paint) const {
+    uint32_t flags = paint.getFlags();
+
+    if (!paint.isLCDRenderText() || !paint.isAntiAlias()) {
+        return flags;
+    }
+
+    if (kUnknown_SkPixelGeometry == fLeakyProperties->pixelGeometry()
+        || this->onShouldDisableLCD(paint)) {
+
+        flags &= ~SkPaint::kLCDRenderText_Flag;
+        flags |= SkPaint::kGenA8FromLCD_Flag;
+    }
+
+    return flags;
+}
+

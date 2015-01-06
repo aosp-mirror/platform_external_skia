@@ -2,6 +2,7 @@
 #define DMTestTask_DEFINED
 
 #include "DMReporter.h"
+#include "DMJsonWriter.h"
 #include "DMTask.h"
 #include "DMTaskRunner.h"
 #include "SkString.h"
@@ -15,17 +16,21 @@ class TestReporter : public skiatest::Reporter {
 public:
   TestReporter() {}
 
-  const char* failure() const { return fFailure.c_str(); }
+  const SkTArray<SkString>& failures() const { return fFailures; }
 
 private:
   virtual bool allowExtendedTest() const SK_OVERRIDE;
   virtual bool verbose()           const SK_OVERRIDE;
 
-  virtual void onReportFailed(const SkString& desc) SK_OVERRIDE {
-      fFailure = desc;
+  virtual void onReportFailed(const skiatest::Failure& failure) SK_OVERRIDE {
+      JsonWriter::AddTestFailure(failure);
+
+      SkString newFailure;
+      failure.getFailureString(&newFailure);
+      fFailures.push_back(newFailure);
   }
 
-  SkString fFailure;
+  SkTArray<SkString> fFailures;
 };
 
 class CpuTestTask : public CpuTask {

@@ -47,10 +47,7 @@ public:
                !fLastClipStackRect.contains(clipSpaceRect);
     }
 
-    // Places the sb in the cache. The cache takes a ref of the stencil buffer.
-    void transferToCache();
-
-    static GrResourceKey ComputeKey(int width, int height, int sampleCnt);
+    static void ComputeKey(int width, int height, int sampleCnt, GrScratchKey* key);
 
 protected:
     GrStencilBuffer(GrGpu* gpu, bool isWrapped, int width, int height, int bits, int sampleCnt)
@@ -60,6 +57,9 @@ protected:
         , fBits(bits)
         , fSampleCnt(sampleCnt)
         , fLastClipStackGenID(SkClipStack::kInvalidGenID) {
+        GrScratchKey key;
+        ComputeKey(width, height, sampleCnt, &key);
+        this->setScratchKey(key);
         fLastClipStackRect.setEmpty();
     }
 

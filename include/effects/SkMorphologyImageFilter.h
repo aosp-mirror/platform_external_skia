@@ -34,9 +34,6 @@ protected:
     bool filterImageGeneric(Proc procX, Proc procY,
                             Proxy*, const SkBitmap& src, const Context&,
                             SkBitmap* result, SkIPoint* offset) const;
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkMorphologyImageFilter(SkReadBuffer& buffer);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 #if SK_SUPPORT_GPU
     virtual bool canFilterImageGPU() const SK_OVERRIDE { return true; }
@@ -71,15 +68,12 @@ public:
                                 SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
 #endif
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDilateImageFilter)
 
 protected:
     SkDilateImageFilter(int radiusX, int radiusY, SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID)
         : INHERITED(radiusX, radiusY, input, cropRect, uniqueID) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkDilateImageFilter(SkReadBuffer& buffer) : INHERITED(buffer) {}
-#endif
-
 private:
     typedef SkMorphologyImageFilter INHERITED;
 };
@@ -103,14 +97,12 @@ public:
                                 SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE;
 #endif
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkErodeImageFilter)
 
 protected:
     SkErodeImageFilter(int radiusX, int radiusY, SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID)
         : INHERITED(radiusX, radiusY, input, cropRect, uniqueID) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkErodeImageFilter(SkReadBuffer& buffer) : INHERITED(buffer) {}
-#endif
 
 private:
     typedef SkMorphologyImageFilter INHERITED;

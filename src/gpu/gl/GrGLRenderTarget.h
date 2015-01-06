@@ -13,41 +13,22 @@
 #include "GrRenderTarget.h"
 #include "SkScalar.h"
 
-class GrGpuGL;
-class GrGLTexture;
-class GrGLTexID;
+class GrGLGpu;
 
 class GrGLRenderTarget : public GrRenderTarget {
-
 public:
     // set fTexFBOID to this value to indicate that it is multisampled but
     // Gr doesn't know how to resolve it.
     enum { kUnresolvableFBOID = 0 };
 
-    struct Desc {
+    struct IDDesc {
         GrGLuint         fRTFBOID;
         GrGLuint         fTexFBOID;
         GrGLuint         fMSColorRenderbufferID;
         bool             fIsWrapped;
-        GrPixelConfig    fConfig;
-        int              fSampleCnt;
-        GrSurfaceOrigin  fOrigin;
-        bool             fCheckAllocation;
     };
 
-    // creates a GrGLRenderTarget associated with a texture
-    GrGLRenderTarget(GrGpuGL*          gpu,
-                     const Desc&       desc,
-                     const GrGLIRect&  viewport,
-                     GrGLTexID*        texID,
-                     GrGLTexture*      texture);
-
-    // creates an independent GrGLRenderTarget
-    GrGLRenderTarget(GrGpuGL*          gpu,
-                     const Desc&       desc,
-                     const GrGLIRect&  viewport);
-
-    virtual ~GrGLRenderTarget() { this->release(); }
+    GrGLRenderTarget(GrGLGpu*, const GrSurfaceDesc&, const IDDesc&);
 
     void setViewport(const GrGLIRect& rect) { fViewport = rect; }
     const GrGLIRect& getViewport() const { return fViewport; }
@@ -61,14 +42,9 @@ public:
     GrGLuint textureFBOID() const { return fTexFBOID; }
 
     // override of GrRenderTarget
-    virtual GrBackendObject getRenderTargetHandle() const {
-        return this->renderFBOID();
-    }
-    virtual GrBackendObject getRenderTargetResolvedHandle() const {
-        return this->textureFBOID();
-    }
-    virtual ResolveType getResolveType() const {
-
+    virtual GrBackendObject getRenderTargetHandle() const SK_OVERRIDE { return this->renderFBOID(); }
+    virtual GrBackendObject getRenderTargetResolvedHandle() const SK_OVERRIDE { return this->textureFBOID(); }
+    virtual ResolveType getResolveType() const SK_OVERRIDE {
         if (!this->isMultisampled() ||
             fRTFBOID == fTexFBOID) {
             // catches FBO 0 and non MSAA case
@@ -81,25 +57,38 @@ public:
     }
 
 protected:
-    // override of GrResource
+    // The public constructor registers this object with the cache. However, only the most derived
+    // class should register with the cache. This constructor does not do the registration and
+    // rather moves that burden onto the derived class.
+    enum Derived { kDerived };
+    GrGLRenderTarget(GrGLGpu*, const GrSurfaceDesc&, const IDDesc&, Derived);
+
+    void init(const GrSurfaceDesc&, const IDDesc&);
+
     virtual void onAbandon() SK_OVERRIDE;
     virtual void onRelease() SK_OVERRIDE;
+
+    // In protected because subclass GrGLTextureRenderTarget calls this version.
+    virtual size_t onGpuMemorySize() const SK_OVERRIDE;
 
 private:
     GrGLuint      fRTFBOID;
     GrGLuint      fTexFBOID;
-
     GrGLuint      fMSColorRenderbufferID;
 
+    // We track this separately from GrGpuResource because this may be both a texture and a render
+    // target, and the texture may be wrapped while the render target is not.
+    bool fIsWrapped;
+
     // when we switch to this render target we want to set the viewport to
-    // only render to to content area (as opposed to the whole allocation) and
+    // only render to content area (as opposed to the whole allocation) and
     // we want the rendering to be at top left (GL has origin in bottom left)
     GrGLIRect fViewport;
 
-    // non-NULL if this RT was created by Gr with an associated GrGLTexture.
-    SkAutoTUnref<GrGLTexID> fTexIDObj;
-
-    void init(const Desc& desc, const GrGLIRect& viewport, GrGLTexID* texID);
+    // onGpuMemorySize() needs to know what how many color values are owned per pixel. However,
+    // abandon and release zero out the IDs and the cache needs to know the size even after those
+    // actions.
+    uint8_t fColorValuesPerPixel;
 
     typedef GrRenderTarget INHERITED;
 };

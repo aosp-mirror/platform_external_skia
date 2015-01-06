@@ -39,15 +39,6 @@ SkBitmapProcShader::SkBitmapProcShader(const SkBitmap& src, TileMode tmx, TileMo
     fTileModeY = (uint8_t)tmy;
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkBitmapProcShader::SkBitmapProcShader(SkReadBuffer& buffer) : INHERITED(buffer) {
-    buffer.readBitmap(&fRawBitmap);
-    fRawBitmap.setImmutable();
-    fTileModeX = buffer.readUInt();
-    fTileModeY = buffer.readUInt();
-}
-#endif
-
 SkShader::BitmapType SkBitmapProcShader::asABitmap(SkBitmap* texture,
                                                    SkMatrix* texM,
                                                    TileMode xy[]) const {
@@ -93,28 +84,7 @@ bool SkBitmapProcShader::isOpaque() const {
     return fRawBitmap.isOpaque();
 }
 
-static bool valid_for_drawing(const SkBitmap& bm) {
-    if (0 == bm.width() || 0 == bm.height()) {
-        return false;   // nothing to draw
-    }
-    if (NULL == bm.pixelRef()) {
-        return false;   // no pixels to read
-    }
-    if (kIndex_8_SkColorType == bm.colorType()) {
-        // ugh, I have to lock-pixels to inspect the colortable
-        SkAutoLockPixels alp(bm);
-        if (!bm.getColorTable()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 SkShader::Context* SkBitmapProcShader::onCreateContext(const ContextRec& rec, void* storage) const {
-    if (!fRawBitmap.getTexture() && !valid_for_drawing(fRawBitmap)) {
-        return NULL;
-    }
-
     SkMatrix totalInverse;
     // Do this first, so we know the matrix can be inverted.
     if (!this->computeTotalInverse(rec, &totalInverse)) {
@@ -337,8 +307,9 @@ static bool bitmapIsTooBig(const SkBitmap& bm) {
     return bm.width() > maxSize || bm.height() > maxSize;
 }
 
-SkShader* CreateBitmapShader(const SkBitmap& src, SkShader::TileMode tmx,
-        SkShader::TileMode tmy, const SkMatrix* localMatrix, SkTBlitterAllocator* allocator) {
+SkShader* SkCreateBitmapShader(const SkBitmap& src, SkShader::TileMode tmx,
+                               SkShader::TileMode tmy, const SkMatrix* localMatrix,
+                               SkTBlitterAllocator* allocator) {
     SkShader* shader;
     SkColor color;
     if (src.isNull() || bitmapIsTooBig(src)) {
@@ -396,6 +367,7 @@ void SkBitmapProcShader::toString(SkString* str) const {
 #include "SkGr.h"
 
 bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& paint,
+                                             const SkMatrix& viewM,
                                              const SkMatrix* localMatrix, GrColor* paintColor,
                                              GrFragmentProcessor** fp) const {
     SkMatrix matrix;
@@ -434,7 +406,7 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
             break;
         case SkPaint::kMedium_FilterLevel: {
             SkMatrix matrix;
-            matrix.setConcat(context->getMatrix(), this->getLocalMatrix());
+            matrix.setConcat(viewM, this->getLocalMatrix());
             if (matrix.getMinScale() < SK_Scalar1) {
                 textureFilterMode = GrTextureParams::kMipMap_FilterMode;
             } else {
@@ -445,7 +417,7 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
         }
         case SkPaint::kHigh_FilterLevel: {
             SkMatrix matrix;
-            matrix.setConcat(context->getMatrix(), this->getLocalMatrix());
+            matrix.setConcat(viewM, this->getLocalMatrix());
             useBicubic = GrBicubicEffect::ShouldUseBicubic(matrix, &textureFilterMode);
             break;
         }
@@ -466,7 +438,7 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
                                     "Couldn't convert bitmap to texture.");
         return false;
     }
-    
+
     *paintColor = (kAlpha_8_SkColorType == fRawBitmap.colorType()) ?
                                                 SkColor2GrColor(paint.getColor()) :
                                                 SkColor2GrColorJustAlpha(paint.getColor());
@@ -480,9 +452,10 @@ bool SkBitmapProcShader::asFragmentProcessor(GrContext* context, const SkPaint& 
     return true;
 }
 
-#else 
+#else
 
-bool SkBitmapProcShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+bool SkBitmapProcShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
+                                             const SkMatrix*, GrColor*,
                                              GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;

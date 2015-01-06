@@ -22,6 +22,8 @@ LOCAL_SRC_FILES := \
 	DMCpuGMTask.cpp \
 	DMGpuGMTask.cpp \
 	DMPDFRasterizeTask.cpp \
+	DMImageTask.cpp \
+	DMJsonWriter.cpp \
 	DMPDFTask.cpp \
 	DMPipeTask.cpp \
 	DMQuiltTask.cpp \
@@ -34,7 +36,6 @@ LOCAL_SRC_FILES := \
 	DMUtil.cpp \
 	DMWriteTask.cpp \
 	../gm/gm.cpp \
-	../src/utils/SkTaskGroup.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
@@ -57,6 +58,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsDTriangleTest.cpp \
 	../tests/PathOpsDVectorTest.cpp \
 	../tests/PathOpsExtendedTest.cpp \
+	../tests/PathOpsFuzz763Test.cpp \
 	../tests/PathOpsInverseTest.cpp \
 	../tests/PathOpsLineIntersectionTest.cpp \
 	../tests/PathOpsLineParametetersTest.cpp \
@@ -85,6 +87,7 @@ LOCAL_SRC_FILES := \
 	../tests/AnnotationTest.cpp \
 	../tests/AsADashTest.cpp \
 	../tests/AtomicTest.cpp \
+	../tests/BadIcoTest.cpp \
 	../tests/BitSetTest.cpp \
 	../tests/BitmapCopyTest.cpp \
 	../tests/BitmapGetColorTest.cpp \
@@ -94,6 +97,7 @@ LOCAL_SRC_FILES := \
 	../tests/BlendTest.cpp \
 	../tests/BlitRowTest.cpp \
 	../tests/BlurTest.cpp \
+	../tests/CTest.cpp \
 	../tests/CachedDataTest.cpp \
 	../tests/CachedDecodingPixelRefTest.cpp \
 	../tests/CanvasStateHelpers.cpp \
@@ -124,7 +128,6 @@ LOCAL_SRC_FILES := \
 	../tests/ErrorTest.cpp \
 	../tests/FillPathTest.cpp \
 	../tests/FitsInTest.cpp \
-	../tests/FlatDataTest.cpp \
 	../tests/FlateTest.cpp \
 	../tests/FloatingPointTextureTest.cpp \
 	../tests/FontHostStreamTest.cpp \
@@ -151,6 +154,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrRedBlackTreeTest.cpp \
 	../tests/GrSurfaceTest.cpp \
 	../tests/GrTBSearchTest.cpp \
+	../tests/GrTRecorderTest.cpp \
 	../tests/GradientTest.cpp \
 	../tests/ImageCacheTest.cpp \
 	../tests/ImageDecodingTest.cpp \
@@ -165,8 +169,10 @@ LOCAL_SRC_FILES := \
 	../tests/LListTest.cpp \
 	../tests/LayerDrawLooperTest.cpp \
 	../tests/LayerRasterizerTest.cpp \
+	../tests/LazyPtrTest.cpp \
 	../tests/MD5Test.cpp \
 	../tests/MallocPixelRefTest.cpp \
+	../tests/MaskCacheTest.cpp \
 	../tests/MathTest.cpp \
 	../tests/Matrix44Test.cpp \
 	../tests/MatrixClipCollapseTest.cpp \
@@ -179,6 +185,7 @@ LOCAL_SRC_FILES := \
 	../tests/NameAllocatorTest.cpp \
 	../tests/OSPathTest.cpp \
 	../tests/OnceTest.cpp \
+	../tests/PDFInvalidBitmapTest.cpp \
 	../tests/PDFJpegEmbedTest.cpp \
 	../tests/PDFPrimitivesTest.cpp \
 	../tests/PackBitsTest.cpp \
@@ -188,6 +195,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathMeasureTest.cpp \
 	../tests/PathTest.cpp \
 	../tests/PathUtilsTest.cpp \
+	../tests/PictureBBHTest.cpp \
 	../tests/PictureShaderTest.cpp \
 	../tests/PictureTest.cpp \
 	../tests/PixelRefTest.cpp \
@@ -206,7 +214,6 @@ LOCAL_SRC_FILES := \
 	../tests/RecordPatternTest.cpp \
 	../tests/RecordTest.cpp \
 	../tests/RecorderTest.cpp \
-	../tests/RecordingTest.cpp \
 	../tests/RecordingXfermodeTest.cpp \
 	../tests/RefCntTest.cpp \
 	../tests/RefDictTest.cpp \
@@ -220,6 +227,7 @@ LOCAL_SRC_FILES := \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
+	../tests/Sk4xTest.cpp \
 	../tests/SkBase64Test.cpp \
 	../tests/SkResourceCacheTest.cpp \
 	../tests/SmallAllocatorTest.cpp \
@@ -232,6 +240,7 @@ LOCAL_SRC_FILES := \
 	../tests/SurfaceTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/THashCache.cpp \
+	../tests/Time.cpp \
 	../tests/TLSTest.cpp \
 	../tests/TSetTest.cpp \
 	../tests/TextBlobTest.cpp \
@@ -242,6 +251,7 @@ LOCAL_SRC_FILES := \
 	../tests/TypefaceTest.cpp \
 	../tests/UnicodeTest.cpp \
 	../tests/UtilsTest.cpp \
+	../tests/VarAllocTest.cpp \
 	../tests/WArrayTest.cpp \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
@@ -259,7 +269,6 @@ LOCAL_SRC_FILES := \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
-	../gm/bitmapmatrix.cpp \
 	../gm/bitmapfilters.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
@@ -277,15 +286,21 @@ LOCAL_SRC_FILES := \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
+	../gm/cgms.cpp \
+	../gm/cgm.c \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
 	../gm/colortype.cpp \
+	../gm/colortypexfermode.cpp \
+	../gm/colorwheel.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
+	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
+	../gm/conicpaths.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
@@ -293,6 +308,7 @@ LOCAL_SRC_FILES := \
 	../gm/cubicpaths.cpp \
 	../gm/cmykjpeg.cpp \
 	../gm/degeneratesegments.cpp \
+	../gm/dcshader.cpp \
 	../gm/discard.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
@@ -312,6 +328,7 @@ LOCAL_SRC_FILES := \
 	../gm/filltypes.cpp \
 	../gm/filltypespersp.cpp \
 	../gm/filterbitmap.cpp \
+	../gm/filterfastbounds.cpp \
 	../gm/filterindiabox.cpp \
 	../gm/fontcache.cpp \
 	../gm/fontmgr.cpp \
@@ -327,6 +344,7 @@ LOCAL_SRC_FILES := \
 	../gm/gradientDirtyLaundry.cpp \
 	../gm/gradient_matrix.cpp \
 	../gm/gradtext.cpp \
+	../gm/grayscalejpg.cpp \
 	../gm/hairlines.cpp \
 	../gm/hairmodes.cpp \
 	../gm/hittestpath.cpp \
@@ -392,6 +410,7 @@ LOCAL_SRC_FILES := \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/smallarc.cpp \
+	../gm/smallimage.cpp \
 	../gm/stringart.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \
@@ -406,11 +425,13 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/variedtext.cpp \
+	../gm/tallstretchedbitmaps.cpp \
 	../gm/textblob.cpp \
 	../gm/textblobshader.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
+	../gm/tiledscaledbitmap.cpp \
 	../gm/tileimagefilter.cpp \
 	../gm/tilemodes.cpp \
 	../gm/tilemodes_scaled.cpp \
@@ -426,6 +447,7 @@ LOCAL_SRC_FILES := \
 	../gm/xfermodes3.cpp \
 	../gm/yuvtorgbeffect.cpp \
 	../tests/FontConfigParser.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
@@ -435,9 +457,9 @@ LOCAL_SRC_FILES := \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
 	../experimental/SkSetPoly3To3_D.cpp \
-	../experimental/sk_surface.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
+	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -452,6 +474,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -490,5 +513,8 @@ LOCAL_MODULE_TAGS := \
 
 LOCAL_MODULE := \
 	skia_dm
+
+LOCAL_PICKUP_FILES := \
+	$(LOCAL_PATH)/../resources
 
 include $(BUILD_NATIVE_TEST)

@@ -9,16 +9,16 @@
 #include "GrGLPathRange.h"
 #include "GrGLPath.h"
 #include "GrGLPathRendering.h"
-#include "GrGpuGL.h"
+#include "GrGLGpu.h"
 
-GrGLPathRange::GrGLPathRange(GrGpuGL* gpu, PathGenerator* pathGenerator, const SkStrokeRec& stroke)
+GrGLPathRange::GrGLPathRange(GrGLGpu* gpu, PathGenerator* pathGenerator, const SkStrokeRec& stroke)
     : INHERITED(gpu, pathGenerator, stroke),
       fBasePathID(gpu->glPathRendering()->genPaths(this->getNumPaths())),
       fGpuMemorySize(0) {
     this->registerWithCache();
 }
 
-GrGLPathRange::GrGLPathRange(GrGpuGL* gpu,
+GrGLPathRange::GrGLPathRange(GrGLGpu* gpu,
                              GrGLuint basePathID,
                              int numPaths,
                              size_t gpuMemorySize,
@@ -29,12 +29,8 @@ GrGLPathRange::GrGLPathRange(GrGpuGL* gpu,
     this->registerWithCache();
 }
 
-GrGLPathRange::~GrGLPathRange() {
-    this->release();
-}
-
 void GrGLPathRange::onInitPath(int index, const SkPath& skPath) const {
-    GrGpuGL* gpu = static_cast<GrGpuGL*>(this->getGpu());
+    GrGLGpu* gpu = static_cast<GrGLGpu*>(this->getGpu());
     if (NULL == gpu) {
         return;
     }
@@ -55,7 +51,7 @@ void GrGLPathRange::onRelease() {
     SkASSERT(this->getGpu());
 
     if (0 != fBasePathID && !this->isWrapped()) {
-        static_cast<GrGpuGL*>(this->getGpu())->glPathRendering()->deletePaths(fBasePathID,
+        static_cast<GrGLGpu*>(this->getGpu())->glPathRendering()->deletePaths(fBasePathID,
                                                                               this->getNumPaths());
         fBasePathID = 0;
     }

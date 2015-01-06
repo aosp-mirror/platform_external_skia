@@ -31,9 +31,8 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkBitmapProcShader)
 
 
-    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
-                             GrFragmentProcessor**)
-            const SK_OVERRIDE;
+    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM, const SkMatrix*,
+                             GrColor*, GrFragmentProcessor**) const SK_OVERRIDE;
 
     class BitmapProcShaderContext : public SkShader::Context {
     public:
@@ -56,9 +55,6 @@ public:
     };
 
 protected:
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkBitmapProcShader(SkReadBuffer& );
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     virtual Context* onCreateContext(const ContextRec&, void* storage) const SK_OVERRIDE;
 
@@ -78,7 +74,7 @@ typedef SkSmallAllocator<3, 1024> SkTBlitterAllocator;
 
 // If alloc is non-NULL, it will be used to allocate the returned SkShader, and MUST outlive
 // the SkShader.
-SkShader* CreateBitmapShader(const SkBitmap& src, SkShader::TileMode, SkShader::TileMode,
-                             const SkMatrix* localMatrix, SkTBlitterAllocator* alloc);
+SkShader* SkCreateBitmapShader(const SkBitmap& src, SkShader::TileMode, SkShader::TileMode,
+                               const SkMatrix* localMatrix, SkTBlitterAllocator* alloc);
 
 #endif

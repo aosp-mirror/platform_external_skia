@@ -31,6 +31,7 @@ public:
         return SkNEW_ARGS(SkMergeImageFilter, (filters, count, modes, cropRect, uniqueID));
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkMergeImageFilter)
 
 protected:
@@ -38,9 +39,6 @@ protected:
                        const SkXfermode::Mode modes[],
                        const CropRect* cropRect,
                        uint32_t uniqueID);
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkMergeImageFilter(SkReadBuffer& buffer);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,

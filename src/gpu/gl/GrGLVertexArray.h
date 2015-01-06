@@ -17,7 +17,7 @@
 
 class GrGLVertexBuffer;
 class GrGLIndexBuffer;
-class GrGpuGL;
+class GrGLGpu;
 
 struct GrGLAttribLayout {
     GrGLint     fCount;
@@ -32,13 +32,15 @@ static inline const GrGLAttribLayout& GrGLAttribTypeToLayout(GrVertexAttribType 
         {2, GR_GL_FLOAT, false},         // kVec2f_GrVertexAttribType
         {3, GR_GL_FLOAT, false},         // kVec3f_GrVertexAttribType
         {4, GR_GL_FLOAT, false},         // kVec4f_GrVertexAttribType
+        {1, GR_GL_UNSIGNED_BYTE, true},  // kUByte_GrVertexAttribType
         {4, GR_GL_UNSIGNED_BYTE, true},  // kVec4ub_GrVertexAttribType
     };
     GR_STATIC_ASSERT(0 == kFloat_GrVertexAttribType);
     GR_STATIC_ASSERT(1 == kVec2f_GrVertexAttribType);
     GR_STATIC_ASSERT(2 == kVec3f_GrVertexAttribType);
     GR_STATIC_ASSERT(3 == kVec4f_GrVertexAttribType);
-    GR_STATIC_ASSERT(4 == kVec4ub_GrVertexAttribType);
+    GR_STATIC_ASSERT(4 == kUByte_GrVertexAttribType);
+    GR_STATIC_ASSERT(5 == kVec4ub_GrVertexAttribType);
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(kLayouts) == kGrVertexAttribTypeCount);
     return kLayouts[type];
 }
@@ -65,7 +67,7 @@ public:
      * assumed that the GrGLAttribArrayState is tracking the state of the currently bound vertex
      * array object.
      */
-    void set(const GrGpuGL*,
+    void set(const GrGLGpu*,
              int index,
              GrGLVertexBuffer*,
              GrGLint size,
@@ -78,7 +80,7 @@ public:
      * This function disables vertex attribs not present in the mask. It is assumed that the
      * GrGLAttribArrayState is tracking the state of the currently bound vertex array object.
      */
-    void disableUnusedArrays(const GrGpuGL*, uint64_t usedAttribArrayMask);
+    void disableUnusedArrays(const GrGLGpu*, uint64_t usedAttribArrayMask);
 
     void invalidate() {
         int count = fAttribArrayStates.count();
@@ -132,7 +134,7 @@ private:
  */
 class GrGLVertexArray : public GrGpuResource {
 public:
-    GrGLVertexArray(GrGpuGL* gpu, GrGLint id, int attribCount);
+    GrGLVertexArray(GrGLGpu* gpu, GrGLint id, int attribCount);
 
     /**
      * Binds this vertex array. If the ID has been deleted or abandoned then NULL is returned.
@@ -157,9 +159,9 @@ public:
 
     void invalidateCachedState();
 
-    virtual size_t gpuMemorySize() const SK_OVERRIDE { return 0; }
-
 protected:
+    virtual size_t onGpuMemorySize() const SK_OVERRIDE { return 0; }
+
     virtual void onAbandon() SK_OVERRIDE;
 
     virtual void onRelease() SK_OVERRIDE;

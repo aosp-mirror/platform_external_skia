@@ -47,6 +47,11 @@ SkSurfaceProps::SkSurfaceProps(uint32_t flags, SkPixelGeometry pg)
     : fFlags(flags), fPixelGeometry(pg)
 {}
 
+SkSurfaceProps::SkSurfaceProps(const SkSurfaceProps& other)
+    : fFlags(other.fFlags)
+    , fPixelGeometry(other.fPixelGeometry)
+{}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 SkSurface_Base::SkSurface_Base(int width, int height, const SkSurfaceProps* props)
@@ -118,16 +123,16 @@ static SkSurface_Base* asSB(SkSurface* surface) {
 SkSurface::SkSurface(int width, int height, const SkSurfaceProps* props)
     : fProps(SkSurfacePropsCopyOrDefault(props)), fWidth(width), fHeight(height)
 {
-    SkASSERT(fWidth >= 0);
-    SkASSERT(fHeight >= 0);
+    SkASSERT(fWidth > 0);
+    SkASSERT(fHeight > 0);
     fGenerationID = 0;
 }
 
 SkSurface::SkSurface(const SkImageInfo& info, const SkSurfaceProps* props)
     : fProps(SkSurfacePropsCopyOrDefault(props)), fWidth(info.width()), fHeight(info.height())
 {
-    SkASSERT(fWidth >= 0);
-    SkASSERT(fHeight >= 0);
+    SkASSERT(fWidth > 0);
+    SkASSERT(fHeight > 0);
     fGenerationID = 0;
 }
 
@@ -165,35 +170,12 @@ const void* SkSurface::peekPixels(SkImageInfo* info, size_t* rowBytes) {
     return this->getCanvas()->peekPixels(info, rowBytes);
 }
 
+bool SkSurface::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                           int srcX, int srcY) {
+    return this->getCanvas()->readPixels(dstInfo, dstPixels, dstRowBytes, srcX, srcY);
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
-#ifdef SK_SUPPORT_LEGACY_TEXTRENDERMODE
-
-static SkSurfaceProps make_props(SkSurface::TextRenderMode trm) {
-    uint32_t propsFlags = 0;
-    if (SkSurface::kDistanceField_TextRenderMode == trm) {
-        propsFlags |= SkSurfaceProps::kUseDistanceFieldFonts_Flag;
-    }
-    return SkSurfaceProps(propsFlags, SkSurfaceProps::kLegacyFontHost_InitType);
-}
-
-SkSurface* SkSurface::NewRenderTargetDirect(GrRenderTarget* target, TextRenderMode trm) {
-    SkSurfaceProps props = make_props(trm);
-    return NewRenderTargetDirect(target, &props);
-}
-
-SkSurface* SkSurface::NewRenderTarget(GrContext* gr, const SkImageInfo& info, int sampleCount,
-                                      TextRenderMode trm) {
-    SkSurfaceProps props = make_props(trm);
-    return NewRenderTarget(gr, info, sampleCount, &props);
-}
-
-SkSurface* SkSurface::NewScratchRenderTarget(GrContext* gr, const SkImageInfo& info, int sampleCount,
-                                             TextRenderMode trm) {
-    SkSurfaceProps props = make_props(trm);
-    return NewScratchRenderTarget(gr, info, sampleCount, &props);
-}
-
-#endif
 
 #if !SK_SUPPORT_GPU
 

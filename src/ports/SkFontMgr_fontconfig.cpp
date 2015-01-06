@@ -373,20 +373,13 @@ static void fcpattern_from_skfontstyle(SkFontStyle style, FcPattern* pattern) {
     FcPatternAddInteger(pattern, FC_SLANT, style.isItalic() ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
 }
 
-static SkTypeface::Style sktypefacestyle_from_fcpattern(FcPattern* pattern) {
-    int fcweight = get_int(pattern, FC_WEIGHT, FC_WEIGHT_REGULAR);
-    int fcslant = get_int(pattern, FC_SLANT, FC_SLANT_ROMAN);
-    return (SkTypeface::Style)((fcweight >= FC_WEIGHT_BOLD ? SkTypeface::kBold : 0) |
-                                (fcslant > FC_SLANT_ROMAN ? SkTypeface::kItalic : 0));
-}
-
 class SkTypeface_stream : public SkTypeface_FreeType {
 public:
     /** @param stream does not take ownership of the reference, does take ownership of the stream.*/
-    SkTypeface_stream(SkTypeface::Style style, bool fixedWidth, int ttcIndex, SkStreamAsset* stream)
+    SkTypeface_stream(const SkFontStyle& style, bool fixedWidth, int index, SkStreamAsset* stream)
         : INHERITED(style, SkTypefaceCache::NewFontID(), fixedWidth)
         , fStream(SkRef(stream))
-        , fIndex(ttcIndex)
+        , fIndex(index)
     { };
 
     virtual void onGetFamilyName(SkString* familyName) const SK_OVERRIDE {
@@ -447,7 +440,7 @@ public:
 private:
     /** @param pattern takes ownership of the reference. */
     SkTypeface_fontconfig(FcPattern* pattern)
-        : INHERITED(sktypefacestyle_from_fcpattern(pattern),
+        : INHERITED(skfontstyle_from_fcpattern(pattern),
                     SkTypefaceCache::NewFontID(),
                     FC_PROPORTIONAL != get_int(pattern, FC_SPACING, FC_PROPORTIONAL))
         , fPattern(pattern)
@@ -459,6 +452,7 @@ private:
 class SkFontMgr_fontconfig : public SkFontMgr {
     mutable SkAutoFcConfig fFC;
     SkAutoTUnref<SkDataTable> fFamilyNames;
+    SkTypeface_FreeType::Scanner fScanner;
 
     class StyleSet : public SkFontStyleSet {
     public:
@@ -571,7 +565,7 @@ class SkFontMgr_fontconfig : public SkFontMgr {
                                           sizes.begin(), names.count());
     }
 
-    static bool FindByFcPattern(SkTypeface* cached, SkTypeface::Style, void* ctx) {
+    static bool FindByFcPattern(SkTypeface* cached, const SkFontStyle&, void* ctx) {
         SkTypeface_fontconfig* cshFace = static_cast<SkTypeface_fontconfig*>(cached);
         FcPattern* ctxPattern = static_cast<FcPattern*>(ctx);
         return FcTrue == FcPatternEqual(cshFace->fPattern, ctxPattern);
@@ -590,7 +584,7 @@ class SkFontMgr_fontconfig : public SkFontMgr {
             FcPatternReference(pattern);
             face = SkTypeface_fontconfig::Create(pattern);
             if (face) {
-                fTFCache.add(face, SkTypeface::kNormal, true);
+                fTFCache.add(face, SkFontStyle());
             }
         }
         return face;
@@ -771,8 +765,9 @@ protected:
 
     virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[],
                                                     const SkFontStyle& style,
-                                                    const char bpc47[],
-                                                    uint32_t character) const SK_OVERRIDE
+                                                    const char* bcp47[],
+                                                    int bcp47Count,
+                                                    SkUnichar character) const SK_OVERRIDE
     {
         FCLocker lock;
 
@@ -784,9 +779,12 @@ protected:
         FcCharSetAddChar(charSet, character);
         FcPatternAddCharSet(pattern, FC_CHARSET, charSet);
 
-        if (bpc47) {
+        if (bcp47Count > 0) {
+            SkASSERT(bcp47);
             SkAutoFcLangSet langSet;
-            FcLangSetAdd(langSet, (const FcChar8*)bpc47);
+            for (int i = bcp47Count; i --> 0;) {
+                FcLangSetAdd(langSet, (const FcChar8*)bcp47[i]);
+            }
             FcPatternAddLangSet(pattern, FC_LANG, langSet);
         }
 
@@ -818,9 +816,9 @@ protected:
             return NULL;
         }
 
-        SkTypeface::Style style = SkTypeface::kNormal;
+        SkFontStyle style;
         bool isFixedWidth = false;
-        if (!SkTypeface_FreeType::ScanFont(stream, ttcIndex, NULL, &style, &isFixedWidth)) {
+        if (!fScanner.scanFont(stream, ttcIndex, NULL, &style, &isFixedWidth)) {
             return NULL;
         }
 

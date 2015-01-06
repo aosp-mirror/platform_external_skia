@@ -185,6 +185,23 @@ public:
         return fPathRef->isFinite();
     }
 
+    /** Returns true if the path is volatile (i.e. should not be cached by devices.)
+     */
+    bool isVolatile() const {
+        return SkToBool(fIsVolatile);
+    }
+
+    /** Specify whether this path is volatile. Paths are not volatile by
+     default. Temporary paths that are discarded or modified after use should be
+     marked as volatile. This provides a hint to the device that the path
+     should not be cached. Providing this hint when appropriate can
+     improve performance by avoiding unnecessary overhead and resource
+     consumption on the device.
+     */
+    void setIsVolatile(bool isVolatile) {
+        fIsVolatile = isVolatile;
+    }
+
     /** Test a line for zero length
 
         @return true if the line is of zero length; otherwise false.
@@ -221,16 +238,6 @@ public:
      *  line, returns false and ignores line[].
      */
     bool isLine(SkPoint line[2]) const;
-
-    /** Returns true if the path specifies a rectangle. If so, and if rect is
-        not null, set rect to the bounds of the path. If the path does not
-        specify a rectangle, return false and ignore rect.
-
-        @param rect If not null, returns the bounds of the path if it specifies
-                    a rectangle
-        @return true if the path specifies a rectangle
-    */
-    bool isRect(SkRect* rect) const;
 
     /** Return the number of points in the path
      */
@@ -269,7 +276,8 @@ public:
     /** Returns the bounds of the path's points. If the path contains 0 or 1
         points, the bounds is set to (0,0,0,0), and isEmpty() will return true.
         Note: this bounds may be larger than the actual shape, since curves
-        do not extend as far as their control points.
+        do not extend as far as their control points. Additionally this bound
+        can contain trailing MoveTo points (cf. isRect).
     */
     const SkRect& getBounds() const {
         return fPathRef->getBounds();
@@ -556,35 +564,22 @@ public:
         return computedDir == dir;
     }
 
-    enum PathAsRect {
-        /** The path can not draw the same as its bounds. */
-        kNone_PathAsRect,
-        /** The path draws the same as its bounds when filled. */
-        kFill_PathAsRect,
-        /** The path draws the same as its bounds when stroked or filled. */
-        kStroke_PathAsRect,
-    };
-
-    /** Returns kFill_PathAsRect or kStroke_PathAsRect if drawing the path (either filled or
-        stroked) will be equivalent to filling/stroking the path's bounding rect. If
-        either is true, and direction is not null, sets the direction of the contour. If the
-        path is not drawn equivalent to a rect, returns kNone_PathAsRect and ignores direction.
-
-        @param direction If not null, set to the contour's direction when it is drawn as a rect
-        @return the path's PathAsRect type
+    /**
+     *  Returns true if the path specifies a rectangle.
+     *
+     *  If this returns false, then all output parameters are ignored, and left
+     *  unchanged. If this returns true, then each of the output parameters
+     *  are checked for NULL. If they are not, they return their value.
+     *
+     *  @param rect If not null, set to the bounds of the rectangle.
+     *              Note : this bounds may be smaller than the path's bounds, since it is just
+     *              the bounds of the "drawable" parts of the path. e.g. a trailing MoveTo would
+     *              be ignored in this rect, but not by the path's bounds
+     *  @param isClosed If not null, set to true if the path is closed
+     *  @param direction If not null, set to the rectangle's direction
+     *  @return true if the path specifies a rectangle
      */
-    PathAsRect asRect(Direction* direction = NULL) const;
-
-    /** Returns true if the path specifies a rectangle. If so, and if isClosed is
-        not null, set isClosed to true if the path is closed. Also, if returning true
-        and direction is not null, return the rect direction. If the path does not
-        specify a rectangle, return false and ignore isClosed and direction.
-
-        @param isClosed If not null, set to true if the path is closed
-        @param direction If not null, set to the rectangle's direction
-        @return true if the path specifies a rectangle
-    */
-    bool isRect(bool* isClosed, Direction* direction) const;
+    bool isRect(SkRect* rect, bool* isClosed = NULL, Direction* direction = NULL) const;
 
     /** Returns true if the path specifies a pair of nested rectangles. If so, and if
         rect is not null, set rect[0] to the outer rectangle and rect[1] to the inner
@@ -971,7 +966,7 @@ private:
         // 1 free bit at 29
         kUnused1_SerializationShift = 28,    // 1 free bit
         kDirection_SerializationShift = 26, // requires 2 bits
-        kUnused2_SerializationShift = 25,    // 1 free bit
+        kIsVolatile_SerializationShift = 25, // requires 1 bit
         // 1 free bit at 24
         kConvexity_SerializationShift = 16, // requires 8 bits
         kFillType_SerializationShift = 8,   // requires 8 bits
@@ -984,6 +979,7 @@ private:
     uint8_t             fFillType;
     mutable uint8_t     fConvexity;
     mutable uint8_t     fDirection;
+    mutable SkBool8     fIsVolatile;
 #ifdef SK_BUILD_FOR_ANDROID
     const SkPath*       fSourcePath;
 #endif

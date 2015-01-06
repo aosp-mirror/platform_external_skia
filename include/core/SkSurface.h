@@ -24,6 +24,9 @@ class GrRenderTarget;
  *
  *  To draw into a canvas, first create the appropriate type of Surface, and
  *  then request the canvas from the surface.
+ *
+ *  SkSurface always has non-zero dimensions. If there is a request for a new surface, and either
+ *  of the requested dimensions are zero, then NULL will be returned.
  */
 class SK_API SkSurface : public SkRefCnt {
 public:
@@ -61,7 +64,12 @@ public:
      *  specified width and height, and populates the rest of info to match
      *  pixels in SkPMColor format.
      */
+#ifdef SK_SUPPORT_LEGACY_NewRasterPMColor
     static SkSurface* NewRasterPMColor(int width, int height, const SkSurfaceProps* props = NULL) {
+        return NewRaster(SkImageInfo::MakeN32Premul(width, height), props);
+    }
+#endif
+    static SkSurface* NewRasterN32Premul(int width, int height, const SkSurfaceProps* props = NULL) {
         return NewRaster(SkImageInfo::MakeN32Premul(width, height), props);
     }
 
@@ -103,27 +111,6 @@ public:
     static SkSurface* NewScratchRenderTarget(GrContext* gr, const SkImageInfo& info) {
         return NewScratchRenderTarget(gr, info, 0, NULL);
     }
-
-#ifdef SK_SUPPORT_LEGACY_TEXTRENDERMODE
-    /**
-     *  Text rendering modes that can be passed to NewRenderTarget*
-     */
-    enum TextRenderMode {
-        /**
-         *  This will use the standard text rendering method
-         */
-        kStandard_TextRenderMode,
-        /**
-         *  This will use signed distance fields for text rendering when possible
-         */
-        kDistanceField_TextRenderMode,
-    };
-    static SkSurface* NewRenderTargetDirect(GrRenderTarget*, TextRenderMode);
-    static SkSurface* NewRenderTarget(GrContext*, const SkImageInfo&, int sampleCount,
-                                      TextRenderMode);
-    static SkSurface* NewScratchRenderTarget(GrContext*, const SkImageInfo&, int sampleCount,
-                                             TextRenderMode);
-#endif
 
     int width() const { return fWidth; }
     int height() const { return fHeight; }
@@ -211,6 +198,27 @@ public:
      *  ignored.
      */
     const void* peekPixels(SkImageInfo* info, size_t* rowBytes);
+
+    /**
+     *  Copy the pixels from the surface into the specified buffer (pixels + rowBytes),
+     *  converting them into the requested format (dstInfo). The surface pixels are read
+     *  starting at the specified (srcX,srcY) location.
+     *
+     *  The specified ImageInfo and (srcX,srcY) offset specifies a source rectangle
+     *
+     *      srcR.setXYWH(srcX, srcY, dstInfo.width(), dstInfo.height());
+     *
+     *  srcR is intersected with the bounds of the base-layer. If this intersection is not empty,
+     *  then we have two sets of pixels (of equal size). Replace the dst pixels with the
+     *  corresponding src pixels, performing any colortype/alphatype transformations needed
+     *  (in the case where the src and dst have different colortypes or alphatypes).
+     *
+     *  This call can fail, returning false, for several reasons:
+     *  - If srcR does not intersect the surface bounds.
+     *  - If the requested colortype/alphatype cannot be converted from the surface's types.
+     */
+    bool readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                    int srcX, int srcY);
 
     const SkSurfaceProps& props() const { return fProps; }
 

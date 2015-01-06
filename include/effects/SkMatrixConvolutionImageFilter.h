@@ -63,6 +63,7 @@ public:
                                                   const CropRect* cropRect = NULL,
                                                   uint32_t uniqueID = 0);
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkMatrixConvolutionImageFilter)
 
 protected:
@@ -76,9 +77,6 @@ protected:
                                    SkImageFilter* input,
                                    const CropRect* cropRect,
                                    uint32_t uniqueID);
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkMatrixConvolutionImageFilter(SkReadBuffer& buffer);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,

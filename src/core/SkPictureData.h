@@ -9,13 +9,13 @@
 #define SkPictureData_DEFINED
 
 #include "SkBitmap.h"
-#include "SkPathHeap.h"
 #include "SkPicture.h"
 #include "SkPictureContentInfo.h"
 #include "SkPictureFlat.h"
 
 class SkData;
 class SkPictureRecord;
+class SkPixelSerializer;
 class SkReader32;
 class SkStream;
 class SkWStream;
@@ -65,7 +65,7 @@ public:
 
     virtual ~SkPictureData();
 
-    void serialize(SkWStream*, SkPicture::EncodeBitmap) const;
+    void serialize(SkWStream*, SkPixelSerializer*) const;
     void flatten(SkWriteBuffer&) const;
 
     bool containsBitmaps() const;
@@ -85,18 +85,12 @@ protected:
 public:
     const SkBitmap& getBitmap(SkReader32* reader) const {
         const int index = reader->readInt();
-        if (SkBitmapHeap::INVALID_SLOT == index) {
-#ifdef SK_DEBUG
-            SkDebugf("An invalid bitmap was recorded!\n");
-#endif
-            return fBadBitmap;
-        }
-        return (*fBitmaps)[index];
+        return fBitmaps[index];
     }
 
     const SkPath& getPath(SkReader32* reader) const {
         int index = reader->readInt() - 1;
-        return (*fPathHeap.get())[index];
+        return fPaths[index];
     }
 
     const SkPicture* getPicture(SkReader32* reader) const {
@@ -110,7 +104,7 @@ public:
         if (index == 0) {
             return NULL;
         }
-        return &(*fPaints)[index - 1];
+        return &fPaints[index - 1];
     }
 
     const SkTextBlob* getTextBlob(SkReader32* reader) const {
@@ -149,14 +143,11 @@ private:
     // bitmap allows playback to draw nothing and move on.
     SkBitmap fBadBitmap;
 
-    SkAutoTUnref<SkBitmapHeap> fBitmapHeap;
-
-    SkTRefArray<SkBitmap>* fBitmaps;
-    SkTRefArray<SkPaint>* fPaints;
+    SkTArray<SkBitmap> fBitmaps;
+    SkTArray<SkPaint>  fPaints;
+    SkTArray<SkPath>   fPaths;
 
     SkData* fOpData;    // opcodes and parameters
-
-    SkAutoTUnref<const SkPathHeap> fPathHeap;  // reference counted
 
     const SkPicture** fPictureRefs;
     int fPictureCount;

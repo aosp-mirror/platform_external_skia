@@ -6,7 +6,6 @@
  * found in the LICENSE file.
  */
 
-
 #include "SkXfermode.h"
 #include "SkXfermode_opts_SSE2.h"
 #include "SkXfermode_proccoeff.h"
@@ -680,16 +679,41 @@ bool SkXfermode::asFragmentProcessor(GrFragmentProcessor**, GrTexture*) const {
     return false;
 }
 
-bool SkXfermode::asFragmentProcessorOrCoeff(SkXfermode* xfermode, GrFragmentProcessor** fp,
-                                            Coeff* src, Coeff* dst, GrTexture* background) {
+bool SkXfermode::asXPFactory(GrXPFactory**) const {
+    return false;
+}
+
+
+#if SK_SUPPORT_GPU
+#include "effects/GrPorterDuffXferProcessor.h"
+
+bool SkXfermode::AsFragmentProcessorOrXPFactory(SkXfermode* xfermode,
+                                                GrFragmentProcessor** fp,
+                                                GrXPFactory** xpf) {
+    Coeff src, dst;
+    Mode mode;
     if (NULL == xfermode) {
-        return ModeAsCoeff(kSrcOver_Mode, src, dst);
-    } else if (xfermode->asCoeff(src, dst)) {
+        *xpf = GrPorterDuffXPFactory::Create(kSrcOver_Mode);
+        return true;
+    } else if (xfermode->asMode(&mode) && mode <= kLastCoeffMode) {
+        *xpf = GrPorterDuffXPFactory::Create(mode);
+        return true;
+    } else if (xfermode->asCoeff(&src, &dst)) {
+        *xpf = GrPorterDuffXPFactory::Create(src, dst);
+        return true;
+    } else if (xfermode->asXPFactory(xpf)) {
         return true;
     } else {
-        return xfermode->asFragmentProcessor(fp, background);
+        return xfermode->asFragmentProcessor(fp);
     }
 }
+#else
+bool SkXfermode::AsFragmentProcessorOrXPFactory(SkXfermode* xfermode,
+                                                GrFragmentProcessor** fp,
+                                                GrXPFactory** xpf) {
+    return false;
+}
+#endif
 
 SkPMColor SkXfermode::xferColor(SkPMColor src, SkPMColor dst) const{
     // no-op. subclasses should override this
@@ -775,10 +799,10 @@ void SkXfermode::xferA8(SkAlpha* SK_RESTRICT dst,
 
 #if SK_SUPPORT_GPU
 
-#include "GrProcessor.h"
+#include "GrFragmentProcessor.h"
 #include "GrCoordTransform.h"
+#include "GrInvariantOutput.h"
 #include "GrProcessorUnitTest.h"
-#include "GrTBackendProcessorFactory.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
@@ -799,23 +823,26 @@ public:
         }
     }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE {
-        return GrTBackendFragmentProcessorFactory<XferEffect>::getInstance();
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GLProcessor::GenKey(*this, caps, b);
     }
 
-    static const char* Name() { return "XferEffect"; }
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GLProcessor, (*this));
+    }
+
+    virtual const char* name() const SK_OVERRIDE { return "XferEffect"; }
 
     SkXfermode::Mode mode() const { return fMode; }
     const GrTextureAccess&  backgroundAccess() const { return fBackgroundAccess; }
 
     class GLProcessor : public GrGLFragmentProcessor {
     public:
-        GLProcessor(const GrBackendProcessorFactory& factory, const GrProcessor&)
-            : INHERITED(factory) {
-        }
+        GLProcessor(const GrFragmentProcessor&) {}
+
         virtual void emitCode(GrGLFPBuilder* builder,
                               const GrFragmentProcessor& fp,
-                              const GrProcessorKey& key,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray& coords,
@@ -1100,10 +1127,10 @@ public:
             setLumBody.appendf("\tfloat outLum = %s(outColor);\n", getFunction.c_str());
             setLumBody.append("\tfloat minComp = min(min(outColor.r, outColor.g), outColor.b);\n"
                               "\tfloat maxComp = max(max(outColor.r, outColor.g), outColor.b);\n"
-                              "\tif (minComp < 0.0) {\n"
+                              "\tif (minComp < 0.0 && outLum != minComp) {\n"
                               "\t\toutColor = outLum + ((outColor - vec3(outLum, outLum, outLum)) * outLum) / (outLum - minComp);\n"
                               "\t}\n"
-                              "\tif (maxComp > alpha) {\n"
+                              "\tif (maxComp > alpha && maxComp != outLum) {\n"
                               "\t\toutColor = outLum + ((outColor - vec3(outLum, outLum, outLum)) * (alpha - outLum)) / (maxComp - outLum);\n"
                               "\t}\n"
                               "\treturn outColor;\n");
@@ -1197,8 +1224,10 @@ public:
 private:
     XferEffect(SkXfermode::Mode mode, GrTexture* background)
         : fMode(mode) {
+        this->initClassID<XferEffect>();
         if (background) {
-            fBackgroundTransform.reset(kLocal_GrCoordSet, background);
+            fBackgroundTransform.reset(kLocal_GrCoordSet, background, 
+                                       GrTextureParams::kNone_FilterMode);
             this->addCoordTransform(&fBackgroundTransform);
             fBackgroundAccess.reset(background);
             this->addTextureAccess(&fBackgroundAccess);
@@ -1206,14 +1235,13 @@ private:
             this->setWillReadDstColor();
         }
     }
-    virtual bool onIsEqual(const GrProcessor& other) const SK_OVERRIDE {
+    virtual bool onIsEqual(const GrFragmentProcessor& other) const SK_OVERRIDE {
         const XferEffect& s = other.cast<XferEffect>();
-        return fMode == s.fMode &&
-               fBackgroundAccess.getTexture() == s.fBackgroundAccess.getTexture();
+        return fMode == s.fMode;
     }
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE {
-        inout->setToUnknown();
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE {
+        inout->setToUnknown(GrInvariantOutput::kWill_ReadInput);
     }
 
     SkXfermode::Mode fMode;
@@ -1237,23 +1265,6 @@ GrFragmentProcessor* XferEffect::TestCreate(SkRandom* rand,
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkProcCoeffXfermode::SkProcCoeffXfermode(SkReadBuffer& buffer) : INHERITED(buffer) {
-    uint32_t mode32 = buffer.read32() % SK_ARRAY_COUNT(gProcCoeffs);
-    if (mode32 >= SK_ARRAY_COUNT(gProcCoeffs)) {
-        // out of range, just set to something harmless
-        mode32 = SkXfermode::kSrcOut_Mode;
-    }
-    fMode = (SkXfermode::Mode)mode32;
-
-    const ProcCoeff& rec = gProcCoeffs[fMode];
-    fProc = rec.fProc;
-    // these may be valid, or may be CANNOT_USE_COEFF
-    fSrcCoeff = rec.fSC;
-    fDstCoeff = rec.fDC;
-}
-#endif
 
 SkFlattenable* SkProcCoeffXfermode::CreateProc(SkReadBuffer& buffer) {
     uint32_t mode32 = buffer.read32();
@@ -1444,9 +1455,6 @@ public:
 
 private:
     SkClearXfermode(const ProcCoeff& rec) : SkProcCoeffXfermode(rec, kClear_Mode) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkClearXfermode(SkReadBuffer& buffer) : SkProcCoeffXfermode(buffer) {}
-#endif
 
     typedef SkProcCoeffXfermode INHERITED;
 };
@@ -1509,9 +1517,6 @@ public:
 
 private:
     SkSrcXfermode(const ProcCoeff& rec) : SkProcCoeffXfermode(rec, kSrc_Mode) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkSrcXfermode(SkReadBuffer& buffer) : SkProcCoeffXfermode(buffer) {}
-#endif
     typedef SkProcCoeffXfermode INHERITED;
 };
 
@@ -1577,9 +1582,6 @@ public:
 
 private:
     SkDstInXfermode(const ProcCoeff& rec) : SkProcCoeffXfermode(rec, kDstIn_Mode) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkDstInXfermode(SkReadBuffer& buffer) : INHERITED(buffer) {}
-#endif
 
     typedef SkProcCoeffXfermode INHERITED;
 };
@@ -1624,9 +1626,6 @@ public:
 
 private:
     SkDstOutXfermode(const ProcCoeff& rec) : SkProcCoeffXfermode(rec, kDstOut_Mode) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkDstOutXfermode(SkReadBuffer& buffer) : INHERITED(buffer) {}
-#endif
 
     typedef SkProcCoeffXfermode INHERITED;
 };

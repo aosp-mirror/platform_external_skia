@@ -9,7 +9,6 @@
 #define GrStencilAndCoverTextContext_DEFINED
 
 #include "GrTextContext.h"
-#include "GrDrawState.h"
 #include "GrDrawTarget.h"
 #include "SkStrokeRec.h"
 
@@ -52,35 +51,38 @@ private:
         kMaxPerformance_RenderMode,
     };
 
+    GrDrawState                     fDrawState;
     GrDrawState::AutoRestoreEffects fStateRestore;
     SkScalar                        fTextRatio;
     float                           fTextInverseRatio;
     SkGlyphCache*                   fGlyphCache;
     GrPathRange*                    fGlyphs;
-    uint32_t                        fIndexBuffer[kGlyphBufferSize];
-    float                           fTransformBuffer[2 * kGlyphBufferSize];
-    GrDrawTarget::PathTransformType fTransformType;
-    int                             fPendingGlyphCount;
+    SkStrokeRec                     fStroke;
+    uint16_t                        fGlyphIndices[kGlyphBufferSize];
+    SkPoint                         fGlyphPositions[kGlyphBufferSize];
+    int                             fQueuedGlyphCount;
+    int                             fFallbackGlyphsIdx;
     SkMatrix                        fContextInitialMatrix;
-    bool                            fNeedsDeviceSpaceGlyphs;
+    SkMatrix                        fViewMatrix;
+    SkMatrix                        fLocalMatrix;
+    bool                            fUsingDeviceSpaceGlyphs;
 
     GrStencilAndCoverTextContext(GrContext*, const SkDeviceProperties&);
 
-    virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
+    virtual bool canDraw(const SkPaint& paint, const SkMatrix& viewMatrix) SK_OVERRIDE;
 
-    virtual void onDrawText(const GrPaint&, const SkPaint&, const char text[],
-                            size_t byteLength,
+    virtual void onDrawText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
+                            const char text[], size_t byteLength,
                             SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void onDrawPosText(const GrPaint&, const SkPaint&,
+    virtual void onDrawPosText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
                                const char text[], size_t byteLength,
                                const SkScalar pos[], int scalarsPerPosition,
                                const SkPoint& offset) SK_OVERRIDE;
 
-    void init(const GrPaint&, const SkPaint&, size_t textByteLength,
-              RenderMode, const SkPoint& textTranslate);
-    void initGlyphs(SkGlyphCache* cache);
-    void appendGlyph(uint16_t glyphID, float x);
-    void appendGlyph(uint16_t glyphID, float x, float y);
+    void init(const GrPaint&, const SkPaint&, size_t textByteLength, RenderMode,
+              const SkMatrix& viewMatrix);
+    bool mapToFallbackContext(SkMatrix* inverse);
+    void appendGlyph(const SkGlyph&, const SkPoint&);
     void flush();
     void finish();
 

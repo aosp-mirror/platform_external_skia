@@ -9,6 +9,7 @@
 #include "SkBitmapSource.h"
 #include "SkBlurImageFilter.h"
 #include "SkCanvas.h"
+#include "SkColorCubeFilter.h"
 #include "SkColorFilter.h"
 #include "SkColorFilterImageFilter.h"
 #include "SkComposeImageFilter.h"
@@ -122,6 +123,11 @@ static SkColor make_color() {
     return (R(2) == 1) ? 0xFFC0F0A0 : 0xFF000090;
 }
 
+static SkDropShadowImageFilter::ShadowMode make_shadow_mode() {
+    return (R(2) == 1) ? SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode :
+                         SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode;
+}
+
 static SkPoint3 make_point() {
     return SkPoint3(make_scalar(), make_scalar(), make_scalar(true));
 }
@@ -205,6 +211,35 @@ static const SkBitmap& make_bitmap() {
     return bitmap[R(2)];
 }
 
+static SkData* make_3Dlut(int* cubeDimension, bool invR, bool invG, bool invB) {
+    int size = 4 << R(5);
+    SkData* data = SkData::NewUninitialized(sizeof(SkColor) * size * size * size);
+    SkColor* pixels = (SkColor*)(data->writable_data());
+    SkAutoMalloc lutMemory(size);
+    SkAutoMalloc invLutMemory(size);
+    uint8_t* lut = (uint8_t*)lutMemory.get();
+    uint8_t* invLut = (uint8_t*)invLutMemory.get();
+    const int maxIndex = size - 1;
+    for (int i = 0; i < size; i++) {
+        lut[i] = (i * 255) / maxIndex;
+        invLut[i] = ((maxIndex - i) * 255) / maxIndex;
+    }
+    for (int r = 0; r < size; ++r) {
+        for (int g = 0; g < size; ++g) {
+            for (int b = 0; b < size; ++b) {
+                pixels[(size * ((size * b) + g)) + r] = SkColorSetARGB(0xFF,
+                        invR ? invLut[r] : lut[r],
+                        invG ? invLut[g] : lut[g],
+                        invB ? invLut[b] : lut[b]);
+            }
+        }
+    }
+    if (cubeDimension) {
+        *cubeDimension = size;
+    }
+    return data;
+}
+
 static void drawSomething(SkCanvas* canvas) {
     SkPaint paint;
 
@@ -213,15 +248,10 @@ static void drawSomething(SkCanvas* canvas) {
     canvas->drawBitmap(make_bitmap(), 0, 0, NULL);
     canvas->restore();
 
-    const char beforeStr[] = "before circle";
-    const char afterStr[] = "after circle";
-
     paint.setAntiAlias(true);
 
     paint.setColor(SK_ColorRED);
-    canvas->drawData(beforeStr, sizeof(beforeStr));
     canvas->drawCircle(SkIntToScalar(kBitmapSize/2), SkIntToScalar(kBitmapSize/2), SkIntToScalar(kBitmapSize/3), paint);
-    canvas->drawData(afterStr, sizeof(afterStr));
     paint.setColor(SK_ColorBLACK);
     paint.setTextSize(SkIntToScalar(kBitmapSize/3));
     canvas->drawText("Picture", 7, SkIntToScalar(kBitmapSize/2), SkIntToScalar(kBitmapSize/4), paint);
@@ -233,7 +263,7 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     // Add a 1 in 3 chance to get a NULL input
     if (canBeNull && (R(3) == 1)) { return filter; }
 
-    enum { ALPHA_THRESHOLD, MERGE, COLOR, BLUR, MAGNIFIER,
+    enum { ALPHA_THRESHOLD, MERGE, COLOR, LUT3D, BLUR, MAGNIFIER,
            DOWN_SAMPLE, XFERMODE, OFFSET, MATRIX, MATRIX_CONVOLUTION, COMPOSE,
            DISTANT_LIGHT, POINT_LIGHT, SPOT_LIGHT, NOISE, DROP_SHADOW,
            MORPHOLOGY, BITMAP, DISPLACE, TILE, PICTURE, NUM_FILTERS };
@@ -250,6 +280,14 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
         SkAutoTUnref<SkColorFilter> cf((R(2) == 1) ?
                  SkColorFilter::CreateModeFilter(make_color(), make_xfermode()) :
                  SkColorFilter::CreateLightingFilter(make_color(), make_color()));
+        filter = cf.get() ? SkColorFilterImageFilter::Create(cf, make_image_filter()) : 0;
+    }
+        break;
+    case LUT3D:
+    {
+        int cubeDimension;
+        SkAutoDataUnref lut3D(make_3Dlut(&cubeDimension, (R(2) == 1), (R(2) == 1), (R(2) == 1)));
+        SkAutoTUnref<SkColorFilter> cf(SkColorCubeFilter::Create(lut3D, cubeDimension));
         filter = cf.get() ? SkColorFilterImageFilter::Create(cf, make_image_filter()) : 0;
     }
         break;
@@ -340,8 +378,9 @@ static SkImageFilter* make_image_filter(bool canBeNull = true) {
     }
         break;
     case DROP_SHADOW:
-        filter = SkDropShadowImageFilter::Create(make_scalar(), make_scalar(),
-                     make_scalar(true), make_scalar(true), make_color(), make_image_filter());
+        filter = SkDropShadowImageFilter::Create(make_scalar(), make_scalar(), make_scalar(true),
+                    make_scalar(true), make_color(), make_shadow_mode(), make_image_filter(),
+                    NULL, 0);
         break;
     case MORPHOLOGY:
         if (R(2) == 1) {

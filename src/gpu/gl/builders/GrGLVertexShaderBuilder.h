@@ -10,59 +10,43 @@
 
 #include "GrGLShaderBuilder.h"
 
-class GrGLProgramBuilder;
+class GrGLVarying;
 
-// TODO we only actually ever need to return a GrGLShaderBuilder for this guy, none of the below
-// functions need to be part of VertexShaderBuilder's public interface
 class GrGLVertexBuilder : public GrGLShaderBuilder {
 public:
     GrGLVertexBuilder(GrGLProgramBuilder* program);
 
-    /**
-     * Are explicit local coordinates provided as input to the vertex shader.
-     */
-    bool hasLocalCoords() const { return (fLocalCoordsVar != fPositionVar); }
+    /** returns the expected position output */
+    const char* glPosition() const { return "pos3"; }
+    const char* positionCoords() const { return "position"; }
+    const char* localCoords() const { return "localCoords"; }
 
-    /** Returns a vertex attribute that represents the local coords in the VS. This may be the same
-        as positionAttribute() or it may not be. It depends upon whether the rendering code
-        specified explicit local coords or not in the GrDrawState. */
-    const GrGLShaderVar& localCoordsAttribute() const { return *fLocalCoordsVar; }
+    void addAttribute(const GrGeometryProcessor::GrAttribute* attr) {
+        this->addAttribute(GrShaderVar(attr->fName,
+                                       GrVertexAttribTypeToSLType(attr->fType),
+                                       GrShaderVar::kAttribute_TypeModifier));
+    }
 
-    /** Returns a vertex attribute that represents the vertex position in the VS. This is the
-        pre-matrix position and is commonly used by effects to compute texture coords via a matrix.
-      */
-    const GrGLShaderVar& positionAttribute() const { return *fPositionVar; }
-
+private:
     /*
      * Internal call for GrGLProgramBuilder.addVarying
      */
-    SkString* addVarying(GrSLType type, const char* name, const char** vsOutName);
+    void addVarying(const char* name, GrGLVarying*);
 
     /*
      * private helpers for compilation by GrGLProgramBuilder
      */
-    void setupLocalCoords();
-    void transformGLToSkiaCoords();
-    void setupBuiltinVertexAttribute(const char* inName, GrGLSLExpr4* out);
+    void transformToNormalizedDeviceSpace();
     void emitAttributes(const GrGeometryProcessor& gp);
-    void transformSkiaToGLCoords();
     void bindVertexAttributes(GrGLuint programID);
     bool compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) const;
 
-private:
     // an internal call which checks for uniquness of a var before adding it to the list of inputs
     bool addAttribute(const GrShaderVar& var);
-    struct AttributePair {
-        void set(int index, const SkString& name) {
-            fIndex = index; fName = name;
-        }
-        int      fIndex;
-        SkString fName;
-    };
 
-    GrGLShaderVar*                      fPositionVar;
-    GrGLShaderVar*                      fLocalCoordsVar;
-    int                                 fEffectAttribOffset;
+    const char* fRtAdjustName;
+
+    friend class GrGLProgramBuilder;
 
     typedef GrGLShaderBuilder INHERITED;
 };

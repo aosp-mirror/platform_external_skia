@@ -590,19 +590,6 @@ static void drawBitmap_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
     }
 }
 
-static void drawBitmapMatrix_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
-                                SkGPipeState* state) {
-    BitmapHolder holder(reader, op32, state);
-    bool hasPaint = SkToBool(DrawOp_unpackFlags(op32) & kDrawBitmap_HasPaint_DrawOpFlag);
-    SkMatrix matrix;
-    reader->readMatrix(&matrix);
-    const SkBitmap* bitmap = holder.getBitmap();
-    if (state->shouldDraw()) {
-        canvas->drawBitmapMatrix(*bitmap, matrix,
-                                 hasPaint ? &state->paint() : NULL);
-    }
-}
-
 static void drawBitmapNine_rp(SkCanvas* canvas, SkReader32* reader,
                               uint32_t op32, SkGPipeState* state) {
     BitmapHolder holder(reader, op32, state);
@@ -652,19 +639,6 @@ static void drawSprite_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-static void drawData_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
-                        SkGPipeState* state) {
-    // since we don't have a paint, we can use data for our (small) sizes
-    size_t size = DrawOp_unpackData(op32);
-    if (0 == size) {
-        size = reader->readU32();
-    }
-    const void* data = reader->skip(SkAlign4(size));
-    if (state->shouldDraw()) {
-        canvas->drawData(data, size);
-    }
-}
 
 static void drawPicture_rp(SkCanvas* canvas, SkReader32* reader, uint32_t op32,
                            SkGPipeState* state) {
@@ -825,11 +799,9 @@ static const ReadProc gReadTable[] = {
     clipRRect_rp,
     concat_rp,
     drawBitmap_rp,
-    drawBitmapMatrix_rp,
     drawBitmapNine_rp,
     drawBitmapRect_rp,
     drawClear_rp,
-    drawData_rp,
     drawDRRect_rp,
     drawOval_rp,
     drawPaint_rp,

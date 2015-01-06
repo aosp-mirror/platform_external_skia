@@ -9,6 +9,10 @@
 #include "SkReadBuffer.h"
 #include "SkWriteBuffer.h"
 
+static bool profile_type_is_valid(SkColorProfileType profileType) {
+    return (profileType >= 0) && (profileType <= kLastEnum_SkColorProfileType);
+}
+
 static bool alpha_type_is_valid(SkAlphaType alphaType) {
     return (alphaType >= 0) && (alphaType <= kLastEnum_SkAlphaType);
 }
@@ -22,10 +26,12 @@ void SkImageInfo::unflatten(SkReadBuffer& buffer) {
     fHeight = buffer.read32();
 
     uint32_t packed = buffer.read32();
-    SkASSERT(0 == (packed >> 16));
+    SkASSERT(0 == (packed >> 24));
+    fProfileType = (SkColorProfileType)((packed >> 16) & 0xFF);
     fAlphaType = (SkAlphaType)((packed >> 8) & 0xFF);
     fColorType = (SkColorType)((packed >> 0) & 0xFF);
-    buffer.validate(alpha_type_is_valid(fAlphaType) &&
+    buffer.validate(profile_type_is_valid(fProfileType) &&
+                    alpha_type_is_valid(fAlphaType) &&
                     color_type_is_valid(fColorType));
 }
 
@@ -33,9 +39,10 @@ void SkImageInfo::flatten(SkWriteBuffer& buffer) const {
     buffer.write32(fWidth);
     buffer.write32(fHeight);
 
+    SkASSERT(0 == (fProfileType & ~0xFF));
     SkASSERT(0 == (fAlphaType & ~0xFF));
     SkASSERT(0 == (fColorType & ~0xFF));
-    uint32_t packed = (fAlphaType << 8) | fColorType;
+    uint32_t packed = (fProfileType << 16) | (fAlphaType << 8) | fColorType;
     buffer.write32(packed);
 }
 
@@ -69,3 +76,47 @@ bool SkColorTypeValidateAlphaType(SkColorType colorType, SkAlphaType alphaType,
     }
     return true;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#include "SkReadPixelsRec.h"
+
+bool SkReadPixelsRec::trim(int srcWidth, int srcHeight) {
+    switch (fInfo.colorType()) {
+        case kUnknown_SkColorType:
+        case kIndex_8_SkColorType:
+            return false;
+        default:
+            break;
+    }
+    if (NULL == fPixels || fRowBytes < fInfo.minRowBytes()) {
+        return false;
+    }
+    if (0 == fInfo.width() || 0 == fInfo.height()) {
+        return false;
+    }
+
+    int x = fX;
+    int y = fY;
+    SkIRect srcR = SkIRect::MakeXYWH(x, y, fInfo.width(), fInfo.height());
+    if (!srcR.intersect(0, 0, srcWidth, srcHeight)) {
+        return false;
+    }
+
+    // if x or y are negative, then we have to adjust pixels
+    if (x > 0) {
+        x = 0;
+    }
+    if (y > 0) {
+        y = 0;
+    }
+    // here x,y are either 0 or negative
+    fPixels = ((char*)fPixels - y * fRowBytes - x * fInfo.bytesPerPixel());
+    // the intersect may have shrunk info's logical size
+    fInfo = fInfo.makeWH(srcR.width(), srcR.height());
+    fX = srcR.x();
+    fY = srcR.y();
+
+    return true;
+}
+

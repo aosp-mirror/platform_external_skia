@@ -37,7 +37,7 @@
         '<(skia_include_path)/utils/SkRandom.h',
         '<(skia_include_path)/utils/SkRTConf.h',
         '<(skia_include_path)/utils/SkProxyCanvas.h',
-        '<(skia_include_path)/utils/SkWGL.h',
+        '<(skia_include_path)/utils/SkTextBox.h',
 
         '<(skia_src_path)/utils/SkBase64.cpp',
         '<(skia_src_path)/utils/SkBase64.h',
@@ -86,8 +86,10 @@
         '<(skia_src_path)/utils/SkSHA1.cpp',
         '<(skia_src_path)/utils/SkSHA1.h',
         '<(skia_src_path)/utils/SkRTConf.cpp',
+        '<(skia_src_path)/utils/SkTextBox.cpp',
         '<(skia_src_path)/utils/SkTextureCompressor.cpp',
         '<(skia_src_path)/utils/SkTextureCompressor.h',
+        '<(skia_src_path)/utils/SkTextureCompressor_Utils.h',
         '<(skia_src_path)/utils/SkTextureCompressor_ASTC.cpp',
         '<(skia_src_path)/utils/SkTextureCompressor_ASTC.h',
         '<(skia_src_path)/utils/SkTextureCompressor_Blitter.h',
@@ -124,6 +126,7 @@
         '<(skia_src_path)/utils/win/SkDWriteGeometrySink.h',
         '<(skia_src_path)/utils/win/SkHRESULT.cpp',
         '<(skia_src_path)/utils/win/SkIStream.cpp',
+        '<(skia_src_path)/utils/win/SkWGL.h',
         '<(skia_src_path)/utils/win/SkWGL_win.cpp',
 
         #testing

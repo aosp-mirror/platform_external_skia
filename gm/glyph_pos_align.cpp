@@ -29,7 +29,7 @@ protected:
         return SkString("glyph_pos_align");
     }
 
-    virtual SkISize onISize() { return SkISize::Make(kWidth, kHeight); }
+    virtual SkISize onISize() SK_OVERRIDE { return SkISize::Make(kWidth, kHeight); }
 
     virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         canvas->clear(SK_ColorBLACK);
@@ -59,7 +59,7 @@ protected:
         SkScalar widths[kMaxStringLength];
         SkScalar posX[kMaxStringLength];
         SkPoint pos[kMaxStringLength];
-        int length = strlen(text);
+        int length = SkToInt(strlen(text));
         SkASSERT(length <= kMaxStringLength);
 
         paint.getTextWidths(text, length, widths);

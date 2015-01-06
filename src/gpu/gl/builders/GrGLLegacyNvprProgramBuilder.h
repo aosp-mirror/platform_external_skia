@@ -12,15 +12,15 @@
 
 class GrGLLegacyNvprProgramBuilder : public GrGLProgramBuilder {
 public:
-    GrGLLegacyNvprProgramBuilder(GrGpuGL*, const GrOptDrawState&, const GrGLProgramDesc&);
+    GrGLLegacyNvprProgramBuilder(GrGLGpu*, const GrOptDrawState&);
 
-    virtual GrGLProgram* createProgram(GrGLuint programID);
+    virtual GrGLProgram* createProgram(GrGLuint programID) SK_OVERRIDE;
 
 private:
     int addTexCoordSets(int count);
-    void emitTransforms(const GrFragmentStage&,
+    void emitTransforms(const GrPendingFragmentStage&,
                         GrGLProcessor::TransformedCoordsArray* outCoords,
-                        GrGLInstalledFragProc*);
+                        GrGLInstalledFragProc*) SK_OVERRIDE;
 
     int fTexCoordSetCnt;
 

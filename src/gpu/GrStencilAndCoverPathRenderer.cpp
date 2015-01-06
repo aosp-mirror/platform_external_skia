@@ -14,6 +14,22 @@
 #include "GrPath.h"
 #include "SkStrokeRec.h"
 
+/*
+ * For now paths only natively support winding and even odd fill types
+ */
+static GrPathRendering::FillType convert_skpath_filltype(SkPath::FillType fill) {
+    switch (fill) {
+        default:
+            SkFAIL("Incomplete Switch\n");
+        case SkPath::kWinding_FillType:
+        case SkPath::kInverseWinding_FillType:
+            return GrPathRendering::kWinding_FillType;
+        case SkPath::kEvenOdd_FillType:
+        case SkPath::kInverseEvenOdd_FillType:
+            return GrPathRendering::kEvenOdd_FillType;
+    }
+}
+
 GrPathRenderer* GrStencilAndCoverPathRenderer::Create(GrContext* context) {
     SkASSERT(context);
     SkASSERT(context->getGpu());
@@ -34,20 +50,23 @@ GrStencilAndCoverPathRenderer::~GrStencilAndCoverPathRenderer() {
     fGpu->unref();
 }
 
-bool GrStencilAndCoverPathRenderer::canDrawPath(const SkPath& path,
+bool GrStencilAndCoverPathRenderer::canDrawPath(const GrDrawTarget* target,
+                                                const GrDrawState* drawState,
+                                                const SkMatrix& viewMatrix,
+                                                const SkPath& path,
                                                 const SkStrokeRec& stroke,
-                                                const GrDrawTarget* target,
                                                 bool antiAlias) const {
     return !stroke.isHairlineStyle() &&
            !antiAlias && // doesn't do per-path AA, relies on the target having MSAA
-           target->getDrawState().getRenderTarget()->getStencilBuffer() &&
-           target->getDrawState().getStencil().isDisabled();
+           drawState->getRenderTarget()->getStencilBuffer() &&
+           drawState->getStencil().isDisabled();
 }
 
-GrPathRenderer::StencilSupport GrStencilAndCoverPathRenderer::onGetStencilSupport(
-                                                        const SkPath&,
-                                                        const SkStrokeRec& ,
-                                                        const GrDrawTarget*) const {
+GrPathRenderer::StencilSupport
+GrStencilAndCoverPathRenderer::onGetStencilSupport(const GrDrawTarget*,
+                                                   const GrDrawState*,
+                                                   const SkPath&,
+                                                   const SkStrokeRec&) const {
     return GrPathRenderer::kStencilOnly_StencilSupport;
 }
 
@@ -62,22 +81,27 @@ static GrPath* get_gr_path(GrGpu* gpu, const SkPath& skPath, const SkStrokeRec& 
     return path.detach();
 }
 
-void GrStencilAndCoverPathRenderer::onStencilPath(const SkPath& path,
-                                                  const SkStrokeRec& stroke,
-                                                  GrDrawTarget* target) {
+void GrStencilAndCoverPathRenderer::onStencilPath(GrDrawTarget* target,
+                                                  GrDrawState* drawState,
+                                                  const SkMatrix& viewMatrix,
+                                                  const SkPath& path,
+                                                  const SkStrokeRec& stroke) {
     SkASSERT(!path.isInverseFillType());
+    SkAutoTUnref<GrPathProcessor> pp(GrPathProcessor::Create(GrColor_WHITE, viewMatrix));
     SkAutoTUnref<GrPath> p(get_gr_path(fGpu, path, stroke));
-    target->stencilPath(p, path.getFillType());
+    target->stencilPath(drawState, pp, p, convert_skpath_filltype(path.getFillType()));
 }
 
-bool GrStencilAndCoverPathRenderer::onDrawPath(const SkPath& path,
+bool GrStencilAndCoverPathRenderer::onDrawPath(GrDrawTarget* target,
+                                               GrDrawState* drawState,
+                                               GrColor color,
+                                               const SkMatrix& viewMatrix,
+                                               const SkPath& path,
                                                const SkStrokeRec& stroke,
-                                               GrDrawTarget* target,
                                                bool antiAlias) {
     SkASSERT(!antiAlias);
     SkASSERT(!stroke.isHairlineStyle());
 
-    GrDrawState* drawState = target->drawState();
     SkASSERT(drawState->getStencil().isDisabled());
 
     SkAutoTUnref<GrPath> p(get_gr_path(fGpu, path, stroke));
@@ -94,7 +118,31 @@ bool GrStencilAndCoverPathRenderer::onDrawPath(const SkPath& path,
             0x0000,
             0xffff);
 
-        *drawState->stencil() = kInvertedStencilPass;
+        drawState->setStencil(kInvertedStencilPass);
+
+        // fake inverse with a stencil and cover
+        SkAutoTUnref<GrPathProcessor> pp(GrPathProcessor::Create(GrColor_WHITE, viewMatrix));
+        target->stencilPath(drawState, pp, p, convert_skpath_filltype(path.getFillType()));
+
+        SkMatrix invert = SkMatrix::I();
+        SkRect bounds = SkRect::MakeLTRB(0, 0,
+                                         SkIntToScalar(drawState->getRenderTarget()->width()),
+                                         SkIntToScalar(drawState->getRenderTarget()->height()));
+        SkMatrix vmi;
+        // mapRect through persp matrix may not be correct
+        if (!viewMatrix.hasPerspective() && viewMatrix.invert(&vmi)) {
+            vmi.mapRect(&bounds);
+            // theoretically could set bloat = 0, instead leave it because of matrix inversion
+            // precision.
+            SkScalar bloat = viewMatrix.getMaxScale() * SK_ScalarHalf;
+            bounds.outset(bloat, bloat);
+        } else {
+            if (!viewMatrix.invert(&invert)) {
+                return false;
+            }
+        }
+        const SkMatrix& viewM = viewMatrix.hasPerspective() ? SkMatrix::I() : viewMatrix;
+        target->drawRect(drawState, color, viewM, bounds, NULL, &invert);
     } else {
         GR_STATIC_CONST_SAME_STENCIL(kStencilPass,
             kZero_StencilOp,
@@ -104,11 +152,11 @@ bool GrStencilAndCoverPathRenderer::onDrawPath(const SkPath& path,
             0x0000,
             0xffff);
 
-        *drawState->stencil() = kStencilPass;
+        drawState->setStencil(kStencilPass);
+        SkAutoTUnref<GrPathProcessor> pp(GrPathProcessor::Create(color, viewMatrix));
+        target->drawPath(drawState, pp, p, convert_skpath_filltype(path.getFillType()));
     }
 
-    target->drawPath(p, path.getFillType());
-
-    target->drawState()->stencil()->setDisabled();
+    drawState->stencil()->setDisabled();
     return true;
 }

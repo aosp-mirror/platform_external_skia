@@ -10,10 +10,10 @@
 #ifndef SkDisplayAdd_DEFINED
 #define SkDisplayAdd_DEFINED
 
-#include "SkDrawable.h"
+#include "SkADrawable.h"
 #include "SkMemberInfo.h"
 
-class SkAdd : public SkDrawable {
+class SkAdd : public SkADrawable {
     DECLARE_MEMBER_INFO(Add);
     SkAdd();
 
@@ -22,24 +22,24 @@ class SkAdd : public SkDrawable {
         kMode_immediate
     };
 
-    virtual SkDisplayable* deepCopy(SkAnimateMaker* );
-    virtual bool draw(SkAnimateMaker& );
+    virtual SkDisplayable* deepCopy(SkAnimateMaker* ) SK_OVERRIDE;
+    virtual bool draw(SkAnimateMaker& ) SK_OVERRIDE;
 #ifdef SK_DUMP_ENABLED
-    virtual void dump(SkAnimateMaker* );
+    virtual void dump(SkAnimateMaker* ) SK_OVERRIDE;
 #endif
-    virtual bool enable(SkAnimateMaker& );
-    virtual bool hasEnable() const;
-    virtual void initialize();
-    virtual bool isDrawable() const;
+    virtual bool enable(SkAnimateMaker& ) SK_OVERRIDE;
+    virtual bool hasEnable() const SK_OVERRIDE;
+    virtual void initialize() SK_OVERRIDE;
+    virtual bool isDrawable() const SK_OVERRIDE;
 protected:
 //  struct _A {
         Mode mode;
         int32_t offset;
-        SkDrawable* use;
-        SkDrawable* where;  // if NULL, offset becomes index
+        SkADrawable* use;
+        SkADrawable* where;  // if NULL, offset becomes index
 //  } A;
 private:
-    typedef SkDrawable INHERITED;
+    typedef SkADrawable INHERITED;
 };
 
 class SkClear : public SkDisplayable {

@@ -5,52 +5,49 @@
  * found in the LICENSE file.
  */
 
-#include "gl/builders/GrGLProgramBuilder.h"
 #include "GrDitherEffect.h"
-
+#include "GrFragmentProcessor.h"
+#include "GrInvariantOutput.h"
+#include "SkRect.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/GrGLSL.h"
-#include "GrTBackendProcessorFactory.h"
-
-#include "SkRect.h"
+#include "gl/builders/GrGLProgramBuilder.h"
 
 //////////////////////////////////////////////////////////////////////////////
-
-class GLDitherEffect;
 
 class DitherEffect : public GrFragmentProcessor {
 public:
     static GrFragmentProcessor* Create() {
-        GR_CREATE_STATIC_FRAGMENT_PROCESSOR(gDitherEffect, DitherEffect, ())
+        GR_CREATE_STATIC_PROCESSOR(gDitherEffect, DitherEffect, ())
         return SkRef(gDitherEffect);
     }
 
     virtual ~DitherEffect() {};
-    static const char* Name() { return "Dither"; }
 
-    typedef GLDitherEffect GLProcessor;
+    virtual const char* name() const SK_OVERRIDE { return "Dither"; }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE {
-        return GrTBackendFragmentProcessorFactory<DitherEffect>::getInstance();
-    }
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
 
 private:
     DitherEffect() {
+        this->initClassID<DitherEffect>();
         this->setWillReadFragmentPosition();
     }
 
     // All dither effects are equal
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE { return true; }
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE { return true; }
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
     typedef GrFragmentProcessor INHERITED;
 };
 
-void DitherEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
-    inout->setToUnknown();
+void DitherEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
+    inout->setToUnknown(GrInvariantOutput::kWill_ReadInput);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -68,11 +65,10 @@ GrFragmentProcessor* DitherEffect::TestCreate(SkRandom*,
 
 class GLDitherEffect : public GrGLFragmentProcessor {
 public:
-    GLDitherEffect(const GrBackendProcessorFactory&, const GrProcessor&);
+    GLDitherEffect(const GrProcessor&);
 
     virtual void emitCode(GrGLFPBuilder* builder,
                           const GrFragmentProcessor& fp,
-                          const GrProcessorKey& key,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -82,14 +78,11 @@ private:
     typedef GrGLFragmentProcessor INHERITED;
 };
 
-GLDitherEffect::GLDitherEffect(const GrBackendProcessorFactory& factory,
-                               const GrProcessor&)
-    : INHERITED (factory) {
+GLDitherEffect::GLDitherEffect(const GrProcessor&) {
 }
 
 void GLDitherEffect::emitCode(GrGLFPBuilder* builder,
                               const GrFragmentProcessor& fp,
-                              const GrProcessorKey& key,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
@@ -112,5 +105,14 @@ void GLDitherEffect::emitCode(GrGLFPBuilder* builder,
 }
 
 //////////////////////////////////////////////////////////////////////////////
+
+void DitherEffect::getGLProcessorKey(const GrGLCaps& caps,
+                                     GrProcessorKeyBuilder* b) const {
+    GLDitherEffect::GenKey(*this, caps, b);
+}
+
+GrGLFragmentProcessor* DitherEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GLDitherEffect, (*this));
+}
 
 GrFragmentProcessor* GrDitherEffect::Create() { return DitherEffect::Create(); }

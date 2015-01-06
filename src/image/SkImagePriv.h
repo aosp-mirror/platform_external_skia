@@ -11,8 +11,8 @@
 #include "SkImage.h"
 
 // Call this if you explicitly want to use/share this pixelRef in the image
-extern SkImage* SkNewImageFromPixelRef(const SkImageInfo&, SkPixelRef*,
-                                       size_t rowBytes);
+extern SkImage* SkNewImageFromPixelRef(const SkImageInfo&, SkPixelRef*, size_t rowBytes,
+                                       const SkSurfaceProps*);
 
 /**
  *  Examines the bitmap to decide if it can share the existing pixelRef, or
@@ -24,7 +24,7 @@ extern SkImage* SkNewImageFromPixelRef(const SkImageInfo&, SkPixelRef*,
  *  SkImageInfo, or the bitmap's pixels cannot be accessed, this will return
  *  NULL.
  */
-extern SkImage* SkNewImageFromBitmap(const SkBitmap&, bool canSharePixelRef);
+extern SkImage* SkNewImageFromBitmap(const SkBitmap&, bool canSharePixelRef, const SkSurfaceProps*);
 
 static inline size_t SkImageMinRowBytes(const SkImageInfo& info) {
     return SkAlign4(info.minRowBytes());
@@ -33,7 +33,7 @@ static inline size_t SkImageMinRowBytes(const SkImageInfo& info) {
 // Given an image created from SkNewImageFromBitmap, return its pixelref. This
 // may be called to see if the surface and the image share the same pixelref,
 // in which case the surface may need to perform a copy-on-write.
-extern SkPixelRef* SkBitmapImageGetPixelRef(SkImage* rasterImage);
+extern const SkPixelRef* SkBitmapImageGetPixelRef(const SkImage* rasterImage);
 
 // Given an image created with NewTexture, return its GrTexture. This
 // may be called to see if the surface and the image share the same GrTexture,
@@ -44,5 +44,7 @@ extern GrTexture* SkTextureImageGetTexture(SkImage* textureImage);
 // is called when a surface and image share the same GrTexture and the
 // surface needs to perform a copy-on-write
 extern void SkTextureImageSetTexture(SkImage* image, GrTexture* texture);
+
+extern SkImage* SkNewImageFromBitmapTexture(const SkBitmap&, int sampleCountForNewSurfaces);
 
 #endif

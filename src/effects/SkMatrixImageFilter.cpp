@@ -31,14 +31,6 @@ SkMatrixImageFilter* SkMatrixImageFilter::Create(const SkMatrix& transform,
     return SkNEW_ARGS(SkMatrixImageFilter, (transform, filterLevel, input, uniqueID));
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkMatrixImageFilter::SkMatrixImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    buffer.readMatrix(&fTransform);
-    fFilterLevel = static_cast<SkPaint::FilterLevel>(buffer.readInt());
-}
-#endif
-
 SkFlattenable* SkMatrixImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     SkMatrix matrix;
@@ -106,11 +98,8 @@ void SkMatrixImageFilter::computeFastBounds(const SkRect& src, SkRect* dst) cons
     if (getInput(0)) {
         getInput(0)->computeFastBounds(src, &bounds);
     }
-    SkMatrix matrix;
-    matrix.setTranslate(-bounds.x(), -bounds.y());
-    matrix.postConcat(fTransform);
-    matrix.postTranslate(bounds.x(), bounds.y());
-    matrix.mapRect(dst, bounds);
+    fTransform.mapRect(dst, bounds);
+    dst->join(bounds);   // Work around for skia:3194
 }
 
 bool SkMatrixImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
@@ -127,8 +116,7 @@ bool SkMatrixImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm
     matrix.postConcat(ctm);
     SkRect floatBounds;
     matrix.mapRect(&floatBounds, SkRect::Make(src));
-    SkIRect bounds;
-    floatBounds.roundOut(&bounds);
+    SkIRect bounds = floatBounds.roundOut();
     if (getInput(0) && !getInput(0)->filterBounds(bounds, ctm, &bounds)) {
         return false;
     }
@@ -136,3 +124,27 @@ bool SkMatrixImageFilter::onFilterBounds(const SkIRect& src, const SkMatrix& ctm
     *dst = bounds;
     return true;
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void SkMatrixImageFilter::toString(SkString* str) const {
+    str->appendf("SkMatrixImageFilter: (");
+
+    str->appendf("transform: (%f %f %f %f %f %f %f %f %f)",
+                 fTransform[SkMatrix::kMScaleX],
+                 fTransform[SkMatrix::kMSkewX],
+                 fTransform[SkMatrix::kMTransX],
+                 fTransform[SkMatrix::kMSkewY],
+                 fTransform[SkMatrix::kMScaleY],
+                 fTransform[SkMatrix::kMTransY],
+                 fTransform[SkMatrix::kMPersp0],
+                 fTransform[SkMatrix::kMPersp1],
+                 fTransform[SkMatrix::kMPersp2]);
+
+    str->append("<dt>FilterLevel:</dt><dd>");
+    static const char* gFilterLevelStrings[] = { "None", "Low", "Medium", "High" };
+    str->append(gFilterLevelStrings[fFilterLevel]);    
+    str->append("</dd>");
+
+    str->appendf(")");
+}
+#endif

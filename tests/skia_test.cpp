@@ -11,6 +11,7 @@
 #include "SkCommonFlags.h"
 #include "SkGraphics.h"
 #include "SkOSFile.h"
+#include "SkRunnable.h"
 #include "SkTArray.h"
 #include "SkTaskGroup.h"
 #include "SkTemplates.h"
@@ -57,7 +58,9 @@ public:
     virtual bool verbose()           const SK_OVERRIDE { return FLAGS_veryVerbose; }
 
 protected:
-    virtual void onReportFailed(const SkString& desc) SK_OVERRIDE {
+    virtual void onReportFailed(const skiatest::Failure& failure) SK_OVERRIDE {
+        SkString desc;
+        failure.getFailureString(&desc);
         SkDebugf("\nFAILED: %s", desc.c_str());
     }
 
@@ -124,7 +127,7 @@ int test_main() {
     }
 #endif
 
-    SkGraphics::Init();
+    SkAutoGraphics ag;
 
     {
         SkString header("Skia UnitTests:");
@@ -210,7 +213,6 @@ int test_main() {
         SkDebugf("\nFinished %d tests, %d failures, %d skipped. (%d internal tests)",
                  toRun, failCount, skipCount, reporter.countTests());
     }
-    SkGraphics::Term();
 
     SkDebugf("\n");
     return (failCount == 0) ? 0 : 1;

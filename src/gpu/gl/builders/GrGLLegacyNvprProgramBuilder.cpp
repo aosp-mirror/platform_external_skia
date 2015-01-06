@@ -6,15 +6,12 @@
  */
 
 #include "GrGLLegacyNvprProgramBuilder.h"
-#include "../GrGpuGL.h"
+#include "../GrGLGpu.h"
 
-GrGLLegacyNvprProgramBuilder::GrGLLegacyNvprProgramBuilder(GrGpuGL* gpu,
-                                                           const GrOptDrawState& optState,
-                                                           const GrGLProgramDesc& desc)
-    : INHERITED(gpu, optState, desc)
+GrGLLegacyNvprProgramBuilder::GrGLLegacyNvprProgramBuilder(GrGLGpu* gpu,
+                                                           const GrOptDrawState& optState)
+    : INHERITED(gpu, optState)
     , fTexCoordSetCnt(0) {
-    SkASSERT(GrGLProgramDesc::kAttribute_ColorInput != desc.getHeader().fColorInput);
-    SkASSERT(GrGLProgramDesc::kAttribute_ColorInput != desc.getHeader().fCoverageInput);
 }
 
 int GrGLLegacyNvprProgramBuilder::addTexCoordSets(int count) {
@@ -24,10 +21,10 @@ int GrGLLegacyNvprProgramBuilder::addTexCoordSets(int count) {
     return firstFreeCoordSet;
 }
 
-void GrGLLegacyNvprProgramBuilder::emitTransforms(const GrFragmentStage& processorStage,
+void GrGLLegacyNvprProgramBuilder::emitTransforms(const GrPendingFragmentStage& processorStage,
                                             GrGLProcessor::TransformedCoordsArray* outCoords,
                                             GrGLInstalledFragProc* ifp) {
-    int numTransforms = processorStage.getProcessor()->numTransforms();
+    int numTransforms = processorStage.processor()->numTransforms();
     int texCoordIndex = this->addTexCoordSets(numTransforms);
 
     // Use the first uniform location as the texcoord index.  This may seem a bit hacky but it
@@ -38,8 +35,8 @@ void GrGLLegacyNvprProgramBuilder::emitTransforms(const GrFragmentStage& process
 
     SkString name;
     for (int t = 0; t < numTransforms; ++t) {
-        GrSLType type = processorStage.isPerspectiveCoordTransform(t, false) ? kVec3f_GrSLType :
-                                                                               kVec2f_GrSLType;
+        GrSLType type = processorStage.isPerspectiveCoordTransform(t) ? kVec3f_GrSLType :
+                                                                        kVec2f_GrSLType;
 
         name.printf("%s(gl_TexCoord[%i])", GrGLSLTypeString(type), texCoordIndex++);
         SkNEW_APPEND_TO_TARRAY(outCoords, GrGLProcessor::TransformedCoords, (name, type));
@@ -48,5 +45,6 @@ void GrGLLegacyNvprProgramBuilder::emitTransforms(const GrFragmentStage& process
 
 GrGLProgram* GrGLLegacyNvprProgramBuilder::createProgram(GrGLuint programID) {
     return SkNEW_ARGS(GrGLLegacyNvprProgram, (fGpu, fDesc, fUniformHandles, programID, fUniforms,
-                                              fFragmentProcessors.get(),  fTexCoordSetCnt));
+            fGeometryProcessor, fXferProcessor, fFragmentProcessors.get(),
+                                              fTexCoordSetCnt));
 }

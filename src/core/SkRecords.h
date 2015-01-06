@@ -9,6 +9,7 @@
 #define SkRecords_DEFINED
 
 #include "SkCanvas.h"
+#include "SkCanvasDrawable.h"
 #include "SkPicture.h"
 #include "SkTextBlob.h"
 
@@ -29,21 +30,21 @@ namespace SkRecords {
     M(Restore)                                                      \
     M(Save)                                                         \
     M(SaveLayer)                                                    \
-    M(PushCull)                                                     \
-    M(PopCull)                                                      \
     M(SetMatrix)                                                    \
     M(ClipPath)                                                     \
     M(ClipRRect)                                                    \
     M(ClipRect)                                                     \
     M(ClipRegion)                                                   \
-    M(Clear)                                                        \
     M(BeginCommentGroup)                                            \
     M(AddComment)                                                   \
     M(EndCommentGroup)                                              \
     M(DrawBitmap)                                                   \
-    M(DrawBitmapMatrix)                                             \
     M(DrawBitmapNine)                                               \
     M(DrawBitmapRectToRect)                                         \
+    M(DrawBitmapRectToRectBleed)                                    \
+    M(DrawDrawable)                                                 \
+    M(DrawImage)                                                    \
+    M(DrawImageRect)                                                \
     M(DrawDRRect)                                                   \
     M(DrawOval)                                                     \
     M(DrawPaint)                                                    \
@@ -59,7 +60,6 @@ namespace SkRecords {
     M(DrawRect)                                                     \
     M(DrawSprite)                                                   \
     M(DrawTextBlob)                                                 \
-    M(DrawData)                                                     \
     M(DrawVertices)
 
 // Defines SkRecords::Type, an enum of all record types.
@@ -190,29 +190,50 @@ public:
         fBitmap.setImmutable();
     }
 
-    operator const SkBitmap& () const { return fBitmap; }
+    int width()  const { return fBitmap.width();  }
+    int height() const { return fBitmap.height(); }
 
+    // While the pixels are immutable, SkBitmap itself is not thread-safe, so return a copy.
+    SkBitmap shallowCopy() const { return fBitmap; }
 private:
     SkBitmap fBitmap;
 };
 
+// SkPath::getBounds() isn't thread safe unless we precache the bounds in a singlethreaded context.
+// Recording is a convenient time to do this, but we could delay it to between record and playback.
+struct BoundedPath : public SkPath {
+    explicit BoundedPath(const SkPath& path) : SkPath(path) {
+        this->updateBoundsCache();
+    }
+};
+
+// Like SkPath::getBounds(), SkMatrix::getType() isn't thread safe unless we precache it.
+// This may not cover all SkMatrices used by the picture (e.g. some could be hiding in a shader).
+struct TypedMatrix : public SkMatrix {
+    explicit TypedMatrix(const SkMatrix& matrix) : SkMatrix(matrix) {
+        (void)this->getType();
+    }
+};
+
 RECORD0(NoOp);
 
-RECORD2(Restore, SkIRect, devBounds, SkMatrix, matrix);
+RECORD2(Restore, SkIRect, devBounds, TypedMatrix, matrix);
 RECORD0(Save);
 RECORD3(SaveLayer, Optional<SkRect>, bounds, Optional<SkPaint>, paint, SkCanvas::SaveFlags, flags);
 
-RECORD1(PushCull, SkRect, rect);
-RECORD0(PopCull);
+RECORD1(SetMatrix, TypedMatrix, matrix);
 
-RECORD1(SetMatrix, SkMatrix, matrix);
+struct RegionOpAndAA {
+    RegionOpAndAA(SkRegion::Op op, bool aa) : op(op), aa(aa) {}
+    SkRegion::Op op : 31;  // This really only needs to be 3, but there's no win today to do so.
+    unsigned     aa :  1;  // MSVC won't pack an enum with an bool, so we call this an unsigned.
+};
+SK_COMPILE_ASSERT(sizeof(RegionOpAndAA) == 4, RegionOpAndAASize);
 
-RECORD4(ClipPath,   SkIRect, devBounds, SkPath,   path,   SkRegion::Op, op, bool, doAA);
-RECORD4(ClipRRect,  SkIRect, devBounds, SkRRect,  rrect,  SkRegion::Op, op, bool, doAA);
-RECORD4(ClipRect,   SkIRect, devBounds, SkRect,   rect,   SkRegion::Op, op, bool, doAA);
-RECORD3(ClipRegion, SkIRect, devBounds, SkRegion, region, SkRegion::Op, op);
-
-RECORD1(Clear, SkColor, color);
+RECORD3(ClipPath,   SkIRect, devBounds, BoundedPath, path, RegionOpAndAA, opAA);
+RECORD3(ClipRRect,  SkIRect, devBounds, SkRRect,    rrect, RegionOpAndAA, opAA);
+RECORD3(ClipRect,   SkIRect, devBounds, SkRect,      rect, RegionOpAndAA, opAA);
+RECORD3(ClipRegion, SkIRect, devBounds, SkRegion,  region, SkRegion::Op,    op);
 
 RECORD1(BeginCommentGroup, PODArray<char>, description);
 RECORD2(AddComment, PODArray<char>, key, PODArray<char>, value);
@@ -223,33 +244,44 @@ RECORD4(DrawBitmap, Optional<SkPaint>, paint,
                     ImmutableBitmap, bitmap,
                     SkScalar, left,
                     SkScalar, top);
-RECORD3(DrawBitmapMatrix, Optional<SkPaint>, paint, ImmutableBitmap, bitmap, SkMatrix, matrix);
 RECORD4(DrawBitmapNine, Optional<SkPaint>, paint,
                         ImmutableBitmap, bitmap,
                         SkIRect, center,
                         SkRect, dst);
-RECORD5(DrawBitmapRectToRect, Optional<SkPaint>, paint,
+RECORD4(DrawBitmapRectToRect, Optional<SkPaint>, paint,
                               ImmutableBitmap, bitmap,
                               Optional<SkRect>, src,
-                              SkRect, dst,
-                              SkCanvas::DrawBitmapRectFlags, flags);
+                              SkRect, dst);
+RECORD4(DrawBitmapRectToRectBleed, Optional<SkPaint>, paint,
+                                   ImmutableBitmap, bitmap,
+                                   Optional<SkRect>, src,
+                                   SkRect, dst);
 RECORD3(DrawDRRect, SkPaint, paint, SkRRect, outer, SkRRect, inner);
+RECORD2(DrawDrawable, SkRect, worstCaseBounds, int32_t, index);
+RECORD4(DrawImage, Optional<SkPaint>, paint,
+                   RefBox<const SkImage>, image,
+                   SkScalar, left,
+                   SkScalar, top);
+RECORD4(DrawImageRect, Optional<SkPaint>, paint,
+                       RefBox<const SkImage>, image,
+                       Optional<SkRect>, src,
+                       SkRect, dst);
 RECORD2(DrawOval, SkPaint, paint, SkRect, oval);
 RECORD1(DrawPaint, SkPaint, paint);
-RECORD2(DrawPath, SkPaint, paint, SkPath, path);
+RECORD2(DrawPath, SkPaint, paint, BoundedPath, path);
 RECORD3(DrawPicture, Optional<SkPaint>, paint,
                      RefBox<const SkPicture>, picture,
-                     Optional<SkMatrix>, matrix);
-RECORD4(DrawPoints, SkPaint, paint, SkCanvas::PointMode, mode, size_t, count, SkPoint*, pts);
+                     TypedMatrix, matrix);
+RECORD4(DrawPoints, SkPaint, paint, SkCanvas::PointMode, mode, unsigned, count, SkPoint*, pts);
 RECORD4(DrawPosText, SkPaint, paint,
                      PODArray<char>, text,
                      size_t, byteLength,
                      PODArray<SkPoint>, pos);
 RECORD5(DrawPosTextH, SkPaint, paint,
                       PODArray<char>, text,
-                      size_t, byteLength,
-                      PODArray<SkScalar>, xpos,
-                      SkScalar, y);
+                      unsigned, byteLength,
+                      SkScalar, y,
+                      PODArray<SkScalar>, xpos);
 RECORD2(DrawRRect, SkPaint, paint, SkRRect, rrect);
 RECORD2(DrawRect, SkPaint, paint, SkRect, rect);
 RECORD4(DrawSprite, Optional<SkPaint>, paint, ImmutableBitmap, bitmap, int, left, int, top);
@@ -265,10 +297,8 @@ RECORD4(DrawTextBlob, SkPaint, paint,
 RECORD5(DrawTextOnPath, SkPaint, paint,
                         PODArray<char>, text,
                         size_t, byteLength,
-                        SkPath, path,
-                        Optional<SkMatrix>, matrix);
-
-RECORD2(DrawData, PODArray<char>, data, size_t, length);
+                        BoundedPath, path,
+                        TypedMatrix, matrix);
 
 RECORD5(DrawPatch, SkPaint, paint,
                    PODArray<SkPoint>, cubics,

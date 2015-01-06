@@ -27,14 +27,12 @@ public:
     virtual bool onFilterBounds(const SkIRect& src, const SkMatrix&,
                                 SkIRect* dst) const SK_OVERRIDE;
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkTileImageFilter)
 
 protected:
     SkTileImageFilter(const SkRect& srcRect, const SkRect& dstRect, SkImageFilter* input, uint32_t uniqueID)
         : INHERITED(1, &input, NULL, uniqueID), fSrcRect(srcRect), fDstRect(dstRect) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkTileImageFilter(SkReadBuffer& buffer);
-#endif
 
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE;
 

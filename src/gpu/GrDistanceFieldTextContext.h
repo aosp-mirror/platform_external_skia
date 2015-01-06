@@ -41,24 +41,28 @@ private:
     uint32_t                           fEffectFlags;
     GrTexture*                         fGammaTexture;
     void*                              fVertices;
-    int32_t                            fMaxVertices;
-    GrTexture*                         fCurrTexture;
     int                                fCurrVertex;
+    int                                fAllocVertexCount;
+    int                                fTotalVertexCount;
+    GrTexture*                         fCurrTexture;
     SkRect                             fVertexBounds;
+    SkMatrix                           fViewMatrix;
 
     GrDistanceFieldTextContext(GrContext*, const SkDeviceProperties&, bool enable);
 
-    virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
+    virtual bool canDraw(const SkPaint& paint, const SkMatrix& viewMatrix) SK_OVERRIDE;
 
-    virtual void onDrawText(const GrPaint&, const SkPaint&, const char text[], size_t byteLength,
+    virtual void onDrawText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
+                            const char text[], size_t byteLength,
                             SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void onDrawPosText(const GrPaint&, const SkPaint&,
+    virtual void onDrawPosText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
                                const char text[], size_t byteLength,
                                const SkScalar pos[], int scalarsPerPosition,
                                const SkPoint& offset) SK_OVERRIDE;
 
     void init(const GrPaint&, const SkPaint&);
-    void appendGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
+    bool appendGlyph(GrGlyph::PackedID, SkScalar left, SkScalar top, GrFontScaler*);
+    bool uploadGlyph(GrGlyph*, GrFontScaler*);
     void setupCoverageEffect(const SkColor& filteredColor);
     void flush();                 // automatically called by destructor
     void finish();

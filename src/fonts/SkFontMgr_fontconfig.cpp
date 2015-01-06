@@ -214,7 +214,7 @@ SkTypeface* SkFontStyleSet_FC::matchStyle(const SkFontStyle& pattern) {
 class SkFontMgr_fontconfig : public SkFontMgr {
     SkAutoTUnref<SkFontConfigInterface> fFCI;
     SkDataTable* fFamilyNames;
-
+    SkTypeface_FreeType::Scanner fScanner;
 
 public:
     SkFontMgr_fontconfig(SkFontConfigInterface* fci)
@@ -285,6 +285,11 @@ protected:
 
     virtual SkTypeface* onMatchFamilyStyle(const char familyName[],
                                            const SkFontStyle&) const SK_OVERRIDE { return NULL; }
+    virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[], const SkFontStyle&,
+                                                    const char* bcp47[], int bcp47Count,
+                                                    SkUnichar character) const SK_OVERRIDE {
+        return NULL;
+    }
     virtual SkTypeface* onMatchFaceStyle(const SkTypeface*,
                                          const SkFontStyle&) const SK_OVERRIDE { return NULL; }
 
@@ -300,9 +305,9 @@ protected:
         }
 
         // TODO should the caller give us the style or should we get it from freetype?
-        SkTypeface::Style style = SkTypeface::kNormal;
+        SkFontStyle style;
         bool isFixedWidth = false;
-        if (!SkTypeface_FreeType::ScanFont(stream, 0, NULL, &style, &isFixedWidth)) {
+        if (!fScanner.scanFont(stream, 0, NULL, &style, &isFixedWidth)) {
             return NULL;
         }
 

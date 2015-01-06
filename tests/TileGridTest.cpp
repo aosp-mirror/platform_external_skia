@@ -23,7 +23,7 @@ class MockCanvas : public SkCanvas {
 public:
     MockCanvas(const SkBitmap& bm) : SkCanvas(bm) {}
 
-    virtual void drawRect(const SkRect& rect, const SkPaint&) {
+    void onDrawRect(const SkRect& rect, const SkPaint&) SK_OVERRIDE {
         // This capture occurs before quick reject.
         fRects.push(rect);
     }
@@ -37,8 +37,12 @@ static void verify_tile_hits(skiatest::Reporter* reporter, SkRect rect,
     info.fMargin.set(borderPixels, borderPixels);
     info.fOffset.setZero();
     info.fTileInterval.set(10 - 2 * borderPixels, 10 - 2 * borderPixels);
+
+    SkAutoTMalloc<SkRect> rects(1);
+    rects[0] = rect;
+
     SkTileGrid grid(2, 2, info);
-    grid.insert(0, rect, false);
+    grid.insert(&rects, 1);
     REPORTER_ASSERT(reporter, grid.tileCount(0, 0) ==
                     ((tileMask & kTopLeft_Tile)? 1 : 0));
     REPORTER_ASSERT(reporter, grid.tileCount(1, 0) ==

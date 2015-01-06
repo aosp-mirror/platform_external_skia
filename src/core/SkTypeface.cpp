@@ -14,26 +14,10 @@
 #include "SkStream.h"
 #include "SkTypeface.h"
 
-//#define TRACE_LIFECYCLE
+SkTypeface::SkTypeface(const SkFontStyle& style, SkFontID fontID, bool isFixedPitch)
+    : fUniqueID(fontID), fStyle(style), fIsFixedPitch(isFixedPitch) { }
 
-#ifdef TRACE_LIFECYCLE
-    static int32_t gTypefaceCounter;
-#endif
-
-SkTypeface::SkTypeface(Style style, SkFontID fontID, bool isFixedPitch)
-    : fUniqueID(fontID), fStyle(style), fIsFixedPitch(isFixedPitch) {
-#ifdef TRACE_LIFECYCLE
-    SkDebugf("SkTypeface: create  %p fontID %d total %d\n",
-             this, fontID, ++gTypefaceCounter);
-#endif
-}
-
-SkTypeface::~SkTypeface() {
-#ifdef TRACE_LIFECYCLE
-    SkDebugf("SkTypeface: destroy %p fontID %d total %d\n",
-             this, fUniqueID, --gTypefaceCounter);
-#endif
-}
+SkTypeface::~SkTypeface() { }
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +27,7 @@ public:
         return SkNEW(SkEmptyTypeface);
     }
 protected:
-    SkEmptyTypeface() : SkTypeface(SkTypeface::kNormal, 0, true) { }
+    SkEmptyTypeface() : SkTypeface(SkFontStyle(), 0, true) { }
 
     virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE { return NULL; }
     virtual SkScalerContext* onCreateScalerContext(const SkDescriptor*) const SK_OVERRIDE {
@@ -171,12 +155,26 @@ void SkTypeface::serialize(SkWStream* wstream) const {
     SkFontDescriptor desc(this->style());
     this->onGetFontDescriptor(&desc, &isLocal);
 
+    // Embed font data if it's a local font.
     if (isLocal && NULL == desc.getFontData()) {
         int ttcIndex;
         desc.setFontData(this->onOpenStream(&ttcIndex));
         desc.setFontIndex(ttcIndex);
     }
+    desc.serialize(wstream);
+}
 
+void SkTypeface::serializeForcingEmbedding(SkWStream* wstream) const {
+    bool ignoredIsLocal;
+    SkFontDescriptor desc(this->style());
+    this->onGetFontDescriptor(&desc, &ignoredIsLocal);
+
+    // Always embed font data.
+    if (NULL == desc.getFontData()) {
+        int ttcIndex;
+        desc.setFontData(this->onOpenStream(&ttcIndex));
+        desc.setFontIndex(ttcIndex);
+    }
     desc.serialize(wstream);
 }
 
@@ -294,9 +292,61 @@ SkAdvancedTypefaceMetrics* SkTypeface::getAdvancedTypefaceMetrics(
     return result;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
 bool SkTypeface::onGetKerningPairAdjustments(const uint16_t glyphs[], int count,
                                              int32_t adjustments[]) const {
     return false;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#include "SkDescriptor.h"
+#include "SkPaint.h"
+
+struct SkTypeface::BoundsComputer {
+    const SkTypeface& fTypeface;
+
+    BoundsComputer(const SkTypeface& tf) : fTypeface(tf) {}
+
+    SkRect* operator()() const {
+        SkRect* rect = SkNEW(SkRect);
+        if (!fTypeface.onComputeBounds(rect)) {
+            rect->setEmpty();
+        }
+        return rect;
+    }
+};
+
+SkRect SkTypeface::getBounds() const {
+    return *fLazyBounds.get(BoundsComputer(*this));
+}
+
+bool SkTypeface::onComputeBounds(SkRect* bounds) const {
+    // we use a big size to ensure lots of significant bits from the scalercontext.
+    // then we scale back down to return our final answer (at 1-pt)
+    const SkScalar textSize = 2048;
+    const SkScalar invTextSize = 1 / textSize;
+
+    SkPaint paint;
+    paint.setTypeface(const_cast<SkTypeface*>(this));
+    paint.setTextSize(textSize);
+    paint.setLinearText(true);
+
+    SkScalerContext::Rec rec;
+    SkScalerContext::MakeRec(paint, NULL, NULL, &rec);
+
+    SkAutoDescriptor ad(sizeof(rec) + SkDescriptor::ComputeOverhead(1));
+    SkDescriptor*    desc = ad.getDesc();
+    desc->init();
+    desc->addEntry(kRec_SkDescriptorTag, sizeof(rec), &rec);
+
+    SkAutoTDelete<SkScalerContext> ctx(this->createScalerContext(desc, true));
+    if (ctx.get()) {
+        SkPaint::FontMetrics fm;
+        ctx->getFontMetrics(&fm);
+        bounds->set(fm.fXMin * invTextSize, fm.fTop * invTextSize,
+                    fm.fXMax * invTextSize, fm.fBottom * invTextSize);
+        return true;
+    }
+    return false;
+}
+

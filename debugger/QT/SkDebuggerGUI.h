@@ -17,7 +17,7 @@
 #include "SkListWidget.h"
 #include "SkInspectorWidget.h"
 #include "SkRasterWidget.h"
-#include "SkImageWidget.h"
+#include "SkDrawCommandGeometryWidget.h"
 #include "SkSettingsWidget.h"
 #include <QtCore/QVariant>
 #include <QtGui/QAction>
@@ -55,8 +55,6 @@ public:
         @param parent  The parent container of this widget.
      */
     SkDebuggerGUI(QWidget *parent = 0);
-
-    ~SkDebuggerGUI();
 
     /**
         Updates the directory widget with the latest directory path stored in
@@ -104,11 +102,6 @@ private slots:
     void actionClearDeletes();
 
     /**
-        Applies a visible filter to all drawing commands other than the previous.
-     */
-    void actionCommandFilter();
-
-    /**
         Closes the application.
      */
     void actionClose();
@@ -122,7 +115,7 @@ private slots:
     /**
         Updates the visibility of the GL canvas widget and sample count of the GL surface.
      */
-    void actionGLWidget();
+    void actionGLSettingsChanged();
 #endif
 
     /**
@@ -137,24 +130,14 @@ private slots:
     void actionPlay();
 
     /**
-        Toggles the visibility of the raster canvas widget.
+        Sets the visibility of the raster canvas widget according to the settings widget.
      */
-    void actionRasterWidget(bool isToggled);
+    void actionRasterSettingsChanged();
 
     /**
-        Toggles the the overdraw visualization on and off
+        Sets the visualization settings according to the settings widget.
      */
-    void actionOverdrawVizWidget(bool isToggled);
-
-    /**
-        Toggles the the mega visualization on and off
-     */
-    void actionMegaVizWidget(bool isToggled);
-
-    /**
-        Toggles using path ops to simplify the clip stack
-     */
-    void actionPathOpsWidget(bool );
+    void actionVisualizationsChanged();
 
     /**
         Applies the new texture filter override
@@ -249,6 +232,8 @@ private slots:
      */
     void toggleFilter(QString string);
 
+    void updateCommand(int newCommand);
+    void updateHit(int newHit);
 private:
     QSplitter fCentralSplitter;
     QStatusBar fStatusBar;
@@ -294,9 +279,18 @@ private:
 
     SkDebugger fDebugger;
     SkCanvasWidget fCanvasWidget;
-    SkImageWidget fImageWidget;
+
     SkInspectorWidget fInspectorWidget;
     SkSettingsWidget fSettingsWidget;
+
+    QFrame fViewStateFrame;
+    QVBoxLayout fViewStateFrameLayout;
+    QGroupBox fViewStateGroup;
+    QFormLayout fViewStateLayout;
+    QLineEdit fCurrentCommandBox;
+    QLineEdit fCommandHitBox;
+    QLineEdit fZoomBox;
+    SkDrawCommandGeometryWidget fDrawCommandGeometryWidget;
 
     QString fPath;
     SkString fFileName;
@@ -310,10 +304,6 @@ private:
     QMenu fMenuView;
     QMenu fMenuWindows;
 
-    bool fBreakpointsActivated;
-    bool fIndexStyleToggle;
-    bool fDeletesActivated;
-    bool fPause;
     bool fLoading;
     int fPausedRow;
 
@@ -334,14 +324,14 @@ private:
     void saveToFile(const SkString& filename);
 
     /**
-        Populates the list widget with the vector of strings passed in.
+        Populates the list widget with the debugger draw command info.
      */
-    void setupListWidget(SkTArray<SkString>* commands, SkTDArray<size_t>* offsets);
+    void setupListWidget();
 
     /**
-        Populates the combo box widget with the vector of strings passed in.
+        Populates the combo box widget with with the debugger draw command info.
      */
-    void setupComboBox(SkTArray<SkString>* command);
+    void setupComboBox();
 
     /**
         Fills in the overview pane with text
@@ -360,6 +350,10 @@ private:
     void run(const SkPicture* pict,
              sk_tools::PictureRenderer* renderer,
              int repeats);
+
+    bool isPaused() const {
+        return fActionPause.isChecked();
+    }
 };
 
 #endif // SKDEBUGGERUI_H

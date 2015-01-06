@@ -81,11 +81,12 @@ public:
      * @param path      the path that will be drawn
      * @param stroke    the stroke information (width, join, cap).
      */
-    StencilSupport getStencilSupport(const SkPath& path,
-                                     const SkStrokeRec& stroke,
-                                     const GrDrawTarget* target) const {
+    StencilSupport getStencilSupport(const GrDrawTarget* target,
+                                     const GrDrawState* drawState,
+                                     const SkPath& path,
+                                     const SkStrokeRec& stroke) const {
         SkASSERT(!path.isInverseFillType());
-        return this->onGetStencilSupport(path, stroke, target);
+        return this->onGetStencilSupport(target, drawState, path, stroke);
     }
 
     /**
@@ -93,35 +94,45 @@ public:
      * caller to fallback to another path renderer This function is called when searching for a path
      * renderer capable of rendering a path.
      *
+     * @param target     The target that the path will be rendered to
+     * @param drawState  The drawState
+     * @param viewMatrix The viewMatrix
      * @param path       The path to draw
      * @param stroke     The stroke information (width, join, cap)
-     * @param target     The target that the path will be rendered to
      * @param antiAlias  True if anti-aliasing is required.
      *
      * @return  true if the path can be drawn by this object, false otherwise.
      */
-    virtual bool canDrawPath(const SkPath& path,
+    virtual bool canDrawPath(const GrDrawTarget* target,
+                             const GrDrawState* drawState,
+                             const SkMatrix& viewMatrix,
+                             const SkPath& path,
                              const SkStrokeRec& rec,
-                             const GrDrawTarget* target,
                              bool antiAlias) const = 0;
     /**
      * Draws the path into the draw target. If getStencilSupport() would return kNoRestriction then
      * the subclass must respect the stencil settings of the target's draw state.
      *
+     * @param target                The target that the path will be rendered to
+     * @param drawState             The drawState
+     * @param viewMatrix            The viewMatrix
      * @param path                  the path to draw.
      * @param stroke                the stroke information (width, join, cap)
-     * @param target                target that the path will be rendered to
      * @param antiAlias             true if anti-aliasing is required.
      */
-    bool drawPath(const SkPath& path,
+    bool drawPath(GrDrawTarget* target,
+                  GrDrawState* ds,
+                  GrColor color,
+                  const SkMatrix& viewMatrix,
+                  const SkPath& path,
                   const SkStrokeRec& stroke,
-                  GrDrawTarget* target,
                   bool antiAlias) {
         SkASSERT(!path.isEmpty());
-        SkASSERT(this->canDrawPath(path, stroke, target, antiAlias));
-        SkASSERT(target->drawState()->getStencil().isDisabled() ||
-                 kNoRestriction_StencilSupport == this->getStencilSupport(path, stroke, target));
-        return this->onDrawPath(path, stroke, target, antiAlias);
+        SkASSERT(this->canDrawPath(target, ds, viewMatrix, path, stroke, antiAlias));
+        SkASSERT(ds->getStencil().isDisabled() ||
+                 kNoRestriction_StencilSupport == this->getStencilSupport(target, ds, path,
+                                                                          stroke));
+        return this->onDrawPath(target, ds, color, viewMatrix, path, stroke, antiAlias);
     }
 
     /**
@@ -132,10 +143,14 @@ public:
      * @param stroke                the stroke information (width, join, cap)
      * @param target                target that the path will be rendered to
      */
-    void stencilPath(const SkPath& path, const SkStrokeRec& stroke, GrDrawTarget* target) {
+    void stencilPath(GrDrawTarget* target,
+                     GrDrawState* ds,
+                     const SkMatrix& viewMatrix,
+                     const SkPath& path,
+                     const SkStrokeRec& stroke) {
         SkASSERT(!path.isEmpty());
-        SkASSERT(kNoSupport_StencilSupport != this->getStencilSupport(path, stroke, target));
-        this->onStencilPath(path, stroke, target);
+        SkASSERT(kNoSupport_StencilSupport != this->getStencilSupport(target, ds, path, stroke));
+        this->onStencilPath(target, ds, viewMatrix, path, stroke);
     }
 
     // Helper for determining if we can treat a thin stroke as a hairline w/ coverage.
@@ -156,27 +171,33 @@ protected:
     /**
      * Subclass overrides if it has any limitations of stenciling support.
      */
-    virtual StencilSupport onGetStencilSupport(const SkPath&,
-                                               const SkStrokeRec&,
-                                               const GrDrawTarget*) const {
+    virtual StencilSupport onGetStencilSupport(const GrDrawTarget*,
+                                               const GrDrawState*,
+                                               const SkPath&,
+                                               const SkStrokeRec&) const {
         return kNoRestriction_StencilSupport;
     }
 
     /**
      * Subclass implementation of drawPath()
      */
-    virtual bool onDrawPath(const SkPath& path,
-                            const SkStrokeRec& stroke,
-                            GrDrawTarget* target,
+    virtual bool onDrawPath(GrDrawTarget*,
+                            GrDrawState*,
+                            GrColor,
+                            const SkMatrix& viewMatrix,
+                            const SkPath&,
+                            const SkStrokeRec&,
                             bool antiAlias) = 0;
 
     /**
      * Subclass implementation of stencilPath(). Subclass must override iff it ever returns
      * kStencilOnly in onGetStencilSupport().
      */
-    virtual void onStencilPath(const SkPath& path,  const SkStrokeRec& stroke, GrDrawTarget* target) {
-        GrDrawTarget::AutoStateRestore asr(target, GrDrawTarget::kPreserve_ASRInit);
-        GrDrawState* drawState = target->drawState();
+    virtual void onStencilPath(GrDrawTarget* target,
+                               GrDrawState* drawState,
+                               const SkMatrix& viewMatrix,
+                               const SkPath& path,
+                               const SkStrokeRec& stroke) {
         GR_STATIC_CONST_SAME_STENCIL(kIncrementStencil,
                                      kReplace_StencilOp,
                                      kReplace_StencilOp,
@@ -185,8 +206,8 @@ protected:
                                      0xffff,
                                      0xffff);
         drawState->setStencil(kIncrementStencil);
-        drawState->enableState(GrDrawState::kNoColorWrites_StateBit);
-        this->drawPath(path, stroke, target, false);
+        drawState->setDisableColorXPFactory();
+        this->drawPath(target, drawState, GrColor_WHITE, viewMatrix, path, stroke, false);
     }
 
     // Helper for getting the device bounds of a path. Inverse filled paths will have bounds set

@@ -42,8 +42,10 @@ public:
 #endif
     }
 
+#ifdef SK_DEBUG
     /** Return the reference count. Use only for debugging. */
     int32_t getRefCnt() const { return fRefCnt; }
+#endif
 
     /** May return true if the caller is the only owner.
      *  Ensures that all previous owner's actions are complete.
@@ -51,11 +53,11 @@ public:
     bool unique() const {
         // We believe we're reading fRefCnt in a safe way here, so we stifle the TSAN warning about
         // an unproctected read.  Generally, don't read fRefCnt, and don't stifle this warning.
-        bool const unique = (1 == SK_ANNOTATE_UNPROTECTED_READ(fRefCnt));
+        bool const unique = (1 == sk_acquire_load(&fRefCnt));
         if (unique) {
             // Acquire barrier (L/SL), if not provided by load of fRefCnt.
             // Prevents user's 'unique' code from happening before decrements.
-            //TODO: issue the barrier.
+            //TODO: issue the barrier only when unique is true
         }
         return unique;
     }
@@ -246,5 +248,34 @@ public:
     SkAutoUnref(SkRefCnt* obj) : SkAutoTUnref<SkRefCnt>(obj) {}
 };
 #define SkAutoUnref(...) SK_REQUIRE_LOCAL_VAR(SkAutoUnref)
+
+// This is a variant of SkRefCnt that's Not Virtual, so weighs 4 bytes instead of 8 or 16.
+// There's only benefit to using this if the deriving class does not otherwise need a vtable.
+template <typename Derived>
+class SkNVRefCnt : SkNoncopyable {
+public:
+    SkNVRefCnt() : fRefCnt(1) {}
+    ~SkNVRefCnt() { SkASSERTF(1 == fRefCnt, "NVRefCnt was %d", fRefCnt); }
+
+    // Implementation is pretty much the same as SkRefCntBase. All required barriers are the same:
+    //   - unique() needs acquire when it returns true, and no barrier if it returns false;
+    //   - ref() doesn't need any barrier;
+    //   - unref() needs a release barrier, and an acquire if it's going to call delete.
+
+    bool unique() const { return 1 == sk_acquire_load(&fRefCnt); }
+    void    ref() const { sk_atomic_inc(&fRefCnt); }
+    void  unref() const {
+        int32_t prevValue = sk_atomic_dec(&fRefCnt);
+        SkASSERT(prevValue >= 1);
+        if (1 == prevValue) {
+            SkDEBUGCODE(fRefCnt = 1;)   // restore the 1 for our destructor's assert
+            SkDELETE((const Derived*)this);
+        }
+    }
+    void  deref() const { this->unref(); }  // Chrome prefers to call deref().
+
+private:
+    mutable int32_t fRefCnt;
+};
 
 #endif

@@ -70,50 +70,48 @@ public:
                        const SkMatrix& initialTransform);
     SK_API virtual ~SkPDFDevice();
 
-    virtual void clear(SkColor color) SK_OVERRIDE;
-
     /** These are called inside the per-device-layer loop for each draw call.
      When these are called, we have already applied any saveLayer operations,
      and are handling any looping from the paint, and any effects from the
      DrawFilter.
      */
-    virtual void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawPoints(const SkDraw&, SkCanvas::PointMode mode,
-                            size_t count, const SkPoint[],
-                            const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawRect(const SkDraw&, const SkRect& r, const SkPaint& paint);
-    virtual void drawOval(const SkDraw&, const SkRect& oval, const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawRRect(const SkDraw&, const SkRRect& rr, const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawPath(const SkDraw&, const SkPath& origpath,
-                          const SkPaint& paint, const SkMatrix* prePathMatrix,
-                          bool pathIsMutable) SK_OVERRIDE;
-    virtual void drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
-                                const SkRect* src, const SkRect& dst,
-                                const SkPaint& paint,
-                                SkCanvas::DrawBitmapRectFlags flags) SK_OVERRIDE;
-    virtual void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
-                            const SkMatrix& matrix, const SkPaint&) SK_OVERRIDE;
-    virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap, int x, int y,
-                            const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawText(const SkDraw&, const void* text, size_t len,
-                          SkScalar x, SkScalar y, const SkPaint&) SK_OVERRIDE;
-    virtual void drawPosText(const SkDraw&, const void* text, size_t len,
-                             const SkScalar pos[], int scalarsPerPos,
-                             const SkPoint& offset, const SkPaint&) SK_OVERRIDE;
-    virtual void drawTextOnPath(const SkDraw&, const void* text, size_t len,
-                                const SkPath& path, const SkMatrix* matrix,
-                                const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawVertices(const SkDraw&, SkCanvas::VertexMode,
-                              int vertexCount, const SkPoint verts[],
-                              const SkPoint texs[], const SkColor colors[],
-                              SkXfermode* xmode, const uint16_t indices[],
-                              int indexCount, const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
-                            const SkPaint&) SK_OVERRIDE;
+    void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE;
+    void drawPoints(const SkDraw&, SkCanvas::PointMode mode,
+                    size_t count, const SkPoint[],
+                    const SkPaint& paint) SK_OVERRIDE;
+    void drawRect(const SkDraw&, const SkRect& r, const SkPaint& paint) SK_OVERRIDE;
+    void drawOval(const SkDraw&, const SkRect& oval, const SkPaint& paint) SK_OVERRIDE;
+    void drawRRect(const SkDraw&, const SkRRect& rr, const SkPaint& paint) SK_OVERRIDE;
+    void drawPath(const SkDraw&, const SkPath& origpath,
+                  const SkPaint& paint, const SkMatrix* prePathMatrix,
+                  bool pathIsMutable) SK_OVERRIDE;
+    void drawBitmapRect(const SkDraw& draw, const SkBitmap& bitmap,
+                        const SkRect* src, const SkRect& dst,
+                        const SkPaint& paint,
+                        SkCanvas::DrawBitmapRectFlags flags) SK_OVERRIDE;
+    void drawBitmap(const SkDraw&, const SkBitmap& bitmap,
+                    const SkMatrix& matrix, const SkPaint&) SK_OVERRIDE;
+    void drawSprite(const SkDraw&, const SkBitmap& bitmap, int x, int y,
+                    const SkPaint& paint) SK_OVERRIDE;
+    void drawText(const SkDraw&, const void* text, size_t len,
+                  SkScalar x, SkScalar y, const SkPaint&) SK_OVERRIDE;
+    void drawPosText(const SkDraw&, const void* text, size_t len,
+                     const SkScalar pos[], int scalarsPerPos,
+                     const SkPoint& offset, const SkPaint&) SK_OVERRIDE;
+    void drawTextOnPath(const SkDraw&, const void* text, size_t len,
+                        const SkPath& path, const SkMatrix* matrix,
+                        const SkPaint& paint) SK_OVERRIDE;
+    void drawVertices(const SkDraw&, SkCanvas::VertexMode,
+                      int vertexCount, const SkPoint verts[],
+                      const SkPoint texs[], const SkColor colors[],
+                      SkXfermode* xmode, const uint16_t indices[],
+                      int indexCount, const SkPaint& paint) SK_OVERRIDE;
+    void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
+                    const SkPaint&) SK_OVERRIDE;
 
-    virtual void onAttachToCanvas(SkCanvas* canvas) SK_OVERRIDE;
-    virtual void onDetachFromCanvas() SK_OVERRIDE;
-    virtual SkImageInfo imageInfo() const SK_OVERRIDE;    
+    void onAttachToCanvas(SkCanvas* canvas) SK_OVERRIDE;
+    void onDetachFromCanvas() SK_OVERRIDE;
+    SkImageInfo imageInfo() const SK_OVERRIDE;
 
     enum DrawingArea {
         kContent_DrawingArea,  // Drawing area for the page content.
@@ -213,10 +211,6 @@ protected:
         return fLegacyBitmap;
     }
 
-    virtual bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE {
-        return false;
-    }
-
     virtual SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE;
 
 private:
@@ -263,7 +257,7 @@ private:
                 const SkRegion& existingClipRegion);
 
     // override from SkBaseDevice
-    virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
+    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) SK_OVERRIDE;
 
     void init();
     void cleanUp(bool clearFontUsage);

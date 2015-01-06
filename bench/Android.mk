@@ -33,6 +33,7 @@ LOCAL_SRC_FILES := \
 	BlurBench.cpp \
 	BlurImageFilterBench.cpp \
 	BlurRectBench.cpp \
+	BlurRectsBench.cpp \
 	BlurRoundRectBench.cpp \
 	ChartBench.cpp \
 	ChecksumBench.cpp \
@@ -82,7 +83,6 @@ LOCAL_SRC_FILES := \
 	PerlinNoiseBench.cpp \
 	PictureNestingBench.cpp \
 	PicturePlaybackBench.cpp \
-	PictureRecordBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
 	RTreeBench.cpp \
 	ReadPixBench.cpp \
@@ -117,7 +117,6 @@ LOCAL_SRC_FILES := \
 	../gm/bigblurs.cpp \
 	../gm/bigmatrix.cpp \
 	../gm/bigtext.cpp \
-	../gm/bitmapmatrix.cpp \
 	../gm/bitmapfilters.cpp \
 	../gm/bitmappremul.cpp \
 	../gm/bitmaprect.cpp \
@@ -135,15 +134,21 @@ LOCAL_SRC_FILES := \
 	../gm/circularclips.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
+	../gm/cgms.cpp \
+	../gm/cgm.c \
 	../gm/colorcube.cpp \
 	../gm/coloremoji.cpp \
 	../gm/colorfilterimagefilter.cpp \
 	../gm/colorfilters.cpp \
 	../gm/colormatrix.cpp \
 	../gm/colortype.cpp \
+	../gm/colortypexfermode.cpp \
+	../gm/colorwheel.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
+	../gm/complexclip3.cpp \
 	../gm/composeshader.cpp \
+	../gm/conicpaths.cpp \
 	../gm/convexpaths.cpp \
 	../gm/convexpolyclip.cpp \
 	../gm/convexpolyeffect.cpp \
@@ -151,6 +156,7 @@ LOCAL_SRC_FILES := \
 	../gm/cubicpaths.cpp \
 	../gm/cmykjpeg.cpp \
 	../gm/degeneratesegments.cpp \
+	../gm/dcshader.cpp \
 	../gm/discard.cpp \
 	../gm/dashcubics.cpp \
 	../gm/dashing.cpp \
@@ -170,6 +176,7 @@ LOCAL_SRC_FILES := \
 	../gm/filltypes.cpp \
 	../gm/filltypespersp.cpp \
 	../gm/filterbitmap.cpp \
+	../gm/filterfastbounds.cpp \
 	../gm/filterindiabox.cpp \
 	../gm/fontcache.cpp \
 	../gm/fontmgr.cpp \
@@ -185,6 +192,7 @@ LOCAL_SRC_FILES := \
 	../gm/gradientDirtyLaundry.cpp \
 	../gm/gradient_matrix.cpp \
 	../gm/gradtext.cpp \
+	../gm/grayscalejpg.cpp \
 	../gm/hairlines.cpp \
 	../gm/hairmodes.cpp \
 	../gm/hittestpath.cpp \
@@ -250,6 +258,7 @@ LOCAL_SRC_FILES := \
 	../gm/simpleaaclip.cpp \
 	../gm/skbug1719.cpp \
 	../gm/smallarc.cpp \
+	../gm/smallimage.cpp \
 	../gm/stringart.cpp \
 	../gm/spritebitmap.cpp \
 	../gm/srcmode.cpp \
@@ -264,11 +273,13 @@ LOCAL_SRC_FILES := \
 	../gm/testimagefilters.cpp \
 	../gm/texdata.cpp \
 	../gm/variedtext.cpp \
+	../gm/tallstretchedbitmaps.cpp \
 	../gm/textblob.cpp \
 	../gm/textblobshader.cpp \
 	../gm/texturedomaineffect.cpp \
 	../gm/thinrects.cpp \
 	../gm/thinstrokedrects.cpp \
+	../gm/tiledscaledbitmap.cpp \
 	../gm/tileimagefilter.cpp \
 	../gm/tilemodes.cpp \
 	../gm/tilemodes_scaled.cpp \
@@ -286,6 +297,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
@@ -296,6 +308,7 @@ LOCAL_SRC_FILES := \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
 
@@ -309,6 +322,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -338,5 +352,8 @@ LOCAL_MODULE_TAGS := \
 
 LOCAL_MODULE := \
 	skia_nanobench
+
+LOCAL_PICKUP_FILES := \
+	$(LOCAL_PATH)/../resources
 
 include $(BUILD_NATIVE_TEST)

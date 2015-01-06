@@ -152,7 +152,7 @@
       'skia_win_debuggers_path%': '',
       'skia_shared_lib%': 0,
       'skia_opencl%': 0,
-      'skia_force_distancefield_fonts%': 0,
+      'skia_force_distance_field_text%': 0,
 
       # These variables determine the default optimization level for different
       # compilers.
@@ -161,10 +161,8 @@
     },
 
     'conditions': [
-      [ 'skia_os == "win" and skia_arch_width == 32 or '
-        'skia_os in ["linux", "freebsd", "openbsd", "solaris", "android"] '
-            'and skia_android_framework == 0 or '
-        'skia_os == "mac" and skia_arch_width == 32', {
+      [ 'skia_os in ["mac", "linux", "freebsd", "openbsd", "solaris", "android", "win"] '
+            'and skia_android_framework == 0', {
         'skia_warnings_as_errors%': 1,
       }, {
         'skia_warnings_as_errors%': 0,
@@ -231,7 +229,7 @@
     'skia_profile_enabled%': '<(skia_profile_enabled)',
     'skia_shared_lib%': '<(skia_shared_lib)',
     'skia_opencl%': '<(skia_opencl)',
-    'skia_force_distancefield_fonts%': '<(skia_force_distancefield_fonts)',
+    'skia_force_distance_field_text%': '<(skia_force_distance_field_text)',
     'skia_static_initializers%': '<(skia_static_initializers)',
     'ios_sdk_version%': '6.0',
     'skia_win_debuggers_path%': '<(skia_win_debuggers_path)',

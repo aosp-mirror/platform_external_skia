@@ -13,6 +13,7 @@
 
 class GrGLProgramBuilder;
 class GrGLShaderBuilder;
+class GrInvariantOutput;
 struct SkRect;
 
 /**
@@ -137,8 +138,6 @@ protected:
     typedef GrSingleTextureEffect INHERITED;
 };
 
-class GrGLTextureDomainEffect;
-
 /**
  * A basic texture effect that uses GrTextureDomain.
  */
@@ -154,11 +153,11 @@ public:
 
     virtual ~GrTextureDomainEffect();
 
-    static const char* Name() { return "TextureDomain"; }
+    virtual const char* name() const SK_OVERRIDE { return "TextureDomain"; }
 
-    typedef GrGLTextureDomainEffect GLProcessor;
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
 
     const GrTextureDomain& textureDomain() const { return fTextureDomain; }
 
@@ -173,9 +172,9 @@ private:
                           GrTextureParams::FilterMode,
                           GrCoordSet);
 
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 

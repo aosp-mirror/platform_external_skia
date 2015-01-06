@@ -11,6 +11,8 @@
 #define SkTypeface_DEFINED
 
 #include "SkAdvancedTypefaceMetrics.h"
+#include "SkFontStyle.h"
+#include "SkLazyPtr.h"
 #include "SkWeakRefCnt.h"
 
 class SkDescriptor;
@@ -49,17 +51,25 @@ public:
         kBoldItalic = 0x03
     };
 
-    /** Returns the typeface's intrinsic style attributes
-    */
-    Style style() const { return fStyle; }
+    /** Returns the typeface's intrinsic style attributes. */
+    SkFontStyle fontStyle() const {
+        return fStyle;
+    }
 
-    /** Returns true if getStyle() has the kBold bit set.
-    */
-    bool isBold() const { return (fStyle & kBold) != 0; }
+    /** Returns the typeface's intrinsic style attributes.
+     *  @deprecated use fontStyle() instead.
+     */
+    Style style() const {
+        return static_cast<Style>(
+            (fStyle.weight() >= SkFontStyle::kSemiBold_Weight ? kBold : kNormal) |
+            (fStyle.slant()  != SkFontStyle::kUpright_Slant ? kItalic : kNormal));
+    }
 
-    /** Returns true if getStyle() has the kItalic bit set.
-    */
-    bool isItalic() const { return (fStyle & kItalic) != 0; }
+    /** Returns true if style() has the kBold bit set. */
+    bool isBold() const { return fStyle.weight() >= SkFontStyle::kSemiBold_Weight; }
+
+    /** Returns true if style() has the kItalic bit set. */
+    bool isItalic() const { return fStyle.slant() != SkFontStyle::kUpright_Slant; }
 
     /** Returns true if the typeface claims to be fixed-pitch.
      *  This is a style bit, advance widths may vary even if this returns true.
@@ -126,6 +136,10 @@ public:
         typeface referencing the same font when Deserialize is called.
      */
     void serialize(SkWStream*) const;
+
+    /** Like serialize, but write the whole font (not just a signature) if possible.
+     */
+    void serializeForcingEmbedding(SkWStream*) const;
 
     /** Given the data previously written by serialize(), return a new instance
         to a typeface referring to the same font. If that font is not available,
@@ -273,6 +287,13 @@ public:
     SkScalerContext* createScalerContext(const SkDescriptor*,
                                          bool allowFailure = false) const;
 
+    /**
+     *  Return a rectangle (scaled to 1-pt) that represents the union of the bounds of all
+     *  of the glyphs, but each one positioned at (0,). This may be conservatively large, and
+     *  will not take into account any hinting or other size-specific adjustments.
+     */
+    SkRect getBounds() const;
+
     // PRIVATE / EXPERIMENTAL -- do not call
     void filterRec(SkScalerContextRec* rec) const {
         this->onFilterRec(rec);
@@ -285,7 +306,7 @@ public:
 protected:
     /** uniqueID must be unique and non-zero
     */
-    SkTypeface(Style style, SkFontID uniqueID, bool isFixedPitch = false);
+    SkTypeface(const SkFontStyle& style, SkFontID uniqueID, bool isFixedPitch = false);
     virtual ~SkTypeface();
 
     /** Sets the fixedPitch bit. If used, must be called in the constructor. */
@@ -324,6 +345,8 @@ protected:
     virtual size_t onGetTableData(SkFontTableTag, size_t offset,
                                   size_t length, void* data) const = 0;
 
+    virtual bool onComputeBounds(SkRect*) const;
+
 private:
     friend class SkGTypeface;
     friend class SkPDFFont;
@@ -350,9 +373,13 @@ private:
     static SkTypeface* CreateDefault(int style);  // SkLazyPtr requires an int, not a Style.
     static void        DeleteDefault(SkTypeface*);
 
-    SkFontID    fUniqueID;
-    Style       fStyle;
-    bool        fIsFixedPitch;
+    struct BoundsComputer;
+//    friend struct BoundsComputer;
+
+    SkLazyPtr<SkRect>   fLazyBounds;
+    SkFontID            fUniqueID;
+    SkFontStyle         fStyle;
+    bool                fIsFixedPitch;
 
     friend class SkPaint;
     friend class SkGlyphCache;  // GetDefaultTypeface

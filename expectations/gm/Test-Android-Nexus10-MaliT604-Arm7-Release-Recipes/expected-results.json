@@ -7588,7 +7588,7 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          10491688216569008375
+          9949591325802194711
         ]
       ], 
       "ignore-failure": true, 
@@ -11800,11 +11800,8 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          15029252674312959982
+          8600688108425811089
         ]
-      ], 
-      "bugs": [
-        1841
       ], 
       "ignore-failure": true, 
       "reviewed-by-human": true
@@ -13161,19 +13158,19 @@
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14593717200149920625
+          10584725278684600171
         ]
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }, 
     "yuv_to_rgb_effect_msaa4.png": {
       "allowed-digests": [
         [
           "bitmap-64bitMD5", 
-          14593717200149920625
+          10584725278684600171
         ]
       ], 
-      "reviewed-by-human": false
+      "reviewed-by-human": true
     }
   }
 }

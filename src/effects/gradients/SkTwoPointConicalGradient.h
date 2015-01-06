@@ -39,8 +39,6 @@ struct TwoPtRadial {
 
 class SkTwoPointConicalGradient : public SkGradientShaderBase {
     TwoPtRadial fRec;
-    void init();
-
 public:
     SkTwoPointConicalGradient(const SkPoint& start, SkScalar startRadius,
                               const SkPoint& end, SkScalar endRadius,
@@ -62,10 +60,10 @@ public:
 
     virtual BitmapType asABitmap(SkBitmap* bitmap,
                                  SkMatrix* matrix,
-                                 TileMode* xy) const;
+                                 TileMode* xy) const SK_OVERRIDE;
     virtual SkShader::GradientType asAGradient(GradientInfo* info) const  SK_OVERRIDE;
-    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
-                                     GrFragmentProcessor**) const SK_OVERRIDE;
+    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&, const SkMatrix*,
+                                     GrColor*, GrFragmentProcessor**) const SK_OVERRIDE;
     virtual bool isOpaque() const SK_OVERRIDE;
 
     SkScalar getCenterX1() const { return SkPoint::Distance(fCenter1, fCenter2); }

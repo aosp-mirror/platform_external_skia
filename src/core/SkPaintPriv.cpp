@@ -12,13 +12,12 @@
 #include "SkPaint.h"
 #include "SkShader.h"
 
-bool isPaintOpaque(const SkPaint* paint,
-                   const SkBitmap* bmpReplacesShader) {
+bool isPaintOpaque(const SkPaint* paint, SkPaintBitmapOpacity contentType) {
     // TODO: SkXfermode should have a virtual isOpaque method, which would
     // make it possible to test modes that do not have a Coeff representation.
 
     if (!paint) {
-        return bmpReplacesShader ? bmpReplacesShader->isOpaque() : true;
+        return contentType != kUnknown_SkPaintBitmapOpacity;
     }
 
     SkXfermode::Coeff srcCoeff, dstCoeff;
@@ -34,10 +33,8 @@ bool isPaintOpaque(const SkPaint* paint,
             if (paint->getAlpha() != 255) {
                 break;
             }
-            if (bmpReplacesShader) {
-                if (!bmpReplacesShader->isOpaque()) {
-                    break;
-                }
+            if (contentType == kUnknown_SkPaintBitmapOpacity) {
+                break;
             } else if (paint->getShader() && !paint->getShader()->isOpaque()) {
                 break;
             }
@@ -61,7 +58,7 @@ bool isPaintOpaque(const SkPaint* paint,
             if (paint->getColor() != 0) { // all components must be 0
                 break;
             }
-            if (bmpReplacesShader || paint->getShader()) {
+            if (contentType != kNoBitmap_SkPaintBitmapOpacity || paint->getShader()) {
                 break;
             }
             if (paint->getColorFilter() && (
@@ -77,13 +74,15 @@ bool isPaintOpaque(const SkPaint* paint,
     return false;
 }
 
-bool NeedsDeepCopy(const SkPaint& paint) {
-    /*
-     *  The types below are not yet immutable/reentrant-safe, and so we return
-     *  true if instances of them are present in the paint.
-     *
-     *  Eventually we hope this list will be empty, and we can always return
-     *  false.
-     */
-    return paint.getImageFilter();
+bool isPaintOpaque(const SkPaint* paint, const SkBitmap* bmpReplacesShader) {
+    SkPaintBitmapOpacity contentType;
+
+    if(!bmpReplacesShader)
+        contentType = kNoBitmap_SkPaintBitmapOpacity;
+    else if(bmpReplacesShader->isOpaque())
+        contentType = kOpaque_SkPaintBitmapOpacity;
+    else
+        contentType = kUnknown_SkPaintBitmapOpacity;
+
+    return isPaintOpaque(paint, contentType);
 }

@@ -384,8 +384,12 @@ public:
      *
      *  The GrContext may be used by the effect to create textures. The GPU device does not
      *  call createContext. Instead we pass the SkPaint here in case the shader needs paint info.
+     *
+     *  A view matrix is always required to create the correct GrFragmentProcessor.  Some shaders
+     *  may also use the optional localMatrix to define a matrix relevant only for sampling.
      */
-    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+    virtual bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM,
+                                     const SkMatrix* localMatrix, GrColor*,
                                      GrFragmentProcessor**) const;
 
     /**
@@ -403,7 +407,7 @@ public:
      *  If the shader is a custom shader which has data the caller might want, call this function
      *  to get that data.
      */
-    virtual bool asACustomShader(void** /*customData*/) const { return false; }
+    virtual bool asACustomShader(void** /* customData */) const { return false; }
 #endif
 
     //////////////////////////////////////////////////////////////////////////
@@ -443,7 +447,6 @@ public:
      *  @param src  The picture to use inside the shader (if not NULL, its ref count
      *              is incremented). The SkPicture must not be changed after
      *              successfully creating a picture shader.
-     *              FIXME: src cannot be const due to SkCanvas::drawPicture
      *  @param tmx  The tiling mode to use when sampling the bitmap in the x-direction.
      *  @param tmy  The tiling mode to use when sampling the bitmap in the y-direction.
      *  @param tile The tile rectangle in picture coordinates: this represents the subset
@@ -453,7 +456,7 @@ public:
      *              bounds.
      *  @return     Returns a new shader object. Note: this function never returns null.
     */
-    static SkShader* CreatePictureShader(SkPicture* src,
+    static SkShader* CreatePictureShader(const SkPicture* src,
                                          TileMode tmx, TileMode tmy,
                                          const SkMatrix* localMatrix,
                                          const SkRect* tile);
@@ -479,9 +482,6 @@ public:
     SK_DEFINE_FLATTENABLE_TYPE(SkShader)
 
 protected:
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkShader(SkReadBuffer& );
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     bool computeTotalInverse(const ContextRec&, SkMatrix* totalInverse) const;

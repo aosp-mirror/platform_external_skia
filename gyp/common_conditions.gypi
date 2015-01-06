@@ -5,7 +5,7 @@
     'SK_ALLOW_STATIC_GLOBAL_INITIALIZERS=<(skia_static_initializers)',
     'SK_SUPPORT_GPU=<(skia_gpu)',
     'SK_SUPPORT_OPENCL=<(skia_opencl)',
-    'SK_FORCE_DISTANCEFIELD_FONTS=<(skia_force_distancefield_fonts)',
+    'SK_FORCE_DISTANCE_FIELD_TEXT=<(skia_force_distance_field_text)',
   ],
   'conditions' : [
     ['skia_pic', {
@@ -129,12 +129,30 @@
             'configurations': {
               'Debug_x64': {
                 'inherit_from': ['Debug'],
+                'msvs_settings': {
+                  'VCCLCompilerTool': {
+                     # /ZI is not supported on 64bit
+                    'DebugInformationFormat': '3', # programDatabase (/Zi)
+                  },
+                },
               },
               'Release_x64': {
                 'inherit_from': ['Release'],
+                'msvs_settings': {
+                  'VCCLCompilerTool': {
+                     # Don't specify /arch. SSE2 is implied by 64bit and specifying it warns.
+                    'EnableEnhancedInstructionSet': '0', #
+                  },
+                },
               },
               'Release_Developer_x64': {
                 'inherit_from': ['Release_Developer'],
+                'msvs_settings': {
+                  'VCCLCompilerTool': {
+                     # Don't specify /arch. SSE2 is implied by 64bit and specifying it warns.
+                    'EnableEnhancedInstructionSet': '0', #
+                  },
+                },
               },
             },
           }],
@@ -280,7 +298,7 @@
                   'SK_ARM_HAS_OPTIONAL_NEON',
                 ],
               }],
-              [ 'skia_os != "chromeos"', {
+              [ 'skia_os != "chromeos" and skia_os != "linux"', {
                 'cflags': [
                   '-mfloat-abi=softfp',
                 ],
@@ -377,8 +395,6 @@
         'IGNORE_ROT_AA_RECT_OPT',
         'SkLONGLONG int64_t',
         'SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)',
-        # Transitional, for deprecated SkCanvas::SaveFlags methods.
-        'SK_ATTR_DEPRECATED=SK_NOTHING_ARG1',
         'SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)',
         'SK_IGNORE_ETC1_SUPPORT',
         # Defines from skia_for_android_framework_defines.gypi
@@ -443,7 +459,7 @@
             ],
             'conditions' : [
               [ 'skia_sanitizer == "thread"', {
-                'defines': [ 'SK_DYNAMIC_ANNOTATIONS_ENABLED=1' ],
+                'defines': [ 'DYNAMIC_ANNOTATIONS_ENABLED=1' ],
               }],
               [ 'skia_sanitizer == "undefined"', {
                 'cflags_cc!': ['-fno-rtti'],

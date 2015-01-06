@@ -40,7 +40,9 @@ static CGDataProviderRef SkStreamToDataProvider(SkStream* stream) {
 
 static CGImageSourceRef SkStreamToCGImageSource(SkStream* stream) {
     CGDataProviderRef data = SkStreamToDataProvider(stream);
-    SkASSERT(data);
+    if (!data) {
+        return NULL;
+    }
     CGImageSourceRef imageSrc = CGImageSourceCreateWithDataProvider(data, 0);
     CGDataProviderRelease(data);
     return imageSrc;
@@ -103,6 +105,32 @@ static void force_opaque(SkBitmap* bm) {
 
 #define BITMAP_INFO (kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast)
 
+class AutoCFDataRelease {
+    CFDataRef fDR;
+public:
+    AutoCFDataRelease(CFDataRef dr) : fDR(dr) {}
+    ~AutoCFDataRelease() { if (fDR) { CFRelease(fDR); } }
+
+    operator CFDataRef () { return fDR; }
+};
+
+static bool colorspace_is_sRGB(CGColorSpaceRef cs) {
+#ifdef SK_BUILD_FOR_IOS
+    return true;    // iOS seems to define itself to always return sRGB <reed>
+#else
+    AutoCFDataRelease data(CGColorSpaceCopyICCProfile(cs));
+    if (data) {
+        // found by inspection -- need a cleaner way to sniff a profile
+        const CFIndex ICC_PROFILE_OFFSET_TO_SRGB_TAG = 52;
+
+        if (CFDataGetLength(data) >= ICC_PROFILE_OFFSET_TO_SRGB_TAG + 4) {
+            return !memcmp(CFDataGetBytePtr(data) + ICC_PROFILE_OFFSET_TO_SRGB_TAG, "sRGB", 4);
+        }
+    }
+    return false;
+#endif
+}
+
 SkImageDecoder::Result SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* bm, Mode mode) {
     CGImageSourceRef imageSrc = SkStreamToCGImageSource(stream);
 
@@ -119,8 +147,17 @@ SkImageDecoder::Result SkImageDecoder_CG::onDecode(SkStream* stream, SkBitmap* b
 
     const int width = SkToInt(CGImageGetWidth(image));
     const int height = SkToInt(CGImageGetHeight(image));
+    SkColorProfileType cpType = kLinear_SkColorProfileType;
 
-    bm->setInfo(SkImageInfo::MakeN32Premul(width, height));
+    CGColorSpaceRef cs = CGImageGetColorSpace(image);
+    if (cs) {
+        CGColorSpaceModel m = CGColorSpaceGetModel(cs);
+        if (kCGColorSpaceModelRGB == m && colorspace_is_sRGB(cs)) {
+            cpType = kSRGB_SkColorProfileType;
+        }
+    }
+
+    bm->setInfo(SkImageInfo::MakeN32Premul(width, height, cpType));
     if (SkImageDecoder::kDecodeBounds_Mode == mode) {
         return kSuccess;
     }

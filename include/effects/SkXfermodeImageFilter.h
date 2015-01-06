@@ -31,6 +31,7 @@ public:
         return SkNEW_ARGS(SkXfermodeImageFilter, (mode, inputs, cropRect, uniqueID));
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkXfermodeImageFilter)
 
     virtual bool onFilterImage(Proxy* proxy,
@@ -47,9 +48,6 @@ public:
 protected:
     SkXfermodeImageFilter(SkXfermode* mode, SkImageFilter* inputs[2],
                           const CropRect* cropRect, uint32_t uniqueID);
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkXfermodeImageFilter(SkReadBuffer& buffer);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
 private:

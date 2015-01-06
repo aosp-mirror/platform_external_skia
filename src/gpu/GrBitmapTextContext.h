@@ -20,43 +20,40 @@ class GrBitmapTextContext : public GrTextContext {
 public:
     static GrBitmapTextContext* Create(GrContext*, const SkDeviceProperties&);
 
-    virtual ~GrBitmapTextContext();
+    virtual ~GrBitmapTextContext() {}
 
 private:
-    enum {
-        kMinRequestedGlyphs      = 1,
-        kDefaultRequestedGlyphs  = 64,
-        kMinRequestedVerts       = kMinRequestedGlyphs * 4,
-        kDefaultRequestedVerts   = kDefaultRequestedGlyphs * 4,
-    };
-
     GrTextStrike*                     fStrike;
     void*                             fVertices;
     int                               fCurrVertex;
-    int                               fMaxVertices;
+    int                               fAllocVertexCount;
+    int                               fTotalVertexCount;
     SkRect                            fVertexBounds;
     GrTexture*                        fCurrTexture;
     GrMaskFormat                      fCurrMaskFormat;
-    SkAutoTUnref<GrGeometryProcessor> fCachedGeometryProcessor;
+    SkAutoTUnref<const GrGeometryProcessor> fCachedGeometryProcessor;
+    SkAutoTUnref<const GrFragmentProcessor> fCachedTextureProcessor;
     // Used to check whether fCachedEffect is still valid.
     uint32_t                          fEffectTextureUniqueID;
+    SkMatrix                          fLocalMatrix;
 
     GrBitmapTextContext(GrContext*, const SkDeviceProperties&);
 
-    virtual bool canDraw(const SkPaint& paint) SK_OVERRIDE;
+    virtual bool canDraw(const SkPaint& paint, const SkMatrix& viewMatrix) SK_OVERRIDE;
 
-    virtual void onDrawText(const GrPaint&, const SkPaint&, const char text[], size_t byteLength,
+    virtual void onDrawText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
+                            const char text[], size_t byteLength,
                             SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void onDrawPosText(const GrPaint&, const SkPaint&,
+    virtual void onDrawPosText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
                                const char text[], size_t byteLength,
                                const SkScalar pos[], int scalarsPerPosition,
                                const SkPoint& offset) SK_OVERRIDE;
 
     void init(const GrPaint&, const SkPaint&);
     void appendGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
+    bool uploadGlyph(GrGlyph*, GrFontScaler*);
     void flush();                 // automatically called by destructor
     void finish();
-
 };
 
 #endif

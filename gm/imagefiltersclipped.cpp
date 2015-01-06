@@ -35,11 +35,11 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("imagefiltersclipped");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(860, 500);
     }
 
@@ -83,7 +83,7 @@ protected:
         canvas.drawCircle(x, y, radius, paint);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         if (!fInitialized) {
             this->make_checkerboard();
             this->make_gradient_circle(64, 64);
@@ -101,8 +101,8 @@ protected:
         SkImageFilter* filters[] = {
             SkBlurImageFilter::Create(SkIntToScalar(12), SkIntToScalar(12)),
             SkDropShadowImageFilter::Create(SkIntToScalar(10), SkIntToScalar(10),
-                                            SkIntToScalar(3), SkIntToScalar(3),
-                                            SK_ColorGREEN),
+                SkIntToScalar(3), SkIntToScalar(3), SK_ColorGREEN,
+                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode),
             SkDisplacementMapEffect::Create(SkDisplacementMapEffect::kR_ChannelSelectorType,
                                             SkDisplacementMapEffect::kR_ChannelSelectorType,
                                             SkIntToScalar(12),

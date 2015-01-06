@@ -30,10 +30,8 @@ SkPictureData::SkPictureData(const SkPictInfo& info)
 
 void SkPictureData::initForPlayback() const {
     // ensure that the paths bounds are pre-computed
-    if (fPathHeap.get()) {
-        for (int i = 0; i < fPathHeap->count(); i++) {
-            (*fPathHeap.get())[i].updateBoundsCache();
-        }
+    for (int i = 0; i < fPaths.count(); i++) {
+        fPaths[i].updateBoundsCache();
     }
 }
 
@@ -48,14 +46,9 @@ SkPictureData::SkPictureData(const SkPictureRecord& record,
 
     fContentInfo.set(record.fContentInfo);
 
-    // copy over the refcnt dictionary to our reader
-    record.fFlattenableHeap.setupPlaybacks();
-
-    fBitmaps = record.fBitmapHeap->extractBitmaps();
-    fPaints = record.fPaints.unflattenToArray();
-
-    fBitmapHeap.reset(SkSafeRef(record.fBitmapHeap));
-    fPathHeap.reset(SkSafeRef(record.pathHeap()));
+    fBitmaps = record.fBitmaps;
+    fPaints  = record.fPaints;
+    fPaths   = record.fPaths;
 
     this->initForPlayback();
 
@@ -81,8 +74,6 @@ SkPictureData::SkPictureData(const SkPictureRecord& record,
 }
 
 void SkPictureData::init() {
-    fBitmaps = NULL;
-    fPaints = NULL;
     fPictureRefs = NULL;
     fPictureCount = 0;
     fTextBlobRefs = NULL;
@@ -93,9 +84,6 @@ void SkPictureData::init() {
 
 SkPictureData::~SkPictureData() {
     SkSafeUnref(fOpData);
-
-    SkSafeUnref(fBitmaps);
-    SkSafeUnref(fPaints);
 
     for (int i = 0; i < fPictureCount; i++) {
         fPictureRefs[i]->unref();
@@ -111,7 +99,7 @@ SkPictureData::~SkPictureData() {
 }
 
 bool SkPictureData::containsBitmaps() const {
-    if (fBitmaps && fBitmaps->count() > 0) {
+    if (fBitmaps.count() > 0) {
         return true;
     }
     for (int i = 0; i < fPictureCount; ++i) {
@@ -192,30 +180,38 @@ void SkPictureData::WriteTypefaces(SkWStream* stream, const SkRefCntSet& rec) {
     rec.copyToArray((SkRefCnt**)array);
 
     for (int i = 0; i < count; i++) {
+#ifdef SK_BUILD_FOR_UNIX
+        array[i]->serializeForcingEmbedding(stream);
+#else
+        // FIXME: Macs and Windows don't draw pixel-perfect if we embed fonts in the SKP.
         array[i]->serialize(stream);
+#endif
     }
 }
 
 void SkPictureData::flattenToBuffer(SkWriteBuffer& buffer) const {
     int i, n;
 
-    if ((n = SafeCount(fBitmaps)) > 0) {
+    if ((n = fBitmaps.count()) > 0) {
         write_tag_size(buffer, SK_PICT_BITMAP_BUFFER_TAG, n);
         for (i = 0; i < n; i++) {
-            buffer.writeBitmap((*fBitmaps)[i]);
+            buffer.writeBitmap(fBitmaps[i]);
         }
     }
 
-    if ((n = SafeCount(fPaints)) > 0) {
+    if ((n = fPaints.count()) > 0) {
         write_tag_size(buffer, SK_PICT_PAINT_BUFFER_TAG, n);
         for (i = 0; i < n; i++) {
-            buffer.writePaint((*fPaints)[i]);
+            buffer.writePaint(fPaints[i]);
         }
     }
 
-    if ((n = SafeCount(fPathHeap.get())) > 0) {
+    if ((n = fPaths.count()) > 0) {
         write_tag_size(buffer, SK_PICT_PATH_BUFFER_TAG, n);
-        fPathHeap->flatten(buffer);
+        buffer.writeInt(n);
+        for (int i = 0; i < n; i++) {
+            buffer.writePath(fPaths[i]);
+        }
     }
 
     if (fTextBlobCount > 0) {
@@ -227,14 +223,14 @@ void SkPictureData::flattenToBuffer(SkWriteBuffer& buffer) const {
 }
 
 void SkPictureData::serialize(SkWStream* stream,
-                                  SkPicture::EncodeBitmap encoder) const {
+                              SkPixelSerializer* pixelSerializer) const {
     write_tag_size(stream, SK_PICT_READER_TAG, fOpData->size());
     stream->write(fOpData->bytes(), fOpData->size());
 
     if (fPictureCount > 0) {
         write_tag_size(stream, SK_PICT_PICTURE_TAG, fPictureCount);
         for (int i = 0; i < fPictureCount; i++) {
-            fPictureRefs[i]->serialize(stream, encoder);
+            fPictureRefs[i]->serialize(stream, pixelSerializer);
         }
     }
 
@@ -247,7 +243,7 @@ void SkPictureData::serialize(SkWStream* stream,
         SkWriteBuffer buffer(SkWriteBuffer::kCrossProcess_Flag);
         buffer.setTypefaceRecorder(&typefaceSet);
         buffer.setFactoryRecorder(&factSet);
-        buffer.setBitmapEncoder(encoder);
+        buffer.setPixelSerializer(pixelSerializer);
 
         this->flattenToBuffer(buffer);
 
@@ -330,17 +326,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             break;
         case SK_PICT_FACTORY_TAG: {
             SkASSERT(!haveBuffer);
-        // Remove this code when v21 and below are no longer supported. At the
-        // same time add a new 'count' variable and use it rather then reusing 'size'.
-#ifndef DISABLE_V21_COMPATIBILITY_CODE
-            if (fInfo.fVersion >= 22) {
-                // in v22 this tag's size represents the size of the chunk in bytes
-                // and the number of factory strings is written out separately
-#endif
-                size = stream->readU32();
-#ifndef DISABLE_V21_COMPATIBILITY_CODE
-            }
-#endif
+            size = stream->readU32();
             fFactoryPlayback = SkNEW_ARGS(SkFactoryPlayback, (size));
             for (size_t i = 0; i < size; i++) {
                 SkString str;
@@ -395,6 +381,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
                 return false;
             }
 
+            /* Should we use SkValidatingReadBuffer instead? */
             SkReadBuffer buffer(storage.get(), size);
             buffer.setFlags(pictInfoFlagsToReadBufferFlags(fInfo.fFlags));
             buffer.setVersion(fInfo.fVersion);
@@ -403,12 +390,15 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             fTFPlayback.setupBuffer(buffer);
             buffer.setBitmapDecoder(proc);
 
-            while (!buffer.eof()) {
+            while (!buffer.eof() && buffer.isValid()) {
                 tag = buffer.readUInt();
                 size = buffer.readUInt();
                 if (!this->parseBufferTag(buffer, tag, size)) {
                     return false;
                 }
+            }
+            if (!buffer.isValid()) {
+                return false;
             }
             SkDEBUGCODE(haveBuffer = true;)
         } break;
@@ -421,25 +411,31 @@ bool SkPictureData::parseBufferTag(SkReadBuffer& buffer,
     switch (tag) {
         case SK_PICT_BITMAP_BUFFER_TAG: {
             const int count = SkToInt(size);
-            fBitmaps = SkTRefArray<SkBitmap>::Create(size);
+            fBitmaps.reset(count);
             for (int i = 0; i < count; ++i) {
-                SkBitmap* bm = &fBitmaps->writableAt(i);
-                buffer.readBitmap(bm);
-                bm->setImmutable();
+                SkBitmap* bm = &fBitmaps[i];
+                if (buffer.readBitmap(bm)) {
+                    bm->setImmutable();
+                } else {
+                    return false;
+                }
             }
         } break;
         case SK_PICT_PAINT_BUFFER_TAG: {
             const int count = SkToInt(size);
-            fPaints = SkTRefArray<SkPaint>::Create(size);
+            fPaints.reset(count);
             for (int i = 0; i < count; ++i) {
-                buffer.readPaint(&fPaints->writableAt(i));
+                buffer.readPaint(&fPaints[i]);
             }
         } break;
         case SK_PICT_PATH_BUFFER_TAG:
             if (size > 0) {
-                fPathHeap.reset(SkNEW_ARGS(SkPathHeap, (buffer)));
-            }
-            break;
+                const int count = buffer.readInt();
+                fPaths.reset(count);
+                for (int i = 0; i < count; i++) {
+                    buffer.readPath(&fPaths[i]);
+                }
+            } break;
         case SK_PICT_TEXTBLOB_BUFFER_TAG: {
             if (!buffer.validate((0 == fTextBlobCount) && (NULL == fTextBlobRefs))) {
                 return false;

@@ -12,19 +12,10 @@
 #include "SkGlyph.h"
 #include "SkScalerContext.h"
 #include "SkTypeface.h"
+#include "SkTypes.h"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
-
-#ifdef SK_DEBUG
-    #define SkASSERT_CONTINUE(pred)                                                         \
-        do {                                                                                \
-            if (!(pred))                                                                    \
-                SkDebugf("file %s:%d: assert failed '" #pred "'\n", __FILE__, __LINE__);    \
-        } while (false)
-#else
-    #define SkASSERT_CONTINUE(pred)
-#endif
 
 class SkScalerContext_FreeType_Base : public SkScalerContext {
 protected:
@@ -48,11 +39,21 @@ public:
     /** For SkFontMgrs to make use of our ability to extract
      *  name and style from a stream, using FreeType's API.
      */
-    static bool ScanFont(SkStream* stream, int ttcIndex,
-                         SkString* name, SkTypeface::Style* style, bool* isFixedPitch);
+    class Scanner : ::SkNoncopyable {
+    public:
+        Scanner();
+        ~Scanner();
+        bool recognizedFont(SkStream* stream, int* numFonts) const;
+        bool scanFont(SkStream* stream, int ttcIndex,
+                      SkString* name, SkFontStyle* style, bool* isFixedPitch) const;
+    private:
+        FT_Face openFace(SkStream* stream, int ttcIndex, FT_Stream ftStream) const;
+        FT_Library fLibrary;
+        mutable SkMutex fLibraryMutex;
+    };
 
 protected:
-    SkTypeface_FreeType(Style style, SkFontID uniqueID, bool isFixedPitch)
+    SkTypeface_FreeType(const SkFontStyle& style, SkFontID uniqueID, bool isFixedPitch)
         : INHERITED(style, uniqueID, isFixedPitch)
         , fGlyphCount(-1)
     {}

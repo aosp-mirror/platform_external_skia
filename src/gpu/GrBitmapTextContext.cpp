@@ -7,14 +7,13 @@
 
 #include "GrBitmapTextContext.h"
 #include "GrAtlas.h"
+#include "GrDefaultGeoProcFactory.h"
 #include "GrDrawTarget.h"
+#include "GrFontCache.h"
 #include "GrFontScaler.h"
 #include "GrIndexBuffer.h"
 #include "GrStrokeInfo.h"
 #include "GrTexturePriv.h"
-#include "GrTextStrike.h"
-#include "GrTextStrike_impl.h"
-#include "effects/GrCustomCoordsTextureEffect.h"
 
 #include "SkAutoKern.h"
 #include "SkColorPriv.h"
@@ -28,27 +27,22 @@
 #include "SkStrokeRec.h"
 #include "SkTextMapStateProc.h"
 
+#include "effects/GrBitmapTextGeoProc.h"
+#include "effects/GrSimpleTextureEffect.h"
+
 SK_CONF_DECLARE(bool, c_DumpFontCache, "gpu.dumpFontCache", false,
                 "Dump the contents of the font cache before every purge.");
 
 namespace {
-// position + texture coord
-extern const GrVertexAttrib gTextVertexAttribs[] = {
-    {kVec2f_GrVertexAttribType, 0,               kPosition_GrVertexAttribBinding},
-    {kVec2f_GrVertexAttribType, sizeof(SkPoint), kGeometryProcessor_GrVertexAttribBinding}
-};
+static const size_t kLCDTextVASize = 2 * sizeof(SkPoint);
 
-static const size_t kTextVASize = 2 * sizeof(SkPoint); 
+// position + local coord
+static const size_t kColorTextVASize = 2 * sizeof(SkPoint);
 
-// position + color + texture coord
-extern const GrVertexAttrib gTextVertexWithColorAttribs[] = {
-    {kVec2f_GrVertexAttribType,  0,                                 kPosition_GrVertexAttribBinding},
-    {kVec4ub_GrVertexAttribType, sizeof(SkPoint),                   kColor_GrVertexAttribBinding},
-    {kVec2f_GrVertexAttribType,  sizeof(SkPoint) + sizeof(GrColor), kGeometryProcessor_GrVertexAttribBinding}
-};
+static const size_t kGrayTextVASize = 2 * sizeof(SkPoint) + sizeof(GrColor);
 
-static const size_t kTextVAColorSize = 2 * sizeof(SkPoint) + sizeof(GrColor); 
-
+static const int kVerticesPerGlyph = 4;
+static const int kIndicesPerGlyph = 6;
 };
 
 GrBitmapTextContext::GrBitmapTextContext(GrContext* context,
@@ -57,11 +51,12 @@ GrBitmapTextContext::GrBitmapTextContext(GrContext* context,
     fStrike = NULL;
 
     fCurrTexture = NULL;
-    fCurrVertex = 0;
     fEffectTextureUniqueID = SK_InvalidUniqueID;
 
     fVertices = NULL;
-    fMaxVertices = 0;
+    fCurrVertex = 0;
+    fAllocVertexCount = 0;
+    fTotalVertexCount = 0;
 
     fVertexBounds.setLargestInverted();
 }
@@ -71,12 +66,8 @@ GrBitmapTextContext* GrBitmapTextContext::Create(GrContext* context,
     return SkNEW_ARGS(GrBitmapTextContext, (context, props));
 }
 
-GrBitmapTextContext::~GrBitmapTextContext() {
-    this->flush();
-}
-
-bool GrBitmapTextContext::canDraw(const SkPaint& paint) {
-    return !SkDraw::ShouldDrawTextAsPaths(paint, fContext->getMatrix());
+bool GrBitmapTextContext::canDraw(const SkPaint& paint, const SkMatrix& viewMatrix) {
+    return !SkDraw::ShouldDrawTextAsPaths(paint, viewMatrix);
 }
 
 inline void GrBitmapTextContext::init(const GrPaint& paint, const SkPaint& skPaint) {
@@ -88,12 +79,14 @@ inline void GrBitmapTextContext::init(const GrPaint& paint, const SkPaint& skPai
     fCurrVertex = 0;
 
     fVertices = NULL;
-    fMaxVertices = 0;
+    fAllocVertexCount = 0;
+    fTotalVertexCount = 0;
 }
 
 void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPaint,
-                                   const char text[], size_t byteLength,
-                                   SkScalar x, SkScalar y) {
+                                     const SkMatrix& viewMatrix,
+                                     const char text[], size_t byteLength,
+                                     SkScalar x, SkScalar y) {
     SkASSERT(byteLength == 0 || text != NULL);
 
     // nothing to draw
@@ -105,26 +98,26 @@ void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPain
 
     SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
 
-    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, &fContext->getMatrix());
+    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, &viewMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
     GrFontScaler*       fontScaler = GetGrFontScaler(cache);
 
     // transform our starting point
     {
         SkPoint loc;
-        fContext->getMatrix().mapXY(x, y, &loc);
+        viewMatrix.mapXY(x, y, &loc);
         x = loc.fX;
         y = loc.fY;
     }
 
     // need to measure first
+    int numGlyphs;
     if (fSkPaint.getTextAlign() != SkPaint::kLeft_Align) {
-        SkVector    stop;
+        SkVector    stopVector;
+        numGlyphs = MeasureText(cache, glyphCacheProc, text, byteLength, &stopVector);
 
-        MeasureText(cache, glyphCacheProc, text, byteLength, &stop);
-
-        SkScalar    stopX = stop.fX;
-        SkScalar    stopY = stop.fY;
+        SkScalar    stopX = stopVector.fX;
+        SkScalar    stopY = stopVector.fY;
 
         if (fSkPaint.getTextAlign() == SkPaint::kCenter_Align) {
             stopX = SkScalarHalf(stopX);
@@ -132,7 +125,10 @@ void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPain
         }
         x -= stopX;
         y -= stopY;
+    } else {
+        numGlyphs = fSkPaint.textToGlyphs(text, byteLength, NULL);
     }
+    fTotalVertexCount = kVerticesPerGlyph*numGlyphs;
 
     const char* stop = text + byteLength;
 
@@ -143,7 +139,7 @@ void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPain
     SkFixed halfSampleX, halfSampleY;
     if (cache->isSubpixel()) {
         halfSampleX = halfSampleY = (SK_FixedHalf >> SkGlyph::kSubBits);
-        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(fContext->getMatrix());
+        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(viewMatrix);
         if (kX_SkAxisAlignment == baseline) {
             fyMask = 0;
             halfSampleY = SK_FixedHalf;
@@ -158,8 +154,12 @@ void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPain
     SkFixed fx = SkScalarToFixed(x) + halfSampleX;
     SkFixed fy = SkScalarToFixed(y) + halfSampleY;
 
-    GrContext::AutoMatrix  autoMatrix;
-    autoMatrix.setIdentity(fContext, &fPaint);
+    // if we have RGB, then we won't have any SkShaders so no need to use a localmatrix, but for
+    // performance reasons we just invert here instead
+    if (!viewMatrix.invert(&fLocalMatrix)) {
+        SkDebugf("Cannot invert viewmatrix\n");
+        return;
+    }
 
     while (text < stop) {
         const SkGlyph& glyph = glyphCacheProc(cache, &text, fx & fxMask, fy & fyMask);
@@ -183,9 +183,10 @@ void GrBitmapTextContext::onDrawText(const GrPaint& paint, const SkPaint& skPain
 }
 
 void GrBitmapTextContext::onDrawPosText(const GrPaint& paint, const SkPaint& skPaint,
-                                      const char text[], size_t byteLength,
-                                      const SkScalar pos[], int scalarsPerPosition,
-                                      const SkPoint& offset) {
+                                        const SkMatrix& viewMatrix,
+                                        const char text[], size_t byteLength,
+                                        const SkScalar pos[], int scalarsPerPosition,
+                                        const SkPoint& offset) {
     SkASSERT(byteLength == 0 || text != NULL);
     SkASSERT(1 == scalarsPerPosition || 2 == scalarsPerPosition);
 
@@ -198,36 +199,37 @@ void GrBitmapTextContext::onDrawPosText(const GrPaint& paint, const SkPaint& skP
 
     SkDrawCacheProc glyphCacheProc = fSkPaint.getDrawCacheProc();
 
-    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, &fContext->getMatrix());
+    SkAutoGlyphCache    autoCache(fSkPaint, &fDeviceProperties, &viewMatrix);
     SkGlyphCache*       cache = autoCache.getCache();
     GrFontScaler*       fontScaler = GetGrFontScaler(cache);
 
-    // store original matrix before we reset, so we can use it to transform positions
-    SkMatrix ctm = fContext->getMatrix();
-    GrContext::AutoMatrix  autoMatrix;
-    autoMatrix.setIdentity(fContext, &fPaint);
+    // if we have RGB, then we won't have any SkShaders so no need to use a localmatrix, but for
+    // performance reasons we just invert here instead
+    if (!viewMatrix.invert(&fLocalMatrix)) {
+        SkDebugf("Cannot invert viewmatrix\n");
+        return;
+    }
+
+    int numGlyphs = fSkPaint.textToGlyphs(text, byteLength, NULL);
+    fTotalVertexCount = kVerticesPerGlyph*numGlyphs;
 
     const char*        stop = text + byteLength;
     SkTextAlignProc    alignProc(fSkPaint.getTextAlign());
-    SkTextMapStateProc tmsProc(ctm, offset, scalarsPerPosition);
+    SkTextMapStateProc tmsProc(viewMatrix, offset, scalarsPerPosition);
     SkFixed halfSampleX = 0, halfSampleY = 0;
 
     if (cache->isSubpixel()) {
         // maybe we should skip the rounding if linearText is set
-        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(ctm);
+        SkAxisAlignment baseline = SkComputeAxisAlignmentForHText(viewMatrix);
 
         SkFixed fxMask = ~0;
         SkFixed fyMask = ~0;
         if (kX_SkAxisAlignment == baseline) {
             fyMask = 0;
-#ifndef SK_IGNORE_SUBPIXEL_AXIS_ALIGN_FIX
             halfSampleY = SK_FixedHalf;
-#endif
         } else if (kY_SkAxisAlignment == baseline) {
             fxMask = 0;
-#ifndef SK_IGNORE_SUBPIXEL_AXIS_ALIGN_FIX
             halfSampleX = SK_FixedHalf;
-#endif
         }
 
         if (SkPaint::kLeft_Align == fSkPaint.getTextAlign()) {
@@ -335,6 +337,70 @@ void GrBitmapTextContext::onDrawPosText(const GrPaint& paint, const SkPaint& skP
     this->finish();
 }
 
+static size_t get_vertex_stride(GrMaskFormat maskFormat) {
+    switch (maskFormat) {
+        case kA8_GrMaskFormat:
+            return kGrayTextVASize;
+        case kARGB_GrMaskFormat:
+            return kColorTextVASize;
+        default:
+            return kLCDTextVASize;
+    }
+}
+
+static void* alloc_vertices(GrDrawTarget* drawTarget,
+                            int numVertices,
+                            GrMaskFormat maskFormat) {
+    if (numVertices <= 0) {
+        return NULL;
+    }
+
+    // set up attributes
+    void* vertices = NULL;
+    bool success = drawTarget->reserveVertexAndIndexSpace(numVertices,
+                                                          get_vertex_stride(maskFormat),
+                                                          0,
+                                                          &vertices,
+                                                          NULL);
+    GrAlwaysAssert(success);
+    return vertices;
+}
+
+inline bool GrBitmapTextContext::uploadGlyph(GrGlyph* glyph, GrFontScaler* scaler) {
+    if (!fStrike->glyphTooLargeForAtlas(glyph)) {
+        if (fStrike->addGlyphToAtlas(glyph, scaler)) {
+            return true;
+        }
+        
+        // try to clear out an unused plot before we flush
+        if (fContext->getFontCache()->freeUnusedPlot(fStrike, glyph) &&
+            fStrike->addGlyphToAtlas(glyph, scaler)) {
+            return true;
+        }
+        
+        if (c_DumpFontCache) {
+#ifdef SK_DEVELOPER
+            fContext->getFontCache()->dump();
+#endif
+        }
+        
+        // before we purge the cache, we must flush any accumulated draws
+        this->flush();
+        fContext->flush();
+        
+        // we should have an unused plot now
+        if (fContext->getFontCache()->freeUnusedPlot(fStrike, glyph) &&
+            fStrike->addGlyphToAtlas(glyph, scaler)) {
+            return true;
+        }
+        
+        // we should never get here
+        SkASSERT(false);
+    }
+    
+    return false;
+}
+
 void GrBitmapTextContext::appendGlyph(GrGlyph::PackedID packed,
                                       SkFixed vx, SkFixed vy,
                                       GrFontScaler* scaler) {
@@ -368,35 +434,8 @@ void GrBitmapTextContext::appendGlyph(GrGlyph::PackedID packed,
         }
     }
 
-    if (NULL == glyph->fPlot) {
-        if (!fStrike->glyphTooLargeForAtlas(glyph)) {
-            if (fStrike->addGlyphToAtlas(glyph, scaler)) {
-                goto HAS_ATLAS;
-            }
-
-            // try to clear out an unused plot before we flush
-            if (fContext->getFontCache()->freeUnusedPlot(fStrike, glyph) &&
-                fStrike->addGlyphToAtlas(glyph, scaler)) {
-                goto HAS_ATLAS;
-            }
-
-            if (c_DumpFontCache) {
-#ifdef SK_DEVELOPER
-                fContext->getFontCache()->dump();
-#endif
-            }
-
-            // flush any accumulated draws to allow us to free up a plot
-            this->flush();
-            fContext->flush();
-
-            // we should have an unused plot now
-            if (fContext->getFontCache()->freeUnusedPlot(fStrike, glyph) &&
-                fStrike->addGlyphToAtlas(glyph, scaler)) {
-                goto HAS_ATLAS;
-            }
-        }
-
+    // If the glyph is too large we fall back to paths
+    if (NULL == glyph->fPlot && !uploadGlyph(glyph, scaler)) {
         if (NULL == glyph->fPath) {
             SkPath* path = SkNEW(SkPath);
             if (!scaler->getGlyphPath(glyph->glyphID(), path)) {
@@ -410,18 +449,19 @@ void GrBitmapTextContext::appendGlyph(GrGlyph::PackedID packed,
         // flush any accumulated draws before drawing this glyph as a path.
         this->flush();
 
-        GrContext::AutoMatrix am;
         SkMatrix translate;
         translate.setTranslate(SkFixedToScalar(vx - SkIntToFixed(glyph->fBounds.fLeft)),
                                SkFixedToScalar(vy - SkIntToFixed(glyph->fBounds.fTop)));
-        GrPaint tmpPaint(fPaint);
-        am.setPreConcat(fContext, translate, &tmpPaint);
+        SkPath tmpPath(*glyph->fPath);
+        tmpPath.transform(translate);
         GrStrokeInfo strokeInfo(SkStrokeRec::kFill_InitStyle);
-        fContext->drawPath(tmpPaint, *glyph->fPath, strokeInfo);
+        fContext->drawPath(fPaint, SkMatrix::I(), tmpPath, strokeInfo);
+
+        // remove this glyph from the vertices we need to allocate
+        fTotalVertexCount -= kVerticesPerGlyph;
         return;
     }
 
-HAS_ATLAS:
     SkASSERT(glyph->fPlot);
     GrDrawTarget::DrawToken drawToken = fDrawTarget->getCurrentDrawToken();
     glyph->fPlot->setDrawToken(drawToken);
@@ -434,54 +474,17 @@ HAS_ATLAS:
     GrTexture* texture = glyph->fPlot->texture();
     SkASSERT(texture);
 
-    if (fCurrTexture != texture || fCurrVertex + 4 > fMaxVertices) {
+    if (fCurrTexture != texture || fCurrVertex + kVerticesPerGlyph > fAllocVertexCount) {
         this->flush();
         fCurrTexture = texture;
         fCurrTexture->ref();
         fCurrMaskFormat = glyph->fMaskFormat;
     }
 
-    bool useColorVerts = kA8_GrMaskFormat == fCurrMaskFormat;
-
     if (NULL == fVertices) {
-       // If we need to reserve vertices allow the draw target to suggest
-        // a number of verts to reserve and whether to perform a flush.
-        fMaxVertices = kMinRequestedVerts;
-        if (useColorVerts) {
-            fDrawTarget->drawState()->setVertexAttribs<gTextVertexWithColorAttribs>(
-                SK_ARRAY_COUNT(gTextVertexWithColorAttribs), kTextVAColorSize);
-        } else {
-            fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(
-                SK_ARRAY_COUNT(gTextVertexAttribs), kTextVASize);
-        }
-        bool flush = fDrawTarget->geometryHints(&fMaxVertices, NULL);
-        if (flush) {
-            this->flush();
-            fContext->flush();
-            if (useColorVerts) {
-                fDrawTarget->drawState()->setVertexAttribs<gTextVertexWithColorAttribs>(
-                    SK_ARRAY_COUNT(gTextVertexWithColorAttribs), kTextVAColorSize);
-            } else {
-                fDrawTarget->drawState()->setVertexAttribs<gTextVertexAttribs>(
-                    SK_ARRAY_COUNT(gTextVertexAttribs), kTextVASize);
-            }
-        }
-        fMaxVertices = kDefaultRequestedVerts;
-        // ignore return, no point in flushing again.
-        fDrawTarget->geometryHints(&fMaxVertices, NULL);
-
-        int maxQuadVertices = 4 * fContext->getQuadIndexBuffer()->maxQuads();
-        if (fMaxVertices < kMinRequestedVerts) {
-            fMaxVertices = kDefaultRequestedVerts;
-        } else if (fMaxVertices > maxQuadVertices) {
-            // don't exceed the limit of the index buffer
-            fMaxVertices = maxQuadVertices;
-        }
-        bool success = fDrawTarget->reserveVertexAndIndexSpace(fMaxVertices,
-                                                               0,
-                                                               &fVertices,
-                                                               NULL);
-        GrAlwaysAssert(success);
+        int maxQuadVertices = kVerticesPerGlyph * fContext->getQuadIndexBuffer()->maxQuads();
+        fAllocVertexCount = SkMin32(fTotalVertexCount, maxQuadVertices);
+        fVertices = alloc_vertices(fDrawTarget, fAllocVertexCount, fCurrMaskFormat);
     }
 
     SkFixed tx = SkIntToFixed(glyph->fAtlasLocation.fX);
@@ -495,10 +498,7 @@ HAS_ATLAS:
 
     fVertexBounds.joinNonEmptyArg(r);
 
-    size_t vertSize = useColorVerts ? (2 * sizeof(SkPoint) + sizeof(GrColor)) :
-                                      (2 * sizeof(SkPoint));
-
-    SkASSERT(vertSize == fDrawTarget->getDrawState().getVertexStride());
+    size_t vertSize = get_vertex_stride(fCurrMaskFormat);
 
     SkPoint* positions = reinterpret_cast<SkPoint*>(
         reinterpret_cast<intptr_t>(fVertices) + vertSize * fCurrVertex);
@@ -512,10 +512,7 @@ HAS_ATLAS:
                               SkFixedToFloat(texture->texturePriv().normalizeFixedX(tx + width)),
                               SkFixedToFloat(texture->texturePriv().normalizeFixedY(ty + height)),
                               vertSize);
-    if (useColorVerts) {
-        if (0xFF == GrColorUnpackA(fPaint.getColor())) {
-            fDrawTarget->drawState()->setHint(GrDrawState::kVertexColorsAreOpaque_Hint, true);
-        }
+    if (kA8_GrMaskFormat == fCurrMaskFormat) {
         // color comes after position.
         GrColor* colors = reinterpret_cast<GrColor*>(positions + 1);
         for (int i = 0; i < 4; ++i) {
@@ -526,86 +523,90 @@ HAS_ATLAS:
     fCurrVertex += 4;
 }
 
-static inline GrColor skcolor_to_grcolor_nopremultiply(SkColor c) {
-    unsigned r = SkColorGetR(c);
-    unsigned g = SkColorGetG(c);
-    unsigned b = SkColorGetB(c);
-    return GrColorPackRGBA(r, g, b, 0xff);
-}
-
 void GrBitmapTextContext::flush() {
     if (NULL == fDrawTarget) {
         return;
     }
 
-    GrDrawState* drawState = fDrawTarget->drawState();
-    GrDrawState::AutoRestoreEffects are(drawState);
-    drawState->setFromPaint(fPaint, SkMatrix::I(), fContext->getRenderTarget());
-
     if (fCurrVertex > 0) {
+        GrDrawState drawState;
+        drawState.setFromPaint(fPaint, fContext->getRenderTarget());
+
         // setup our sampler state for our text texture/atlas
         SkASSERT(SkIsAlign4(fCurrVertex));
         SkASSERT(fCurrTexture);
-        GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kNone_FilterMode);
 
-        uint32_t textureUniqueID = fCurrTexture->getUniqueID();
-
-        if (textureUniqueID != fEffectTextureUniqueID) {
-            fCachedGeometryProcessor.reset(GrCustomCoordsTextureEffect::Create(fCurrTexture,
-                                                                               params));
-            fEffectTextureUniqueID = textureUniqueID;
-        }
-
-        // This effect could be stored with one of the cache objects (atlas?)
-        drawState->setGeometryProcessor(fCachedGeometryProcessor.get());
         SkASSERT(fStrike);
+        GrColor color = fPaint.getColor();
         switch (fCurrMaskFormat) {
                 // Color bitmap text
-            case kARGB_GrMaskFormat:
-                SkASSERT(!drawState->hasColorVertexAttribute());
-                drawState->setBlendFunc(fPaint.getSrcBlendCoeff(), fPaint.getDstBlendCoeff());
-                drawState->setAlpha(fSkPaint.getAlpha());
+            case kARGB_GrMaskFormat: {
+                int a = fSkPaint.getAlpha();
+                color = SkColorSetARGB(a, a, a, a);
                 break;
+            }
                 // LCD text
-            case kA888_GrMaskFormat:
             case kA565_GrMaskFormat: {
-                if (kOne_GrBlendCoeff != fPaint.getSrcBlendCoeff() ||
-                    kISA_GrBlendCoeff != fPaint.getDstBlendCoeff() ||
-                    fPaint.numColorStages()) {
-                    GrPrintf("LCD Text will not draw correctly.\n");
+                // TODO: move supportsRGBCoverage check to setupCoverageEffect and only add LCD
+                // processor if the xp can support it. For now we will simply assume that if
+                // fUseLCDText is true, then we have a known color output.
+                if (!drawState.getXPFactory()->supportsRGBCoverage(0, kRGBA_GrColorComponentFlags)) {
+                    SkDebugf("LCD Text will not draw correctly.\n");
                 }
-                SkASSERT(!drawState->hasColorVertexAttribute());
-                // We don't use the GrPaint's color in this case because it's been premultiplied by
-                // alpha. Instead we feed in a non-premultiplied color, and multiply its alpha by
-                // the mask texture color. The end result is that we get
-                //            mask*paintAlpha*paintColor + (1-mask*paintAlpha)*dstColor
-                int a = SkColorGetA(fSkPaint.getColor());
-                // paintAlpha
-                drawState->setColor(SkColorSetARGB(a, a, a, a));
-                // paintColor
-                drawState->setBlendConstant(skcolor_to_grcolor_nopremultiply(fSkPaint.getColor()));
-                drawState->setBlendFunc(kConstC_GrBlendCoeff, kISC_GrBlendCoeff);
                 break;
             }
                 // Grayscale/BW text
             case kA8_GrMaskFormat:
-                // set back to normal in case we took LCD path previously.
-                drawState->setBlendFunc(fPaint.getSrcBlendCoeff(), fPaint.getDstBlendCoeff());
-                // We're using per-vertex color.
-                SkASSERT(drawState->hasColorVertexAttribute());
                 break;
             default:
                 SkFAIL("Unexpected mask format.");
         }
-        int nGlyphs = fCurrVertex / 4;
+
+        GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kNone_FilterMode);
+        if (kARGB_GrMaskFormat == fCurrMaskFormat) {
+            uint32_t textureUniqueID = fCurrTexture->getUniqueID();
+            if (textureUniqueID != fEffectTextureUniqueID ||
+                fCachedGeometryProcessor->color() != color) {
+                uint32_t flags = GrDefaultGeoProcFactory::kLocalCoord_GPType;
+                fCachedGeometryProcessor.reset(GrDefaultGeoProcFactory::Create(flags, color));
+                fCachedTextureProcessor.reset(GrSimpleTextureEffect::Create(fCurrTexture,
+                                                                            SkMatrix::I(),
+                                                                            params));
+                fEffectTextureUniqueID = textureUniqueID;
+            }
+            drawState.addColorProcessor(fCachedTextureProcessor.get());
+        } else {
+            uint32_t textureUniqueID = fCurrTexture->getUniqueID();
+            if (textureUniqueID != fEffectTextureUniqueID ||
+                fCachedGeometryProcessor->color() != color ||
+                !fCachedGeometryProcessor->localMatrix().cheapEqualTo(fLocalMatrix)) {
+                bool hasColor = kA8_GrMaskFormat == fCurrMaskFormat;
+                bool opaqueVertexColors = GrColorIsOpaque(fPaint.getColor());
+                fCachedGeometryProcessor.reset(GrBitmapTextGeoProc::Create(color,
+                                                                           fCurrTexture,
+                                                                           params,
+                                                                           hasColor,
+                                                                           opaqueVertexColors,
+                                                                           fLocalMatrix));
+                fEffectTextureUniqueID = textureUniqueID;
+            }
+        }
+
+        int nGlyphs = fCurrVertex / kVerticesPerGlyph;
         fDrawTarget->setIndexSourceToBuffer(fContext->getQuadIndexBuffer());
-        fDrawTarget->drawIndexedInstances(kTriangles_GrPrimitiveType,
+        fDrawTarget->drawIndexedInstances(&drawState,
+                                          fCachedGeometryProcessor.get(),
+                                          kTriangles_GrPrimitiveType,
                                           nGlyphs,
-                                          4, 6, &fVertexBounds);
+                                          kVerticesPerGlyph,
+                                          kIndicesPerGlyph,
+                                          &fVertexBounds);
 
         fDrawTarget->resetVertexSource();
         fVertices = NULL;
-        fMaxVertices = 0;
+        fAllocVertexCount = 0;
+        // reset to be those that are left
+        fTotalVertexCount -= fCurrVertex;
         fCurrVertex = 0;
         fVertexBounds.setLargestInverted();
         SkSafeSetNull(fCurrTexture);
@@ -614,6 +615,7 @@ void GrBitmapTextContext::flush() {
 
 inline void GrBitmapTextContext::finish() {
     this->flush();
+    fTotalVertexCount = 0;
 
     GrTextContext::finish();
 }

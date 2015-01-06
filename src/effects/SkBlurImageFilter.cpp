@@ -31,18 +31,6 @@ static SkVector mapSigma(const SkSize& localSigma, const SkMatrix& ctm) {
     return sigma;
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkBlurImageFilter::SkBlurImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    fSigma.fWidth = buffer.readScalar();
-    fSigma.fHeight = buffer.readScalar();
-    buffer.validate(SkScalarIsFinite(fSigma.fWidth) &&
-                    SkScalarIsFinite(fSigma.fHeight) &&
-                    (fSigma.fWidth >= 0) &&
-                    (fSigma.fHeight >= 0));
-}
-#endif
-
 SkBlurImageFilter::SkBlurImageFilter(SkScalar sigmaX,
                                      SkScalar sigmaY,
                                      SkImageFilter* input,
@@ -299,3 +287,16 @@ bool SkBlurImageFilter::filterImageGPU(Proxy* proxy, const SkBitmap& src, const 
     return false;
 #endif
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void SkBlurImageFilter::toString(SkString* str) const {
+    str->appendf("SkBlurImageFilter: (");
+    str->appendf("sigma: (%f, %f) input (", fSigma.fWidth, fSigma.fHeight);
+
+    if (this->getInput(0)) {
+        this->getInput(0)->toString(str);
+    }
+
+    str->append("))");
+}
+#endif

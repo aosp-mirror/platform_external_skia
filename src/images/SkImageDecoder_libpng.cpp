@@ -141,6 +141,7 @@ static void sk_seek_fn(png_structp png_ptr, png_uint_32 offset) {
 }
 #endif
 
+#ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
 static int sk_read_user_chunk(png_structp png_ptr, png_unknown_chunkp chunk) {
     SkImageDecoder::Peeker* peeker =
                     (SkImageDecoder::Peeker*)png_get_user_chunk_ptr(png_ptr);
@@ -148,6 +149,7 @@ static int sk_read_user_chunk(png_structp png_ptr, png_unknown_chunkp chunk) {
     return peeker->peek((const char*)chunk->name, chunk->data, chunk->size) ?
             1 : -1;
 }
+#endif
 
 static void sk_error_fn(png_structp png_ptr, png_const_charp msg) {
     SkDEBUGF(("------ png error %s\n", msg));
@@ -266,12 +268,13 @@ bool SkPNGImageDecoder::onDecodeInit(SkStream* sk_stream, png_structp *png_ptrp,
     /* If we have already read some of the signature */
 //  png_set_sig_bytes(png_ptr, 0 /* sig_read */ );
 
+#ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
     // hookup our peeker so we can see any user-chunks the caller may be interested in
     png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_ALWAYS, (png_byte*)"", 0);
     if (this->getPeeker()) {
         png_set_read_user_chunk_fn(png_ptr, (png_voidp)this->getPeeker(), sk_read_user_chunk);
     }
-
+#endif
     /* The call to png_read_info() gives us all of the information from the
     * PNG file before the first IDAT (image data chunk). */
     png_read_info(png_ptr, info_ptr);
@@ -284,11 +287,13 @@ bool SkPNGImageDecoder::onDecodeInit(SkStream* sk_stream, png_structp *png_ptrp,
     if (bitDepth == 16) {
         png_set_strip_16(png_ptr);
     }
+#ifdef PNG_READ_PACK_SUPPORTED
     /* Extract multiple pixels with bit depths of 1, 2, and 4 from a single
      * byte into separate bytes (useful for paletted and grayscale images). */
     if (bitDepth < 8) {
         png_set_packing(png_ptr);
     }
+#endif
     /* Expand grayscale images to the full 8 bits from 1, 2, or 4 bits/pixel */
     if (colorType == PNG_COLOR_TYPE_GRAY && bitDepth < 8) {
         png_set_expand_gray_1_2_4_to_8(png_ptr);
@@ -408,8 +413,8 @@ SkImageDecoder::Result SkPNGImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
             even if our decodedBitmap doesn't, due to the request that we
             upscale png's palette to a direct model
          */
-        SkAutoLockColors ctLock(colorTable);
-        if (!sampler.begin(decodedBitmap, sc, *this, ctLock.colors())) {
+        const SkPMColor* colors = colorTable ? colorTable->readColors() : NULL;
+        if (!sampler.begin(decodedBitmap, sc, *this, colors)) {
             return kFailure;
         }
         const int height = decodedBitmap->height();
@@ -494,6 +499,7 @@ bool SkPNGImageDecoder::getBitmapColorType(png_structp png_ptr, png_infop info_p
     png_get_IHDR(png_ptr, info_ptr, &origWidth, &origHeight, &bitDepth,
                  &colorType, int_p_NULL, int_p_NULL, int_p_NULL);
 
+#ifdef PNG_sBIT_SUPPORTED
     // check for sBIT chunk data, in case we should disable dithering because
     // our data is not truely 8bits per component
     png_color_8p sig_bit;
@@ -509,6 +515,7 @@ bool SkPNGImageDecoder::getBitmapColorType(png_structp png_ptr, png_infop info_p
             this->setDitherImage(false);
         }
     }
+#endif
 
     if (colorType == PNG_COLOR_TYPE_PALETTE) {
         bool paletteHasAlpha = hasTransparencyInPalette(png_ptr, info_ptr);
@@ -606,12 +613,6 @@ bool SkPNGImageDecoder::getBitmapColorType(png_structp png_ptr, png_infop info_p
             return false;
         }
     }
-
-#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
-    if (!this->chooseFromOneChoice(*colorTypep, origWidth, origHeight)) {
-        return false;
-    }
-#endif
 
     // If the image has alpha and the decoder wants unpremultiplied
     // colors, the only supported colortype is 8888.
@@ -887,8 +888,8 @@ bool SkPNGImageDecoder::onDecodeSubset(SkBitmap* bm, const SkIRect& region) {
             even if our decodedBitmap doesn't, due to the request that we
             upscale png's palette to a direct model
          */
-        SkAutoLockColors ctLock(colorTable);
-        if (!sampler.begin(&decodedBitmap, sc, *this, ctLock.colors())) {
+        const SkPMColor* colors = colorTable ? colorTable->readColors() : NULL;
+        if (!sampler.begin(&decodedBitmap, sc, *this, colors)) {
             return false;
         }
         const int height = decodedBitmap.height();
@@ -1040,8 +1041,7 @@ static int computeBitDepth(int colorCount) {
 static inline int pack_palette(SkColorTable* ctable,
                                png_color* SK_RESTRICT palette,
                                png_byte* SK_RESTRICT trans, bool hasAlpha) {
-    SkAutoLockColors alc(ctable);
-    const SkPMColor* SK_RESTRICT colors = alc.colors();
+    const SkPMColor* SK_RESTRICT colors = ctable ? ctable->readColors() : NULL;
     const int ctCount = ctable->count();
     int i, num_trans = 0;
 
@@ -1217,8 +1217,9 @@ bool SkPNGImageEncoder::doEncode(SkWStream* stream, const SkBitmap& bitmap,
             png_set_tRNS(png_ptr, info_ptr, trans, numTrans, NULL);
         }
     }
-
+#ifdef PNG_sBIT_SUPPORTED
     png_set_sBIT(png_ptr, info_ptr, &sig_bit);
+#endif
     png_write_info(png_ptr, info_ptr);
 
     const char* srcImage = (const char*)bitmap.getPixels();

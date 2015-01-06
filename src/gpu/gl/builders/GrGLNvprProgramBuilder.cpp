@@ -6,29 +6,28 @@
  */
 
 #include "GrGLNvprProgramBuilder.h"
-#include "../GrGpuGL.h"
+#include "../GrGLGpu.h"
 
 #define GL_CALL(X) GR_GL_CALL(this->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->gpu()->glInterface(), R, X)
 
-GrGLNvprProgramBuilder::GrGLNvprProgramBuilder(GrGpuGL* gpu,
-                                               const GrOptDrawState& optState,
-                                               const GrGLProgramDesc& desc)
-        : INHERITED(gpu, optState, desc)
+GrGLNvprProgramBuilder::GrGLNvprProgramBuilder(GrGLGpu* gpu,
+                                               const GrOptDrawState& optState)
+        : INHERITED(gpu, optState)
         , fSeparableVaryingInfos(kVarsPerBlock) {
 }
 
-void GrGLNvprProgramBuilder::emitTransforms(const GrFragmentStage& processorStage,
+void GrGLNvprProgramBuilder::emitTransforms(const GrPendingFragmentStage& processorStage,
                                             GrGLProcessor::TransformedCoordsArray* outCoords,
                                             GrGLInstalledFragProc* ifp) {
-    const GrFragmentProcessor* effect = processorStage.getProcessor();
+    const GrFragmentProcessor* effect = processorStage.processor();
     int numTransforms = effect->numTransforms();
 
     ifp->fTransforms.push_back_n(numTransforms);
 
     for (int t = 0; t < numTransforms; t++) {
         GrSLType varyingType =
-                processorStage.isPerspectiveCoordTransform(t, false) ?
+                processorStage.isPerspectiveCoordTransform(t) ?
                         kVec3f_GrSLType :
                         kVec2f_GrSLType;
 
@@ -39,23 +38,18 @@ void GrGLNvprProgramBuilder::emitTransforms(const GrFragmentStage& processorStag
             suffixedVaryingName.appendf("_%i", t);
             varyingName = suffixedVaryingName.c_str();
         }
-        const char* vsVaryingName;
-        const char* fsVaryingName;
-        ifp->fTransforms[t].fHandle = this->addSeparableVarying(varyingType, varyingName,
-                                                                &vsVaryingName, &fsVaryingName);
+        GrGLVertToFrag v(varyingType);
+        ifp->fTransforms[t].fHandle = this->addSeparableVarying(varyingName, &v);
         ifp->fTransforms[t].fType = varyingType;
 
         SkNEW_APPEND_TO_TARRAY(outCoords, GrGLProcessor::TransformedCoords,
-                               (SkString(fsVaryingName), varyingType));
+                               (SkString(v.fsIn()), varyingType));
     }
 }
 
 GrGLInstalledFragProc::ShaderVarHandle
-GrGLNvprProgramBuilder::addSeparableVarying(GrSLType type,
-                                            const char* name,
-                                            const char** vsOutName,
-                                            const char** fsInName) {
-    addVarying(type, name, vsOutName, fsInName);
+GrGLNvprProgramBuilder::addSeparableVarying(const char* name, GrGLVarying* v) {
+    this->addVarying(name, v);
     SeparableVaryingInfo& varying = fSeparableVaryingInfos.push_back();
     varying.fVariable = fFS.fInputs.back();
     return GrGLInstalledFragProc::ShaderVarHandle(fSeparableVaryingInfos.count() - 1);
@@ -78,5 +72,7 @@ GrGLProgram* GrGLNvprProgramBuilder::createProgram(GrGLuint programID) {
     // building
     this->resolveSeparableVaryings(programID);
     return SkNEW_ARGS(GrGLNvprProgram, (fGpu, fDesc, fUniformHandles, programID, fUniforms,
-                                        fFragmentProcessors.get(), fSeparableVaryingInfos));
+                                        fGeometryProcessor,
+                                        fXferProcessor, fFragmentProcessors.get(),
+                                        fSeparableVaryingInfos));
 }

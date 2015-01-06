@@ -30,7 +30,7 @@ class SkWStream;
  *      c. doc->endPage();
  *  3. Close the document with doc->close().
  */
-class SkDocument : public SkRefCnt {
+class SK_API SkDocument : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkDocument)
 
@@ -121,6 +121,9 @@ protected:
     virtual void onEndPage() = 0;
     virtual bool onClose(SkWStream*) = 0;
     virtual void onAbort() = 0;
+
+    // Allows subclasses to write to the stream as pages are written.
+    SkWStream* getStream() { return fStream; }
 
     enum State {
         kBetweenPages_State,

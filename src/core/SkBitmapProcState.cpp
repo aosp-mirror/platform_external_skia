@@ -30,6 +30,8 @@ extern void  SI8_opaque_D32_filter_DX_shaderproc_neon(const SkBitmapProcState&, 
 extern void  Clamp_SI8_opaque_D32_filter_DX_shaderproc_neon(const SkBitmapProcState&, int, int, uint32_t*, int);
 #endif
 
+extern void Clamp_S32_opaque_D32_nofilter_DX_shaderproc(const SkBitmapProcState&, int, int, uint32_t*, int);
+
 #define   NAME_WRAP(x)  x
 #include "SkBitmapProcState_filter.h"
 #include "SkBitmapProcState_procs.h"
@@ -129,8 +131,6 @@ static inline bool cache_size_okay(const SkBitmap& bm, const SkMatrix& invMat) {
 bool SkBitmapProcState::possiblyScaleImage() {
     SkASSERT(NULL == fBitmap);
 
-    fAdjustedMatrix = false;
-
     if (fFilterLevel <= SkPaint::kLow_FilterLevel) {
         return false;
     }
@@ -144,13 +144,8 @@ bool SkBitmapProcState::possiblyScaleImage() {
     float trueDestWidth  = fOrigBitmap.width() / invScaleX;
     float trueDestHeight = fOrigBitmap.height() / invScaleY;
 
-#ifndef SK_IGNORE_PROPER_FRACTIONAL_SCALING
     float roundedDestWidth = SkScalarRoundToScalar(trueDestWidth);
     float roundedDestHeight = SkScalarRoundToScalar(trueDestHeight);
-#else
-    float roundedDestWidth = trueDestWidth;
-    float roundedDestHeight = trueDestHeight;
-#endif
 
     if (SkPaint::kHigh_FilterLevel == fFilterLevel &&
         fInvMatrix.getType() <= (SkMatrix::kScale_Mask | SkMatrix::kTranslate_Mask) &&
@@ -196,19 +191,10 @@ bool SkBitmapProcState::possiblyScaleImage() {
         SkASSERT(fScaledBitmap.getPixels());
         fBitmap = &fScaledBitmap;
 
-        // set the inv matrix type to translate-only;
-        fInvMatrix.setTranslate(fInvMatrix.getTranslateX() / fInvMatrix.getScaleX(),
-                                fInvMatrix.getTranslateY() / fInvMatrix.getScaleY());
+        // clean up the inverse matrix by incorporating the scale we just performed.
 
-#ifndef SK_IGNORE_PROPER_FRACTIONAL_SCALING
-        // reintroduce any fractional scaling missed by our integral scale done above.
-
-       float fractionalScaleX = roundedDestWidth/trueDestWidth;
-       float fractionalScaleY = roundedDestHeight/trueDestHeight;
-
-       fInvMatrix.postScale(fractionalScaleX, fractionalScaleY);
-#endif
-        fAdjustedMatrix = true;
+        fInvMatrix.postScale(roundedDestWidth / fOrigBitmap.width(),
+                             roundedDestHeight / fOrigBitmap.height());
 
         // Set our filter level to low -- the only post-filtering this
         // image might require is some interpolation if the translation
@@ -338,8 +324,30 @@ SkBitmapProcState::~SkBitmapProcState() {
     SkDELETE(fBitmapFilter);
 }
 
+static bool valid_for_drawing(const SkBitmap& bm) {
+    if (0 == bm.width() || 0 == bm.height()) {
+        return false;   // nothing to draw
+    }
+    if (NULL == bm.pixelRef()) {
+        return false;   // no pixels to read
+    }
+    if (bm.getTexture()) {
+        // we can handle texture (ugh) since lockPixels will perform a read-back
+        return true;
+    }
+    if (kIndex_8_SkColorType == bm.colorType()) {
+        SkAutoLockPixels alp(bm); // but we need to call it before getColorTable() is safe.
+        if (!bm.getColorTable()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
-    SkASSERT(fOrigBitmap.width() && fOrigBitmap.height());
+    if (!valid_for_drawing(fOrigBitmap)) {
+        return false;
+    }
 
     fBitmap = NULL;
     fInvMatrix = inv;
@@ -372,8 +380,15 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     bool clampClamp = SkShader::kClamp_TileMode == fTileModeX &&
                       SkShader::kClamp_TileMode == fTileModeY;
 
-    if (!(fAdjustedMatrix || clampClamp || trivialMatrix)) {
-        fInvMatrix.postIDiv(fOrigBitmap.width(), fOrigBitmap.height());
+    // Most of the scanline procs deal with "unit" texture coordinates, as this
+    // makes it easy to perform tiling modes (repeat = (x & 0xFFFF)). To generate
+    // those, we divide the matrix by its dimensions here.
+    //
+    // We don't do this if we're either trivial (can ignore the matrix) or clamping
+    // in both X and Y since clamping to width,height is just as easy as to 0xFFFF.
+
+    if (!(clampClamp || trivialMatrix)) {
+        fInvMatrix.postIDiv(fBitmap->width(), fBitmap->height());
     }
 
     // Now that all possible changes to the matrix have taken place, check
@@ -589,6 +604,8 @@ bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
             }
         } else if (SK_ARM_NEON_WRAP(SI8_opaque_D32_filter_DX) == fSampleProc32 && clampClamp) {
             fShaderProc32 = SK_ARM_NEON_WRAP(Clamp_SI8_opaque_D32_filter_DX_shaderproc);
+        } else if (S32_opaque_D32_nofilter_DX == fSampleProc32 && clampClamp) {
+            fShaderProc32 = Clamp_S32_opaque_D32_nofilter_DX_shaderproc;
         }
 
         if (NULL == fShaderProc32) {
@@ -1019,3 +1036,58 @@ int SkBitmapProcState::maxCountForBufferSize(size_t bufferSize) const {
 
     return size;
 }
+
+///////////////////////
+
+void  Clamp_S32_opaque_D32_nofilter_DX_shaderproc(const SkBitmapProcState& s, int x, int y,
+                                                  SkPMColor* SK_RESTRICT dst, int count) {
+    SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
+                             SkMatrix::kScale_Mask)) == 0);
+
+    const unsigned maxX = s.fBitmap->width() - 1;
+    SkFractionalInt fx;
+    int dstY;
+    {
+        SkPoint pt;
+        s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf, SkIntToScalar(y) + SK_ScalarHalf,
+                   &pt);
+        fx = SkScalarToFractionalInt(pt.fY);
+        const unsigned maxY = s.fBitmap->height() - 1;
+        dstY = SkClampMax(SkFractionalIntToInt(fx), maxY);
+        fx = SkScalarToFractionalInt(pt.fX);
+    }
+
+    const SkPMColor* SK_RESTRICT src = s.fBitmap->getAddr32(0, dstY);
+    const SkFractionalInt dx = s.fInvSxFractionalInt;
+
+    // Check if we're safely inside [0...maxX] so no need to clamp each computed index.
+    //
+    if ((uint64_t)SkFractionalIntToInt(fx) <= maxX &&
+        (uint64_t)SkFractionalIntToInt(fx + dx * (count - 1)) <= maxX)
+    {
+        int count4 = count >> 2;
+        for (int i = 0; i < count4; ++i) {
+            SkPMColor src0 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src1 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src2 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            SkPMColor src3 = src[SkFractionalIntToInt(fx)]; fx += dx;
+            dst[0] = src0;
+            dst[1] = src1;
+            dst[2] = src2;
+            dst[3] = src3;
+            dst += 4;
+        }
+        for (int i = (count4 << 2); i < count; ++i) {
+            unsigned index = SkFractionalIntToInt(fx);
+            SkASSERT(index <= maxX);
+            *dst++ = src[index];
+            fx += dx;
+        }
+    } else {
+        for (int i = 0; i < count; ++i) {
+            dst[i] = src[SkClampMax(SkFractionalIntToInt(fx), maxX)];
+            fx += dx;
+        }
+    }
+}
+

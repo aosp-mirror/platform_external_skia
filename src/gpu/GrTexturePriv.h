@@ -17,15 +17,15 @@
     implemented privately in GrTexture with a inline public method here). */
 class GrTexturePriv {
 public:
-    void setFlag(GrTextureFlags flags) {
+    void setFlag(GrSurfaceFlags flags) {
         fTexture->fDesc.fFlags = fTexture->fDesc.fFlags | flags;
     }
 
-    void resetFlag(GrTextureFlags flags) {
+    void resetFlag(GrSurfaceFlags flags) {
         fTexture->fDesc.fFlags = fTexture->fDesc.fFlags & ~flags;
     }
 
-    bool isSetFlag(GrTextureFlags flags) const {
+    bool isSetFlag(GrSurfaceFlags flags) const {
         return 0 != (fTexture->fDesc.fFlags & flags);
     }
 
@@ -39,16 +39,11 @@ public:
         return GrTexture::kNotAllocated_MipMapsStatus != fTexture->fMipMapsStatus;
     }
 
-    static GrResourceKey::ResourceType ResourceType() {
-        static const GrResourceKey::ResourceType gType = GrResourceKey::GenerateResourceType();
-        return gType;
-    }
-
     static GrResourceKey ComputeKey(const GrGpu* gpu,
                                     const GrTextureParams* params,
-                                    const GrTextureDesc& desc,
+                                    const GrSurfaceDesc& desc,
                                     const GrCacheID& cacheID);
-    static GrResourceKey ComputeScratchKey(const GrTextureDesc& desc);
+    static void ComputeScratchKey(const GrSurfaceDesc&, GrScratchKey*);
     static bool NeedsResizing(const GrResourceKey& key);
     static bool NeedsBilerp(const GrResourceKey& key);
 

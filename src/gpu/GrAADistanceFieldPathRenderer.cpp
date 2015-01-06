@@ -20,8 +20,7 @@
 #include "SkRTConf.h"
 
 #define ATLAS_TEXTURE_WIDTH 1024
-#define ATLAS_TEXTURE_HEIGHT 1024
-
+#define ATLAS_TEXTURE_HEIGHT 2048
 #define PLOT_WIDTH  256
 #define PLOT_HEIGHT 256
 
@@ -31,7 +30,23 @@
 SK_CONF_DECLARE(bool, c_DumpPathCache, "gpu.dumpPathCache", false,
                 "Dump the contents of the path cache before every purge.");
 
+#ifdef DF_PATH_TRACKING
+static int g_NumCachedPaths = 0;
+static int g_NumFreedPaths = 0;
+#endif
+
+// mip levels
+static const int kSmallMIP = 32;
+static const int kMediumMIP = 78;
+static const int kLargeMIP = 192;
+
 ////////////////////////////////////////////////////////////////////////////////
+GrAADistanceFieldPathRenderer::GrAADistanceFieldPathRenderer(GrContext* context)
+    : fContext(context)
+    , fAtlas(NULL)
+    , fEffectFlags(kInvalid_DistanceFieldEffectFlag) {
+}
+
 GrAADistanceFieldPathRenderer::~GrAADistanceFieldPathRenderer() {
     PathDataList::Iter iter;
     iter.init(fPathList, PathDataList::Iter::kHead_IterStart);
@@ -43,52 +58,57 @@ GrAADistanceFieldPathRenderer::~GrAADistanceFieldPathRenderer() {
     }
     
     SkDELETE(fAtlas);
+
+#ifdef DF_PATH_TRACKING
+    SkDebugf("Cached paths: %d, freed paths: %d\n", g_NumCachedPaths, g_NumFreedPaths);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-bool GrAADistanceFieldPathRenderer::canDrawPath(const SkPath& path,
+bool GrAADistanceFieldPathRenderer::canDrawPath(const GrDrawTarget* target,
+                                                const GrDrawState* drawState,
+                                                const SkMatrix& viewMatrix,
+                                                const SkPath& path,
                                                 const SkStrokeRec& stroke,
-                                                const GrDrawTarget* target,
                                                 bool antiAlias) const {
+    
     // TODO: Support inverse fill
     // TODO: Support strokes
     if (!target->caps()->shaderDerivativeSupport() || !antiAlias || path.isInverseFillType()
-        || SkStrokeRec::kFill_Style != stroke.getStyle()) {
+        || path.isVolatile() || SkStrokeRec::kFill_Style != stroke.getStyle()) {
         return false;
     }
 
-    // currently don't support perspective or scaling more than 3x
-    const GrDrawState& drawState = target->getDrawState();
-    const SkMatrix& vm = drawState.getViewMatrix();
-    if (vm.hasPerspective() || vm.getMaxScale() > 3.0f) {
+    // currently don't support perspective
+    if (viewMatrix.hasPerspective()) {
         return false;
     }
     
-    // only support paths smaller than 64 x 64
+    // only support paths smaller than 64x64, scaled to less than 256x256
+    // the goal is to accelerate rendering of lots of small paths that may be scaling
+    SkScalar maxScale = viewMatrix.getMaxScale();
     const SkRect& bounds = path.getBounds();
-    return bounds.width() < 64.f && bounds.height() < 64.f;
+    SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
+    return maxDim < 64.f && maxDim*maxScale < 256.f;
 }
 
 
-GrPathRenderer::StencilSupport GrAADistanceFieldPathRenderer::onGetStencilSupport(
-                                                                       const SkPath&,
-                                                                       const SkStrokeRec&,
-                                                                       const GrDrawTarget*) const {
+GrPathRenderer::StencilSupport
+GrAADistanceFieldPathRenderer::onGetStencilSupport(const GrDrawTarget*,
+                                                   const GrDrawState*,
+                                                   const SkPath&,
+                                                   const SkStrokeRec&) const {
     return GrPathRenderer::kNoSupport_StencilSupport;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// position + texture coord
-extern const GrVertexAttrib gSDFPathVertexAttribs[] = {
-    { kVec2f_GrVertexAttribType, 0, kPosition_GrVertexAttribBinding },
-    { kVec2f_GrVertexAttribType, sizeof(SkPoint), kGeometryProcessor_GrVertexAttribBinding }
-};
-static const size_t kSDFPathVASize = 2 * sizeof(SkPoint);
-
-bool GrAADistanceFieldPathRenderer::onDrawPath(const SkPath& path,
+bool GrAADistanceFieldPathRenderer::onDrawPath(GrDrawTarget* target,
+                                               GrDrawState* drawState,
+                                               GrColor color,
+                                               const SkMatrix& viewMatrix,
+                                               const SkPath& path,
                                                const SkStrokeRec& stroke,
-                                               GrDrawTarget* target,
                                                bool antiAlias) {
     // we've already bailed on inverse filled paths, so this is safe
     if (path.isEmpty()) {
@@ -97,35 +117,51 @@ bool GrAADistanceFieldPathRenderer::onDrawPath(const SkPath& path,
 
     SkASSERT(fContext);
 
+    // get mip level
+    SkScalar maxScale = viewMatrix.getMaxScale();
+    const SkRect& bounds = path.getBounds();
+    SkScalar maxDim = SkMaxScalar(bounds.width(), bounds.height());
+    SkScalar size = maxScale*maxDim;
+    uint32_t desiredDimension;
+    if (size <= kSmallMIP) {
+        desiredDimension = kSmallMIP;
+    } else if (size <= kMediumMIP) {
+        desiredDimension = kMediumMIP;
+    } else {
+        desiredDimension = kLargeMIP;
+    }
+
     // check to see if path is cached
     // TODO: handle stroked vs. filled version of same path
-    PathData* pathData = fPathCache.find(path.getGenerationID());
+    PathData::Key key = { path.getGenerationID(), desiredDimension };
+    PathData* pathData = fPathCache.find(key);
     if (NULL == pathData) {
-        pathData = this->addPathToAtlas(path, stroke, antiAlias);
+        SkScalar scale = desiredDimension/maxDim;
+        pathData = this->addPathToAtlas(path, stroke, antiAlias, desiredDimension, scale);
         if (NULL == pathData) {
             return false;
         }
     }
 
     // use signed distance field to render
-    return this->internalDrawPath(path, pathData, target);
+    return this->internalDrawPath(target, drawState, color, viewMatrix, path, pathData);
 }
 
-// factor used to scale the path prior to building distance field
-const SkScalar kScaleFactor = 2.0f;
 // padding around path bounds to allow for antialiased pixels
 const SkScalar kAntiAliasPad = 1.0f;
 
 GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathToAtlas(
                                                                         const SkPath& path,
                                                                         const SkStrokeRec& stroke,
-                                                                        bool antiAlias) {
+                                                                        bool antiAlias,
+                                                                        uint32_t dimension,
+                                                                        SkScalar scale) {
 
     // generate distance field and add to atlas
     if (NULL == fAtlas) {
         SkISize textureSize = SkISize::Make(ATLAS_TEXTURE_WIDTH, ATLAS_TEXTURE_HEIGHT);
         fAtlas = SkNEW_ARGS(GrAtlas, (fContext->getGpu(), kAlpha_8_GrPixelConfig,
-                                      kNone_GrTextureFlags, textureSize,
+                                      kNone_GrSurfaceFlags, textureSize,
                                       NUM_PLOTS_X, NUM_PLOTS_Y, false));
         if (NULL == fAtlas) {
             return NULL;
@@ -136,11 +172,11 @@ GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathT
     
     // generate bounding rect for bitmap draw
     SkRect scaledBounds = bounds;
-    // scale up to improve maxification range
-    scaledBounds.fLeft *= kScaleFactor;
-    scaledBounds.fTop *= kScaleFactor;
-    scaledBounds.fRight *= kScaleFactor;
-    scaledBounds.fBottom *= kScaleFactor;
+    // scale to mip level size
+    scaledBounds.fLeft *= scale;
+    scaledBounds.fTop *= scale;
+    scaledBounds.fRight *= scale;
+    scaledBounds.fBottom *= scale;
     // move the origin to an integer boundary (gives better results)
     SkScalar dx = SkScalarFraction(scaledBounds.fLeft);
     SkScalar dy = SkScalarFraction(scaledBounds.fTop);
@@ -156,7 +192,7 @@ GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathT
     // draw path to bitmap
     SkMatrix drawMatrix;
     drawMatrix.setTranslate(-bounds.left(), -bounds.top());
-    drawMatrix.postScale(kScaleFactor, kScaleFactor);
+    drawMatrix.postScale(scale, scale);
     drawMatrix.postTranslate(kAntiAliasPad, kAntiAliasPad);
     GrSWMaskHelper helper(fContext);
     
@@ -211,7 +247,9 @@ GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathT
 HAS_ATLAS:
     // add to cache
     PathData* pathData = SkNEW(PathData);
-    pathData->fGenID = path.getGenerationID();
+    pathData->fKey.fGenID = path.getGenerationID();
+    pathData->fKey.fDimension = dimension;
+    pathData->fScale = scale;
     pathData->fPlot = plot;
     // change the scaled rect to match the size of the inset distance field
     scaledBounds.fRight = scaledBounds.fLeft +
@@ -230,7 +268,10 @@ HAS_ATLAS:
     
     fPathCache.add(pathData);
     fPathList.addToTail(pathData);
-    
+#ifdef DF_PATH_TRACKING
+    ++g_NumCachedPaths;
+#endif
+
     return pathData;
 }
 
@@ -249,9 +290,12 @@ bool GrAADistanceFieldPathRenderer::freeUnusedPlot() {
     while ((pathData = iter.get())) {
         iter.next();
         if (plot == pathData->fPlot) {
-            fPathCache.remove(pathData->fGenID);
+            fPathCache.remove(pathData->fKey);
             fPathList.remove(pathData);
             SkDELETE(pathData);
+#ifdef DF_PATH_TRACKING
+            ++g_NumFreedPaths;
+#endif
         }
     }
         
@@ -261,24 +305,40 @@ bool GrAADistanceFieldPathRenderer::freeUnusedPlot() {
     return true;
 }
 
-bool GrAADistanceFieldPathRenderer::internalDrawPath(const SkPath& path,
-                                                     const PathData* pathData,
-                                                     GrDrawTarget* target) {
-    
+bool GrAADistanceFieldPathRenderer::internalDrawPath(GrDrawTarget* target,
+                                                     GrDrawState* drawState,
+                                                     GrColor color,
+                                                     const SkMatrix& viewMatrix,
+                                                     const SkPath& path,
+                                                     const PathData* pathData) {
     GrTexture* texture = fAtlas->getTexture();
-    GrDrawState* drawState = target->drawState();
     GrDrawState::AutoRestoreEffects are(drawState);
     
     SkASSERT(pathData->fPlot);
     GrDrawTarget::DrawToken drawToken = target->getCurrentDrawToken();
     pathData->fPlot->setDrawToken(drawToken);
     
-    // make me some vertices
-    drawState->setVertexAttribs<gSDFPathVertexAttribs>(SK_ARRAY_COUNT(gSDFPathVertexAttribs),
-                                                       kSDFPathVASize);
+    // set up any flags
+    uint32_t flags = 0;
+    flags |= viewMatrix.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
+
+    GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kBilerp_FilterMode);
+    if (flags != fEffectFlags || fCachedGeometryProcessor->color() != color ||
+        !fCachedGeometryProcessor->viewMatrix().cheapEqualTo(viewMatrix)) {
+        fCachedGeometryProcessor.reset(GrDistanceFieldNoGammaTextureEffect::Create(color,
+                                                                                   viewMatrix,
+                                                                                   texture,
+                                                                                   params,
+                                                                                   flags,
+                                                                                   false));
+        fEffectFlags = flags;
+    }
+
     void* vertices = NULL;
-    void* indices = NULL;
-    bool success = target->reserveVertexAndIndexSpace(4, 6, &vertices, &indices);
+    bool success = target->reserveVertexAndIndexSpace(4,
+                                                      fCachedGeometryProcessor->getVertexStride(),
+                                                      0, &vertices, NULL);
+    SkASSERT(fCachedGeometryProcessor->getVertexStride() == 2 * sizeof(SkPoint));
     GrAlwaysAssert(success);
     
     SkScalar dx = pathData->fBounds.fLeft;
@@ -286,7 +346,7 @@ bool GrAADistanceFieldPathRenderer::internalDrawPath(const SkPath& path,
     SkScalar width = pathData->fBounds.width();
     SkScalar height = pathData->fBounds.height();
     
-    SkScalar invScale = 1.0f/kScaleFactor;
+    SkScalar invScale = 1.0f/pathData->fScale;
     dx *= invScale;
     dy *= invScale;
     width *= invScale;
@@ -312,29 +372,11 @@ bool GrAADistanceFieldPathRenderer::internalDrawPath(const SkPath& path,
                               SkFixedToFloat(texture->texturePriv().normalizeFixedY(ty + th)),
                               vertSize);
     
-    uint16_t* indexPtr = reinterpret_cast<uint16_t*>(indices);
-    *indexPtr++ = 0;
-    *indexPtr++ = 1;
-    *indexPtr++ = 2;
-    *indexPtr++ = 0;
-    *indexPtr++ = 2;
-    *indexPtr++ = 3;
-    
-    // set up any flags
-    uint32_t flags = 0;
-    const SkMatrix& vm = drawState->getViewMatrix();
-    flags |= vm.isSimilarity() ? kSimilarity_DistanceFieldEffectFlag : 0;
-    
-    GrTextureParams params(SkShader::kRepeat_TileMode, GrTextureParams::kBilerp_FilterMode);
-    drawState->setGeometryProcessor(GrDistanceFieldNoGammaTextureEffect::Create(texture,
-                                                                                params,
-                                                                                flags))->unref();
-    
-
-    vm.mapRect(&r);
-    target->drawIndexedInstances(kTriangles_GrPrimitiveType, 1, 4, 6, &r);
+    viewMatrix.mapRect(&r);
+    target->setIndexSourceToBuffer(fContext->getQuadIndexBuffer());
+    target->drawIndexedInstances(drawState, fCachedGeometryProcessor.get(),
+                                 kTriangles_GrPrimitiveType, 1, 4, 6, &r);
     target->resetVertexSource();
-    target->resetIndexSource();
     
     return true;
 }

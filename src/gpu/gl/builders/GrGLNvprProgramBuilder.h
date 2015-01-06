@@ -12,7 +12,7 @@
 
 class GrGLNvprProgramBuilder : public GrGLProgramBuilder {
 public:
-    GrGLNvprProgramBuilder(GrGpuGL*, const GrOptDrawState&, const GrGLProgramDesc&);
+    GrGLNvprProgramBuilder(GrGLGpu*, const GrOptDrawState&);
 
     /*
      * The separable varying info must be passed to GrGLProgram so this must
@@ -25,10 +25,10 @@ public:
 
     typedef GrTAllocator<SeparableVaryingInfo> SeparableVaryingInfoArray;
 
-    virtual GrGLProgram* createProgram(GrGLuint programID);
+    virtual GrGLProgram* createProgram(GrGLuint programID) SK_OVERRIDE;
 
 private:
-    virtual void emitTransforms(const GrFragmentStage&,
+    virtual void emitTransforms(const GrPendingFragmentStage&,
                                 GrGLProcessor::TransformedCoordsArray* outCoords,
                                 GrGLInstalledFragProc*) SK_OVERRIDE;
 
@@ -41,10 +41,7 @@ private:
      * varyings. Without a vertex shader, such as with NV_path_rendering, GL APIs are used to
      * populate the variable. The APIs can refer to the variable through the returned handle.
      */
-    ShaderVarHandle addSeparableVarying(GrSLType type,
-                                      const char* name,
-                                      const char** vsOutName,
-                                      const char** fsInName);
+    ShaderVarHandle addSeparableVarying(const char* name, GrGLVarying* v);
 
     void resolveSeparableVaryings(GrGLuint programId);
 

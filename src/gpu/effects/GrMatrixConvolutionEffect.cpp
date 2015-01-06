@@ -4,20 +4,17 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "gl/builders/GrGLProgramBuilder.h"
 #include "GrMatrixConvolutionEffect.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLTexture.h"
-#include "GrTBackendProcessorFactory.h"
+#include "gl/builders/GrGLProgramBuilder.h"
 
 class GrGLMatrixConvolutionEffect : public GrGLFragmentProcessor {
 public:
-    GrGLMatrixConvolutionEffect(const GrBackendProcessorFactory& factory,
-                                const GrProcessor&);
+    GrGLMatrixConvolutionEffect(const GrProcessor&);
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -43,9 +40,7 @@ private:
     typedef GrGLFragmentProcessor INHERITED;
 };
 
-GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrBackendProcessorFactory& factory,
-                                                         const GrProcessor& processor)
-    : INHERITED(factory) {
+GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrProcessor& processor) {
     const GrMatrixConvolutionEffect& m = processor.cast<GrMatrixConvolutionEffect>();
     fKernelSize = m.kernelSize();
     fConvolveAlpha = m.convolveAlpha();
@@ -53,7 +48,6 @@ GrGLMatrixConvolutionEffect::GrGLMatrixConvolutionEffect(const GrBackendProcesso
 
 void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
                                            const GrFragmentProcessor& fp,
-                                           const GrProcessorKey& key,
                                            const char* outputColor,
                                            const char* inputColor,
                                            const TransformedCoordsArray& coords,
@@ -61,19 +55,20 @@ void GrGLMatrixConvolutionEffect::emitCode(GrGLFPBuilder* builder,
     const GrTextureDomain& domain = fp.cast<GrMatrixConvolutionEffect>().domain();
 
     fBoundsUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                     kVec4f_GrSLType, "Bounds");
+                                     kVec4f_GrSLType, kDefault_GrSLPrecision, "Bounds");
     fImageIncrementUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                             kVec2f_GrSLType, "ImageIncrement");
+                                             kVec2f_GrSLType, kDefault_GrSLPrecision,
+                                             "ImageIncrement");
     fKernelUni = builder->addUniformArray(GrGLProgramBuilder::kFragment_Visibility,
-                                          kFloat_GrSLType,
+                                          kFloat_GrSLType, kDefault_GrSLPrecision,
                                           "Kernel",
                                           fKernelSize.width() * fKernelSize.height());
     fKernelOffsetUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                           kVec2f_GrSLType, "KernelOffset");
+                                           kVec2f_GrSLType, kDefault_GrSLPrecision, "KernelOffset");
     fGainUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                   kFloat_GrSLType, "Gain");
+                                   kFloat_GrSLType, kDefault_GrSLPrecision, "Gain");
     fBiasUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                   kFloat_GrSLType, "Bias");
+                                   kFloat_GrSLType, kDefault_GrSLPrecision, "Bias");
 
     const char* kernelOffset = builder->getUniformCStr(fKernelOffsetUni);
     const char* imgInc = builder->getUniformCStr(fImageIncrementUni);
@@ -162,6 +157,7 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
     fBias(SkScalarToFloat(bias) / 255.0f),
     fConvolveAlpha(convolveAlpha),
     fDomain(GrTextureDomain::MakeTexelDomain(texture, bounds), tileMode) {
+    this->initClassID<GrMatrixConvolutionEffect>();
     for (int i = 0; i < kernelSize.width() * kernelSize.height(); i++) {
         fKernel[i] = SkScalarToFloat(kernel[i]);
     }
@@ -172,14 +168,18 @@ GrMatrixConvolutionEffect::GrMatrixConvolutionEffect(GrTexture* texture,
 GrMatrixConvolutionEffect::~GrMatrixConvolutionEffect() {
 }
 
-const GrBackendFragmentProcessorFactory& GrMatrixConvolutionEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrMatrixConvolutionEffect>::getInstance();
+void GrMatrixConvolutionEffect::getGLProcessorKey(const GrGLCaps& caps,
+                                                  GrProcessorKeyBuilder* b) const {
+    GrGLMatrixConvolutionEffect::GenKey(*this, caps, b);
 }
 
-bool GrMatrixConvolutionEffect::onIsEqual(const GrProcessor& sBase) const {
+GrGLFragmentProcessor* GrMatrixConvolutionEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GrGLMatrixConvolutionEffect, (*this));
+}
+
+bool GrMatrixConvolutionEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     const GrMatrixConvolutionEffect& s = sBase.cast<GrMatrixConvolutionEffect>();
-    return this->texture(0) == s.texture(0) &&
-           fKernelSize == s.kernelSize() &&
+    return fKernelSize == s.kernelSize() &&
            !memcmp(fKernel, s.kernel(),
                    fKernelSize.width() * fKernelSize.height() * sizeof(float)) &&
            fGain == s.gain() &&

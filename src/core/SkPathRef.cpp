@@ -87,13 +87,13 @@ void SkPathRef::CreateTransformedCopy(SkAutoTUnref<SkPathRef>* dst,
     if (canXformBounds) {
         (*dst)->fBoundsIsDirty = false;
         if (src.fIsFinite) {
-            matrix.mapRect((*dst)->fBounds.get(), src.fBounds);
-            if (!((*dst)->fIsFinite = (*dst)->fBounds->isFinite())) {
-                (*dst)->fBounds->setEmpty();
+            matrix.mapRect(&(*dst)->fBounds, src.fBounds);
+            if (!((*dst)->fIsFinite = (*dst)->fBounds.isFinite())) {
+                (*dst)->fBounds.setEmpty();
             }
         } else {
             (*dst)->fIsFinite = false;
-            (*dst)->fBounds->setEmpty();
+            (*dst)->fBounds.setEmpty();
         }
     } else {
         (*dst)->fBoundsIsDirty = true;
@@ -193,12 +193,18 @@ bool SkPathRef::operator== (const SkPathRef& ref) const {
         SkASSERT(!genIDMatch);
         return false;
     }
+    if (0 == ref.fVerbCnt) {
+        SkASSERT(0 == ref.fPointCnt);
+        return true;
+    }
+    SkASSERT(this->verbsMemBegin() && ref.verbsMemBegin());
     if (0 != memcmp(this->verbsMemBegin(),
                     ref.verbsMemBegin(),
                     ref.fVerbCnt * sizeof(uint8_t))) {
         SkASSERT(!genIDMatch);
         return false;
     }
+    SkASSERT(this->points() && ref.points());
     if (0 != memcmp(this->points(),
                     ref.points(),
                     ref.fPointCnt * sizeof(SkPoint))) {
@@ -443,14 +449,27 @@ void SkPathRef::validate() const {
     SkASSERT(this->currSize() ==
                 fFreeSpace + sizeof(SkPoint) * fPointCnt + sizeof(uint8_t) * fVerbCnt);
 
-    if (!fBoundsIsDirty && !fBounds->isEmpty()) {
+    if (!fBoundsIsDirty && !fBounds.isEmpty()) {
         bool isFinite = true;
         for (int i = 0; i < fPointCnt; ++i) {
-            SkASSERT(!fPoints[i].isFinite() || (
-                     fBounds->fLeft - fPoints[i].fX   < SK_ScalarNearlyZero &&
-                     fPoints[i].fX - fBounds->fRight  < SK_ScalarNearlyZero &&
-                     fBounds->fTop  - fPoints[i].fY   < SK_ScalarNearlyZero &&
-                     fPoints[i].fY - fBounds->fBottom < SK_ScalarNearlyZero));
+#ifdef SK_DEBUG
+            if (fPoints[i].isFinite() &&
+                (fPoints[i].fX < fBounds.fLeft || fPoints[i].fX > fBounds.fRight ||
+                 fPoints[i].fY < fBounds.fTop || fPoints[i].fY > fBounds.fBottom)) {
+                SkDebugf("bounds: %f %f %f %f\n",
+                         fBounds.fLeft, fBounds.fTop, fBounds.fRight, fBounds.fBottom);
+                for (int j = 0; j < fPointCnt; ++j) {
+                    if (i == j) {
+                        SkDebugf("*");
+                    }
+                    SkDebugf("%f %f\n", fPoints[j].fX, fPoints[j].fY);
+                }
+            }
+#endif
+
+            SkASSERT(!fPoints[i].isFinite() ||
+		     (fPoints[i].fX >= fBounds.fLeft && fPoints[i].fX <= fBounds.fRight &&
+		      fPoints[i].fY >= fBounds.fTop && fPoints[i].fY <= fBounds.fBottom));
             if (!fPoints[i].isFinite()) {
                 isFinite = false;
             }

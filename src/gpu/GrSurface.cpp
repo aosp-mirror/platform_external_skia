@@ -43,10 +43,12 @@ bool GrSurface::readPixels(int left, int top, int width, int height,
 
 SkImageInfo GrSurface::info() const {
     SkColorType colorType;
-    if (!GrPixelConfig2ColorType(this->config(), &colorType)) {
+    SkColorProfileType profileType;
+    if (!GrPixelConfig2ColorAndProfileType(this->config(), &colorType, &profileType)) {
         sk_throw();
     }
-    return SkImageInfo::Make(this->width(), this->height(), colorType, kPremul_SkAlphaType);
+    return SkImageInfo::Make(this->width(), this->height(), colorType, kPremul_SkAlphaType,
+                             profileType);
 }
 
 // TODO: This should probably be a non-member helper function. It might only be needed in
@@ -79,6 +81,12 @@ bool GrSurface::savePixels(const char* filename) {
 void GrSurface::flushWrites() {
     if (!this->wasDestroyed()) {
         this->getContext()->flushSurfaceWrites(this);
+    }
+}
+
+void GrSurface::prepareForExternalRead() {
+    if (!this->wasDestroyed()) {
+        this->getContext()->prepareSurfaceForExternalRead(this);
     }
 }
 
@@ -116,15 +124,4 @@ bool GrSurface::hasPendingIO() const {
         return true;
     }
     return false;
-}
-
-bool GrSurface::isSameAs(const GrSurface* other) const {
-    const GrRenderTarget* thisRT = this->asRenderTarget();
-    if (thisRT) {
-        return thisRT == other->asRenderTarget();
-    } else {
-        const GrTexture* thisTex = this->asTexture();
-        SkASSERT(thisTex); // We must be one or the other
-        return thisTex == other->asTexture();
-    }
 }

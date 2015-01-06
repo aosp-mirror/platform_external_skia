@@ -76,7 +76,7 @@ int SkChopQuadAtXExtrema(const SkPoint src[3], SkPoint dst[5]);
     curvature exists on the segment, returns the t value for this
     point along the curve. Otherwise it will return a value of 0.
 */
-float SkFindQuadMaxCurvature(const SkPoint src[3]);
+SkScalar SkFindQuadMaxCurvature(const SkPoint src[3]);
 
 /** Given 3 points on a quadratic bezier, divide it into 2 quadratics
     if the point of maximum curvature exists on the quad segment.
@@ -191,6 +191,20 @@ bool SkXRayCrossesMonotonicCubic(const SkXRay& pt, const SkPoint cubic[4],
 int SkNumXRayCrossingsForCubic(const SkXRay& pt, const SkPoint cubic[4],
                                bool* ambiguous = NULL);
 
+enum SkCubicType {
+    kSerpentine_SkCubicType,
+    kCusp_SkCubicType,
+    kLoop_SkCubicType,
+    kQuadratic_SkCubicType,
+    kLine_SkCubicType,
+    kPoint_SkCubicType
+};
+
+/** Returns the cubic classification. Pass scratch storage for computing inflection data,
+    which can be used with additional work to find the loop intersections and so on.
+*/
+SkCubicType SkClassifyCubic(const SkPoint p[4], SkScalar inflection[3]);
+
 ///////////////////////////////////////////////////////////////////////////////
 
 enum SkRotationDirection {
@@ -214,6 +228,18 @@ int SkBuildQuadArc(const SkVector& unitStart, const SkVector& unitStop,
 
 // experimental
 struct SkConic {
+    SkConic() {}
+    SkConic(const SkPoint& p0, const SkPoint& p1, const SkPoint& p2, SkScalar w) {
+        fPts[0] = p0;
+        fPts[1] = p1;
+        fPts[2] = p2;
+        fW = w;
+    }
+    SkConic(const SkPoint pts[3], SkScalar w) {
+        memcpy(fPts, pts, sizeof(fPts));
+        fW = w;
+    }
+
     SkPoint  fPts[3];
     SkScalar fW;
 
@@ -264,6 +290,8 @@ struct SkConic {
      *  @return  true if max curvature found inside 0..1 range, false otherwise
      */
     bool findMaxCurvature(SkScalar* t) const;
+
+    static SkScalar TransformW(const SkPoint[3], SkScalar w, const SkMatrix&);
 };
 
 #include "SkTemplates.h"

@@ -14,9 +14,9 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrCoordTransform.h"
+#include "GrInvariantOutput.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
-#include "GrTBackendProcessorFactory.h"
 #endif
 
 static const bool gUseUnpremul = false;
@@ -47,16 +47,6 @@ private:
         fK[3] = k4;
         fEnforcePMColor = enforcePMColor;
     }
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkArithmeticMode_scalar(SkReadBuffer& buffer) : INHERITED(buffer) {
-        fK[0] = buffer.readScalar();
-        fK[1] = buffer.readScalar();
-        fK[2] = buffer.readScalar();
-        fK[3] = buffer.readScalar();
-        fEnforcePMColor = buffer.readBool();
-    }
-#endif
 
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         buffer.writeScalar(fK[0]);
@@ -250,12 +240,11 @@ SkXfermode* SkArithmeticMode::Create(SkScalar k1, SkScalar k2,
 
 class GrGLArithmeticEffect : public GrGLFragmentProcessor {
 public:
-    GrGLArithmeticEffect(const GrBackendProcessorFactory&, const GrProcessor&);
+    GrGLArithmeticEffect(const GrProcessor&);
     virtual ~GrGLArithmeticEffect();
 
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -283,10 +272,17 @@ public:
 
     virtual ~GrArithmeticEffect();
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual const char* name() const SK_OVERRIDE { return "Arithmetic"; }
 
-    typedef GrGLArithmeticEffect GLProcessor;
-    static const char* Name() { return "Arithmetic"; }
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GrGLArithmeticEffect::GenKey(*this, caps, b);
+    }
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GrGLArithmeticEffect, (*this));
+    }
+
     GrTexture* backgroundTexture() const { return fBackgroundAccess.getTexture(); }
 
     float k1() const { return fK1; }
@@ -296,9 +292,9 @@ public:
     bool enforcePMColor() const { return fEnforcePMColor; }
 
 private:
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GrArithmeticEffect(float k1, float k2, float k3, float k4, bool enforcePMColor,
                        GrTexture* background);
@@ -317,8 +313,10 @@ private:
 GrArithmeticEffect::GrArithmeticEffect(float k1, float k2, float k3, float k4,
                                        bool enforcePMColor, GrTexture* background)
   : fK1(k1), fK2(k2), fK3(k3), fK4(k4), fEnforcePMColor(enforcePMColor) {
+    this->initClassID<GrArithmeticEffect>();
     if (background) {
-        fBackgroundTransform.reset(kLocal_GrCoordSet, background);
+        fBackgroundTransform.reset(kLocal_GrCoordSet, background,
+                                   GrTextureParams::kNone_FilterMode);
         this->addCoordTransform(&fBackgroundTransform);
         fBackgroundAccess.reset(background);
         this->addTextureAccess(&fBackgroundAccess);
@@ -330,31 +328,24 @@ GrArithmeticEffect::GrArithmeticEffect(float k1, float k2, float k3, float k4,
 GrArithmeticEffect::~GrArithmeticEffect() {
 }
 
-bool GrArithmeticEffect::onIsEqual(const GrProcessor& sBase) const {
+bool GrArithmeticEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     const GrArithmeticEffect& s = sBase.cast<GrArithmeticEffect>();
     return fK1 == s.fK1 &&
            fK2 == s.fK2 &&
            fK3 == s.fK3 &&
            fK4 == s.fK4 &&
-           fEnforcePMColor == s.fEnforcePMColor &&
-           backgroundTexture() == s.backgroundTexture();
+           fEnforcePMColor == s.fEnforcePMColor;
 }
 
-const GrBackendFragmentProcessorFactory& GrArithmeticEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrArithmeticEffect>::getInstance();
-}
-
-void GrArithmeticEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void GrArithmeticEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     // TODO: optimize this
-    inout->setToUnknown();
+    inout->setToUnknown(GrInvariantOutput::kWill_ReadInput);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGLArithmeticEffect::GrGLArithmeticEffect(const GrBackendProcessorFactory& factory,
-                                           const GrProcessor&)
-   : INHERITED(factory),
-     fEnforcePMColor(true) {
+GrGLArithmeticEffect::GrGLArithmeticEffect(const GrProcessor&)
+   : fEnforcePMColor(true) {
 }
 
 GrGLArithmeticEffect::~GrGLArithmeticEffect() {
@@ -362,7 +353,6 @@ GrGLArithmeticEffect::~GrGLArithmeticEffect() {
 
 void GrGLArithmeticEffect::emitCode(GrGLFPBuilder* builder,
                                     const GrFragmentProcessor& fp,
-                                    const GrProcessorKey& key,
                                     const char* outputColor,
                                     const char* inputColor,
                                     const TransformedCoordsArray& coords,
@@ -382,7 +372,8 @@ void GrGLArithmeticEffect::emitCode(GrGLFPBuilder* builder,
 
     SkASSERT(dstColor);
     fKUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                kVec4f_GrSLType, "k");
+                                kVec4f_GrSLType, kDefault_GrSLPrecision,
+                                "k");
     const char* kUni = builder->getUniformCStr(fKUni);
 
     // We don't try to optimize for this case at all

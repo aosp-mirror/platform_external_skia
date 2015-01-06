@@ -75,6 +75,8 @@ struct SK_API SkIRect {
      */
     int height() const { return fBottom - fTop; }
 
+    SkISize size() const { return SkISize::Make(this->width(), this->height()); }
+
     /**
      *  Since the center of an integer rect may fall on a factional value, this
      *  method is defined to return (right + left) >> 1.
@@ -393,6 +395,12 @@ struct SK_API SkRect {
         return r;
     }
 
+    static SkRect SK_WARN_UNUSED_RESULT MakeIWH(int w, int h) {
+        SkRect r;
+        r.set(0, 0, SkIntToScalar(w), SkIntToScalar(h));
+        return r;
+    }
+
     static SkRect SK_WARN_UNUSED_RESULT MakeSize(const SkSize& size) {
         SkRect r;
         r.set(0, 0, size.width(), size.height());
@@ -453,11 +461,11 @@ struct SK_API SkRect {
         accum *= fBottom;
 
         // accum is either NaN or it is finite (zero).
-        SkASSERT(0 == accum || !(accum == accum));
+        SkASSERT(0 == accum || SkScalarIsNaN(accum));
 
         // value==value will be true iff value is not NaN
         // TODO: is it faster to say !accum or accum==accum?
-        return accum == accum;
+        return !SkScalarIsNaN(accum);
     }
 
     SkScalar    x() const { return fLeft; }
@@ -684,6 +692,11 @@ public:
         return Intersects(fLeft, fTop, fRight, fBottom, left, top, right, bottom);
     }
 
+    bool intersects(const SkRect& r) const {
+        return Intersects(fLeft, fTop, fRight, fBottom,
+                          r.fLeft, r.fTop, r.fRight, r.fBottom);
+    }
+
     /**
      *  Return true if rectangles a and b are not empty and intersect.
      */
@@ -801,15 +814,16 @@ public:
     }
 
     /**
-     *  Expand this rectangle by rounding its coordinates "out", choosing the
-     *  floor of top and left, and the ceil of right and bottom. If this rect
-     *  is already on integer coordinates, then it will be unchanged.
+     *  Set the dst rectangle by rounding "out" this rectangle, choosing the
+     *  SkScalarFloorToScalar of top and left, and the SkScalarCeilToScalar of right and bottom.
+     *
+     *  It is safe for this == dst
      */
-    void roundOut() {
-        this->set(SkScalarFloorToScalar(fLeft),
-                  SkScalarFloorToScalar(fTop),
-                  SkScalarCeilToScalar(fRight),
-                  SkScalarCeilToScalar(fBottom));
+    void roundOut(SkRect* dst) const {
+        dst->set(SkScalarFloorToScalar(fLeft),
+                 SkScalarFloorToScalar(fTop),
+                 SkScalarCeilToScalar(fRight),
+                 SkScalarCeilToScalar(fBottom));
     }
 
     /**
@@ -824,16 +838,20 @@ public:
                  SkScalarFloorToInt(fRight), SkScalarFloorToInt(fBottom));
     }
 
-    /**
-     *  Return a new SkIRect which is contains the rounded coordinates of this
-     *  rect using SkScalarRoundToInt.
-     */
+    //! Returns the result of calling round(&dst)
     SkIRect round() const {
         SkIRect ir;
         this->round(&ir);
         return ir;
     }
-
+    
+    //! Returns the result of calling roundOut(&dst)
+    SkIRect roundOut() const {
+        SkIRect ir;
+        this->roundOut(&ir);
+        return ir;
+    }
+    
     /**
      *  Swap top/bottom or left/right if there are flipped (i.e. if width()
      *  or height() would have returned a negative value.) This should be called
@@ -841,15 +859,13 @@ public:
      *  other. When this returns, left <= right && top <= bottom
      */
     void sort() {
-        SkScalar min = SkMinScalar(fLeft, fRight);
-        SkScalar max = SkMaxScalar(fLeft, fRight);
-        fLeft = min;
-        fRight = max;
-        
-        min = SkMinScalar(fTop, fBottom);
-        max = SkMaxScalar(fTop, fBottom);
-        fTop = min;
-        fBottom = max;
+        if (fLeft > fRight) {
+            SkTSwap<SkScalar>(fLeft, fRight);
+        }
+
+        if (fTop > fBottom) {
+            SkTSwap<SkScalar>(fTop, fBottom);
+        }
     }
 
     /**
@@ -857,16 +873,9 @@ public:
      */
     const SkScalar* asScalars() const { return &fLeft; }
 
-#ifdef SK_DEVELOPER
-    /**
-     * Dumps the rect using SkDebugf. This is intended for Skia development debugging. Don't
-     * rely on the existence of this function or the formatting of its output.
-     */
-    void dump() const {
-        SkDebugf("{ l: %f, t: %f, r: %f, b: %f }", fLeft, fTop, fRight, fBottom);
-    }
-#endif
-
+    void dump(bool asHex) const;
+    void dump() const { this->dump(false); }
+    void dumpHex() const { this->dump(true); }
 };
 
 #endif

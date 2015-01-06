@@ -12,15 +12,14 @@
 #include "GrGLBufferImpl.h"
 #include "gl/GrGLInterface.h"
 
-class GrGpuGL;
+class GrGLGpu;
 
 class GrGLIndexBuffer : public GrIndexBuffer {
 
 public:
     typedef GrGLBufferImpl::Desc Desc;
 
-    GrGLIndexBuffer(GrGpuGL* gpu, const Desc& desc);
-    virtual ~GrGLIndexBuffer() { this->release(); }
+    GrGLIndexBuffer(GrGLGpu* gpu, const Desc& desc);
 
     GrGLuint bufferID() const { return fImpl.bufferID(); }
     size_t baseOffset() const { return fImpl.baseOffset(); }
@@ -40,9 +39,9 @@ private:
     virtual void onUnmap() SK_OVERRIDE;
     virtual bool onUpdateData(const void* src, size_t srcSizeInBytes) SK_OVERRIDE;
 
-    GrGpuGL* getGpuGL() const {
+    GrGLGpu* getGpuGL() const {
         SkASSERT(!this->wasDestroyed());
-        return (GrGpuGL*)(this->getGpu());
+        return (GrGLGpu*)(this->getGpu());
     }
 
     GrGLBufferImpl fImpl;

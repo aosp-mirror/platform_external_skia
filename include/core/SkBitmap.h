@@ -14,16 +14,6 @@
 #include "SkPoint.h"
 #include "SkRefCnt.h"
 
-#ifdef SK_SUPPORT_LEGACY_ALLOCPIXELS_BOOL
-    #define SK_ALLOCPIXELS_RETURN_TYPE  bool
-    #define SK_ALLOCPIXELS_RETURN_TRUE  return true
-    #define SK_ALLOCPIXELS_RETURN_FAIL  return false
-#else
-    #define SK_ALLOCPIXELS_RETURN_TYPE  void
-    #define SK_ALLOCPIXELS_RETURN_TRUE  return
-    #define SK_ALLOCPIXELS_RETURN_FAIL  sk_throw()
-#endif
-
 struct SkMask;
 struct SkIRect;
 struct SkRect;
@@ -82,6 +72,7 @@ public:
     int height() const { return fInfo.height(); }
     SkColorType colorType() const { return fInfo.colorType(); }
     SkAlphaType alphaType() const { return fInfo.alphaType(); }
+    SkColorProfileType profileType() const { return fInfo.profileType(); }
 
     /**
      *  Return the number of bytes per pixel based on the colortype. If the colortype is
@@ -220,6 +211,9 @@ public:
     void getBounds(SkRect* bounds) const;
     void getBounds(SkIRect* bounds) const;
 
+    SkIRect bounds() const { return fInfo.bounds(); }
+    SkISize dimensions() const { return fInfo.dimensions(); }
+
     bool setInfo(const SkImageInfo&, size_t rowBytes = 0);
 
     /**
@@ -230,12 +224,10 @@ public:
      */
     bool SK_WARN_UNUSED_RESULT tryAllocPixels(const SkImageInfo&, SkPixelRefFactory*, SkColorTable*);
 
-    SK_ALLOCPIXELS_RETURN_TYPE allocPixels(const SkImageInfo& info, SkPixelRefFactory* factory,
-                                           SkColorTable* ctable) {
+    void allocPixels(const SkImageInfo& info, SkPixelRefFactory* factory, SkColorTable* ctable) {
         if (!this->tryAllocPixels(info, factory, ctable)) {
-            SK_ALLOCPIXELS_RETURN_FAIL;
+            sk_throw();
         }
-        SK_ALLOCPIXELS_RETURN_TRUE;
     }
 
     /**
@@ -248,19 +240,18 @@ public:
      */
     bool SK_WARN_UNUSED_RESULT tryAllocPixels(const SkImageInfo& info, size_t rowBytes);
 
-    SK_ALLOCPIXELS_RETURN_TYPE allocPixels(const SkImageInfo& info, size_t rowBytes) {
+    void allocPixels(const SkImageInfo& info, size_t rowBytes) {
         if (!this->tryAllocPixels(info, rowBytes)) {
-            SK_ALLOCPIXELS_RETURN_FAIL;
+            sk_throw();
         }
-        SK_ALLOCPIXELS_RETURN_TRUE;
     }
 
     bool SK_WARN_UNUSED_RESULT tryAllocPixels(const SkImageInfo& info) {
         return this->tryAllocPixels(info, info.minRowBytes());
     }
 
-    SK_ALLOCPIXELS_RETURN_TYPE allocPixels(const SkImageInfo& info) {
-        return this->allocPixels(info, info.minRowBytes());
+    void allocPixels(const SkImageInfo& info) {
+        this->allocPixels(info, info.minRowBytes());
     }
 
     bool SK_WARN_UNUSED_RESULT tryAllocN32Pixels(int width, int height, bool isOpaque = false) {
@@ -268,13 +259,13 @@ public:
                                             isOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
         return this->tryAllocPixels(info);
     }
-    
-    SK_ALLOCPIXELS_RETURN_TYPE allocN32Pixels(int width, int height, bool isOpaque = false) {
+
+    void allocN32Pixels(int width, int height, bool isOpaque = false) {
         SkImageInfo info = SkImageInfo::MakeN32(width, height,
                                             isOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
-        return this->allocPixels(info);
+        this->allocPixels(info);
     }
-    
+
     /**
      *  Install a pixelref that wraps the specified pixels and rowBytes, and
      *  optional ReleaseProc and context. When the pixels are no longer
@@ -351,8 +342,8 @@ public:
         return this->tryAllocPixels(NULL, ctable);
     }
 
-    SK_ALLOCPIXELS_RETURN_TYPE allocPixels(SkColorTable* ctable = NULL) {
-        return this->allocPixels(NULL, ctable);
+    void allocPixels(SkColorTable* ctable = NULL) {
+        this->allocPixels(NULL, ctable);
     }
 
     /** Use the specified Allocator to create the pixelref that manages the
@@ -375,11 +366,10 @@ public:
     */
     bool SK_WARN_UNUSED_RESULT tryAllocPixels(Allocator* allocator, SkColorTable* ctable);
 
-    SK_ALLOCPIXELS_RETURN_TYPE allocPixels(Allocator* allocator, SkColorTable* ctable) {
+    void allocPixels(Allocator* allocator, SkColorTable* ctable) {
         if (!this->tryAllocPixels(allocator, ctable)) {
-            SK_ALLOCPIXELS_RETURN_FAIL;
+            sk_throw();
         }
-        SK_ALLOCPIXELS_RETURN_TRUE;
     }
 
     /**
@@ -794,60 +784,6 @@ private:
 };
 //TODO(mtklein): uncomment when 71713004 lands and Chromium's fixed.
 //#define SkAutoLockPixels(...) SK_REQUIRE_LOCAL_VAR(SkAutoLockPixels)
-
-/** Helper class that performs the lock/unlockColors calls on a colortable.
-    The destructor will call unlockColors(false) if it has a bitmap's colortable
-*/
-class SkAutoLockColors : SkNoncopyable {
-public:
-    /** Initialize with no bitmap. Call lockColors(bitmap) to lock bitmap's
-        colortable
-     */
-    SkAutoLockColors() : fCTable(NULL), fColors(NULL) {}
-    /** Initialize with bitmap, locking its colortable if present
-     */
-    explicit SkAutoLockColors(const SkBitmap& bm) {
-        fCTable = bm.getColorTable();
-        fColors = fCTable ? fCTable->lockColors() : NULL;
-    }
-    /** Initialize with a colortable (may be null)
-     */
-    explicit SkAutoLockColors(SkColorTable* ctable) {
-        fCTable = ctable;
-        fColors = ctable ? ctable->lockColors() : NULL;
-    }
-    ~SkAutoLockColors() {
-        if (fCTable) {
-            fCTable->unlockColors();
-        }
-    }
-
-    /** Return the currently locked colors, or NULL if no bitmap's colortable
-        is currently locked.
-    */
-    const SkPMColor* colors() const { return fColors; }
-
-    /** Locks the table and returns is colors (assuming ctable is not null) and
-        unlocks the previous table if one was present
-     */
-    const SkPMColor* lockColors(SkColorTable* ctable) {
-        if (fCTable) {
-            fCTable->unlockColors();
-        }
-        fCTable = ctable;
-        fColors = ctable ? ctable->lockColors() : NULL;
-        return fColors;
-    }
-
-    const SkPMColor* lockColors(const SkBitmap& bm) {
-        return this->lockColors(bm.getColorTable());
-    }
-
-private:
-    SkColorTable*    fCTable;
-    const SkPMColor* fColors;
-};
-#define SkAutoLockColors(...) SK_REQUIRE_LOCAL_VAR(SkAutoLockColors)
 
 ///////////////////////////////////////////////////////////////////////////////
 

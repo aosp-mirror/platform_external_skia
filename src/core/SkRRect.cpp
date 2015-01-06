@@ -97,6 +97,32 @@ void SkRRect::setNinePatch(const SkRect& rect, SkScalar leftRad, SkScalar topRad
     SkDEBUGCODE(this->validate();)
 }
 
+/*
+ *  TODO: clean this guy up and possibly add to SkScalar.h
+ */
+static inline SkScalar SkScalarDecULP(SkScalar value) {
+#if SK_SCALAR_IS_FLOAT
+        return SkBits2Float(SkFloat2Bits(value) - 1);
+#else
+    #error "need impl for doubles"
+#endif
+}
+
+static SkScalar clamp_radius_add(SkScalar rad, SkScalar min, SkScalar max) {
+    SkASSERT(rad <= max - min);
+    if (min + rad > max) {
+        rad = SkScalarDecULP(rad);
+    }
+    return rad;
+}
+
+static SkScalar clamp_radius_sub(SkScalar rad, SkScalar min, SkScalar max) {
+    SkASSERT(rad <= max - min);
+    if (max - rad < min) {
+        rad = SkScalarDecULP(rad);
+    }
+    return rad;
+}
 
 void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
     if (rect.isEmpty()) {
@@ -159,15 +185,29 @@ void SkRRect::setRectRadii(const SkRect& rect, const SkVector radii[4]) {
 
     if (scale < SK_Scalar1) {
         for (int i = 0; i < 4; ++i) {
-            fRadii[i].fX = SkScalarMul(fRadii[i].fX, scale);
-            fRadii[i].fY = SkScalarMul(fRadii[i].fY, scale);
+            fRadii[i].fX *= scale;
+            fRadii[i].fY *= scale;
         }
     }
 
-    // At this point we're either oval, simple, or complex (not empty or rect)
-    // but we lazily resolve the type to avoid the work if the information
-    // isn't required.
-    fType = (SkRRect::Type) kUnknown_Type;
+    // skbug.com/3239 -- its possible that we can hit the following inconsistency:
+    //     rad == bounds.bottom - bounds.top
+    //     bounds.bottom - radius < bounds.top
+    //     YIKES
+    // We need to detect and "fix" this now, otherwise we can have the following wackiness:
+    //     path.addRRect(rrect);
+    //     rrect.rect() != path.getBounds()
+    fRadii[0].fX = clamp_radius_add(fRadii[0].fX, rect.fLeft, rect.fRight);
+    fRadii[0].fY = clamp_radius_add(fRadii[0].fY, rect.fTop, rect.fBottom);
+    fRadii[1].fX = clamp_radius_sub(fRadii[1].fX, rect.fLeft, rect.fRight);
+    fRadii[1].fY = clamp_radius_add(fRadii[1].fY, rect.fTop, rect.fBottom);
+    fRadii[2].fX = clamp_radius_sub(fRadii[2].fX, rect.fLeft, rect.fRight);
+    fRadii[2].fY = clamp_radius_sub(fRadii[2].fY, rect.fTop, rect.fBottom);
+    fRadii[3].fX = clamp_radius_add(fRadii[3].fX, rect.fLeft, rect.fRight);
+    fRadii[3].fY = clamp_radius_sub(fRadii[3].fY, rect.fTop, rect.fBottom);
+
+    // At this point we're either oval, simple, or complex (not empty or rect).
+    this->computeType();
 
     SkDEBUGCODE(this->validate();)
 }
@@ -263,8 +303,12 @@ static bool radii_are_nine_patch(const SkVector radii[4]) {
 }
 
 // There is a simplified version of this method in setRectXY
-void SkRRect::computeType() const {
-    SkDEBUGCODE(this->validate();)
+void SkRRect::computeType() {
+    struct Validator {
+        Validator(const SkRRect* r) : fR(r) {}
+        ~Validator() { SkDEBUGCODE(fR->validate();) }
+        const SkRRect* fR;
+    } autoValidate(this);
 
     if (fRect.isEmpty()) {
         fType = kEmpty_Type;
@@ -445,17 +489,27 @@ size_t SkRRect::readFromMemory(const void* buffer, size_t length) {
     return kSizeInMemory;
 }
 
-#ifdef SK_DEVELOPER
-void SkRRect::dump() const {
-    SkDebugf("Rect: ");
-    fRect.dump();
-    SkDebugf(" Corners: { TL: (%f, %f), TR: (%f, %f), BR: (%f, %f), BL: (%f, %f) }",
-             fRadii[kUpperLeft_Corner].fX,  fRadii[kUpperLeft_Corner].fY,
-             fRadii[kUpperRight_Corner].fX, fRadii[kUpperRight_Corner].fY,
-             fRadii[kLowerRight_Corner].fX, fRadii[kLowerRight_Corner].fY,
-             fRadii[kLowerLeft_Corner].fX,  fRadii[kLowerLeft_Corner].fY);
+#include "SkString.h"
+#include "SkStringUtils.h"
+
+void SkRRect::dump(bool asHex) const {
+    SkScalarAsStringType asType = asHex ? kHex_SkScalarAsStringType : kDec_SkScalarAsStringType;
+
+    fRect.dump(asHex);
+    SkString line("const SkPoint corners[] = {\n");
+    for (int i = 0; i < 4; ++i) {
+        SkString strX, strY;
+        SkAppendScalar(&strX, fRadii[i].x(), asType);
+        SkAppendScalar(&strY, fRadii[i].y(), asType);
+        line.appendf("    { %s, %s },", strX.c_str(), strY.c_str());
+        if (asHex) {
+            line.appendf(" /* %f %f */", fRadii[i].x(), fRadii[i].y());
+        }
+        line.append("\n");
+    }
+    line.append("};");
+    SkDebugf("%s\n", line.c_str());
 }
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -511,9 +565,6 @@ void SkRRect::validate() const {
             SkASSERT(!fRect.isEmpty());
             SkASSERT(!allRadiiZero && !allRadiiSame && !allCornersSquare);
             SkASSERT(!patchesOfNine);
-            break;
-        case kUnknown_Type:
-            // no limits on this
             break;
     }
 }

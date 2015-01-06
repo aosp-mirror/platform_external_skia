@@ -148,18 +148,8 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
                 reader->setOffset(offsetToRestore);
             }
         } break;
-        case PUSH_CULL: {
-            const SkRect& cullRect = reader->skipT<SkRect>();
-            size_t offsetToRestore = reader->readInt();
-            if (offsetToRestore && canvas->quickReject(cullRect)) {
-                reader->setOffset(offsetToRestore);
-            } else {
-                canvas->pushCull(cullRect);
-            }
-        } break;
-        case POP_CULL:
-            canvas->popCull();
-            break;
+        case PUSH_CULL: break;  // Deprecated, safe to ignore both push and pop.
+        case POP_CULL:  break;
         case CONCAT: {
             SkMatrix matrix;
             reader->readMatrix(&matrix);
@@ -186,7 +176,10 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             const SkBitmap bitmap = shallow_copy(fPictureData->getBitmap(reader));
             SkMatrix matrix;
             reader->readMatrix(&matrix);
-            canvas->drawBitmapMatrix(bitmap, matrix, paint);
+
+            SkAutoCanvasRestore acr(canvas, true);
+            canvas->concat(matrix);
+            canvas->drawBitmap(bitmap, 0, 0, paint);
         } break;
         case DRAW_BITMAP_NINE: {
             const SkPaint* paint = fPictureData->getPaint(reader);
@@ -199,8 +192,9 @@ void SkPicturePlayback::handleOp(SkReader32* reader,
             canvas->clear(reader->readInt());
             break;
         case DRAW_DATA: {
+            // This opcode is now dead, just need to skip it for backwards compatibility
             size_t length = reader->readInt();
-            canvas->drawData(reader->skip(length), length);
+            (void)reader->skip(length);
             // skip handles padding the read out to a multiple of 4
         } break;
         case DRAW_DRRECT: {

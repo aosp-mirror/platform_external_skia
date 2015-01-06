@@ -14,14 +14,12 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 #if SK_SUPPORT_GPU
+#include "GrInvariantOutput.h"
 #include "effects/GrSingleTextureEffect.h"
 #include "gl/GrGLProcessor.h"
-#include "gl/builders/GrGLProgramBuilder.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLTexture.h"
-#include "GrTBackendProcessorFactory.h"
-
-class GrGLMagnifierEffect;
+#include "gl/builders/GrGLProgramBuilder.h"
 
 class GrMagnifierEffect : public GrSingleTextureEffect {
 
@@ -44,17 +42,18 @@ public:
 
     virtual ~GrMagnifierEffect() {};
 
-    static const char* Name() { return "Magnifier"; }
+    virtual const char* name() const SK_OVERRIDE { return "Magnifier"; }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
+
     float x_offset() const { return fXOffset; }
     float y_offset() const { return fYOffset; }
     float x_inv_zoom() const { return fXInvZoom; }
     float y_inv_zoom() const { return fYInvZoom; }
     float x_inv_inset() const { return fXInvInset; }
     float y_inv_inset() const { return fYInvInset; }
-
-    typedef GrGLMagnifierEffect GLProcessor;
 
 private:
     GrMagnifierEffect(GrTexture* texture,
@@ -70,11 +69,13 @@ private:
         , fXInvZoom(xInvZoom)
         , fYInvZoom(yInvZoom)
         , fXInvInset(xInvInset)
-        , fYInvInset(yInvInset) {}
+        , fYInvInset(yInvInset) {
+        this->initClassID<GrMagnifierEffect>();
+    }
 
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
@@ -93,11 +94,10 @@ typedef GrGLProgramDataManager::UniformHandle UniformHandle;
 
 class GrGLMagnifierEffect : public GrGLFragmentProcessor {
 public:
-    GrGLMagnifierEffect(const GrBackendProcessorFactory&, const GrProcessor&);
+    GrGLMagnifierEffect(const GrProcessor&);
 
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -113,14 +113,11 @@ private:
     typedef GrGLFragmentProcessor INHERITED;
 };
 
-GrGLMagnifierEffect::GrGLMagnifierEffect(const GrBackendProcessorFactory& factory,
-                                         const GrProcessor&)
-    : INHERITED(factory) {
+GrGLMagnifierEffect::GrGLMagnifierEffect(const GrProcessor&) {
 }
 
 void GrGLMagnifierEffect::emitCode(GrGLFPBuilder* builder,
                                    const GrFragmentProcessor&,
-                                   const GrProcessorKey& key,
                                    const char* outputColor,
                                    const char* inputColor,
                                    const TransformedCoordsArray& coords,
@@ -128,15 +125,15 @@ void GrGLMagnifierEffect::emitCode(GrGLFPBuilder* builder,
     fOffsetVar = builder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
-        kVec2f_GrSLType, "Offset");
+        kVec2f_GrSLType, kDefault_GrSLPrecision, "Offset");
     fInvZoomVar = builder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
-        kVec2f_GrSLType, "InvZoom");
+        kVec2f_GrSLType, kDefault_GrSLPrecision, "InvZoom");
     fInvInsetVar = builder->addUniform(
         GrGLProgramBuilder::kFragment_Visibility |
         GrGLProgramBuilder::kVertex_Visibility,
-        kVec2f_GrSLType, "InvInset");
+        kVec2f_GrSLType, kDefault_GrSLPrecision, "InvInset");
 
     GrGLFPFragmentBuilder* fsBuilder = builder->getFragmentShaderBuilder();
     SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 0);
@@ -182,6 +179,15 @@ void GrGLMagnifierEffect::setData(const GrGLProgramDataManager& pdman,
 
 /////////////////////////////////////////////////////////////////////
 
+void GrMagnifierEffect::getGLProcessorKey(const GrGLCaps& caps,
+                                          GrProcessorKeyBuilder* b) const {
+    GrGLMagnifierEffect::GenKey(*this, caps, b);
+}
+
+GrGLFragmentProcessor* GrMagnifierEffect::createGLInstance() const {
+    return SkNEW_ARGS(GrGLMagnifierEffect, (*this));
+}
+
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(GrMagnifierEffect);
 
 GrFragmentProcessor* GrMagnifierEffect::TestCreate(SkRandom* random,
@@ -212,14 +218,9 @@ GrFragmentProcessor* GrMagnifierEffect::TestCreate(SkRandom* random,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-const GrBackendFragmentProcessorFactory& GrMagnifierEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrMagnifierEffect>::getInstance();
-}
-
-bool GrMagnifierEffect::onIsEqual(const GrProcessor& sBase) const {
+bool GrMagnifierEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     const GrMagnifierEffect& s = sBase.cast<GrMagnifierEffect>();
-    return (this->texture(0) == s.texture(0) &&
-            this->fXOffset == s.fXOffset &&
+    return (this->fXOffset == s.fXOffset &&
             this->fYOffset == s.fYOffset &&
             this->fXInvZoom == s.fXInvZoom &&
             this->fYInvZoom == s.fYInvZoom &&
@@ -227,7 +228,7 @@ bool GrMagnifierEffect::onIsEqual(const GrProcessor& sBase) const {
             this->fYInvInset == s.fYInvInset);
 }
 
-void GrMagnifierEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void GrMagnifierEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     this->updateInvariantOutputForModulation(inout);
 }
 
@@ -237,7 +238,7 @@ void GrMagnifierEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
 
 SkImageFilter* SkMagnifierImageFilter::Create(const SkRect& srcRect, SkScalar inset,
                                               SkImageFilter* input) {
-    
+
     if (!SkScalarIsFinite(inset) || !SkIsValidRect(srcRect)) {
         return NULL;
     }
@@ -248,22 +249,6 @@ SkImageFilter* SkMagnifierImageFilter::Create(const SkRect& srcRect, SkScalar in
     return SkNEW_ARGS(SkMagnifierImageFilter, (srcRect, inset, input));
 }
 
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkMagnifierImageFilter::SkMagnifierImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    float x = buffer.readScalar();
-    float y = buffer.readScalar();
-    float width = buffer.readScalar();
-    float height = buffer.readScalar();
-    fSrcRect = SkRect::MakeXYWH(x, y, width, height);
-    fInset = buffer.readScalar();
-
-    buffer.validate(SkScalarIsFinite(fInset) && SkIsValidRect(fSrcRect) &&
-                    // Negative numbers in src rect are not supported
-                    (fSrcRect.fLeft >= 0) && (fSrcRect.fTop >= 0));
-}
-#endif
 
 SkMagnifierImageFilter::SkMagnifierImageFilter(const SkRect& srcRect, SkScalar inset,
                                                SkImageFilter* input)
@@ -372,3 +357,13 @@ bool SkMagnifierImageFilter::onFilterImage(Proxy*, const SkBitmap& src,
     }
     return true;
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void SkMagnifierImageFilter::toString(SkString* str) const {
+    str->appendf("SkMagnifierImageFilter: (");
+    str->appendf("src: (%f,%f,%f,%f) ",
+                 fSrcRect.fLeft, fSrcRect.fTop, fSrcRect.fRight, fSrcRect.fBottom);
+    str->appendf("inset: %f", fInset);
+    str->append(")");
+}
+#endif

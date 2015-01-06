@@ -31,8 +31,7 @@
 #endif
 
 static bool isLCD(const SkScalerContext::Rec& rec) {
-    return SkMask::kLCD16_Format == rec.fMaskFormat ||
-           SkMask::kLCD32_Format == rec.fMaskFormat;
+    return SkMask::kLCD16_Format == rec.fMaskFormat;
 }
 
 static bool is_hinted_without_gasp(DWriteFontTypeface* typeface) {
@@ -211,26 +210,29 @@ SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
     // Also, rotated glyphs should have the same absolute advance widths as
     // horizontal glyphs and the subpixel flag should not affect glyph shapes.
 
-    // A is the total matrix.
-    SkMatrix A;
-    fRec.getSingleMatrix(&A);
+    SkVector scale;
+    SkMatrix GsA;
+    fRec.computeMatrices(SkScalerContextRec::kVertical_PreMatrixScale,
+                         &scale, &fSkXform, &GsA, &fG_inv);
 
-    // h is where A maps the horizontal baseline.
-    SkPoint h = SkPoint::Make(SK_Scalar1, 0);
-    A.mapPoints(&h, 1);
+    fXform.m11 = SkScalarToFloat(fSkXform.getScaleX());
+    fXform.m12 = SkScalarToFloat(fSkXform.getSkewY());
+    fXform.m21 = SkScalarToFloat(fSkXform.getSkewX());
+    fXform.m22 = SkScalarToFloat(fSkXform.getScaleY());
+    fXform.dx = 0;
+    fXform.dy = 0;
 
-    // G is the Givens Matrix for A (rotational matrix where GA[0][1] == 0).
-    SkMatrix G;
-    SkComputeGivensRotation(h, &G);
-
-    // GA is the matrix A with rotation removed.
-    SkMatrix GA(G);
-    GA.preConcat(A);
+    fGsA.m11 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleX));
+    fGsA.m12 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewY)); // This should be ~0.
+    fGsA.m21 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewX));
+    fGsA.m22 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleY));
+    fGsA.dx = 0;
+    fGsA.dy = 0;
 
     // realTextSize is the actual device size we want (as opposed to the size the user requested).
     // gdiTextSize is the size we request when GDI compatible.
     // If the scale is negative, this means the matrix will do the flip anyway.
-    SkScalar realTextSize = SkScalarAbs(GA.get(SkMatrix::kMScaleY));
+    const SkScalar realTextSize = scale.fY;
     // Due to floating point math, the lower bits are suspect. Round carefully.
     SkScalar gdiTextSize = SkScalarRoundToScalar(realTextSize * 64.0f) / 64.0f;
     if (gdiTextSize == 0) {
@@ -301,36 +303,6 @@ SkScalerContext_DW::SkScalerContext_DW(DWriteFontTypeface* typeface,
         fTextSizeMeasure = realTextSize;
         fMeasuringMode = DWRITE_MEASURING_MODE_NATURAL;
     }
-
-    // Remove the realTextSize, as that is the text height scale currently in A.
-    SkScalar scale = SkScalarInvert(realTextSize);
-
-    // fSkXform is the total matrix A without the text height scale.
-    fSkXform = A;
-    fSkXform.preScale(scale, scale); //remove the text height scale.
-
-    fXform.m11 = SkScalarToFloat(fSkXform.getScaleX());
-    fXform.m12 = SkScalarToFloat(fSkXform.getSkewY());
-    fXform.m21 = SkScalarToFloat(fSkXform.getSkewX());
-    fXform.m22 = SkScalarToFloat(fSkXform.getScaleY());
-    fXform.dx = 0;
-    fXform.dy = 0;
-
-    // GsA is the non-rotational part of A without the text height scale.
-    SkMatrix GsA(GA);
-    GsA.preScale(scale, scale); //remove text height scale, G is rotational so reorders with scale.
-
-    fGsA.m11 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleX));
-    fGsA.m12 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewY)); // This should be ~0.
-    fGsA.m21 = SkScalarToFloat(GsA.get(SkMatrix::kMSkewX));
-    fGsA.m22 = SkScalarToFloat(GsA.get(SkMatrix::kMScaleY));
-    fGsA.dx = 0;
-    fGsA.dy = 0;
-
-    // fG_inv is G inverse, which is fairly simple since G is 2x2 rotational.
-    fG_inv.setAll(G.get(SkMatrix::kMScaleX), -G.get(SkMatrix::kMSkewX), G.get(SkMatrix::kMTransX),
-                  -G.get(SkMatrix::kMSkewY), G.get(SkMatrix::kMScaleY), G.get(SkMatrix::kMTransY),
-                  G.get(SkMatrix::kMPersp0), G.get(SkMatrix::kMPersp1), G.get(SkMatrix::kMPersp2));
 }
 
 SkScalerContext_DW::~SkScalerContext_DW() {
@@ -637,24 +609,6 @@ static void rgb_to_lcd16(const uint8_t* SK_RESTRICT src, const SkGlyph& glyph,
     }
 }
 
-template<bool APPLY_PREBLEND>
-static void rgb_to_lcd32(const uint8_t* SK_RESTRICT src, const SkGlyph& glyph,
-                         const uint8_t* tableR, const uint8_t* tableG, const uint8_t* tableB) {
-    const size_t dstRB = glyph.rowBytes();
-    const U16CPU width = glyph.fWidth;
-    SkPMColor* SK_RESTRICT dst = static_cast<SkPMColor*>(glyph.fImage);
-
-    for (U16CPU y = 0; y < glyph.fHeight; y++) {
-        for (U16CPU i = 0; i < width; i++) {
-            U8CPU r = sk_apply_lut_if<APPLY_PREBLEND>(*(src++), tableR);
-            U8CPU g = sk_apply_lut_if<APPLY_PREBLEND>(*(src++), tableG);
-            U8CPU b = sk_apply_lut_if<APPLY_PREBLEND>(*(src++), tableB);
-            dst[i] = SkPackARGB32(0xFF, r, g, b);
-        }
-        dst = (SkPMColor*)((char*)dst + dstRB);
-    }
-}
-
 const void* SkScalerContext_DW::drawDWMask(const SkGlyph& glyph,
                                            DWRITE_RENDERING_MODE renderingMode,
                                            DWRITE_TEXTURE_TYPE textureType)
@@ -742,18 +696,12 @@ void SkScalerContext_DW::generateImage(const SkGlyph& glyph) {
         } else {
             rgb_to_a8<false>(src, glyph, fPreBlend.fG);
         }
-    } else if (SkMask::kLCD16_Format == glyph.fMaskFormat) {
+    } else {
+        SkASSERT(SkMask::kLCD16_Format == glyph.fMaskFormat);
         if (fPreBlend.isApplicable()) {
             rgb_to_lcd16<true>(src, glyph, fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
         } else {
             rgb_to_lcd16<false>(src, glyph, fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
-        }
-    } else {
-        SkASSERT(SkMask::kLCD32_Format == glyph.fMaskFormat);
-        if (fPreBlend.isApplicable()) {
-            rgb_to_lcd32<true>(src, glyph, fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
-        } else {
-            rgb_to_lcd32<false>(src, glyph, fPreBlend.fR, fPreBlend.fG, fPreBlend.fB);
         }
     }
 }

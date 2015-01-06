@@ -259,8 +259,12 @@ public:
 
     virtual void tearDownBackend(SampleWindow *win) {
 #if SK_SUPPORT_GPU
-        SkSafeUnref(fCurContext);
-        fCurContext = NULL;
+        if (fCurContext) {
+            // in case we have outstanding refs to this guy (lua?)
+            fCurContext->abandonContext();
+            fCurContext->unref();
+            fCurContext = NULL;
+        }
 
         SkSafeUnref(fCurIntf);
         fCurIntf = NULL;
@@ -297,7 +301,8 @@ public:
                 const SkBitmap& bm = win->getBitmap();
                 fCurRenderTarget->writePixels(0, 0, bm.width(), bm.height(),
                                              SkImageInfo2GrPixelConfig(bm.colorType(),
-                                                                       bm.alphaType()),
+                                                                       bm.alphaType(),
+                                                                       bm.profileType()),
                                              bm.getPixels(),
                                              bm.rowBytes(),
                                              GrContext::kFlushWrites_PixelOp);
@@ -742,6 +747,8 @@ DEFINE_bool(list, false, "List samples?");
 DEFINE_string(pdfPath, "", "Path to direcotry of pdf files.");
 #endif
 
+#include "SkTaskGroup.h"
+
 SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* devManager)
     : INHERITED(hwnd)
     , fDevManager(NULL) {
@@ -813,6 +820,7 @@ SampleWindow::SampleWindow(void* hwnd, int argc, char** argv, DeviceManager* dev
         fCurrIndex = 0;
     }
 
+    static SkTaskGroup::Enabler enabled(-1);
     gSampleWindow = this;
 
 #ifdef  PIPE_FILE
@@ -1306,7 +1314,7 @@ SkCanvas* SampleWindow::beforeChildren(SkCanvas* canvas) {
 
     return canvas;
 }
-
+#include "SkMultiPictureDraw.h"
 void SampleWindow::afterChildren(SkCanvas* orig) {
     if (fSaveToPdf) {
         fSaveToPdf = false;
@@ -1336,7 +1344,39 @@ void SampleWindow::afterChildren(SkCanvas* orig) {
 
         if (true) {
             this->installDrawFilter(orig);
-            orig->drawPicture(picture);
+            
+            if (true) {
+                SkImageInfo info;
+                size_t rowBytes;
+                void* addr = orig->accessTopLayerPixels(&info, &rowBytes);
+                if (addr) {
+                    SkSurface* surfs[4];
+                    SkMultiPictureDraw md;
+
+                    SkImageInfo n = SkImageInfo::Make(info.width()/2, info.height()/2,
+                                                      info.colorType(), info.alphaType());
+                    int index = 0;
+                    for (int y = 0; y < 2; ++y) {
+                        for (int x = 0; x < 2; ++x) {
+                            char* p = (char*)addr;
+                            p += y * n.height() * rowBytes;
+                            p += x * n.width() * sizeof(SkPMColor);
+                            surfs[index] = SkSurface::NewRasterDirect(n, p, rowBytes);
+                            SkCanvas* c = surfs[index]->getCanvas();
+                            c->translate(SkIntToScalar(-x * n.width()),
+                                         SkIntToScalar(-y * n.height()));
+                            md.add(c, picture, NULL, NULL);
+                            index++;
+                        }
+                    }
+                    md.draw();
+                    for (int i = 0; i < 4; ++i) {
+                        surfs[i]->unref();
+                    }
+                }
+            } else {
+                orig->drawPicture(picture);
+            }
         } else if (true) {
             SkDynamicMemoryWStream ostream;
             picture->serialize(&ostream);
@@ -2381,6 +2421,7 @@ void get_preferred_size(int* x, int* y, int* width, int* height) {
 }
 
 #ifdef SK_BUILD_FOR_IOS
+#include "SkApplication.h"
 IOS_launch_type set_cmd_line_args(int , char *[], const char* resourceDir) {
     SetResourcePath(resourceDir);
     return kApplication__iOSLaunchType;

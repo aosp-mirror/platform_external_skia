@@ -44,18 +44,9 @@ SkShader::SkShader(const SkMatrix* localMatrix) {
     } else {
         fLocalMatrix.reset();
     }
+    // Pre-cache so future calls to fLocalMatrix.getType() are threadsafe.
+    (void)fLocalMatrix.getType();
 }
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkShader::SkShader(SkReadBuffer& buffer) : INHERITED(buffer) {
-    inc_shader_counter();
-    if (buffer.readBool()) {
-        buffer.readMatrix(&fLocalMatrix);
-    } else {
-        fLocalMatrix.reset();
-    }
-}
-#endif
 
 SkShader::~SkShader() {
     dec_shader_counter();
@@ -223,8 +214,8 @@ SkShader::GradientType SkShader::asAGradient(GradientInfo* info) const {
     return kNone_GradientType;
 }
 
-bool SkShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
-                                   GrFragmentProcessor**)  const {
+bool SkShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&, const SkMatrix*,
+                                   GrColor*, GrFragmentProcessor**)  const {
     return false;
 }
 
@@ -242,10 +233,10 @@ SkShader* SkShader::CreateColorShader(SkColor color) {
 
 SkShader* SkShader::CreateBitmapShader(const SkBitmap& src, TileMode tmx, TileMode tmy,
                                        const SkMatrix* localMatrix) {
-    return ::CreateBitmapShader(src, tmx, tmy, localMatrix, NULL);
+    return SkCreateBitmapShader(src, tmx, tmy, localMatrix, NULL);
 }
 
-SkShader* SkShader::CreatePictureShader(SkPicture* src, TileMode tmx, TileMode tmy,
+SkShader* SkShader::CreatePictureShader(const SkPicture* src, TileMode tmx, TileMode tmy,
                                         const SkMatrix* localMatrix, const SkRect* tile) {
     return SkPictureShader::Create(src, tmx, tmy, localMatrix, tile);
 }
@@ -270,21 +261,6 @@ SkColorShader::SkColorShader(SkColor c)
 bool SkColorShader::isOpaque() const {
     return SkColorGetA(fColor) == 255;
 }
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkColorShader::SkColorShader(SkReadBuffer& b) : INHERITED(b) {
-    // V25_COMPATIBILITY_CODE We had a boolean to make the color shader inherit the paint's
-    // color. We don't support that any more.
-    if (b.isVersionLT(SkReadBuffer::kColorShaderNoBool_Version)) {
-        if (b.readBool()) {
-            SkDEBUGFAIL("We shouldn't have pictures that recorded the inherited case.");
-            fColor = SK_ColorWHITE;
-            return;
-        }
-    }
-    fColor = b.readColor();
-}
-#endif
 
 SkFlattenable* SkColorShader::CreateProc(SkReadBuffer& buffer) {
     return SkNEW_ARGS(SkColorShader, (buffer.readColor()));
@@ -369,8 +345,9 @@ SkShader::GradientType SkColorShader::asAGradient(GradientInfo* info) const {
 
 #include "SkGr.h"
 
-bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix*,
-                                        GrColor* paintColor, GrFragmentProcessor** fp) const {
+bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix&,
+                                        const SkMatrix*, GrColor* paintColor,
+                                        GrFragmentProcessor** fp) const {
     *fp = NULL;
     SkColor skColor = fColor;
     U8CPU newA = SkMulDiv255Round(SkColorGetA(fColor), paint.getAlpha());
@@ -380,7 +357,8 @@ bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint& paint, const 
 
 #else
 
-bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
+bool SkColorShader::asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix&,
+                                        const SkMatrix*, GrColor*,
                                         GrFragmentProcessor**) const {
     SkDEBUGFAIL("Should not call in GPU-less build");
     return false;

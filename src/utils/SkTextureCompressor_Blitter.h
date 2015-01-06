@@ -309,7 +309,8 @@ public:
     virtual void blitMask(const SkMask& mask, const SkIRect& clip) SK_OVERRIDE {
 
         // Assumptions:
-        SkASSERT(!fBlitMaskCalled && (fBlitMaskCalled = true));
+        SkASSERT(!fBlitMaskCalled);
+        SkDEBUGCODE(fBlitMaskCalled = true);
         SkASSERT(SkMask::kA8_Format == mask.fFormat);
         SkASSERT(mask.fBounds.contains(clip));
 
@@ -377,7 +378,7 @@ public:
      * to preserve semantics if blitAntiH doesn't get called in too many
      * weird ways...
      */
-    virtual int requestRowsPreserved() const { return BlockDim; }
+    virtual int requestRowsPreserved() const SK_OVERRIDE { return BlockDim; }
 
 private:
     static const int kPixelsPerBlock = BlockDim * BlockDim;

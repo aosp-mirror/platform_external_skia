@@ -18,7 +18,7 @@
 static const SkScalar SW = SkIntToScalar(W);
 static const SkScalar SH = SkIntToScalar(H);
 
-static void rnd_rect(SkRect* r, SkPaint* paint, SkLCGRandom& rand) {
+static void rnd_rect(SkRect* r, SkPaint* paint, SkRandom& rand) {
     SkScalar x = rand.nextUScalar1() * W;
     SkScalar y = rand.nextUScalar1() * H;
     SkScalar w = rand.nextUScalar1() * (W >> 2);
@@ -43,15 +43,15 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("strokes_round");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(W, H*2);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         paint.setStyle(SkPaint::kStroke_Style);
         paint.setStrokeWidth(SkIntToScalar(9)/2);
@@ -65,7 +65,7 @@ protected:
                                               , SW - SkIntToScalar(2), SH - SkIntToScalar(2)
                                               ));
 
-            SkLCGRandom rand;
+            SkRandom rand;
             for (int i = 0; i < N; i++) {
                 SkRect r;
                 rnd_rect(&r, &paint, rand);
@@ -85,7 +85,7 @@ class Strokes2GM : public skiagm::GM {
     SkPath fPath;
 public:
     Strokes2GM() {
-        SkLCGRandom rand;
+        SkRandom rand;
         fPath.moveTo(0, 0);
         for (int i = 0; i < 13; i++) {
             SkScalar x = rand.nextUScalar1() * (W >> 1);
@@ -99,11 +99,11 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("strokes_poly");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(W, H*2);
     }
 
@@ -113,7 +113,7 @@ protected:
         canvas->concat(matrix);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         canvas->drawColor(SK_ColorWHITE);
 
         SkPaint paint;
@@ -129,7 +129,7 @@ protected:
                                               SW - SkIntToScalar(2),
                                               SH - SkIntToScalar(2)));
 
-            SkLCGRandom rand;
+            SkRandom rand;
             for (int i = 0; i < N/2; i++) {
                 SkRect r;
                 rnd_rect(&r, &paint, rand);
@@ -200,15 +200,15 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("strokes3");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(W, H*2);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint origPaint;
         origPaint.setAntiAlias(true);
         origPaint.setStyle(SkPaint::kStroke_Style);

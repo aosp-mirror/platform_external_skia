@@ -15,11 +15,11 @@
 #include "gl/GrGLProgram.h"
 
 class GrGLNameAllocator;
-class GrGpuGL;
+class GrGLGpu;
 
 /**
  * This class wraps the NV_path_rendering extension and manages its various
- * API versions. If a method is not present in the GrGLInterface of the GrGpuGL
+ * API versions. If a method is not present in the GrGLInterface of the GrGLGpu
  * (because the driver version is old), it tries to provide a backup
  * implementation. But if a backup implementation is not practical, it marks the
  * method as not supported.
@@ -27,9 +27,9 @@ class GrGpuGL;
 class GrGLPathRendering : public GrPathRendering {
 public:
     /**
-     * Create a new GrGLPathRendering object from a given GrGpuGL.
+     * Create a new GrGLPathRendering object from a given GrGLGpu.
      */
-    GrGLPathRendering(GrGpuGL* gpu);
+    GrGLPathRendering(GrGLGpu* gpu);
     virtual ~GrGLPathRendering();
 
     // GrPathRendering implementations.
@@ -39,11 +39,11 @@ public:
     virtual GrPathRange* createGlyphs(const SkTypeface*,
                                       const SkDescriptor*,
                                       const SkStrokeRec&) SK_OVERRIDE;
-    virtual void stencilPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
-    virtual void drawPath(const GrPath*, SkPath::FillType) SK_OVERRIDE;
-    virtual void drawPaths(const GrPathRange*, const uint32_t indices[], int count,
-                           const float transforms[], PathTransformType,
-                           SkPath::FillType) SK_OVERRIDE;
+    virtual void stencilPath(const GrPath*, const GrStencilSettings&) SK_OVERRIDE;
+    virtual void drawPath(const GrPath*, const GrStencilSettings&) SK_OVERRIDE;
+    virtual void drawPaths(const GrPathRange*, const void* indices, PathIndexType,
+                           const float transformValues[], PathTransformType, int count,
+                           const GrStencilSettings&) SK_OVERRIDE;
 
     /* Called when the 3D context state is unknown. */
     void resetContext();
@@ -107,7 +107,7 @@ private:
     };
     const Caps& caps() const { return fCaps; }
 
-    void flushPathStencilSettings(SkPath::FillType fill);
+    void flushPathStencilSettings(const GrStencilSettings&);
 
     // NV_path_rendering v1.2
     void stencilThenCoverFillPath(GrGLuint path, GrGLenum fillMode,
@@ -126,10 +126,42 @@ private:
                          GrGLuint pathBase, GrGLint reference, GrGLuint mask, GrGLenum coverMode,
                          GrGLenum transformType, const GrGLfloat *transformValues);
 
-    GrGpuGL* fGpu;
+    struct MatrixState {
+        SkMatrix        fViewMatrix;
+        SkISize         fRenderTargetSize;
+        GrSurfaceOrigin fRenderTargetOrigin;
+
+        MatrixState() { this->invalidate(); }
+        void invalidate() {
+            fViewMatrix = SkMatrix::InvalidMatrix();
+            fRenderTargetSize.fWidth = -1;
+            fRenderTargetSize.fHeight = -1;
+            fRenderTargetOrigin = (GrSurfaceOrigin) -1;
+        }
+
+        /**
+         * Gets a matrix that goes from local coordinates to GL normalized device coords.
+         */
+        template<int Size> void getRTAdjustedGLMatrix(GrGLfloat* destMatrix) {
+            SkMatrix combined;
+            if (kBottomLeft_GrSurfaceOrigin == fRenderTargetOrigin) {
+                combined.setAll(SkIntToScalar(2) / fRenderTargetSize.fWidth, 0, -SK_Scalar1,
+                                0, -SkIntToScalar(2) / fRenderTargetSize.fHeight, SK_Scalar1,
+                                0, 0, 1);
+            } else {
+                combined.setAll(SkIntToScalar(2) / fRenderTargetSize.fWidth, 0, -SK_Scalar1,
+                                0, SkIntToScalar(2) / fRenderTargetSize.fHeight, -SK_Scalar1,
+                                0, 0, 1);
+            }
+            combined.preConcat(fViewMatrix);
+            GrGLGetMatrix<Size>(destMatrix, combined);
+        }
+    };
+
+    GrGLGpu* fGpu;
     SkAutoTDelete<GrGLNameAllocator> fPathNameAllocator;
     Caps fCaps;
-    GrGLProgram::MatrixState fHWProjectionMatrixState;
+    MatrixState fHWProjectionMatrixState;
     GrStencilSettings fHWPathStencilSettings;
     struct PathTexGenData {
         GrGLenum  fMode;

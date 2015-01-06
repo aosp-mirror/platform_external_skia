@@ -34,17 +34,6 @@ public:
         kVaryingOut_TypeModifier
     };
 
-    enum Precision {
-        kLow_Precision,         // lowp
-        kMedium_Precision,      // mediump
-        kHigh_Precision,        // highp
-        kDefault_Precision,     // Default for the current context. We make
-                                // fragment shaders default to mediump on ES2
-                                // because highp support is not guaranteed (and
-                                // we haven't been motivated to test for it).
-                                // Otherwise, highp.
-    };
-
     /**
      * Defaults to a float with no precision specifier
      */
@@ -52,36 +41,39 @@ public:
         : fType(kFloat_GrSLType)
         , fTypeModifier(kNone_TypeModifier)
         , fCount(kNonArray)
-        , fPrecision(kDefault_Precision) {
+        , fPrecision(kDefault_GrSLPrecision) {
     }
 
     GrShaderVar(const SkString& name, GrSLType type, int arrayCount = kNonArray,
-                Precision precision = kDefault_Precision)
+                GrSLPrecision precision = kDefault_GrSLPrecision)
         : fType(type)
         , fTypeModifier(kNone_TypeModifier)
         , fName(name)
         , fCount(arrayCount)
         , fPrecision(precision) {
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         SkASSERT(kVoid_GrSLType != type);
     }
 
     GrShaderVar(const char* name, GrSLType type, int arrayCount = kNonArray,
-                  Precision precision = kDefault_Precision)
+                GrSLPrecision precision = kDefault_GrSLPrecision)
         : fType(type)
         , fTypeModifier(kNone_TypeModifier)
         , fName(name)
         , fCount(arrayCount)
         , fPrecision(precision) {
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         SkASSERT(kVoid_GrSLType != type);
     }
 
     GrShaderVar(const char* name, GrSLType type, TypeModifier typeModifier,
-                  int arrayCount = kNonArray, Precision precision = kDefault_Precision)
+                  int arrayCount = kNonArray, GrSLPrecision precision = kDefault_GrSLPrecision)
         : fType(type)
         , fTypeModifier(typeModifier)
         , fName(name)
         , fCount(arrayCount)
         , fPrecision(precision) {
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         SkASSERT(kVoid_GrSLType != type);
     }
 
@@ -99,8 +91,9 @@ public:
     void set(GrSLType type,
              TypeModifier typeModifier,
              const SkString& name,
-             Precision precision = kDefault_Precision) {
+             GrSLPrecision precision = kDefault_GrSLPrecision) {
         SkASSERT(kVoid_GrSLType != type);
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         fType = type;
         fTypeModifier = typeModifier;
         fName = name;
@@ -114,8 +107,9 @@ public:
     void set(GrSLType type,
              TypeModifier typeModifier,
              const char* name,
-             Precision precision = kDefault_Precision) {
+             GrSLPrecision precision = kDefault_GrSLPrecision) {
         SkASSERT(kVoid_GrSLType != type);
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         fType = type;
         fTypeModifier = typeModifier;
         fName = name;
@@ -130,8 +124,9 @@ public:
              TypeModifier typeModifier,
              const SkString& name,
              int count,
-             Precision precision = kDefault_Precision) {
+             GrSLPrecision precision = kDefault_GrSLPrecision) {
         SkASSERT(kVoid_GrSLType != type);
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         fType = type;
         fTypeModifier = typeModifier;
         fName = name;
@@ -146,8 +141,9 @@ public:
              TypeModifier typeModifier,
              const char* name,
              int count,
-             Precision precision = kDefault_Precision) {
+             GrSLPrecision precision = kDefault_GrSLPrecision) {
         SkASSERT(kVoid_GrSLType != type);
+        SkASSERT(kDefault_GrSLPrecision == precision || GrSLTypeIsFloatType(type));
         fType = type;
         fTypeModifier = typeModifier;
         fName = name;
@@ -215,19 +211,19 @@ public:
     /**
      * Get the precision of the var
      */
-    Precision getPrecision() const { return fPrecision; }
+    GrSLPrecision getPrecision() const { return fPrecision; }
 
     /**
      * Set the precision of the var
      */
-    void setPrecision(Precision p) { fPrecision = p; }
+    void setPrecision(GrSLPrecision p) { fPrecision = p; }
 
 protected:
     GrSLType        fType;
     TypeModifier    fTypeModifier;
     SkString        fName;
     int             fCount;
-    Precision       fPrecision;
+    GrSLPrecision   fPrecision;
 };
 
 #endif

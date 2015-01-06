@@ -10,7 +10,8 @@
 
 #include "GrContext.h"
 #include "GrContextFactory.h"
-#include "GrProcessor.h"
+#include "GrFragmentProcessor.h"
+#include "GrInvariantOutput.h"
 #include "SkColorFilter.h"
 #include "SkGr.h"
 #include "Test.h"
@@ -63,9 +64,9 @@ static void test_getConstantColorComponents(skiatest::Reporter* reporter, GrCont
     const GrColor gr_c1 = SkColor2GrColor(c1);
     const GrColor gr_c2 = SkColor2GrColor(c2);
 
-    const GrColor gr_black = GrColorPackRGBA(0, 0, 0, 0);
-    const GrColor gr_white = GrColorPackRGBA(255, 255, 255, 255);
-    const GrColor gr_whiteTrans = GrColorPackRGBA(128, 128, 128, 128);
+    const GrColor gr_black = GrColorPackA4(0);
+    const GrColor gr_white = GrColorPackA4(255);
+    const GrColor gr_whiteTrans = GrColorPackA4(128);
 
     GetConstantComponentTestCase filterTests[] = {
         // A color filtered with Clear produces black.
@@ -99,8 +100,9 @@ static void test_getConstantColorComponents(skiatest::Reporter* reporter, GrCont
         const GetConstantComponentTestCase& test = filterTests[i];
         SkAutoTUnref<SkColorFilter> cf(SkColorFilter::CreateModeFilter(test.filterColor, test.filterMode));
         SkAutoTUnref<GrFragmentProcessor> effect(cf->asFragmentProcessor(grContext));
-        GrProcessor::InvariantOutput inout;
-        inout.setToOther(test.inputComponents, test.inputColor);
+        GrInvariantOutput inout(test.inputColor,
+                                static_cast<GrColorComponentFlags>(test.inputComponents),
+                                false);
         effect->computeInvariantOutput(&inout);
 
         REPORTER_ASSERT(reporter, filterColor(inout.color(), inout.validFlags()) == test.outputColor);

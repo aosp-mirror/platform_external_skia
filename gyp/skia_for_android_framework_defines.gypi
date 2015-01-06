@@ -13,16 +13,17 @@
     # If these become 'permanent', they should be moved into common_variables.gypi
     #
     'skia_for_android_framework_defines': [
+      'SK_SUPPORT_LEGACY_GRADIENT_FACTORIES',
       'SK_SUPPORT_LEGACY_PUBLIC_IMAGEINFO_FIELDS',
-      'SK_SUPPORT_LEGACY_ALLOCPIXELS_BOOL',
       'SK_SUPPORT_LEGACY_GETDEVICE',
       # Needed until we fix skbug.com/2440.
       'SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG',
-      # Transitional, for deprecated SkCanvas::SaveFlags methods.
-      'SK_ATTR_DEPRECATED=SK_NOTHING_ARG1',
-      'SK_LEGACY_PICTURE_SIZE_API',
-      'SK_LEGACY_PICTURE_DRAW_API',
-      'SK_LEGACY_NO_DISTANCE_FIELD_PATHS'
+      # TODO(tfarina): Remove this when Android is fixed. skbug.com/3178
+      'SK_SUPPORT_LEGACY_PORTER_DUFF',
+      'SK_SUPPORT_LEGACY_DRAWDATA',
+      'SK_SUPPORT_LEGACY_CANVAS_VIRTUAL',
+      'SK_SUPPORT_LEGACY_ADDOVAL',
+      'SK_SUPPORT_LEGACY_ADDRRECT',
     ],
   },
 }

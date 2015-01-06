@@ -17,9 +17,11 @@ public:
 
     static GrPathRenderer* Create(GrContext* context);
 
-    virtual bool canDrawPath(const SkPath& path,
-                             const SkStrokeRec& stroke,
-                             const GrDrawTarget* target,
+    virtual bool canDrawPath(const GrDrawTarget*,
+                             const GrDrawState*,
+                             const SkMatrix& viewMatrix,
+                             const SkPath&,
+                             const SkStrokeRec&,
                              bool antiAlias) const SK_OVERRIDE;
 
     typedef SkTArray<SkPoint, true> PtArray;
@@ -27,9 +29,12 @@ public:
     typedef SkTArray<float, true> FloatArray;
 
 protected:
-    virtual bool onDrawPath(const SkPath& path,
-                            const SkStrokeRec& stroke,
-                            GrDrawTarget* target,
+    virtual bool onDrawPath(GrDrawTarget*,
+                            GrDrawState*,
+                            GrColor,
+                            const SkMatrix& viewMatrix,
+                            const SkPath&,
+                            const SkStrokeRec&,
                             bool antiAlias) SK_OVERRIDE;
 
 private:
@@ -37,23 +42,30 @@ private:
                              const GrIndexBuffer* fLinesIndexBuffer,
                              const GrIndexBuffer* fQuadsIndexBuffer);
 
-    bool createLineGeom(const SkPath& path,
-                        GrDrawTarget* target,
-                        const PtArray& lines,
-                        int lineCnt,
+    bool createLineGeom(GrDrawTarget* target,
+                        GrDrawState*,
+                        const SkMatrix& viewMatrix,
+                        uint8_t coverage,
+                        size_t vertexStride,
                         GrDrawTarget::AutoReleaseGeometry* arg,
-                        SkRect* devBounds);
+                        SkRect* devBounds,
+                        const SkPath& path,
+                        const PtArray& lines,
+                        int lineCnt);
 
-    bool createBezierGeom(const SkPath& path,
-                          GrDrawTarget* target,
+    bool createBezierGeom(GrDrawTarget* target,
+                          GrDrawState*,
+                          const SkMatrix& viewMatrix,
+                          GrDrawTarget::AutoReleaseGeometry* arg,
+                          SkRect* devBounds,
+                          const SkPath& path,
                           const PtArray& quads,
                           int quadCnt,
                           const PtArray& conics,
                           int conicCnt,
                           const IntArray& qSubdivs,
                           const FloatArray& cWeights,
-                          GrDrawTarget::AutoReleaseGeometry* arg,
-                          SkRect* devBounds);
+                          size_t vertexStride);
 
     const GrIndexBuffer*        fLinesIndexBuffer;
     const GrIndexBuffer*        fQuadsIndexBuffer;

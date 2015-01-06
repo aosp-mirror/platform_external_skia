@@ -220,6 +220,7 @@ public:
         GLPtr<GrGLGetRenderbufferParameterivProc> fGetRenderbufferParameteriv;
         GLPtr<GrGLGetShaderInfoLogProc> fGetShaderInfoLog;
         GLPtr<GrGLGetShaderivProc> fGetShaderiv;
+        GLPtr<GrGLGetShaderPrecisionFormatProc> fGetShaderPrecisionFormat;
         GLPtr<GrGLGetStringProc> fGetString;
         GLPtr<GrGLGetStringiProc> fGetStringi;
         GLPtr<GrGLGetTexLevelParameterivProc> fGetTexLevelParameteriv;
@@ -311,6 +312,9 @@ public:
         GLPtr<GrGLUnmapBufferSubDataProc> fUnmapBufferSubData;
         GLPtr<GrGLUnmapTexSubImage2DProc> fUnmapTexSubImage2D;
         GLPtr<GrGLUseProgramProc> fUseProgram;
+        GLPtr<GrGLVertexAttrib1fProc> fVertexAttrib1f;
+        GLPtr<GrGLVertexAttrib2fvProc> fVertexAttrib2fv;
+        GLPtr<GrGLVertexAttrib3fvProc> fVertexAttrib3fv;
         GLPtr<GrGLVertexAttrib4fvProc> fVertexAttrib4fv;
         GLPtr<GrGLVertexAttribPointerProc> fVertexAttribPointer;
         GLPtr<GrGLViewportProc> fViewport;

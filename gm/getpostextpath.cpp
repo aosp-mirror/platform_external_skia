@@ -20,11 +20,11 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    SkString onShortName() {
+    SkString onShortName() SK_OVERRIDE {
         return SkString("getpostextpath");
     }
 
-    SkISize onISize() { return SkISize::Make(480, 780); }
+    SkISize onISize() SK_OVERRIDE { return SkISize::Make(480, 780); }
 
     static void strokePath(SkCanvas* canvas, const SkPath& path) {
         SkPaint paint;
@@ -34,7 +34,7 @@ protected:
         canvas->drawPath(path, paint);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         // explicitly add spaces, to test a prev. bug
         const char* text = "Ham bur ge fons";
         int len = SkToInt(strlen(text));
@@ -56,7 +56,7 @@ protected:
         SkAutoTArray<SkScalar> widths(len);
         paint.getTextWidths(text, len, &widths[0]);
 
-        SkLCGRandom rand;
+        SkRandom rand;
         SkScalar x = SkIntToScalar(20);
         SkScalar y = SkIntToScalar(100);
         for (int i = 0; i < len; ++i) {

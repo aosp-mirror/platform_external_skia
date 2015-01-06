@@ -102,11 +102,15 @@ public:
     GradTextGM () {}
 
 protected:
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("gradtext");
     }
 
-    virtual SkISize onISize() { return SkISize::Make(500, 480); }
+    uint32_t onGetFlags() const SK_OVERRIDE {
+        return kSkipTiled_Flag;
+    }
+
+    SkISize onISize() SK_OVERRIDE { return SkISize::Make(500, 480); }
 
     static void draw_text(SkCanvas* canvas, const SkPaint& paint) {
         const char* text = "When in the course of human events";
@@ -127,7 +131,7 @@ protected:
         draw_text(canvas, p);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         sk_tool_utils::set_portable_typeface(&paint);
         paint.setTextSize(SkIntToScalar(26));

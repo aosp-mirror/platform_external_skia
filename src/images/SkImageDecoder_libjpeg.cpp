@@ -229,7 +229,7 @@ public:
     }
 #endif
 
-    virtual Format getFormat() const {
+    virtual Format getFormat() const SK_OVERRIDE {
         return kJPEG_Format;
     }
 
@@ -239,6 +239,9 @@ protected:
     virtual bool onDecodeSubset(SkBitmap* bitmap, const SkIRect& rect) SK_OVERRIDE;
 #endif
     virtual Result onDecode(SkStream* stream, SkBitmap* bm, Mode) SK_OVERRIDE;
+    virtual bool onDecodeYUV8Planes(SkStream* stream, SkISize componentSizes[3],
+                                    void* planes[3], size_t rowBytes[3],
+                                    SkYUVColorSpace* colorSpace) SK_OVERRIDE;
 
 private:
 #ifdef SK_BUILD_FOR_ANDROID
@@ -337,10 +340,18 @@ static void print_jpeg_decoder_errors(const jpeg_decompress_struct& cinfo,
 }
 
 static bool return_false(const jpeg_decompress_struct& cinfo,
+                         const char caller[]) {
+    print_jpeg_decoder_errors(cinfo, 0, 0, caller);
+    return false;
+}
+
+#ifdef SK_BUILD_FOR_ANDROID
+static bool return_false(const jpeg_decompress_struct& cinfo,
                          const SkBitmap& bm, const char caller[]) {
     print_jpeg_decoder_errors(cinfo, bm.width(), bm.height(), caller);
     return false;
 }
+#endif
 
 static SkImageDecoder::Result return_failure(const jpeg_decompress_struct& cinfo,
                                              const SkBitmap& bm, const char caller[]) {
@@ -629,13 +640,6 @@ SkImageDecoder::Result SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* 
     }
     sampleSize = recompute_sampleSize(sampleSize, cinfo);
 
-#ifdef SK_SUPPORT_LEGACY_IMAGEDECODER_CHOOSER
-    // should we allow the Chooser (if present) to pick a colortype for us???
-    if (!this->chooseFromOneChoice(colorType, cinfo.output_width, cinfo.output_height)) {
-        return return_failure(cinfo, *bm, "chooseFromOneChoice");
-    }
-#endif
-
     SkScaledBitmapSampler sampler(cinfo.output_width, cinfo.output_height, sampleSize);
     // Assume an A8 bitmap is not opaque to avoid the check of each
     // individual pixel. It is very unlikely to be opaque, since
@@ -713,7 +717,7 @@ SkImageDecoder::Result SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* 
             fill_below_level(y, bm);
             cinfo.output_scanline = cinfo.output_height;
             jpeg_finish_decompress(&cinfo);
-            return kSuccess;
+            return kPartialSuccess;
         }
         if (this->shouldCancelDecode()) {
             return return_failure(cinfo, *bm, "shouldCancelDecode");
@@ -743,6 +747,191 @@ SkImageDecoder::Result SkJPEGImageDecoder::onDecode(SkStream* stream, SkBitmap* 
 
     return kSuccess;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+enum SizeType {
+    kSizeForMemoryAllocation_SizeType,
+    kActualSize_SizeType
+};
+
+static SkISize compute_yuv_size(const jpeg_decompress_struct& info, int component,
+                                SizeType sizeType) {
+    if (sizeType == kSizeForMemoryAllocation_SizeType) {
+        return SkISize::Make(info.cur_comp_info[component]->width_in_blocks * DCTSIZE,
+                             info.cur_comp_info[component]->height_in_blocks * DCTSIZE);
+    }
+    return SkISize::Make(info.cur_comp_info[component]->downsampled_width,
+                         info.cur_comp_info[component]->downsampled_height);
+}
+
+static void update_components_sizes(const jpeg_decompress_struct& cinfo, SkISize componentSizes[3],
+                                    SizeType sizeType) {
+    for (int i = 0; i < 3; ++i) {
+        componentSizes[i] = compute_yuv_size(cinfo, i, sizeType);
+    }
+}
+
+static bool output_raw_data(jpeg_decompress_struct& cinfo, void* planes[3], size_t rowBytes[3]) {
+    // U size and V size have to be the same if we're calling output_raw_data()
+    SkISize uvSize = compute_yuv_size(cinfo, 1, kSizeForMemoryAllocation_SizeType);
+    SkASSERT(uvSize == compute_yuv_size(cinfo, 2, kSizeForMemoryAllocation_SizeType));
+
+    JSAMPARRAY bufferraw[3];
+    JSAMPROW bufferraw2[32];
+    bufferraw[0] = &bufferraw2[0]; // Y channel rows (8 or 16)
+    bufferraw[1] = &bufferraw2[16]; // U channel rows (8)
+    bufferraw[2] = &bufferraw2[24]; // V channel rows (8)
+    int yWidth = cinfo.output_width;
+    int yHeight = cinfo.output_height;
+    int yMaxH = yHeight - 1;
+    int v = cinfo.cur_comp_info[0]->v_samp_factor;
+    int uvMaxH = uvSize.height() - 1;
+    JSAMPROW outputY = static_cast<JSAMPROW>(planes[0]);
+    JSAMPROW outputU = static_cast<JSAMPROW>(planes[1]);
+    JSAMPROW outputV = static_cast<JSAMPROW>(planes[2]);
+    size_t rowBytesY = rowBytes[0];
+    size_t rowBytesU = rowBytes[1];
+    size_t rowBytesV = rowBytes[2];
+
+    int yScanlinesToRead = DCTSIZE * v;
+    SkAutoMalloc lastRowStorage(yWidth * 8);
+    JSAMPROW yLastRow = (JSAMPROW)lastRowStorage.get();
+    JSAMPROW uLastRow = yLastRow + 2 * yWidth;
+    JSAMPROW vLastRow = uLastRow + 2 * yWidth;
+    JSAMPROW dummyRow = vLastRow + 2 * yWidth;
+
+    while (cinfo.output_scanline < cinfo.output_height) {
+        // Request 8 or 16 scanlines: returns 0 or more scanlines.
+        bool hasYLastRow(false), hasUVLastRow(false);
+        // Assign 8 or 16 rows of memory to read the Y channel.
+        for (int i = 0; i < yScanlinesToRead; ++i) {
+            int scanline = (cinfo.output_scanline + i);
+            if (scanline < yMaxH) {
+                bufferraw2[i] = &outputY[scanline * rowBytesY];
+            } else if (scanline == yMaxH) {
+                bufferraw2[i] = yLastRow;
+                hasYLastRow = true;
+            } else {
+                bufferraw2[i] = dummyRow;
+            }
+        }
+        int scaledScanline = cinfo.output_scanline / v;
+        // Assign 8 rows of memory to read the U and V channels.
+        for (int i = 0; i < 8; ++i) {
+            int scanline = (scaledScanline + i);
+            if (scanline < uvMaxH) {
+                bufferraw2[16 + i] = &outputU[scanline * rowBytesU];
+                bufferraw2[24 + i] = &outputV[scanline * rowBytesV];
+            } else if (scanline == uvMaxH) {
+                bufferraw2[16 + i] = uLastRow;
+                bufferraw2[24 + i] = vLastRow;
+                hasUVLastRow = true;
+            } else {
+                bufferraw2[16 + i] = dummyRow;
+                bufferraw2[24 + i] = dummyRow;
+            }
+        }
+        JDIMENSION scanlinesRead = jpeg_read_raw_data(&cinfo, bufferraw, yScanlinesToRead);
+
+        if (scanlinesRead == 0) {
+            return false;
+        }
+
+        if (hasYLastRow) {
+            memcpy(&outputY[yMaxH * rowBytesY], yLastRow, yWidth);
+        }
+        if (hasUVLastRow) {
+            memcpy(&outputU[uvMaxH * rowBytesU], uLastRow, uvSize.width());
+            memcpy(&outputV[uvMaxH * rowBytesV], vLastRow, uvSize.width());
+        }
+    }
+
+    cinfo.output_scanline = SkMin32(cinfo.output_scanline, cinfo.output_height);
+
+    return true;
+}
+
+bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentSizes[3],
+                                            void* planes[3], size_t rowBytes[3],
+                                            SkYUVColorSpace* colorSpace) {
+#ifdef TIME_DECODE
+    SkAutoTime atm("JPEG YUV8 Decode");
+#endif
+
+    if (this->getSampleSize() != 1) {
+        return false; // Resizing not supported
+    }
+
+    JPEGAutoClean autoClean;
+
+    jpeg_decompress_struct  cinfo;
+    skjpeg_source_mgr       srcManager(stream, this);
+
+    skjpeg_error_mgr errorManager;
+    set_error_mgr(&cinfo, &errorManager);
+
+    // All objects need to be instantiated before this setjmp call so that
+    // they will be cleaned up properly if an error occurs.
+    if (setjmp(errorManager.fJmpBuf)) {
+        return return_false(cinfo, "setjmp YUV8");
+    }
+
+    initialize_info(&cinfo, &srcManager);
+    autoClean.set(&cinfo);
+
+    int status = jpeg_read_header(&cinfo, true);
+    if (status != JPEG_HEADER_OK) {
+        return return_false(cinfo, "read_header YUV8");
+    }
+
+    if (cinfo.jpeg_color_space != JCS_YCbCr) {
+        // It's not an error to not be encoded in YUV, so no need to use return_false()
+        return false;
+    }
+
+    cinfo.out_color_space = JCS_YCbCr;
+    cinfo.raw_data_out = TRUE;
+
+    if (!planes || !planes[0] || !rowBytes || !rowBytes[0]) { // Compute size only
+        update_components_sizes(cinfo, componentSizes, kSizeForMemoryAllocation_SizeType);
+        return true;
+    }
+
+    set_dct_method(*this, &cinfo);
+
+    SkASSERT(1 == cinfo.scale_num);
+    cinfo.scale_denom = 1;
+
+    turn_off_visual_optimizations(&cinfo);
+
+#ifdef ANDROID_RGB
+    cinfo.dither_mode = JDITHER_NONE;
+#endif
+
+    /*  image_width and image_height are the original dimensions, available
+        after jpeg_read_header(). To see the scaled dimensions, we have to call
+        jpeg_start_decompress(), and then read output_width and output_height.
+    */
+    if (!jpeg_start_decompress(&cinfo)) {
+        return return_false(cinfo, "start_decompress YUV8");
+    }
+
+    if (!output_raw_data(cinfo, planes, rowBytes)) {
+        return return_false(cinfo, "output_raw_data");
+    }
+
+    update_components_sizes(cinfo, componentSizes, kActualSize_SizeType);
+    jpeg_finish_decompress(&cinfo);
+
+    if (NULL != colorSpace) {
+        *colorSpace = kJPEG_SkYUVColorSpace;
+    }
+
+    return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 #ifdef SK_BUILD_FOR_ANDROID
 bool SkJPEGImageDecoder::onBuildTileIndex(SkStreamRewindable* stream, int *width, int *height) {
@@ -1159,7 +1348,6 @@ protected:
 
         // allocate these before set call setjmp
         SkAutoMalloc    oneRow;
-        SkAutoLockColors ctLocker;
 
         cinfo.err = jpeg_std_error(&sk_err);
         sk_err.error_exit = skjpeg_error_exit;
@@ -1196,7 +1384,7 @@ protected:
         const int       width = bm.width();
         uint8_t*        oneRowP = (uint8_t*)oneRow.reset(width * 3);
 
-        const SkPMColor* colors = ctLocker.lockColors(bm);
+        const SkPMColor* colors = bm.getColorTable() ? bm.getColorTable()->readColors() : NULL;
         const void*      srcRow = bm.getPixels();
 
         while (cinfo.next_scanline < cinfo.image_height) {

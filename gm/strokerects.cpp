@@ -29,15 +29,15 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("strokerects");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(W*2, H*2);
     }
 
-    static void rnd_rect(SkRect* r, SkLCGRandom& rand) {
+    static void rnd_rect(SkRect* r, SkRandom& rand) {
         SkScalar x = rand.nextUScalar1() * W;
         SkScalar y = rand.nextUScalar1() * H;
         SkScalar w = rand.nextUScalar1() * (W >> 2);
@@ -49,7 +49,7 @@ protected:
         r->offset(-w/2 + woffset, -h/2 + hoffset);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         paint.setStyle(SkPaint::kStroke_Style);
 
@@ -65,7 +65,7 @@ protected:
                         , SW - SkIntToScalar(2), SH - SkIntToScalar(2)
                 ));
 
-                SkLCGRandom rand;
+                SkRandom rand;
                 for (int i = 0; i < N; i++) {
                     SkRect r;
                     rnd_rect(&r, rand);

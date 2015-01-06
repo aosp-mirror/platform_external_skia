@@ -13,9 +13,9 @@
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #include "GrCoordTransform.h"
+#include "GrInvariantOutput.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
-#include "GrTBackendProcessorFactory.h"
 #endif
 
 namespace {
@@ -191,19 +191,6 @@ SkDisplacementMapEffect::SkDisplacementMapEffect(ChannelSelectorType xChannelSel
 SkDisplacementMapEffect::~SkDisplacementMapEffect() {
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkDisplacementMapEffect::SkDisplacementMapEffect(SkReadBuffer& buffer)
-  : INHERITED(2, buffer)
-{
-    fXChannelSelector = (SkDisplacementMapEffect::ChannelSelectorType) buffer.readInt();
-    fYChannelSelector = (SkDisplacementMapEffect::ChannelSelectorType) buffer.readInt();
-    fScale            = buffer.readScalar();
-    buffer.validate(channel_selector_type_is_valid(fXChannelSelector) &&
-                    channel_selector_type_is_valid(fYChannelSelector) &&
-                    SkScalarIsFinite(fScale));
-}
-#endif
-
 SkFlattenable* SkDisplacementMapEffect::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
     ChannelSelectorType xsel = (ChannelSelectorType)buffer.readInt();
@@ -294,18 +281,32 @@ bool SkDisplacementMapEffect::onFilterBounds(const SkIRect& src, const SkMatrix&
     return true;
 }
 
+#ifndef SK_IGNORE_TO_STRING
+void SkDisplacementMapEffect::toString(SkString* str) const {
+    str->appendf("SkDisplacementMapEffect: (");
+    str->appendf("scale: %f ", fScale);
+    str->appendf("displacement: (");
+    if (this->getDisplacementInput()) {
+        this->getDisplacementInput()->toString(str);
+    }
+    str->appendf(") color: (");
+    if (this->getColorInput()) {
+        this->getColorInput()->toString(str);
+    }
+    str->appendf("))");
+}
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
 class GrGLDisplacementMapEffect : public GrGLFragmentProcessor {
 public:
-    GrGLDisplacementMapEffect(const GrBackendProcessorFactory&,
-                              const GrProcessor&);
+    GrGLDisplacementMapEffect(const GrProcessor&);
     virtual ~GrGLDisplacementMapEffect();
 
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -341,20 +342,27 @@ public:
 
     virtual ~GrDisplacementMapEffect();
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GrGLDisplacementMapEffect::GenKey(*this, caps, b);
+    }
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GrGLDisplacementMapEffect, (*this));
+    }
+
     SkDisplacementMapEffect::ChannelSelectorType xChannelSelector() const
         { return fXChannelSelector; }
     SkDisplacementMapEffect::ChannelSelectorType yChannelSelector() const
         { return fYChannelSelector; }
     const SkVector& scale() const { return fScale; }
 
-    typedef GrGLDisplacementMapEffect GLProcessor;
-    static const char* Name() { return "DisplacementMap"; }
+    virtual const char* name() const SK_OVERRIDE { return "DisplacementMap"; }
 
 private:
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GrDisplacementMapEffect(SkDisplacementMapEffect::ChannelSelectorType xChannelSelector,
                             SkDisplacementMapEffect::ChannelSelectorType yChannelSelector,
@@ -408,8 +416,8 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
     GrTexture* displacement = displacementBM.getTexture();
     GrContext* context = color->getContext();
 
-    GrTextureDesc desc;
-    desc.fFlags = kRenderTarget_GrTextureFlagBit | kNoStencil_GrTextureFlagBit;
+    GrSurfaceDesc desc;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag | kNoStencil_GrSurfaceFlag;
     desc.fWidth = bounds.width();
     desc.fHeight = bounds.height();
     desc.fConfig = kSkia8888_GrPixelConfig;
@@ -440,13 +448,10 @@ bool SkDisplacementMapEffect::filterImageGPU(Proxy* proxy, const SkBitmap& src, 
                                         color))->unref();
     SkIRect colorBounds = bounds;
     colorBounds.offset(-colorOffset);
-    GrContext::AutoMatrix am;
-    am.setIdentity(context);
     SkMatrix matrix;
     matrix.setTranslate(-SkIntToScalar(colorBounds.x()),
                         -SkIntToScalar(colorBounds.y()));
-    context->concatMatrix(matrix);
-    context->drawRect(paint, SkRect::Make(colorBounds));
+    context->drawRect(paint, matrix, SkRect::Make(colorBounds));
     offset->fX = bounds.left();
     offset->fY = bounds.top();
     WrapTexture(dst, bounds.width(), bounds.height(), result);
@@ -462,43 +467,38 @@ GrDisplacementMapEffect::GrDisplacementMapEffect(
                              GrTexture* displacement,
                              const SkMatrix& offsetMatrix,
                              GrTexture* color)
-    : fDisplacementTransform(kLocal_GrCoordSet, offsetMatrix, displacement)
+    : fDisplacementTransform(kLocal_GrCoordSet, offsetMatrix, displacement,
+                             GrTextureParams::kNone_FilterMode)
     , fDisplacementAccess(displacement)
-    , fColorTransform(kLocal_GrCoordSet, color)
+    , fColorTransform(kLocal_GrCoordSet, color, GrTextureParams::kNone_FilterMode)
     , fColorAccess(color)
     , fXChannelSelector(xChannelSelector)
     , fYChannelSelector(yChannelSelector)
     , fScale(scale) {
+    this->initClassID<GrDisplacementMapEffect>();
     this->addCoordTransform(&fDisplacementTransform);
     this->addTextureAccess(&fDisplacementAccess);
     this->addCoordTransform(&fColorTransform);
     this->addTextureAccess(&fColorAccess);
-    this->setWillNotUseInputColor();
 }
 
 GrDisplacementMapEffect::~GrDisplacementMapEffect() {
 }
 
-bool GrDisplacementMapEffect::onIsEqual(const GrProcessor& sBase) const {
+bool GrDisplacementMapEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     const GrDisplacementMapEffect& s = sBase.cast<GrDisplacementMapEffect>();
-    return fDisplacementAccess.getTexture() == s.fDisplacementAccess.getTexture() &&
-           fColorAccess.getTexture() == s.fColorAccess.getTexture() &&
-           fXChannelSelector == s.fXChannelSelector &&
+    return fXChannelSelector == s.fXChannelSelector &&
            fYChannelSelector == s.fYChannelSelector &&
            fScale == s.fScale;
 }
 
-const GrBackendFragmentProcessorFactory& GrDisplacementMapEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrDisplacementMapEffect>::getInstance();
-}
-
-void GrDisplacementMapEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void GrDisplacementMapEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     // Any displacement offset bringing a pixel out of bounds will output a color of (0,0,0,0),
     // so the only way we'd get a constant alpha is if the input color image has a constant alpha
     // and no displacement offset push any texture coordinates out of bounds OR if the constant
     // alpha is 0. Since this isn't trivial to compute at this point, let's assume the output is
     // not of constant color when a displacement effect is applied.
-    inout->setToUnknown();
+    inout->setToUnknown(GrInvariantOutput::kWillNot_ReadInput);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -530,10 +530,8 @@ GrFragmentProcessor* GrDisplacementMapEffect::TestCreate(SkRandom* random,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGLDisplacementMapEffect::GrGLDisplacementMapEffect(const GrBackendProcessorFactory& factory,
-                                                     const GrProcessor& proc)
-    : INHERITED(factory)
-    , fXChannelSelector(proc.cast<GrDisplacementMapEffect>().xChannelSelector())
+GrGLDisplacementMapEffect::GrGLDisplacementMapEffect(const GrProcessor& proc)
+    : fXChannelSelector(proc.cast<GrDisplacementMapEffect>().xChannelSelector())
     , fYChannelSelector(proc.cast<GrDisplacementMapEffect>().yChannelSelector()) {
 }
 
@@ -542,7 +540,6 @@ GrGLDisplacementMapEffect::~GrGLDisplacementMapEffect() {
 
 void GrGLDisplacementMapEffect::emitCode(GrGLFPBuilder* builder,
                                          const GrFragmentProcessor&,
-                                         const GrProcessorKey& key,
                                          const char* outputColor,
                                          const char* inputColor,
                                          const TransformedCoordsArray& coords,
@@ -550,7 +547,7 @@ void GrGLDisplacementMapEffect::emitCode(GrGLFPBuilder* builder,
     sk_ignore_unused_variable(inputColor);
 
     fScaleUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                    kVec2f_GrSLType, "Scale");
+                                    kVec2f_GrSLType, kDefault_GrSLPrecision, "Scale");
     const char* scaleUni = builder->getUniformCStr(fScaleUni);
     const char* dColor = "dColor";
     const char* cCoords = "cCoords";
@@ -567,9 +564,9 @@ void GrGLDisplacementMapEffect::emitCode(GrGLFPBuilder* builder,
     // Unpremultiply the displacement
     fsBuilder->codeAppendf("\t\t%s.rgb = (%s.a < %s) ? vec3(0.0) : clamp(%s.rgb / %s.a, 0.0, 1.0);",
                            dColor, dColor, nearZero, dColor, dColor);
-
+    SkString coords2D = fsBuilder->ensureFSCoords2D(coords, 1);
     fsBuilder->codeAppendf("\t\tvec2 %s = %s + %s*(%s.",
-                           cCoords, coords[1].c_str(), scaleUni, dColor);
+                           cCoords, coords2D.c_str(), scaleUni, dColor);
 
     switch (fXChannelSelector) {
       case SkDisplacementMapEffect::kR_ChannelSelectorType:
@@ -614,7 +611,9 @@ void GrGLDisplacementMapEffect::emitCode(GrGLFPBuilder* builder,
         "bool %s = (%s.x < 0.0) || (%s.y < 0.0) || (%s.x > 1.0) || (%s.y > 1.0);\t\t",
         outOfBounds, cCoords, cCoords, cCoords, cCoords);
     fsBuilder->codeAppendf("%s = %s ? vec4(0.0) : ", outputColor, outOfBounds);
-    fsBuilder->appendTextureLookup(samplers[1], cCoords, coords[1].getType());
+
+    // cCoords is always a vec2f
+    fsBuilder->appendTextureLookup(samplers[1], cCoords, kVec2f_GrSLType);
     fsBuilder->codeAppend(";\n");
 }
 
@@ -639,3 +638,4 @@ void GrGLDisplacementMapEffect::GenKey(const GrProcessor& proc,
     b->add32(xKey | yKey);
 }
 #endif
+

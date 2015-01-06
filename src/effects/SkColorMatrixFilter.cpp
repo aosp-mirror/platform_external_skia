@@ -307,15 +307,6 @@ void SkColorMatrixFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalarArray(fMatrix.fMat, 20);
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkColorMatrixFilter::SkColorMatrixFilter(SkReadBuffer& buffer) : INHERITED(buffer) {
-    SkASSERT(buffer.getArrayCount() == 20);
-    if (buffer.readScalarArray(fMatrix.fMat, 20)) {
-        this->initState(fMatrix.fMat);
-    }
-}
-#endif
-
 SkFlattenable* SkColorMatrixFilter::CreateProc(SkReadBuffer& buffer) {
     SkColorMatrix matrix;
     if (buffer.readScalarArray(matrix.fMat, 20)) {
@@ -332,8 +323,8 @@ bool SkColorMatrixFilter::asColorMatrix(SkScalar matrix[20]) const {
 }
 
 #if SK_SUPPORT_GPU
-#include "GrProcessor.h"
-#include "GrTBackendProcessorFactory.h"
+#include "GrFragmentProcessor.h"
+#include "GrInvariantOutput.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
 
@@ -343,11 +334,17 @@ public:
         return SkNEW_ARGS(ColorMatrixEffect, (matrix));
     }
 
-    static const char* Name() { return "Color Matrix"; }
+    virtual const char* name() const SK_OVERRIDE { return "Color Matrix"; }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE {
-        return GrTBackendFragmentProcessorFactory<ColorMatrixEffect>::getInstance();
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GLProcessor::GenKey(*this, caps, b);
     }
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GLProcessor, (*this));
+    }
+
 
     GR_DECLARE_FRAGMENT_PROCESSOR_TEST;
 
@@ -356,23 +353,19 @@ public:
         // this class always generates the same code.
         static void GenKey(const GrProcessor&, const GrGLCaps&, GrProcessorKeyBuilder* b) {}
 
-        GLProcessor(const GrBackendProcessorFactory& factory,
-                 const GrProcessor&)
-        : INHERITED(factory) {
-        }
+        GLProcessor(const GrProcessor&) {}
 
         virtual void emitCode(GrGLFPBuilder* builder,
                               const GrFragmentProcessor&,
-                              const GrProcessorKey&,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
                               const TextureSamplerArray&) SK_OVERRIDE {
             fMatrixHandle = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                                kMat44f_GrSLType,
+                                                kMat44f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrix");
             fVectorHandle = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                                kVec4f_GrSLType,
+                                                kVec4f_GrSLType, kDefault_GrSLPrecision,
                                                 "ColorMatrixVector");
 
             if (NULL == inputColor) {
@@ -419,14 +412,16 @@ public:
     };
 
 private:
-    ColorMatrixEffect(const SkColorMatrix& matrix) : fMatrix(matrix) {}
+    ColorMatrixEffect(const SkColorMatrix& matrix) : fMatrix(matrix) {
+        this->initClassID<ColorMatrixEffect>();
+    }
 
-    virtual bool onIsEqual(const GrProcessor& s) const {
+    virtual bool onIsEqual(const GrFragmentProcessor& s) const SK_OVERRIDE {
         const ColorMatrixEffect& cme = s.cast<ColorMatrixEffect>();
         return cme.fMatrix == fMatrix;
     }
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE {
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE {
         // We only bother to check whether the alpha channel will be constant. If SkColorMatrix had
         // type flags it might be worth checking the other components.
 
@@ -453,7 +448,7 @@ private:
             // then we can't know the final result.
             if (0 != fMatrix.fMat[kAlphaRowStartIdx + i]) {
                 if (!(inout->validFlags() & kRGBAFlags[i])) {
-                    inout->setToUnknown();
+                    inout->setToUnknown(GrInvariantOutput::kWill_ReadInput);
                     return;
                 } else {
                     uint32_t component = (inout->color() >> kShifts[i]) & 0xFF;
@@ -467,7 +462,8 @@ private:
         // underflow this may deviate from the actual result. Maybe the effect should pin its
         // result if the matrix could over/underflow for any component?
         inout->setToOther(kA_GrColorComponentFlag,
-                          static_cast<uint8_t>(SkScalarPin(outputA, 0, 255)) << GrColor_SHIFT_A);
+                          static_cast<uint8_t>(SkScalarPin(outputA, 0, 255)) << GrColor_SHIFT_A,
+                          GrInvariantOutput::kWill_ReadInput);
     }
 
     SkColorMatrix fMatrix;

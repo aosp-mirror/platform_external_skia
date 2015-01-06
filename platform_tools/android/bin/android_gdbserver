@@ -29,6 +29,8 @@ else
 fi
 for library_file in \
     libc.so \
+    libc++.so \
+    libstdc++.so \
     libm.so \
     liblog.so \
     libz.so \

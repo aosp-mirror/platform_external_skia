@@ -24,15 +24,11 @@ public:
 
     /**
      * Retrieves the width of the surface.
-     *
-     * @return the width in texels
      */
     int width() const { return fDesc.fWidth; }
 
     /**
      * Retrieves the height of the surface.
-     *
-     * @return the height in texels
      */
     int height() const { return fDesc.fHeight; }
 
@@ -58,19 +54,19 @@ public:
     /**
      * Return the descriptor describing the surface
      */
-    const GrTextureDesc& desc() const { return fDesc; }
+    const GrSurfaceDesc& desc() const { return fDesc; }
 
     /**
      * @return the texture associated with the surface, may be NULL.
      */
-    virtual GrTexture* asTexture() = 0;
-    virtual const GrTexture* asTexture() const = 0;
+    virtual GrTexture* asTexture() { return NULL; }
+    virtual const GrTexture* asTexture() const { return NULL; }
 
     /**
      * @return the render target underlying this surface, may be NULL.
      */
-    virtual GrRenderTarget* asRenderTarget() = 0;
-    virtual const GrRenderTarget* asRenderTarget() const = 0;
+    virtual GrRenderTarget* asRenderTarget() { return NULL; }
+    virtual const GrRenderTarget* asRenderTarget() const { return NULL; }
 
     /**
      * Reads a rectangle of pixels from the surface.
@@ -120,6 +116,13 @@ public:
      */
     void flushWrites();
 
+
+    /**
+     * After this returns any pending writes to the surface will be issued to the backend 3D API and
+     * if the surface has MSAA it will be resolved.
+     */
+    void prepareForExternalRead();
+    
     /** Access methods that are only to be used within Skia code. */
     inline GrSurfacePriv surfacePriv();
     inline const GrSurfacePriv surfacePriv() const;
@@ -131,17 +134,16 @@ protected:
     bool hasPendingRead() const;
     bool hasPendingWrite() const;
     bool hasPendingIO() const;
-    bool isSameAs(const GrSurface* other) const;
 
     // Provides access to methods that should be public within Skia code.
     friend class GrSurfacePriv;
 
-    GrSurface(GrGpu* gpu, bool isWrapped, const GrTextureDesc& desc)
+    GrSurface(GrGpu* gpu, bool isWrapped, const GrSurfaceDesc& desc)
     : INHERITED(gpu, isWrapped)
     , fDesc(desc) {
     }
 
-    GrTextureDesc fDesc;
+    GrSurfaceDesc fDesc;
 
 private:
     typedef GrGpuResource INHERITED;

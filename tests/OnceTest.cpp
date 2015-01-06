@@ -6,6 +6,7 @@
  */
 
 #include "SkOnce.h"
+#include "SkRunnable.h"
 #include "SkTaskGroup.h"
 #include "Test.h"
 
@@ -31,6 +32,8 @@ static void add_six(int* x) {
     *x += 6;
 }
 
+namespace {
+
 class Racer : public SkRunnable {
 public:
     SkOnceFlag* once;
@@ -40,6 +43,8 @@ public:
         SkOnce(once, add_six, ptr);
     }
 };
+
+}  // namespace
 
 DEF_TEST(SkOnce_Multithreaded, r) {
     const int kTasks = 16;

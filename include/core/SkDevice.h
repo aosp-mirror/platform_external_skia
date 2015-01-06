@@ -31,9 +31,8 @@ public:
      *  Construct a new device.
     */
     SkBaseDevice();
+    explicit SkBaseDevice(const SkDeviceProperties&);
     virtual ~SkBaseDevice();
-
-    SkBaseDevice* createCompatibleDevice(const SkImageInfo&);
 
     SkMetaData& getMetaData();
 
@@ -52,6 +51,12 @@ public:
         SkASSERT(bounds);
         const SkIPoint& origin = this->getOrigin();
         bounds->setXYWH(origin.x(), origin.y(), this->width(), this->height());
+    }
+
+    SkIRect getGlobalBounds() const {
+        SkIRect bounds;
+        this->getGlobalBounds(&bounds);
+        return bounds;
     }
 
     int width() const {
@@ -121,7 +126,8 @@ public:
 protected:
     enum Usage {
        kGeneral_Usage,
-       kSaveLayer_Usage  // <! internal use only
+       kSaveLayer_Usage,  // <! internal use only
+       kImageFilter_Usage // <! internal use only
     };
 
     struct TextFlags {
@@ -129,12 +135,12 @@ protected:
     };
 
     /**
-     *  Device may filter the text flags for drawing text here. If it wants to
-     *  make a change to the specified values, it should write them into the
-     *  textflags parameter (output) and return true. If the paint is fine as
-     *  is, then ignore the textflags parameter and return false.
+     * Returns the text-related flags, possibly modified based on the state of the
+     * device (e.g. support for LCD).
      */
-    virtual bool filterTextFlags(const SkPaint& /*paint*/, TextFlags*) { return false; }
+    uint32_t filterTextFlags(const SkPaint&) const;
+
+    virtual bool onShouldDisableLCD(const SkPaint&) const { return false; }
 
     /**
      *
@@ -154,14 +160,6 @@ protected:
      */
      virtual void setMatrixClip(const SkMatrix&, const SkRegion&,
                                 const SkClipStack&) {};
-
-    /** Clears the entire device to the specified color (including alpha).
-     *  Ignores the clip.
-     */
-    virtual void clear(SkColor color) = 0;
-
-    SK_ATTR_DEPRECATED("use clear() instead")
-    void eraseColor(SkColor eraseColor) { this->clear(eraseColor); }
 
     /** These are called inside the per-device-layer loop for each draw call.
      When these are called, we have already applied any saveLayer operations,
@@ -235,7 +233,7 @@ protected:
     virtual void drawPatch(const SkDraw&, const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint);
     /** The SkDevice passed will be an SkDevice which was returned by a call to
-        onCreateDevice on this device with kSaveLayer_Usage.
+        onCreateCompatibleDevice on this device with kSaveLayer_Usage.
      */
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) = 0;
@@ -281,7 +279,7 @@ protected:
      *  it just returns false and leaves result and offset unchanged.
      */
     virtual bool filterImage(const SkImageFilter*, const SkBitmap&,
-                             const SkImageFilter::Context& /*ctx*/,
+                             const SkImageFilter::Context&,
                              SkBitmap* /*result*/, SkIPoint* /*offset*/) {
         return false;
     }
@@ -326,12 +324,6 @@ protected:
 
     /**
      *  PRIVATE / EXPERIMENTAL -- do not call
-     *  Construct an acceleration object and attach it to 'picture'
-     */
-    virtual void EXPERIMENTAL_optimize(const SkPicture* picture);
-
-    /**
-     *  PRIVATE / EXPERIMENTAL -- do not call
      *  This entry point gives the backend an opportunity to take over the rendering
      *  of 'picture'. If optimization data is available (due to an earlier
      *  'optimize' call) this entry point should make use of it and return true
@@ -343,7 +335,26 @@ protected:
     virtual bool EXPERIMENTAL_drawPicture(SkCanvas*, const SkPicture*, const SkMatrix*,
                                           const SkPaint*);
 
-    void setPixelGeometry(SkPixelGeometry geo);
+    struct CreateInfo {
+        static SkPixelGeometry AdjustGeometry(const SkImageInfo&, Usage, SkPixelGeometry geo);
+
+        // The construct may change the pixel geometry based on usage as needed.
+        CreateInfo(const SkImageInfo& info, Usage usage, SkPixelGeometry geo)
+            : fInfo(info)
+            , fUsage(usage)
+            , fPixelGeometry(AdjustGeometry(info, usage, geo))
+        {}
+
+        const SkImageInfo     fInfo;
+        const Usage           fUsage;
+        const SkPixelGeometry fPixelGeometry;
+    };
+
+    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) {
+        return NULL;
+    }
+
+    virtual void initForRootLayer(SkPixelGeometry geo);
 
 private:
     friend class SkCanvas;
@@ -353,6 +364,7 @@ private:
     friend class SkDeviceFilteredPaint;
     friend class SkDeviceImageFilterProxy;
     friend class SkDeferredDevice;    // for newSurface
+    friend class SkNoPixelsBitmapDevice;
 
     friend class SkSurface_Raster;
 
@@ -366,12 +378,6 @@ private:
 
     // just called by SkCanvas when built as a layer
     void setOrigin(int x, int y) { fOrigin.set(x, y); }
-    // just called by SkCanvas for saveLayer
-    SkBaseDevice* createCompatibleDeviceForSaveLayer(const SkImageInfo&);
-
-    virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) {
-        return NULL;
-    }
 
     /** Causes any deferred drawing to the device to be completed.
      */

@@ -29,11 +29,7 @@ public:
     public:
         Registrar() {
             SkFlattenable::Register("SimpleOffsetFilter",
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-                                    SimpleOffsetFilter::DeepCreateProc,
-#else
                                     SimpleOffsetFilter::CreateProc,
-#endif
                                     SimpleOffsetFilter::GetFlattenableType());
         }
     };
@@ -66,17 +62,10 @@ public:
         return true;
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SimpleOffsetFilter);
 
 protected:
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SimpleOffsetFilter(SkReadBuffer& buffer)
-    : SkImageFilter(1, buffer) {
-        fDX = buffer.readScalar();
-        fDY = buffer.readScalar();
-    }
-#endif
-
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->INHERITED::flatten(buffer);
         buffer.writeScalar(fDX);
@@ -100,6 +89,13 @@ SkFlattenable* SimpleOffsetFilter::CreateProc(SkReadBuffer& buffer) {
     SkScalar dy = buffer.readScalar();
     return Create(dx, dy, common.getInput(0));
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void SimpleOffsetFilter::toString(SkString* str) const {
+    str->appendf("SimpleOffsetFilter: (");
+    str->append(")");
+}
+#endif
 
 class ImageFiltersGraphGM : public skiagm::GM {
 public:

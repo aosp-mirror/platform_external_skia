@@ -10,7 +10,6 @@
 #define GrTexture_DEFINED
 
 #include "GrSurface.h"
-#include "GrRenderTarget.h"
 #include "SkPoint.h"
 #include "SkRefCnt.h"
 
@@ -18,17 +17,10 @@ class GrResourceKey;
 class GrTextureParams;
 class GrTexturePriv;
 
-class GrTexture : public GrSurface {
+class GrTexture : virtual public GrSurface {
 public:
-    /**
-     *  Approximate number of bytes used by the texture
-     */
-    virtual size_t gpuMemorySize() const SK_OVERRIDE;
-
     virtual GrTexture* asTexture() SK_OVERRIDE { return this; }
     virtual const GrTexture* asTexture() const SK_OVERRIDE { return this; }
-    virtual GrRenderTarget* asRenderTarget() SK_OVERRIDE { return fRenderTarget.get(); }
-    virtual const GrRenderTarget* asRenderTarget() const SK_OVERRIDE { return fRenderTarget.get(); }
 
     /**
      *  Return the native ID or handle to the texture, depending on the
@@ -42,23 +34,6 @@ public:
      */
     virtual void textureParamsModified() = 0;
 
-    /**
-     * Informational texture flags. This will be removed soon.
-     */
-    enum FlagBits {
-        kFirstBit = (kLastPublic_GrTextureFlagBit << 1),
-
-        /**
-         * This texture should be returned to the texture cache when
-         * it is no longer reffed
-         */
-        kReturnToCache_FlagBit        = kFirstBit,
-    };
-
-    void resetFlag(GrTextureFlags flags) {
-        fDesc.fFlags = fDesc.fFlags & ~flags;
-    }
-
 #ifdef SK_DEBUG
     void validate() const {
         this->INHERITED::validate();
@@ -71,21 +46,12 @@ public:
     inline const GrTexturePriv texturePriv() const;
 
 protected:
-    // A texture refs its rt representation but not vice-versa. It is up to
-    // the subclass constructor to initialize this pointer.
-    SkAutoTUnref<GrRenderTarget> fRenderTarget;
-
-    GrTexture(GrGpu* gpu, bool isWrapped, const GrTextureDesc& desc);
-
-    virtual ~GrTexture();
-
-    // GrResource overrides
-    virtual void onRelease() SK_OVERRIDE;
-    virtual void onAbandon() SK_OVERRIDE;
+    GrTexture(GrGpu* gpu, bool isWrapped, const GrSurfaceDesc& desc);
 
     void validateDesc() const;
 
 private:
+    virtual size_t onGpuMemorySize() const SK_OVERRIDE;
     void dirtyMipMaps(bool mipMapsDirty);
 
     enum MipMapsStatus {

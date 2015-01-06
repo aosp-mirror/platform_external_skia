@@ -311,6 +311,7 @@ bool SkMaskFilter::canFilterMaskGPU(const SkRect& devBounds,
 
  bool SkMaskFilter::directFilterMaskGPU(GrContext* context,
                                         GrPaint* grp,
+                                        const SkMatrix& viewMatrix,
                                         const SkStrokeRec& strokeRec,
                                         const SkPath& path) const {
     return false;
@@ -319,6 +320,7 @@ bool SkMaskFilter::canFilterMaskGPU(const SkRect& devBounds,
 
 bool SkMaskFilter::directFilterRRectMaskGPU(GrContext* context,
                                             GrPaint* grp,
+                                            const SkMatrix& viewMatrix,
                                             const SkStrokeRec& strokeRec,
                                             const SkRRect& rrect) const {
     return false;
@@ -337,7 +339,7 @@ void SkMaskFilter::computeFastBounds(const SkRect& src, SkRect* dst) const {
     SkMask  srcM, dstM;
 
     srcM.fImage = NULL;
-    src.roundOut(&srcM.fBounds);
+    srcM.fBounds = src.roundOut();
     srcM.fRowBytes = 0;
     srcM.fFormat = SkMask::kA8_Format;
 

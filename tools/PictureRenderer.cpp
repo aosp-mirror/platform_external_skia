@@ -28,6 +28,7 @@
 #include "SkPictureRecorder.h"
 #include "SkPictureUtils.h"
 #include "SkPixelRef.h"
+#include "SkPixelSerializer.h"
 #include "SkScalar.h"
 #include "SkStream.h"
 #include "SkString.h"
@@ -148,9 +149,9 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
             SkAutoTUnref<GrSurface> target;
             if (fGrContext) {
                 // create a render target to back the device
-                GrTextureDesc desc;
+                GrSurfaceDesc desc;
                 desc.fConfig = kSkia8888_GrPixelConfig;
-                desc.fFlags = kRenderTarget_GrTextureFlagBit;
+                desc.fFlags = kRenderTarget_GrSurfaceFlag;
                 desc.fWidth = width;
                 desc.fHeight = height;
                 desc.fSampleCnt = fSampleCount;
@@ -161,8 +162,10 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
                 return NULL;
             }
 
+            uint32_t flags = fUseDFText ? SkGpuDevice::kDFText_Flag : 0;
             SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(target,
-                                         SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType)));
+                                         SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType),
+                                         flags));
             canvas = SkNEW_ARGS(SkCanvas, (device.get()));
             break;
         }
@@ -221,10 +224,14 @@ void PictureRenderer::buildBBoxHierarchy() {
     if (kNone_BBoxHierarchyType != fBBoxHierarchyType && fPicture) {
         SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
         SkPictureRecorder recorder;
+        uint32_t flags = this->recordFlags();
+        if (fUseMultiPictureDraw) {
+            flags |= SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
+        }
         SkCanvas* canvas = recorder.beginRecording(fPicture->cullRect().width(), 
                                                    fPicture->cullRect().height(),
                                                    factory.get(),
-                                                   this->recordFlags());
+                                                   flags);
         fPicture->playback(canvas);
         fPicture.reset(recorder.endRecording());
     }
@@ -353,10 +360,18 @@ SkCanvas* RecordPictureRenderer::setupCanvas(int width, int height) {
     return NULL;
 }
 
-// the size_t* parameter is deprecated, so we ignore it
-static SkData* encode_bitmap_to_data(size_t*, const SkBitmap& bm) {
-    return SkImageEncoder::EncodeData(bm, SkImageEncoder::kPNG_Type, 100);
-}
+// Encodes to PNG, unless there is already encoded data, in which case that gets
+// used.
+// FIXME: Share with PictureTest.cpp?
+
+class PngPixelSerializer : public SkPixelSerializer {
+public:
+    bool onUseEncodedData(const void*, size_t) SK_OVERRIDE { return true; }
+    SkData* onEncodePixels(const SkImageInfo& info, const void* pixels,
+                           size_t rowBytes) SK_OVERRIDE {
+        return SkImageEncoder::EncodeData(info, pixels, rowBytes, SkImageEncoder::kPNG_Type, 100);
+    }
+};
 
 bool RecordPictureRenderer::render(SkBitmap** out) {
     SkAutoTDelete<SkBBHFactory> factory(this->getFactory());
@@ -372,7 +387,8 @@ bool RecordPictureRenderer::render(SkBitmap** out) {
         // Record the new picture as a new SKP with PNG encoded bitmaps.
         SkString skpPath = SkOSPath::Join(fWritePath.c_str(), fInputFilename.c_str());
         SkFILEWStream stream(skpPath.c_str());
-        picture->serialize(&stream, &encode_bitmap_to_data);
+        PngPixelSerializer serializer;
+        picture->serialize(&stream, &serializer);
         return true;
     }
     return false;
@@ -612,6 +628,8 @@ static void draw_tile_to_canvas(SkCanvas* canvas,
     SkMatrix mat(canvas->getTotalMatrix());
     mat.postTranslate(-SkIntToScalar(tileRect.fLeft), -SkIntToScalar(tileRect.fTop));
     canvas->setMatrix(mat);
+    canvas->clipRect(SkRect::Make(tileRect));
+    canvas->clear(SK_ColorTRANSPARENT); // Not every picture covers the entirety of every tile
     canvas->drawPicture(picture);
     canvas->restoreToCount(saveCount);
     canvas->flush();
@@ -704,8 +722,12 @@ bool TiledPictureRenderer::render(SkBitmap** out) {
             surfaces[i]->getCanvas()->setMatrix(fCanvas->getTotalMatrix());
 
             SkPictureRecorder recorder;
+            SkRTreeFactory bbhFactory;
+
             SkCanvas* c = recorder.beginRecording(SkIntToScalar(fTileRects[i].width()),
-                                                  SkIntToScalar(fTileRects[i].height()));
+                                                  SkIntToScalar(fTileRects[i].height()),
+                                                  &bbhFactory,
+                                                  SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag);
             c->save();
             SkMatrix mat;
             mat.setTranslate(-SkIntToScalar(fTileRects[i].fLeft),

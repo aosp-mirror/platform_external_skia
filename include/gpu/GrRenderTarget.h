@@ -12,36 +12,21 @@
 #include "SkRect.h"
 
 class GrStencilBuffer;
-class GrTexture;
 
 /**
  * GrRenderTarget represents a 2D buffer of pixels that can be rendered to.
  * A context's render target is set by setRenderTarget(). Render targets are
- * created by a createTexture with the kRenderTarget_TextureFlag flag.
+ * created by a createTexture with the kRenderTarget_SurfaceFlag flag.
  * Additionally, GrContext provides methods for creating GrRenderTargets
  * that wrap externally created render targets.
  */
-class GrRenderTarget : public GrSurface {
+class GrRenderTarget : virtual public GrSurface {
 public:
     SK_DECLARE_INST_COUNT(GrRenderTarget)
 
-    // GrResource overrides
-    virtual size_t gpuMemorySize() const SK_OVERRIDE;
-
     // GrSurface overrides
-    /**
-     * @return the texture associated with the render target, may be NULL.
-     */
-    virtual GrTexture* asTexture() SK_OVERRIDE { return fTexture; }
-    virtual const GrTexture* asTexture() const SK_OVERRIDE { return fTexture; }
-
-    /**
-     * @return this render target.
-     */
     virtual GrRenderTarget* asRenderTarget() SK_OVERRIDE { return this; }
-    virtual const GrRenderTarget* asRenderTarget() const  SK_OVERRIDE {
-        return this;
-    }
+    virtual const GrRenderTarget* asRenderTarget() const  SK_OVERRIDE { return this; }
 
     // GrRenderTarget
     /**
@@ -102,14 +87,6 @@ public:
     const SkIRect& getResolveRect() const { return fResolveRect; }
 
     /**
-     * If the render target is multisampled this will perform a multisample
-     * resolve. Any pending draws to the target are first flushed. This only
-     * applies to render targets that are associated with GrTextures. After the
-     * function returns the GrTexture will contain the resolved pixels.
-     */
-    void resolve();
-
-    /**
      * Provide a performance hint that the render target's contents are allowed
      * to become undefined.
      */
@@ -134,11 +111,9 @@ public:
 protected:
     GrRenderTarget(GrGpu* gpu,
                    bool isWrapped,
-                   GrTexture* texture,
-                   const GrTextureDesc& desc)
+                   const GrSurfaceDesc& desc)
         : INHERITED(gpu, isWrapped, desc)
-        , fStencilBuffer(NULL)
-        , fTexture(texture) {
+        , fStencilBuffer(NULL) {
         fResolveRect.setLargestInverted();
     }
 
@@ -147,15 +122,7 @@ protected:
     virtual void onRelease() SK_OVERRIDE;
 
 private:
-    friend class GrTexture;
-    // called by ~GrTexture to remove the non-ref'ed back ptr.
-    void owningTextureDestroyed() {
-        SkASSERT(fTexture);
-        fTexture = NULL;
-    }
-
     GrStencilBuffer*  fStencilBuffer;
-    GrTexture*        fTexture; // not ref'ed
 
     SkIRect           fResolveRect;
 

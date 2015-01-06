@@ -12,6 +12,7 @@
 #include "SkUserConfig.h"
 #include "SkPostConfig.h"
 #include <stdint.h>
+#include <sys/types.h>
 
 /** \file SkTypes.h
 */
@@ -244,6 +245,7 @@ typedef uint8_t SkBool8;
     SK_API int         SkToInt(intmax_t);
     SK_API unsigned    SkToUInt(uintmax_t);
     SK_API size_t      SkToSizeT(uintmax_t);
+    SK_API off_t       SkToOffT(intmax_t x);
 #else
     #define SkToS8(x)   ((int8_t)(x))
     #define SkToU8(x)   ((uint8_t)(x))
@@ -254,6 +256,7 @@ typedef uint8_t SkBool8;
     #define SkToInt(x)  ((int)(x))
     #define SkToUInt(x) ((unsigned)(x))
     #define SkToSizeT(x) ((size_t)(x))
+    #define SkToOffT(x) ((off_t)(x))
 #endif
 
 /** Returns 0 or 1 based on the condition
@@ -352,6 +355,7 @@ template <typename T> inline void SkTSwap(T& a, T& b) {
 }
 
 static inline int32_t SkAbs32(int32_t value) {
+    SkASSERT(value != SK_NaN32);  // The most negative int32_t can't be negated.
     if (value < 0) {
         value = -value;
     }

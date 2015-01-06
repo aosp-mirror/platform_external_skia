@@ -8,11 +8,11 @@
 #include "SkPDFDevice.h"
 
 #include "SkAnnotation.h"
+#include "SkBitmapDevice.h"
 #include "SkColor.h"
 #include "SkClipStack.h"
 #include "SkData.h"
 #include "SkDraw.h"
-#include "SkFontHost.h"
 #include "SkGlyphCache.h"
 #include "SkPaint.h"
 #include "SkPath.h"
@@ -566,10 +566,19 @@ void GraphicStackState::updateDrawingState(const GraphicStateEntry& state) {
     }
 }
 
-SkBaseDevice* SkPDFDevice::onCreateDevice(const SkImageInfo& info, Usage usage) {
+SkBaseDevice* SkPDFDevice::onCreateCompatibleDevice(const CreateInfo& cinfo) {
+    // PDF does not support image filters, so render them on CPU.
+    // Note that this rendering is done at "screen" resolution (100dpi), not
+    // printer resolution.
+    // FIXME: It may be possible to express some filters natively using PDF
+    // to improve quality and file size (http://skbug.com/3043)
+    if (kImageFilter_Usage == cinfo.fUsage) {
+        return SkBitmapDevice::Create(cinfo.fInfo);
+    }
+
     SkMatrix initialTransform;
     initialTransform.reset();
-    SkISize size = SkISize::Make(info.width(), info.height());
+    SkISize size = SkISize::Make(cinfo.fInfo.width(), cinfo.fInfo.height());
     return SkNEW_ARGS(SkPDFDevice, (size, size, initialTransform));
 }
 
@@ -735,7 +744,7 @@ SkPDFDevice::SkPDFDevice(const SkISize& pageSize, const SkISize& contentSize,
     fInitialTransform.preConcat(initialTransform);
     fLegacyBitmap.setInfo(info);
 
-    SkIRect existingClip = SkIRect::MakeWH(info.width(), info.height());
+    SkIRect existingClip = info.bounds();
     fExistingClipRegion.setRect(existingClip);
     this->init();
 }
@@ -789,20 +798,6 @@ void SkPDFDevice::cleanUp(bool clearFontUsage) {
     if (clearFontUsage) {
         fFontGlyphUsage->reset();
     }
-}
-
-void SkPDFDevice::clear(SkColor color) {
-    this->cleanUp(true);
-    this->init();
-
-    SkPaint paint;
-    paint.setColor(color);
-    paint.setStyle(SkPaint::kFill_Style);
-    SkMatrix identity;
-    identity.reset();
-    ScopedContentEntry content(this, &fExistingClipStack, fExistingClipRegion,
-                               identity, paint);
-    internalDrawPaint(paint, content.entry());
 }
 
 void SkPDFDevice::drawPaint(const SkDraw& d, const SkPaint& paint) {
@@ -1124,17 +1119,21 @@ void SkPDFDevice::drawText(const SkDraw& d, const void* text, size_t len,
     set_text_transform(x, y, textPaint.getTextSkewX(),
                        &content.entry()->fContent);
     int consumedGlyphCount = 0;
+
+    SkTDArray<uint16_t> glyphIDsCopy(glyphIDs, numGlyphs);
+
     while (numGlyphs > consumedGlyphCount) {
         updateFont(textPaint, glyphIDs[consumedGlyphCount], content.entry());
         SkPDFFont* font = content.entry()->fState.fFont;
-        //TODO: the const_cast here is a bug if the encoding started out as glyph encoding.
-        int availableGlyphs =
-            font->glyphsToPDFFontEncoding(const_cast<uint16_t*>(glyphIDs) + consumedGlyphCount,
-                                          numGlyphs - consumedGlyphCount);
-        fFontGlyphUsage->noteGlyphUsage(font, glyphIDs + consumedGlyphCount,
-                                        availableGlyphs);
+
+        int availableGlyphs = font->glyphsToPDFFontEncoding(
+                glyphIDsCopy.begin() + consumedGlyphCount,
+                numGlyphs - consumedGlyphCount);
+        fFontGlyphUsage->noteGlyphUsage(
+                font,  glyphIDsCopy.begin() + consumedGlyphCount,
+                availableGlyphs);
         SkString encodedString =
-            SkPDFString::FormatString(glyphIDs + consumedGlyphCount,
+            SkPDFString::FormatString(glyphIDsCopy.begin() + consumedGlyphCount,
                                       availableGlyphs, font->multiByteGlyphs());
         content.entry()->fContent.writeText(encodedString.c_str());
         consumedGlyphCount += availableGlyphs;
@@ -1217,7 +1216,7 @@ void SkPDFDevice::drawVertices(const SkDraw& d, SkCanvas::VertexMode,
 
 void SkPDFDevice::drawDevice(const SkDraw& d, SkBaseDevice* device,
                              int x, int y, const SkPaint& paint) {
-    // our onCreateDevice() always creates SkPDFDevice subclasses.
+    // our onCreateCompatibleDevice() always creates SkPDFDevice subclasses.
     SkPDFDevice* pdfDevice = static_cast<SkPDFDevice*>(device);
     if (pdfDevice->isContentEmpty()) {
         return;
@@ -2167,7 +2166,7 @@ void SkPDFDevice::internalDrawBitmap(const SkMatrix& origMatrix,
     scaled.setScale(SK_Scalar1, -SK_Scalar1);
     scaled.postTranslate(0, SK_Scalar1);
     // Scale the image up from 1x1 to WxH.
-    SkIRect subset = SkIRect::MakeWH(bitmap->width(), bitmap->height());
+    SkIRect subset = bitmap->bounds();
     scaled.postScale(SkIntToScalar(subset.width()),
                      SkIntToScalar(subset.height()));
     scaled.postConcat(matrix);

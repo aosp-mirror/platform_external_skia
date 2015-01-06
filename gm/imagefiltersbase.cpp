@@ -22,11 +22,7 @@ public:
     public:
         Registrar() {
             SkFlattenable::Register("FailImageFilter",
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-                                    FailImageFilter::DeepCreateProc,
-#else
                                     FailImageFilter::CreateProc,
-#endif
                                     FailImageFilter::GetFlattenableType());
         }
     };
@@ -34,6 +30,7 @@ public:
         return SkNEW(FailImageFilter);
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(FailImageFilter)
 
 protected:
@@ -43,10 +40,6 @@ protected:
                                SkBitmap* result, SkIPoint* offset) const SK_OVERRIDE {
         return false;
     }
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    FailImageFilter(SkReadBuffer& buffer) : INHERITED(0, buffer) {}
-#endif
 
 private:
     typedef SkImageFilter INHERITED;
@@ -59,17 +52,20 @@ SkFlattenable* FailImageFilter::CreateProc(SkReadBuffer& buffer) {
     return FailImageFilter::Create();
 }
 
+#ifndef SK_IGNORE_TO_STRING
+void FailImageFilter::toString(SkString* str) const {
+    str->appendf("FailImageFilter: (");
+    str->append(")");
+}
+#endif
+
 class IdentityImageFilter : public SkImageFilter {
 public:
     class Registrar {
     public:
         Registrar() {
             SkFlattenable::Register("IdentityImageFilter",
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-                                    IdentityImageFilter::DeepCreateProc,
-#else
                                     IdentityImageFilter::CreateProc,
-#endif
                                     IdentityImageFilter::GetFlattenableType());
         }
     };
@@ -77,6 +73,7 @@ public:
         return SkNEW_ARGS(IdentityImageFilter, (input));
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(IdentityImageFilter)
 protected:
     IdentityImageFilter(SkImageFilter* input) : INHERITED(1, &input) {}
@@ -88,10 +85,6 @@ protected:
         return true;
     }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    IdentityImageFilter(SkReadBuffer& buffer) : INHERITED(1, buffer) {}
-#endif
-
 private:
     typedef SkImageFilter INHERITED;
 };
@@ -102,6 +95,13 @@ SkFlattenable* IdentityImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
     return IdentityImageFilter::Create(common.getInput(0));
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void IdentityImageFilter::toString(SkString* str) const {
+    str->appendf("IdentityImageFilter: (");
+    str->append(")");
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -231,7 +231,8 @@ protected:
             FailImageFilter::Create(),
             SkColorFilterImageFilter::Create(cf),
             SkBlurImageFilter::Create(12.0f, 0.0f),
-            SkDropShadowImageFilter::Create(10.0f, 5.0f, 3.0f, 3.0f, SK_ColorBLUE),
+            SkDropShadowImageFilter::Create(10.0f, 5.0f, 3.0f, 3.0f, SK_ColorBLUE,
+                SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode),
         };
         cf->unref();
 

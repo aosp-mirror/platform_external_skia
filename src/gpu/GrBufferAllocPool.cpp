@@ -131,6 +131,7 @@ void GrBufferAllocPool::unmap() {
 
 #ifdef SK_DEBUG
 void GrBufferAllocPool::validate(bool unusedBlockAllowed) const {
+    bool wasDestroyed = false;
     if (fBufferPtr) {
         SkASSERT(!fBlocks.empty());
         if (fBlocks.back().fBuffer->isMapped()) {
@@ -146,18 +147,24 @@ void GrBufferAllocPool::validate(bool unusedBlockAllowed) const {
     for (int i = 0; i < fBlocks.count() - 1; ++i) {
         SkASSERT(!fBlocks[i].fBuffer->isMapped());
     }
-    for (int i = 0; i < fBlocks.count(); ++i) {
-        size_t bytes = fBlocks[i].fBuffer->gpuMemorySize() - fBlocks[i].fBytesFree;
-        bytesInUse += bytes;
-        SkASSERT(bytes || unusedBlockAllowed);
+    for (int i = 0; !wasDestroyed && i < fBlocks.count(); ++i) {
+        if (fBlocks[i].fBuffer->wasDestroyed()) {
+            wasDestroyed = true;
+        } else {
+            size_t bytes = fBlocks[i].fBuffer->gpuMemorySize() - fBlocks[i].fBytesFree;
+            bytesInUse += bytes;
+            SkASSERT(bytes || unusedBlockAllowed);
+        }
     }
 
-    SkASSERT(bytesInUse == fBytesInUse);
-    if (unusedBlockAllowed) {
-        SkASSERT((fBytesInUse && !fBlocks.empty()) ||
-                 (!fBytesInUse && (fBlocks.count() < 2)));
-    } else {
-        SkASSERT((0 == fBytesInUse) == fBlocks.empty());
+    if (!wasDestroyed) {
+        SkASSERT(bytesInUse == fBytesInUse);
+        if (unusedBlockAllowed) {
+            SkASSERT((fBytesInUse && !fBlocks.empty()) ||
+                     (!fBytesInUse && (fBlocks.count() < 2)));
+        } else {
+            SkASSERT((0 == fBytesInUse) == fBlocks.empty());
+        }
     }
 }
 #endif
@@ -419,22 +426,6 @@ void* GrVertexBufferAllocPool::makeSpace(size_t vertexSize,
     return ptr;
 }
 
-bool GrVertexBufferAllocPool::appendVertices(size_t vertexSize,
-                                             int vertexCount,
-                                             const void* vertices,
-                                             const GrVertexBuffer** buffer,
-                                             int* startVertex) {
-    void* space = makeSpace(vertexSize, vertexCount, buffer, startVertex);
-    if (space) {
-        memcpy(space,
-               vertices,
-               vertexSize * vertexCount);
-        return true;
-    } else {
-        return false;
-    }
-}
-
 int GrVertexBufferAllocPool::preallocatedBufferVertices(size_t vertexSize) const {
     return static_cast<int>(INHERITED::preallocatedBufferSize() / vertexSize);
 }
@@ -475,19 +466,6 @@ void* GrIndexBufferAllocPool::makeSpace(int indexCount,
     SkASSERT(0 == offset % sizeof(uint16_t));
     *startIndex = static_cast<int>(offset / sizeof(uint16_t));
     return ptr;
-}
-
-bool GrIndexBufferAllocPool::appendIndices(int indexCount,
-                                           const void* indices,
-                                           const GrIndexBuffer** buffer,
-                                           int* startIndex) {
-    void* space = makeSpace(indexCount, buffer, startIndex);
-    if (space) {
-        memcpy(space, indices, sizeof(uint16_t) * indexCount);
-        return true;
-    } else {
-        return false;
-    }
 }
 
 int GrIndexBufferAllocPool::preallocatedBufferIndices() const {

@@ -45,6 +45,8 @@ protected:
     virtual bool onGetPixels(const SkImageInfo& info,
                              void* pixels, size_t rowBytes,
                              SkPMColor ctable[], int* ctableCount) SK_OVERRIDE;
+    virtual bool onGetYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],
+                                 SkYUVColorSpace* colorSpace) SK_OVERRIDE;
 
 private:
     typedef SkImageGenerator INHERITED;
@@ -169,7 +171,7 @@ bool DecodingImageGenerator::onGetPixels(const SkImageInfo& info,
     TargetAllocator allocator(fInfo, pixels, rowBytes);
     decoder->setAllocator(&allocator);
     bool success = decoder->decode(fStream, &bitmap, info.colorType(),
-                                   SkImageDecoder::kDecodePixels_Mode);
+                                   SkImageDecoder::kDecodePixels_Mode) != SkImageDecoder::kFailure;
     decoder->setAllocator(NULL);
     if (!success) {
         return false;
@@ -197,11 +199,24 @@ bool DecodingImageGenerator::onGetPixels(const SkImageInfo& info,
             return false;
         }
         const int count = ctable->count();
-        memcpy(ctableEntries, ctable->lockColors(), count * sizeof(SkPMColor));
-        ctable->unlockColors();
+        memcpy(ctableEntries, ctable->readColors(), count * sizeof(SkPMColor));
         *ctableCount = count;
     }
     return true;
+}
+
+bool DecodingImageGenerator::onGetYUV8Planes(SkISize sizes[3], void* planes[3],
+                                             size_t rowBytes[3], SkYUVColorSpace* colorSpace) {
+    if (!fStream->rewind()) {
+        return false;
+    }
+
+    SkAutoTDelete<SkImageDecoder> decoder(SkImageDecoder::Factory(fStream));
+    if (NULL == decoder.get()) {
+        return false;
+    }
+
+    return decoder->decodeYUV8Planes(fStream, sizes, planes, rowBytes, colorSpace);
 }
 
 // A contructor-type function that returns NULL on failure.  This

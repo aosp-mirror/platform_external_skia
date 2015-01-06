@@ -19,15 +19,15 @@ protected:
         return kSkipTiled_Flag;
     }
 
-    virtual SkString onShortName() {
+    virtual SkString onShortName() SK_OVERRIDE {
         return SkString("points");
     }
 
-    virtual SkISize onISize() {
+    virtual SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(640, 490);
     }
 
-    static void fill_pts(SkPoint pts[], size_t n, SkLCGRandom* rand) {
+    static void fill_pts(SkPoint pts[], size_t n, SkRandom* rand) {
         for (size_t i = 0; i < n; i++) {
             // Compute these independently and store in variables, rather
             // than in the parameter-passing expression, to get consistent
@@ -38,10 +38,10 @@ protected:
         }
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         canvas->translate(SK_Scalar1, SK_Scalar1);
 
-        SkLCGRandom rand;
+        SkRandom rand;
         SkPaint  p0, p1, p2, p3;
         const size_t n = 99;
 

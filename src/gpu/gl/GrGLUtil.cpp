@@ -39,14 +39,14 @@ void GrGLCheckErr(const GrGLInterface* gl,
                   const char* call) {
     uint32_t err = GR_GL_GET_ERROR(gl);
     if (GR_GL_NO_ERROR != err) {
-        GrPrintf("---- glGetError 0x%x(%s)", err, get_error_string(err));
+        SkDebugf("---- glGetError 0x%x(%s)", err, get_error_string(err));
         if (location) {
-            GrPrintf(" at\n\t%s", location);
+            SkDebugf(" at\n\t%s", location);
         }
         if (call) {
-            GrPrintf("\n\t\t%s", call);
+            SkDebugf("\n\t\t%s", call);
         }
-        GrPrintf("\n");
+        SkDebugf("\n");
     }
 }
 
@@ -94,8 +94,18 @@ GrGLStandard GrGLGetStandardInUseFromString(const char* versionString) {
 
 bool GrGLIsMesaFromVersionString(const char* versionString) {
     int major, minor, mesaMajor, mesaMinor;
-    int n = sscanf(versionString, "%d.%d Mesa %d.%d", &major, &minor, &mesaMajor, &mesaMinor);
-    return 4 == n;
+
+    GrGLStandard standard = GrGLGetStandardInUseFromString(versionString);
+
+    if (standard == kGL_GrGLStandard) {
+        int n = sscanf(versionString, "%d.%d Mesa %d.%d", &major, &minor, &mesaMajor, &mesaMinor);
+        return 4 == n;
+    }
+    else {
+        int n = sscanf(versionString, "OpenGL ES %d.%d Mesa %d.%d", &major, &minor, &mesaMajor, &mesaMinor);
+        return 4 == n;
+    }
+    return false;
 }
 
 bool GrGLIsChromiumFromRendererString(const char* rendererString) {
@@ -181,7 +191,7 @@ GrGLVendor GrGLGetVendorFromString(const char* vendorString) {
             return kQualcomm_GrGLVendor;
         }
         if (0 == strcmp(vendorString, "NVIDIA Corporation")) {
-                return kNVIDIA_GrGLVendor;
+            return kNVIDIA_GrGLVendor;
         }
     }
     return kOther_GrGLVendor;
@@ -193,6 +203,16 @@ GrGLRenderer GrGLGetRendererFromString(const char* rendererString) {
             return kTegra3_GrGLRenderer;
         } else if (0 == strcmp(rendererString, "NVIDIA Tegra")) {
             return kTegra2_GrGLRenderer;
+        }
+        int lastDigit;
+        int n = sscanf(rendererString, "PowerVR SGX 54%d", &lastDigit);
+        if (1 == n && lastDigit >= 0 && lastDigit <= 9) {
+            return kPowerVR54x_GrGLRenderer;
+        }
+        static const char kPowerVRRogueStr[] = "PowerVR Rogue";
+        if (0 == strncmp(rendererString, kPowerVRRogueStr,
+                         SK_ARRAY_COUNT(kPowerVRRogueStr)-1)) {
+            return kPowerVRRogue_GrGLRenderer;
         }
     }
     return kOther_GrGLRenderer;

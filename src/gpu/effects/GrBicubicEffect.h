@@ -11,9 +11,9 @@
 #include "GrSingleTextureEffect.h"
 #include "GrTextureDomain.h"
 #include "gl/GrGLProcessor.h"
-#include "GrTBackendProcessorFactory.h"
 
 class GrGLBicubicEffect;
+class GrInvariantOutput;
 
 class GrBicubicEffect : public GrSingleTextureEffect {
 public:
@@ -23,12 +23,13 @@ public:
     };
     virtual ~GrBicubicEffect();
 
-    static const char* Name() { return "Bicubic"; }
     const float* coefficients() const { return fCoefficients; }
 
-    typedef GrGLBicubicEffect GLProcessor;
+    virtual const char* name() const SK_OVERRIDE { return "Bicubic"; }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
 
     const GrTextureDomain& domain() const { return fDomain; }
 
@@ -90,9 +91,9 @@ private:
                     const SkMatrix &matrix, const SkShader::TileMode tileModes[2]);
     GrBicubicEffect(GrTexture*, const SkScalar coefficients[16],
                     const SkMatrix &matrix, const SkRect& domain);
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     float           fCoefficients[16];
     GrTextureDomain fDomain;

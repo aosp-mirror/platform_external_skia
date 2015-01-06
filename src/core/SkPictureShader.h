@@ -30,8 +30,8 @@ public:
     SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkPictureShader)
 
-    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix*, GrColor*,
-                             GrFragmentProcessor**) const SK_OVERRIDE;
+    bool asFragmentProcessor(GrContext*, const SkPaint&, const SkMatrix& viewM, const SkMatrix*,
+                             GrColor*, GrFragmentProcessor**) const SK_OVERRIDE;
 
 protected:
     SkPictureShader(SkReadBuffer&);
@@ -43,13 +43,9 @@ private:
 
     SkShader* refBitmapShader(const SkMatrix&, const SkMatrix* localMatrix) const;
 
-    const SkPicture*  fPicture;
-    SkRect            fTile;
-    TileMode          fTmx, fTmy;
-
-    mutable SkMutex                 fCachedBitmapShaderMutex;
-    mutable SkAutoTUnref<SkShader>  fCachedBitmapShader;
-    mutable SkSize                  fCachedTileScale;
+    const SkPicture* fPicture;
+    SkRect           fTile;
+    TileMode         fTmx, fTmy;
 
     class PictureShaderContext : public SkShader::Context {
     public:

@@ -12,10 +12,17 @@
       },
     },
     'conditions': [
-      [ 'skia_os == "android" and not skia_android_framework', {
+      [ 'skia_os == "android"', {
+        'conditions': [
+          ['skia_android_framework == 0', {
+            'dependencies': [
+              'android_deps.gyp:Android_EntryPoint',
+              'skia_launcher.gyp:skia_launcher',
+            ],
+          }],
+        ],
         'dependencies': [
-          'android_deps.gyp:Android_EntryPoint',
-          'skia_launcher.gyp:skia_launcher',
+          'android_output.gyp:android_output',
         ],
       }],
       [ 'skia_os == "nacl"', {
@@ -39,7 +46,6 @@
             'include_dirs' : [
               '../experimental/iOSSampleApp/Shared',
               '../include/views',
-              '../include/xml',
               '../include/utils/mac',
               '../src/views/mac',
             ],
@@ -55,7 +61,6 @@
         ],
         'dependencies': [
           'views.gyp:views',
-          'xml.gyp:xml',
         ],
         'link_settings': {
           'libraries': [

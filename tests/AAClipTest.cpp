@@ -34,7 +34,6 @@ static bool operator==(const SkMask& a, const SkMask& b) {
         case SkMask::kLCD16_Format:
             wbytes <<= 1;
             break;
-        case SkMask::kLCD32_Format:
         case SkMask::kARGB32_Format:
             wbytes <<= 2;
             break;
@@ -421,6 +420,20 @@ static void test_regressions() {
     }
 }
 
+// Building aaclip meant aa-scan-convert a path into a huge clip.
+// the old algorithm sized the supersampler to the size of the clip, which overflowed
+// its internal 16bit coordinates. The fix was to intersect the clip+path_bounds before
+// sizing the supersampler.
+//
+// Before the fix, the following code would assert in debug builds.
+//
+static void test_crbug_422693(skiatest::Reporter* reporter) {
+    SkRasterClip rc(SkIRect::MakeLTRB(-25000, -25000, 25000, 25000));
+    SkPath path;
+    path.addCircle(50, 50, 50);
+    rc.op(path, rc.getBounds().size(), SkRegion::kIntersect_Op, true);
+}
+
 DEF_TEST(AAClip, reporter) {
     test_empty(reporter);
     test_path_bounds(reporter);
@@ -430,4 +443,5 @@ DEF_TEST(AAClip, reporter) {
     test_regressions();
     test_nearly_integral(reporter);
     test_really_a_rect(reporter);
+    test_crbug_422693(reporter);
 }

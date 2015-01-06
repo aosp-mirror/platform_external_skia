@@ -1,5 +1,6 @@
 #include "DMWriteTask.h"
 
+#include "DMJsonWriter.h"
 #include "DMUtil.h"
 #include "SkColorPriv.h"
 #include "SkCommonFlags.h"
@@ -24,7 +25,7 @@ static int split_suffixes(int N, const char* name, SkTArray<SkString>* out) {
     for (int i = 0; i < N; i++) {
         // We're splitting off suffixes from the back to front.
         out->push_back(split[split.count()-i-1]);
-        consumed += out->back().size() + 1;  // Add one for the _.
+        consumed += SkToInt(out->back().size() + 1);  // Add one for the _.
     }
     return consumed;
 }
@@ -59,8 +60,9 @@ WriteTask::WriteTask(const Task& parent,
 }
 
 void WriteTask::makeDirOrFail(SkString dir) {
-    if (!sk_mkdir(dir.c_str())) {
-        this->fail();
+    // This can be a little racy, so if it fails check to see if someone else succeeded.
+    if (!sk_mkdir(dir.c_str()) && !sk_isdir(dir.c_str())) {
+        this->fail("Can't make directory.");
     }
 }
 
@@ -81,21 +83,28 @@ static SkString get_md5(const void* ptr, size_t len) {
     return get_md5_string(&hasher);
 }
 
+static bool write_asset(SkStreamAsset* input, SkWStream* output) {
+    return input->rewind() && output->writeStream(input, input->getLength());
+}
+
 static SkString get_md5(SkStreamAsset* stream) {
     SkMD5 hasher;
-    hasher.writeStream(stream, stream->getLength());
+    write_asset(stream, &hasher);
     return get_md5_string(&hasher);
 }
 
-struct JsonData {
-    SkString name;            // E.g. "ninepatch-stretch", "desk-gws_skp"
-    SkString config;          //      "gpu", "8888"
-    SkString mode;            //      "direct", "default-tilegrid", "pipe"
-    SkString sourceType;      //      "GM", "SKP"
-    SkString md5;             // In ASCII, so 32 bytes long.
-};
-SkTArray<JsonData> gJsonData;
-SK_DECLARE_STATIC_MUTEX(gJsonDataLock);
+static bool encode_png(const SkBitmap& src, SkFILEWStream* file) {
+    SkBitmap bm;
+    // We can't encode A8 bitmaps as PNGs.  Convert them to 8888 first.
+    if (src.info().colorType() == kAlpha_8_SkColorType) {
+        if (!src.copyTo(&bm, kN32_SkColorType)) {
+            return false;
+        }
+    } else {
+        bm = src;
+    }
+    return SkImageEncoder::EncodeStream(file, bm, SkImageEncoder::kPNG_Type, 100);
+}
 
 void WriteTask::draw() {
     SkString md5;
@@ -112,10 +121,13 @@ void WriteTask::draw() {
         mode = fSuffixes.fromBack(1);
     }
 
-    JsonData entry = { fBaseName, config, mode, fSourceType, md5 };
     {
-        SkAutoMutexAcquire lock(&gJsonDataLock);
-        gJsonData.push_back(entry);
+        const JsonWriter::BitmapResult entry = { fBaseName,
+                                                 config,
+                                                 mode,
+                                                 fSourceType,
+                                                 md5 };
+        JsonWriter::AddBitmapResult(entry);
     }
 
     SkString dir(FLAGS_writePath[0]);
@@ -154,8 +166,8 @@ void WriteTask::draw() {
         return this->fail("Can't open file.");
     }
 
-    bool ok = fData ? file.writeStream(fData, fData->getLength())
-                    : SkImageEncoder::EncodeStream(&file, fBitmap, SkImageEncoder::kPNG_Type, 100);
+    bool ok = fData ? write_asset(fData, &file)
+                    : encode_png(fBitmap, &file);
     if (!ok) {
         return this->fail("Can't write to file.");
     }
@@ -172,40 +184,6 @@ SkString WriteTask::name() const {
 
 bool WriteTask::shouldSkip() const {
     return FLAGS_writePath.isEmpty();
-}
-
-void WriteTask::DumpJson() {
-    if (FLAGS_writePath.isEmpty()) {
-        return;
-    }
-
-    Json::Value root;
-
-    for (int i = 1; i < FLAGS_properties.count(); i += 2) {
-        root[FLAGS_properties[i-1]] = FLAGS_properties[i];
-    }
-    for (int i = 1; i < FLAGS_key.count(); i += 2) {
-        root["key"][FLAGS_key[i-1]] = FLAGS_key[i];
-    }
-
-    {
-        SkAutoMutexAcquire lock(&gJsonDataLock);
-        for (int i = 0; i < gJsonData.count(); i++) {
-            Json::Value result;
-            result["key"]["name"]            = gJsonData[i].name.c_str();
-            result["key"]["config"]          = gJsonData[i].config.c_str();
-            result["key"]["mode"]            = gJsonData[i].mode.c_str();
-            result["options"]["source_type"] = gJsonData[i].sourceType.c_str();
-            result["md5"]                    = gJsonData[i].md5.c_str();
-
-            root["results"].append(result);
-        }
-    }
-
-    SkString path = SkOSPath::Join(FLAGS_writePath[0], "dm.json");
-    SkFILEWStream stream(path.c_str());
-    stream.writeText(Json::StyledWriter().write(root).c_str());
-    stream.flush();
 }
 
 }  // namespace DM

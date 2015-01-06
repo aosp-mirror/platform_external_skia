@@ -8,12 +8,14 @@
 #ifndef GrAARectRenderer_DEFINED
 #define GrAARectRenderer_DEFINED
 
+#include "GrColor.h"
 #include "SkMatrix.h"
 #include "SkRect.h"
 #include "SkRefCnt.h"
 #include "SkStrokeRec.h"
 
 class GrGpu;
+class GrDrawState;
 class GrDrawTarget;
 class GrIndexBuffer;
 
@@ -24,8 +26,9 @@ class GrAARectRenderer : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(GrAARectRenderer)
 
-    GrAARectRenderer()
-    : fAAFillRectIndexBuffer(NULL)
+    GrAARectRenderer(GrGpu* gpu)
+    : fGpu(gpu)
+    , fAAFillRectIndexBuffer(NULL)
     , fAAMiterStrokeRectIndexBuffer(NULL)
     , fAABevelStrokeRectIndexBuffer(NULL) {
     }
@@ -39,69 +42,53 @@ public:
     // TODO: potentialy fuse the fill & stroke methods and differentiate
     // between them by passing in stroke (==NULL means fill).
 
-    void fillAARect(GrGpu* gpu,
-                    GrDrawTarget* target,
+    void fillAARect(GrDrawTarget* target,
+                    GrDrawState* ds,
+                    GrColor color,
+                    const SkMatrix& viewMatrix,
                     const SkRect& rect,
-                    const SkMatrix& combinedMatrix,
                     const SkRect& devRect) {
-#ifdef SHADER_AA_FILL_RECT
-        if (combinedMatrix.rectStaysRect()) {
-            this->shaderFillAlignedAARect(gpu, target,
-                                          rect, combinedMatrix);
-        } else {
-            this->shaderFillAARect(gpu, target,
-                                   rect, combinedMatrix);
-        }
-#else
-        this->geometryFillAARect(gpu, target, rect, combinedMatrix, devRect);
-#endif
+        this->geometryFillAARect(target, ds, color, viewMatrix, rect, devRect);
     }
 
-    void strokeAARect(GrGpu* gpu,
-                      GrDrawTarget* target,
+    void strokeAARect(GrDrawTarget*,
+                      GrDrawState*,
+                      GrColor,
+                      const SkMatrix& viewMatrix,
                       const SkRect& rect,
-                      const SkMatrix& combinedMatrix,
                       const SkRect& devRect,
                       const SkStrokeRec& stroke);
 
     // First rect is outer; second rect is inner
-    void fillAANestedRects(GrGpu* gpu,
-                           GrDrawTarget* target,
-                           const SkRect rects[2],
-                           const SkMatrix& combinedMatrix);
+    void fillAANestedRects(GrDrawTarget*,
+                           GrDrawState*,
+                           GrColor,
+                           const SkMatrix& viewMatrix,
+                           const SkRect rects[2]);
 
 private:
-    GrIndexBuffer*              fAAFillRectIndexBuffer;
-    GrIndexBuffer*              fAAMiterStrokeRectIndexBuffer;
-    GrIndexBuffer*              fAABevelStrokeRectIndexBuffer;
+    GrIndexBuffer* aaStrokeRectIndexBuffer(bool miterStroke);
 
-    GrIndexBuffer* aaFillRectIndexBuffer(GrGpu* gpu);
-
-    static int aaStrokeRectIndexCount(bool miterStroke);
-    GrIndexBuffer* aaStrokeRectIndexBuffer(GrGpu* gpu, bool miterStroke);
-
-    void geometryFillAARect(GrGpu* gpu,
-                            GrDrawTarget* target,
+    void geometryFillAARect(GrDrawTarget*,
+                            GrDrawState*,
+                            GrColor,
+                            const SkMatrix& viewMatrix,
                             const SkRect& rect,
-                            const SkMatrix& combinedMatrix,
                             const SkRect& devRect);
 
-    void shaderFillAARect(GrGpu* gpu,
-                          GrDrawTarget* target,
-                          const SkRect& rect,
-                          const SkMatrix& combinedMatrix);
-
-    void shaderFillAlignedAARect(GrGpu* gpu,
-                                 GrDrawTarget* target,
-                                 const SkRect& rect,
-                                 const SkMatrix& combinedMatrix);
-
-    void geometryStrokeAARect(GrGpu* gpu,
-                              GrDrawTarget* target,
+    void geometryStrokeAARect(GrDrawTarget*,
+                              GrDrawState*,
+                              GrColor,
+                              const SkMatrix& viewMatrix,
                               const SkRect& devOutside,
                               const SkRect& devOutsideAssist,
                               const SkRect& devInside,
                               bool miterStroke);
+
+    GrGpu*                      fGpu;
+    GrIndexBuffer*              fAAFillRectIndexBuffer;
+    GrIndexBuffer*              fAAMiterStrokeRectIndexBuffer;
+    GrIndexBuffer*              fAABevelStrokeRectIndexBuffer;
 
     typedef SkRefCnt INHERITED;
 };

@@ -78,7 +78,7 @@ public:
                                             const SkStrokeRec& stroke,
                                             const SkIRect& resultBounds,
                                             bool antiAlias,
-                                            SkMatrix* matrix);
+                                            const SkMatrix* matrix);
 
     // This utility routine is used to add a path's mask to some other draw.
     // The ClipMaskManager uses it to accumulate clip masks while the
@@ -92,6 +92,9 @@ public:
     // output of DrawPathMaskToTexture.
     static void DrawToTargetWithPathMask(GrTexture* texture,
                                          GrDrawTarget* target,
+                                         GrDrawState* drawState,
+                                         GrColor,
+                                         const SkMatrix& viewMatrix,
                                          const SkIRect& rect);
 
 private:
@@ -125,12 +128,12 @@ private:
 
     // Actually sends the texture data to the GPU. This is called from
     // toTexture with the data filled in depending on the texture config.
-    void sendTextureData(GrTexture *texture, const GrTextureDesc& desc,
-                         const void *data, int rowbytes);
+    void sendTextureData(GrTexture *texture, const GrSurfaceDesc& desc,
+                         const void *data, size_t rowbytes);
 
     // Compresses the bitmap stored in fBM and sends the compressed data
     // to the GPU to be stored in 'texture' using sendTextureData.
-    void compressTextureData(GrTexture *texture, const GrTextureDesc& desc);
+    void compressTextureData(GrTexture *texture, const GrSurfaceDesc& desc);
 
     typedef SkNoncopyable INHERITED;
 };

@@ -1,80 +1,18 @@
-function tostr(t)
-    local str = ""
-    for k, v in next, t do
-        if #str > 0 then
-            str = str .. ", "
-        end
-        if type(k) == "number" then
-            str = str .. "[" .. k .. "] = "
-        else
-            str = str .. tostring(k) .. " = "
-        end
-        if type(v) == "table" then
-            str = str .. "{ " .. tostr(v) .. " }"
-        elseif type(v) == "string" then
-            str = str .. '"' .. v .. '"'
-        else
-            str = str .. tostring(v)
-        end
-    end
-    return str
+gShowBounds = false
+gUseBlurInTransitions = false
+
+gPath = "/skia/trunk/resources/"
+
+function load_file(file)
+    local prev_path = package.path
+    package.path = package.path .. ";" .. gPath .. file .. ".lua"
+    require(file)
+    package.path = prev_path
 end
 
+load_file("slides_utils")
 
-function trim_ws(s)
-    return s:match("^%s*(.*)")
-end
-
-function count_hypens(s)
-    local leftover = s:match("^-*(.*)")
-    return string.len(s) - string.len(leftover)
-end
-
-function parse_file(file)
-    local slides = {}
-    local block = {}
-
-    for line in file:lines() do
-        local s = trim_ws(line)
-        if #s == 0 then   -- done with a block
-            if #block > 0 then
-                slides[#slides + 1] = block
-                block = {}
-            end
-        else
-            local n = count_hypens(s)
-            block[#block + 1] = {
-                indent = n,
-                text = trim_ws(s:sub(n + 1, -1))
-            }
-        end
-    end
-    return slides
-end
-
-function pretty_print_slide(slide)
-    io.write("{\n")
-    for i = 1, #slide do
-        local node = slide[i]
-        for j = 0, node.indent do
-            io.write("   ")
-        end
-        io.write("{ ")
-        io.write(tostr(node))
-        io.write(" },\n")
-    end
-    io.write("},\n")
-end
-
-function pretty_print_slides(slides)
-    io.write("gSlides = {\n")
-    for i = 1, #slides do
-        pretty_print_slide(slides[i])
-    end
-    io.write("}\n")
-end
-
-gSlides = parse_file(io.open("/skia/trunk/resources/slides_content.lua", "r"))
+gSlides = parse_file(io.open("/skia/trunk/resources/slides_content2.lua", "r"))
 
 function make_rect(l, t, r, b)
     return { left = l, top = t, right = r, bottom = b }
@@ -90,118 +28,101 @@ function make_paint(typefacename, stylebits, size, color)
     return paint
 end
 
-function drawSlide(canvas, slide, template)
-    template = template.slide   -- need to sniff the slide to know if we're title or slide
+function draw_bullet(canvas, x, y, paint, indent)
+    if 0 == indent then
+        return
+    end
+    local ps = paint:getTextSize()
+    local cx = x - ps * .8
+    local cy = y - ps * .4
+    local radius = ps * .2
+    canvas:drawCircle(cx, cy, radius, paint)
+end
+
+function stroke_rect(canvas, rect, color)
+    local paint = Sk.newPaint()
+    paint:setStroke(true);
+    paint:setColor(color)
+    canvas:drawRect(rect, paint)
+end
+
+function drawSlide(canvas, slide, master_template)
+
+    if #slide == 1 then
+        template = master_template.title
+        canvas:drawText(slide[1].text, 320, 240, template[1])
+        return
+    end
+
+    template = master_template.slide
 
     local x = template.margin_x
     local y = template.margin_y
+    local scale = 1.25
 
-    local scale = 1.15
+    if slide.blockstyle == "code" then
+        local paint = master_template.codePaint
+        local fm = paint:getFontMetrics()
+        local height = #slide * (fm.descent - fm.ascent)
+        y = (480 - height) / 2
+        for i = 1, #slide do
+            local node = slide[i]
+            y = y - fm.ascent * scale
+            canvas:drawText(node.text, x, y, paint)
+            y = y + fm.descent * scale
+        end
+        return
+    end
+
     for i = 1, #slide do
         local node = slide[i]
-        local paint = template[node.indent + 1]
+        local paint = template[node.indent + 1].paint
+        local extra_dy = template[node.indent + 1].extra_dy
         local fm = paint:getFontMetrics()
-        local x_offset = -fm.ascent * node.indent
+        local x_offset = -fm.ascent * node.indent * 1.25
 
-        y = y - fm.ascent * scale
-        canvas:drawText(node.text, x + x_offset, y, paint)
-        y = y + fm.descent * scale
-    end
-end
+        local bounds = make_rect(x + x_offset, y, 620, 640)
+        local blob, newBottom = Sk.newTextBlob(node.text, bounds, paint)
+        draw_bullet(canvas, x + x_offset, y - fm.ascent, paint, node.indent)
+        canvas:drawTextBlob(blob, 0, 0, paint)
+        y = newBottom + paint:getTextSize() * .5 + extra_dy
 
-function slide_transition(prev, next, is_forward)
-    local rec = {
-        proc = function(self, canvas, drawSlideProc)
-            if self:isDone() then
-                drawSlideProc(canvas)
-                return nil
-            end
-            self.prevDrawable:draw(canvas, self.curr_x, 0)
-            self.nextDrawable:draw(canvas, self.curr_x + 640, 0)
-            self.curr_x = self.curr_x + self.step_x
-            return self
+        if gShowBounds then
+            bounds.bottom = newBottom
+            stroke_rect(canvas, bounds, {a=1,r=0,g=1,b=0})
+            stroke_rect(canvas, blob:bounds(), {a=1,r=1,g=0,b=0})
         end
-    }
-    if is_forward then
-        rec.prevDrawable = prev
-        rec.nextDrawable = next
-        rec.curr_x = 0
-        rec.step_x = -15
-        rec.isDone = function (self) return self.curr_x <= -640 end
-    else
-        rec.prevDrawable = next
-        rec.nextDrawable = prev
-        rec.curr_x = -640
-        rec.step_x = 15
-        rec.isDone = function (self) return self.curr_x >= 0 end
-    end
-    return rec
-end
 
-function fade_slide_transition(prev, next, is_forward)
-    local rec = {
-        prevDrawable = prev,
-        nextDrawable = next,
-        proc = function(self, canvas, drawSlideProc)
-            if self:isDone() then
-                drawSlideProc(canvas)
-                return nil
-            end
-            self.prevDrawable:draw(canvas, self.prev_x, 0, self.prev_a)
-            self.nextDrawable:draw(canvas, self.next_x, 0, self.next_a)
-            self:step()
-            return self
-        end
-    }
-    if is_forward then
-        rec.prev_x = 0
-        rec.prev_a = 1
-        rec.next_x = 640
-        rec.next_a = 0
-        rec.isDone = function (self) return self.next_x <= 0 end
-        rec.step = function (self)
-            self.next_x = self.next_x - 20
-            self.next_a = (640 - self.next_x) / 640
-            self.prev_a = 1 - self.next_a
-        end
-    else
-        rec.prev_x = 0
-        rec.prev_a = 1
-        rec.next_x = 0
-        rec.next_a = 0
-        rec.isDone = function (self) return self.prev_x >= 640 end
-        rec.step = function (self)
-            self.prev_x = self.prev_x + 20
-            self.prev_a = (640 - self.prev_x) / 640
-            self.next_a = 1 - self.prev_a
-        end
     end
-    return rec
 end
 
 --------------------------------------------------------------------------------------
+function make_tmpl(paint, extra_dy)
+    return { paint = paint, extra_dy = extra_dy }
+end
 
 function SkiaPoint_make_template()
     local title = {
         margin_x = 30,
         margin_y = 100,
     }
-    title[1] = make_paint("Arial", 1, 50, { a=1, r=0, g=0, b=0 })
+    title[1] = make_paint("Arial", 1, 45, { a=1, r=1, g=1, b=1 })
     title[1]:setTextAlign("center")
-    title[2] = make_paint("Arial", 1, 25, { a=1, r=.3, g=.3, b=.3 })
+    title[2] = make_paint("Arial", 1, 25, { a=1, r=.75, g=.75, b=.75 })
     title[2]:setTextAlign("center")
 
     local slide = {
         margin_x = 20,
-        margin_y = 30,
+        margin_y = 25,
     }
-    slide[1] = make_paint("Arial", 1, 36, { a=1, r=0, g=0, b=0 })
-    slide[2] = make_paint("Arial", 0, 30, { a=1, r=0, g=0, b=0 })
-    slide[3] = make_paint("Arial", 0, 24, { a=1, r=.2, g=.2, b=.2 })
+    slide[1] = make_tmpl(make_paint("Arial", 1, 35, { a=1, r=1, g=1, b=1 }), 18)
+    slide[2] = make_tmpl(make_paint("Arial", 0, 25, { a=1, r=1, g=1, b=1 }), 10)
+    slide[3] = make_tmpl(make_paint("Arial", 0, 20, { a=1, r=.9, g=.9, b=.9 }), 5)
 
     return {
         title = title,
         slide = slide,
+        codePaint = make_paint("Courier", 0, 20, { a=1, r=.9, g=.9, b=.9 }),
     }
 end
 
@@ -219,27 +140,7 @@ local gCurrAnimation
 
 gSlideIndex = 1
 
-function next_slide()
-    local prev = gSlides[gSlideIndex]
-
-    gSlideIndex = gSlideIndex + 1
-    if gSlideIndex > #gSlides then
-        gSlideIndex = 1
-    end
-
-    spawn_transition(prev, gSlides[gSlideIndex], true)
-end
-
-function prev_slide()
-    local prev = gSlides[gSlideIndex]
-
-    gSlideIndex = gSlideIndex - 1
-    if gSlideIndex < 1 then
-        gSlideIndex = #gSlides
-    end
-
-    spawn_transition(prev, gSlides[gSlideIndex], false)
-end
+-----------------------------------------------------------------------------
 
 function new_drawable_picture(pic)
     return {
@@ -263,26 +164,78 @@ function new_drawable_image(img)
     }
 end
 
+function convert_to_picture_drawable(slide)
+    local rec = Sk.newPictureRecorder()
+    drawSlide(rec:beginRecording(640, 480), slide, gTemplate)
+    return new_drawable_picture(rec:endRecording())
+end
+
+function convert_to_image_drawable(slide)
+    local surf = Sk.newRasterSurface(640, 480)
+    drawSlide(surf:getCanvas(), slide, gTemplate)
+    return new_drawable_image(surf:newImageSnapshot())
+end
+
+function new_drawable_slide(slide)
+    return {
+        slide = slide,
+        draw = function (self, canvas, x, y, paint)
+            if (nil == paint or ("number" == type(paint) and (1 == paint))) then
+                canvas:save()
+            else
+                canvas:saveLayer(paint)
+            end
+            canvas:translate(x, y)
+            drawSlide(canvas, self.slide, gTemplate)
+            canvas:restore()
+        end
+    }
+end
+
+gNewDrawableFactory = {
+    default = new_drawable_slide,
+    picture = convert_to_picture_drawable,
+    image = convert_to_image_drawable,
+}
+
+-----------------------------------------------------------------------------
+
+function next_slide()
+    local prev = gSlides[gSlideIndex]
+
+    if gSlideIndex < #gSlides then
+        gSlideIndex = gSlideIndex + 1
+        spawn_transition(prev, gSlides[gSlideIndex], true)
+    end
+end
+
+function prev_slide()
+    local prev = gSlides[gSlideIndex]
+
+    if gSlideIndex > 1 then
+        gSlideIndex = gSlideIndex - 1
+        spawn_transition(prev, gSlides[gSlideIndex], false)
+    end
+end
+
+gDrawableType = "default"
+
+load_file("slides_transitions")
+
 function spawn_transition(prevSlide, nextSlide, is_forward)
     local transition
     if is_forward then
-        transition = prevSlide.transition
+        transition = gTransitionTable[nextSlide.transition]
     else
-        transition = nextSlide.transition
+        transition = gTransitionTable[prevSlide.transition]
     end
 
     if not transition then
         transition = fade_slide_transition
     end
 
-    local rec = Sk.newPictureRecorder()
-
-    drawSlide(rec:beginRecording(640, 480), prevSlide, gTemplate)
-    local prevDrawable = new_drawable_picture(rec:endRecording())
-
-    drawSlide(rec:beginRecording(640, 480), nextSlide, gTemplate)
-    local nextDrawable = new_drawable_picture(rec:endRecording())
-
+    local prevDrawable = gNewDrawableFactory[gDrawableType](prevSlide)
+    local nextDrawable = gNewDrawableFactory[gDrawableType](nextSlide)
     gCurrAnimation = transition(prevDrawable, nextDrawable, is_forward)
 end
 
@@ -337,10 +290,26 @@ function spawn_scale_animation()
     }
 end
 
+local bgPaint = nil
+
+function draw_bg(canvas)
+    if not bgPaint then
+        bgPaint = Sk.newPaint()
+        local grad = Sk.newLinearGradient(  0,   0, { a=1, r=0, g=0, b=.3 },
+                                          640, 480, { a=1, r=0, g=0, b=.8 })
+        bgPaint:setShader(grad)
+        bgPaint:setDither(true)
+    end
+
+    canvas:drawPaint(bgPaint)
+end
+
 function onDrawContent(canvas, width, height)
     local matrix = Sk.newMatrix()
     matrix:setRectToRect(make_rect(0, 0, 640, 480), make_rect(0, 0, width, height), "center")
     canvas:concat(matrix)
+
+    draw_bg(canvas)
 
     local drawSlideProc = function(canvas)
         drawSlide(canvas, gSlides[gSlideIndex], gTemplate)
@@ -364,6 +333,15 @@ local keyProcs = {
     p = prev_slide,
     r = spawn_rotate_animation,
     s = spawn_scale_animation,
+    ["="] = function () scale_text_delta(gTemplate, 1) end,
+    ["-"] = function () scale_text_delta(gTemplate, -1) end,
+
+    b = function () gShowBounds = not gShowBounds end,
+    B = function () gUseBlurInTransitions = not gUseBlurInTransitions end,
+
+    ["1"] = function () gDrawableType = "default" end,
+    ["2"] = function () gDrawableType = "picture" end,
+    ["3"] = function () gDrawableType = "image" end,
 }
 
 function onCharHandler(uni)

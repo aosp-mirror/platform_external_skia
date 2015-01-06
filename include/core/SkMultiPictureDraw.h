@@ -40,7 +40,7 @@ public:
      */
     void add(SkCanvas* canvas,
              const SkPicture* picture,
-             const SkMatrix* matrix = NULL, 
+             const SkMatrix* matrix = NULL,
              const SkPaint* paint = NULL);
 
     /**
@@ -56,13 +56,21 @@ public:
 
 private:
     struct DrawData {
-        SkCanvas*        canvas;  // reffed
-        const SkPicture* picture; // reffed
-        SkMatrix         matrix;
-        SkPaint*         paint;   // owned
+        SkCanvas*        fCanvas;  // reffed
+        const SkPicture* fPicture; // reffed
+        SkMatrix         fMatrix;
+        SkPaint*         fPaint;   // owned
+
+        void init(SkCanvas*, const SkPicture*, const SkMatrix*, const SkPaint*);
+        void draw();
+
+        static void Reset(SkTDArray<DrawData>&);
+
+        static void Draw(DrawData* d) { d->draw(); }
     };
 
-    SkTDArray<DrawData> fDrawData;
+    SkTDArray<DrawData> fThreadSafeDrawData;
+    SkTDArray<DrawData> fGPUDrawData;
 };
 
 #endif

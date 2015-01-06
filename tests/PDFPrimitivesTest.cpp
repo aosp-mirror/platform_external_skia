@@ -15,6 +15,7 @@
 #include "SkPDFDevice.h"
 #include "SkPDFStream.h"
 #include "SkPDFTypes.h"
+#include "SkReadBuffer.h"
 #include "SkScalar.h"
 #include "SkStream.h"
 #include "SkTypes.h"
@@ -57,9 +58,9 @@ static bool stream_equals(const SkDynamicMemoryWStream& stream, size_t offset,
 static bool stream_contains(const SkDynamicMemoryWStream& stream,
                             const char* buffer) {
     SkAutoDataUnref data(stream.copyToData());
-    int len = strlen(buffer);  // our buffer does not have EOSs.
+    size_t len = strlen(buffer);  // our buffer does not have EOSs.
 
-    for (int offset = 0 ; offset < (int)data->size() - len; offset++) {
+    for (size_t offset = 0 ; offset < data->size() - len; offset++) {
         if (memcmp(data->bytes() + offset, buffer, len) == 0) {
             return true;
         }
@@ -427,4 +428,58 @@ DEF_TEST(PDFPrimitives, reporter) {
     test_issue1083();
 
     TestImages(reporter);
+}
+
+namespace {
+
+class DummyImageFilter : public SkImageFilter {
+public:
+    DummyImageFilter(bool visited = false) : SkImageFilter(0, NULL), fVisited(visited) {}
+    virtual ~DummyImageFilter() SK_OVERRIDE {}
+    virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
+                               SkBitmap* result, SkIPoint* offset) const {
+        fVisited = true;
+        offset->fX = offset->fY = 0;
+        *result = src;
+        return true;
+    }
+    SK_TO_STRING_OVERRIDE()
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(DummyImageFilter)
+    bool visited() const { return fVisited; }
+
+private:
+    mutable bool fVisited;
+};
+
+SkFlattenable* DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
+    SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 0);
+    bool visited = buffer.readBool();
+    return SkNEW_ARGS(DummyImageFilter, (visited));
+}
+
+#ifndef SK_IGNORE_TO_STRING
+void DummyImageFilter::toString(SkString* str) const {
+    str->appendf("DummyImageFilter: (");
+    str->append(")");
+}
+#endif
+
+};
+
+// Check that PDF rendering of image filters successfully falls back to
+// CPU rasterization.
+DEF_TEST(PDFImageFilter, reporter) {
+    SkISize pageSize = SkISize::Make(100, 100);
+    SkAutoTUnref<SkPDFDevice> device(new SkPDFDevice(pageSize, pageSize, SkMatrix::I()));
+    SkCanvas canvas(device.get());
+    SkAutoTUnref<DummyImageFilter> filter(new DummyImageFilter());
+
+    // Filter just created; should be unvisited.
+    REPORTER_ASSERT(reporter, !filter->visited());
+    SkPaint paint;
+    paint.setImageFilter(filter.get());
+    canvas.drawRect(SkRect::MakeWH(100, 100), paint);
+
+    // Filter was used in rendering; should be visited.
+    REPORTER_ASSERT(reporter, filter->visited());
 }

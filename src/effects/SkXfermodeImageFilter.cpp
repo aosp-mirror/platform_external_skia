@@ -32,13 +32,6 @@ SkXfermodeImageFilter::~SkXfermodeImageFilter() {
     SkSafeUnref(fMode);
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkXfermodeImageFilter::SkXfermodeImageFilter(SkReadBuffer& buffer)
-  : INHERITED(2, buffer) {
-    fMode = buffer.readXfermode();
-}
-#endif
-
 SkFlattenable* SkXfermodeImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 2);
     SkAutoTUnref<SkXfermode> mode(buffer.readXfermode());
@@ -105,6 +98,17 @@ bool SkXfermodeImageFilter::onFilterImage(Proxy* proxy,
     return true;
 }
 
+#ifndef SK_IGNORE_TO_STRING
+void SkXfermodeImageFilter::toString(SkString* str) const {
+    str->appendf("SkXfermodeImageFilter: (");
+    str->appendf("xfermode: (");
+    if (fMode) {
+        fMode->toString(str);
+    }
+    str->append("))");
+}
+#endif
+
 #if SK_SUPPORT_GPU
 
 bool SkXfermodeImageFilter::canFilterImageGPU() const {
@@ -134,8 +138,8 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
 
     GrFragmentProcessor* xferProcessor = NULL;
 
-    GrTextureDesc desc;
-    desc.fFlags = kRenderTarget_GrTextureFlagBit | kNoStencil_GrTextureFlagBit;
+    GrSurfaceDesc desc;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag | kNoStencil_GrSurfaceFlag;
     desc.fWidth = src.width();
     desc.fHeight = src.height();
     desc.fConfig = kSkia8888_GrPixelConfig;
@@ -163,7 +167,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     GrPaint paint;
     paint.addColorTextureProcessor(foregroundTex, foregroundMatrix);
     paint.addColorProcessor(xferProcessor)->unref();
-    context->drawRect(paint, srcRect);
+    context->drawRect(paint, SkMatrix::I(), srcRect);
 
     offset->fX = backgroundOffset.fX;
     offset->fY = backgroundOffset.fY;
@@ -172,3 +176,4 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
 }
 
 #endif
+

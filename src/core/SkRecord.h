@@ -8,10 +8,10 @@
 #ifndef SkRecord_DEFINED
 #define SkRecord_DEFINED
 
-#include "SkChunkAlloc.h"
 #include "SkRecords.h"
 #include "SkTLogic.h"
 #include "SkTemplates.h"
+#include "SkVarAlloc.h"
 
 // SkRecord (REC-ord) represents a sequence of SkCanvas calls, saved for future use.
 // These future uses may include: replay, optimization, serialization, or combinations of those.
@@ -25,20 +25,13 @@
 // only with SkRecords::* structs defined in SkRecords.h.  Your compiler will helpfully yell if you
 // get this wrong.
 
-class SkRecord : SkNoncopyable {
+class SkRecord : public SkNVRefCnt<SkRecord> {
     enum {
-        kChunkBytes = 4096,
         kFirstReserveCount = 64 / sizeof(void*),
     };
 public:
-    SkRecord() : fAlloc(kChunkBytes), fCount(0), fReserved(0) {}
-
-    ~SkRecord() {
-        Destroyer destroyer;
-        for (unsigned i = 0; i < this->count(); i++) {
-            this->mutate<void>(i, destroyer);
-        }
-    }
+    SkRecord() : fCount(0), fReserved(0), fAlloc(8/*start block sizes at 256 bytes*/) {}
+    ~SkRecord();
 
     // Returns the number of canvas commands in this SkRecord.
     unsigned count() const { return fCount; }
@@ -69,7 +62,7 @@ public:
     template <typename T>
     T* alloc(size_t count = 1) {
         // Bump up to the next pointer width if needed, so all allocations start pointer-aligned.
-        return (T*)fAlloc.allocThrow(SkAlignPtr(sizeof(T) * count));
+        return (T*)fAlloc.alloc(sizeof(T) * count, SK_MALLOC_THROW);
     }
 
     // Add a new command of type T to the end of this SkRecord.
@@ -77,11 +70,8 @@ public:
     template <typename T>
     T* append() {
         if (fCount == fReserved) {
-            fReserved = SkTMax<unsigned>(kFirstReserveCount, fReserved*2);
-            fRecords.realloc(fReserved);
-            fTypes.realloc(fReserved);
+            this->grow();
         }
-
         fTypes[fCount] = T::kType;
         return fRecords[fCount++].set(this->allocCommand<T>());
     }
@@ -113,6 +103,10 @@ public:
         fTypes[i] = T::kType;
         return fRecords[i].set(this->allocCommand<T>());
     }
+
+    // Does not return the bytes in any pointers embedded in the Records; callers
+    // need to iterate with a visitor to measure those they care for.
+    size_t bytesUsed() const;
 
 private:
     // Implementation notes!
@@ -179,6 +173,9 @@ private:
     template <typename T>
     SK_WHEN(!SkTIsEmpty<T>, T*) allocCommand() { return this->alloc<T>(); }
 
+    // Called when we've run out of room to record new commands.
+    void grow();
+
     // An untyped pointer to some bytes in fAlloc.  This is the interface for polymorphic dispatch:
     // visit() and mutate() work with the parallel fTypes array to do the work of a vtable.
     struct Record {
@@ -226,12 +223,15 @@ private:
     // fRecords and fTypes need to be data structures that can append fixed length data, and need to
     // support efficient random access and forward iteration.  (They don't need to be contiguous.)
 
-    SkChunkAlloc fAlloc;
-    SkAutoTMalloc<Record> fRecords;
-    SkAutoTMalloc<Type8> fTypes;
     // fCount and fReserved measure both fRecords and fTypes, which always grow in lock step.
     unsigned fCount;
     unsigned fReserved;
+    SkAutoTMalloc<Record> fRecords;
+    SkAutoTMalloc<Type8> fTypes;
+    SkVarAlloc fAlloc;
+    // Strangely the order of these fields matters.  If the unsigneds don't go first we're 56 bytes.
+    // tomhudson and mtklein have no idea why.
 };
+SK_COMPILE_ASSERT(sizeof(SkRecord) <= 56, SkRecordSize);
 
 #endif//SkRecord_DEFINED

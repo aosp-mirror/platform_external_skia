@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "gl/builders/GrGLProgramBuilder.h"
 #include "GrTextureDomain.h"
+#include "GrInvariantOutput.h"
 #include "GrSimpleTextureEffect.h"
-#include "GrTBackendProcessorFactory.h"
-#include "gl/GrGLProcessor.h"
 #include "SkFloatingPoint.h"
-
+#include "gl/GrGLProcessor.h"
+#include "gl/builders/GrGLProgramBuilder.h"
 
 GrTextureDomain::GrTextureDomain(const SkRect& domain, Mode mode, int index)
     : fIndex(index) {
@@ -57,8 +56,9 @@ void GrTextureDomain::GLDomain::sampleTexture(GrGLShaderBuilder* builder,
         if (textureDomain.fIndex >= 0) {
             uniName.appendS32(textureDomain.fIndex);
         }
-        fDomainUni = program->addUniform(GrGLProgramBuilder::kFragment_Visibility, kVec4f_GrSLType,
-                uniName.c_str(), &name);
+        fDomainUni = program->addUniform(GrGLProgramBuilder::kFragment_Visibility,
+                                         kVec4f_GrSLType, kDefault_GrSLPrecision,
+                                         uniName.c_str(), &name);
         fDomainName = name;
     }
 
@@ -167,11 +167,10 @@ void GrTextureDomain::GLDomain::setData(const GrGLProgramDataManager& pdman,
 
 class GrGLTextureDomainEffect : public GrGLFragmentProcessor {
 public:
-    GrGLTextureDomainEffect(const GrBackendProcessorFactory&, const GrProcessor&);
+    GrGLTextureDomainEffect(const GrProcessor&);
 
     virtual void emitCode(GrGLFPBuilder*,
                           const GrFragmentProcessor&,
-                          const GrProcessorKey&,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray&,
@@ -186,14 +185,11 @@ private:
     typedef GrGLFragmentProcessor INHERITED;
 };
 
-GrGLTextureDomainEffect::GrGLTextureDomainEffect(const GrBackendProcessorFactory& factory,
-                                                 const GrProcessor&)
-    : INHERITED(factory) {
+GrGLTextureDomainEffect::GrGLTextureDomainEffect(const GrProcessor&) {
 }
 
 void GrGLTextureDomainEffect::emitCode(GrGLFPBuilder* builder,
                                        const GrFragmentProcessor& fp,
-                                       const GrProcessorKey& key,
                                        const char* outputColor,
                                        const char* inputColor,
                                        const TransformedCoordsArray& coords,
@@ -253,25 +249,34 @@ GrTextureDomainEffect::GrTextureDomainEffect(GrTexture* texture,
     , fTextureDomain(domain, mode) {
     SkASSERT(mode != GrTextureDomain::kRepeat_Mode ||
             filterMode == GrTextureParams::kNone_FilterMode);
+    this->initClassID<GrTextureDomainEffect>();
 }
 
 GrTextureDomainEffect::~GrTextureDomainEffect() {
 
 }
 
-const GrBackendFragmentProcessorFactory& GrTextureDomainEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrTextureDomainEffect>::getInstance();
+void GrTextureDomainEffect::getGLProcessorKey(const GrGLCaps& caps,
+                                              GrProcessorKeyBuilder* b) const {
+    GrGLTextureDomainEffect::GenKey(*this, caps, b);
 }
 
-bool GrTextureDomainEffect::onIsEqual(const GrProcessor& sBase) const {
+GrGLFragmentProcessor* GrTextureDomainEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GrGLTextureDomainEffect, (*this));
+}
+
+bool GrTextureDomainEffect::onIsEqual(const GrFragmentProcessor& sBase) const {
     const GrTextureDomainEffect& s = sBase.cast<GrTextureDomainEffect>();
-    return this->hasSameTextureParamsMatrixAndSourceCoords(s) &&
-           this->fTextureDomain == s.fTextureDomain;
+    return this->fTextureDomain == s.fTextureDomain;
 }
 
-void GrTextureDomainEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void GrTextureDomainEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     if (GrTextureDomain::kDecal_Mode == fTextureDomain.mode()) { // TODO: helper
-        inout->mulByUnknownColor();
+        if (GrPixelConfigIsAlphaOnly(this->texture(0)->config())) {
+            inout->mulByUnknownSingleComponent();
+        } else {
+            inout->mulByUnknownFourComponents();
+        }
     } else {
         this->updateInvariantOutputForModulation(inout);
     }
@@ -296,7 +301,7 @@ GrFragmentProcessor* GrTextureDomainEffect::TestCreate(SkRandom* random,
         (GrTextureDomain::Mode) random->nextULessThan(GrTextureDomain::kModeCount);
     const SkMatrix& matrix = GrProcessorUnitTest::TestMatrix(random);
     bool bilerp = mode != GrTextureDomain::kRepeat_Mode ? random->nextBool() : false;
-    GrCoordSet coords = random->nextBool() ? kLocal_GrCoordSet : kPosition_GrCoordSet;
+    GrCoordSet coords = random->nextBool() ? kLocal_GrCoordSet : kDevice_GrCoordSet;
     return GrTextureDomainEffect::Create(textures[texIdx],
                                          matrix,
                                          domain,

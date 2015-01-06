@@ -33,7 +33,6 @@ LOCAL_SRC_FILES := \
 	bigblurs.cpp \
 	bigmatrix.cpp \
 	bigtext.cpp \
-	bitmapmatrix.cpp \
 	bitmapfilters.cpp \
 	bitmappremul.cpp \
 	bitmaprect.cpp \
@@ -51,15 +50,21 @@ LOCAL_SRC_FILES := \
 	circularclips.cpp \
 	clip_strokerect.cpp \
 	clippedbitmapshaders.cpp \
+	cgms.cpp \
+	cgm.c \
 	colorcube.cpp \
 	coloremoji.cpp \
 	colorfilterimagefilter.cpp \
 	colorfilters.cpp \
 	colormatrix.cpp \
 	colortype.cpp \
+	colortypexfermode.cpp \
+	colorwheel.cpp \
 	complexclip.cpp \
 	complexclip2.cpp \
+	complexclip3.cpp \
 	composeshader.cpp \
+	conicpaths.cpp \
 	convexpaths.cpp \
 	convexpolyclip.cpp \
 	convexpolyeffect.cpp \
@@ -67,6 +72,7 @@ LOCAL_SRC_FILES := \
 	cubicpaths.cpp \
 	cmykjpeg.cpp \
 	degeneratesegments.cpp \
+	dcshader.cpp \
 	discard.cpp \
 	dashcubics.cpp \
 	dashing.cpp \
@@ -86,6 +92,7 @@ LOCAL_SRC_FILES := \
 	filltypes.cpp \
 	filltypespersp.cpp \
 	filterbitmap.cpp \
+	filterfastbounds.cpp \
 	filterindiabox.cpp \
 	fontcache.cpp \
 	fontmgr.cpp \
@@ -101,6 +108,7 @@ LOCAL_SRC_FILES := \
 	gradientDirtyLaundry.cpp \
 	gradient_matrix.cpp \
 	gradtext.cpp \
+	grayscalejpg.cpp \
 	hairlines.cpp \
 	hairmodes.cpp \
 	hittestpath.cpp \
@@ -166,6 +174,7 @@ LOCAL_SRC_FILES := \
 	simpleaaclip.cpp \
 	skbug1719.cpp \
 	smallarc.cpp \
+	smallimage.cpp \
 	stringart.cpp \
 	spritebitmap.cpp \
 	srcmode.cpp \
@@ -180,11 +189,13 @@ LOCAL_SRC_FILES := \
 	testimagefilters.cpp \
 	texdata.cpp \
 	variedtext.cpp \
+	tallstretchedbitmaps.cpp \
 	textblob.cpp \
 	textblobshader.cpp \
 	texturedomaineffect.cpp \
 	thinrects.cpp \
 	thinstrokedrects.cpp \
+	tiledscaledbitmap.cpp \
 	tileimagefilter.cpp \
 	tilemodes.cpp \
 	tilemodes_scaled.cpp \
@@ -202,6 +213,7 @@ LOCAL_SRC_FILES := \
 	../src/utils/debugger/SkDrawCommand.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkObjectParser.cpp \
+	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../tools/CrashHandler.cpp \
 	gm_expectations.cpp \
@@ -209,6 +221,7 @@ LOCAL_SRC_FILES := \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
+	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
@@ -222,6 +235,7 @@ LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
 
 LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH)/../include/c \
 	$(LOCAL_PATH)/../include/config \
 	$(LOCAL_PATH)/../include/core \
 	$(LOCAL_PATH)/../include/pathops \
@@ -251,5 +265,8 @@ LOCAL_MODULE_TAGS := \
 
 LOCAL_MODULE := \
 	skia_gm
+
+LOCAL_PICKUP_FILES := \
+	$(LOCAL_PATH)/../resources
 
 include $(BUILD_NATIVE_TEST)

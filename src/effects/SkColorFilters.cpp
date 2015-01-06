@@ -84,17 +84,6 @@ protected:
         buffer.writeUInt(fMode);
     }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkModeColorFilter(SkReadBuffer& buffer) {
-        fColor = buffer.readColor();
-        fMode = (SkXfermode::Mode)buffer.readUInt();
-        if (buffer.isValid()) {
-            this->updateCache();
-            buffer.validate(SkIsValidMode(fMode));
-        }
-    }
-#endif
-
 private:
     SkColor             fColor;
     SkXfermode::Mode    fMode;
@@ -123,12 +112,12 @@ SkFlattenable* SkModeColorFilter::CreateProc(SkReadBuffer& buffer) {
 ///////////////////////////////////////////////////////////////////////////////
 #if SK_SUPPORT_GPU
 #include "GrBlend.h"
-#include "GrProcessor.h"
+#include "GrFragmentProcessor.h"
+#include "GrInvariantOutput.h"
 #include "GrProcessorUnitTest.h"
-#include "GrTBackendProcessorFactory.h"
+#include "SkGr.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
-#include "SkGr.h"
 
 namespace {
 /**
@@ -205,24 +194,27 @@ public:
         return true;
     }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE {
-        return GrTBackendFragmentProcessorFactory<ModeColorFilterEffect>::getInstance();
+    virtual void getGLProcessorKey(const GrGLCaps& caps,
+                                   GrProcessorKeyBuilder* b) const SK_OVERRIDE {
+        GLProcessor::GenKey(*this, caps, b);
     }
 
-    static const char* Name() { return "ModeColorFilterEffect"; }
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE {
+        return SkNEW_ARGS(GLProcessor, (*this));
+    }
+
+    virtual const char* name() const SK_OVERRIDE { return "ModeColorFilterEffect"; }
 
     SkXfermode::Mode mode() const { return fMode; }
     GrColor color() const { return fColor; }
 
     class GLProcessor : public GrGLFragmentProcessor {
     public:
-        GLProcessor(const GrBackendProcessorFactory& factory, const GrProcessor&)
-            : INHERITED(factory) {
+        GLProcessor(const GrProcessor&) {
         }
 
         virtual void emitCode(GrGLFPBuilder* builder,
                               const GrFragmentProcessor& fp,
-                              const GrProcessorKey&,
                               const char* outputColor,
                               const char* inputColor,
                               const TransformedCoordsArray&,
@@ -233,7 +225,8 @@ public:
             const char* colorFilterColorUniName = NULL;
             if (fp.cast<ModeColorFilterEffect>().willUseFilterColor()) {
                 fFilterColorUni = builder->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                                      kVec4f_GrSLType, "FilterColor",
+                                                      kVec4f_GrSLType, kDefault_GrSLPrecision,
+                                                      "FilterColor",
                                                       &colorFilterColorUniName);
             }
 
@@ -275,23 +268,15 @@ private:
     ModeColorFilterEffect(GrColor color, SkXfermode::Mode mode)
         : fMode(mode),
           fColor(color) {
-
-        SkXfermode::Coeff dstCoeff;
-        SkXfermode::Coeff srcCoeff;
-        SkAssertResult(SkXfermode::ModeAsCoeff(fMode, &srcCoeff, &dstCoeff));
-        // These could be calculated from the blend equation with template trickery..
-        if (SkXfermode::kZero_Coeff == dstCoeff &&
-                !GrBlendCoeffRefsDst(sk_blend_to_grblend(srcCoeff))) {
-            this->setWillNotUseInputColor();
-        }
+        this->initClassID<ModeColorFilterEffect>();
     }
 
-    virtual bool onIsEqual(const GrProcessor& other) const SK_OVERRIDE {
+    virtual bool onIsEqual(const GrFragmentProcessor& other) const SK_OVERRIDE {
         const ModeColorFilterEffect& s = other.cast<ModeColorFilterEffect>();
         return fMode == s.fMode && fColor == s.fColor;
     }
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     SkXfermode::Mode fMode;
     GrColor fColor;
@@ -382,7 +367,7 @@ private:
 
 }
 
-void ModeColorFilterEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void ModeColorFilterEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     float inputColor[4];
     GrColorToRGBAFloat(inout->color(), inputColor);
     float filterColor[4];
@@ -392,7 +377,17 @@ void ModeColorFilterEffect::onComputeInvariantOutput(InvariantOutput* inout) con
                                 MaskedColorExpr(filterColor, kRGBA_GrColorComponentFlags),
                                 MaskedColorExpr(inputColor, inout->validFlags()));
 
-    inout->setToOther(result.getValidComponents(), result.getColor());
+    // Check if we will use the input color
+    SkXfermode::Coeff dstCoeff;
+    SkXfermode::Coeff srcCoeff;
+    SkAssertResult(SkXfermode::ModeAsCoeff(fMode, &srcCoeff, &dstCoeff));
+    GrInvariantOutput::ReadInput readInput = GrInvariantOutput::kWill_ReadInput;
+    // These could be calculated from the blend equation with template trickery..
+    if (SkXfermode::kZero_Coeff == dstCoeff &&
+        !GrBlendCoeffRefsDst(sk_blend_to_grblend(srcCoeff))) {
+        readInput = GrInvariantOutput::kWillNot_ReadInput;
+    }
+    inout->setToOther(result.getValidComponents(), result.getColor(), readInput);
 }
 
 GR_DEFINE_FRAGMENT_PROCESSOR_TEST(ModeColorFilterEffect);

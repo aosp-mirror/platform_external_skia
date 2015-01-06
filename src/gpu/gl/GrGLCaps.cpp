@@ -7,6 +7,7 @@
 
 
 #include "GrGLCaps.h"
+
 #include "GrGLContext.h"
 #include "SkTSearch.h"
 #include "SkTSort.h"
@@ -43,6 +44,7 @@ void GrGLCaps::reset() {
     fTwoFormatLimit = false;
     fFragCoordsConventionSupport = false;
     fVertexArrayObjectSupport = false;
+    fES2CompatibilitySupport = false;
     fUseNonVBOVertexAndIndexDynamicData = false;
     fIsCoreProfile = false;
     fFullClearIsFree = false;
@@ -85,6 +87,7 @@ GrGLCaps& GrGLCaps::operator= (const GrGLCaps& caps) {
     fTwoFormatLimit = caps.fTwoFormatLimit;
     fFragCoordsConventionSupport = caps.fFragCoordsConventionSupport;
     fVertexArrayObjectSupport = caps.fVertexArrayObjectSupport;
+    fES2CompatibilitySupport = caps.fES2CompatibilitySupport;
     fUseNonVBOVertexAndIndexDynamicData = caps.fUseNonVBOVertexAndIndexDynamicData;
     fIsCoreProfile = caps.fIsCoreProfile;
     fFullClearIsFree = caps.fFullClearIsFree;
@@ -177,20 +180,17 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
                              ctxInfo.hasExtension("GL_EXT_texture_storage");
     }
 
-    // ARB_texture_rg is part of OpenGL 3.0, but mesa doesn't support it if
-    // it doesn't have ARB_texture_rg extension.
-    if (kGL_GrGLStandard == standard) {
-        if (ctxInfo.isMesa()) {
-            fTextureRedSupport = ctxInfo.hasExtension("GL_ARB_texture_rg");
-        } else {
+    // ARB_texture_rg is part of OpenGL 3.0, but mesa doesn't support GL_RED 
+    // and GL_RG on FBO textures.
+    if (!ctxInfo.isMesa()) {
+        if (kGL_GrGLStandard == standard) {
             fTextureRedSupport = version >= GR_GL_VER(3,0) ||
                                  ctxInfo.hasExtension("GL_ARB_texture_rg");
+        } else {
+            fTextureRedSupport =  version >= GR_GL_VER(3,0) ||
+                                  ctxInfo.hasExtension("GL_EXT_texture_rg");
         }
-    } else {
-        fTextureRedSupport =  version >= GR_GL_VER(3,0) ||
-                              ctxInfo.hasExtension("GL_EXT_texture_rg");
     }
-
     fImagingSupport = kGL_GrGLStandard == standard &&
                       ctxInfo.hasExtension("GL_ARB_imaging");
 
@@ -199,9 +199,10 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
     // can change based on which render target is bound
     fTwoFormatLimit = kGLES_GrGLStandard == standard;
 
+    // Frag Coords Convention support is not part of ES
     // Known issue on at least some Intel platforms:
     // http://code.google.com/p/skia/issues/detail?id=946
-    if (kIntel_GrGLVendor != ctxInfo.vendor()) {
+    if (kIntel_GrGLVendor != ctxInfo.vendor() && kGLES_GrGLStandard != standard) {
         fFragCoordsConventionSupport = ctxInfo.glslGeneration() >= k150_GrGLSLGeneration ||
                                        ctxInfo.hasExtension("GL_ARB_fragment_coord_conventions");
     }
@@ -233,10 +234,18 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
 
     if (kGL_GrGLStandard == standard) {
         fVertexArrayObjectSupport = version >= GR_GL_VER(3, 0) ||
-                                    ctxInfo.hasExtension("GL_ARB_vertex_array_object");
+                                    ctxInfo.hasExtension("GL_ARB_vertex_array_object") ||
+                                    ctxInfo.hasExtension("GL_APPLE_vertex_array_object");
     } else {
         fVertexArrayObjectSupport = version >= GR_GL_VER(3, 0) ||
                                     ctxInfo.hasExtension("GL_OES_vertex_array_object");
+    }
+
+    if (kGL_GrGLStandard == standard) {
+        fES2CompatibilitySupport = ctxInfo.hasExtension("GL_ARB_ES2_compatibility");
+    }
+    else {
+        fES2CompatibilitySupport = true;
     }
 
     if (kGLES_GrGLStandard == standard) {
@@ -368,7 +377,8 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         fGeometryShaderSupport = ctxInfo.version() >= GR_GL_VER(3,2) &&
                                  ctxInfo.glslGeneration() >= k150_GrGLSLGeneration;
     } else {
-        fShaderDerivativeSupport = ctxInfo.hasExtension("GL_OES_standard_derivatives");
+        fShaderDerivativeSupport = ctxInfo.version() >= GR_GL_VER(3, 0) ||
+                                   ctxInfo.hasExtension("GL_OES_standard_derivatives");
     }
 
     if (GrGLCaps::kES_IMG_MsToTexture_MSFBOType == fMSFBOType) {
@@ -377,14 +387,20 @@ bool GrGLCaps::init(const GrGLContextInfo& ctxInfo, const GrGLInterface* gli) {
         GR_GL_GetIntegerv(gli, GR_GL_MAX_SAMPLES, &fMaxSampleCount);
     }
 
+    if (kPowerVR54x_GrGLRenderer == ctxInfo.renderer() ||
+        kPowerVRRogue_GrGLRenderer == ctxInfo.renderer()) {
+        fUseDrawInsteadOfClear = true;
+    }
+
     this->initConfigTexturableTable(ctxInfo, gli);
     this->initConfigRenderableTable(ctxInfo);
+
+    this->initShaderPrecisionTable(ctxInfo, gli);
 
     return true;
 }
 
 void GrGLCaps::initConfigRenderableTable(const GrGLContextInfo& ctxInfo) {
-
     // OpenGL < 3.0
     //  no support for render targets unless the GL_ARB_framebuffer_object
     //  extension is supported (in which case we get ALPHA, RED, RG, RGB,
@@ -462,10 +478,57 @@ void GrGLCaps::initConfigRenderableTable(const GrGLContextInfo& ctxInfo) {
         }
     }
 
+    if (this->fRGBA8RenderbufferSupport && this->isConfigTexturable(kSRGBA_8888_GrPixelConfig)) {
+        if (kGL_GrGLStandard == standard) {
+            if (ctxInfo.version() >= GR_GL_VER(3,0) ||
+                ctxInfo.hasExtension("GL_ARB_framebuffer_sRGB") ||
+                ctxInfo.hasExtension("GL_EXT_framebuffer_sRGB")) {
+                fConfigRenderSupport[kSRGBA_8888_GrPixelConfig][kNo_MSAA] = true;
+                fConfigRenderSupport[kSRGBA_8888_GrPixelConfig][kYes_MSAA] = true;
+            }
+        } else {
+            if (ctxInfo.version() >= GR_GL_VER(3,0) ||
+                ctxInfo.hasExtension("GL_EXT_sRGB")) {
+                fConfigRenderSupport[kSRGBA_8888_GrPixelConfig][kNo_MSAA] = true;
+                fConfigRenderSupport[kSRGBA_8888_GrPixelConfig][kYes_MSAA] = true;
+            }
+        }
+    }
+    
     if (this->isConfigTexturable(kRGBA_float_GrPixelConfig)) {
-        fConfigRenderSupport[kRGBA_float_GrPixelConfig][kNo_MSAA] = true;
+        if (kGL_GrGLStandard == standard) {
+            fConfigRenderSupport[kRGBA_float_GrPixelConfig][kNo_MSAA] = true;
+            fConfigRenderSupport[kRGBA_float_GrPixelConfig][kYes_MSAA] = true;
+        } else {
+            if (ctxInfo.hasExtension("GL_EXT_color_buffer_float")) {
+                fConfigRenderSupport[kRGBA_float_GrPixelConfig][kNo_MSAA] = true;
+            } else {
+                fConfigRenderSupport[kRGBA_float_GrPixelConfig][kNo_MSAA] = false;
+            }
+            // for now we don't support floating point MSAA on ES
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kYes_MSAA] = false;
+        }
     }
 
+    if (this->isConfigTexturable(kAlpha_half_GrPixelConfig)) {
+        if (kGL_GrGLStandard == standard) {
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kNo_MSAA] = true;
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kYes_MSAA] = true;
+        } else if (ctxInfo.version() >= GR_GL_VER(3,0)) {
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kNo_MSAA] = true;
+            // for now we don't support floating point MSAA on ES
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kYes_MSAA] = false;
+        } else {
+            if (ctxInfo.hasExtension("GL_EXT_color_buffer_half_float") && fTextureRedSupport) {
+                fConfigRenderSupport[kAlpha_half_GrPixelConfig][kNo_MSAA] = true;
+            } else {
+                fConfigRenderSupport[kAlpha_half_GrPixelConfig][kNo_MSAA] = false;
+            }
+            // for now we don't support floating point MSAA on ES
+            fConfigRenderSupport[kAlpha_half_GrPixelConfig][kYes_MSAA] = false;
+        }
+    }
+    
     // If we don't support MSAA then undo any places above where we set a config as renderable with
     // msaa.
     if (kNone_MSFBOType == fMSFBOType) {
@@ -514,6 +577,15 @@ void GrGLCaps::initConfigTexturableTable(const GrGLContextInfo& ctxInfo, const G
                  kSkia8888_GrPixelConfig != kBGRA_8888_GrPixelConfig);
     }
 
+    // Check for sRGBA
+    if (kGL_GrGLStandard == standard) {
+        fConfigTextureSupport[kSRGBA_8888_GrPixelConfig] =
+            (version >= GR_GL_VER(3,0) || ctxInfo.hasExtension("GL_EXT_texture_sRGB"));
+    } else {
+        fConfigTextureSupport[kSRGBA_8888_GrPixelConfig] =
+            (version >= GR_GL_VER(3,0) || ctxInfo.hasExtension("GL_EXT_sRGB"));
+    }
+    
     // Compressed texture support
 
     // glCompressedTexImage2D is available on all OpenGL ES devices...
@@ -597,10 +669,23 @@ void GrGLCaps::initConfigTexturableTable(const GrGLContextInfo& ctxInfo, const G
     bool hasFPTextures = version >= GR_GL_VER(3, 1);
     if (!hasFPTextures) {
         hasFPTextures = ctxInfo.hasExtension("GL_ARB_texture_float") ||
-                        (ctxInfo.hasExtension("OES_texture_float_linear") &&
+                        (ctxInfo.hasExtension("GL_OES_texture_float_linear") &&
                          ctxInfo.hasExtension("GL_OES_texture_float"));
     }
     fConfigTextureSupport[kRGBA_float_GrPixelConfig] = hasFPTextures;
+
+    // Check for fp16 texture support
+    // NOTE: We disallow floating point textures on ES devices if linear
+    // filtering modes are not supported.  This is for simplicity, but a more
+    // granular approach is possible.  Coincidentally, 16-bit floating point textures became part of
+    // the standard in ES3.1 / OGL 3.1, hence the shorthand
+    bool hasHalfFPTextures = version >= GR_GL_VER(3, 1);
+    if (!hasHalfFPTextures) {
+        hasHalfFPTextures = ctxInfo.hasExtension("GL_ARB_texture_float") ||
+                            (ctxInfo.hasExtension("GL_OES_texture_half_float_linear") &&
+                             ctxInfo.hasExtension("GL_OES_texture_half_float"));
+    }
+    fConfigTextureSupport[kAlpha_half_GrPixelConfig] = hasHalfFPTextures;
 }
 
 bool GrGLCaps::doReadPixelsSupported(const GrGLInterface* intf,
@@ -739,6 +824,85 @@ void GrGLCaps::initStencilFormats(const GrGLContextInfo& ctxInfo) {
     SkASSERT(0 == fStencilVerifiedColorConfigs.count());
     fStencilVerifiedColorConfigs.push_back_n(fStencilFormats.count());
 }
+
+static GrGLenum precision_to_gl_float_type(GrSLPrecision p) {
+    switch (p) {
+        case kLow_GrSLPrecision:
+            return GR_GL_LOW_FLOAT;
+        case kMedium_GrSLPrecision:
+            return GR_GL_MEDIUM_FLOAT;
+        case kHigh_GrSLPrecision:
+            return GR_GL_HIGH_FLOAT;
+    }
+    SkFAIL("Unknown precision.");
+    return -1;
+}
+
+static GrGLenum shader_type_to_gl_shader(GrShaderType type) {
+    switch (type) {
+        case kVertex_GrShaderType:
+            return GR_GL_VERTEX_SHADER;
+        case kGeometry_GrShaderType:
+            return GR_GL_GEOMETRY_SHADER;
+        case kFragment_GrShaderType:
+            return GR_GL_FRAGMENT_SHADER;
+    }
+    SkFAIL("Unknown shader type.");
+    return -1;
+}
+
+void GrGLCaps::initShaderPrecisionTable(const GrGLContextInfo& ctxInfo, const GrGLInterface* intf) {
+    if (kGLES_GrGLStandard == ctxInfo.standard() || ctxInfo.version() >= GR_GL_VER(4,1) ||
+        ctxInfo.hasExtension("GL_ARB_ES2_compatibility")) {
+        for (int s = 0; s < kGrShaderTypeCount; ++s) {
+            if (kGeometry_GrShaderType != s) {
+                GrShaderType shaderType = static_cast<GrShaderType>(s);
+                GrGLenum glShader = shader_type_to_gl_shader(shaderType);
+                PrecisionInfo* first = NULL;
+                fShaderPrecisionVaries = false;
+                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+                    GrSLPrecision precision = static_cast<GrSLPrecision>(p);
+                    GrGLenum glPrecision = precision_to_gl_float_type(precision);
+                    GrGLint range[2];
+                    GrGLint bits;
+                    GR_GL_GetShaderPrecisionFormat(intf, glShader, glPrecision, range, &bits);
+                    if (bits) {
+                        fFloatPrecisions[s][p].fLogRangeLow = range[0];
+                        fFloatPrecisions[s][p].fLogRangeHigh = range[1];
+                        fFloatPrecisions[s][p].fBits = bits;
+                        if (!first) {
+                            first = &fFloatPrecisions[s][p];
+                        } else if (!fShaderPrecisionVaries) {
+                            fShaderPrecisionVaries = (*first != fFloatPrecisions[s][p]);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // We're on a desktop GL that doesn't have precision info. Assume they're all 32bit float.
+        fShaderPrecisionVaries = false;
+        for (int s = 0; s < kGrShaderTypeCount; ++s) {
+            if (kGeometry_GrShaderType != s) {
+                for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+                    fFloatPrecisions[s][p].fLogRangeLow = 127;
+                    fFloatPrecisions[s][p].fLogRangeHigh = 127;
+                    fFloatPrecisions[s][p].fBits = 23;
+                }
+            }
+        }
+    }
+    // GetShaderPrecisionFormat doesn't accept GL_GEOMETRY_SHADER as a shader type. Assume they're
+    // the same as the vertex shader. Only fragment shaders were ever allowed to omit support for
+    // highp. GS was added after GetShaderPrecisionFormat was added to the list of features that
+    // are recommended against.
+    if (fGeometryShaderSupport) {
+        for (int p = 0; p < kGrSLPrecisionCount; ++p) {
+            fFloatPrecisions[kGeometry_GrShaderType][p] = fFloatPrecisions[kVertex_GrShaderType][p];
+        }
+    }
+}
+
 
 void GrGLCaps::markColorConfigAndStencilFormatAsVerified(
                                     GrPixelConfig config,

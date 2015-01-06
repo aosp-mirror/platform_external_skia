@@ -41,13 +41,14 @@ void GrTextContext::init(const GrPaint& grPaint, const SkPaint& skPaint) {
 }
 
 bool GrTextContext::drawText(const GrPaint& paint, const SkPaint& skPaint,
+                             const SkMatrix& viewMatrix,
                              const char text[], size_t byteLength,
                              SkScalar x, SkScalar y) {
 
     GrTextContext* textContext = this;
     do {
-        if (textContext->canDraw(skPaint)) {
-            textContext->onDrawText(paint, skPaint, text, byteLength, x, y);
+        if (textContext->canDraw(skPaint, viewMatrix)) {
+            textContext->onDrawText(paint, skPaint, viewMatrix, text, byteLength, x, y);
             return true;
         }
         textContext = textContext->fFallbackTextContext;
@@ -57,15 +58,16 @@ bool GrTextContext::drawText(const GrPaint& paint, const SkPaint& skPaint,
 }
 
 bool GrTextContext::drawPosText(const GrPaint& paint, const SkPaint& skPaint,
+                                const SkMatrix& viewMatrix,
                                 const char text[], size_t byteLength,
                                 const SkScalar pos[], int scalarsPerPosition,
                                 const SkPoint& offset) {
 
     GrTextContext* textContext = this;
     do {
-        if (textContext->canDraw(skPaint)) {
-            textContext->onDrawPosText(paint, skPaint, text, byteLength, pos, scalarsPerPosition,
-                                     offset);
+        if (textContext->canDraw(skPaint, viewMatrix)) {
+            textContext->onDrawPosText(paint, skPaint, viewMatrix, text, byteLength, pos,
+                                       scalarsPerPosition, offset);
             return true;
         }
         textContext = textContext->fFallbackTextContext;
@@ -76,13 +78,14 @@ bool GrTextContext::drawPosText(const GrPaint& paint, const SkPaint& skPaint,
 
 
 //*** change to output positions?
-void GrTextContext::MeasureText(SkGlyphCache* cache, SkDrawCacheProc glyphCacheProc,
+int GrTextContext::MeasureText(SkGlyphCache* cache, SkDrawCacheProc glyphCacheProc,
                                 const char text[], size_t byteLength, SkVector* stopVector) {
     SkFixed     x = 0, y = 0;
     const char* stop = text + byteLength;
 
     SkAutoKern  autokern;
 
+    int numGlyphs = 0;
     while (text < stop) {
         // don't need x, y here, since all subpixel variants will have the
         // same advance
@@ -90,10 +93,13 @@ void GrTextContext::MeasureText(SkGlyphCache* cache, SkDrawCacheProc glyphCacheP
 
         x += autokern.adjust(glyph) + glyph.fAdvanceX;
         y += glyph.fAdvanceY;
+        ++numGlyphs;
     }
     stopVector->set(SkFixedToScalar(x), SkFixedToScalar(y));
 
     SkASSERT(text == stop);
+    
+    return numGlyphs;
 }
 
 static void GlyphCacheAuxProc(void* data) {

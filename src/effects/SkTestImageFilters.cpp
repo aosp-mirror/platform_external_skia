@@ -81,10 +81,9 @@ void SkDownSampleImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeScalar(fScale);
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkDownSampleImageFilter::SkDownSampleImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    fScale = buffer.readScalar();
-    buffer.validate(SkScalarIsFinite(fScale));
+#ifndef SK_IGNORE_TO_STRING
+void SkDownSampleImageFilter::toString(SkString* str) const {
+    str->appendf("SkDownSampleImageFilter: (");
+    str->append(")");
 }
 #endif

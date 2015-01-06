@@ -47,7 +47,7 @@ public:
      */
     void abandon();
 
-    const GrGLProgramDesc& getDesc() { return fDesc; }
+    const GrProgramDesc& getDesc() { return fDesc; }
 
     /**
      * Gets the GL program ID for this program.
@@ -60,68 +60,19 @@ public:
     virtual bool hasVertexShader() const { return true; }
 
     /**
-     * Some GL state that is relevant to programs is not stored per-program. In particular color
-     * and coverage attributes can be global state. This struct is read and updated by
-     * GrGLProgram::setColor and GrGLProgram::setCoverage to allow us to avoid setting this state
-     * redundantly.
+     * We use the RT's size and origin to adjust from Skia device space to OpenGL normalized device
+     * space and to make device space positions have the correct origin for processors that require
+     * them.
      */
-    struct SharedGLState {
-        GrColor fConstAttribColor;
-        int     fConstAttribColorIndex;
-        GrColor fConstAttribCoverage;
-        int     fConstAttribCoverageIndex;
-
-        SharedGLState() { this->invalidate(); }
-        void invalidate() {
-            fConstAttribColor = GrColor_ILLEGAL;
-            fConstAttribColorIndex = -1;
-            fConstAttribCoverage = GrColor_ILLEGAL;
-            fConstAttribCoverageIndex = -1;
-        }
-    };
-
-    /**
-     * The GrDrawState's view matrix along with the aspects of the render target determine the
-     * matrix sent to GL. The size of the render target affects the GL matrix because we must
-     * convert from Skia device coords to GL's normalized coords. Also the origin of the render
-     * target may require us to perform a mirror-flip.
-     */
-    struct MatrixState {
-        SkMatrix        fViewMatrix;
+    struct RenderTargetState {
         SkISize         fRenderTargetSize;
         GrSurfaceOrigin fRenderTargetOrigin;
 
-        MatrixState() { this->invalidate(); }
+        RenderTargetState() { this->invalidate(); }
         void invalidate() {
-            fViewMatrix = SkMatrix::InvalidMatrix();
             fRenderTargetSize.fWidth = -1;
             fRenderTargetSize.fHeight = -1;
             fRenderTargetOrigin = (GrSurfaceOrigin) -1;
-        }
-
-        /**
-         * Gets a matrix that goes from local coords to Skia's device coordinates.
-         */
-        template<int Size> void getGLMatrix(GrGLfloat* destMatrix) {
-            GrGLGetMatrix<Size>(destMatrix, fViewMatrix);
-        }
-
-        /**
-         * Gets a matrix that goes from local coordinates to GL normalized device coords.
-         */
-        template<int Size> void getRTAdjustedGLMatrix(GrGLfloat* destMatrix) {
-            SkMatrix combined;
-            if (kBottomLeft_GrSurfaceOrigin == fRenderTargetOrigin) {
-                combined.setAll(SkIntToScalar(2) / fRenderTargetSize.fWidth, 0, -SK_Scalar1,
-                                0, -SkIntToScalar(2) / fRenderTargetSize.fHeight, SK_Scalar1,
-                                0, 0, 1);
-            } else {
-                combined.setAll(SkIntToScalar(2) / fRenderTargetSize.fWidth, 0, -SK_Scalar1,
-                                0, SkIntToScalar(2) / fRenderTargetSize.fHeight, -SK_Scalar1,
-                                0, 0, 1);
-            }
-            combined.preConcat(fViewMatrix);
-            GrGLGetMatrix<Size>(destMatrix, combined);
         }
 
         /**
@@ -147,41 +98,33 @@ public:
     /**
      * This function uploads uniforms and calls each GrGLProcessor's setData. It is called before a
      * draw occurs using the program after the program has already been bound. It also uses the
-     * GrGpuGL object to bind the textures required by the GrGLProcessors. The color and coverage
+     * GrGLGpu object to bind the textures required by the GrGLProcessors. The color and coverage
      * stages come from GrGLProgramDesc::Build().
      */
-    void setData(const GrOptDrawState&,
-                 GrGpu::DrawType,
-                 const GrDeviceCoordTexture* dstCopy, // can be NULL
-                 SharedGLState*);
+    void setData(const GrOptDrawState&);
 
 protected:
     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
     typedef GrGLProgramDataManager::UniformInfoArray UniformInfoArray;
 
-    GrGLProgram(GrGpuGL*,
-                const GrGLProgramDesc&,
+    GrGLProgram(GrGLGpu*,
+                const GrProgramDesc&,
                 const BuiltinUniformHandles&,
                 GrGLuint programID,
                 const UniformInfoArray&,
                 GrGLInstalledGeoProc* geometryProcessor,
+                GrGLInstalledXferProc* xferProcessor,
                 GrGLInstalledFragProcs* fragmentProcessors);
 
     // Sets the texture units for samplers.
     void initSamplerUniforms();
     void initSamplers(GrGLInstalledProc*, int* texUnitIdx);
 
-    // Helper for setData(). Makes GL calls to specify the initial color when there is not
-    // per-vertex colors.
-    void setColor(const GrOptDrawState&, GrColor color, SharedGLState*);
-
-    // Helper for setData(). Makes GL calls to specify the initial coverage when there is not
-    // per-vertex coverages.
-    void setCoverage(const GrOptDrawState&, GrColor coverage, SharedGLState*);
-
     // A templated helper to loop over effects, set the transforms(via subclass) and bind textures
     void setFragmentData(const GrOptDrawState&);
-    virtual void setTransformData(const GrFragmentStage& effectStage, GrGLInstalledFragProc* pe);
+    virtual void setTransformData(const GrPendingFragmentStage&,
+                                  const SkMatrix& localMatrix,
+                                  GrGLInstalledFragProc*);
     void bindTextures(const GrGLInstalledProc*, const GrProcessor&);
 
     /*
@@ -191,23 +134,24 @@ protected:
     virtual void didSetData(GrGpu::DrawType);
 
     // Helper for setData() that sets the view matrix and loads the render target height uniform
-    void setMatrixAndRenderTargetHeight(GrGpu::DrawType, const GrOptDrawState&);
-    virtual void onSetMatrixAndRenderTargetHeight(GrGpu::DrawType, const GrOptDrawState&);
+    void setRenderTargetState(const GrOptDrawState&);
+    virtual void onSetRenderTargetState(const GrOptDrawState&);
 
     // these reflect the current values of uniforms (GL uniform values travel with program)
-    MatrixState fMatrixState;
+    RenderTargetState fRenderTargetState;
     GrColor fColor;
-    GrColor fCoverage;
+    uint8_t fCoverage;
     int fDstCopyTexUnit;
     BuiltinUniformHandles fBuiltinUniformHandles;
     GrGLuint fProgramID;
 
     // the installed effects
     SkAutoTDelete<GrGLInstalledGeoProc> fGeometryProcessor;
+    SkAutoTDelete<GrGLInstalledXferProc> fXferProcessor;
     SkAutoTUnref<GrGLInstalledFragProcs> fFragmentProcessors;
 
-    GrGLProgramDesc fDesc;
-    GrGpuGL* fGpu;
+    GrProgramDesc fDesc;
+    GrGLGpu* fGpu;
     GrGLProgramDataManager fProgramDataManager;
 
     friend class GrGLProgramBuilder;
@@ -224,33 +168,39 @@ protected:
  */
 class GrGLNvprProgramBase : public GrGLProgram {
 protected:
-    GrGLNvprProgramBase(GrGpuGL*,
-                        const GrGLProgramDesc&,
+    GrGLNvprProgramBase(GrGLGpu*,
+                        const GrProgramDesc&,
                         const BuiltinUniformHandles&,
                         GrGLuint programID,
                         const UniformInfoArray&,
+                        GrGLInstalledGeoProc*,
+                        GrGLInstalledXferProc* xferProcessor,
                         GrGLInstalledFragProcs* fragmentProcessors);
-    virtual void onSetMatrixAndRenderTargetHeight(GrGpu::DrawType, const GrOptDrawState&);
+    virtual void onSetRenderTargetState(const GrOptDrawState&);
 
     typedef GrGLProgram INHERITED;
 };
 
 class GrGLNvprProgram : public GrGLNvprProgramBase {
 public:
-      virtual bool hasVertexShader() const SK_OVERRIDE { return true; }
+    virtual bool hasVertexShader() const SK_OVERRIDE { return true; }
 
 private:
     typedef GrGLNvprProgramBuilder::SeparableVaryingInfo SeparableVaryingInfo;
     typedef GrGLNvprProgramBuilder::SeparableVaryingInfoArray SeparableVaryingInfoArray;
-    GrGLNvprProgram(GrGpuGL*,
-                    const GrGLProgramDesc&,
+    GrGLNvprProgram(GrGLGpu*,
+                    const GrProgramDesc&,
                     const BuiltinUniformHandles&,
                     GrGLuint programID,
                     const UniformInfoArray&,
+                    GrGLInstalledGeoProc*,
+                    GrGLInstalledXferProc* xferProcessor,
                     GrGLInstalledFragProcs* fragmentProcessors,
                     const SeparableVaryingInfoArray& separableVaryings);
     virtual void didSetData(GrGpu::DrawType) SK_OVERRIDE;
-    virtual void setTransformData(const GrFragmentStage&, GrGLInstalledFragProc*) SK_OVERRIDE;
+    virtual void setTransformData(const GrPendingFragmentStage&,
+                                  const SkMatrix& localMatrix,
+                                  GrGLInstalledFragProc*) SK_OVERRIDE;
 
     struct Varying {
         GrGLint     fLocation;
@@ -270,15 +220,19 @@ public:
     virtual bool hasVertexShader() const SK_OVERRIDE { return false; }
 
 private:
-    GrGLLegacyNvprProgram(GrGpuGL* gpu,
-                          const GrGLProgramDesc& desc,
+    GrGLLegacyNvprProgram(GrGLGpu* gpu,
+                          const GrProgramDesc& desc,
                           const BuiltinUniformHandles&,
                           GrGLuint programID,
                           const UniformInfoArray&,
-                          GrGLInstalledFragProcs* fragmentProcessors,
+                          GrGLInstalledGeoProc*,
+                          GrGLInstalledXferProc* xp,
+                          GrGLInstalledFragProcs* fps,
                           int texCoordSetCnt);
     virtual void didSetData(GrGpu::DrawType) SK_OVERRIDE;
-    virtual void setTransformData(const GrFragmentStage&, GrGLInstalledFragProc*) SK_OVERRIDE;
+    virtual void setTransformData(const GrPendingFragmentStage&,
+                                  const SkMatrix& localMatrix,
+                                  GrGLInstalledFragProc*) SK_OVERRIDE;
 
     int fTexCoordSetCnt;
 

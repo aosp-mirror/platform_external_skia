@@ -112,8 +112,9 @@ void SkClipStack::Element::invertShapeFillType() {
 void SkClipStack::Element::initPath(int saveCount, const SkPath& path, SkRegion::Op op,
                                     bool doAA) {
     if (!path.isInverseFillType()) {
-        if (SkPath::kNone_PathAsRect != path.asRect()) {
-            this->initRect(saveCount, path.getBounds(), op, doAA);
+        SkRect r;
+        if (path.isRect(&r)) {
+            this->initRect(saveCount, r, op, doAA);
             return;
         }
         SkRect ovalRect;
@@ -125,6 +126,7 @@ void SkClipStack::Element::initPath(int saveCount, const SkPath& path, SkRegion:
         }
     }
     fPath.set(path);
+    fPath.get()->setIsVolatile(true);
     fType = kPath_Type;
     this->initCommon(saveCount, op, doAA);
 }
@@ -146,6 +148,7 @@ void SkClipStack::Element::asPath(SkPath* path) const {
             *path = *fPath.get();
             break;
     }
+    path->setIsVolatile(true);
 }
 
 void SkClipStack::Element::setEmpty() {

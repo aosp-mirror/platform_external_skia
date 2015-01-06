@@ -8,11 +8,14 @@
 #ifndef SkDynamicAnnotations_DEFINED
 #define SkDynamicAnnotations_DEFINED
 
+// Make sure we see anything set via SkUserConfig.h (e.g. DYNAMIC_ANNOTATIONS_ENABLED).
+#include "SkTypes.h"
+
 // This file contains macros used to send out-of-band signals to dynamic instrumentation systems,
 // namely thread sanitizer.  This is a cut-down version of the full dynamic_annotations library with
 // only the features used by Skia.
 
-#if SK_DYNAMIC_ANNOTATIONS_ENABLED
+#if DYNAMIC_ANNOTATIONS_ENABLED
 
 extern "C" {
 // TSAN provides these hooks.
@@ -42,7 +45,7 @@ inline T SK_ANNOTATE_UNPROTECTED_READ(const volatile T& x) {
 
 // Like SK_ANNOTATE_UNPROTECTED_READ, but for writes.
 template <typename T>
-inline void SK_ANNOTATE_UNPROTECTED_WRITE(T* ptr, const volatile T& val) {
+inline void SK_ANNOTATE_UNPROTECTED_WRITE(T* ptr, const T& val) {
     AnnotateIgnoreWritesBegin(__FILE__, __LINE__);
     *ptr = val;
     AnnotateIgnoreWritesEnd(__FILE__, __LINE__);
@@ -55,7 +58,7 @@ void SK_ANNOTATE_BENIGN_RACE(T* ptr) {
     AnnotateBenignRaceSized(__FILE__, __LINE__, ptr, sizeof(*ptr), "SK_ANNOTATE_BENIGN_RACE");
 }
 
-#else  // !SK_DYNAMIC_ANNOTATIONS_ENABLED
+#else  // !DYNAMIC_ANNOTATIONS_ENABLED
 
 #define SK_ANNOTATE_UNPROTECTED_READ(x) (x)
 #define SK_ANNOTATE_UNPROTECTED_WRITE(ptr, val) *(ptr) = (val)
@@ -77,34 +80,6 @@ public:
         SK_ANNOTATE_UNPROTECTED_WRITE(&fVal, val);
         return *this;
     }
-
-private:
-    T fVal;
-};
-
-// This is like SkTRacy, but allows you to return the value by reference.
-// TSAN is better at suppressing SkTRacy than SkTRacyReffable, so use SkTRacy when possible.
-//
-// We use this for SkPathRef bounds, which is an SkRect we pass around by reference publically.
-template <typename T>
-class SkTRacyReffable {
-public:
-    SkTRacyReffable() { SK_ANNOTATE_BENIGN_RACE(&fVal); }
-
-    operator const T&() const {
-        return fVal;
-    }
-
-    SkTRacyReffable& operator=(const T& val) {
-        fVal = val;
-        return *this;
-    }
-
-    const T* get() const { return &fVal; }
-          T* get()       { return &fVal; }
-
-    const T* operator->() const { return &fVal; }
-          T* operator->()       { return &fVal; }
 
 private:
     T fVal;

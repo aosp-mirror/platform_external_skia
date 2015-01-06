@@ -12,6 +12,26 @@ class SkBitmap;
 class SkPaint;
 
 #include "SkTypes.h"
+
+enum SkPaintBitmapOpacity {
+    // No content replaces the paint's color
+    kNoBitmap_SkPaintBitmapOpacity = 0,
+    // The color replacement is known to be opaque
+    kOpaque_SkPaintBitmapOpacity = 1,
+    // We have no information about the color or it is transparent
+    kUnknown_SkPaintBitmapOpacity = 2
+};
+
+/** Returns true if draw calls that use the paint will completely occlude
+    canvas contents that are covered by the draw.
+    @param paint The paint to be analyzed, NULL is equivalent to
+        the default paint.
+    @param contentType The type of the content that will be drawn,
+        kNoBitmap_SkPaintBitmapOpacity if there is no content in adition to the paint.
+    @return true if paint is opaque
+*/
+bool isPaintOpaque(const SkPaint* paint, SkPaintBitmapOpacity contentType);
+
 /** Returns true if draw calls that use the paint will completely occlude
     canvas contents that are covered by the draw.
     @param paint The paint to be analyzed, NULL is equivalent to
@@ -22,11 +42,4 @@ class SkPaint;
 */
 bool isPaintOpaque(const SkPaint* paint,
                    const SkBitmap* bmpReplacesShader = NULL);
-
-/** Returns true if the provided paint has fields which are not
-    immutable (and will thus require deep copying).
-    @param paint the paint to be analyzed
-    @return true if the paint requires a deep copy
-*/
-bool NeedsDeepCopy(const SkPaint& paint);
 #endif

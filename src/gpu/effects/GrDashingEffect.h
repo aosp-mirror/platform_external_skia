@@ -9,10 +9,12 @@
 #ifndef GrDashingEffect_DEFINED
 #define GrDashingEffect_DEFINED
 
+#include "GrColor.h"
 #include "GrTypesPriv.h"
 #include "SkPathEffect.h"
 
 class GrGpu;
+class GrDrawState;
 class GrDrawTarget;
 class GrGeometryProcessor;
 class GrPaint;
@@ -22,8 +24,8 @@ class GrGLDashingEffect;
 class SkPath;
 
 namespace GrDashingEffect {
-    bool DrawDashLine(const SkPoint pts[2], const GrPaint& paint, const GrStrokeInfo& strokeInfo,
-                      GrGpu* gpu, GrDrawTarget* target, const SkMatrix& vm);
+    bool DrawDashLine(GrGpu*, GrDrawTarget*, GrDrawState*, GrColor, const SkMatrix& viewMatrix,
+                      const SkPoint pts[2], const GrPaint& paint, const GrStrokeInfo& strokeInfo);
 
     enum DashCap {
         kRound_DashCap,
@@ -36,10 +38,12 @@ namespace GrDashingEffect {
      * Bounding geometry is rendered and the effect computes coverage based on the fragment's
      * position relative to the dashed line.
      */
-    GrGeometryProcessor* Create(GrPrimitiveEdgeType edgeType,
+    GrGeometryProcessor* Create(GrColor,
+                                GrPrimitiveEdgeType edgeType,
                                 const SkPathEffect::DashInfo& info,
                                 SkScalar strokeWidth,
-                                DashCap cap);
+                                DashCap cap,
+                                const SkMatrix& localMatrix);
 }
 
 #endif

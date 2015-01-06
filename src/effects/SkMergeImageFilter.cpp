@@ -141,23 +141,17 @@ void SkMergeImageFilter::flatten(SkWriteBuffer& buffer) const {
     }
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkMergeImageFilter::SkMergeImageFilter(SkReadBuffer& buffer)
-  : INHERITED(-1, buffer) {
-    bool hasModes = buffer.readBool();
-    if (hasModes) {
-        this->initAllocModes();
-        int nbInputs = countInputs();
-        size_t size = nbInputs * sizeof(fModes[0]);
-        SkASSERT(buffer.getArrayCount() == size);
-        if (buffer.validate(buffer.getArrayCount() == size) &&
-            buffer.readByteArray(fModes, size)) {
-            for (int i = 0; i < nbInputs; ++i) {
-                buffer.validate(SkIsValidMode((SkXfermode::Mode)fModes[i]));
-            }
-        }
-    } else {
-        fModes = 0;
+#ifndef SK_IGNORE_TO_STRING
+void SkMergeImageFilter::toString(SkString* str) const {
+    str->appendf("SkMergeImageFilter: (");
+    
+    for (int i = 0; i < this->countInputs(); ++i) {
+        SkImageFilter* filter = this->getInput(i);
+        str->appendf("%d: (", i);
+        filter->toString(str);
+        str->appendf(")");
     }
+
+    str->append(")");
 }
 #endif

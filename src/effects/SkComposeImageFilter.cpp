@@ -41,8 +41,19 @@ SkFlattenable* SkComposeImageFilter::CreateProc(SkReadBuffer& buffer) {
     return SkComposeImageFilter::Create(common.getInput(0), common.getInput(1));
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkComposeImageFilter::SkComposeImageFilter(SkReadBuffer& buffer)
-  : INHERITED(2, buffer) {
+#ifndef SK_IGNORE_TO_STRING
+void SkComposeImageFilter::toString(SkString* str) const {
+    SkImageFilter* outer = getInput(0);
+    SkImageFilter* inner = getInput(1);
+
+    str->appendf("SkComposeImageFilter: (");
+
+    str->appendf("outer: ");
+    outer->toString(str);
+
+    str->appendf("inner: ");
+    inner->toString(str);
+
+    str->appendf(")");
 }
 #endif

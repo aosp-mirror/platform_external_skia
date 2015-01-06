@@ -18,6 +18,9 @@ class SkData;
 class SkCanvas;
 class SkImageGenerator;
 class SkPaint;
+class SkString;
+class SkSurface;
+class SkSurfaceProps;
 class GrContext;
 class GrTexture;
 
@@ -30,6 +33,10 @@ class GrTexture;
  *  The content of SkImage is always immutable, though the actual storage may
  *  change, if for example that image can be re-created via encoded data or
  *  other means.
+ *
+ *  SkImage always has a non-zero dimensions. If there is a request to create a new image, either
+ *  directly or via SkSurface, and either of the requested dimensions are zero, then NULL will be
+ *  returned.
  */
 class SK_API SkImage : public SkRefCnt {
 public:
@@ -83,6 +90,27 @@ public:
     const void* peekPixels(SkImageInfo* info, size_t* rowBytes) const;
 
     /**
+     *  Copy the pixels from the image into the specified buffer (pixels + rowBytes),
+     *  converting them into the requested format (dstInfo). The image pixels are read
+     *  starting at the specified (srcX,srcY) location.
+     *
+     *  The specified ImageInfo and (srcX,srcY) offset specifies a source rectangle
+     *
+     *      srcR.setXYWH(srcX, srcY, dstInfo.width(), dstInfo.height());
+     *
+     *  srcR is intersected with the bounds of the image. If this intersection is not empty,
+     *  then we have two sets of pixels (of equal size). Replace the dst pixels with the
+     *  corresponding src pixels, performing any colortype/alphatype transformations needed
+     *  (in the case where the src and dst have different colortypes or alphatypes).
+     *
+     *  This call can fail, returning false, for several reasons:
+     *  - If srcR does not intersect the image bounds.
+     *  - If the requested colortype/alphatype cannot be converted from the image's types.
+     */
+    bool readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                    int srcX, int srcY) const;
+
+    /**
      *  Encode the image's pixels and return the result as a new SkData, which
      *  the caller must manage (i.e. call unref() when they are done).
      *
@@ -92,14 +120,25 @@ public:
     SkData* encode(SkImageEncoder::Type t = SkImageEncoder::kPNG_Type,
                    int quality = 80) const;
 
+    /**
+     *  Return a new surface that is compatible with this image's internal representation
+     *  (e.g. raster or gpu).
+     *
+     *  If no surfaceprops are specified, the image will attempt to match the props of when it
+     *  was created (if it came from a surface).
+     */
+    SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps* = NULL) const;
+
+    const char* toString(SkString*) const;
+
 protected:
     SkImage(int width, int height) :
         fWidth(width),
         fHeight(height),
         fUniqueID(NextUniqueID()) {
 
-        SkASSERT(width >= 0);
-        SkASSERT(height >= 0);
+        SkASSERT(width > 0);
+        SkASSERT(height > 0);
     }
 
 private:
@@ -123,29 +162,6 @@ private:
      *  See SkCanvas::drawBitmapRectToRect for similar behavior.
      */
     void drawRect(SkCanvas*, const SkRect* src, const SkRect& dst, const SkPaint*) const;
-
-    /**
-     *  Return a copy of the image's pixels, limiting them to the subset
-     *  rectangle's intersection wit the image bounds. If subset is NULL, then
-     *  the entire image will be considered.
-     *
-     *  If the bitmap's pixels have already been allocated, then readPixels()
-     *  will succeed only if it can support converting the image's pixels into
-     *  the bitmap's ColorType/AlphaType. Any pixels in the bitmap that do not
-     *  intersect with the image's bounds and the subset (if not null) will be
-     *  left untouched.
-     *
-     *  If the bitmap is initially empty/unallocated, then it will be allocated
-     *  using the default allocator, and the ColorType/AlphaType will be chosen
-     *  to most closely fit the image's configuration.
-     *
-     *  On failure, false will be returned, and bitmap will unmodified.
-     */
-    // On ice for now:
-    // - should it respect the particular colortype/alphatype of the src
-    // - should it have separate entrypoints for preallocated and not bitmaps?
-    // - isn't it enough to allow the caller to draw() the image into a canvas?
-    bool readPixels(SkBitmap* bitmap, const SkIRect* subset = NULL) const;
 };
 
 #endif

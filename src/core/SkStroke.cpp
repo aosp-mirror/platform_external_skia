@@ -380,7 +380,9 @@ SkPathStroker::SkPathStroker(const SkPath& src,
     // 3x for result == inner + outer + join (swag)
     // 1x for inner == 'wag' (worst contour length would be better guess)
     fOuter.incReserve(src.countPoints() * 3);
+    fOuter.setIsVolatile(true);
     fInner.incReserve(src.countPoints());
+    fInner.setIsVolatile(true);
 #if QUAD_STROKE_APPROXIMATION
 #ifdef SK_DEBUG
     if (!gDebugStrokerErrorSet) {
@@ -1412,10 +1414,11 @@ void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
 
     // If src is really a rect, call our specialty strokeRect() method
     {
+        SkRect rect;
         bool isClosed;
         SkPath::Direction dir;
-        if (src.isRect(&isClosed, &dir) && isClosed) {
-            this->strokeRect(src.getBounds(), dst, dir);
+        if (src.isRect(&rect, &isClosed, &dir) && isClosed) {
+            this->strokeRect(rect, dst, dir);
             // our answer should preserve the inverseness of the src
             if (src.isInverseFillType()) {
                 SkASSERT(!dst->isInverseFillType());

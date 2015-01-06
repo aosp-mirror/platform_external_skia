@@ -5,12 +5,13 @@
  * found in the LICENSE file.
  */
 
+#include "Test.h"
+
 // This test is specific to the GPU backend.
 #if SK_SUPPORT_GPU && !defined(SK_BUILD_FOR_ANDROID)
 
 #include "GrContextFactory.h"
 #include "SkGpuDevice.h"
-#include "Test.h"
 
 static const int X_SIZE = 12;
 static const int Y_SIZE = 12;
@@ -30,10 +31,10 @@ DEF_GPUTEST(ReadWriteAlpha, reporter, factory) {
 
         memset(textureData, 0, X_SIZE * Y_SIZE);
 
-        GrTextureDesc desc;
+        GrSurfaceDesc desc;
 
         // let Skia know we will be using this texture as a render target
-        desc.fFlags     = kRenderTarget_GrTextureFlagBit;
+        desc.fFlags     = kRenderTarget_GrSurfaceFlag;
         // it is a single channel texture
         desc.fConfig    = kAlpha_8_GrPixelConfig;
         desc.fWidth     = X_SIZE;

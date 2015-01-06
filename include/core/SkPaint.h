@@ -921,10 +921,13 @@ public:
     void getPosTextPath(const void* text, size_t length,
                         const SkPoint pos[], SkPath* path) const;
 
-#ifdef SK_BUILD_FOR_ANDROID
-    uint32_t getGenerationID() const;
-    void setGenerationID(uint32_t generationID);
-#endif
+    /**
+     *  Return a rectangle that represents the union of the bounds of all
+     *  of the glyphs, but each one positioned at (0,0). This may be conservatively large, and
+     *  will not take into account any hinting, but will respect any text-scale-x or text-skew-x
+     *  on this paint.
+     */
+    SkRect getFontBounds() const;
 
     // returns true if the paint's settings (e.g. xfermode + alpha) resolve to
     // mean that we need not draw at all (e.g. SrcOver + 0-alpha)
@@ -1109,12 +1112,6 @@ private:
     friend class GrGLPathRendering;
     friend class SkTextToPathIter;
     friend class SkCanonicalizePaint;
-
-#ifdef SK_BUILD_FOR_ANDROID
-    // In order for the == operator to work properly this must be the last field
-    // in the struct so that we can do a memcmp to this field's offset.
-    uint32_t        fGenerationID;
-#endif
 };
 
 #endif

@@ -10,10 +10,8 @@
 
 #include "SkCanvas.h"
 #include "SkFlattenable.h"
-#include "SkPathHeap.h"
 #include "SkPicture.h"
 #include "SkPictureData.h"
-#include "SkPictureFlat.h"
 #include "SkTemplates.h"
 #include "SkWriter32.h"
 
@@ -31,35 +29,9 @@ public:
     SkPictureRecord(const SkISize& dimensions, uint32_t recordFlags);
     virtual ~SkPictureRecord();
 
-    virtual void clear(SkColor) SK_OVERRIDE;
-    virtual void drawPaint(const SkPaint& paint) SK_OVERRIDE;
-    virtual void drawPoints(PointMode, size_t count, const SkPoint pts[],
-                            const SkPaint&) SK_OVERRIDE;
-    virtual void drawOval(const SkRect&, const SkPaint&) SK_OVERRIDE;
-    virtual void drawRect(const SkRect&, const SkPaint&) SK_OVERRIDE;
-    virtual void drawRRect(const SkRRect&, const SkPaint&) SK_OVERRIDE;
-    virtual void drawPath(const SkPath& path, const SkPaint&) SK_OVERRIDE;
-    virtual void drawBitmap(const SkBitmap&, SkScalar left, SkScalar top,
-                            const SkPaint*) SK_OVERRIDE;
-    virtual void drawBitmapRectToRect(const SkBitmap&, const SkRect* src,
-                                      const SkRect& dst, const SkPaint* paint,
-                                      DrawBitmapRectFlags flags) SK_OVERRIDE;
-    virtual void drawBitmapMatrix(const SkBitmap&, const SkMatrix&,
-                                  const SkPaint*) SK_OVERRIDE;
-    virtual void drawBitmapNine(const SkBitmap& bitmap, const SkIRect& center,
-                                const SkRect& dst, const SkPaint*) SK_OVERRIDE;
-    virtual void drawSprite(const SkBitmap&, int left, int top,
-                            const SkPaint*) SK_OVERRIDE;
-    virtual void drawVertices(VertexMode, int vertexCount,
-                          const SkPoint vertices[], const SkPoint texs[],
-                          const SkColor colors[], SkXfermode*,
-                          const uint16_t indices[], int indexCount,
-                              const SkPaint&) SK_OVERRIDE;
-    virtual void drawData(const void*, size_t) SK_OVERRIDE;
     virtual void beginCommentGroup(const char* description) SK_OVERRIDE;
     virtual void addComment(const char* kywd, const char* value) SK_OVERRIDE;
     virtual void endCommentGroup() SK_OVERRIDE;
-    virtual bool isDrawingToLayer() const SK_OVERRIDE;
 
     const SkTDArray<const SkPicture* >& getPictureRefs() const {
         return fPictureRefs;
@@ -81,10 +53,6 @@ public:
         }
 
         return fWriter.snapshotAsData();
-    }
-
-    const SkPathHeap* pathHeap() const {
-        return fPathHeap.get();
     }
 
     const SkPictureContentInfo& contentInfo() const {
@@ -111,10 +79,6 @@ private:
     void fillRestoreOffsetPlaceholdersForCurrentStackLevel(uint32_t restoreOffset);
 
     SkTDArray<int32_t> fRestoreOffsetStack;
-    int fFirstSavedLayerIndex;
-    enum {
-        kNoSavedLayerIndex = -1
-    };
 
     SkTDArray<uint32_t> fCullOffsetStack;
 
@@ -157,8 +121,7 @@ private:
         fWriter.writeScalar(scalar);
     }
 
-    // The command at 'offset' in the skp uses the specified bitmap
-    int addBitmap(const SkBitmap& bitmap);
+    void addBitmap(const SkBitmap& bitmap);
     void addMatrix(const SkMatrix& matrix);
     void addPaint(const SkPaint& paint) { this->addPaintPtr(&paint); }
     void addPaintPtr(const SkPaint* paint);
@@ -196,8 +159,6 @@ protected:
     virtual void didSetMatrix(const SkMatrix&) SK_OVERRIDE;
 
     virtual void onDrawDRRect(const SkRRect&, const SkRRect&, const SkPaint&) SK_OVERRIDE;
-    virtual void onPushCull(const SkRect&) SK_OVERRIDE;
-    virtual void onPopCull() SK_OVERRIDE;
 
     virtual void onDrawText(const void* text, size_t byteLength, SkScalar x, SkScalar y,
                             const SkPaint&) SK_OVERRIDE;
@@ -213,6 +174,30 @@ protected:
     virtual void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
                              const SkPoint texCoords[4], SkXfermode* xmode,
                              const SkPaint& paint) SK_OVERRIDE;
+
+    void onDrawPaint(const SkPaint&) SK_OVERRIDE;
+    void onDrawPoints(PointMode, size_t count, const SkPoint pts[], const SkPaint&) SK_OVERRIDE;
+    void onDrawRect(const SkRect&, const SkPaint&) SK_OVERRIDE;
+    void onDrawOval(const SkRect&, const SkPaint&) SK_OVERRIDE;
+    void onDrawRRect(const SkRRect&, const SkPaint&) SK_OVERRIDE;
+    void onDrawPath(const SkPath&, const SkPaint&) SK_OVERRIDE;
+    void onDrawBitmap(const SkBitmap&, SkScalar left, SkScalar top, const SkPaint*) SK_OVERRIDE;
+    void onDrawBitmapRect(const SkBitmap&, const SkRect* src, const SkRect& dst, const SkPaint*,
+                          DrawBitmapRectFlags flags) SK_OVERRIDE;
+#if 0
+    // rely on conversion to bitmap (for now)
+    void onDrawImage(const SkImage*, SkScalar left, SkScalar top, const SkPaint*) SK_OVERRIDE;
+    void onDrawImageRect(const SkImage*, const SkRect* src, const SkRect& dst,
+                         const SkPaint*) SK_OVERRIDE;
+#endif
+    void onDrawBitmapNine(const SkBitmap&, const SkIRect& center, const SkRect& dst,
+                          const SkPaint*) SK_OVERRIDE;
+    void onDrawSprite(const SkBitmap&, int left, int top, const SkPaint*) SK_OVERRIDE;
+    void onDrawVertices(VertexMode vmode, int vertexCount,
+                        const SkPoint vertices[], const SkPoint texs[],
+                        const SkColor colors[], SkXfermode* xmode,
+                        const uint16_t indices[], int indexCount,
+                        const SkPaint&) SK_OVERRIDE;
 
     virtual void onClipRect(const SkRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
     virtual void onClipRRect(const SkRRect&, SkRegion::Op, ClipEdgeStyle) SK_OVERRIDE;
@@ -237,16 +222,12 @@ protected:
     void recordSaveLayer(const SkRect* bounds, const SkPaint* paint, SaveFlags flags);
     void recordRestore(bool fillInSkips = true);
 
-    // Allocated in the constructor and managed by this class.
-    SkBitmapHeap* fBitmapHeap;
-
 private:
     SkPictureContentInfo fContentInfo;
-    SkAutoTUnref<SkPathHeap> fPathHeap;
 
-    SkChunkFlatController fFlattenableHeap;
-
-    SkPaintDictionary fPaints;
+    SkTArray<SkBitmap> fBitmaps;
+    SkTArray<SkPaint>  fPaints;
+    SkTArray<SkPath>   fPaths;
 
     SkWriter32 fWriter;
 
@@ -258,7 +239,6 @@ private:
     int      fInitialSaveCount;
 
     friend class SkPictureData;   // for SkPictureData's SkPictureRecord-based constructor
-    friend class SkPictureTester; // for unit testing
 
     typedef SkCanvas INHERITED;
 };

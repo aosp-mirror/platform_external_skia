@@ -5,23 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "gl/builders/GrGLProgramBuilder.h"
 #include "GrSimpleTextureEffect.h"
+#include "GrInvariantOutput.h"
+#include "GrTexture.h"
+#include "gl/GrGLCaps.h"
 #include "gl/GrGLProcessor.h"
 #include "gl/GrGLSL.h"
 #include "gl/GrGLTexture.h"
-#include "GrTBackendProcessorFactory.h"
-#include "GrTexture.h"
+#include "gl/builders/GrGLProgramBuilder.h"
 
 class GrGLSimpleTextureEffect : public GrGLFragmentProcessor {
 public:
-    GrGLSimpleTextureEffect(const GrBackendProcessorFactory& factory, const GrProcessor&)
-        : INHERITED (factory) {
-    }
+    GrGLSimpleTextureEffect(const GrProcessor&) {}
 
     virtual void emitCode(GrGLFPBuilder* builder,
                           const GrFragmentProcessor& fp,
-                          const GrProcessorKey& key,
                           const char* outputColor,
                           const char* inputColor,
                           const TransformedCoordsArray& coords,
@@ -41,12 +39,17 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrSimpleTextureEffect::onComputeInvariantOutput(InvariantOutput* inout) const {
+void GrSimpleTextureEffect::onComputeInvariantOutput(GrInvariantOutput* inout) const {
     this->updateInvariantOutputForModulation(inout);
 }
 
-const GrBackendFragmentProcessorFactory& GrSimpleTextureEffect::getFactory() const {
-    return GrTBackendFragmentProcessorFactory<GrSimpleTextureEffect>::getInstance();
+void GrSimpleTextureEffect::getGLProcessorKey(const GrGLCaps& caps,
+                                              GrProcessorKeyBuilder* b) const {
+    GrGLSimpleTextureEffect::GenKey(*this, caps, b);
+}
+
+GrGLFragmentProcessor* GrSimpleTextureEffect::createGLInstance() const  {
+    return SkNEW_ARGS(GrGLSimpleTextureEffect, (*this));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,7 +76,7 @@ GrFragmentProcessor* GrSimpleTextureEffect::TestCreate(SkRandom* random,
 
     static const GrCoordSet kCoordSets[] = {
         kLocal_GrCoordSet,
-        kPosition_GrCoordSet
+        kDevice_GrCoordSet
     };
     GrCoordSet coordSet = kCoordSets[random->nextULessThan(SK_ARRAY_COUNT(kCoordSets))];
 

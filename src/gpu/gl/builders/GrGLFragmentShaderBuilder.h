@@ -10,6 +10,8 @@
 
 #include "GrGLShaderBuilder.h"
 
+class GrGLVarying;
+
 /*
  * This base class encapsulates the functionality which the GP uses to build fragment shaders
  */
@@ -82,7 +84,7 @@ public:
        the key is 0. */
     static FragPosKey KeyForFragmentPosition(const GrRenderTarget* dst, const GrGLCaps&);
 
-    GrGLFragmentShaderBuilder(GrGLProgramBuilder* program, const GrGLProgramDesc& desc);
+    GrGLFragmentShaderBuilder(GrGLProgramBuilder* program, uint8_t fragPosKey);
 
     // true public interface, defined explicitly in the abstract interfaces above
     virtual bool enableFeature(GLSLFeature) SK_OVERRIDE;
@@ -91,24 +93,15 @@ public:
     virtual const char* fragmentPosition() SK_OVERRIDE;
     virtual const char* dstColor() SK_OVERRIDE;
 
+private:
     // Private public interface, used by GrGLProgramBuilder to build a fragment shader
     void emitCodeToReadDstTexture();
     void enableCustomOutput();
     void enableSecondaryOutput();
     const char* getPrimaryColorOutputName() const;
     const char* getSecondaryColorOutputName() const;
-    void enableSecondaryOutput(const GrGLSLExpr4& inputColor, const GrGLSLExpr4& inputCoverage);
-    void combineColorAndCoverage(const GrGLSLExpr4& inputColor, const GrGLSLExpr4& inputCoverage);
     bool compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) const;
     void bindFragmentShaderLocations(GrGLuint programID);
-
-    /*
-     * An internal call for GrGLProgramBuilder to use to add varyings to the vertex shader
-     */
-    void addVarying(GrSLType type,
-                   const char* name,
-                   const char** fsInName,
-                   GrGLShaderVar::Precision fsPrecision = GrGLShaderVar::kDefault_Precision);
 
     // As GLProcessors emit code, there are some conditions we need to verify.  We use the below
     // state to track this.  The reset call is called per processor emitted.
@@ -119,7 +112,11 @@ public:
         fHasReadFragmentPosition = false;
     }
 
-private:
+    /*
+     * An internal call for GrGLProgramBuilder to use to add varyings to the vertex shader
+     */
+    void addVarying(GrGLVarying*, GrSLPrecision);
+
     /**
      * Features that should only be enabled by GrGLFragmentShaderBuilder itself.
      */
@@ -149,6 +146,7 @@ private:
     bool fHasSecondaryOutput;
     bool fSetupFragPosition;
     bool fTopLeftFragPosRead;
+    int  fCustomColorOutputIndex;
 
     // some state to verify shaders and effects are consistent, this is reset between effects by
     // the program creator

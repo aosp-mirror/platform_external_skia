@@ -60,6 +60,9 @@ bool matrix_needs_clamping(SkScalar matrix[20]) {
 SkColorFilterImageFilter* SkColorFilterImageFilter::Create(SkColorFilter* cf,
         SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID) {
     SkASSERT(cf);
+    if (NULL == cf) {
+        return NULL;
+    }
     SkScalar colorMatrix[20], inputMatrix[20];
     SkColorFilter* inputColorFilter;
     if (input && cf->asColorMatrix(colorMatrix)
@@ -78,17 +81,8 @@ SkColorFilterImageFilter* SkColorFilterImageFilter::Create(SkColorFilter* cf,
 
 SkColorFilterImageFilter::SkColorFilterImageFilter(SkColorFilter* cf,
         SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID)
-    : INHERITED(1, &input, cropRect, uniqueID), fColorFilter(cf) {
-    SkASSERT(cf);
-    SkSafeRef(cf);
+    : INHERITED(1, &input, cropRect, uniqueID), fColorFilter(SkRef(cf)) {
 }
-
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkColorFilterImageFilter::SkColorFilterImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    fColorFilter = buffer.readColorFilter();
-}
-#endif
 
 SkFlattenable* SkColorFilterImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 1);
@@ -102,7 +96,7 @@ void SkColorFilterImageFilter::flatten(SkWriteBuffer& buffer) const {
 }
 
 SkColorFilterImageFilter::~SkColorFilterImageFilter() {
-    SkSafeUnref(fColorFilter);
+    fColorFilter->unref();
 }
 
 bool SkColorFilterImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& source,
@@ -147,3 +141,20 @@ bool SkColorFilterImageFilter::asColorFilter(SkColorFilter** filter) const {
     }
     return false;
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void SkColorFilterImageFilter::toString(SkString* str) const {
+    str->appendf("SkColorFilterImageFilter: (");
+
+    str->appendf("input: (");
+
+    if (this->getInput(0)) {
+        this->getInput(0)->toString(str);
+    }
+
+    str->appendf(") color filter: ");
+    fColorFilter->toString(str);
+
+    str->append(")");
+}
+#endif

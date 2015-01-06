@@ -11,7 +11,7 @@
 #include "GrSingleTextureEffect.h"
 
 class GrFragmentStage;
-class GrGLConfigConversionEffect;
+class GrInvariantOutput;
 
 /**
  * This class is used to perform config conversions. Clients may want to read/write data that is
@@ -34,14 +34,14 @@ public:
         kPMConversionCnt
     };
 
-    // Installs an effect in the GrProcessorStage to perform a config conversion.
     static const GrFragmentProcessor* Create(GrTexture*, bool swapRedAndBlue, PMConversion,
                                              const SkMatrix&);
 
-    static const char* Name() { return "Config Conversion"; }
-    typedef GrGLConfigConversionEffect GLProcessor;
+    virtual const char* name() const SK_OVERRIDE { return "Config Conversion"; }
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
+
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
 
     bool swapsRedAndBlue() const { return fSwapRedAndBlue; }
     PMConversion  pmConversion() const { return fPMConversion; }
@@ -61,9 +61,9 @@ private:
                             PMConversion pmConversion,
                             const SkMatrix& matrix);
 
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     bool            fSwapRedAndBlue;
     PMConversion    fPMConversion;

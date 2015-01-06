@@ -259,18 +259,14 @@ bool SkReadBuffer::readBitmap(SkBitmap* bitmap) {
             // This bitmap was encoded when written, but we are unable to decode, possibly due to
             // not having a decoder.
             SkErrorInternals::SetError(kParseError_SkError,
-                                       "Could not decode bitmap. Resulting bitmap will be red.");
-        } else {
-            // A size of zero means the SkBitmap was simply flattened.
-            if (this->isVersionLT(kNoMoreBitmapFlatten_Version)) {
-                SkBitmap tmp;
-                tmp.legacyUnflatten(*this);
-                // just throw this guy away
-            } else {
-                if (SkBitmap::ReadRawPixels(this, bitmap)) {
-                    return true;
-                }
-            }
+                                       "Could not decode bitmap. Resulting bitmap will be empty.");
+            // Even though we weren't able to decode the pixels, the readbuffer should still be
+            // intact, so we return true with an empty bitmap, so we don't force an abort of the
+            // larger deserialize.
+            bitmap->setInfo(SkImageInfo::MakeUnknown(width, height));
+            return true;
+        } else if (SkBitmap::ReadRawPixels(this, bitmap)) {
+            return true;
         }
     }
     // Could not read the SkBitmap. Use a placeholder bitmap.

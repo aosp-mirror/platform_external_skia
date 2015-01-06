@@ -104,6 +104,14 @@ static void test_constructor(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, testMatrix == placeholderMatrix);
     REPORTER_ASSERT(reporter, testMatrix->isIdentity());
     REPORTER_ASSERT(reporter, *testMatrix == SkMatrix44::I());
+
+    // Verify that that constructing from an SkMatrix initializes everything.
+    SkMatrix44 scaleMatrix(SkMatrix44::kUninitialized_Constructor);
+    scaleMatrix.setScale(3, 4, 5);
+    REPORTER_ASSERT(reporter, scaleMatrix.isScale());
+    testMatrix = new(&scaleMatrix) SkMatrix44(SkMatrix::I());
+    REPORTER_ASSERT(reporter, testMatrix->isIdentity());
+    REPORTER_ASSERT(reporter, *testMatrix == SkMatrix44::I());
 }
 
 static void test_translate(skiatest::Reporter* reporter) {
@@ -761,6 +769,21 @@ static void test_preserves_2d_axis_alignment(skiatest::Reporter* reporter) {
   test(true, reporter, transform);
 }
 
+// just want to exercise the various converters for MScalar
+static void test_toint(skiatest::Reporter* reporter) {
+    SkMatrix44 mat(SkMatrix44::kUninitialized_Constructor);
+    mat.setScale(3, 3, 3);
+
+    SkMScalar sum = SkMScalarFloor(mat.get(0, 0)) +
+                    SkMScalarRound(mat.get(1, 0)) +
+                    SkMScalarCeil(mat.get(2, 0));
+    int isum =      SkMScalarFloorToInt(mat.get(0, 1)) +
+                    SkMScalarRoundToInt(mat.get(1, 2)) +
+                    SkMScalarCeilToInt(mat.get(2, 3));
+    REPORTER_ASSERT(reporter, sum >= 0);
+    REPORTER_ASSERT(reporter, isum >= 0);
+    REPORTER_ASSERT(reporter, static_cast<SkMScalar>(isum) == SkIntToMScalar(isum));
+}
 
 DEF_TEST(Matrix44, reporter) {
     SkMatrix44 mat(SkMatrix44::kUninitialized_Constructor);
@@ -869,4 +892,5 @@ DEF_TEST(Matrix44, reporter) {
     test_3x3_conversion(reporter);
     test_has_perspective(reporter);
     test_preserves_2d_axis_alignment(reporter);
+    test_toint(reporter);
 }

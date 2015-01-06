@@ -9,7 +9,6 @@
 #ifndef SkPathRef_DEFINED
 #define SkPathRef_DEFINED
 
-#include "SkDynamicAnnotations.h"
 #include "SkMatrix.h"
 #include "SkPoint.h"
 #include "SkRect.h"
@@ -254,6 +253,8 @@ public:
      */
     uint32_t genID() const;
 
+    SkDEBUGCODE(void validate() const;)
+
 private:
     enum SerializationOffsets {
         kIsFinite_SerializationShift = 25,  // requires 1 bit
@@ -293,9 +294,9 @@ private:
         SkDEBUGCODE(this->validate();)
         // TODO(mtklein): remove fBoundsIsDirty and fIsFinite,
         // using an inverted rect instead of fBoundsIsDirty and always recalculating fIsFinite.
-        //SkASSERT(fBoundsIsDirty);
+        SkASSERT(fBoundsIsDirty);
 
-        fIsFinite = ComputePtBounds(fBounds.get(), *this);
+        fIsFinite = ComputePtBounds(&fBounds, *this);
         fBoundsIsDirty = false;
     }
 
@@ -303,7 +304,7 @@ private:
         SkASSERT(rect.fLeft <= rect.fRight && rect.fTop <= rect.fBottom);
         fBounds = rect;
         fBoundsIsDirty = false;
-        fIsFinite = fBounds->isFinite();
+        fIsFinite = fBounds.isFinite();
     }
 
     /** Makes additional room but does not change the counts or change the genID */
@@ -416,8 +417,6 @@ private:
         return reinterpret_cast<intptr_t>(fVerbs) - reinterpret_cast<intptr_t>(fPoints);
     }
 
-    SkDEBUGCODE(void validate() const;)
-
     /**
      * Called the first time someone calls CreateEmpty to actually create the singleton.
      */
@@ -435,9 +434,9 @@ private:
         kMinSize = 256,
     };
 
-    mutable SkTRacyReffable<SkRect> fBounds;
-    mutable SkTRacy<uint8_t>        fBoundsIsDirty;
-    mutable SkTRacy<SkBool8>        fIsFinite;    // only meaningful if bounds are valid
+    mutable SkRect   fBounds;
+    mutable uint8_t  fBoundsIsDirty;
+    mutable SkBool8  fIsFinite;    // only meaningful if bounds are valid
 
     SkBool8  fIsOval;
     uint8_t  fSegmentMask;

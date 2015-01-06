@@ -38,12 +38,7 @@ public:
     virtual SkImageInfo imageInfo() const SK_OVERRIDE;
 
 protected:
-    virtual bool filterTextFlags(const SkPaint& paint, TextFlags*) SK_OVERRIDE;
-
-    /** Clears the entire device to the specified color (including alpha).
-     *  Ignores the clip.
-     */
-    virtual void clear(SkColor color) SK_OVERRIDE;
+    bool onShouldDisableLCD(const SkPaint&) const SK_OVERRIDE;
 
     /** These are called inside the per-device-layer loop for each draw call.
      When these are called, we have already applied any saveLayer operations,
@@ -107,7 +102,7 @@ protected:
                               const uint16_t indices[], int indexCount,
                               const SkPaint& paint) SK_OVERRIDE;
     /** The SkBaseDevice passed will be an SkBaseDevice which was returned by a call to
-        onCreateDevice on this device with kSaveLayer_Usage.
+        onCreateCompatibleDevice on this device with kSaveLayer_Usage.
      */
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) SK_OVERRIDE;
@@ -153,7 +148,7 @@ private:
     // any clip information.
     virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE;
 
-    virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
+    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) SK_OVERRIDE;
 
     virtual SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE;
     virtual const void* peekPixels(SkImageInfo*, size_t* rowBytes) SK_OVERRIDE;

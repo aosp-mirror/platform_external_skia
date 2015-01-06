@@ -52,9 +52,6 @@ public:
      * by type(). The subtypes become progressively less restrictive.
      */
     enum Type {
-        // !< Internal indicator that the sub type must be computed.
-        kUnknown_Type = -1,
-
         // !< The RR is empty
         kEmpty_Type,
 
@@ -90,12 +87,7 @@ public:
      */
     Type getType() const {
         SkDEBUGCODE(this->validate();)
-
-        if (kUnknown_Type == fType) {
-            this->computeType();
-        }
-        SkASSERT(kUnknown_Type != fType);
-        return fType;
+        return static_cast<Type>(fType);
     }
 
     Type type() const { return this->getType(); }
@@ -292,23 +284,20 @@ public:
      */
     bool transform(const SkMatrix& matrix, SkRRect* dst) const;
 
-#ifdef SK_DEVELOPER
-    /**
-     * Prints the rrect using SkDebugf. This is intended for Skia development debugging. Don't
-     * rely on the existence of this function or the formatting of its output.
-     */
-    void dump() const;
-#endif
+    void dump(bool asHex) const;
+    void dump() const { this->dump(false); }
+    void dumpHex() const { this->dump(true); }
 
 private:
     SkRect fRect;
     // Radii order is UL, UR, LR, LL. Use Corner enum to index into fRadii[]
     SkVector fRadii[4];
-    mutable Type fType;
+    // use an explicitly sized type so we're sure the class is dense (no uninitialized bytes)
+    int32_t fType;
     // TODO: add padding so we can use memcpy for flattening and not copy
     // uninitialized data
 
-    void computeType() const;
+    void computeType();
     bool checkCornerContainment(SkScalar x, SkScalar y) const;
 
     // to access fRadii directly

@@ -26,19 +26,6 @@ SkBitmapSource::SkBitmapSource(const SkBitmap& bitmap, const SkRect& srcRect, co
   , fSrcRect(srcRect)
   , fDstRect(dstRect) {}
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkBitmapSource::SkBitmapSource(SkReadBuffer& buffer) : INHERITED(0, buffer) {
-    if (buffer.isVersionLT(SkReadBuffer::kNoMoreBitmapFlatten_Version)) {
-        fBitmap.legacyUnflatten(buffer);
-    } else {
-        buffer.readBitmap(&fBitmap);
-    }
-    buffer.readRect(&fSrcRect);
-    buffer.readRect(&fDstRect);
-    buffer.validate(buffer.isValid() && SkIsValidRect(fSrcRect) && SkIsValidRect(fDstRect));
-}
-#endif
-
 SkFlattenable* SkBitmapSource::CreateProc(SkReadBuffer& buffer) {
     SkRect src, dst;
     buffer.readRect(&src);
@@ -67,9 +54,8 @@ bool SkBitmapSource::onFilterImage(Proxy* proxy, const SkBitmap&, const Context&
         offset->fX = offset->fY = 0;
         return true;
     }
-    SkIRect dstIRect;
-    dstRect.roundOut(&dstIRect);
 
+    const SkIRect dstIRect = dstRect.roundOut();
     SkAutoTUnref<SkBaseDevice> device(proxy->createDevice(dstIRect.width(), dstIRect.height()));
     if (NULL == device.get()) {
         return false;
@@ -98,8 +84,14 @@ void SkBitmapSource::computeFastBounds(const SkRect&, SkRect* dst) const {
     *dst = fDstRect;
 }
 
-bool SkBitmapSource::onFilterBounds(const SkIRect& src, const SkMatrix& ctm,
-                                    SkIRect* dst) const {
-    *dst = src;
-    return true;
+#ifndef SK_IGNORE_TO_STRING
+void SkBitmapSource::toString(SkString* str) const {
+    str->appendf("SkBitmapSource: (");
+    str->appendf("src: (%f,%f,%f,%f) dst: (%f,%f,%f,%f) ",
+                 fSrcRect.fLeft, fSrcRect.fTop, fSrcRect.fRight, fSrcRect.fBottom,
+                 fDstRect.fLeft, fDstRect.fTop, fDstRect.fRight, fDstRect.fBottom);
+    str->appendf("bitmap: (%d,%d)",
+                 fBitmap.width(), fBitmap.height());
+    str->append(")");
 }
+#endif

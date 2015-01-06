@@ -23,11 +23,13 @@
 #include "SkMergeImageFilter.h"
 #include "SkMorphologyImageFilter.h"
 #include "SkOffsetImageFilter.h"
+#include "SkPerlinNoiseShader.h"
 #include "SkPicture.h"
 #include "SkPictureImageFilter.h"
 #include "SkPictureRecorder.h"
 #include "SkReadBuffer.h"
 #include "SkRect.h"
+#include "SkRectShaderImageFilter.h"
 #include "SkTileImageFilter.h"
 #include "SkXfermodeImageFilter.h"
 #include "Test.h"
@@ -53,16 +55,10 @@ public:
         return true;
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(MatrixTestImageFilter)
 
 protected:
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit MatrixTestImageFilter(SkReadBuffer& buffer) : SkImageFilter(0, NULL) {
-        fReporter = static_cast<skiatest::Reporter*>(buffer.readFunctionPtr());
-        buffer.readMatrix(&fExpectedMatrix);
-    }
-#endif
-
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->INHERITED::flatten(buffer);
         buffer.writeFunctionPtr(fReporter);
@@ -72,7 +68,7 @@ protected:
 private:
     skiatest::Reporter* fReporter;
     SkMatrix fExpectedMatrix;
-    
+
     typedef SkImageFilter INHERITED;
 };
 
@@ -85,6 +81,13 @@ SkFlattenable* MatrixTestImageFilter::CreateProc(SkReadBuffer& buffer) {
     buffer.readMatrix(&matrix);
     return SkNEW_ARGS(MatrixTestImageFilter, (reporter, matrix));
 }
+
+#ifndef SK_IGNORE_TO_STRING
+void MatrixTestImageFilter::toString(SkString* str) const {
+    str->appendf("MatrixTestImageFilter: (");
+    str->append(")");
+}
+#endif
 
 static void make_small_bitmap(SkBitmap& bitmap) {
     bitmap.allocN32Pixels(kBitmapSize, kBitmapSize);
@@ -233,7 +236,7 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
     SkBitmap bitmap;
     bitmap.allocN32Pixels(100, 100);
     bitmap.eraseARGB(0, 0, 0, 0);
-    SkDeviceImageFilterProxy proxy(device);
+    SkDeviceImageFilterProxy proxy(device, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
 
     SkImageFilter::CropRect inputCropRect(SkRect::MakeXYWH(8, 13, 80, 80));
     SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(20, 30, 60, 60));
@@ -256,7 +259,9 @@ static void test_crop_rects(SkBaseDevice* device, skiatest::Reporter* reporter) 
                                         SkDisplacementMapEffect::kB_ChannelSelectorType,
                                         40.0f, input.get(), input.get(), &cropRect),
         SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1, input.get(), &cropRect),
-        SkDropShadowImageFilter::Create(SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN, input.get(), &cropRect),
+        SkDropShadowImageFilter::Create(SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1,
+            SK_ColorGREEN, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
+            input.get(), &cropRect, 0),
         SkLightingImageFilter::CreatePointLitDiffuse(location, SK_ColorGREEN, 0, 0, input.get(), &cropRect),
         SkLightingImageFilter::CreatePointLitSpecular(location, SK_ColorGREEN, 0, 0, 0, input.get(), &cropRect),
         SkMatrixConvolutionImageFilter::Create(kernelSize, kernel, gain, bias, SkIPoint::Make(1, 1), SkMatrixConvolutionImageFilter::kRepeat_TileMode, false, input.get(), &cropRect),
@@ -311,7 +316,7 @@ static void test_negative_blur_sigma(SkBaseDevice* device, skiatest::Reporter* r
     // Check that SkBlurImageFilter will accept a negative sigma, either in
     // the given arguments or after CTM application.
     int width = 32, height = 32;
-    SkDeviceImageFilterProxy proxy(device);
+    SkDeviceImageFilterProxy proxy(device, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
     SkScalar five = SkIntToScalar(5);
 
     SkAutoTUnref<SkBlurImageFilter> positiveFilter(
@@ -397,6 +402,9 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
     recordingCanvas->drawRect(SkRect::Make(SkIRect::MakeXYWH(10, 10, 30, 20)), greenPaint);
     SkAutoTUnref<SkPicture> picture(recorder.endRecording());
     SkAutoTUnref<SkImageFilter> pictureFilter(SkPictureImageFilter::Create(picture.get()));
+    SkAutoTUnref<SkShader> shader(SkPerlinNoiseShader::CreateTurbulence(SK_Scalar1, SK_Scalar1, 1, 0));
+
+    SkAutoTUnref<SkImageFilter> rectShaderFilter(SkRectShaderImageFilter::Create(shader.get()));
 
     struct {
         const char*    fName;
@@ -409,7 +417,8 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
               20.0f, gradient_source.get()) },
         { "blur", SkBlurImageFilter::Create(SK_Scalar1, SK_Scalar1) },
         { "drop shadow", SkDropShadowImageFilter::Create(
-              SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN) },
+              SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_Scalar1, SK_ColorGREEN,
+              SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode) },
         { "diffuse lighting", SkLightingImageFilter::CreatePointLitDiffuse(
               location, SK_ColorGREEN, 0, 0) },
         { "specular lighting",
@@ -427,6 +436,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
         { "matrix", SkMatrixImageFilter::Create(matrix, SkPaint::kLow_FilterLevel) },
         { "blur and offset", SkOffsetImageFilter::Create(five, five, blur.get()) },
         { "picture and blur", SkBlurImageFilter::Create(five, five, pictureFilter.get()) },
+        { "rect shader and blur", SkBlurImageFilter::Create(five, five, rectShaderFilter.get()) },
     };
 
     SkBitmap untiledResult, tiledResult;
@@ -478,7 +488,7 @@ DEF_TEST(ImageFilterDrawTiled, reporter) {
     }
 }
 
-static void draw_saveLayer_picture(int width, int height, int tileSize, 
+static void draw_saveLayer_picture(int width, int height, int tileSize,
                                    SkBBHFactory* factory, SkBitmap* result) {
 
     SkMatrix matrix;
@@ -492,8 +502,8 @@ static void draw_saveLayer_picture(int width, int height, int tileSize,
     paint.setImageFilter(imageFilter.get());
     SkPictureRecorder recorder;
     SkRect bounds = SkRect::Make(SkIRect::MakeXYWH(0, 0, 50, 50));
-    SkCanvas* recordingCanvas = recorder.beginRecording(SkIntToScalar(width), 
-                                                        SkIntToScalar(height), 
+    SkCanvas* recordingCanvas = recorder.beginRecording(SkIntToScalar(width),
+                                                        SkIntToScalar(height),
                                                         factory, 0);
     recordingCanvas->translate(-55, 0);
     recordingCanvas->saveLayer(&bounds, &paint);
@@ -537,7 +547,8 @@ static SkImageFilter* makeDropShadow(SkImageFilter* input = NULL) {
     return SkDropShadowImageFilter::Create(
         SkIntToScalar(100), SkIntToScalar(100),
         SkIntToScalar(10), SkIntToScalar(10),
-        SK_ColorBLUE, input);
+        SK_ColorBLUE, SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
+        input, NULL, 0);
 }
 
 DEF_TEST(ImageFilterBlurThenShadowBounds, reporter) {
@@ -615,11 +626,11 @@ DEF_TEST(ImageFilterDrawTiledBlurRTree, reporter) {
 
     SkPictureRecorder recorder1, recorder2;
     // The only difference between these two pictures is that one has RTree aceleration.
-    SkCanvas* recordingCanvas1 = recorder1.beginRecording(SkIntToScalar(width), 
-                                                          SkIntToScalar(height), 
+    SkCanvas* recordingCanvas1 = recorder1.beginRecording(SkIntToScalar(width),
+                                                          SkIntToScalar(height),
                                                           NULL, 0);
-    SkCanvas* recordingCanvas2 = recorder2.beginRecording(SkIntToScalar(width), 
-                                                          SkIntToScalar(height), 
+    SkCanvas* recordingCanvas2 = recorder2.beginRecording(SkIntToScalar(width),
+                                                          SkIntToScalar(height),
                                                           &factory, 0);
     draw_blurred_rect(recordingCanvas1);
     draw_blurred_rect(recordingCanvas2);
@@ -815,7 +826,7 @@ DEF_TEST(ImageFilterClippedPictureImageFilter, reporter) {
     SkBitmap bitmap;
     bitmap.allocN32Pixels(2, 2);
     SkBitmapDevice device(bitmap);
-    SkDeviceImageFilterProxy proxy(&device);
+    SkDeviceImageFilterProxy proxy(&device, SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType));
     REPORTER_ASSERT(reporter, !imageFilter->filterImage(&proxy, bitmap, ctx, &result, &offset));
 }
 

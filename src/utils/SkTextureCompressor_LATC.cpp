@@ -7,6 +7,7 @@
 
 #include "SkTextureCompressor_LATC.h"
 #include "SkTextureCompressor_Blitter.h"
+#include "SkTextureCompressor_Utils.h"
 
 #include "SkBlitter.h"
 #include "SkEndian.h"
@@ -84,7 +85,7 @@ typedef uint64_t (*A84x4To64BitProc)(const uint8_t block[]);
 // src pixels are divisible by 4, and copy 4x4 blocks one at a time
 // for compression.
 static bool compress_4x4_a8_to_64bit(uint8_t* dst, const uint8_t* src,
-                                     int width, int height, int rowBytes,
+                                     int width, int height, size_t rowBytes,
                                      A84x4To64BitProc proc) {
     // Make sure that our data is well-formed enough to be considered for compression
     if (0 == width || 0 == height || (width % 4) != 0 || (height % 4) != 0) {
@@ -329,7 +330,7 @@ static inline uint32_t convert_index(uint32_t x) {
     //
     // This first operation takes the mapping from
     // 0 1 2 3 4 5 6 7  -->  7 6 5 4 3 2 1 0
-    x = 0x07070707 - ((x >> 5) & 0x07070707);
+    x = 0x07070707 - SkTextureCompressor::ConvertToThreeBitIndex(x);
 
     // mask is 1 if index is non-zero
     const uint32_t mask = (x | (x >> 1) | (x >> 2)) & 0x01010101;
@@ -349,15 +350,15 @@ static inline uint32_t convert_index(uint32_t x) {
     return pack_index(x);
 }
 
-typedef uint64_t (*PackIndicesProc)(const uint8_t* alpha, int rowBytes);
+typedef uint64_t (*PackIndicesProc)(const uint8_t* alpha, size_t rowBytes);
 template<PackIndicesProc packIndicesProc>
-static void compress_a8_latc_block(uint8_t** dstPtr, const uint8_t* src, int rowBytes) {
+static void compress_a8_latc_block(uint8_t** dstPtr, const uint8_t* src, size_t rowBytes) {
     *(reinterpret_cast<uint64_t*>(*dstPtr)) =
         SkEndian_SwapLE64(0xFF | (packIndicesProc(src, rowBytes) << 16));
     *dstPtr += 8;
 }
 
-inline uint64_t PackRowMajor(const uint8_t *indices, int rowBytes) {
+inline uint64_t PackRowMajor(const uint8_t *indices, size_t rowBytes) {
     uint64_t result = 0;
     for (int i = 0; i < 4; ++i) {
         const uint32_t idx = *(reinterpret_cast<const uint32_t*>(indices + i*rowBytes));
@@ -366,7 +367,7 @@ inline uint64_t PackRowMajor(const uint8_t *indices, int rowBytes) {
     return result;
 }
 
-inline uint64_t PackColumnMajor(const uint8_t *indices, int rowBytes) {
+inline uint64_t PackColumnMajor(const uint8_t *indices, size_t rowBytes) {
     // !SPEED! Blarg, this is kind of annoying. SSE4 can make this
     // a LOT faster.
     uint8_t transposed[16];
@@ -380,7 +381,7 @@ inline uint64_t PackColumnMajor(const uint8_t *indices, int rowBytes) {
 }
 
 static bool compress_4x4_a8_latc(uint8_t* dst, const uint8_t* src,
-                                 int width, int height, int rowBytes) {
+                                 int width, int height, size_t rowBytes) {
 
     if (width < 0 || ((width % 4) != 0) || height < 0 || ((height % 4) != 0)) {
         return false;
@@ -471,7 +472,7 @@ struct CompressorLATC {
 
 namespace SkTextureCompressor {
 
-bool CompressA8ToLATC(uint8_t* dst, const uint8_t* src, int width, int height, int rowBytes) {
+bool CompressA8ToLATC(uint8_t* dst, const uint8_t* src, int width, int height, size_t rowBytes) {
 #if COMPRESS_LATC_FAST
     return compress_4x4_a8_latc(dst, src, width, height, rowBytes);
 #elif COMPRESS_LATC_SLOW

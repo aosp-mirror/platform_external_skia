@@ -13,13 +13,13 @@
       ],
 
       'include_dirs': [
+        '../include/c',
         '../include/config',
         '../include/core',
         '../include/pathops',
         '../include/pipe',
         '../include/ports',
         '../include/utils',
-        '../include/xml',
         '../include/images',
         '../src/core',
         '../src/sfnt',
@@ -99,6 +99,7 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [
+          '../include/c',
           '../include/config',
           '../include/core',
           '../include/pathops',

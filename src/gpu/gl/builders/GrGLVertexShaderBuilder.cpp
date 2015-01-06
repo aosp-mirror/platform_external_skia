@@ -8,143 +8,95 @@
 #include "GrGLVertexShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
 #include "GrGLShaderStringBuilder.h"
-#include "../GrGpuGL.h"
+#include "../GrGLGpu.h"
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(fProgramBuilder->gpu()->glInterface(), R, X)
 
-static const char* color_attribute_name() { return "inColor"; }
-static const char* coverage_attribute_name() { return "inCoverage"; }
-
 GrGLVertexBuilder::GrGLVertexBuilder(GrGLProgramBuilder* program)
     : INHERITED(program)
-    , fPositionVar(NULL)
-    , fLocalCoordsVar(NULL)
-    , fEffectAttribOffset(0) {
+    , fRtAdjustName(NULL) {
 }
 
-SkString* GrGLVertexBuilder::addVarying(GrSLType type, const char* name,
-                                              const char** vsOutName) {
+void GrGLVertexBuilder::addVarying(const char* name, GrGLVarying* v) {
     fOutputs.push_back();
-    fOutputs.back().setType(type);
+    fOutputs.back().setType(v->fType);
     fOutputs.back().setTypeModifier(GrGLShaderVar::kVaryingOut_TypeModifier);
     fProgramBuilder->nameVariable(fOutputs.back().accessName(), 'v', name);
-
-    if (vsOutName) {
-        *vsOutName = fOutputs.back().getName().c_str();
-    }
-    return fOutputs.back().accessName();
-}
-
-void GrGLVertexBuilder::setupLocalCoords() {
-    fPositionVar = &fInputs.push_back();
-    fPositionVar->set(kVec2f_GrSLType, GrGLShaderVar::kAttribute_TypeModifier, "inPosition");
-    if (-1 != fProgramBuilder->header().fLocalCoordAttributeIndex) {
-        fLocalCoordsVar = &fInputs.push_back();
-        fLocalCoordsVar->set(kVec2f_GrSLType,
-                             GrGLShaderVar::kAttribute_TypeModifier,
-                             "inLocalCoords");
-    } else {
-        fLocalCoordsVar = fPositionVar;
-    }
-    fEffectAttribOffset = fInputs.count();
-}
-
-void GrGLVertexBuilder::transformGLToSkiaCoords() {
-    const char* viewMName;
-    fProgramBuilder->fUniformHandles.fViewMatrixUni =
-            fProgramBuilder->addUniform(GrGLProgramBuilder::kVertex_Visibility,
-                                        kMat33f_GrSLType,
-                                        "ViewM",
-                                        &viewMName);
-
-    // Transform the position into Skia's device coords.
-    this->codeAppendf("vec3 pos3 = %s * vec3(%s, 1);", viewMName, fPositionVar->c_str());
-}
-
-void GrGLVertexBuilder::setupBuiltinVertexAttribute(const char* inName, GrGLSLExpr4* out) {
-    SkString name(inName);
-    const char *vsName, *fsName;
-    fProgramBuilder->addVarying(kVec4f_GrSLType, name.c_str(), &vsName, &fsName);
-    name.prepend("in");
-    this->addAttribute(GrShaderVar(name.c_str(),
-                                   kVec4f_GrSLType,
-                                   GrShaderVar::kAttribute_TypeModifier));
-    this->codeAppendf("%s = %s;", vsName, name.c_str());
-    *out = fsName;
-    fEffectAttribOffset++;
+    v->fVsOut = fOutputs.back().getName().c_str();
 }
 
 void GrGLVertexBuilder::emitAttributes(const GrGeometryProcessor& gp) {
-    const GrGeometryProcessor::VertexAttribArray& vars = gp.getVertexAttribs();
-    int numAttributes = vars.count();
-    for (int a = 0; a < numAttributes; ++a) {
-        this->addAttribute(vars[a]);
+    const GrGeometryProcessor::VertexAttribArray& v = gp.getAttribs();
+    int vaCount = v.count();
+    for (int i = 0; i < vaCount; i++) {
+        this->addAttribute(&v[i]);
     }
+    return;
 }
 
-void GrGLVertexBuilder::transformSkiaToGLCoords() {
-    const char* rtAdjustName;
+void GrGLVertexBuilder::transformToNormalizedDeviceSpace() {
+    // setup RT Uniform
     fProgramBuilder->fUniformHandles.fRTAdjustmentUni =
             fProgramBuilder->addUniform(GrGLProgramBuilder::kVertex_Visibility,
-                                        kVec4f_GrSLType,
-                                        "rtAdjustment",
-                                        &rtAdjustName);
+                                        kVec4f_GrSLType, kDefault_GrSLPrecision,
+                                        fProgramBuilder->rtAdjustment(),
+                                        &fRtAdjustName);
+    // Wire transforms
+    SkTArray<GrGLProgramBuilder::TransformVarying, true>& transVs = fProgramBuilder->fCoordVaryings;
+    int transformCount = transVs.count();
+    for (int i = 0; i < transformCount; i++) {
+        GrCoordSet coordSet = transVs[i].fCoordSet;
+        const char* coords = NULL;
+        switch (coordSet) {
+            case kLocal_GrCoordSet:
+                coords = this->localCoords();
+                break;
+            case kDevice_GrCoordSet:
+                coords = this->glPosition();
+                break;
+        }
+
+        // varying = matrix * coords (logically)
+        const GrGLVarying& v = transVs[i].fV;
+        if (kDevice_GrCoordSet == coordSet) {
+            if (kVec2f_GrSLType == v.fType) {
+                this->codeAppendf("%s = (%s * %s).xy;", v.fVsOut, transVs[i].fUniName.c_str(),
+                                  coords);
+            } else {
+                this->codeAppendf("%s = %s * %s;", v.fVsOut, transVs[i].fUniName.c_str(), coords);
+            }
+        } else {
+            if (kVec2f_GrSLType == v.fType) {
+                this->codeAppendf("%s = (%s * vec3(%s, 1)).xy;", v.fVsOut, transVs[i].fUniName.c_str(),
+                                  coords);
+            } else {
+                this->codeAppendf("%s = %s * vec3(%s, 1);", v.fVsOut, transVs[i].fUniName.c_str(),
+                                  coords);
+            }
+        }
+    }
 
     // Transform from Skia's device coords to GL's normalized device coords.
-    this->codeAppendf("gl_Position = vec4(dot(pos3.xz, %s.xy), dot(pos3.yz, %s.zw), 0, pos3.z);",
-                    rtAdjustName, rtAdjustName);
+    this->codeAppendf("gl_Position = vec4(dot(%s.xz, %s.xy), dot(%s.yz, %s.zw), 0, %s.z);",
+                      this->glPosition(), fRtAdjustName, this->glPosition(), fRtAdjustName,
+                      this->glPosition());
 }
 
 void GrGLVertexBuilder::bindVertexAttributes(GrGLuint programID) {
-    // Bind the attrib locations to same values for all shaders
-    const GrGLProgramDesc::KeyHeader& header = fProgramBuilder->header();
-    SkASSERT(-1 != header.fPositionAttributeIndex);
-    GL_CALL(BindAttribLocation(programID,
-                               header.fPositionAttributeIndex,
-                               fPositionVar->c_str()));
-    if (-1 != header.fLocalCoordAttributeIndex) {
-        GL_CALL(BindAttribLocation(programID,
-                                   header.fLocalCoordAttributeIndex,
-                                   fLocalCoordsVar->c_str()));
-    }
-    if (-1 != header.fColorAttributeIndex) {
-        GL_CALL(BindAttribLocation(programID,
-                                   header.fColorAttributeIndex,
-                                   color_attribute_name()));
-    }
-    if (-1 != header.fCoverageAttributeIndex) {
-        GL_CALL(BindAttribLocation(programID,
-                                   header.fCoverageAttributeIndex,
-                                   coverage_attribute_name()));
-    }
+    const GrGeometryProcessor* gp = fProgramBuilder->fOptState.getGeometryProcessor();
 
-    const GrOptDrawState& optState = fProgramBuilder->optState();
-    const GrVertexAttrib* vaPtr = optState.getVertexAttribs();
-    const int vaCount = optState.getVertexAttribCount();
-
-    // We start binding attributes after builtins
-    int i = fEffectAttribOffset;
-    for (int index = 0; index < vaCount; index++) {
-        if (kGeometryProcessor_GrVertexAttribBinding != vaPtr[index].fBinding) {
-            continue;
-        }
-        SkASSERT(index != header.fPositionAttributeIndex &&
-                 index != header.fLocalCoordAttributeIndex &&
-                 index != header.fColorAttributeIndex &&
-                 index != header.fCoverageAttributeIndex);
-        // We should never find another effect attribute if we have bound everything
-        SkASSERT(i < fInputs.count());
-        GL_CALL(BindAttribLocation(programID, index, fInputs[i].c_str()));
-        i++;
+    const GrGeometryProcessor::VertexAttribArray& v = gp->getAttribs();
+    int vaCount = v.count();
+    for (int i = 0; i < vaCount; i++) {
+        GL_CALL(BindAttribLocation(programID, i, v[i].fName));
     }
-    // Make sure we bound everything
-    SkASSERT(fInputs.count() == i);
+    return;
 }
 
 bool GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId,
         SkTDArray<GrGLuint>* shaderIds) const {
-    GrGpuGL* gpu = fProgramBuilder->gpu();
+    GrGLGpu* gpu = fProgramBuilder->gpu();
     const GrGLContext& glCtx = gpu->glContext();
     const GrGLContextInfo& ctxInfo = gpu->ctxInfo();
     SkString vertShaderSrc(GrGetGLSLVersionDecl(ctxInfo));

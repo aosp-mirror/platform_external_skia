@@ -5,76 +5,78 @@
  * found in the LICENSE file.
  */
 
+#include "GrContext.h"
+#include "GrLayerCache.h"
 #include "GrRecordReplaceDraw.h"
 #include "SkCanvasPriv.h"
+#include "SkGrPixelRef.h"
 #include "SkImage.h"
 #include "SkRecordDraw.h"
 #include "SkRecords.h"
 
-GrReplacements::ReplacementInfo* GrReplacements::newReplacement(uint32_t pictureID,
-                                                                unsigned int start,
-                                                                const SkMatrix& ctm) {
-    ReplacementInfo* replacement = SkNEW_ARGS(ReplacementInfo, (pictureID, start, ctm));
-    fReplacementHash.add(replacement);
-    return replacement;
+static inline void wrap_texture(GrTexture* texture, int width, int height, SkBitmap* result) {
+    SkImageInfo info = SkImageInfo::MakeN32Premul(width, height);
+    result->setInfo(info);
+    result->setPixelRef(SkNEW_ARGS(SkGrPixelRef, (info, texture)))->unref();
 }
 
-void GrReplacements::freeAll() {
-    SkTDynamicHash<ReplacementInfo, ReplacementInfo::Key>::Iter iter(&fReplacementHash);
+static inline void draw_replacement_bitmap(GrCachedLayer* layer, SkCanvas* canvas) {
 
-    for (; !iter.done(); ++iter) {
-        ReplacementInfo* replacement = &(*iter);
-        SkDELETE(replacement);
+    SkBitmap bm;
+    wrap_texture(layer->texture(),
+                 !layer->isAtlased() ? layer->rect().width()  : layer->texture()->width(),
+                 !layer->isAtlased() ? layer->rect().height() : layer->texture()->height(),
+                 &bm);
+
+    if (layer->isAtlased()) {
+        const SkRect src = SkRect::Make(layer->rect());
+        const SkRect dst = SkRect::Make(layer->srcIR());
+
+        SkASSERT(layer->offset().isZero());
+
+        canvas->save();
+        canvas->setMatrix(SkMatrix::I());
+        canvas->drawBitmapRectToRect(bm, &src, dst, layer->paint());
+        canvas->restore();
+    } else {
+        canvas->drawSprite(bm, 
+                           layer->srcIR().fLeft + layer->offset().fX,
+                           layer->srcIR().fTop + layer->offset().fY,
+                           layer->paint());
     }
-
-    fReplacementHash.reset();
-}
-
-const GrReplacements::ReplacementInfo* GrReplacements::lookupByStart(uint32_t pictureID,
-                                                                     size_t start,
-                                                                     const SkMatrix& ctm) const {
-    return fReplacementHash.find(ReplacementInfo::Key(pictureID, start, ctm));
-}
-
-static inline void draw_replacement_bitmap(const GrReplacements::ReplacementInfo* ri,
-                                           SkCanvas* canvas,
-                                           const SkMatrix& initialMatrix) {
-    SkRect src = SkRect::Make(ri->fSrcRect);
-    SkRect dst = SkRect::MakeXYWH(SkIntToScalar(ri->fPos.fX),
-                                  SkIntToScalar(ri->fPos.fY),
-                                  SkIntToScalar(ri->fSrcRect.width()),
-                                  SkIntToScalar(ri->fSrcRect.height()));
-
-    canvas->save();
-    canvas->setMatrix(initialMatrix);
-    canvas->drawImageRect(ri->fImage, &src, dst, ri->fPaint);
-    canvas->restore();
 }
 
 // Used by GrRecordReplaceDraw. It intercepts nested drawPicture calls and
 // also draws them with replaced layers.
 class ReplaceDraw : public SkRecords::Draw {
 public:
-    ReplaceDraw(SkCanvas* canvas,
+    ReplaceDraw(SkCanvas* canvas, GrLayerCache* layerCache,
+                SkPicture const* const drawablePicts[], int drawableCount,
+                const SkPicture* topLevelPicture,
                 const SkPicture* picture,
-                const GrReplacements* replacements,
                 const SkMatrix& initialMatrix,
-                SkDrawPictureCallback* callback)
-        : INHERITED(canvas)
+                SkDrawPictureCallback* callback,
+                const unsigned* opIndices, int numIndices)
+        : INHERITED(canvas, drawablePicts, NULL, drawableCount)
         , fCanvas(canvas)
+        , fLayerCache(layerCache)
+        , fTopLevelPicture(topLevelPicture)
         , fPicture(picture)
-        , fReplacements(replacements)
         , fInitialMatrix(initialMatrix)
         , fCallback(callback)
-        , fIndex(0) {
+        , fIndex(0)
+        , fNumReplaced(0) {
+        fOpIndexStack.append(numIndices, opIndices);
     }
 
-    void draw() {
+    int draw() {
         const SkBBoxHierarchy* bbh = fPicture->fBBH.get();
         const SkRecord* record = fPicture->fRecord.get();
         if (NULL == record) {
-            return;
+            return 0;
         }
+
+        fNumReplaced = 0;
 
         fOps.rewind();
 
@@ -91,7 +93,7 @@ public:
 
             for (fIndex = 0; fIndex < fOps.count(); ++fIndex) {
                 if (fCallback && fCallback->abortDrawing()) {
-                    return;
+                    return fNumReplaced;
                 }
 
                 record->visit<void>(fOps[fIndex], *this);
@@ -100,12 +102,14 @@ public:
         } else {
             for (fIndex = 0; fIndex < (int) record->count(); ++fIndex) {
                 if (fCallback && fCallback->abortDrawing()) {
-                    return;
+                    return fNumReplaced;
                 }
 
                 record->visit<void>(fIndex, *this);
             }
         }
+
+        return fNumReplaced;
     }
 
     // Same as Draw for all ops except DrawPicture and SaveLayer.
@@ -113,68 +117,97 @@ public:
         this->INHERITED::operator()(r);
     }
     void operator()(const SkRecords::DrawPicture& dp) {
-        SkAutoCanvasMatrixPaint acmp(fCanvas, dp.matrix, dp.paint, dp.picture->cullRect());
+
+        int drawPictureOffset;
+        if (fOps.count()) {
+            drawPictureOffset = fOps[fIndex];
+        } else {
+            drawPictureOffset = fIndex;
+        }
+
+        fOpIndexStack.push(drawPictureOffset);
+
+        SkAutoCanvasMatrixPaint acmp(fCanvas, &dp.matrix, dp.paint, dp.picture->cullRect());
 
         // Draw sub-pictures with the same replacement list but a different picture
-        ReplaceDraw draw(fCanvas, dp.picture, fReplacements, fInitialMatrix, fCallback);
+        ReplaceDraw draw(fCanvas, fLayerCache, 
+                         this->drawablePicts(), this->drawableCount(),
+                         fTopLevelPicture, dp.picture, fInitialMatrix, fCallback,
+                         fOpIndexStack.begin(), fOpIndexStack.count());
 
-        draw.draw();
+        fNumReplaced += draw.draw();
+
+        fOpIndexStack.pop();
     }
     void operator()(const SkRecords::SaveLayer& sl) {
 
         // For a saveLayer command, check if it can be replaced by a drawBitmap
         // call and, if so, draw it and then update the current op index accordingly.
-        size_t startOffset;
+        unsigned startOffset;
         if (fOps.count()) {
             startOffset = fOps[fIndex];
         } else {
             startOffset = fIndex;
         }
 
-        const GrReplacements::ReplacementInfo* ri = fReplacements->lookupByStart(
-                                                            fPicture->uniqueID(),
-                                                            startOffset,
-                                                            fCanvas->getTotalMatrix());
+        fOpIndexStack.push(startOffset);
 
-        if (ri) {
-            draw_replacement_bitmap(ri, fCanvas, fInitialMatrix);
+        GrCachedLayer* layer = fLayerCache->findLayer(fTopLevelPicture->uniqueID(),
+                                                      fInitialMatrix,
+                                                      fOpIndexStack.begin(),
+                                                      fOpIndexStack.count());
+
+        if (layer) {
+            fNumReplaced++;
+
+            draw_replacement_bitmap(layer, fCanvas);
 
             if (fPicture->fBBH.get()) {
-                while (fOps[fIndex] < ri->fStop) {
+                while (fOps[fIndex] < layer->stop()) {
                     ++fIndex;
                 }
-                SkASSERT(fOps[fIndex] == ri->fStop);
+                SkASSERT(fOps[fIndex] == layer->stop());
             } else {
-                fIndex = ri->fStop;
+                fIndex = layer->stop();
             }
+            fOpIndexStack.pop();
             return;
         }
 
         // This is a fail for layer hoisting
         this->INHERITED::operator()(sl);
+
+        fOpIndexStack.pop();
     }
 
 private:
     SkCanvas*              fCanvas;
+    GrLayerCache*          fLayerCache;
+    const SkPicture*       fTopLevelPicture;
     const SkPicture*       fPicture;
-    const GrReplacements*  fReplacements;
     const SkMatrix         fInitialMatrix;
     SkDrawPictureCallback* fCallback;
 
     SkTDArray<unsigned>    fOps;
     int                    fIndex;
+    int                    fNumReplaced;
+
+    // The op code indices of all the enclosing drawPicture and saveLayer calls
+    SkTDArray<unsigned>    fOpIndexStack;
 
     typedef Draw INHERITED;
 };
 
-void GrRecordReplaceDraw(const SkPicture* picture,
-                         SkCanvas* canvas,
-                         const GrReplacements* replacements,
-                         const SkMatrix& initialMatrix,
-                         SkDrawPictureCallback* callback) {
+int GrRecordReplaceDraw(const SkPicture* picture,
+                        SkCanvas* canvas,
+                        GrLayerCache* layerCache,
+                        const SkMatrix& initialMatrix,
+                        SkDrawPictureCallback* callback) {
     SkAutoCanvasRestore saveRestore(canvas, true /*save now, restore at exit*/);
 
-    ReplaceDraw draw(canvas, picture, replacements, initialMatrix, callback);
-
-    draw.draw();
+    // TODO: drawablePicts?
+    ReplaceDraw draw(canvas, layerCache, NULL, 0,
+                     picture, picture,
+                     initialMatrix, callback, NULL, 0);
+    return draw.draw();
 }

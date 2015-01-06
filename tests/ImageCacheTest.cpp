@@ -12,11 +12,10 @@
 namespace {
 static void* gGlobalAddress;
 struct TestingKey : public SkResourceCache::Key {
-    void*       fPtr;
     intptr_t    fValue;
 
-    TestingKey(intptr_t value) : fPtr(&gGlobalAddress), fValue(value) {
-        this->init(sizeof(fPtr) + sizeof(fValue));
+    TestingKey(intptr_t value) : fValue(value) {
+        this->init(&gGlobalAddress, sizeof(fValue));
     }
 };
 struct TestingRec : public SkResourceCache::Rec {
@@ -57,7 +56,7 @@ static void test_cache(skiatest::Reporter* reporter, SkResourceCache& cache, boo
 
     if (testPurge) {
         // stress test, should trigger purges
-        for (size_t i = 0; i < COUNT * 100; ++i) {
+        for (int i = 0; i < COUNT * 100; ++i) {
             TestingKey key(i);
             cache.add(SkNEW_ARGS(TestingRec, (key, i)));
         }

@@ -109,11 +109,14 @@ SkOffsetImageFilter::SkOffsetImageFilter(SkScalar dx, SkScalar dy, SkImageFilter
     fOffset.set(dx, dy);
 }
 
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-SkOffsetImageFilter::SkOffsetImageFilter(SkReadBuffer& buffer)
-  : INHERITED(1, buffer) {
-    buffer.readPoint(&fOffset);
-    buffer.validate(SkScalarIsFinite(fOffset.fX) &&
-                    SkScalarIsFinite(fOffset.fY));
+#ifndef SK_IGNORE_TO_STRING
+void SkOffsetImageFilter::toString(SkString* str) const {
+    str->appendf("SkOffsetImageFilter: (");
+    str->appendf("offset: (%f, %f) ", fOffset.fX, fOffset.fY);
+    str->append("input: (");
+    if (this->getInput(0)) {
+        this->getInput(0)->toString(str);
+    }
+    str->append("))");
 }
 #endif

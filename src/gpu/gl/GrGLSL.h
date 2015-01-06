@@ -35,6 +35,14 @@ enum GrGLSLGeneration {
      * Desktop GLSL 1.50
      */
     k150_GrGLSLGeneration,
+    /**
+     * Desktop GLSL 3.30, and ES GLSL 3.00
+     */
+    k330_GrGLSLGeneration,
+    /**
+     * ES GLSL 3.10 only TODO Make GLSLCap objects to make this more granular
+     */
+    k310es_GrGLSLGeneration,
 };
 
 /**
@@ -98,6 +106,10 @@ public:
         return fExpr.c_str();
     }
 
+    bool isValid() const {
+        return kFullExpr_ExprType != fType || !fExpr.isEmpty();
+    }
+
 protected:
     /** Constructs an invalid expression.
      * Useful only as a return value from functions that never actually return
@@ -156,10 +168,6 @@ protected:
     GrGLSLExpr(const char format[], const char in0[], const char in1[])
         : fType(kFullExpr_ExprType) {
         fExpr.appendf(format, in0, in1);
-    }
-
-    bool isValid() const {
-        return kFullExpr_ExprType != fType || !fExpr.isEmpty();
     }
 
     /** Returns expression casted to another type.

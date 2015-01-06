@@ -16,6 +16,7 @@
 class SkBitmap;
 class SkColorFilter;
 class SkBaseDevice;
+class SkSurfaceProps;
 struct SkIPoint;
 class GrFragmentProcessor;
 class GrTexture;
@@ -87,6 +88,7 @@ public:
         virtual bool filterImage(const SkImageFilter*, const SkBitmap& src,
                                  const Context&,
                                  SkBitmap* result, SkIPoint* offset) = 0;
+        virtual const SkSurfaceProps* surfaceProps() const = 0;
     };
 
     /**
@@ -186,6 +188,7 @@ public:
                            SkBitmap* result, SkIPoint* offset) const;
 #endif
 
+    SK_TO_STRING_PUREVIRT()
     SK_DEFINE_FLATTENABLE_TYPE(SkImageFilter)
 
 protected:

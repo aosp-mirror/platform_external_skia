@@ -247,9 +247,11 @@ SkTypeface* SkFontMgr_Indirect::onMatchFamilyStyle(const char familyName[],
 
 SkTypeface* SkFontMgr_Indirect::onMatchFamilyStyleCharacter(const char familyName[],
                                                             const SkFontStyle& style,
-                                                            const char bpc47[],
-                                                            uint32_t character) const {
-    SkFontIdentity id = fProxy->matchNameStyleCharacter(familyName, style, bpc47, character);
+                                                            const char* bcp47[],
+                                                            int bcp47Count,
+                                                            SkUnichar character) const {
+    SkFontIdentity id = fProxy->matchNameStyleCharacter(familyName, style, bcp47,
+                                                        bcp47Count, character);
     return this->createTypefaceFromFontId(id);
 }
 

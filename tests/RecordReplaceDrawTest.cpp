@@ -9,6 +9,8 @@
 
 #include "Test.h"
 
+#include "GrContextFactory.h"
+#include "GrLayerCache.h"
 #include "GrRecordReplaceDraw.h"
 #include "RecordTestUtils.h"
 #include "SkBBHFactory.h"
@@ -47,14 +49,21 @@ DEF_TEST(RecordReplaceDraw_Abort, r) {
     SkRecord rerecord;
     SkRecorder canvas(&rerecord, kWidth, kHeight);
 
-    GrReplacements replacements;
     JustOneDraw callback;
-    GrRecordReplaceDraw(pic, &canvas, &replacements, SkMatrix::I(), &callback);
+    GrRecordReplaceDraw(pic, &canvas, NULL, SkMatrix::I(), &callback);
 
-    REPORTER_ASSERT(r, 3 == rerecord.count());
-    assert_type<SkRecords::Save>(r, rerecord, 0);
-    assert_type<SkRecords::DrawRect>(r, rerecord, 1);
-    assert_type<SkRecords::Restore>(r, rerecord, 2);
+    switch (rerecord.count()) {
+        case 3:
+            assert_type<SkRecords::Save>(r, rerecord, 0);
+            assert_type<SkRecords::DrawRect>(r, rerecord, 1);
+            assert_type<SkRecords::Restore>(r, rerecord, 2);
+            break;
+        case 1:
+            assert_type<SkRecords::DrawRect>(r, rerecord, 0);
+            break;
+        default:
+            REPORTER_ASSERT(r, false);
+    }
 }
 
 // Make sure GrRecordReplaceDraw balances unbalanced saves
@@ -67,47 +76,31 @@ DEF_TEST(RecordReplaceDraw_Unbalanced, r) {
 
         // We won't balance this, but GrRecordReplaceDraw will for us.
         canvas->save();
-
+        canvas->scale(2, 2);
         pic.reset(recorder.endRecording());
     }
 
     SkRecord rerecord;
     SkRecorder canvas(&rerecord, kWidth, kHeight);
 
-    GrReplacements replacements;
-    GrRecordReplaceDraw(pic, &canvas, &replacements, SkMatrix::I(), NULL/*callback*/);
+    GrRecordReplaceDraw(pic, &canvas, NULL, SkMatrix::I(), NULL/*callback*/);
 
-    REPORTER_ASSERT(r, 4 == rerecord.count());
-    assert_type<SkRecords::Save>(r, rerecord, 0);
-    assert_type<SkRecords::Save>(r, rerecord, 1);
-    assert_type<SkRecords::Restore>(r, rerecord, 2);
-    assert_type<SkRecords::Restore>(r, rerecord, 3);
-}
-
-static SkImage* make_image(SkColor color) {
-    const SkPMColor pmcolor = SkPreMultiplyColor(color);
-    const SkImageInfo info = SkImageInfo::MakeN32Premul(kWidth, kHeight);
-    const size_t rowBytes = info.minRowBytes();
-    const size_t size = rowBytes * info.height();
-
-    SkAutoMalloc addr(size);
-    sk_memset32((SkPMColor*)addr.get(), pmcolor, SkToInt(size >> 2));
-
-    return SkImage::NewRasterCopy(info, addr.get(), rowBytes);
+    // ensure rerecord is balanced (in this case by checking that the count is odd)
+    REPORTER_ASSERT(r, (rerecord.count() & 1) == 1);
 }
 
 // Test out the layer replacement functionality with and w/o a BBH
-void test_replacements(skiatest::Reporter* r, bool useBBH) {
+void test_replacements(skiatest::Reporter* r, GrContext* context, bool useBBH) {
     SkAutoTUnref<const SkPicture> pic;
 
     {
         SkRTreeFactory bbhFactory;
         SkPictureRecorder recorder;
-        SkCanvas* canvas = recorder.beginRecording(SkIntToScalar(kWidth), SkIntToScalar(kHeight), 
+        SkCanvas* canvas = recorder.beginRecording(SkIntToScalar(kWidth), SkIntToScalar(kHeight),
                                                    useBBH ? &bbhFactory : NULL);
 
-        SkAutoTDelete<SkPaint> paint(SkNEW(SkPaint));
-        canvas->saveLayer(NULL, paint);
+        SkPaint paint;
+        canvas->saveLayer(NULL, &paint);
         canvas->clear(SK_ColorRED);
         canvas->restore();
         canvas->drawRect(SkRect::MakeWH(SkIntToScalar(kWidth / 2), SkIntToScalar(kHeight / 2)),
@@ -115,32 +108,60 @@ void test_replacements(skiatest::Reporter* r, bool useBBH) {
         pic.reset(recorder.endRecording());
     }
 
-    GrReplacements replacements;
-    GrReplacements::ReplacementInfo* ri = replacements.newReplacement(pic->uniqueID(), 
-                                                                      0, SkMatrix::I());
-    ri->fStop = 2;
-    ri->fPos.set(0, 0);
-    ri->fImage = make_image(SK_ColorRED);
-    ri->fPaint = SkNEW(SkPaint);
-    ri->fSrcRect = SkIRect::MakeWH(kWidth, kHeight);
+    unsigned key[1] = { 0 };
+
+    SkPaint paint;
+    GrLayerCache* layerCache = context->getLayerCache();
+    GrCachedLayer* layer = layerCache->findLayerOrCreate(pic->uniqueID(), 0, 2,
+                                                         SkIRect::MakeWH(kWidth, kHeight),
+                                                         SkIRect::MakeWH(kWidth, kHeight),
+                                                         SkMatrix::I(), key, 1, &paint);
+
+    GrSurfaceDesc desc;
+    desc.fConfig = kSkia8888_GrPixelConfig;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
+    desc.fWidth = kWidth;
+    desc.fHeight = kHeight;
+    desc.fSampleCnt = 0;
+
+    SkAutoTUnref<GrTexture> texture(context->createUncachedTexture(desc, NULL, 0));
+    layer->setTexture(texture, SkIRect::MakeWH(kWidth, kHeight));
 
     SkAutoTUnref<SkBBoxHierarchy> bbh;
 
     SkRecord rerecord;
     SkRecorder canvas(&rerecord, kWidth, kHeight);
-    GrRecordReplaceDraw(pic, &canvas, &replacements, SkMatrix::I(), NULL/*callback*/);
+    GrRecordReplaceDraw(pic, &canvas, layerCache, SkMatrix::I(), NULL/*callback*/);
 
-    REPORTER_ASSERT(r, 7 == rerecord.count());
-    assert_type<SkRecords::Save>(r, rerecord, 0);
-    assert_type<SkRecords::Save>(r, rerecord, 1);
-    assert_type<SkRecords::SetMatrix>(r, rerecord, 2);
-    assert_type<SkRecords::DrawBitmapRectToRect>(r, rerecord, 3);
-    assert_type<SkRecords::Restore>(r, rerecord, 4);
-    assert_type<SkRecords::DrawRect>(r, rerecord, 5);
-    assert_type<SkRecords::Restore>(r, rerecord, 6);
+    int recount = rerecord.count();
+    REPORTER_ASSERT(r, 2 == recount || 4 == recount);
+
+    int index = 0;
+    if (4 == recount) {
+        assert_type<SkRecords::Save>(r, rerecord, 0);
+        index += 1;
+    }
+    assert_type<SkRecords::DrawSprite>(r, rerecord, index + 0);
+    assert_type<SkRecords::DrawRect>(r, rerecord, index + 1);
+    if (4 == recount) {
+        assert_type<SkRecords::Restore>(r, rerecord, 3);
+    }
 }
 
-DEF_TEST(RecordReplaceDraw_Replace, r)        { test_replacements(r, false); }
-DEF_TEST(RecordReplaceDraw_ReplaceWithBBH, r) { test_replacements(r, true); }
+DEF_GPUTEST(RecordReplaceDraw, r, factory) { 
+    for (int type = 0; type < GrContextFactory::kLastGLContextType; ++type) {
+        GrContextFactory::GLContextType glType = static_cast<GrContextFactory::GLContextType>(type);
+        if (!GrContextFactory::IsRenderingGLContext(glType)) {
+            continue;
+        }
+        GrContext* context = factory->get(glType);
+        if (NULL == context) {
+            continue;
+        }
+
+        test_replacements(r, context, true);
+        test_replacements(r, context, false);
+    }
+}
 
 #endif

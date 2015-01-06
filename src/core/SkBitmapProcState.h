@@ -14,21 +14,11 @@
 #include "SkMipMap.h"
 #include "SkPaint.h"
 
-#define FractionalInt_IS_64BIT
-
-#ifdef FractionalInt_IS_64BIT
-    typedef SkFixed48    SkFractionalInt;
-    #define SkScalarToFractionalInt(x)  SkScalarToFixed48(x)
-    #define SkFractionalIntToFixed(x)   SkFixed48ToFixed(x)
-    #define SkFixedToFractionalInt(x)   SkFixedToFixed48(x)
-    #define SkFractionalIntToInt(x)     SkFixed48ToInt(x)
-#else
-    typedef SkFixed    SkFractionalInt;
-    #define SkScalarToFractionalInt(x)  SkScalarToFixed(x)
-    #define SkFractionalIntToFixed(x)   (x)
-    #define SkFixedToFractionalInt(x)   (x)
-    #define SkFractionalIntToInt(x)     ((x) >> 16)
-#endif
+typedef SkFixed3232    SkFractionalInt;
+#define SkScalarToFractionalInt(x)  SkScalarToFixed3232(x)
+#define SkFractionalIntToFixed(x)   SkFixed3232ToFixed(x)
+#define SkFixedToFractionalInt(x)   SkFixedToFixed3232(x)
+#define SkFractionalIntToInt(x)     SkFixed3232ToInt(x)
 
 class SkPaint;
 
@@ -214,6 +204,8 @@ void ClampX_ClampY_nofilter_affine(const SkBitmapProcState& s,
                                    uint32_t xy[], int count, int x, int y);
 void S32_D16_filter_DX(const SkBitmapProcState& s,
                        const uint32_t* xy, int count, uint16_t* colors);
+void S32_D16_filter_DXDY(const SkBitmapProcState& s,
+                         const uint32_t* xy, int count, uint16_t* colors);
 
 void highQualityFilter32(const SkBitmapProcState &s, int x, int y,
                          SkPMColor *SK_RESTRICT colors, int count);

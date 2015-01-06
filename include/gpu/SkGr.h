@@ -44,13 +44,13 @@ GR_STATIC_ASSERT((int)kIDA_GrBlendCoeff  == (int)SkXfermode::kIDA_Coeff);
 
 #include "SkColorPriv.h"
 
-GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType, SkAlphaType);
+GrPixelConfig SkImageInfo2GrPixelConfig(SkColorType, SkAlphaType, SkColorProfileType);
 
 static inline GrPixelConfig SkImageInfo2GrPixelConfig(const SkImageInfo& info) {
-    return SkImageInfo2GrPixelConfig(info.colorType(), info.alphaType());
+    return SkImageInfo2GrPixelConfig(info.colorType(), info.alphaType(), info.profileType());
 }
 
-bool GrPixelConfig2ColorType(GrPixelConfig, SkColorType*);
+bool GrPixelConfig2ColorAndProfileType(GrPixelConfig, SkColorType*, SkColorProfileType*);
 
 static inline GrColor SkColor2GrColor(SkColor c) {
     SkPMColor pm = SkPreMultiplyColor(c);
@@ -68,6 +68,11 @@ static inline GrColor SkColor2GrColorJustAlpha(SkColor c) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The cache listens for these messages to purge junk resources proactively.
+struct GrResourceInvalidatedMessage {
+    GrResourceKey key;
+};
+
 bool GrIsBitmapInCache(const GrContext*, const SkBitmap&, const GrTextureParams*);
 
 GrTexture* GrRefCachedBitmapTexture(GrContext*, const SkBitmap&, const GrTextureParams*);
@@ -84,10 +89,10 @@ void SkPaint2GrPaintNoShader(GrContext* context, const SkPaint& skPaint, GrColor
                              bool constantColor, GrPaint* grPaint);
 
 // This function is similar to skPaint2GrPaintNoShader but also converts
-// skPaint's shader to a GrTexture/GrProcessorStage if possible.
+// skPaint's shader to a GrFragmentProcessor if possible.
 // constantColor has the same meaning as in skPaint2GrPaintNoShader.
 void SkPaint2GrPaintShader(GrContext* context, const SkPaint& skPaint,
-                           bool constantColor, GrPaint* grPaint);
+                           const SkMatrix& viewM, bool constantColor, GrPaint* grPaint);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Classes

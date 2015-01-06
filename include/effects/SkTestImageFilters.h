@@ -18,14 +18,12 @@ public:
         return SkNEW_ARGS(SkDownSampleImageFilter, (scale, input));
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDownSampleImageFilter)
 
 protected:
     SkDownSampleImageFilter(SkScalar scale, SkImageFilter* input)
       : INHERITED(1, &input), fScale(scale) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    SkDownSampleImageFilter(SkReadBuffer& buffer);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,

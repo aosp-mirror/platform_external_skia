@@ -15,7 +15,6 @@
         '../include/ports',
         '../include/utils',
         '../include/utils/win',
-        '../include/xml',
         '../src/core',
         '../src/lazy',
         '../src/ports',
@@ -55,12 +54,10 @@
         '../src/ports/SkTime_win.cpp',
         '../src/ports/SkTLS_pthread.cpp',
         '../src/ports/SkTLS_win.cpp',
-        '../src/ports/SkXMLParser_empty.cpp',
 
         '../include/ports/SkFontConfigInterface.h',
         '../include/ports/SkFontMgr.h',
         '../include/ports/SkFontMgr_indirect.h',
-        '../include/ports/SkFontStyle.h',
         '../include/ports/SkRemotableFontMgr.h',
       ],
       'conditions': [

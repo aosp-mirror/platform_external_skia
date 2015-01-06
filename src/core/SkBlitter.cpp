@@ -714,15 +714,6 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(Sk3DShader)
 
 protected:
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    Sk3DShader(SkReadBuffer& buffer) : INHERITED(buffer) {
-        fProxy = buffer.readShader();
-        // Leaving this here until we bump the picture version, though this
-        // shader should never be recorded.
-        buffer.readColor();
-    }
-#endif
-
     virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         buffer.writeFlattenable(fProxy);
     }
@@ -745,24 +736,24 @@ public:
         , fShaderContext(shaderContext)
     {}
 
-    virtual void blitH(int x, int y, int width) {
+    virtual void blitH(int x, int y, int width) SK_OVERRIDE {
         fProxy->blitH(x, y, width);
     }
 
     virtual void blitAntiH(int x, int y, const SkAlpha antialias[],
-                           const int16_t runs[]) {
+                           const int16_t runs[]) SK_OVERRIDE {
         fProxy->blitAntiH(x, y, antialias, runs);
     }
 
-    virtual void blitV(int x, int y, int height, SkAlpha alpha) {
+    virtual void blitV(int x, int y, int height, SkAlpha alpha) SK_OVERRIDE {
         fProxy->blitV(x, y, height, alpha);
     }
 
-    virtual void blitRect(int x, int y, int width, int height) {
+    virtual void blitRect(int x, int y, int width, int height) SK_OVERRIDE {
         fProxy->blitRect(x, y, width, height);
     }
 
-    virtual void blitMask(const SkMask& mask, const SkIRect& clip) {
+    virtual void blitMask(const SkMask& mask, const SkIRect& clip) SK_OVERRIDE {
         if (mask.fFormat == SkMask::k3D_Format) {
             fShaderContext->set3DMask(&mask);
 
@@ -850,14 +841,11 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
                              bool drawCoverage) {
     SkASSERT(allocator != NULL);
 
-    SkBlitter*  blitter = NULL;
-
     // which check, in case we're being called by a client with a dummy device
     // (e.g. they have a bounder that always aborts the draw)
     if (kUnknown_SkColorType == device.colorType() ||
             (drawCoverage && (kAlpha_8_SkColorType != device.colorType()))) {
-        blitter = allocator->createT<SkNullBlitter>();
-        return blitter;
+        return allocator->createT<SkNullBlitter>();
     }
 
     SkShader* shader = origPaint.getShader();
@@ -882,8 +870,7 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
                 paint.writable()->setXfermode(NULL);
                 break;
             case kSkipDrawing_XferInterp:{
-                blitter = allocator->createT<SkNullBlitter>();
-                return blitter;
+                return allocator->createT<SkNullBlitter>();
             }
             default:
                 break;
@@ -930,24 +917,26 @@ SkBlitter* SkBlitter::Choose(const SkBitmap& device,
     /*
      *  We create a SkShader::Context object, and store it on the blitter.
      */
-    SkShader::Context* shaderContext;
+    SkShader::Context* shaderContext = NULL;
     if (shader) {
         SkShader::ContextRec rec(device, *paint, matrix);
-        // Try to create the ShaderContext
-        void* storage = allocator->reserveT<SkShader::Context>(shader->contextSize());
-        shaderContext = shader->createContext(rec, storage);
-        if (!shaderContext) {
-            allocator->freeLast();
-            blitter = allocator->createT<SkNullBlitter>();
-            return blitter;
+        size_t contextSize = shader->contextSize();
+        if (contextSize) {
+            // Try to create the ShaderContext
+            void* storage = allocator->reserveT<SkShader::Context>(contextSize);
+            shaderContext = shader->createContext(rec, storage);
+            if (!shaderContext) {
+                allocator->freeLast();
+                return allocator->createT<SkNullBlitter>();
+            }
+            SkASSERT(shaderContext);
+            SkASSERT((void*) shaderContext == storage);
+        } else {
+            return allocator->createT<SkNullBlitter>();
         }
-        SkASSERT(shaderContext);
-        SkASSERT((void*) shaderContext == storage);
-    } else {
-        shaderContext = NULL;
     }
 
-
+    SkBlitter*  blitter = NULL;
     switch (device.colorType()) {
         case kAlpha_8_SkColorType:
             if (drawCoverage) {

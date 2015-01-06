@@ -13,7 +13,7 @@
       'standalone_static_library': 1,
       'dependencies': [
         'skia_lib.gyp:skia_lib',
-        'xml.gyp:*',
+        'xml.gyp:xml',
       ],
       'include_dirs': [
         '../include/views',
@@ -33,7 +33,6 @@
         '../include/views/SkOSWindow_Win.h',
         '../include/views/SkStackViewLayout.h',
         '../include/views/SkSystemEventTypes.h',
-        '../include/views/SkTextBox.h',
         '../include/views/SkTouchGesture.h',
         '../include/views/SkView.h',
         '../include/views/SkViewInflate.h',
@@ -49,7 +48,6 @@
         '../src/views/SkStackViewLayout.cpp',
         '../src/views/SkTagList.cpp',
         '../src/views/SkTagList.h',
-        '../src/views/SkTextBox.cpp',
         '../src/views/SkTouchGesture.cpp',
         '../src/views/SkView.cpp',
         '../src/views/SkViewInflate.cpp',
@@ -136,6 +134,9 @@
           '../include/views',
         ],
       },
+      'export_dependent_settings': [
+        'xml.gyp:xml',
+      ],
     },
   ],
 }

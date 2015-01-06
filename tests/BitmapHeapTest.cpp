@@ -15,6 +15,19 @@
 #include "SkShader.h"
 #include "Test.h"
 
+struct SimpleFlatController : public SkFlatController {
+    SimpleFlatController() : SkFlatController() {}
+    ~SimpleFlatController() { fAllocations.freeAll(); }
+    virtual void* allocThrow(size_t bytes) SK_OVERRIDE {
+        fAllocations.push(sk_malloc_throw(bytes));
+        return fAllocations.top();
+    }
+    virtual void unalloc(void*) SK_OVERRIDE { }
+    void setBitmapStorage(SkBitmapHeap* h) { this->setBitmapHeap(h); }
+private:
+    SkTDArray<void*> fAllocations;
+};
+
 struct SkShaderTraits {
     static void Flatten(SkWriteBuffer& buffer, const SkShader& shader) {
         buffer.writeFlattenable(&shader);
@@ -23,7 +36,6 @@ struct SkShaderTraits {
 typedef SkFlatDictionary<SkShader, SkShaderTraits> FlatDictionary;
 
 class SkBitmapHeapTester {
-
 public:
     static int32_t GetRefCount(const SkBitmapHeapEntry* entry) {
         return entry->fRefCount;
@@ -44,7 +56,7 @@ DEF_TEST(BitmapHeap, reporter) {
 
     // Flatten, storing it in the bitmap heap.
     SkBitmapHeap heap(1, 1);
-    SkChunkFlatController controller(1024);
+    SimpleFlatController controller;
     controller.setBitmapStorage(&heap);
     FlatDictionary dictionary(&controller);
 

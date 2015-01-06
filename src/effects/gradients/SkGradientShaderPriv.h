@@ -102,7 +102,7 @@ public:
     class DescriptorScope : public Descriptor {
     public:
         DescriptorScope() {}
-        
+
         bool unflatten(SkReadBuffer&);
 
         // fColors and fPos always point into local memory, so they can be safely mutated
@@ -121,7 +121,7 @@ public:
     };
 
 public:
-    SkGradientShaderBase(const Descriptor& desc);
+    SkGradientShaderBase(const Descriptor& desc, const SkMatrix& ptsToUnit);
     virtual ~SkGradientShaderBase();
 
     // The cache is initialized on-demand when getCache16/32 is called.
@@ -223,7 +223,7 @@ protected:
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
     SK_TO_STRING_OVERRIDE()
 
-    SkMatrix    fPtsToUnit;     // set by subclass
+    const SkMatrix fPtsToUnit;
     TileMode    fTileMode;
     TileProc    fTileProc;
     int         fColorCount;
@@ -249,11 +249,6 @@ protected:
     static void FlipGradientColors(SkColor* colorDst, Rec* recDst,
                                    SkColor* colorSrc, Rec* recSrc,
                                    int count);
-
-    // V23_COMPATIBILITY_CODE
-    // Used for 2-pt conical gradients since we sort start/end cirlces by radius
-    // Assumes space has already been allocated for fOrigColors
-    void flipGradientColors();
 
 private:
     enum {
@@ -298,10 +293,11 @@ static inline int next_dither_toggle16(int toggle) {
 #if SK_SUPPORT_GPU
 
 #include "GrCoordTransform.h"
+#include "GrFragmentProcessor.h"
 #include "gl/GrGLProcessor.h"
 
 class GrFragmentStage;
-class GrBackendProcessorFactory;
+class GrInvariantOutput;
 
 /*
  * The interpretation of the texture matrix depends on the sample mode. The
@@ -372,9 +368,9 @@ protected:
                                     SkScalar** stops,
                                     SkShader::TileMode* tm);
 
-    virtual bool onIsEqual(const GrProcessor&) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor&) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     const GrCoordTransform& getCoordTransform() const { return fCoordTransform; }
 
@@ -400,7 +396,7 @@ private:
 // Base class for GL gradient effects
 class GrGLGradientEffect : public GrGLFragmentProcessor {
 public:
-    GrGLGradientEffect(const GrBackendProcessorFactory& factory);
+    GrGLGradientEffect();
     virtual ~GrGLGradientEffect();
 
     virtual void setData(const GrGLProgramDataManager&, const GrProcessor&) SK_OVERRIDE;
@@ -415,15 +411,15 @@ protected:
 
     // Emits the uniform used as the y-coord to texture samples in derived classes. Subclasses
     // should call this method from their emitCode().
-    void emitUniforms(GrGLFPBuilder* builder, uint32_t baseKey);
+    void emitUniforms(GrGLFPBuilder* builder, const GrGradientEffect&);
 
 
     // emit code that gets a fragment's color from an expression for t; Has branches for 3 separate
     // control flows inside -- 2 color gradients, 3 color symmetric gradients (both using
     // native GLSL mix), and 4+ color gradients that use the traditional texture lookup.
     void emitColor(GrGLFPBuilder* builder,
+                   const GrGradientEffect&,
                    const char* gradientTValue,
-                   uint32_t baseKey,
                    const char* outputColor,
                    const char* inputColor,
                    const TextureSamplerArray& samplers);
@@ -444,22 +440,6 @@ private:
         kBaseKeyBitCnt = (kPremulTypeKeyBitCnt + kColorKeyBitCnt)
     };
     GR_STATIC_ASSERT(kBaseKeyBitCnt <= 32);
-
-    static SkGradientShaderBase::GpuColorType ColorTypeFromKey(uint32_t baseKey){
-        if (kTwoColorKey == (baseKey & kColorKeyMask)) {
-            return SkGradientShaderBase::kTwo_GpuColorType;
-        } else if (kThreeColorKey == (baseKey & kColorKeyMask)) {
-            return SkGradientShaderBase::kThree_GpuColorType;
-        } else {return SkGradientShaderBase::kTexture_GpuColorType;}
-    }
-
-    static GrGradientEffect::PremulType PremulTypeFromKey(uint32_t baseKey){
-        if (kPremulBeforeInterpKey == (baseKey & kPremulTypeMask)) {
-            return GrGradientEffect::kBeforeInterp_PremulType;
-        } else {
-            return GrGradientEffect::kAfterInterp_PremulType;
-        }
-    }
 
     SkScalar fCachedYCoord;
     GrGLProgramDataManager::UniformHandle fFSYUni;

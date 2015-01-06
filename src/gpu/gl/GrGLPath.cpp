@@ -8,7 +8,7 @@
 
 #include "GrGLPath.h"
 #include "GrGLPathRendering.h"
-#include "GrGpuGL.h"
+#include "GrGLGpu.h"
 
 namespace {
 inline GrGLubyte verb_to_gl_path_cmd(SkPath::Verb verb) {
@@ -16,13 +16,14 @@ inline GrGLubyte verb_to_gl_path_cmd(SkPath::Verb verb) {
         GR_GL_MOVE_TO,
         GR_GL_LINE_TO,
         GR_GL_QUADRATIC_CURVE_TO,
-        0xFF, // conic
+        GR_GL_CONIC_CURVE_TO,
         GR_GL_CUBIC_CURVE_TO,
         GR_GL_CLOSE_PATH,
     };
     GR_STATIC_ASSERT(0 == SkPath::kMove_Verb);
     GR_STATIC_ASSERT(1 == SkPath::kLine_Verb);
     GR_STATIC_ASSERT(2 == SkPath::kQuad_Verb);
+    GR_STATIC_ASSERT(3 == SkPath::kConic_Verb);
     GR_STATIC_ASSERT(4 == SkPath::kCubic_Verb);
     GR_STATIC_ASSERT(5 == SkPath::kClose_Verb);
 
@@ -31,18 +32,19 @@ inline GrGLubyte verb_to_gl_path_cmd(SkPath::Verb verb) {
 }
 
 #ifdef SK_DEBUG
-inline int num_pts(SkPath::Verb verb) {
+inline int num_coords(SkPath::Verb verb) {
     static const int gTable[] = {
-        1, // move
-        1, // line
-        2, // quad
-        2, // conic
-        3, // cubic
+        2, // move
+        2, // line
+        4, // quad
+        5, // conic
+        6, // cubic
         0, // close
     };
     GR_STATIC_ASSERT(0 == SkPath::kMove_Verb);
     GR_STATIC_ASSERT(1 == SkPath::kLine_Verb);
     GR_STATIC_ASSERT(2 == SkPath::kQuad_Verb);
+    GR_STATIC_ASSERT(3 == SkPath::kConic_Verb);
     GR_STATIC_ASSERT(4 == SkPath::kCubic_Verb);
     GR_STATIC_ASSERT(5 == SkPath::kClose_Verb);
 
@@ -77,38 +79,93 @@ inline GrGLenum cap_to_gl_cap(SkPaint::Cap cap) {
     GR_STATIC_ASSERT(SK_ARRAY_COUNT(gSkCapsToGrGLCaps) == SkPaint::kCapCount);
 }
 
+inline void points_to_coords(const SkPoint points[], size_t first_point, size_t amount,
+                             GrGLfloat coords[]) {
+    for (size_t i = 0;  i < amount; ++i) {
+        coords[i * 2] =  SkScalarToFloat(points[first_point + i].fX);
+        coords[i * 2 + 1] = SkScalarToFloat(points[first_point + i].fY);
+    }
+}
 }
 
 static const bool kIsWrapped = false; // The constructor creates the GL path object.
 
-void GrGLPath::InitPathObject(GrGpuGL* gpu,
+void GrGLPath::InitPathObject(GrGLGpu* gpu,
                               GrGLuint pathID,
                               const SkPath& skPath,
                               const SkStrokeRec& stroke) {
     if (!skPath.isEmpty()) {
-        SkSTArray<16, GrGLubyte, true> pathCommands;
-        SkSTArray<16, SkPoint, true> pathPoints;
-
         int verbCnt = skPath.countVerbs();
         int pointCnt = skPath.countPoints();
-        pathCommands.resize_back(verbCnt);
-        pathPoints.resize_back(pointCnt);
+        int minCoordCnt = pointCnt * 2;
 
-        // TODO: Direct access to path points since we could pass them on directly.
-        skPath.getPoints(&pathPoints[0], pointCnt);
-        skPath.getVerbs(&pathCommands[0], verbCnt);
+        SkSTArray<16, GrGLubyte, true> pathCommands(verbCnt);
+        SkSTArray<16, GrGLfloat, true> pathCoords(minCoordCnt);
 
-        SkDEBUGCODE(int numPts = 0);
-        for (int i = 0; i < verbCnt; ++i) {
-            SkPath::Verb v = static_cast<SkPath::Verb>(pathCommands[i]);
-            pathCommands[i] = verb_to_gl_path_cmd(v);
-            SkDEBUGCODE(numPts += num_pts(v));
+        SkDEBUGCODE(int numCoords = 0);
+
+        if ((skPath.getSegmentMasks() & SkPath::kConic_SegmentMask) == 0) {
+            // This branch does type punning, converting SkPoint* to GrGLfloat*.
+            SK_COMPILE_ASSERT(sizeof(SkPoint) == sizeof(GrGLfloat) * 2, sk_point_not_two_floats);
+            // This branch does not convert with SkScalarToFloat.
+#ifndef SK_SCALAR_IS_FLOAT
+#error Need SK_SCALAR_IS_FLOAT.
+#endif
+            pathCommands.resize_back(verbCnt);
+            pathCoords.resize_back(minCoordCnt);
+            skPath.getPoints(reinterpret_cast<SkPoint*>(&pathCoords[0]), pointCnt);
+            skPath.getVerbs(&pathCommands[0], verbCnt);
+            for (int i = 0; i < verbCnt; ++i) {
+                SkPath::Verb v = static_cast<SkPath::Verb>(pathCommands[i]);
+                pathCommands[i] = verb_to_gl_path_cmd(v);
+                SkDEBUGCODE(numCoords += num_coords(v));
+            }
+        } else {
+            SkPoint points[4];
+            SkPath::RawIter iter(skPath);
+            SkPath::Verb verb;
+            while ((verb = iter.next(points)) != SkPath::kDone_Verb) {
+                pathCommands.push_back(verb_to_gl_path_cmd(verb));
+                GrGLfloat coords[6];
+                int coordsForVerb;
+                switch (verb) {
+                    case SkPath::kMove_Verb:
+                        points_to_coords(points, 0, 1, coords);
+                        coordsForVerb = 2;
+                        break;
+                    case SkPath::kLine_Verb:
+                        points_to_coords(points, 1, 1, coords);
+                        coordsForVerb = 2;
+                        break;
+                    case SkPath::kConic_Verb:
+                        points_to_coords(points, 1, 2, coords);
+                        coords[4] = SkScalarToFloat(iter.conicWeight());
+                        coordsForVerb = 5;
+                        break;
+                    case SkPath::kQuad_Verb:
+                        points_to_coords(points, 1, 2, coords);
+                        coordsForVerb = 4;
+                        break;
+                    case SkPath::kCubic_Verb:
+                        points_to_coords(points, 1, 3, coords);
+                        coordsForVerb = 6;
+                        break;
+                    case SkPath::kClose_Verb:
+                        continue;
+                    default:
+                        SkASSERT(false);  // Not reached.
+                        continue;
+                }
+                SkDEBUGCODE(numCoords += num_coords(verb));
+                pathCoords.push_back_n(coordsForVerb, coords);
+            }
         }
-        SkASSERT(pathPoints.count() == numPts);
 
-        GR_GL_CALL(gpu->glInterface(),
-                   PathCommands(pathID, verbCnt, &pathCommands[0],
-                                2 * pointCnt, GR_GL_FLOAT, &pathPoints[0]));
+        SkASSERT(verbCnt == pathCommands.count());
+        SkASSERT(numCoords == pathCoords.count());
+
+        GR_GL_CALL(gpu->glInterface(), PathCommands(pathID, pathCommands.count(), &pathCommands[0],
+                   pathCoords.count(), GR_GL_FLOAT, &pathCoords[0]));
     } else {
         GR_GL_CALL(gpu->glInterface(), PathCommands(pathID, 0, NULL, 0, GR_GL_FLOAT, NULL));
     }
@@ -120,17 +177,13 @@ void GrGLPath::InitPathObject(GrGpuGL* gpu,
         GR_GL_CALL(gpu->glInterface(),
             PathParameterf(pathID, GR_GL_PATH_MITER_LIMIT, SkScalarToFloat(stroke.getMiter())));
         GrGLenum join = join_to_gl_join(stroke.getJoin());
-        GR_GL_CALL(gpu->glInterface(),
-            PathParameteri(pathID, GR_GL_PATH_JOIN_STYLE, join));
+        GR_GL_CALL(gpu->glInterface(), PathParameteri(pathID, GR_GL_PATH_JOIN_STYLE, join));
         GrGLenum cap = cap_to_gl_cap(stroke.getCap());
-        GR_GL_CALL(gpu->glInterface(),
-            PathParameteri(pathID, GR_GL_PATH_INITIAL_END_CAP, cap));
-        GR_GL_CALL(gpu->glInterface(),
-            PathParameteri(pathID, GR_GL_PATH_TERMINAL_END_CAP, cap));
+        GR_GL_CALL(gpu->glInterface(), PathParameteri(pathID, GR_GL_PATH_END_CAPS, cap));
     }
 }
 
-GrGLPath::GrGLPath(GrGpuGL* gpu, const SkPath& path, const SkStrokeRec& stroke)
+GrGLPath::GrGLPath(GrGLGpu* gpu, const SkPath& path, const SkStrokeRec& stroke)
     : INHERITED(gpu, kIsWrapped, path, stroke),
       fPathID(gpu->glPathRendering()->genPaths(1)) {
 
@@ -143,13 +196,9 @@ GrGLPath::GrGLPath(GrGpuGL* gpu, const SkPath& path, const SkStrokeRec& stroke)
     this->registerWithCache();
 }
 
-GrGLPath::~GrGLPath() {
-    this->release();
-}
-
 void GrGLPath::onRelease() {
     if (0 != fPathID && !this->isWrapped()) {
-        static_cast<GrGpuGL*>(this->getGpu())->glPathRendering()->deletePaths(fPathID, 1);
+        static_cast<GrGLGpu*>(this->getGpu())->glPathRendering()->deletePaths(fPathID, 1);
         fPathID = 0;
     }
 

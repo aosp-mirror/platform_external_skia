@@ -10,8 +10,6 @@
 #include "SkBBHFactory.h"
 #include "SkPictureRecorder.h"
 
-static const int kTileSize = 256;
-
 RecordingBench::RecordingBench(const char* name, const SkPicture* pic, bool useBBH)
     : fSrc(SkRef(pic))
     , fName(name)
@@ -31,18 +29,14 @@ SkIPoint RecordingBench::onGetSize() {
 }
 
 void RecordingBench::onDraw(const int loops, SkCanvas*) {
-    SkTileGridFactory::TileGridInfo info;
-    info.fTileInterval.set(kTileSize, kTileSize);
-    info.fMargin.setEmpty();
-    info.fOffset.setZero();
-    SkTileGridFactory factory(info);
-
+    SkRTreeFactory factory;
     const SkScalar w = fSrc->cullRect().width(),
                    h = fSrc->cullRect().height();
 
     for (int i = 0; i < loops; i++) {
         SkPictureRecorder recorder;
-        fSrc->playback(recorder.beginRecording(w, h, fUseBBH ? &factory : NULL));
-        SkDELETE(recorder.endRecording());
+        fSrc->playback(recorder.beginRecording(w, h, fUseBBH ? &factory : NULL,
+                                               SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag));
+        SkSafeUnref(recorder.endRecording());
     }
 }

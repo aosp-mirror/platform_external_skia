@@ -9,14 +9,9 @@
 #include "SkCanvas.h"
 #include "SkImagePriv.h"
 #include "SkImage_Base.h"
-
-static SkImage_Base* as_IB(SkImage* image) {
-    return static_cast<SkImage_Base*>(image);
-}
-
-static const SkImage_Base* as_IB(const SkImage* image) {
-    return static_cast<const SkImage_Base*>(image);
-}
+#include "SkReadPixelsRec.h"
+#include "SkString.h"
+#include "SkSurface.h"
 
 uint32_t SkImage::NextUniqueID() {
     static int32_t gUniqueID;
@@ -50,27 +45,13 @@ const void* SkImage::peekPixels(SkImageInfo* info, size_t* rowBytes) const {
     return as_IB(this)->onPeekPixels(info, rowBytes);
 }
 
-bool SkImage::readPixels(SkBitmap* bitmap, const SkIRect* subset) const {
-    if (NULL == bitmap) {
+bool SkImage::readPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                           int srcX, int srcY) const {
+    SkReadPixelsRec rec(dstInfo, dstPixels, dstRowBytes, srcX, srcY);
+    if (!rec.trim(this->width(), this->height())) {
         return false;
     }
-
-    SkIRect bounds = SkIRect::MakeWH(this->width(), this->height());
-
-    // trim against the bitmap, if its already been allocated
-    if (bitmap->pixelRef()) {
-        bounds.fRight = SkMin32(bounds.fRight, bitmap->width());
-        bounds.fBottom = SkMin32(bounds.fBottom, bitmap->height());
-        if (bounds.isEmpty()) {
-            return false;
-        }
-    }
-
-    if (subset && !bounds.intersect(*subset)) {
-        // perhaps we could return true + empty-bitmap?
-        return false;
-    }
-    return as_IB(this)->onReadPixels(bitmap, bounds);
+    return as_IB(this)->onReadPixels(rec.fInfo, rec.fPixels, rec.fRowBytes, rec.fX, rec.fY);
 }
 
 GrTexture* SkImage::getTexture() {
@@ -91,6 +72,19 @@ SkData* SkImage::encode(SkImageEncoder::Type type, int quality) const {
     return NULL;
 }
 
+SkSurface* SkImage::newSurface(const SkImageInfo& info, const SkSurfaceProps* props) const {
+    if (NULL == props) {
+        props = &as_IB(this)->props();
+    }
+    return as_IB(this)->onNewSurface(info, *props);
+}
+
+const char* SkImage::toString(SkString* str) const {
+    str->appendf("image: (id:%d (%d, %d) %s)", this->uniqueID(), this->width(), this->height(),
+                 this->isOpaque() ? "opaque" : "");
+    return str->c_str();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 static bool raster_canvas_supports(const SkImageInfo& info) {
@@ -107,34 +101,19 @@ static bool raster_canvas_supports(const SkImageInfo& info) {
     return false;
 }
 
-bool SkImage_Base::onReadPixels(SkBitmap* bitmap, const SkIRect& subset) const {
-    if (bitmap->pixelRef()) {
-        const SkImageInfo info = bitmap->info();
-        if (kUnknown_SkColorType == info.colorType()) {
-            return false;
-        }
-        if (!raster_canvas_supports(info)) {
-            return false;
-        }
-    } else {
-        SkBitmap tmp;
-        if (!tmp.tryAllocN32Pixels(subset.width(), subset.height())) {
-            return false;
-        }
-        *bitmap = tmp;
+bool SkImage_Base::onReadPixels(const SkImageInfo& dstInfo, void* dstPixels, size_t dstRowBytes,
+                                int srcX, int srcY) const {
+    if (!raster_canvas_supports(dstInfo)) {
+        return false;
     }
 
-    SkRect srcR, dstR;
-    srcR.set(subset);
-    dstR = srcR;
-    dstR.offset(-dstR.left(), -dstR.top());
-
-    SkCanvas canvas(*bitmap);
+    SkBitmap bm;
+    bm.installPixels(dstInfo, dstPixels, dstRowBytes);
+    SkCanvas canvas(bm);
 
     SkPaint paint;
-    paint.setXfermodeMode(SkXfermode::kClear_Mode);
-    canvas.drawRect(dstR, paint);
+    paint.setXfermodeMode(SkXfermode::kSrc_Mode);
+    canvas.drawImage(this, -SkIntToScalar(srcX), -SkIntToScalar(srcY), &paint);
 
-    canvas.drawImageRect(this, &srcR, dstR);
     return true;
 }

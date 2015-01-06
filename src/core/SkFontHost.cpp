@@ -67,6 +67,15 @@ SkFontStyle::SkFontStyle(int weight, int width, Slant slant) {
     fUnion.fR.fSlant = SkPin32(slant, kUpright_Slant, kItalic_Slant);
 }
 
+SkFontStyle::SkFontStyle(unsigned oldStyle) {
+    fUnion.fU32 = 0;
+    fUnion.fR.fWeight = (oldStyle & SkTypeface::kBold) ? SkFontStyle::kBold_Weight
+                                                       : SkFontStyle::kNormal_Weight;
+    fUnion.fR.fWidth = SkFontStyle::kNormal_Width;
+    fUnion.fR.fSlant = (oldStyle & SkTypeface::kItalic) ? SkFontStyle::kItalic_Slant
+                                                        : SkFontStyle::kUpright_Slant;
+}
+
 #include "SkFontMgr.h"
 
 class SkEmptyFontStyleSet : public SkFontStyleSet {
@@ -112,8 +121,9 @@ protected:
     }
     virtual SkTypeface* onMatchFamilyStyleCharacter(const char familyName[],
                                                     const SkFontStyle& style,
-                                                    const char bpc47[],
-                                                    uint32_t character) const SK_OVERRIDE {
+                                                    const char* bcp47[],
+                                                    int bcp47Count,
+                                                    SkUnichar character) const SK_OVERRIDE {
         return NULL;
     }
     virtual SkTypeface* onMatchFaceStyle(const SkTypeface*,
@@ -163,8 +173,9 @@ SkTypeface* SkFontMgr::matchFamilyStyle(const char familyName[],
 }
 
 SkTypeface* SkFontMgr::matchFamilyStyleCharacter(const char familyName[], const SkFontStyle& style,
-                                                 const char bpc47[], uint32_t character) const {
-    return this->onMatchFamilyStyleCharacter(familyName, style, bpc47, character);
+                                                 const char* bcp47[], int bcp47Count,
+                                                 SkUnichar character) const {
+    return this->onMatchFamilyStyleCharacter(familyName, style, bcp47, bcp47Count, character);
 }
 
 SkTypeface* SkFontMgr::matchFaceStyle(const SkTypeface* face,

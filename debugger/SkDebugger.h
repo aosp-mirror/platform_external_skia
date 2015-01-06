@@ -26,7 +26,7 @@ public:
         fIndex = index;
     }
     void draw(SkCanvas* canvas) {
-        if (fIndex > 0) {
+        if (fIndex >= 0) {
             fDebugCanvas->drawTo(canvas, fIndex);
         }
     }
@@ -44,12 +44,8 @@ public:
         fDebugCanvas->toggleCommand(index, isVisible);
     }
 
-    SkTArray<SkString>* getDrawCommandsAsStrings() {
-        return fDebugCanvas->getDrawCommandsAsStrings();
-    }
-
-    SkTDArray<size_t>* getDrawCommandOffsets() {
-        return fDebugCanvas->getDrawCommandOffsets();
+    SkDrawCommand* getDrawCommandAt(int index) {
+        return fDebugCanvas->getDrawCommandAt(index);
     }
 
     const SkTDArray<SkDrawCommand*>& getDrawCommands() const {
@@ -60,13 +56,11 @@ public:
         fDebugCanvas->toggleFilter(on);
     }
 
-    void setWindowSize(int width, int height) { fDebugCanvas->setWindowSize(width, height); }
-
     void loadPicture(SkPicture* picture);
 
     SkPicture* copyPicture();
 
-    int getSize() {
+    int getSize() const {
         return fDebugCanvas->getSize();
     }
 
@@ -79,7 +73,7 @@ public:
         return fDebugCanvas->getCommandAtPoint(x, y, index);
     }
 
-    SkTDArray<SkString*>* getCommandInfo(int index) {
+    const SkTDArray<SkString*>* getCommandInfo(int index) const {
         return fDebugCanvas->getCommandInfo(index);
     }
 

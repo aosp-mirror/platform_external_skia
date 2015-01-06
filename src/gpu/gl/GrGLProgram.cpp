@@ -12,11 +12,13 @@
 #include "GrCoordTransform.h"
 #include "GrGLGeometryProcessor.h"
 #include "GrGLProcessor.h"
-#include "GrGpuGL.h"
+#include "GrGLXferProcessor.h"
+#include "GrGLGpu.h"
 #include "GrGLPathRendering.h"
 #include "GrGLShaderVar.h"
 #include "GrGLSL.h"
 #include "GrOptDrawState.h"
+#include "GrXferProcessor.h"
 #include "SkXfermode.h"
 
 #define GL_CALL(X) GR_GL_CALL(fGpu->glInterface(), X)
@@ -25,18 +27,15 @@
 /**
  * Retrieves the final matrix that a transform needs to apply to its source coords.
  */
-static SkMatrix get_transform_matrix(const GrFragmentStage& processorStage,
-                                     bool useExplicitLocalCoords,
-                                     int transformIdx) {
-    const GrCoordTransform& coordTransform =
-            processorStage.getProcessor()->coordTransform(transformIdx);
+static SkMatrix get_transform_matrix(const GrPendingFragmentStage& stage,
+                                     int transformIdx,
+                                     const SkMatrix& localMatrix) {
+    const GrCoordTransform& coordTransform = stage.processor()->coordTransform(transformIdx);
     SkMatrix combined;
 
+    // We only apply the localmatrix to localcoords
     if (kLocal_GrCoordSet == coordTransform.sourceCoords()) {
-        // If we have explicit local coords then we shouldn't need a coord change.
-        const SkMatrix& ccm =
-                useExplicitLocalCoords ? SkMatrix::I() : processorStage.getCoordChangeMatrix();
-        combined.setConcat(coordTransform.getMatrix(), ccm);
+        combined.setConcat(coordTransform.getMatrix(), localMatrix);
     } else {
         combined = coordTransform.getMatrix();
     }
@@ -55,19 +54,21 @@ static SkMatrix get_transform_matrix(const GrFragmentStage& processorStage,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-GrGLProgram::GrGLProgram(GrGpuGL* gpu,
-                         const GrGLProgramDesc& desc,
+GrGLProgram::GrGLProgram(GrGLGpu* gpu,
+                         const GrProgramDesc& desc,
                          const BuiltinUniformHandles& builtinUniforms,
                          GrGLuint programID,
                          const UniformInfoArray& uniforms,
                          GrGLInstalledGeoProc* geometryProcessor,
+                         GrGLInstalledXferProc* xferProcessor,
                          GrGLInstalledFragProcs* fragmentProcessors)
     : fColor(GrColor_ILLEGAL)
-    , fCoverage(GrColor_ILLEGAL)
+    , fCoverage(0)
     , fDstCopyTexUnit(-1)
     , fBuiltinUniformHandles(builtinUniforms)
     , fProgramID(programID)
     , fGeometryProcessor(geometryProcessor)
+    , fXferProcessor(xferProcessor)
     , fFragmentProcessors(SkRef(fragmentProcessors))
     , fDesc(desc)
     , fGpu(gpu)
@@ -94,6 +95,9 @@ void GrGLProgram::initSamplerUniforms() {
     }
     if (fGeometryProcessor.get()) {
         this->initSamplers(fGeometryProcessor.get(), &texUnitIdx);
+    }
+    if (fXferProcessor.get()) {
+        this->initSamplers(fXferProcessor.get(), &texUnitIdx);
     }
     int numProcs = fFragmentProcessors->fProcs.count();
     for (int i = 0; i < numProcs; i++) {
@@ -127,17 +131,10 @@ void GrGLProgram::bindTextures(const GrGLInstalledProc* ip, const GrProcessor& p
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void GrGLProgram::setData(const GrOptDrawState& optState,
-                          GrGpu::DrawType drawType,
-                          const GrDeviceCoordTexture* dstCopy,
-                          SharedGLState* sharedState) {
-    GrColor color = optState.getColor();
-    GrColor coverage = optState.getCoverageColor();
+void GrGLProgram::setData(const GrOptDrawState& optState) {
+    this->setRenderTargetState(optState);
 
-    this->setColor(optState, color, sharedState);
-    this->setCoverage(optState, coverage, sharedState);
-    this->setMatrixAndRenderTargetHeight(drawType, optState);
-
+    const GrDeviceCoordTexture* dstCopy = optState.getDstCopy();
     if (dstCopy) {
         if (fBuiltinUniformHandles.fDstCopyTopLeftUni.isValid()) {
             fProgramDataManager.set2f(fBuiltinUniformHandles.fDstCopyTopLeftUni,
@@ -161,35 +158,42 @@ void GrGLProgram::setData(const GrOptDrawState& optState,
 
     // we set the textures, and uniforms for installed processors in a generic way, but subclasses
     // of GLProgram determine how to set coord transforms
-    if (fGeometryProcessor.get()) {
-        SkASSERT(optState.hasGeometryProcessor());
-        const GrGeometryProcessor& gp = *optState.getGeometryProcessor();
-        fGeometryProcessor->fGLProc->setData(fProgramDataManager, gp);
-        this->bindTextures(fGeometryProcessor, gp);
+    const GrPrimitiveProcessor& primProc = *optState.getPrimitiveProcessor();
+    const GrBatchTracker& bt = optState.getBatchTracker();
+    fGeometryProcessor->fGLProc->setData(fProgramDataManager, primProc, bt);
+    this->bindTextures(fGeometryProcessor, primProc);
+
+    if (fXferProcessor.get()) {
+        const GrXferProcessor& xp = *optState.getXferProcessor();
+        fXferProcessor->fGLProc->setData(fProgramDataManager, xp);
+        this->bindTextures(fXferProcessor, xp);
     }
     this->setFragmentData(optState);
 
     // Some of GrGLProgram subclasses need to update state here
-    this->didSetData(drawType);
+    this->didSetData(optState.drawType());
 }
 
 void GrGLProgram::setFragmentData(const GrOptDrawState& optState) {
     int numProcessors = fFragmentProcessors->fProcs.count();
     for (int e = 0; e < numProcessors; ++e) {
-        const GrFragmentStage& stage = optState.getFragmentStage(e);
-        const GrProcessor& processor = *stage.getProcessor();
+        const GrPendingFragmentStage& stage = optState.getFragmentStage(e);
+        const GrProcessor& processor = *stage.processor();
         fFragmentProcessors->fProcs[e]->fGLProc->setData(fProgramDataManager, processor);
-        this->setTransformData(stage, fFragmentProcessors->fProcs[e]);
+        const SkMatrix& localMatrix = optState.getPrimitiveProcessor()->localMatrix();
+        this->setTransformData(stage, localMatrix, fFragmentProcessors->fProcs[e]);
         this->bindTextures(fFragmentProcessors->fProcs[e], processor);
     }
 }
-void GrGLProgram::setTransformData(const GrFragmentStage& processor, GrGLInstalledFragProc* ip) {
+void GrGLProgram::setTransformData(const GrPendingFragmentStage& processor,
+                                   const SkMatrix& localMatrix,
+                                   GrGLInstalledFragProc* ip) {
     SkTArray<GrGLInstalledFragProc::Transform, true>& transforms = ip->fTransforms;
     int numTransforms = transforms.count();
-    SkASSERT(numTransforms == processor.getProcessor()->numTransforms());
+    SkASSERT(numTransforms == processor.processor()->numTransforms());
     for (int t = 0; t < numTransforms; ++t) {
         SkASSERT(transforms[t].fHandle.isValid());
-        const SkMatrix& matrix = get_transform_matrix(processor, ip->fLocalCoordAttrib, t);
+        const SkMatrix& matrix = get_transform_matrix(processor, t, localMatrix);
         if (!transforms[t].fCurrentValue.cheapEqualTo(matrix)) {
             fProgramDataManager.setSkMatrix(transforms[t].fHandle.convertToUniformHandle(), matrix);
             transforms[t].fCurrentValue = matrix;
@@ -201,150 +205,69 @@ void GrGLProgram::didSetData(GrGpu::DrawType drawType) {
     SkASSERT(!GrGpu::IsPathRenderingDrawType(drawType));
 }
 
-void GrGLProgram::setColor(const GrOptDrawState& optState,
-                           GrColor color,
-                           SharedGLState* sharedState) {
-    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
-    if (!optState.hasColorVertexAttribute()) {
-        switch (header.fColorInput) {
-            case GrGLProgramDesc::kAttribute_ColorInput:
-                SkASSERT(-1 != header.fColorAttributeIndex);
-                if (sharedState->fConstAttribColor != color ||
-                    sharedState->fConstAttribColorIndex != header.fColorAttributeIndex) {
-                    // OpenGL ES only supports the float varieties of glVertexAttrib
-                    GrGLfloat c[4];
-                    GrColorToRGBAFloat(color, c);
-                    GL_CALL(VertexAttrib4fv(header.fColorAttributeIndex, c));
-                    sharedState->fConstAttribColor = color;
-                    sharedState->fConstAttribColorIndex = header.fColorAttributeIndex;
-                }
-                break;
-            case GrGLProgramDesc::kUniform_ColorInput:
-                if (fColor != color && fBuiltinUniformHandles.fColorUni.isValid()) {
-                    // OpenGL ES doesn't support unsigned byte varieties of glUniform
-                    GrGLfloat c[4];
-                    GrColorToRGBAFloat(color, c);
-                    fProgramDataManager.set4fv(fBuiltinUniformHandles.fColorUni, 1, c);
-                    fColor = color;
-                }
-                sharedState->fConstAttribColorIndex = -1;
-                break;
-            case GrGLProgramDesc::kAllOnes_ColorInput:
-                sharedState->fConstAttribColorIndex = -1;
-                break;
-            default:
-                SkFAIL("Unexpected color type.");
-        }
-    } else {
-        sharedState->fConstAttribColorIndex = -1;
-    }
-}
-
-void GrGLProgram::setCoverage(const GrOptDrawState& optState,
-                              GrColor coverage,
-                              SharedGLState* sharedState) {
-    const GrGLProgramDesc::KeyHeader& header = fDesc.getHeader();
-    if (!optState.hasCoverageVertexAttribute()) {
-        switch (header.fCoverageInput) {
-            case GrGLProgramDesc::kAttribute_ColorInput:
-                if (sharedState->fConstAttribCoverage != coverage ||
-                    sharedState->fConstAttribCoverageIndex != header.fCoverageAttributeIndex) {
-                    // OpenGL ES only supports the float varieties of  glVertexAttrib
-                    GrGLfloat c[4];
-                    GrColorToRGBAFloat(coverage, c);
-                    GL_CALL(VertexAttrib4fv(header.fCoverageAttributeIndex, c));
-                    sharedState->fConstAttribCoverage = coverage;
-                    sharedState->fConstAttribCoverageIndex = header.fCoverageAttributeIndex;
-                }
-                break;
-            case GrGLProgramDesc::kUniform_ColorInput:
-                if (fCoverage != coverage) {
-                    // OpenGL ES doesn't support unsigned byte varieties of glUniform
-                    GrGLfloat c[4];
-                    GrColorToRGBAFloat(coverage, c);
-                    fProgramDataManager.set4fv(fBuiltinUniformHandles.fCoverageUni, 1, c);
-                    fCoverage = coverage;
-                }
-                sharedState->fConstAttribCoverageIndex = -1;
-                break;
-            case GrGLProgramDesc::kAllOnes_ColorInput:
-                sharedState->fConstAttribCoverageIndex = -1;
-                break;
-            default:
-                SkFAIL("Unexpected coverage type.");
-        }
-    } else {
-        sharedState->fConstAttribCoverageIndex = -1;
-    }
-}
-
-void GrGLProgram::setMatrixAndRenderTargetHeight(GrGpu::DrawType drawType,
-                                                 const GrOptDrawState& optState) {
+void GrGLProgram::setRenderTargetState(const GrOptDrawState& optState) {
     // Load the RT height uniform if it is needed to y-flip gl_FragCoord.
     if (fBuiltinUniformHandles.fRTHeightUni.isValid() &&
-        fMatrixState.fRenderTargetSize.fHeight != optState.getRenderTarget()->height()) {
+        fRenderTargetState.fRenderTargetSize.fHeight != optState.getRenderTarget()->height()) {
         fProgramDataManager.set1f(fBuiltinUniformHandles.fRTHeightUni,
                                    SkIntToScalar(optState.getRenderTarget()->height()));
     }
 
     // call subclasses to set the actual view matrix
-    this->onSetMatrixAndRenderTargetHeight(drawType, optState);
+    this->onSetRenderTargetState(optState);
 }
 
-void GrGLProgram::onSetMatrixAndRenderTargetHeight(GrGpu::DrawType drawType,
-                                                   const GrOptDrawState& optState) {
+void GrGLProgram::onSetRenderTargetState(const GrOptDrawState& optState) {
     const GrRenderTarget* rt = optState.getRenderTarget();
     SkISize size;
     size.set(rt->width(), rt->height());
-    if (fMatrixState.fRenderTargetOrigin != rt->origin() ||
-        fMatrixState.fRenderTargetSize != size ||
-        !fMatrixState.fViewMatrix.cheapEqualTo(optState.getViewMatrix())) {
-        SkASSERT(fBuiltinUniformHandles.fViewMatrixUni.isValid());
-
-        fMatrixState.fViewMatrix = optState.getViewMatrix();
-        fMatrixState.fRenderTargetSize = size;
-        fMatrixState.fRenderTargetOrigin = rt->origin();
-
-        GrGLfloat viewMatrix[3 * 3];
-        fMatrixState.getGLMatrix<3>(viewMatrix);
-        fProgramDataManager.setMatrix3f(fBuiltinUniformHandles.fViewMatrixUni, viewMatrix);
+    if (fRenderTargetState.fRenderTargetOrigin != rt->origin() ||
+        fRenderTargetState.fRenderTargetSize != size) {
+        fRenderTargetState.fRenderTargetSize = size;
+        fRenderTargetState.fRenderTargetOrigin = rt->origin();
 
         GrGLfloat rtAdjustmentVec[4];
-        fMatrixState.getRTAdjustmentVec(rtAdjustmentVec);
+        fRenderTargetState.getRTAdjustmentVec(rtAdjustmentVec);
         fProgramDataManager.set4fv(fBuiltinUniformHandles.fRTAdjustmentUni, 1, rtAdjustmentVec);
     }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-GrGLNvprProgramBase::GrGLNvprProgramBase(GrGpuGL* gpu,
-                                         const GrGLProgramDesc& desc,
+GrGLNvprProgramBase::GrGLNvprProgramBase(GrGLGpu* gpu,
+                                         const GrProgramDesc& desc,
                                          const BuiltinUniformHandles& builtinUniforms,
                                          GrGLuint programID,
                                          const UniformInfoArray& uniforms,
+                                         GrGLInstalledGeoProc* primProc,
+                                         GrGLInstalledXferProc* xferProcessor,
                                          GrGLInstalledFragProcs* fragmentProcessors)
-    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, NULL, fragmentProcessors) {
+    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, primProc,
+                xferProcessor, fragmentProcessors) {
 }
 
-void GrGLNvprProgramBase::onSetMatrixAndRenderTargetHeight(GrGpu::DrawType drawType,
-                                                           const GrOptDrawState& optState) {
-    SkASSERT(GrGpu::IsPathRenderingDrawType(drawType));
+void GrGLNvprProgramBase::onSetRenderTargetState(const GrOptDrawState& optState) {
+    SkASSERT(GrGpu::IsPathRenderingDrawType(optState.drawType()));
     const GrRenderTarget* rt = optState.getRenderTarget();
     SkISize size;
     size.set(rt->width(), rt->height());
-    fGpu->glPathRendering()->setProjectionMatrix(optState.getViewMatrix(), size, rt->origin());
+    fGpu->glPathRendering()->setProjectionMatrix(optState.getPrimitiveProcessor()->viewMatrix(),
+                                                 size, rt->origin());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-GrGLNvprProgram::GrGLNvprProgram(GrGpuGL* gpu,
-                                 const GrGLProgramDesc& desc,
+GrGLNvprProgram::GrGLNvprProgram(GrGLGpu* gpu,
+                                 const GrProgramDesc& desc,
                                  const BuiltinUniformHandles& builtinUniforms,
                                  GrGLuint programID,
                                  const UniformInfoArray& uniforms,
+                                 GrGLInstalledGeoProc* primProc,
+                                 GrGLInstalledXferProc* xferProcessor,
                                  GrGLInstalledFragProcs* fragmentProcessors,
                                  const SeparableVaryingInfoArray& separableVaryings)
-    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, fragmentProcessors) {
+    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, primProc,
+                xferProcessor, fragmentProcessors) {
     int count = separableVaryings.count();
     fVaryings.push_back_n(count);
     for (int i = 0; i < count; i++) {
@@ -362,13 +285,15 @@ void GrGLNvprProgram::didSetData(GrGpu::DrawType drawType) {
     SkASSERT(GrGpu::IsPathRenderingDrawType(drawType));
 }
 
-void GrGLNvprProgram::setTransformData(const GrFragmentStage& proc, GrGLInstalledFragProc* ip) {
+void GrGLNvprProgram::setTransformData(const GrPendingFragmentStage& proc,
+                                       const SkMatrix& localMatrix,
+                                       GrGLInstalledFragProc* ip) {
     SkTArray<GrGLInstalledFragProc::Transform, true>& transforms = ip->fTransforms;
     int numTransforms = transforms.count();
-    SkASSERT(numTransforms == proc.getProcessor()->numTransforms());
+    SkASSERT(numTransforms == proc.processor()->numTransforms());
     for (int t = 0; t < numTransforms; ++t) {
         SkASSERT(transforms[t].fHandle.isValid());
-        const SkMatrix& transform = get_transform_matrix(proc, false, t);
+        const SkMatrix& transform = get_transform_matrix(proc, t, localMatrix);
         if (transforms[t].fCurrentValue.cheapEqualTo(transform)) {
             continue;
         }
@@ -386,14 +311,16 @@ void GrGLNvprProgram::setTransformData(const GrFragmentStage& proc, GrGLInstalle
 
 //////////////////////////////////////////////////////////////////////////////////////
 
-GrGLLegacyNvprProgram::GrGLLegacyNvprProgram(GrGpuGL* gpu,
-                                             const GrGLProgramDesc& desc,
+GrGLLegacyNvprProgram::GrGLLegacyNvprProgram(GrGLGpu* gpu,
+                                             const GrProgramDesc& desc,
                                              const BuiltinUniformHandles& builtinUniforms,
                                              GrGLuint programID,
                                              const UniformInfoArray& uniforms,
+                                             GrGLInstalledGeoProc* primProc,
+                                             GrGLInstalledXferProc* xp,
                                              GrGLInstalledFragProcs* fps,
                                              int texCoordSetCnt)
-    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, fps)
+    : INHERITED(gpu, desc, builtinUniforms, programID, uniforms, primProc, xp, fps)
     , fTexCoordSetCnt(texCoordSetCnt) {
 }
 
@@ -403,15 +330,17 @@ void GrGLLegacyNvprProgram::didSetData(GrGpu::DrawType drawType) {
 }
 
 void
-GrGLLegacyNvprProgram::setTransformData(const GrFragmentStage& proc, GrGLInstalledFragProc* ip) {
+GrGLLegacyNvprProgram::setTransformData(const GrPendingFragmentStage& proc,
+                                        const SkMatrix& localMatrix,
+                                        GrGLInstalledFragProc* ip) {
     // We've hidden the texcoord index in the first entry of the transforms array for each effect
     int texCoordIndex = ip->fTransforms[0].fHandle.handle();
-    int numTransforms = proc.getProcessor()->numTransforms();
+    int numTransforms = proc.processor()->numTransforms();
     for (int t = 0; t < numTransforms; ++t) {
-        const SkMatrix& transform = get_transform_matrix(proc, false, t);
+        const SkMatrix& transform = get_transform_matrix(proc, t, localMatrix);
         GrGLPathRendering::PathTexGenComponents components =
                 GrGLPathRendering::kST_PathTexGenComponents;
-        if (proc.isPerspectiveCoordTransform(t, false)) {
+        if (proc.isPerspectiveCoordTransform(t)) {
             components = GrGLPathRendering::kSTR_PathTexGenComponents;
         }
         fGpu->glPathRendering()->enablePathTexGen(texCoordIndex++, components, transform);

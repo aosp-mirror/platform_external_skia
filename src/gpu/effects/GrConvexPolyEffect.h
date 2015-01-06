@@ -9,10 +9,11 @@
 #define GrConvexPolyEffect_DEFINED
 
 #include "GrDrawTargetCaps.h"
+#include "GrFragmentProcessor.h"
 #include "GrProcessor.h"
 #include "GrTypesPriv.h"
 
-class GrGLConvexPolyEffect;
+class GrInvariantOutput;
 class SkPath;
 
 /**
@@ -60,7 +61,7 @@ public:
 
     virtual ~GrConvexPolyEffect();
 
-    static const char* Name() { return "ConvexPoly"; }
+    virtual const char* name() const SK_OVERRIDE { return "ConvexPoly"; }
 
     GrPrimitiveEdgeType getEdgeType() const { return fEdgeType; }
 
@@ -68,16 +69,16 @@ public:
 
     const SkScalar* getEdges() const { return fEdges; }
 
-    typedef GrGLConvexPolyEffect GLProcessor;
+    virtual void getGLProcessorKey(const GrGLCaps&, GrProcessorKeyBuilder*) const SK_OVERRIDE;
 
-    virtual const GrBackendFragmentProcessorFactory& getFactory() const SK_OVERRIDE;
+    virtual GrGLFragmentProcessor* createGLInstance() const SK_OVERRIDE;
 
 private:
     GrConvexPolyEffect(GrPrimitiveEdgeType edgeType, int n, const SkScalar edges[]);
 
-    virtual bool onIsEqual(const GrProcessor& other) const SK_OVERRIDE;
+    virtual bool onIsEqual(const GrFragmentProcessor& other) const SK_OVERRIDE;
 
-    virtual void onComputeInvariantOutput(InvariantOutput* inout) const SK_OVERRIDE;
+    virtual void onComputeInvariantOutput(GrInvariantOutput* inout) const SK_OVERRIDE;
 
     GrPrimitiveEdgeType    fEdgeType;
     int                    fEdgeCount;

@@ -34,7 +34,7 @@ class SK_API SkGpuDevice : public SkBaseDevice {
 public:
     enum Flags {
         kNeedClear_Flag = 1 << 0,  //!< Surface requires an initial clear
-        kDFFonts_Flag   = 1 << 1,  //!< Surface should render fonts using signed distance fields
+        kDFText_Flag   = 1 << 1,  //!< Surface should render text using signed distance fields
     };
 
     /**
@@ -56,7 +56,17 @@ public:
 
     virtual ~SkGpuDevice();
 
+    SkGpuDevice* cloneDevice(const SkSurfaceProps& props) {
+        SkBaseDevice* dev = this->onCreateCompatibleDevice(CreateInfo(this->imageInfo(),
+                                                                      kGeneral_Usage,
+                                                                      props.pixelGeometry()));
+        return static_cast<SkGpuDevice*>(dev);
+    }
+
     GrContext* context() const { return fContext; }
+
+    // set all pixels to 0
+    void clearAll();
 
     virtual GrRenderTarget* accessRenderTarget() SK_OVERRIDE;
 
@@ -64,7 +74,6 @@ public:
         return fRenderTarget ? fRenderTarget->surfacePriv().info() : SkImageInfo::MakeUnknown();
     }
 
-    virtual void clear(SkColor color) SK_OVERRIDE;
     virtual void drawPaint(const SkDraw&, const SkPaint& paint) SK_OVERRIDE;
     virtual void drawPoints(const SkDraw&, SkCanvas::PointMode mode, size_t count,
                             const SkPoint[], const SkPaint& paint) SK_OVERRIDE;
@@ -86,7 +95,7 @@ public:
                                 const SkPaint& paint,
                                 SkCanvas::DrawBitmapRectFlags flags) SK_OVERRIDE;
     virtual void drawSprite(const SkDraw&, const SkBitmap& bitmap,
-                            int x, int y, const SkPaint& paint);
+                            int x, int y, const SkPaint& paint) SK_OVERRIDE;
     virtual void drawText(const SkDraw&, const void* text, size_t len,
                           SkScalar x, SkScalar y, const SkPaint&) SK_OVERRIDE;
     virtual void drawPosText(const SkDraw&, const void* text, size_t len,
@@ -102,7 +111,6 @@ public:
                               const SkPaint&) SK_OVERRIDE;
     virtual void drawDevice(const SkDraw&, SkBaseDevice*, int x, int y,
                             const SkPaint&) SK_OVERRIDE;
-    virtual bool filterTextFlags(const SkPaint&, TextFlags*) SK_OVERRIDE;
 
     virtual void flush() SK_OVERRIDE;
 
@@ -116,12 +124,15 @@ public:
                              const SkImageFilter::Context&,
                              SkBitmap*, SkIPoint*) SK_OVERRIDE;
 
+    bool filterTexture(GrContext*, GrTexture*, const SkImageFilter*,
+                       const SkImageFilter::Context&,
+                       SkBitmap* result, SkIPoint* offset);
+
 protected:
     virtual bool onReadPixels(const SkImageInfo&, void*, size_t, int, int) SK_OVERRIDE;
     virtual bool onWritePixels(const SkImageInfo&, const void*, size_t, int, int) SK_OVERRIDE;
+    bool onShouldDisableLCD(const SkPaint&) const SK_OVERRIDE;
 
-    /**  PRIVATE / EXPERIMENTAL -- do not call */
-    virtual void EXPERIMENTAL_optimize(const SkPicture* picture) SK_OVERRIDE;
     /**  PRIVATE / EXPERIMENTAL -- do not call */
     virtual bool EXPERIMENTAL_drawPicture(SkCanvas* canvas, const SkPicture* picture,
                                           const SkMatrix*, const SkPaint*) SK_OVERRIDE;
@@ -136,26 +147,24 @@ private:
     GrTextContext*  fTextContext;
 
     // state for our render-target
-    GrRenderTarget*     fRenderTarget;
-    bool                fNeedClear;
+    GrRenderTarget* fRenderTarget;
+    uint32_t        fFlags;
 
     // remove when our clients don't rely on accessBitmap()
     SkBitmap fLegacyBitmap;
 
     SkGpuDevice(GrSurface*, const SkSurfaceProps&, unsigned flags = 0);
 
-    virtual SkBaseDevice* onCreateDevice(const SkImageInfo&, Usage) SK_OVERRIDE;
+    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo&) SK_OVERRIDE;
 
     virtual SkSurface* newSurface(const SkImageInfo&, const SkSurfaceProps&) SK_OVERRIDE;
 
     virtual SkImageFilter::Cache* getImageFilterCache() SK_OVERRIDE;
 
-    // temporarily change the return to false, until we understand the issues with filters and persp
     virtual bool forceConservativeRasterClip() const SK_OVERRIDE { return true; }
 
-    // sets the render target, clip, and matrix on GrContext. Use forceIdenity to override
-    // SkDraw's matrix and draw in device coords.
-    void prepareDraw(const SkDraw&, bool forceIdentity);
+    // sets the render target and clip on context
+    void prepareDraw(const SkDraw&);
 
     /**
      * Implementation for both drawBitmap and drawBitmapRect.
@@ -174,12 +183,14 @@ private:
 
     // The tileSize and clippedSrcRect will be valid only if true is returned.
     bool shouldTileBitmap(const SkBitmap& bitmap,
+                          const SkMatrix& viewMatrix,
                           const GrTextureParams& sampler,
                           const SkRect* srcRectPtr,
                           int maxTileSize,
                           int* tileSize,
                           SkIRect* clippedSrcRect) const;
     void internalDrawBitmap(const SkBitmap&,
+                            const SkMatrix& viewMatrix,
                             const SkRect&,
                             const GrTextureParams& params,
                             const SkPaint& paint,
@@ -187,6 +198,7 @@ private:
                             bool bicubic,
                             bool needsTextureDomain);
     void drawTiledBitmap(const SkBitmap& bitmap,
+                         const SkMatrix& viewMatrix,
                          const SkRect& srcRect,
                          const SkIRect& clippedSrcRect,
                          const GrTextureParams& params,

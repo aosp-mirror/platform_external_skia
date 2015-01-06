@@ -44,6 +44,8 @@ protected:
             fDevice->setRasterDpi(fRasterDpi);
         }
         fCanvas = SkNEW_ARGS(SkCanvas, (fDevice));
+        fCanvas->clipRect(trimBox);
+        fCanvas->translate(trimBox.x(), trimBox.y());
         return fCanvas;
     }
 

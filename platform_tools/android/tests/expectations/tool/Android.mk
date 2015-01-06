@@ -37,4 +37,7 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	local_module
 
+LOCAL_PICKUP_FILES := \
+	$(LOCAL_PATH)/../resources
+
 include $(BUILD_NATIVE_TEST)

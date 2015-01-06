@@ -26,13 +26,10 @@ public:
 
 protected:
     explicit SkPixelXorXfermode(SkColor opColor) : fOpColor(opColor) {}
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkPixelXorXfermode(SkReadBuffer& rb);
-#endif
     virtual void flatten(SkWriteBuffer&) const SK_OVERRIDE;
 
     // override from SkXfermode
-    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst) const;
+    virtual SkPMColor xferColor(SkPMColor src, SkPMColor dst) const SK_OVERRIDE;
 
 private:
     SkColor fOpColor;

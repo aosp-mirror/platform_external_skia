@@ -43,7 +43,8 @@ enum GrGLVendor {
 enum GrGLRenderer {
     kTegra2_GrGLRenderer,
     kTegra3_GrGLRenderer,
-
+    kPowerVR54x_GrGLRenderer,
+    kPowerVRRogue_GrGLRenderer,
     kOther_GrGLRenderer
 };
 
@@ -70,10 +71,19 @@ enum GrGLRenderer {
         *(p) = GR_GL_INIT_ZERO;                                                \
         GR_GL_CALL(gl, GetRenderbufferParameteriv(t, pname, p));               \
     } while (0)
+
 #define GR_GL_GetTexLevelParameteriv(gl, t, l, pname, p)                       \
     do {                                                                       \
         *(p) = GR_GL_INIT_ZERO;                                                \
         GR_GL_CALL(gl, GetTexLevelParameteriv(t, l, pname, p));                \
+    } while (0)
+
+#define GR_GL_GetShaderPrecisionFormat(gl, st, pt, range, precision)           \
+    do {                                                                       \
+        (range)[0] = GR_GL_INIT_ZERO;                                          \
+        (range)[1] = GR_GL_INIT_ZERO;                                          \
+        (*precision) = GR_GL_INIT_ZERO;                                        \
+        GR_GL_CALL(gl, GetShaderPrecisionFormat(st, pt, range, precision));    \
     } while (0)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -130,13 +140,13 @@ template<int MatrixSize> void GrGLGetMatrix(GrGLfloat* dest, const SkMatrix& src
     #define GR_GL_CHECK_ERROR_IMPL(IFACE, X)
 #endif
 
-// internal macro to conditionally log the gl call using GrPrintf based on
+// internal macro to conditionally log the gl call using SkDebugf based on
 // compile-time and run-time flags.
 #if GR_GL_LOG_CALLS
     extern bool gLogCallsGL;
     #define GR_GL_LOG_CALLS_IMPL(X)                             \
         if (gLogCallsGL)                                        \
-            GrPrintf(GR_FILE_AND_LINE_STR "GL: " #X "\n")
+            SkDebugf(GR_FILE_AND_LINE_STR "GL: " #X "\n")
 #else
     #define GR_GL_LOG_CALLS_IMPL(X)
 #endif

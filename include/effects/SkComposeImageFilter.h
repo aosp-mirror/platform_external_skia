@@ -25,6 +25,7 @@ public:
         return SkNEW_ARGS(SkComposeImageFilter, (inputs));
     }
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkComposeImageFilter)
 
 protected:
@@ -32,10 +33,6 @@ protected:
         SkASSERT(inputs[0]);
         SkASSERT(inputs[1]);
     }
-#ifdef SK_SUPPORT_LEGACY_DEEPFLATTENING
-    explicit SkComposeImageFilter(SkReadBuffer& buffer);
-#endif
-
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                                SkBitmap* result, SkIPoint* loc) const SK_OVERRIDE;
     virtual bool onFilterBounds(const SkIRect&, const SkMatrix&, SkIRect*) const SK_OVERRIDE;

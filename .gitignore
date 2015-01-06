@@ -10,12 +10,11 @@
 TAGS
 bower_components
 common
-experimental/webtry/templates/template.cpp
-experimental/webtry/webtry.db
 gyp/build
 out
 platform_tools/chromeos/third_party/externals
 platform_tools/chromeos/toolchain
 third_party/externals
-tools/bug_chomper/oauth_client_secret.json
+tools/skp/page_sets/data/*.json
+tools/skp/page_sets/data/*.wpr
 xcodebuild
