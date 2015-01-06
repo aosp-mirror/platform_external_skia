@@ -595,7 +595,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
 	external/zlib
@@ -608,7 +607,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/images \
-	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils

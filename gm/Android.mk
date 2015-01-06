@@ -257,8 +257,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../include/pdf
+	$(LOCAL_PATH)/../third_party/etc1
 
 LOCAL_MODULE_TAGS := \
 	tests
