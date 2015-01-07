@@ -436,6 +436,7 @@ LOCAL_SRC_FILES := \
 	../gm/tilemodes.cpp \
 	../gm/tilemodes_scaled.cpp \
 	../gm/tinybitmap.cpp \
+	../gm/transparency.cpp \
 	../gm/twopointradial.cpp \
 	../gm/typeface.cpp \
 	../gm/vertices.cpp \
