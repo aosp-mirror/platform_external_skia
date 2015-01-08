@@ -331,6 +331,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkMovie_gif.cpp \
 	src/images/SkPageFlipper.cpp \
 	src/images/SkScaledBitmapSampler.cpp \
+	src/ports/SkImageGenerator_skia.cpp \
 	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
