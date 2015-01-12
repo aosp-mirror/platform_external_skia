@@ -1407,7 +1407,7 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
 
 // hand-tuned value to reduce outline embolden strength
 #ifndef SK_OUTLINE_EMBOLDEN_DIVISOR
-    #ifdef SK_BUILD_FOR_ANDROID
+    #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
         #define SK_OUTLINE_EMBOLDEN_DIVISOR   34
     #else
         #define SK_OUTLINE_EMBOLDEN_DIVISOR   24
