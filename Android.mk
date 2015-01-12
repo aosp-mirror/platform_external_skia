@@ -66,6 +66,7 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
 	src/core/SkAnnotation.cpp \
