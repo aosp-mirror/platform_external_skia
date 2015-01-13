@@ -515,8 +515,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
-	src/gpu/gl/builders/GrGLLegacyNvprProgramBuilder.cpp \
-	src/gpu/gl/builders/GrGLNvprProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
