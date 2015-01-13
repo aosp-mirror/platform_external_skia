@@ -48,7 +48,6 @@ LOCAL_SRC_FILES := \
 	blurroundrect.cpp \
 	circles.cpp \
 	circularclips.cpp \
-	clipdrawdraw.cpp \
 	clip_strokerect.cpp \
 	clippedbitmapshaders.cpp \
 	cgms.cpp \

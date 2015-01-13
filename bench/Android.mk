@@ -132,7 +132,6 @@ LOCAL_SRC_FILES := \
 	../gm/blurroundrect.cpp \
 	../gm/circles.cpp \
 	../gm/circularclips.cpp \
-	../gm/clipdrawdraw.cpp \
 	../gm/clip_strokerect.cpp \
 	../gm/clippedbitmapshaders.cpp \
 	../gm/cgms.cpp \
