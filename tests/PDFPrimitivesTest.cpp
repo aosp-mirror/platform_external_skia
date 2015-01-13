@@ -205,7 +205,7 @@ static void TestObjectRef(skiatest::Reporter* reporter) {
 
     char expectedResult[] = "2 0 R";
     SkDynamicMemoryWStream buffer;
-    int2ref->emitObject(&buffer, &catalog, false);
+    int2ref->emitObject(&buffer, &catalog);
     REPORTER_ASSERT(reporter, buffer.getOffset() == strlen(expectedResult));
     REPORTER_ASSERT(reporter, stream_equals(buffer, 0, expectedResult,
                                             buffer.getOffset()));
@@ -435,7 +435,7 @@ namespace {
 class DummyImageFilter : public SkImageFilter {
 public:
     DummyImageFilter(bool visited = false) : SkImageFilter(0, NULL), fVisited(visited) {}
-    virtual ~DummyImageFilter() SK_OVERRIDE {}
+    ~DummyImageFilter() SK_OVERRIDE {}
     virtual bool onFilterImage(Proxy*, const SkBitmap& src, const Context&,
                                SkBitmap* result, SkIPoint* offset) const {
         fVisited = true;

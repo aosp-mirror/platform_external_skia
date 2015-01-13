@@ -16,17 +16,19 @@
 class TestLooper : public SkDrawLooper {
 public:
 
-    virtual SkDrawLooper::Context* createContext(SkCanvas*, void* storage) const SK_OVERRIDE {
+    SkDrawLooper::Context* createContext(SkCanvas*, void* storage) const SK_OVERRIDE {
         return SkNEW_PLACEMENT(storage, TestDrawLooperContext);
     }
 
-    virtual size_t contextSize() const SK_OVERRIDE { return sizeof(TestDrawLooperContext); }
+    size_t contextSize() const SK_OVERRIDE { return sizeof(TestDrawLooperContext); }
 
 #ifndef SK_IGNORE_TO_STRING
-    virtual void toString(SkString* str) const SK_OVERRIDE {
+    void toString(SkString* str) const SK_OVERRIDE {
         str->append("TestLooper:");
     }
 #endif
+
+    SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(TestLooper);
 
 private:
     class TestDrawLooperContext : public SkDrawLooper::Context {
@@ -34,7 +36,7 @@ private:
         TestDrawLooperContext() : fOnce(true) {}
         virtual ~TestDrawLooperContext() {}
 
-        virtual bool next(SkCanvas* canvas, SkPaint*) SK_OVERRIDE {
+        bool next(SkCanvas* canvas, SkPaint*) SK_OVERRIDE {
             if (fOnce) {
                 fOnce = false;
                 canvas->translate(SkIntToScalar(10), 0);
@@ -45,9 +47,9 @@ private:
     private:
         bool fOnce;
     };
-
-    SK_DECLARE_UNFLATTENABLE_OBJECT()
 };
+
+SkFlattenable* TestLooper::CreateProc(SkReadBuffer&) { return SkNEW(TestLooper); }
 
 static void test_drawBitmap(skiatest::Reporter* reporter) {
     SkBitmap src;

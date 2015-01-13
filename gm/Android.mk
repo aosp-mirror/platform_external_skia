@@ -200,6 +200,7 @@ LOCAL_SRC_FILES := \
 	tilemodes.cpp \
 	tilemodes_scaled.cpp \
 	tinybitmap.cpp \
+	transparency.cpp \
 	twopointradial.cpp \
 	typeface.cpp \
 	vertices.cpp \

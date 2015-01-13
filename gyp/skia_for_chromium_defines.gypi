@@ -13,10 +13,7 @@
     # If these become 'permanent', they should be moved into skia_common.gypi
     #
     'skia_for_chromium_defines': [
-      'SK_SUPPORT_LEGACY_DRAWDATA',
-      'SK_SUPPORT_LEGACY_CANVAS_VIRTUAL',
-      'SK_SUPPORT_LEGACY_ADDOVAL',
-      'SK_SUPPORT_LEGACY_ADDRRECT',
+      'SK_LEGACY_DRAWPICTURECALLBACK',
     ],
   },
 }

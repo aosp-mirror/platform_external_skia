@@ -194,14 +194,14 @@ public:
     }
 
 protected:
-    virtual unsigned generateGlyphCount() SK_OVERRIDE;
-    virtual uint16_t generateCharToGlyph(SkUnichar uni) SK_OVERRIDE;
-    virtual void generateAdvance(SkGlyph* glyph) SK_OVERRIDE;
-    virtual void generateMetrics(SkGlyph* glyph) SK_OVERRIDE;
-    virtual void generateImage(const SkGlyph& glyph) SK_OVERRIDE;
-    virtual void generatePath(const SkGlyph& glyph, SkPath* path) SK_OVERRIDE;
-    virtual void generateFontMetrics(SkPaint::FontMetrics*) SK_OVERRIDE;
-    virtual SkUnichar generateGlyphToChar(uint16_t glyph) SK_OVERRIDE;
+    unsigned generateGlyphCount() SK_OVERRIDE;
+    uint16_t generateCharToGlyph(SkUnichar uni) SK_OVERRIDE;
+    void generateAdvance(SkGlyph* glyph) SK_OVERRIDE;
+    void generateMetrics(SkGlyph* glyph) SK_OVERRIDE;
+    void generateImage(const SkGlyph& glyph) SK_OVERRIDE;
+    void generatePath(const SkGlyph& glyph, SkPath* path) SK_OVERRIDE;
+    void generateFontMetrics(SkPaint::FontMetrics*) SK_OVERRIDE;
+    SkUnichar generateGlyphToChar(uint16_t glyph) SK_OVERRIDE;
 
 private:
     SkFaceRec*  fFaceRec;
@@ -1407,7 +1407,7 @@ void SkScalerContext_FreeType::generateFontMetrics(SkPaint::FontMetrics* metrics
 
 // hand-tuned value to reduce outline embolden strength
 #ifndef SK_OUTLINE_EMBOLDEN_DIVISOR
-    #ifdef SK_BUILD_FOR_ANDROID
+    #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
         #define SK_OUTLINE_EMBOLDEN_DIVISOR   34
     #else
         #define SK_OUTLINE_EMBOLDEN_DIVISOR   24

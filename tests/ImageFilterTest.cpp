@@ -59,7 +59,7 @@ public:
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(MatrixTestImageFilter)
 
 protected:
-    virtual void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
+    void flatten(SkWriteBuffer& buffer) const SK_OVERRIDE {
         this->INHERITED::flatten(buffer);
         buffer.writeFunctionPtr(fReporter);
         buffer.writeMatrix(fExpectedMatrix);
@@ -802,8 +802,12 @@ DEF_TEST(ImageFilterCrossProcessPictureImageFilter, reporter) {
     canvas.clear(0x0);
     canvas.drawPicture(crossProcessPicture);
     pixel = *bitmap.getAddr32(0, 0);
+#ifdef SK_DISALLOW_CROSSPROCESS_PICTUREIMAGEFILTERS
     // The result here should not be green, since the filter draws nothing.
     REPORTER_ASSERT(reporter, pixel != SK_ColorGREEN);
+#else
+    REPORTER_ASSERT(reporter, pixel == SK_ColorGREEN);
+#endif
 }
 
 DEF_TEST(ImageFilterClippedPictureImageFilter, reporter) {

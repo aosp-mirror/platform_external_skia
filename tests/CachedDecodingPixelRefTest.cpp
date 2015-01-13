@@ -9,7 +9,6 @@
 #include "SkCachingPixelRef.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkDecodingImageGenerator.h"
 #include "SkDiscardableMemoryPool.h"
 #include "SkImageDecoder.h"
 #include "SkImageGeneratorPriv.h"
@@ -143,15 +142,11 @@ static void test_three_encodings(skiatest::Reporter* reporter,
 
 ////////////////////////////////////////////////////////////////////////////////
 static bool install_skCachingPixelRef(SkData* encoded, SkBitmap* dst) {
-    return SkCachingPixelRef::Install(
-        SkDecodingImageGenerator::Create(
-            encoded, SkDecodingImageGenerator::Options()), dst);
+    return SkCachingPixelRef::Install(SkImageGenerator::NewFromData(encoded), dst);
 }
 static bool install_skDiscardablePixelRef(SkData* encoded, SkBitmap* dst) {
     // Use system-default discardable memory.
-    return SkInstallDiscardablePixelRef(
-        SkDecodingImageGenerator::Create(
-            encoded, SkDecodingImageGenerator::Options()), dst);
+    return SkInstallDiscardablePixelRef(encoded, dst);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -183,7 +178,7 @@ public:
     virtual ~TestImageGenerator() { }
 
 protected:
-    virtual bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
+    bool onGetInfo(SkImageInfo* info) SK_OVERRIDE {
         REPORTER_ASSERT(fReporter, info);
         if ((NULL == info) || (kFailGetInfo_TestType == fType)) {
             return false;

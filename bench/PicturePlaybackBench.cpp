@@ -72,7 +72,7 @@ class TextPlaybackBench : public PicturePlaybackBench {
 public:
     TextPlaybackBench() : INHERITED("drawText") { }
 protected:
-    virtual void recordCanvas(SkCanvas* canvas) SK_OVERRIDE {
+    void recordCanvas(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         paint.setTextSize(fTextSize);
         paint.setColor(SK_ColorBLACK);
@@ -97,7 +97,7 @@ public:
         : INHERITED(drawPosH ? "drawPosTextH" : "drawPosText")
         , fDrawPosH(drawPosH) { }
 protected:
-    virtual void recordCanvas(SkCanvas* canvas) SK_OVERRIDE {
+    void recordCanvas(SkCanvas* canvas) SK_OVERRIDE {
         SkPaint paint;
         paint.setTextSize(fTextSize);
         paint.setColor(SK_ColorBLACK);
@@ -144,7 +144,7 @@ DEF_BENCH( return new PosTextPlaybackBench(false); )
 // Chrome draws into small tiles with impl-side painting.
 // This benchmark measures the relative performance of our bounding-box hierarchies,
 // both when querying tiles perfectly and when not.
-enum BBH  { kNone, kRTree, kTileGrid };
+enum BBH  { kNone, kRTree };
 enum Mode { kTiled, kRandom };
 class TiledPlaybackBench : public Benchmark {
 public:
@@ -152,7 +152,6 @@ public:
         switch (fBBH) {
             case kNone:     fName.append("_none"    ); break;
             case kRTree:    fName.append("_rtree"   ); break;
-            case kTileGrid: fName.append("_tilegrid"); break;
         }
         switch (fMode) {
             case kTiled:  fName.append("_tiled" ); break;
@@ -160,16 +159,14 @@ public:
         }
     }
 
-    virtual const char* onGetName() SK_OVERRIDE { return fName.c_str(); }
-    virtual SkIPoint onGetSize() SK_OVERRIDE { return SkIPoint::Make(1024,1024); }
+    const char* onGetName() SK_OVERRIDE { return fName.c_str(); }
+    SkIPoint onGetSize() SK_OVERRIDE { return SkIPoint::Make(1024,1024); }
 
-    virtual void onPreDraw() SK_OVERRIDE {
-        SkTileGridFactory::TileGridInfo info = { { 256, 256 }, {0,0}, {0,0} };
+    void onPreDraw() SK_OVERRIDE {
         SkAutoTDelete<SkBBHFactory> factory;
         switch (fBBH) {
             case kNone:                                                 break;
             case kRTree:    factory.reset(new SkRTreeFactory);          break;
-            case kTileGrid: factory.reset(new SkTileGridFactory(info)); break;
         }
 
         SkPictureRecorder recorder;
@@ -188,7 +185,7 @@ public:
         fPic.reset(recorder.endRecording());
     }
 
-    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         for (int i = 0; i < loops; i++) {
             // This inner loop guarantees we make the same choices for all bench variants.
             SkRandom rand;
@@ -220,5 +217,3 @@ DEF_BENCH( return new TiledPlaybackBench(kNone,     kRandom); )
 DEF_BENCH( return new TiledPlaybackBench(kNone,     kTiled ); )
 DEF_BENCH( return new TiledPlaybackBench(kRTree,    kRandom); )
 DEF_BENCH( return new TiledPlaybackBench(kRTree,    kTiled ); )
-DEF_BENCH( return new TiledPlaybackBench(kTileGrid, kRandom); )
-DEF_BENCH( return new TiledPlaybackBench(kTileGrid, kTiled ); )

@@ -9,7 +9,7 @@
 #include "Resources.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkDecodingImageGenerator.h"
+#include "SkImageGenerator.h"
 #include "SkImageDecoder.h"
 #include "SkOSFile.h"
 #include "SkPixelRef.h"
@@ -122,12 +122,12 @@ public:
     ETCBitmapBench(bool decompress, Backend backend)
         : fDecompress(decompress), fBackend(backend) { }
 
-    virtual bool isSuitableFor(Backend backend) SK_OVERRIDE {
+    bool isSuitableFor(Backend backend) SK_OVERRIDE {
         return backend == this->fBackend;
     }
 
 protected:
-    virtual const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() SK_OVERRIDE {
         if (kGPU_Backend == this->fBackend) {
             if (this->fDecompress) {
                 return "etc1bitmap_render_gpu_decompressed";
@@ -144,16 +144,14 @@ protected:
         }
     }
 
-    virtual void onPreDraw() SK_OVERRIDE {
+    void onPreDraw() SK_OVERRIDE {
         if (NULL == fPKMData) {
             SkDebugf("Failed to load PKM data!\n");
             return;
         }
 
         // Install pixel ref
-        if (!SkInstallDiscardablePixelRef(
-                SkDecodingImageGenerator::Create(
-                    fPKMData, SkDecodingImageGenerator::Options()), &(this->fBitmap))) {
+        if (!SkInstallDiscardablePixelRef(fPKMData, &(this->fBitmap))) {
             SkDebugf("Could not install discardable pixel ref.\n");
             return;
         }
@@ -164,7 +162,7 @@ protected:
         }
     }
 
-    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         for (int i = 0; i < loops; ++i) {
             canvas->drawBitmap(this->fBitmap, 0, 0, NULL);
         }
@@ -189,7 +187,7 @@ public:
         : ETCBitmapBench(decompress, backend) { }
 
 protected:
-    virtual const char* onGetName() SK_OVERRIDE {
+    const char* onGetName() SK_OVERRIDE {
         if (kGPU_Backend == this->backend()) {
             if (this->decompress()) {
                 return "etc1bitmap_upload_gpu_decompressed";
@@ -206,7 +204,7 @@ protected:
         }
     }
 
-    virtual void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(const int loops, SkCanvas* canvas) SK_OVERRIDE {
         SkPixelRef* pr = fBitmap.pixelRef();
         for (int i = 0; i < loops; ++i) {
             if (pr) {

@@ -35,6 +35,11 @@ class SkImageGenerator;
  */
 SK_API bool SkInstallDiscardablePixelRef(SkImageGenerator*, SkBitmap* destination);
 
+/**
+ *  On success, installs a discardable pixelref into destination, based on encoded data.
+ *  Regardless of success or failure, the caller must still balance their ownership of encoded.
+ */
+SK_API bool SkInstallDiscardablePixelRef(SkData* encoded, SkBitmap* destination);
 
 /**
  *  An interface that allows a purgeable PixelRef (such as a
@@ -115,6 +120,13 @@ public:
      */
     bool getYUV8Planes(SkISize sizes[3], void* planes[3], size_t rowBytes[3],
                        SkYUVColorSpace* colorSpace);
+
+    /**
+     *  If the default image decoder system can interpret the specified (encoded) data, then
+     *  this returns a new ImageGenerator for it. Otherwise this returns NULL. Either way
+     *  the caller is still responsible for managing their ownership of the data.
+     */
+    static SkImageGenerator* NewFromData(SkData*);
 
 protected:
     virtual SkData* onRefEncodedData();

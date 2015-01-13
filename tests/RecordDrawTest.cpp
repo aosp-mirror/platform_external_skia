@@ -9,7 +9,6 @@
 #include "RecordTestUtils.h"
 
 #include "SkDebugCanvas.h"
-#include "SkDrawPictureCallback.h"
 #include "SkDropShadowImageFilter.h"
 #include "SkImagePriv.h"
 #include "SkRecord.h"
@@ -21,11 +20,11 @@
 
 static const int W = 1920, H = 1080;
 
-class JustOneDraw : public SkDrawPictureCallback {
+class JustOneDraw : public SkPicture::AbortCallback {
 public:
     JustOneDraw() : fCalls(0) {}
 
-    virtual bool abortDrawing() SK_OVERRIDE { return fCalls++ > 0; }
+    bool abort() SK_OVERRIDE { return fCalls++ > 0; }
 private:
     int fCalls;
 };
@@ -124,7 +123,7 @@ DEF_TEST(RecordDraw_SetMatrixClobber, r) {
 }
 
 struct TestBBH : public SkBBoxHierarchy {
-    virtual void insert(SkAutoTMalloc<SkRect>* boundsArray, int N) SK_OVERRIDE {
+    void insert(SkAutoTMalloc<SkRect>* boundsArray, int N) SK_OVERRIDE {
         fEntries.setCount(N);
         for (int i = 0; i < N; i++) {
             Entry e = { (unsigned)i, (*boundsArray)[i] };
@@ -132,8 +131,8 @@ struct TestBBH : public SkBBoxHierarchy {
         }
     }
 
-    virtual void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {}
-    virtual size_t bytesUsed() const SK_OVERRIDE { return 0; }
+    void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {}
+    size_t bytesUsed() const SK_OVERRIDE { return 0; }
 
     struct Entry {
         unsigned opIndex;

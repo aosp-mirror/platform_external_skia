@@ -12,7 +12,7 @@
 #include "SkColorPriv.h"
 #include "SkDashPathEffect.h"
 #include "SkData.h"
-#include "SkDecodingImageGenerator.h"
+#include "SkImageGenerator.h"
 #include "SkError.h"
 #include "SkImageEncoder.h"
 #include "SkImageGenerator.h"
@@ -1165,12 +1165,12 @@ public:
         return this->INHERITED::willSaveLayer(bounds, paint, flags);
     }
 
-    virtual void willSave() SK_OVERRIDE {
+    void willSave() SK_OVERRIDE {
         ++fSaveCount;
         this->INHERITED::willSave();
     }
 
-    virtual void willRestore() SK_OVERRIDE {
+    void willRestore() SK_OVERRIDE {
         ++fRestoreCount;
         this->INHERITED::willRestore();
     }
@@ -1495,8 +1495,7 @@ static void test_bitmap_with_encoded_data(skiatest::Reporter* reporter) {
     SkAutoDataUnref data(wStream.copyToData());
 
     SkBitmap bm;
-    bool installSuccess = SkInstallDiscardablePixelRef(
-         SkDecodingImageGenerator::Create(data, SkDecodingImageGenerator::Options()), &bm);
+    bool installSuccess = SkInstallDiscardablePixelRef(data, &bm);
     REPORTER_ASSERT(reporter, installSuccess);
 
     // Write both bitmaps to pictures, and ensure that the resulting data streams are the same.
@@ -1638,7 +1637,7 @@ public:
         this->INHERITED::onClipPath(path, op, edgeStyle);
     }
 
-    virtual void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE {
+    void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) SK_OVERRIDE {
         fClipCount += 1;
         this->INHERITED::onClipRegion(deviceRgn, op);
     }
@@ -1867,11 +1866,11 @@ struct CountingBBH : public SkBBoxHierarchy {
 
     CountingBBH() : searchCalls(0) {}
 
-    virtual void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {
+    void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {
         this->searchCalls++;
     }
 
-    virtual void insert(SkAutoTMalloc<SkRect>*, int) SK_OVERRIDE {}
+    void insert(SkAutoTMalloc<SkRect>*, int) SK_OVERRIDE {}
     virtual size_t bytesUsed() const { return 0; }
 };
 

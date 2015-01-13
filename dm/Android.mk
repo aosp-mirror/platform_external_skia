@@ -245,7 +245,6 @@ LOCAL_SRC_FILES := \
 	../tests/TSetTest.cpp \
 	../tests/TextBlobTest.cpp \
 	../tests/TextureCompressionTest.cpp \
-	../tests/TileGridTest.cpp \
 	../tests/ToUnicodeTest.cpp \
 	../tests/TracingTest.cpp \
 	../tests/TypefaceTest.cpp \
@@ -436,6 +435,7 @@ LOCAL_SRC_FILES := \
 	../gm/tilemodes.cpp \
 	../gm/tilemodes_scaled.cpp \
 	../gm/tinybitmap.cpp \
+	../gm/transparency.cpp \
 	../gm/twopointradial.cpp \
 	../gm/typeface.cpp \
 	../gm/vertices.cpp \

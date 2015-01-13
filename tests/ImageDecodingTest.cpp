@@ -455,9 +455,7 @@ DEF_TEST(WebP, reporter) {
                                                 sizeof(encodedWebP)));
     SkBitmap bm;
 
-    bool success = SkInstallDiscardablePixelRef(
-        SkDecodingImageGenerator::Create(encoded,
-            SkDecodingImageGenerator::Options()), &bm);
+    bool success = SkInstallDiscardablePixelRef(encoded, &bm);
 
     REPORTER_ASSERT(reporter, success);
     if (!success) {
@@ -762,7 +760,7 @@ public:
     SingleAllocator(void* p, size_t s) : fPixels(p), fSize(s) { }
     ~SingleAllocator() {}
     // If the pixels in fPixels are big enough, use them.
-    virtual bool allocPixelRef(SkBitmap* bm, SkColorTable* ct) SK_OVERRIDE {
+    bool allocPixelRef(SkBitmap* bm, SkColorTable* ct) SK_OVERRIDE {
         SkASSERT(bm);
         if (bm->info().getSafeSize(bm->rowBytes()) <= fSize) {
             bm->setPixels(fPixels, ct);

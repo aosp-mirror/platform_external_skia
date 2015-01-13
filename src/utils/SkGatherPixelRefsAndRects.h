@@ -35,12 +35,12 @@ public:
         SkSafeUnref(fPRCont);
     }
 
-    virtual SkImageInfo imageInfo() const SK_OVERRIDE {
+    SkImageInfo imageInfo() const SK_OVERRIDE {
         return fEmptyBitmap.info();
     }
 
 protected:
-    virtual void drawPaint(const SkDraw& draw, const SkPaint& paint) SK_OVERRIDE {
+    void drawPaint(const SkDraw& draw, const SkPaint& paint) SK_OVERRIDE {
         SkBitmap bm;
 
         if (GetBitmapFromPaint(paint, &bm)) {
@@ -79,8 +79,9 @@ protected:
             SkRect mappedRect;
             draw.fMatrix->mapRect(&mappedRect, rect);
             SkRect clipRect = SkRect::Make(draw.fRC->getBounds());
-            mappedRect.intersect(clipRect);
-            fPRCont->add(bm.pixelRef(), mappedRect);
+            if (mappedRect.intersect(clipRect)) {
+                fPRCont->add(bm.pixelRef(), mappedRect);
+            }
         }
     }
     virtual void drawOval(const SkDraw& draw, const SkRect& rect,
@@ -267,13 +268,13 @@ protected:
         NothingToDo();
     }
     // TODO: allow this call to return failure, or move to SkBitmapDevice only.
-    virtual const SkBitmap& onAccessBitmap() SK_OVERRIDE {
+    const SkBitmap& onAccessBitmap() SK_OVERRIDE {
         return fEmptyBitmap;
     }
-    virtual void lockPixels() SK_OVERRIDE { NothingToDo(); }
-    virtual void unlockPixels() SK_OVERRIDE { NothingToDo(); }
-    virtual bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
-    virtual bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
+    void lockPixels() SK_OVERRIDE { NothingToDo(); }
+    void unlockPixels() SK_OVERRIDE { NothingToDo(); }
+    bool allowImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
+    bool canHandleImageFilter(const SkImageFilter*) SK_OVERRIDE { return false; }
     virtual bool filterImage(const SkImageFilter*, const SkBitmap&, const SkImageFilter::Context&,
                              SkBitmap* result, SkIPoint* offset) SK_OVERRIDE {
         return false;
@@ -295,11 +296,11 @@ private:
         return false;
     }
 
-    virtual void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE {
+    void replaceBitmapBackendForRasterSurface(const SkBitmap&) SK_OVERRIDE {
         NotSupported();
     }
 
-    virtual SkBaseDevice* onCreateCompatibleDevice(const CreateInfo& info) SK_OVERRIDE {
+    SkBaseDevice* onCreateCompatibleDevice(const CreateInfo& info) SK_OVERRIDE {
         // we expect to only get called via savelayer, in which case it is fine.
         SkASSERT(kSaveLayer_Usage == info.fUsage);
         return SkNEW_ARGS(SkGatherPixelRefsAndRectsDevice,

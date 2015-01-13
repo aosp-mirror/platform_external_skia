@@ -10,7 +10,7 @@
 #include "Resources.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkDecodingImageGenerator.h"
+#include "SkImageGenerator.h"
 #include "SkImageDecoder.h"
 #include "SkOSFile.h"
 
@@ -81,19 +81,19 @@ public:
     virtual ~ETC1BitmapGM() { }
 
 protected:
-    virtual SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() SK_OVERRIDE {
         SkString str = SkString("etc1bitmap_");
         str.append(this->fileExtension());
         return str;
     }
 
-    virtual SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(128, 128);
     }
 
     virtual SkString fileExtension() const = 0;
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkBitmap bm;
         SkString filename = GetResourcePath("mandrill_128.");
         filename.append(this->fileExtension());
@@ -103,9 +103,7 @@ protected:
             return;
         }
 
-        if (!SkInstallDiscardablePixelRef(
-                SkDecodingImageGenerator::Create(
-                    fileData, SkDecodingImageGenerator::Options()), &bm)) {
+        if (!SkInstallDiscardablePixelRef(fileData, &bm)) {
             SkDebugf("Could not install discardable pixel ref.\n");
             return;
         }
@@ -125,7 +123,7 @@ public:
 
 protected:
 
-    virtual SkString fileExtension() const SK_OVERRIDE { return SkString("pkm"); }
+    SkString fileExtension() const SK_OVERRIDE { return SkString("pkm"); }
 
 private:
     typedef ETC1BitmapGM INHERITED;
@@ -139,7 +137,7 @@ public:
 
 protected:
 
-    virtual SkString fileExtension() const SK_OVERRIDE { return SkString("ktx"); }
+    SkString fileExtension() const SK_OVERRIDE { return SkString("ktx"); }
 
 private:
     typedef ETC1BitmapGM INHERITED;
@@ -153,7 +151,7 @@ public:
 
 protected:
 
-    virtual SkString fileExtension() const SK_OVERRIDE { return SkString("r11.ktx"); }
+    SkString fileExtension() const SK_OVERRIDE { return SkString("r11.ktx"); }
 
 private:
     typedef ETC1BitmapGM INHERITED;
@@ -172,15 +170,15 @@ public:
     virtual ~ETC1Bitmap_NPOT_GM() { }
 
 protected:
-    virtual SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() SK_OVERRIDE {
         return SkString("etc1bitmap_npot");
     }
 
-    virtual SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(124, 124);
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         SkBitmap bm;
         SkString pkmFilename = GetResourcePath("mandrill_128.pkm");
         SkAutoDataUnref fileData(SkData::NewFromFileName(pkmFilename.c_str()));
@@ -204,9 +202,7 @@ protected:
         size_t dataSz = etc1_get_encoded_data_size(width, height) + ETC_PKM_HEADER_SIZE;
         SkAutoDataUnref nonPOTData(SkData::NewWithCopy(am.get(), dataSz));
 
-        if (!SkInstallDiscardablePixelRef(
-                SkDecodingImageGenerator::Create(
-                    nonPOTData, SkDecodingImageGenerator::Options()), &bm)) {
+        if (!SkInstallDiscardablePixelRef(nonPOTData, &bm)) {
             SkDebugf("Could not install discardable pixel ref.\n");
             return;
         }

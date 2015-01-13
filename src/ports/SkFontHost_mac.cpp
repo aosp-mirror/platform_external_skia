@@ -46,6 +46,9 @@
 
 #include <dlfcn.h>
 
+// Set to make glyph bounding boxes visible.
+#define SK_SHOW_TEXT_BLIT_COVERAGE 0
+
 class SkScalerContext_Mac;
 
 // CTFontManagerCopyAvailableFontFamilyNames() is not always available, so we
@@ -465,22 +468,22 @@ public:
 protected:
     friend class SkFontHost;    // to access our protected members for deprecated methods
 
-    virtual int onGetUPEM() const SK_OVERRIDE;
-    virtual SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
-    virtual void onGetFamilyName(SkString* familyName) const SK_OVERRIDE;
-    virtual SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const SK_OVERRIDE;
-    virtual int onGetTableTags(SkFontTableTag tags[]) const SK_OVERRIDE;
+    int onGetUPEM() const SK_OVERRIDE;
+    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
+    void onGetFamilyName(SkString* familyName) const SK_OVERRIDE;
+    SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const SK_OVERRIDE;
+    int onGetTableTags(SkFontTableTag tags[]) const SK_OVERRIDE;
     virtual size_t onGetTableData(SkFontTableTag, size_t offset,
                                   size_t length, void* data) const SK_OVERRIDE;
-    virtual SkScalerContext* onCreateScalerContext(const SkDescriptor*) const SK_OVERRIDE;
-    virtual void onFilterRec(SkScalerContextRec*) const SK_OVERRIDE;
-    virtual void onGetFontDescriptor(SkFontDescriptor*, bool*) const SK_OVERRIDE;
+    SkScalerContext* onCreateScalerContext(const SkDescriptor*) const SK_OVERRIDE;
+    void onFilterRec(SkScalerContextRec*) const SK_OVERRIDE;
+    void onGetFontDescriptor(SkFontDescriptor*, bool*) const SK_OVERRIDE;
     virtual SkAdvancedTypefaceMetrics* onGetAdvancedTypefaceMetrics(
                                 SkAdvancedTypefaceMetrics::PerGlyphInfo,
                                 const uint32_t*, uint32_t) const SK_OVERRIDE;
     virtual int onCharsToGlyphs(const void* chars, Encoding, uint16_t glyphs[],
                                 int glyphCount) const SK_OVERRIDE;
-    virtual int onCountGlyphs() const SK_OVERRIDE;
+    int onCountGlyphs() const SK_OVERRIDE;
 
 private:
     bool fIsLocalStream;
@@ -681,14 +684,18 @@ private:
     AutoCFRelease<CTFontRef> fCTFont;
     CGAffineTransform fInvTransform;
 
-    /** Vertical variant of fCTFont.
+    /** Unrotated variant of fCTFont.
+     *
+     *  In 10.10.1 CTFontGetAdvancesForGlyphs applies the font transform to the width of the
+     *  advances, but always sets the height to 0. This font is used to get the advances of the
+     *  unrotated glyph, and then the rotation is applied separately.
      *
      *  CT vertical metrics are pre-rotated (in em space, before transform) 90deg clock-wise.
      *  This makes kCTFontDefaultOrientation dangerous, because the metrics from
      *  kCTFontHorizontalOrientation are in a different space from kCTFontVerticalOrientation.
-     *  Use fCTVerticalFont with kCTFontVerticalOrientation to get metrics in the same space.
+     *  With kCTFontVerticalOrientation the advances must be unrotated.
      */
-    AutoCFRelease<CTFontRef> fCTVerticalFont;
+    AutoCFRelease<CTFontRef> fCTUnrotatedFont;
 
     AutoCFRelease<CGFontRef> fCGFont;
     SkAutoTMalloc<GlyphRect> fFBoundingBoxes;
@@ -729,6 +736,7 @@ SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac* typeface,
 
     AutoCFRelease<CTFontDescriptorRef> ctFontDesc;
     if (fVertical) {
+        // Setting the vertical orientation here affects the character to glyph mapping.
         AutoCFRelease<CFMutableDictionaryRef> cfAttributes(CFDictionaryCreateMutable(
                 kCFAllocatorDefault, 0,
                 &kCFTypeDictionaryKeyCallBacks,
@@ -748,11 +756,8 @@ SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac* typeface,
 
     fCTFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize, &transform, ctFontDesc));
     fCGFont.reset(CTFontCopyGraphicsFont(fCTFont, NULL));
-    if (fVertical) {
-        CGAffineTransform rotateLeft = CGAffineTransformMake(0, -1, 1, 0, 0, 0);
-        transform = CGAffineTransformConcat(rotateLeft, transform);
-        fCTVerticalFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize, &transform, NULL));
-    }
+    fCTUnrotatedFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize,
+                                                          &CGAffineTransformIdentity, NULL));
 
     // The fUnitMatrix includes the text size (and em) as it is used to scale the raw font data.
     SkScalar emPerFUnit = SkScalarInvert(SkIntToScalar(CGFontGetUnitsPerEm(fCGFont)));
@@ -896,11 +901,14 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
         subY += offset.fY;
     }
 
-    // CTFontDrawGlyphs and CGContextShowGlyphsAtPositions take 'positions' which are in text space.
-    // The glyph location (in device space) must be mapped into text space, so that CG can convert
-    // it back into device space.
     CGPoint point = CGPointMake(-glyph.fLeft + subX, glyph.fTop + glyph.fHeight - subY);
-    point = CGPointApplyAffineTransform(point, context.fInvTransform);
+    if (darwinVersion() < 14) {
+        // Prior to 10.10, CTFontDrawGlyphs acted like CGContextShowGlyphsAtPositions and took
+        // 'positions' which are in text space. The glyph location (in device space) must be
+        // mapped into text space, so that CG can convert it back into device space.
+        // In 10.10 and later, this is handled directly in CTFontDrawGlyphs.
+        point = CGPointApplyAffineTransform(point, context.fInvTransform);
+    }
     ctFontDrawGlyphs(context.fCTFont, &glyphID, &point, 1, fCG);
 
     SkASSERT(rowBytesPtr);
@@ -1007,12 +1015,16 @@ void SkScalerContext_Mac::generateMetrics(SkGlyph* glyph) {
     // The following block produces cgAdvance in CG units (pixels, y up).
     CGSize cgAdvance;
     if (fVertical) {
-        CTFontGetAdvancesForGlyphs(fCTVerticalFont, kCTFontVerticalOrientation,
+        CTFontGetAdvancesForGlyphs(fCTUnrotatedFont, kCTFontVerticalOrientation,
                                    &cgGlyph, &cgAdvance, 1);
+        // Vertical advances are returned as widths instead of heights.
+        SkTSwap(cgAdvance.height, cgAdvance.width);
+        cgAdvance.height = -cgAdvance.height;
     } else {
-        CTFontGetAdvancesForGlyphs(fCTFont, kCTFontHorizontalOrientation,
+        CTFontGetAdvancesForGlyphs(fCTUnrotatedFont, kCTFontHorizontalOrientation,
                                    &cgGlyph, &cgAdvance, 1);
     }
+    cgAdvance = CGSizeApplyAffineTransform(cgAdvance, CTFontGetMatrix(fCTFont));
     glyph->fAdvanceX =  SkFloatToFixed_Check(cgAdvance.width);
     glyph->fAdvanceY = -SkFloatToFixed_Check(cgAdvance.height);
 
@@ -1153,7 +1165,11 @@ static inline uint8_t rgb_to_a8(CGRGBPixel rgb, const uint8_t* table8) {
     U8CPU r = (rgb >> 16) & 0xFF;
     U8CPU g = (rgb >>  8) & 0xFF;
     U8CPU b = (rgb >>  0) & 0xFF;
-    return sk_apply_lut_if<APPLY_PREBLEND>(SkComputeLuminance(r, g, b), table8);
+    U8CPU lum = sk_apply_lut_if<APPLY_PREBLEND>(SkComputeLuminance(r, g, b), table8);
+#if SK_SHOW_TEXT_BLIT_COVERAGE
+    lum = SkTMax(lum, (U8CPU)0x30);
+#endif
+    return lum;
 }
 template<bool APPLY_PREBLEND>
 static void rgb_to_a8(const CGRGBPixel* SK_RESTRICT cgPixels, size_t cgRowBytes,
@@ -1178,6 +1194,11 @@ static inline uint16_t rgb_to_lcd16(CGRGBPixel rgb, const uint8_t* tableR,
     U8CPU r = sk_apply_lut_if<APPLY_PREBLEND>((rgb >> 16) & 0xFF, tableR);
     U8CPU g = sk_apply_lut_if<APPLY_PREBLEND>((rgb >>  8) & 0xFF, tableG);
     U8CPU b = sk_apply_lut_if<APPLY_PREBLEND>((rgb >>  0) & 0xFF, tableB);
+#if SK_SHOW_TEXT_BLIT_COVERAGE
+    r = SkTMax(r, (U8CPU)0x30);
+    g = SkTMax(g, (U8CPU)0x30);
+    b = SkTMax(b, (U8CPU)0x30);
+#endif
     return SkPack888ToRGB16(r, g, b);
 }
 template<bool APPLY_PREBLEND>
@@ -1201,7 +1222,9 @@ static SkPMColor cgpixels_to_pmcolor(CGRGBPixel rgb) {
     U8CPU r = (rgb >> 16) & 0xFF;
     U8CPU g = (rgb >>  8) & 0xFF;
     U8CPU b = (rgb >>  0) & 0xFF;
-
+#if SK_SHOW_TEXT_BLIT_COVERAGE
+    a = SkTMax(a, (U8CPU)0x30);
+#endif
     return SkPackARGB32(a, r, g, b);
 }
 
@@ -2086,11 +2109,11 @@ public:
         CFRelease(fFamilyName);
     }
 
-    virtual int count() SK_OVERRIDE {
+    int count() SK_OVERRIDE {
         return fCount;
     }
 
-    virtual void getStyle(int index, SkFontStyle* style, SkString* name) SK_OVERRIDE {
+    void getStyle(int index, SkFontStyle* style, SkString* name) SK_OVERRIDE {
         SkASSERT((unsigned)index < (unsigned)fCount);
         CTFontDescriptorRef desc = (CTFontDescriptorRef)CFArrayGetValueAtIndex(fArray, index);
         if (style) {
@@ -2103,14 +2126,14 @@ public:
         }
     }
 
-    virtual SkTypeface* createTypeface(int index) SK_OVERRIDE {
+    SkTypeface* createTypeface(int index) SK_OVERRIDE {
         SkASSERT((unsigned)index < (unsigned)CFArrayGetCount(fArray));
         CTFontDescriptorRef desc = (CTFontDescriptorRef)CFArrayGetValueAtIndex(fArray, index);
 
         return createFromDesc(fFamilyName, desc);
     }
 
-    virtual SkTypeface* matchStyle(const SkFontStyle& pattern) SK_OVERRIDE {
+    SkTypeface* matchStyle(const SkFontStyle& pattern) SK_OVERRIDE {
         if (0 == fCount) {
             return NULL;
         }
@@ -2174,11 +2197,11 @@ public:
     }
 
 protected:
-    virtual int onCountFamilies() const SK_OVERRIDE {
+    int onCountFamilies() const SK_OVERRIDE {
         return fCount;
     }
 
-    virtual void onGetFamilyName(int index, SkString* familyName) const SK_OVERRIDE {
+    void onGetFamilyName(int index, SkString* familyName) const SK_OVERRIDE {
         if ((unsigned)index < (unsigned)fCount) {
             CFStringToSkString(this->stringAt(index), familyName);
         } else {
@@ -2186,14 +2209,14 @@ protected:
         }
     }
 
-    virtual SkFontStyleSet* onCreateStyleSet(int index) const SK_OVERRIDE {
+    SkFontStyleSet* onCreateStyleSet(int index) const SK_OVERRIDE {
         if ((unsigned)index >= (unsigned)fCount) {
             return NULL;
         }
         return CreateSet(this->stringAt(index));
     }
 
-    virtual SkFontStyleSet* onMatchFamily(const char familyName[]) const SK_OVERRIDE {
+    SkFontStyleSet* onMatchFamily(const char familyName[]) const SK_OVERRIDE {
         AutoCFRelease<CFStringRef> cfName(make_CFString(familyName));
         return CreateSet(cfName);
     }
@@ -2214,7 +2237,7 @@ protected:
         return NULL;
     }
 
-    virtual SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
         AutoCFRelease<CGDataProviderRef> pr(SkCreateDataProviderFromData(data));
         if (NULL == pr) {
             return NULL;
@@ -2222,7 +2245,7 @@ protected:
         return create_from_dataProvider(pr);
     }
 
-    virtual SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
         AutoCFRelease<CGDataProviderRef> pr(SkCreateDataProviderFromStream(stream));
         if (NULL == pr) {
             return NULL;
@@ -2230,7 +2253,7 @@ protected:
         return create_from_dataProvider(pr);
     }
 
-    virtual SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
         AutoCFRelease<CGDataProviderRef> pr(CGDataProviderCreateWithFilename(path));
         if (NULL == pr) {
             return NULL;

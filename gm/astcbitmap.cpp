@@ -10,7 +10,7 @@
 #include "Resources.h"
 #include "SkCanvas.h"
 #include "SkData.h"
-#include "SkDecodingImageGenerator.h"
+#include "SkImageGenerator.h"
 #include "SkImageDecoder.h"
 #include "SkOSFile.h"
 #include "SkTextureCompressor.h"
@@ -53,15 +53,15 @@ public:
     virtual ~ASTCBitmapGM() { }
 
 protected:
-    virtual SkString onShortName() SK_OVERRIDE {
+    SkString onShortName() SK_OVERRIDE {
         return SkString("astcbitmap");
     }
 
-    virtual SkISize onISize() SK_OVERRIDE {
+    SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(kGMDimension, kGMDimension);
     }
 
-    virtual void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         for (int j = 0; j < 4; ++j) {
             for (int i = 0; i < 4; ++i) {
                 SkString filename = GetResourcePath(get_astc_filename(j*4+i));
@@ -76,9 +76,7 @@ protected:
                 }
 
                 SkBitmap bm;
-                if (!SkInstallDiscardablePixelRef(
-                        SkDecodingImageGenerator::Create(
-                            fileData, SkDecodingImageGenerator::Options()), &bm)) {
+                if (!SkInstallDiscardablePixelRef(fileData, &bm)) {
                     SkDebugf("Could not install discardable pixel ref.\n");
                     return;
                 }
