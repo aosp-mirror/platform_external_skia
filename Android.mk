@@ -258,6 +258,7 @@ LOCAL_SRC_FILES := \
 	src/effects/SkAlphaThresholdFilter.cpp \
 	src/effects/SkArcToPathEffect.cpp \
 	src/effects/SkArithmeticMode.cpp \
+	src/effects/SkArithmeticMode_gpu.cpp \
 	src/effects/SkAvoidXfermode.cpp \
 	src/effects/SkBitmapSource.cpp \
 	src/effects/SkBlurDrawLooper.cpp \
