@@ -474,6 +474,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
+	src/gpu/effects/GrCustomXfermode.cpp \
 	src/gpu/effects/GrBezierEffect.cpp \
 	src/gpu/effects/GrConvolutionEffect.cpp \
 	src/gpu/effects/GrConvexPolyEffect.cpp \
