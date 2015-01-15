@@ -19,8 +19,22 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	DM.cpp \
-	DMSrcSink.cpp \
+	DMCpuGMTask.cpp \
+	DMGpuGMTask.cpp \
+	DMPDFRasterizeTask.cpp \
+	DMImageTask.cpp \
 	DMJsonWriter.cpp \
+	DMPDFTask.cpp \
+	DMPipeTask.cpp \
+	DMQuiltTask.cpp \
+	DMReporter.cpp \
+	DMSKPTask.cpp \
+	DMSerializeTask.cpp \
+	DMTask.cpp \
+	DMTaskRunner.cpp \
+	DMTestTask.cpp \
+	DMUtil.cpp \
+	DMWriteTask.cpp \
 	../gm/gm.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
@@ -441,10 +455,6 @@ LOCAL_SRC_FILES := \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
-	../tools/timer/Timer.cpp \
-	../tools/timer/TimerData.cpp \
-	../tools/timer/GpuTimer.cpp \
-	../tools/timer/SysTimer_posix.cpp \
 	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
@@ -497,7 +507,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
-	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
