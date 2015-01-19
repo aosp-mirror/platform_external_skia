@@ -243,6 +243,7 @@ LOCAL_SRC_FILES := \
 	../tests/WritePixelsTest.cpp \
 	../tests/Writer32Test.cpp \
 	../tests/XfermodeTest.cpp \
+	../tests/YUVCacheTest.cpp \
 	../tests/PipeTest.cpp \
 	../tests/TDStackNesterTest.cpp \
 	../gm/aaclip.cpp \
