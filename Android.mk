@@ -128,6 +128,8 @@ LOCAL_SRC_FILES := \
 	src/core/SkFloatBits.cpp \
 	src/core/SkFont.cpp \
 	src/core/SkFontHost.cpp \
+	src/core/SkFontMgr.cpp \
+	src/core/SkFontStyle.cpp \
 	src/core/SkFontDescriptor.cpp \
 	src/core/SkFontStream.cpp \
 	src/core/SkGeometry.cpp \
