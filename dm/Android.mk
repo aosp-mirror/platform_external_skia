@@ -19,7 +19,6 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	DM.cpp \
-	DMGpuSupport.cpp \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
