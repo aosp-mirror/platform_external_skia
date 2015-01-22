@@ -431,7 +431,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDistanceFieldTextContext.cpp \
-	src/gpu/GrDrawState.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
@@ -444,7 +443,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
 	src/gpu/GrMemoryPool.cpp \
-	src/gpu/GrOptDrawState.cpp \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
@@ -453,6 +451,8 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathRenderer.cpp \
 	src/gpu/GrPathRendering.cpp \
 	src/gpu/GrPathUtils.cpp \
+	src/gpu/GrPipeline.cpp \
+	src/gpu/GrPipelineBuilder.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
 	src/gpu/GrProcOptInfo.cpp \
