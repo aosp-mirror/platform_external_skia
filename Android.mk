@@ -384,7 +384,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkDeferredCanvas.cpp \
 	src/utils/SkDumpCanvas.cpp \
 	src/utils/SkEventTracer.cpp \
-	src/utils/SkGatherPixelRefsAndRects.cpp \
 	src/utils/SkInterpolator.cpp \
 	src/utils/SkLayer.cpp \
 	src/utils/SkMatrix22.cpp \
