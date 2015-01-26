@@ -313,7 +313,6 @@ LOCAL_SRC_FILES := \
 	../tools/Resources.cpp \
 	../tools/sk_tool_utils.cpp \
 	../tools/sk_tool_utils_font.cpp \
-	../tools/Checkerboard.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp \
 	../tools/flags/SkCommandLineFlags.cpp
