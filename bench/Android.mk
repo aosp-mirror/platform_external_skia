@@ -61,6 +61,7 @@ LOCAL_SRC_FILES := \
 	ImageCacheBench.cpp \
 	ImageDecodeBench.cpp \
 	ImageFilterDAGBench.cpp \
+	ImageFilterCollapse.cpp \
 	InterpBench.cpp \
 	LightingBench.cpp \
 	LineBench.cpp \
