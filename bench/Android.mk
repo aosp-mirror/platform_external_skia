@@ -74,6 +74,7 @@ LOCAL_SRC_FILES := \
 	MemoryBench.cpp \
 	MemsetBench.cpp \
 	MergeBench.cpp \
+	MipMapBench.cpp \
 	MorphologyBench.cpp \
 	MutexBench.cpp \
 	PatchBench.cpp \
