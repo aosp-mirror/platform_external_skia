@@ -383,6 +383,7 @@ LOCAL_SRC_FILES := \
 	../gm/poly2poly.cpp \
 	../gm/polygons.cpp \
 	../gm/quadpaths.cpp \
+	../gm/recordopts.cpp \
 	../gm/rects.cpp \
 	../gm/resizeimagefilter.cpp \
 	../gm/rrect.cpp \
