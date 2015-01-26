@@ -445,6 +445,7 @@ LOCAL_SRC_FILES := \
 	../tools/timer/TimerData.cpp \
 	../tools/timer/GpuTimer.cpp \
 	../tools/timer/SysTimer_posix.cpp \
+	../tools/Checkerboard.cpp \
 	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
