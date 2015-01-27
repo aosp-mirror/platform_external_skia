@@ -158,7 +158,6 @@ LOCAL_SRC_FILES := \
 	../gm/copyTo4444.cpp \
 	../gm/cubicpaths.cpp \
 	../gm/cmykjpeg.cpp \
-	../gm/dstreadshuffle.cpp \
 	../gm/degeneratesegments.cpp \
 	../gm/dcshader.cpp \
 	../gm/discard.cpp \
