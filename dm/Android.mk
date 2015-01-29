@@ -246,6 +246,7 @@ LOCAL_SRC_FILES := \
 	../tests/TDStackNesterTest.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
+	../gm/addarc.cpp \
 	../gm/alphagradients.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
