@@ -216,6 +216,7 @@
 #define SK_IGNORE_ETC1_SUPPORT
 #define SK_INTERNAL
 #define SK_LEGACY_DRAWPICTURECALLBACK
+#define SK_OVERRIDE override
 #define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
