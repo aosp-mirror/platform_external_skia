@@ -23,6 +23,7 @@ LOCAL_SRC_FILES := \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
+	../experimental/svg/SkSVGDevice.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
@@ -448,6 +449,10 @@ LOCAL_SRC_FILES := \
 	../tools/timer/TimerData.cpp \
 	../tools/timer/GpuTimer.cpp \
 	../tools/timer/SysTimer_posix.cpp \
+	../src/xml/SkBML_XMLParser.cpp \
+	../src/xml/SkDOM.cpp \
+	../src/xml/SkXMLParser.cpp \
+	../src/xml/SkXMLWriter.cpp \
 	../tools/Resources.cpp \
 	../experimental/SkSetPoly3To3.cpp \
 	../experimental/SkSetPoly3To3_A.cpp \
@@ -486,13 +491,15 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/gpu \
+	$(LOCAL_PATH)/../include/xml \
+	$(LOCAL_PATH)/../experimental/svg \
 	$(LOCAL_PATH)/../gm \
-	$(LOCAL_PATH)/../tests \
+	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
 	$(LOCAL_PATH)/../src/lazy \
-	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/pipe/utils \
 	$(LOCAL_PATH)/../src/utils/debugger \
+	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
