@@ -9,13 +9,13 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_CFLAGS += \
 	-fPIC \
-	-Wno-c++11-extensions \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
 	-DSKIA_IMPLEMENTATION=1
 
 LOCAL_CPPFLAGS := \
+	-std=c++11 \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
