@@ -476,7 +476,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrFontCache.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
-	src/gpu/GrXferProcessor.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
 	src/gpu/effects/GrCoverageSetOpXP.cpp \
 	src/gpu/effects/GrCustomXfermode.cpp \
@@ -522,7 +521,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
 	src/gpu/gl/GrGLVertexBuffer.cpp \
-	src/gpu/gl/GrGLXferProcessor.cpp \
 	src/gpu/gl/builders/GrGLProgramBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderBuilder.cpp \
 	src/gpu/gl/builders/GrGLShaderStringBuilder.cpp \
