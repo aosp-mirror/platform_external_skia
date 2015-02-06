@@ -28,6 +28,7 @@ LOCAL_SRC_FILES := \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
 	BezierBench.cpp \
+	BigPathBench.cpp \
 	BitmapBench.cpp \
 	BitmapRectBench.cpp \
 	BitmapScaleBench.cpp \
