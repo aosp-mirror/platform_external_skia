@@ -23,7 +23,6 @@ LOCAL_SRC_FILES := \
 	DMSrcSink.cpp \
 	DMJsonWriter.cpp \
 	../gm/gm.cpp \
-	../experimental/svg/SkSVGDevice.cpp \
 	../src/pipe/utils/SamplePipeControllers.cpp \
 	../src/utils/debugger/SkDebugCanvas.cpp \
 	../src/utils/debugger/SkDrawCommand.cpp \
@@ -441,6 +440,8 @@ LOCAL_SRC_FILES := \
 	../tests/FontConfigParser.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
+	../src/svg/SkSVGCanvas.cpp \
+	../src/svg/SkSVGDevice.cpp \
 	../tools/CrashHandler.cpp \
 	../tools/ProcStats.cpp \
 	../tools/sk_tool_utils.cpp \
@@ -487,12 +488,12 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils \
 	$(LOCAL_PATH)/../include/gpu \
 	$(LOCAL_PATH)/../src/core \
+	$(LOCAL_PATH)/../include/svg \
+	$(LOCAL_PATH)/../include/xml \
 	$(LOCAL_PATH)/../src/fonts \
 	$(LOCAL_PATH)/../tools \
 	$(LOCAL_PATH)/../tools/flags \
 	$(LOCAL_PATH)/../src/gpu \
-	$(LOCAL_PATH)/../include/xml \
-	$(LOCAL_PATH)/../experimental/svg \
 	$(LOCAL_PATH)/../gm \
 	$(LOCAL_PATH)/../src/effects \
 	$(LOCAL_PATH)/../src/images \
