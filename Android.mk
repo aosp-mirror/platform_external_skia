@@ -95,7 +95,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkBuffer.cpp \
 	src/core/SkCachedData.cpp \
 	src/core/SkCanvas.cpp \
-	src/core/SkCanvasDrawable.cpp \
 	src/core/SkChunkAlloc.cpp \
 	src/core/SkClipStack.cpp \
 	src/core/SkColor.cpp \
@@ -117,6 +116,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkDistanceFieldGen.cpp \
 	src/core/SkDither.cpp \
 	src/core/SkDraw.cpp \
+	src/core/SkDrawable.cpp \
 	src/core/SkDrawLooper.cpp \
 	src/core/SkEdgeBuilder.cpp \
 	src/core/SkEdgeClipper.cpp \
