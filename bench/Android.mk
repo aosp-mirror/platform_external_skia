@@ -24,7 +24,6 @@ LOCAL_SRC_FILES := \
 	RecordingBench.cpp \
 	SKPBench.cpp \
 	nanobench.cpp \
-	../tools/LazyDecodeBitmap.cpp \
 	Benchmark.cpp \
 	AAClipBench.cpp \
 	AlternatingColorPatternBench.cpp \
