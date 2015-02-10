@@ -512,6 +512,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../experimental \
 	$(LOCAL_PATH)/../include/pdf
 
+LOCAL_CFLAGS += \
+	-DSK_CRASH_HANDLER
+
 LOCAL_MODULE_TAGS := \
 	tests
 

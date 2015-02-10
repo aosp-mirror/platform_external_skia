@@ -356,6 +356,9 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../tools/timer \
 	$(LOCAL_PATH)/../third_party/etc1
 
+LOCAL_CFLAGS += \
+	-DSK_CRASH_HANDLER
+
 LOCAL_MODULE_TAGS := \
 	tests
 
