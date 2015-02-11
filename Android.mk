@@ -463,7 +463,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRectanizer_skyline.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
-	src/gpu/GrResourceCache2.cpp \
+	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
