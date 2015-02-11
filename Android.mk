@@ -549,7 +549,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/debug/GrProgramObj.cpp \
 	src/gpu/gl/debug/GrDebugGL.cpp \
 	src/gpu/gl/debug/SkDebugGLContext.cpp \
-	src/gpu/gl/GrGLCreateNullInterface.cpp \
 	src/gpu/gl/SkNullGLContext.cpp \
 	third_party/etc1/etc1.cpp \
 	third_party/ktx/ktx.cpp \
