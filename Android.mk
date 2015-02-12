@@ -449,6 +449,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrOvalRenderer.cpp \
 	src/gpu/GrPaint.cpp \
 	src/gpu/GrPath.cpp \
+	src/gpu/GrPathProcessor.cpp \
 	src/gpu/GrPathRange.cpp \
 	src/gpu/GrPathRendererChain.cpp \
 	src/gpu/GrPathRenderer.cpp \
@@ -456,6 +457,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrPathUtils.cpp \
 	src/gpu/GrPipeline.cpp \
 	src/gpu/GrPipelineBuilder.cpp \
+	src/gpu/GrPrimitiveProcessor.cpp \
 	src/gpu/GrProgramElement.cpp \
 	src/gpu/GrProcessor.cpp \
 	src/gpu/GrProcOptInfo.cpp \
@@ -504,6 +506,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLBufferImpl.cpp \
 	src/gpu/gl/GrGLCaps.cpp \
 	src/gpu/gl/GrGLContext.cpp \
+	src/gpu/gl/GrGLGeometryProcessor.cpp \
 	src/gpu/gl/GrGLGpu.cpp \
 	src/gpu/gl/GrGLGpuProgramCache.cpp \
 	src/gpu/gl/GrGLExtensions.cpp \
@@ -512,8 +515,10 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLNameAllocator.cpp \
 	src/gpu/gl/GrGLNoOpInterface.cpp \
 	src/gpu/gl/GrGLPath.cpp \
+	src/gpu/gl/GrGLPathProcessor.cpp \
 	src/gpu/gl/GrGLPathRange.cpp \
 	src/gpu/gl/GrGLPathRendering.cpp \
+	src/gpu/gl/GrGLPrimitiveProcessor.cpp \
 	src/gpu/gl/GrGLProgram.cpp \
 	src/gpu/gl/GrGLProgramDesc.cpp \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
