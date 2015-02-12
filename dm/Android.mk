@@ -143,6 +143,7 @@ LOCAL_SRC_FILES := \
 	../tests/GrTBSearchTest.cpp \
 	../tests/GrTRecorderTest.cpp \
 	../tests/GradientTest.cpp \
+	../tests/HashTest.cpp \
 	../tests/ImageCacheTest.cpp \
 	../tests/ImageDecodingTest.cpp \
 	../tests/ImageFilterTest.cpp \
