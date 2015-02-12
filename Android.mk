@@ -657,9 +657,7 @@ endif
 
 LOCAL_CFLAGS_x86 += \
 	-msse2 \
-	-mfpmath=sse \
-	-m32 \
-	-mssse3
+	-mfpmath=sse
 
 LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
@@ -675,10 +673,6 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBitmapProcState_opts_SSSE3.cpp \
 	src/opts/SkBlurImage_opts_SSE4.cpp \
 	src/opts/SkBlitRow_opts_SSE4.cpp
-
-LOCAL_CFLAGS_x86_64 += \
-	-m64 \
-	-mssse3
 
 LOCAL_SRC_FILES_x86_64 += \
 	src/opts/SkBitmapFilter_opts_SSE2.cpp \
