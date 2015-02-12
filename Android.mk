@@ -677,9 +677,7 @@ LOCAL_SRC_FILES_x86 += \
 	src/opts/SkBlitRow_opts_SSE4.cpp
 
 LOCAL_CFLAGS_x86_64 += \
-	-msse2 \
-	-mfpmath=sse \
-	-m32 \
+	-m64 \
 	-mssse3
 
 LOCAL_SRC_FILES_x86_64 += \
