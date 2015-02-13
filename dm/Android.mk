@@ -100,6 +100,7 @@ LOCAL_SRC_FILES := \
 	../tests/ColorFilterTest.cpp \
 	../tests/ColorPrivTest.cpp \
 	../tests/ColorTest.cpp \
+	../tests/CPlusPlusEleven.cpp \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DeferredCanvasTest.cpp \
