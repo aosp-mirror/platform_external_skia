@@ -22,6 +22,8 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
+	DecodingBench.cpp \
+	DecodingSubsetBench.cpp \
 	GMBench.cpp \
 	RecordingBench.cpp \
 	SKPBench.cpp \
@@ -48,7 +50,6 @@ LOCAL_SRC_FILES := \
 	ColorPrivBench.cpp \
 	CoverageBench.cpp \
 	DashBench.cpp \
-	DecodeBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
 	DisplacementBench.cpp \
 	ETCBitmapBench.cpp \
@@ -63,7 +64,6 @@ LOCAL_SRC_FILES := \
 	GradientBench.cpp \
 	HairlinePathBench.cpp \
 	ImageCacheBench.cpp \
-	ImageDecodeBench.cpp \
 	ImageFilterDAGBench.cpp \
 	ImageFilterCollapse.cpp \
 	InterpBench.cpp \
