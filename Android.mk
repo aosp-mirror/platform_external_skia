@@ -168,7 +168,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureData.cpp \
 	src/core/SkPictureFlat.cpp \
 	src/core/SkPicturePlayback.cpp \
-	src/core/SkPicturePreroll.cpp \
 	src/core/SkPictureRecord.cpp \
 	src/core/SkPictureRecorder.cpp \
 	src/core/SkPictureShader.cpp \
