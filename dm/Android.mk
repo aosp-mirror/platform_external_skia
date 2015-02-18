@@ -104,6 +104,7 @@ LOCAL_SRC_FILES := \
 	../tests/DashPathEffectTest.cpp \
 	../tests/DataRefTest.cpp \
 	../tests/DeferredCanvasTest.cpp \
+	../tests/DeflateWStream.cpp \
 	../tests/DequeTest.cpp \
 	../tests/DeviceLooperTest.cpp \
 	../tests/DiscardableMemoryPoolTest.cpp \
@@ -393,6 +394,7 @@ LOCAL_SRC_FILES := \
 	../gm/quadpaths.cpp \
 	../gm/recordopts.cpp \
 	../gm/rects.cpp \
+	../gm/repeated_bitmap.cpp \
 	../gm/resizeimagefilter.cpp \
 	../gm/rrect.cpp \
 	../gm/rrects.cpp \

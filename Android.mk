@@ -339,6 +339,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkScaledBitmapSampler.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
 	src/doc/SkDocument_PDF.cpp \
+	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
 	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
@@ -354,6 +355,7 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
+	src/pdf/SkDeflateWStream.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
