@@ -339,6 +339,7 @@ LOCAL_SRC_FILES := \
 	src/images/SkScaledBitmapSampler.cpp \
 	src/ports/SkImageGenerator_skia.cpp \
 	src/doc/SkDocument_PDF.cpp \
+	src/pdf/SkDeflateWStream.cpp \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
 	src/pdf/SkPDFCatalog.cpp \
@@ -355,7 +356,6 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFStream.cpp \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
-	src/pdf/SkDeflateWStream.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
@@ -610,7 +610,6 @@ LOCAL_C_INCLUDES := \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
-	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/src/pdf \
 	external/sfntly/cpp/src \
 	external/zlib
@@ -623,7 +622,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/pipe \
 	$(LOCAL_PATH)/include/effects \
 	$(LOCAL_PATH)/include/images \
-	$(LOCAL_PATH)/include/pdf \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/src/utils

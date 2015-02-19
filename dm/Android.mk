@@ -516,8 +516,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
-	$(LOCAL_PATH)/../experimental \
-	$(LOCAL_PATH)/../include/pdf
+	$(LOCAL_PATH)/../experimental
 
 LOCAL_CFLAGS += \
 	-DSK_CRASH_HANDLER
