@@ -229,6 +229,7 @@ LOCAL_SRC_FILES := \
 	../tests/StrokeTest.cpp \
 	../tests/StrokerTest.cpp \
 	../tests/SurfaceTest.cpp \
+	../tests/SVGDeviceTest.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/TDPQueueTest.cpp \
 	../tests/Time.cpp \
