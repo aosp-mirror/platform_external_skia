@@ -81,6 +81,7 @@ LOCAL_SRC_FILES := \
 	MipMapBench.cpp \
 	MorphologyBench.cpp \
 	MutexBench.cpp \
+	PMFloatBench.cpp \
 	PatchBench.cpp \
 	PatchGridBench.cpp \
 	PathBench.cpp \
