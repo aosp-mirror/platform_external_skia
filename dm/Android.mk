@@ -251,6 +251,7 @@ LOCAL_SRC_FILES := \
 	../tests/YUVCacheTest.cpp \
 	../tests/PipeTest.cpp \
 	../tests/TDStackNesterTest.cpp \
+	DMSrcSinkAndroid.cpp \
 	../gm/aaclip.cpp \
 	../gm/aarectmodes.cpp \
 	../gm/addarc.cpp \
@@ -476,6 +477,10 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libskia \
+	libandroid \
+	libgui \
+	libhwui \
+	libutils \
 	libdl \
 	libGLESv2 \
 	libEGL \
@@ -516,6 +521,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
 	$(LOCAL_PATH)/../experimental/PdfViewer/src \
+	$(LOCAL_PATH)/../../../frameworks/base/libs/hwui \
+	$(LOCAL_PATH)/../../../frameworks/native/include \
 	$(LOCAL_PATH)/../src/ports \
 	$(LOCAL_PATH)/../third_party/etc1 \
 	$(LOCAL_PATH)/../tools/timer \
