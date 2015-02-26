@@ -232,6 +232,7 @@ LOCAL_SRC_FILES := \
 	../tests/StrokerTest.cpp \
 	../tests/SurfaceTest.cpp \
 	../tests/SVGDeviceTest.cpp \
+	../tests/TessellatingPathRendererTests.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/TDPQueueTest.cpp \
 	../tests/Time.cpp \
@@ -293,6 +294,7 @@ LOCAL_SRC_FILES := \
 	../gm/colortype.cpp \
 	../gm/colortypexfermode.cpp \
 	../gm/colorwheel.cpp \
+	../gm/concavepaths.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \

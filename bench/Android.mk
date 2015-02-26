@@ -153,6 +153,7 @@ LOCAL_SRC_FILES := \
 	../gm/colortype.cpp \
 	../gm/colortypexfermode.cpp \
 	../gm/colorwheel.cpp \
+	../gm/concavepaths.cpp \
 	../gm/complexclip.cpp \
 	../gm/complexclip2.cpp \
 	../gm/complexclip3.cpp \
