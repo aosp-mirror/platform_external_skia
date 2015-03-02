@@ -354,9 +354,6 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
-	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libpng.cpp \
-	src/codec/SkSwizzler.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
@@ -607,8 +604,6 @@ LOCAL_C_INCLUDES := \
 	external/webp/include \
 	external/giflib \
 	external/libpng \
-	$(LOCAL_PATH)/include/codec \
-	$(LOCAL_PATH)/src/codec \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
