@@ -473,6 +473,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilBuffer.cpp \
+	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTessellatingPathRenderer.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
