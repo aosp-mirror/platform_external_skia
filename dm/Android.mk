@@ -453,6 +453,7 @@ LOCAL_SRC_FILES := \
 	../gm/yuvtorgbeffect.cpp \
 	../tests/FontConfigParser.cpp \
 	../tools/AndroidSkDebugToStdOut.cpp \
+	../src/doc/SkDocument_XPS_None.cpp \
 	../tools/flags/SkCommandLineFlags.cpp \
 	../src/svg/SkSVGCanvas.cpp \
 	../src/svg/SkSVGDevice.cpp \
