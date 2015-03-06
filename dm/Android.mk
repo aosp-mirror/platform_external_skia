@@ -316,6 +316,7 @@ LOCAL_SRC_FILES := \
 	../gm/dftext.cpp \
 	../gm/displacement.cpp \
 	../gm/downsamplebitmap.cpp \
+	../gm/drawfilter.cpp \
 	../gm/drawlooper.cpp \
 	../gm/dropshadowimagefilter.cpp \
 	../gm/drrect.cpp \
