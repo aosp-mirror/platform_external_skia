@@ -568,6 +568,7 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libGLESv2 \
 	libEGL \
+	libz \
 	libjpeg \
 	libpng \
 	libicuuc \
@@ -613,7 +614,8 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/utils/win \
 	$(LOCAL_PATH)/src/ports \
 	$(LOCAL_PATH)/src/pdf \
-	external/sfntly/cpp/src
+	external/sfntly/cpp/src \
+	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	$(LOCAL_PATH)/include/c \
