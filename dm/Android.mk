@@ -488,8 +488,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libdl \
 	libGLESv2 \
-	libEGL \
-	libz
+	libEGL
 
 LOCAL_STATIC_LIBRARIES := \
 	libjsoncpp
