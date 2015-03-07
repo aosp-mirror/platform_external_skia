@@ -154,6 +154,7 @@ LOCAL_SRC_FILES := \
 	../tests/ImageNewShaderTest.cpp \
 	../tests/InfRectTest.cpp \
 	../tests/InterpolatorTest.cpp \
+	../tests/InvalidIndexedPngTest.cpp \
 	../tests/JpegTest.cpp \
 	../tests/KtxTest.cpp \
 	../tests/LListTest.cpp \
