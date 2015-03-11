@@ -173,7 +173,6 @@ LOCAL_SRC_FILES := \
 	src/core/SkPictureShader.cpp \
 	src/core/SkPixelRef.cpp \
 	src/core/SkPoint.cpp \
-	src/core/SkProcSpriteBlitter.cpp \
 	src/core/SkPtrRecorder.cpp \
 	src/core/SkQuadClipper.cpp \
 	src/core/SkRasterClip.cpp \
