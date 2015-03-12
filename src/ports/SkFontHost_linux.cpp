@@ -5,7 +5,6 @@
  * found in the LICENSE file.
  */
 
-#include "SkFontHost.h"
 #include "SkFontHost_FreeType_common.h"
 #include "SkFontDescriptor.h"
 #include "SkFontMgr.h"
@@ -73,7 +72,7 @@ public:
     const char* getUniqueString() const SK_OVERRIDE { return NULL; }
 
 protected:
-    SkStream* onOpenStream(int*) const SK_OVERRIDE { return NULL; }
+    SkStreamAsset* onOpenStream(int*) const SK_OVERRIDE { return NULL; }
 
 private:
     typedef SkTypeface_Custom INHERITED;
@@ -83,21 +82,21 @@ private:
 class SkTypeface_Stream : public SkTypeface_Custom {
 public:
     SkTypeface_Stream(const SkFontStyle& style, bool isFixedPitch, bool sysFont,
-                      const SkString familyName, SkStream* stream, int index)
+                      const SkString familyName, SkStreamAsset* stream, int index)
         : INHERITED(style, isFixedPitch, sysFont, familyName, index)
-        , fStream(SkRef(stream))
+        , fStream(stream)
     { }
 
     const char* getUniqueString() const SK_OVERRIDE { return NULL; }
 
 protected:
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
         *ttcIndex = this->getIndex();
         return fStream->duplicate();
     }
 
 private:
-    const SkAutoTUnref<const SkStream> fStream;
+    const SkAutoTDelete<const SkStreamAsset> fStream;
 
     typedef SkTypeface_Custom INHERITED;
 };
@@ -128,7 +127,7 @@ public:
     }
 
 protected:
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
         *ttcIndex = this->getIndex();
         if (fStream.get()) {
             return fStream->duplicate();
@@ -139,7 +138,7 @@ protected:
 
 private:
     SkString fPath;
-    const SkAutoTUnref<SkStreamAsset> fStream;
+    const SkAutoTDelete<SkStreamAsset> fStream;
 
     typedef SkTypeface_Custom INHERITED;
 };
@@ -283,13 +282,12 @@ protected:
     }
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
-        SkAutoTUnref<SkStream> stream(new SkMemoryStream(data));
-        return this->createFromStream(stream, ttcIndex);
+        return this->createFromStream(new SkMemoryStream(data), ttcIndex);
     }
 
-    SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const SK_OVERRIDE {
+        SkAutoTDelete<SkStreamAsset> stream(bareStream);
         if (NULL == stream || stream->getLength() <= 0) {
-            SkDELETE(stream);
             return NULL;
         }
 
@@ -298,15 +296,15 @@ protected:
         SkString name;
         if (fScanner.scanFont(stream, ttcIndex, &name, &style, &isFixedPitch)) {
             return SkNEW_ARGS(SkTypeface_Stream, (style, isFixedPitch, false, name,
-                                                  stream, ttcIndex));
+                                                  stream.detach(), ttcIndex));
         } else {
             return NULL;
         }
     }
 
     SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
-        SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
-        return stream.get() ? this->createFromStream(stream, ttcIndex) : NULL;
+        SkAutoTDelete<SkStreamAsset> stream(SkStream::NewFromFile(path));
+        return stream.get() ? this->createFromStream(stream.detach(), ttcIndex) : NULL;
     }
 
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],
@@ -341,7 +339,7 @@ private:
 
         while (iter.next(&name, false)) {
             SkString filename(SkOSPath::Join(directory.c_str(), name.c_str()));
-            SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(filename.c_str()));
+            SkAutoTDelete<SkStream> stream(SkStream::NewFromFile(filename.c_str()));
             if (!stream.get()) {
                 SkDebugf("---- failed to open <%s>\n", filename.c_str());
                 continue;

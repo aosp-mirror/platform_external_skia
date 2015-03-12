@@ -270,6 +270,26 @@ public:
         }
     }
 
+    /** Swaps the contents of this array with that array. Does a pointer swap if possible,
+        otherwise copies the T values. */
+    void swap(SkTArray* that) {
+        if (this == that) {
+            return;
+        }
+        if (this->fPreAllocMemArray != this->fItemArray &&
+            that->fPreAllocMemArray != that->fItemArray) {
+            // If neither is using a preallocated array then just swap.
+            SkTSwap(fItemArray, that->fItemArray);
+            SkTSwap(fCount, that->fCount);
+            SkTSwap(fAllocCount, that->fAllocCount);
+        } else {
+            // This could be more optimal...
+            SkTArray copy(*that);
+            *that = *this;
+            *this = copy;
+        }
+    }
+
     T* begin() {
         return fItemArray;
     }
@@ -375,7 +395,7 @@ protected:
     }
 
     void init(const T* array, int count,
-               void* preAllocStorage, int preAllocOrReserveCount) {
+              void* preAllocStorage, int preAllocOrReserveCount) {
         SkASSERT(count >= 0);
         SkASSERT(preAllocOrReserveCount >= 0);
         fCount              = count;
@@ -452,10 +472,10 @@ private:
     template<typename X> friend void SkTArrayExt::copy(SkTArray<X, false>* that, const X*);
     template<typename X> friend void SkTArrayExt::copyAndDelete(SkTArray<X, false>* that, char*);
 
-    int fReserveCount;
-    int fCount;
-    int fAllocCount;
-    void*    fPreAllocMemArray;
+    int     fReserveCount;
+    int     fCount;
+    int     fAllocCount;
+    void*   fPreAllocMemArray;
     union {
         T*       fItemArray;
         void*    fMemArray;

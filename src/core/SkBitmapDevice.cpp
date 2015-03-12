@@ -25,7 +25,7 @@ static bool valid_for_bitmap_device(const SkImageInfo& info,
     // TODO: can we stop supporting kUnknown in SkBitmkapDevice?
     if (kUnknown_SkColorType == info.colorType()) {
         if (newAlphaType) {
-            *newAlphaType = kIgnore_SkAlphaType;
+            *newAlphaType = kUnknown_SkAlphaType;
         }
         return true;
     }
@@ -327,13 +327,6 @@ void SkBitmapDevice::drawPosText(const SkDraw& draw, const void* text, size_t le
                                  const SkScalar xpos[], int scalarsPerPos,
                                  const SkPoint& offset, const SkPaint& paint) {
     draw.drawPosText((const char*)text, len, xpos, scalarsPerPos, offset, paint);
-}
-
-void SkBitmapDevice::drawTextOnPath(const SkDraw& draw, const void* text,
-                                    size_t len, const SkPath& path,
-                                    const SkMatrix* matrix,
-                                    const SkPaint& paint) {
-    draw.drawTextOnPath((const char*)text, len, path, matrix, paint);
 }
 
 void SkBitmapDevice::drawVertices(const SkDraw& draw, SkCanvas::VertexMode vmode,

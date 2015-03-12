@@ -156,6 +156,8 @@ GrGLFragmentProcessor* GrConfigConversionEffect::createGLInstance() const {
     return SkNEW_ARGS(GrGLConfigConversionEffect, (*this));
 }
 
+
+
 void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context,
                                                               PMConversion* pmToUPMRule,
                                                               PMConversion* upmToPMRule) {
@@ -179,22 +181,21 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
     }
 
     GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag |
-                  kNoStencil_GrSurfaceFlag;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = 256;
     desc.fHeight = 256;
     desc.fConfig = kRGBA_8888_GrPixelConfig;
 
-    SkAutoTUnref<GrTexture> readTex(context->createUncachedTexture(desc, NULL, 0));
+    SkAutoTUnref<GrTexture> readTex(context->createTexture(desc, true, NULL, 0));
     if (!readTex.get()) {
         return;
     }
-    SkAutoTUnref<GrTexture> tempTex(context->createUncachedTexture(desc, NULL, 0));
+    SkAutoTUnref<GrTexture> tempTex(context->createTexture(desc, true, NULL, 0));
     if (!tempTex.get()) {
         return;
     }
     desc.fFlags = kNone_GrSurfaceFlags;
-    SkAutoTUnref<GrTexture> dataTex(context->createUncachedTexture(desc, data, 0));
+    SkAutoTUnref<GrTexture> dataTex(context->createTexture(desc, true, data, 0));
     if (!dataTex.get()) {
         return;
     }
@@ -203,8 +204,6 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
         {kDivByAlpha_RoundDown_PMConversion, kMulByAlpha_RoundUp_PMConversion},
         {kDivByAlpha_RoundUp_PMConversion, kMulByAlpha_RoundDown_PMConversion},
     };
-
-    GrContext::AutoWideOpenIdentityDraw awoid(context, NULL);
 
     bool failed = true;
 
@@ -228,22 +227,34 @@ void GrConfigConversionEffect::TestForPreservingPMConversions(GrContext* context
                 SkNEW_ARGS(GrConfigConversionEffect,
                            (tempTex, false, *pmToUPMRule, SkMatrix::I())));
 
-        context->setRenderTarget(readTex->asRenderTarget());
         GrPaint paint1;
         paint1.addColorProcessor(pmToUPM1);
-        context->drawNonAARectToRect(paint1, SkMatrix::I(), kDstRect, kSrcRect);
+        context->drawNonAARectToRect(readTex->asRenderTarget(),
+                                     GrClip::WideOpen(),
+                                     paint1,
+                                     SkMatrix::I(),
+                                     kDstRect,
+                                     kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, firstRead);
 
-        context->setRenderTarget(tempTex->asRenderTarget());
         GrPaint paint2;
         paint2.addColorProcessor(upmToPM);
-        context->drawNonAARectToRect(paint2, SkMatrix::I(), kDstRect, kSrcRect);
-        context->setRenderTarget(readTex->asRenderTarget());
+        context->drawNonAARectToRect(tempTex->asRenderTarget(),
+                                     GrClip::WideOpen(),
+                                     paint2,
+                                     SkMatrix::I(),
+                                     kDstRect,
+                                     kSrcRect);
 
         GrPaint paint3;
         paint3.addColorProcessor(pmToUPM2);
-        context->drawNonAARectToRect(paint3, SkMatrix::I(), kDstRect, kSrcRect);
+        context->drawNonAARectToRect(readTex->asRenderTarget(),
+                                     GrClip::WideOpen(),
+                                     paint3,
+                                     SkMatrix::I(),
+                                     kDstRect,
+                                     kSrcRect);
 
         readTex->readPixels(0, 0, 256, 256, kRGBA_8888_GrPixelConfig, secondRead);
 

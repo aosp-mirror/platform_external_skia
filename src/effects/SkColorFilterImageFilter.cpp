@@ -12,70 +12,26 @@
 #include "SkDevice.h"
 #include "SkColorFilter.h"
 #include "SkReadBuffer.h"
+#include "SkTableColorFilter.h"
 #include "SkWriteBuffer.h"
-
-namespace {
-
-void mult_color_matrix(SkScalar a[20], SkScalar b[20], SkScalar out[20]) {
-    for (int j = 0; j < 4; ++j) {
-        for (int i = 0; i < 5; ++i) {
-            out[i+j*5] = 4 == i ? a[4+j*5] : 0;
-            for (int k = 0; k < 4; ++k)
-                out[i+j*5] += SkScalarMul(a[k+j*5], b[i+k*5]);
-        }
-    }
-}
-
-// To detect if we need to apply clamping after applying a matrix, we check if
-// any output component might go outside of [0, 255] for any combination of
-// input components in [0..255].
-// Each output component is an affine transformation of the input component, so
-// the minimum and maximum values are for any combination of minimum or maximum
-// values of input components (i.e. 0 or 255).
-// E.g. if R' = x*R + y*G + z*B + w*A + t
-// Then the maximum value will be for R=255 if x>0 or R=0 if x<0, and the
-// minimum value will be for R=0 if x>0 or R=255 if x<0.
-// Same goes for all components.
-bool component_needs_clamping(SkScalar row[5]) {
-    SkScalar maxValue = row[4] / 255;
-    SkScalar minValue = row[4] / 255;
-    for (int i = 0; i < 4; ++i) {
-        if (row[i] > 0)
-            maxValue += row[i];
-        else
-            minValue += row[i];
-    }
-    return (maxValue > 1) || (minValue < 0);
-}
-
-bool matrix_needs_clamping(SkScalar matrix[20]) {
-    return component_needs_clamping(matrix)
-        || component_needs_clamping(matrix+5)
-        || component_needs_clamping(matrix+10)
-        || component_needs_clamping(matrix+15);
-}
-
-};
 
 SkColorFilterImageFilter* SkColorFilterImageFilter::Create(SkColorFilter* cf,
         SkImageFilter* input, const CropRect* cropRect, uint32_t uniqueID) {
-    SkASSERT(cf);
     if (NULL == cf) {
         return NULL;
     }
-    SkScalar colorMatrix[20], inputMatrix[20];
-    SkColorFilter* inputColorFilter;
-    if (input && cf->asColorMatrix(colorMatrix)
-              && input->asColorFilter(&inputColorFilter)
-              && (inputColorFilter)) {
-        SkAutoUnref autoUnref(inputColorFilter);
-        if (inputColorFilter->asColorMatrix(inputMatrix) && !matrix_needs_clamping(inputMatrix)) {
-            SkScalar combinedMatrix[20];
-            mult_color_matrix(colorMatrix, inputMatrix, combinedMatrix);
-            SkAutoTUnref<SkColorFilter> newCF(SkColorMatrixFilter::Create(combinedMatrix));
+
+    SkColorFilter* inputCF;
+    if (input && input->isColorFilterNode(&inputCF)) {
+        // This is an optimization, as it collapses the hierarchy by just combining the two
+        // colorfilters into a single one, which the new imagefilter will wrap.
+        SkAutoUnref autoUnref(inputCF);
+        SkAutoTUnref<SkColorFilter> newCF(SkColorFilter::CreateComposeFilter(cf, inputCF));
+        if (newCF) {
             return SkNEW_ARGS(SkColorFilterImageFilter, (newCF, input->getInput(0), cropRect, 0));
         }
     }
+
     return SkNEW_ARGS(SkColorFilterImageFilter, (cf, input, cropRect, uniqueID));
 }
 
@@ -131,11 +87,11 @@ bool SkColorFilterImageFilter::onFilterImage(Proxy* proxy, const SkBitmap& sourc
     return true;
 }
 
-bool SkColorFilterImageFilter::asColorFilter(SkColorFilter** filter) const {
-    if (!cropRectIsSet()) {
+bool SkColorFilterImageFilter::onIsColorFilterNode(SkColorFilter** filter) const {
+    SkASSERT(1 == this->countInputs());
+    if (!this->cropRectIsSet()) {
         if (filter) {
-            *filter = fColorFilter;
-            fColorFilter->ref();
+            *filter = SkRef(fColorFilter);
         }
         return true;
     }

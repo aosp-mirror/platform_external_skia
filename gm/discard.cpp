@@ -25,8 +25,6 @@ public:
     DiscardGM() {
     }
 
-    uint32_t onGetFlags() const SK_OVERRIDE { return kGPUOnly_Flag; }
-
 protected:
     SkString onShortName() SK_OVERRIDE {
         return SkString("discard");
@@ -46,7 +44,7 @@ protected:
         size.fWidth /= 10;
         size.fHeight /= 10;
         SkImageInfo info = SkImageInfo::MakeN32Premul(size);
-        SkSurface* surface = SkSurface::NewRenderTarget(context, info);
+        SkSurface* surface = SkSurface::NewRenderTarget(context, SkSurface::kNo_Budgeted, info);
 
         if (NULL == surface) {
             return;

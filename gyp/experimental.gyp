@@ -20,61 +20,6 @@
       },
     },
     {
-      'target_name': 'SkiaExamples',
-      'type': 'executable',
-      'mac_bundle' : 1,
-      'sources': [
-        '../experimental/SkiaExamples/SkExample.h',
-        '../experimental/SkiaExamples/SkExample.cpp',
-        '../experimental/SkiaExamples/HelloSkiaExample.cpp',
-      ],
-      'dependencies': [
-        'flags.gyp:flags',
-        'skia_lib.gyp:skia_lib',
-        'views.gyp:views',
-      ],
-      'conditions' : [
-        [ 'skia_gpu == 1', {
-          'include_dirs' : [
-            '../src/gpu',
-          ],
-        }],
-        [ 'skia_os == "win"', {
-          'sources' : [
-            '../src/views/win/SkOSWindow_Win.cpp',
-            '../src/views/win/skia_win.cpp',
-          ],
-        }],
-        [ 'skia_os == "mac"', {
-          'sources': [
-            '../experimental/SkiaExamples/SkiaExamples-Info.plist',
-            '../experimental/SkiaExamples/SkExampleNSView.h',
-            '../experimental/SkiaExamples/SkExampleNSView.mm',
-            '../src/views/mac/SampleAppDelegate.h',
-            '../src/views/mac/SampleAppDelegate.mm',
-            '../src/views/mac/SkEventNotifier.mm',
-            '../src/views/mac/skia_mac.mm',
-            '../src/views/mac/SkNSView.h',
-            '../src/views/mac/SkNSView.mm',
-            '../src/views/mac/SkOptionsTableView.h',
-            '../src/views/mac/SkOptionsTableView.mm',
-            '../src/views/mac/SkOSWindow_Mac.mm',
-            '../src/views/mac/SkTextFieldCell.h',
-            '../src/views/mac/SkTextFieldCell.m',
-          ],
-          'include_dirs' : [
-            '../src/views/mac/'
-          ],
-          'xcode_settings' : {
-            'INFOPLIST_FILE' : '../experimental/SkiaExamples/SkiaExamples-Info.plist',
-          },
-          'mac_bundle_resources' : [
-            '../experimental/SkiaExamples/SkiaExamples.xib'
-          ],
-        }],
-      ],
-    },
-    {
       'target_name': 'multipage_pdf_profiler',
       'type': 'executable',
       'sources': [
@@ -93,6 +38,7 @@
       'type': 'executable',
       'sources': [
         '../experimental/tools/skp_to_pdf_md5.cpp',
+        '../experimental/tools/SkDmuxWStream.cpp',
       ],
       'include_dirs': [
         '../src/core',
@@ -103,28 +49,6 @@
         'skia_lib.gyp:skia_lib',
         'tools.gyp:sk_tool_utils',
       ],
-    },
-    {
-      'target_name': 'gmtoskp',
-      'type': 'executable',
-      'sources': [
-        '../experimental/tools/gmtoskp.cpp',
-        '../gm/gm.cpp',
-      ],
-      'include_dirs': [
-        '../tools',
-        '../src/effects',
-        '../src/core',
-        '../src/gpu',
-        '../third_party/etc1',
-      ],
-      'dependencies': [
-        'skia_lib.gyp:skia_lib',
-        'tools.gyp:resources',
-        'tools.gyp:sk_tool_utils',
-        'gputest.gyp:skgputest',
-      ],
-      'includes': [ 'gmslides.gypi', ],
     },
   ],
 }

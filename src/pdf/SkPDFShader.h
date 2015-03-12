@@ -10,14 +10,14 @@
 #ifndef SkPDFShader_DEFINED
 #define SkPDFShader_DEFINED
 
+#include "SkPDFResourceDict.h"
 #include "SkPDFStream.h"
 #include "SkPDFTypes.h"
-#include "SkMatrix.h"
-#include "SkRefCnt.h"
-#include "SkShader.h"
 
-class SkObjRef;
-class SkPDFCatalog;
+class SkPDFCanon;
+class SkMatrix;
+class SkShader;
+struct SkIRect;
 
 /** \class SkPDFShader
 
@@ -27,47 +27,78 @@ class SkPDFCatalog;
 
 class SkPDFShader {
 public:
+    class State;
+
     /** Get the PDF shader for the passed SkShader. If the SkShader is
      *  invalid in some way, returns NULL. The reference count of
      *  the object is incremented and it is the caller's responsibility to
      *  unreference it when done.  This is needed to accommodate the weak
      *  reference pattern used when the returned object is new and has no
      *  other references.
-     *  @param shader     The SkShader to emulate.
-     *  @param matrix     The current transform. (PDF shaders are absolutely
-     *                    positioned, relative to where the page is drawn.)
-     *  @param surfceBBox The bounding box of the drawing surface (with matrix
-     *                    already applied).
+     *  @param shader      The SkShader to emulate.
+     *  @param matrix      The current transform. (PDF shaders are absolutely
+     *                     positioned, relative to where the page is drawn.)
+     *  @param surfceBBox  The bounding box of the drawing surface (with matrix
+     *                     already applied).
+     *  @param rasterScale Additional scale to be applied for early
+     *                     rasterization.
      */
-    static SkPDFObject* GetPDFShader(const SkShader& shader,
+    static SkPDFObject* GetPDFShader(SkPDFCanon* canon,
+                                     SkScalar dpi,
+                                     const SkShader& shader,
                                      const SkMatrix& matrix,
-                                     const SkIRect& surfaceBBox);
+                                     const SkIRect& surfaceBBox,
+                                     SkScalar rasterScale);
+};
 
-protected:
-    class State;
+class SkPDFFunctionShader : public SkPDFDict {
+    SK_DECLARE_INST_COUNT(SkPDFFunctionShader);
 
-    class ShaderCanonicalEntry {
-    public:
-        ShaderCanonicalEntry(SkPDFObject* pdfShader, const State* state);
-        bool operator==(const ShaderCanonicalEntry& b) const;
+public:
+    static SkPDFFunctionShader* Create(SkPDFCanon*,
+                                       SkAutoTDelete<SkPDFShader::State>*);
+    virtual ~SkPDFFunctionShader();
+    bool equals(const SkPDFShader::State&) const;
 
-        SkPDFObject* fPDFShader;
-        const State* fState;
-    };
-    // This should be made a hash table if performance is a problem.
-    static SkTDArray<ShaderCanonicalEntry>& CanonicalShaders();
-    static SkBaseMutex& CanonicalShadersMutex();
+private:
+    SkAutoTDelete<const SkPDFShader::State> fShaderState;
+    SkTDArray<SkPDFObject*> fResources;
+    SkPDFFunctionShader(SkPDFShader::State*);
+    typedef SkPDFDict INHERITED;
+};
 
-    // This is an internal method.
-    // CanonicalShadersMutex() should already be acquired.
-    // This also takes ownership of shaderState.
-    static SkPDFObject* GetPDFShaderByState(State* shaderState);
-    static void RemoveShader(SkPDFObject* shader);
+/**
+ * A shader for PDF gradients. This encapsulates the function shader
+ * inside a tiling pattern while providing a common pattern interface.
+ * The encapsulation allows the use of a SMask for transparency gradients.
+ */
+class SkPDFAlphaFunctionShader : public SkPDFStream {
+public:
+    static SkPDFAlphaFunctionShader* Create(SkPDFCanon*,
+                                            SkScalar dpi,
+                                            SkAutoTDelete<SkPDFShader::State>*);
+    virtual ~SkPDFAlphaFunctionShader();
+    bool equals(const SkPDFShader::State&) const;
 
-    SkPDFShader();
-    virtual ~SkPDFShader() {};
+private:
+    SkAutoTDelete<const SkPDFShader::State> fShaderState;
+    SkAutoTUnref<SkPDFObject> fColorShader;
+    SkAutoTUnref<SkPDFResourceDict> fResourceDict;
+    SkPDFAlphaFunctionShader(SkPDFShader::State*);
+};
 
-    virtual bool isValid() = 0;
+class SkPDFImageShader : public SkPDFStream {
+public:
+    static SkPDFImageShader* Create(SkPDFCanon*,
+                                    SkScalar dpi,
+                                    SkAutoTDelete<SkPDFShader::State>*);
+    virtual ~SkPDFImageShader();
+    bool equals(const SkPDFShader::State&) const;
+
+private:
+    SkAutoTDelete<const SkPDFShader::State> fShaderState;
+    SkTSet<SkPDFObject*> fResources;
+    SkPDFImageShader(SkPDFShader::State*);
 };
 
 #endif

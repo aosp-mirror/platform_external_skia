@@ -182,8 +182,8 @@ SkPixelRef* SkBitmap::setPixelRef(SkPixelRef* pr, int dx, int dy) {
             SkASSERT(fInfo.height() <= prInfo.height());
             SkASSERT(fInfo.colorType() == prInfo.colorType());
             switch (prInfo.alphaType()) {
-                case kIgnore_SkAlphaType:
-                    SkASSERT(fInfo.alphaType() == kIgnore_SkAlphaType);
+                case kUnknown_SkAlphaType:
+                    SkASSERT(fInfo.alphaType() == kUnknown_SkAlphaType);
                     break;
                 case kOpaque_SkAlphaType:
                 case kPremul_SkAlphaType:
@@ -1232,6 +1232,9 @@ bool SkBitmap::ReadRawPixels(SkReadBuffer* buffer, SkBitmap* bitmap) {
 
     SkAutoTUnref<SkPixelRef> pr(SkMallocPixelRef::NewWithData(info, info.minRowBytes(),
                                                               ctable.get(), data.get()));
+    if (!pr.get()) {
+        return false;
+    }
     bitmap->setInfo(pr->info());
     bitmap->setPixelRef(pr, 0, 0);
     return true;

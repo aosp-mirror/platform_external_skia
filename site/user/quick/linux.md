@@ -33,8 +33,6 @@ Make sure the following have been installed:
   * mesa-common-dev
   * GL
     * such as freeglut3-dev
-  * Poppler PDF rendering library C++ development files
-    * suggested Ubuntu package: libpoppler-cpp-dev
 
 Check out the source code
 -------------------------
@@ -56,6 +54,11 @@ Or, you can just rely on it being run automatically by using `make` instead of
 `ninja` in examples shown below.
 
 If you want to use Eclipse, see Creating an Eclipse Project after you have generated the makefiles.
+
+On 32-bit Linux (when `uname -m` is *not* `x86_64`), you will have to
+explicitly specify the architecture:
+
+    GYP_DEFINES='skia_arch_width=32' ./gyp_skia
 
 Build and run tests from the command line
 -----------------------------------------

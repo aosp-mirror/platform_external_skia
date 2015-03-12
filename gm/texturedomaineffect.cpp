@@ -41,11 +41,6 @@ protected:
         return SkISize::Make(SkScalarCeilToInt(canvasWidth), 800);
     }
 
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        // This is a GPU-specific GM.
-        return kGPUOnly_Flag;
-    }
-
     void onOnceBeforeDraw() SK_OVERRIDE {
         fBmp.allocN32Pixels(kTargetWidth, kTargetHeight);
         SkCanvas canvas(fBmp);
@@ -80,6 +75,7 @@ protected:
         }
         GrContext* context = rt->getContext();
         if (NULL == context) {
+            this->drawGpuOnlyMessage(canvas);
             return;
         }
 
@@ -130,11 +126,14 @@ protected:
                     }
                     SkMatrix viewMatrix;
                     viewMatrix.setTranslate(x, y);
-                    GrDrawState drawState;
-                    drawState.setRenderTarget(rt);
-                    drawState.addColorProcessor(fp);
+                    GrPipelineBuilder pipelineBuilder;
+                    pipelineBuilder.setRenderTarget(rt);
+                    pipelineBuilder.addColorProcessor(fp);
 
-                    tt.target()->drawSimpleRect(&drawState, GrColor_WHITE, viewMatrix, renderRect);
+                    tt.target()->drawSimpleRect(&pipelineBuilder,
+                                                GrColor_WHITE,
+                                                viewMatrix,
+                                                renderRect);
                     x += renderRect.width() + kTestPad;
                 }
                 y += renderRect.height() + kTestPad;

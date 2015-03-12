@@ -64,7 +64,7 @@ public:
         return NULL;
     }
 
-    SkImage* onNewImageSnapshot() SK_OVERRIDE {
+    SkImage* onNewImageSnapshot(Budgeted) SK_OVERRIDE {
         return SkNewImageFromBitmap(fBitmap, true, &this->props());
     }
 
@@ -698,7 +698,8 @@ static void TestDeferredCanvasSurface(skiatest::Reporter* reporter, GrContextFac
                 return;
             }
 
-            surface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
+            surface =
+                SkSurface::NewRenderTarget(context, SkSurface::kNo_Budgeted, imageSpec, 0, NULL);
         } else
 #endif
         {
@@ -780,8 +781,10 @@ static void TestDeferredCanvasSetSurface(skiatest::Reporter* reporter, GrContext
             if (NULL == context) {
                 continue;
             }
-            surface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
-            alternateSurface = SkSurface::NewRenderTarget(context, imageSpec, 0, NULL);
+            surface =
+                SkSurface::NewRenderTarget(context, SkSurface::kNo_Budgeted, imageSpec, 0, NULL);
+            alternateSurface =
+                SkSurface::NewRenderTarget(context, SkSurface::kNo_Budgeted, imageSpec, 0, NULL);
         } else
 #endif
         {

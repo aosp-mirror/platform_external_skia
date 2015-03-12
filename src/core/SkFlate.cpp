@@ -11,36 +11,34 @@
 #include "SkFlate.h"
 #include "SkStream.h"
 
-#ifndef SK_HAS_ZLIB
-bool SkFlate::HaveFlate() { return false; }
-bool SkFlate::Deflate(SkStream*, SkWStream*) { return false; }
-bool SkFlate::Deflate(const void*, size_t, SkWStream*) { return false; }
-bool SkFlate::Deflate(const SkData*, SkWStream*) { return false; }
-bool SkFlate::Inflate(SkStream*, SkWStream*) { return false; }
-#else
-
-// static
-bool SkFlate::HaveFlate() {
-    return true;
-}
+#ifndef SK_NO_FLATE
 
 namespace {
 
-#ifdef SK_SYSTEM_ZLIB
-#include <zlib.h>
+#ifdef ZLIB_INCLUDE
+    #include ZLIB_INCLUDE
 #else
-#include SK_ZLIB_INCLUDE
+    #include "zlib.h"
 #endif
 
 // static
 const size_t kBufferSize = 1024;
 
+// Different zlib implementations use different T.
+// We've seen size_t and unsigned.
+template <typename T> void* skia_alloc_func(void*, T items, T size) {
+    return sk_calloc_throw(SkToSizeT(items) * SkToSizeT(size));
+}
+
+static void skia_free_func(void*, void* address) { sk_free(address); }
+
 bool doFlate(bool compress, SkStream* src, SkWStream* dst) {
     uint8_t inputBuffer[kBufferSize];
     uint8_t outputBuffer[kBufferSize];
     z_stream flateData;
-    flateData.zalloc = NULL;
-    flateData.zfree = NULL;
+    flateData.zalloc = &skia_alloc_func;
+    flateData.zfree = &skia_free_func;
+    flateData.opaque = NULL;
     flateData.next_in = NULL;
     flateData.avail_in = 0;
     flateData.next_out = outputBuffer;
@@ -137,4 +135,97 @@ bool SkFlate::Inflate(SkStream* src, SkWStream* dst) {
     return doFlate(false, src, dst);
 }
 
-#endif
+
+#define SKDEFLATEWSTREAM_INPUT_BUFFER_SIZE 4096
+#define SKDEFLATEWSTREAM_OUTPUT_BUFFER_SIZE 4224  // 4096 + 128, usually big
+                                                  // enough to always do a
+                                                  // single loop.
+
+// called by both write() and finalize()
+static void do_deflate(int flush,
+                       z_stream* zStream,
+                       SkWStream* out,
+                       unsigned char* inBuffer,
+                       size_t inBufferSize) {
+    zStream->next_in = inBuffer;
+    zStream->avail_in = SkToInt(inBufferSize);
+    unsigned char outBuffer[SKDEFLATEWSTREAM_OUTPUT_BUFFER_SIZE];
+    SkDEBUGCODE(int returnValue;)
+    do {
+        zStream->next_out = outBuffer;
+        zStream->avail_out = sizeof(outBuffer);
+        SkDEBUGCODE(returnValue =) deflate(zStream, flush);
+        SkASSERT(!zStream->msg);
+
+        out->write(outBuffer, sizeof(outBuffer) - zStream->avail_out);
+    } while (zStream->avail_in || !zStream->avail_out);
+    SkASSERT(flush == Z_FINISH
+                 ? returnValue == Z_STREAM_END
+                 : returnValue == Z_OK);
+}
+
+// Hide all zlib impl details.
+struct SkDeflateWStream::Impl {
+    SkWStream* fOut;
+    unsigned char fInBuffer[SKDEFLATEWSTREAM_INPUT_BUFFER_SIZE];
+    size_t fInBufferIndex;
+    z_stream fZStream;
+};
+
+SkDeflateWStream::SkDeflateWStream(SkWStream* out)
+    : fImpl(SkNEW(SkDeflateWStream::Impl)) {
+    fImpl->fOut = out;
+    fImpl->fInBufferIndex = 0;
+    if (!fImpl->fOut) {
+        return;
+    }
+    fImpl->fZStream.zalloc = &skia_alloc_func;
+    fImpl->fZStream.zfree = &skia_free_func;
+    fImpl->fZStream.opaque = NULL;
+    SkDEBUGCODE(int r =) deflateInit(&fImpl->fZStream, Z_DEFAULT_COMPRESSION);
+    SkASSERT(Z_OK == r);
+}
+
+SkDeflateWStream::~SkDeflateWStream() { this->finalize(); }
+
+void SkDeflateWStream::finalize() {
+    if (!fImpl->fOut) {
+        return;
+    }
+    do_deflate(Z_FINISH, &fImpl->fZStream, fImpl->fOut, fImpl->fInBuffer,
+               fImpl->fInBufferIndex);
+    (void)deflateEnd(&fImpl->fZStream);
+    fImpl->fOut = NULL;
+}
+
+bool SkDeflateWStream::write(const void* void_buffer, size_t len) {
+    if (!fImpl->fOut) {
+        return false;
+    }
+    const char* buffer = (const char*)void_buffer;
+    while (len > 0) {
+        size_t tocopy =
+                SkTMin(len, sizeof(fImpl->fInBuffer) - fImpl->fInBufferIndex);
+        memcpy(fImpl->fInBuffer + fImpl->fInBufferIndex, buffer, tocopy);
+        len -= tocopy;
+        buffer += tocopy;
+        fImpl->fInBufferIndex += tocopy;
+        SkASSERT(fImpl->fInBufferIndex <= sizeof(fImpl->fInBuffer));
+
+        // if the buffer isn't filled, don't call into zlib yet.
+        if (sizeof(fImpl->fInBuffer) == fImpl->fInBufferIndex) {
+            do_deflate(Z_NO_FLUSH, &fImpl->fZStream, fImpl->fOut,
+                       fImpl->fInBuffer, fImpl->fInBufferIndex);
+            fImpl->fInBufferIndex = 0;
+        }
+    }
+    return true;
+}
+
+size_t SkDeflateWStream::bytesWritten() const {
+    return fImpl->fZStream.total_in + fImpl->fInBufferIndex;
+}
+
+
+#endif  // SK_NO_FLATE
+

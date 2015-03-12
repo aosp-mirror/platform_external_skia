@@ -10,6 +10,7 @@
 
 #include "GrColor.h"
 #include "GrProcessor.h"
+#include "GrTexture.h"
 #include "GrTypes.h"
 #include "SkXfermode.h"
 
@@ -17,6 +18,34 @@ class GrDrawTargetCaps;
 class GrGLCaps;
 class GrGLXferProcessor;
 class GrProcOptInfo;
+
+/**
+ * Coeffecients for alpha-blending.
+ */
+enum GrBlendCoeff {
+    kInvalid_GrBlendCoeff = -1,
+
+    kZero_GrBlendCoeff,    //<! 0
+    kOne_GrBlendCoeff,     //<! 1
+    kSC_GrBlendCoeff,      //<! src color
+    kISC_GrBlendCoeff,     //<! one minus src color
+    kDC_GrBlendCoeff,      //<! dst color
+    kIDC_GrBlendCoeff,     //<! one minus dst color
+    kSA_GrBlendCoeff,      //<! src alpha
+    kISA_GrBlendCoeff,     //<! one minus src alpha
+    kDA_GrBlendCoeff,      //<! dst alpha
+    kIDA_GrBlendCoeff,     //<! one minus dst alpha
+    kConstC_GrBlendCoeff,  //<! constant color
+    kIConstC_GrBlendCoeff, //<! one minus constant color
+    kConstA_GrBlendCoeff,  //<! constant color alpha
+    kIConstA_GrBlendCoeff, //<! one minus constant color alpha
+    kS2C_GrBlendCoeff,
+    kIS2C_GrBlendCoeff,
+    kS2A_GrBlendCoeff,
+    kIS2A_GrBlendCoeff,
+
+    kTotalGrBlendCoeffCount
+};
 
 /**
  * GrXferProcessor is responsible for implementing the xfer mode that blends the src color and dst
@@ -34,11 +63,10 @@ class GrProcOptInfo;
 class GrXferProcessor : public GrProcessor {
 public:
     /**
-     * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this xfer
-     * processor's GL backend implementation.
-     */
-    virtual void getGLProcessorKey(const GrGLCaps& caps,
-                                   GrProcessorKeyBuilder* b) const = 0;
+     * Sets a unique key on the GrProcessorKeyBuilder calls onGetGLProcessorKey(...) to get the
+     * specific subclass's key.
+     */ 
+    void getGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const;
 
     /** Returns a new instance of the appropriate *GL* implementation class
         for the given GrXferProcessor; caller is responsible for deleting
@@ -73,6 +101,10 @@ public:
          * Set CoverageDrawing_StateBit
          */
         kSetCoverageDrawing_OptFlag       = 0x10,
+        /**
+         * Can tweak alpha for coverage. Currently this flag should only be used by a batch
+         */
+        kCanTweakAlphaForCoverage_OptFlag = 0x20,
     };
 
     GR_DECL_BITFIELD_OPS_FRIENDS(OptFlags);
@@ -103,8 +135,23 @@ public:
 
     virtual void getBlendInfo(BlendInfo* blendInfo) const = 0;
 
-    /** Will this prceossor read the destination pixel value? */
     bool willReadDstColor() const { return fWillReadDstColor; }
+
+    /**
+     * Returns the texture to be used as the destination when reading the dst in the fragment
+     * shader. If the returned texture is NULL then the XP is either not reading the dst or we have
+     * extentions that support framebuffer fetching and thus don't need a copy of the dst texture.
+     */
+    const GrTexture* getDstCopyTexture() const { return fDstCopy.getTexture(); }
+
+    /**
+     * Returns the offset into the DstCopyTexture to use when reading it in the shader. This value
+     * is only valid if getDstCopyTexture() != NULL.
+     */
+    const SkIPoint& dstCopyTextureOffset() const {
+        SkASSERT(this->getDstCopyTexture());
+        return fDstCopyTextureOffset;
+    }
 
     /** 
      * Returns whether or not this xferProcossor will set a secondary output to be used with dual
@@ -123,28 +170,42 @@ public:
         if (this->classID() != that.classID()) {
             return false;
         }
+        if (this->fWillReadDstColor != that.fWillReadDstColor) {
+            return false;
+        }
+        if (this->fDstCopy.getTexture() != that.fDstCopy.getTexture()) {
+            return false;
+        }
+        if (this->fDstCopyTextureOffset != that.fDstCopyTextureOffset) {
+            return false;
+        }
         return this->onIsEqual(that);
     }
    
 protected:
-    GrXferProcessor() : fWillReadDstColor(false) {}
-
-    /**
-     * If the prceossor subclass will read the destination pixel value then it must call this
-     * function from its constructor. Otherwise, when its generated backend-specific prceossor class
-     * attempts to generate code that reads the destination pixel it will fail.
-     */
-    void setWillReadDstColor() { fWillReadDstColor = true; }
+    GrXferProcessor();
+    GrXferProcessor(const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
 
 private:
+    /**
+     * Sets a unique key on the GrProcessorKeyBuilder that is directly associated with this xfer
+     * processor's GL backend implementation.
+     */
+    virtual void onGetGLProcessorKey(const GrGLCaps& caps,
+                                     GrProcessorKeyBuilder* b) const = 0;
+
     virtual bool onIsEqual(const GrXferProcessor&) const = 0;
 
-    bool         fWillReadDstColor;
+    bool                    fWillReadDstColor;
+    SkIPoint                fDstCopyTextureOffset;
+    GrTextureAccess         fDstCopy;
 
     typedef GrFragmentProcessor INHERITED;
 };
 
 GR_MAKE_BITFIELD_OPS(GrXferProcessor::OptFlags);
+
+///////////////////////////////////////////////////////////////////////////////
 
 /**
  * We install a GrXPFactory (XPF) early on in the pipeline before all the final draw information is
@@ -159,8 +220,10 @@ GR_MAKE_BITFIELD_OPS(GrXferProcessor::OptFlags);
  */
 class GrXPFactory : public SkRefCnt {
 public:
-    virtual GrXferProcessor* createXferProcessor(const GrProcOptInfo& colorPOI,
-                                                 const GrProcOptInfo& coveragePOI) const = 0;
+    GrXferProcessor* createXferProcessor(const GrProcOptInfo& colorPOI,
+                                         const GrProcOptInfo& coveragePOI,
+                                         const GrDeviceCoordTexture* dstCopy,
+                                         const GrDrawTargetCaps& caps) const;
 
     /**
      * This function returns true if the GrXferProcessor generated from this factory will be able to
@@ -168,18 +231,6 @@ public:
      * final computed color from the color stages.
      */
     virtual bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const = 0;
-
-    /**
-     * Depending on color blend mode requested it may or may not be possible to correctly blend with
-     * fractional pixel coverage generated by the fragment shader.
-     *
-     * This function considers the known color and coverage input into the xfer processor and
-     * certain state information (colorWriteDisabled) to determine whether
-     * coverage can be handled correctly.
-     */
-    virtual bool canApplyCoverage(const GrProcOptInfo& colorPOI,
-                                  const GrProcOptInfo& coveragePOI) const = 0;
-
 
     struct InvariantOutput {
         bool        fWillBlendWithDst;
@@ -202,13 +253,8 @@ public:
      */
     virtual bool canTweakAlphaForCoverage() const = 0;
 
-    /**
-     *  Returns true if the XP generated by this factory will read dst.
-     */
-    // TODO: Currently this function must also check if the color/coverage stages read dst.
-    //       Once only XP's can read dst we can remove the ProcOptInfo's from this function.
-    virtual bool willReadDst(const GrProcOptInfo& colorPOI,
-                             const GrProcOptInfo& coveragePOI) const = 0;
+    bool willNeedDstCopy(const GrDrawTargetCaps& caps, const GrProcOptInfo& colorPOI,
+                         const GrProcOptInfo& coveragePOI) const;
 
     bool isEqual(const GrXPFactory& that) const {
         if (this->classID() != that.classID()) {
@@ -235,6 +281,18 @@ protected:
     uint32_t fClassID;
 
 private:
+    virtual GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+                                                   const GrProcOptInfo& colorPOI,
+                                                   const GrProcOptInfo& coveragePOI,
+                                                   const GrDeviceCoordTexture* dstCopy) const = 0;
+    /**
+     *  Returns true if the XP generated by this factory will explicitly read dst in the fragment
+     *  shader.
+     */
+    virtual bool willReadDstColor(const GrDrawTargetCaps& caps,
+                                  const GrProcOptInfo& colorPOI,
+                                  const GrProcOptInfo& coveragePOI) const = 0;
+
     virtual bool onIsEqual(const GrXPFactory&) const = 0;
 
     static uint32_t GenClassID() {

@@ -9,7 +9,7 @@
 #include "GrGLProcessor.h"
 #include "GrProcessor.h"
 #include "GrGLGpu.h"
-#include "GrOptDrawState.h"
+#include "GrPipeline.h"
 #include "SkChecksum.h"
 #include "gl/builders/GrGLFragmentShaderBuilder.h"
 
@@ -38,62 +38,6 @@ static bool swizzle_requires_alpha_remapping(const GrGLCaps& caps,
         }
     }
     return false;
-}
-
-/**
- * The key for an individual coord transform is made up of a matrix type, a precision, and a bit
- * that indicates the source of the input coords.
- */
-enum {
-    kMatrixTypeKeyBits   = 1,
-    kMatrixTypeKeyMask   = (1 << kMatrixTypeKeyBits) - 1,
-    
-    kPrecisionBits       = 2,
-    kPrecisionShift      = kMatrixTypeKeyBits,
-
-    kPositionCoords_Flag = (1 << (kPrecisionShift + kPrecisionBits)),
-    kDeviceCoords_Flag   = kPositionCoords_Flag + kPositionCoords_Flag,
-
-    kTransformKeyBits    = kMatrixTypeKeyBits + kPrecisionBits + 2,
-};
-
-GR_STATIC_ASSERT(kHigh_GrSLPrecision < (1 << kPrecisionBits));
-
-/**
- * We specialize the vertex code for each of these matrix types.
- */
-enum MatrixType {
-    kNoPersp_MatrixType  = 0,
-    kGeneral_MatrixType  = 1,
-};
-
-static uint32_t gen_transform_key(const GrPendingFragmentStage& stage, bool useExplicitLocalCoords) {
-    uint32_t totalKey = 0;
-    int numTransforms = stage.processor()->numTransforms();
-    for (int t = 0; t < numTransforms; ++t) {
-        uint32_t key = 0;
-        if (stage.isPerspectiveCoordTransform(t)) {
-            key |= kGeneral_MatrixType;
-        } else {
-            key |= kNoPersp_MatrixType;
-        }
-
-        const GrCoordTransform& coordTransform = stage.processor()->coordTransform(t);
-        if (kLocal_GrCoordSet == coordTransform.sourceCoords() && !useExplicitLocalCoords) {
-            key |= kPositionCoords_Flag;
-        } else if (kDevice_GrCoordSet == coordTransform.sourceCoords()) {
-            key |= kDeviceCoords_Flag;
-        }
-
-        GR_STATIC_ASSERT(kGrSLPrecisionCount <= (1 << kPrecisionBits));
-        key |= (coordTransform.precision() << kPrecisionShift);
-
-        key <<= kTransformKeyBits * t;
-
-        SkASSERT(0 == (totalKey & key)); // keys for each transform ought not to overlap
-        totalKey |= key;
-    }
-    return totalKey;
 }
 
 static uint32_t gen_texture_key(const GrProcessor& proc, const GrGLCaps& caps) {
@@ -142,17 +86,15 @@ static bool get_meta_key(const GrProcessor& proc,
     return true;
 }
 
-bool GrGLProgramDescBuilder::Build(const GrOptDrawState& optState,
-                                   const GrProgramDesc::DescInfo& descInfo,
-                                   GrGpu::DrawType drawType,
-                                   GrGLGpu* gpu,
-                                   GrProgramDesc* desc) {
+bool GrGLProgramDescBuilder::Build(GrProgramDesc* desc,
+                                   const GrPrimitiveProcessor& primProc,
+                                   const GrPipeline& pipeline,
+                                   const GrGLGpu* gpu,
+                                   const GrBatchTracker& batchTracker) {
     // The descriptor is used as a cache key. Thus when a field of the
     // descriptor will not affect program generation (because of the attribute
     // bindings in use or other descriptor field settings) it should be set
     // to a canonical value to avoid duplicate programs with different keys.
-
-    bool requiresLocalCoordAttrib = descInfo.fRequiresLocalCoordAttrib;
 
     GR_STATIC_ASSERT(0 == kProcessorKeysOffset % sizeof(uint32_t));
     // Make room for everything up to the effect keys.
@@ -161,25 +103,23 @@ bool GrGLProgramDescBuilder::Build(const GrOptDrawState& optState,
 
     GrProcessorKeyBuilder b(&desc->fKey);
 
-    const GrPrimitiveProcessor& primProc = *optState.getPrimitiveProcessor();
-    primProc.getGLProcessorKey(optState.getBatchTracker(), gpu->glCaps(), &b);
+    primProc.getGLProcessorKey(batchTracker, gpu->glCaps(), &b);
     if (!get_meta_key(primProc, gpu->glCaps(), 0, &b)) {
         desc->fKey.reset();
         return false;
     }
 
-    for (int s = 0; s < optState.numFragmentStages(); ++s) {
-        const GrPendingFragmentStage& fps = optState.getFragmentStage(s);
+    for (int s = 0; s < pipeline.numFragmentStages(); ++s) {
+        const GrPendingFragmentStage& fps = pipeline.getFragmentStage(s);
         const GrFragmentProcessor& fp = *fps.processor();
         fp.getGLProcessorKey(gpu->glCaps(), &b);
-        if (!get_meta_key(fp, gpu->glCaps(),
-                          gen_transform_key(fps, requiresLocalCoordAttrib), &b)) {
+        if (!get_meta_key(fp, gpu->glCaps(), primProc.getTransformKey(fp.coordTransforms()), &b)) {
             desc->fKey.reset();
             return false;
         }
     }
 
-    const GrXferProcessor& xp = *optState.getXferProcessor();
+    const GrXferProcessor& xp = *pipeline.getXferProcessor();
     xp.getGLProcessorKey(gpu->glCaps(), &b);
     if (!get_meta_key(xp, gpu->glCaps(), 0, &b)) {
         desc->fKey.reset();
@@ -189,43 +129,21 @@ bool GrGLProgramDescBuilder::Build(const GrOptDrawState& optState,
     // --------DO NOT MOVE HEADER ABOVE THIS LINE--------------------------------------------------
     // Because header is a pointer into the dynamic array, we can't push any new data into the key
     // below here.
-    GLKeyHeader* header = desc->atOffset<GLKeyHeader, kHeaderOffset>();
+    KeyHeader* header = desc->atOffset<KeyHeader, kHeaderOffset>();
 
     // make sure any padding in the header is zeroed.
     memset(header, 0, kHeaderSize);
 
-    bool isPathRendering = GrGpu::IsPathRenderingDrawType(drawType);
-    if (gpu->caps()->pathRenderingSupport() && isPathRendering) {
-        header->fUseNvpr = true;
-        SkASSERT(!optState.hasGeometryProcessor());
-    } else {
-        header->fUseNvpr = false;
-    }
-
-    if (descInfo.fReadsDst) {
-        const GrDeviceCoordTexture* dstCopy = optState.getDstCopy();
-        SkASSERT(dstCopy || gpu->caps()->dstReadInShaderSupport());
-        const GrTexture* dstCopyTexture = NULL;
-        if (dstCopy) {
-            dstCopyTexture = dstCopy->texture();
-        }
-        header->fDstReadKey = GrGLFragmentShaderBuilder::KeyForDstRead(dstCopyTexture,
-                                                                       gpu->glCaps());
-        SkASSERT(0 != header->fDstReadKey);
-    } else {
-        header->fDstReadKey = 0;
-    }
-
-    if (descInfo.fReadsFragPosition) {
+    if (pipeline.readsFragPosition()) {
         header->fFragPosKey =
-                GrGLFragmentShaderBuilder::KeyForFragmentPosition(optState.getRenderTarget(),
+                GrGLFragmentShaderBuilder::KeyForFragmentPosition(pipeline.getRenderTarget(),
                                                                   gpu->glCaps());
     } else {
         header->fFragPosKey = 0;
     }
 
-    header->fColorEffectCnt = optState.numColorStages();
-    header->fCoverageEffectCnt = optState.numCoverageStages();
+    header->fColorEffectCnt = pipeline.numColorFragmentStages();
+    header->fCoverageEffectCnt = pipeline.numCoverageFragmentStages();
     desc->finalize();
     return true;
 }

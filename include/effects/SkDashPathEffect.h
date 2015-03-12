@@ -51,7 +51,12 @@ public:
 
     DashType asADash(DashInfo* info) const SK_OVERRIDE;
 
+    SK_TO_STRING_OVERRIDE()
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(SkDashPathEffect)
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    bool exposedInAndroidJavaAPI() const SK_OVERRIDE { return true; }
+#endif
 
 protected:
     SkDashPathEffect(const SkScalar intervals[], int count, SkScalar phase);

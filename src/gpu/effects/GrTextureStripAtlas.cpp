@@ -92,6 +92,9 @@ int GrTextureStripAtlas::lockRow(const SkBitmap& data) {
     VALIDATE;
     if (0 == fLockedRows) {
         this->lockTexture();
+        if (!fTexture) {
+            return -1;
+        }
     }
 
     int key = data.getGenerationID();
@@ -190,21 +193,24 @@ GrTextureStripAtlas::AtlasRow* GrTextureStripAtlas::getLRU() {
 }
 
 void GrTextureStripAtlas::lockTexture() {
-    GrTextureParams params;
     GrSurfaceDesc texDesc;
     texDesc.fWidth = fDesc.fWidth;
     texDesc.fHeight = fDesc.fHeight;
     texDesc.fConfig = fDesc.fConfig;
 
-    static const GrCacheID::Domain gTextureStripAtlasDomain = GrCacheID::GenerateDomain();
-    GrCacheID::Key key;
-    *key.fData32 = fCacheKey;
-    memset(key.fData32 + 1, 0, sizeof(key) - sizeof(uint32_t));
-    GrCacheID cacheID(gTextureStripAtlasDomain, key);
+    static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey key;
+    GrUniqueKey::Builder builder(&key, kDomain, 1);
+    builder[0] = static_cast<uint32_t>(fCacheKey);
+    builder.finish();
 
-    fTexture = fDesc.fContext->findAndRefTexture(texDesc, cacheID, &params);
+    fTexture = fDesc.fContext->findAndRefCachedTexture(key);
     if (NULL == fTexture) {
-        fTexture = fDesc.fContext->createTexture(&params, texDesc, cacheID, NULL, 0);
+        fTexture = fDesc.fContext->createTexture(texDesc, true, NULL, 0);
+        if (!fTexture) {
+            return;
+        }
+        fDesc.fContext->addResourceToCache(key, fTexture);
         // This is a new texture, so all of our cache info is now invalid
         this->initLRU();
         fKeyTable.rewind();

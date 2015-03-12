@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2006 The Android Open Source Project
  *
@@ -6,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-
 #ifndef SkColorFilter_DEFINED
 #define SkColorFilter_DEFINED
 
 #include "SkColor.h"
 #include "SkFlattenable.h"
+#include "SkTDArray.h"
 #include "SkXfermode.h"
 
 class SkBitmap;
@@ -98,6 +97,15 @@ public:
     virtual uint32_t getFlags() const { return 0; }
 
     /**
+     *  If this subclass can optimally createa composition with the inner filter, return it as
+     *  a new filter (which the caller must unref() when it is done). If no such optimization
+     *  is known, return NULL.
+     *
+     *  e.g. result(color) == this_filter(inner(color))
+     */
+    virtual SkColorFilter* newComposed(const SkColorFilter* /*inner*/) const { return NULL; }
+
+    /**
      *  Apply this colorfilter to the specified SkColor. This routine handles
      *  converting to SkPMColor, calling the filter, and then converting back
      *  to SkColor. This method is not virtual, but will call filterSpan()
@@ -123,10 +131,30 @@ public:
     */
     static SkColorFilter* CreateLightingFilter(SkColor mul, SkColor add);
 
-    /** A subclass may implement this factory function to work with the GPU backend. If the return
-        is non-NULL then the caller owns a ref on the returned object.
+    /** Construct a colorfilter whose effect is to first apply the inner filter and then apply
+     *  the outer filter to the result of the inner's.
+     *  The reference counts for outer and inner are incremented.
+     *
+     *  Due to internal limits, it is possible that this will return NULL, so the caller must
+     *  always check.
      */
-    virtual GrFragmentProcessor* asFragmentProcessor(GrContext*) const;
+    static SkColorFilter* CreateComposeFilter(SkColorFilter* outer, SkColorFilter* inner);
+
+    /**
+     *  A subclass may implement this factory function to work with the GPU backend.
+     *  If it returns true, then 1 or more fragment processors will have been appended to the
+     *  array, each of which has been ref'd, so that the caller is responsible for calling unref()
+     *  on them when they are finished. If more than one processor is appended, they will be
+     *  applied in FIFO order.
+     *
+     *  The fragment processor(s) must each return their color as a premul normalized value
+     *  e.g. each component between [0..1] and each color component <= alpha.
+     *
+     *  If the subclass returns false, then it should not modify the array at all.
+     */
+    virtual bool asFragmentProcessors(GrContext*, SkTDArray<GrFragmentProcessor*>*) const {
+        return false;
+    }
 
     SK_TO_STRING_PUREVIRT()
 
@@ -137,6 +165,16 @@ protected:
     SkColorFilter() {}
 
 private:
+    /*
+     *  Returns 1 if this is a single filter (not a composition of other filters), otherwise it
+     *  reutrns the number of leaf-node filters in a composition. This should be the same value
+     *  as the number of GrFragmentProcessors returned by asFragmentProcessors's array parameter.
+     *
+     *  e.g. compose(filter, compose(compose(filter, filter), filter)) --> 4
+     */
+    virtual int privateComposedFilterCount() const { return 1; }
+    friend class SkComposeColorFilter;
+
     typedef SkFlattenable INHERITED;
 };
 

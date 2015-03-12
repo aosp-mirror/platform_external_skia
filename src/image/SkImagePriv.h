@@ -9,9 +9,12 @@
 #define SkImagePriv_DEFINED
 
 #include "SkImage.h"
+#include "SkSurface.h"
 
 // Call this if you explicitly want to use/share this pixelRef in the image
-extern SkImage* SkNewImageFromPixelRef(const SkImageInfo&, SkPixelRef*, size_t rowBytes,
+extern SkImage* SkNewImageFromPixelRef(const SkImageInfo&, SkPixelRef*,
+                                       const SkIPoint& pixelRefOrigin,
+                                       size_t rowBytes,
                                        const SkSurfaceProps*);
 
 /**
@@ -40,11 +43,18 @@ extern const SkPixelRef* SkBitmapImageGetPixelRef(const SkImage* rasterImage);
 // in which case the surface may need to perform a copy-on-write.
 extern GrTexture* SkTextureImageGetTexture(SkImage* textureImage);
 
+// When a texture is shared by a surface and an image its budgeted status is that of the
+// surface. This function is used when the surface makes a new texture for itself in order
+// for the orphaned image to determine whether the original texture counts against the
+// budget or not.
+extern void SkTextureImageApplyBudgetedDecision(SkImage* textureImage);
+
 // Update the texture wrapped by an image created with NewTexture. This
 // is called when a surface and image share the same GrTexture and the
 // surface needs to perform a copy-on-write
 extern void SkTextureImageSetTexture(SkImage* image, GrTexture* texture);
 
-extern SkImage* SkNewImageFromBitmapTexture(const SkBitmap&, int sampleCountForNewSurfaces);
+extern SkImage* SkNewImageFromBitmapTexture(const SkBitmap&, int sampleCountForNewSurfaces,
+                                            SkSurface::Budgeted);
 
 #endif

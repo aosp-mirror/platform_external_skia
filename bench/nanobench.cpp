@@ -9,6 +9,8 @@
 
 #include "Benchmark.h"
 #include "CrashHandler.h"
+#include "DecodingBench.h"
+#include "DecodingSubsetBench.h"
 #include "GMBench.h"
 #include "ProcStats.h"
 #include "ResultsWriter.h"
@@ -20,6 +22,7 @@
 #include "SkBBoxHierarchy.h"
 #include "SkCanvas.h"
 #include "SkCommonFlags.h"
+#include "SkData.h"
 #include "SkForceLinking.h"
 #include "SkGraphics.h"
 #include "SkOSFile.h"
@@ -74,17 +77,12 @@ DEFINE_string(scales, "1.0", "Space-separated scales for SKPs.");
 DEFINE_bool(bbh, true, "Build a BBH for SKPs?");
 DEFINE_bool(mpd, true, "Use MultiPictureDraw for the SKPs?");
 DEFINE_int32(flushEvery, 10, "Flush --outResultsFile every Nth run.");
+DEFINE_bool(resetGpuContext, true, "Reset the GrContext before running each test.");
+DEFINE_bool(gpuStats, false, "Print GPU stats after each gpu benchmark?");
 
 static SkString humanize(double ms) {
     if (FLAGS_verbose) return SkStringPrintf("%llu", (uint64_t)(ms*1e6));
-    if (ms > 1e+3)     return SkStringPrintf("%.3gs",  ms/1e3);
-    if (ms < 1e-3)     return SkStringPrintf("%.3gns", ms*1e6);
-#ifdef SK_BUILD_FOR_WIN
-    if (ms < 1)        return SkStringPrintf("%.3gus", ms*1e3);
-#else
-    if (ms < 1)        return SkStringPrintf("%.3gµs", ms*1e3);
-#endif
-    return SkStringPrintf("%.3gms", ms);
+    return HumanizeMs(ms);
 }
 #define HUMANIZE(ms) humanize(ms).c_str()
 
@@ -395,7 +393,8 @@ static Target* is_enabled(Benchmark* bench, const Config& config) {
     else if (Benchmark::kGPU_Backend == config.backend) {
         uint32_t flags = config.useDFText ? SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
         SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-        target->surface.reset(SkSurface::NewRenderTarget(gGrFactory->get(config.ctxType), info,
+        target->surface.reset(SkSurface::NewRenderTarget(gGrFactory->get(config.ctxType),
+                                                         SkSurface::kNo_Budgeted, info,
                                                          config.samples, &props));
         target->gl = gGrFactory->getGLContext(config.ctxType);
     }
@@ -443,7 +442,11 @@ public:
                       , fCurrentRecording(0)
                       , fCurrentScale(0)
                       , fCurrentSKP(0)
-                      , fCurrentUseMPD(0) {
+                      , fCurrentUseMPD(0)
+                      , fCurrentImage(0)
+                      , fCurrentSubsetImage(0)
+                      , fCurrentColorType(0)
+                      , fDivisor(2) {
         for (int i = 0; i < FLAGS_skps.count(); i++) {
             if (SkStrEndsWith(FLAGS_skps[i], ".skp")) {
                 fSKPs.push_back() = FLAGS_skps[i];
@@ -473,6 +476,27 @@ public:
         if (FLAGS_mpd) {
             fUseMPDs.push_back() = true;
         }
+        
+        // Prepare the images for decoding
+        for (int i = 0; i < FLAGS_images.count(); i++) {
+            const char* flag = FLAGS_images[i];
+            if (sk_isdir(flag)) {
+                // If the value passed in is a directory, add all the images
+                SkOSFile::Iter it(flag);
+                SkString file;
+                while (it.next(&file)) {
+                    fImages.push_back() = SkOSPath::Join(flag, file.c_str());
+                }
+            } else if (sk_exists(flag)) {
+                // Also add the value if it is a single image
+                fImages.push_back() = flag;
+            }
+        }
+        
+        // Choose the candidate color types for image decoding
+        const SkColorType colorTypes[] =
+            { kN32_SkColorType, kRGB_565_SkColorType, kAlpha_8_SkColorType };
+        fColorTypes.push_back_n(SK_ARRAY_COUNT(colorTypes), colorTypes);
     }
 
     static bool ReadPicture(const char* path, SkAutoTUnref<SkPicture>* pic) {
@@ -482,7 +506,7 @@ public:
             return false;
         }
 
-        SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
+        SkAutoTDelete<SkStream> stream(SkStream::NewFromFile(path));
         if (stream.get() == NULL) {
             SkDebugf("Could not read %s.\n", path);
             return false;
@@ -508,7 +532,7 @@ public:
         while (fGMs) {
             SkAutoTDelete<skiagm::GM> gm(fGMs->factory()(NULL));
             fGMs = fGMs->next();
-            if (gm->getFlags() & skiagm::GM::kAsBench_Flag) {
+            if (gm->runAsBench()) {
                 fSourceType = "gm";
                 fBenchType  = "micro";
                 return SkNEW_ARGS(GMBench, (gm.detach()));
@@ -548,7 +572,7 @@ public:
                         static const int kFlags = SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
                         pic->playback(recorder.beginRecording(pic->cullRect().width(),
                                                               pic->cullRect().height(),
-                                                              &factory, 
+                                                              &factory,
                                                               fUseMPDs[fCurrentUseMPD] ? kFlags : 0));
                         pic.reset(recorder.endRecording());
                     }
@@ -564,6 +588,75 @@ public:
             }
             fCurrentSKP = 0;
             fCurrentScale++;
+        }
+
+        // Run the DecodingBenches
+        while (fCurrentImage < fImages.count()) {
+            while (fCurrentColorType < fColorTypes.count()) {
+                const SkString& path = fImages[fCurrentImage];
+                SkColorType colorType = fColorTypes[fCurrentColorType];
+                fCurrentColorType++;
+                // Check if the image decodes before creating the benchmark
+                SkBitmap bitmap;
+                if (SkImageDecoder::DecodeFile(path.c_str(), &bitmap,
+                        colorType, SkImageDecoder::kDecodePixels_Mode)) {
+                    return new DecodingBench(path, colorType);
+                }
+            }
+            fCurrentColorType = 0;
+            fCurrentImage++;
+        }
+
+        // Run the DecodingSubsetBenches
+        while (fCurrentSubsetImage < fImages.count()) {
+            while (fCurrentColorType < fColorTypes.count()) {
+                const SkString& path = fImages[fCurrentSubsetImage];
+                SkColorType colorType = fColorTypes[fCurrentColorType];
+                fCurrentColorType++;
+                // Check if the image decodes before creating the benchmark
+                SkAutoTUnref<SkData> encoded(
+                        SkData::NewFromFileName(path.c_str()));
+                SkAutoTDelete<SkMemoryStream> stream(
+                        new SkMemoryStream(encoded));
+                SkAutoTDelete<SkImageDecoder>
+                    decoder(SkImageDecoder::Factory(stream.get()));
+                if (!decoder) {
+                    SkDebugf("Cannot find decoder for %s\n", path.c_str());
+                } else {
+                    stream->rewind();
+                    int w, h;
+                    bool success;
+                    if (!decoder->buildTileIndex(stream.detach(), &w, &h)
+                            || w*h == 1) {
+                        // This is not an error, but in this case we still
+                        // do not want to run the benchmark.
+                        success = false;
+                    } else if (fDivisor > w || fDivisor > h) {
+                        SkDebugf("Divisor %d is too big for %s %dx%d\n",
+                                fDivisor, path.c_str(), w, h);
+                        success = false;
+                    } else {
+                        const int sW  = w / fDivisor;
+                        const int sH = h / fDivisor;
+                        SkBitmap bitmap;
+                        success = true;
+                        for (int y = 0; y < h; y += sH) {
+                            for (int x = 0; x < w; x += sW) {
+                                SkIRect rect = SkIRect::MakeXYWH(x, y, sW, sH);
+                                success &= decoder->decodeSubset(&bitmap, rect,
+                                                                 colorType);
+                            }
+                        }
+                    }
+                    // Create the benchmark if successful
+                    if (success) {
+                        return new DecodingSubsetBench(path, colorType,
+                                                       fDivisor);
+                    }
+                }
+            }
+            fCurrentColorType = 0;
+            fCurrentSubsetImage++;
         }
 
         return NULL;
@@ -595,6 +688,8 @@ private:
     SkTArray<SkScalar> fScales;
     SkTArray<SkString> fSKPs;
     SkTArray<bool>     fUseMPDs;
+    SkTArray<SkString> fImages;
+    SkTArray<SkColorType> fColorTypes;
 
     double fSKPBytes, fSKPOps;
 
@@ -604,6 +699,10 @@ private:
     int fCurrentScale;
     int fCurrentSKP;
     int fCurrentUseMPD;
+    int fCurrentImage;
+    int fCurrentSubsetImage;
+    int fCurrentColorType;
+    const int fDivisor;
 };
 
 int nanobench_main();
@@ -771,10 +870,11 @@ int nanobench_main() {
                         , bench->getUniqueName()
                         );
             }
-#if SK_SUPPORT_GPU && GR_CACHE_STATS
-            if (FLAGS_veryVerbose &&
+#if SK_SUPPORT_GPU
+            if (FLAGS_gpuStats &&
                 Benchmark::kGPU_Backend == targets[j]->config.backend) {
                 gGrFactory->get(targets[j]->config.ctxType)->printCacheStats();
+                gGrFactory->get(targets[j]->config.ctxType)->printGpuStats();
             }
 #endif
         }

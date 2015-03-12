@@ -7,7 +7,6 @@
 
 #include "GrGLVertexShaderBuilder.h"
 #include "GrGLProgramBuilder.h"
-#include "GrGLShaderStringBuilder.h"
 #include "../GrGLGpu.h"
 
 #define GL_CALL(X) GR_GL_CALL(fProgramBuilder->gpu()->glInterface(), X)
@@ -27,93 +26,59 @@ void GrGLVertexBuilder::addVarying(const char* name, GrGLVarying* v) {
 }
 
 void GrGLVertexBuilder::emitAttributes(const GrGeometryProcessor& gp) {
-    const GrGeometryProcessor::VertexAttribArray& v = gp.getAttribs();
-    int vaCount = v.count();
+    int vaCount = gp.numAttribs();
     for (int i = 0; i < vaCount; i++) {
-        this->addAttribute(&v[i]);
+        this->addAttribute(&gp.getAttrib(i));
     }
     return;
 }
 
-void GrGLVertexBuilder::transformToNormalizedDeviceSpace() {
+void GrGLVertexBuilder::transformToNormalizedDeviceSpace(const GrShaderVar& posVar) {
+    SkASSERT(!fRtAdjustName);
+
     // setup RT Uniform
     fProgramBuilder->fUniformHandles.fRTAdjustmentUni =
             fProgramBuilder->addUniform(GrGLProgramBuilder::kVertex_Visibility,
                                         kVec4f_GrSLType, kDefault_GrSLPrecision,
                                         fProgramBuilder->rtAdjustment(),
                                         &fRtAdjustName);
-    // Wire transforms
-    SkTArray<GrGLProgramBuilder::TransformVarying, true>& transVs = fProgramBuilder->fCoordVaryings;
-    int transformCount = transVs.count();
-    for (int i = 0; i < transformCount; i++) {
-        GrCoordSet coordSet = transVs[i].fCoordSet;
-        const char* coords = NULL;
-        switch (coordSet) {
-            case kLocal_GrCoordSet:
-                coords = this->localCoords();
-                break;
-            case kDevice_GrCoordSet:
-                coords = this->glPosition();
-                break;
-        }
 
-        // varying = matrix * coords (logically)
-        const GrGLVarying& v = transVs[i].fV;
-        if (kDevice_GrCoordSet == coordSet) {
-            if (kVec2f_GrSLType == v.fType) {
-                this->codeAppendf("%s = (%s * %s).xy;", v.fVsOut, transVs[i].fUniName.c_str(),
-                                  coords);
-            } else {
-                this->codeAppendf("%s = %s * %s;", v.fVsOut, transVs[i].fUniName.c_str(), coords);
-            }
-        } else {
-            if (kVec2f_GrSLType == v.fType) {
-                this->codeAppendf("%s = (%s * vec3(%s, 1)).xy;", v.fVsOut, transVs[i].fUniName.c_str(),
-                                  coords);
-            } else {
-                this->codeAppendf("%s = %s * vec3(%s, 1);", v.fVsOut, transVs[i].fUniName.c_str(),
-                                  coords);
-            }
-        }
+    // Transform from Skia's device coords to GL's normalized device coords. Note that
+    // because we want to "nudge" the device space positions we are converting to 
+    // non-homogeneous NDC.
+    if (kVec3f_GrSLType == posVar.getType()) {
+        this->codeAppendf("gl_Position = vec4(dot(%s.xz, %s.xy)/%s.z, dot(%s.yz, %s.zw)/%s.z, 0, 1);",
+                          posVar.c_str(), fRtAdjustName, posVar.c_str(),
+                          posVar.c_str(), fRtAdjustName, posVar.c_str());
+    } else {
+        SkASSERT(kVec2f_GrSLType == posVar.getType());
+        this->codeAppendf("gl_Position = vec4(%s.x * %s.x + %s.y, %s.y * %s.z + %s.w, 0, 1);",
+                          posVar.c_str(), fRtAdjustName, fRtAdjustName,
+                          posVar.c_str(), fRtAdjustName, fRtAdjustName);
     }
 
-    // Transform from Skia's device coords to GL's normalized device coords.
-    this->codeAppendf("gl_Position = vec4(dot(%s.xz, %s.xy), dot(%s.yz, %s.zw), 0, %s.z);",
-                      this->glPosition(), fRtAdjustName, this->glPosition(), fRtAdjustName,
-                      this->glPosition());
+    // We could have the GrGeometryProcessor do this, but its just easier to have it performed here.
+    // If we ever need to set variable pointsize, then we can reinvestigate
+    this->codeAppend("gl_PointSize = 1.0;");
 }
 
 void GrGLVertexBuilder::bindVertexAttributes(GrGLuint programID) {
-    const GrGeometryProcessor* gp = fProgramBuilder->fOptState.getGeometryProcessor();
+    const GrPrimitiveProcessor& primProc = fProgramBuilder->primitiveProcessor();
 
-    const GrGeometryProcessor::VertexAttribArray& v = gp->getAttribs();
-    int vaCount = v.count();
+    int vaCount = primProc.numAttribs();
     for (int i = 0; i < vaCount; i++) {
-        GL_CALL(BindAttribLocation(programID, i, v[i].fName));
+        GL_CALL(BindAttribLocation(programID, i, primProc.getAttrib(i).fName));
     }
     return;
 }
 
-bool GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId,
-        SkTDArray<GrGLuint>* shaderIds) const {
-    GrGLGpu* gpu = fProgramBuilder->gpu();
-    const GrGLContext& glCtx = gpu->glContext();
-    const GrGLContextInfo& ctxInfo = gpu->ctxInfo();
-    SkString vertShaderSrc(GrGetGLSLVersionDecl(ctxInfo));
-    fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kVertex_Visibility, &vertShaderSrc);
-    this->appendDecls(fInputs, &vertShaderSrc);
-    this->appendDecls(fOutputs, &vertShaderSrc);
-    vertShaderSrc.append("void main() {");
-    vertShaderSrc.append(fCode);
-    vertShaderSrc.append("}\n");
-    GrGLuint vertShaderId = GrGLCompileAndAttachShader(glCtx, programId,
-                                                       GR_GL_VERTEX_SHADER, vertShaderSrc,
-                                                       gpu->gpuStats());
-    if (!vertShaderId) {
-        return false;
-    }
-    *shaderIds->append() = vertShaderId;
-    return true;
+bool
+GrGLVertexBuilder::compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) {
+    this->versionDecl() = GrGetGLSLVersionDecl(fProgramBuilder->ctxInfo());
+    fProgramBuilder->appendUniformDecls(GrGLProgramBuilder::kVertex_Visibility, &this->uniforms());
+    this->appendDecls(fInputs, &this->inputs());
+    this->appendDecls(fOutputs, &this->outputs());
+    return this->finalize(programId, GR_GL_VERTEX_SHADER, shaderIds);
 }
 
 bool GrGLVertexBuilder::addAttribute(const GrShaderVar& var) {

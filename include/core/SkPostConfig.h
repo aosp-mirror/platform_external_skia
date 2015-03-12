@@ -68,6 +68,15 @@
 #  endif
 #endif
 
+// As usual, there are two ways to increase alignment... the MSVC way and the everyone-else way.
+#ifndef SK_STRUCT_ALIGN
+    #ifdef _MSC_VER
+        #define SK_STRUCT_ALIGN(N) __declspec(align(N))
+    #else
+        #define SK_STRUCT_ALIGN(N) __attribute__((aligned(N)))
+    #endif
+#endif
+
 #if !defined(SK_SUPPORT_GPU)
 #  define SK_SUPPORT_GPU 1
 #endif
@@ -86,12 +95,6 @@
 #  else
 #    define SkNO_RETURN_HINT() do {} while (false)
 #  endif
-#endif
-
-#if defined(SK_ZLIB_INCLUDE) && defined(SK_SYSTEM_ZLIB)
-#  error "cannot define both SK_ZLIB_INCLUDE and SK_SYSTEM_ZLIB"
-#elif defined(SK_ZLIB_INCLUDE) || defined(SK_SYSTEM_ZLIB)
-#  define SK_HAS_ZLIB
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,7 +131,7 @@
 #ifndef SK_ENABLE_INST_COUNT
 // Only enabled for static builds, because instance counting relies on static
 // variables in functions defined in header files.
-#  if defined(SK_DEBUG) && !defined(SKIA_DLL)
+#  if SK_DEVELOPER && !defined(SKIA_DLL)
 #    define SK_ENABLE_INST_COUNT 1
 #  else
 #    define SK_ENABLE_INST_COUNT 0
@@ -308,6 +311,9 @@
 #    elif defined(__has_extension) && __has_extension(cxx_override_control)
 #      define SK_OVERRIDE override
 #    endif
+   // if GCC >= 4.7
+#  elif defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7))
+#    define SK_OVERRIDE override
 #  endif
 #  ifndef SK_OVERRIDE
 #    define SK_OVERRIDE
@@ -381,34 +387,6 @@
 
 #ifndef SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 #  define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 1
-#endif
-
-//////////////////////////////////////////////////////////////////////
-
-#ifndef SK_ATOMICS_PLATFORM_H
-#  if defined(_MSC_VER)
-#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_win.h"
-#  else
-#    define SK_ATOMICS_PLATFORM_H "../../src/ports/SkAtomics_sync.h"
-#  endif
-#endif
-
-#ifndef SK_MUTEX_PLATFORM_H
-#  if defined(SK_BUILD_FOR_WIN)
-#    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_win.h"
-#  else
-#    define SK_MUTEX_PLATFORM_H "../../src/ports/SkMutex_pthread.h"
-#  endif
-#endif
-
-#ifndef SK_BARRIERS_PLATFORM_H
-#  if SK_HAS_COMPILER_FEATURE(thread_sanitizer)
-#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_tsan.h"
-#  elif defined(SK_CPU_ARM32) || defined(SK_CPU_ARM64)
-#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_arm.h"
-#  else
-#    define SK_BARRIERS_PLATFORM_H "../../src/ports/SkBarriers_x86.h"
-#  endif
 #endif
 
 //////////////////////////////////////////////////////////////////////

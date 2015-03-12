@@ -6,21 +6,18 @@
  */
 
 #include "SkDocument.h"
+#include "SkPDFCanon.h"
 #include "SkPDFDocument.h"
 #include "SkPDFDevice.h"
 
 class SkDocument_PDF : public SkDocument {
 public:
-    SkDocument_PDF(SkWStream* stream, void (*doneProc)(SkWStream*,bool),
-                   SkPicture::EncodeBitmap encoder,
+    SkDocument_PDF(SkWStream* stream,
+                   void (*doneProc)(SkWStream*, bool),
                    SkScalar rasterDpi)
-            : SkDocument(stream, doneProc)
-            , fEncoder(encoder)
-            , fRasterDpi(rasterDpi) {
-        fDoc = SkNEW(SkPDFDocument);
-        fCanvas = NULL;
-        fDevice = NULL;
-    }
+        : SkDocument(stream, doneProc)
+        , fDoc(SkNEW(SkPDFDocument))
+        , fRasterDpi(rasterDpi) {}
 
     virtual ~SkDocument_PDF() {
         // subclasses must call close() in their destructors
@@ -30,81 +27,67 @@ public:
 protected:
     virtual SkCanvas* onBeginPage(SkScalar width, SkScalar height,
                                   const SkRect& trimBox) SK_OVERRIDE {
-        SkASSERT(NULL == fCanvas);
-        SkASSERT(NULL == fDevice);
+        SkASSERT(!fCanvas.get());
+        SkASSERT(!fDevice.get());
 
-        SkISize mediaBoxSize;
-        mediaBoxSize.set(SkScalarRoundToInt(width), SkScalarRoundToInt(height));
-
-        fDevice = SkNEW_ARGS(SkPDFDevice, (mediaBoxSize, mediaBoxSize, SkMatrix::I()));
-        if (fEncoder) {
-            fDevice->setDCTEncoder(fEncoder);
-        }
-        if (fRasterDpi != 0) {
-            fDevice->setRasterDpi(fRasterDpi);
-        }
-        fCanvas = SkNEW_ARGS(SkCanvas, (fDevice));
+        SkISize pageSize = SkISize::Make(
+                SkScalarRoundToInt(width), SkScalarRoundToInt(height));
+        fDevice.reset(SkPDFDevice::Create(pageSize, fRasterDpi, &fCanon));
+        fCanvas.reset(SkNEW_ARGS(SkCanvas, (fDevice)));
         fCanvas->clipRect(trimBox);
         fCanvas->translate(trimBox.x(), trimBox.y());
-        return fCanvas;
+        return fCanvas.get();
     }
 
     void onEndPage() SK_OVERRIDE {
-        SkASSERT(fCanvas);
-        SkASSERT(fDevice);
+        SkASSERT(fCanvas.get());
+        SkASSERT(fDevice.get());
 
         fCanvas->flush();
-        fDoc->appendPage(fDevice);
+        fDoc->appendPage(fDevice.get());
 
-        fCanvas->unref();
-        fDevice->unref();
-
-        fCanvas = NULL;
-        fDevice = NULL;
+        fCanvas.reset(NULL);
+        fDevice.reset(NULL);
     }
 
     bool onClose(SkWStream* stream) SK_OVERRIDE {
-        SkASSERT(NULL == fCanvas);
-        SkASSERT(NULL == fDevice);
+        SkASSERT(!fCanvas.get());
+        SkASSERT(!fDevice.get());
 
         bool success = fDoc->emitPDF(stream);
-        SkDELETE(fDoc);
-        fDoc = NULL;
+        fDoc.free();
+        fCanon.reset();
         return success;
     }
 
     void onAbort() SK_OVERRIDE {
-        SkDELETE(fDoc);
-        fDoc = NULL;
+        fDoc.free();
+        fCanon.reset();
     }
 
 private:
-    SkPDFDocument*  fDoc;
-    SkPDFDevice*    fDevice;
-    SkCanvas*       fCanvas;
-    SkPicture::EncodeBitmap fEncoder;
-    SkScalar        fRasterDpi;
+    SkPDFCanon fCanon;
+    SkAutoTDelete<SkPDFDocument> fDoc;
+    SkAutoTUnref<SkPDFDevice> fDevice;
+    SkAutoTUnref<SkCanvas> fCanvas;
+    SkScalar fRasterDpi;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SkDocument* SkDocument::CreatePDF(SkWStream* stream, void (*done)(SkWStream*,bool),
-                                  SkPicture::EncodeBitmap enc,
-                                  SkScalar dpi) {
-    return stream ? SkNEW_ARGS(SkDocument_PDF, (stream, done, enc, dpi)) : NULL;
+SkDocument* SkDocument::CreatePDF(SkWStream* stream, SkScalar dpi) {
+    return stream ? SkNEW_ARGS(SkDocument_PDF, (stream, NULL, dpi)) : NULL;
 }
 
 static void delete_wstream(SkWStream* stream, bool aborted) {
     SkDELETE(stream);
 }
 
-SkDocument* SkDocument::CreatePDF(const char path[],
-                                  SkPicture::EncodeBitmap enc,
-                                  SkScalar dpi) {
+SkDocument* SkDocument::CreatePDF(const char path[], SkScalar dpi) {
     SkFILEWStream* stream = SkNEW_ARGS(SkFILEWStream, (path));
     if (!stream->isValid()) {
         SkDELETE(stream);
         return NULL;
     }
-    return SkNEW_ARGS(SkDocument_PDF, (stream, delete_wstream, enc, dpi));
+    return SkNEW_ARGS(SkDocument_PDF, (stream, delete_wstream, dpi));
 }

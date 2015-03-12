@@ -102,7 +102,9 @@ Run correctness tests
 First build the app and then run it on an attached device:
 
     ./platform_tools/android/bin/android_ninja [-d device_id] dm
-    ./platform_tools/android/bin/android_run_skia dm # uploads and runs the dm binary on the attached device
+
+    # uploads dm binary and resources and runs dm on the attached device
+    ./platform_tools/android/bin/android_run_skia dm --resourcePath /data/local/tmp/skia/resources/
 
 Run performance tests
 ---------------------
@@ -135,7 +137,7 @@ The SampleApp on Android provides a simple UI for viewing sample slides and gm i
 
 Then, install the app onto the device:
 
-    ./platform_tools/android/bin/android_install_apk
+    ./platform_tools/android/bin/android_install_app
 
 Finally to run the application you must navigate to the Skia Samples
 application using the application launcher on your device.
@@ -153,14 +155,20 @@ Clean up all generated files
 Debugging on Android
 --------------------
 
-We support debugging on using a GDB wrapper script. The script loads the app
-onto the device, starts a gdbserver instance with that app, and then enters a
-GDB client shell on the host. Necessary symbol files are pulled from the
-device and placed into a temporary folder. The script does not build the app -
-you'll have to do that first.
+We support 2 modes of debugging on Android using GDB wrapper scripts. These
+scripts start a gdbserver instance on the device and then enter an interactive
+GDB client shell on your host. All necessary symbol files should
+be pulled from the device and placed into a temporary folder (android_gdb_tmp).
 
-    # you can include additional arguments in quotes (e.g. "dm --nopdf")
-    ./platform_tools/android/bin/android_gdb_exe dm
+Note: The debugging scripts do not build the app - you'll have to do that first.
+
+    # COMMAND LINE APPS
+    # include additional arguments in quotes (e.g. "dm --nopdf")
+    ./platform_tools/android/bin/android_gdb_native dm
+    
+    # SAMPLE APP
+    # make sure you've installed the app on the device first
+    ./platform_tools/android/bin/android_gdb_app
 
 When the gdb client is ready, insert a breakpoint, and continue to let the
 program resume execution.

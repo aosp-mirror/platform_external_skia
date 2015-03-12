@@ -9,7 +9,7 @@
 
 #include "GrClipMaskCache.h"
 #include "GrContext.h"
-#include "GrDrawState.h"
+#include "GrPipelineBuilder.h"
 #include "GrReducedClip.h"
 #include "GrStencil.h"
 #include "GrTexture.h"
@@ -48,16 +48,15 @@ public:
      * the manager when it must install additional effects to implement the
      * clip. devBounds is optional but can help optimize clipping.
      */
-    bool setupClipping(GrDrawState*,
-                       GrDrawState::AutoRestoreEffects*,
-                       GrDrawState::AutoRestoreStencil*,
+    bool setupClipping(GrPipelineBuilder*,
+                       GrPipelineBuilder::AutoRestoreFragmentProcessors*,
+                       GrPipelineBuilder::AutoRestoreStencil*,
                        GrScissorState*,
-                       const GrClipData* clipDataIn,
                        const SkRect* devBounds);
 
     /**
      * Purge resources to free up memory. TODO: This class shouldn't hold any long lived refs
-     * which will allow ResourceCache2 to automatically purge anything this class has created.
+     * which will allow Resourcecache to automatically purge anything this class has created.
      */
     void purgeResources();
 
@@ -94,8 +93,8 @@ private:
 
     // Attempts to install a series of coverage effects to implement the clip. Return indicates
     // whether the element list was successfully converted to effects.
-    bool installClipEffects(GrDrawState*,
-                            GrDrawState::AutoRestoreEffects*,
+    bool installClipEffects(GrPipelineBuilder*,
+                            GrPipelineBuilder::AutoRestoreFragmentProcessors*,
                             const GrReducedClip::ElementList&,
                             const SkVector& clipOffset,
                             const SkRect* devBounds);
@@ -133,14 +132,14 @@ private:
                                 const SkIRect& clipSpaceIBounds,
                                 bool willUpload);
 
-    bool useSWOnlyPath(const GrDrawState*,
+    bool useSWOnlyPath(const GrPipelineBuilder*,
                        const SkVector& clipToMaskOffset,
                        const GrReducedClip::ElementList& elements);
 
     // Draws a clip element into the target alpha mask. The caller should have already setup the
     // desired blend operation. Optionally if the caller already selected a path renderer it can
     // be passed. Otherwise the function will select one if the element is a path.
-    bool drawElement(GrDrawState*,
+    bool drawElement(GrPipelineBuilder*,
                      const SkMatrix& viewMatrix,
                      GrTexture* target,
                      const SkClipStack::Element*,
@@ -149,12 +148,12 @@ private:
     // Determines whether it is possible to draw the element to both the stencil buffer and the
     // alpha mask simultaneously. If so and the element is a path a compatible path renderer is
     // also returned.
-    bool canStencilAndDrawElement(GrDrawState*,
+    bool canStencilAndDrawElement(GrPipelineBuilder*,
                                   GrTexture* target,
                                   GrPathRenderer**,
                                   const SkClipStack::Element*);
 
-    void mergeMask(GrDrawState*,
+    void mergeMask(GrPipelineBuilder*,
                    GrTexture* dstMask,
                    GrTexture* srcMask,
                    SkRegion::Op op,
@@ -166,11 +165,10 @@ private:
     void setupCache(const SkClipStack& clip,
                     const SkIRect& bounds);
     /**
-     * Called prior to return control back the GrGpu in setupClipping. It
-     * updates the GrGpu with stencil settings that account stencil-based
-     * clipping.
+     * Called prior to return control back the GrGpu in setupClipping. It updates the
+     * GrPipelineBuilder with stencil settings that account for stencil-based clipping.
      */
-    void setDrawStateStencil(GrDrawState*, GrDrawState::AutoRestoreStencil*);
+    void setPipelineBuilderStencil(GrPipelineBuilder*, GrPipelineBuilder::AutoRestoreStencil*);
 
     /**
      * Adjusts the stencil settings to account for interaction with stencil

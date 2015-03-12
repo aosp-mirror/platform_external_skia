@@ -7,9 +7,9 @@
 
 #include "SkCommonFlags.h"
 
-DEFINE_string(config, "565 8888 pdf gpu nonrendering angle nvprmsaa4",
+DEFINE_string(config, "565 8888 gpu nonrendering angle nvprmsaa4 hwui ",
               "Options: 565 8888 pdf gpu nonrendering msaa4 msaa16 nvprmsaa4 nvprmsaa16 "
-              "gpudft gpunull gpudebug angle mesa");
+              "gpudft gpunull gpudebug angle mesa (and many more)");
 
 DEFINE_bool(cpu, true, "master switch for running CPU-bound work.");
 
@@ -22,6 +22,8 @@ DEFINE_string(gpuAPI, "", "Force use of specific gpu API.  Using \"gl\" "
               "forces OpenGL API. Using \"gles\" forces OpenGL ES API. "
               "Defaults to empty string, which selects the API native to the "
               "system.");
+
+DEFINE_string(images, "resources", "Directory of images to decode.");
 
 DEFINE_bool2(leaks, l, false, "show leaked ref cnt'd objects.");
 
@@ -37,9 +39,9 @@ DEFINE_string2(match, m, NULL,
 
 DEFINE_bool2(quiet, q, false, "if true, don't print status updates.");
 
-DEFINE_bool(resetGpuContext, true, "Reset the GrContext before running each test.");
-DEFINE_bool(abandonGpuContext, false, "Abandon the GrContext after running each test. "
-                                      "Implies --resetGpuContext.");
+DEFINE_bool(preAbandonGpuContext, false, "Abandons the GrContext before running the test.");
+
+DEFINE_bool(abandonGpuContext, false, "Abandon the GrContext after running each test.");
 
 DEFINE_string(skps, "skps", "Directory to read skps from.");
 

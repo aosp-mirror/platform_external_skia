@@ -41,7 +41,7 @@ DEF_GPUTEST(ReadWriteAlpha, reporter, factory) {
         desc.fHeight    = Y_SIZE;
 
         // We are initializing the texture with zeros here
-        GrTexture* texture = context->createUncachedTexture(desc, textureData, 0);
+        GrTexture* texture = context->createTexture(desc, false, textureData, 0);
         if (!texture) {
             return;
         }
@@ -82,8 +82,8 @@ DEF_GPUTEST(ReadWriteAlpha, reporter, factory) {
         REPORTER_ASSERT(reporter, match);
 
         // Now try writing on the single channel texture
-        SkAutoTUnref<SkBaseDevice> device(SkGpuDevice::Create(texture->asRenderTarget(),
-                                      SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType)));
+        SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
+        SkAutoTUnref<SkBaseDevice> device(SkGpuDevice::Create(texture->asRenderTarget(), &props));
         SkCanvas canvas(device);
 
         SkPaint paint;

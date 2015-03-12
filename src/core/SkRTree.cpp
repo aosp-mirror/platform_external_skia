@@ -9,14 +9,22 @@
 
 SkRTree::SkRTree(SkScalar aspectRatio) : fCount(0), fAspectRatio(aspectRatio) {}
 
-void SkRTree::insert(SkAutoTMalloc<SkRect>* boundsArray, int N) {
+SkRect SkRTree::getRootBound() const {
+    if (fCount) {
+        return fRoot.fBounds;
+    } else {
+        return SkRect::MakeEmpty();
+    }
+}
+
+void SkRTree::insert(const SkRect boundsArray[], int N) {
     SkASSERT(0 == fCount);
 
     SkTDArray<Branch> branches;
     branches.setReserve(N);
 
     for (int i = 0; i < N; i++) {
-        const SkRect& bounds = (*boundsArray)[i];
+        const SkRect& bounds = boundsArray[i];
         if (bounds.isEmpty()) {
             continue;
         }

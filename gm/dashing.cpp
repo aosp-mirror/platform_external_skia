@@ -49,9 +49,6 @@ public:
     DashingGM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() {
         return SkString("dashing");
@@ -136,9 +133,6 @@ public:
     Dashing2GM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() {
         return SkString("dashing2");
@@ -198,9 +192,6 @@ public:
     Dashing3GM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() {
         return SkString("dashing3");
@@ -331,9 +322,6 @@ public:
     Dashing4GM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() {
         return SkString("dashing4");
@@ -414,9 +402,10 @@ public:
     Dashing5GM(bool doAA) : fDoAA(doAA) {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE { return kAsBench_Flag | kSkipTiled_Flag; }
 
-    SkString onShortName() SK_OVERRIDE { 
+    bool runAsBench() const SK_OVERRIDE { return true; }
+
+    SkString onShortName() SK_OVERRIDE {
         if (fDoAA) {
             return SkString("dashing5_aa");
         } else {

@@ -14,7 +14,7 @@
 
 #include "GrContextFactory.h"
 #include "GrInvariantOutput.h"
-#include "GrOptDrawState.h"
+#include "GrPipeline.h"
 #include "GrTest.h"
 #include "GrXferProcessor.h"
 #include "SkChecksum.h"
@@ -98,9 +98,7 @@ GrFragmentProcessor* BigKeyProcessor::TestCreate(SkRandom*,
 static const int kRenderTargetHeight = 1;
 static const int kRenderTargetWidth = 1;
 
-static GrRenderTarget* random_render_target(GrContext* context,
-                                            const GrCacheID& cacheId,
-                                            SkRandom* random) {
+static GrRenderTarget* random_render_target(GrContext* context, SkRandom* random) {
     // setup render target
     GrTextureParams params;
     GrSurfaceDesc texDesc;
@@ -110,23 +108,29 @@ static GrRenderTarget* random_render_target(GrContext* context,
     texDesc.fConfig = kRGBA_8888_GrPixelConfig;
     texDesc.fOrigin = random->nextBool() == true ? kTopLeft_GrSurfaceOrigin :
                                                    kBottomLeft_GrSurfaceOrigin;
+    GrUniqueKey key;
+    static const GrUniqueKey::Domain kDomain = GrUniqueKey::GenerateDomain();
+    GrUniqueKey::Builder builder(&key, kDomain, 1);
+    builder[0] = texDesc.fOrigin;
+    builder.finish();
 
-    SkAutoTUnref<GrTexture> texture(context->findAndRefTexture(texDesc, cacheId, &params));
+    GrTexture* texture = context->findAndRefCachedTexture(key);
     if (!texture) {
-        texture.reset(context->createTexture(&params, texDesc, cacheId, 0, 0));
-        if (!texture) {
-            return NULL;
+        texture = context->createTexture(texDesc, true);
+        if (texture) {
+            context->addResourceToCache(key, texture);
         }
     }
-    return SkRef(texture->asRenderTarget());
+    return texture ? texture->asRenderTarget() : NULL;
 }
 
-static void set_random_xpf(GrContext* context, const GrDrawTargetCaps& caps, GrDrawState* ds,
-                           SkRandom* random, GrTexture* dummyTextures[]) {
+static void set_random_xpf(GrContext* context, const GrDrawTargetCaps& caps,
+                           GrPipelineBuilder* pipelineBuilder, SkRandom* random,
+                           GrTexture* dummyTextures[]) {
     SkAutoTUnref<const GrXPFactory> xpf(
         GrProcessorTestFactory<GrXPFactory>::CreateStage(random, context, caps, dummyTextures));
     SkASSERT(xpf);
-    ds->setXPFactory(xpf.get());
+    pipelineBuilder->setXPFactory(xpf.get());
 }
 
 static const GrGeometryProcessor* get_random_gp(GrContext* context,
@@ -140,7 +144,7 @@ static const GrGeometryProcessor* get_random_gp(GrContext* context,
 }
 
 static void set_random_color_coverage_stages(GrGLGpu* gpu,
-                                             GrDrawState* ds,
+                                             GrPipelineBuilder* pipelineBuilder,
                                              int maxStages,
                                              bool usePathRendering,
                                              SkRandom* random,
@@ -157,11 +161,6 @@ static void set_random_color_coverage_stages(GrGLGpu* gpu,
                                                                          dummyTextures));
         SkASSERT(fp);
 
-        // don't add dst color reads to coverage stage
-        if (s >= numColorProcs && fp->willReadDstColor()) {
-            continue;
-        }
-
         // If adding this effect would exceed the max texture coord set count then generate a
         // new random effect.
         if (usePathRendering && gpu->glPathRendering()->texturingMode() ==
@@ -176,24 +175,24 @@ static void set_random_color_coverage_stages(GrGLGpu* gpu,
 
         // finally add the stage to the correct pipeline in the drawstate
         if (s < numColorProcs) {
-            ds->addColorProcessor(fp);
+            pipelineBuilder->addColorProcessor(fp);
         } else {
-            ds->addCoverageProcessor(fp);
+            pipelineBuilder->addCoverageProcessor(fp);
         }
         ++s;
     }
 }
 
-static void set_random_state(GrDrawState* ds, SkRandom* random) {
+static void set_random_state(GrPipelineBuilder* pipelineBuilder, SkRandom* random) {
     int state = 0;
-    for (int i = 1; i <= GrDrawState::kLast_StateBit; i <<= 1) {
+    for (int i = 1; i <= GrPipelineBuilder::kLast_StateBit; i <<= 1) {
         state |= random->nextBool() * i;
     }
-    ds->enableState(state);
+    pipelineBuilder->enableState(state);
 }
 
 // right now, the only thing we seem to care about in drawState's stencil is 'doesWrite()'
-static void set_random_stencil(GrDrawState* ds, SkRandom* random) {
+static void set_random_stencil(GrPipelineBuilder* pipelineBuilder, SkRandom* random) {
     GR_STATIC_CONST_SAME_STENCIL(kDoesWriteStencil,
                                  kReplace_StencilOp,
                                  kReplace_StencilOp,
@@ -210,9 +209,9 @@ static void set_random_stencil(GrDrawState* ds, SkRandom* random) {
                                  0xffff);
 
     if (random->nextBool()) {
-        ds->setStencil(kDoesWriteStencil);
+        pipelineBuilder->setStencil(kDoesWriteStencil);
     } else {
-        ds->setStencil(kDoesNotWriteStencil);
+        pipelineBuilder->setStencil(kDoesNotWriteStencil);
     }
 }
 
@@ -224,12 +223,12 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
     dummyDesc.fConfig = kSkia8888_GrPixelConfig;
     dummyDesc.fWidth = 34;
     dummyDesc.fHeight = 18;
-    SkAutoTUnref<GrTexture> dummyTexture1(gpu->createTexture(dummyDesc, NULL, 0));
+    SkAutoTUnref<GrTexture> dummyTexture1(gpu->createTexture(dummyDesc, false, NULL, 0));
     dummyDesc.fFlags = kNone_GrSurfaceFlags;
     dummyDesc.fConfig = kAlpha_8_GrPixelConfig;
     dummyDesc.fWidth = 16;
     dummyDesc.fHeight = 22;
-    SkAutoTUnref<GrTexture> dummyTexture2(gpu->createTexture(dummyDesc, NULL, 0));
+    SkAutoTUnref<GrTexture> dummyTexture2(gpu->createTexture(dummyDesc, false, NULL, 0));
 
     if (!dummyTexture1 || ! dummyTexture2) {
         SkDebugf("Could not allocate dummy textures");
@@ -241,14 +240,6 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
     // dummy scissor state
     GrScissorState scissor;
 
-    // Setup texture cache id key
-    const GrCacheID::Domain glProgramsDomain = GrCacheID::GenerateDomain();
-    GrCacheID::Key key;
-    memset(&key, 0, sizeof(key));
-    key.fData32[0] = kRenderTargetWidth;
-    key.fData32[1] = kRenderTargetHeight;
-    GrCacheID glProgramsCacheID(glProgramsDomain, key);
-
     // setup clip
     SkRect screen = SkRect::MakeWH(SkIntToScalar(kRenderTargetWidth),
                                    SkIntToScalar(kRenderTargetHeight));
@@ -256,29 +247,26 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
     SkClipStack stack;
     stack.clipDevRect(screen, SkRegion::kReplace_Op, false);
 
-    // wrap the SkClipStack in a GrClipData
-    GrClipData clipData;
-    clipData.fClipStack = &stack;
-    this->setClip(&clipData);
+    // wrap the SkClipStack in a GrClip
+    GrClip clip;
+    clip.setClipStack(&stack);
 
     SkRandom random;
     static const int NUM_TESTS = 512;
     for (int t = 0; t < NUM_TESTS;) {
         // setup random render target(can fail)
-        SkAutoTUnref<GrRenderTarget> rt(random_render_target(fContext, glProgramsCacheID, &random));
+        SkAutoTUnref<GrRenderTarget> rt(random_render_target(fContext, &random));
         if (!rt.get()) {
             SkDebugf("Could not allocate render target");
             return false;
         }
 
-        GrDrawState ds;
-        ds.setRenderTarget(rt.get());
+        GrPipelineBuilder pipelineBuilder;
+        pipelineBuilder.setRenderTarget(rt.get());
+        pipelineBuilder.setClip(clip);
 
         // if path rendering we have to setup a couple of things like the draw type
         bool usePathRendering = gpu->glCaps().pathRenderingSupport() && random.nextBool();
-
-        GrGpu::DrawType drawType = usePathRendering ? GrGpu::kDrawPath_DrawType :
-                                                      GrGpu::kDrawPoints_DrawType;
 
         // twiddle drawstate knobs randomly
         bool hasGeometryProcessor = !usePathRendering;
@@ -290,17 +278,17 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
             pathProc.reset(GrPathProcessor::Create(GrColor_WHITE));
         }
         set_random_color_coverage_stages(gpu,
-                                         &ds,
+                                         &pipelineBuilder,
                                          maxStages - hasGeometryProcessor,
                                          usePathRendering,
                                          &random,
                                          dummyTextures);
 
         // creates a random xfer processor factory on the draw state 
-        set_random_xpf(fContext, gpu->glCaps(), &ds, &random, dummyTextures);
+        set_random_xpf(fContext, gpu->glCaps(), &pipelineBuilder, &random, dummyTextures);
 
-        set_random_state(&ds, &random);
-        set_random_stencil(&ds, &random);
+        set_random_state(&pipelineBuilder, &random);
+        set_random_stencil(&pipelineBuilder, &random);
 
         GrDeviceCoordTexture dstCopy;
 
@@ -310,19 +298,32 @@ bool GrDrawTarget::programUnitTest(int maxStages) {
         } else {
             primProc = pathProc.get();
         }
-        if (!this->setupDstReadIfNecessary(&ds, primProc, &dstCopy, NULL)) {
+
+        const GrProcOptInfo& colorPOI = pipelineBuilder.colorProcInfo(primProc);
+        const GrProcOptInfo& coveragePOI = pipelineBuilder.coverageProcInfo(primProc);
+
+        if (!this->setupDstReadIfNecessary(pipelineBuilder, colorPOI, coveragePOI, &dstCopy,
+                                           NULL)) {
             SkDebugf("Couldn't setup dst read texture");
             return false;
         }
 
         // create optimized draw state, setup readDst texture if required, and build a descriptor
         // and program.  ODS creation can fail, so we have to check
-        GrOptDrawState ods(ds, gp, pathProc, *gpu->caps(), scissor, &dstCopy, drawType);
-        if (ods.mustSkip()) {
+        GrPipeline pipeline(pipelineBuilder, colorPOI, coveragePOI,
+                            *gpu->caps(), scissor, &dstCopy);
+        if (pipeline.mustSkip()) {
             continue;
         }
-        ods.finalize(gpu);
-        SkAutoTUnref<GrGLProgram> program(GrGLProgramBuilder::CreateProgram(ods, gpu));
+        GrBatchTracker bt;
+        primProc->initBatchTracker(&bt, pipeline.getInitBatchTracker());
+
+        GrProgramDesc desc;
+        gpu->buildProgramDesc(&desc, *primProc, pipeline, bt);
+
+        GrGpu::DrawArgs args(primProc, &pipeline, &desc, &bt);
+        SkAutoTUnref<GrGLProgram> program(GrGLProgramBuilder::CreateProgram(args, gpu));
+
         if (NULL == program.get()) {
             SkDebugf("Failed to create program!");
             return false;
@@ -359,7 +360,7 @@ DEF_GPUTEST(GLPrograms, reporter, factory) {
 #if SK_ANGLE
             // Some long shaders run out of temporary registers in the D3D compiler on ANGLE.
             if (type == GrContextFactory::kANGLE_GLContextType) {
-                maxStages = 3;
+                maxStages = 2;
             }
 #endif
             GrTestTarget target;

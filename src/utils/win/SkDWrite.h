@@ -9,6 +9,7 @@
 #define SkDWrite_DEFINED
 
 #include "SkTemplates.h"
+#include "SkFontStyle.h"
 
 #include <dwrite.h>
 #include <winsdkver.h>
@@ -20,6 +21,10 @@ class SkString;
 
 #ifndef SK_HAS_DWRITE_1_H
 #define SK_HAS_DWRITE_1_H (WINVER_MAXVER >= 0x0602)
+#endif
+
+#ifndef SK_HAS_DWRITE_2_H
+#define SK_HAS_DWRITE_2_H (WINVER_MAXVER >= 0x0603)
 #endif
 
 IDWriteFactory* sk_get_dwrite_factory();
@@ -78,6 +83,30 @@ public:
 
     const T* get() const { return reinterpret_cast<const T*>(fData); }
     const T* operator->() const { return reinterpret_cast<const T*>(fData); }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Style conversion
+
+struct DWriteStyle {
+    explicit DWriteStyle(const SkFontStyle& pattern) {
+        switch (pattern.slant()) {
+        case SkFontStyle::kUpright_Slant:
+            fSlant = DWRITE_FONT_STYLE_NORMAL;
+            break;
+        case SkFontStyle::kItalic_Slant:
+            fSlant = DWRITE_FONT_STYLE_ITALIC;
+            break;
+        default:
+            SkASSERT(false);
+        }
+
+        fWeight = (DWRITE_FONT_WEIGHT)pattern.weight();
+        fWidth = (DWRITE_FONT_STRETCH)pattern.width();
+    }
+    DWRITE_FONT_STYLE fSlant;
+    DWRITE_FONT_WEIGHT fWeight;
+    DWRITE_FONT_STRETCH fWidth;
 };
 
 #endif

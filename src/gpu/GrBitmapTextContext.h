@@ -32,7 +32,6 @@ private:
     GrTexture*                        fCurrTexture;
     GrMaskFormat                      fCurrMaskFormat;
     SkAutoTUnref<const GrGeometryProcessor> fCachedGeometryProcessor;
-    SkAutoTUnref<const GrFragmentProcessor> fCachedTextureProcessor;
     // Used to check whether fCachedEffect is still valid.
     uint32_t                          fEffectTextureUniqueID;
     SkMatrix                          fLocalMatrix;
@@ -41,15 +40,16 @@ private:
 
     bool canDraw(const SkPaint& paint, const SkMatrix& viewMatrix) SK_OVERRIDE;
 
-    virtual void onDrawText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
-                            const char text[], size_t byteLength,
+    virtual void onDrawText(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
+                            const SkMatrix& viewMatrix, const char text[], size_t byteLength,
                             SkScalar x, SkScalar y) SK_OVERRIDE;
-    virtual void onDrawPosText(const GrPaint&, const SkPaint&, const SkMatrix& viewMatrix,
+    virtual void onDrawPosText(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&,
+                               const SkMatrix& viewMatrix,
                                const char text[], size_t byteLength,
                                const SkScalar pos[], int scalarsPerPosition,
                                const SkPoint& offset) SK_OVERRIDE;
 
-    void init(const GrPaint&, const SkPaint&);
+    void init(GrRenderTarget*, const GrClip&, const GrPaint&, const SkPaint&);
     void appendGlyph(GrGlyph::PackedID, SkFixed left, SkFixed top, GrFontScaler*);
     bool uploadGlyph(GrGlyph*, GrFontScaler*);
     void flush();                 // automatically called by destructor

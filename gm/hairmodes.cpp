@@ -82,7 +82,7 @@ namespace skiagm {
             return SkString("hairmodes");
         }
 
-        virtual SkISize onISize() { return SkISize::Make(640, 480); }
+        virtual SkISize onISize() SK_OVERRIDE { return SkISize::Make(640, 480); }
 
         void onOnceBeforeDraw() SK_OVERRIDE {
             fBGPaint.setShader(make_bg_shader())->unref();
@@ -120,9 +120,6 @@ namespace skiagm {
                 canvas->translate(W * 5 / 4, 0);
             }
         }
-
-        // disable pdf for now, since it crashes on mac
-        virtual uint32_t onGetFlags() const { return kSkipPDF_Flag | kSkipTiled_Flag; }
 
     private:
         typedef GM INHERITED;

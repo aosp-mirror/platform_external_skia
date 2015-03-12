@@ -6,11 +6,14 @@
  */
 
 #include "SkChecksum.h"
-#include "SkResourceCache.h"
+#include "SkMessageBus.h"
 #include "SkMipMap.h"
 #include "SkPixelRef.h"
+#include "SkResourceCache.h"
 
 #include <stddef.h>
+
+DECLARE_SKMESSAGEBUS_MESSAGE(SkResourceCache::PurgeSharedIDMessage)
 
 // This can be defined by the caller's build system
 //#define SK_USE_DISCARDABLE_SCALEDIMAGECACHE
@@ -23,18 +26,22 @@
     #define SK_DEFAULT_IMAGE_CACHE_LIMIT     (2 * 1024 * 1024)
 #endif
 
-void SkResourceCache::Key::init(void* nameSpace, size_t length) {
+void SkResourceCache::Key::init(void* nameSpace, uint64_t sharedID, size_t length) {
     SkASSERT(SkAlign4(length) == length);
 
     // fCount32 and fHash are not hashed
-    static const int kUnhashedLocal32s = 2;
-    static const int kLocal32s = kUnhashedLocal32s + (sizeof(fNamespace) >> 2);
+    static const int kUnhashedLocal32s = 2; // fCache32 + fHash
+    static const int kSharedIDLocal32s = 2; // fSharedID_lo + fSharedID_hi
+    static const int kHashedLocal32s = kSharedIDLocal32s + (sizeof(fNamespace) >> 2);
+    static const int kLocal32s = kUnhashedLocal32s + kHashedLocal32s;
 
     SK_COMPILE_ASSERT(sizeof(Key) == (kLocal32s << 2), unaccounted_key_locals);
     SK_COMPILE_ASSERT(sizeof(Key) == offsetof(Key, fNamespace) + sizeof(fNamespace),
                       namespace_field_must_be_last);
 
     fCount32 = SkToS32(kLocal32s + (length >> 2));
+    fSharedID_lo = (uint32_t)sharedID;
+    fSharedID_hi = (uint32_t)(sharedID >> 32);
     fNamespace = nameSpace;
     // skip unhashed fields when computing the murmur
     fHash = SkChecksum::Murmur3(this->as32() + kUnhashedLocal32s,
@@ -199,7 +206,9 @@ SkResourceCache::~SkResourceCache() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool SkResourceCache::find(const Key& key, VisitorProc visitor, void* context) {
+bool SkResourceCache::find(const Key& key, FindVisitor visitor, void* context) {
+    this->checkMessages();
+
     Rec* rec = fHash->find(key);
     if (rec) {
         if (visitor(*rec, context)) {
@@ -226,6 +235,8 @@ static void make_size_str(size_t size, SkString* str) {
 static bool gDumpCacheTransactions;
 
 void SkResourceCache::add(Rec* rec) {
+    this->checkMessages();
+    
     SkASSERT(rec);
     // See if we already have this key (racy inserts, etc.)
     Rec* existing = fHash->find(rec->getKey());
@@ -294,6 +305,47 @@ void SkResourceCache::purgeAsNeeded(bool forcePurge) {
     }
 }
 
+//#define SK_TRACK_PURGE_SHAREDID_HITRATE
+
+#ifdef SK_TRACK_PURGE_SHAREDID_HITRATE
+static int gPurgeCallCounter;
+static int gPurgeHitCounter;
+#endif
+
+void SkResourceCache::purgeSharedID(uint64_t sharedID) {
+    if (0 == sharedID) {
+        return;
+    }
+
+#ifdef SK_TRACK_PURGE_SHAREDID_HITRATE
+    gPurgeCallCounter += 1;
+    bool found = false;
+#endif
+    // go backwards, just like purgeAsNeeded, just to make the code similar.
+    // could iterate either direction and still be correct.
+    Rec* rec = fTail;
+    while (rec) {
+        Rec* prev = rec->fPrev;
+        if (rec->getKey().getSharedID() == sharedID) {
+//            SkDebugf("purgeSharedID id=%llx rec=%p\n", sharedID, rec);
+            this->remove(rec);
+#ifdef SK_TRACK_PURGE_SHAREDID_HITRATE
+            found = true;
+#endif
+        }
+        rec = prev;
+    }
+
+#ifdef SK_TRACK_PURGE_SHAREDID_HITRATE
+    if (found) {
+        gPurgeHitCounter += 1;
+    }
+
+    SkDebugf("PurgeShared calls=%d hits=%d rate=%g\n", gPurgeCallCounter, gPurgeHitCounter,
+             gPurgeHitCounter * 100.0 / gPurgeCallCounter);
+#endif
+}
+
 size_t SkResourceCache::setTotalByteLimit(size_t newLimit) {
     size_t prevLimit = fTotalByteLimit;
     fTotalByteLimit = newLimit;
@@ -304,6 +356,8 @@ size_t SkResourceCache::setTotalByteLimit(size_t newLimit) {
 }
 
 SkCachedData* SkResourceCache::newCachedData(size_t bytes) {
+    this->checkMessages();
+    
     if (fDiscardableFactory) {
         SkDiscardableMemory* dm = fDiscardableFactory(bytes);
         return dm ? SkNEW_ARGS(SkCachedData, (bytes, dm)) : NULL;
@@ -435,6 +489,30 @@ size_t SkResourceCache::getSingleAllocationByteLimit() const {
     return fSingleAllocationByteLimit;
 }
 
+size_t SkResourceCache::getEffectiveSingleAllocationByteLimit() const {
+    // fSingleAllocationByteLimit == 0 means the caller is asking for our default
+    size_t limit = fSingleAllocationByteLimit;
+
+    // if we're not discardable (i.e. we are fixed-budget) then cap the single-limit
+    // to our budget.
+    if (NULL == fDiscardableFactory) {
+        if (0 == limit) {
+            limit = fTotalByteLimit;
+        } else {
+            limit = SkTMin(limit, fTotalByteLimit);
+        }
+    }
+    return limit;
+}
+
+void SkResourceCache::checkMessages() {
+    SkTArray<PurgeSharedIDMessage> msgs;
+    fPurgeSharedIDInbox.poll(&msgs);
+    for (int i = 0; i < msgs.count(); ++i) {
+        this->purgeSharedID(msgs[i].fSharedID);
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "SkThread.h"
@@ -511,12 +589,17 @@ size_t SkResourceCache::GetSingleAllocationByteLimit() {
     return get_cache()->getSingleAllocationByteLimit();
 }
 
+size_t SkResourceCache::GetEffectiveSingleAllocationByteLimit() {
+    SkAutoMutexAcquire am(gMutex);
+    return get_cache()->getEffectiveSingleAllocationByteLimit();
+}
+
 void SkResourceCache::PurgeAll() {
     SkAutoMutexAcquire am(gMutex);
     return get_cache()->purgeAll();
 }
 
-bool SkResourceCache::Find(const Key& key, VisitorProc visitor, void* context) {
+bool SkResourceCache::Find(const Key& key, FindVisitor visitor, void* context) {
     SkAutoMutexAcquire am(gMutex);
     return get_cache()->find(key, visitor, context);
 }
@@ -524,6 +607,12 @@ bool SkResourceCache::Find(const Key& key, VisitorProc visitor, void* context) {
 void SkResourceCache::Add(Rec* rec) {
     SkAutoMutexAcquire am(gMutex);
     get_cache()->add(rec);
+}
+
+void SkResourceCache::PostPurgeSharedID(uint64_t sharedID) {
+    if (sharedID) {
+        SkMessageBus<PurgeSharedIDMessage>::Post(PurgeSharedIDMessage(sharedID));
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////

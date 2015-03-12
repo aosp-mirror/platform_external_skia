@@ -25,7 +25,7 @@
 # If you want more fine-grained control, you can run gyp and then build the
 # gyp-generated projects yourself.
 #
-# See https://sites.google.com/site/skiadocs/ for complete documentation.
+# See https://skia.org for complete documentation.
 
 SKIA_OUT ?= out
 BUILDTYPE ?= Debug
@@ -44,7 +44,6 @@ VALID_TARGETS := \
                  debugger \
                  dm \
                  everything \
-                 gm \
                  most \
                  pathops_unittest \
                  pdfviewer \
@@ -68,7 +67,7 @@ default: most
 
 uname := $(shell uname)
 ifneq (,$(findstring CYGWIN, $(uname)))
-  $(error Cannot build using Make on Windows. See https://sites.google.com/site/skiadocs/user-documentation/quick-start-guides/windows)
+  $(error Cannot build using Make on Windows. See https://skia.org/user/quick/windows)
 endif
 
 # If user requests "make all", chain to our explicitly-declared "everything"
@@ -87,7 +86,7 @@ endif
 # Run gyp no matter what.
 .PHONY: gyp
 gyp:
-	$(CWD)/gyp_skia
+	$(CWD)/gyp_skia --no-parallel -G config=$(BUILDTYPE)
 
 # For all specific targets: run gyp if necessary, and then pass control to
 # the gyp-generated buildfiles.

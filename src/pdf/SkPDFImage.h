@@ -23,13 +23,10 @@ struct SkIRect;
 
 /**
  *  Return the mose efficient availible encoding of the given bitmap.
- *
- *  If the bitmap has encoded JPEG data and that data can be embedded
- *  into the PDF output stream directly, use that.  Otherwise, fall
- *  back on SkPDFImage::CreateImage.
  */
-SkPDFObject* SkPDFCreateImageObject(
-        const SkBitmap&, const SkIRect& subset, SkPicture::EncodeBitmap);
+SkPDFObject* SkPDFCreateImageObject(SkPDFCanon* canon,
+                                    const SkBitmap&,
+                                    const SkIRect& subset);
 
 /** \class SkPDFImage
 
@@ -49,50 +46,35 @@ public:
      *           the given parameters.
      */
     static SkPDFImage* CreateImage(const SkBitmap& bitmap,
-                                   const SkIRect& srcRect,
-                                   SkPicture::EncodeBitmap encoder);
+                                   const SkIRect& srcRect);
 
     virtual ~SkPDFImage();
-
-    /** Add a Soft Mask (alpha or shape channel) to the image.  Refs mask.
-     *  @param mask A gray scale image representing the mask.
-     *  @return The mask argument is returned.
-     */
-    SkPDFImage* addSMask(SkPDFImage* mask);
 
     bool isEmpty() {
         return fSrcRect.isEmpty();
     }
 
-    // The SkPDFObject interface.
-    virtual void getResources(const SkTSet<SkPDFObject*>& knownResourceObjects,
-                              SkTSet<SkPDFObject*>* newResourceObjects);
-
 private:
     SkBitmap fBitmap;
     bool fIsAlpha;
     SkIRect fSrcRect;
-    SkPicture::EncodeBitmap fEncoder;
     bool fStreamValid;
-
-    SkTDArray<SkPDFObject*> fResources;
 
     /** Create a PDF image XObject. Entries for the image properties are
      *  automatically added to the stream dictionary.
      *  @param stream     The image stream. May be NULL. Otherwise, this
      *                    (instead of the input bitmap) will be used as the
      *                    PDF's content stream, possibly with lossless encoding.
+     *                    Will be duplicated, and left in indeterminate state.
      *  @param bitmap     The image. If a stream is not given, its color data
      *                    will be used as the image. If a stream is given, this
      *                    is used for configuration only.
      *  @param isAlpha    Whether or not this is the alpha of an image.
      *  @param srcRect    The clipping applied to bitmap before generating
      *                    imageData.
-     *  @param encoder    A function used to encode the bitmap for compression.
-     *                    May be NULL.
      */
     SkPDFImage(SkStream* stream, const SkBitmap& bitmap, bool isAlpha,
-               const SkIRect& srcRect, SkPicture::EncodeBitmap encoder);
+               const SkIRect& srcRect);
 
     /** Copy constructor, used to generate substitutes.
      *  @param image      The SkPDFImage to copy.

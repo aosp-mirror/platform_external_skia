@@ -21,10 +21,10 @@
 
     // These are all free, zero instructions.
     // MSVC insists we use _mm_castA_B(a) instead of (B)a.
-    static __m128  as_4f(__m128i v) { return _mm_castsi128_ps(v); }
-    static __m128  as_4f(__m128  v) { return                  v ; }
-    static __m128i as_4i(__m128i v) { return                  v ; }
-    static __m128i as_4i(__m128  v) { return _mm_castps_si128(v); }
+    static inline __m128  as_4f(__m128i v) { return _mm_castsi128_ps(v); }
+    static inline __m128  as_4f(__m128  v) { return                  v ; }
+    static inline __m128i as_4i(__m128i v) { return                  v ; }
+    static inline __m128i as_4i(__m128  v) { return _mm_castps_si128(v); }
 
 #elif defined(SK4X_PRIVATE)
     // It'd be slightly faster to call _mm_cmpeq_epi32() on an unintialized register and itself,
@@ -75,6 +75,7 @@ Sk4x<T> Sk4x<T>::ZWCD(const Sk4x<T>& a, const Sk4x<T>& b) {
 // Now we'll write all Sk4f specific methods.  This M() macro will remove some noise.
 #define M(...) template <> inline __VA_ARGS__ Sk4f::
 
+M() Sk4x(float v) : fVec(_mm_set1_ps(v)) {}
 M() Sk4x(float a, float b, float c, float d) : fVec(_mm_set_ps(d,c,b,a)) {}
 
 M(Sk4f) Load       (const float fs[4]) { return _mm_loadu_ps(fs); }
@@ -83,11 +84,11 @@ M(Sk4f) LoadAligned(const float fs[4]) { return _mm_load_ps (fs); }
 M(void) store       (float fs[4]) const { _mm_storeu_ps(fs, fVec); }
 M(void) storeAligned(float fs[4]) const { _mm_store_ps (fs, fVec); }
 
-template <> template <>
-Sk4i Sk4f::reinterpret<Sk4i>() const { return as_4i(fVec); }
+template <>
+M(Sk4i) reinterpret<Sk4i>() const { return as_4i(fVec); }
 
-template <> template <>
-Sk4i Sk4f::cast<Sk4i>() const { return _mm_cvtps_epi32(fVec); }
+template <>
+M(Sk4i) cast<Sk4i>() const { return _mm_cvtps_epi32(fVec); }
 
 // We're going to try a little experiment here and skip allTrue(), anyTrue(), and bit-manipulators
 // for Sk4f.  Code that calls them probably does so accidentally.
@@ -97,6 +98,9 @@ M(Sk4f) add     (const Sk4f& o) const { return _mm_add_ps(fVec, o.fVec); }
 M(Sk4f) subtract(const Sk4f& o) const { return _mm_sub_ps(fVec, o.fVec); }
 M(Sk4f) multiply(const Sk4f& o) const { return _mm_mul_ps(fVec, o.fVec); }
 M(Sk4f) divide  (const Sk4f& o) const { return _mm_div_ps(fVec, o.fVec); }
+
+M(Sk4f) rsqrt() const { return _mm_rsqrt_ps(fVec); }
+M(Sk4f)  sqrt() const { return _mm_sqrt_ps( fVec); }
 
 M(Sk4i) equal           (const Sk4f& o) const { return _mm_cmpeq_ps (fVec, o.fVec); }
 M(Sk4i) notEqual        (const Sk4f& o) const { return _mm_cmpneq_ps(fVec, o.fVec); }
@@ -112,6 +116,7 @@ M(Sk4f) Max(const Sk4f& a, const Sk4f& b) { return _mm_max_ps(a.fVec, b.fVec); }
 #undef M
 #define M(...) template <> inline __VA_ARGS__ Sk4i::
 
+M() Sk4x(int32_t v) : fVec(_mm_set1_epi32(v)) {}
 M() Sk4x(int32_t a, int32_t b, int32_t c, int32_t d) : fVec(_mm_set_epi32(d,c,b,a)) {}
 
 M(Sk4i) Load       (const int32_t is[4]) { return _mm_loadu_si128((const __m128i*)is); }
@@ -120,11 +125,11 @@ M(Sk4i) LoadAligned(const int32_t is[4]) { return _mm_load_si128 ((const __m128i
 M(void) store       (int32_t is[4]) const { _mm_storeu_si128((__m128i*)is, fVec); }
 M(void) storeAligned(int32_t is[4]) const { _mm_store_si128 ((__m128i*)is, fVec); }
 
-template <> template <>
-Sk4f Sk4i::reinterpret<Sk4f>() const { return as_4f(fVec); }
+template <>
+M(Sk4f) reinterpret<Sk4f>() const { return as_4f(fVec); }
 
-template <> template <>
-Sk4f Sk4i::cast<Sk4f>() const { return _mm_cvtepi32_ps(fVec); }
+template <>
+M(Sk4f) cast<Sk4f>() const { return _mm_cvtepi32_ps(fVec); }
 
 M(bool) allTrue() const { return 0xf == _mm_movemask_ps(as_4f(fVec)); }
 M(bool) anyTrue() const { return 0x0 != _mm_movemask_ps(as_4f(fVec)); }

@@ -47,10 +47,10 @@ static void perform_font_subsetting(SkPDFCatalog* catalog,
     }
 }
 
-SkPDFDocument::SkPDFDocument(Flags flags)
+SkPDFDocument::SkPDFDocument()
         : fXRefFileOffset(0),
           fTrailerDict(NULL) {
-    fCatalog.reset(new SkPDFCatalog(flags));
+    fCatalog.reset(SkNEW(SkPDFCatalog));
     fDocCatalog = SkNEW_ARGS(SkPDFDict, ("Catalog"));
     fCatalog->addObject(fDocCatalog, true);
     fFirstPageResources = NULL;
@@ -158,70 +158,31 @@ bool SkPDFDocument::emitPDF(SkWStream* stream) {
 
         // Build font subsetting info before proceeding.
         perform_font_subsetting(fCatalog.get(), fPages, &fSubstitutes);
-
-        // Figure out the size of things and inform the catalog of file offsets.
-        off_t fileOffset = SkToOffT(this->headerSize());
-        fileOffset += SkToOffT(fCatalog->setFileOffset(fDocCatalog, fileOffset));
-        fileOffset += SkToOffT(fCatalog->setFileOffset(fPages[0], fileOffset));
-        fileOffset += fPages[0]->getPageSize(fCatalog.get(), fileOffset);
-        for (int i = 0; i < fFirstPageResources->count(); i++) {
-            fileOffset += SkToOffT(fCatalog->setFileOffset((*fFirstPageResources)[i], fileOffset));
-        }
-        // Add the size of resources of substitute objects used on page 1.
-        fileOffset += fCatalog->setSubstituteResourcesOffsets(fileOffset, true);
-        if (fPages.count() > 1) {
-            // TODO(vandebo): For linearized format, save the start of the
-            // first page xref table and calculate the size.
-        }
-
-        for (int i = 0; i < fPageTree.count(); i++) {
-            fileOffset += SkToOffT(fCatalog->setFileOffset(fPageTree[i], fileOffset));
-        }
-
-        for (int i = 1; i < fPages.count(); i++) {
-            fileOffset += fPages[i]->getPageSize(fCatalog.get(), fileOffset);
-        }
-
-        for (int i = 0; i < fOtherPageResources->count(); i++) {
-            fileOffset += SkToOffT(fCatalog->setFileOffset((*fOtherPageResources)[i], fileOffset));
-        }
-
-        fileOffset += fCatalog->setSubstituteResourcesOffsets(fileOffset, false);
-        fXRefFileOffset = fileOffset;
     }
 
+    SkTSet<SkPDFObject*> resourceSet;
+    if (resourceSet.add(fDocCatalog)) {
+        fDocCatalog->addResources(&resourceSet, fCatalog);
+    }
+    off_t baseOffset = SkToOffT(stream->bytesWritten());
     emitHeader(stream);
-    fDocCatalog->emitIndirectObject(stream, fCatalog.get());
-    fPages[0]->emitIndirectObject(stream, fCatalog.get());
-    fPages[0]->emitPage(stream, fCatalog.get());
-    for (int i = 0; i < fFirstPageResources->count(); i++) {
-        (*fFirstPageResources)[i]->emit(stream, fCatalog.get(), true);
+    for (int i = 0; i < resourceSet.count(); ++i) {
+        SkPDFObject* object = resourceSet[i];
+        fCatalog->setFileOffset(object,
+                                SkToOffT(stream->bytesWritten()) - baseOffset);
+        SkASSERT(object == fCatalog->getSubstituteObject(object));
+        stream->writeDecAsText(fCatalog->getObjectNumber(object));
+        stream->writeText(" 0 obj\n");  // Generation number is always 0.
+        object->emitObject(stream, fCatalog);
+        stream->writeText("\nendobj\n");
     }
-    fCatalog->emitSubstituteResources(stream, true);
-    // TODO(vandebo): Support linearized format
-    // if (fPages.size() > 1) {
-    //     // TODO(vandebo): Save the file offset for the first page xref table.
-    //     fCatalog->emitXrefTable(stream, true);
-    // }
-
-    for (int i = 0; i < fPageTree.count(); i++) {
-        fPageTree[i]->emitIndirectObject(stream, fCatalog.get());
-    }
-
-    for (int i = 1; i < fPages.count(); i++) {
-        fPages[i]->emitPage(stream, fCatalog.get());
-    }
-
-    for (int i = 0; i < fOtherPageResources->count(); i++) {
-        (*fOtherPageResources)[i]->emit(stream, fCatalog.get(), true);
-    }
-
-    fCatalog->emitSubstituteResources(stream, false);
+    fXRefFileOffset = SkToOffT(stream->bytesWritten()) - baseOffset;
     int64_t objCount = fCatalog->emitXrefTable(stream, fPages.count() > 1);
     emitFooter(stream, objCount);
     return true;
 }
 
+// TODO(halcanary): remove this method, since it is unused.
 bool SkPDFDocument::setPage(int pageNumber, SkPDFDevice* pdfDevice) {
     if (!fPageTree.isEmpty()) {
         return false;
@@ -255,6 +216,7 @@ bool SkPDFDocument::appendPage(SkPDFDevice* pdfDevice) {
 }
 
 // Deprecated.
+// TODO(halcanary): remove
 void SkPDFDocument::getCountOfFontTypes(
         int counts[SkAdvancedTypefaceMetrics::kOther_Font + 2]) const {
     sk_bzero(counts, sizeof(int) *
@@ -279,6 +241,7 @@ void SkPDFDocument::getCountOfFontTypes(
     counts[SkAdvancedTypefaceMetrics::kOther_Font + 1] = notEmbeddable;
 }
 
+// TODO(halcanary): expose notEmbeddableCount in SkDocument
 void SkPDFDocument::getCountOfFontTypes(
         int counts[SkAdvancedTypefaceMetrics::kOther_Font + 1],
         int* notSubsettableCount,
@@ -323,6 +286,7 @@ void SkPDFDocument::emitHeader(SkWStream* stream) {
     stream->writeText("\n");
 }
 
+//TODO(halcanary): remove this function
 size_t SkPDFDocument::headerSize() {
     SkDynamicMemoryWStream buffer;
     emitHeader(&buffer);

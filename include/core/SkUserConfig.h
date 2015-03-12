@@ -117,13 +117,10 @@
  */
 //#define SK_DEFAULT_IMAGE_CACHE_LIMIT (1024 * 1024)
 
-/*  If zlib is available and you want to support the flate compression
-    algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
-    include path. Alternatively, define SK_SYSTEM_ZLIB to use the system zlib
-    library specified as "#include <zlib.h>".
+/*  If zlib is not available or you don't want to support flate compression
+    in PDF generation, define SK_NO_FLATE.
  */
-//#define SK_ZLIB_INCLUDE <zlib.h>
-//#define SK_SYSTEM_ZLIB
+//#define SK_NO_FLATE
 
 /*  Define this to allow PDF scalars above 32k.  The PDF/A spec doesn't allow
     them, but modern PDF interpreters should handle them just fine.
@@ -178,16 +175,6 @@
  */
 //#define SK_PDF_USE_PATHOPS
 
-/* Skia uses these defines as the target of include preprocessor directives.
- * The header files pointed to by these defines provide declarations and
- * possibly inline implementations of threading primitives.
- *
- * See SkThread.h for documentation on what these includes must contain.
- */
-//#define SK_ATOMICS_PLATFORM_H "SkAtomics_xxx.h"
-//#define SK_MUTEX_PLATFORM_H "SkMutex_xxx.h"
-//#define SK_BARRIERS_PLATFORM_H "SkBarriers_xxx.h"
-
 #endif
 
 // Android defines:
@@ -209,11 +196,11 @@
 #define GR_GL_CUSTOM_SETUP_HEADER "gl/GrGLConfig_chrome.h"
 #define GR_GL_USE_NEW_SHADER_SOURCE_SIGNATURE 1
 #define IGNORE_ROT_AA_RECT_OPT
+#define SKIA_DLL
 #define SK_ALLOW_STATIC_GLOBAL_INITIALIZERS 0
 #define SK_BUILD_FOR_ANDROID
 #define SK_BUILD_FOR_ANDROID_FRAMEWORK
 #define SK_CAN_USE_DLOPEN 0
-#define SK_CRASH_HANDLER
 #define SK_DEFAULT_FONT_CACHE_LIMIT   (768 * 1024)
 #define SK_DEFAULT_GLOBAL_DISCARDABLE_MEMORY_POOL_SIZE (512 * 1024)
 #define SK_EGL 1
@@ -225,21 +212,17 @@
 #define SK_IGNORE_ETC1_SUPPORT
 #define SK_INTERNAL
 #define SK_LEGACY_DRAWPICTURECALLBACK
-#define SK_SCALAR_IS_FLOAT
+#define SK_OVERRIDE override
 #define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
-#define SK_SUPPORT_LEGACY_ADDOVAL
-#define SK_SUPPORT_LEGACY_ADDRRECT
 #define SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
 #define SK_SUPPORT_LEGACY_GETDEVICE
 #define SK_SUPPORT_LEGACY_GRADIENT_FACTORIES
-#define SK_SUPPORT_LEGACY_PORTER_DUFF
 #define SK_SUPPORT_LEGACY_PUBLIC_IMAGEINFO_FIELDS
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF
 #define SK_USE_FREETYPE_EMBOLDEN
-#define SK_USE_POSIX_THREADS
 #define SkLONGLONG int64_t
 
 #endif // SkUserConfig_Android_DEFINED

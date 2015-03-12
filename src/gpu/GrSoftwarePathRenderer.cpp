@@ -12,7 +12,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrSoftwarePathRenderer::canDrawPath(const GrDrawTarget*,
-                                         const GrDrawState*,
+                                         const GrPipelineBuilder*,
                                          const SkMatrix& viewMatrix,
                                          const SkPath&,
                                          const SkStrokeRec&,
@@ -26,7 +26,7 @@ bool GrSoftwarePathRenderer::canDrawPath(const GrDrawTarget*,
 
 GrPathRenderer::StencilSupport
 GrSoftwarePathRenderer::onGetStencilSupport(const GrDrawTarget*,
-                                            const GrDrawState*,
+                                            const GrPipelineBuilder*,
                                             const SkPath&,
                                             const SkStrokeRec&) const {
     return GrPathRenderer::kNoSupport_StencilSupport;
@@ -39,23 +39,21 @@ namespace {
 // path bounds will be a subset of the clip bounds. returns false if
 // path bounds would be empty.
 bool get_path_and_clip_bounds(const GrDrawTarget* target,
-                              const GrDrawState* drawState,
+                              const GrPipelineBuilder* pipelineBuilder,
                               const SkPath& path,
                               const SkMatrix& matrix,
                               SkIRect* devPathBounds,
                               SkIRect* devClipBounds) {
     // compute bounds as intersection of rt size, clip, and path
-    const GrRenderTarget* rt = drawState->getRenderTarget();
+    const GrRenderTarget* rt = pipelineBuilder->getRenderTarget();
     if (NULL == rt) {
         return false;
     }
-    *devPathBounds = SkIRect::MakeWH(rt->width(), rt->height());
 
-    target->getClip()->getConservativeBounds(rt, devClipBounds);
+    pipelineBuilder->clip().getConservativeBounds(rt, devClipBounds);
 
-    // TODO: getConservativeBounds already intersects with the
-    // render target's bounding box. Remove this next line
-    if (!devPathBounds->intersect(*devClipBounds)) {
+    if (devClipBounds->isEmpty()) {
+        *devPathBounds = SkIRect::MakeWH(rt->width(), rt->height());
         return false;
     }
 
@@ -64,6 +62,7 @@ bool get_path_and_clip_bounds(const GrDrawTarget* target,
         matrix.mapRect(&pathSBounds, path.getBounds());
         SkIRect pathIBounds;
         pathSBounds.roundOut(&pathIBounds);
+        *devPathBounds = *devClipBounds;
         if (!devPathBounds->intersect(pathIBounds)) {
             // set the correct path bounds, as this would be used later.
             *devPathBounds = pathIBounds;
@@ -78,7 +77,7 @@ bool get_path_and_clip_bounds(const GrDrawTarget* target,
 
 ////////////////////////////////////////////////////////////////////////////////
 void draw_around_inv_path(GrDrawTarget* target,
-                          GrDrawState* drawState,
+                          GrPipelineBuilder* pipelineBuilder,
                           GrColor color,
                           const SkMatrix& viewMatrix,
                           const SkIRect& devClipBounds,
@@ -92,22 +91,22 @@ void draw_around_inv_path(GrDrawTarget* target,
     if (devClipBounds.fTop < devPathBounds.fTop) {
         rect.iset(devClipBounds.fLeft, devClipBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fTop);
-        target->drawRect(drawState, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fLeft < devPathBounds.fLeft) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fTop,
                   devPathBounds.fLeft, devPathBounds.fBottom);
-        target->drawRect(drawState, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fRight > devPathBounds.fRight) {
         rect.iset(devPathBounds.fRight, devPathBounds.fTop,
                   devClipBounds.fRight, devPathBounds.fBottom);
-        target->drawRect(drawState, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
     if (devClipBounds.fBottom > devPathBounds.fBottom) {
         rect.iset(devClipBounds.fLeft, devPathBounds.fBottom,
                   devClipBounds.fRight, devClipBounds.fBottom);
-        target->drawRect(drawState, color, SkMatrix::I(), rect, NULL, &invert);
+        target->drawRect(pipelineBuilder, color, SkMatrix::I(), rect, NULL, &invert);
     }
 }
 
@@ -116,7 +115,7 @@ void draw_around_inv_path(GrDrawTarget* target,
 ////////////////////////////////////////////////////////////////////////////////
 // return true on success; false on failure
 bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
-                                        GrDrawState* drawState,
+                                        GrPipelineBuilder* pipelineBuilder,
                                         GrColor color,
                                         const SkMatrix& viewMatrix,
                                         const SkPath& path,
@@ -128,10 +127,11 @@ bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
     }
 
     SkIRect devPathBounds, devClipBounds;
-    if (!get_path_and_clip_bounds(target, drawState, path, viewMatrix,
-                                  &devPathBounds, &devClipBounds)) {
+    if (!get_path_and_clip_bounds(target, pipelineBuilder, path, viewMatrix, &devPathBounds,
+                                  &devClipBounds)) {
         if (path.isInverseFillType()) {
-            draw_around_inv_path(target, drawState, color, viewMatrix, devClipBounds,devPathBounds);
+            draw_around_inv_path(target, pipelineBuilder, color, viewMatrix, devClipBounds,
+                                 devPathBounds);
         }
         return true;
     }
@@ -144,12 +144,13 @@ bool GrSoftwarePathRenderer::onDrawPath(GrDrawTarget* target,
         return false;
     }
 
-    GrDrawState copy = *drawState;
+    GrPipelineBuilder copy = *pipelineBuilder;
     GrSWMaskHelper::DrawToTargetWithPathMask(texture, target, &copy, color, viewMatrix,
                                              devPathBounds);
 
     if (path.isInverseFillType()) {
-        draw_around_inv_path(target, drawState, color, viewMatrix, devClipBounds, devPathBounds);
+        draw_around_inv_path(target, pipelineBuilder, color, viewMatrix, devClipBounds,
+                             devPathBounds);
     }
 
     return true;

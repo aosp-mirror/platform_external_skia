@@ -38,6 +38,14 @@ static void test_add_rrect(skiatest::Reporter* reporter, const SkRect& bounds,
     REPORTER_ASSERT(reporter, bounds == path.getBounds());
 }
 
+static void test_skbug_3469(skiatest::Reporter* reporter) {
+    SkPath path;
+    path.moveTo(20, 20);
+    path.quadTo(20, 50, 80, 50);
+    path.quadTo(20, 50, 20, 80);
+    REPORTER_ASSERT(reporter, !path.isConvex());
+}
+
 static void test_skbug_3239(skiatest::Reporter* reporter) {
     const float min = SkBits2Float(0xcb7f16c8); /* -16717512.000000 */
     const float max = SkBits2Float(0x4b7f1c1d); /*  16718877.000000 */
@@ -225,57 +233,6 @@ static void test_path_close_issue1474(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 95 == last.fY);
 }
 
-static void test_android_specific_behavior(skiatest::Reporter* reporter) {
-#ifdef SK_BUILD_FOR_ANDROID
-    // Make sure we treat fGenerationID and fSourcePath correctly for each of
-    // copy, assign, rewind, reset, and swap.
-    SkPath original, source, anotherSource;
-    original.setSourcePath(&source);
-    original.moveTo(0, 0);
-    original.lineTo(1, 1);
-    REPORTER_ASSERT(reporter, original.getSourcePath() == &source);
-
-    uint32_t copyID, assignID;
-
-    // Test copy constructor.  Copy generation ID, copy source path.
-    SkPath copy(original);
-    REPORTER_ASSERT(reporter, copy.getGenerationID() == original.getGenerationID());
-    REPORTER_ASSERT(reporter, copy.getSourcePath() == original.getSourcePath());
-
-    // Test assigment operator.  Change generation ID, copy source path.
-    SkPath assign;
-    assignID = assign.getGenerationID();
-    assign = original;
-    REPORTER_ASSERT(reporter, assign.getGenerationID() != assignID);
-    REPORTER_ASSERT(reporter, assign.getSourcePath() == original.getSourcePath());
-
-    // Test rewind.  Change generation ID, don't touch source path.
-    copyID = copy.getGenerationID();
-    copy.rewind();
-    REPORTER_ASSERT(reporter, copy.getGenerationID() != copyID);
-    REPORTER_ASSERT(reporter, copy.getSourcePath() == original.getSourcePath());
-
-    // Test reset.  Change generation ID, don't touch source path.
-    assignID = assign.getGenerationID();
-    assign.reset();
-    REPORTER_ASSERT(reporter, assign.getGenerationID() != assignID);
-    REPORTER_ASSERT(reporter, assign.getSourcePath() == original.getSourcePath());
-
-    // Test swap.  Swap the generation IDs, swap source paths.
-    copy.reset();
-    copy.moveTo(2, 2);
-    copy.setSourcePath(&anotherSource);
-    copyID = copy.getGenerationID();
-    assign.moveTo(3, 3);
-    assignID = assign.getGenerationID();
-    copy.swap(assign);
-    REPORTER_ASSERT(reporter, copy.getGenerationID() != copyID);
-    REPORTER_ASSERT(reporter, assign.getGenerationID() != assignID);
-    REPORTER_ASSERT(reporter, copy.getSourcePath() == original.getSourcePath());
-    REPORTER_ASSERT(reporter, assign.getSourcePath() == &anotherSource);
-#endif
-}
-
 static void test_gen_id(skiatest::Reporter* reporter) {
     SkPath a, b;
     REPORTER_ASSERT(reporter, a.getGenerationID() == b.getGenerationID());
@@ -310,7 +267,7 @@ static void test_gen_id(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, a.getGenerationID() == x);
     REPORTER_ASSERT(reporter, w != x);
 
-#ifdef SK_BUILD_FOR_ANDROID
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     static bool kExpectGenIDToIgnoreFill = false;
 #else
     static bool kExpectGenIDToIgnoreFill = true;
@@ -1117,6 +1074,34 @@ static void check_convexity(skiatest::Reporter* reporter, const SkPath& path,
     SkPath copy(path); // we make a copy so that we don't cache the result on the passed in path.
     SkPath::Convexity c = copy.getConvexity();
     REPORTER_ASSERT(reporter, c == expected);
+}
+
+static void test_path_crbug389050(skiatest::Reporter* reporter) {
+    SkPath  tinyConvexPolygon;
+    tinyConvexPolygon.moveTo(600.131559f, 800.112512f);
+    tinyConvexPolygon.lineTo(600.161735f, 800.118627f);
+    tinyConvexPolygon.lineTo(600.148962f, 800.142338f);
+    tinyConvexPolygon.lineTo(600.134891f, 800.137724f);
+    tinyConvexPolygon.close();
+    tinyConvexPolygon.getConvexity();
+    check_convexity(reporter, tinyConvexPolygon, SkPath::kConvex_Convexity);
+    check_direction(reporter, tinyConvexPolygon, SkPath::kCW_Direction);
+
+    SkPath  platTriangle;
+    platTriangle.moveTo(0, 0);
+    platTriangle.lineTo(200, 0);
+    platTriangle.lineTo(100, 0.04f);
+    platTriangle.close();
+    platTriangle.getConvexity();
+    check_direction(reporter, platTriangle, SkPath::kCW_Direction);
+
+    platTriangle.reset();
+    platTriangle.moveTo(0, 0);
+    platTriangle.lineTo(200, 0);
+    platTriangle.lineTo(100, 0.03f);
+    platTriangle.close();
+    platTriangle.getConvexity();
+    check_direction(reporter, platTriangle, SkPath::kCW_Direction);
 }
 
 static void test_convexity2(skiatest::Reporter* reporter) {
@@ -2207,7 +2192,7 @@ static void test_transform(skiatest::Reporter* reporter) {
     {
         SkMatrix matrix;
         matrix.reset();
-        matrix.setPerspX(SkScalarToPersp(4));
+        matrix.setPerspX(4);
 
         SkPath p1;
         p1.moveTo(SkPoint::Make(0, 0));
@@ -2526,6 +2511,20 @@ static void test_iter(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, SkPath::kDone_Verb == iter.next(pts, true));
 
     // The GM degeneratesegments.cpp test is more extensive
+
+    // Test out mixed degenerate and non-degenerate geometry with Conics
+    const SkVector radii[4] = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 100 } };
+    SkRect r = SkRect::MakeWH(100, 100);
+    SkRRect rr;
+    rr.setRectRadii(r, radii);
+    p.reset();
+    p.addRRect(rr);
+    iter.setPath(p, false);
+    REPORTER_ASSERT(reporter, SkPath::kMove_Verb == iter.next(pts));
+    REPORTER_ASSERT(reporter, SkPath::kLine_Verb == iter.next(pts));
+    REPORTER_ASSERT(reporter, SkPath::kLine_Verb == iter.next(pts));
+    REPORTER_ASSERT(reporter, SkPath::kConic_Verb == iter.next(pts));
+    REPORTER_ASSERT(reporter, SK_ScalarRoot2Over2 == iter.conicWeight());
 }
 
 static void test_raw_iter(skiatest::Reporter* reporter) {
@@ -3113,10 +3112,12 @@ static void test_rrect(skiatest::Reporter* reporter) {
     rr.setRectRadii(largeR, radii);
     p.addRRect(rr);
     test_rrect_convexity_is_unknown(reporter, &p, SkPath::kCW_Direction);
+
+    // we check for non-finites
     SkRect infR = {0, 0, SK_ScalarMax, SK_ScalarInfinity};
     rr.setRectRadii(infR, radii);
-    p.addRRect(rr);
-    test_rrect_convexity_is_unknown(reporter, &p, SkPath::kCW_Direction);
+    REPORTER_ASSERT(reporter, rr.isEmpty());
+
     SkRect tinyR = {0, 0, 1e-9f, 1e-9f};
     p.addRoundRect(tinyR, 5e-11f, 5e-11f);
     test_rrect_is_convex(reporter, &p, SkPath::kCW_Direction);
@@ -3230,6 +3231,13 @@ static void check_path_is_quad_and_reset(skiatest::Reporter* reporter, SkPath* p
     check_done_and_reset(reporter, p, &iter);
 }
 
+static bool nearly_equal(const SkRect& a, const SkRect& b) {
+    return  SkScalarNearlyEqual(a.fLeft, b.fLeft) &&
+            SkScalarNearlyEqual(a.fTop, b.fTop) &&
+            SkScalarNearlyEqual(a.fRight, b.fRight) &&
+            SkScalarNearlyEqual(a.fBottom, b.fBottom);
+}
+
 static void test_arcTo(skiatest::Reporter* reporter) {
     SkPath p;
     p.arcTo(0, 0, 1, 2, 1);
@@ -3256,15 +3264,16 @@ static void test_arcTo(skiatest::Reporter* reporter) {
     check_path_is_move_and_reset(reporter, &p, oval.fRight, oval.centerY());
     p.arcTo(oval, 360, 0, false);
     check_path_is_move_and_reset(reporter, &p, oval.fRight, oval.centerY());
+
     for (float sweep = 359, delta = 0.5f; sweep != (float) (sweep + delta); ) {
         p.arcTo(oval, 0, sweep, false);
-        REPORTER_ASSERT(reporter, p.getBounds() == oval);
+        REPORTER_ASSERT(reporter, nearly_equal(p.getBounds(), oval));
         sweep += delta;
         delta /= 2;
     }
     for (float sweep = 361, delta = 0.5f; sweep != (float) (sweep - delta);) {
         p.arcTo(oval, 0, sweep, false);
-        REPORTER_ASSERT(reporter, p.getBounds() == oval);
+        REPORTER_ASSERT(reporter, nearly_equal(p.getBounds(), oval));
         sweep -= delta;
         delta /= 2;
     }
@@ -3738,7 +3747,6 @@ DEF_TEST(Paths, reporter) {
     test_crbug_170666();
     test_bad_cubic_crbug229478();
     test_bad_cubic_crbug234190();
-    test_android_specific_behavior(reporter);
     test_gen_id(reporter);
     test_path_close_issue1474(reporter);
     test_path_to_region(reporter);
@@ -3759,6 +3767,8 @@ DEF_TEST(Paths, reporter) {
     PathTest_Private::TestPathTo(reporter);
     PathRefTest_Private::TestPathRef(reporter);
     test_dump(reporter);
+    test_path_crbug389050(reporter);
     test_path_crbugskia2820(reporter);
+    test_skbug_3469(reporter);
     test_skbug_3239(reporter);
 }

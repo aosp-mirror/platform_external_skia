@@ -15,6 +15,7 @@
 #include "GrXferProcessor.h"
 #include "effects/GrPorterDuffXferProcessor.h"
 
+#include "SkRegion.h"
 #include "SkXfermode.h"
 
 /**
@@ -25,27 +26,19 @@
  * created by subclassing GrProcessor.
  *
  * The primitive color computation starts with the color specified by setColor(). This color is the
- * input to the first color stage. Each color stage feeds its output to the next color stage. The
- * final color stage's output color is input to the color filter specified by
- * setXfermodeColorFilter which produces the final source color, S.
+ * input to the first color stage. Each color stage feeds its output to the next color stage.
  *
  * Fractional pixel coverage follows a similar flow. The coverage is initially the value specified
  * by setCoverage(). This is input to the first coverage stage. Coverage stages are chained
  * together in the same manner as color stages. The output of the last stage is modulated by any
  * fractional coverage produced by anti-aliasing. This last step produces the final coverage, C.
  *
- * setBlendFunc() specifies blending coefficients for S (described above) and D, the initial value
- * of the destination pixel, labeled Bs and Bd respectively. The final value of the destination
- * pixel is then D' = (1-C)*D + C*(Bd*D + Bs*S).
- *
- * Note that the coverage is applied after the blend. This is why they are computed as distinct
- * values.
- *
- * TODO: Encapsulate setXfermodeColorFilter in a GrProcessor and remove from GrPaint.
+ * setXPFactory is used to control blending between the output color and dest. It also implements
+ * the application of fractional coverage from the coverage pipeline.
  */
 class GrPaint {
 public:
-    GrPaint() { this->reset(); }
+    GrPaint();
 
     GrPaint(const GrPaint& paint) { *this = paint; }
 
@@ -78,9 +71,7 @@ public:
         fXPFactory.reset(GrPorterDuffXPFactory::Create(mode));
     }
 
-    void setPorterDuffXPFactory(GrBlendCoeff src, GrBlendCoeff dst) {
-        fXPFactory.reset(GrPorterDuffXPFactory::Create(src, dst));
-    }
+    void setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage = false); 
 
     /**
      * Appends an additional color processor to the color computation.
@@ -113,7 +104,12 @@ public:
     int numCoverageStages() const { return fCoverageStages.count(); }
     int numTotalStages() const { return this->numColorStages() + this->numCoverageStages(); }
 
-    const GrXPFactory* getXPFactory() const { return fXPFactory.get(); }
+    const GrXPFactory* getXPFactory() const {
+        if (!fXPFactory) {
+            fXPFactory.reset(GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode));
+        }
+        return fXPFactory.get();
+    }
 
     const GrFragmentStage& getColorStage(int s) const { return fColorStages[s]; }
     const GrFragmentStage& getCoverageStage(int s) const { return fCoverageStages[s]; }
@@ -133,22 +129,13 @@ public:
     }
 
     /**
-     * Resets the paint to the defaults.
-     */
-    void reset() {
-        this->resetOptions();
-        this->resetColor();
-        this->resetStages();
-    }
-
-    /**
      * Returns true if isOpaque would return true and the paint represents a solid constant color
      * draw. If the result is true, constantColor will be updated to contain the constant color.
      */
     bool isOpaqueAndConstantColor(GrColor* constantColor) const;
 
 private:
-    SkAutoTUnref<const GrXPFactory> fXPFactory;
+    mutable SkAutoTUnref<const GrXPFactory> fXPFactory;
     SkSTArray<4, GrFragmentStage>   fColorStages;
     SkSTArray<2, GrFragmentStage>   fCoverageStages;
 
@@ -156,17 +143,6 @@ private:
     bool                            fDither;
 
     GrColor                         fColor;
-
-    void resetOptions() {
-        fAntiAlias = false;
-        fDither = false;
-    }
-
-    void resetColor() {
-        fColor = GrColorPackRGBA(0xff, 0xff, 0xff, 0xff);
-    }
-
-    void resetStages();
 };
 
 #endif

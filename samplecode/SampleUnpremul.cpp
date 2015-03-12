@@ -7,6 +7,7 @@
 
 #include "gm.h"
 
+#include "sk_tool_utils.h"
 #include "Resources.h"
 #include "SampleCode.h"
 #include "SkBlurMask.h"
@@ -24,9 +25,6 @@
 #include "SkView.h"
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
-
-// Defined in SampleColorFilter.cpp
-extern SkShader* createChecker();
 
 /**
  *  Interprets c as an unpremultiplied color, and returns the
@@ -78,10 +76,7 @@ protected:
     }
 
     void onDrawBackground(SkCanvas* canvas) SK_OVERRIDE {
-        SkPaint paint;
-        SkAutoTUnref<SkShader> shader(createChecker());
-        paint.setShader(shader.get());
-        canvas->drawPaint(paint);
+        sk_tool_utils::draw_checkerboard(canvas, 0xFFCCCCCC, 0xFFFFFFFF, 12);
     }
 
     void onDrawContent(SkCanvas* canvas) SK_OVERRIDE {

@@ -39,9 +39,6 @@ public:
     StrokesGM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("strokes_round");
@@ -83,8 +80,8 @@ private:
 
 class Strokes2GM : public skiagm::GM {
     SkPath fPath;
-public:
-    Strokes2GM() {
+protected:
+    void onOnceBeforeDraw() SK_OVERRIDE {
         SkRandom rand;
         fPath.moveTo(0, 0);
         for (int i = 0; i < 13; i++) {
@@ -94,10 +91,6 @@ public:
         }
     }
 
-protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("strokes_poly");
@@ -196,16 +189,13 @@ public:
     Strokes3GM() {}
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("strokes3");
     }
 
     SkISize onISize() SK_OVERRIDE {
-        return SkISize::Make(W, H*2);
+        return SkISize::Make(1500, 1500);
     }
 
     void onDraw(SkCanvas* canvas) SK_OVERRIDE {
@@ -221,7 +211,7 @@ protected:
             make0, make1, make2, make3, make4, make5
         };
 
-        canvas->translate(SkIntToScalar(20), SkIntToScalar(20));
+        canvas->translate(SkIntToScalar(20), SkIntToScalar(80));
 
         SkRect bounds = SkRect::MakeWH(SkIntToScalar(50), SkIntToScalar(50));
         SkScalar dx = bounds.width() * 4/3;

@@ -105,8 +105,10 @@ static void initialize_info(jpeg_decompress_struct* cinfo, skjpeg_source_mgr* sr
 #ifdef SK_BUILD_FOR_ANDROID
 class SkJPEGImageIndex {
 public:
+    // Takes ownership of stream.
     SkJPEGImageIndex(SkStreamRewindable* stream, SkImageDecoder* decoder)
         : fSrcMgr(stream, decoder)
+        , fStream(stream)
         , fInfoInitialized(false)
         , fHuffmanCreated(false)
         , fDecompressStarted(false)
@@ -206,6 +208,7 @@ public:
 
 private:
     skjpeg_source_mgr  fSrcMgr;
+    SkAutoTDelete<SkStream> fStream;
     jpeg_decompress_struct fCInfo;
     huffman_index fHuffmanIndex;
     bool fInfoInitialized;
@@ -795,11 +798,11 @@ static bool output_raw_data(jpeg_decompress_struct& cinfo, void* planes[3], size
     size_t rowBytesV = rowBytes[2];
 
     int yScanlinesToRead = DCTSIZE * v;
-    SkAutoMalloc lastRowStorage(yWidth * 8);
+    SkAutoMalloc lastRowStorage(rowBytesY * 4);
     JSAMPROW yLastRow = (JSAMPROW)lastRowStorage.get();
-    JSAMPROW uLastRow = yLastRow + 2 * yWidth;
-    JSAMPROW vLastRow = uLastRow + 2 * yWidth;
-    JSAMPROW dummyRow = vLastRow + 2 * yWidth;
+    JSAMPROW uLastRow = yLastRow + rowBytesY;
+    JSAMPROW vLastRow = uLastRow + rowBytesY;
+    JSAMPROW dummyRow = vLastRow + rowBytesY;
 
     while (cinfo.output_scanline < cinfo.output_height) {
         // Request 8 or 16 scanlines: returns 0 or more scanlines.
@@ -937,10 +940,9 @@ bool SkJPEGImageDecoder::onDecodeYUV8Planes(SkStream* stream, SkISize componentS
 bool SkJPEGImageDecoder::onBuildTileIndex(SkStreamRewindable* stream, int *width, int *height) {
 
     SkAutoTDelete<SkJPEGImageIndex> imageIndex(SkNEW_ARGS(SkJPEGImageIndex, (stream, this)));
-    jpeg_decompress_struct* cinfo = imageIndex->cinfo();
 
     skjpeg_error_mgr sk_err;
-    set_error_mgr(cinfo, &sk_err);
+    set_error_mgr(imageIndex->cinfo(), &sk_err);
 
     // All objects need to be instantiated before this setjmp call so that
     // they will be cleaned up properly if an error occurs.
@@ -964,6 +966,10 @@ bool SkJPEGImageDecoder::onBuildTileIndex(SkStreamRewindable* stream, int *width
     if (!imageIndex->initializeInfoAndReadHeader()) {
         return false;
     }
+
+    jpeg_decompress_struct* cinfo = imageIndex->cinfo();
+    // We have a new cinfo, so set the error mgr again.
+    set_error_mgr(cinfo, &sk_err);
 
     // FIXME: This sets cinfo->out_color_space, which we may change later
     // based on the config in onDecodeSubset. This should be fine, since

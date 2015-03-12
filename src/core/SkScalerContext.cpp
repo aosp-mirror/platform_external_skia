@@ -482,7 +482,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
              SkMask::kARGB32_Format != origGlyph.fMaskFormat);
 
     if (fMaskFilter) {   // restore the prefilter bounds
-        tmpGlyph.init(origGlyph.fID);
+        tmpGlyph.initGlyphIdFrom(origGlyph);
 
         // need the original bounds, sans our maskfilter
         SkMaskFilter* mf = fMaskFilter;
@@ -693,28 +693,15 @@ void SkScalerContext::internalGetPath(const SkGlyph& glyph, SkPath* fillPath,
 void SkScalerContextRec::getMatrixFrom2x2(SkMatrix* dst) const {
     dst->setAll(fPost2x2[0][0], fPost2x2[0][1], 0,
                 fPost2x2[1][0], fPost2x2[1][1], 0,
-                0,              0,              SkScalarToPersp(SK_Scalar1));
+                0,              0,              1);
 }
 
 void SkScalerContextRec::getLocalMatrix(SkMatrix* m) const {
     SkPaint::SetTextMatrix(m, fTextSize, fPreScaleX, fPreSkewX);
 }
 
-void SkScalerContextRec::getLocalMatrixWithoutTextSize(SkMatrix* m) const {
-    SkPaint::SetTextMatrix(m, SK_Scalar1, fPreScaleX, fPreSkewX);
-}
-
 void SkScalerContextRec::getSingleMatrix(SkMatrix* m) const {
     this->getLocalMatrix(m);
-
-    //  now concat the device matrix
-    SkMatrix    deviceMatrix;
-    this->getMatrixFrom2x2(&deviceMatrix);
-    m->postConcat(deviceMatrix);
-}
-
-void SkScalerContextRec::getSingleMatrixWithoutTextSize(SkMatrix* m) const {
-    this->getLocalMatrixWithoutTextSize(m);
 
     //  now concat the device matrix
     SkMatrix    deviceMatrix;

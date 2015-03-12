@@ -9,8 +9,19 @@
 #include "GrPaint.h"
 
 #include "GrProcOptInfo.h"
+#include "effects/GrCoverageSetOpXP.h"
 #include "effects/GrPorterDuffXferProcessor.h"
 #include "effects/GrSimpleTextureEffect.h"
+
+GrPaint::GrPaint()
+    : fAntiAlias(false)
+    , fDither(false)
+    , fColor(GrColor_WHITE) {
+}
+
+void GrPaint::setCoverageSetOpXPFactory(SkRegion::Op regionOp, bool invertCoverage) {
+    fXPFactory.reset(GrCoverageSetOpXPFactory::Create(regionOp, invertCoverage));
+}
 
 void GrPaint::addColorTextureProcessor(GrTexture* texture, const SkMatrix& matrix) {
     this->addColorProcessor(GrSimpleTextureEffect::Create(texture, matrix))->unref();
@@ -50,10 +61,3 @@ bool GrPaint::isOpaqueAndConstantColor(GrColor* color) const {
     }
     return false;
 }
-
-void GrPaint::resetStages() {
-    fColorStages.reset();
-    fCoverageStages.reset();
-    fXPFactory.reset(GrPorterDuffXPFactory::Create(SkXfermode::kSrc_Mode));
-}
-

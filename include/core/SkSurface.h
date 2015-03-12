@@ -33,6 +33,18 @@ public:
     SK_DECLARE_INST_COUNT(SkSurface)
 
     /**
+     *  Indicates whether a new surface or image should count against a cache budget. Currently this
+     *  is only used by the GPU backend (sw-raster surfaces and images are never counted against the
+     *  resource cache budget.)
+     */
+    enum Budgeted {
+        /** The surface or image does not count against the cache budget. */
+        kNo_Budgeted,
+        /** The surface or image counts against the cache budget. */
+        kYes_Budgeted
+    };
+
+    /**
      *  Create a new surface, using the specified pixels/rowbytes as its
      *  backend.
      *
@@ -86,30 +98,11 @@ public:
      *  Return a new surface whose contents will be drawn to an offscreen
      *  render target, allocated by the surface.
      */
-    static SkSurface* NewRenderTarget(GrContext*, const SkImageInfo&, int sampleCount,
+    static SkSurface* NewRenderTarget(GrContext*, Budgeted, const SkImageInfo&, int sampleCount,
                                       const SkSurfaceProps* = NULL);
 
-    static SkSurface* NewRenderTarget(GrContext* gr, const SkImageInfo& info) {
-        return NewRenderTarget(gr, info, 0, NULL);
-    }
-
-    /**
-     *  Return a new surface whose contents will be drawn to an offscreen
-     *  render target, allocated by the surface from the scratch texture pool
-     *  managed by the GrContext. The scratch texture pool serves the purpose
-     *  of retaining textures after they are no longer in use in order to
-     *  re-use them later without having to re-allocate.  Scratch textures
-     *  should be used in cases where high turnover is expected. This allows,
-     *  for example, the copy on write to recycle a texture from a recently
-     *  released SkImage snapshot of the surface.
-     *  Note: Scratch textures count against the GrContext's cached resource
-     *  budget.
-     */
-    static SkSurface* NewScratchRenderTarget(GrContext*, const SkImageInfo&, int sampleCount,
-                                             const SkSurfaceProps* = NULL);
-
-    static SkSurface* NewScratchRenderTarget(GrContext* gr, const SkImageInfo& info) {
-        return NewScratchRenderTarget(gr, info, 0, NULL);
+    static SkSurface* NewRenderTarget(GrContext* gr, Budgeted b, const SkImageInfo& info) {
+        return NewRenderTarget(gr, b, info, 0, NULL);
     }
 
     int width() const { return fWidth; }
@@ -174,12 +167,14 @@ public:
     /**
      *  Returns an image of the current state of the surface pixels up to this
      *  point. Subsequent changes to the surface (by drawing into its canvas)
-     *  will not be reflected in this image.
+     *  will not be reflected in this image. If a copy must be made the Budgeted
+     *  parameter controls whether it counts against the resource budget
+     *  (currently for the gpu backend only).
      */
-    SkImage* newImageSnapshot();
+    SkImage* newImageSnapshot(Budgeted = kYes_Budgeted);
 
     /**
-     *  Thought the caller could get a snapshot image explicitly, and draw that,
+     *  Though the caller could get a snapshot image explicitly, and draw that,
      *  it seems that directly drawing a surface into another canvas might be
      *  a common pattern, and that we could possibly be more efficient, since
      *  we'd know that the "snapshot" need only live until we've handed it off

@@ -1,13 +1,15 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SampleCode.h"
+#include "SkAnimTimer.h"
 #include "SkView.h"
 #include "SkCanvas.h"
+#include "SkDrawable.h"
 #include "SkGradientShader.h"
 #include "SkPath.h"
 #include "SkRegion.h"
@@ -23,8 +25,6 @@
 #include "SkColorFilter.h"
 #include "SkLayerRasterizer.h"
 
-#include "SkCanvasDrawable.h"
-
 #include "SkParsePath.h"
 static void testparse() {
     SkRect r;
@@ -39,7 +39,7 @@ static void testparse() {
 }
 
 class ArcsView : public SampleView {
-    class MyDrawable : public SkCanvasDrawable {
+    class MyDrawable : public SkDrawable {
         SkRect   fR;
         SkScalar fSweep;
     public:
@@ -83,7 +83,7 @@ class ArcsView : public SampleView {
 public:
     SkRect fRect;
     MyDrawable* fAnimatingDrawable;
-    SkCanvasDrawable* fRootDrawable;
+    SkDrawable* fRootDrawable;
 
     ArcsView() {
         testparse();
@@ -96,7 +96,7 @@ public:
 
         SkPictureRecorder recorder;
         this->drawRoot(recorder.beginRecording(SkRect::MakeWH(800, 500)));
-        fRootDrawable = recorder.EXPERIMENTAL_endRecordingAsDrawable();
+        fRootDrawable = recorder.endRecordingAsDrawable();
     }
 
     ~ArcsView() SK_OVERRIDE {
@@ -122,8 +122,7 @@ protected:
         canvas->drawLine(r.centerX(), r.fTop, r.centerX(), r.fBottom, p);
     }
 
-    static void DrawLabel(SkCanvas* canvas, const SkRect& rect,
-                            int start, int sweep) {
+    static void DrawLabel(SkCanvas* canvas, const SkRect& rect, SkScalar start, SkScalar sweep) {
         SkPaint paint;
 
         paint.setAntiAlias(true);
@@ -131,9 +130,9 @@ protected:
 
         SkString    str;
 
-        str.appendS32(start);
+        str.appendScalar(start);
         str.append(", ");
-        str.appendS32(sweep);
+        str.appendScalar(sweep);
         canvas->drawText(str.c_str(), str.size(), rect.centerX(),
                          rect.fBottom + paint.getTextSize() * 5/4, paint);
     }
@@ -141,8 +140,8 @@ protected:
     static void DrawArcs(SkCanvas* canvas) {
         SkPaint paint;
         SkRect  r;
-        SkScalar w = SkIntToScalar(75);
-        SkScalar h = SkIntToScalar(50);
+        SkScalar w = 75;
+        SkScalar h = 50;
 
         r.set(0, 0, w, h);
         paint.setAntiAlias(true);
@@ -153,7 +152,7 @@ protected:
 
         paint.setStrokeWidth(SkIntToScalar(1));
 
-        static const int gAngles[] = {
+        static const SkScalar gAngles[] = {
             0, 360,
             0, 45,
             0, -45,
@@ -170,8 +169,7 @@ protected:
             DrawRectWithLines(canvas, r, paint);
 
             paint.setColor(SK_ColorRED);
-            canvas->drawArc(r, SkIntToScalar(gAngles[i]),
-                            SkIntToScalar(gAngles[i+1]), false, paint);
+            canvas->drawArc(r, gAngles[i], gAngles[i+1], false, paint);
 
             DrawLabel(canvas, r, gAngles[i], gAngles[i+1]);
 
@@ -189,15 +187,19 @@ protected:
 
         DrawRectWithLines(canvas, fRect, paint);
 
-        canvas->EXPERIMENTAL_drawDrawable(fAnimatingDrawable);
+        canvas->drawDrawable(fAnimatingDrawable);
 
         DrawArcs(canvas);
     }
 
     void onDrawContent(SkCanvas* canvas) SK_OVERRIDE {
-        fAnimatingDrawable->setSweep(SampleCode::GetAnimScalar(360/24, 360));
-        canvas->EXPERIMENTAL_drawDrawable(fRootDrawable);
-        this->inval(NULL);
+        canvas->drawDrawable(fRootDrawable);
+    }
+
+    bool onAnimate(const SkAnimTimer& timer) SK_OVERRIDE {
+        SkScalar angle = SkDoubleToScalar(fmod(timer.secs() * 360 / 24, 360));
+        fAnimatingDrawable->setSweep(angle);
+        return true;
     }
 
     SkView::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) SK_OVERRIDE {

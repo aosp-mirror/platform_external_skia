@@ -19,12 +19,7 @@ class SkWriteBuffer;
  *  Describes how to interpret the alpha compoent of a pixel.
  */
 enum SkAlphaType {
-    /**
-     *  All pixels should be treated as opaque, regardless of the value stored
-     *  in their alpha field. Used for legacy images that wrote 0 or garbarge
-     *  in their alpha field, but intended the RGB to be treated as opaque.
-     */
-    kIgnore_SkAlphaType,
+    kUnknown_SkAlphaType,
 
     /**
      *  All pixels are stored as opaque. This differs slightly from kIgnore in
@@ -53,11 +48,7 @@ enum SkAlphaType {
 };
 
 static inline bool SkAlphaTypeIsOpaque(SkAlphaType at) {
-    SK_COMPILE_ASSERT(kIgnore_SkAlphaType < kOpaque_SkAlphaType, bad_alphatype_order);
-    SK_COMPILE_ASSERT(kPremul_SkAlphaType > kOpaque_SkAlphaType, bad_alphatype_order);
-    SK_COMPILE_ASSERT(kUnpremul_SkAlphaType > kOpaque_SkAlphaType, bad_alphatype_order);
-
-    return (unsigned)at <= kOpaque_SkAlphaType;
+    return kOpaque_SkAlphaType == at;
 }
 
 static inline bool SkAlphaTypeIsValid(unsigned value) {
@@ -155,13 +146,13 @@ enum SkColorProfileType {
  *  Describe an image's dimensions and pixel type.
  *  Used for both src images and render-targets (surfaces).
  */
-struct SkImageInfo {
+struct SK_API SkImageInfo {
 public:
     SkImageInfo()
         : fWidth(0)
         , fHeight(0)
         , fColorType(kUnknown_SkColorType)
-        , fAlphaType(kIgnore_SkAlphaType)
+        , fAlphaType(kUnknown_SkAlphaType)
         , fProfileType(kLinear_SkColorProfileType)
     {}
 
@@ -200,7 +191,7 @@ public:
     }
 
     static SkImageInfo MakeUnknown(int width, int height) {
-        return SkImageInfo(width, height, kUnknown_SkColorType, kIgnore_SkAlphaType,
+        return SkImageInfo(width, height, kUnknown_SkColorType, kUnknown_SkAlphaType,
                            kLinear_SkColorProfileType);
     }
 

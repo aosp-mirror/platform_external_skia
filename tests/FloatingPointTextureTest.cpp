@@ -22,113 +22,99 @@
 #include "SkHalf.h"
 
 static const int DEV_W = 100, DEV_H = 100;
-static const int FP_CONTROL_ARRAY_SIZE = DEV_W * DEV_H * 4;
+static const int FP_CONTROL_ARRAY_SIZE = DEV_W * DEV_H * 4/*RGBA*/;
 static const float kMaxIntegerRepresentableInSPFloatingPoint = 16777216;  // 2 ^ 24
 
 static const SkIRect DEV_RECT = SkIRect::MakeWH(DEV_W, DEV_H);
 
 DEF_GPUTEST(FloatingPointTextureTest, reporter, factory) {
-    float controlPixelData[FP_CONTROL_ARRAY_SIZE];
-    float readBuffer[FP_CONTROL_ARRAY_SIZE];
+    SkTDArray<float> controlPixelData, readBuffer;
+    controlPixelData.setCount(FP_CONTROL_ARRAY_SIZE);
+    readBuffer.setCount(FP_CONTROL_ARRAY_SIZE);
+
     for (int i = 0; i < FP_CONTROL_ARRAY_SIZE; i += 4) {
-        controlPixelData[i] = FLT_MIN;
+        controlPixelData[i + 0] = FLT_MIN;
         controlPixelData[i + 1] = FLT_MAX;
         controlPixelData[i + 2] = FLT_EPSILON;
         controlPixelData[i + 3] = kMaxIntegerRepresentableInSPFloatingPoint;
     }
 
     for (int origin = 0; origin < 2; ++origin) {
-        int glCtxTypeCnt = 1;
-        glCtxTypeCnt = GrContextFactory::kGLContextTypeCnt;
-        for (int glCtxType = 0; glCtxType < glCtxTypeCnt; ++glCtxType) {
+        for (int glCtxType = 0; glCtxType < GrContextFactory::kGLContextTypeCnt; ++glCtxType) {
             GrSurfaceDesc desc;
-            desc.fFlags = kRenderTarget_GrSurfaceFlag;
-            desc.fWidth = DEV_W;
+            desc.fFlags  = kRenderTarget_GrSurfaceFlag;
+            desc.fWidth  = DEV_W;
             desc.fHeight = DEV_H;
             desc.fConfig = kRGBA_float_GrPixelConfig;
             desc.fOrigin = 0 == origin ?
                 kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
 
-            GrContext* context = NULL;
             GrContextFactory::GLContextType type =
-                    static_cast<GrContextFactory::GLContextType>(glCtxType);
+                static_cast<GrContextFactory::GLContextType>(glCtxType);
             if (!GrContextFactory::IsRenderingGLContext(type)) {
                 continue;
             }
-            context = factory->get(type);
+            GrContext* context = factory->get(type);
             if (NULL == context){
                 continue;
             }
 
-            SkAutoTUnref<GrTexture> fpTexture(context->createUncachedTexture(desc,
-                                                                             NULL,
-                                                                             0));
-
+            SkAutoTUnref<GrTexture> fpTexture(context->createTexture(desc, false,
+                                                                     controlPixelData.begin(), 0));
             // Floating point textures are NOT supported everywhere
             if (NULL == fpTexture) {
                 continue;
             }
-
-            // write square
-            fpTexture->writePixels(0, 0, DEV_W, DEV_H, desc.fConfig, controlPixelData, 0);
-            fpTexture->readPixels(0, 0, DEV_W, DEV_H, desc.fConfig, readBuffer, 0);
-            for (int j = 0; j < FP_CONTROL_ARRAY_SIZE; ++j) {
-                REPORTER_ASSERT(reporter, readBuffer[j] == controlPixelData[j]);
-            }
+            fpTexture->readPixels(0, 0, DEV_W, DEV_H, desc.fConfig, readBuffer.begin(), 0);
+            REPORTER_ASSERT(reporter,
+                    0 == memcmp(readBuffer.begin(), controlPixelData.begin(), readBuffer.bytes()));
         }
     }
 }
 
-static const int HALF_CONTROL_ARRAY_SIZE = DEV_W * DEV_H;
+static const int HALF_CONTROL_ARRAY_SIZE = DEV_W * DEV_H * 1 /*alpha-only*/;
 
 DEF_GPUTEST(HalfFloatTextureTest, reporter, factory) {
-    SkHalf controlPixelData[HALF_CONTROL_ARRAY_SIZE];
-    SkHalf readBuffer[HALF_CONTROL_ARRAY_SIZE];
+    SkTDArray<SkHalf> controlPixelData, readBuffer;
+    controlPixelData.setCount(HALF_CONTROL_ARRAY_SIZE);
+    readBuffer.setCount(HALF_CONTROL_ARRAY_SIZE);
+
     for (int i = 0; i < HALF_CONTROL_ARRAY_SIZE; i += 4) {
-        controlPixelData[i] = SK_HalfMin;
+        controlPixelData[i + 0] = SK_HalfMin;
         controlPixelData[i + 1] = SK_HalfMax;
         controlPixelData[i + 2] = SK_HalfEpsilon;
         controlPixelData[i + 3] = 0x6800;   // 2^11
     }
 
     for (int origin = 0; origin < 2; ++origin) {
-        int glCtxTypeCnt = 1;
-        glCtxTypeCnt = GrContextFactory::kGLContextTypeCnt;
-        for (int glCtxType = 0; glCtxType < glCtxTypeCnt; ++glCtxType) {
+        for (int glCtxType = 0; glCtxType < GrContextFactory::kGLContextTypeCnt; ++glCtxType) {
             GrSurfaceDesc desc;
-            desc.fFlags = kRenderTarget_GrSurfaceFlag;
-            desc.fWidth = DEV_W;
+            desc.fFlags  = kRenderTarget_GrSurfaceFlag;
+            desc.fWidth  = DEV_W;
             desc.fHeight = DEV_H;
             desc.fConfig = kAlpha_half_GrPixelConfig;
             desc.fOrigin = 0 == origin ?
-            kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
+                kTopLeft_GrSurfaceOrigin : kBottomLeft_GrSurfaceOrigin;
 
-            GrContext* context = NULL;
             GrContextFactory::GLContextType type =
-            static_cast<GrContextFactory::GLContextType>(glCtxType);
+                static_cast<GrContextFactory::GLContextType>(glCtxType);
             if (!GrContextFactory::IsRenderingGLContext(type)) {
                 continue;
             }
-            context = factory->get(type);
+            GrContext* context = factory->get(type);
             if (NULL == context){
                 continue;
             }
 
-            SkAutoTUnref<GrTexture> fpTexture(context->createUncachedTexture(desc,
-                                                                             NULL,
-                                                                             0));
-
+            SkAutoTUnref<GrTexture> fpTexture(context->createTexture(desc, false,
+                                                                     controlPixelData.begin(), 0));
             // 16-bit floating point textures are NOT supported everywhere
             if (NULL == fpTexture) {
                 continue;
             }
-
-            // write square
-            fpTexture->writePixels(0, 0, DEV_W, DEV_H, desc.fConfig, controlPixelData, 0);
-            fpTexture->readPixels(0, 0, DEV_W, DEV_H, desc.fConfig, readBuffer, 0);
-            for (int j = 0; j < HALF_CONTROL_ARRAY_SIZE; ++j) {
-                REPORTER_ASSERT(reporter, readBuffer[j] == controlPixelData[j]);
-            }
+            fpTexture->readPixels(0, 0, DEV_W, DEV_H, desc.fConfig, readBuffer.begin(), 0);
+            REPORTER_ASSERT(reporter,
+                    0 == memcmp(readBuffer.begin(), controlPixelData.begin(), readBuffer.bytes()));
         }
     }
 }

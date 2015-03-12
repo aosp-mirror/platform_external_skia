@@ -7,10 +7,13 @@
 
 #include "GrDefaultPathRenderer.h"
 
+#include "GrBatch.h"
+#include "GrBatchTarget.h"
+#include "GrBufferAllocPool.h"
 #include "GrContext.h"
 #include "GrDefaultGeoProcFactory.h"
-#include "GrDrawState.h"
 #include "GrPathUtils.h"
+#include "GrPipelineBuilder.h"
 #include "SkGeometry.h"
 #include "SkString.h"
 #include "SkStrokeRec.h"
@@ -165,7 +168,7 @@ static inline bool single_pass_path(const SkPath& path, const SkStrokeRec& strok
 
 GrPathRenderer::StencilSupport
 GrDefaultPathRenderer::onGetStencilSupport(const GrDrawTarget*,
-                                           const GrDrawState*,
+                                           const GrPipelineBuilder*,
                                            const SkPath& path,
                                            const SkStrokeRec& stroke) const {
     if (single_pass_path(path, stroke)) {
@@ -191,9 +194,9 @@ static inline void append_countour_edge_indices(bool hairLine,
 
 static inline void add_quad(SkPoint** vert, const SkPoint* base, const SkPoint pts[],
                             SkScalar srcSpaceTolSqd, SkScalar srcSpaceTol, bool indexed,
-                            bool isHairline, uint16_t subpathIdxStart, uint16_t** idx) {
+                            bool isHairline, uint16_t subpathIdxStart, int offset, uint16_t** idx) {
     // first pt of quad is the pt we ended on in previous step
-    uint16_t firstQPtIdx = (uint16_t)(*vert - base) - 1;
+    uint16_t firstQPtIdx = (uint16_t)(*vert - base) - 1 + offset;
     uint16_t numPts =  (uint16_t)
         GrPathUtils::generateQuadraticPoints(
             pts[0], pts[1], pts[2],
@@ -207,142 +210,338 @@ static inline void add_quad(SkPoint** vert, const SkPoint* base, const SkPoint p
     }
 }
 
-bool GrDefaultPathRenderer::createGeom(GrDrawTarget* target,
-                                       GrDrawState* drawState,
-                                       GrPrimitiveType* primType,
-                                       int* vertexCnt,
-                                       int* indexCnt,
-                                       GrDrawTarget::AutoReleaseGeometry* arg,
-                                       const SkPath& path,
-                                       const SkStrokeRec& stroke,
-                                       SkScalar srcSpaceTol) {
-    {
-    SkScalar srcSpaceTolSqd = SkScalarMul(srcSpaceTol, srcSpaceTol);
-    int contourCnt;
-    int maxPts = GrPathUtils::worstCasePointCount(path, &contourCnt,
-                                                  srcSpaceTol);
+class DefaultPathBatch : public GrBatch {
+public:
+    struct Geometry {
+        GrColor fColor;
+        SkPath fPath;
+        SkScalar fTolerance;
+        SkDEBUGCODE(SkRect fDevBounds;)
+    };
 
-    if (maxPts <= 0) {
-        return false;
-    }
-    if (maxPts > ((int)SK_MaxU16 + 1)) {
-        SkDebugf("Path not rendered, too many verts (%d)\n", maxPts);
-        return false;
+    static GrBatch* Create(const Geometry& geometry, uint8_t coverage, const SkMatrix& viewMatrix,
+                           bool isHairline) {
+        return SkNEW_ARGS(DefaultPathBatch, (geometry, coverage, viewMatrix, isHairline));
     }
 
-    bool indexed = contourCnt > 1;
+    const char* name() const SK_OVERRIDE { return "DefaultPathBatch"; }
 
-    const bool isHairline = stroke.isHairlineStyle();
+    void getInvariantOutputColor(GrInitInvariantOutput* out) const SK_OVERRIDE {
+        // When this is called on a batch, there is only one geometry bundle
+        out->setKnownFourComponents(fGeoData[0].fColor);
+    }
+    void getInvariantOutputCoverage(GrInitInvariantOutput* out) const SK_OVERRIDE {
+        out->setKnownSingleComponent(this->coverage());
+    }
 
-    int maxIdxs = 0;
-    if (isHairline) {
-        if (indexed) {
-            maxIdxs = 2 * maxPts;
-            *primType = kLines_GrPrimitiveType;
-        } else {
-            *primType = kLineStrip_GrPrimitiveType;
+    void initBatchTracker(const GrPipelineInfo& init) SK_OVERRIDE {
+        // Handle any color overrides
+        if (init.fColorIgnored) {
+            fGeoData[0].fColor = GrColor_ILLEGAL;
+        } else if (GrColor_ILLEGAL != init.fOverrideColor) {
+            fGeoData[0].fColor = init.fOverrideColor;
         }
-    } else {
-        if (indexed) {
-            maxIdxs = 3 * maxPts;
-            *primType = kTriangles_GrPrimitiveType;
-        } else {
-            *primType = kTriangleFan_GrPrimitiveType;
+
+        // setup batch properties
+        fBatch.fColorIgnored = init.fColorIgnored;
+        fBatch.fColor = fGeoData[0].fColor;
+        fBatch.fUsesLocalCoords = init.fUsesLocalCoords;
+        fBatch.fCoverageIgnored = init.fCoverageIgnored;
+    }
+
+    void generateGeometry(GrBatchTarget* batchTarget, const GrPipeline* pipeline) SK_OVERRIDE {
+        SkAutoTUnref<const GrGeometryProcessor> gp(
+                GrDefaultGeoProcFactory::Create(GrDefaultGeoProcFactory::kPosition_GPType,
+                                                this->color(),
+                                                this->viewMatrix(),
+                                                SkMatrix::I(),
+                                                false,
+                                                this->coverage()));
+
+        size_t vertexStride = gp->getVertexStride();
+        SkASSERT(vertexStride == sizeof(SkPoint));
+
+        batchTarget->initDraw(gp, pipeline);
+
+        // TODO this is hacky, but the only way we have to initialize the GP is to use the
+        // GrPipelineInfo struct so we can generate the correct shader.  Once we have GrBatch
+        // everywhere we can remove this nastiness
+        GrPipelineInfo init;
+        init.fColorIgnored = fBatch.fColorIgnored;
+        init.fOverrideColor = GrColor_ILLEGAL;
+        init.fCoverageIgnored = fBatch.fCoverageIgnored;
+        init.fUsesLocalCoords = this->usesLocalCoords();
+        gp->initBatchTracker(batchTarget->currentBatchTracker(), init);
+
+        int instanceCount = fGeoData.count();
+
+        // compute number of vertices
+        int maxVertices = 0;
+
+        // We will use index buffers if we have multiple paths or one path with multiple contours
+        bool isIndexed = instanceCount > 1;
+        for (int i = 0; i < instanceCount; i++) {
+            Geometry& args = fGeoData[i];
+
+            int contourCount;
+            maxVertices += GrPathUtils::worstCasePointCount(args.fPath, &contourCount,
+                                                            args.fTolerance);
+
+            isIndexed = isIndexed || contourCount > 1;
         }
-    }
 
-    if (!arg->set(target, maxPts, GrDefaultGeoProcFactory::DefaultVertexStride(), maxIdxs)) {
-        return false;
-    }
-    SkASSERT(GrDefaultGeoProcFactory::DefaultVertexStride() == sizeof(SkPoint));
+        if (maxVertices == 0 || maxVertices > ((int)SK_MaxU16 + 1)) {
+            SkDebugf("Cannot render path (%d)\n", maxVertices);
+            return;
+        }
 
-    uint16_t* idxBase = reinterpret_cast<uint16_t*>(arg->indices());
-    uint16_t* idx = idxBase;
-    uint16_t subpathIdxStart = 0;
-
-    SkPoint* base = reinterpret_cast<SkPoint*>(arg->vertices());
-    SkASSERT(base);
-    SkPoint* vert = base;
-
-    SkPoint pts[4];
-
-    bool first = true;
-    int subpath = 0;
-
-    SkPath::Iter iter(path, false);
-
-    for (;;) {
-        SkPath::Verb verb = iter.next(pts);
-        switch (verb) {
-            case SkPath::kMove_Verb:
-                if (!first) {
-                    uint16_t currIdx = (uint16_t) (vert - base);
-                    subpathIdxStart = currIdx;
-                    ++subpath;
-                }
-                *vert = pts[0];
-                vert++;
-                break;
-            case SkPath::kLine_Verb:
-                if (indexed) {
-                    uint16_t prevIdx = (uint16_t)(vert - base) - 1;
-                    append_countour_edge_indices(isHairline, subpathIdxStart,
-                                                 prevIdx, &idx);
-                }
-                *(vert++) = pts[1];
-                break;
-            case SkPath::kConic_Verb: {
-                SkScalar weight = iter.conicWeight();
-                SkAutoConicToQuads converter;
-                // Converting in src-space, hance the finer tolerance (0.25)
-                // TODO: find a way to do this in dev-space so the tolerance means something
-                const SkPoint* quadPts = converter.computeQuads(pts, weight, 0.25f);
-                for (int i = 0; i < converter.countQuads(); ++i) {
-                    add_quad(&vert, base, quadPts + i*2, srcSpaceTolSqd, srcSpaceTol, indexed,
-                             isHairline, subpathIdxStart, &idx);
-                }
-                break;
+        // determine primitiveType
+        int maxIndices = 0;
+        GrPrimitiveType primitiveType;
+        if (this->isHairline()) {
+            if (isIndexed) {
+                maxIndices = 2 * maxVertices;
+                primitiveType = kLines_GrPrimitiveType;
+            } else {
+                primitiveType = kLineStrip_GrPrimitiveType;
             }
-            case SkPath::kQuad_Verb:
-                add_quad(&vert, base, pts, srcSpaceTolSqd, srcSpaceTol, indexed,
-                         isHairline, subpathIdxStart, &idx);
-                break;
-            case SkPath::kCubic_Verb: {
-                // first pt of cubic is the pt we ended on in previous step
-                uint16_t firstCPtIdx = (uint16_t)(vert - base) - 1;
-                uint16_t numPts = (uint16_t) GrPathUtils::generateCubicPoints(
-                                pts[0], pts[1], pts[2], pts[3],
-                                srcSpaceTolSqd, &vert,
-                                GrPathUtils::cubicPointCount(pts, srcSpaceTol));
-                if (indexed) {
-                    for (uint16_t i = 0; i < numPts; ++i) {
-                        append_countour_edge_indices(isHairline, subpathIdxStart,
-                                                     firstCPtIdx + i, &idx);
+        } else {
+            if (isIndexed) {
+                maxIndices = 3 * maxVertices;
+                primitiveType = kTriangles_GrPrimitiveType;
+            } else {
+                primitiveType = kTriangleFan_GrPrimitiveType;
+            }
+        }
+
+        // allocate vertex / index buffers
+        const GrVertexBuffer* vertexBuffer;
+        int firstVertex;
+
+        void* vertices = batchTarget->vertexPool()->makeSpace(vertexStride,
+                                                              maxVertices,
+                                                              &vertexBuffer,
+                                                              &firstVertex);
+
+        if (!vertices) {
+            SkDebugf("Could not allocate vertices\n");
+            return;
+        }
+
+        const GrIndexBuffer* indexBuffer;
+        int firstIndex;
+
+        void* indices = NULL;
+        if (isIndexed) {
+            indices = batchTarget->indexPool()->makeSpace(maxIndices,
+                                                          &indexBuffer,
+                                                          &firstIndex);
+
+            if (!indices) {
+                SkDebugf("Could not allocate indices\n");
+                return;
+            }
+        }
+
+        // fill buffers
+        int vertexOffset = 0;
+        int indexOffset = 0;
+        for (int i = 0; i < instanceCount; i++) {
+            Geometry& args = fGeoData[i];
+
+            int vertexCnt = 0;
+            int indexCnt = 0;
+            if (!this->createGeom(vertices,
+                                  vertexOffset,
+                                  indices,
+                                  indexOffset,
+                                  &vertexCnt,
+                                  &indexCnt,
+                                  args.fPath,
+                                  args.fTolerance,
+                                  isIndexed)) {
+                return;
+            }
+
+            vertexOffset += vertexCnt;
+            indexOffset += indexCnt;
+            SkASSERT(vertexOffset <= maxVertices && indexOffset <= maxIndices);
+        }
+
+        GrDrawTarget::DrawInfo drawInfo;
+        drawInfo.setPrimitiveType(primitiveType);
+        drawInfo.setVertexBuffer(vertexBuffer);
+        drawInfo.setStartVertex(firstVertex);
+        drawInfo.setVertexCount(vertexOffset);
+        if (isIndexed) {
+            drawInfo.setIndexBuffer(indexBuffer);
+            drawInfo.setStartIndex(firstIndex);
+            drawInfo.setIndexCount(indexOffset);
+        } else {
+            drawInfo.setStartIndex(0);
+            drawInfo.setIndexCount(0);
+        }
+        batchTarget->draw(drawInfo);
+
+        // put back reserves
+        batchTarget->putBackIndices((size_t)(maxIndices - indexOffset));
+        batchTarget->putBackVertices((size_t)(maxVertices - vertexOffset), (size_t)vertexStride);
+    }
+
+    SkSTArray<1, Geometry, true>* geoData() { return &fGeoData; }
+
+private:
+    DefaultPathBatch(const Geometry& geometry, uint8_t coverage, const SkMatrix& viewMatrix,
+                     bool isHairline) {
+        this->initClassID<DefaultPathBatch>();
+        fBatch.fCoverage = coverage;
+        fBatch.fIsHairline = isHairline;
+        fBatch.fViewMatrix = viewMatrix;
+        fGeoData.push_back(geometry);
+    }
+
+    bool onCombineIfPossible(GrBatch* t) SK_OVERRIDE {
+        DefaultPathBatch* that = t->cast<DefaultPathBatch>();
+
+        if (this->color() != that->color()) {
+            return false;
+        }
+
+        if (this->coverage() != that->coverage()) {
+            return false;
+        }
+
+        if (!this->viewMatrix().cheapEqualTo(that->viewMatrix())) {
+            return false;
+        }
+
+        if (this->isHairline() != that->isHairline()) {
+            return false;
+        }
+
+        fGeoData.push_back_n(that->geoData()->count(), that->geoData()->begin());
+        return true;
+    }
+
+    bool createGeom(void* vertices,
+                    size_t vertexOffset,
+                    void* indices,
+                    size_t indexOffset,
+                    int* vertexCnt,
+                    int* indexCnt,
+                    const SkPath& path,
+                    SkScalar srcSpaceTol,
+                    bool isIndexed)  {
+        {
+            SkScalar srcSpaceTolSqd = SkScalarMul(srcSpaceTol, srcSpaceTol);
+
+            uint16_t indexOffsetU16 = (uint16_t)indexOffset;
+            uint16_t vertexOffsetU16 = (uint16_t)vertexOffset;
+
+            uint16_t* idxBase = reinterpret_cast<uint16_t*>(indices) + indexOffsetU16;
+            uint16_t* idx = idxBase;
+            uint16_t subpathIdxStart = vertexOffsetU16;
+
+            SkPoint* base = reinterpret_cast<SkPoint*>(vertices) + vertexOffset;
+            SkPoint* vert = base;
+
+            SkPoint pts[4];
+
+            bool first = true;
+            int subpath = 0;
+
+            SkPath::Iter iter(path, false);
+
+            bool done = false;
+            while (!done) {
+                SkPath::Verb verb = iter.next(pts);
+                switch (verb) {
+                    case SkPath::kMove_Verb:
+                        if (!first) {
+                            uint16_t currIdx = (uint16_t) (vert - base) + vertexOffsetU16;
+                            subpathIdxStart = currIdx;
+                            ++subpath;
+                        }
+                        *vert = pts[0];
+                        vert++;
+                        break;
+                    case SkPath::kLine_Verb:
+                        if (isIndexed) {
+                            uint16_t prevIdx = (uint16_t)(vert - base) - 1 + vertexOffsetU16;
+                            append_countour_edge_indices(this->isHairline(), subpathIdxStart,
+                                                         prevIdx, &idx);
+                        }
+                        *(vert++) = pts[1];
+                        break;
+                    case SkPath::kConic_Verb: {
+                        SkScalar weight = iter.conicWeight();
+                        SkAutoConicToQuads converter;
+                        // Converting in src-space, hance the finer tolerance (0.25)
+                        // TODO: find a way to do this in dev-space so the tolerance means something
+                        const SkPoint* quadPts = converter.computeQuads(pts, weight, 0.25f);
+                        for (int i = 0; i < converter.countQuads(); ++i) {
+                            add_quad(&vert, base, quadPts + i*2, srcSpaceTolSqd, srcSpaceTol,
+                                     isIndexed, this->isHairline(), subpathIdxStart,
+                                     (int)vertexOffset, &idx);
+                        }
+                        break;
                     }
+                    case SkPath::kQuad_Verb:
+                        add_quad(&vert, base, pts, srcSpaceTolSqd, srcSpaceTol, isIndexed,
+                                 this->isHairline(), subpathIdxStart, (int)vertexOffset, &idx);
+                        break;
+                    case SkPath::kCubic_Verb: {
+                        // first pt of cubic is the pt we ended on in previous step
+                        uint16_t firstCPtIdx = (uint16_t)(vert - base) - 1 + vertexOffsetU16;
+                        uint16_t numPts = (uint16_t) GrPathUtils::generateCubicPoints(
+                                        pts[0], pts[1], pts[2], pts[3],
+                                        srcSpaceTolSqd, &vert,
+                                        GrPathUtils::cubicPointCount(pts, srcSpaceTol));
+                        if (isIndexed) {
+                            for (uint16_t i = 0; i < numPts; ++i) {
+                                append_countour_edge_indices(this->isHairline(), subpathIdxStart,
+                                                             firstCPtIdx + i, &idx);
+                            }
+                        }
+                        break;
+                    }
+                    case SkPath::kClose_Verb:
+                        break;
+                    case SkPath::kDone_Verb:
+                        done = true;
                 }
-                break;
+                first = false;
             }
-            case SkPath::kClose_Verb:
-                break;
-            case SkPath::kDone_Verb:
-             // uint16_t currIdx = (uint16_t) (vert - base);
-                goto FINISHED;
+
+            *vertexCnt = static_cast<int>(vert - base);
+            *indexCnt = static_cast<int>(idx - idxBase);
+
         }
-        first = false;
+        return true;
     }
-FINISHED:
-    SkASSERT((vert - base) <= maxPts);
-    SkASSERT((idx - idxBase) <= maxIdxs);
 
-    *vertexCnt = static_cast<int>(vert - base);
-    *indexCnt = static_cast<int>(idx - idxBase);
+    GrColor color() const { return fBatch.fColor; }
+    uint8_t coverage() const { return fBatch.fCoverage; }
+    bool usesLocalCoords() const { return fBatch.fUsesLocalCoords; }
+    const SkMatrix& viewMatrix() const { return fBatch.fViewMatrix; }
+    bool isHairline() const { return fBatch.fIsHairline; }
 
-    }
-    return true;
-}
+    struct BatchTracker {
+        GrColor fColor;
+        uint8_t fCoverage;
+        SkMatrix fViewMatrix;
+        bool fUsesLocalCoords;
+        bool fColorIgnored;
+        bool fCoverageIgnored;
+        bool fIsHairline;
+    };
+
+    BatchTracker fBatch;
+    SkSTArray<1, Geometry, true> fGeoData;
+};
 
 bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
-                                             GrDrawState* drawState,
+                                             GrPipelineBuilder* pipelineBuilder,
                                              GrColor color,
                                              const SkMatrix& viewMatrix,
                                              const SkPath& path,
@@ -360,36 +559,20 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
         }
     }
 
-    SkScalar tol = SK_Scalar1;
-    tol = GrPathUtils::scaleToleranceToSrc(tol, viewMatrix, path.getBounds());
+    const bool isHairline = stroke->isHairlineStyle();
 
-    int vertexCnt;
-    int indexCnt;
-    GrPrimitiveType primType;
-    GrDrawTarget::AutoReleaseGeometry arg;
-    if (!this->createGeom(target,
-                          drawState,
-                          &primType,
-                          &vertexCnt,
-                          &indexCnt,
-                          &arg,
-                          path,
-                          *stroke,
-                          tol)) {
-        return false;
-    }
     // Save the current xp on the draw state so we can reset it if needed
-    SkAutoTUnref<const GrXPFactory> backupXPFactory(SkRef(drawState->getXPFactory()));
+    SkAutoTUnref<const GrXPFactory> backupXPFactory(SkRef(pipelineBuilder->getXPFactory()));
     // face culling doesn't make sense here
-    SkASSERT(GrDrawState::kBoth_DrawFace == drawState->getDrawFace());
+    SkASSERT(GrPipelineBuilder::kBoth_DrawFace == pipelineBuilder->getDrawFace());
 
     int                         passCount = 0;
     const GrStencilSettings*    passes[3];
-    GrDrawState::DrawFace       drawFace[3];
+    GrPipelineBuilder::DrawFace drawFace[3];
     bool                        reverse = false;
     bool                        lastPassIsBounds;
 
-    if (stroke->isHairlineStyle()) {
+    if (isHairline) {
         passCount = 1;
         if (stencilOnly) {
             passes[0] = &gDirectToStencil;
@@ -397,7 +580,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
             passes[0] = NULL;
         }
         lastPassIsBounds = false;
-        drawFace[0] = GrDrawState::kBoth_DrawFace;
+        drawFace[0] = GrPipelineBuilder::kBoth_DrawFace;
     } else {
         if (single_pass_path(path, *stroke)) {
             passCount = 1;
@@ -406,7 +589,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
             } else {
                 passes[0] = NULL;
             }
-            drawFace[0] = GrDrawState::kBoth_DrawFace;
+            drawFace[0] = GrPipelineBuilder::kBoth_DrawFace;
             lastPassIsBounds = false;
         } else {
             switch (path.getFillType()) {
@@ -427,7 +610,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
                             passes[1] = &gEOColorPass;
                         }
                     }
-                    drawFace[0] = drawFace[1] = GrDrawState::kBoth_DrawFace;
+                    drawFace[0] = drawFace[1] = GrPipelineBuilder::kBoth_DrawFace;
                     break;
 
                 case SkPath::kInverseWinding_FillType:
@@ -441,7 +624,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
                             passes[0] = &gWindStencilSeparateNoWrap;
                         }
                         passCount = 2;
-                        drawFace[0] = GrDrawState::kBoth_DrawFace;
+                        drawFace[0] = GrPipelineBuilder::kBoth_DrawFace;
                     } else {
                         if (fStencilWrapOps) {
                             passes[0] = &gWindSingleStencilWithWrapInc;
@@ -451,8 +634,8 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
                             passes[1] = &gWindSingleStencilNoWrapDec;
                         }
                         // which is cw and which is ccw is arbitrary.
-                        drawFace[0] = GrDrawState::kCW_DrawFace;
-                        drawFace[1] = GrDrawState::kCCW_DrawFace;
+                        drawFace[0] = GrPipelineBuilder::kCW_DrawFace;
+                        drawFace[1] = GrPipelineBuilder::kCCW_DrawFace;
                         passCount = 3;
                     }
                     if (stencilOnly) {
@@ -460,7 +643,7 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
                         --passCount;
                     } else {
                         lastPassIsBounds = true;
-                        drawFace[passCount-1] = GrDrawState::kBoth_DrawFace;
+                        drawFace[passCount-1] = GrPipelineBuilder::kBoth_DrawFace;
                         if (reverse) {
                             passes[passCount-1] = &gInvWindColorPass;
                         } else {
@@ -475,22 +658,25 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
         }
     }
 
+    SkScalar tol = SK_Scalar1;
+    SkScalar srcSpaceTol = GrPathUtils::scaleToleranceToSrc(tol, viewMatrix, path.getBounds());
+
     SkRect devBounds;
-    GetPathDevBounds(path, drawState->getRenderTarget(), viewMatrix, &devBounds);
+    GetPathDevBounds(path, pipelineBuilder->getRenderTarget(), viewMatrix, &devBounds);
 
     for (int p = 0; p < passCount; ++p) {
-        drawState->setDrawFace(drawFace[p]);
+        pipelineBuilder->setDrawFace(drawFace[p]);
         if (passes[p]) {
-            *drawState->stencil() = *passes[p];
+            *pipelineBuilder->stencil() = *passes[p];
         }
 
         if (lastPassIsBounds && (p == passCount-1)) {
-            // Reset the XP Factory on drawState
-            drawState->setXPFactory(backupXPFactory);
+            // Reset the XP Factory on pipelineBuilder
+            pipelineBuilder->setXPFactory(backupXPFactory);
             SkRect bounds;
             SkMatrix localMatrix = SkMatrix::I();
             if (reverse) {
-                SkASSERT(drawState->getRenderTarget());
+                SkASSERT(pipelineBuilder->getRenderTarget());
                 // draw over the dev bounds (which will be the whole dst surface for inv fill).
                 bounds = devBounds;
                 SkMatrix vmi;
@@ -508,38 +694,29 @@ bool GrDefaultPathRenderer::internalDrawPath(GrDrawTarget* target,
             GrDrawTarget::AutoGeometryPush agp(target);
             const SkMatrix& viewM = (reverse && viewMatrix.hasPerspective()) ? SkMatrix::I() :
                                                                                viewMatrix;
-            target->drawRect(drawState, color, viewM, bounds, NULL, &localMatrix);
+            target->drawRect(pipelineBuilder, color, viewM, bounds, NULL, &localMatrix);
         } else {
             if (passCount > 1) {
-                drawState->setDisableColorXPFactory();
+                pipelineBuilder->setDisableColorXPFactory();
             }
-            GrDrawState::AutoRestoreEffects are(drawState);
-            SkAutoTUnref<const GrGeometryProcessor> gp(
-                    GrDefaultGeoProcFactory::Create(GrDefaultGeoProcFactory::kPosition_GPType,
-                                                    color,
-                                                    viewMatrix,
-                                                    SkMatrix::I(),
-                                                    false,
-                                                    newCoverage));
-            if (indexCnt) {
-                target->drawIndexed(drawState,
-                                    gp,
-                                    primType,
-                                    0,
-                                    0,
-                                    vertexCnt,
-                                    indexCnt,
-                                    &devBounds);
-            } else {
-                target->drawNonIndexed(drawState, gp, primType, 0, vertexCnt, &devBounds);
-            }
+
+            DefaultPathBatch::Geometry geometry;
+            geometry.fColor = color;
+            geometry.fPath = path;
+            geometry.fTolerance = srcSpaceTol;
+            SkDEBUGCODE(geometry.fDevBounds = devBounds;)
+
+            SkAutoTUnref<GrBatch> batch(DefaultPathBatch::Create(geometry, newCoverage, viewMatrix,
+                                                                 isHairline));
+
+            target->drawBatch(pipelineBuilder, batch, &devBounds);
         }
     }
     return true;
 }
 
 bool GrDefaultPathRenderer::canDrawPath(const GrDrawTarget* target,
-                                        const GrDrawState* drawState,
+                                        const GrPipelineBuilder* pipelineBuilder,
                                         const SkMatrix& viewMatrix,
                                         const SkPath& path,
                                         const SkStrokeRec& stroke,
@@ -551,14 +728,14 @@ bool GrDefaultPathRenderer::canDrawPath(const GrDrawTarget* target,
 }
 
 bool GrDefaultPathRenderer::onDrawPath(GrDrawTarget* target,
-                                       GrDrawState* drawState,
+                                       GrPipelineBuilder* pipelineBuilder,
                                        GrColor color,
                                        const SkMatrix& viewMatrix,
                                        const SkPath& path,
                                        const SkStrokeRec& stroke,
                                        bool antiAlias) {
     return this->internalDrawPath(target,
-                                  drawState,
+                                  pipelineBuilder,
                                   color,
                                   viewMatrix,
                                   path,
@@ -567,11 +744,11 @@ bool GrDefaultPathRenderer::onDrawPath(GrDrawTarget* target,
 }
 
 void GrDefaultPathRenderer::onStencilPath(GrDrawTarget* target,
-                                          GrDrawState* drawState,
+                                          GrPipelineBuilder* pipelineBuilder,
                                           const SkMatrix& viewMatrix,
                                           const SkPath& path,
                                           const SkStrokeRec& stroke) {
     SkASSERT(SkPath::kInverseEvenOdd_FillType != path.getFillType());
     SkASSERT(SkPath::kInverseWinding_FillType != path.getFillType());
-    this->internalDrawPath(target, drawState, GrColor_WHITE, viewMatrix, path, stroke, true);
+    this->internalDrawPath(target, pipelineBuilder, GrColor_WHITE, viewMatrix, path, stroke, true);
 }

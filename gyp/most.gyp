@@ -16,7 +16,7 @@
         'skia_lib.gyp:skia_lib',
 
         'bench.gyp:*',
-        'gm.gyp:gm',
+        'example.gyp:HelloWorld',
         'SampleApp.gyp:SampleApp',
         'tools.gyp:tools',
         'pathops_unittest.gyp:*',
@@ -25,11 +25,19 @@
         'dm.gyp:dm',
       ],
       'conditions': [
+        [ 'skia_gpu == 0 or skia_os == "android"', {
+          'dependencies!': [
+            'example.gyp:HelloWorld',
+          ],
+        }],
         ['skia_os == "android"', {
           'dependencies': [ 'android_system.gyp:SampleApp_APK' ],
         }],
         ['skia_os == "ios"', {
-          'dependencies!': [ 'SampleApp.gyp:SampleApp' ],
+          'dependencies!': [
+            'example.gyp:HelloWorld',
+            'SampleApp.gyp:SampleApp',
+          ],
           'dependencies': ['iOSShell.gyp:iOSShell' ],
         }],
         ['skia_os == "mac" or skia_os == "linux"', {
@@ -38,6 +46,7 @@
         [ 'skia_skip_gui',
           {
             'dependencies!': [
+              'example.gyp:HelloWorld',
               'SampleApp.gyp:SampleApp',
             ]
           }

@@ -16,6 +16,8 @@
 #include "SkTRegistry.h"
 #include "sk_tool_utils.h"
 
+class SkAnimTimer;
+
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
 #endif
@@ -40,24 +42,6 @@ namespace skiagm {
         GM();
         virtual ~GM();
 
-        enum Flags {
-            kSkipPDF_Flag               = 1 << 0,
-            kSkipPicture_Flag           = 1 << 1,
-            kSkipPipe_Flag              = 1 << 2,
-            kSkipPipeCrossProcess_Flag  = 1 << 3,
-            kSkipTiled_Flag             = 1 << 4,
-            kSkip565_Flag               = 1 << 5,
-            kSkipScaledReplay_Flag      = 1 << 6,
-            kSkipGPU_Flag               = 1 << 7,
-            kSkipPDFRasterization_Flag  = 1 << 8,
-
-            kGPUOnly_Flag               = 1 << 9,
-
-            kAsBench_Flag               = 1 << 10, // Run the GM as a benchmark in the bench tool
-
-            kNoBBH_Flag                 = 1 << 11, // May draw wrong using a bounding-box hierarchy
-        };
-
         enum Mode {
             kGM_Mode,
             kSample_Mode,
@@ -74,9 +58,7 @@ namespace skiagm {
         SkISize getISize() { return this->onISize(); }
         const char* getName();
 
-        uint32_t getFlags() const {
-            return this->onGetFlags();
-        }
+        virtual bool runAsBench() const { return false; }
 
         SkScalar width() {
             return SkIntToScalar(this->getISize().width());
@@ -112,13 +94,18 @@ namespace skiagm {
             fStarterMatrix = matrix;
         }
 
+        bool animate(const SkAnimTimer&);
+
     protected:
+        /** draws a standard message that the GM is only intended to be used with the GPU.*/
+        void drawGpuOnlyMessage(SkCanvas*);
         virtual void onOnceBeforeDraw() {}
         virtual void onDraw(SkCanvas*) = 0;
         virtual void onDrawBackground(SkCanvas*);
         virtual SkISize onISize() = 0;
         virtual SkString onShortName() = 0;
-        virtual uint32_t onGetFlags() const { return 0; }
+
+        virtual bool onAnimate(const SkAnimTimer&) { return false; }
         virtual SkMatrix onGetInitialTransform() const { return SkMatrix::I(); }
 
     private:

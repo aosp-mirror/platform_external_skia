@@ -7,6 +7,9 @@
 
 #include "SkInstCnt.h"
 
-#if SK_ENABLE_INST_COUNT
-bool gPrintInstCount = false;
+#if SK_ENABLE_INST_COUNT && !defined(SKIA_DLL)  // See SkInstCnt.h
+    bool gPrintInstCount = false;
+    void SkInstCountPrintLeaksOnExit() { gPrintInstCount = true; }
+#else
+    void SkInstCountPrintLeaksOnExit() {}
 #endif

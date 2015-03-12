@@ -1,220 +1,517 @@
-// Main binary for DM.
-// For a high-level overview, please see dm/README.
-
 #include "CrashHandler.h"
-#include "LazyDecodeBitmap.h"
+#include "DMJsonWriter.h"
+#include "DMSrcSink.h"
+#include "DMSrcSinkAndroid.h"
+#include "OverwriteLine.h"
+#include "ProcStats.h"
+#include "SkBBHFactory.h"
+#include "SkChecksum.h"
 #include "SkCommonFlags.h"
 #include "SkForceLinking.h"
 #include "SkGraphics.h"
+#include "SkInstCnt.h"
+#include "SkMD5.h"
 #include "SkOSFile.h"
-#include "SkPicture.h"
-#include "SkString.h"
+#include "SkTHash.h"
 #include "SkTaskGroup.h"
 #include "Test.h"
-#include "gm.h"
-#include "sk_tool_utils.h"
-#include "sk_tool_utils_flags.h"
+#include "Timer.h"
 
-#include "DMCpuGMTask.h"
-#include "DMGpuGMTask.h"
-#include "DMGpuSupport.h"
-#include "DMImageTask.h"
-#include "DMJsonWriter.h"
-#include "DMPDFTask.h"
-#include "DMPDFRasterizeTask.h"
-#include "DMReporter.h"
-#include "DMSKPTask.h"
-#include "DMTask.h"
-#include "DMTaskRunner.h"
-#include "DMTestTask.h"
+DEFINE_string(src, "tests gm skp image subset", "Source types to test.");
+DEFINE_bool(nameByHash, false,
+            "If true, write to FLAGS_writePath[0]/<hash>.png instead of "
+            "to FLAGS_writePath[0]/<config>/<sourceType>/<name>.png");
+DEFINE_bool2(pathOpsExtended, x, false, "Run extended pathOps tests.");
+DEFINE_string(matrix, "1 0 0 1",
+              "2x2 scale+skew matrix to apply or upright when using "
+              "'matrix' or 'upright' in config.");
+DEFINE_bool(gpu_threading, false, "Allow GPU work to run on multiple threads?");
 
-#ifdef SK_BUILD_POPPLER
-#  include "SkPDFRasterizer.h"
-#  define RASTERIZE_PDF_PROC SkPopplerRasterizePDF
-#elif defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-#  include "SkCGUtils.h"
-#  define RASTERIZE_PDF_PROC SkPDFDocumentToBitmap
-#else
-#  define RASTERIZE_PDF_PROC NULL
-#endif
+DEFINE_string(blacklist, "",
+        "Space-separated config/src/name triples to blacklist.  '_' matches anything.  E.g. \n"
+        "'--blacklist gpu skp _' will blacklist all SKPs drawn into the gpu config.\n"
+        "'--blacklist gpu skp _ 8888 gm aarects' will also blacklist the aarects GM on 8888.");
 
-#include <ctype.h>
-
-using skiagm::GM;
-using skiagm::GMRegistry;
-using skiatest::Test;
-using skiatest::TestRegistry;
-
-static const char kGpuAPINameGL[] = "gl";
-static const char kGpuAPINameGLES[] = "gles";
-
-DEFINE_bool(gms, true, "Run GMs?");
-DEFINE_bool(tests, true, "Run tests?");
-DEFINE_bool(reportUsedChars, false, "Output test font construction data to be pasted into"
-                                    " create_test_font.cpp.");
-DEFINE_string(images, "resources", "Path to directory containing images to decode.");
-DEFINE_bool(rasterPDF, true, "Rasterize PDFs?");
+DEFINE_string2(readPath, r, "", "If set check for equality with golden results in this directory.");
 
 __SK_FORCE_IMAGE_DECODER_LINKING;
+using namespace DM;
 
-static DM::RasterizePdfProc get_pdf_rasterizer_proc() {
-    return reinterpret_cast<DM::RasterizePdfProc>(
-            FLAGS_rasterPDF ? RASTERIZE_PDF_PROC : NULL);
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+SK_DECLARE_STATIC_MUTEX(gFailuresMutex);
+static SkTArray<SkString> gFailures;
+
+static void fail(ImplicitString err) {
+    SkAutoMutexAcquire lock(gFailuresMutex);
+    SkDebugf("\n\nFAILURE: %s\n\n", err.c_str());
+    gFailures.push_back(err);
 }
 
-// "FooBar" -> "foobar".  Obviously, ASCII only.
-static SkString lowercase(SkString s) {
-    for (size_t i = 0; i < s.size(); i++) {
-        s[i] = tolower(s[i]);
+static int32_t gPending = 0;  // Atomic.
+
+static void done(double ms,
+                 ImplicitString config, ImplicitString src, ImplicitString name,
+                 ImplicitString log) {
+    if (!log.isEmpty()) {
+        log.prepend("\n");
     }
-    return s;
+    auto pending = sk_atomic_dec(&gPending)-1;
+    SkDebugf("%s(%4dMB %5d) %s\t%s %s %s%s", FLAGS_verbose ? "\n" : kSkOverwriteLine
+                                           , sk_tools::getMaxResidentSetSizeMB()
+                                           , pending
+                                           , HumanizeMs(ms).c_str()
+                                           , config.c_str()
+                                           , src.c_str()
+                                           , name.c_str()
+                                           , log.c_str());
+    // We write our dm.json file every once in a while in case we crash.
+    // Notice this also handles the final dm.json when pending == 0.
+    if (pending % 500 == 0) {
+        JsonWriter::DumpJson();
+    }
 }
 
-static const GrContextFactory::GLContextType native = GrContextFactory::kNative_GLContextType;
-static const GrContextFactory::GLContextType nvpr   = GrContextFactory::kNVPR_GLContextType;
-static const GrContextFactory::GLContextType null   = GrContextFactory::kNull_GLContextType;
-static const GrContextFactory::GLContextType debug  = GrContextFactory::kDebug_GLContextType;
-#if SK_ANGLE
-static const GrContextFactory::GLContextType angle  = GrContextFactory::kANGLE_GLContextType;
-#endif
-#if SK_MESA
-static const GrContextFactory::GLContextType mesa   = GrContextFactory::kMESA_GLContextType;
-#endif
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
-static void kick_off_gms(const SkTDArray<GMRegistry::Factory>& gms,
-                         const SkTArray<SkString>& configs,
-                         GrGLStandard gpuAPI,
-                         DM::Reporter* reporter,
-                         DM::TaskRunner* tasks) {
-#define START(name, type, ...)                                                              \
-    if (lowercase(configs[j]).equals(name)) {                                               \
-        tasks->add(SkNEW_ARGS(DM::type, (name, reporter, tasks, gms[i], ## __VA_ARGS__)));  \
-    }
-    for (int i = 0; i < gms.count(); i++) {
-        for (int j = 0; j < configs.count(); j++) {
-
-            START("565",        CpuGMTask, kRGB_565_SkColorType);
-            START("8888",       CpuGMTask, kN32_SkColorType);
-            START("gpu",        GpuGMTask, native, gpuAPI, 0,  false);
-            START("msaa4",      GpuGMTask, native, gpuAPI, 4,  false);
-            START("msaa16",     GpuGMTask, native, gpuAPI, 16, false);
-            START("nvprmsaa4",  GpuGMTask, nvpr,   gpuAPI, 4,  false);
-            START("nvprmsaa16", GpuGMTask, nvpr,   gpuAPI, 16, false);
-            START("gpudft",     GpuGMTask, native, gpuAPI, 0,  true);
-            START("gpunull",    GpuGMTask, null,   gpuAPI, 0,  false);
-            START("gpudebug",   GpuGMTask, debug,  gpuAPI, 0,  false);
-#if SK_ANGLE
-            START("angle",      GpuGMTask, angle,  gpuAPI, 0,  false);
-#endif
-#if SK_MESA
-            START("mesa",       GpuGMTask, mesa,   gpuAPI, 0,  false);
-#endif
-            START("pdf",        PDFTask,   get_pdf_rasterizer_proc());
+struct Gold : public SkString {
+    Gold() : SkString("") {}
+    Gold(ImplicitString sink, ImplicitString src, ImplicitString name, ImplicitString md5)
+        : SkString("") {
+        this->append(sink);
+        this->append(src);
+        this->append(name);
+        this->append(md5);
+        while (this->size() % 4) {
+            this->append("!");  // Pad out if needed so we can pass this to Murmur3.
         }
     }
-#undef START
+    static uint32_t Hash(const Gold& g) {
+        return SkChecksum::Murmur3((const uint32_t*)g.c_str(), g.size());
+    }
+};
+static SkTHashSet<Gold, Gold::Hash> gGold;
+
+static void add_gold(JsonWriter::BitmapResult r) {
+    gGold.add(Gold(r.config, r.sourceType, r.name, r.md5));
 }
 
-static void kick_off_tests(const SkTDArray<TestRegistry::Factory>& tests,
-                           DM::Reporter* reporter,
-                           DM::TaskRunner* tasks) {
-    for (int i = 0; i < tests.count(); i++) {
-        SkAutoTDelete<Test> test(tests[i](NULL));
-        if (test->isGPUTest()) {
-            tasks->add(SkNEW_ARGS(DM::GpuTestTask, (reporter, tasks, tests[i])));
+static void gather_gold() {
+    if (!FLAGS_readPath.isEmpty()) {
+        SkString path(FLAGS_readPath[0]);
+        path.append("/dm.json");
+        if (!JsonWriter::ReadJson(path.c_str(), add_gold)) {
+            fail(SkStringPrintf("Couldn't read %s for golden results.", path.c_str()));
+        }
+    }
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+template <typename T>
+struct Tagged : public SkAutoTDelete<T> { const char* tag; };
+
+static const bool kMemcpyOK = true;
+
+static SkTArray<Tagged<Src>,  kMemcpyOK>  gSrcs;
+static SkTArray<Tagged<Sink>, kMemcpyOK> gSinks;
+
+static void push_src(const char* tag, Src* s) {
+    SkAutoTDelete<Src> src(s);
+    if (FLAGS_src.contains(tag) &&
+        !SkCommandLineFlags::ShouldSkip(FLAGS_match, src->name().c_str())) {
+        Tagged<Src>& s = gSrcs.push_back();
+        s.reset(src.detach());
+        s.tag = tag;
+    }
+}
+
+static void gather_srcs() {
+    for (const skiagm::GMRegistry* r = skiagm::GMRegistry::Head(); r; r = r->next()) {
+        push_src("gm", new GMSrc(r->factory()));
+    }
+    for (int i = 0; i < FLAGS_skps.count(); i++) {
+        const char* path = FLAGS_skps[i];
+        if (sk_isdir(path)) {
+            SkOSFile::Iter it(path, "skp");
+            for (SkString file; it.next(&file); ) {
+                push_src("skp", new SKPSrc(SkOSPath::Join(path, file.c_str())));
+            }
         } else {
-            tasks->add(SkNEW_ARGS(DM::CpuTestTask, (reporter, tasks, tests[i])));
+            push_src("skp", new SKPSrc(path));
+        }
+    }
+    static const char* const exts[] = {
+        "bmp", "gif", "jpg", "jpeg", "png", "webp", "ktx", "astc", "wbmp", "ico",
+        "BMP", "GIF", "JPG", "JPEG", "PNG", "WEBP", "KTX", "ASTC", "WBMP", "ICO",
+    };
+    for (int i = 0; i < FLAGS_images.count(); i++) {
+        const char* flag = FLAGS_images[i];
+        if (sk_isdir(flag)) {
+            for (size_t j = 0; j < SK_ARRAY_COUNT(exts); j++) {
+                SkOSFile::Iter it(flag, exts[j]);
+                for (SkString file; it.next(&file); ) {
+                    SkString path = SkOSPath::Join(flag, file.c_str());
+                    push_src("image", new ImageSrc(path));     // Decode entire image.
+                    push_src("subset", new ImageSrc(path, 2)); // Decode into 2 x 2 subsets
+                }
+            }
+        } else if (sk_exists(flag)) {
+            // assume that FLAGS_images[i] is a valid image if it is a file.
+            push_src("image", new ImageSrc(flag));     // Decode entire image.
+            push_src("subset", new ImageSrc(flag, 2)); // Decode into 2 x 2 subsets
         }
     }
 }
 
-static void find_files(const char* dir,
-                       const char* suffixes[],
-                       size_t num_suffixes,
-                       SkTArray<SkString>* files) {
-    if (0 == strcmp(dir, "")) {
+static GrGLStandard get_gpu_api() {
+    if (FLAGS_gpuAPI.contains("gl"))   { return kGL_GrGLStandard; }
+    if (FLAGS_gpuAPI.contains("gles")) { return kGLES_GrGLStandard; }
+    return kNone_GrGLStandard;
+}
+
+static void push_sink(const char* tag, Sink* s) {
+    SkAutoTDelete<Sink> sink(s);
+    if (!FLAGS_config.contains(tag)) {
+        return;
+    }
+    // Try a noop Src as a canary.  If it fails, skip this sink.
+    struct : public Src {
+        Error draw(SkCanvas*) const SK_OVERRIDE { return ""; }
+        SkISize size() const SK_OVERRIDE { return SkISize::Make(16, 16); }
+        Name name() const SK_OVERRIDE { return "noop"; }
+    } noop;
+
+    SkBitmap bitmap;
+    SkDynamicMemoryWStream stream;
+    SkString log;
+    Error err = sink->draw(noop, &bitmap, &stream, &log);
+    if (err.isFatal()) {
+        SkDebugf("Skipping %s: %s\n", tag, err.c_str());
         return;
     }
 
-    SkString filename;
-    for (size_t i = 0; i < num_suffixes; i++) {
-        SkOSFile::Iter it(dir, suffixes[i]);
-        while (it.next(&filename)) {
-            if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, filename.c_str())) {
-                files->push_back(SkOSPath::Join(dir, filename.c_str()));
+    Tagged<Sink>& ts = gSinks.push_back();
+    ts.reset(sink.detach());
+    ts.tag = tag;
+}
+
+static bool gpu_supported() {
+#if SK_SUPPORT_GPU
+    return FLAGS_gpu;
+#else
+    return false;
+#endif
+}
+
+static Sink* create_sink(const char* tag) {
+#define SINK(t, sink, ...) if (0 == strcmp(t, tag)) { return new sink(__VA_ARGS__); }
+    if (gpu_supported()) {
+        typedef GrContextFactory Gr;
+        const GrGLStandard api = get_gpu_api();
+        SINK("gpunull",    GPUSink, Gr::kNull_GLContextType,   api,  0, false, FLAGS_gpu_threading);
+        SINK("gpudebug",   GPUSink, Gr::kDebug_GLContextType,  api,  0, false, FLAGS_gpu_threading);
+        SINK("gpu",        GPUSink, Gr::kNative_GLContextType, api,  0, false, FLAGS_gpu_threading);
+        SINK("gpudft",     GPUSink, Gr::kNative_GLContextType, api,  0,  true, FLAGS_gpu_threading);
+        SINK("msaa4",      GPUSink, Gr::kNative_GLContextType, api,  4, false, FLAGS_gpu_threading);
+        SINK("msaa16",     GPUSink, Gr::kNative_GLContextType, api, 16, false, FLAGS_gpu_threading);
+        SINK("nvprmsaa4",  GPUSink, Gr::kNVPR_GLContextType,   api,  4, false, FLAGS_gpu_threading);
+        SINK("nvprmsaa16", GPUSink, Gr::kNVPR_GLContextType,   api, 16, false, FLAGS_gpu_threading);
+    #if SK_ANGLE
+        SINK("angle",      GPUSink, Gr::kANGLE_GLContextType,  api,  0, false, FLAGS_gpu_threading);
+    #endif
+    #if SK_MESA
+        SINK("mesa",       GPUSink, Gr::kMESA_GLContextType,   api,  0, false, FLAGS_gpu_threading);
+    #endif
+    }
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    SINK("hwui",           HWUISink);
+#endif
+
+    if (FLAGS_cpu) {
+        SINK("565",  RasterSink, kRGB_565_SkColorType);
+        SINK("8888", RasterSink, kN32_SkColorType);
+        SINK("pdf",  PDFSink);
+        SINK("skp",  SKPSink);
+        SINK("svg",  SVGSink);
+        SINK("null", NullSink);
+        SINK("xps",  XPSSink);
+    }
+#undef SINK
+    return NULL;
+}
+
+static Sink* create_via(const char* tag, Sink* wrapped) {
+#define VIA(t, via, ...) if (0 == strcmp(t, tag)) { return new via(__VA_ARGS__); }
+    VIA("pipe",      ViaPipe,          wrapped);
+    VIA("serialize", ViaSerialization, wrapped);
+    VIA("tiles",     ViaTiles, 256, 256,               NULL, wrapped);
+    VIA("tiles_rt",  ViaTiles, 256, 256, new SkRTreeFactory, wrapped);
+
+    if (FLAGS_matrix.count() == 4) {
+        SkMatrix m;
+        m.reset();
+        m.setScaleX((SkScalar)atof(FLAGS_matrix[0]));
+        m.setSkewX ((SkScalar)atof(FLAGS_matrix[1]));
+        m.setSkewY ((SkScalar)atof(FLAGS_matrix[2]));
+        m.setScaleY((SkScalar)atof(FLAGS_matrix[3]));
+        VIA("matrix",  ViaMatrix,  m, wrapped);
+        VIA("upright", ViaUpright, m, wrapped);
+    }
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    VIA("androidsdk", ViaAndroidSDK, wrapped);
+#endif
+
+#undef VIA
+    return NULL;
+}
+
+static void gather_sinks() {
+    for (int i = 0; i < FLAGS_config.count(); i++) {
+        const char* config = FLAGS_config[i];
+        SkTArray<SkString> parts;
+        SkStrSplit(config, "-", &parts);
+
+        Sink* sink = NULL;
+        for (int i = parts.count(); i-- > 0;) {
+            const char* part = parts[i].c_str();
+            Sink* next = (sink == NULL) ? create_sink(part) : create_via(part, sink);
+            if (next == NULL) {
+                SkDebugf("Skipping %s: Don't understand '%s'.\n", config, part);
+                delete sink;
+                sink = NULL;
+                break;
+            }
+            sink = next;
+        }
+        if (sink) {
+            push_sink(config, sink);
+        }
+    }
+}
+
+static bool match(const char* needle, const char* haystack) {
+    return 0 == strcmp("_", needle) || NULL != strstr(haystack, needle);
+}
+
+static ImplicitString is_blacklisted(const char* sink, const char* src, const char* name) {
+    for (int i = 0; i < FLAGS_blacklist.count() - 2; i += 3) {
+        if (match(FLAGS_blacklist[i+0], sink) &&
+            match(FLAGS_blacklist[i+1],  src) &&
+            match(FLAGS_blacklist[i+2], name)) {
+            return SkStringPrintf("%s %s %s",
+                                  FLAGS_blacklist[i+0], FLAGS_blacklist[i+1], FLAGS_blacklist[i+2]);
+        }
+    }
+    return "";
+}
+
+// The finest-grained unit of work we can run: draw a single Src into a single Sink,
+// report any errors, and perhaps write out the output: a .png of the bitmap, or a raw stream.
+struct Task {
+    Task(const Tagged<Src>& src, const Tagged<Sink>& sink) : src(src), sink(sink) {}
+    const Tagged<Src>&  src;
+    const Tagged<Sink>& sink;
+
+    static void Run(Task* task) {
+        SkString name = task->src->name();
+        SkString whyBlacklisted = is_blacklisted(task->sink.tag, task->src.tag, name.c_str());
+        SkString log;
+        WallTimer timer;
+        timer.start();
+        if (!FLAGS_dryRun && whyBlacklisted.isEmpty()) {
+            SkBitmap bitmap;
+            SkDynamicMemoryWStream stream;
+            Error err = task->sink->draw(*task->src, &bitmap, &stream, &log);
+            if (!err.isEmpty()) {
+                timer.end();
+                if (err.isFatal()) {
+                    fail(SkStringPrintf("%s %s %s: %s",
+                                        task->sink.tag,
+                                        task->src.tag,
+                                        name.c_str(),
+                                        err.c_str()));
+                } else if (FLAGS_verbose) {
+                    name.appendf(" (skipped: %s)", err.c_str());
+                }
+                done(timer.fWall, task->sink.tag, task->src.tag, name, log);
+                return;
+            }
+            SkAutoTDelete<SkStreamAsset> data(stream.detachAsStream());
+
+            SkString md5;
+            if (!FLAGS_writePath.isEmpty() || !FLAGS_readPath.isEmpty()) {
+                SkMD5 hash;
+                if (data->getLength()) {
+                    hash.writeStream(data, data->getLength());
+                    data->rewind();
+                } else {
+                    hash.write(bitmap.getPixels(), bitmap.getSize());
+                }
+                SkMD5::Digest digest;
+                hash.finish(digest);
+                for (int i = 0; i < 16; i++) {
+                    md5.appendf("%02x", digest.data[i]);
+                }
+            }
+
+            if (!FLAGS_readPath.isEmpty() &&
+                !gGold.contains(Gold(task->sink.tag, task->src.tag, name, md5))) {
+                fail(SkStringPrintf("%s not found for %s %s %s in %s",
+                                    md5.c_str(),
+                                    task->sink.tag,
+                                    task->src.tag,
+                                    name.c_str(),
+                                    FLAGS_readPath[0]));
+            }
+
+            if (!FLAGS_writePath.isEmpty()) {
+                const char* ext = task->sink->fileExtension();
+                if (data->getLength()) {
+                    WriteToDisk(*task, md5, ext, data, data->getLength(), NULL);
+                    SkASSERT(bitmap.drawsNothing());
+                } else if (!bitmap.drawsNothing()) {
+                    WriteToDisk(*task, md5, ext, NULL, 0, &bitmap);
+                }
+            }
+        }
+        timer.end();
+        if (FLAGS_verbose && !whyBlacklisted.isEmpty()) {
+            name.appendf(" (--blacklist, %s)", whyBlacklisted.c_str());
+        }
+        done(timer.fWall, task->sink.tag, task->src.tag, name, log);
+    }
+
+    static void WriteToDisk(const Task& task,
+                            SkString md5,
+                            const char* ext,
+                            SkStream* data, size_t len,
+                            const SkBitmap* bitmap) {
+        JsonWriter::BitmapResult result;
+        result.name       = task.src->name();
+        result.config     = task.sink.tag;
+        result.sourceType = task.src.tag;
+        result.ext        = ext;
+        result.md5        = md5;
+        JsonWriter::AddBitmapResult(result);
+
+        const char* dir = FLAGS_writePath[0];
+        if (0 == strcmp(dir, "@")) {  // Needed for iOS.
+            dir = FLAGS_resourcePath[0];
+        }
+        sk_mkdir(dir);
+
+        SkString path;
+        if (FLAGS_nameByHash) {
+            path = SkOSPath::Join(dir, result.md5.c_str());
+            path.append(".");
+            path.append(ext);
+            if (sk_exists(path.c_str())) {
+                return;  // Content-addressed.  If it exists already, we're done.
+            }
+        } else {
+            path = SkOSPath::Join(dir, task.sink.tag);
+            sk_mkdir(path.c_str());
+            path = SkOSPath::Join(path.c_str(), task.src.tag);
+            sk_mkdir(path.c_str());
+            path = SkOSPath::Join(path.c_str(), task.src->name().c_str());
+            path.append(".");
+            path.append(ext);
+        }
+
+        SkFILEWStream file(path.c_str());
+        if (!file.isValid()) {
+            fail(SkStringPrintf("Can't open %s for writing.\n", path.c_str()));
+            return;
+        }
+
+        if (bitmap) {
+            // We can't encode A8 bitmaps as PNGs.  Convert them to 8888 first.
+            SkBitmap converted;
+            if (bitmap->info().colorType() == kAlpha_8_SkColorType) {
+                if (!bitmap->copyTo(&converted, kN32_SkColorType)) {
+                    fail("Can't convert A8 to 8888.\n");
+                    return;
+                }
+                bitmap = &converted;
+            }
+            if (!SkImageEncoder::EncodeStream(&file, *bitmap, SkImageEncoder::kPNG_Type, 100)) {
+                fail(SkStringPrintf("Can't encode PNG to %s.\n", path.c_str()));
+                return;
+            }
+        } else {
+            if (!file.writeStream(data, len)) {
+                fail(SkStringPrintf("Can't write to %s.\n", path.c_str()));
+                return;
             }
         }
     }
-}
+};
 
-static void kick_off_skps(const SkTArray<SkString>& skps,
-                          DM::Reporter* reporter,
-                          DM::TaskRunner* tasks) {
-    for (int i = 0; i < skps.count(); ++i) {
-        SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(skps[i].c_str()));
-        if (stream.get() == NULL) {
-            SkDebugf("Could not read %s.\n", skps[i].c_str());
-            exit(1);
-        }
-        SkAutoTUnref<SkPicture> pic(
-                SkPicture::CreateFromStream(stream.get(), &sk_tools::LazyDecodeBitmap));
-        if (pic.get() == NULL) {
-            SkDebugf("Could not read %s as an SkPicture.\n", skps[i].c_str());
-            exit(1);
-        }
-
-        SkString filename = SkOSPath::Basename(skps[i].c_str());
-        tasks->add(SkNEW_ARGS(DM::SKPTask, (reporter, tasks, pic, filename)));
-        tasks->add(SkNEW_ARGS(DM::PDFTask, (reporter, tasks, pic, filename,
-                                            get_pdf_rasterizer_proc())));
+// Run all tasks in the same enclave serially on the same thread.
+// They can't possibly run concurrently with each other.
+static void run_enclave(SkTArray<Task>* tasks) {
+    for (int i = 0; i < tasks->count(); i++) {
+        Task::Run(tasks->begin() + i);
     }
 }
 
-static void kick_off_images(const SkTArray<SkString>& images,
-                            DM::Reporter* reporter,
-                            DM::TaskRunner* tasks) {
-    for (int i = 0; i < images.count(); i++) {
-        SkAutoTUnref<SkData> image(SkData::NewFromFileName(images[i].c_str()));
-        if (!image) {
-            SkDebugf("Could not read %s.\n", images[i].c_str());
-            exit(1);
-        }
-        SkString filename = SkOSPath::Basename(images[i].c_str());
-        tasks->add(SkNEW_ARGS(DM::ImageTask, (reporter, tasks, image, filename)));
-        tasks->add(SkNEW_ARGS(DM::ImageTask, (reporter, tasks, image, filename, 5/*subsets*/)));
-    }
-}
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
 
+// Unit tests don't fit so well into the Src/Sink model, so we give them special treatment.
 
-static void report_failures(const SkTArray<SkString>& failures) {
-    if (failures.count() == 0) {
+static SkTDArray<skiatest::Test> gThreadedTests, gGPUTests;
+
+static void gather_tests() {
+    if (!FLAGS_src.contains("tests")) {
         return;
     }
-
-    SkDebugf("Failures:\n");
-    for (int i = 0; i < failures.count(); i++) {
-        SkDebugf("  %s\n", failures[i].c_str());
-    }
-    SkDebugf("%d failures.\n", failures.count());
-}
-
-static GrGLStandard get_gl_standard() {
-  if (FLAGS_gpuAPI.contains(kGpuAPINameGL)) {
-      return kGL_GrGLStandard;
-  }
-  if (FLAGS_gpuAPI.contains(kGpuAPINameGLES)) {
-      return kGLES_GrGLStandard;
-  }
-  return kNone_GrGLStandard;
-}
-
-template <typename T, typename Registry>
-static void append_matching_factories(Registry* head, SkTDArray<typename Registry::Factory>* out) {
-    for (const Registry* reg = head; reg != NULL; reg = reg->next()) {
-        SkAutoTDelete<T> forName(reg->factory()(NULL));
-        if (!SkCommandLineFlags::ShouldSkip(FLAGS_match, forName->getName())) {
-            *out->append() = reg->factory();
+    for (const skiatest::TestRegistry* r = skiatest::TestRegistry::Head(); r;
+         r = r->next()) {
+        // Despite its name, factory() is returning a reference to
+        // link-time static const POD data.
+        const skiatest::Test& test = r->factory();
+        if (SkCommandLineFlags::ShouldSkip(FLAGS_match, test.name)) {
+            continue;
         }
+        if (test.needsGpu && gpu_supported()) {
+            (FLAGS_gpu_threading ? gThreadedTests : gGPUTests).push(test);
+        } else if (!test.needsGpu && FLAGS_cpu) {
+            gThreadedTests.push(test);
+        }
+    }
+}
+
+static void run_test(skiatest::Test* test) {
+    struct : public skiatest::Reporter {
+        void reportFailed(const skiatest::Failure& failure) SK_OVERRIDE {
+            fail(failure.toString());
+            JsonWriter::AddTestFailure(failure);
+        }
+        bool allowExtendedTest() const SK_OVERRIDE {
+            return FLAGS_pathOpsExtended;
+        }
+        bool verbose() const SK_OVERRIDE { return FLAGS_veryVerbose; }
+    } reporter;
+    WallTimer timer;
+    timer.start();
+    if (!FLAGS_dryRun) {
+        GrContextFactory factory;
+        test->proc(&reporter, &factory);
+    }
+    timer.end();
+    done(timer.fWall, "unit", "test", test->name, "");
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+// If we're isolating all GPU-bound work to one thread (the default), this function runs all that.
+static void run_enclave_and_gpu_tests(SkTArray<Task>* tasks) {
+    run_enclave(tasks);
+    for (int i = 0; i < gGPUTests.count(); i++) {
+        run_test(&gGPUTests[i]);
     }
 }
 
@@ -223,71 +520,63 @@ int dm_main() {
     SetupCrashHandler();
     SkAutoGraphics ag;
     SkTaskGroup::Enabler enabled(FLAGS_threads);
-
-    if (FLAGS_dryRun || FLAGS_veryVerbose) {
-        FLAGS_verbose = true;
-    }
-#if SK_ENABLE_INST_COUNT
-    gPrintInstCount = FLAGS_leaks;
-#endif
-
-    SkTArray<SkString> configs;
-    for (int i = 0; i < FLAGS_config.count(); i++) {
-        SkStrSplit(FLAGS_config[i], ", ", &configs);
+    if (FLAGS_leaks) {
+        SkInstCountPrintLeaksOnExit();
     }
 
-    GrGLStandard gpuAPI = get_gl_standard();
+    gather_gold();
 
-    SkTDArray<GMRegistry::Factory> gms;
-    if (FLAGS_gms) {
-        append_matching_factories<GM>(GMRegistry::Head(), &gms);
+    gather_srcs();
+    gather_sinks();
+    gather_tests();
+
+    gPending = gSrcs.count() * gSinks.count() + gThreadedTests.count() + gGPUTests.count();
+    SkDebugf("%d srcs * %d sinks + %d tests == %d tasks\n",
+             gSrcs.count(), gSinks.count(), gThreadedTests.count() + gGPUTests.count(), gPending);
+
+    // We try to exploit as much parallelism as is safe.  Most Src/Sink pairs run on any thread,
+    // but Sinks that identify as part of a particular enclave run serially on a single thread.
+    // CPU tests run on any thread.  GPU tests depend on --gpu_threading.
+    SkTArray<Task> enclaves[kNumEnclaves];
+    for (int j = 0; j < gSinks.count(); j++) {
+        SkTArray<Task>& tasks = enclaves[gSinks[j]->enclave()];
+        for (int i = 0; i < gSrcs.count(); i++) {
+            tasks.push_back(Task(gSrcs[i], gSinks[j]));
+        }
     }
 
-    SkTDArray<TestRegistry::Factory> tests;
-    if (FLAGS_tests) {
-        append_matching_factories<Test>(TestRegistry::Head(), &tests);
+    SkTaskGroup tg;
+    tg.batch(run_test, gThreadedTests.begin(), gThreadedTests.count());
+    for (int i = 0; i < kNumEnclaves; i++) {
+        switch(i) {
+            case kAnyThread_Enclave:
+                tg.batch(Task::Run, enclaves[i].begin(), enclaves[i].count());
+                break;
+            case kGPU_Enclave:
+                tg.add(run_enclave_and_gpu_tests, &enclaves[i]);
+                break;
+            default:
+                tg.add(run_enclave, &enclaves[i]);
+                break;
+        }
     }
-
-
-    SkTArray<SkString> skps;
-    if (!FLAGS_skps.isEmpty()) {
-        const char* suffixes[] = { "skp" };
-        find_files(FLAGS_skps[0], suffixes, SK_ARRAY_COUNT(suffixes), &skps);
-    }
-
-    SkTArray<SkString> images;
-    if (!FLAGS_images.isEmpty()) {
-        const char* suffixes[] = {
-            "bmp", "gif", "jpg", "jpeg", "png", "webp", "ktx", "astc", "wbmp", "ico",
-            "BMP", "GIF", "JPG", "JPEG", "PNG", "WEBP", "KTX", "ASTC", "WBMP", "ICO",
-        };
-        find_files(FLAGS_images[0], suffixes, SK_ARRAY_COUNT(suffixes), &images);
-    }
-
-    SkDebugf("%d GMs x %d configs, %d tests, %d pictures, %d images\n",
-             gms.count(), configs.count(), tests.count(), skps.count(), images.count());
-    DM::Reporter reporter;
-
-    DM::TaskRunner tasks;
-    kick_off_tests(tests, &reporter, &tasks);
-    kick_off_gms(gms, configs, gpuAPI, &reporter, &tasks);
-    kick_off_skps(skps, &reporter, &tasks);
-    kick_off_images(images, &reporter, &tasks);
-    tasks.wait();
-
-    DM::JsonWriter::DumpJson();
+    tg.wait();
+    // At this point we're back in single-threaded land.
 
     SkDebugf("\n");
-#ifdef SK_DEBUG
-    if (FLAGS_portableFonts && FLAGS_reportUsedChars) {
-        sk_tool_utils::report_used_chars();
+    if (gFailures.count() > 0) {
+        SkDebugf("Failures:\n");
+        for (int i = 0; i < gFailures.count(); i++) {
+            SkDebugf("\t%s\n", gFailures[i].c_str());
+        }
+        SkDebugf("%d failures\n", gFailures.count());
+        return 1;
     }
-#endif
-
-    SkTArray<SkString> failures;
-    reporter.getFailures(&failures);
-    report_failures(failures);
-    return failures.count() > 0;
+    if (gPending > 0) {
+        SkDebugf("Hrm, we didn't seem to run everything we intended to!  Please file a bug.\n");
+        return 1;
+    }
+    return 0;
 }
 
 #if !defined(SK_BUILD_FOR_IOS) && !defined(SK_BUILD_FOR_NACL)

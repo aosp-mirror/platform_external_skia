@@ -123,16 +123,17 @@ DEF_TEST(RecordDraw_SetMatrixClobber, r) {
 }
 
 struct TestBBH : public SkBBoxHierarchy {
-    void insert(SkAutoTMalloc<SkRect>* boundsArray, int N) SK_OVERRIDE {
+    void insert(const SkRect boundsArray[], int N) SK_OVERRIDE {
         fEntries.setCount(N);
         for (int i = 0; i < N; i++) {
-            Entry e = { (unsigned)i, (*boundsArray)[i] };
+            Entry e = { (unsigned)i, boundsArray[i] };
             fEntries[i] = e;
         }
     }
 
     void search(const SkRect& query, SkTDArray<unsigned>* results) const SK_OVERRIDE {}
     size_t bytesUsed() const SK_OVERRIDE { return 0; }
+    SkRect getRootBound() const SK_OVERRIDE { return SkRect::MakeEmpty(); }
 
     struct Entry {
         unsigned opIndex;

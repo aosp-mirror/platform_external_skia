@@ -14,7 +14,7 @@
 #include "SkPaint.h"
 #include "SkTypeface.h"
 
-struct SkGlyph;
+class SkGlyph;
 class SkDescriptor;
 class SkMaskFilter;
 class SkPathEffect;
@@ -82,9 +82,7 @@ struct SkScalerContextRec {
 
     void    getMatrixFrom2x2(SkMatrix*) const;
     void    getLocalMatrix(SkMatrix*) const;
-    void    getLocalMatrixWithoutTextSize(SkMatrix*) const;
     void    getSingleMatrix(SkMatrix*) const;
-    void    getSingleMatrixWithoutTextSize(SkMatrix*) const;
 
     /** The kind of scale which will be applied by the underlying port (pre-matrix). */
     enum PreMatrixScale {
@@ -244,6 +242,8 @@ public:
     static inline void PostMakeRec(const SkPaint&, Rec*);
 
     static SkMaskGamma::PreBlend GetMaskPreBlend(const Rec& rec);
+
+    const Rec& getRec() const { return fRec; }
 
 protected:
     Rec         fRec;

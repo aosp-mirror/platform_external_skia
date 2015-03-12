@@ -80,10 +80,10 @@ static void copyFT2LCD16(const FT_Bitmap& bitmap, const SkMask& mask, int lcdIsB
 {
     SkASSERT(SkMask::kLCD16_Format == mask.fFormat);
     if (FT_PIXEL_MODE_LCD != bitmap.pixel_mode) {
-        SkASSERT(mask.fBounds.width() == bitmap.width);
+        SkASSERT(mask.fBounds.width() == static_cast<int>(bitmap.width));
     }
     if (FT_PIXEL_MODE_LCD_V != bitmap.pixel_mode) {
-        SkASSERT(mask.fBounds.height() == bitmap.rows);
+        SkASSERT(mask.fBounds.height() == static_cast<int>(bitmap.rows));
     }
 
     const uint8_t* src = bitmap.buffer;
@@ -113,7 +113,7 @@ static void copyFT2LCD16(const FT_Bitmap& bitmap, const SkMask& mask, int lcdIsB
             }
             break;
         case FT_PIXEL_MODE_LCD:
-            SkASSERT(3 * mask.fBounds.width() == bitmap.width);
+            SkASSERT(3 * mask.fBounds.width() == static_cast<int>(bitmap.width));
             for (int y = height; y --> 0;) {
                 const uint8_t* triple = src;
                 if (lcdIsBGR) {
@@ -136,7 +136,7 @@ static void copyFT2LCD16(const FT_Bitmap& bitmap, const SkMask& mask, int lcdIsB
             }
             break;
         case FT_PIXEL_MODE_LCD_V:
-            SkASSERT(3 * mask.fBounds.height() == bitmap.rows);
+            SkASSERT(3 * mask.fBounds.height() == static_cast<int>(bitmap.rows));
             for (int y = height; y --> 0;) {
                 const uint8_t* srcR = src;
                 const uint8_t* srcG = srcR + bitmap.pitch;
@@ -177,8 +177,8 @@ static void copyFT2LCD16(const FT_Bitmap& bitmap, const SkMask& mask, int lcdIsB
  *  TODO: All of these N need to be Y or otherwise ruled out.
  */
 static void copyFTBitmap(const FT_Bitmap& srcFTBitmap, SkMask& dstMask) {
-    SkASSERT(dstMask.fBounds.width() == srcFTBitmap.width);
-    SkASSERT(dstMask.fBounds.height() == srcFTBitmap.rows);
+    SkASSERT(dstMask.fBounds.width() == static_cast<int>(srcFTBitmap.width));
+    SkASSERT(dstMask.fBounds.height() == static_cast<int>(srcFTBitmap.rows));
 
     const uint8_t* src = reinterpret_cast<const uint8_t*>(srcFTBitmap.buffer);
     const FT_Pixel_Mode srcFormat = static_cast<FT_Pixel_Mode>(srcFTBitmap.pixel_mode);

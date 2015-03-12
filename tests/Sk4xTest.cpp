@@ -77,10 +77,27 @@ DEF_TEST(Sk4x_Arith, r) {
 
     float third = 1.0f/3.0f;
     ASSERT_EQ(Sk4f(1*third, 0.5f, 0.6f, 2*third), Sk4f(1,2,3,4).divide(Sk4f(3,4,5,6)));
-
     ASSERT_EQ(Sk4i(4,6,8,10),    Sk4i(1,2,3,4).add(Sk4i(3,4,5,6)));
     ASSERT_EQ(Sk4i(-2,-2,-2,-2), Sk4i(1,2,3,4).subtract(Sk4i(3,4,5,6)));
     ASSERT_EQ(Sk4i(3,8,15,24),   Sk4i(1,2,3,4).multiply(Sk4i(3,4,5,6)));
+}
+
+DEF_TEST(Sk4x_ImplicitPromotion, r) {
+    ASSERT_EQ(Sk4f(2,4,6,8), Sk4f(1,2,3,4).multiply(Sk4f(2.0f)));
+}
+
+DEF_TEST(Sk4x_Sqrt, r) {
+    Sk4f squares(4, 16, 25, 121),
+           roots(2,  4,  5,  11);
+    // .sqrt() should be pretty precise.
+    Sk4f error = roots.subtract(squares.sqrt());
+    REPORTER_ASSERT(r, error.greaterThanEqual(Sk4f(0.0f)).allTrue());
+    REPORTER_ASSERT(r, error.lessThan(Sk4f(0.000001f)).allTrue());
+
+    // .rsqrt() isn't so precise (for SSE), but should be pretty close.
+    error = roots.subtract(squares.multiply(squares.rsqrt()));
+    REPORTER_ASSERT(r, error.greaterThanEqual(Sk4f(0.0f)).allTrue());
+    REPORTER_ASSERT(r, error.lessThan(Sk4f(0.01f)).allTrue());
 }
 
 DEF_TEST(Sk4x_Comparison, r) {

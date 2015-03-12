@@ -12,7 +12,6 @@
 #include "SkData.h"
 #include "SkDescriptor.h"
 #include "SkFontDescriptor.h"
-#include "SkFontHost.h"
 #include "SkGlyph.h"
 #include "SkHRESULT.h"
 #include "SkMaskGamma.h"
@@ -255,7 +254,7 @@ public:
     }
 
 protected:
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
     SkScalerContext* onCreateScalerContext(const SkDescriptor*) const SK_OVERRIDE;
     void onFilterRec(SkScalerContextRec*) const SK_OVERRIDE;
     virtual SkAdvancedTypefaceMetrics* onGetAdvancedTypefaceMetrics(
@@ -854,7 +853,7 @@ void SkScalerContext_GDI::generateMetrics(SkGlyph* glyph) {
             SkMatrix m;
             m.setAll(SkFIXEDToScalar(fMat22.eM11), -SkFIXEDToScalar(fMat22.eM21), 0,
                      -SkFIXEDToScalar(fMat22.eM12), SkFIXEDToScalar(fMat22.eM22), 0,
-                     0,  0, SkScalarToPersp(SK_Scalar1));
+                     0,  0, 1);
             m.mapRect(&bounds);
             bounds.roundOut(&bounds);
             glyph->fLeft = SkScalarTruncToInt(bounds.fLeft);
@@ -1581,17 +1580,17 @@ DWORD SkScalerContext_GDI::getGDIGlyphPath(const SkGlyph& glyph, UINT flags,
 {
     GLYPHMETRICS gm;
 
-    DWORD total_size = GetGlyphOutlineW(fDDC, glyph.fID, flags, &gm, BUFFERSIZE, glyphbuf->get(), &fMat22);
+    DWORD total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, BUFFERSIZE, glyphbuf->get(), &fMat22);
     // Sometimes GetGlyphOutlineW returns a number larger than BUFFERSIZE even if BUFFERSIZE > 0.
     // It has been verified that this does not involve a buffer overrun.
     if (GDI_ERROR == total_size || total_size > BUFFERSIZE) {
         // GDI_ERROR because the BUFFERSIZE was too small, or because the data was not accessible.
         // When the data is not accessable GetGlyphOutlineW fails rather quickly,
         // so just try to get the size. If that fails then ensure the data is accessible.
-        total_size = GetGlyphOutlineW(fDDC, glyph.fID, flags, &gm, 0, NULL, &fMat22);
+        total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, NULL, &fMat22);
         if (GDI_ERROR == total_size) {
             LogFontTypeface::EnsureAccessible(this->getTypeface());
-            total_size = GetGlyphOutlineW(fDDC, glyph.fID, flags, &gm, 0, NULL, &fMat22);
+            total_size = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, 0, NULL, &fMat22);
             if (GDI_ERROR == total_size) {
                 // GetGlyphOutlineW is known to fail for some characters, such as spaces.
                 // In these cases, just return that the glyph does not have a shape.
@@ -1601,10 +1600,10 @@ DWORD SkScalerContext_GDI::getGDIGlyphPath(const SkGlyph& glyph, UINT flags,
 
         glyphbuf->reset(total_size);
 
-        DWORD ret = GetGlyphOutlineW(fDDC, glyph.fID, flags, &gm, total_size, glyphbuf->get(), &fMat22);
+        DWORD ret = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, total_size, glyphbuf->get(), &fMat22);
         if (GDI_ERROR == ret) {
             LogFontTypeface::EnsureAccessible(this->getTypeface());
-            ret = GetGlyphOutlineW(fDDC, glyph.fID, flags, &gm, total_size, glyphbuf->get(), &fMat22);
+            ret = GetGlyphOutlineW(fDDC, glyph.getGlyphID(), flags, &gm, total_size, glyphbuf->get(), &fMat22);
             if (GDI_ERROR == ret) {
                 SkASSERT(false);
                 return 0;
@@ -1924,7 +1923,8 @@ static HANDLE activate_font(SkData* fontData) {
     return fontHandle;
 }
 
-static SkTypeface* create_from_stream(SkStream* stream) {
+// Does not affect ownership of stream.
+static SkTypeface* create_from_stream(SkStreamAsset* stream) {
     // Create a unique and unpredictable font name.
     // Avoids collisions and access from CSS.
     char familyName[BASE64_GUID_ID_LEN];
@@ -1952,7 +1952,7 @@ static SkTypeface* create_from_stream(SkStream* stream) {
     return SkCreateFontMemResourceTypefaceFromLOGFONT(lf, fontReference);
 }
 
-SkStream* LogFontTypeface::onOpenStream(int* ttcIndex) const {
+SkStreamAsset* LogFontTypeface::onOpenStream(int* ttcIndex) const {
     *ttcIndex = 0;
 
     const DWORD kTTCTag =
@@ -2480,20 +2480,19 @@ protected:
         return this->matchFamilyStyle(familyName.c_str(), fontstyle);
     }
 
-    SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const SK_OVERRIDE {
+        SkAutoTDelete<SkStreamAsset> stream(bareStream);
         return create_from_stream(stream);
     }
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
         // could be in base impl
-        SkAutoTUnref<SkStream> stream(SkNEW_ARGS(SkMemoryStream, (data)));
-        return this->createFromStream(stream);
+        return this->createFromStream(SkNEW_ARGS(SkMemoryStream, (data)));
     }
 
     SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
         // could be in base impl
-        SkAutoTUnref<SkStream> stream(SkStream::NewFromFile(path));
-        return this->createFromStream(stream);
+        return this->createFromStream(SkStream::NewFromFile(path));
     }
 
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],

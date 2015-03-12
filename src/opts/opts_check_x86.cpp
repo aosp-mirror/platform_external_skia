@@ -10,7 +10,6 @@
 #include "SkBitmapProcState_opts_SSSE3.h"
 #include "SkBitmapScaler.h"
 #include "SkBlitMask.h"
-#include "SkBlitRect_opts_SSE2.h"
 #include "SkBlitRow.h"
 #include "SkBlitRow_opts_SSE2.h"
 #include "SkBlitRow_opts_SSE4.h"
@@ -130,8 +129,6 @@ static inline bool supports_simd(int minLevel) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-SK_CONF_DECLARE( bool, c_hqfilter_sse, "bitmap.filter.highQualitySSE", true, "Use SSE optimized version of high quality image filters");
-
 void SkBitmapScaler::PlatformConvolutionProcs(SkConvolutionProcs* procs) {
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
         procs->fExtraHorizontalReads = 3;
@@ -195,18 +192,11 @@ void SkBitmapProcState::platformProcs() {
     } else if (fMatrixProc == ClampX_ClampY_nofilter_affine) {
         fMatrixProc = ClampX_ClampY_nofilter_affine_SSE2;
     }
-
-    /* Check fShaderProc32 */
-    if (c_hqfilter_sse) {
-        if (fShaderProc32 == highQualityFilter32) {
-            fShaderProc32 = highQualityFilter_SSE2;
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static SkBlitRow::Proc platform_16_procs[] = {
+static const SkBlitRow::Proc16 platform_16_procs[] = {
     S32_D565_Opaque_SSE2,               // S32_D565_Opaque
     NULL,                               // S32_D565_Blend
     S32A_D565_Opaque_SSE2,              // S32A_D565_Opaque
@@ -217,7 +207,7 @@ static SkBlitRow::Proc platform_16_procs[] = {
     NULL,                               // S32A_D565_Blend_Dither
 };
 
-SkBlitRow::Proc SkBlitRow::PlatformProcs565(unsigned flags) {
+SkBlitRow::Proc16 SkBlitRow::PlatformFactory565(unsigned flags) {
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
         return platform_16_procs[flags];
     } else {
@@ -225,28 +215,37 @@ SkBlitRow::Proc SkBlitRow::PlatformProcs565(unsigned flags) {
     }
 }
 
-static SkBlitRow::Proc32 platform_32_procs_SSE2[] = {
+static const SkBlitRow::ColorProc16 platform_565_colorprocs_SSE4[] = {
+    Color32A_D565_SSE4,                 // Color32A_D565,
+    NULL,                               // Color32A_D565_Dither
+};
+
+SkBlitRow::ColorProc16 SkBlitRow::PlatformColorFactory565(unsigned flags) {
+    if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
+        return platform_565_colorprocs_SSE4[flags];
+    } else {
+        return NULL;
+    }
+}
+
+static const SkBlitRow::Proc32 platform_32_procs_SSE2[] = {
     NULL,                               // S32_Opaque,
     S32_Blend_BlitRow32_SSE2,           // S32_Blend,
     S32A_Opaque_BlitRow32_SSE2,         // S32A_Opaque
     S32A_Blend_BlitRow32_SSE2,          // S32A_Blend,
 };
 
-#if defined(SK_ATT_ASM_SUPPORTED)
-static SkBlitRow::Proc32 platform_32_procs_SSE4[] = {
+static const SkBlitRow::Proc32 platform_32_procs_SSE4[] = {
     NULL,                               // S32_Opaque,
     S32_Blend_BlitRow32_SSE2,           // S32_Blend,
-    S32A_Opaque_BlitRow32_SSE4_asm,     // S32A_Opaque
+    S32A_Opaque_BlitRow32_SSE4,         // S32A_Opaque
     S32A_Blend_BlitRow32_SSE2,          // S32A_Blend,
 };
-#endif
 
 SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
-#if defined(SK_ATT_ASM_SUPPORTED)
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE41)) {
         return platform_32_procs_SSE4[flags];
     } else
-#endif
     if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
         return platform_32_procs_SSE2[flags];
     } else {
@@ -260,19 +259,6 @@ SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
     } else {
         return NULL;
     }
-}
-
-SkBlitRow::ColorRectProc PlatformColorRectProcFactory(); // suppress warning
-
-SkBlitRow::ColorRectProc PlatformColorRectProcFactory() {
-/* Return NULL for now, since the optimized path in ColorRect32_SSE2 is disabled.
-    if (supports_simd(SK_CPU_SSE_LEVEL_SSE2)) {
-        return ColorRect32_SSE2;
-    } else {
-        return NULL;
-    }
-*/
-    return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

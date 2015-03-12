@@ -12,11 +12,10 @@
 #include "SkString.h"
 #include "SkTypeface.h"
 
-class SkWStream;
-
 class SkFontDescriptor {
 public:
     SkFontDescriptor(SkTypeface::Style = SkTypeface::kNormal);
+    // Does not affect ownership of SkStream.
     SkFontDescriptor(SkStream*);
 
     void serialize(SkWStream*);
@@ -28,7 +27,9 @@ public:
     const char* getFullName() const { return fFullName.c_str(); }
     const char* getPostscriptName() const { return fPostscriptName.c_str(); }
     const char* getFontFileName() const { return fFontFileName.c_str(); }
-    SkStream* getFontData() const { return fFontData; }
+    bool hasFontData() const { return fFontData.get() != NULL; }
+    // Transfers ownership to the caller.
+    SkStreamAsset* transferFontData() { return fFontData.detach(); }
     int getFontIndex() const { return fFontIndex; }
 
     void setFamilyName(const char* name) { fFamilyName.set(name); }
@@ -38,7 +39,7 @@ public:
     /** Set the font data only if it is necessary for serialization.
      *  This method takes ownership of the stream (both reference and cursor).
      */
-    void setFontData(SkStream* stream) { fFontData.reset(stream); }
+    void setFontData(SkStreamAsset* stream) { fFontData.reset(stream); }
     void setFontIndex(int index) { fFontIndex = index; }
 
 private:
@@ -46,7 +47,7 @@ private:
     SkString fFullName;
     SkString fPostscriptName;
     SkString fFontFileName;
-    SkAutoTUnref<SkStream> fFontData;
+    SkAutoTDelete<SkStreamAsset> fFontData;
     int fFontIndex;
 
     SkTypeface::Style fStyle;

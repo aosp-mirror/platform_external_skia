@@ -18,7 +18,6 @@
 #include "SkColorPriv.h"
 #include "SkColorFilter.h"
 #include "SkTypeface.h"
-#include "SkAvoidXfermode.h"
 
 static inline SkPMColor rgb2gray(SkPMColor c) {
     unsigned r = SkGetPackedR32(c);
@@ -117,6 +116,13 @@ public:
         dst->setFillType(SkPath::kInverseWinding_FillType);
         return true;
     }
+
+#ifndef SK_IGNORE_TO_STRING
+    void toString(SkString* str) const SK_OVERRIDE {
+        str->appendf("InverseFillPE: ()");
+    }
+#endif
+
     SK_DECLARE_PUBLIC_FLATTENABLE_DESERIALIZATION_PROCS(InverseFillPE)
 
 private:

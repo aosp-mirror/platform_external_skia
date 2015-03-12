@@ -20,6 +20,7 @@ class SkFontDescriptor;
 class SkScalerContext;
 struct SkScalerContextRec;
 class SkStream;
+class SkStreamAsset;
 class SkAdvancedTypefaceMetrics;
 class SkWStream;
 
@@ -130,7 +131,7 @@ public:
         not a valid font file, returns null. Ownership of the stream is
         transferred, so the caller must not reference it again.
     */
-    static SkTypeface* CreateFromStream(SkStream* stream, int index = 0);
+    static SkTypeface* CreateFromStream(SkStreamAsset* stream, int index = 0);
 
     /** Write a unique signature to a stream, sufficient to reconstruct a
         typeface referencing the same font when Deserialize is called.
@@ -145,6 +146,7 @@ public:
         to a typeface referring to the same font. If that font is not available,
         return null. If an instance is returned, the caller is responsible for
         calling unref() when they are done with it.
+        Does not affect ownership of SkStream.
      */
     static SkTypeface* Deserialize(SkStream*);
 
@@ -276,8 +278,9 @@ public:
      *  If ttcIndex is not null, it is set to the TrueTypeCollection index
      *  of this typeface within the stream, or 0 if the stream is not a
      *  collection.
+     *  The caller is responsible for deleting the stream.
      */
-    SkStream* openStream(int* ttcIndex) const;
+    SkStreamAsset* openStream(int* ttcIndex) const;
 
     /**
      *  Return a scalercontext for the given descriptor. If this fails, then
@@ -322,7 +325,7 @@ protected:
                         const uint32_t* glyphIDs,
                         uint32_t glyphIDsCount) const = 0;
 
-    virtual SkStream* onOpenStream(int* ttcIndex) const = 0;
+    virtual SkStreamAsset* onOpenStream(int* ttcIndex) const = 0;
     virtual void onGetFontDescriptor(SkFontDescriptor*, bool* isLocal) const = 0;
 
     virtual int onCharsToGlyphs(const void* chars, Encoding, uint16_t glyphs[],
@@ -383,8 +386,6 @@ private:
 
     friend class SkPaint;
     friend class SkGlyphCache;  // GetDefaultTypeface
-    // just so deprecated fonthost can call protected methods
-    friend class SkFontHost;
 
     typedef SkWeakRefCnt INHERITED;
 };

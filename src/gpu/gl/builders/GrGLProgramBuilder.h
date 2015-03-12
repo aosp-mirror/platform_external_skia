@@ -13,10 +13,10 @@
 #include "GrGLVertexShaderBuilder.h"
 #include "../GrGLProgramDataManager.h"
 #include "../GrGLUniformHandle.h"
-#include "../GrGLGeometryProcessor.h"
+#include "../GrGLPrimitiveProcessor.h"
 #include "../GrGLXferProcessor.h"
-#include "../../GrOptDrawState.h"
 #include "../../GrPendingFragmentStage.h"
+#include "../../GrPipeline.h"
 
 /*
  * This is the base class for a series of interfaces.  This base class *MUST* remain abstract with
@@ -89,6 +89,7 @@ public:
     const char* gsIn() const { return fGsIn; }
     const char* gsOut() const { return fGsOut; }
     const char* fsIn() const { return fFsIn; }
+    GrSLType type() const { return fType; }
 
 protected:
     enum Varying {
@@ -150,7 +151,7 @@ public:
      * it expects 'output' to be defined in the fragment shader before this call is made.
      * TODO it might be nicer behavior to have a flag to declare output inside this call
      */
-    virtual void addPassThroughAttribute(const GrGeometryProcessor::GrAttribute*,
+    virtual void addPassThroughAttribute(const GrGeometryProcessor::Attribute*,
                                          const char* output) = 0;
 
     // TODO rename getFragmentBuilder
@@ -181,11 +182,31 @@ public:
      * *NOTE* NO MEMBERS ALLOWED, MULTIPLE INHERITANCE
      */
 };
-struct GrGLInstalledProc;
-struct GrGLInstalledGeoProc;
-struct GrGLInstalledXferProc;
-struct GrGLInstalledFragProc;
-struct GrGLInstalledFragProcs;
+
+/**
+ * The below struct represent processors installed in programs.
+ */
+template <class Proc>
+struct GrGLInstalledProc {
+     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
+
+     struct Sampler {
+         SkDEBUGCODE(Sampler() : fTextureUnit(-1) {})
+         UniformHandle  fUniform;
+         int            fTextureUnit;
+     };
+     SkSTArray<4, Sampler, true> fSamplers;
+     SkAutoTDelete<Proc> fGLProc;
+};
+
+typedef GrGLInstalledProc<GrGLPrimitiveProcessor> GrGLInstalledGeoProc;
+typedef GrGLInstalledProc<GrGLXferProcessor> GrGLInstalledXferProc;
+typedef GrGLInstalledProc<GrGLFragmentProcessor> GrGLInstalledFragProc;
+
+struct GrGLInstalledFragProcs : public SkRefCnt {
+    virtual ~GrGLInstalledFragProcs();
+    SkSTArray<8, GrGLInstalledFragProc*, true> fProcs;
+};
 
 /*
  * Please note - no diamond problems because of virtual inheritance.  Also, both base classes
@@ -198,6 +219,7 @@ class GrGLProgramBuilder : public GrGLGPBuilder,
                            public GrGLFPBuilder,
                            public GrGLXPBuilder {
 public:
+    typedef GrGpu::DrawArgs DrawArgs;
     /** Generates a shader program.
      *
      * The program implements what is specified in the stages given as input.
@@ -205,7 +227,7 @@ public:
      * to be used.
      * @return true if generation was successful.
      */
-    static GrGLProgram* CreateProgram(const GrOptDrawState&, GrGLGpu*);
+    static GrGLProgram* CreateProgram(const DrawArgs&, GrGLGpu*);
 
     UniformHandle addUniformArray(uint32_t visibility,
                                   GrSLType type,
@@ -234,8 +256,8 @@ public:
             GrGLVarying*,
             GrSLPrecision fsPrecision = kDefault_GrSLPrecision) SK_OVERRIDE;
 
-    void addPassThroughAttribute(const GrGeometryProcessor::GrAttribute*,
-                                         const char* output) SK_OVERRIDE;
+    void addPassThroughAttribute(const GrPrimitiveProcessor::Attribute*,
+                                 const char* output) SK_OVERRIDE;
 
 
     // Handles for program uniforms (other than per-effect uniforms)
@@ -245,26 +267,21 @@ public:
         // We use the render target height to provide a y-down frag coord when specifying
         // origin_upper_left is not supported.
         UniformHandle       fRTHeightUni;
-
-        // Uniforms for computing texture coords to do the dst-copy lookup
-        UniformHandle       fDstCopyTopLeftUni;
-        UniformHandle       fDstCopyScaleUni;
-        UniformHandle       fDstCopySamplerUni;
     };
 
 protected:
     typedef GrGLProgramDataManager::UniformInfo UniformInfo;
     typedef GrGLProgramDataManager::UniformInfoArray UniformInfoArray;
 
-    static GrGLProgramBuilder* CreateProgramBuilder(const GrOptDrawState&,
-                                                    bool hasGeometryProcessor,
-                                                    GrGLGpu*);
+    static GrGLProgramBuilder* CreateProgramBuilder(const DrawArgs&, GrGLGpu*);
 
-    GrGLProgramBuilder(GrGLGpu*, const GrOptDrawState&);
+    GrGLProgramBuilder(GrGLGpu*, const DrawArgs&);
 
-    const GrOptDrawState& optState() const { return fOptState; }
-    const GrProgramDesc& desc() const { return fDesc; }
-    const GrProgramDesc::KeyHeader& header() const { return fDesc.header(); }
+    const GrPrimitiveProcessor& primitiveProcessor() const { return *fArgs.fPrimitiveProcessor; }
+    const GrPipeline& pipeline() const { return *fArgs.fPipeline; }
+    const GrProgramDesc& desc() const { return *fArgs.fDesc; }
+    const GrBatchTracker& batchTracker() const { return *fArgs.fBatchTracker; }
+    const GrProgramDesc::KeyHeader& header() const { return fArgs.fDesc->header(); }
 
     // Generates a name for a variable. The generated string will be name prefixed by the prefix
     // char (unless the prefix is '\0'). It also mangles the name to be stage-specific if we're
@@ -287,6 +304,7 @@ protected:
 
     // these emit functions help to keep the createAndEmitProcessors template general
     void emitAndInstallProc(const GrPendingFragmentStage&,
+                            int index,
                             const char* outColor,
                             const char* inColor);
     void emitAndInstallProc(const GrPrimitiveProcessor&,
@@ -299,14 +317,11 @@ protected:
     void verify(const GrPrimitiveProcessor&);
     void verify(const GrXferProcessor&);
     void verify(const GrFragmentProcessor&);
+    template <class Proc>
     void emitSamplers(const GrProcessor&,
                       GrGLProcessor::TextureSamplerArray* outSamplers,
-                      GrGLInstalledProc*);
+                      GrGLInstalledProc<Proc>*);
 
-    // each specific program builder has a distinct transform and must override this function
-    virtual void emitTransforms(const GrPendingFragmentStage&,
-                                GrGLProcessor::TransformedCoordsArray* outCoords,
-                                GrGLInstalledFragProc*);
     GrGLProgram* finalize();
     void bindUniformLocations(GrGLuint programID);
     bool checkLinkStatus(GrGLuint programID);
@@ -341,7 +356,12 @@ protected:
     };
     class AutoStageAdvance {
     public:
-        AutoStageAdvance(GrGLProgramBuilder* pb) : fPB(pb) { fPB->reset(); }
+        AutoStageAdvance(GrGLProgramBuilder* pb)
+            : fPB(pb) {
+            fPB->reset();
+            // Each output to the fragment processor gets its own code section
+            fPB->fFS.nextStage();
+        }
         ~AutoStageAdvance() { fPB->exitStage(); }
     private:
         GrGLProgramBuilder* fPB;
@@ -349,14 +369,6 @@ protected:
     void exitStage() { fOutOfStage = true; }
     void enterStage() { fOutOfStage = false; }
     int stageIndex() const { return fStageIndex; }
-
-    struct TransformVarying {
-        TransformVarying(const GrGLVarying& v, const char* uniName, GrCoordSet coordSet)
-            : fV(v), fUniName(uniName), fCoordSet(coordSet) {}
-        GrGLVarying fV;
-        SkString fUniName;
-        GrCoordSet fCoordSet;
-    };
 
     const char* rtAdjustment() const { return "rtAdjustment"; }
 
@@ -374,72 +386,15 @@ protected:
     GrGLInstalledXferProc* fXferProcessor;
     SkAutoTUnref<GrGLInstalledFragProcs> fFragmentProcessors;
 
-    const GrOptDrawState& fOptState;
-    const GrProgramDesc& fDesc;
+    const DrawArgs& fArgs;
     GrGLGpu* fGpu;
     UniformInfoArray fUniforms;
-    SkSTArray<16, TransformVarying, true> fCoordVaryings;
+    GrGLPrimitiveProcessor::TransformsIn fCoordTransforms;
+    GrGLPrimitiveProcessor::TransformsOut fOutCoords;
 
     friend class GrGLShaderBuilder;
     friend class GrGLVertexBuilder;
     friend class GrGLFragmentShaderBuilder;
     friend class GrGLGeometryBuilder;
 };
-
-/**
- * The below structs represent processors installed in programs.  All processors can have texture
- * samplers, but only frag processors have coord transforms, hence the need for different structs
- */
-struct GrGLInstalledProc {
-     typedef GrGLProgramDataManager::UniformHandle UniformHandle;
-
-     struct Sampler {
-         SkDEBUGCODE(Sampler() : fTextureUnit(-1) {})
-         UniformHandle  fUniform;
-         int            fTextureUnit;
-     };
-     SkSTArray<4, Sampler, true> fSamplers;
-};
-
-struct GrGLInstalledGeoProc : public GrGLInstalledProc {
-    SkAutoTDelete<GrGLGeometryProcessor> fGLProc;
-};
-
-struct GrGLInstalledXferProc : public GrGLInstalledProc {
-    SkAutoTDelete<GrGLXferProcessor> fGLProc;
-};
-
-struct GrGLInstalledFragProc : public GrGLInstalledProc {
-    GrGLInstalledFragProc() : fGLProc(NULL) {}
-    class ShaderVarHandle {
-    public:
-        bool isValid() const { return fHandle > -1; }
-        ShaderVarHandle() : fHandle(-1) {}
-        ShaderVarHandle(int value) : fHandle(value) { SkASSERT(this->isValid()); }
-        int handle() const { SkASSERT(this->isValid()); return fHandle; }
-        UniformHandle convertToUniformHandle() {
-            SkASSERT(this->isValid());
-            return GrGLProgramDataManager::UniformHandle::CreateFromUniformIndex(fHandle);
-        }
-
-    private:
-        int fHandle;
-    };
-
-    struct Transform {
-        Transform() : fType(kVoid_GrSLType) { fCurrentValue = SkMatrix::InvalidMatrix(); }
-        ShaderVarHandle fHandle;
-        SkMatrix       fCurrentValue;
-        GrSLType       fType;
-    };
-
-    SkAutoTDelete<GrGLFragmentProcessor> fGLProc;
-    SkSTArray<2, Transform, true>        fTransforms;
-};
-
-struct GrGLInstalledFragProcs : public SkRefCnt {
-    virtual ~GrGLInstalledFragProcs();
-    SkSTArray<8, GrGLInstalledFragProc*, true> fProcs;
-};
-
 #endif

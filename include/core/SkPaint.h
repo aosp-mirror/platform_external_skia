@@ -10,8 +10,12 @@
 
 #include "SkColor.h"
 #include "SkDrawLooper.h"
+#include "SkFilterQuality.h"
 #include "SkMatrix.h"
 #include "SkXfermode.h"
+
+// TODO: clean up Skia internals so we can remove this and only keep it for clients
+#define SK_SUPPORT_LEGACY_FILTERLEVEL_ENUM
 
 class SkAnnotation;
 class SkAutoGlyphCache;
@@ -20,7 +24,7 @@ class SkDescriptor;
 struct SkDeviceProperties;
 class SkReadBuffer;
 class SkWriteBuffer;
-struct SkGlyph;
+class SkGlyph;
 struct SkRect;
 class SkGlyphCache;
 class SkImageFilter;
@@ -294,11 +298,12 @@ public:
      */
     void setDistanceFieldTextTEMP(bool distanceFieldText);
 
+#ifdef SK_SUPPORT_LEGACY_FILTERLEVEL_ENUM
     enum FilterLevel {
-        kNone_FilterLevel,
-        kLow_FilterLevel,
-        kMedium_FilterLevel,
-        kHigh_FilterLevel
+        kNone_FilterLevel   = kNone_SkFilterQuality,
+        kLow_FilterLevel    = kLow_SkFilterQuality,
+        kMedium_FilterLevel = kMedium_SkFilterQuality,
+        kHigh_FilterLevel   = kHigh_SkFilterQuality
     };
 
     /**
@@ -306,14 +311,31 @@ public:
      *  drawing scaled images.
      */
     FilterLevel getFilterLevel() const {
-      return (FilterLevel)fBitfields.fFilterLevel;
+        return (FilterLevel)this->getFilterQuality();
     }
 
     /**
      *  Set the filter level. This affects the quality (and performance) of
      *  drawing scaled images.
      */
-    void setFilterLevel(FilterLevel);
+    void setFilterLevel(FilterLevel level) {
+        this->setFilterQuality((SkFilterQuality)level);
+    }
+#endif
+
+    /**
+     *  Return the filter level. This affects the quality (and performance) of
+     *  drawing scaled images.
+     */
+    SkFilterQuality getFilterQuality() const {
+        return (SkFilterQuality)fBitfields.fFilterQuality;
+    }
+    
+    /**
+     *  Set the filter quality. This affects the quality (and performance) of
+     *  drawing scaled images.
+     */
+    void setFilterQuality(SkFilterQuality quality);
 
     /**
      *  If the predicate is true, set the filterLevel to Low, else set it to
@@ -490,11 +512,17 @@ public:
      *  @param src  input path
      *  @param dst  output path (may be the same as src)
      *  @param cullRect If not null, the dst path may be culled to this rect.
+     *  @param resScale If > 1, increase precision, else if (0 < res < 1) reduce precision
+     *              in favor of speed/size.
      *  @return     true if the path should be filled, or false if it should be
      *              drawn with a hairline (width == 0)
      */
-    bool getFillPath(const SkPath& src, SkPath* dst,
-                     const SkRect* cullRect = NULL) const;
+    bool getFillPath(const SkPath& src, SkPath* dst, const SkRect* cullRect,
+                     SkScalar resScale = 1) const;
+
+    bool getFillPath(const SkPath& src, SkPath* dst) const {
+        return this->getFillPath(src, dst, NULL, 1);
+    }
 
     /** Get the paint's shader object.
         <p />
@@ -1040,7 +1068,7 @@ private:
             unsigned        fStyle : 2;
             unsigned        fTextEncoding : 2;  // 3 values
             unsigned        fHinting : 2;
-            unsigned        fFilterLevel : 2;
+            unsigned        fFilterQuality : 2;
             //unsigned      fFreeBits : 2;
         } fBitfields;
         uint32_t fBitfieldsUInt;

@@ -13,8 +13,8 @@ class CircularClipsGM : public skiagm::GM {
     SkScalar fX1, fX2, fY, fR;
     SkPath   fCircle1, fCircle2;
 
-public:
-    CircularClipsGM() {
+protected:
+    void onOnceBeforeDraw() SK_OVERRIDE {
         fX1 = 80;
         fX2 = 120;
         fY = 50;
@@ -24,10 +24,8 @@ public:
         fCircle2.addCircle(fX2, fY, fR, SkPath::kCW_Direction);
     }
 
-protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag | kAsBench_Flag;
-    }
+
+    bool runAsBench() const SK_OVERRIDE { return true; }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("circular-clips");

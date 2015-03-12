@@ -10,6 +10,7 @@
 
 #include "SkTypes.h"
 
+#include "SkMutex.h"
 #include "SkStream.h"
 #include "SkTScopedComPtr.h"
 
@@ -64,14 +65,15 @@ public:
     virtual HRESULT STDMETHODCALLTYPE GetFileSize(UINT64* fileSize);
     virtual HRESULT STDMETHODCALLTYPE GetLastWriteTime(UINT64* lastWriteTime);
 
-    static HRESULT Create(SkStream* stream, SkDWriteFontFileStreamWrapper** streamFontFileStream);
+    static HRESULT Create(SkStreamAsset* stream,
+                          SkDWriteFontFileStreamWrapper** streamFontFileStream);
 
 private:
-    explicit SkDWriteFontFileStreamWrapper(SkStream* stream);
+    explicit SkDWriteFontFileStreamWrapper(SkStreamAsset* stream);
     virtual ~SkDWriteFontFileStreamWrapper() { }
 
     ULONG fRefCount;
-    SkAutoTUnref<SkStream> fStream;
+    SkAutoTDelete<SkStreamAsset> fStream;
     SkMutex fStreamMutex;
 };
 #endif

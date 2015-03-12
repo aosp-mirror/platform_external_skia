@@ -10,80 +10,37 @@
 #define GrGpuResourceCacheAccess_DEFINED
 
 #include "GrGpuResource.h"
+#include "GrGpuResourcePriv.h"
+
+namespace skiatest {
+    class Reporter;
+}
 
 /**
- * This class allows code internal to Skia privileged access to manage the cache keys of a
- * GrGpuResource object.
+ * This class allows GrResourceCache increased privileged access to GrGpuResource objects.
  */
 class GrGpuResource::CacheAccess {
-public:
+private:
     /**
-     * Sets a content key for the resource. If the resource was previously cached as scratch it will
-     * be converted to a content resource. Currently this may only be called once per resource. It
-     * fails if there is already a resource with the same content key. TODO: make this supplant the
-     * resource that currently is using the content key, allow resources' content keys to change,
-     * and allow removal of a content key to convert a resource back to scratch.
-     */
-    bool setContentKey(const GrResourceKey& contentKey) {
-        return fResource->setContentKey(contentKey);
-    }
-
-    /**
-     * Changes whether the resource counts against the resource cache budget.
-     */
-    void setBudgeted(bool countsAgainstBudget) { fResource->setBudgeted(countsAgainstBudget); }
-
-    /**
-     * Is the resource currently cached as scratch? This means it has a valid scratch key and does
-     * not have a content key.
+     * Is the resource currently cached as scratch? This means it is cached, has a valid scratch
+     * key, and does not have a unique key.
      */
     bool isScratch() const {
-        return NULL == this->getContentKey() && fResource->fScratchKey.isValid();
-    }
-
-    /** 
-     * If this resource can be used as a scratch resource this returns a valid scratch key.
-     * Otherwise it returns a key for which isNullScratch is true. The resource may currently be
-     * used as a content resource rather than scratch. Check isScratch().
-     */
-    const GrScratchKey& getScratchKey() const { return fResource->fScratchKey; }
-
-    /**
-     * If the resource has a scratch key, the key will be removed. Since scratch keys are installed
-     * at resource creation time, this means the resource will never again be used as scratch.
-     */
-    void removeScratchKey() const { fResource->removeScratchKey();  }
-
-    /**
-     * If the resource is currently cached by a content key, the key is returned, otherwise NULL.
-     */
-    const GrResourceKey* getContentKey() const {
-        if (fResource->fFlags & GrGpuResource::kContentKeySet_Flag) {
-            return &fResource->fContentKey;
-        }
-        return NULL;
+        return !fResource->getUniqueKey().isValid() && fResource->fScratchKey.isValid() &&
+                fResource->resourcePriv().isBudgeted();
     }
 
     /**
      * Is the resource object wrapping an externally allocated GPU resource?
      */
-    bool isWrapped() const { return fResource->isWrapped(); }
-
-    /**
-     * Does the resource count against the resource budget?
-     */
-    bool isBudgeted() const { 
-        bool ret = SkToBool(GrGpuResource::kBudgeted_Flag & fResource->fFlags);
-        SkASSERT(!(ret && fResource->isWrapped()));
-        return ret;
-    }
-
+    bool isWrapped() const { return GrGpuResource::kWrapped_LifeCycle == fResource->fLifeCycle; }
+ 
     /**
      * Called by the cache to delete the resource under normal circumstances.
      */
     void release() {
         fResource->release();
-        if (fResource->isPurgable()) {            
+        if (fResource->isPurgeable()) {            
             SkDELETE(fResource);
         }
     }
@@ -93,14 +50,24 @@ public:
      */
     void abandon() {
         fResource->abandon();
-        if (fResource->isPurgable()) {            
+        if (fResource->isPurgeable()) {            
             SkDELETE(fResource);
         }
     }
 
-private:
-    CacheAccess(GrGpuResource* resource) : fResource(resource) { }
-    CacheAccess(const CacheAccess& that) : fResource(that.fResource) { }
+    /** Called by the cache to assign a new unique key. */
+    void setUniqueKey(const GrUniqueKey& key) { fResource->fUniqueKey = key; }
+
+    /** Called by the cache to make the unique key invalid. */
+    void removeUniqueKey() { fResource->fUniqueKey.reset(); }
+
+    uint32_t timestamp() const { return fResource->fTimestamp; }
+    void setTimestamp(uint32_t ts) { fResource->fTimestamp = ts; }
+
+    int* accessCacheIndex() const { return &fResource->fCacheArrayIndex; }
+
+    CacheAccess(GrGpuResource* resource) : fResource(resource) {}
+    CacheAccess(const CacheAccess& that) : fResource(that.fResource) {}
     CacheAccess& operator=(const CacheAccess&); // unimpl
 
     // No taking addresses of this type.
@@ -110,6 +77,8 @@ private:
     GrGpuResource* fResource;
 
     friend class GrGpuResource; // to construct/copy this type.
+    friend class GrResourceCache; // to use this type
+    friend void test_unbudgeted_to_scratch(skiatest::Reporter* reporter); // for unit testing
 };
 
 inline GrGpuResource::CacheAccess GrGpuResource::cacheAccess() { return CacheAccess(this); }

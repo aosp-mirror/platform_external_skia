@@ -6,6 +6,8 @@
  * found in the LICENSE file.
  */
 
+#include "SkTypes.h"  // Keep this before any #ifdef ...
+
 #ifdef SK_BUILD_FOR_MAC
 #import <ApplicationServices/ApplicationServices.h>
 #endif
@@ -17,7 +19,6 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
-#include "SkFontHost.h"
 #include "SkCGUtils.h"
 #include "SkColorPriv.h"
 #include "SkDescriptor.h"
@@ -437,6 +438,14 @@ static SkFontID CTFontRef_to_SkFontID(CTFontRef fontRef) {
 
 #define WEIGHT_THRESHOLD    ((SkFontStyle::kNormal_Weight + SkFontStyle::kBold_Weight)/2)
 
+// kCTFontColorGlyphsTrait was added in the Mac 10.7 and iPhone 4.3 SDKs.
+// Being an enum value it is not guarded by version macros, but old SDKs must still be supported.
+#if defined(__MAC_10_7) || defined(__IPHONE_4_3)
+static const uint32_t SkCTFontColorGlyphsTrait = kCTFontColorGlyphsTrait;
+#else
+static const uint32_t SkCTFontColorGlyphsTrait = (1 << 13);
+#endif
+
 class SkTypeface_Mac : public SkTypeface {
 public:
     SkTypeface_Mac(const SkFontStyle& fs, SkFontID fontID, bool isFixedPitch,
@@ -445,31 +454,17 @@ public:
         , fRequestedName(requestedName)
         , fFontRef(fontRef) // caller has already called CFRetain for us
         , fIsLocalStream(isLocalStream)
-        , fHasSbixTable(false)
+        , fHasColorGlyphs(CTFontGetSymbolicTraits(fFontRef) & SkCTFontColorGlyphsTrait)
     {
         SkASSERT(fontRef);
-
-        AutoCFRelease<CFArrayRef> tags(CTFontCopyAvailableTables(fFontRef,kCTFontTableOptionNoOptions));
-        if (tags) {
-            int count = SkToInt(CFArrayGetCount(tags));
-            for (int i = 0; i < count; ++i) {
-                uintptr_t tag = reinterpret_cast<uintptr_t>(CFArrayGetValueAtIndex(tags, i));
-                if ('sbix' == tag) {
-                    fHasSbixTable = true;
-                    break;
-                }
-            }
-        }
     }
 
     SkString fRequestedName;
     AutoCFRelease<CTFontRef> fFontRef;
 
 protected:
-    friend class SkFontHost;    // to access our protected members for deprecated methods
-
     int onGetUPEM() const SK_OVERRIDE;
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE;
     void onGetFamilyName(SkString* familyName) const SK_OVERRIDE;
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const SK_OVERRIDE;
     int onGetTableTags(SkFontTableTag tags[]) const SK_OVERRIDE;
@@ -487,7 +482,7 @@ protected:
 
 private:
     bool fIsLocalStream;
-    bool fHasSbixTable;
+    bool fHasColorGlyphs;
 
     typedef SkTypeface INHERITED;
 };
@@ -682,6 +677,7 @@ private:
 
     Offscreen fOffscreen;
     AutoCFRelease<CTFontRef> fCTFont;
+    CGAffineTransform fTransform;
     CGAffineTransform fInvTransform;
 
     /** Unrotated variant of fCTFont.
@@ -731,12 +727,12 @@ SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac* typeface,
     SkMatrix skTransform;
     fRec.computeMatrices(SkScalerContextRec::kVertical_PreMatrixScale, &scale, &skTransform,
                          NULL, NULL, &fFUnitMatrix);
-    CGAffineTransform transform = MatrixToCGAffineTransform(skTransform);
-    fInvTransform = CGAffineTransformInvert(transform);
+    fTransform = MatrixToCGAffineTransform(skTransform);
+    fInvTransform = CGAffineTransformInvert(fTransform);
 
     AutoCFRelease<CTFontDescriptorRef> ctFontDesc;
     if (fVertical) {
-        // Setting the vertical orientation here affects the character to glyph mapping.
+        // Setting the vertical orientation here is required for vertical metrics on some versions.
         AutoCFRelease<CFMutableDictionaryRef> cfAttributes(CFDictionaryCreateMutable(
                 kCFAllocatorDefault, 0,
                 &kCFTypeDictionaryKeyCallBacks,
@@ -754,7 +750,7 @@ SkScalerContext_Mac::SkScalerContext_Mac(SkTypeface_Mac* typeface,
     // Some properties, like 'trak', are based on the text size (before applying the matrix).
     CGFloat textSize = ScalarToCG(scale.y());
 
-    fCTFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize, &transform, ctFontDesc));
+    fCTFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize, &fTransform, ctFontDesc));
     fCGFont.reset(CTFontCopyGraphicsFont(fCTFont, NULL));
     fCTUnrotatedFont.reset(CTFontCreateCopyWithAttributes(ctFont, textSize,
                                                           &CGAffineTransformIdentity, NULL));
@@ -866,8 +862,8 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
             // Our 'fake' one does not, so set up the CGContext here.
             CGContextSetFont(fCG, context.fCGFont);
             CGContextSetFontSize(fCG, CTFontGetSize(context.fCTFont));
-            CGContextSetTextMatrix(fCG, CTFontGetMatrix(context.fCTFont));
         }
+        CGContextSetTextMatrix(fCG, context.fTransform);
     }
 
     if (fDoAA != doAA) {
@@ -902,14 +898,16 @@ CGRGBPixel* Offscreen::getCG(const SkScalerContext_Mac& context, const SkGlyph& 
     }
 
     CGPoint point = CGPointMake(-glyph.fLeft + subX, glyph.fTop + glyph.fHeight - subY);
-    if (darwinVersion() < 14) {
-        // Prior to 10.10, CTFontDrawGlyphs acted like CGContextShowGlyphsAtPositions and took
-        // 'positions' which are in text space. The glyph location (in device space) must be
-        // mapped into text space, so that CG can convert it back into device space.
-        // In 10.10 and later, this is handled directly in CTFontDrawGlyphs.
-        point = CGPointApplyAffineTransform(point, context.fInvTransform);
-    }
-    ctFontDrawGlyphs(context.fCTFont, &glyphID, &point, 1, fCG);
+    // Prior to 10.10, CTFontDrawGlyphs acted like CGContextShowGlyphsAtPositions and took
+    // 'positions' which are in text space. The glyph location (in device space) must be
+    // mapped into text space, so that CG can convert it back into device space.
+    // In 10.10.1, this is handled directly in CTFontDrawGlyphs.
+
+    // However, in 10.10.2 color glyphs no longer rotate based on the font transform.
+    // So always make the font transform identity and place the transform on the context.
+    point = CGPointApplyAffineTransform(point, context.fInvTransform);
+
+    ctFontDrawGlyphs(context.fCTUnrotatedFont, &glyphID, &point, 1, fCG);
 
     SkASSERT(rowBytesPtr);
     *rowBytesPtr = rowBytes;
@@ -1685,7 +1683,7 @@ static SK_SFNT_ULONG get_font_type_tag(const SkTypeface_Mac* typeface) {
     }
 }
 
-SkStream* SkTypeface_Mac::onOpenStream(int* ttcIndex) const {
+SkStreamAsset* SkTypeface_Mac::onOpenStream(int* ttcIndex) const {
     SK_SFNT_ULONG fontType = get_font_type_tag(this);
     if (0 == fontType) {
         return NULL;
@@ -1747,6 +1745,7 @@ SkStream* SkTypeface_Mac::onOpenStream(int* ttcIndex) const {
         ++entry;
     }
 
+    *ttcIndex = 0;
     return stream;
 }
 
@@ -1900,7 +1899,7 @@ void SkTypeface_Mac::onFilterRec(SkScalerContextRec* rec) const {
     // CoreText provides no information as to whether a glyph will be color or not.
     // Fonts may mix outlines and bitmaps, so information is needed on a glyph by glyph basis.
     // If a font contains an 'sbix' table, consider it to be a color font, and disable lcd.
-    if (fHasSbixTable) {
+    if (fHasColorGlyphs) {
         rec->fMaskFormat = SkMask::kARGB32_Format;
     }
 
@@ -2245,7 +2244,7 @@ protected:
         return create_from_dataProvider(pr);
     }
 
-    SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStreamAsset* stream, int ttcIndex) const SK_OVERRIDE {
         AutoCFRelease<CGDataProviderRef> pr(SkCreateDataProviderFromStream(stream));
         if (NULL == pr) {
             return NULL;

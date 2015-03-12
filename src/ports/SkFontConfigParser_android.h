@@ -8,6 +8,7 @@
 #ifndef SKFONTCONFIGPARSER_ANDROID_H_
 #define SKFONTCONFIGPARSER_ANDROID_H_
 
+#include "SkFontMgr_android.h"
 #include "SkString.h"
 #include "SkTDArray.h"
 
@@ -59,12 +60,13 @@ enum FontVariants {
 };
 typedef uint32_t FontVariant;
 
+// Must remain trivially movable (can be memmoved).
 struct FontFileInfo {
     FontFileInfo() : fIndex(0), fWeight(0) { }
 
-    SkString              fFileName;
-    int                   fIndex;
-    int                   fWeight;
+    SkString fFileName;
+    int fIndex;
+    int fWeight;
 };
 
 /**
@@ -75,34 +77,33 @@ struct FontFileInfo {
  * Android distinguishes "fallback" fonts to support non-ASCII character sets.
  */
 struct FontFamily {
-    FontFamily()
+    FontFamily(const SkString& basePath, bool isFallbackFont)
         : fVariant(kDefault_FontVariant)
         , fOrder(-1)
-        , fIsFallbackFont(false) { }
+        , fIsFallbackFont(isFallbackFont)
+        , fBasePath(basePath)
+    { }
 
-    SkTArray<SkString>                 fNames;
-    SkTArray<FontFileInfo>             fFonts;
-    SkLanguage                         fLanguage;
-    FontVariant                        fVariant;
-    int                                fOrder; // internal to SkFontConfigParser
-    bool                               fIsFallbackFont;
+    SkTArray<SkString, true> fNames;
+    SkTArray<FontFileInfo, true> fFonts;
+    SkLanguage fLanguage;
+    FontVariant fVariant;
+    int fOrder; // internal to SkFontConfigParser
+    bool fIsFallbackFont;
+    const SkString fBasePath;
 };
 
 namespace SkFontConfigParser {
 
-/**
- * Parses all system font configuration files and returns the results in an
- * array of FontFamily structures.
- */
-void GetFontFamilies(SkTDArray<FontFamily*> &fontFamilies);
+/** Parses system font configuration files and appends result to fontFamilies. */
+void GetSystemFontFamilies(SkTDArray<FontFamily*>& fontFamilies);
 
-/**
- * Parses all test font configuration files and returns the results in an
- * array of FontFamily structures.
- */
-void GetTestFontFamilies(SkTDArray<FontFamily*> &fontFamilies,
-                         const char* testMainConfigFile,
-                         const char* testFallbackConfigFile);
+/** Parses font configuration files and appends result to fontFamilies. */
+void GetCustomFontFamilies(SkTDArray<FontFamily*>& fontFamilies,
+                           const SkString& basePath,
+                           const char* fontsXml,
+                           const char* fallbackFontsXml,
+                           const char* langFallbackFontsDir = NULL);
 
 } // SkFontConfigParser namespace
 

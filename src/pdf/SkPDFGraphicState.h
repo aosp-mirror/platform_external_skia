@@ -13,7 +13,6 @@
 #include "SkPaint.h"
 #include "SkPDFTypes.h"
 #include "SkTemplates.h"
-#include "SkThread.h"
 
 class SkPDFFormXObject;
 
@@ -36,13 +35,9 @@ public:
 
     virtual ~SkPDFGraphicState();
 
-    virtual void getResources(const SkTSet<SkPDFObject*>& knownResourceObjects,
-                              SkTSet<SkPDFObject*>* newResourceObjects);
-
-    // Override emitObject and getOutputSize so that we can populate
-    // the dictionary on demand.
+    // Override emitObject so that we can populate the dictionary on
+    // demand.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog);
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
 
     /** Get the graphic state for the passed SkPaint. The reference count of
      *  the object is incremented and it is the caller's responsibility to
@@ -51,7 +46,8 @@ public:
      *  other references.
      *  @param paint  The SkPaint to emulate.
      */
-    static SkPDFGraphicState* GetGraphicStateForPaint(const SkPaint& paint);
+    static SkPDFGraphicState* GetGraphicStateForPaint(SkPDFCanon* canon,
+                                                      const SkPaint& paint);
 
     /** Make a graphic state that only sets the passed soft mask. The
      *  reference count of the object is incremented and it is the caller's
@@ -72,38 +68,20 @@ public:
      */
     static SkPDFGraphicState* GetNoSMaskGraphicState();
 
+    bool equals(const SkPaint&) const;
+
+    // Only public for SK_DECLARE_STATIC_LAZY_PTR
+    static SkPDFGraphicState* CreateNoSMaskGraphicState();
+
 private:
     const SkPaint fPaint;
-    SkTDArray<SkPDFObject*> fResources;
     bool fPopulated;
-    bool fSMask;
-
-    class GSCanonicalEntry {
-    public:
-        SkPDFGraphicState* fGraphicState;
-        const SkPaint* fPaint;
-
-        bool operator==(const GSCanonicalEntry& b) const;
-        explicit GSCanonicalEntry(SkPDFGraphicState* gs)
-            : fGraphicState(gs),
-              fPaint(&gs->fPaint) {}
-        explicit GSCanonicalEntry(const SkPaint* paint)
-            : fGraphicState(NULL),
-              fPaint(paint) {}
-    };
-
-    // This should be made a hash table if performance is a problem.
-    static SkTDArray<GSCanonicalEntry>& CanonicalPaints();
-    static SkBaseMutex& CanonicalPaintsMutex();
 
     SkPDFGraphicState();
-    explicit SkPDFGraphicState(const SkPaint& paint);
+    SkPDFGraphicState(const SkPaint& paint);
 
     void populateDict();
 
-    static SkPDFObject* GetInvertFunction();
-
-    static int Find(const SkPaint& paint);
     typedef SkPDFDict INHERITED;
 };
 

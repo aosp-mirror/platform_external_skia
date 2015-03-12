@@ -25,6 +25,8 @@ while (( "$#" )); do
     BUILDTYPE=Release
   elif [[ "$1" == "--clang" ]]; then
     USE_CLANG="true"
+  elif [[ "$1" == "--logcat" ]]; then
+    LOGCAT=1
   else
     APP_ARGS=("${APP_ARGS[@]}" "${1}")
   fi
@@ -114,16 +116,16 @@ setup_device() {
       ANDROID_ARCH="arm"
       ;;
     intel_rhb | razr_i)
-      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
+      DEFINES="${DEFINES} skia_arch_type=x86"
       DEFINES="${DEFINES} skia_resource_cache_mb_limit=32"
       ANDROID_ARCH="x86"
       ;;
     x86)
-      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=32"
+      DEFINES="${DEFINES} skia_arch_type=x86"
       ANDROID_ARCH="x86"
       ;;
     x86_64 | x64)
-      DEFINES="${DEFINES} skia_arch_type=x86 skia_arch_width=64"
+      DEFINES="${DEFINES} skia_arch_type=x86_64"
       ANDROID_ARCH="x86_64"
       ;;
     arm_v7)

@@ -6,6 +6,8 @@
 #define SK4X_PREAMBLE 1
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
         #include "Sk4x_sse.h"
+    #elif defined(SK_ARM_HAS_NEON)
+        #include "Sk4x_neon.h"
     #else
         #include "Sk4x_portable.h"
     #endif
@@ -22,7 +24,8 @@ typedef Sk4x<int32_t> Sk4i;
 
 template <typename T> class Sk4x {
 public:
-    Sk4x();  // Uninitialized; use Sk4x(0,0,0,0) for zero.
+    Sk4x();  // Uninitialized; use Sk4x(0) for zero.
+    explicit Sk4x(T);  // Same as Sk4x(T,T,T,T);
     Sk4x(T, T, T, T);
 
     Sk4x(const Sk4x&);
@@ -48,6 +51,9 @@ public:
     Sk4x subtract(const Sk4x&) const;
     Sk4x multiply(const Sk4x&) const;
     Sk4x   divide(const Sk4x&) const;
+
+    Sk4x rsqrt() const;   // Approximate reciprocal sqrt().
+    Sk4x  sqrt() const;   // this->multiply(this->rsqrt()) may be faster, but less precise.
 
     Sk4i            equal(const Sk4x&) const;
     Sk4i         notEqual(const Sk4x&) const;
@@ -77,6 +83,8 @@ private:
 #define SK4X_PRIVATE 1
     #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
         #include "Sk4x_sse.h"
+    #elif defined(SK_ARM_HAS_NEON)
+        #include "Sk4x_neon.h"
     #else
         #include "Sk4x_portable.h"
     #endif
@@ -85,6 +93,8 @@ private:
 
 #if SK_CPU_SSE_LEVEL >= SK_CPU_SSE_LEVEL_SSE2
     #include "Sk4x_sse.h"
+#elif defined(SK_ARM_HAS_NEON)
+    #include "Sk4x_neon.h"
 #else
     #include "Sk4x_portable.h"
 #endif

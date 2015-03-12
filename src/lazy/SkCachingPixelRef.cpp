@@ -52,13 +52,18 @@ bool SkCachingPixelRef::onNewLockPixels(LockRec* rec) {
             fErrorInDecoding = true;
             return false;
         }
-        if (!fImageGenerator->getPixels(info, fLockedBitmap.getPixels(), fRowBytes)) {
-            fErrorInDecoding = true;
-            return false;
+        const SkImageGenerator::Result result = fImageGenerator->getPixels(info,
+                fLockedBitmap.getPixels(), fRowBytes);
+        switch (result) {
+            case SkImageGenerator::kIncompleteInput:
+            case SkImageGenerator::kSuccess:
+                break;
+            default:
+                fErrorInDecoding = true;
+                return false;
         }
         fLockedBitmap.setImmutable();
-        SkBitmapCache::Add(
-                this->getGenerationID(), info.bounds(), fLockedBitmap);
+        SkBitmapCache::Add(this, info.bounds(), fLockedBitmap);
     }
 
     // Now bitmap should contain a concrete PixelRef of the decoded image.

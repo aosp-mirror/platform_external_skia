@@ -156,32 +156,6 @@ static inline bool GrIsPrimTypeTris(GrPrimitiveType type) {
 }
 
 /**
- * Coeffecients for alpha-blending.
- */
-enum GrBlendCoeff {
-    kInvalid_GrBlendCoeff = -1,
-
-    kZero_GrBlendCoeff,    //<! 0
-    kOne_GrBlendCoeff,     //<! 1
-    kSC_GrBlendCoeff,      //<! src color
-    kISC_GrBlendCoeff,     //<! one minus src color
-    kDC_GrBlendCoeff,      //<! dst color
-    kIDC_GrBlendCoeff,     //<! one minus dst color
-    kSA_GrBlendCoeff,      //<! src alpha
-    kISA_GrBlendCoeff,     //<! one minus src alpha
-    kDA_GrBlendCoeff,      //<! dst alpha
-    kIDA_GrBlendCoeff,     //<! one minus dst alpha
-    kConstC_GrBlendCoeff,  //<! constant color
-    kIConstC_GrBlendCoeff, //<! one minus constant color
-    kConstA_GrBlendCoeff,  //<! constant color alpha
-    kIConstA_GrBlendCoeff, //<! one minus constant color alpha
-
-    kFirstPublicGrBlendCoeff = kZero_GrBlendCoeff,
-    kLastPublicGrBlendCoeff = kIConstA_GrBlendCoeff,
-};
-static const int kPublicGrBlendCoeffCount = kLastPublicGrBlendCoeff + 1;
-
-/**
  *  Formats for masks, used by the font cache.
  *  Important that these are 0-based.
  */
@@ -302,6 +276,22 @@ static inline bool GrPixelConfigIsCompressed(GrPixelConfig config) {
     }
 }
 
+/** If the pixel config is compressed, return an equivalent uncompressed format. */
+static inline GrPixelConfig GrMakePixelConfigUncompressed(GrPixelConfig config) {
+    switch (config) {
+        case kIndex_8_GrPixelConfig:
+        case kETC1_GrPixelConfig:
+        case kASTC_12x12_GrPixelConfig:
+            return kRGBA_8888_GrPixelConfig;
+        case kLATC_GrPixelConfig:
+        case kR11_EAC_GrPixelConfig:
+            return kAlpha_8_GrPixelConfig;
+        default:
+            SkASSERT(!GrPixelConfigIsCompressed(config));
+            return config;
+    }
+}
+
 // Returns true if the pixel config is 32 bits per pixel
 static inline bool GrPixelConfigIs8888(GrPixelConfig config) {
     switch (config) {
@@ -400,10 +390,7 @@ enum GrSurfaceFlags {
      */
     kRenderTarget_GrSurfaceFlag     = 0x1,
     /**
-     * By default all render targets have an associated stencil buffer that
-     * may be required for path filling. This flag overrides stencil buffer
-     * creation.
-     * MAKE THIS PRIVATE?
+     * DEPRECATED. This has no effect.
      */
     kNoStencil_GrSurfaceFlag        = 0x2,
     /**
@@ -471,58 +458,6 @@ struct GrSurfaceDesc {
 
 // Legacy alias
 typedef GrSurfaceDesc GrTextureDesc;
-
-/**
- * GrCacheID is used create and find cached GrResources (e.g. GrTextures). The ID has two parts:
- * the domain and the key. Domains simply allow multiple clients to use 0-based indices as their
- * cache key without colliding. The key uniquely identifies a GrResource within the domain.
- * Users of the cache must obtain a domain via GenerateDomain().
- */
-struct GrCacheID {
-public:
-    typedef uint8_t  Domain;
-
-    struct Key {
-        union {
-            uint8_t  fData8[16];
-            uint32_t fData32[4];
-            uint64_t fData64[2];
-        };
-    };
-
-    /**
-     * A default cache ID is invalid; a set method must be called before the object is used.
-     */
-    GrCacheID() { fDomain = kInvalid_Domain; }
-
-    /**
-     * Initialize the cache ID to a domain and key.
-     */
-    GrCacheID(Domain domain, const Key& key) {
-        SkASSERT(kInvalid_Domain != domain);
-        this->reset(domain, key);
-    }
-
-    void reset(Domain domain, const Key& key) {
-        fDomain = domain;
-        memcpy(&fKey, &key, sizeof(Key));
-    }
-
-    /** Has this been initialized to a valid domain */
-    bool isValid() const { return kInvalid_Domain != fDomain; }
-
-    const Key& getKey() const { SkASSERT(this->isValid()); return fKey; }
-    Domain getDomain() const { SkASSERT(this->isValid()); return fDomain; }
-
-    /** Creates a new unique ID domain. */
-    static Domain GenerateDomain();
-
-private:
-    Key             fKey;
-    Domain          fDomain;
-
-    static const Domain kInvalid_Domain = 0;
-};
 
 /**
  * Clips are composed from these objects.

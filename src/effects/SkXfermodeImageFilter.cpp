@@ -127,6 +127,12 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
         return onFilterImage(proxy, src, ctx, result, offset);
     }
     GrTexture* backgroundTex = background.getTexture();
+
+    if (NULL == backgroundTex) {
+        SkASSERT(false);
+        return false;
+    }
+
     SkBitmap foreground = src;
     SkIPoint foregroundOffset = SkIPoint::Make(0, 0);
     if (getInput(1) && !getInput(1)->getInputResultGPU(proxy, src, ctx, &foreground,
@@ -139,7 +145,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     GrFragmentProcessor* xferProcessor = NULL;
 
     GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag | kNoStencil_GrSurfaceFlag;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fWidth = src.width();
     desc.fHeight = src.height();
     desc.fConfig = kSkia8888_GrPixelConfig;
@@ -148,7 +154,6 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     if (!dst) {
         return false;
     }
-    GrContext::AutoRenderTarget art(context, dst->asRenderTarget());
 
     if (!fMode || !fMode->asFragmentProcessor(&xferProcessor, backgroundTex)) {
         // canFilterImageGPU() should've taken care of this
@@ -167,7 +172,7 @@ bool SkXfermodeImageFilter::filterImageGPU(Proxy* proxy,
     GrPaint paint;
     paint.addColorTextureProcessor(foregroundTex, foregroundMatrix);
     paint.addColorProcessor(xferProcessor)->unref();
-    context->drawRect(paint, SkMatrix::I(), srcRect);
+    context->drawRect(dst->asRenderTarget(), GrClip::WideOpen(), paint, SkMatrix::I(), srcRect);
 
     offset->fX = backgroundOffset.fX;
     offset->fY = backgroundOffset.fY;

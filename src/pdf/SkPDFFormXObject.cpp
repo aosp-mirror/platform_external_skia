@@ -21,12 +21,10 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
     // We don't want to keep around device because we'd have two copies
     // of content, so reference or copy everything we need (content and
     // resources).
-    SkTSet<SkPDFObject*> emptySet;
     SkPDFResourceDict* resourceDict = device->getResourceDict();
-    resourceDict->getReferencedResources(emptySet, &fResources, false);
 
-    SkAutoTUnref<SkStream> content(device->content());
-    setData(content.get());
+    SkAutoTDelete<SkStreamAsset> content(device->content());
+    this->setData(content.get());
 
     SkAutoTUnref<SkPDFArray> bboxArray(device->copyMediaBox());
     init(NULL, resourceDict, bboxArray);
@@ -50,9 +48,6 @@ SkPDFFormXObject::SkPDFFormXObject(SkPDFDevice* device) {
  */
 SkPDFFormXObject::SkPDFFormXObject(SkStream* content, SkRect bbox,
                                    SkPDFResourceDict* resourceDict) {
-    SkTSet<SkPDFObject*> emptySet;
-    resourceDict->getReferencedResources(emptySet, &fResources, false);
-
     setData(content);
 
     SkAutoTUnref<SkPDFArray> bboxArray(SkPDFUtils::RectToArray(bbox));
@@ -82,14 +77,4 @@ void SkPDFFormXObject::init(const char* colorSpace,
     insert("Group", group.get());
 }
 
-SkPDFFormXObject::~SkPDFFormXObject() {
-    fResources.unrefAll();
-}
-
-void SkPDFFormXObject::getResources(
-        const SkTSet<SkPDFObject*>& knownResourceObjects,
-        SkTSet<SkPDFObject*>* newResourceObjects) {
-    GetResourcesHelper(&fResources.toArray(),
-                       knownResourceObjects,
-                       newResourceObjects);
-}
+SkPDFFormXObject::~SkPDFFormXObject() {}

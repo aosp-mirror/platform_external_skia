@@ -347,7 +347,7 @@ void S32A_Blend_BlitRow32_arm(SkPMColor* SK_RESTRICT dst,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static const SkBlitRow::Proc sk_blitrow_platform_565_procs_arm[] = {
+static const SkBlitRow::Proc16 sk_blitrow_platform_565_procs_arm[] = {
     // no dither
     // NOTE: For the functions below, we don't have a special version
     //       that assumes that each source pixel is opaque. But our S32A is
@@ -364,6 +364,11 @@ static const SkBlitRow::Proc sk_blitrow_platform_565_procs_arm[] = {
     NULL,   // S32A_D565_Blend_Dither
 };
 
+static const SkBlitRow::ColorProc16 sk_blitrow_platform_565_colorprocs_arm[] = {
+    NULL,   // Color32A_D565,
+    NULL,   // Color32A_D565_Dither
+};
+
 static const SkBlitRow::Proc32 sk_blitrow_platform_32_procs_arm[] = {
     NULL,   // S32_Opaque,
     NULL,   // S32_Blend,
@@ -373,8 +378,12 @@ static const SkBlitRow::Proc32 sk_blitrow_platform_32_procs_arm[] = {
 
 #endif // USE_ARM_CODE
 
-SkBlitRow::Proc SkBlitRow::PlatformProcs565(unsigned flags) {
+SkBlitRow::Proc16 SkBlitRow::PlatformFactory565(unsigned flags) {
     return SK_ARM_NEON_WRAP(sk_blitrow_platform_565_procs_arm)[flags];
+}
+
+SkBlitRow::ColorProc16 SkBlitRow::PlatformColorFactory565(unsigned flags) {
+    return SK_ARM_NEON_WRAP(sk_blitrow_platform_565_colorprocs_arm)[flags];
 }
 
 SkBlitRow::Proc32 SkBlitRow::PlatformProcs32(unsigned flags) {
@@ -387,6 +396,3 @@ SkBlitRow::ColorProc SkBlitRow::PlatformColorProc() {
     return SK_ARM_NEON_WRAP(Color32_arm);
 }
 
-SkBlitRow::ColorRectProc PlatformColorRectProcFactory() {
-    return NULL;
-}

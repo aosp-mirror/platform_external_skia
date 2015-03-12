@@ -72,6 +72,20 @@ protected:
             closedEllipse->moveTo(0,  0);
             closedEllipse->conicTo(100, 100, 0, 0, SK_ScalarHalf);
         }
+        {
+            const SkScalar w = SkScalarSqrt(2)/2;
+            fGiantCircle.moveTo(2.1e+11f, -1.05e+11f);
+            fGiantCircle.conicTo(2.1e+11f, 0, 1.05e+11f, 0, w);
+            fGiantCircle.conicTo(0, 0, 0, -1.05e+11f, w);
+            fGiantCircle.conicTo(0, -2.1e+11f, 1.05e+11f, -2.1e+11f, w);
+            fGiantCircle.conicTo(2.1e+11f, -2.1e+11f, 2.1e+11f, -1.05e+11f, w);
+
+        }
+    }
+
+    void drawGiantCircle(SkCanvas* canvas) {
+        SkPaint paint;
+        canvas->drawPath(fGiantCircle, paint);
     }
 
     void onDraw(SkCanvas* canvas) SK_OVERRIDE {
@@ -104,16 +118,13 @@ protected:
             canvas->translate(0, 110);
         }
         canvas->restore();
-    }
 
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        // tiling w/ non-antialias paths can cause off-by-1-pixels differences which are
-        // unavoidable (chopping in floats -vs- stepping in scan-converter).
-        return kSkipTiled_Flag;
+        this->drawGiantCircle(canvas);  
     }
 
 private:
     SkTArray<SkPath> fPaths;
+    SkPath           fGiantCircle;
     typedef skiagm::GM INHERITED;
 };
 DEF_GM( return SkNEW(ConicPathsGM); )

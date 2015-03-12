@@ -24,6 +24,21 @@ public:
     ComplexClip2GM(Clip clip, bool antiAlias)
     : fClip(clip)
     , fAntiAlias(antiAlias) {
+        SkScalar xA = 0.65f;
+        SkScalar xF = 50.65f;
+
+        SkScalar yA = 0.65f;
+        SkScalar yF = 50.65f;
+
+        fWidth = xF - xA;
+        fHeight = yF - yA;
+
+        fTotalWidth = kCols * fWidth + SK_Scalar1 * (kCols + 1) * kPadX;
+        fTotalHeight = kRows * fHeight + SK_Scalar1 * (kRows + 1) * kPadY;
+    }
+
+protected:
+    void onOnceBeforeDraw() SK_OVERRIDE {
         this->setBGColor(SkColorSetRGB(0xDD,0xA0,0xDD));
 
         // offset the rects a bit so we get antialiasing even in the rect case
@@ -40,9 +55,6 @@ public:
         SkScalar yD = 30.65f;
         SkScalar yE = 40.65f;
         SkScalar yF = 50.65f;
-
-        fWidth = xF - xA;
-        fHeight = yF - yA;
 
         fRects[0].set(xB, yB, xE, yE);
         fRRects[0].setRectXY(fRects[0], 7, 7);
@@ -69,9 +81,6 @@ public:
         fPaths[4].addRoundRect(fRects[4], 5, 5);
         fRectColors[4] = SK_ColorCYAN;
 
-        fTotalWidth = kCols * fWidth + SK_Scalar1 * (kCols + 1) * kPadX;
-        fTotalHeight = kRows * fHeight + SK_Scalar1 * (kRows + 1) * kPadY;
-
         SkRegion::Op ops[] = {
             SkRegion::kDifference_Op,
             SkRegion::kIntersect_Op,
@@ -91,8 +100,6 @@ public:
         }
     }
 
-protected:
-
     static const int kRows = 5;
     static const int kCols = 5;
     static const int kPadX = 20;
@@ -109,13 +116,6 @@ protected:
         }
         SkDEBUGFAIL("Unknown clip type.");
         return "";
-    }
-
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        if (kRect_Clip != fClip) {
-            return kSkipTiled_Flag;
-        }
-        return 0;
     }
 
     virtual SkString onShortName() {

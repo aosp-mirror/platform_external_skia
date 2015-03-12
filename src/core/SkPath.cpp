@@ -125,11 +125,7 @@ private:
 #define INITIAL_LASTMOVETOINDEX_VALUE   ~0
 
 SkPath::SkPath()
-    : fPathRef(SkPathRef::CreateEmpty())
-#ifdef SK_BUILD_FOR_ANDROID
-    , fSourcePath(NULL)
-#endif
-{
+    : fPathRef(SkPathRef::CreateEmpty()) {
     this->resetFields();
     fIsVolatile = false;
 }
@@ -148,9 +144,6 @@ void SkPath::resetFields() {
 SkPath::SkPath(const SkPath& that)
     : fPathRef(SkRef(that.fPathRef.get())) {
     this->copyFields(that);
-#ifdef SK_BUILD_FOR_ANDROID
-    fSourcePath   = that.fSourcePath;
-#endif
     SkDEBUGCODE(that.validate();)
 }
 
@@ -164,9 +157,6 @@ SkPath& SkPath::operator=(const SkPath& that) {
     if (this != &that) {
         fPathRef.reset(SkRef(that.fPathRef.get()));
         this->copyFields(that);
-#ifdef SK_BUILD_FOR_ANDROID
-        fSourcePath = that.fSourcePath;
-#endif
     }
     SkDEBUGCODE(this->validate();)
     return *this;
@@ -198,9 +188,6 @@ void SkPath::swap(SkPath& that) {
         SkTSwap<uint8_t>(fConvexity, that.fConvexity);
         SkTSwap<uint8_t>(fDirection, that.fDirection);
         SkTSwap<SkBool8>(fIsVolatile, that.fIsVolatile);
-#ifdef SK_BUILD_FOR_ANDROID
-        SkTSwap<const SkPath*>(fSourcePath, that.fSourcePath);
-#endif
     }
 }
 
@@ -308,22 +295,12 @@ bool SkPath::conservativelyContainsRect(const SkRect& rect) const {
 
 uint32_t SkPath::getGenerationID() const {
     uint32_t genID = fPathRef->genID();
-#ifdef SK_BUILD_FOR_ANDROID
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
     SkASSERT((unsigned)fFillType < (1 << (32 - kPathRefGenIDBitCnt)));
     genID |= static_cast<uint32_t>(fFillType) << kPathRefGenIDBitCnt;
 #endif
     return genID;
 }
-
-#ifdef SK_BUILD_FOR_ANDROID
-const SkPath* SkPath::getSourcePath() const {
-    return fSourcePath;
-}
-
-void SkPath::setSourcePath(const SkPath* path) {
-    fSourcePath = path;
-}
-#endif
 
 void SkPath::reset() {
     SkDEBUGCODE(this->validate();)
@@ -886,6 +863,7 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
 
     if (close) {
         ed.growForVerb(kClose_Verb);
+        fLastMoveToIndex ^= ~fLastMoveToIndex >> (8 * sizeof(fLastMoveToIndex) - 1);
     }
 
     DIRTY_AFTER_EDIT;
@@ -894,17 +872,14 @@ void SkPath::addPoly(const SkPoint pts[], int count, bool close) {
 
 #include "SkGeometry.h"
 
-static int build_arc_points(const SkRect& oval, SkScalar startAngle,
-                            SkScalar sweepAngle,
-                            SkPoint pts[kSkBuildQuadArcStorage]) {
-
-    if (0 == sweepAngle &&
-        (0 == startAngle || SkIntToScalar(360) == startAngle)) {
+static bool arc_is_lone_point(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
+                              SkPoint* pt) {
+    if (0 == sweepAngle && (0 == startAngle || SkIntToScalar(360) == startAngle)) {
         // Chrome uses this path to move into and out of ovals. If not
         // treated as a special case the moves can distort the oval's
         // bounding box (and break the circle special case).
-        pts[0].set(oval.fRight, oval.centerY());
-        return 1;
+        pt->set(oval.fRight, oval.centerY());
+        return true;
     } else if (0 == oval.width() && 0 == oval.height()) {
         // Chrome will sometimes create 0 radius round rects. Having degenerate
         // quad segments in the path prevents the path from being recognized as
@@ -912,25 +887,28 @@ static int build_arc_points(const SkRect& oval, SkScalar startAngle,
         // TODO: optimizing the case where only one of width or height is zero
         // should also be considered. This case, however, doesn't seem to be
         // as common as the single point case.
-        pts[0].set(oval.fRight, oval.fTop);
-        return 1;
+        pt->set(oval.fRight, oval.fTop);
+        return true;
     }
+    return false;
+}
 
-    SkVector start, stop;
-
-    start.fY = SkScalarSinCos(SkDegreesToRadians(startAngle), &start.fX);
-    stop.fY = SkScalarSinCos(SkDegreesToRadians(startAngle + sweepAngle),
-                             &stop.fX);
+// Return the unit vectors pointing at the start/stop points for the given start/sweep angles
+//
+static void angles_to_unit_vectors(SkScalar startAngle, SkScalar sweepAngle,
+                                   SkVector* startV, SkVector* stopV, SkRotationDirection* dir) {
+    startV->fY = SkScalarSinCos(SkDegreesToRadians(startAngle), &startV->fX);
+    stopV->fY = SkScalarSinCos(SkDegreesToRadians(startAngle + sweepAngle), &stopV->fX);
 
     /*  If the sweep angle is nearly (but less than) 360, then due to precision
-        loss in radians-conversion and/or sin/cos, we may end up with coincident
-        vectors, which will fool SkBuildQuadArc into doing nothing (bad) instead
-        of drawing a nearly complete circle (good).
-             e.g. canvas.drawArc(0, 359.99, ...)
-             -vs- canvas.drawArc(0, 359.9, ...)
-        We try to detect this edge case, and tweak the stop vector
+     loss in radians-conversion and/or sin/cos, we may end up with coincident
+     vectors, which will fool SkBuildQuadArc into doing nothing (bad) instead
+     of drawing a nearly complete circle (good).
+     e.g. canvas.drawArc(0, 359.99, ...)
+     -vs- canvas.drawArc(0, 359.9, ...)
+     We try to detect this edge case, and tweak the stop vector
      */
-    if (start == stop) {
+    if (*startV == *stopV) {
         SkScalar sw = SkScalarAbs(sweepAngle);
         if (sw < SkIntToScalar(360) && sw > SkIntToScalar(359)) {
             SkScalar stopRad = SkDegreesToRadians(startAngle + sweepAngle);
@@ -939,21 +917,43 @@ static int build_arc_points(const SkRect& oval, SkScalar startAngle,
             // not sure how much will be enough, so we use a loop
             do {
                 stopRad -= deltaRad;
-                stop.fY = SkScalarSinCos(stopRad, &stop.fX);
-            } while (start == stop);
+                stopV->fY = SkScalarSinCos(stopRad, &stopV->fX);
+            } while (*startV == *stopV);
         }
     }
+    *dir = sweepAngle > 0 ? kCW_SkRotationDirection : kCCW_SkRotationDirection;
+}
 
+#ifdef SK_SUPPORT_LEGACY_ARCTO_QUADS
+static int build_arc_points(const SkRect& oval, const SkVector& start, const SkVector& stop,
+                            SkRotationDirection dir, SkPoint pts[kSkBuildQuadArcStorage]) {
     SkMatrix    matrix;
 
     matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
     matrix.postTranslate(oval.centerX(), oval.centerY());
 
-    return SkBuildQuadArc(start, stop,
-                          sweepAngle > 0 ? kCW_SkRotationDirection :
-                                           kCCW_SkRotationDirection,
-                          &matrix, pts);
+    return SkBuildQuadArc(start, stop, dir, &matrix, pts);
 }
+#else
+/**
+ *  If this returns 0, then the caller should just line-to the singlePt, else it should
+ *  ignore singlePt and append the specified number of conics.
+ */
+static int build_arc_conics(const SkRect& oval, const SkVector& start, const SkVector& stop,
+                            SkRotationDirection dir, SkConic conics[SkConic::kMaxConicsForArc],
+                            SkPoint* singlePt) {
+    SkMatrix    matrix;
+
+    matrix.setScale(SkScalarHalf(oval.width()), SkScalarHalf(oval.height()));
+    matrix.postTranslate(oval.centerX(), oval.centerY());
+
+    int count = SkConic::BuildUnitArc(start, stop, dir, &matrix, conics);
+    if (0 == count) {
+        matrix.mapXY(start.x(), start.y(), singlePt);
+    }
+    return count;
+}
+#endif
 
 void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
                           Direction dir) {
@@ -961,135 +961,6 @@ void SkPath::addRoundRect(const SkRect& rect, const SkScalar radii[],
     rrect.setRectRadii(rect, (const SkVector*) radii);
     this->addRRect(rrect, dir);
 }
-
-#ifdef SK_SUPPORT_LEGACY_ADDRRECT
-/* The inline clockwise and counterclockwise round rect quad approximations
-   make it easier to see the symmetry patterns used by add corner quads.
-Clockwise                                                     corner value
-    path->lineTo(rect.fLeft,           rect.fTop    + ry);    0 upper left
-    path->quadTo(rect.fLeft,           rect.fTop    + offPtY,
-                 rect.fLeft  + midPtX, rect.fTop    + midPtY);
-    path->quadTo(rect.fLeft  + offPtX, rect.fTop,
-                 rect.fLeft  + rx,     rect.fTop);
-
-    path->lineTo(rect.fRight - rx,     rect.fTop);            1 upper right
-    path->quadTo(rect.fRight - offPtX, rect.fTop,
-                 rect.fRight - midPtX, rect.fTop    + midPtY);
-    path->quadTo(rect.fRight,          rect.fTop    + offPtY,
-                 rect.fRight,          rect.fTop    + ry);
-
-    path->lineTo(rect.fRight,          rect.fBottom - ry);    2 lower right
-    path->quadTo(rect.fRight,          rect.fBottom - offPtY,
-                 rect.fRight - midPtX, rect.fBottom - midPtY);
-    path->quadTo(rect.fRight - offPtX, rect.fBottom,
-                 rect.fRight - rx,     rect.fBottom);
-
-    path->lineTo(rect.fLeft  + rx,     rect.fBottom);         3 lower left
-    path->quadTo(rect.fLeft  + offPtX, rect.fBottom,
-                 rect.fLeft  + midPtX, rect.fBottom - midPtY);
-    path->quadTo(rect.fLeft,           rect.fBottom - offPtY,
-                 rect.fLeft,           rect.fBottom - ry);
-
-Counterclockwise
-    path->lineTo(rect.fLeft,           rect.fBottom - ry);    3 lower left
-    path->quadTo(rect.fLeft,           rect.fBottom - offPtY,
-                 rect.fLeft  + midPtX, rect.fBottom - midPtY);
-    path->quadTo(rect.fLeft  + offPtX, rect.fBottom,
-                 rect.fLeft  + rx,     rect.fBottom);
-
-    path->lineTo(rect.fRight - rx,     rect.fBottom);         2 lower right
-    path->quadTo(rect.fRight - offPtX, rect.fBottom,
-                 rect.fRight - midPtX, rect.fBottom - midPtY);
-    path->quadTo(rect.fRight,          rect.fBottom - offPtY,
-                 rect.fRight,          rect.fBottom - ry);
-
-    path->lineTo(rect.fRight,          rect.fTop    + ry);    1 upper right
-    path->quadTo(rect.fRight,          rect.fTop    + offPtY,
-                 rect.fRight - midPtX, rect.fTop    + midPtY);
-    path->quadTo(rect.fRight - offPtX, rect.fTop,
-                 rect.fRight - rx,     rect.fTop);
-
-    path->lineTo(rect.fLeft  + rx,     rect.fTop);            0 upper left
-    path->quadTo(rect.fLeft  + offPtX, rect.fTop,
-                 rect.fLeft  + midPtX, rect.fTop    + midPtY);
-    path->quadTo(rect.fLeft,           rect.fTop    + offPtY,
-                 rect.fLeft,           rect.fTop    + ry);
-*/
-static void add_corner_quads(SkPath* path, const SkRRect& rrect,
-                             SkRRect::Corner corner, SkPath::Direction dir) {
-    const SkRect& rect = rrect.rect();
-    const SkVector& radii = rrect.radii(corner);
-    SkScalar rx = radii.fX;
-    SkScalar ry = radii.fY;
-    // The mid point of the quadratic arc approximation is half way between the two
-    // control points.
-    const SkScalar mid = 1 - (SK_Scalar1 + SK_ScalarTanPIOver8) / 2;
-    SkScalar midPtX = rx * mid;
-    SkScalar midPtY = ry * mid;
-    const SkScalar control = 1 - SK_ScalarTanPIOver8;
-    SkScalar offPtX = rx * control;
-    SkScalar offPtY = ry * control;
-    static const int kCornerPts = 5;
-    SkScalar xOff[kCornerPts];
-    SkScalar yOff[kCornerPts];
-
-    if ((corner & 1) == (dir == SkPath::kCCW_Direction)) {  // corners always alternate direction
-        SkASSERT(dir == SkPath::kCCW_Direction
-             ? corner == SkRRect::kLowerLeft_Corner || corner == SkRRect::kUpperRight_Corner
-             : corner == SkRRect::kUpperLeft_Corner || corner == SkRRect::kLowerRight_Corner);
-        xOff[0] = xOff[1] = 0;
-        xOff[2] = midPtX;
-        xOff[3] = offPtX;
-        xOff[4] = rx;
-        yOff[0] = ry;
-        yOff[1] = offPtY;
-        yOff[2] = midPtY;
-        yOff[3] = yOff[4] = 0;
-    } else {
-        xOff[0] = rx;
-        xOff[1] = offPtX;
-        xOff[2] = midPtX;
-        xOff[3] = xOff[4] = 0;
-        yOff[0] = yOff[1] = 0;
-        yOff[2] = midPtY;
-        yOff[3] = offPtY;
-        yOff[4] = ry;
-    }
-    if ((corner - 1) & 2) {
-        SkASSERT(corner == SkRRect::kLowerLeft_Corner || corner == SkRRect::kUpperLeft_Corner);
-        for (int i = 0; i < kCornerPts; ++i) {
-            xOff[i] = rect.fLeft + xOff[i];
-        }
-    } else {
-        SkASSERT(corner == SkRRect::kLowerRight_Corner || corner == SkRRect::kUpperRight_Corner);
-        for (int i = 0; i < kCornerPts; ++i) {
-            xOff[i] = rect.fRight - xOff[i];
-        }
-    }
-    if (corner < SkRRect::kLowerRight_Corner) {
-        for (int i = 0; i < kCornerPts; ++i) {
-            yOff[i] = rect.fTop + yOff[i];
-        }
-    } else {
-        for (int i = 0; i < kCornerPts; ++i) {
-            yOff[i] = rect.fBottom - yOff[i];
-        }
-    }
-
-    SkPoint lastPt;
-    SkAssertResult(path->getLastPt(&lastPt));
-    if (lastPt.fX != xOff[0] || lastPt.fY != yOff[0]) {
-        path->lineTo(xOff[0], yOff[0]);
-    }
-    if (rx || ry) {
-        path->quadTo(xOff[1], yOff[1], xOff[2], yOff[2]);
-        path->quadTo(xOff[3], yOff[3], xOff[4], yOff[4]);
-    } else {
-        path->lineTo(xOff[2], yOff[2]);
-        path->lineTo(xOff[4], yOff[4]);
-    }
-}
-#endif
 
 void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
     assert_known_direction(dir);
@@ -1110,24 +981,6 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
         SkAutoPathBoundsUpdate apbu(this, bounds);
         SkAutoDisableDirectionCheck addc(this);
 
-#ifdef SK_SUPPORT_LEGACY_ADDRRECT
-        this->incReserve(21);
-        if (kCW_Direction == dir) {
-            this->moveTo(bounds.fLeft,
-                         bounds.fBottom - rrect.fRadii[SkRRect::kLowerLeft_Corner].fY);
-            add_corner_quads(this, rrect, SkRRect::kUpperLeft_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kUpperRight_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kLowerRight_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kLowerLeft_Corner, dir);
-        } else {
-            this->moveTo(bounds.fLeft,
-                         bounds.fTop + rrect.fRadii[SkRRect::kUpperLeft_Corner].fY);
-            add_corner_quads(this, rrect, SkRRect::kLowerLeft_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kLowerRight_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kUpperRight_Corner, dir);
-            add_corner_quads(this, rrect, SkRRect::kUpperLeft_Corner, dir);
-        }
-#else
         const SkScalar L = bounds.fLeft;
         const SkScalar T = bounds.fTop;
         const SkScalar R = bounds.fRight;
@@ -1164,7 +1017,6 @@ void SkPath::addRRect(const SkRRect& rrect, Direction dir) {
             this->lineTo(L + rrect.fRadii[SkRRect::kUpperLeft_Corner].fX, T);
             this->conicTo(L, T, L, T + rrect.fRadii[SkRRect::kUpperLeft_Corner].fY, W);
         }
-#endif
         this->close();
     }
     SkDEBUGCODE(fPathRef->validate();)
@@ -1222,50 +1074,6 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
 
     SkAutoPathBoundsUpdate apbu(this, oval);
 
-#ifdef SK_SUPPORT_LEGACY_ADDOVAL
-    SkScalar    cx = oval.centerX();
-    SkScalar    cy = oval.centerY();
-    SkScalar    rx = SkScalarHalf(oval.width());
-    SkScalar    ry = SkScalarHalf(oval.height());
-
-    SkScalar    sx = SkScalarMul(rx, SK_ScalarTanPIOver8);
-    SkScalar    sy = SkScalarMul(ry, SK_ScalarTanPIOver8);
-    SkScalar    mx = SkScalarMul(rx, SK_ScalarRoot2Over2);
-    SkScalar    my = SkScalarMul(ry, SK_ScalarRoot2Over2);
-
-    /*
-     To handle imprecision in computing the center and radii, we revert to
-     the provided bounds when we can (i.e. use oval.fLeft instead of cx-rx)
-     to ensure that we don't exceed the oval's bounds *ever*, since we want
-     to use oval for our fast-bounds, rather than have to recompute it.
-     */
-    const SkScalar L = oval.fLeft;      // cx - rx
-    const SkScalar T = oval.fTop;       // cy - ry
-    const SkScalar R = oval.fRight;     // cx + rx
-    const SkScalar B = oval.fBottom;    // cy + ry
-
-    this->incReserve(17);   // 8 quads + close
-    this->moveTo(R, cy);
-    if (dir == kCCW_Direction) {
-        this->quadTo(      R, cy - sy, cx + mx, cy - my);
-        this->quadTo(cx + sx,       T, cx     ,       T);
-        this->quadTo(cx - sx,       T, cx - mx, cy - my);
-        this->quadTo(      L, cy - sy,       L, cy     );
-        this->quadTo(      L, cy + sy, cx - mx, cy + my);
-        this->quadTo(cx - sx,       B, cx     ,       B);
-        this->quadTo(cx + sx,       B, cx + mx, cy + my);
-        this->quadTo(      R, cy + sy,       R, cy     );
-    } else {
-        this->quadTo(      R, cy + sy, cx + mx, cy + my);
-        this->quadTo(cx + sx,       B, cx     ,       B);
-        this->quadTo(cx - sx,       B, cx - mx, cy + my);
-        this->quadTo(      L, cy + sy,       L, cy     );
-        this->quadTo(      L, cy - sy, cx - mx, cy - my);
-        this->quadTo(cx - sx,       T, cx     ,       T);
-        this->quadTo(cx + sx,       T, cx + mx, cy - my);
-        this->quadTo(      R, cy - sy,       R, cy     );
-    }
-#else
     const SkScalar L = oval.fLeft;
     const SkScalar T = oval.fTop;
     const SkScalar R = oval.fRight;
@@ -1287,7 +1095,6 @@ void SkPath::addOval(const SkRect& oval, Direction dir) {
         this->conicTo(L, T, cx, T, weight);
         this->conicTo(R, T, R, cy, weight);
     }
-#endif
     this->close();
 
     SkPathRef::Editor ed(&fPathRef);
@@ -1309,18 +1116,45 @@ void SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle,
         return;
     }
 
-    SkPoint pts[kSkBuildQuadArcStorage];
-    int count = build_arc_points(oval, startAngle, sweepAngle, pts);
-    SkASSERT((count & 1) == 1);
-
     if (fPathRef->countVerbs() == 0) {
         forceMoveTo = true;
     }
+
+    SkPoint lonePt;
+    if (arc_is_lone_point(oval, startAngle, sweepAngle, &lonePt)) {
+        forceMoveTo ? this->moveTo(lonePt) : this->lineTo(lonePt);
+        return;
+    }
+
+    SkVector startV, stopV;
+    SkRotationDirection dir;
+    angles_to_unit_vectors(startAngle, sweepAngle, &startV, &stopV, &dir);
+
+#ifdef SK_SUPPORT_LEGACY_ARCTO_QUADS
+    SkPoint pts[kSkBuildQuadArcStorage];
+    int count = build_arc_points(oval, startV, stopV, dir, pts);
+    SkASSERT((count & 1) == 1);
+
     this->incReserve(count);
     forceMoveTo ? this->moveTo(pts[0]) : this->lineTo(pts[0]);
     for (int i = 1; i < count; i += 2) {
         this->quadTo(pts[i], pts[i+1]);
     }
+#else
+    SkPoint singlePt;
+    SkConic conics[SkConic::kMaxConicsForArc];
+    int count = build_arc_conics(oval, startV, stopV, dir, conics, &singlePt);
+    if (count) {
+        this->incReserve(count * 2 + 1);
+        const SkPoint& pt = conics[0].fPts[0];
+        forceMoveTo ? this->moveTo(pt) : this->lineTo(pt);
+        for (int i = 0; i < count; ++i) {
+            this->conicTo(conics[i].fPts[1], conics[i].fPts[2], conics[i].fW);
+        }
+    } else {
+        forceMoveTo ? this->moveTo(singlePt) : this->lineTo(singlePt);
+    }
+#endif
 }
 
 void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle) {
@@ -1332,35 +1166,16 @@ void SkPath::addArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle
 
     if (sweepAngle >= kFullCircleAngle || sweepAngle <= -kFullCircleAngle) {
         this->addOval(oval, sweepAngle > 0 ? kCW_Direction : kCCW_Direction);
-        return;
+    } else {
+        this->arcTo(oval, startAngle, sweepAngle, true);
     }
-
-    SkPoint pts[kSkBuildQuadArcStorage];
-    int count = build_arc_points(oval, startAngle, sweepAngle, pts);
-
-    SkDEBUGCODE(this->validate();)
-    SkASSERT(count & 1);
-
-    fLastMoveToIndex = fPathRef->countPoints();
-
-    SkPathRef::Editor ed(&fPathRef, 1+(count-1)/2, count);
-
-    ed.growForVerb(kMove_Verb)->set(pts[0].fX, pts[0].fY);
-    if (count > 1) {
-        SkPoint* p = ed.growForRepeatedVerb(kQuad_Verb, (count-1)/2);
-        memcpy(p, &pts[1], (count-1) * sizeof(SkPoint));
-    }
-
-    DIRTY_AFTER_EDIT;
-    SkDEBUGCODE(this->validate();)
 }
 
 /*
     Need to handle the case when the angle is sharp, and our computed end-points
     for the arc go behind pt1 and/or p2...
 */
-void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2,
-                   SkScalar radius) {
+void SkPath::arcTo(SkScalar x1, SkScalar y1, SkScalar x2, SkScalar y2, SkScalar radius) {
     if (radius == 0) {
         this->lineTo(x1, y1);
         return;
@@ -1801,6 +1616,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
     // forward before the next move is seen
     const uint8_t* lastMoveVerb = 0;
     const SkPoint* lastMovePt = 0;
+    const SkScalar* lastMoveWeight = NULL;
     SkPoint lastPt = fLastPt;
     while (fVerbs != fVerbStop) {
         unsigned verb = *(fVerbs - 1); // fVerbs is one beyond the current verb
@@ -1809,6 +1625,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                 // Keep a record of this most recent move
                 lastMoveVerb = fVerbs;
                 lastMovePt = fPts;
+                lastMoveWeight = fConicWeights;
                 lastPt = fPts[0];
                 fVerbs--;
                 fPts++;
@@ -1829,6 +1646,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                     if (lastMoveVerb) {
                         fVerbs = lastMoveVerb;
                         fPts = lastMovePt;
+                        fConicWeights = lastMoveWeight;
                         return;
                     }
                     return;
@@ -1844,6 +1662,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                     if (lastMoveVerb) {
                         fVerbs = lastMoveVerb;
                         fPts = lastMovePt;
+                        fConicWeights = lastMoveWeight;
                         return;
                     }
                     return;
@@ -1859,6 +1678,7 @@ void SkPath::Iter::consumeDegenerateSegments() {
                     if (lastMoveVerb) {
                         fVerbs = lastMoveVerb;
                         fPts = lastMovePt;
+                        fConicWeights = lastMoveWeight;
                         return;
                     }
                     return;
@@ -2234,29 +2054,10 @@ static bool almost_equal(SkScalar compA, SkScalar compB) {
     return aBits < bBits + epsilon && bBits < aBits + epsilon;
 }
 
-static DirChange direction_change(const SkPoint& lastPt, const SkVector& curPt,
-                                  const SkVector& lastVec, const SkVector& curVec) {
-    SkScalar cross = SkPoint::CrossProduct(lastVec, curVec);
-
-    SkScalar smallest = SkTMin(curPt.fX, SkTMin(curPt.fY, SkTMin(lastPt.fX, lastPt.fY)));
-    SkScalar largest = SkTMax(curPt.fX, SkTMax(curPt.fY, SkTMax(lastPt.fX, lastPt.fY)));
-    largest = SkTMax(largest, -smallest);
-
-    if (!almost_equal(largest, largest + cross)) {
-        int sign = SkScalarSignAsInt(cross);
-        if (sign) {
-            return (1 == sign) ? kRight_DirChange : kLeft_DirChange;
-        }
-    }
-
-    if (!SkScalarNearlyZero(lastVec.lengthSqd(), SK_ScalarNearlyZero*SK_ScalarNearlyZero) &&
-        !SkScalarNearlyZero(curVec.lengthSqd(), SK_ScalarNearlyZero*SK_ScalarNearlyZero) &&
-        lastVec.dot(curVec) < 0.0f) {
-        return kBackwards_DirChange;
-    }
-
-    return kStraight_DirChange;
+static bool approximately_zero_when_compared_to(double x, double y) {
+    return x == 0 || fabs(x) < fabs(y * FLT_EPSILON);
 }
+
 
 // only valid for a single contour
 struct Convexicator {
@@ -2264,7 +2065,8 @@ struct Convexicator {
     : fPtCount(0)
     , fConvexity(SkPath::kConvex_Convexity)
     , fDirection(SkPath::kUnknown_Direction)
-    , fIsFinite(true) {
+    , fIsFinite(true)
+    , fIsCurve(false) {
         fExpectedDir = kInvalid_DirChange;
         // warnings
         fLastPt.set(0, 0);
@@ -2295,6 +2097,7 @@ struct Convexicator {
             if (!SkScalarIsFinite(lengthSqd)) {
                 fIsFinite = false;
             } else if (!SkScalarNearlyZero(lengthSqd, SK_ScalarNearlyZero*SK_ScalarNearlyZero)) {
+                fPriorPt = fLastPt;
                 fLastPt = fCurrPt;
                 fCurrPt = pt;
                 if (++fPtCount == 2) {
@@ -2324,14 +2127,56 @@ struct Convexicator {
         }
     }
 
+    DirChange directionChange(const SkVector& curVec) {
+        SkScalar cross = SkPoint::CrossProduct(fLastVec, curVec);
+
+        SkScalar smallest = SkTMin(fCurrPt.fX, SkTMin(fCurrPt.fY, SkTMin(fLastPt.fX, fLastPt.fY)));
+        SkScalar largest = SkTMax(fCurrPt.fX, SkTMax(fCurrPt.fY, SkTMax(fLastPt.fX, fLastPt.fY)));
+        largest = SkTMax(largest, -smallest);
+
+        if (!almost_equal(largest, largest + cross)) {
+            int sign = SkScalarSignAsInt(cross);
+            if (sign) {
+                return (1 == sign) ? kRight_DirChange : kLeft_DirChange;
+            }
+        }
+
+        if (cross) {
+            double dLastVecX = SkScalarToDouble(fLastPt.fX) - SkScalarToDouble(fPriorPt.fX);
+            double dLastVecY = SkScalarToDouble(fLastPt.fY) - SkScalarToDouble(fPriorPt.fY);
+            double dCurrVecX = SkScalarToDouble(fCurrPt.fX) - SkScalarToDouble(fLastPt.fX);
+            double dCurrVecY = SkScalarToDouble(fCurrPt.fY) - SkScalarToDouble(fLastPt.fY);
+            double dCross = dLastVecX * dCurrVecY - dLastVecY * dCurrVecX;
+            if (!approximately_zero_when_compared_to(dCross, SkScalarToDouble(largest))) {
+                int sign = SkScalarSignAsInt(SkDoubleToScalar(dCross));
+                if (sign) {
+                    return (1 == sign) ? kRight_DirChange : kLeft_DirChange;
+                }
+            }
+        }
+
+        if (!SkScalarNearlyZero(fLastVec.lengthSqd(), SK_ScalarNearlyZero*SK_ScalarNearlyZero) &&
+            !SkScalarNearlyZero(curVec.lengthSqd(), SK_ScalarNearlyZero*SK_ScalarNearlyZero) &&
+            fLastVec.dot(curVec) < 0.0f) {
+            return kBackwards_DirChange;
+        }
+
+        return kStraight_DirChange;
+    }
+
+
     bool isFinite() const {
         return fIsFinite;
+    }
+
+    void setCurve(bool isCurve) {
+        fIsCurve = isCurve;
     }
 
 private:
     void addVec(const SkVector& vec) {
         SkASSERT(vec.fX || vec.fY);
-        DirChange dir = direction_change(fLastPt, fCurrPt, fLastVec, vec);
+        DirChange dir = this->directionChange(vec);
         switch (dir) {
             case kLeft_DirChange:       // fall through
             case kRight_DirChange:
@@ -2348,6 +2193,10 @@ private:
             case kStraight_DirChange:
                 break;
             case kBackwards_DirChange:
+                if (fIsCurve) {
+                    fConvexity = SkPath::kConcave_Convexity;
+                    fDirection = SkPath::kUnknown_Direction;
+                }
                 fLastVec = vec;
                 break;
             case kInvalid_DirChange:
@@ -2356,6 +2205,7 @@ private:
         }
     }
 
+    SkPoint             fPriorPt;
     SkPoint             fLastPt;
     SkPoint             fCurrPt;
     // fLastVec does not necessarily start at fLastPt. We only advance it when the cross product
@@ -2367,6 +2217,7 @@ private:
     SkPath::Direction   fDirection;
     int                 fDx, fDy, fSx, fSy;
     bool                fIsFinite;
+    bool                fIsCurve;
 };
 
 SkPath::Convexity SkPath::internalGetConvexity() const {
@@ -2390,13 +2241,23 @@ SkPath::Convexity SkPath::internalGetConvexity() const {
                     return kConcave_Convexity;
                 }
                 pts[1] = pts[0];
+                // fall through
+            case kLine_Verb:
                 count = 1;
+                state.setCurve(false);
                 break;
-            case kLine_Verb: count = 1; break;
-            case kQuad_Verb: count = 2; break;
-            case kConic_Verb: count = 2; break;
-            case kCubic_Verb: count = 3; break;
+            case kQuad_Verb:
+                // fall through
+            case kConic_Verb:
+                // fall through
+            case kCubic_Verb:
+                count = 2 + (kCubic_Verb == verb);
+                // As an additional enhancement, this could set curve true only
+                // if the curve is nonlinear
+                state.setCurve(true);
+                break;
             case kClose_Verb:
+                state.setCurve(false);
                 state.close();
                 count = 0;
                 break;

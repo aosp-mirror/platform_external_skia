@@ -25,17 +25,13 @@ public:
 protected:
     void onOnceBeforeDraw() SK_OVERRIDE {
         SkString filename = GetResourcePath("/Funkster.ttf");
-        SkAutoTUnref<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
+        SkAutoTDelete<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
         if (!stream->isValid()) {
             SkDebugf("Could not find Funkster.ttf, please set --resourcePath correctly.\n");
             return;
         }
 
-        fTypeface = SkTypeface::CreateFromStream(stream);
-    }
-
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kGPUOnly_Flag;
+        fTypeface = SkTypeface::CreateFromStream(stream.detach());
     }
 
     SkString onShortName() SK_OVERRIDE {
@@ -54,7 +50,7 @@ protected:
         canvas->translate(-px, -py);
     }
 
-    virtual void onDraw(SkCanvas* inputCanvas) {
+    virtual void onDraw(SkCanvas* inputCanvas) SK_OVERRIDE {
 #ifdef SK_BUILD_FOR_ANDROID
         SkScalar textSizes[] = { 9.0f, 9.0f*2.0f, 9.0f*5.0f, 9.0f*2.0f*5.0f };
 #else
@@ -68,7 +64,8 @@ protected:
         SkImageInfo info = SkImageInfo::MakeN32Premul(onISize());
         SkSurfaceProps props(SkSurfaceProps::kUseDistanceFieldFonts_Flag,
                              SkSurfaceProps::kLegacyFontHost_InitType);
-        SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(ctx, info, 0, &props));
+        SkAutoTUnref<SkSurface> surface(SkSurface::NewRenderTarget(ctx, SkSurface::kNo_Budgeted,
+                                                                   info, 0, &props));
         SkCanvas* canvas = surface.get() ? surface->getCanvas() : inputCanvas;
         // init our new canvas with the old canvas's matrix
         canvas->setMatrix(inputCanvas->getTotalMatrix());

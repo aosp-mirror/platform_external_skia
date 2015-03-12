@@ -68,7 +68,6 @@ GrGLPathRendering::GrGLPathRendering(GrGLGpu* gpu)
         NULL != glInterface->fFunctions.fStencilThenCoverFillPathInstanced &&
         NULL != glInterface->fFunctions.fStencilThenCoverStrokePathInstanced;
     fCaps.fragmentInputGenSupport =
-        kGLES_GrGLStandard == glInterface->fStandard &&
         NULL != glInterface->fFunctions.fProgramPathFragmentInputGen;
     fCaps.glyphLoadingSupport =
         NULL != glInterface->fFunctions.fPathMemoryGlyphIndexArray;
@@ -89,7 +88,8 @@ void GrGLPathRendering::resetContext() {
     fHWProjectionMatrixState.invalidate();
     // we don't use the model view matrix.
     GrGLenum matrixMode =
-        fGpu->glStandard() == kGLES_GrGLStandard ? GR_GL_PATH_MODELVIEW : GR_GL_MODELVIEW;
+            fGpu->glCaps().nvprSupport() == GrGLCaps::kNormal_NvprSupport ? GR_GL_PATH_MODELVIEW :
+                                                                            GR_GL_MODELVIEW;
     GL_CALL(MatrixLoadIdentity(matrixMode));
 
     if (!caps().fragmentInputGenSupport) {
@@ -125,7 +125,7 @@ GrPathRange* GrGLPathRendering::createGlyphs(const SkTypeface* typeface,
     }
 
     int faceIndex;
-    SkAutoTUnref<SkStream> fontStream(typeface->openStream(&faceIndex));
+    SkAutoTDelete<SkStream> fontStream(typeface->openStream(&faceIndex));
 
     const size_t fontDataLength = fontStream->getLength();
     if (0 == fontDataLength) {
@@ -357,7 +357,8 @@ void GrGLPathRendering::setProjectionMatrix(const SkMatrix& matrix,
     GrGLfloat glMatrix[4 * 4];
     fHWProjectionMatrixState.getRTAdjustedGLMatrix<4>(glMatrix);
      GrGLenum matrixMode =
-         fGpu->glStandard() == kGLES_GrGLStandard ? GR_GL_PATH_PROJECTION : GR_GL_PROJECTION;
+             fGpu->glCaps().nvprSupport() == GrGLCaps::kNormal_NvprSupport ? GR_GL_PATH_PROJECTION :
+                                                                             GR_GL_PROJECTION;
      GL_CALL(MatrixLoadf(matrixMode, glMatrix));
 }
 

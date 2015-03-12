@@ -10,7 +10,8 @@
 #include "SkMultiPictureDraw.h"
 #include "SkSurface.h"
 
-DEFINE_int32(benchTile, 256, "Tile dimension used for SKP playback.");
+DEFINE_int32(benchTileW, 1600, "Tile width  used for SKP playback.");
+DEFINE_int32(benchTileH, 512, "Tile height used for SKP playback.");
 
 SKPBench::SKPBench(const char* name, const SkPicture* pic, const SkIRect& clip, SkScalar scale,
                    bool useMultiPictureDraw)
@@ -19,7 +20,7 @@ SKPBench::SKPBench(const char* name, const SkPicture* pic, const SkIRect& clip, 
     , fScale(scale)
     , fName(name)
     , fUseMultiPictureDraw(useMultiPictureDraw) {
-    fUniqueName.printf("%s_%.2g", name, scale);  // Scale makes this unqiue for skiaperf.com traces.
+    fUniqueName.printf("%s_%.2g", name, scale);  // Scale makes this unqiue for perf.skia.org traces.
     if (useMultiPictureDraw) {
         fUniqueName.append("_mpd");
     }
@@ -43,17 +44,20 @@ void SKPBench::onPerCanvasPreDraw(SkCanvas* canvas) {
     SkIRect bounds;
     SkAssertResult(canvas->getClipDeviceBounds(&bounds));
 
-    int xTiles = SkScalarCeilToInt(bounds.width()  / SkIntToScalar(FLAGS_benchTile));
-    int yTiles = SkScalarCeilToInt(bounds.height() / SkIntToScalar(FLAGS_benchTile));
+    int tileW = SkTMin(FLAGS_benchTileW, bounds.width());
+    int tileH = SkTMin(FLAGS_benchTileH, bounds.height());
+
+    int xTiles = SkScalarCeilToInt(bounds.width()  / SkIntToScalar(tileW));
+    int yTiles = SkScalarCeilToInt(bounds.height() / SkIntToScalar(tileH));
 
     fSurfaces.setReserve(xTiles * yTiles);
     fTileRects.setReserve(xTiles * yTiles);
 
-    SkImageInfo ii = canvas->imageInfo().makeWH(FLAGS_benchTile, FLAGS_benchTile);
+    SkImageInfo ii = canvas->imageInfo().makeWH(tileW, tileH);
 
-    for (int y = bounds.fTop; y < bounds.fBottom; y += FLAGS_benchTile) {
-        for (int x = bounds.fLeft; x < bounds.fRight; x += FLAGS_benchTile) {
-            const SkIRect tileRect = SkIRect::MakeXYWH(x, y, FLAGS_benchTile, FLAGS_benchTile);
+    for (int y = bounds.fTop; y < bounds.fBottom; y += tileH) {
+        for (int x = bounds.fLeft; x < bounds.fRight; x += tileW) {
+            const SkIRect tileRect = SkIRect::MakeXYWH(x, y, tileW, tileH);
             *fTileRects.append() = tileRect;
             *fSurfaces.push() = canvas->newSurface(ii);
 

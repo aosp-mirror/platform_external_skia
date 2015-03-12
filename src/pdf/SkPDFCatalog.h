@@ -12,9 +12,7 @@
 
 #include <sys/types.h>
 
-#include "SkPDFDocument.h"
 #include "SkPDFTypes.h"
-#include "SkRefCnt.h"
 #include "SkTDArray.h"
 
 /** \class SkPDFCatalog
@@ -26,7 +24,7 @@ class SkPDFCatalog {
 public:
     /** Create a PDF catalog.
      */
-    explicit SkPDFCatalog(SkPDFDocument::Flags flags);
+    SkPDFCatalog();
     ~SkPDFCatalog();
 
     /** Add the passed object to the catalog.  Refs obj.
@@ -37,28 +35,16 @@ public:
     SkPDFObject* addObject(SkPDFObject* obj, bool onFirstPage);
 
     /** Inform the catalog of the object's position in the final stream.
-     *  The object should already have been added to the catalog.  Returns
-     *  the object's size.
+     *  The object should already have been added to the catalog.
      *  @param obj         The object to add.
      *  @param offset      The byte offset in the output stream of this object.
      */
-    size_t setFileOffset(SkPDFObject* obj, off_t offset);
+    void setFileOffset(SkPDFObject* obj, off_t offset);
 
-    /** Output the object number for the passed object.
+    /** Get the object number for the passed object.
      *  @param obj         The object of interest.
-     *  @param stream      The writable output stream to send the output to.
      */
-    void emitObjectNumber(SkWStream* stream, SkPDFObject* obj);
-
-    /** Return the number of bytes that would be emitted for the passed
-     *  object's object number.
-     *  @param obj         The object of interest
-     */
-    size_t getObjectNumberSize(SkPDFObject* obj);
-
-    /** Return the document flags in effect for this catalog/document.
-     */
-    SkPDFDocument::Flags getDocumentFlags() const { return fDocumentFlags; }
+    int32_t getObjectNumber(SkPDFObject* obj);
 
     /** Output the cross reference table for objects in the catalog.
      *  Returns the total number of objects.
@@ -76,17 +62,6 @@ public:
      *  there is none, return the passed object.
      */
     SkPDFObject* getSubstituteObject(SkPDFObject* object);
-
-    /** Set file offsets for the resources of substitute objects.
-     *  @param fileOffset Accumulated offset of current document.
-     *  @param firstPage  Indicate whether this is for the first page only.
-     *  @return           Total size of resources of substitute objects.
-     */
-    off_t setSubstituteResourcesOffsets(off_t fileOffset, bool firstPage);
-
-    /** Emit the resources of substitute objects.
-     */
-    void emitSubstituteResources(SkWStream* stream, bool firstPage);
 
 private:
     struct Rec {
@@ -111,7 +86,7 @@ private:
     };
 
     // TODO(vandebo): Make this a hash if it's a performance problem.
-    SkTDArray<struct Rec> fCatalog;
+    SkTDArray<Rec> fCatalog;
 
     // TODO(arthurhsu): Make this a hash if it's a performance problem.
     SkTDArray<SubstituteMapping> fSubstituteMap;
@@ -125,13 +100,9 @@ private:
     // Next object number to assign on the first page.
     uint32_t fNextFirstPageObjNum;
 
-    SkPDFDocument::Flags fDocumentFlags;
-
-    int findObjectIndex(SkPDFObject* obj) const;
+    int findObjectIndex(SkPDFObject* obj);
 
     int assignObjNum(SkPDFObject* obj);
-
-    SkTSet<SkPDFObject*>* getSubstituteList(bool firstPage);
 };
 
 #endif

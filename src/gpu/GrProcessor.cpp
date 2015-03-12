@@ -8,12 +8,11 @@
 #include "GrProcessor.h"
 #include "GrContext.h"
 #include "GrCoordTransform.h"
-#include "GrGeometryData.h"
 #include "GrGeometryProcessor.h"
 #include "GrInvariantOutput.h"
 #include "GrMemoryPool.h"
 #include "GrXferProcessor.h"
-#include "SkTLS.h"
+#include "SkMutex.h"
 
 #if SK_ALLOW_STATIC_GLOBAL_INITIALIZERS
 
@@ -52,7 +51,7 @@ GrProcessorTestFactory<GrGeometryProcessor>::GetFactories() {
  */
 static const int kFPFactoryCount = 37;
 static const int kGPFactoryCount = 14;
-static const int kXPFactoryCount = 3;
+static const int kXPFactoryCount = 5;
 
 template<>
 void GrProcessorTestFactory<GrFragmentProcessor>::VerifyFactoryCount() {
@@ -97,24 +96,27 @@ const SkMatrix& TestMatrix(SkRandom* random) {
 }
 }
 
-class GrProcessor_Globals {
+
+// We use a global pool protected by a mutex. Chrome may use the same GrContext on different
+// threads. The GrContext is not used concurrently on different threads and there is a memory
+// barrier between accesses of a context on different threads. Also, there may be multiple
+// GrContexts and those contexts may be in use concurrently on different threads.
+namespace {
+SK_DECLARE_STATIC_MUTEX(gProcessorPoolMutex);
+class MemoryPoolAccessor {
 public:
-    static GrMemoryPool* GetTLS() {
-        return (GrMemoryPool*)SkTLS::Get(CreateTLS, DeleteTLS);
-    }
+    MemoryPoolAccessor() { gProcessorPoolMutex.acquire(); }
 
-private:
-    static void* CreateTLS() {
-        return SkNEW_ARGS(GrMemoryPool, (4096, 4096));
-    }
+    ~MemoryPoolAccessor() { gProcessorPoolMutex.release(); }
 
-    static void DeleteTLS(void* pool) {
-        SkDELETE(reinterpret_cast<GrMemoryPool*>(pool));
+    GrMemoryPool* pool() const {
+        static GrMemoryPool gPool(4096, 4096);
+        return &gPool;
     }
 };
+}
 
-int32_t GrProcessor::gCurrProcessorClassID =
-        GrProcessor::kIllegalProcessorClassID;
+int32_t GrProcessor::gCurrProcessorClassID = GrProcessor::kIllegalProcessorClassID;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -126,11 +128,11 @@ void GrProcessor::addTextureAccess(const GrTextureAccess* access) {
 }
 
 void* GrProcessor::operator new(size_t size) {
-    return GrProcessor_Globals::GetTLS()->allocate(size);
+    return MemoryPoolAccessor().pool()->allocate(size);
 }
 
 void GrProcessor::operator delete(void* target) {
-    GrProcessor_Globals::GetTLS()->release(target);
+    return MemoryPoolAccessor().pool()->release(target);
 }
 
 bool GrProcessor::hasSameTextureAccesses(const GrProcessor& that) const {
@@ -168,19 +170,6 @@ bool GrFragmentProcessor::hasSameTransforms(const GrFragmentProcessor& that) con
 
 void GrFragmentProcessor::computeInvariantOutput(GrInvariantOutput* inout) const {
     this->onComputeInvariantOutput(inout);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
- * GrGeometryData shares the same pool so it lives in this file too
- */
-void* GrGeometryData::operator new(size_t size) {
-    return GrProcessor_Globals::GetTLS()->allocate(size);
-}
-
-void GrGeometryData::operator delete(void* target) {
-    GrProcessor_Globals::GetTLS()->release(target);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

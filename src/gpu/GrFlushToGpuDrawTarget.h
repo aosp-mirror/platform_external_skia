@@ -46,7 +46,10 @@ protected:
     GrGpu* getGpu() { return fGpu; }
     const GrGpu* getGpu() const{ return fGpu; }
 
-private:
+    GrVertexBufferAllocPool* getVertexAllocPool() { return fVertexPool; }
+    GrIndexBufferAllocPool* getIndexAllocPool() { return fIndexPool; }
+
+    // TODO all of this goes away when batch is everywhere
     enum {
         kGeoPoolStatePreAllocCnt = 4,
     };
@@ -64,7 +67,13 @@ private:
     };
 
     typedef SkSTArray<kGeoPoolStatePreAllocCnt, GeometryPoolState> GeoPoolStateStack;
+    const GeoPoolStateStack& getGeoPoolStateStack() const { return fGeoPoolStateStack; }
 
+    void willReserveVertexAndIndexSpace(int vertexCount,
+                                        size_t vertexStride,
+                                        int indexCount) SK_OVERRIDE;
+
+private:
     virtual void onReset() = 0;
 
     virtual void onFlush() = 0;
@@ -76,9 +85,6 @@ private:
     void releaseReservedIndexSpace() SK_OVERRIDE;
     void geometrySourceWillPush() SK_OVERRIDE;
     void geometrySourceWillPop(const GeometrySrcState& restoredState) SK_OVERRIDE;
-    void willReserveVertexAndIndexSpace(int vertexCount,
-                                        size_t vertexStride,
-                                        int indexCount) SK_OVERRIDE;
     bool onCanCopySurface(const GrSurface* dst,
                           const GrSurface* src,
                           const SkIRect& srcRect,

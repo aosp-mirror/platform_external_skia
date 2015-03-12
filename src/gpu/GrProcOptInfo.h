@@ -11,6 +11,7 @@
 #include "GrColor.h"
 #include "GrInvariantOutput.h"
 
+class GrBatch;
 class GrFragmentStage;
 class GrFragmentProcessor;
 class GrPrimitiveProcessor;
@@ -28,12 +29,15 @@ public:
         , fFirstEffectStageIndex(0)
         , fInputColorIsUsed(true)
         , fInputColor(0)
-        , fReadsDst(false)
         , fReadsFragPosition(false) {}
 
     void calcWithInitialValues(const GrFragmentStage*, int stageCount, GrColor startColor,
                                GrColorComponentFlags flags, bool areCoverageStages);
 
+    void calcColorWithBatch(const GrBatch*, const GrFragmentStage*, int stagecount);
+    void calcCoverageWithBatch(const GrBatch*, const GrFragmentStage*, int stagecount);
+
+    // TODO delete these when batch is everywhere
     void calcColorWithPrimProc(const GrPrimitiveProcessor*, const GrFragmentStage*, int stagecount);
     void calcCoverageWithPrimProc(const GrPrimitiveProcessor*, const GrFragmentStage*,
                                   int stagecount);
@@ -41,6 +45,7 @@ public:
     bool isSolidWhite() const { return fInOut.isSolidWhite(); }
     bool isOpaque() const { return fInOut.isOpaque(); }
     bool isSingleComponent() const { return fInOut.isSingleComponent(); }
+    bool allStagesMultiplyInput() const { return fInOut.allStagesMulInput(); }
 
     // TODO: Once texture pixel configs quaries are updated, we no longer need this function.
     // For now this function will correctly tell us if we are using LCD text or not and should only
@@ -75,11 +80,6 @@ public:
     GrColor inputColorToEffectiveStage() const { return fInputColor; }
 
     /**
-     * Returns true if any of the stages preserved by GrProcOptInfo read the dst color.
-     */
-    bool readsDst() const { return fReadsDst; }
-
-    /**
      * Returns true if any of the stages preserved by GrProcOptInfo read the frag position.
      */
     bool readsFragPosition() const { return fReadsFragPosition; }
@@ -91,7 +91,6 @@ private:
     int fFirstEffectStageIndex;
     bool fInputColorIsUsed;
     GrColor fInputColor;
-    bool fReadsDst;
     bool fReadsFragPosition;
 };
 

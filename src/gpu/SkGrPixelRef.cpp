@@ -77,10 +77,10 @@ static SkGrPixelRef* copy_to_new_texture_pixelref(GrTexture* texture, SkColorTyp
         desc.fHeight = subset->height();
         srcRect = *subset;
     }
-    desc.fFlags = kRenderTarget_GrSurfaceFlag | kNoStencil_GrSurfaceFlag;
+    desc.fFlags = kRenderTarget_GrSurfaceFlag;
     desc.fConfig = SkImageInfo2GrPixelConfig(dstCT, kPremul_SkAlphaType, dstPT);
 
-    GrTexture* dst = context->createUncachedTexture(desc, NULL, 0);
+    GrTexture* dst = context->createTexture(desc, false, NULL, 0);
     if (NULL == dst) {
         return NULL;
     }
@@ -189,7 +189,7 @@ bool SkGrPixelRef::onReadPixels(SkBitmap* dst, const SkIRect* subset) {
         // If we are here, pixels were read correctly from the surface.
         cachedBitmap.setImmutable();
         //Add to the cache
-        SkBitmapCache::Add(this->getGenerationID(), bounds, cachedBitmap);
+        SkBitmapCache::Add(this, bounds, cachedBitmap);
 
         dst->swap(cachedBitmap);
     }

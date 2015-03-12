@@ -1,24 +1,34 @@
-
 /*
  * Copyright 2012 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SampleCode.h"
+#include "SkAnimTimer.h"
 #include "SkBlurMaskFilter.h"
 #include "SkColorPriv.h"
 #include "SkCanvas.h"
 #include "SkRandom.h"
 
+SkScalar get_anim_sin(double secs, SkScalar amplitude, SkScalar periodInSec, SkScalar phaseInSec) {
+    if (!periodInSec) {
+        return 0;
+    }
+    double t = secs + phaseInSec;
+    t *= SkScalarToFloat(2 * SK_ScalarPI) / periodInSec;
+    amplitude = SK_ScalarHalf * amplitude;
+    return amplitude * SkDoubleToScalar(sin(t)) + amplitude;
+}
+
 class AnimBlurView : public SampleView {
 public:
-    AnimBlurView() {
-    }
+    AnimBlurView() : fBlurSigma(0), fCircleRadius(100) {}
 
 protected:
     // overrides from SkEventSink
-    virtual bool onQuery(SkEvent* evt) {
+    bool onQuery(SkEvent* evt) SK_OVERRIDE {
         if (SampleCode::TitleQ(*evt)) {
             SampleCode::TitleR(evt, "AnimBlur");
             return true;
@@ -26,17 +36,7 @@ protected:
         return this->INHERITED::onQuery(evt);
     }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
-
-        SkScalar blurSigma = SampleCode::GetAnimSinScalar(100 * SK_Scalar1,
-                                                          4 * SK_Scalar1,
-                                                          5 * SK_Scalar1);
-
-        SkScalar circleRadius = 3 * SK_Scalar1 +
-                                SampleCode::GetAnimSinScalar(150 * SK_Scalar1,
-                                                             25 * SK_Scalar1,
-                                                             3 * SK_Scalar1);
-
+    void onDrawContent(SkCanvas* canvas) SK_OVERRIDE {
         static const SkBlurStyle gStyles[] = {
             kNormal_SkBlurStyle,
             kInner_SkBlurStyle,
@@ -48,20 +48,27 @@ protected:
         for (size_t i = 0; i < SK_ARRAY_COUNT(gStyles); ++i) {
             SkMaskFilter* mf = SkBlurMaskFilter::Create(
                                        gStyles[i],
-                                       blurSigma,
+                                       fBlurSigma,
                                        SkBlurMaskFilter::kHighQuality_BlurFlag);
             SkPaint paint;
             SkSafeUnref(paint.setMaskFilter(mf));
             paint.setColor(random.nextU() | 0xff000000);
             canvas->drawCircle(200 * SK_Scalar1 + 400 * (i % 2) * SK_Scalar1,
                                200 * SK_Scalar1 + i / 2 * 400 * SK_Scalar1,
-                               circleRadius, paint);
+                               fCircleRadius, paint);
         }
-        this->inval(NULL);
+    }
+
+    bool onAnimate(const SkAnimTimer& timer) SK_OVERRIDE {
+        fBlurSigma = get_anim_sin(timer.secs(), 100, 4, 5);
+        fCircleRadius = 3 + get_anim_sin(timer.secs(), 150, 25, 3);
+        return true;
     }
 
 private:
-    typedef SkView INHERITED;
+    SkScalar fBlurSigma, fCircleRadius;
+
+    typedef SampleView INHERITED;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -1,10 +1,10 @@
-
 /*
  * Copyright 2011 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+
 #include "SkLineClipper.h"
 
 template <typename T> T pin_unsorted(T value, T limit0, T limit1) {
@@ -172,8 +172,9 @@ static void sect_with_horizontal_test_for_pin_results() {
 }
 #endif
 
-int SkLineClipper::ClipLine(const SkPoint pts[], const SkRect& clip,
-                            SkPoint lines[]) {
+int SkLineClipper::ClipLine(const SkPoint pts[], const SkRect& clip, SkPoint lines[],
+                            bool canCullToTheRight) {
+
 #ifdef SK_DEBUG
     {
         static bool gOnce;
@@ -241,6 +242,9 @@ int SkLineClipper::ClipLine(const SkPoint pts[], const SkRect& clip,
         result = tmp;
         reverse = false;
     } else if (tmp[index0].fX >= clip.fRight) {    // wholly to the right
+        if (canCullToTheRight) {
+            return 0;
+        }
         tmp[0].fX = tmp[1].fX = clip.fRight;
         result = tmp;
         reverse = false;

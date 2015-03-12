@@ -10,7 +10,7 @@
 
 #include "GrAtlas.h"
 #include "GrContext.h"
-#include "GrDrawState.h"
+#include "GrPipelineBuilder.h"
 #include "GrSurfacePriv.h"
 #include "GrSWMaskHelper.h"
 #include "GrTexturePriv.h"
@@ -66,7 +66,7 @@ GrAADistanceFieldPathRenderer::~GrAADistanceFieldPathRenderer() {
 
 ////////////////////////////////////////////////////////////////////////////////
 bool GrAADistanceFieldPathRenderer::canDrawPath(const GrDrawTarget* target,
-                                                const GrDrawState* drawState,
+                                                const GrPipelineBuilder* pipelineBuilder,
                                                 const SkMatrix& viewMatrix,
                                                 const SkPath& path,
                                                 const SkStrokeRec& stroke,
@@ -95,7 +95,7 @@ bool GrAADistanceFieldPathRenderer::canDrawPath(const GrDrawTarget* target,
 
 GrPathRenderer::StencilSupport
 GrAADistanceFieldPathRenderer::onGetStencilSupport(const GrDrawTarget*,
-                                                   const GrDrawState*,
+                                                   const GrPipelineBuilder*,
                                                    const SkPath&,
                                                    const SkStrokeRec&) const {
     return GrPathRenderer::kNoSupport_StencilSupport;
@@ -104,7 +104,7 @@ GrAADistanceFieldPathRenderer::onGetStencilSupport(const GrDrawTarget*,
 ////////////////////////////////////////////////////////////////////////////////
 
 bool GrAADistanceFieldPathRenderer::onDrawPath(GrDrawTarget* target,
-                                               GrDrawState* drawState,
+                                               GrPipelineBuilder* pipelineBuilder,
                                                GrColor color,
                                                const SkMatrix& viewMatrix,
                                                const SkPath& path,
@@ -144,11 +144,45 @@ bool GrAADistanceFieldPathRenderer::onDrawPath(GrDrawTarget* target,
     }
 
     // use signed distance field to render
-    return this->internalDrawPath(target, drawState, color, viewMatrix, path, pathData);
+    return this->internalDrawPath(target, pipelineBuilder, color, viewMatrix, path, pathData);
 }
 
 // padding around path bounds to allow for antialiased pixels
 const SkScalar kAntiAliasPad = 1.0f;
+
+inline bool GrAADistanceFieldPathRenderer::uploadPath(GrPlot** plot, SkIPoint16* atlasLocation,
+                                                      int width, int height, void* dfStorage) {
+    *plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage, atlasLocation);
+
+    // if atlas full
+    if (NULL == *plot) {
+        if (this->freeUnusedPlot()) {
+            *plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage, atlasLocation);
+            if (*plot) {
+                return true;
+            }
+        }
+
+        if (c_DumpPathCache) {
+#ifdef SK_DEVELOPER
+            GrTexture* texture = fAtlas->getTexture();
+            texture->surfacePriv().savePixels("pathcache.png");
+#endif
+        }
+
+        // before we purge the cache, we must flush any accumulated draws
+        fContext->flush();
+
+        if (this->freeUnusedPlot()) {
+            *plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage, atlasLocation);
+            if (*plot) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return true;
+}
 
 GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathToAtlas(
                                                                         const SkPath& path,
@@ -209,42 +243,12 @@ GrAADistanceFieldPathRenderer::PathData* GrAADistanceFieldPathRenderer::addPathT
     helper.toSDF((unsigned char*) dfStorage.get());
     
     // add to atlas
+    GrPlot* plot;
     SkIPoint16  atlasLocation;
-    GrPlot* plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage.get(),
-                                      &atlasLocation);
-    
-    // if atlas full
-    if (NULL == plot) {
-        if (this->freeUnusedPlot()) {
-            plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage.get(),
-                                      &atlasLocation);
-            if (plot) {
-                goto HAS_ATLAS;
-            }
-        }
-    
-        if (c_DumpPathCache) {
-#ifdef SK_DEVELOPER
-            GrTexture* texture = fAtlas->getTexture();
-            texture->surfacePriv().savePixels("pathcache.png");
-#endif
-        }
-        
-        // before we purge the cache, we must flush any accumulated draws
-        fContext->flush();
-        
-        if (this->freeUnusedPlot()) {
-            plot = fAtlas->addToAtlas(&fPlotUsage, width, height, dfStorage.get(),
-                                      &atlasLocation);
-            if (plot) {
-                goto HAS_ATLAS;
-            }
-        }
-            
+    if (!this->uploadPath(&plot, &atlasLocation, width, height, dfStorage.get())) {
         return NULL;
     }
-    
-HAS_ATLAS:
+
     // add to cache
     PathData* pathData = SkNEW(PathData);
     pathData->fKey.fGenID = path.getGenerationID();
@@ -306,13 +310,13 @@ bool GrAADistanceFieldPathRenderer::freeUnusedPlot() {
 }
 
 bool GrAADistanceFieldPathRenderer::internalDrawPath(GrDrawTarget* target,
-                                                     GrDrawState* drawState,
+                                                     GrPipelineBuilder* pipelineBuilder,
                                                      GrColor color,
                                                      const SkMatrix& viewMatrix,
                                                      const SkPath& path,
                                                      const PathData* pathData) {
     GrTexture* texture = fAtlas->getTexture();
-    GrDrawState::AutoRestoreEffects are(drawState);
+    GrPipelineBuilder::AutoRestoreFragmentProcessors arfp(pipelineBuilder);
     
     SkASSERT(pathData->fPlot);
     GrDrawTarget::DrawToken drawToken = target->getCurrentDrawToken();
@@ -374,7 +378,7 @@ bool GrAADistanceFieldPathRenderer::internalDrawPath(GrDrawTarget* target,
     
     viewMatrix.mapRect(&r);
     target->setIndexSourceToBuffer(fContext->getQuadIndexBuffer());
-    target->drawIndexedInstances(drawState, fCachedGeometryProcessor.get(),
+    target->drawIndexedInstances(pipelineBuilder, fCachedGeometryProcessor.get(),
                                  kTriangles_GrPrimitiveType, 1, 4, 6, &r);
     target->resetVertexSource();
     

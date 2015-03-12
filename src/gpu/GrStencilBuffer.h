@@ -10,7 +10,7 @@
 #ifndef GrStencilBuffer_DEFINED
 #define GrStencilBuffer_DEFINED
 
-#include "GrClipData.h"
+#include "GrClip.h"
 #include "GrGpuResource.h"
 
 class GrRenderTarget;
@@ -47,19 +47,19 @@ public:
                !fLastClipStackRect.contains(clipSpaceRect);
     }
 
-    static void ComputeKey(int width, int height, int sampleCnt, GrScratchKey* key);
+    // We create a unique stencil buffer at each width, height and sampleCnt and share it for
+    // all render targets that require a stencil with those params.
+    static void ComputeSharedStencilBufferKey(int width, int height, int sampleCnt,
+                                              GrUniqueKey* key);
 
 protected:
-    GrStencilBuffer(GrGpu* gpu, bool isWrapped, int width, int height, int bits, int sampleCnt)
-        : GrGpuResource(gpu, isWrapped)
+    GrStencilBuffer(GrGpu* gpu, LifeCycle lifeCycle, int width, int height, int bits, int sampleCnt)
+        : GrGpuResource(gpu, lifeCycle)
         , fWidth(width)
         , fHeight(height)
         , fBits(bits)
         , fSampleCnt(sampleCnt)
         , fLastClipStackGenID(SkClipStack::kInvalidGenID) {
-        GrScratchKey key;
-        ComputeKey(width, height, sampleCnt, &key);
-        this->setScratchKey(key);
         fLastClipStackRect.setEmpty();
     }
 

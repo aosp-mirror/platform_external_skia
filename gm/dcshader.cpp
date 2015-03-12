@@ -36,6 +36,13 @@ public:
     bool asFragmentProcessor(GrContext*, const SkPaint& paint, const SkMatrix& viewM,
                              const SkMatrix* localMatrix, GrColor* color,
                              GrFragmentProcessor** fp) const SK_OVERRIDE;
+
+#ifndef SK_IGNORE_TO_STRING
+    void toString(SkString* str) const SK_OVERRIDE {
+        str->appendf("DCShader: ()");
+    }
+#endif
+
 private:
     const SkMatrix fDeviceMatrix;
 };
@@ -113,9 +120,6 @@ public:
     }
 
 protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kGPUOnly_Flag;
-    }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("dcshader");
@@ -216,13 +220,13 @@ protected:
            void setFont(SkPaint* paint) SK_OVERRIDE {
                if (!fTypeface) {
                     SkString filename = GetResourcePath("/Funkster.ttf");
-                    SkAutoTUnref<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
+                    SkAutoTDelete<SkFILEStream> stream(new SkFILEStream(filename.c_str()));
                     if (!stream->isValid()) {
                         SkDebugf("Could not find Funkster.ttf, please set --resourcePath "
                                  "correctly.\n");
                         return;
                     }
-                    fTypeface.reset(SkTypeface::CreateFromStream(stream));
+                    fTypeface.reset(SkTypeface::CreateFromStream(stream.detach()));
                }
                paint->setTypeface(fTypeface);
             }
@@ -244,13 +248,19 @@ protected:
     }
 
     void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+        // This GM exists to test a specific feature of the GPU backend. It does not work with the
+        // sw rasterizer, tile modes, etc.
+        if (NULL == canvas->getGrContext()) {
+            this->drawGpuOnlyMessage(canvas);
+            return;
+        }
         SkPaint paint;
         SkTArray<SkMatrix> devMats;
         devMats.push_back().reset();
         devMats.push_back().setRotate(45, 500, 500);
         devMats.push_back().setRotate(-30, 200, 200);
-        devMats.back().setPerspX(-SkScalarToPersp(SK_Scalar1 / 2000));
-        devMats.back().setPerspY(SkScalarToPersp(SK_Scalar1 / 1000));
+        devMats.back().setPerspX(-SK_Scalar1 / 2000);
+        devMats.back().setPerspY(SK_Scalar1 / 1000);
 
 
         SkTArray<SkMatrix> viewMats;

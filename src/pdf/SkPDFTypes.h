@@ -20,6 +20,8 @@
 class SkPDFCatalog;
 class SkWStream;
 
+class SkPDFObject;
+
 /** \class SkPDFObject
 
     A PDF Object is the base class for primitive elements in a PDF file.  A
@@ -30,73 +32,24 @@ class SkPDFObject : public SkRefCnt {
 public:
     SK_DECLARE_INST_COUNT(SkPDFObject)
 
-    /** Return the size (number of bytes) of this object in the final output
-     *  file. Compound objects or objects that are computationally intensive
-     *  to output should override this method.
-     *  @param catalog  The object catalog to use.
-     *  @param indirect If true, output an object identifier with the object.
-     */
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
-
-    /** For non-primitive objects (i.e. objects defined outside this file),
-     *  this method will add to newResourceObjects any objects that this method
-     *  depends on, but not already in knownResourceObjects. This operates
-     *  recursively so if this object depends on another object and that object
-     *  depends on two more, all three objects will be added.
-     *
-     *  @param knownResourceObjects  The set of resources to be ignored.
-     *  @param newResourceObjects  The set to append dependant resources to.
-     */
-    virtual void getResources(const SkTSet<SkPDFObject*>& knownResourceObjects,
-                              SkTSet<SkPDFObject*>* newResourceObjects);
-
-    /** Emit this object unless the catalog has a substitute object, in which
-     *  case emit that.
-     *  @see emitObject
-     */
-    void emit(SkWStream* stream, SkPDFCatalog* catalog, bool indirect);
-
-    /** Helper function to output an indirect object.
-     *  @param catalog The object catalog to use.
-     *  @param stream  The writable output stream to send the output to.
-     */
-    void emitIndirectObject(SkWStream* stream, SkPDFCatalog* catalog);
-
-    /** Helper function to find the size of an indirect object.
-     *  @param catalog The object catalog to use.
-     */
-    size_t getIndirectOutputSize(SkPDFCatalog* catalog);
-
-    /** Static helper function to add a resource to a list.  The list takes
-     *  a reference.
-     * @param resource  The resource to add.
-     * @param list      The list to add the resource to.
-     */
-    static void AddResourceHelper(SkPDFObject* resource,
-                                  SkTDArray<SkPDFObject*>* list);
-
-    /** Static helper function to copy and reference the resources (and all
-     *   their subresources) into a new list.
-     * @param resources The resource list.
-     * @param newResourceObjects All the resource objects (recursively) used on
-     *                         the page are added to this array.  This gives
-     *                         the caller a chance to deduplicate resources
-     *                         across pages.
-     * @param knownResourceObjects  The set of resources to be ignored.
-     */
-    static void GetResourcesHelper(
-            const SkTDArray<SkPDFObject*>* resources,
-            const SkTSet<SkPDFObject*>& knownResourceObjects,
-            SkTSet<SkPDFObject*>* newResourceObjects);
-
-protected:
     /** Subclasses must implement this method to print the object to the
      *  PDF file.
      *  @param catalog  The object catalog to use.
      *  @param stream   The writable output stream to send the output to.
      */
+    // TODO(halcanary): make this method const
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) = 0;
 
+    /**
+     *  Adds all transitive dependencies of this object to resourceSet.
+     *
+     *  @param catalog Implementations should respect the catalog's
+     *                 object substitution map.
+     */
+    virtual void addResources(SkTSet<SkPDFObject*>* resourceSet,
+                              SkPDFCatalog* catalog) const {}
+
+private:
     typedef SkRefCnt INHERITED;
 };
 
@@ -116,7 +69,7 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
+    virtual void addResources(SkTSet<SkPDFObject*>*, SkPDFCatalog*) const SK_OVERRIDE;
 
 private:
     SkAutoTUnref<SkPDFObject> fObj;
@@ -163,7 +116,6 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
 
 private:
     bool fValue;
@@ -221,7 +173,6 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
 
     static SkString FormatString(const char* input, size_t len);
     static SkString FormatString(const uint16_t* input, size_t len,
@@ -256,7 +207,6 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
 
 private:
     static const size_t kMaxLen = 127;
@@ -283,7 +233,7 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
+    virtual void addResources(SkTSet<SkPDFObject*>*, SkPDFCatalog*) const SK_OVERRIDE;
 
     /** The size of the array.
      */
@@ -355,7 +305,7 @@ public:
 
     // The SkPDFObject interface.
     virtual void emitObject(SkWStream* stream, SkPDFCatalog* catalog) SK_OVERRIDE;
-    virtual size_t getOutputSize(SkPDFCatalog* catalog, bool indirect);
+    virtual void addResources(SkTSet<SkPDFObject*>*, SkPDFCatalog*) const SK_OVERRIDE;
 
     /** The size of the dictionary.
      */
@@ -433,7 +383,6 @@ private:
 
     static const int kMaxLen = 4095;
 
-    mutable SkMutex fMutex;  // protects modifications to fValue
     SkTDArray<struct Rec> fValue;
 
     SkPDFObject* append(SkPDFName* key, SkPDFObject* value);

@@ -9,14 +9,16 @@
 #define GrGLShaderStringBuilder_DEFINED
 
 #include "GrAllocator.h"
-#include "GrContext.h"
+#include "GrGpu.h"
 #include "gl/GrGLContext.h"
 #include "SkTypes.h"
 
 GrGLuint GrGLCompileAndAttachShader(const GrGLContext& glCtx,
                                     GrGLuint programId,
                                     GrGLenum type,
-                                    const SkString& shaderSrc,
-                                    GrContext::GPUStats* gpuStats);
+                                    const char** strings,
+                                    int* lengths,
+                                    int count,
+                                    GrGpu::Stats*);
 
 #endif

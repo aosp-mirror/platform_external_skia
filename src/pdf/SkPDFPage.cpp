@@ -24,37 +24,19 @@ SkPDFPage::~SkPDFPage() {}
 void SkPDFPage::finalizePage(SkPDFCatalog* catalog, bool firstPage,
                              const SkTSet<SkPDFObject*>& knownResourceObjects,
                              SkTSet<SkPDFObject*>* newResourceObjects) {
-    SkPDFResourceDict* resourceDict = fDevice->getResourceDict();
     if (fContentStream.get() == NULL) {
-        insert("Resources", resourceDict);
+        this->insert("Resources", fDevice->getResourceDict());
         SkSafeUnref(this->insert("MediaBox", fDevice->copyMediaBox()));
-        if (!SkToBool(catalog->getDocumentFlags() &
-                      SkPDFDocument::kNoLinks_Flags)) {
-            SkPDFArray* annots = fDevice->getAnnotations();
-            if (annots && annots->size() > 0) {
-                insert("Annots", annots);
-            }
+        SkPDFArray* annots = fDevice->getAnnotations();
+        if (annots && annots->size() > 0) {
+            insert("Annots", annots);
         }
 
-        SkAutoTUnref<SkData> content(fDevice->copyContentToData());
+        SkAutoTDelete<SkStreamAsset> content(fDevice->content());
         fContentStream.reset(new SkPDFStream(content.get()));
         insert("Contents", new SkPDFObjRef(fContentStream.get()))->unref();
     }
     catalog->addObject(fContentStream.get(), firstPage);
-    resourceDict->getReferencedResources(knownResourceObjects,
-                                         newResourceObjects,
-                                         true);
-}
-
-off_t SkPDFPage::getPageSize(SkPDFCatalog* catalog, off_t fileOffset) {
-    SkASSERT(fContentStream.get() != NULL);
-    catalog->setFileOffset(fContentStream.get(), fileOffset);
-    return SkToOffT(fContentStream->getOutputSize(catalog, true));
-}
-
-void SkPDFPage::emitPage(SkWStream* stream, SkPDFCatalog* catalog) {
-    SkASSERT(fContentStream.get() != NULL);
-    fContentStream->emitIndirectObject(stream, catalog);
 }
 
 // static
@@ -155,4 +137,8 @@ const SkPDFGlyphSetMap& SkPDFPage::getFontGlyphUsage() const {
 
 void SkPDFPage::appendDestinations(SkPDFDict* dict) {
     fDevice->appendDestinations(dict, this);
+}
+
+SkPDFObject* SkPDFPage::getContentStream() const {
+    return fContentStream.get();
 }

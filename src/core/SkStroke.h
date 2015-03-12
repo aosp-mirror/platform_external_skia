@@ -13,15 +13,9 @@
 #include "SkPaint.h"
 #include "SkStrokerPriv.h"
 
-// set to 1 to use experimental outset stroking with quads
-#ifndef QUAD_STROKE_APPROXIMATION
-#define QUAD_STROKE_APPROXIMATION 0
-#endif
-
-#if QUAD_STROKE_APPROXIMATION && defined(SK_DEBUG)
+#if !defined SK_LEGACY_STROKE_CURVES && defined SK_DEBUG
 extern bool gDebugStrokerErrorSet;
 extern SkScalar gDebugStrokerError;
-
 extern int gMaxRecursion[];
 #endif
 
@@ -43,14 +37,25 @@ public:
     SkPaint::Join   getJoin() const { return (SkPaint::Join)fJoin; }
     void        setJoin(SkPaint::Join);
 
-#if QUAD_STROKE_APPROXIMATION
-    void    setError(SkScalar);
-#endif
     void    setMiterLimit(SkScalar);
     void    setWidth(SkScalar);
 
     bool    getDoFill() const { return SkToBool(fDoFill); }
     void    setDoFill(bool doFill) { fDoFill = SkToU8(doFill); }
+
+    /**
+     *  ResScale is the "intended" resolution for the output.
+     *      Default is 1.0.
+     *      Larger values (res > 1) indicate that the result should be more precise, since it will
+     *          be zoomed up, and small errors will be magnified.
+     *      Smaller values (0 < res < 1) indicate that the result can be less precise, since it will
+     *          be zoomed down, and small errors may be invisible.
+     */
+    SkScalar getResScale() const { return fResScale; }
+    void setResScale(SkScalar rs) {
+        SkASSERT(rs > 0 && SkScalarIsFinite(rs));
+        fResScale = rs;
+    }
 
     /**
      *  Stroke the specified rect, winding it in the specified direction..
@@ -62,10 +67,8 @@ public:
     ////////////////////////////////////////////////////////////////
 
 private:
-#if QUAD_STROKE_APPROXIMATION
-    SkScalar    fError;
-#endif
     SkScalar    fWidth, fMiterLimit;
+    SkScalar    fResScale;
     uint8_t     fCap, fJoin;
     SkBool8     fDoFill;
 

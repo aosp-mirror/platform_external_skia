@@ -13,63 +13,13 @@
 
 class GrProcOptInfo;
 
-/**
- * This xfer processor disables color writing. Thus color and coverage and ignored and no blending
- * occurs. This XP is usful for things like stenciling.
- */
-class GrDisableColorXP : public GrXferProcessor {
-public:
-    static GrXferProcessor* Create() {
-        return SkNEW(GrDisableColorXP);
-    }
-
-    ~GrDisableColorXP() SK_OVERRIDE {};
-
-    const char* name() const SK_OVERRIDE { return "Disable Color"; }
-
-    void getGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const SK_OVERRIDE;
-
-    GrGLXferProcessor* createGLInstance() const SK_OVERRIDE;
-
-    bool hasSecondaryOutput() const SK_OVERRIDE { return false; }
-
-    GrXferProcessor::OptFlags getOptimizations(const GrProcOptInfo& colorPOI,
-                                               const GrProcOptInfo& coveragePOI,
-                                               bool doesStencilWrite,
-                                               GrColor* color,
-                                               const GrDrawTargetCaps& caps) SK_OVERRIDE {
-        return GrXferProcessor::kIgnoreColor_OptFlag | GrXferProcessor::kIgnoreCoverage_OptFlag;
-    }
-
-    void getBlendInfo(GrXferProcessor::BlendInfo* blendInfo) const SK_OVERRIDE;
-
-private:
-    GrDisableColorXP();
-
-    bool onIsEqual(const GrXferProcessor& xpBase) const SK_OVERRIDE {
-        return true;
-    }
-
-    typedef GrXferProcessor INHERITED;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 class GrDisableColorXPFactory : public GrXPFactory {
 public:
     static GrXPFactory* Create() {
         return SkNEW(GrDisableColorXPFactory);
     }
 
-    GrXferProcessor* createXferProcessor(const GrProcOptInfo& colorPOI,
-                                         const GrProcOptInfo& coveragePOI) const SK_OVERRIDE;
-
     bool supportsRGBCoverage(GrColor knownColor, uint32_t knownColorFlags) const SK_OVERRIDE {
-        return true;
-    }
-
-    bool canApplyCoverage(const GrProcOptInfo& colorPOI,
-                          const GrProcOptInfo& coveragePOI) const SK_OVERRIDE {
         return true;
     }
 
@@ -81,13 +31,19 @@ public:
         output->fWillBlendWithDst = 0;
     }
 
-    bool willReadDst(const GrProcOptInfo& colorPOI,
-                     const GrProcOptInfo& coveragePOI) const SK_OVERRIDE {
-        return false;
-    }
-
 private:
     GrDisableColorXPFactory();
+
+    GrXferProcessor* onCreateXferProcessor(const GrDrawTargetCaps& caps,
+                                           const GrProcOptInfo& colorPOI,
+                                           const GrProcOptInfo& coveragePOI,
+                                           const GrDeviceCoordTexture* dstCopy) const SK_OVERRIDE;
+
+    bool willReadDstColor(const GrDrawTargetCaps& caps,
+                          const GrProcOptInfo& colorPOI,
+                          const GrProcOptInfo& coveragePOI) const SK_OVERRIDE {
+        return false;
+    }
 
     bool onIsEqual(const GrXPFactory& xpfBase) const SK_OVERRIDE {
         return true;

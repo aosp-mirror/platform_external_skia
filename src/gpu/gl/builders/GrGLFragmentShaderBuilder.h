@@ -48,6 +48,8 @@ public:
     virtual const char* fragmentPosition() = 0;
 
 private:
+    friend class GrGLNormalPathProcessor;
+
     typedef GrGLShaderBuilder INHERITED;
 };
 
@@ -95,12 +97,11 @@ public:
 
 private:
     // Private public interface, used by GrGLProgramBuilder to build a fragment shader
-    void emitCodeToReadDstTexture();
     void enableCustomOutput();
     void enableSecondaryOutput();
     const char* getPrimaryColorOutputName() const;
     const char* getSecondaryColorOutputName() const;
-    bool compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds) const;
+    bool compileAndAttachShaders(GrGLuint programId, SkTDArray<GrGLuint>* shaderIds);
     void bindFragmentShaderLocations(GrGLuint programID);
 
     // As GLProcessors emit code, there are some conditions we need to verify.  We use the below
@@ -153,7 +154,6 @@ private:
     bool fHasReadDstColor;
     bool fHasReadFragmentPosition;
 
-    friend class GrGLNvprProgramBuilder;
     friend class GrGLProgramBuilder;
 
     typedef GrGLFPFragmentBuilder INHERITED;

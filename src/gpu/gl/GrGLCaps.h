@@ -12,7 +12,7 @@
 #include "GrDrawTargetCaps.h"
 #include "GrGLStencilBuffer.h"
 #include "SkChecksum.h"
-#include "SkTHashCache.h"
+#include "SkTHash.h"
 #include "SkTArray.h"
 
 class GrGLContextInfo;
@@ -172,6 +172,8 @@ public:
      */
     bool fbFetchSupport() const { return fFBFetchSupport; }
 
+    bool fbFetchNeedsCustomOutput() const { return fFBFetchNeedsCustomOutput; }
+
     const char* fbFetchColorName() const { return fFBFetchColorName; }
 
     const char* fbFetchExtensionString() const { return fFBFetchExtensionString; }
@@ -265,6 +267,10 @@ public:
     bool fullClearIsFree() const { return fFullClearIsFree; }
 
     bool dropsTileOnZeroDivide() const { return fDropsTileOnZeroDivide; }
+    
+    bool bindFBOToReadAndDrawForAddingAttachments() const {
+        return fBindFBOToReadAndDrawForAddingAttachments;
+    }
 
     /**
      * Returns a string containing the caps info.
@@ -283,6 +289,18 @@ public:
     };
 
     LATCAlias latcAlias() const { return fLATCAlias; }
+
+    /**
+     * Which type of path rendering is supported, if any
+     * TODO delete this when we only support normal non-legacy nvpr
+     */
+    enum NvprSupport {
+        kNone_NvprSupport,
+        kLegacy_NvprSupport,
+        kNormal_NvprSupport,
+    };
+
+    NvprSupport nvprSupport() const { return fNvprSupport; }
 
 private:
     /**
@@ -352,6 +370,7 @@ private:
     InvalidateFBType    fInvalidateFBType;
     MapBufferType       fMapBufferType;
     LATCAlias           fLATCAlias;
+    NvprSupport         fNvprSupport;
 
     bool fRGBA8RenderbufferSupport : 1;
     bool fBGRAIsInternalFormat : 1;
@@ -372,51 +391,30 @@ private:
     bool fIsCoreProfile : 1;
     bool fFullClearIsFree : 1;
     bool fDropsTileOnZeroDivide : 1;
-    // TODO(joshualitt) encapsulate the FB Fetch logic in a feature object
     bool fFBFetchSupport : 1;
+    bool fFBFetchNeedsCustomOutput : 1;
+    bool fBindFBOToReadAndDrawForAddingAttachments : 1;
 
     const char* fFBFetchColorName;
     const char* fFBFetchExtensionString;
 
-    class ReadPixelsSupportedFormats {
-    public:
-        struct Key {
-            GrGLenum fFormat;
-            GrGLenum fType;
-            GrGLenum fFboFormat;
+    struct ReadPixelsSupportedFormat {
+        GrGLenum fFormat;
+        GrGLenum fType;
+        GrGLenum fFboFormat;
 
-            bool operator==(const Key& rhs) const {
-                return fFormat == rhs.fFormat
-                        && fType == rhs.fType
-                        && fFboFormat == rhs.fFboFormat;
-            }
-
-            uint32_t getHash() const {
-                return SkChecksum::Murmur3(reinterpret_cast<const uint32_t*>(this), sizeof(*this));
-            }
-        };
-
-        ReadPixelsSupportedFormats(Key key, bool value) : fKey(key), fValue(value) {
+        bool operator==(const ReadPixelsSupportedFormat& rhs) const {
+            return fFormat    == rhs.fFormat
+                && fType      == rhs.fType
+                && fFboFormat == rhs.fFboFormat;
         }
-
-        static const Key& GetKey(const ReadPixelsSupportedFormats& element) {
-            return element.fKey;
+        static uint32_t Hash(const ReadPixelsSupportedFormat& r) {
+            return SkChecksum::Murmur3(reinterpret_cast<const uint32_t*>(&r), sizeof(r));
         }
-
-        static uint32_t Hash(const Key& key) {
-            return key.getHash();
-        }
-
-        bool value() const {
-            return fValue;
-        }
-    private:
-        Key fKey;
-        bool fValue;
     };
 
-    mutable SkTHashCache<ReadPixelsSupportedFormats,
-                         ReadPixelsSupportedFormats::Key> fReadPixelsSupportedCache;
+    mutable SkTHashMap<ReadPixelsSupportedFormat, bool, ReadPixelsSupportedFormat::Hash>
+        fReadPixelsSupportedCache;
 
     typedef GrDrawTargetCaps INHERITED;
 };

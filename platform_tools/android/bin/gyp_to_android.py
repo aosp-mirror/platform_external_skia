@@ -10,6 +10,7 @@ Script for generating the Android framework's version of Skia from gyp
 files.
 """
 
+import argparse
 import os
 import shutil
 import sys
@@ -106,6 +107,8 @@ def main(target_dir=None, require_sk_user_config=False, gyp_source_dir=None):
                                           True, gyp_source_dir)
     x86_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'x86', False,
                                      gyp_source_dir)
+    x86_64_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'x86_64',
+                                        False, gyp_source_dir)
 
     mips_var_dict = generate_var_dict(tmp_folder, main_gyp_file, 'mips', False,
                                       gyp_source_dir)
@@ -120,8 +123,8 @@ def main(target_dir=None, require_sk_user_config=False, gyp_source_dir=None):
     # should be part of the makefile always. Each dict will now contain trimmed
     # lists containing only variable definitions specific to that configuration.
     var_dict_list = [default_var_dict, arm_var_dict, arm_neon_var_dict,
-                     x86_var_dict, mips_var_dict, mips64_var_dict,
-                     arm64_var_dict]
+                     x86_var_dict, x86_64_var_dict, mips_var_dict,
+                     mips64_var_dict, arm64_var_dict]
     common = vars_dict_lib.intersect(var_dict_list)
 
     common.LOCAL_MODULE.add('libskia')
@@ -146,16 +149,6 @@ def main(target_dir=None, require_sk_user_config=False, gyp_source_dir=None):
                                        local_module_name='skia_nanobench',
                                        local_module_tags=['tests'],
                                        desired_targets=['nanobench'],
-                                       gyp_source_dir=gyp_source_dir)
-
-    tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
-                                       target_file='gm.gyp',
-                                       skia_trunk=target_dir,
-                                       dest_dir='gm',
-                                       skia_lib_var_dict=common,
-                                       local_module_name='skia_gm',
-                                       local_module_tags=['tests'],
-                                       desired_targets=['gm'],
                                        gyp_source_dir=gyp_source_dir)
 
     tool_makefile_writer.generate_tool(gyp_dir=tmp_folder,
@@ -187,8 +180,7 @@ def main(target_dir=None, require_sk_user_config=False, gyp_source_dir=None):
         arm_neon_var_dict, 'arm', 'ARCH_ARM_HAVE_NEON'))
     deviations_from_common.append(makefile_writer.VarsDictData(x86_var_dict,
                                                                'x86'))
-    # Currently, x86_64 is identical to x86
-    deviations_from_common.append(makefile_writer.VarsDictData(x86_var_dict,
+    deviations_from_common.append(makefile_writer.VarsDictData(x86_64_var_dict,
                                                                'x86_64'))
 
     deviations_from_common.append(makefile_writer.VarsDictData(mips_var_dict,
@@ -207,4 +199,9 @@ def main(target_dir=None, require_sk_user_config=False, gyp_source_dir=None):
     shutil.rmtree(tmp_folder)
 
 if __name__ == '__main__':
-  main()
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--gyp_source_dir', help='Source of gyp program. '
+                      'e.g. <path_to_skia>/third_party/externals/gyp')
+  args = parser.parse_args()
+
+  main(gyp_source_dir=args.gyp_source_dir)

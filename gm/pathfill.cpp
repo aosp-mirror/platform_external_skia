@@ -117,17 +117,13 @@ static const MakePathProc gProcs[] = {
 class PathFillGM : public skiagm::GM {
     SkPath  fPath[N];
     SkScalar fDY[N];
-public:
-    PathFillGM() {
+protected:
+    void onOnceBeforeDraw() SK_OVERRIDE {
         for (size_t i = 0; i < N; i++) {
             fDY[i] = gProcs[i](&fPath[i]);
         }
     }
 
-protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
-    }
 
     SkString onShortName() SK_OVERRIDE {
         return SkString("pathfill");
@@ -155,16 +151,11 @@ private:
 class PathInverseFillGM : public skiagm::GM {
     SkPath  fPath[N];
     SkScalar fDY[N];
-public:
-    PathInverseFillGM() {
+protected:
+    void onOnceBeforeDraw() SK_OVERRIDE {
         for (size_t i = 0; i < N; i++) {
             fDY[i] = gProcs[i](&fPath[i]);
         }
-    }
-
-protected:
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return kSkipTiled_Flag;
     }
 
     SkString onShortName() SK_OVERRIDE {

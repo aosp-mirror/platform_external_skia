@@ -18,6 +18,7 @@
       'include_dirs': [
         '../include/views',
         '../include/views/unix',
+        '../src/gpu',
       ],
       'sources': [
         '../include/views/SkApplication.h',
@@ -77,6 +78,11 @@
         '../src/views/SDL/SkOSWindow_SDL.cpp',
       ],
       'conditions': [
+        [ 'skia_gpu == 1', {
+          'include_dirs' : [
+            '../src/gpu',
+          ],
+        }],
         [ 'skia_os == "mac"', {
           'link_settings': {
             'libraries': [

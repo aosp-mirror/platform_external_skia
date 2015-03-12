@@ -14,6 +14,10 @@
 class SkResourceCache;
 class SkMipMap;
 
+uint64_t SkMakeResourceCacheSharedIDForBitmap(uint32_t bitmapGenID);
+
+void SkNotifyBitmapGenIDIsStale(uint32_t bitmapGenID);
+
 class SkBitmapCache {
 public:
     /**
@@ -46,7 +50,7 @@ public:
      * The width and the height of the provided subset must be the same as the result bitmap ones.
      * result must be marked isImmutable()
      */
-    static bool Add(uint32_t genID, const SkIRect& subset, const SkBitmap& result,
+    static bool Add(SkPixelRef*, const SkIRect& subset, const SkBitmap& result,
                     SkResourceCache* localCache = NULL);
 };
 

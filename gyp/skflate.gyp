@@ -6,21 +6,9 @@
       'type': 'static_library',
       'dependencies': [
         'skia_lib.gyp:skia_lib',
+        'zlib.gyp:zlib',
       ],
-      'conditions': [
-        # When zlib is not availible on a system,
-        # SkFlate::HaveFlate will just return false.
-        [ 'skia_os != "win"',
-          {
-            'dependencies': [
-              'zlib.gyp:zlib',
-            ],
-          }
-        ],
-      ],
-      'sources': [
-        '../src/core/SkFlate.cpp',
-      ],
+      'sources': [ '../src/core/SkFlate.cpp' ],
     },
   ],
 }

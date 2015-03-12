@@ -7,7 +7,6 @@
 
 #include "GrDefaultGeoProcFactory.h"
 
-#include "GrDrawState.h"
 #include "GrInvariantOutput.h"
 #include "gl/GrGLGeometryProcessor.h"
 #include "gl/builders/GrGLProgramBuilder.h"
@@ -37,13 +36,13 @@ public:
 
     const char* name() const SK_OVERRIDE { return "DefaultGeometryProcessor"; }
 
-    const GrAttribute* inPosition() const { return fInPosition; }
-    const GrAttribute* inColor() const { return fInColor; }
-    const GrAttribute* inLocalCoords() const { return fInLocalCoords; }
-    const GrAttribute* inCoverage() const { return fInCoverage; }
+    const Attribute* inPosition() const { return fInPosition; }
+    const Attribute* inColor() const { return fInColor; }
+    const Attribute* inLocalCoords() const { return fInLocalCoords; }
+    const Attribute* inCoverage() const { return fInCoverage; }
     uint8_t coverage() const { return fCoverage; }
 
-    void initBatchTracker(GrBatchTracker* bt, const InitBT& init) const SK_OVERRIDE {
+    void initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const SK_OVERRIDE {
         BatchTracker* local = bt->cast<BatchTracker>();
         local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init,
                                                    SkToBool(fInColor));
@@ -83,32 +82,31 @@ public:
         GLProcessor(const GrGeometryProcessor& gp, const GrBatchTracker&)
             : fColor(GrColor_ILLEGAL), fCoverage(0xff) {}
 
-        void emitCode(const EmitArgs& args) SK_OVERRIDE {
+        void onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) SK_OVERRIDE {
             const DefaultGeoProc& gp = args.fGP.cast<DefaultGeoProc>();
             GrGLGPBuilder* pb = args.fPB;
-            GrGLVertexBuilder* vs = pb->getVertexShaderBuilder();
+            GrGLVertexBuilder* vsBuilder = pb->getVertexShaderBuilder();
             GrGLGPFragmentBuilder* fs = args.fPB->getFragmentShaderBuilder();
             const BatchTracker& local = args.fBT.cast<BatchTracker>();
 
-            vs->codeAppendf("%s = %s;", vs->positionCoords(), gp.inPosition()->fName);
+            // emit attributes
+            vsBuilder->emitAttributes(gp);
 
             // Setup pass through color
             this->setupColorPassThrough(pb, local.fInputColorType, args.fOutputColor, gp.inColor(),
                                         &fColorUniform);
+            // Setup position
+            this->setupPosition(pb, gpArgs, gp.inPosition()->fName, gp.viewMatrix());
 
-            // Setup local coords if needed
             if (gp.inLocalCoords()) {
-                vs->codeAppendf("%s = %s;", vs->localCoords(), gp.inLocalCoords()->fName);
+                // emit transforms with explicit local coords
+                this->emitTransforms(pb, gpArgs->fPositionVar, gp.inLocalCoords()->fName,
+                                     gp.localMatrix(), args.fTransformsIn, args.fTransformsOut);
             } else {
-                vs->codeAppendf("%s = %s;", vs->localCoords(), gp.inPosition()->fName);
+                // emit transforms with position
+                this->emitTransforms(pb, gpArgs->fPositionVar, gp.inPosition()->fName,
+                                     gp.localMatrix(), args.fTransformsIn, args.fTransformsOut);
             }
-
-            // setup uniform viewMatrix
-            this->addUniformViewMatrix(pb);
-
-            // setup position varying
-            vs->codeAppendf("%s = %s * vec3(%s, 1);", vs->glPosition(), this->uViewM(),
-                            gp.inPosition()->fName);
 
             // Setup coverage as pass through
             if (kUniform_GrGPInput == local.fInputCoverageType) {
@@ -138,6 +136,7 @@ public:
             uint32_t key = def.fFlags;
             key |= local.fInputColorType << 8 | local.fInputCoverageType << 16;
             key |= local.fUsesLocalCoords && gp.localMatrix().hasPerspective() ? 0x1 << 24 : 0x0;
+            key |= ComputePosKey(gp.viewMatrix()) << 25;
             b->add32(key);
         }
 
@@ -174,7 +173,8 @@ public:
         GLProcessor::GenKey(*this, bt, caps, b);
     }
 
-    GrGLGeometryProcessor* createGLInstance(const GrBatchTracker& bt) const SK_OVERRIDE {
+    virtual GrGLPrimitiveProcessor* createGLInstance(const GrBatchTracker& bt,
+                                                     const GrGLCaps&) const SK_OVERRIDE {
         return SkNEW_ARGS(GLProcessor, (*this, bt));
     }
 
@@ -196,18 +196,18 @@ private:
         bool hasColor = SkToBool(gpTypeFlags & GrDefaultGeoProcFactory::kColor_GPType);
         bool hasLocalCoord = SkToBool(gpTypeFlags & GrDefaultGeoProcFactory::kLocalCoord_GPType);
         bool hasCoverage = SkToBool(gpTypeFlags & GrDefaultGeoProcFactory::kCoverage_GPType);
-        fInPosition = &this->addVertexAttrib(GrAttribute("inPosition", kVec2f_GrVertexAttribType));
+        fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
         if (hasColor) {
-            fInColor = &this->addVertexAttrib(GrAttribute("inColor", kVec4ub_GrVertexAttribType));
+            fInColor = &this->addVertexAttrib(Attribute("inColor", kVec4ub_GrVertexAttribType));
             this->setHasVertexColor();
         }
         if (hasLocalCoord) {
-            fInLocalCoords = &this->addVertexAttrib(GrAttribute("inLocalCoord",
+            fInLocalCoords = &this->addVertexAttrib(Attribute("inLocalCoord",
                                                                 kVec2f_GrVertexAttribType));
             this->setHasLocalCoords();
         }
         if (hasCoverage) {
-            fInCoverage = &this->addVertexAttrib(GrAttribute("inCoverage",
+            fInCoverage = &this->addVertexAttrib(Attribute("inCoverage",
                                                              kFloat_GrVertexAttribType));
         }
     }
@@ -234,10 +234,10 @@ private:
         bool fUsesLocalCoords;
     };
 
-    const GrAttribute* fInPosition;
-    const GrAttribute* fInColor;
-    const GrAttribute* fInLocalCoords;
-    const GrAttribute* fInCoverage;
+    const Attribute* fInPosition;
+    const Attribute* fInColor;
+    const Attribute* fInLocalCoords;
+    const Attribute* fInCoverage;
     uint8_t fCoverage;
     uint32_t fFlags;
 

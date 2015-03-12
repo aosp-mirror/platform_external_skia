@@ -8,9 +8,8 @@
 #ifndef GrGLGeometryProcessor_DEFINED
 #define GrGLGeometryProcessor_DEFINED
 
-#include "GrGLProcessor.h"
+#include "GrGLPrimitiveProcessor.h"
 
-class GrBatchTracker;
 class GrGLGPBuilder;
 
 /**
@@ -18,80 +17,59 @@ class GrGLGPBuilder;
  * from this class. Since paths don't have vertices, this class is only meant to be used internally
  * by skia, for special cases.
  */
-class GrGLGeometryProcessor {
+class GrGLGeometryProcessor : public GrGLPrimitiveProcessor {
 public:
-    GrGLGeometryProcessor() : fViewMatrixName(NULL) { fViewMatrix = SkMatrix::InvalidMatrix(); }
-    virtual ~GrGLGeometryProcessor() {}
+    /* Any general emit code goes in the base class emitCode.  Subclasses override onEmitCode */
+    void emitCode(EmitArgs&) SK_OVERRIDE;
 
-    typedef GrGLProgramDataManager::UniformHandle UniformHandle;
-    typedef GrGLProcessor::TextureSamplerArray TextureSamplerArray;
-
-    struct EmitArgs {
-        EmitArgs(GrGLGPBuilder* pb,
-                 const GrPrimitiveProcessor& gp,
-                 const GrBatchTracker& bt,
-                 const char* outputColor,
-                 const char* outputCoverage,
-                 const TextureSamplerArray& samplers)
-            : fPB(pb)
-            , fGP(gp)
-            , fBT(bt)
-            , fOutputColor(outputColor)
-            , fOutputCoverage(outputCoverage)
-            , fSamplers(samplers) {}
-        GrGLGPBuilder* fPB;
-        const GrPrimitiveProcessor& fGP;
-        const GrBatchTracker& fBT;
-        const char* fOutputColor;
-        const char* fOutputCoverage;
-        const TextureSamplerArray& fSamplers;
-    };
-
-    /**
-     * This is similar to emitCode() in the base class, except it takes a full shader builder.
-     * This allows the effect subclass to emit vertex code.
-     */
-    virtual void emitCode(const EmitArgs&) = 0;
-
-    /** A GrGLGeometryProcessor instance can be reused with any GrGLGeometryProcessor that produces
-        the same stage key; this function reads data from a GrGLGeometryProcessor and uploads any
-        uniform variables required  by the shaders created in emitCode(). The GrGeometryProcessor
-        parameter is guaranteed to be of the same type that created this GrGLGeometryProcessor and
-        to have an identical processor key as the one that created this GrGLGeometryProcessor.  */
-    virtual void setData(const GrGLProgramDataManager&,
-                         const GrPrimitiveProcessor&,
-                         const GrBatchTracker&) = 0;
+    void setTransformData(const GrPrimitiveProcessor&,
+                          const GrGLProgramDataManager&,
+                          int index,
+                          const SkTArray<const GrCoordTransform*, true>& transforms);
 
 protected:
-    /** a helper which can setup vertex, constant, or uniform color depending on inputType.
-     *  This function will only do the minimum required to emit the correct shader code.  If
-     *  inputType == attribute, then colorAttr must not be NULL.  Likewise, if inputType == Uniform
-     *  then colorUniform must not be NULL.
-     */
-    void setupColorPassThrough(GrGLGPBuilder* pb,
-                               GrGPInput inputType,
-                               const char* inputName,
-                               const GrGeometryProcessor::GrAttribute* colorAttr,
-                               UniformHandle* colorUniform);
+    // Many GrGeometryProcessors do not need explicit local coords
+    void emitTransforms(GrGLGPBuilder* gp,
+                        const GrShaderVar& posVar,
+                        const SkMatrix& localMatrix,
+                        const TransformsIn& tin,
+                        TransformsOut* tout) {
+        this->emitTransforms(gp, posVar, posVar.c_str(), localMatrix, tin, tout);
+    }
 
-    const char* uViewM() const { return fViewMatrixName; }
+    void emitTransforms(GrGLGPBuilder*,
+                        const GrShaderVar& posVar,
+                        const char* localCoords,
+                        const SkMatrix& localMatrix,
+                        const TransformsIn&,
+                        TransformsOut*);
 
-    /** a helper function to setup the uniform handle for the uniform view matrix */
-    void addUniformViewMatrix(GrGLGPBuilder*);
+    struct GrGPArgs {
+        // The variable used by a GP to store its position. It can be
+        // either a vec2 or a vec3 depending on the presence of perspective.
+        GrShaderVar fPositionVar;
+    };
 
+    // Create the correct type of position variable given the CTM
+    void setupPosition(GrGLGPBuilder* pb,
+                       GrGPArgs* gpArgs,
+                       const char* posName,
+                       const SkMatrix& mat);
 
-    /** a helper function to upload a uniform viewmatrix.
-     * TODO we can remove this function when we have deferred geometry in place
-     */
-    void setUniformViewMatrix(const GrGLProgramDataManager&,
-                              const SkMatrix& viewMatrix);
+    static uint32_t ComputePosKey(const SkMatrix& mat) {
+        if (mat.isIdentity()) {
+            return 0x0;
+        } else if (!mat.hasPerspective()) {
+            return 0x01;
+        } else {
+            return 0x02;
+        }
+    }
 
 private:
-    UniformHandle fViewMatrixUniform;
-    SkMatrix fViewMatrix;
-    const char* fViewMatrixName;
+    virtual void onEmitCode(EmitArgs&, GrGPArgs*) = 0;
 
-    typedef GrGLProcessor INHERITED;
+    typedef GrGLPrimitiveProcessor INHERITED;
 };
 
 #endif

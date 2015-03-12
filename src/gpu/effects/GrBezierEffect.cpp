@@ -24,7 +24,7 @@ public:
     GrGLConicEffect(const GrGeometryProcessor&,
                     const GrBatchTracker&);
 
-    void emitCode(const EmitArgs&) SK_OVERRIDE;
+    void onEmitCode(EmitArgs&, GrGPArgs*) SK_OVERRIDE;
 
     static inline void GenKey(const GrGeometryProcessor&,
                               const GrBatchTracker&,
@@ -66,11 +66,14 @@ GrGLConicEffect::GrGLConicEffect(const GrGeometryProcessor& processor,
     fEdgeType = ce.getEdgeType();
 }
 
-void GrGLConicEffect::emitCode(const EmitArgs& args) {
+void GrGLConicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLGPBuilder* pb = args.fPB;
     GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
     const GrConicEffect& gp = args.fGP.cast<GrConicEffect>();
     const ConicBatchTracker& local = args.fBT.cast<ConicBatchTracker>();
+
+    // emit attributes
+    vsBuilder->emitAttributes(gp);
 
     GrGLVertToFrag v(kVec4f_GrSLType);
     args.fPB->addVarying("ConicCoeffs", &v);
@@ -80,16 +83,12 @@ void GrGLConicEffect::emitCode(const EmitArgs& args) {
     this->setupColorPassThrough(args.fPB, local.fInputColorType, args.fOutputColor, NULL,
                                 &fColorUniform);
 
-    // setup coord outputs
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->positionCoords(), gp.inPosition()->fName);
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->localCoords(), gp.inPosition()->fName);
+    // Setup position
+    this->setupPosition(pb, gpArgs, gp.inPosition()->fName, gp.viewMatrix());
 
-    // setup uniform viewMatrix
-    this->addUniformViewMatrix(pb);
-
-    // setup position varying
-    vsBuilder->codeAppendf("%s = %s * vec3(%s, 1);", vsBuilder->glPosition(), this->uViewM(),
-                           gp.inPosition()->fName);
+    // emit transforms with position
+    this->emitTransforms(pb, gpArgs->fPositionVar, gp.inPosition()->fName, gp.localMatrix(),
+                         args.fTransformsIn, args.fTransformsOut);
 
     GrGLGPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
     fsBuilder->codeAppend("float edgeAlpha;");
@@ -151,26 +150,27 @@ void GrGLConicEffect::emitCode(const EmitArgs& args) {
     if (0xff != local.fCoverageScale) {
         const char* coverageScale;
         fCoverageScaleUniform = pb->addUniform(GrGLProgramBuilder::kFragment_Visibility,
-                                          kFloat_GrSLType,
-                                          kDefault_GrSLPrecision,
-                                          "Coverage",
-                                          &coverageScale);
+                                               kFloat_GrSLType,
+                                               kDefault_GrSLPrecision,
+                                               "Coverage",
+                                               &coverageScale);
         fsBuilder->codeAppendf("%s = vec4(%s * edgeAlpha);", args.fOutputCoverage, coverageScale);
     } else {
         fsBuilder->codeAppendf("%s = vec4(edgeAlpha);", args.fOutputCoverage);
     }
 }
 
-void GrGLConicEffect::GenKey(const GrGeometryProcessor& processor,
+void GrGLConicEffect::GenKey(const GrGeometryProcessor& gp,
                              const GrBatchTracker& bt,
                              const GrGLCaps&,
                              GrProcessorKeyBuilder* b) {
-    const GrConicEffect& ce = processor.cast<GrConicEffect>();
+    const GrConicEffect& ce = gp.cast<GrConicEffect>();
     const ConicBatchTracker& local = bt.cast<ConicBatchTracker>();
     uint32_t key = ce.isAntiAliased() ? (ce.isFilled() ? 0x0 : 0x1) : 0x2;
     key |= kUniform_GrGPInput == local.fInputColorType ? 0x4 : 0x0;
     key |= 0xff != local.fCoverageScale ? 0x8 : 0x0;
-    key |= local.fUsesLocalCoords && processor.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= local.fUsesLocalCoords && gp.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= ComputePosKey(gp.viewMatrix()) << 5;
     b->add32(key);
 }
 
@@ -184,7 +184,8 @@ void GrConicEffect::getGLProcessorKey(const GrBatchTracker& bt,
     GrGLConicEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLGeometryProcessor* GrConicEffect::createGLInstance(const GrBatchTracker& bt) const {
+GrGLPrimitiveProcessor* GrConicEffect::createGLInstance(const GrBatchTracker& bt,
+                                                        const GrGLCaps&) const {
     return SkNEW_ARGS(GrGLConicEffect, (*this, bt));
 }
 
@@ -194,8 +195,8 @@ GrConicEffect::GrConicEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t 
     , fCoverageScale(coverage)
     , fEdgeType(edgeType) {
     this->initClassID<GrConicEffect>();
-    fInPosition = &this->addVertexAttrib(GrAttribute("inPosition", kVec2f_GrVertexAttribType));
-    fInConicCoeffs = &this->addVertexAttrib(GrAttribute("inConicCoeffs",
+    fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
+    fInConicCoeffs = &this->addVertexAttrib(Attribute("inConicCoeffs",
                                                         kVec4f_GrVertexAttribType));
 }
 
@@ -204,7 +205,7 @@ bool GrConicEffect::onIsEqual(const GrGeometryProcessor& other) const {
     return (ce.fEdgeType == fEdgeType);
 }
 
-void GrConicEffect::initBatchTracker(GrBatchTracker* bt, const InitBT& init) const {
+void GrConicEffect::initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const {
     ConicBatchTracker* local = bt->cast<ConicBatchTracker>();
     local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
     local->fCoverageScale = fCoverageScale;
@@ -258,7 +259,7 @@ public:
     GrGLQuadEffect(const GrGeometryProcessor&,
                    const GrBatchTracker&);
 
-    void emitCode(const EmitArgs&) SK_OVERRIDE;
+    void onEmitCode(EmitArgs&, GrGPArgs*) SK_OVERRIDE;
 
     static inline void GenKey(const GrGeometryProcessor&,
                               const GrBatchTracker&,
@@ -300,11 +301,14 @@ GrGLQuadEffect::GrGLQuadEffect(const GrGeometryProcessor& processor,
     fEdgeType = ce.getEdgeType();
 }
 
-void GrGLQuadEffect::emitCode(const EmitArgs& args) {
+void GrGLQuadEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLGPBuilder* pb = args.fPB;
     GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
     const GrQuadEffect& gp = args.fGP.cast<GrQuadEffect>();
     const QuadBatchTracker& local = args.fBT.cast<QuadBatchTracker>();
+
+    // emit attributes
+    vsBuilder->emitAttributes(gp);
 
     GrGLVertToFrag v(kVec4f_GrSLType);
     args.fPB->addVarying("HairQuadEdge", &v);
@@ -314,16 +318,12 @@ void GrGLQuadEffect::emitCode(const EmitArgs& args) {
     this->setupColorPassThrough(args.fPB, local.fInputColorType, args.fOutputColor, NULL,
                                 &fColorUniform);
 
-    // setup coord outputs
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->positionCoords(), gp.inPosition()->fName);
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->localCoords(), gp.inPosition()->fName);
+    // Setup position
+    this->setupPosition(pb, gpArgs, gp.inPosition()->fName, gp.viewMatrix());
 
-    // setup uniform viewMatrix
-    this->addUniformViewMatrix(pb);
-
-    // setup position varying
-    vsBuilder->codeAppendf("%s = %s * vec3(%s, 1);", vsBuilder->glPosition(), this->uViewM(),
-                           gp.inPosition()->fName);
+    // emit transforms with position
+    this->emitTransforms(pb, gpArgs->fPositionVar, gp.inPosition()->fName, gp.localMatrix(),
+                         args.fTransformsIn, args.fTransformsOut);
 
     GrGLGPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
     fsBuilder->codeAppendf("float edgeAlpha;");
@@ -381,16 +381,17 @@ void GrGLQuadEffect::emitCode(const EmitArgs& args) {
     }
 }
 
-void GrGLQuadEffect::GenKey(const GrGeometryProcessor& processor,
+void GrGLQuadEffect::GenKey(const GrGeometryProcessor& gp,
                             const GrBatchTracker& bt,
                             const GrGLCaps&,
                             GrProcessorKeyBuilder* b) {
-    const GrQuadEffect& ce = processor.cast<GrQuadEffect>();
+    const GrQuadEffect& ce = gp.cast<GrQuadEffect>();
     const QuadBatchTracker& local = bt.cast<QuadBatchTracker>();
     uint32_t key = ce.isAntiAliased() ? (ce.isFilled() ? 0x0 : 0x1) : 0x2;
     key |= kUniform_GrGPInput == local.fInputColorType ? 0x4 : 0x0;
     key |= 0xff != local.fCoverageScale ? 0x8 : 0x0;
-    key |= local.fUsesLocalCoords && processor.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= local.fUsesLocalCoords && gp.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= ComputePosKey(gp.viewMatrix()) << 5;
     b->add32(key);
 }
 
@@ -404,7 +405,8 @@ void GrQuadEffect::getGLProcessorKey(const GrBatchTracker& bt,
     GrGLQuadEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLGeometryProcessor* GrQuadEffect::createGLInstance(const GrBatchTracker& bt) const {
+GrGLPrimitiveProcessor* GrQuadEffect::createGLInstance(const GrBatchTracker& bt,
+                                                       const GrGLCaps&) const {
     return SkNEW_ARGS(GrGLQuadEffect, (*this, bt));
 }
 
@@ -414,8 +416,8 @@ GrQuadEffect::GrQuadEffect(GrColor color, const SkMatrix& viewMatrix, uint8_t co
     , fCoverageScale(coverage)
     , fEdgeType(edgeType) {
     this->initClassID<GrQuadEffect>();
-    fInPosition = &this->addVertexAttrib(GrAttribute("inPosition", kVec2f_GrVertexAttribType));
-    fInHairQuadEdge = &this->addVertexAttrib(GrAttribute("inHairQuadEdge",
+    fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
+    fInHairQuadEdge = &this->addVertexAttrib(Attribute("inHairQuadEdge",
                                                         kVec4f_GrVertexAttribType));
 }
 
@@ -424,7 +426,7 @@ bool GrQuadEffect::onIsEqual(const GrGeometryProcessor& other) const {
     return (ce.fEdgeType == fEdgeType);
 }
 
-void GrQuadEffect::initBatchTracker(GrBatchTracker* bt, const InitBT& init) const {
+void GrQuadEffect::initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const {
     QuadBatchTracker* local = bt->cast<QuadBatchTracker>();
     local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
     local->fCoverageScale = fCoverageScale;
@@ -478,7 +480,7 @@ public:
     GrGLCubicEffect(const GrGeometryProcessor&,
                     const GrBatchTracker&);
 
-    void emitCode(const EmitArgs&) SK_OVERRIDE;
+    void onEmitCode(EmitArgs&, GrGPArgs*) SK_OVERRIDE;
 
     static inline void GenKey(const GrGeometryProcessor&,
                               const GrBatchTracker&,
@@ -514,10 +516,13 @@ GrGLCubicEffect::GrGLCubicEffect(const GrGeometryProcessor& processor,
     fEdgeType = ce.getEdgeType();
 }
 
-void GrGLCubicEffect::emitCode(const EmitArgs& args) {
+void GrGLCubicEffect::onEmitCode(EmitArgs& args, GrGPArgs* gpArgs) {
     GrGLVertexBuilder* vsBuilder = args.fPB->getVertexShaderBuilder();
     const GrCubicEffect& gp = args.fGP.cast<GrCubicEffect>();
     const CubicBatchTracker& local = args.fBT.cast<CubicBatchTracker>();
+
+    // emit attributes
+    vsBuilder->emitAttributes(gp);
 
     GrGLVertToFrag v(kVec4f_GrSLType);
     args.fPB->addVarying("CubicCoeffs", &v, kHigh_GrSLPrecision);
@@ -527,16 +532,12 @@ void GrGLCubicEffect::emitCode(const EmitArgs& args) {
     this->setupColorPassThrough(args.fPB, local.fInputColorType, args.fOutputColor, NULL,
                                 &fColorUniform);
 
-    // setup coord outputs
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->positionCoords(), gp.inPosition()->fName);
-    vsBuilder->codeAppendf("%s = %s;", vsBuilder->localCoords(), gp.inPosition()->fName);
+    // Setup position
+    this->setupPosition(args.fPB, gpArgs, gp.inPosition()->fName, gp.viewMatrix());
 
-    // setup uniform viewMatrix
-    this->addUniformViewMatrix(args.fPB);
-
-    // setup position varying
-    vsBuilder->codeAppendf("%s = %s * vec3(%s, 1);", vsBuilder->glPosition(), this->uViewM(),
-                           gp.inPosition()->fName);
+    // emit transforms with position
+    this->emitTransforms(args.fPB, gpArgs->fPositionVar, gp.inPosition()->fName, gp.localMatrix(),
+                         args.fTransformsIn, args.fTransformsOut);
 
     GrGLGPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
 
@@ -625,15 +626,16 @@ void GrGLCubicEffect::emitCode(const EmitArgs& args) {
     fsBuilder->codeAppendf("%s = vec4(%s);", args.fOutputCoverage, edgeAlpha.c_str());
 }
 
-void GrGLCubicEffect::GenKey(const GrGeometryProcessor& processor,
+void GrGLCubicEffect::GenKey(const GrGeometryProcessor& gp,
                              const GrBatchTracker& bt,
                              const GrGLCaps&,
                              GrProcessorKeyBuilder* b) {
-    const GrCubicEffect& ce = processor.cast<GrCubicEffect>();
+    const GrCubicEffect& ce = gp.cast<GrCubicEffect>();
     const CubicBatchTracker& local = bt.cast<CubicBatchTracker>();
     uint32_t key = ce.isAntiAliased() ? (ce.isFilled() ? 0x0 : 0x1) : 0x2;
     key |= kUniform_GrGPInput == local.fInputColorType ? 0x4 : 0x8;
-    key |= local.fUsesLocalCoords && processor.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= local.fUsesLocalCoords && gp.localMatrix().hasPerspective() ? 0x10 : 0x0;
+    key |= ComputePosKey(gp.viewMatrix()) << 5;
     b->add32(key);
 }
 
@@ -647,7 +649,8 @@ void GrCubicEffect::getGLProcessorKey(const GrBatchTracker& bt,
     GrGLCubicEffect::GenKey(*this, bt, caps, b);
 }
 
-GrGLGeometryProcessor* GrCubicEffect::createGLInstance(const GrBatchTracker& bt) const {
+GrGLPrimitiveProcessor* GrCubicEffect::createGLInstance(const GrBatchTracker& bt,
+                                                        const GrGLCaps&) const {
     return SkNEW_ARGS(GrGLCubicEffect, (*this, bt));
 }
 
@@ -655,8 +658,8 @@ GrCubicEffect::GrCubicEffect(GrColor color, const SkMatrix& viewMatrix,
                              GrPrimitiveEdgeType edgeType)
     : INHERITED(color, viewMatrix), fEdgeType(edgeType) {
     this->initClassID<GrCubicEffect>();
-    fInPosition = &this->addVertexAttrib(GrAttribute("inPosition", kVec2f_GrVertexAttribType));
-    fInCubicCoeffs = &this->addVertexAttrib(GrAttribute("inCubicCoeffs",
+    fInPosition = &this->addVertexAttrib(Attribute("inPosition", kVec2f_GrVertexAttribType));
+    fInCubicCoeffs = &this->addVertexAttrib(Attribute("inCubicCoeffs",
                                                         kVec4f_GrVertexAttribType));
 }
 
@@ -665,7 +668,7 @@ bool GrCubicEffect::onIsEqual(const GrGeometryProcessor& other) const {
     return (ce.fEdgeType == fEdgeType);
 }
 
-void GrCubicEffect::initBatchTracker(GrBatchTracker* bt, const InitBT& init) const {
+void GrCubicEffect::initBatchTracker(GrBatchTracker* bt, const GrPipelineInfo& init) const {
     CubicBatchTracker* local = bt->cast<CubicBatchTracker>();
     local->fInputColorType = GetColorInputType(&local->fColor, this->color(), init, false);
     local->fUsesLocalCoords = init.fUsesLocalCoords;

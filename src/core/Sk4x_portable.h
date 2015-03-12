@@ -2,6 +2,8 @@
 // This file will be intentionally included three times.
 
 #if defined(SK4X_PREAMBLE)
+    #include "SkFloatingPoint.h"
+    #include <math.h>
 
 #elif defined(SK4X_PRIVATE)
     typedef T Type;
@@ -19,6 +21,7 @@
 #define M(...) template <typename T> __VA_ARGS__ Sk4x<T>::
 
 M() Sk4x() {}
+M() Sk4x(T v) { fVec[0] = fVec[1] = fVec[2] = fVec[3] = v; }
 M() Sk4x(T a, T b, T c, T d) { fVec[0] = a; fVec[1] = b; fVec[2] = c; fVec[3] = d; }
 
 M()              Sk4x(const Sk4x<T>& other) { this->set(other.fVec);               }
@@ -58,6 +61,20 @@ M(Sk4x<T>) subtract(const Sk4x<T>& other) const { return Sk4x(BINOP(-)); }
 M(Sk4x<T>) multiply(const Sk4x<T>& other) const { return Sk4x(BINOP(*)); }
 M(Sk4x<T>)   divide(const Sk4x<T>& other) const { return Sk4x(BINOP(/)); }
 #undef BINOP
+
+template<> inline Sk4f Sk4f::rsqrt() const {
+    return Sk4f(sk_float_rsqrt(fVec[0]),
+                sk_float_rsqrt(fVec[1]),
+                sk_float_rsqrt(fVec[2]),
+                sk_float_rsqrt(fVec[3]));
+}
+
+template<> inline Sk4f Sk4f::sqrt() const {
+    return Sk4f(sqrtf(fVec[0]),
+                sqrtf(fVec[1]),
+                sqrtf(fVec[2]),
+                sqrtf(fVec[3]));
+}
 
 #define BOOL_BINOP(op) fVec[0] op other.fVec[0] ? -1 : 0, \
                        fVec[1] op other.fVec[1] ? -1 : 0, \

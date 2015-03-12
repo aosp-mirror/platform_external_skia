@@ -32,19 +32,16 @@ void SkGLWidget::initializeGL() {
     if (!fCurIntf) {
         return;
     }
-    if (!fCurContext) {
-        fCurContext.reset(GrContext::Create(kOpenGL_GrBackend, (GrBackendContext) fCurIntf.get()));
-    }
-    if (!fCurContext) {
-        return;
-    }
-
     // The call may come multiple times, for example after setSampleCount().  The QGLContext will be
     // different, but we do not have a mechanism to catch the destroying of QGLContext, so that
-    // proper resource cleanup could be made. Instead, we assume that the underlying GL context
-    // never actually changes. If it would, we could not destroy the resources.
+    // proper resource cleanup could be made.
+    if (fCurContext) {
+        fCurContext->abandonContext();
+    }
     fGpuDevice.reset(NULL);
     fCanvas.reset(NULL);
+
+    fCurContext.reset(GrContext::Create(kOpenGL_GrBackend, (GrBackendContext) fCurIntf.get()));
 }
 
 void SkGLWidget::createRenderTarget() {
@@ -64,19 +61,19 @@ void SkGLWidget::createRenderTarget() {
     GrBackendRenderTargetDesc desc = this->getDesc(this->width(), this->height());
     desc.fOrigin = kBottomLeft_GrSurfaceOrigin;
     SkAutoTUnref<GrRenderTarget> curRenderTarget(fCurContext->wrapBackendRenderTarget(desc));
-    fGpuDevice.reset(SkGpuDevice::Create(curRenderTarget.get(),
-                                         SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType)));
+    SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
+    fGpuDevice.reset(SkGpuDevice::Create(curRenderTarget, &props));
     fCanvas.reset(new SkCanvas(fGpuDevice));
 }
 
 void SkGLWidget::resizeGL(int w, int h) {
     SkASSERT(w == this->width() && h == this->height());
     this->createRenderTarget();
-    draw();
 }
 
 void SkGLWidget::paintGL() {
     if (!this->isHidden() && fCanvas) {
+        fCurContext->resetContext();
         fDebugger->draw(fCanvas.get());
         // TODO(chudy): Implement an optional flush button in Gui.
         fCanvas->flush();

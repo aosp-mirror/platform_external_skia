@@ -17,10 +17,6 @@
 #include "SkTemplates.h"
 #include "SkTSort.h"
 
-#ifdef SK_USE_LEGACY_AA_COVERAGE
-    #define SK_USE_STD_SORT_FOR_EDGES
-#endif
-
 #define kEDGE_HEAD_Y    SK_MinS32
 #define kEDGE_TAIL_Y    SK_MaxS32
 
@@ -45,34 +41,23 @@ static inline void remove_edge(SkEdge* edge) {
     edge->fNext->fPrev = edge->fPrev;
 }
 
-static inline void swap_edges(SkEdge* prev, SkEdge* next) {
-    SkASSERT(prev->fNext == next && next->fPrev == prev);
-
-    // remove prev from the list
-    prev->fPrev->fNext = next;
-    next->fPrev = prev->fPrev;
-
-    // insert prev after next
-    prev->fNext = next->fNext;
-    next->fNext->fPrev = prev;
-    next->fNext = prev;
-    prev->fPrev = next;
+static inline void insert_edge_after(SkEdge* edge, SkEdge* afterMe) {
+    edge->fPrev = afterMe;
+    edge->fNext = afterMe->fNext;
+    afterMe->fNext->fPrev = edge;
+    afterMe->fNext = edge;
 }
 
 static void backward_insert_edge_based_on_x(SkEdge* edge SkDECLAREPARAM(int, curr_y)) {
     SkFixed x = edge->fX;
 
-    for (;;) {
-        SkEdge* prev = edge->fPrev;
-
-        // add 1 to curr_y since we may have added new edges (built from curves)
-        // that start on the next scanline
-        SkASSERT(prev && prev->fFirstY <= curr_y + 1);
-
-        if (prev->fX <= x) {
-            break;
-        }
-        swap_edges(prev, edge);
+    SkEdge* prev = edge->fPrev;
+    while (prev->fX > x) {
+        prev = prev->fPrev;
+    }
+    if (prev->fNext != edge) {
+        remove_edge(edge);
+        insert_edge_after(edge, prev);
     }
 }
 
@@ -113,7 +98,7 @@ typedef void (*PrePostProc)(SkBlitter* blitter, int y, bool isStartOfScanline);
 
 static void walk_edges(SkEdge* prevHead, SkPath::FillType fillType,
                        SkBlitter* blitter, int start_y, int stop_y,
-                       PrePostProc proc) {
+                       PrePostProc proc, int rightClip) {
     validate_sort(prevHead->fNext);
 
     int curr_y = start_y;
@@ -181,6 +166,14 @@ static void walk_edges(SkEdge* prevHead, SkPath::FillType fillType,
             }
             currE = next;
             SkASSERT(currE);
+        }
+
+        // was our right-edge culled away?
+        if (in_interval) {
+            int width = rightClip - left;
+            if (width > 0) {
+                blitter->blitH(left, curr_y, width);
+            }
         }
 
         if (proc) {
@@ -260,8 +253,6 @@ static void walk_convex_edges(SkEdge* prevHead, SkPath::FillType,
             if (L < R) {
                 count += 1;
                 blitter->blitRect(L, local_top, R - L, count);
-                left += count * dLeft;
-                rite += count * dRite;
             }
             local_top = local_bot + 1;
         } else {
@@ -373,27 +364,6 @@ static void PrePostInverseBlitterProc(SkBlitter* blitter, int y, bool isStart) {
 #pragma warning ( pop )
 #endif
 
-#ifdef SK_USE_STD_SORT_FOR_EDGES
-extern "C" {
-    static int edge_compare(const void* a, const void* b) {
-        const SkEdge* edgea = *(const SkEdge**)a;
-        const SkEdge* edgeb = *(const SkEdge**)b;
-
-        int valuea = edgea->fFirstY;
-        int valueb = edgeb->fFirstY;
-
-        if (valuea == valueb) {
-            valuea = edgea->fX;
-            valueb = edgeb->fX;
-        }
-
-        // this overflows if valuea >>> valueb or vice-versa
-        //     return valuea - valueb;
-        // do perform the slower but safe compares
-        return (valuea < valueb) ? -1 : (valuea > valueb);
-    }
-}
-#else
 static bool operator<(const SkEdge& a, const SkEdge& b) {
     int valuea = a.fFirstY;
     int valueb = b.fFirstY;
@@ -405,14 +375,9 @@ static bool operator<(const SkEdge& a, const SkEdge& b) {
 
     return valuea < valueb;
 }
-#endif
 
 static SkEdge* sort_edges(SkEdge* list[], int count, SkEdge** last) {
-#ifdef SK_USE_STD_SORT_FOR_EDGES
-    qsort(list, count, sizeof(SkEdge*), edge_compare);
-#else
     SkTQSort(list, list + count - 1);
-#endif
 
     // now make the edges linked in sorted order
     for (int i = 1; i < count; i++) {
@@ -430,16 +395,20 @@ static SkEdge* sort_edges(SkEdge* list[], int count, SkEdge** last) {
 // clipRect (if no null) has already been shifted up
 //
 void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitter,
-                  int start_y, int stop_y, int shiftEdgesUp,
-                  const SkRegion& clipRgn) {
+                  int start_y, int stop_y, int shiftEdgesUp, const SkRegion& clipRgn) {
     SkASSERT(blitter);
 
     SkEdgeBuilder   builder;
 
-    int count = builder.build(path, clipRect, shiftEdgesUp);
+    // If we're convex, then we need both edges, even the right edge is past the clip
+    const bool canCullToTheRight = !path.isConvex();
+
+    int count = builder.build(path, clipRect, shiftEdgesUp, canCullToTheRight);
+    SkASSERT(count >= 0);
+
     SkEdge**    list = builder.edgeList();
 
-    if (count < 2) {
+    if (0 == count) {
         if (path.isInverseFillType()) {
             /*
              *  Since we are in inverse-fill, our caller has already drawn above
@@ -461,7 +430,6 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
                                   rect.height() << shiftEdgesUp);
             }
         }
-
         return;
     }
 
@@ -501,9 +469,17 @@ void sk_fill_path(const SkPath& path, const SkIRect* clipRect, SkBlitter* blitte
     }
 
     if (path.isConvex() && (NULL == proc)) {
+        SkASSERT(count >= 2);   // convex walker does not handle missing right edges
         walk_convex_edges(&headEdge, path.getFillType(), blitter, start_y, stop_y, NULL);
     } else {
-        walk_edges(&headEdge, path.getFillType(), blitter, start_y, stop_y, proc);
+        int rightEdge;
+        if (clipRect) {
+            rightEdge = clipRect->right();
+        } else {
+            rightEdge = SkScalarRoundToInt(path.getBounds().right()) << shiftEdgesUp;
+        }
+        
+        walk_edges(&headEdge, path.getFillType(), blitter, start_y, stop_y, proc, rightEdge);
     }
 }
 

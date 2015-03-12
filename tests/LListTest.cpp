@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "SkInstCnt.h"
 #include "SkRandom.h"
 #include "SkTInternalLList.h"
 #include "SkTLList.h"
@@ -24,7 +25,7 @@ public:
     int fID;
 
 private:
-    SK_DECLARE_INST_COUNT_ROOT(ListElement);
+    SK_DECLARE_INST_COUNT(ListElement);
     SK_DECLARE_INTERNAL_LLIST_INTERFACE(ListElement);
 };
 

@@ -32,26 +32,194 @@ static bool can_tweak_alpha_for_coverage(GrBlendCoeff dstCoeff) {
            kISC_GrBlendCoeff == dstCoeff;
 }
 
-class GrGLPorterDuffXferProcessor : public GrGLXferProcessor {
+class PorterDuffXferProcessor : public GrXferProcessor {
 public:
-    GrGLPorterDuffXferProcessor(const GrProcessor&) {}
+    static GrXferProcessor* Create(GrBlendCoeff srcBlend, GrBlendCoeff dstBlend,
+                                   GrColor constant, const GrDeviceCoordTexture* dstCopy,
+                                   bool willReadDstColor) {
+        return SkNEW_ARGS(PorterDuffXferProcessor, (srcBlend, dstBlend, constant, dstCopy,
+                                                    willReadDstColor));
+    }
 
-    virtual ~GrGLPorterDuffXferProcessor() {}
+    ~PorterDuffXferProcessor() SK_OVERRIDE;
 
-    void emitCode(const EmitArgs& args) SK_OVERRIDE {
-        const GrPorterDuffXferProcessor& xp = args.fXP.cast<GrPorterDuffXferProcessor>();
+    const char* name() const SK_OVERRIDE { return "Porter Duff"; }
+
+    GrGLXferProcessor* createGLInstance() const SK_OVERRIDE;
+
+    bool hasSecondaryOutput() const SK_OVERRIDE;
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Stage Output Types
+    ////
+
+    enum PrimaryOutputType {
+        kNone_PrimaryOutputType,
+        kColor_PrimaryOutputType,
+        kCoverage_PrimaryOutputType,
+        // Modulate color and coverage, write result as the color output.
+        kModulate_PrimaryOutputType,
+        // Custom Porter-Duff output, used for when we explictly are reading the dst and blending
+        // in the shader. Secondary Output must be none if you use this. The custom blend uses the
+        // equation: cov * (coeffS * S + coeffD * D) + (1 - cov) * D
+        kCustom_PrimaryOutputType
+    };
+
+    enum SecondaryOutputType {
+        // There is no secondary output
+        kNone_SecondaryOutputType,
+        // Writes coverage as the secondary output. Only set if dual source blending is supported
+        // and primary output is kModulate.
+        kCoverage_SecondaryOutputType,
+        // Writes coverage * (1 - colorA) as the secondary output. Only set if dual source blending
+        // is supported and primary output is kModulate.
+        kCoverageISA_SecondaryOutputType,
+        // Writes coverage * (1 - colorRGBA) as the secondary output. Only set if dual source
+        // blending is supported and primary output is kModulate.
+        kCoverageISC_SecondaryOutputType,
+
+        kSecondaryOutputTypeCnt,
+    };
+
+    PrimaryOutputType primaryOutputType() const { return fPrimaryOutputType; }
+    SecondaryOutputType secondaryOutputType() const { return fSecondaryOutputType; }
+
+    GrXferProcessor::OptFlags getOptimizations(const GrProcOptInfo& colorPOI,
+                                               const GrProcOptInfo& coveragePOI,
+                                               bool doesStencilWrite,
+                                               GrColor* overrideColor,
+                                               const GrDrawTargetCaps& caps) SK_OVERRIDE;
+
+    void getBlendInfo(GrXferProcessor::BlendInfo* blendInfo) const SK_OVERRIDE {
+        if (!this->willReadDstColor()) {
+            blendInfo->fSrcBlend = fSrcBlend;
+            blendInfo->fDstBlend = fDstBlend;
+        } else {
+            blendInfo->fSrcBlend = kOne_GrBlendCoeff;
+            blendInfo->fDstBlend = kZero_GrBlendCoeff;
+        }
+        blendInfo->fBlendConstant = fBlendConstant;
+    }
+
+    GrBlendCoeff getSrcBlend() const { return fSrcBlend; }
+    GrBlendCoeff getDstBlend() const { return fDstBlend; }
+
+private:
+    PorterDuffXferProcessor(GrBlendCoeff srcBlend, GrBlendCoeff dstBlend, GrColor constant,
+                            const GrDeviceCoordTexture* dstCopy, bool willReadDstColor);
+
+    void onGetGLProcessorKey(const GrGLCaps& caps, GrProcessorKeyBuilder* b) const SK_OVERRIDE;
+
+    bool onIsEqual(const GrXferProcessor& xpBase) const SK_OVERRIDE {
+        const PorterDuffXferProcessor& xp = xpBase.cast<PorterDuffXferProcessor>();
+        if (fSrcBlend != xp.fSrcBlend ||
+            fDstBlend != xp.fDstBlend ||
+            fBlendConstant != xp.fBlendConstant ||
+            fPrimaryOutputType != xp.fPrimaryOutputType || 
+            fSecondaryOutputType != xp.fSecondaryOutputType) {
+            return false;
+        }
+        return true;
+    }
+
+    GrXferProcessor::OptFlags internalGetOptimizations(const GrProcOptInfo& colorPOI,
+                                                       const GrProcOptInfo& coveragePOI,
+                                                       bool doesStencilWrite);
+
+    void calcOutputTypes(GrXferProcessor::OptFlags blendOpts, const GrDrawTargetCaps& caps,
+                         bool hasSolidCoverage);
+
+    GrBlendCoeff fSrcBlend;
+    GrBlendCoeff fDstBlend;
+    GrColor      fBlendConstant;
+    PrimaryOutputType fPrimaryOutputType;
+    SecondaryOutputType fSecondaryOutputType;
+
+    typedef GrXferProcessor INHERITED;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+bool append_porterduff_term(GrGLFPFragmentBuilder* fsBuilder, GrBlendCoeff coeff,
+                            const char* colorName, const char* srcColorName,
+                            const char* dstColorName, bool hasPrevious) {
+    if (kZero_GrBlendCoeff == coeff) {
+        return hasPrevious;
+    } else {
+        if (hasPrevious) {
+            fsBuilder->codeAppend(" + ");
+        }
+        fsBuilder->codeAppendf("%s", colorName);
+        switch (coeff) {
+            case kOne_GrBlendCoeff:
+                break;
+            case kSC_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * %s", srcColorName); 
+                break;
+            case kISC_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * (vec4(1.0) - %s)", srcColorName); 
+                break;
+            case kDC_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * %s", dstColorName); 
+                break;
+            case kIDC_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * (vec4(1.0) - %s)", dstColorName); 
+                break;
+            case kSA_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * %s.a", srcColorName); 
+                break;
+            case kISA_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * (1.0 - %s.a)", srcColorName); 
+                break;
+            case kDA_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * %s.a", dstColorName); 
+                break;
+            case kIDA_GrBlendCoeff:
+                fsBuilder->codeAppendf(" * (1.0 - %s.a)", dstColorName); 
+                break;
+            default:
+                SkFAIL("Unsupported Blend Coeff");
+        }
+        return true;
+    }
+}
+
+class GLPorterDuffXferProcessor : public GrGLXferProcessor {
+public:
+    GLPorterDuffXferProcessor(const GrProcessor&) {}
+
+    virtual ~GLPorterDuffXferProcessor() {}
+
+    static void GenKey(const GrProcessor& processor, const GrGLCaps& caps,
+                       GrProcessorKeyBuilder* b) {
+        const PorterDuffXferProcessor& xp = processor.cast<PorterDuffXferProcessor>();
+        b->add32(xp.primaryOutputType());
+        b->add32(xp.secondaryOutputType());
+        if (xp.willReadDstColor()) {
+            b->add32(xp.getSrcBlend());
+            b->add32(xp.getDstBlend());
+        }
+    };
+
+private:
+    void onEmitCode(const EmitArgs& args) SK_OVERRIDE {
+        const PorterDuffXferProcessor& xp = args.fXP.cast<PorterDuffXferProcessor>();
         GrGLFPFragmentBuilder* fsBuilder = args.fPB->getFragmentShaderBuilder();
-        if (xp.hasSecondaryOutput()) {
+        if (PorterDuffXferProcessor::kCustom_PrimaryOutputType != xp.primaryOutputType()) {
+            SkASSERT(!xp.willReadDstColor());
             switch(xp.secondaryOutputType()) {
-                case GrPorterDuffXferProcessor::kCoverage_SecondaryOutputType:
-                    fsBuilder->codeAppendf("%s = %s;", args.fOutputSecondary, args.fInputCoverage);
+                case PorterDuffXferProcessor::kNone_SecondaryOutputType:
                     break;
-                case GrPorterDuffXferProcessor::kCoverageISA_SecondaryOutputType:
+                case PorterDuffXferProcessor::kCoverage_SecondaryOutputType:
+                    fsBuilder->codeAppendf("%s = %s;", args.fOutputSecondary,
+                                           args.fInputCoverage);
+                    break;
+                case PorterDuffXferProcessor::kCoverageISA_SecondaryOutputType:
                     fsBuilder->codeAppendf("%s = (1.0 - %s.a) * %s;",
                                            args.fOutputSecondary, args.fInputColor,
                                            args.fInputCoverage);
                     break;
-                case GrPorterDuffXferProcessor::kCoverageISC_SecondaryOutputType:
+                case PorterDuffXferProcessor::kCoverageISC_SecondaryOutputType:
                     fsBuilder->codeAppendf("%s = (vec4(1.0) - %s) * %s;",
                                            args.fOutputSecondary, args.fInputColor,
                                            args.fInputCoverage);
@@ -59,76 +227,85 @@ public:
                 default:
                     SkFAIL("Unexpected Secondary Output");
             }
-        }
-        
-        switch (xp.primaryOutputType()) {
-            case GrPorterDuffXferProcessor::kNone_PrimaryOutputType:
-                fsBuilder->codeAppendf("%s = vec4(0);", args.fOutputPrimary);
-                break;
-            case GrPorterDuffXferProcessor::kColor_PrimaryOutputType:
-                fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputColor);
-                break;
-            case GrPorterDuffXferProcessor::kCoverage_PrimaryOutputType:
-                fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputCoverage);
-                break;
-            case GrPorterDuffXferProcessor::kModulate_PrimaryOutputType:
-            case GrPorterDuffXferProcessor::kCombineWithDst_PrimaryOutputType:
-                fsBuilder->codeAppendf("%s = %s * %s;", args.fOutputPrimary, args.fInputColor,
-                                       args.fInputCoverage);
-                if (GrPorterDuffXferProcessor::kCombineWithDst_PrimaryOutputType ==
-                    xp.primaryOutputType()){
-                    fsBuilder->codeAppendf("%s += (vec4(1.0) - %s) * %s;", args.fOutputPrimary,
-                                           args.fInputCoverage, fsBuilder->dstColor());
-                }
-                break;
-            default:
-                SkFAIL("Unexpected Primary Output");
+
+            switch (xp.primaryOutputType()) {
+                case PorterDuffXferProcessor::kNone_PrimaryOutputType:
+                    fsBuilder->codeAppendf("%s = vec4(0);", args.fOutputPrimary);
+                    break;
+                case PorterDuffXferProcessor::kColor_PrimaryOutputType:
+                    fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputColor);
+                    break;
+                case PorterDuffXferProcessor::kCoverage_PrimaryOutputType:
+                    fsBuilder->codeAppendf("%s = %s;", args.fOutputPrimary, args.fInputCoverage);
+                    break;
+                case PorterDuffXferProcessor::kModulate_PrimaryOutputType:
+                    fsBuilder->codeAppendf("%s = %s * %s;", args.fOutputPrimary, args.fInputColor,
+                                           args.fInputCoverage);
+                    break;
+                default:
+                    SkFAIL("Unexpected Primary Output");
+            }
+        } else {
+            SkASSERT(xp.willReadDstColor());
+
+            const char* dstColor = fsBuilder->dstColor();
+
+            fsBuilder->codeAppend("vec4 colorBlend =");
+            // append src blend
+            bool didAppend = append_porterduff_term(fsBuilder, xp.getSrcBlend(),
+                                                    args.fInputColor, args.fInputColor,
+                                                    dstColor, false);
+            // append dst blend
+            SkAssertResult(append_porterduff_term(fsBuilder, xp.getDstBlend(),
+                                                  dstColor, args.fInputColor,
+                                                  dstColor, didAppend));
+            fsBuilder->codeAppend(";");
+
+            fsBuilder->codeAppendf("%s = %s * colorBlend + (vec4(1.0) - %s) * %s;",
+                                   args.fOutputPrimary, args.fInputCoverage, args.fInputCoverage,
+                                   dstColor);
         }
     }
 
-    void setData(const GrGLProgramDataManager&, const GrXferProcessor&) SK_OVERRIDE {};
+    void onSetData(const GrGLProgramDataManager&, const GrXferProcessor&) SK_OVERRIDE {};
 
-    static void GenKey(const GrProcessor& processor, const GrGLCaps& caps,
-                       GrProcessorKeyBuilder* b) {
-        const GrPorterDuffXferProcessor& xp = processor.cast<GrPorterDuffXferProcessor>();
-        b->add32(xp.primaryOutputType());
-        b->add32(xp.secondaryOutputType());
-    };
-
-private:
     typedef GrGLXferProcessor INHERITED;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-GrPorterDuffXferProcessor::GrPorterDuffXferProcessor(GrBlendCoeff srcBlend, GrBlendCoeff dstBlend,
-                                                     GrColor constant)
-    : fSrcBlend(srcBlend)
+PorterDuffXferProcessor::PorterDuffXferProcessor(GrBlendCoeff srcBlend,
+                                                 GrBlendCoeff dstBlend,
+                                                 GrColor constant,
+                                                 const GrDeviceCoordTexture* dstCopy,
+                                                 bool willReadDstColor)
+    : INHERITED(dstCopy, willReadDstColor)
+    , fSrcBlend(srcBlend)
     , fDstBlend(dstBlend)
     , fBlendConstant(constant)
     , fPrimaryOutputType(kModulate_PrimaryOutputType) 
     , fSecondaryOutputType(kNone_SecondaryOutputType) {
-    this->initClassID<GrPorterDuffXferProcessor>();
+    this->initClassID<PorterDuffXferProcessor>();
 }
 
-GrPorterDuffXferProcessor::~GrPorterDuffXferProcessor() {
+PorterDuffXferProcessor::~PorterDuffXferProcessor() {
 }
 
-void GrPorterDuffXferProcessor::getGLProcessorKey(const GrGLCaps& caps,
+void PorterDuffXferProcessor::onGetGLProcessorKey(const GrGLCaps& caps,
                                                   GrProcessorKeyBuilder* b) const {
-    GrGLPorterDuffXferProcessor::GenKey(*this, caps, b);
+    GLPorterDuffXferProcessor::GenKey(*this, caps, b);
 }
 
-GrGLXferProcessor* GrPorterDuffXferProcessor::createGLInstance() const {
-    return SkNEW_ARGS(GrGLPorterDuffXferProcessor, (*this));
+GrGLXferProcessor* PorterDuffXferProcessor::createGLInstance() const {
+    return SkNEW_ARGS(GLPorterDuffXferProcessor, (*this));
 }
 
 GrXferProcessor::OptFlags
-GrPorterDuffXferProcessor::getOptimizations(const GrProcOptInfo& colorPOI,
-                                            const GrProcOptInfo& coveragePOI,
-                                            bool doesStencilWrite,
-                                            GrColor* overrideColor,
-                                            const GrDrawTargetCaps& caps) {
+PorterDuffXferProcessor::getOptimizations(const GrProcOptInfo& colorPOI,
+                                          const GrProcOptInfo& coveragePOI,
+                                          bool doesStencilWrite,
+                                          GrColor* overrideColor,
+                                          const GrDrawTargetCaps& caps) {
     GrXferProcessor::OptFlags optFlags;
     // Optimizations when doing RGB Coverage
     if (coveragePOI.isFourChannelOutput()) {
@@ -144,14 +321,18 @@ GrPorterDuffXferProcessor::getOptimizations(const GrProcOptInfo& colorPOI,
                                                   coveragePOI,
                                                   doesStencilWrite);
     }
-    this->calcOutputTypes(optFlags, caps, coveragePOI.isSolidWhite(),
-                          colorPOI.readsDst() || coveragePOI.readsDst());
+    this->calcOutputTypes(optFlags, caps, coveragePOI.isSolidWhite());
     return optFlags;
 }
 
-void GrPorterDuffXferProcessor::calcOutputTypes(GrXferProcessor::OptFlags optFlags,
-                                                const GrDrawTargetCaps& caps,
-                                                bool hasSolidCoverage, bool readsDst) {
+void PorterDuffXferProcessor::calcOutputTypes(GrXferProcessor::OptFlags optFlags,
+                                              const GrDrawTargetCaps& caps,
+                                              bool hasSolidCoverage) {
+    if (this->willReadDstColor()) {
+        fPrimaryOutputType = kCustom_PrimaryOutputType;
+        return;
+    }
+
     if (optFlags & kIgnoreColor_OptFlag) {
         if (optFlags & kIgnoreCoverage_OptFlag) {
             fPrimaryOutputType = kNone_PrimaryOutputType;
@@ -174,33 +355,30 @@ void GrPorterDuffXferProcessor::calcOutputTypes(GrXferProcessor::OptFlags optFla
             if (kZero_GrBlendCoeff == fDstBlend) {
                 // write the coverage value to second color
                 fSecondaryOutputType = kCoverage_SecondaryOutputType;
-                fDstBlend = (GrBlendCoeff)GrGpu::kIS2C_GrBlendCoeff;
+                fDstBlend = kIS2C_GrBlendCoeff;
             } else if (kSA_GrBlendCoeff == fDstBlend) {
                 // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially covered.
                 fSecondaryOutputType = kCoverageISA_SecondaryOutputType;
-                fDstBlend = (GrBlendCoeff)GrGpu::kIS2C_GrBlendCoeff;
+                fDstBlend = kIS2C_GrBlendCoeff;
             } else if (kSC_GrBlendCoeff == fDstBlend) {
                 // SA dst coeff becomes 1-(1-SA)*coverage when dst is partially covered.
                 fSecondaryOutputType = kCoverageISC_SecondaryOutputType;
-                fDstBlend = (GrBlendCoeff)GrGpu::kIS2C_GrBlendCoeff;
+                fDstBlend = kIS2C_GrBlendCoeff;
             }
-        } else if (readsDst &&
-                   kOne_GrBlendCoeff == fSrcBlend &&
-                   kZero_GrBlendCoeff == fDstBlend) {
-            fPrimaryOutputType = kCombineWithDst_PrimaryOutputType;
         }
     }
 }
 
 GrXferProcessor::OptFlags
-GrPorterDuffXferProcessor::internalGetOptimizations(const GrProcOptInfo& colorPOI,
-                                                    const GrProcOptInfo& coveragePOI,
-                                                    bool doesStencilWrite) {
-    bool srcAIsOne;
-    bool hasCoverage;
+PorterDuffXferProcessor::internalGetOptimizations(const GrProcOptInfo& colorPOI,
+                                                  const GrProcOptInfo& coveragePOI,
+                                                  bool doesStencilWrite) {
+    if (this->willReadDstColor()) {
+        return GrXferProcessor::kNone_Opt;
+    }
 
-    srcAIsOne = colorPOI.isOpaque();
-    hasCoverage = !coveragePOI.isSolidWhite();
+    bool srcAIsOne = colorPOI.isOpaque();
+    bool hasCoverage = !coveragePOI.isSolidWhite();
 
     bool dstCoeffIsOne = kOne_GrBlendCoeff == fDstBlend ||
                          (kSA_GrBlendCoeff == fDstBlend && srcAIsOne);
@@ -242,7 +420,13 @@ GrPorterDuffXferProcessor::internalGetOptimizations(const GrProcOptInfo& colorPO
         // check whether coverage can be safely rolled into alpha
         // of if we can skip color computation and just emit coverage
         if (can_tweak_alpha_for_coverage(fDstBlend)) {
-            return GrXferProcessor::kSetCoverageDrawing_OptFlag;
+            if (colorPOI.allStagesMultiplyInput()) {
+                return GrXferProcessor::kSetCoverageDrawing_OptFlag |
+                       GrXferProcessor::kCanTweakAlphaForCoverage_OptFlag;
+            } else {
+                return GrXferProcessor::kSetCoverageDrawing_OptFlag;
+
+            }
         }
         if (dstCoeffIsZero) {
             if (kZero_GrBlendCoeff == fSrcBlend) {
@@ -258,12 +442,25 @@ GrPorterDuffXferProcessor::internalGetOptimizations(const GrProcOptInfo& colorPO
                 // If Sa is 1 then we can replace Sa with c
                 // and set dst coeff to 1-Sa.
                 fDstBlend = kISA_GrBlendCoeff;
-                return GrXferProcessor::kSetCoverageDrawing_OptFlag;
+                if (colorPOI.allStagesMultiplyInput()) {
+                    return GrXferProcessor::kSetCoverageDrawing_OptFlag |
+                           GrXferProcessor::kCanTweakAlphaForCoverage_OptFlag;
+                } else {
+                    return GrXferProcessor::kSetCoverageDrawing_OptFlag;
+
+                }
             }
         } else if (dstCoeffIsOne) {
             // the dst coeff is effectively one so blend works out to:
             // cS + (c)(1)D + (1-c)D = cS + D.
             fDstBlend = kOne_GrBlendCoeff;
+            if (colorPOI.allStagesMultiplyInput()) {
+                return GrXferProcessor::kSetCoverageDrawing_OptFlag |
+                       GrXferProcessor::kCanTweakAlphaForCoverage_OptFlag;
+            } else {
+                return GrXferProcessor::kSetCoverageDrawing_OptFlag;
+
+            }
             return GrXferProcessor::kSetCoverageDrawing_OptFlag;
         }
     }
@@ -271,7 +468,7 @@ GrPorterDuffXferProcessor::internalGetOptimizations(const GrProcOptInfo& colorPO
     return GrXferProcessor::kNone_Opt;
 }
 
-bool GrPorterDuffXferProcessor::hasSecondaryOutput() const {
+bool PorterDuffXferProcessor::hasSecondaryOutput() const {
     return kNone_SecondaryOutputType != fSecondaryOutputType;
 }
 
@@ -364,16 +561,21 @@ GrXPFactory* GrPorterDuffXPFactory::Create(SkXfermode::Mode mode) {
     }
 }
 
-GrXferProcessor* GrPorterDuffXPFactory::createXferProcessor(const GrProcOptInfo& colorPOI,
-                                                            const GrProcOptInfo& covPOI) const {
+GrXferProcessor*
+GrPorterDuffXPFactory::onCreateXferProcessor(const GrDrawTargetCaps& caps,
+                                             const GrProcOptInfo& colorPOI,
+                                             const GrProcOptInfo& covPOI,
+                                             const GrDeviceCoordTexture* dstCopy) const {
     if (!covPOI.isFourChannelOutput()) {
-        return GrPorterDuffXferProcessor::Create(fSrcCoeff, fDstCoeff);
+        return PorterDuffXferProcessor::Create(fSrcCoeff, fDstCoeff, 0, dstCopy,
+                                               this->willReadDstColor(caps, colorPOI, covPOI));
     } else {
         if (this->supportsRGBCoverage(colorPOI.color(), colorPOI.validFlags())) {
             SkASSERT(kRGBA_GrColorComponentFlags == colorPOI.validFlags());
             GrColor blendConstant = GrUnPreMulColor(colorPOI.color());
-            return GrPorterDuffXferProcessor::Create(kConstC_GrBlendCoeff, kISC_GrBlendCoeff,
-                                                     blendConstant);
+            return PorterDuffXferProcessor::Create(kConstC_GrBlendCoeff, kISC_GrBlendCoeff,
+                                                   blendConstant, dstCopy,
+                                                   this->willReadDstColor(caps, colorPOI, covPOI));
         } else {
             return NULL;
         }
@@ -386,46 +588,6 @@ bool GrPorterDuffXPFactory::supportsRGBCoverage(GrColor /*knownColor*/,
         kRGBA_GrColorComponentFlags == knownColorFlags) {
         return true;
     }
-    return false;
-}
-
-bool GrPorterDuffXPFactory::canApplyCoverage(const GrProcOptInfo& colorPOI,
-                                             const GrProcOptInfo& coveragePOI) const {
-    bool srcAIsOne = colorPOI.isOpaque();
-
-    bool dstCoeffIsOne = kOne_GrBlendCoeff == fDstCoeff ||
-                         (kSA_GrBlendCoeff == fDstCoeff && srcAIsOne);
-    bool dstCoeffIsZero = kZero_GrBlendCoeff == fDstCoeff ||
-                         (kISA_GrBlendCoeff == fDstCoeff && srcAIsOne);
-
-    if ((kZero_GrBlendCoeff == fSrcCoeff && dstCoeffIsOne)) {
-        return true;
-    }
-
-    // if we don't have coverage we can check whether the dst
-    // has to read at all.
-    // check whether coverage can be safely rolled into alpha
-    // of if we can skip color computation and just emit coverage
-    if (this->canTweakAlphaForCoverage()) {
-        return true;
-    }
-    if (dstCoeffIsZero) {
-        if (kZero_GrBlendCoeff == fSrcCoeff) {
-            return true;
-        } else if (srcAIsOne) {
-            return  true;
-        }
-    } else if (dstCoeffIsOne) {
-        return true;
-    }
-
-    // TODO: once all SkXferEffects are XP's then we will never reads dst here since only XP's
-    // will readDst and PD XP's don't read dst.
-    if ((colorPOI.readsDst() || coveragePOI.readsDst()) &&
-        kOne_GrBlendCoeff == fSrcCoeff && kZero_GrBlendCoeff == fDstCoeff) {
-        return true;
-    }
-
     return false;
 }
 
@@ -499,18 +661,40 @@ void GrPorterDuffXPFactory::getInvariantOutput(const GrProcOptInfo& colorPOI,
             break;
     }
 
-    // TODO: once all SkXferEffects are XP's then we will never reads dst here since only XP's
-    // will readDst and PD XP's don't read dst.
-    if (colorPOI.readsDst() || coveragePOI.readsDst()) {
-        output->fWillBlendWithDst = true;
-        return;
-    }
     output->fWillBlendWithDst = false;
 }
 
-bool GrPorterDuffXPFactory::willReadDst(const GrProcOptInfo& colorPOI,
-                                        const GrProcOptInfo& coveragePOI) const {
-    return colorPOI.readsDst() || coveragePOI.readsDst();
+bool GrPorterDuffXPFactory::willReadDstColor(const GrDrawTargetCaps& caps,
+                                             const GrProcOptInfo& colorPOI,
+                                             const GrProcOptInfo& coveragePOI) const {
+    // We can always blend correctly if we have dual source blending.
+    if (caps.dualSourceBlendingSupport()) {
+        return false;
+    }
+
+    if (this->canTweakAlphaForCoverage()) {
+        return false;
+    }
+
+    bool srcAIsOne = colorPOI.isOpaque();
+
+    if (kZero_GrBlendCoeff == fDstCoeff) {
+        if (kZero_GrBlendCoeff == fSrcCoeff || srcAIsOne) {
+            return false;
+        }
+    }
+
+    // Reduces to: coeffS * (Cov*S) + D
+    if (kSA_GrBlendCoeff == fDstCoeff && srcAIsOne) {
+        return false;
+    }
+
+    // We can always blend correctly if we have solid coverage.
+    if (coveragePOI.isSolidWhite()) {
+        return false;
+    }
+
+    return true;
 }
 
 GR_DEFINE_XP_FACTORY_TEST(GrPorterDuffXPFactory);
@@ -519,16 +703,7 @@ GrXPFactory* GrPorterDuffXPFactory::TestCreate(SkRandom* random,
                                                GrContext*,
                                                const GrDrawTargetCaps&,
                                                GrTexture*[]) {
-    GrBlendCoeff src;
-    do {
-        src = GrBlendCoeff(random->nextRangeU(kFirstPublicGrBlendCoeff, kLastPublicGrBlendCoeff));
-    } while (GrBlendCoeffRefsSrc(src));
-
-    GrBlendCoeff dst;
-    do {
-        dst = GrBlendCoeff(random->nextRangeU(kFirstPublicGrBlendCoeff, kLastPublicGrBlendCoeff));
-    } while (GrBlendCoeffRefsDst(dst));
-
-    return GrPorterDuffXPFactory::Create(src, dst);
+    SkXfermode::Mode mode = SkXfermode::Mode(random->nextULessThan(SkXfermode::kLastCoeffMode));
+    return GrPorterDuffXPFactory::Create(mode);
 }
 

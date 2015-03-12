@@ -47,7 +47,7 @@ public:
                                       sizeof(fLocalMatrixStorage);
         // This better be packed.
         SkASSERT(sizeof(uint32_t) * (&fEndOfStruct - &fPictureID) == keySize);
-        this->init(&gBitmapSkaderKeyNamespaceLabel, keySize);
+        this->init(&gBitmapSkaderKeyNamespaceLabel, 0, keySize);
     }
 
 private:
@@ -157,7 +157,8 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
         scale.set(SkScalarSqrt(m.getScaleX() * m.getScaleX() + m.getSkewX() * m.getSkewX()),
                   SkScalarSqrt(m.getScaleY() * m.getScaleY() + m.getSkewY() * m.getSkewY()));
     }
-    SkSize scaledSize = SkSize::Make(scale.x() * fTile.width(), scale.y() * fTile.height());
+    SkSize scaledSize = SkSize::Make(SkScalarAbs(scale.x() * fTile.width()),
+                                     SkScalarAbs(scale.y() * fTile.height()));
 
     // Clamp the tile size to about 16M pixels
     static const SkScalar kMaxTileArea = 4096 * 4096;
@@ -193,7 +194,9 @@ SkShader* SkPictureShader::refBitmapShader(const SkMatrix& matrix, const SkMatri
         }
         bm.eraseColor(SK_ColorTRANSPARENT);
 
-        SkCanvas canvas(bm);
+        // Always disable LCD text, since we can't assume our image will be opaque.
+        SkCanvas canvas(bm, SkSurfaceProps(0, kUnknown_SkPixelGeometry));
+
         canvas.scale(tileScale.width(), tileScale.height());
         canvas.translate(-fTile.x(), -fTile.y());
         canvas.drawPicture(fPicture);

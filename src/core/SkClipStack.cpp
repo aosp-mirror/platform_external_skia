@@ -8,6 +8,7 @@
 #include "SkCanvas.h"
 #include "SkClipStack.h"
 #include "SkPath.h"
+#include "SkPathOps.h"
 #include "SkThread.h"
 
 #include <new>
@@ -419,12 +420,6 @@ void SkClipStack::Element::updateBoundAndGenID(const Element* prior) {
     }
 
     if (!fDoAA) {
-        // Here we mimic a non-anti-aliased scanline system. If there is
-        // no anti-aliasing we can integerize the bounding box to exclude
-        // fractional parts that won't be rendered.
-        // Note: the left edge is handled slightly differently below. We
-        // are a bit more generous in the rounding since we don't want to
-        // risk missing the left pixels when fLeft is very close to .5
         fFiniteBound.set(SkScalarFloorToScalar(fFiniteBound.fLeft+0.45f),
                          SkScalarRoundToScalar(fFiniteBound.fTop),
                          SkScalarRoundToScalar(fFiniteBound.fRight),
@@ -621,25 +616,6 @@ void SkClipStack::getBounds(SkRect* canvFiniteBound,
     }
 }
 
-bool SkClipStack::intersectRectWithClip(SkRect* rect) const {
-    SkASSERT(rect);
-
-    SkRect bounds;
-    SkClipStack::BoundsType bt;
-    this->getBounds(&bounds, &bt);
-    if (bt == SkClipStack::kInsideOut_BoundsType) {
-        if (bounds.contains(*rect)) {
-            return false;
-        } else {
-            // If rect's x values are both within bound's x range we
-            // could clip here. Same for y. But we don't bother to check.
-            return true;
-        }
-    } else {
-        return rect->intersect(bounds);
-    }
-}
-
 bool SkClipStack::quickContains(const SkRect& rect) const {
 
     Iter iter(*this, Iter::kTop_IterStart);
@@ -663,6 +639,35 @@ bool SkClipStack::quickContains(const SkRect& rect) const {
         element = iter.prev();
     }
     return true;
+}
+
+bool SkClipStack::asPath(SkPath *path) const {
+    bool isAA = false;
+
+    path->reset();
+    path->setFillType(SkPath::kInverseEvenOdd_FillType);
+
+    SkClipStack::Iter iter(*this, SkClipStack::Iter::kBottom_IterStart);
+    while (const SkClipStack::Element* element = iter.next()) {
+        SkPath operand;
+        if (element->getType() != SkClipStack::Element::kEmpty_Type) {
+            element->asPath(&operand);
+        }
+
+        SkRegion::Op elementOp = element->getOp();
+        if (elementOp == SkRegion::kReplace_Op) {
+            *path = operand;
+        } else {
+            Op(*path, operand, (SkPathOp)elementOp, path);
+        }
+
+        // if the prev and curr clips disagree about aa -vs- not, favor the aa request.
+        // perhaps we need an API change to avoid this sort of mixed-signals about
+        // clipping.
+        isAA = (isAA || element->isAA());
+    }
+
+    return isAA;
 }
 
 void SkClipStack::pushElement(const Element& element) {

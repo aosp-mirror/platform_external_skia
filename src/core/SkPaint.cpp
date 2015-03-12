@@ -171,8 +171,8 @@ void SkPaint::reset() {
     *this = init;
 }
 
-void SkPaint::setFilterLevel(FilterLevel level) {
-    fBitfields.fFilterLevel = level;
+void SkPaint::setFilterQuality(SkFilterQuality quality) {
+    fBitfields.fFilterQuality = quality;
 }
 
 void SkPaint::setHinting(Hinting hintingLevel) {
@@ -802,14 +802,6 @@ static void set_bounds(const SkGlyph& g, SkRect* bounds) {
                 SkIntToScalar(g.fTop),
                 SkIntToScalar(g.fLeft + g.fWidth),
                 SkIntToScalar(g.fTop + g.fHeight));
-}
-
-// 64bits wide, with a 16bit bias. Useful when accumulating lots of 16.16 so
-// we don't overflow along the way
-typedef int64_t Sk48Dot16;
-
-static inline float Sk48Dot16ToScalar(Sk48Dot16 x) {
-    return (float) (x * 1.5258789e-5);   // x * (1 / 65536.0f)
 }
 
 static void join_bounds_x(const SkGlyph& g, SkRect* bounds, Sk48Dot16 dx) {
@@ -2003,9 +1995,9 @@ SkMaskFilter* SkPaint::setMaskFilter(SkMaskFilter* filter) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SkPaint::getFillPath(const SkPath& src, SkPath* dst,
-                          const SkRect* cullRect) const {
-    SkStrokeRec rec(*this);
+bool SkPaint::getFillPath(const SkPath& src, SkPath* dst, const SkRect* cullRect,
+                          SkScalar resScale) const {
+    SkStrokeRec rec(*this, resScale);
 
     const SkPath* srcPtr = &src;
     SkPath tmpPath;
@@ -2084,7 +2076,7 @@ void SkPaint::toString(SkString* str) const {
     if (typeface) {
         SkDynamicMemoryWStream ostream;
         typeface->serialize(&ostream);
-        SkAutoTUnref<SkStreamAsset> istream(ostream.detachAsStream());
+        SkAutoTDelete<SkStreamAsset> istream(ostream.detachAsStream());
         SkFontDescriptor descriptor(istream);
 
         str->append("<dt>Font Family Name:</dt><dd>");
@@ -2113,6 +2105,7 @@ void SkPaint::toString(SkString* str) const {
     SkPathEffect* pathEffect = this->getPathEffect();
     if (pathEffect) {
         str->append("<dt>PathEffect:</dt><dd>");
+        pathEffect->toString(str);
         str->append("</dd>");
     }
 

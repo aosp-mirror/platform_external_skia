@@ -6,10 +6,11 @@
  */
 
 #include "gm.h"
-#include "SkSurface.h"
-#include "SkCanvas.h"
-#include "SkStream.h"
 #include "SkData.h"
+#include "SkCanvas.h"
+#include "SkRandom.h"
+#include "SkStream.h"
+#include "SkSurface.h"
 
 #if SK_SUPPORT_GPU
 #include "GrContext.h"
@@ -120,17 +121,16 @@ public:
         sk_free(fBuffer);
     }
 
-
 protected:
-    virtual SkString onShortName() {
+    SkString onShortName() SK_OVERRIDE {
         return SkString("image-surface");
     }
 
-    virtual SkISize onISize() {
+    SkISize onISize() SK_OVERRIDE {
         return SkISize::Make(960, 1200);
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
         drawJpeg(canvas, this->getISize());
 
         canvas->scale(2, 2);
@@ -145,8 +145,7 @@ protected:
 
         static const char* kLabel8 = "Pre-Alloc Img";
         static const char* kLabel9 = "New Alloc Img";
-        static const char* kLabel10 = "Null Paint";
-        static const char* kLabel11 = "GPU";
+        static const char* kLabel10 = "GPU";
 
         SkPaint textPaint;
         textPaint.setAntiAlias(true);
@@ -163,8 +162,7 @@ protected:
 
         canvas->drawText(kLabel8, strlen(kLabel8),  80, 10, textPaint);
         canvas->drawText(kLabel9, strlen(kLabel9), 160, 10, textPaint);
-        canvas->drawText(kLabel10, strlen(kLabel10), 250, 10, textPaint);
-        canvas->drawText(kLabel11, strlen(kLabel11), 320, 10, textPaint);
+        canvas->drawText(kLabel10, strlen(kLabel10), 265, 10, textPaint);
 
         canvas->translate(80, 20);
 
@@ -174,32 +172,116 @@ protected:
         SkImageInfo info = SkImageInfo::MakeN32Premul(W, H);
         SkAutoTUnref<SkSurface> surf0(SkSurface::NewRasterDirect(info, fBuffer, RB));
         SkAutoTUnref<SkSurface> surf1(SkSurface::NewRaster(info));
-#if SK_SUPPORT_GPU
-        GrContext* ctx = canvas->getGrContext();
+        SkAutoTUnref<SkSurface> surf2;  // gpu
 
-        SkAutoTUnref<SkSurface> surf4(SkSurface::NewRenderTarget(ctx, info));
+#if SK_SUPPORT_GPU
+        surf2.reset(SkSurface::NewRenderTarget(canvas->getGrContext(),
+                                               SkSurface::kNo_Budgeted, info));
 #endif
 
         test_surface(canvas, surf0, true);
         canvas->translate(80, 0);
         test_surface(canvas, surf1, true);
-#if SK_SUPPORT_GPU
-        if (ctx) {
+        if (surf2) {
             canvas->translate(80, 0);
-            test_surface(canvas, surf4, true);
+            test_surface(canvas, surf2, true);
         }
-#endif
-    }
-
-    uint32_t onGetFlags() const SK_OVERRIDE {
-        return GM::kSkipPicture_Flag | GM::kSkipPipe_Flag;
     }
 
 private:
     typedef skiagm::GM INHERITED;
 };
+DEF_GM( return new ImageGM; )
 
-//////////////////////////////////////////////////////////////////////////////
+class ImageResizeGM : public skiagm::GM {
+    enum {
+        W = 100,
+        H = 100,
+    };
+public:
+    ImageResizeGM() {}
 
-static skiagm::GM* MyFactory(void*) { return new ImageGM; }
-static skiagm::GMRegistry reg(MyFactory);
+protected:
+    SkString onShortName() SK_OVERRIDE { return SkString("image-resize"); }
+
+    SkISize onISize() SK_OVERRIDE { return SkISize::Make(510, 480); }
+
+    void drawIntoImage(SkCanvas* canvas) {
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        paint.setStyle(SkPaint::kStroke_Style);
+        paint.setStrokeWidth(3);
+        SkRandom rand;
+        for (int i = 0; i < 60; ++i) {
+            paint.setColor(rand.nextU());
+            SkScalar x = rand.nextUScalar1() * W;
+            SkScalar y = rand.nextUScalar1() * H;
+            SkScalar r = rand.nextUScalar1() * W / 2;
+            canvas->drawCircle(x, y, r, paint);
+        }
+    }
+
+    SkImage* makeImage(SkCanvas* canvas) {
+        const SkImageInfo info = SkImageInfo::MakeN32Premul(W, H);
+        SkAutoTUnref<SkSurface> surface(canvas->newSurface(info));
+        if (!surface) {
+            surface.reset(SkSurface::NewRaster(info));
+        }
+        this->drawIntoImage(surface->getCanvas());
+        return surface->newImageSnapshot();
+    }
+
+    void drawResized(SkCanvas* canvas, SkImage* image, int newW, int newH, const SkIRect* subset,
+                     SkFilterQuality fq) {
+        // canvas method
+        SkPaint paint;
+        paint.setFilterQuality(fq);
+        SkRect dstR = SkRect::MakeWH(SkIntToScalar(newW), SkIntToScalar(newH));
+        SkRect srcR;
+        if (subset) {
+            srcR.set(*subset);
+        }
+        canvas->drawImageRect(image, subset ? &srcR : NULL, dstR, &paint);
+        canvas->translate(newW + 20.0f, 0);
+
+        // image method
+        SkAutoTUnref<SkImage> image2(image->newImage(newW, newH, subset, fq));
+        canvas->drawImage(image2, 0, 0, NULL);
+        canvas->translate(image2->width() + 20.0f, 0);
+    }
+
+    void drawImage(SkCanvas* canvas, SkImage* image, SkFilterQuality fq) {
+
+        canvas->drawImage(image, 0, 0, NULL);
+        canvas->translate(image->width() + 20.0f, 0);
+        this->drawResized(canvas, image, image->width()*4/10, image->height()*4/10, NULL, fq);
+
+        SkIRect subset = SkIRect::MakeLTRB(W/4, H/4, W/2, H/2);
+        this->drawResized(canvas, image, W, H, &subset, fq);
+    }
+
+    void onDraw(SkCanvas* canvas) SK_OVERRIDE {
+        canvas->translate(10, 10);
+
+        SkAutoTUnref<SkImage> image(this->makeImage(canvas));
+
+        const SkFilterQuality fq[] = {
+            kNone_SkFilterQuality,
+            kLow_SkFilterQuality,
+            kMedium_SkFilterQuality,
+            kHigh_SkFilterQuality,
+        };
+        for (size_t i = 0; i < SK_ARRAY_COUNT(fq); ++i) {
+            {
+                SkAutoCanvasRestore acr(canvas, true);
+                this->drawImage(canvas, image, fq[i]);
+            }
+            canvas->translate(0, image->height() + 20.0f);
+        }
+    }
+    
+private:
+    typedef skiagm::GM INHERITED;
+};
+DEF_GM( return new ImageResizeGM; )
+

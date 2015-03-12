@@ -155,18 +155,16 @@ SkCanvas* PictureRenderer::setupCanvas(int width, int height) {
                 desc.fWidth = width;
                 desc.fHeight = height;
                 desc.fSampleCnt = fSampleCount;
-                target.reset(fGrContext->createUncachedTexture(desc, NULL, 0));
-            }
-            if (NULL == target.get()) {
-                SkASSERT(0);
-                return NULL;
+                target.reset(fGrContext->createTexture(desc, false, NULL, 0));
             }
 
-            uint32_t flags = fUseDFText ? SkGpuDevice::kDFText_Flag : 0;
-            SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(target,
-                                         SkSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType),
-                                         flags));
-            canvas = SkNEW_ARGS(SkCanvas, (device.get()));
+            uint32_t flags = fUseDFText ? SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
+            SkSurfaceProps props(flags, SkSurfaceProps::kLegacyFontHost_InitType);
+            SkAutoTUnref<SkGpuDevice> device(SkGpuDevice::Create(target->asRenderTarget(), &props));
+            if (!device) {
+                return NULL;
+            }
+            canvas = SkNEW_ARGS(SkCanvas, (device));
             break;
         }
 #endif
@@ -832,40 +830,5 @@ SkBBHFactory* PictureRenderer::getFactory() {
     SkASSERT(0); // invalid bbhType
     return NULL;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-
-class GatherRenderer : public PictureRenderer {
-public:
-#if SK_SUPPORT_GPU
-    GatherRenderer(const GrContext::Options& opts) : INHERITED(opts) { }
-#endif
-
-    bool render(SkBitmap** out = NULL) SK_OVERRIDE {
-        SkRect bounds = SkRect::MakeWH(SkIntToScalar(fPicture->cullRect().width()),
-                                       SkIntToScalar(fPicture->cullRect().height()));
-        SkData* data = SkPictureUtils::GatherPixelRefs(fPicture, bounds);
-        SkSafeUnref(data);
-
-        return (fWritePath.isEmpty());    // we don't have anything to write
-    }
-
-private:
-    SkString getConfigNameInternal() SK_OVERRIDE {
-        return SkString("gather_pixelrefs");
-    }
-
-    typedef PictureRenderer INHERITED;
-};
-
-#if SK_SUPPORT_GPU
-PictureRenderer* CreateGatherPixelRefsRenderer(const GrContext::Options& opts) {
-    return SkNEW_ARGS(GatherRenderer, (opts));
-}
-#else
-PictureRenderer* CreateGatherPixelRefsRenderer() {
-    return SkNEW(GatherRenderer);
-}
-#endif
 
 } // namespace sk_tools

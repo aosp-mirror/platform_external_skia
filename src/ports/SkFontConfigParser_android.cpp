@@ -6,6 +6,8 @@
  */
 
 #include "SkFontConfigParser_android.h"
+#include "SkFontMgr_android.h"
+#include "SkStream.h"
 #include "SkTDArray.h"
 #include "SkTSearch.h"
 #include "SkTypeface.h"
@@ -15,8 +17,7 @@
 #include <stdio.h>
 
 #include <limits>
-
-
+#include <stdlib.h>
 
 // From Android version LMP onwards, all font files collapse into
 // /system/etc/fonts.xml. Instead of trying to detect which version
@@ -32,6 +33,10 @@
 #define LOCALE_FALLBACK_FONTS_PREFIX "fallback_fonts-"
 #define LOCALE_FALLBACK_FONTS_SUFFIX ".xml"
 
+#ifndef SK_FONT_FILE_PREFIX
+#    define SK_FONT_FILE_PREFIX "/fonts/"
+#endif
+
 /**
  * This file contains TWO parsers: one for JB and earlier (system_fonts.xml /
  * fallback_fonts.xml), one for LMP and later (fonts.xml).
@@ -39,34 +44,48 @@
  * version 21 or higher we switch to the LMP parser.
  */
 
-// These defines are used to determine the kind of tag that we're currently
-// populating with data. We only care about the sibling tags nameset and fileset
-// for now.
-#define NO_TAG 0
-#define NAMESET_TAG 1
-#define FILESET_TAG 2
+/** Used to track which tag is currently populating with data.
+ *  Only nameset and fileset are of interest for now.
+ */
+enum CurrentTag {
+    kNo_CurrentTag,
+    kNameSet_CurrentTag,
+    kFileSet_CurrentTag
+};
 
 /**
  * The FamilyData structure is passed around by the parser so that each handler
  * can read these variables that are relevant to the current parsing.
  */
 struct FamilyData {
-    FamilyData(XML_Parser* parserRef, SkTDArray<FontFamily*> &familiesRef) :
-        parser(parserRef),
-        families(familiesRef),
-        currentFamily(NULL),
-        currentFontInfo(NULL),
-        currentTag(NO_TAG) {};
+    FamilyData(XML_Parser parser, SkTDArray<FontFamily*>& families,
+               const SkString& basePath, bool isFallback)
+        : fParser(parser)
+        , fFamilies(families)
+        , fCurrentFamily(NULL)
+        , fCurrentFontInfo(NULL)
+        , fCurrentTag(kNo_CurrentTag)
+        , fVersion(0)
+        , fBasePath(basePath)
+        , fIsFallback(isFallback)
+    { };
 
-    XML_Parser* parser;                // The expat parser doing the work
-    SkTDArray<FontFamily*> &families;  // The array that each family is put into as it is parsed
-    FontFamily* currentFamily;         // The current family being created
-    FontFileInfo* currentFontInfo;     // The current fontInfo being created
-    int currentTag;                    // A flag to indicate whether we're in nameset/fileset tags
+    XML_Parser fParser;                       // The expat parser doing the work, owned by caller
+    SkTDArray<FontFamily*>& fFamilies;        // The array to append families, owned by caller
+    SkAutoTDelete<FontFamily> fCurrentFamily; // The family being created, owned by this
+    FontFileInfo* fCurrentFontInfo;           // The fontInfo being created, owned by fCurrentFamily
+    CurrentTag fCurrentTag;                   // The kind of tag currently being parsed.
+    int fVersion;                             // The version of the file parsed.
+    const SkString& fBasePath;                // The current base path.
+    const bool fIsFallback;                   // Indicates the file being parsed is a fallback file
 };
 
-/** http://www.w3.org/TR/html-markup/datatypes.html#common.data.integer.non-negative-def */
-template <typename T> static bool parseNonNegativeInteger(const char* s, T* value) {
+/** Parses a null terminated string into an integer type, checking for overflow.
+ *  http://www.w3.org/TR/html-markup/datatypes.html#common.data.integer.non-negative-def
+ *
+ *  If the string cannot be parsed into 'value', returns false and does not change 'value'.
+ */
+template <typename T> static bool parse_non_negative_integer(const char* s, T* value) {
     SK_COMPILE_ASSERT(std::numeric_limits<T>::is_integer, T_must_be_integer);
     const T nMax = std::numeric_limits<T>::max() / 10;
     const T dMax = std::numeric_limits<T>::max() - (nMax * 10);
@@ -87,76 +106,77 @@ template <typename T> static bool parseNonNegativeInteger(const char* s, T* valu
     return true;
 }
 
+static bool memeq(const char* s1, const char* s2, size_t n1, size_t n2) {
+    return n1 == n2 && 0 == memcmp(s1, s2, n1);
+}
+#define MEMEQ(c, s, n) memeq(c, s, sizeof(c) - 1, n)
+
+#define ATTS_NON_NULL(a, i) (a[i] != NULL && a[i+1] != NULL)
+
 namespace lmpParser {
 
-void familyElementHandler(FontFamily* family, const char** attributes) {
+static void family_element_handler(FontFamily* family, const char** attributes) {
     // A non-fallback <family> tag must have a canonical name attribute.
     // A fallback <family> tag has no name, and may have lang and variant
     // attributes.
     family->fIsFallbackFont = true;
-    for (size_t i = 0; attributes[i] != NULL &&
-                       attributes[i+1] != NULL; i += 2) {
+    for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
         const char* name = attributes[i];
         const char* value = attributes[i+1];
         size_t nameLen = strlen(name);
         size_t valueLen = strlen(value);
-        if (nameLen == 4 && !strncmp("name", name, nameLen)) {
+        if (MEMEQ("name", name, nameLen)) {
             SkAutoAsciiToLC tolc(value);
             family->fNames.push_back().set(tolc.lc());
             family->fIsFallbackFont = false;
-        } else if (nameLen == 4 && !strncmp("lang", name, nameLen)) {
-            family->fLanguage = SkLanguage (value);
-        } else if (nameLen == 7 && !strncmp("variant", name, nameLen)) {
+        } else if (MEMEQ("lang", name, nameLen)) {
+            family->fLanguage = SkLanguage(value, valueLen);
+        } else if (MEMEQ("variant", name, nameLen)) {
             // Value should be either elegant or compact.
-            if (valueLen == 7 && !strncmp("elegant", value, valueLen)) {
+            if (MEMEQ("elegant", value, valueLen)) {
                 family->fVariant = kElegant_FontVariant;
-            } else if (valueLen == 7 && !strncmp("compact", value, valueLen)) {
+            } else if (MEMEQ("compact", value, valueLen)) {
                 family->fVariant = kCompact_FontVariant;
             }
         }
     }
 }
 
-void fontFileNameHandler(void* data, const char* s, int len) {
-    FamilyData* familyData = (FamilyData*) data;
-    familyData->currentFontInfo->fFileName.set(s, len);
+static void XMLCALL font_file_name_handler(void* data, const char* s, int len) {
+    FamilyData* self = static_cast<FamilyData*>(data);
+    self->fCurrentFontInfo->fFileName.append(s, len);
 }
 
-void fontElementHandler(XML_Parser* parser, FontFileInfo* file, const char** attributes) {
+static void font_element_handler(FamilyData* self, FontFileInfo* file, const char** attributes) {
     // A <font> should have weight (integer) and style (normal, italic) attributes.
     // NOTE: we ignore the style.
     // The element should contain a filename.
-    for (size_t i = 0; attributes[i] != NULL &&
-                       attributes[i+1] != NULL; i += 2) {
+    for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
         const char* name = attributes[i];
         const char* value = attributes[i+1];
         size_t nameLen = strlen(name);
-        if (nameLen == 6 && !strncmp("weight", name, nameLen)) {
-            if (!parseNonNegativeInteger(value, &file->fWeight)) {
+        if (MEMEQ("weight", name, nameLen)) {
+            if (!parse_non_negative_integer(value, &file->fWeight)) {
                 SkDebugf("---- Font weight %s (INVALID)", value);
-                file->fWeight = 0;
             }
         }
     }
-    XML_SetCharacterDataHandler(*parser, fontFileNameHandler);
+    XML_SetCharacterDataHandler(self->fParser, font_file_name_handler);
 }
 
-FontFamily* findFamily(FamilyData* familyData, const char* familyName) {
-    size_t nameLen = strlen(familyName);
-    for (int i = 0; i < familyData->families.count(); i++) {
-        FontFamily* candidate = familyData->families[i];
+static FontFamily* find_family(FamilyData* self, const SkString& familyName) {
+    for (int i = 0; i < self->fFamilies.count(); i++) {
+        FontFamily* candidate = self->fFamilies[i];
         for (int j = 0; j < candidate->fNames.count(); j++) {
-            if (!strncmp(candidate->fNames[j].c_str(), familyName, nameLen) &&
-                nameLen == strlen(candidate->fNames[j].c_str())) {
+            if (candidate->fNames[j] == familyName) {
                 return candidate;
             }
         }
     }
-
     return NULL;
 }
 
-void aliasElementHandler(FamilyData* familyData, const char** attributes) {
+static void alias_element_handler(FamilyData* self, const char** attributes) {
     // An <alias> must have name and to attributes.
     //   It may have weight (integer).
     // If it *does not* have a weight, it is a variant name for a <family>.
@@ -166,30 +186,31 @@ void aliasElementHandler(FamilyData* familyData, const char** attributes) {
     SkString aliasName;
     SkString to;
     int weight = 0;
-    for (size_t i = 0; attributes[i] != NULL &&
-                       attributes[i+1] != NULL; i += 2) {
+    for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
         const char* name = attributes[i];
         const char* value = attributes[i+1];
         size_t nameLen = strlen(name);
-        if (nameLen == 4 && !strncmp("name", name, nameLen)) {
+        if (MEMEQ("name", name, nameLen)) {
             SkAutoAsciiToLC tolc(value);
             aliasName.set(tolc.lc());
-        } else if (nameLen == 2 && !strncmp("to", name, nameLen)) {
+        } else if (MEMEQ("to", name, nameLen)) {
             to.set(value);
-        } else if (nameLen == 6 && !strncmp("weight", name, nameLen)) {
-            parseNonNegativeInteger(value, &weight);
+        } else if (MEMEQ("weight", name, nameLen)) {
+            if (!parse_non_negative_integer(value, &weight)) {
+                SkDebugf("---- Font weight %s (INVALID)", value);
+            }
         }
     }
 
     // Assumes that the named family is already declared
-    FontFamily* targetFamily = findFamily(familyData, to.c_str());
+    FontFamily* targetFamily = find_family(self, to);
     if (!targetFamily) {
         SkDebugf("---- Font alias target %s (NOT FOUND)", to.c_str());
         return;
     }
 
     if (weight) {
-        FontFamily* family = new FontFamily();
+        FontFamily* family = new FontFamily(targetFamily->fBasePath, self->fIsFallback);
         family->fNames.push_back().set(aliasName);
 
         for (int i = 0; i < targetFamily->fFonts.count(); i++) {
@@ -197,35 +218,34 @@ void aliasElementHandler(FamilyData* familyData, const char** attributes) {
                 family->fFonts.push_back(targetFamily->fFonts[i]);
             }
         }
-        *familyData->families.append() = family;
+        *self->fFamilies.append() = family;
     } else {
         targetFamily->fNames.push_back().set(aliasName);
     }
 }
 
-void startElementHandler(void* data, const char* tag, const char** attributes) {
-    FamilyData* familyData = (FamilyData*) data;
+static void XMLCALL start_element_handler(void* data, const char* tag, const char** attributes) {
+    FamilyData* self = static_cast<FamilyData*>(data);
     size_t len = strlen(tag);
-    if (len == 6 && !strncmp(tag, "family", len)) {
-        familyData->currentFamily = new FontFamily();
-        familyElementHandler(familyData->currentFamily, attributes);
-    } else if (len == 4 && !strncmp(tag, "font", len)) {
-        FontFileInfo* file = &familyData->currentFamily->fFonts.push_back();
-        familyData->currentFontInfo = file;
-        fontElementHandler(familyData->parser, file, attributes);
-    } else if (len == 5 && !strncmp(tag, "alias", len)) {
-        aliasElementHandler(familyData, attributes);
+    if (MEMEQ("family", tag, len)) {
+        self->fCurrentFamily.reset(new FontFamily(self->fBasePath, self->fIsFallback));
+        family_element_handler(self->fCurrentFamily, attributes);
+    } else if (MEMEQ("font", tag, len)) {
+        FontFileInfo* file = &self->fCurrentFamily->fFonts.push_back();
+        self->fCurrentFontInfo = file;
+        font_element_handler(self, file, attributes);
+    } else if (MEMEQ("alias", tag, len)) {
+        alias_element_handler(self, attributes);
     }
 }
 
-void endElementHandler(void* data, const char* tag) {
-    FamilyData* familyData = (FamilyData*) data;
+static void XMLCALL end_element_handler(void* data, const char* tag) {
+    FamilyData* self = static_cast<FamilyData*>(data);
     size_t len = strlen(tag);
-    if (len == 6 && strncmp(tag, "family", len) == 0) {
-        *familyData->families.append() = familyData->currentFamily;
-        familyData->currentFamily = NULL;
-    } else if (len == 4 && !strncmp(tag, "font", len)) {
-        XML_SetCharacterDataHandler(*familyData->parser, NULL);
+    if (MEMEQ("family", tag, len)) {
+        *self->fFamilies.append() = self->fCurrentFamily.detach();
+    } else if (MEMEQ("font", tag, len)) {
+        XML_SetCharacterDataHandler(self->fParser, NULL);
     }
 }
 
@@ -237,20 +257,19 @@ namespace jbParser {
  * Handler for arbitrary text. This is used to parse the text inside each name
  * or file tag. The resulting strings are put into the fNames or FontFileInfo arrays.
  */
-static void textHandler(void* data, const char* s, int len) {
-    FamilyData* familyData = (FamilyData*) data;
+static void XMLCALL text_handler(void* data, const char* s, int len) {
+    FamilyData* self = static_cast<FamilyData*>(data);
     // Make sure we're in the right state to store this name information
-    if (familyData->currentFamily &&
-            (familyData->currentTag == NAMESET_TAG || familyData->currentTag == FILESET_TAG)) {
-        switch (familyData->currentTag) {
-        case NAMESET_TAG: {
+    if (self->fCurrentFamily.get()) {
+        switch (self->fCurrentTag) {
+        case kNameSet_CurrentTag: {
             SkAutoAsciiToLC tolc(s, len);
-            familyData->currentFamily->fNames.push_back().set(tolc.lc(), len);
+            self->fCurrentFamily->fNames.back().append(tolc.lc(), len);
             break;
         }
-        case FILESET_TAG:
-            if (familyData->currentFontInfo) {
-                familyData->currentFontInfo->fFileName.set(s, len);
+        case kFileSet_CurrentTag:
+            if (self->fCurrentFontInfo) {
+                self->fCurrentFontInfo->fFileName.append(s, len);
             }
             break;
         default:
@@ -264,97 +283,87 @@ static void textHandler(void* data, const char* s, int len) {
  * Handler for font files. This processes the attributes for language and
  * variants then lets textHandler handle the actual file name
  */
-static void fontFileElementHandler(FamilyData* familyData, const char** attributes) {
-    FontFileInfo& newFileInfo = familyData->currentFamily->fFonts.push_back();
+static void font_file_element_handler(FamilyData* self, const char** attributes) {
+    FontFamily& currentFamily = *self->fCurrentFamily.get();
+    FontFileInfo& newFileInfo = currentFamily.fFonts.push_back();
     if (attributes) {
-        size_t currentAttributeIndex = 0;
-        while (attributes[currentAttributeIndex] &&
-               attributes[currentAttributeIndex + 1]) {
-            const char* attributeName = attributes[currentAttributeIndex];
-            const char* attributeValue = attributes[currentAttributeIndex+1];
+        for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
+            const char* attributeName = attributes[i];
+            const char* attributeValue = attributes[i+1];
             size_t nameLength = strlen(attributeName);
             size_t valueLength = strlen(attributeValue);
-            if (nameLength == 7 && strncmp(attributeName, "variant", nameLength) == 0) {
-                const FontVariant prevVariant = familyData->currentFamily->fVariant;
-                if (valueLength == 7 && strncmp(attributeValue, "elegant", valueLength) == 0) {
-                    familyData->currentFamily->fVariant = kElegant_FontVariant;
-                } else if (valueLength == 7 &&
-                           strncmp(attributeValue, "compact", valueLength) == 0) {
-                    familyData->currentFamily->fVariant = kCompact_FontVariant;
+            if (MEMEQ("variant", attributeName, nameLength)) {
+                const FontVariant prevVariant = currentFamily.fVariant;
+                if (MEMEQ("elegant", attributeValue, valueLength)) {
+                    currentFamily.fVariant = kElegant_FontVariant;
+                } else if (MEMEQ("compact", attributeValue, valueLength)) {
+                    currentFamily.fVariant = kCompact_FontVariant;
                 }
-                if (familyData->currentFamily->fFonts.count() > 1 &&
-                        familyData->currentFamily->fVariant != prevVariant) {
+                if (currentFamily.fFonts.count() > 1 && currentFamily.fVariant != prevVariant) {
                     SkDebugf("Every font file within a family must have identical variants");
-                    sk_throw();
                 }
 
-            } else if (nameLength == 4 && strncmp(attributeName, "lang", nameLength) == 0) {
-                SkLanguage prevLang = familyData->currentFamily->fLanguage;
-                familyData->currentFamily->fLanguage = SkLanguage(attributeValue);
-                if (familyData->currentFamily->fFonts.count() > 1 &&
-                        familyData->currentFamily->fLanguage != prevLang) {
+            } else if (MEMEQ("lang", attributeName, nameLength)) {
+                SkLanguage prevLang = currentFamily.fLanguage;
+                currentFamily.fLanguage = SkLanguage(attributeValue, valueLength);
+                if (currentFamily.fFonts.count() > 1 && currentFamily.fLanguage != prevLang) {
                     SkDebugf("Every font file within a family must have identical languages");
-                    sk_throw();
                 }
-            } else if (nameLength == 5 && strncmp(attributeName, "index", nameLength) == 0) {
-                int value;
-                if (parseNonNegativeInteger(attributeValue, &value)) {
-                    newFileInfo.fIndex = value;
-                } else {
+
+            } else if (MEMEQ("index", attributeName, nameLength)) {
+                if (!parse_non_negative_integer(attributeValue, &newFileInfo.fIndex)) {
                     SkDebugf("---- SystemFonts index=%s (INVALID)", attributeValue);
                 }
             }
-            //each element is a pair of attributeName/attributeValue string pairs
-            currentAttributeIndex += 2;
         }
     }
-    familyData->currentFontInfo = &newFileInfo;
-    XML_SetCharacterDataHandler(*familyData->parser, textHandler);
+    self->fCurrentFontInfo = &newFileInfo;
+    XML_SetCharacterDataHandler(self->fParser, text_handler);
 }
 
 /**
  * Handler for the start of a tag. The only tags we expect are familyset, family,
  * nameset, fileset, name, and file.
  */
-static void startElementHandler(void* data, const char* tag, const char** atts) {
-    FamilyData* familyData = (FamilyData*) data;
+static void XMLCALL start_element_handler(void* data, const char* tag, const char** attributes) {
+    FamilyData* self = static_cast<FamilyData*>(data);
     size_t len = strlen(tag);
-    if (len == 9 && strncmp(tag, "familyset", len) == 0) {
+    if (MEMEQ("familyset", tag, len)) {
         // The familyset tag has an optional "version" attribute with an integer value >= 0
-        for (size_t i = 0; atts[i] != NULL &&
-                           atts[i+1] != NULL; i += 2) {
-            size_t nameLen = strlen(atts[i]);
-            if (nameLen == 7 && strncmp(atts[i], "version", nameLen)) continue;
-            const char* valueString = atts[i+1];
+        for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
+            size_t nameLen = strlen(attributes[i]);
+            if (!MEMEQ("version", attributes[i], nameLen)) continue;
+            const char* valueString = attributes[i+1];
             int version;
-            if (parseNonNegativeInteger(valueString, &version) && (version >= 21)) {
-                XML_SetElementHandler(*familyData->parser,
-                                      lmpParser::startElementHandler,
-                                      lmpParser::endElementHandler);
+            if (parse_non_negative_integer(valueString, &version) && (version >= 21)) {
+                XML_SetElementHandler(self->fParser,
+                                      lmpParser::start_element_handler,
+                                      lmpParser::end_element_handler);
+                self->fVersion = version;
             }
         }
-    } else if (len == 6 && strncmp(tag, "family", len) == 0) {
-        familyData->currentFamily = new FontFamily();
+    } else if (MEMEQ("family", tag, len)) {
+        self->fCurrentFamily.reset(new FontFamily(self->fBasePath, self->fIsFallback));
         // The Family tag has an optional "order" attribute with an integer value >= 0
         // If this attribute does not exist, the default value is -1
-        for (size_t i = 0; atts[i] != NULL &&
-                           atts[i+1] != NULL; i += 2) {
-            const char* valueString = atts[i+1];
+        for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
+            const char* valueString = attributes[i+1];
             int value;
-            if (parseNonNegativeInteger(valueString, &value)) {
-                familyData->currentFamily->fOrder = value;
+            if (parse_non_negative_integer(valueString, &value)) {
+                self->fCurrentFamily->fOrder = value;
             }
         }
-    } else if (len == 7 && strncmp(tag, "nameset", len) == 0) {
-        familyData->currentTag = NAMESET_TAG;
-    } else if (len == 7 && strncmp(tag, "fileset", len) == 0) {
-        familyData->currentTag = FILESET_TAG;
-    } else if (len == 4 && strncmp(tag, "name", len) == 0 && familyData->currentTag == NAMESET_TAG) {
+    } else if (MEMEQ("nameset", tag, len)) {
+        self->fCurrentTag = kNameSet_CurrentTag;
+    } else if (MEMEQ("fileset", tag, len)) {
+        self->fCurrentTag = kFileSet_CurrentTag;
+    } else if (MEMEQ("name", tag, len) && self->fCurrentTag == kNameSet_CurrentTag) {
         // If it's a Name, parse the text inside
-        XML_SetCharacterDataHandler(*familyData->parser, textHandler);
-    } else if (len == 4 && strncmp(tag, "file", len) == 0 && familyData->currentTag == FILESET_TAG) {
+        self->fCurrentFamily->fNames.push_back();
+        XML_SetCharacterDataHandler(self->fParser, text_handler);
+    } else if (MEMEQ("file", tag, len) && self->fCurrentTag == kFileSet_CurrentTag) {
         // If it's a file, parse the attributes, then parse the text inside
-        fontFileElementHandler(familyData, atts);
+        font_file_element_handler(self, attributes);
     }
 }
 
@@ -362,71 +371,120 @@ static void startElementHandler(void* data, const char* tag, const char** atts) 
  * Handler for the end of tags. We only care about family, nameset, fileset,
  * name, and file.
  */
-static void endElementHandler(void* data, const char* tag) {
-    FamilyData* familyData = (FamilyData*) data;
+static void XMLCALL end_element_handler(void* data, const char* tag) {
+    FamilyData* self = static_cast<FamilyData*>(data);
     size_t len = strlen(tag);
-    if (len == 6 && strncmp(tag, "family", len)== 0) {
+    if (MEMEQ("family", tag, len)) {
         // Done parsing a Family - store the created currentFamily in the families array
-        *familyData->families.append() = familyData->currentFamily;
-        familyData->currentFamily = NULL;
-    } else if (len == 7 && strncmp(tag, "nameset", len) == 0) {
-        familyData->currentTag = NO_TAG;
-    } else if (len == 7 && strncmp(tag, "fileset", len) == 0) {
-        familyData->currentTag = NO_TAG;
-    } else if ((len == 4 &&
-                strncmp(tag, "name", len) == 0 &&
-                familyData->currentTag == NAMESET_TAG) ||
-               (len == 4 &&
-                strncmp(tag, "file", len) == 0 &&
-                familyData->currentTag == FILESET_TAG)) {
+        *self->fFamilies.append() = self->fCurrentFamily.detach();
+    } else if (MEMEQ("nameset", tag, len)) {
+        self->fCurrentTag = kNo_CurrentTag;
+    } else if (MEMEQ("fileset", tag, len)) {
+        self->fCurrentTag = kNo_CurrentTag;
+    } else if ((MEMEQ("name", tag, len) && self->fCurrentTag == kNameSet_CurrentTag) ||
+               (MEMEQ("file", tag, len) && self->fCurrentTag == kFileSet_CurrentTag)) {
         // Disable the arbitrary text handler installed to load Name data
-        XML_SetCharacterDataHandler(*familyData->parser, NULL);
+        XML_SetCharacterDataHandler(self->fParser, NULL);
     }
 }
 
 } // namespace jbParser
 
+static void XMLCALL xml_entity_decl_handler(void *data,
+                                            const XML_Char *entityName,
+                                            int is_parameter_entity,
+                                            const XML_Char *value,
+                                            int value_length,
+                                            const XML_Char *base,
+                                            const XML_Char *systemId,
+                                            const XML_Char *publicId,
+                                            const XML_Char *notationName)
+{
+    FamilyData* self = static_cast<FamilyData*>(data);
+    SkDebugf("Entity declaration %s found, stopping processing.", entityName);
+    XML_StopParser(self->fParser, XML_FALSE);
+}
+
+static const XML_Memory_Handling_Suite sk_XML_alloc = {
+    sk_malloc_throw,
+    sk_realloc_throw,
+    sk_free
+};
+
+template<typename T> struct remove_ptr {typedef T type;};
+template<typename T> struct remove_ptr<T*> {typedef T type;};
+
 /**
  * This function parses the given filename and stores the results in the given
- * families array.
+ * families array. Returns the version of the file, negative if the file does not exist.
  */
-static void parseConfigFile(const char* filename, SkTDArray<FontFamily*> &families) {
-
-    FILE* file = fopen(filename, "r");
+static int parse_config_file(const char* filename, SkTDArray<FontFamily*>& families,
+                             const SkString& basePath, bool isFallback)
+{
+    SkFILEStream file(filename);
 
     // Some of the files we attempt to parse (in particular, /vendor/etc/fallback_fonts.xml)
     // are optional - failure here is okay because one of these optional files may not exist.
-    if (NULL == file) {
-        return;
+    if (!file.isValid()) {
+        SkDebugf("File %s could not be opened.\n", filename);
+        return -1;
     }
 
-    XML_Parser parser = XML_ParserCreate(NULL);
-    FamilyData* familyData = new FamilyData(&parser, families);
-    XML_SetUserData(parser, familyData);
-    // Start parsing oldschool; switch these in flight if we detect a newer version of the file.
-    XML_SetElementHandler(parser, jbParser::startElementHandler, jbParser::endElementHandler);
+    SkAutoTCallVProc<remove_ptr<XML_Parser>::type, XML_ParserFree> parser(
+        XML_ParserCreate_MM(NULL, &sk_XML_alloc, NULL));
+    if (!parser) {
+        SkDebugf("Could not create XML parser.\n");
+        return -1;
+    }
 
-    char buffer[512];
+    FamilyData self(parser, families, basePath, isFallback);
+    XML_SetUserData(parser, &self);
+
+    // Disable entity processing, to inhibit internal entity expansion. See expat CVE-2013-0340
+    XML_SetEntityDeclHandler(parser, xml_entity_decl_handler);
+
+    // Start parsing oldschool; switch these in flight if we detect a newer version of the file.
+    XML_SetElementHandler(parser, jbParser::start_element_handler, jbParser::end_element_handler);
+
+    // One would assume it would be faster to have a buffer on the stack and call XML_Parse.
+    // But XML_Parse will call XML_GetBuffer anyway and memmove the passed buffer into it.
+    // (Unless XML_CONTEXT_BYTES is undefined, but all users define it.)
+    // In debug, buffer a small odd number of bytes to detect slicing in XML_CharacterDataHandler.
+    static const int bufferSize = 512 SkDEBUGCODE( - 507);
     bool done = false;
     while (!done) {
-        fgets(buffer, sizeof(buffer), file);
-        size_t len = strlen(buffer);
-        if (feof(file) != 0) {
-            done = true;
+        void* buffer = XML_GetBuffer(parser, bufferSize);
+        if (!buffer) {
+            SkDebugf("Could not buffer enough to continue.\n");
+            return -1;
         }
-        XML_Parse(parser, buffer, len, done);
+        size_t len = file.read(buffer, bufferSize);
+        done = file.isAtEnd();
+        XML_Status status = XML_ParseBuffer(parser, len, done);
+        if (XML_STATUS_ERROR == status) {
+            XML_Error error = XML_GetErrorCode(parser);
+            int line = XML_GetCurrentLineNumber(parser);
+            int column = XML_GetCurrentColumnNumber(parser);
+            int index = XML_GetCurrentByteIndex(parser);
+            const XML_LChar* errorString = XML_ErrorString(error);
+            SkDebugf("Line: %d Column: %d (Offset: %d) Error %d: %s.\n",
+                          line,    column,      index,    error, errorString);
+            return -1;
+        }
     }
-    XML_ParserFree(parser);
-    fclose(file);
+    return self.fVersion;
 }
 
-static void getSystemFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
+/** Returns the version of the system font file actually found, negative if none. */
+static int append_system_font_families(SkTDArray<FontFamily*>& fontFamilies,
+                                       const SkString& basePath)
+{
     int initialCount = fontFamilies.count();
-    parseConfigFile(LMP_SYSTEM_FONTS_FILE, fontFamilies);
-
-    if (initialCount == fontFamilies.count()) {
-        parseConfigFile(OLD_SYSTEM_FONTS_FILE, fontFamilies);
+    int version = parse_config_file(LMP_SYSTEM_FONTS_FILE, fontFamilies, basePath, false);
+    if (version < 0 || fontFamilies.count() == initialCount) {
+        version = parse_config_file(OLD_SYSTEM_FONTS_FILE, fontFamilies, basePath, false);
     }
+    return version;
 }
 
 /**
@@ -436,60 +494,70 @@ static void getSystemFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
  * directory for those files,add all of their entries to the fallback chain, and
  * include the locale as part of each entry.
  */
-static void getFallbackFontFamiliesForLocale(SkTDArray<FontFamily*> &fallbackFonts, const char* dir) {
+static void append_fallback_font_families_for_locale(SkTDArray<FontFamily*>& fallbackFonts,
+                                                     const char* dir,
+                                                     const SkString& basePath)
+{
 #if defined(SK_BUILD_FOR_ANDROID_FRAMEWORK)
     // The framework is beyond Android 4.2 and can therefore skip this function
     return;
 #endif
 
-    DIR* fontDirectory = opendir(dir);
-    if (fontDirectory != NULL){
-        struct dirent* dirEntry = readdir(fontDirectory);
-        while (dirEntry) {
+    SkAutoTCallIProc<DIR, closedir> fontDirectory(opendir(dir));
+    if (NULL == fontDirectory) {
+        return;
+    }
 
-            // The size of both the prefix, suffix, and a minimum valid language code
-            static const size_t minSize = strlen(LOCALE_FALLBACK_FONTS_PREFIX) +
-                                          strlen(LOCALE_FALLBACK_FONTS_SUFFIX) + 2;
+    for (struct dirent* dirEntry; (dirEntry = readdir(fontDirectory));) {
+        // The size of the prefix and suffix.
+        static const size_t fixedLen = sizeof(LOCALE_FALLBACK_FONTS_PREFIX) - 1
+                                     + sizeof(LOCALE_FALLBACK_FONTS_SUFFIX) - 1;
 
-            SkString fileName(dirEntry->d_name);
-            if (fileName.size() >= minSize &&
-                    fileName.startsWith(LOCALE_FALLBACK_FONTS_PREFIX) &&
-                    fileName.endsWith(LOCALE_FALLBACK_FONTS_SUFFIX)) {
+        // The size of the prefix, suffix, and a minimum valid language code
+        static const size_t minSize = fixedLen + 2;
 
-                static const size_t fixedLen = strlen(LOCALE_FALLBACK_FONTS_PREFIX) -
-                                               strlen(LOCALE_FALLBACK_FONTS_SUFFIX);
-
-                SkString locale(fileName.c_str() - strlen(LOCALE_FALLBACK_FONTS_PREFIX),
-                                fileName.size() - fixedLen);
-
-                SkString absoluteFilename;
-                absoluteFilename.printf("%s/%s", dir, fileName.c_str());
-
-                SkTDArray<FontFamily*> langSpecificFonts;
-                parseConfigFile(absoluteFilename.c_str(), langSpecificFonts);
-
-                for (int i = 0; i < langSpecificFonts.count(); ++i) {
-                    FontFamily* family = langSpecificFonts[i];
-                    family->fLanguage = SkLanguage(locale);
-                    *fallbackFonts.append() = family;
-                }
-            }
-
-            // proceed to the next entry in the directory
-            dirEntry = readdir(fontDirectory);
+        SkString fileName(dirEntry->d_name);
+        if (fileName.size() < minSize ||
+            !fileName.startsWith(LOCALE_FALLBACK_FONTS_PREFIX) ||
+            !fileName.endsWith(LOCALE_FALLBACK_FONTS_SUFFIX))
+        {
+            continue;
         }
-        // cleanup the directory reference
-        closedir(fontDirectory);
+
+        SkString locale(fileName.c_str() + sizeof(LOCALE_FALLBACK_FONTS_PREFIX) - 1,
+                        fileName.size() - fixedLen);
+
+        SkString absoluteFilename;
+        absoluteFilename.printf("%s/%s", dir, fileName.c_str());
+
+        SkTDArray<FontFamily*> langSpecificFonts;
+        parse_config_file(absoluteFilename.c_str(), langSpecificFonts, basePath, true);
+
+        for (int i = 0; i < langSpecificFonts.count(); ++i) {
+            FontFamily* family = langSpecificFonts[i];
+            family->fLanguage = SkLanguage(locale);
+            *fallbackFonts.append() = family;
+        }
     }
 }
 
-static void getFallbackFontFamilies(SkTDArray<FontFamily*> &fallbackFonts) {
-    SkTDArray<FontFamily*> vendorFonts;
-    parseConfigFile(FALLBACK_FONTS_FILE, fallbackFonts);
-    parseConfigFile(VENDOR_FONTS_FILE, vendorFonts);
+static void append_system_fallback_font_families(SkTDArray<FontFamily*>& fallbackFonts,
+                                                 const SkString& basePath)
+{
+    parse_config_file(FALLBACK_FONTS_FILE, fallbackFonts, basePath, true);
+    append_fallback_font_families_for_locale(fallbackFonts,
+                                             LOCALE_FALLBACK_FONTS_SYSTEM_DIR,
+                                             basePath);
+}
 
-    getFallbackFontFamiliesForLocale(fallbackFonts, LOCALE_FALLBACK_FONTS_SYSTEM_DIR);
-    getFallbackFontFamiliesForLocale(vendorFonts, LOCALE_FALLBACK_FONTS_VENDOR_DIR);
+static void mixin_vendor_fallback_font_families(SkTDArray<FontFamily*>& fallbackFonts,
+                                                const SkString& basePath)
+{
+    SkTDArray<FontFamily*> vendorFonts;
+    parse_config_file(VENDOR_FONTS_FILE, vendorFonts, basePath, true);
+    append_fallback_font_families_for_locale(vendorFonts,
+                                             LOCALE_FALLBACK_FONTS_VENDOR_DIR,
+                                             basePath);
 
     // This loop inserts the vendor fallback fonts in the correct order in the
     // overall fallbacks list.
@@ -515,37 +583,38 @@ static void getFallbackFontFamilies(SkTDArray<FontFamily*> &fallbackFonts) {
     }
 }
 
-/**
- * Loads data on font families from various expected configuration files. The
- * resulting data is returned in the given fontFamilies array.
- */
-void SkFontConfigParser::GetFontFamilies(SkTDArray<FontFamily*> &fontFamilies) {
+void SkFontConfigParser::GetSystemFontFamilies(SkTDArray<FontFamily*>& fontFamilies) {
+    // Version 21 of the system font configuration does not need any fallback configuration files.
+    SkString basePath(getenv("ANDROID_ROOT"));
+    basePath.append(SK_FONT_FILE_PREFIX, sizeof(SK_FONT_FILE_PREFIX) - 1);
 
-    getSystemFontFamilies(fontFamilies);
+    if (append_system_font_families(fontFamilies, basePath) >= 21) {
+        return;
+    }
 
     // Append all the fallback fonts to system fonts
     SkTDArray<FontFamily*> fallbackFonts;
-    getFallbackFontFamilies(fallbackFonts);
-    for (int i = 0; i < fallbackFonts.count(); ++i) {
-        fallbackFonts[i]->fIsFallbackFont = true;
-        *fontFamilies.append() = fallbackFonts[i];
-    }
+    append_system_fallback_font_families(fallbackFonts, basePath);
+    mixin_vendor_fallback_font_families(fallbackFonts, basePath);
+    fontFamilies.append(fallbackFonts.count(), fallbackFonts.begin());
 }
 
-void SkFontConfigParser::GetTestFontFamilies(SkTDArray<FontFamily*> &fontFamilies,
-                                             const char* testMainConfigFile,
-                                             const char* testFallbackConfigFile) {
-    parseConfigFile(testMainConfigFile, fontFamilies);
-
-    SkTDArray<FontFamily*> fallbackFonts;
-    if (testFallbackConfigFile) {
-        parseConfigFile(testFallbackConfigFile, fallbackFonts);
+void SkFontConfigParser::GetCustomFontFamilies(SkTDArray<FontFamily*>& fontFamilies,
+                                               const SkString& basePath,
+                                               const char* fontsXml,
+                                               const char* fallbackFontsXml,
+                                               const char* langFallbackFontsDir)
+{
+    if (fontsXml) {
+        parse_config_file(fontsXml, fontFamilies, basePath, false);
     }
-
-    // Append all fallback fonts to system fonts
-    for (int i = 0; i < fallbackFonts.count(); ++i) {
-        fallbackFonts[i]->fIsFallbackFont = true;
-        *fontFamilies.append() = fallbackFonts[i];
+    if (fallbackFontsXml) {
+        parse_config_file(fallbackFontsXml, fontFamilies, basePath, true);
+    }
+    if (langFallbackFontsDir) {
+        append_fallback_font_families_for_locale(fontFamilies,
+                                                 langFallbackFontsDir,
+                                                 basePath);
     }
 }
 

@@ -378,7 +378,7 @@ public:
     /** @param stream does not take ownership of the reference, does take ownership of the stream.*/
     SkTypeface_stream(const SkFontStyle& style, bool fixedWidth, int index, SkStreamAsset* stream)
         : INHERITED(style, SkTypefaceCache::NewFontID(), fixedWidth)
-        , fStream(SkRef(stream))
+        , fStream(stream)
         , fIndex(index)
     { };
 
@@ -391,13 +391,13 @@ public:
         *serialize = true;
     }
 
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
         *ttcIndex = fIndex;
         return fStream->duplicate();
     }
 
 private:
-    SkAutoTUnref<SkStreamAsset> fStream;
+    SkAutoTDelete<SkStreamAsset> fStream;
     int fIndex;
 
     typedef SkTypeface_FreeType INHERITED;
@@ -425,7 +425,7 @@ public:
         *serialize = false;
     }
 
-    SkStream* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
+    SkStreamAsset* onOpenStream(int* ttcIndex) const SK_OVERRIDE {
         FCLocker lock;
         *ttcIndex = get_int(fPattern, FC_INDEX, 0);
         return SkStream::NewFromFile(get_string(fPattern, FC_FILE));
@@ -809,8 +809,8 @@ protected:
         return this->matchFamilyStyle(get_string(fcTypeface->fPattern, FC_FAMILY), style);
     }
 
-    /** @param stream does not take ownership of the reference. */
-    SkTypeface* onCreateFromStream(SkStream* stream, int ttcIndex) const SK_OVERRIDE {
+    SkTypeface* onCreateFromStream(SkStreamAsset* bareStream, int ttcIndex) const SK_OVERRIDE {
+        SkAutoTDelete<SkStreamAsset> stream(bareStream);
         const size_t length = stream->getLength();
         if (length <= 0 || (1u << 30) < length) {
             return NULL;
@@ -823,17 +823,15 @@ protected:
         }
 
         return SkNEW_ARGS(SkTypeface_stream, (style, isFixedWidth, ttcIndex,
-                                              static_cast<SkStreamAsset*>(stream)));
+                                              static_cast<SkStreamAsset*>(stream.detach())));
     }
 
     SkTypeface* onCreateFromData(SkData* data, int ttcIndex) const SK_OVERRIDE {
-        SkAutoTUnref<SkStreamAsset> stream(SkNEW_ARGS(SkMemoryStream, (data)));
-        return this->createFromStream(stream, ttcIndex);
+        return this->createFromStream(SkNEW_ARGS(SkMemoryStream, (data)), ttcIndex);
     }
 
     SkTypeface* onCreateFromFile(const char path[], int ttcIndex) const SK_OVERRIDE {
-        SkAutoTUnref<SkStreamAsset> stream(SkStream::NewFromFile(path));
-        return this->createFromStream(stream, ttcIndex);
+        return this->createFromStream(SkStream::NewFromFile(path), ttcIndex);
     }
 
     virtual SkTypeface* onLegacyCreateTypeface(const char familyName[],

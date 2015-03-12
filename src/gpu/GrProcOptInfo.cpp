@@ -7,9 +7,28 @@
 
 #include "GrProcOptInfo.h"
 
+#include "GrBatch.h"
 #include "GrFragmentProcessor.h"
 #include "GrFragmentStage.h"
 #include "GrGeometryProcessor.h"
+
+void GrProcOptInfo::calcColorWithBatch(const GrBatch* batch,
+                                       const GrFragmentStage* stages,
+                                       int stageCount) {
+    GrInitInvariantOutput out;
+    batch->getInvariantOutputColor(&out);
+    fInOut.reset(out);
+    this->internalCalc(stages, stageCount, batch->willReadFragmentPosition());
+}
+
+void GrProcOptInfo::calcCoverageWithBatch(const GrBatch* batch,
+                                          const GrFragmentStage* stages,
+                                          int stageCount) {
+    GrInitInvariantOutput out;
+    batch->getInvariantOutputCoverage(&out);
+    fInOut.reset(out);
+    this->internalCalc(stages, stageCount, batch->willReadFragmentPosition());
+}
 
 void GrProcOptInfo::calcColorWithPrimProc(const GrPrimitiveProcessor* primProc,
                                           const GrFragmentStage* stages,
@@ -48,7 +67,6 @@ void GrProcOptInfo::internalCalc(const GrFragmentStage* stages,
     fFirstEffectStageIndex = 0;
     fInputColorIsUsed = true;
     fInputColor = fInOut.color();
-    fReadsDst = false;
     fReadsFragPosition = initWillReadFragmentPosition;
 
     for (int i = 0; i < stageCount; ++i) {
@@ -60,11 +78,7 @@ void GrProcOptInfo::internalCalc(const GrFragmentStage* stages,
             fFirstEffectStageIndex = i;
             fInputColorIsUsed = false;
             // Reset these since we don't care if previous stages read these values
-            fReadsDst = false;
             fReadsFragPosition = initWillReadFragmentPosition;
-        }
-        if (processor->willReadDstColor()) {
-            fReadsDst = true;
         }
         if (processor->willReadFragmentPosition()) {
             fReadsFragPosition = true;
@@ -77,7 +91,6 @@ void GrProcOptInfo::internalCalc(const GrFragmentStage* stages,
             // zero stages that don't multiply the inputColor.
             fInOut.resetNonMulStageFound();
             // Reset these since we don't care if previous stages read these values
-            fReadsDst = false;
             fReadsFragPosition = initWillReadFragmentPosition;
         }
     }

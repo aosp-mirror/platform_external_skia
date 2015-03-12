@@ -21,8 +21,8 @@
 
 class SkBaseDevice;
 class SkCanvasClipVisitor;
-class SkCanvasDrawable;
 class SkDraw;
+class SkDrawable;
 class SkDrawFilter;
 class SkImage;
 class SkMetaData;
@@ -64,7 +64,7 @@ public:
      *  1. invalid ImageInfo (e.g. negative dimensions)
      *  2. unsupported ImageInfo for a canvas
      *      - kUnknown_SkColorType, kIndex_8_SkColorType
-     *      - kIgnore_SkAlphaType
+     *      - kUnknown_SkAlphaType
      *      - this list is not complete, so others may also be unsupported
      *
      *  Note: it is valid to request a supported ImageInfo, but with zero
@@ -87,7 +87,7 @@ public:
      *  by any device/pixels. Typically this use used by subclasses who handle
      *  the draw calls in some other way.
      */
-    SkCanvas(int width, int height);
+    SkCanvas(int width, int height, const SkSurfaceProps* = NULL);
 
     /** Construct a canvas with the specified device to draw into.
 
@@ -100,6 +100,14 @@ public:
                         structure are copied to the canvas.
     */
     explicit SkCanvas(const SkBitmap& bitmap);
+
+    /** Construct a canvas with the specified bitmap to draw into.
+        @param bitmap   Specifies a bitmap for the canvas to draw into. Its
+                        structure are copied to the canvas.
+        @param props    New canvas surface properties.
+    */
+    SkCanvas(const SkBitmap& bitmap, const SkSurfaceProps& props);
+
     virtual ~SkCanvas();
 
     SkMetaData& getMetaData();
@@ -1010,7 +1018,15 @@ public:
     void drawPatch(const SkPoint cubics[12], const SkColor colors[4],
                    const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint);
 
-    void EXPERIMENTAL_drawDrawable(SkCanvasDrawable*);
+    /**
+     *  Draw the contents of this drawable into the canvas. If the canvas is async
+     *  (e.g. it is recording into a picture) then the drawable will be referenced instead,
+     *  to have its draw() method called when the picture is finalized.
+     *
+     *  If the intent is to force the contents of the drawable into this canvas immediately,
+     *  then drawable->draw(canvas) may be called.
+     */
+    void drawDrawable(SkDrawable* drawable);
 
     /** Add comments. beginCommentGroup/endCommentGroup open/close a new group.
         Each comment added via addComment is notionally attached to its
@@ -1073,7 +1089,7 @@ public:
      *  @return the current clip stack ("list" of individual clip elements)
      */
     const SkClipStack* getClipStack() const {
-        return &fClipStack;
+        return fClipStack;
     }
 
     typedef SkCanvasClipVisitor ClipVisitor;
@@ -1180,7 +1196,7 @@ protected:
     virtual void onDrawPatch(const SkPoint cubics[12], const SkColor colors[4],
                            const SkPoint texCoords[4], SkXfermode* xmode, const SkPaint& paint);
 
-    virtual void onDrawDrawable(SkCanvasDrawable*);
+    virtual void onDrawDrawable(SkDrawable*);
 
     virtual void onDrawPaint(const SkPaint&);
     virtual void onDrawRect(const SkRect&, const SkPaint&);
@@ -1235,7 +1251,7 @@ protected:
 private:
     class MCRec;
 
-    SkClipStack fClipStack;
+    SkAutoTUnref<SkClipStack> fClipStack;
     SkDeque     fMCStack;
     // points to top of stack
     MCRec*      fMCRec;
@@ -1278,7 +1294,6 @@ private:
     };
     SkCanvas(const SkIRect& bounds, InitFlags);
     SkCanvas(SkBaseDevice*, const SkSurfaceProps*, InitFlags);
-    SkCanvas(const SkBitmap&, const SkSurfaceProps&);
 
     // needs gettotalclip()
     friend class SkCanvasStateUtils;
@@ -1289,15 +1304,6 @@ private:
     void setupDevice(SkBaseDevice*);
 
     SkBaseDevice* init(SkBaseDevice*, InitFlags);
-
-    /**
-     *  DEPRECATED
-     *
-     *  Specify a device for this canvas to draw into. If it is not null, its
-     *  reference count is incremented. If the canvas was already holding a
-     *  device, its reference count is decremented. The new device is returned.
-     */
-    SkBaseDevice* setRootDevice(SkBaseDevice* device);
 
     /**
      * Gets the size/origin of the top level layer in global canvas coordinates. We don't want this

@@ -19,8 +19,8 @@ struct SkBaseMutex;
 /**
  *  \class SkFontConfigInterface
  *
- *  Provides SkFontHost clients with access to fontconfig services. They will
- *  access the global instance found in RefGlobal().
+ *  A simple interface for remotable font management.
+ *  The global instance can be found with RefGlobal().
  */
 class SK_API SkFontConfigInterface : public SkRefCnt {
 public:
@@ -90,17 +90,16 @@ public:
     /**
      *  Given a FontRef, open a stream to access its data, or return null
      *  if the FontRef's data is not available. The caller is responsible for
-     *  calling stream->unref() when it is done accessing the data.
+     *  deleting the stream when it is done accessing the data.
      */
-    virtual SkStream* openStream(const FontIdentity&) = 0;
+    virtual SkStreamAsset* openStream(const FontIdentity&) = 0;
 
     /**
      *  Return a singleton instance of a direct subclass that calls into
      *  libfontconfig. This does not affect the refcnt of the returned instance.
      *  The mutex may be used to guarantee the singleton is only constructed once.
      */
-    static SkFontConfigInterface* GetSingletonDirectInterface
-        (SkBaseMutex* mutex = NULL);
+    static SkFontConfigInterface* GetSingletonDirectInterface(SkBaseMutex* mutex = NULL);
 
     // New APIS, which have default impls for now (which do nothing)
 
