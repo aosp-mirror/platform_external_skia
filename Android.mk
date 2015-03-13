@@ -421,6 +421,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
 	src/gpu/GrBatch.cpp \
+	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchTarget.cpp \
 	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
