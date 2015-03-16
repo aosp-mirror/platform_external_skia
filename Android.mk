@@ -354,6 +354,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkForceCPlusPlusLinking.cpp \
 	src/codec/SkCodec.cpp \
 	src/codec/SkCodec_libpng.cpp \
+	src/codec/SkCodec_libbmp.cpp \
+	src/codec/SkMaskSwizzler.cpp \
+	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
