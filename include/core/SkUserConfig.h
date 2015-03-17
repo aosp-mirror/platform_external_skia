@@ -221,6 +221,5 @@
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF
 #define SK_USE_FREETYPE_EMBOLDEN
-#define SkLONGLONG int64_t
 
 #endif // SkUserConfig_Android_DEFINED
