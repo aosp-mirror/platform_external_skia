@@ -69,6 +69,12 @@ LOCAL_CPPFLAGS := \
 	-Wno-invalid-offsetof
 
 LOCAL_SRC_FILES := \
+	src/codec/SkCodec.cpp \
+	src/codec/SkCodec_libpng.cpp \
+	src/codec/SkCodec_libbmp.cpp \
+	src/codec/SkMaskSwizzler.cpp \
+	src/codec/SkMasks.cpp \
+	src/codec/SkSwizzler.cpp \
 	src/c/sk_paint.cpp \
 	src/c/sk_surface.cpp \
 	src/core/SkAAClip.cpp \
@@ -352,12 +358,6 @@ LOCAL_SRC_FILES := \
 	src/pdf/SkPDFTypes.cpp \
 	src/pdf/SkPDFUtils.cpp \
 	src/core/SkForceCPlusPlusLinking.cpp \
-	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libpng.cpp \
-	src/codec/SkCodec_libbmp.cpp \
-	src/codec/SkMaskSwizzler.cpp \
-	src/codec/SkMasks.cpp \
-	src/codec/SkSwizzler.cpp \
 	src/fonts/SkFontMgr_indirect.cpp \
 	src/fonts/SkRemotableFontMgr.cpp \
 	src/ports/SkGlobalInitialization_default.cpp \
@@ -572,8 +572,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libGLESv2 \
 	libEGL \
 	libz \
-	libjpeg \
 	libpng \
+	libjpeg \
 	libicuuc \
 	libicui18n \
 	libexpat \
@@ -586,6 +586,9 @@ LOCAL_STATIC_LIBRARIES := \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
+	external/libpng \
+	$(LOCAL_PATH)/include/codec \
+	$(LOCAL_PATH)/src/codec \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -609,9 +612,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
 	external/giflib \
-	external/libpng \
-	$(LOCAL_PATH)/include/codec \
-	$(LOCAL_PATH)/src/codec \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
@@ -621,6 +621,7 @@ LOCAL_C_INCLUDES := \
 	external/zlib
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
+	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
