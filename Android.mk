@@ -153,6 +153,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkMaskGamma.cpp \
 	src/core/SkMath.cpp \
 	src/core/SkMatrix.cpp \
+	src/core/SkMatrixImageFilter.cpp \
 	src/core/SkMetaData.cpp \
 	src/core/SkMipMap.cpp \
 	src/core/SkMultiPictureDraw.cpp \
@@ -301,7 +302,6 @@ LOCAL_SRC_FILES := \
 	src/effects/SkTableMaskFilter.cpp \
 	src/effects/SkTestImageFilters.cpp \
 	src/effects/SkTileImageFilter.cpp \
-	src/effects/SkMatrixImageFilter.cpp \
 	src/effects/SkTransparentShader.cpp \
 	src/effects/SkXfermodeImageFilter.cpp \
 	src/effects/gradients/SkClampRange.cpp \
