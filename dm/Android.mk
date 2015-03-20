@@ -368,6 +368,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefilterscropped.cpp \
 	../gm/imagefiltersgraph.cpp \
 	../gm/imagefiltersscaled.cpp \
+	../gm/imagefilterstransformed.cpp \
 	../gm/internal_links.cpp \
 	../gm/lcdtext.cpp \
 	../gm/linepaths.cpp \
