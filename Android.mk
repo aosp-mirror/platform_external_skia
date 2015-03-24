@@ -70,9 +70,8 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	src/codec/SkCodec.cpp \
-	src/codec/SkCodec_libbmp.cpp \
-	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
+	src/codec/SkCodec_libbmp.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
@@ -590,7 +589,6 @@ LOCAL_C_INCLUDES := \
 	external/libpng \
 	$(LOCAL_PATH)/include/codec \
 	$(LOCAL_PATH)/src/codec \
-	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/include/c \
 	$(LOCAL_PATH)/include/config \
 	$(LOCAL_PATH)/include/core \
@@ -599,6 +597,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
+	$(LOCAL_PATH)/src/core \
 	$(LOCAL_PATH)/src/sfnt \
 	$(LOCAL_PATH)/src/image \
 	$(LOCAL_PATH)/src/opts \
