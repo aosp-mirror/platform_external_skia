@@ -32,17 +32,18 @@ LOCAL_SRC_FILES := \
 	../tests/Test.cpp \
 	../tests/PathOpsAngleTest.cpp \
 	../tests/PathOpsBoundsTest.cpp \
-	../tests/PathOpsBuilderTest.cpp \
-	../tests/PathOpsBuildUseTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
 	../tests/PathOpsCubicLineIntersectionTest.cpp \
 	../tests/PathOpsCubicQuadIntersectionTest.cpp \
 	../tests/PathOpsCubicReduceOrderTest.cpp \
+	../tests/PathOpsCubicToQuadsTest.cpp \
 	../tests/PathOpsDCubicTest.cpp \
 	../tests/PathOpsDLineTest.cpp \
 	../tests/PathOpsDPointTest.cpp \
+	../tests/PathOpsDQuadTest.cpp \
 	../tests/PathOpsDRectTest.cpp \
+	../tests/PathOpsDTriangleTest.cpp \
 	../tests/PathOpsDVectorTest.cpp \
 	../tests/PathOpsExtendedTest.cpp \
 	../tests/PathOpsFuzz763Test.cpp \
@@ -56,6 +57,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsQuadIntersectionTestData.cpp \
 	../tests/PathOpsQuadLineIntersectionTest.cpp \
 	../tests/PathOpsQuadLineIntersectionThreadedTest.cpp \
+	../tests/PathOpsQuadParameterizationTest.cpp \
 	../tests/PathOpsQuadReduceOrderTest.cpp \
 	../tests/PathOpsSimplifyDegenerateThreadedTest.cpp \
 	../tests/PathOpsSimplifyFailTest.cpp \
@@ -67,9 +69,7 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsSkpTest.cpp \
 	../tests/PathOpsTestCommon.cpp \
 	../tests/PathOpsThreadedCommon.cpp \
-	../tests/PathOpsThreeWayTest.cpp \
 	../tests/PathOpsTightBoundsTest.cpp \
-	../tests/PathOpsTypesTest.cpp \
 	../tests/AAClipTest.cpp \
 	../tests/ARGBImageEncoderTest.cpp \
 	../tests/AnnotationTest.cpp \

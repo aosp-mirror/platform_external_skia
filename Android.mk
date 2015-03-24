@@ -236,19 +236,18 @@ LOCAL_SRC_FILES := \
 	src/pipe/SkGPipeWrite.cpp \
 	src/lazy/SkCachingPixelRef.cpp \
 	src/pathops/SkAddIntersections.cpp \
+	src/pathops/SkDCubicIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
 	src/pathops/SkDCubicToQuads.cpp \
 	src/pathops/SkDLineIntersection.cpp \
+	src/pathops/SkDQuadImplicit.cpp \
+	src/pathops/SkDQuadIntersection.cpp \
 	src/pathops/SkDQuadLineIntersection.cpp \
 	src/pathops/SkIntersections.cpp \
 	src/pathops/SkOpAngle.cpp \
-	src/pathops/SkOpBuilder.cpp \
-	src/pathops/SkOpCoincidence.cpp \
 	src/pathops/SkOpContour.cpp \
-	src/pathops/SkOpCubicHull.cpp \
 	src/pathops/SkOpEdgeBuilder.cpp \
 	src/pathops/SkOpSegment.cpp \
-	src/pathops/SkOpSpan.cpp \
 	src/pathops/SkPathOpsBounds.cpp \
 	src/pathops/SkPathOpsCommon.cpp \
 	src/pathops/SkPathOpsCubic.cpp \
@@ -259,11 +258,11 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathOpsQuad.cpp \
 	src/pathops/SkPathOpsRect.cpp \
 	src/pathops/SkPathOpsSimplify.cpp \
-	src/pathops/SkPathOpsTCubicSect.cpp \
 	src/pathops/SkPathOpsTightBounds.cpp \
-	src/pathops/SkPathOpsTQuadSect.cpp \
+	src/pathops/SkPathOpsTriangle.cpp \
 	src/pathops/SkPathOpsTypes.cpp \
 	src/pathops/SkPathWriter.cpp \
+	src/pathops/SkQuarticRoot.cpp \
 	src/pathops/SkReduceOrder.cpp \
 	src/effects/Sk1DPathEffect.cpp \
 	src/effects/Sk2DPathEffect.cpp \
