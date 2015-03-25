@@ -62,7 +62,8 @@ LOCAL_CFLAGS += \
 	-Wno-unused-parameter \
 	-U_FORTIFY_SOURCE \
 	-D_FORTIFY_SOURCE=1 \
-	-DSKIA_IMPLEMENTATION=1
+	-DSKIA_IMPLEMENTATION=1 \
+	-Wno-clobbered
 
 LOCAL_CPPFLAGS := \
 	-std=c++11 \
