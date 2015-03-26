@@ -398,6 +398,7 @@ LOCAL_SRC_FILES := \
 	src/utils/SkNWayCanvas.cpp \
 	src/utils/SkNullCanvas.cpp \
 	src/utils/SkOSFile.cpp \
+	src/utils/SkPaintFilterCanvas.cpp \
 	src/utils/SkParse.cpp \
 	src/utils/SkParseColor.cpp \
 	src/utils/SkParsePath.cpp \
