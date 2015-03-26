@@ -113,6 +113,7 @@ LOCAL_SRC_FILES := \
 	../tests/DrawBitmapRectTest.cpp \
 	../tests/DrawPathTest.cpp \
 	../tests/DrawTextTest.cpp \
+	../tests/DrawLooperTest.cpp \
 	../tests/DynamicHashTest.cpp \
 	../tests/EmptyPathTest.cpp \
 	../tests/ErrorTest.cpp \
