@@ -211,7 +211,6 @@
 #define SK_GAMMA_EXPONENT 1.4
 #define SK_IGNORE_ETC1_SUPPORT
 #define SK_INTERNAL
-#define SK_OVERRIDE override
 #define SK_SCALAR_TO_FLOAT_EXCLUDED
 #define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 #define SK_SUPPORT_GPU 1
@@ -221,5 +220,6 @@
 #define SK_SUPPORT_OPENCL 0
 #define SK_SUPPORT_PDF
 #define SK_USE_FREETYPE_EMBOLDEN
+#define override override
 
 #endif // SkUserConfig_Android_DEFINED
