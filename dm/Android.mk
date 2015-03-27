@@ -482,6 +482,7 @@ LOCAL_SRC_FILES := \
 	../tools/flags/SkCommonFlags.cpp \
 	../tools/picture_utils.cpp \
 	../src/utils/android/SkAndroidSDKCanvas.cpp \
+	../src/utils/android/SkHwuiRenderer.cpp \
 	../src/gpu/GrContextFactory.cpp \
 	../src/gpu/GrTest.cpp
 
