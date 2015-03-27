@@ -74,6 +74,7 @@ LOCAL_SRC_FILES := \
 	src/codec/SkCodec_libbmp.cpp \
 	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
+	src/codec/SkCodec_wbmp.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
