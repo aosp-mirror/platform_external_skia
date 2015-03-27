@@ -582,9 +582,9 @@ LOCAL_SHARED_LIBRARIES := \
 	libft2
 
 LOCAL_STATIC_LIBRARIES := \
+	libgif \
 	libwebp-decode \
 	libwebp-encode \
-	libgif \
 	libsfntly
 
 LOCAL_C_INCLUDES := \
@@ -610,10 +610,10 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/effects \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
+	external/giflib \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
-	external/giflib \
 	external/expat/lib \
 	external/freetype/include \
 	$(LOCAL_PATH)/include/utils/win \
