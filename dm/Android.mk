@@ -222,8 +222,7 @@ LOCAL_SRC_FILES := \
 	../tests/ShaderImageFilterTest.cpp \
 	../tests/ShaderOpacityTest.cpp \
 	../tests/SizeTest.cpp \
-	../tests/Sk2xTest.cpp \
-	../tests/Sk4xTest.cpp \
+	../tests/SkNxTest.cpp \
 	../tests/SkBase64Test.cpp \
 	../tests/SkImageTest.cpp \
 	../tests/SkResourceCacheTest.cpp \
