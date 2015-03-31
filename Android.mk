@@ -348,7 +348,6 @@ LOCAL_SRC_FILES := \
 	src/doc/SkDocument_PDF.cpp \
 	src/pdf/SkPDFBitmap.cpp \
 	src/pdf/SkPDFCanon.cpp \
-	src/pdf/SkPDFCatalog.cpp \
 	src/pdf/SkPDFDevice.cpp \
 	src/pdf/SkPDFFont.cpp \
 	src/pdf/SkPDFFormXObject.cpp \
