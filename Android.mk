@@ -426,6 +426,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrAARectRenderer.cpp \
 	src/gpu/GrAddPathRenderers_default.cpp \
 	src/gpu/GrAtlas.cpp \
+	src/gpu/GrAtlasTextContext.cpp \
 	src/gpu/GrBatch.cpp \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFontCache.cpp \
