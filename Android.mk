@@ -72,9 +72,11 @@ LOCAL_CPPFLAGS := \
 LOCAL_SRC_FILES := \
 	src/codec/SkCodec.cpp \
 	src/codec/SkCodec_libbmp.cpp \
+	src/codec/SkCodec_libgif.cpp \
 	src/codec/SkCodec_libico.cpp \
 	src/codec/SkCodec_libpng.cpp \
 	src/codec/SkCodec_wbmp.cpp \
+	src/codec/SkGifInterlaceIter.cpp \
 	src/codec/SkMaskSwizzler.cpp \
 	src/codec/SkMasks.cpp \
 	src/codec/SkSwizzler.cpp \
@@ -597,6 +599,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/include/core \
 	$(LOCAL_PATH)/include/pathops \
 	$(LOCAL_PATH)/include/pipe \
+	external/giflib \
 	$(LOCAL_PATH)/include/ports \
 	$(LOCAL_PATH)/include/utils \
 	$(LOCAL_PATH)/include/images \
@@ -610,7 +613,6 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/src/effects \
 	external/jpeg \
 	$(LOCAL_PATH)/src/lazy \
-	external/giflib \
 	$(LOCAL_PATH)/third_party/etc1 \
 	$(LOCAL_PATH)/third_party/ktx \
 	external/webp/include \
