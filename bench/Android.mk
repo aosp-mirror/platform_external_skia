@@ -22,6 +22,7 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	../gm/gm.cpp \
+	CodecBench.cpp \
 	DecodingBench.cpp \
 	DecodingSubsetBench.cpp \
 	GMBench.cpp \
