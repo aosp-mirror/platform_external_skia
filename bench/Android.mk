@@ -90,6 +90,7 @@ LOCAL_SRC_FILES := \
 	PathUtilsBench.cpp \
 	PerlinNoiseBench.cpp \
 	PictureNestingBench.cpp \
+	PictureOverheadBench.cpp \
 	PicturePlaybackBench.cpp \
 	PremulAndUnpremulAlphaOpsBench.cpp \
 	RTreeBench.cpp \
