@@ -109,6 +109,7 @@ LOCAL_SRC_FILES := \
 	StrokeBench.cpp \
 	TableBench.cpp \
 	TextBench.cpp \
+	TextBlobBench.cpp \
 	TileBench.cpp \
 	VertBench.cpp \
 	WritePixelsBench.cpp \
@@ -236,6 +237,7 @@ LOCAL_SRC_FILES := \
 	../gm/matriximagefilter.cpp \
 	../gm/megalooper.cpp \
 	../gm/mixedxfermodes.cpp \
+	../gm/mixedtextblobs.cpp \
 	../gm/mipmap.cpp \
 	../gm/modecolorfilters.cpp \
 	../gm/morphology.cpp \
