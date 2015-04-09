@@ -652,8 +652,7 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkMorphology_opts_arm.cpp \
 	src/opts/SkTextureCompression_opts_arm.cpp \
 	src/opts/SkUtils_opts_arm.cpp \
-	src/opts/SkXfermode_opts_arm.cpp \
-	src/opts/memset.arm.S
+	src/opts/SkXfermode_opts_arm.cpp
 
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
 LOCAL_SRC_FILES_arm += \
