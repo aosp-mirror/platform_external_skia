@@ -236,6 +236,7 @@ LOCAL_SRC_FILES := \
 	../tests/StrokerTest.cpp \
 	../tests/SurfaceTest.cpp \
 	../tests/SVGDeviceTest.cpp \
+	../tests/SwizzlerTest.cpp \
 	../tests/TessellatingPathRendererTests.cpp \
 	../tests/TArrayTest.cpp \
 	../tests/TemplatesTest.cpp \
@@ -534,6 +535,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../src/utils/debugger \
 	$(LOCAL_PATH)/../tests \
 	$(LOCAL_PATH)/../src/pathops \
+	$(LOCAL_PATH)/../src/codec \
 	$(LOCAL_PATH)/../src/image \
 	$(LOCAL_PATH)/../src/pdf \
 	$(LOCAL_PATH)/../experimental/PdfViewer \
