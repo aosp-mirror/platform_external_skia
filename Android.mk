@@ -503,7 +503,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/effects/GrBitmapTextGeoProc.cpp \
 	src/gpu/effects/GrDashingEffect.cpp \
 	src/gpu/effects/GrDisableColorXP.cpp \
-	src/gpu/effects/GrDistanceFieldTextureEffect.cpp \
+	src/gpu/effects/GrDistanceFieldGeoProc.cpp \
 	src/gpu/effects/GrDitherEffect.cpp \
 	src/gpu/effects/GrMatrixConvolutionEffect.cpp \
 	src/gpu/effects/GrOvalEffect.cpp \
