@@ -278,6 +278,7 @@ LOCAL_SRC_FILES := \
 	../gm/bitmapscroll.cpp \
 	../gm/bitmapshader.cpp \
 	../gm/bitmapsource.cpp \
+	../gm/bitmapsource2.cpp \
 	../gm/bleed.cpp \
 	../gm/blurcircles.cpp \
 	../gm/blurs.cpp \
