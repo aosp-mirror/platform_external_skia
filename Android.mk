@@ -663,9 +663,8 @@ LOCAL_SRC_FILES_arm += \
 	src/opts/SkBlurImage_opts_neon.cpp \
 	src/opts/SkMorphology_opts_neon.cpp \
 	src/opts/SkTextureCompression_opts_neon.cpp \
-	src/opts/SkXfermode_opts_arm_neon.cpp \
-	src/opts/memset16_neon.S \
-	src/opts/memset32_neon.S
+	src/opts/SkUtils_opts_arm_neon.cpp \
+	src/opts/SkXfermode_opts_arm_neon.cpp
 
 LOCAL_CFLAGS_arm += \
 	-DSK_ARM_HAS_NEON
