@@ -190,6 +190,7 @@ LOCAL_SRC_FILES := \
 	../gm/extractbitmap.cpp \
 	../gm/emboss.cpp \
 	../gm/emptypath.cpp \
+	../gm/fadefilter.cpp \
 	../gm/fatpathfill.cpp \
 	../gm/factory.cpp \
 	../gm/filltypes.cpp \
