@@ -122,6 +122,7 @@ LOCAL_SRC_FILES := \
 	../gm/addarc.cpp \
 	../gm/all_bitmap_configs.cpp \
 	../gm/alphagradients.cpp \
+	../gm/anisotropic.cpp \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
