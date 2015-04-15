@@ -269,6 +269,7 @@ LOCAL_SRC_FILES := \
 	../gm/arcofzorro.cpp \
 	../gm/arithmode.cpp \
 	../gm/astcbitmap.cpp \
+	../gm/badpaint.cpp \
 	../gm/beziereffects.cpp \
 	../gm/beziers.cpp \
 	../gm/bigblurs.cpp \
