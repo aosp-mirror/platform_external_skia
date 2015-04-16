@@ -288,6 +288,7 @@ LOCAL_SRC_FILES := \
 	../gm/blurquickreject.cpp \
 	../gm/blurrect.cpp \
 	../gm/blurroundrect.cpp \
+	../gm/bmpfilterqualityrepeat.cpp \
 	../gm/circles.cpp \
 	../gm/circularclips.cpp \
 	../gm/clipdrawdraw.cpp \
