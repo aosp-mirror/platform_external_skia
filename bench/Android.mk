@@ -87,7 +87,6 @@ LOCAL_SRC_FILES := \
 	PatchGridBench.cpp \
 	PathBench.cpp \
 	PathIterBench.cpp \
-	PathUtilsBench.cpp \
 	PerlinNoiseBench.cpp \
 	PictureNestingBench.cpp \
 	PictureOverheadBench.cpp \
