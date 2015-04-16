@@ -482,7 +482,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencil.cpp \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
-	src/gpu/GrStencilBuffer.cpp \
+	src/gpu/GrStencilAttachment.cpp \
 	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTessellatingPathRenderer.cpp \
@@ -539,7 +539,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/gl/GrGLProgramDataManager.cpp \
 	src/gpu/gl/GrGLRenderTarget.cpp \
 	src/gpu/gl/GrGLSL.cpp \
-	src/gpu/gl/GrGLStencilBuffer.cpp \
+	src/gpu/gl/GrGLStencilAttachment.cpp \
 	src/gpu/gl/GrGLTexture.cpp \
 	src/gpu/gl/GrGLUtil.cpp \
 	src/gpu/gl/GrGLVertexArray.cpp \
