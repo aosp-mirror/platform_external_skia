@@ -411,7 +411,6 @@ LOCAL_SRC_FILES := \
 	src/utils/SkPictureUtils.cpp \
 	src/utils/SkPatchGrid.cpp \
 	src/utils/SkPatchUtils.cpp \
-	src/utils/SkPathUtils.cpp \
 	src/utils/SkSHA1.cpp \
 	src/utils/SkRTConf.cpp \
 	src/utils/SkTextBox.cpp \
