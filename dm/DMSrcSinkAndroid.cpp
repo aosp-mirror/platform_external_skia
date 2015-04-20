@@ -9,7 +9,7 @@
 #include "DMSrcSinkAndroid.h"
 
 #include "AnimationContext.h"
-#include "DisplayListRenderer.h"
+#include "DisplayListCanvas.h"
 #include "IContextFactory.h"
 #include "RenderNode.h"
 #include "SkCanvas.h"
@@ -299,19 +299,19 @@ Error HWUISink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) const
 
     // Do the draw
 
-    SkAutoTDelete<android::uirenderer::DisplayListRenderer> renderer
-        (new android::uirenderer::DisplayListRenderer());
-    renderer->setViewport(size.width(), size.height());
-    renderer->prepare();
-    renderer->clipRect(0, 0, size.width(), size.height(), SkRegion::Op::kReplace_Op);
+    SkAutoTDelete<android::uirenderer::DisplayListCanvas> canvas
+        (new android::uirenderer::DisplayListCanvas());
+    canvas->setViewport(size.width(), size.height());
+    canvas->prepare();
+    canvas->clipRect(0, 0, size.width(), size.height(), SkRegion::Op::kReplace_Op);
 
-    Error err = src.draw(renderer->asSkCanvas());
+    Error err = src.draw(canvas->asSkCanvas());
     if (!err.isEmpty()) {
         return err;
     }
 
-    renderer->finish();
-    rootNode->setStagingDisplayList(renderer->finishRecording());
+    canvas->finish();
+    rootNode->setStagingDisplayList(canvas->finishRecording());
 
     proxy->syncAndDrawFrame();
     proxy->fence();
