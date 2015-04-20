@@ -230,6 +230,7 @@ LOCAL_SRC_FILES := \
 	../gm/lighting.cpp \
 	../gm/lumafilter.cpp \
 	../gm/image.cpp \
+	../gm/imagefilters.cpp \
 	../gm/imagefiltersbase.cpp \
 	../gm/imagefiltersclipped.cpp \
 	../gm/imagefilterscropped.cpp \
