@@ -34,6 +34,8 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsBoundsTest.cpp \
 	../tests/PathOpsBuilderTest.cpp \
 	../tests/PathOpsBuildUseTest.cpp \
+	../tests/PathOpsConicIntersectionTest.cpp \
+	../tests/PathOpsConicLineIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTest.cpp \
 	../tests/PathOpsCubicIntersectionTestData.cpp \
 	../tests/PathOpsCubicLineIntersectionTest.cpp \
@@ -47,8 +49,10 @@ LOCAL_SRC_FILES := \
 	../tests/PathOpsExtendedTest.cpp \
 	../tests/PathOpsFuzz763Test.cpp \
 	../tests/PathOpsInverseTest.cpp \
+	../tests/PathOpsIssue3651.cpp \
 	../tests/PathOpsLineIntersectionTest.cpp \
 	../tests/PathOpsLineParametetersTest.cpp \
+	../tests/PathOpsOpCircleThreadedTest.cpp \
 	../tests/PathOpsOpCubicThreadedTest.cpp \
 	../tests/PathOpsOpRectThreadedTest.cpp \
 	../tests/PathOpsOpTest.cpp \

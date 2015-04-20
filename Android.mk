@@ -244,6 +244,7 @@ LOCAL_SRC_FILES := \
 	src/pipe/SkGPipeWrite.cpp \
 	src/lazy/SkCachingPixelRef.cpp \
 	src/pathops/SkAddIntersections.cpp \
+	src/pathops/SkDConicLineIntersection.cpp \
 	src/pathops/SkDCubicLineIntersection.cpp \
 	src/pathops/SkDCubicToQuads.cpp \
 	src/pathops/SkDLineIntersection.cpp \
@@ -259,6 +260,7 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkOpSpan.cpp \
 	src/pathops/SkPathOpsBounds.cpp \
 	src/pathops/SkPathOpsCommon.cpp \
+	src/pathops/SkPathOpsConic.cpp \
 	src/pathops/SkPathOpsCubic.cpp \
 	src/pathops/SkPathOpsDebug.cpp \
 	src/pathops/SkPathOpsLine.cpp \
@@ -267,9 +269,8 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathOpsQuad.cpp \
 	src/pathops/SkPathOpsRect.cpp \
 	src/pathops/SkPathOpsSimplify.cpp \
-	src/pathops/SkPathOpsTCubicSect.cpp \
+	src/pathops/SkPathOpsTSect.cpp \
 	src/pathops/SkPathOpsTightBounds.cpp \
-	src/pathops/SkPathOpsTQuadSect.cpp \
 	src/pathops/SkPathOpsTypes.cpp \
 	src/pathops/SkPathWriter.cpp \
 	src/pathops/SkReduceOrder.cpp \
