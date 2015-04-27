@@ -442,6 +442,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
 	src/gpu/GrCoordTransform.cpp \
+	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDistanceFieldTextContext.cpp \
@@ -483,6 +484,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrStencilAndCoverPathRenderer.cpp \
 	src/gpu/GrStencilAndCoverTextContext.cpp \
 	src/gpu/GrStencilAttachment.cpp \
+	src/gpu/GrStrokeInfo.cpp \
 	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTessellatingPathRenderer.cpp \
