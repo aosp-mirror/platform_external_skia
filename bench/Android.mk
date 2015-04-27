@@ -27,6 +27,7 @@ LOCAL_SRC_FILES := \
 	DecodingSubsetBench.cpp \
 	GMBench.cpp \
 	RecordingBench.cpp \
+	SKPAnimationBench.cpp \
 	SKPBench.cpp \
 	nanobench.cpp \
 	Benchmark.cpp \
