@@ -486,6 +486,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTargetCommands.cpp \
 	src/gpu/GrTraceMarker.cpp \
 	src/gpu/GrTessellatingPathRenderer.cpp \
+	src/gpu/GrTestUtils.cpp \
 	src/gpu/GrSWMaskHelper.cpp \
 	src/gpu/GrSoftwarePathRenderer.cpp \
 	src/gpu/GrSurface.cpp \
