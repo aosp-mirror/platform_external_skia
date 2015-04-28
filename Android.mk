@@ -434,7 +434,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrBatchAtlas.cpp \
 	src/gpu/GrBatchFontCache.cpp \
 	src/gpu/GrBatchTarget.cpp \
-	src/gpu/GrBitmapTextContext.cpp \
 	src/gpu/GrBlend.cpp \
 	src/gpu/GrBufferAllocPool.cpp \
 	src/gpu/GrClip.cpp \
@@ -445,7 +444,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
 	src/gpu/GrDefaultPathRenderer.cpp \
-	src/gpu/GrDistanceFieldTextContext.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFlushToGpuDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
@@ -493,7 +491,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrSurface.cpp \
 	src/gpu/GrTextBlobCache.cpp \
 	src/gpu/GrTextContext.cpp \
-	src/gpu/GrFontCache.cpp \
 	src/gpu/GrTexture.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
