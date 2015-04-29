@@ -259,10 +259,10 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkOpEdgeBuilder.cpp \
 	src/pathops/SkOpSegment.cpp \
 	src/pathops/SkOpSpan.cpp \
-	src/pathops/SkPathOpsBounds.cpp \
 	src/pathops/SkPathOpsCommon.cpp \
 	src/pathops/SkPathOpsConic.cpp \
 	src/pathops/SkPathOpsCubic.cpp \
+	src/pathops/SkPathOpsCurve.cpp \
 	src/pathops/SkPathOpsDebug.cpp \
 	src/pathops/SkPathOpsLine.cpp \
 	src/pathops/SkPathOpsOp.cpp \
