@@ -204,6 +204,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkResourceCache.cpp \
 	src/core/SkRRect.cpp \
 	src/core/SkRTree.cpp \
+	src/core/SkRWBuffer.cpp \
 	src/core/SkScalar.cpp \
 	src/core/SkScalerContext.cpp \
 	src/core/SkScan.cpp \
