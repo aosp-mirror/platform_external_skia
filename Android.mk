@@ -494,6 +494,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrTextBlobCache.cpp \
 	src/gpu/GrTextContext.cpp \
 	src/gpu/GrTexture.cpp \
+	src/gpu/GrTextureProvider.cpp \
 	src/gpu/GrTextureAccess.cpp \
 	src/gpu/GrXferProcessor.cpp \
 	src/gpu/effects/GrConfigConversionEffect.cpp \
