@@ -223,6 +223,7 @@ LOCAL_SRC_FILES := \
 	src/core/SkStrokerPriv.cpp \
 	src/core/SkTaskGroup.cpp \
 	src/core/SkTextBlob.cpp \
+	src/core/SkTime.cpp \
 	src/core/SkTLS.cpp \
 	src/core/SkTSearch.cpp \
 	src/core/SkTypeface.cpp \
