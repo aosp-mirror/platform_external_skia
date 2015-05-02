@@ -40,4 +40,12 @@ LOCAL_MODULE := \
 	local_module
 
 
+# Setup directory to store skia's resources in the directory structure that
+# the Android testing infrastructure expects
+skia_res_dir := $(call intermediates-dir-for,PACKAGING,skia_resources)/DATA
+$(shell mkdir -p $(skia_res_dir))
+$(shell cp -r $(LOCAL_PATH)/../resources/. $(skia_res_dir)/skia_resources)
+LOCAL_PICKUP_FILES := $(skia_res_dir)
+skia_res_dir :=
+
 include $(BUILD_NATIVE_TEST)

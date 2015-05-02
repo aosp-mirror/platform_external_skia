@@ -268,6 +268,7 @@ LOCAL_MODULE_TAGS := \
 LOCAL_MODULE := \
 	skia_gm
 
-LOCAL_PICKUP_FILES := DATA
+LOCAL_PICKUP_FILES := \
+	$(LOCAL_PATH)/../resources
 
 include $(BUILD_NATIVE_TEST)
