@@ -327,7 +327,6 @@ LOCAL_SRC_FILES := \
 	src/effects/gradients/SkGradientShader.cpp \
 	src/effects/gradients/SkLinearGradient.cpp \
 	src/effects/gradients/SkRadialGradient.cpp \
-	src/effects/gradients/SkTwoPointRadialGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient.cpp \
 	src/effects/gradients/SkTwoPointConicalGradient_gpu.cpp \
 	src/effects/gradients/SkSweepGradient.cpp \
