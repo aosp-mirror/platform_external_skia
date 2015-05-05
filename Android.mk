@@ -442,6 +442,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrClipMaskCache.cpp \
 	src/gpu/GrClipMaskManager.cpp \
 	src/gpu/GrContext.cpp \
+	src/gpu/GrCommandBuilder.cpp \
 	src/gpu/GrCoordTransform.cpp \
 	src/gpu/GrDashLinePathRenderer.cpp \
 	src/gpu/GrDefaultGeoProcFactory.cpp \
