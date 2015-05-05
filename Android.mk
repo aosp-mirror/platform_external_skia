@@ -454,6 +454,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
 	src/gpu/GrInvariantOutput.cpp \
+	src/gpu/GrInOrderCommandBuilder.cpp \
 	src/gpu/GrInOrderDrawBuffer.cpp \
 	src/gpu/GrLayerCache.cpp \
 	src/gpu/GrLayerHoister.cpp \
