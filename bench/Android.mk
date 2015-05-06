@@ -50,6 +50,7 @@ LOCAL_SRC_FILES := \
 	ColorCubeBench.cpp \
 	ColorFilterBench.cpp \
 	ColorPrivBench.cpp \
+	ControlBench.cpp \
 	CoverageBench.cpp \
 	DashBench.cpp \
 	DeferredSurfaceCopyBench.cpp \
