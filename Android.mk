@@ -482,6 +482,7 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrRectBatch.cpp \
 	src/gpu/GrRenderTarget.cpp \
 	src/gpu/GrReducedClip.cpp \
+	src/gpu/GrReorderCommandBuilder.cpp \
 	src/gpu/GrResourceCache.cpp \
 	src/gpu/GrResourceProvider.cpp \
 	src/gpu/GrStencil.cpp \
