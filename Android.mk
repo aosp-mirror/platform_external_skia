@@ -274,6 +274,7 @@ LOCAL_SRC_FILES := \
 	src/pathops/SkPathOpsTSect.cpp \
 	src/pathops/SkPathOpsTightBounds.cpp \
 	src/pathops/SkPathOpsTypes.cpp \
+	src/pathops/SkPathOpsWinding.cpp \
 	src/pathops/SkPathWriter.cpp \
 	src/pathops/SkReduceOrder.cpp \
 	src/effects/Sk1DPathEffect.cpp \
