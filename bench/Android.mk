@@ -241,6 +241,7 @@ LOCAL_SRC_FILES := \
 	../gm/imagefiltersscaled.cpp \
 	../gm/imagefilterstransformed.cpp \
 	../gm/internal_links.cpp \
+	../gm/largeglyphblur.cpp \
 	../gm/lcdtext.cpp \
 	../gm/linepaths.cpp \
 	../gm/matrixconvolution.cpp \
