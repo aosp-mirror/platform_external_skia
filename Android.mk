@@ -452,7 +452,6 @@ LOCAL_SRC_FILES := \
 	src/gpu/GrDefaultPathRenderer.cpp \
 	src/gpu/GrDrawTarget.cpp \
 	src/gpu/GrFontScaler.cpp \
-	src/gpu/GrGeometryProcessor.cpp \
 	src/gpu/GrGpu.cpp \
 	src/gpu/GrGpuResource.cpp \
 	src/gpu/GrGpuFactory.cpp \
