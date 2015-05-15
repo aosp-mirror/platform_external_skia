@@ -295,7 +295,8 @@ Error HWUISink::draw(const Src& src, SkBitmap* dst, SkWStream*, SkString*) const
 
     float lightX = size.width() / 2.0f;
     android::uirenderer::Vector3 lightVector { lightX, -200.0f, 800.0f };
-    proxy->setup(size.width(), size.height(), lightVector, 800.0f, 255 * 0.075f, 255 * 0.15f);
+    proxy->setup(size.width(), size.height(), 800.0f, 255 * 0.075f, 255 * 0.15f);
+    proxy->setLightCenter(lightVector);
 
     // Do the draw
 
